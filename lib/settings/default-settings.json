@@ -1,0 +1,26 @@
+{
+  "company_types": [
+    "Brand Owner",
+    "Manufacturer",
+    "Distributor",
+    "Exporter",
+    "Retailer"
+  ],
+  "partner_statuses": [
+    {
+      "id": "Active",
+      "label": "Active",
+      "color": "emerald"
+    },
+    {
+      "id": "Pending",
+      "label": "Pending",
+      "color": "amber"
+    },
+    {
+      "id": "Inactive",
+      "label": "Inactive",
+      "color": "rose"
+    }
+  ]
+}
