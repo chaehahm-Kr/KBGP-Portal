@@ -21,18 +21,18 @@ export default async function ProductDetailPage({
 
   const { data: product } = await supabase
     .from("products")
-    .select(
-      "id, name, name_en, category, volume, estimated_retail_price, ingredients_text, brand_id, " +
-      "description, bullet_points, color, color_map, origin, lead_time, " +
-      "parent_sku, child_sku, manufacture_sku, letusto_sku, " +
-      "price_krw_retail, price_krw_wholesale, price_usd_fob, price_additional_info, " +
-      "item_width, item_depth, item_height, item_weight, " +
-      "package_width, package_depth, package_height, package_weight, " +
-      "carton_pack_qty, carton_width, carton_depth, carton_height, carton_weight, carton_cbm, " +
-      "palette_carton_qty, palette_width, palette_depth, palette_height, palette_weight, " +
-      "container_20ft_qty, container_20ft_weight, container_20ft_cbm, " +
-      "container_40fthc_qty, container_40fthc_weight, container_40fthc_cbm"
-    )
+    .select(`
+      id, name, name_en, category, volume, estimated_retail_price, ingredients_text, brand_id,
+      description, bullet_points, color, color_map, origin, lead_time,
+      parent_sku, child_sku, manufacture_sku, letusto_sku,
+      price_krw_retail, price_krw_wholesale, price_usd_fob, price_additional_info,
+      item_width, item_depth, item_height, item_weight,
+      package_width, package_depth, package_height, package_weight,
+      carton_pack_qty, carton_width, carton_depth, carton_height, carton_weight, carton_cbm,
+      palette_carton_qty, palette_width, palette_depth, palette_height, palette_weight,
+      container_20ft_qty, container_20ft_weight, container_20ft_cbm,
+      container_40fthc_qty, container_40fthc_weight, container_40fthc_cbm
+    `)
     .eq("id", id)
     .eq("company_id", companyId)
     .single();
