@@ -43,6 +43,33 @@ const AREAS: { prefix: string; login: string; publicPaths: string[] }[] = [
  */
 export async function updateSession(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
+  const host = request.headers.get("host") || "";
+
+  // 1. 도메인별 접속 경로 자동 분기 및 보안 영역 제한
+  if (host.includes("admin.kselectnetwork.com")) {
+    if (pathname.startsWith("/portal")) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/admin/login";
+      return NextResponse.redirect(url);
+    }
+    if (pathname === "/") {
+      const url = request.nextUrl.clone();
+      url.pathname = "/admin/login";
+      return NextResponse.redirect(url);
+    }
+  } else if (host.includes("portal.kselectnetwork.com")) {
+    if (pathname.startsWith("/admin")) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/portal/login";
+      return NextResponse.redirect(url);
+    }
+    if (pathname === "/") {
+      const url = request.nextUrl.clone();
+      url.pathname = "/portal/login";
+      return NextResponse.redirect(url);
+    }
+  }
+
   const prefix = pathname.startsWith("/admin") ? "admin-" : pathname.startsWith("/portal") ? "portal-" : "";
 
   request.headers.set("x-url", pathname);
