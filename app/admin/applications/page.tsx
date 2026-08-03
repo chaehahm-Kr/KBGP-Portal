@@ -46,7 +46,7 @@ export default async function AdminApplicationsPage({
 
   let query = supabase
     .from("applications")
-    .select("id, application_number, status, company_id, submitted_at, created_at")
+    .select("id, application_number, status, company_id, submitted_at, created_at, eligibility_responses")
     .neq("status", "draft")
     .order("created_at", { ascending: false });
 
@@ -225,6 +225,7 @@ export default async function AdminApplicationsPage({
                 <th className="px-6 py-3 font-semibold">신청번호</th>
                 <th className="px-6 py-3 font-semibold">회사명</th>
                 <th className="px-6 py-3 font-semibold">심사 상태</th>
+                <th className="px-6 py-3 font-semibold">준비 사항</th>
                 <th className="px-6 py-3 font-semibold">담당 심사원</th>
                 <th className="px-6 py-3 font-semibold text-center">브랜드 담당자</th>
                 <th className="px-6 py-3 font-semibold">제출일</th>
@@ -251,6 +252,27 @@ export default async function AdminApplicationsPage({
                       <span className={`inline-block rounded px-2 py-0.5 text-[10px] font-bold ${badgeClass}`}>
                         {APPLICATION_STATUS_LABEL[app.status as ApplicationStatus]}
                       </span>
+                    </td>
+                    <td className="px-6 py-3.5 whitespace-nowrap">
+                      {app.eligibility_responses ? (
+                        (() => {
+                          const list = app.eligibility_responses as any[];
+                          const available = list.filter((r) => r.response === "available").length;
+                          const discussion = list.filter((r) => r.response === "discussion_required").length;
+                          return (
+                            <div className="flex gap-1.5 text-[10px]">
+                              <span className="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 font-semibold text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-350 border border-emerald-100 dark:border-emerald-900/50">
+                                🟢 {available}
+                              </span>
+                              <span className="inline-flex items-center rounded-full bg-amber-50 px-2 py-0.5 font-semibold text-amber-700 dark:bg-amber-950/40 dark:text-amber-350 border border-amber-100 dark:border-amber-900/50">
+                                🟡 {discussion}
+                              </span>
+                            </div>
+                          );
+                        })()
+                      ) : (
+                        <span className="text-zinc-400 font-normal italic">-</span>
+                      )}
                     </td>
                     <td className="px-6 py-3.5">
                       {assigneeByApplication.has(app.id) ? (
@@ -322,7 +344,7 @@ export default async function AdminApplicationsPage({
               })}
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="py-12 text-center text-sm text-zinc-400">
+                  <td colSpan={7} className="py-12 text-center text-sm text-zinc-400">
                     조건에 부합하는 신청서 내역이 없습니다.
                   </td>
                 </tr>

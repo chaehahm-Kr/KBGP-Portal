@@ -243,6 +243,18 @@ export default function ApplicationWorkspace({
                 <div className="text-sm text-zinc-800 dark:text-zinc-200 space-y-2">
                   <p>국가: {company?.country}</p>
                   <p>사업자등록번호: {company?.business_registration_number}</p>
+                  {application.eligibility_responses && (
+                    <p className="text-xs text-zinc-550 dark:text-zinc-400">
+                      준비 사항:{" "}
+                      <span className="font-semibold text-emerald-650 dark:text-emerald-400">
+                        진행 가능 {(application.eligibility_responses as any[]).filter((r) => r.response === "available").length}
+                      </span>
+                      {" · "}
+                      <span className="font-semibold text-amber-600 dark:text-amber-400">
+                        협의 필요 {(application.eligibility_responses as any[]).filter((r) => r.response === "discussion_required").length}
+                      </span>
+                    </p>
+                  )}
                 </div>
               </div>
 
@@ -454,18 +466,59 @@ export default function ApplicationWorkspace({
         )}
 
         {activeTab === "documents" && (
-          <div className="rounded-lg border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900 space-y-4">
-            <h2 className="text-sm font-bold text-zinc-900 dark:text-white">자가진단 응답 결과 (Self-Check)</h2>
-            <ul className="space-y-2 text-xs text-zinc-700 dark:text-zinc-300">
-              {SELF_CHECK_ITEMS.map((item, index) => (
-                <li key={item} className="flex items-start gap-2 rounded border border-zinc-100 p-2.5 dark:border-zinc-800 bg-white dark:bg-zinc-950">
-                  <span className="text-sm shrink-0">
-                    {(application.self_check_answers as boolean[] | null)?.[index] ? "✅" : "⬜"}
-                  </span>
-                  <span className="self-center">{item}</span>
-                </li>
-              ))}
-            </ul>
+          <div className="space-y-6">
+            {/* 자가진단 카드 */}
+            <div className="rounded-lg border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900 space-y-4">
+              <h2 className="text-sm font-bold text-zinc-900 dark:text-white">자가진단 응답 결과 (Self-Check)</h2>
+              <ul className="space-y-2 text-xs text-zinc-700 dark:text-zinc-300">
+                {SELF_CHECK_ITEMS.map((item, index) => (
+                  <li key={item} className="flex items-start gap-2 rounded border border-zinc-100 p-2.5 dark:border-zinc-800 bg-white dark:bg-zinc-950">
+                    <span className="text-sm shrink-0">
+                      {(application.self_check_answers as boolean[] | null)?.[index] ? "✅" : "⬜"}
+                    </span>
+                    <span className="self-center">{item}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            {/* 준비 사항 카드 */}
+            <div className="rounded-lg border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900 space-y-4">
+              <h2 className="text-sm font-bold text-zinc-900 dark:text-white">프로그램 참여 준비 사항 (Readiness)</h2>
+              {application.eligibility_responses ? (
+                <ul className="space-y-2 text-xs">
+                  {(application.eligibility_responses as { itemKey: string; response: string }[]).map((item) => {
+                    const READINESS_ITEMS: Record<string, string> = {
+                      stable_supply: "안정적인 생산 및 공급망 확보",
+                      us_regulatory_compliance: "미국 화장품 규제(MoCRA) 준수 및 FDA 등록 준비",
+                      initial_test_quantity: "초기 파트너십 테스트 물량 공급 의향",
+                      north_america_distribution: "북미 온/오프라인 유통 및 가격 정책 동의",
+                      joint_marketing: "북미 현지 공동 마케팅 협력 의향",
+                      sales_content_support: "상세 페이지 및 현지화 마케팅 콘텐츠 지원",
+                    };
+                    return (
+                      <li key={item.itemKey} className="flex items-start gap-2 rounded border border-zinc-100 p-2.5 dark:border-zinc-800 bg-white dark:bg-zinc-950">
+                        <span className="text-sm shrink-0">
+                          {item.response === "available" ? "🟢" : "🟡"}
+                        </span>
+                        <div className="self-center">
+                          <span className="font-semibold text-zinc-900 dark:text-zinc-200">
+                            {READINESS_ITEMS[item.itemKey] || item.itemKey}
+                          </span>
+                          <span className="ml-2 text-[10px] text-zinc-400 dark:text-zinc-500">
+                            — {item.response === "available" ? "진행 가능" : "협의 필요"}
+                          </span>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              ) : (
+                <p className="text-xs text-zinc-400 dark:text-zinc-500 italic text-center py-4">
+                  등록된 응답 기록이 없습니다.
+                </p>
+              )}
+            </div>
           </div>
         )}
 

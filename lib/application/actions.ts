@@ -20,9 +20,22 @@ export async function createDraftApplication() {
   const { companyId, userId } = await requireCompanyMembership();
   const supabase = await createClient();
 
+  // Find inquiry associated with this company to carry over eligibility responses
+  const { data: inquiry } = await supabase
+    .from("inquiries")
+    .select("eligibility_responses")
+    .eq("converted_company_id", companyId)
+    .maybeSingle();
+
+  const eligibilityResponses = inquiry?.eligibility_responses ?? null;
+
   const { data: application, error } = await supabase
     .from("applications")
-    .insert({ company_id: companyId, created_by: userId })
+    .insert({
+      company_id: companyId,
+      created_by: userId,
+      eligibility_responses: eligibilityResponses,
+    })
     .select("id")
     .single();
 

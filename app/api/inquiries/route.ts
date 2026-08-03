@@ -27,6 +27,18 @@ const productSchema = z.object({
   note: z.string().optional().default(""),
 });
 
+const eligibilityResponseSchema = z.object({
+  itemKey: z.enum([
+    "stable_supply",
+    "us_regulatory_compliance",
+    "initial_test_quantity",
+    "north_america_distribution",
+    "joint_marketing",
+    "sales_content_support",
+  ]),
+  response: z.enum(["available", "discussion_required"]),
+});
+
 const payloadSchema = z.object({
   companyName: z.string().trim().min(1),
   businessNumber: z.string().trim().min(1),
@@ -39,6 +51,7 @@ const payloadSchema = z.object({
   phone: z.string().trim().min(1),
   products: z.array(productSchema).min(1).max(MAX_PRODUCTS),
   agreePrivacy: z.literal(true),
+  eligibilityResponses: z.array(eligibilityResponseSchema).length(6).optional(),
 });
 
 function newInquiryNumber() {
@@ -113,6 +126,7 @@ export async function POST(request: Request) {
       contact_email: input.email,
       contact_phone: input.phone,
       products: input.products,
+      eligibility_responses: input.eligibilityResponses || null,
     })
     .select("id, inquiry_number")
     .single();

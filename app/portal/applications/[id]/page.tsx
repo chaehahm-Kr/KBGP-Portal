@@ -36,7 +36,7 @@ export default async function ApplicationDetailPage({
   const { data: application } = await supabase
     .from("applications")
     .select(
-      "id, application_number, status, motivation_note, self_check_answers, submitted_at"
+      "id, application_number, status, motivation_note, self_check_answers, submitted_at, eligibility_responses"
     )
     .eq("id", id)
     .single();
@@ -387,6 +387,46 @@ export default async function ApplicationDetailPage({
                 );
               })}
             </ul>
+          </div>
+
+          {/* Readiness Check Card */}
+          <div className="rounded-lg border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-900">
+            <h2 className="text-sm font-bold text-zinc-900 dark:text-white border-b border-zinc-100 pb-3 dark:border-zinc-850">
+              프로그램 참여 준비 사항
+            </h2>
+            {application.eligibility_responses ? (
+              <ul className="mt-4 space-y-3 text-xs">
+                {(application.eligibility_responses as { itemKey: string; response: string }[]).map((item) => {
+                  const READINESS_ITEMS: Record<string, string> = {
+                    stable_supply: "안정적인 생산 및 공급망 확보",
+                    us_regulatory_compliance: "미국 화장품 규제(MoCRA) 준수 및 FDA 등록 준비",
+                    initial_test_quantity: "초기 파트너십 테스트 물량 공급 의향",
+                    north_america_distribution: "북미 온/오프라인 유통 및 가격 정책 동의",
+                    joint_marketing: "북미 현지 공동 마케팅 협력 의향",
+                    sales_content_support: "상세 페이지 및 현지화 마케팅 콘텐츠 지원",
+                  };
+                  return (
+                    <li key={item.itemKey} className="flex items-start gap-2.5">
+                      <span className="shrink-0 text-sm mt-0.5">
+                        {item.response === "available" ? "🟢" : "🟡"}
+                      </span>
+                      <div className="leading-snug">
+                        <p className="font-semibold text-zinc-900 dark:text-zinc-200">
+                          {READINESS_ITEMS[item.itemKey] || item.itemKey}
+                        </p>
+                        <p className="text-[10px] text-zinc-400 dark:text-zinc-500 mt-0.5">
+                          {item.response === "available" ? "진행 가능" : "협의 필요"}
+                        </p>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            ) : (
+              <p className="mt-4 text-xs text-zinc-400 dark:text-zinc-500 italic text-center py-4">
+                등록된 응답 기록이 없습니다.
+              </p>
+            )}
           </div>
         </div>
       </div>
