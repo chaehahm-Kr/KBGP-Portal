@@ -17,6 +17,9 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "K Select Network 파트너 포털",
   description: "K Select Network B2B 운영 플랫폼",
+  icons: {
+    icon: "/favicon-symbol.png",
+  },
 };
 
 export default function RootLayout({

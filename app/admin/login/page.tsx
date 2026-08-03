@@ -11,18 +11,15 @@ export default function AdminLoginPage() {
     <div className="w-full max-w-md rounded-xl border border-zinc-800 bg-zinc-900/90 p-8 shadow-2xl space-y-6 backdrop-blur-sm">
       {/* KSN Premium Logo & Title */}
       <div className="flex flex-col items-center justify-center text-center space-y-4">
-        {/* KSN Logo Image - Dark Circle cropping the top circle from the JPG */}
-        <div className="relative h-20 w-20 rounded-full overflow-hidden border border-zinc-850 shadow-2xl bg-black">
+        {/* KSN Burgundy Horizontal Logo */}
+        <div className="max-w-[260px] w-full px-2">
           <img
-            src="/ksn-logo.jpg"
-            alt="KSN Logo"
-            className="h-full w-full object-cover object-top scale-110"
+            src="/ksn-logo-admin.png"
+            alt="K SELECT NETWORK"
+            className="w-full h-auto object-contain"
           />
         </div>
-        <div className="space-y-1">
-          <h1 className="text-base font-bold text-white tracking-tight">Korea Select Network</h1>
-          <p className="text-[11px] text-zinc-400 font-medium">Letusto 내부 직원 전용 백엔드 관리 시스템</p>
-        </div>
+        <p className="text-[11px] text-zinc-400 font-medium">Letusto 내부 직원 전용 백엔드 관리 시스템</p>
       </div>
 
       <div className="border-t border-zinc-800 pt-6">
