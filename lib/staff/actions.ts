@@ -3,7 +3,7 @@
 import { z } from "zod";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { requireSuperAdmin } from "@/lib/auth/dal";
+import { requireSuperAdmin, verifyAdminSession } from "@/lib/auth/dal";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { deactivateUserSessions, reactivateUserSessions } from "@/lib/auth/admin-actions";
@@ -147,4 +147,23 @@ export async function completeStaffInviteAcceptance() {
   }
 
   redirect("/admin");
+}
+
+export async function updateMyName(name: string) {
+  const { userId } = await verifyAdminSession();
+  const trimmed = name.trim();
+  if (!trimmed) {
+    throw new Error("이름을 입력해주세요.");
+  }
+  const admin = createAdminClient();
+  const { error } = await admin
+    .from("staff_members")
+    .update({ name: trimmed })
+    .eq("id", userId);
+  
+  if (error) {
+    throw new Error("이름 변경에 실패했습니다: " + error.message);
+  }
+  revalidatePath("/admin");
+  revalidatePath("/admin/staff");
 }

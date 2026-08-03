@@ -32,11 +32,11 @@ export function CreateInfoRequestForm({
         <select
           name="productId"
           defaultValue=""
-          className="mt-1 rounded-md border border-zinc-300 px-3 py-1.5 text-sm"
+          className="mt-1 rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-sm text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white outline-none focus:border-zinc-500 dark:focus:border-zinc-700"
         >
-          <option value="">신청서 전체</option>
+          <option value="" className="bg-white text-zinc-900 dark:bg-zinc-950 dark:text-white">신청서 전체</option>
           {products.map((p) => (
-            <option key={p.id} value={p.id}>
+            <option key={p.id} value={p.id} className="bg-white text-zinc-900 dark:bg-zinc-950 dark:text-white">
               {p.name}
             </option>
           ))}
@@ -50,7 +50,7 @@ export function CreateInfoRequestForm({
           name="requestContent"
           rows={2}
           required
-          className="mt-1 block w-full rounded-md border border-zinc-300 px-3 py-2 text-sm"
+          className="mt-1 block w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white outline-none focus:border-zinc-500 dark:focus:border-zinc-700"
         />
       </div>
       {state?.error && (

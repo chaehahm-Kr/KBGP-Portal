@@ -8,6 +8,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendTemplatedEmail } from "@/lib/notifications/templates";
 import { validateUploadedFile } from "@/lib/files/validate";
+import { createNotification } from "@/lib/notification/actions";
 
 export type InfoRequestFormState = { error: string } | undefined;
 
@@ -82,9 +83,35 @@ export async function createInfoRequest(
 
   const { data: recipients } = await admin
     .from("company_users")
-    .select("email")
+    .select("id, email")
     .eq("company_id", application.company_id)
     .eq("status", "active");
+
+  const firstUserId = recipients?.[0]?.id;
+  if (firstUserId) {
+    // 1:1 문의 채널에 '조치 필요(Action Required)' 형태로 추가 자료 요청 내용 연동 삽입
+    await admin.from("partner_inquiries").insert({
+      company_id: application.company_id,
+      created_by: firstUserId,
+      category: "onboarding",
+      title: `[자료요청] 신청서 ${application.application_number} 추가 자료 요청`,
+      content: `어드민 심사위원으로부터 신청서 ${application.application_number}에 대한 추가 자료 요청이 접수되었습니다. 아래 요청 내용을 검토하시고 필요한 조치를 이행해 주세요.`,
+      status: "replied",
+      reply_content: parsed.data.requestContent,
+      replied_by: session.userId,
+      replied_at: new Date().toISOString(),
+      is_action_required: true,
+    });
+
+    // 실시간 B2B 알림 센터에 추가 자료 요청 알림 주입
+    await createNotification(
+      firstUserId,
+      session.userId,
+      "추가 자료 요청",
+      `신청서 ${application.application_number} 건에 대한 추가 자료 요청이 등록되었습니다. 내용을 확인하고 조치해 주세요.`,
+      "/portal/support"
+    );
+  }
 
   for (const recipient of recipients ?? []) {
     await sendTemplatedEmail("info_request_created", recipient.email, {
@@ -96,6 +123,7 @@ export async function createInfoRequest(
 
   revalidatePath(`/admin/applications/${applicationId}`);
   revalidatePath(`/portal/applications/${applicationId}`);
+  revalidatePath(`/portal/support`);
 }
 
 /**

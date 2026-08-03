@@ -123,7 +123,6 @@ export default async function ApplicationDetailPage({
             action={saveDraftApplication.bind(null, application.id)}
             products={productOptions}
             selectedProductIds={productIds}
-            motivationNote={application.motivation_note ?? ""}
             selfCheckAnswers={(application.self_check_answers ?? []) as boolean[]}
           />
           {linkRows.length > 0 && (
@@ -366,17 +365,7 @@ export default async function ApplicationDetailPage({
 
         {/* Right Column: Motivation & Self Checks (1 Col) */}
         <div className="space-y-6">
-          {/* Motivation Note Card */}
-          {application.motivation_note && (
-            <div className="rounded-lg border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-900">
-              <h2 className="text-sm font-bold text-zinc-900 dark:text-white border-b border-zinc-100 pb-3 dark:border-zinc-850">
-                신청 동기
-              </h2>
-              <p className="mt-3 text-xs text-zinc-600 dark:text-zinc-400 whitespace-pre-wrap leading-relaxed">
-                {application.motivation_note}
-              </p>
-            </div>
-          )}
+
 
           {/* Self Check Card */}
           <div className="rounded-lg border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-900">

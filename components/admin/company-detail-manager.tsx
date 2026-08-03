@@ -2,7 +2,14 @@
 
 import React, { useState, useTransition } from "react";
 import Link from "next/link";
-import { updateCompanyAdminMetadata, type CompanyContact, type CompanyParsedMetadata } from "@/lib/company/admin-actions";
+import {
+  updateCompanyAdminMetadata,
+  adminInviteCompanyUser,
+  adminUpdateCompanyUser,
+  adminDeleteCompanyUser,
+  type CompanyContact,
+  type CompanyParsedMetadata
+} from "@/lib/company/admin-actions";
 import { type PartnerStatusConfig } from "@/lib/settings/actions";
 
 interface CompanyDetailManagerProps {
@@ -15,6 +22,7 @@ interface CompanyDetailManagerProps {
     created_at: string;
   };
   parsedMeta: CompanyParsedMetadata;
+  companyUsers: any[];
   brands: {
     id: string;
     name: string;
@@ -46,6 +54,7 @@ interface CompanyDetailManagerProps {
 export function CompanyDetailManager({
   company,
   parsedMeta,
+  companyUsers,
   brands,
   products,
   applications,
@@ -63,12 +72,8 @@ export function CompanyDetailManager({
   const [type, setType] = useState(parsedMeta.type);
   const [status, setStatus] = useState(parsedMeta.status);
   
-  // Contacts state
-  const [contacts, setContacts] = useState<CompanyContact[]>(parsedMeta.contacts);
-  
   // Editing modes
   const [isEditingMeta, setIsEditingMeta] = useState(false);
-  const [isEditingContacts, setIsEditingContacts] = useState(false);
 
   // Temporary edit states
   const [tempAddress, setTempAddress] = useState(address);
@@ -76,8 +81,61 @@ export function CompanyDetailManager({
   const [tempAdminMemo, setTempAdminMemo] = useState(adminMemo);
   const [tempType, setTempType] = useState(type);
   const [tempStatus, setTempStatus] = useState(status);
-  
-  const [tempContacts, setTempContacts] = useState<CompanyContact[]>([...contacts]);
+
+  // New States for Portal User Manager
+  const [isAddUserOpen, setIsAddUserOpen] = useState(false);
+  const [isEditUserOpen, setIsEditUserOpen] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<any>(null);
+
+  // Add User Form States
+  const [addName, setAddName] = useState("");
+  const [addEmail, setAddEmail] = useState("");
+  const [addPhone, setAddPhone] = useState("");
+  const [addTitle, setAddTitle] = useState("");
+  const [addPosition, setAddPosition] = useState("");
+  const [addRole, setAddRole] = useState<"company_admin" | "company_staff">("company_staff");
+  const [addIsPrimary, setAddIsPrimary] = useState(false);
+  const [addPermissions, setAddPermissions] = useState({
+    application: "none",
+    brands: "none",
+    products: "none",
+    company_info: "none",
+  });
+
+  // Edit User Form States
+  const [editName, setEditName] = useState("");
+  const [editPhone, setEditPhone] = useState("");
+  const [editTitle, setEditTitle] = useState("");
+  const [editPosition, setEditPosition] = useState("");
+  const [editRole, setEditRole] = useState<"company_admin" | "company_staff">("company_staff");
+  const [editStatus, setEditStatus] = useState<"active" | "suspended" | "invited">("active");
+  const [editIsPrimary, setEditIsPrimary] = useState(false);
+  const [editPermissions, setEditPermissions] = useState({
+    application: "none",
+    brands: "none",
+    products: "none",
+    company_info: "none",
+  });
+
+  const handleOpenEdit = (user: any) => {
+    setSelectedUser(user);
+    setEditName(user.name || "");
+    setEditPhone(user.phone || "");
+    setEditTitle(user.title || "");
+    setEditPosition(user.position || "");
+    setEditRole(user.company_role || "company_staff");
+    setEditStatus(user.status || "active");
+    setEditIsPrimary(user.is_primary || false);
+    setEditPermissions(
+      user.permissions || {
+        application: "none",
+        brands: "none",
+        products: "none",
+        company_info: "none",
+      }
+    );
+    setIsEditUserOpen(true);
+  };
 
   // Form submit handles
   const handleSaveMeta = async () => {
@@ -87,7 +145,7 @@ export function CompanyDetailManager({
           address: tempAddress,
           website: tempWebsite,
           adminMemo: tempAdminMemo,
-          contacts: contacts, // keep contacts unchanged
+          contacts: [], // Keep intro contacts array empty or unchanged since we drive from company_users now!
           type: tempType,
           status: tempStatus,
         });
@@ -103,80 +161,84 @@ export function CompanyDetailManager({
     });
   };
 
-  const handleSaveContacts = async () => {
+  const handleAddUserSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!addName.trim() || !addEmail.trim()) {
+      alert("이름과 이메일은 필수 입력 사항입니다.");
+      return;
+    }
     startTransition(async () => {
       try {
-        // Validate contacts
-        const invalid = tempContacts.some(c => !c.name.trim());
-        if (invalid) {
-          alert("담당자 이름은 필수 입력 항목입니다.");
-          return;
-        }
-
-        // Ensure at least one contact is marked isPrimary if list is not empty
-        if (tempContacts.length > 0) {
-          const hasPrimary = tempContacts.some(c => c.isPrimary);
-          if (!hasPrimary) {
-            tempContacts[0].isPrimary = true;
-          }
-        }
-
-        await updateCompanyAdminMetadata(company.id, {
-          address,
-          website,
-          adminMemo,
-          contacts: tempContacts,
-          type,
-          status,
+        await adminInviteCompanyUser(company.id, {
+          name: addName,
+          email: addEmail,
+          phone: addPhone,
+          title: addTitle,
+          position: addPosition,
+          companyRole: addRole,
+          isPrimary: addIsPrimary,
+          permissions: addPermissions,
         });
-        setContacts(tempContacts);
-        setIsEditingContacts(false);
-      } catch (err) {
-        alert(err instanceof Error ? err.message : "담당자 정보 저장 실패");
+        setIsAddUserOpen(false);
+        // Reset states
+        setAddName("");
+        setAddEmail("");
+        setAddPhone("");
+        setAddTitle("");
+        setAddPosition("");
+        setAddRole("company_staff");
+        setAddIsPrimary(false);
+        setAddPermissions({
+          application: "none",
+          brands: "none",
+          products: "none",
+          company_info: "none",
+        });
+      } catch (err: any) {
+        alert(err.message || "담당자 초대 실패");
       }
     });
   };
 
-  const addContactRow = () => {
-    const isFirst = tempContacts.length === 0;
-    setTempContacts([
-      ...tempContacts,
-      {
-        id: crypto.randomUUID(),
-        name: "",
-        phone: "",
-        email: "",
-        title: "",
-        position: "",
-        isPrimary: isFirst,
-      },
-    ]);
-  };
-
-  const removeContactRow = (id: string) => {
-    const target = tempContacts.find(c => c.id === id);
-    const filtered = tempContacts.filter(c => c.id !== id);
-    
-    // If we removed a primary contact, make the first remaining one primary
-    if (target?.isPrimary && filtered.length > 0) {
-      filtered[0].isPrimary = true;
+  const handleUpdateUserSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedUser) return;
+    if (!editName.trim()) {
+      alert("이름은 필수 입력 사항입니다.");
+      return;
     }
-    setTempContacts(filtered);
+    startTransition(async () => {
+      try {
+        await adminUpdateCompanyUser(company.id, selectedUser.id, {
+          name: editName,
+          phone: editPhone,
+          title: editTitle,
+          position: editPosition,
+          companyRole: editRole,
+          status: editStatus,
+          isPrimary: editIsPrimary,
+          permissions: editPermissions,
+        });
+        setIsEditUserOpen(false);
+      } catch (err: any) {
+        alert(err.message || "담당자 정보 수정 실패");
+      }
+    });
   };
 
-  const updateContactField = (id: string, field: keyof CompanyContact, value: any) => {
-    setTempContacts(
-      tempContacts.map(c => (c.id === id ? { ...c, [field]: value } : c))
-    );
-  };
-
-  const handleTogglePrimary = (id: string) => {
-    setTempContacts(
-      tempContacts.map(c => ({
-        ...c,
-        isPrimary: c.id === id,
-      }))
-    );
+  const handleDeleteUser = async () => {
+    if (!selectedUser) return;
+    if (!confirm(`${selectedUser.name || selectedUser.email} 담당자를 삭제하시겠습니까?\n삭제 시 이 사용자는 더 이상 포털에 로그인할 수 없습니다.`)) {
+      return;
+    }
+    startTransition(async () => {
+      try {
+        await adminDeleteCompanyUser(company.id, selectedUser.id);
+        setIsEditUserOpen(false);
+      } catch (err: any) {
+        alert(err.message || "담당자 삭제 실패");
+      }
+    });
   };
 
   // Get status color configuration
@@ -379,170 +441,92 @@ export function CompanyDetailManager({
           {/* Contact Details Card */}
           <div className="rounded-lg border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
             <div className="flex items-center justify-between mb-4 pb-2 border-b border-zinc-100 dark:border-zinc-800">
-              <h3 className="text-xs font-bold text-zinc-950 dark:text-white">담당자 목록 ({contacts.length})</h3>
-              {!isEditingContacts ? (
-                <button
-                  onClick={() => {
-                    setTempContacts([...contacts]);
-                    setIsEditingContacts(true);
-                  }}
-                  className="text-xs font-semibold text-zinc-550 hover:underline dark:text-zinc-400"
-                >
-                  관리
-                </button>
-              ) : (
-                <div className="flex gap-2">
-                  <button
-                    onClick={handleSaveContacts}
-                    disabled={isPending}
-                    className="text-xs font-bold text-emerald-650 hover:underline disabled:opacity-50"
-                  >
-                    저장
-                  </button>
-                  <button
-                    onClick={() => setIsEditingContacts(false)}
-                    className="text-xs font-semibold text-zinc-400 hover:underline"
-                  >
-                    취소
-                  </button>
-                </div>
-              )}
+              <h3 className="text-xs font-bold text-zinc-950 dark:text-white">담당자 및 포털 사용자 ({companyUsers.length})</h3>
+              <button
+                onClick={() => setIsAddUserOpen(true)}
+                className="rounded bg-zinc-900 px-2 py-1 text-[10px] font-bold text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-100"
+              >
+                + 신규 담당자 초대
+              </button>
             </div>
 
-            {!isEditingContacts ? (
-              <div className="space-y-4">
-                {contacts.length > 0 ? (
-                  contacts.map((contact, index) => (
-                    <div key={contact.id || index} className={`text-xs space-y-2 ${index > 0 ? "pt-4 border-t border-zinc-100 dark:border-zinc-800/80" : ""}`}>
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="space-y-0.5">
-                          <span className="font-bold text-zinc-900 dark:text-white text-[13px] flex items-center gap-1.5">
-                            {contact.name}
-                            {contact.isPrimary && (
-                              <span className="inline-block rounded bg-emerald-50 text-emerald-700 px-1.5 py-0.5 text-[8px] font-bold border border-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-900">
-                                주 컨택
-                              </span>
-                            )}
+            <div className="space-y-4">
+              {companyUsers.length > 0 ? (
+                companyUsers.map((user, index) => (
+                  <div key={user.id} className={`text-xs space-y-2 ${index > 0 ? "pt-4 border-t border-zinc-150 dark:border-zinc-800/80" : ""}`}>
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="space-y-1">
+                        <span className="font-bold text-zinc-900 dark:text-white text-[13px] flex flex-wrap items-center gap-1.5">
+                          {user.name || "이름 없음"}
+                          {user.is_primary && (
+                            <span className="inline-block rounded bg-emerald-50 text-emerald-700 px-1.5 py-0.5 text-[8px] font-bold border border-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-900">
+                              주 컨택
+                            </span>
+                          )}
+                          <span className={`inline-block rounded px-1.5 py-0.2 text-[9px] font-bold ${
+                            user.status === "active"
+                              ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300"
+                              : user.status === "suspended"
+                              ? "bg-red-50 text-red-700 dark:bg-red-950/50 dark:text-red-300"
+                              : "bg-zinc-100 text-zinc-650 dark:bg-zinc-800 dark:text-zinc-350"
+                          }`}>
+                            {user.status === "active" ? "정상 이용" : user.status === "suspended" ? "이용 정지" : "초대 대기"}
                           </span>
-                        </div>
-                        <div className="flex flex-wrap gap-1 justify-end">
-                          {contact.title && (
-                            <span className="rounded bg-zinc-50 border border-zinc-150 text-zinc-600 px-1.5 py-0.5 text-[9px] font-semibold dark:bg-zinc-800/20 dark:border-zinc-700 dark:text-zinc-350">
-                              직함: {contact.title}
+                        </span>
+                        <div className="flex flex-wrap gap-1">
+                          <span className="rounded bg-zinc-100 border border-zinc-150 text-zinc-600 px-1 py-0.2 text-[8px] font-bold dark:bg-zinc-800/20 dark:border-zinc-700 dark:text-zinc-350">
+                            {user.company_role === "company_admin" ? "관리자 (Admin)" : "담당자 (Staff)"}
+                          </span>
+                          {user.title && (
+                            <span className="rounded bg-zinc-50 border border-zinc-150 text-zinc-500 px-1 py-0.2 text-[8px] font-semibold dark:bg-zinc-850 dark:border-zinc-750">
+                              직함: {user.title}
                             </span>
                           )}
-                          {contact.position && (
-                            <span className="rounded bg-zinc-50 border border-zinc-150 text-zinc-600 px-1.5 py-0.5 text-[9px] font-semibold dark:bg-zinc-800/20 dark:border-zinc-700 dark:text-zinc-350">
-                              부서: {contact.position}
+                          {user.position && (
+                            <span className="rounded bg-zinc-50 border border-zinc-150 text-zinc-500 px-1 py-0.2 text-[8px] font-semibold dark:bg-zinc-850 dark:border-zinc-750">
+                              부서: {user.position}
                             </span>
                           )}
                         </div>
                       </div>
-                      <div className="grid grid-cols-1 gap-1 text-[11px] text-zinc-550 dark:text-zinc-450">
-                        {contact.phone && <p>📞 {contact.phone}</p>}
-                        {contact.email && <p>✉️ {contact.email}</p>}
-                      </div>
+                      <button
+                        onClick={() => handleOpenEdit(user)}
+                        className="text-xs font-semibold text-indigo-650 hover:underline dark:text-indigo-400"
+                      >
+                        수정
+                      </button>
                     </div>
-                  ))
-                ) : (
-                  <p className="text-xs text-zinc-400 py-3 text-center">등록된 담당자 정보가 없습니다.</p>
-                )}
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {tempContacts.map((contact, index) => (
-                  <div key={contact.id} className="p-3 rounded-md border border-zinc-200 bg-zinc-50/50 dark:border-zinc-800 dark:bg-zinc-950/40 space-y-2.5 relative">
-                    <button
-                      type="button"
-                      onClick={() => removeContactRow(contact.id)}
-                      className="absolute top-2 right-2 text-[10px] font-bold text-rose-600 hover:underline"
-                    >
-                      삭제
-                    </button>
-                    
-                    {/* Primary checkbox selector */}
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        id={`primary-${contact.id}`}
-                        checked={contact.isPrimary}
-                        onChange={() => handleTogglePrimary(contact.id)}
-                        className="rounded border-zinc-300 text-emerald-600 focus:ring-emerald-500 h-3 w-3"
-                      />
-                      <label htmlFor={`primary-${contact.id}`} className="text-[10px] font-bold text-zinc-600 dark:text-zinc-300 select-none">
-                        대표 담당자(주 컨택 직원)로 지정
-                      </label>
+                    <div className="grid grid-cols-1 gap-0.5 text-[11px] text-zinc-550 dark:text-zinc-450 font-mono">
+                      {user.phone && <p>📞 {user.phone}</p>}
+                      <p>✉️ {user.email}</p>
                     </div>
-
-                    <div className="grid grid-cols-2 gap-2">
-                      <div>
-                        <label className="text-[9px] font-bold text-zinc-400 block">이름</label>
-                        <input
-                          type="text"
-                          required
-                          value={contact.name}
-                          onChange={(e) => updateContactField(contact.id, "name", e.target.value)}
-                          placeholder="담당자 이름"
-                          className="mt-0.5 w-full rounded border border-zinc-200 p-1 text-[11px] outline-none dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
-                        />
+                    {/* Permissions summary */}
+                    {user.permissions && (
+                      <div className="mt-1 flex flex-wrap gap-1 items-center bg-zinc-50/50 p-1.5 rounded border border-zinc-100 dark:bg-zinc-950/20 dark:border-zinc-850">
+                        <span className="text-[9px] font-bold text-zinc-400 dark:text-zinc-500 uppercase mr-1">권한:</span>
+                        <span className="text-[9px] text-zinc-600 dark:text-zinc-350">신청서({
+                          user.permissions.application === "read_write" ? "쓰기" : user.permissions.application === "read_only" ? "읽기" : "없음"
+                        })</span>
+                        <span className="text-zinc-300 dark:text-zinc-700">•</span>
+                        <span className="text-[9px] text-zinc-600 dark:text-zinc-350">브랜드({
+                          user.permissions.brands === "read_write" ? "쓰기" : user.permissions.brands === "read_only" ? "읽기" : "없음"
+                        })</span>
+                        <span className="text-zinc-300 dark:text-zinc-700">•</span>
+                        <span className="text-[9px] text-zinc-600 dark:text-zinc-350">제품({
+                          user.permissions.products === "read_write" ? "쓰기" : user.permissions.products === "read_only" ? "읽기" : "없음"
+                        })</span>
+                        <span className="text-zinc-300 dark:text-zinc-700">•</span>
+                        <span className="text-[9px] text-zinc-600 dark:text-zinc-350">회사정보({
+                          user.permissions.company_info === "read_write" ? "쓰기" : user.permissions.company_info === "read_only" ? "읽기" : "없음"
+                        })</span>
                       </div>
-                      <div>
-                        <label className="text-[9px] font-bold text-zinc-400 block">직함</label>
-                        <input
-                          type="text"
-                          value={contact.title}
-                          onChange={(e) => updateContactField(contact.id, "title", e.target.value)}
-                          placeholder="예: 과장, 대표"
-                          className="mt-0.5 w-full rounded border border-zinc-200 p-1 text-[11px] outline-none dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-2">
-                      <div>
-                        <label className="text-[9px] font-bold text-zinc-400 block">포지션 / 부서</label>
-                        <input
-                          type="text"
-                          value={contact.position}
-                          onChange={(e) => updateContactField(contact.id, "position", e.target.value)}
-                          placeholder="예: 해외영업부, 마케팅"
-                          className="mt-0.5 w-full rounded border border-zinc-200 p-1 text-[11px] outline-none dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-[9px] font-bold text-zinc-400 block">연락처</label>
-                        <input
-                          type="text"
-                          value={contact.phone}
-                          onChange={(e) => updateContactField(contact.id, "phone", e.target.value)}
-                          placeholder="010-1234-5678"
-                          className="mt-0.5 w-full rounded border border-zinc-200 p-1 text-[11px] outline-none dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
-                        />
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="text-[9px] font-bold text-zinc-400 block">이메일</label>
-                      <input
-                        type="email"
-                        value={contact.email}
-                        onChange={(e) => updateContactField(contact.id, "email", e.target.value)}
-                        placeholder="user@example.com"
-                        className="mt-0.5 w-full rounded border border-zinc-200 p-1 text-[11px] outline-none dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
-                      />
-                    </div>
+                    )}
                   </div>
-                ))}
-                
-                <button
-                  type="button"
-                  onClick={addContactRow}
-                  className="w-full py-1.5 border border-dashed border-zinc-300 rounded-md text-[11px] font-bold text-zinc-600 hover:bg-zinc-50 dark:border-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-950/20"
-                >
-                  + 담당자 추가
-                </button>
-              </div>
-            )}
+                ))
+              ) : (
+                <p className="text-xs text-zinc-400 py-3 text-center">등록된 담당자가 없습니다.</p>
+              )}
+            </div>
           </div>
         </div>
 
@@ -745,6 +729,361 @@ export function CompanyDetailManager({
           </div>
         </div>
       </div>
+
+      {/* Invite User Modal */}
+      {isAddUserOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-lg rounded-xl border border-zinc-200 bg-white p-6 shadow-2xl dark:border-zinc-800 dark:bg-zinc-900">
+            <h3 className="text-sm font-bold text-zinc-955 dark:text-white mb-4">신규 담당자 초대</h3>
+            <form onSubmit={handleAddUserSubmit} className="space-y-4 text-xs">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[10px] font-bold text-zinc-400 block mb-1">이름</label>
+                  <input
+                    type="text"
+                    required
+                    value={addName}
+                    onChange={(e) => setAddName(e.target.value)}
+                    placeholder="홍길동"
+                    className="w-full rounded border border-zinc-200 p-2 outline-none dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold text-zinc-400 block mb-1">이메일 계정</label>
+                  <input
+                    type="email"
+                    required
+                    value={addEmail}
+                    onChange={(e) => setAddEmail(e.target.value)}
+                    placeholder="user@example.com"
+                    className="w-full rounded border border-zinc-200 p-2 outline-none dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[10px] font-bold text-zinc-400 block mb-1">연락처</label>
+                  <input
+                    type="text"
+                    value={addPhone}
+                    onChange={(e) => setAddPhone(e.target.value)}
+                    placeholder="010-1234-5678"
+                    className="w-full rounded border border-zinc-200 p-2 outline-none dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold text-zinc-400 block mb-1">회사 내 역할 (Role)</label>
+                  <select
+                    value={addRole}
+                    onChange={(e) => setAddRole(e.target.value as any)}
+                    className="w-full rounded border border-zinc-200 p-2 outline-none bg-white dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+                  >
+                    <option value="company_staff">담당자 (Staff)</option>
+                    <option value="company_admin">관리자 (Admin)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[10px] font-bold text-zinc-400 block mb-1">부서 (Position)</label>
+                  <input
+                    type="text"
+                    value={addPosition}
+                    onChange={(e) => setAddPosition(e.target.value)}
+                    placeholder="예: 마케팅부"
+                    className="w-full rounded border border-zinc-200 p-2 outline-none dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold text-zinc-400 block mb-1">직함 (Title)</label>
+                  <input
+                    type="text"
+                    value={addTitle}
+                    onChange={(e) => setAddTitle(e.target.value)}
+                    placeholder="예: 과장"
+                    className="w-full rounded border border-zinc-200 p-2 outline-none dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 py-1">
+                <input
+                  type="checkbox"
+                  id="add-primary"
+                  checked={addIsPrimary}
+                  onChange={(e) => setAddIsPrimary(e.target.checked)}
+                  className="rounded border-zinc-300 text-indigo-650 focus:ring-indigo-500 h-4 w-4"
+                />
+                <label htmlFor="add-primary" className="text-[11px] font-bold text-zinc-700 dark:text-zinc-300">
+                  대표 담당자(주 컨택 직원)로 설정
+                </label>
+              </div>
+
+              {/* Permissions matrix */}
+              <div className="rounded-lg border border-zinc-150 bg-zinc-50/50 p-4 dark:border-zinc-800 dark:bg-zinc-950/20 space-y-3">
+                <h4 className="font-bold text-[11px] text-zinc-450 dark:text-zinc-550 uppercase tracking-wider">메뉴별 상세 권한 설정</h4>
+                <div className="grid grid-cols-2 gap-3 text-[11px]">
+                  <div className="flex flex-col gap-1">
+                    <span className="font-semibold text-zinc-700 dark:text-zinc-300">입점 신청서</span>
+                    <select
+                      value={addPermissions.application}
+                      onChange={(e) => setAddPermissions({ ...addPermissions, application: e.target.value })}
+                      className="rounded border border-zinc-200 bg-white p-1 text-[11px] text-zinc-900 outline-none dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+                    >
+                      <option value="none">권한 없음</option>
+                      <option value="read_only">읽기 전용</option>
+                      <option value="read_write">읽기 및 쓰기</option>
+                    </select>
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <span className="font-semibold text-zinc-700 dark:text-zinc-300">브랜드 관리</span>
+                    <select
+                      value={addPermissions.brands}
+                      onChange={(e) => setAddPermissions({ ...addPermissions, brands: e.target.value })}
+                      className="rounded border border-zinc-200 bg-white p-1 text-[11px] text-zinc-900 outline-none dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+                    >
+                      <option value="none">권한 없음</option>
+                      <option value="read_only">읽기 전용</option>
+                      <option value="read_write">읽기 및 쓰기</option>
+                    </select>
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <span className="font-semibold text-zinc-700 dark:text-zinc-300">제품 관리</span>
+                    <select
+                      value={addPermissions.products}
+                      onChange={(e) => setAddPermissions({ ...addPermissions, products: e.target.value })}
+                      className="rounded border border-zinc-200 bg-white p-1 text-[11px] text-zinc-900 outline-none dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+                    >
+                      <option value="none">권한 없음</option>
+                      <option value="read_only">읽기 전용</option>
+                      <option value="read_write">읽기 및 쓰기</option>
+                    </select>
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <span className="font-semibold text-zinc-700 dark:text-zinc-300">회사 정보</span>
+                    <select
+                      value={addPermissions.company_info}
+                      onChange={(e) => setAddPermissions({ ...addPermissions, company_info: e.target.value })}
+                      className="rounded border border-zinc-200 bg-white p-1 text-[11px] text-zinc-900 outline-none dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+                    >
+                      <option value="none">권한 없음</option>
+                      <option value="read_only">읽기 전용</option>
+                      <option value="read_write">읽기 및 쓰기</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-zinc-100 dark:border-zinc-800">
+                <button
+                  type="button"
+                  onClick={() => setIsAddUserOpen(false)}
+                  className="rounded border border-zinc-200 px-4 py-2 font-bold text-zinc-500 hover:bg-zinc-50 dark:border-zinc-850 dark:hover:bg-zinc-950"
+                >
+                  취소
+                </button>
+                <button
+                  type="submit"
+                  disabled={isPending}
+                  className="rounded bg-zinc-950 px-4 py-2 font-bold text-white hover:bg-zinc-850 disabled:opacity-50 dark:bg-white dark:text-zinc-955 dark:hover:bg-zinc-100"
+                >
+                  {isPending ? "초대중..." : "초대 발송"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit User Modal */}
+      {isEditUserOpen && selectedUser && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-lg rounded-xl border border-zinc-200 bg-white p-6 shadow-2xl dark:border-zinc-800 dark:bg-zinc-900">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-sm font-bold text-zinc-955 dark:text-white">담당자 상세 설정</h3>
+              <button
+                type="button"
+                onClick={handleDeleteUser}
+                disabled={isPending}
+                className="text-xs font-bold text-red-600 hover:underline disabled:opacity-50"
+              >
+                이 담당자 삭제
+              </button>
+            </div>
+            <form onSubmit={handleUpdateUserSubmit} className="space-y-4 text-xs">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[10px] font-bold text-zinc-400 block mb-1">이름</label>
+                  <input
+                    type="text"
+                    required
+                    value={editName}
+                    onChange={(e) => setEditName(e.target.value)}
+                    className="w-full rounded border border-zinc-200 p-2 outline-none dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold text-zinc-400 block mb-1">이메일 계정 (수정 불가)</label>
+                  <input
+                    type="text"
+                    disabled
+                    value={selectedUser.email}
+                    className="w-full rounded border border-zinc-150 p-2 outline-none bg-zinc-50 dark:border-zinc-850 dark:bg-zinc-950/50 text-zinc-400"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[10px] font-bold text-zinc-400 block mb-1">연락처</label>
+                  <input
+                    type="text"
+                    value={editPhone}
+                    onChange={(e) => setEditPhone(e.target.value)}
+                    className="w-full rounded border border-zinc-200 p-2 outline-none dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold text-zinc-400 block mb-1">회사 내 역할 (Role)</label>
+                  <select
+                    value={editRole}
+                    onChange={(e) => setEditRole(e.target.value as any)}
+                    className="w-full rounded border border-zinc-200 p-2 outline-none bg-white dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+                  >
+                    <option value="company_staff">담당자 (Staff)</option>
+                    <option value="company_admin">관리자 (Admin)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[10px] font-bold text-zinc-400 block mb-1">부서 (Position)</label>
+                  <input
+                    type="text"
+                    value={editPosition}
+                    onChange={(e) => setEditPosition(e.target.value)}
+                    className="w-full rounded border border-zinc-200 p-2 outline-none dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold text-zinc-400 block mb-1">직함 (Title)</label>
+                  <input
+                    type="text"
+                    value={editTitle}
+                    onChange={(e) => setEditTitle(e.target.value)}
+                    className="w-full rounded border border-zinc-200 p-2 outline-none dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[10px] font-bold text-zinc-400 block mb-1">이용 상태 (Status)</label>
+                  <select
+                    value={editStatus}
+                    disabled={selectedUser.status === "invited"}
+                    onChange={(e) => setEditStatus(e.target.value as any)}
+                    className="w-full rounded border border-zinc-200 p-2 outline-none bg-white dark:border-zinc-800 dark:bg-zinc-950 dark:text-white disabled:bg-zinc-50/50 disabled:text-zinc-400"
+                  >
+                    <option value="active">정상 이용 (Active)</option>
+                    <option value="suspended">이용 정지 (Suspended)</option>
+                    <option value="invited">초대 대기중 (Invited)</option>
+                  </select>
+                </div>
+                <div className="flex items-end pb-2">
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      id="edit-primary"
+                      checked={editIsPrimary}
+                      onChange={(e) => setEditIsPrimary(e.target.checked)}
+                      className="rounded border-zinc-300 text-indigo-650 focus:ring-indigo-500 h-4 w-4"
+                    />
+                    <label htmlFor="edit-primary" className="text-[11px] font-bold text-zinc-700 dark:text-zinc-300">
+                      대표 담당자(주 컨택 직원)로 설정
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              {/* Permissions matrix */}
+              <div className="rounded-lg border border-zinc-150 bg-zinc-50/50 p-4 dark:border-zinc-800 dark:bg-zinc-950/20 space-y-3">
+                <h4 className="font-bold text-[11px] text-zinc-450 dark:text-zinc-550 uppercase tracking-wider">메뉴별 상세 권한 설정</h4>
+                <div className="grid grid-cols-2 gap-3 text-[11px]">
+                  <div className="flex flex-col gap-1">
+                    <span className="font-semibold text-zinc-700 dark:text-zinc-300">입점 신청서</span>
+                    <select
+                      value={editPermissions.application}
+                      onChange={(e) => setEditPermissions({ ...editPermissions, application: e.target.value })}
+                      className="rounded border border-zinc-200 bg-white p-1 text-[11px] text-zinc-900 outline-none dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+                    >
+                      <option value="none">권한 없음</option>
+                      <option value="read_only">읽기 전용</option>
+                      <option value="read_write">읽기 및 쓰기</option>
+                    </select>
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <span className="font-semibold text-zinc-700 dark:text-zinc-300">브랜드 관리</span>
+                    <select
+                      value={editPermissions.brands}
+                      onChange={(e) => setEditPermissions({ ...editPermissions, brands: e.target.value })}
+                      className="rounded border border-zinc-200 bg-white p-1 text-[11px] text-zinc-900 outline-none dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+                    >
+                      <option value="none">권한 없음</option>
+                      <option value="read_only">읽기 전용</option>
+                      <option value="read_write">읽기 및 쓰기</option>
+                    </select>
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <span className="font-semibold text-zinc-700 dark:text-zinc-300">제품 관리</span>
+                    <select
+                      value={editPermissions.products}
+                      onChange={(e) => setEditPermissions({ ...editPermissions, products: e.target.value })}
+                      className="rounded border border-zinc-200 bg-white p-1 text-[11px] text-zinc-900 outline-none dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+                    >
+                      <option value="none">권한 없음</option>
+                      <option value="read_only">읽기 전용</option>
+                      <option value="read_write">읽기 및 쓰기</option>
+                    </select>
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <span className="font-semibold text-zinc-700 dark:text-zinc-300">회사 정보</span>
+                    <select
+                      value={editPermissions.company_info}
+                      onChange={(e) => setEditPermissions({ ...editPermissions, company_info: e.target.value })}
+                      className="rounded border border-zinc-200 bg-white p-1 text-[11px] text-zinc-900 outline-none dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+                    >
+                      <option value="none">권한 없음</option>
+                      <option value="read_only">읽기 전용</option>
+                      <option value="read_write">읽기 및 쓰기</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-zinc-100 dark:border-zinc-800">
+                <button
+                  type="button"
+                  onClick={() => setIsEditUserOpen(false)}
+                  className="rounded border border-zinc-200 px-4 py-2 font-bold text-zinc-500 hover:bg-zinc-50 dark:border-zinc-850 dark:hover:bg-zinc-950"
+                >
+                  취소
+                </button>
+                <button
+                  type="submit"
+                  disabled={isPending}
+                  className="rounded bg-zinc-950 px-4 py-2 font-bold text-white hover:bg-zinc-850 disabled:opacity-50 dark:bg-white dark:text-zinc-955 dark:hover:bg-zinc-100"
+                >
+                  {isPending ? "저장중..." : "변경 사항 저장"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

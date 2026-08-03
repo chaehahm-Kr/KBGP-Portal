@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { requireCompanyMembership } from "@/lib/company/dal";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { validateUploadedFile } from "@/lib/files/validate";
 import type { CertificateType, ProductCategory } from "@/lib/product/types";
 
@@ -13,8 +14,9 @@ export type ProductFormState = { error: string } | undefined;
 const MAX_IMAGES = 5;
 
 const productSchema = z.object({
-  brandId: z.string().uuid({ message: "브랜드를 선택해주세요." }),
-  name: z.string().trim().min(1, "제품명을 입력해주세요."),
+  brandId: z.string().uuid("브랜드를 선택해주세요."),
+  manufactureSku: z.string().trim().min(1, "제조사 SKU를 입력해주세요."),
+  nameEn: z.string().trim().min(1, "영문 제품명을 입력해주세요."),
   category: z.enum([
     "skincare",
     "hair_scalp",
@@ -22,16 +24,12 @@ const productSchema = z.object({
     "daily_care",
     "wellness_patch",
   ] as const satisfies readonly ProductCategory[]),
-  volume: z.string().trim().optional(),
-  estimatedRetailPrice: z
-    .string()
-    .trim()
-    .optional()
-    .transform((v) => (v ? Number(v) : null))
-    .refine((v) => v === null || Number.isFinite(v), {
-      message: "소비자가는 숫자로 입력해주세요.",
-    }),
-  ingredientsText: z.string().trim().optional(),
+  priceKrwRetail: z.preprocess((val) => (val === "" || val === null ? undefined : val), z.coerce.number().min(0).optional()),
+  priceUsdFob: z.preprocess((val) => (val === "" || val === null ? undefined : val), z.coerce.number().min(0).optional()),
+  packageWidth: z.preprocess((val) => (val === "" || val === null ? undefined : val), z.coerce.number().min(0).optional()),
+  packageDepth: z.preprocess((val) => (val === "" || val === null ? undefined : val), z.coerce.number().min(0).optional()),
+  packageHeight: z.preprocess((val) => (val === "" || val === null ? undefined : val), z.coerce.number().min(0).optional()),
+  packageWeight: z.preprocess((val) => (val === "" || val === null ? undefined : val), z.coerce.number().min(0).optional()),
 });
 
 function extensionFor(mime: string) {
@@ -44,10 +42,8 @@ function extensionFor(mime: string) {
 }
 
 /**
- * 08_주요화면과AC.md 화면 7(제품 등록) AC: "이미지 최소 1장, 인증서는 선택사항이지만
- * 없을 경우 신청서 제출 시 경고(차단은 아님) 표시" — 그래서 인증서는 등록 시점이
- * 아니라 상세 화면에서 별도로 추가하도록 분리했다(addProductCertificate).
- * 이미지는 이 화면에서 최소 1장을 강제한다(최대 5장).
+ * 새 제품을 등록합니다. 필수 정보(브랜드, 제조사 SKU, 영문 제품명, 카테고리, 가격, 패키지)를 입력받아
+ * 제품 레코드를 생성한 뒤, 제출 액션 타입에 따라 목록 또는 상세로 이동합니다.
  */
 export async function createProduct(
   _prevState: ProductFormState,
@@ -57,39 +53,24 @@ export async function createProduct(
 
   const parsed = productSchema.safeParse({
     brandId: formData.get("brandId"),
-    name: formData.get("name"),
+    manufactureSku: formData.get("manufactureSku"),
+    nameEn: formData.get("nameEn"),
     category: formData.get("category"),
-    volume: formData.get("volume"),
-    estimatedRetailPrice: formData.get("estimatedRetailPrice"),
-    ingredientsText: formData.get("ingredientsText"),
+    priceKrwRetail: formData.get("priceKrwRetail"),
+    priceUsdFob: formData.get("priceUsdFob"),
+    packageWidth: formData.get("packageWidth"),
+    packageDepth: formData.get("packageDepth"),
+    packageHeight: formData.get("packageHeight"),
+    packageWeight: formData.get("packageWeight"),
   });
 
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "입력값을 확인해주세요." };
   }
 
-  const images = formData
-    .getAll("images")
-    .filter((f): f is File => f instanceof File && f.size > 0);
-
-  if (images.length === 0) {
-    return { error: "제품 이미지를 최소 1장 첨부해주세요." };
-  }
-  if (images.length > MAX_IMAGES) {
-    return { error: `제품 이미지는 최대 ${MAX_IMAGES}장까지 첨부할 수 있습니다.` };
-  }
-
-  for (const image of images) {
-    const validation = await validateUploadedFile(image, ["image"]);
-    if (!validation.ok) {
-      return { error: validation.error };
-    }
-  }
-
   const supabase = await createClient();
 
-  // 브랜드가 정말 본인 회사 소속인지 확인 — RLS가 있어도 요청 파라미터로 넘어온
-  // brandId를 신뢰하지 않고 애플리케이션 레벨에서도 한 번 더 확인한다.
+  // 브랜드 소유 확인
   const { data: brand } = await supabase
     .from("brands")
     .select("id")
@@ -106,36 +87,33 @@ export async function createProduct(
     .insert({
       brand_id: brand.id,
       company_id: companyId,
-      name: parsed.data.name,
+      name: parsed.data.nameEn,
+      name_en: parsed.data.nameEn,
       category: parsed.data.category,
-      volume: parsed.data.volume || null,
-      estimated_retail_price: parsed.data.estimatedRetailPrice,
-      ingredients_text: parsed.data.ingredientsText || null,
+      manufacture_sku: parsed.data.manufactureSku,
+      price_krw_retail: parsed.data.priceKrwRetail ?? null,
+      price_usd_fob: parsed.data.priceUsdFob ?? null,
+      package_width: parsed.data.packageWidth ?? null,
+      package_depth: parsed.data.packageDepth ?? null,
+      package_height: parsed.data.packageHeight ?? null,
+      package_weight: parsed.data.packageWeight ?? null,
     })
     .select("id")
     .single();
 
   if (insertError || !product) {
+    console.error("Insert product error:", insertError);
     return { error: "제품 등록에 실패했습니다. 잠시 후 다시 시도해주세요." };
   }
 
-  for (const [index, image] of images.entries()) {
-    const validation = await validateUploadedFile(image, ["image"]);
-    if (!validation.ok) continue; // 위에서 이미 전체 검증했으므로 도달하지 않음
-    const path = `${companyId}/products/${product.id}/images/${crypto.randomUUID()}.${extensionFor(
-      validation.detectedMime
-    )}`;
-    const { error: uploadError } = await supabase.storage
-      .from("company-uploads")
-      .upload(path, image, { contentType: validation.detectedMime });
-    if (!uploadError) {
-      await supabase
-        .from("product_images")
-        .insert({ product_id: product.id, company_id: companyId, storage_path: path, position: index });
-    }
+  revalidatePath("/portal/products");
+  
+  const submitAction = formData.get("submitAction") || "continue";
+  if (submitAction === "list") {
+    redirect("/portal/products");
+  } else {
+    redirect(`/portal/products/${product.id}`);
   }
-
-  redirect(`/portal/products/${product.id}`);
 }
 
 export async function addProductImages(productId: string, formData: FormData) {
@@ -582,3 +560,204 @@ export async function removeProductVideo(productId: string, videoId: string) {
   revalidatePath(`/portal/products/${productId}`);
 }
 
+export async function uploadIngredientsFile(productId: string, language: "ko" | "en", formData: FormData) {
+  const { companyId } = await requireCompanyMembership();
+  const supabase = await createClient();
+
+  const file = formData.get("ingredientsFile");
+  if (!(file instanceof File) || file.size === 0) {
+    throw new Error("파일을 선택해주세요.");
+  }
+
+  const validation = await validateUploadedFile(file, ["document", "image"]);
+  if (!validation.ok) {
+    throw new Error(validation.error);
+  }
+
+  const columnName = language === "en" ? "ingredients_file_path_en" : "ingredients_file_path";
+
+  // 기존 파일 조회 및 삭제
+  const { data: product } = await supabase
+    .from("products")
+    .select(columnName)
+    .eq("id", productId)
+    .eq("company_id", companyId)
+    .single();
+
+  const oldPath = product ? (product as any)[columnName] : null;
+
+  if (oldPath) {
+    try {
+      await supabase.storage.from("company-uploads").remove([oldPath]);
+    } catch (e) {
+      console.error("Failed to remove old file:", e);
+    }
+  }
+
+  const path = `${companyId}/products/${productId}/ingredients/${language}_${crypto.randomUUID()}.${extensionFor(
+    validation.detectedMime
+  )}`;
+
+  const { error: uploadError } = await supabase.storage
+    .from("company-uploads")
+    .upload(path, file, { contentType: validation.detectedMime });
+
+  if (uploadError) {
+    throw new Error("파일 업로드에 실패했습니다.");
+  }
+
+  await supabase
+    .from("products")
+    .update({ [columnName]: path })
+    .eq("id", productId)
+    .eq("company_id", companyId);
+
+  // Synchronize to product_certificates for "ingredient_certification"
+  if (language === "ko") {
+    const { data: previous } = await supabase
+      .from("product_certificates")
+      .select("version")
+      .eq("product_id", productId)
+      .eq("certificate_type", "ingredient_certification")
+      .eq("is_current", true)
+      .order("version", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    const nextVersion = (previous?.version ?? 0) + 1;
+
+    await supabase
+      .from("product_certificates")
+      .update({ is_current: false })
+      .eq("product_id", productId)
+      .eq("certificate_type", "ingredient_certification")
+      .eq("is_current", true);
+
+    await supabase.from("product_certificates").insert({
+      product_id: productId,
+      company_id: companyId,
+      certificate_type: "ingredient_certification",
+      storage_path: path,
+      original_filename: file.name,
+      version: nextVersion,
+      is_current: true,
+    });
+  }
+
+  revalidatePath(`/portal/products/${productId}`);
+}
+
+export async function deleteIngredientsFile(productId: string, language: "ko" | "en") {
+  const { companyId } = await requireCompanyMembership();
+  const supabase = await createClient();
+
+  const columnName = language === "en" ? "ingredients_file_path_en" : "ingredients_file_path";
+
+  const { data: product } = await supabase
+    .from("products")
+    .select(columnName)
+    .eq("id", productId)
+    .eq("company_id", companyId)
+    .single();
+
+  const oldPath = product ? (product as any)[columnName] : null;
+
+  if (oldPath) {
+    try {
+      await supabase.storage.from("company-uploads").remove([oldPath]);
+    } catch (e) {
+      console.error("Failed to remove old file:", e);
+    }
+  }
+
+  await supabase
+    .from("products")
+    .update({ [columnName]: null })
+    .eq("id", productId)
+    .eq("company_id", companyId);
+
+  // Synchronize to product_certificates for "ingredient_certification"
+  if (language === "ko") {
+    await supabase
+      .from("product_certificates")
+      .update({ is_current: false })
+      .eq("product_id", productId)
+      .eq("certificate_type", "ingredient_certification")
+      .eq("is_current", true);
+  }
+
+  revalidatePath(`/portal/products/${productId}`);
+}
+
+export async function updateProductImagesOrder(productId: string, imageIdsInOrder: string[]) {
+  const { companyId } = await requireCompanyMembership();
+  const supabase = await createClient();
+
+  const { data: currentImages } = await supabase
+    .from("product_images")
+    .select("id")
+    .eq("product_id", productId)
+    .eq("company_id", companyId);
+
+  const currentIds = new Set((currentImages ?? []).map((img) => img.id));
+  if (currentIds.size !== imageIdsInOrder.length || !imageIdsInOrder.every(id => currentIds.has(id))) {
+    throw new Error("올바르지 않은 이미지 목록입니다.");
+  }
+
+  const adminSupabase = createAdminClient();
+  for (let index = 0; index < imageIdsInOrder.length; index++) {
+    const id = imageIdsInOrder[index];
+    const { error } = await adminSupabase
+      .from("product_images")
+      .update({ position: index })
+      .eq("id", id)
+      .eq("product_id", productId)
+      .eq("company_id", companyId);
+
+    if (error) {
+      console.error("Failed to update image position:", error);
+      throw new Error(`이미지 순서 저장 실패: ${error.message}`);
+    }
+  }
+
+  revalidatePath(`/portal/products/${productId}`);
+}
+
+/**
+ * 제품을 소프트 삭제(deleted_at 설정)합니다.
+ */
+export async function deleteProduct(productId: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { companyId } = await requireCompanyMembership();
+    const supabase = await createClient();
+
+    // 제품이 해당 회사 소유인지 확인
+    const { data: product } = await supabase
+      .from("products")
+      .select("id")
+      .eq("id", productId)
+      .eq("company_id", companyId)
+      .single();
+
+    if (!product) {
+      return { success: false, error: "제품을 찾을 수 없거나 삭제 권한이 없습니다." };
+    }
+
+    const { error: deleteError } = await supabase
+      .from("products")
+      .update({ deleted_at: new Date().toISOString() })
+      .eq("id", productId)
+      .eq("company_id", companyId);
+
+    if (deleteError) {
+      console.error("Delete product error:", deleteError);
+      return { success: false, error: "제품 삭제 중 오류가 발생했습니다." };
+    }
+
+    revalidatePath("/portal/products");
+    revalidatePath(`/portal/products/${productId}`);
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err.message || "오류가 발생했습니다." };
+  }
+}

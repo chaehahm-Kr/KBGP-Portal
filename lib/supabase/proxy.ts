@@ -42,7 +42,15 @@ const AREAS: { prefix: string; login: string; publicPaths: string[] }[] = [
  * 항상 lib/auth/dal.ts가 각 화면에서 담당한다 — proxy는 1차 방어선일 뿐이다.
  */
 export async function updateSession(request: NextRequest) {
-  let supabaseResponse = NextResponse.next({ request });
+  const pathname = request.nextUrl.pathname;
+  const prefix = pathname.startsWith("/admin") ? "admin-" : pathname.startsWith("/portal") ? "portal-" : "";
+
+  request.headers.set("x-url", pathname);
+  let supabaseResponse = NextResponse.next({
+    request: {
+      headers: request.headers,
+    },
+  });
 
   const supabase = createServerClient(
     publicEnv.NEXT_PUBLIC_SUPABASE_URL,
@@ -50,24 +58,54 @@ export async function updateSession(request: NextRequest) {
     {
       cookies: {
         getAll() {
-          return request.cookies.getAll();
+          const allCookies = request.cookies.getAll();
+          if (!prefix) return allCookies;
+          return allCookies
+            .filter((cookie) => {
+              if (cookie.name.startsWith("sb-")) return false;
+              if (cookie.name.startsWith("admin-sb-") && prefix !== "admin-") return false;
+              if (cookie.name.startsWith("portal-sb-") && prefix !== "portal-") return false;
+              return true;
+            })
+            .map((cookie) => {
+              if (cookie.name.startsWith(prefix)) {
+                return {
+                  name: cookie.name.substring(prefix.length),
+                  value: cookie.value,
+                };
+              }
+              return cookie;
+            });
         },
         setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value }) =>
-            request.cookies.set(name, value)
-          );
-          supabaseResponse = NextResponse.next({ request });
-          cookiesToSet.forEach(({ name, value, options }) =>
-            supabaseResponse.cookies.set(name, value, options)
-          );
+          cookiesToSet.forEach(({ name, value }) => {
+            const mappedName = prefix && name.startsWith("sb-") ? `${prefix}${name}` : name;
+            request.cookies.set(mappedName, value);
+          });
+          supabaseResponse = NextResponse.next({
+            request: {
+              headers: request.headers,
+            },
+          });
+          cookiesToSet.forEach(({ name, value, options }) => {
+            const mappedName = prefix && name.startsWith("sb-") ? `${prefix}${name}` : name;
+            supabaseResponse.cookies.set(mappedName, value, options);
+          });
         },
       },
     }
   );
 
-  // createServerClient와 getClaims() 사이에는 다른 코드를 두지 않는다 (위 주석 참고).
-  const { data } = await supabase.auth.getClaims();
-  const isAuthenticated = Boolean(data?.claims);
+  // createServerClient와 getUser() 사이에는 다른 코드를 두지 않는다 (위 주석 참고).
+  // getUser()를 호출해야 만료된 session이 refresh token을 이용하여 쿠키(setAll)에 의해 자동 갱신됩니다.
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser();
+  if (userError) {
+    console.error("proxy.ts updateSession getUser error:", userError);
+  }
+  const isAuthenticated = Boolean(user);
 
   const area = AREAS.find(({ prefix }) =>
     request.nextUrl.pathname.startsWith(prefix)

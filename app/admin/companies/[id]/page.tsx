@@ -92,12 +92,19 @@ export default async function AdminCompanyDetailPage({
     .neq("status", "draft")
     .order("submitted_at", { ascending: false });
 
+  const { data: companyUsers } = await supabase
+    .from("company_users")
+    .select("id, name, email, status, company_role, title, position, phone, is_primary, permissions")
+    .eq("company_id", id)
+    .order("created_at", { ascending: true });
+
   const brandNameById = new Map(brandsData.map((b) => [b.id, b.name]));
 
   return (
     <CompanyDetailManager
       company={company}
       parsedMeta={parsedMeta}
+      companyUsers={companyUsers ?? []}
       brands={resolvedBrands}
       products={products ?? []}
       applications={applications ?? []}

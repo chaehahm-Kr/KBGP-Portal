@@ -155,3 +155,161 @@ export async function updateCompanyAdminMetadata(
   revalidatePath(`/admin/companies/${companyId}`);
   revalidatePath("/admin/companies");
 }
+
+import { deactivateUserSessions } from "@/lib/auth/admin-actions";
+
+export async function adminInviteCompanyUser(
+  companyId: string,
+  payload: {
+    name: string;
+    email: string;
+    title: string;
+    position: string;
+    phone: string;
+    companyRole: "company_admin" | "company_staff";
+    isPrimary: boolean;
+    permissions: Record<string, any>;
+  }
+) {
+  await verifyAdminSession();
+  const admin = createAdminClient();
+
+  // 1. Check if email already registered
+  const { data: existing } = await admin
+    .from("company_users")
+    .select("id")
+    .eq("email", payload.email)
+    .maybeSingle();
+
+  if (existing) {
+    throw new Error("이미 이메일로 등록된 담당자가 존재합니다.");
+  }
+
+  // 2. Invite Auth User
+  const { data: invited, error: inviteError } =
+    await admin.auth.admin.inviteUserByEmail(payload.email, {
+      data: { role: "portal", display_name: payload.name },
+      redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3010'}/portal/invite/accept`,
+    });
+
+  if (inviteError || !invited.user) {
+    throw new Error(`사용자 초대 실패: ${inviteError?.message || "알 수 없는 에러"}`);
+  }
+
+  // 3. Handle isPrimary
+  if (payload.isPrimary) {
+    await admin
+      .from("company_users")
+      .update({ is_primary: false })
+      .eq("company_id", companyId);
+  }
+
+  // 4. Insert into company_users
+  const { error: insertError } = await admin.from("company_users").insert({
+    id: invited.user.id,
+    company_id: companyId,
+    name: payload.name,
+    email: payload.email,
+    company_role: payload.companyRole,
+    status: "invited",
+    title: payload.title,
+    position: payload.position,
+    phone: payload.phone,
+    is_primary: payload.isPrimary,
+    permissions: payload.permissions,
+    invited_at: new Date().toISOString(),
+  });
+
+  if (insertError) {
+    console.error("Insert error:", insertError);
+    throw new Error(`담당자 정보 저장 실패: ${insertError.message}`);
+  }
+
+  revalidatePath(`/admin/companies/${companyId}`);
+}
+
+export async function adminUpdateCompanyUser(
+  companyId: string,
+  targetUserId: string,
+  payload: {
+    name: string;
+    title: string;
+    position: string;
+    phone: string;
+    companyRole: "company_admin" | "company_staff";
+    status: "active" | "suspended" | "invited";
+    isPrimary: boolean;
+    permissions: Record<string, any>;
+  }
+) {
+  await verifyAdminSession();
+  const admin = createAdminClient();
+
+  // 1. Fetch current status to detect changes
+  const { data: target } = await admin
+    .from("company_users")
+    .select("status, company_role")
+    .eq("id", targetUserId)
+    .single();
+
+  if (!target) {
+    throw new Error("대상 사용자를 찾을 수 없습니다.");
+  }
+
+  // 2. Handle isPrimary
+  if (payload.isPrimary) {
+    await admin
+      .from("company_users")
+      .update({ is_primary: false })
+      .eq("company_id", companyId)
+      .neq("id", targetUserId);
+  }
+
+  // 3. Update company_users
+  const { error: updateError } = await admin
+    .from("company_users")
+    .update({
+      name: payload.name,
+      title: payload.title,
+      position: payload.position,
+      phone: payload.phone,
+      company_role: payload.companyRole,
+      status: payload.status,
+      is_primary: payload.isPrimary,
+      permissions: payload.permissions,
+    })
+    .eq("id", targetUserId);
+
+  if (updateError) {
+    throw new Error(`담당자 정보 업데이트 실패: ${updateError.message}`);
+  }
+
+  // 4. Force log out sessions if suspended or role changed
+  const deactivated = payload.status === "suspended" && target.status !== "suspended";
+  const roleChanged = payload.companyRole !== target.company_role;
+  if (deactivated || roleChanged) {
+    await deactivateUserSessions(targetUserId);
+  }
+
+  revalidatePath(`/admin/companies/${companyId}`);
+}
+
+export async function adminDeleteCompanyUser(companyId: string, targetUserId: string) {
+  await verifyAdminSession();
+  const admin = createAdminClient();
+
+  // Delete from company_users (which cascade deletes profiles or we can delete auth)
+  const { error: deleteError } = await admin
+    .from("company_users")
+    .delete()
+    .eq("id", targetUserId);
+
+  if (deleteError) {
+    throw new Error(`담당자 삭제 실패: ${deleteError.message}`);
+  }
+
+  // Also delete Auth User
+  await admin.auth.admin.deleteUser(targetUserId);
+
+  revalidatePath(`/admin/companies/${companyId}`);
+}

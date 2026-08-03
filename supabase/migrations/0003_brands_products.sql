@@ -109,6 +109,12 @@ create policy "product_images_delete_own"
   to authenticated
   using (company_id = public.auth_company_id());
 
+create policy "product_images_update_own"
+  on public.product_images for update
+  to authenticated
+  using (company_id = public.auth_company_id())
+  with check (company_id = public.auth_company_id());
+
 create table public.product_certificates (
   id uuid primary key default gen_random_uuid(),
   product_id uuid not null references public.products (id) on delete cascade,

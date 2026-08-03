@@ -29,13 +29,13 @@ export function AssignApplicationForm({
         <select
           name="staffId"
           defaultValue={currentStaffId ?? ""}
-          className="mt-1 rounded-md border border-zinc-300 px-3 py-1.5 text-sm"
+          className="mt-1 rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-sm text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white outline-none focus:border-zinc-500 dark:focus:border-zinc-700"
         >
-          <option value="" disabled>
+          <option value="" disabled className="bg-white text-zinc-900 dark:bg-zinc-950 dark:text-white">
             선택
           </option>
           {staffMembers.map((staff) => (
-            <option key={staff.id} value={staff.id}>
+            <option key={staff.id} value={staff.id} className="bg-white text-zinc-900 dark:bg-zinc-950 dark:text-white">
               {staff.name || staff.email}
             </option>
           ))}

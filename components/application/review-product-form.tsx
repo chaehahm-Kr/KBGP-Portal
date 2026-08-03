@@ -52,10 +52,10 @@ export function ReviewProductForm({
             DECIDABLE_STATUSES.includes(currentStatus) ? currentStatus : "approved"
           }
           disabled={disabled}
-          className="rounded-md border border-zinc-300 px-3 py-1.5 text-sm disabled:opacity-50"
+          className="rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-sm text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white outline-none focus:border-zinc-500 dark:focus:border-zinc-700 disabled:opacity-50"
         >
           {DECIDABLE_STATUSES.map((value) => (
-            <option key={value} value={value}>
+            <option key={value} value={value} className="bg-white text-zinc-900 dark:bg-zinc-950 dark:text-white">
               {REVIEW_STATUS_LABEL[value]}
             </option>
           ))}

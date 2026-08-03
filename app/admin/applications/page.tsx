@@ -56,8 +56,81 @@ export default async function AdminApplicationsPage({
 
   const { data: applications } = await query;
 
-  const { data: companies } = await supabase.from("companies").select("id, name");
-  const companyNameById = new Map((companies ?? []).map((c) => [c.id, c.name]));
+  const { data: companies } = await supabase
+    .from("companies")
+    .select("id, name, intro, contact_name, contact_phone");
+
+  const { data: companyUsers } = await supabase
+    .from("company_users")
+    .select("company_id, name, email, phone, title, position, is_primary, status")
+    .order("created_at", { ascending: true });
+  
+  const companyMap = new Map<
+    string,
+    {
+      name: string;
+      contactName: string;
+      contactEmail: string;
+      contactPhone: string;
+      contactTitle: string;
+      contactPosition: string;
+      description: string;
+    }
+  >();
+
+  for (const c of companies ?? []) {
+    const users = (companyUsers ?? []).filter((u) => u.company_id === c.id);
+    const dbPrimary = users.find((u) => u.is_primary) || users[0];
+
+    let description = "";
+    let contactEmail = "";
+    let contactPhone = c.contact_phone || "";
+    let contactName = c.contact_name || "";
+    let contactTitle = "";
+    let contactPosition = "";
+
+    if (dbPrimary) {
+      contactName = dbPrimary.name || contactName;
+      contactEmail = dbPrimary.email || "";
+      contactPhone = dbPrimary.phone || contactPhone;
+      contactTitle = dbPrimary.title || "";
+      contactPosition = dbPrimary.position || "";
+    } else if (c.intro && c.intro.startsWith("__COMPANY_METADATA__:")) {
+      try {
+        const jsonStr = c.intro.substring("__COMPANY_METADATA__:".length);
+        const data = JSON.parse(jsonStr);
+        const contacts = data.contacts || [];
+        const primary = contacts.find((x: any) => x.isPrimary) || contacts[0];
+        if (primary) {
+          contactName = primary.name || contactName;
+          contactEmail = primary.email || "";
+          contactPhone = primary.phone || contactPhone;
+          contactTitle = primary.title || "";
+          contactPosition = primary.position || "";
+        }
+      } catch (e) {}
+    }
+
+    if (c.intro && c.intro.startsWith("__COMPANY_METADATA__:")) {
+      try {
+        const jsonStr = c.intro.substring("__COMPANY_METADATA__:".length);
+        const data = JSON.parse(jsonStr);
+        description = data.description || "";
+      } catch (e) {}
+    } else {
+      description = c.intro || "";
+    }
+
+    companyMap.set(c.id, {
+      name: c.name,
+      contactName: contactName || "-",
+      contactEmail,
+      contactPhone,
+      contactTitle,
+      contactPosition,
+      description
+    });
+  }
 
   const { data: staffMembers } = await supabase.from("staff_members").select("id, name, email");
   const staffNameById = new Map(
@@ -74,16 +147,28 @@ export default async function AdminApplicationsPage({
 
   const filtered = (applications ?? []).filter((app) => {
     if (!company) return true;
-    const name = companyNameById.get(app.company_id) ?? "";
+    const cInfo = companyMap.get(app.company_id);
+    const name = cInfo?.name ?? "";
     return name.toLowerCase().includes(company.toLowerCase());
   });
+
+  const getDaysPassed = (dateStr?: string | null) => {
+    if (!dateStr) return "";
+    const submittedDate = new Date(dateStr);
+    submittedDate.setHours(0, 0, 0, 0);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const diffTime = today.getTime() - submittedDate.getTime();
+    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+    return diffDays === 0 ? "오늘 제출" : `${diffDays}일 경과`;
+  };
 
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-xl font-bold text-zinc-950 dark:text-white">신청서 목록</h1>
+          <h1 className="text-xl font-bold text-zinc-955 dark:text-white">신청서 목록</h1>
           <p className="text-xs text-zinc-500 dark:text-zinc-400">
             전체 파트너 회사가 제출한 입점 신청서 내역을 조회하고 배정 및 심사를 처리합니다.
           </p>
@@ -123,7 +208,7 @@ export default async function AdminApplicationsPage({
           <div className="flex h-11 items-end">
             <button
               type="submit"
-              className="rounded-md bg-zinc-900 px-4 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-zinc-800 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-100 h-8"
+              className="rounded-md bg-zinc-900 px-4 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-zinc-800 dark:bg-white dark:text-zinc-955 dark:hover:bg-zinc-100 h-8"
             >
               필터 적용
             </button>
@@ -136,20 +221,22 @@ export default async function AdminApplicationsPage({
         <div className="overflow-x-auto">
           <table className="w-full border-collapse text-left text-xs text-zinc-500 dark:text-zinc-400">
             <thead>
-              <tr className="border-b border-zinc-150 bg-zinc-50 font-bold text-zinc-950 dark:border-zinc-800 dark:bg-zinc-900/50 dark:text-white">
+              <tr className="border-b border-zinc-150 bg-zinc-50 font-bold text-zinc-955 dark:border-zinc-800 dark:bg-zinc-900/50 dark:text-white">
                 <th className="px-6 py-3 font-semibold">신청번호</th>
                 <th className="px-6 py-3 font-semibold">회사명</th>
                 <th className="px-6 py-3 font-semibold">심사 상태</th>
                 <th className="px-6 py-3 font-semibold">담당 심사원</th>
+                <th className="px-6 py-3 font-semibold text-center">브랜드 담당자</th>
                 <th className="px-6 py-3 font-semibold">제출일</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
               {filtered.map((app) => {
                 const badgeClass = STATUS_BADGE_STYLE[app.status as ApplicationStatus] || "bg-zinc-100 text-zinc-800";
+                const compInfo = companyMap.get(app.company_id);
                 return (
                   <tr key={app.id} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-900/50">
-                    <td className="px-6 py-3.5 font-semibold text-zinc-950 dark:text-white">
+                    <td className="px-6 py-3.5 font-semibold text-zinc-955 dark:text-white">
                       <Link
                         href={`/admin/applications/${app.id}`}
                         className="hover:underline hover:text-zinc-900 dark:hover:text-zinc-300"
@@ -157,8 +244,8 @@ export default async function AdminApplicationsPage({
                         {app.application_number}
                       </Link>
                     </td>
-                    <td className="px-6 py-3.5 text-zinc-700 dark:text-zinc-300">
-                      {companyNameById.get(app.company_id) ?? "-"}
+                    <td className="px-6 py-3.5 text-zinc-700 dark:text-zinc-300 font-medium">
+                      {compInfo?.name ?? "-"}
                     </td>
                     <td className="px-6 py-3.5">
                       <span className={`inline-block rounded px-2 py-0.5 text-[10px] font-bold ${badgeClass}`}>
@@ -176,21 +263,66 @@ export default async function AdminApplicationsPage({
                         </span>
                       )}
                     </td>
-                    <td className="px-6 py-3.5 text-zinc-400">
-                      {app.submitted_at
-                        ? new Date(app.submitted_at).toLocaleDateString("ko-KR", {
-                            year: "numeric",
-                            month: "short",
-                            day: "numeric",
-                          })
-                        : "-"}
+                    <td className="px-6 py-3.5 text-center relative group">
+                      {compInfo ? (
+                        <>
+                          <span className="font-semibold text-zinc-900 dark:text-white underline decoration-dotted cursor-help decoration-zinc-400 hover:text-indigo-650 dark:hover:text-indigo-400">
+                            {compInfo.contactName}
+                          </span>
+                          {/* Hover Popover Tooltip */}
+                          <div className="absolute left-1/2 bottom-full mb-2 w-72 -translate-x-1/2 rounded-lg border border-zinc-200 bg-white p-3.5 text-left text-xs text-zinc-700 shadow-xl opacity-0 scale-95 pointer-events-none group-hover:opacity-100 group-hover:scale-100 group-hover:pointer-events-auto transition-all duration-200 z-35 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-300">
+                            <h4 className="font-bold text-zinc-900 dark:text-white text-[13px] border-b border-zinc-100 pb-1.5 mb-2 dark:border-zinc-900 flex justify-between items-center">
+                              <span>{compInfo.contactName} {compInfo.contactTitle && `(${compInfo.contactTitle})`}</span>
+                              <span className="text-[10px] font-normal text-zinc-400">{compInfo.contactPosition}</span>
+                            </h4>
+                            <div className="space-y-1 text-xs">
+                              <p className="flex justify-between gap-2">
+                                <span className="text-zinc-400 shrink-0 font-medium">이메일:</span>
+                                <span className="font-semibold text-zinc-900 dark:text-white truncate">{compInfo.contactEmail || "-"}</span>
+                              </p>
+                              <p className="flex justify-between gap-2">
+                                <span className="text-zinc-400 shrink-0 font-medium">연락처:</span>
+                                <span className="font-semibold text-zinc-900 dark:text-white">{compInfo.contactPhone || "-"}</span>
+                              </p>
+                              {compInfo.description && (
+                                <div className="mt-2 pt-2 border-t border-zinc-100 dark:border-zinc-900">
+                                  <span className="block text-[10px] text-zinc-400 font-bold mb-1">회사 소개</span>
+                                  <p className="text-[11px] leading-relaxed text-zinc-600 dark:text-zinc-400 line-clamp-3">{compInfo.description}</p>
+                                </div>
+                              )}
+                            </div>
+                            {/* Arrow */}
+                            <div className="absolute left-1/2 top-full h-2 w-2 -translate-x-1/2 -translate-y-1 rotate-45 border-r border-b border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950" />
+                          </div>
+                        </>
+                      ) : (
+                        "-"
+                      )}
+                    </td>
+                    <td className="px-6 py-3.5 text-zinc-650 dark:text-zinc-400">
+                      {app.submitted_at ? (
+                        <div className="flex flex-col gap-0.5">
+                          <span>
+                            {new Date(app.submitted_at).toLocaleDateString("ko-KR", {
+                              year: "numeric",
+                              month: "short",
+                              day: "numeric",
+                            })}
+                          </span>
+                          <span className="text-[9px] text-zinc-450 dark:text-zinc-500 font-bold">
+                            ({getDaysPassed(app.submitted_at)})
+                          </span>
+                        </div>
+                      ) : (
+                        "-"
+                      )}
                     </td>
                   </tr>
                 );
               })}
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="py-12 text-center text-sm text-zinc-400">
+                  <td colSpan={6} className="py-12 text-center text-sm text-zinc-400">
                     조건에 부합하는 신청서 내역이 없습니다.
                   </td>
                 </tr>

@@ -17,7 +17,6 @@ type ApplicationDraftFormProps = {
   ) => Promise<ApplicationFormState>;
   products: ProductOption[];
   selectedProductIds: string[];
-  motivationNote: string;
   selfCheckAnswers: boolean[];
 };
 
@@ -25,7 +24,6 @@ export function ApplicationDraftForm({
   action,
   products,
   selectedProductIds,
-  motivationNote,
   selfCheckAnswers,
 }: ApplicationDraftFormProps) {
   const [state, formAction, pending] = useActionState<
@@ -82,15 +80,7 @@ export function ApplicationDraftForm({
         </div>
       </section>
 
-      <section className="space-y-2">
-        <h2 className="text-sm font-semibold text-zinc-900 dark:text-white">신청 동기 (선택)</h2>
-        <textarea
-          name="motivationNote"
-          defaultValue={motivationNote}
-          rows={3}
-          className="block w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 outline-none transition-all focus:border-zinc-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white dark:focus:border-zinc-700"
-        />
-      </section>
+
 
       <section className="space-y-3">
         <div>

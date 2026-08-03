@@ -22,9 +22,9 @@ export default async function ProductDetailPage({
   const { data: product } = await supabase
     .from("products")
     .select(`
-      id, name, name_en, category, volume, estimated_retail_price, ingredients_text, brand_id,
+      id, name, name_en, category, volume, estimated_retail_price, ingredients_text, ingredients_file_path, ingredients_file_path_en, brand_id,
       description, bullet_points, color, color_map, origin, lead_time,
-      parent_sku, child_sku, manufacture_sku, letusto_sku,
+      parent_sku, child_sku, manufacture_sku, letusto_sku, upc, ean,
       price_krw_retail, price_krw_wholesale, price_usd_fob, price_additional_info,
       item_width, item_depth, item_height, item_weight,
       package_width, package_depth, package_height, package_weight,
@@ -46,6 +46,13 @@ export default async function ProductDetailPage({
     .select("name")
     .eq("id", product.brand_id)
     .single();
+
+  const { data: brands } = await supabase
+    .from("brands")
+    .select("id, name")
+    .eq("company_id", companyId)
+    .eq("is_active", true)
+    .order("name", { ascending: true });
 
   const { data: images } = await supabase
     .from("product_images")
@@ -90,16 +97,37 @@ export default async function ProductDetailPage({
     certificateRows.map((cert) => getSignedFileUrl(cert.storage_path))
   );
 
+  let ingredientsFileUrl: string | null = null;
+  if (product.ingredients_file_path) {
+    try {
+      ingredientsFileUrl = await getSignedFileUrl(product.ingredients_file_path);
+    } catch {
+      // Ignore
+    }
+  }
+
+  let ingredientsFileUrlEn: string | null = null;
+  if (product.ingredients_file_path_en) {
+    try {
+      ingredientsFileUrlEn = await getSignedFileUrl(product.ingredients_file_path_en);
+    } catch {
+      // Ignore
+    }
+  }
+
   return (
     <ProductDetailTabs
       product={product as unknown as Product}
       brandName={brand?.name ?? "(미확인 브랜드)"}
+      brands={brands ?? []}
       imageRows={imageRows}
       imageUrls={imageUrls}
       videoRows={videoRows}
       videoUrls={videoUrls}
       certificateRows={certificateRows}
       certificateUrls={certificateUrls}
+      ingredientsFileUrl={ingredientsFileUrl}
+      ingredientsFileUrlEn={ingredientsFileUrlEn}
     />
   );
 }

@@ -381,10 +381,12 @@ export function CompanyUsersManager({ initialUsers, currentUserId }: CompanyUser
                           value={formPermissions.application || "none"}
                           disabled={formRole === "company_admin"}
                           onChange={(e) => setFormPermissions({ ...formPermissions, application: e.target.value })}
-                          className="rounded border border-zinc-200 p-1 text-[11px] outline-none dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+                          className="rounded border border-zinc-200 bg-white p-1 text-[11px] text-zinc-900 outline-none dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
                         >
                           {permissionOptions.map(opt => (
-                            <option key={opt.value} value={opt.value}>{opt.label}</option>
+                            <option key={opt.value} value={opt.value} className="bg-white text-zinc-900 dark:bg-zinc-950 dark:text-white">
+                              {opt.label}
+                            </option>
                           ))}
                         </select>
                       </div>
@@ -398,10 +400,12 @@ export function CompanyUsersManager({ initialUsers, currentUserId }: CompanyUser
                           value={formPermissions.brands || "none"}
                           disabled={formRole === "company_admin"}
                           onChange={(e) => setFormPermissions({ ...formPermissions, brands: e.target.value })}
-                          className="rounded border border-zinc-200 p-1 text-[11px] outline-none dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+                          className="rounded border border-zinc-200 bg-white p-1 text-[11px] text-zinc-900 outline-none dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
                         >
                           {permissionOptions.map(opt => (
-                            <option key={opt.value} value={opt.value}>{opt.label}</option>
+                            <option key={opt.value} value={opt.value} className="bg-white text-zinc-900 dark:bg-zinc-950 dark:text-white">
+                              {opt.label}
+                            </option>
                           ))}
                         </select>
                       </div>
@@ -415,10 +419,12 @@ export function CompanyUsersManager({ initialUsers, currentUserId }: CompanyUser
                           value={formPermissions.products || "none"}
                           disabled={formRole === "company_admin"}
                           onChange={(e) => setFormPermissions({ ...formPermissions, products: e.target.value })}
-                          className="rounded border border-zinc-200 p-1 text-[11px] outline-none dark:border-zinc-800 dark:bg-zinc-955 dark:text-white"
+                          className="rounded border border-zinc-200 bg-white p-1 text-[11px] text-zinc-900 outline-none dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
                         >
                           {permissionOptions.map(opt => (
-                            <option key={opt.value} value={opt.value}>{opt.label}</option>
+                            <option key={opt.value} value={opt.value} className="bg-white text-zinc-900 dark:bg-zinc-950 dark:text-white">
+                              {opt.label}
+                            </option>
                           ))}
                         </select>
                       </div>
@@ -432,10 +438,12 @@ export function CompanyUsersManager({ initialUsers, currentUserId }: CompanyUser
                           value={formPermissions.company_info || "none"}
                           disabled={formRole === "company_admin"}
                           onChange={(e) => setFormPermissions({ ...formPermissions, company_info: e.target.value })}
-                          className="rounded border border-zinc-200 p-1 text-[11px] outline-none dark:border-zinc-800 dark:bg-zinc-955 dark:text-white"
+                          className="rounded border border-zinc-200 bg-white p-1 text-[11px] text-zinc-900 outline-none dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
                         >
                           {permissionOptions.map(opt => (
-                            <option key={opt.value} value={opt.value}>{opt.label}</option>
+                            <option key={opt.value} value={opt.value} className="bg-white text-zinc-900 dark:bg-zinc-950 dark:text-white">
+                              {opt.label}
+                            </option>
                           ))}
                         </select>
                       </div>

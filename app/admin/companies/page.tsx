@@ -23,6 +23,11 @@ export default async function AdminCompaniesPage() {
     `)
     .order("created_at", { ascending: false });
 
+  const { data: companyUsers } = await supabase
+    .from("company_users")
+    .select("company_id, name, email, phone, title, position, is_primary, status")
+    .order("created_at", { ascending: true });
+
   const configs = await getSystemCompanyConfigs();
 
   const resolvedDbCompanies = await Promise.all(
@@ -31,8 +36,14 @@ export default async function AdminCompaniesPage() {
       const activeBrandsCount = ((c.brands as any[]) || []).filter((b) => b.is_active).length;
       const totalProductsCount = ((c.products as any[]) || []).length;
 
-      // Find primary contact or fallback to first contact
-      const primaryContact = parsed.contacts.find((contact) => contact.isPrimary) || parsed.contacts[0] || null;
+      // Find primary contact from company_users first
+      const users = (companyUsers ?? []).filter((u) => u.company_id === c.id);
+      const dbPrimary = users.find((u) => u.is_primary) || users[0] || null;
+
+      // Fallback to parsed metadata contacts
+      const metadataPrimary = parsed.contacts.find((contact) => contact.isPrimary) || parsed.contacts[0] || null;
+
+      const primaryContact = dbPrimary || metadataPrimary;
 
       return {
         id: c.id,

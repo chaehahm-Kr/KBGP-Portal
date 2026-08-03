@@ -13,6 +13,14 @@ import {
   LogOutIcon
 } from "./icons";
 import { logoutAdmin } from "@/lib/auth/actions";
+import { createClient } from "@/lib/supabase/client";
+import { updateMyName } from "@/lib/staff/actions";
+import {
+  getNotifications,
+  markNotificationAsRead,
+  markAllNotificationsAsRead,
+  type NotificationItem
+} from "@/lib/notification/actions";
 
 interface HeaderProps {
   isSidebarCollapsed: boolean;
@@ -24,6 +32,106 @@ export default function Header({ isSidebarCollapsed }: HeaderProps) {
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+
+  const loadNotifications = async () => {
+    const data = await getNotifications();
+    setNotifications(data);
+  };
+
+  useEffect(() => {
+    loadNotifications();
+    const interval = setInterval(loadNotifications, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const handleNotificationClick = async (n: NotificationItem) => {
+    if (!n.is_read) {
+      await markNotificationAsRead(n.id);
+      setNotifications(prev =>
+        prev.map(item => item.id === n.id ? { ...item, is_read: true } : item)
+      );
+    }
+    setIsNotificationsOpen(false);
+    if (n.link_url) {
+      router.push(n.link_url);
+    }
+  };
+
+  const handleMarkAllRead = async () => {
+    await markAllNotificationsAsRead();
+    setNotifications(prev => prev.map(item => ({ ...item, is_read: true })));
+  };
+
+  const formatRelativeTime = (dateStr: string): string => {
+    const now = new Date();
+    const date = new Date(dateStr);
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    if (diffMins < 1) return "방금 전";
+    if (diffMins < 60) return `${diffMins}분 전`;
+    const diffHours = Math.floor(diffMins / 60);
+    if (diffHours < 24) return `${diffHours}시간 전`;
+    const diffDays = Math.floor(diffHours / 24);
+    return `${diffDays}일 전`;
+  };
+
+  // Profile management states
+  const [userProfile, setUserProfile] = useState<{ name: string; email: string } | null>(null);
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+  const [tempName, setTempName] = useState("");
+  const [errorMsg, setErrorMsg] = useState("");
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
+
+  const fetchProfile = async () => {
+    try {
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data: staff } = await supabase
+          .from("staff_members")
+          .select("name, email")
+          .eq("id", user.id)
+          .maybeSingle();
+
+        if (staff) {
+          setUserProfile({
+            name: staff.name || "관리자",
+            email: staff.email || user.email || "",
+          });
+          setTempName(staff.name || "");
+        } else {
+          setUserProfile({
+            name: "관리자",
+            email: user.email || "",
+          });
+          setTempName("관리자");
+        }
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  useEffect(() => {
+    fetchProfile();
+  }, []);
+
+  const handleSaveProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMsg("");
+    setIsSavingProfile(true);
+    try {
+      await updateMyName(tempName);
+      await fetchProfile();
+      setIsProfileModalOpen(false);
+      setIsProfileOpen(false);
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : "프로필 이름 수정에 실패했습니다.");
+    } finally {
+      setIsSavingProfile(false);
+    }
+  };
 
   // Initialize theme from localStorage or system preference
   useEffect(() => {
@@ -35,8 +143,10 @@ export default function Header({ isSidebarCollapsed }: HeaderProps) {
     setIsDarkMode(initialDark);
     if (initialDark) {
       root.classList.add("dark");
+      root.classList.remove("light");
     } else {
       root.classList.remove("dark");
+      root.classList.add("light");
     }
   }, []);
 
@@ -73,7 +183,7 @@ export default function Header({ isSidebarCollapsed }: HeaderProps) {
   return (
     <header
       className={`fixed top-0 right-0 z-10 flex h-16 items-center justify-between border-b border-zinc-200 bg-white px-6 dark:border-zinc-800 dark:bg-zinc-950 transition-all duration-300 ${
-        isSidebarCollapsed ? "left-16" : "left-0 lg:left-64"
+        isSidebarCollapsed ? "left-16" : "left-64"
       }`}
     >
       {/* Left side: Breadcrumbs */}
@@ -135,38 +245,60 @@ export default function Header({ isSidebarCollapsed }: HeaderProps) {
             className="relative flex h-8 w-8 items-center justify-center rounded-md border border-zinc-200 text-zinc-500 hover:bg-zinc-50 hover:text-zinc-900 dark:border-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-900 dark:hover:text-white"
           >
             <BellIcon size={16} />
-            <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-destructive" />
+            {notifications.some(n => !n.is_read) && (
+              <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-rose-500 ring-2 ring-white dark:ring-zinc-950 animate-pulse" />
+            )}
           </button>
 
           {isNotificationsOpen && (
-            <div className="absolute right-0 mt-2 w-80 rounded-md border border-zinc-200 bg-white p-4 shadow-lg dark:border-zinc-800 dark:bg-zinc-950">
-              <div className="flex items-center justify-between border-b border-zinc-100 pb-2 dark:border-zinc-900">
-                <span className="text-xs font-bold text-zinc-950 dark:text-white">
-                  Notifications
+            <div className="absolute right-0 mt-2 w-80 rounded-lg border border-zinc-200 bg-white p-3 shadow-lg dark:border-zinc-800 dark:bg-zinc-950 z-50">
+              <div className="flex items-center justify-between border-b border-zinc-100 pb-2 mb-2 dark:border-zinc-900">
+                <span className="text-xs font-extrabold text-zinc-900 dark:text-white">
+                  알림 센터
                 </span>
-                <button className="text-[10px] font-semibold text-zinc-400 hover:text-zinc-900 dark:hover:text-white">
-                  Clear All
-                </button>
+                {notifications.some(n => !n.is_read) && (
+                  <button
+                    onClick={handleMarkAllRead}
+                    className="text-[10px] font-bold text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white"
+                  >
+                    모두 읽음
+                  </button>
+                )}
               </div>
-              <div className="mt-3 space-y-2 text-xs">
-                <div className="flex flex-col gap-0.5 rounded border border-zinc-50 p-2 dark:border-zinc-900">
-                  <span className="font-semibold text-zinc-900 dark:text-white">
-                    New Application Submitted
-                  </span>
-                  <span className="text-[10px] text-zinc-500">
-                    APP-000001 (Moisturizer Inc.)
-                  </span>
-                  <span className="text-[9px] text-zinc-400 mt-1">2 mins ago</span>
-                </div>
-                <div className="flex flex-col gap-0.5 rounded border border-zinc-50 p-2 dark:border-zinc-900">
-                  <span className="font-semibold text-zinc-900 dark:text-white">
-                    Compliance Alert
-                  </span>
-                  <span className="text-[10px] text-zinc-500">
-                    Missing ingredient certificate for SKU-3401.
-                  </span>
-                  <span className="text-[9px] text-zinc-400 mt-1">1 hr ago</span>
-                </div>
+
+              <div className="max-h-72 overflow-y-auto space-y-1 scrollbar-thin">
+                {notifications.length > 0 ? (
+                  notifications.map((n) => (
+                    <button
+                      key={n.id}
+                      onClick={() => handleNotificationClick(n)}
+                      className={`w-full text-left p-2.5 rounded-lg text-xs transition-colors flex gap-2.5 items-start ${
+                        n.is_read
+                          ? "hover:bg-zinc-50 dark:hover:bg-zinc-900 text-zinc-650 dark:text-zinc-400"
+                          : "bg-indigo-50/40 hover:bg-indigo-50/70 border-l-2 border-indigo-500 pl-2 dark:bg-indigo-950/10 dark:hover:bg-indigo-950/20 text-zinc-900 dark:text-white"
+                      }`}
+                    >
+                      <div className="flex-1 min-w-0">
+                        <p className={`font-bold truncate ${!n.is_read ? "text-indigo-600 dark:text-indigo-400" : ""}`}>
+                          {n.title}
+                        </p>
+                        <p className="text-zinc-500 dark:text-zinc-400 mt-0.5 line-clamp-2 leading-relaxed">
+                          {n.content}
+                        </p>
+                        <span className="text-[9px] text-zinc-400 dark:text-zinc-500 mt-1.5 block font-medium">
+                          {formatRelativeTime(n.created_at)}
+                        </span>
+                      </div>
+                      {!n.is_read && (
+                        <span className="h-1.5 w-1.5 rounded-full bg-indigo-500 self-center shrink-0" />
+                      )}
+                    </button>
+                  ))
+                ) : (
+                  <div className="text-xs text-zinc-400 dark:text-zinc-500 text-center py-6">
+                    새로운 알림이 없습니다.
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -179,7 +311,7 @@ export default function Header({ isSidebarCollapsed }: HeaderProps) {
             className="flex items-center gap-2 rounded-md hover:bg-zinc-50 p-1 dark:hover:bg-zinc-900 outline-none"
           >
             <div className="flex h-8 w-8 items-center justify-center rounded-full bg-zinc-900 text-xs font-bold text-white dark:bg-white dark:text-zinc-950">
-              L
+              {userProfile?.name ? userProfile.name.charAt(0) : "A"}
             </div>
             <ChevronDownIcon size={14} className="text-zinc-400" />
           </button>
@@ -187,16 +319,21 @@ export default function Header({ isSidebarCollapsed }: HeaderProps) {
           {isProfileOpen && (
             <div className="absolute right-0 mt-2 w-48 rounded-md border border-zinc-200 bg-white shadow-lg dark:border-zinc-800 dark:bg-zinc-950">
               <div className="border-b border-zinc-100 p-3 dark:border-zinc-900">
-                <p className="text-xs font-bold text-zinc-950 dark:text-white">Letusto Admin</p>
-                <p className="text-[10px] text-zinc-500">admin@kselectnetwork.com</p>
+                <p className="text-xs font-bold text-zinc-950 dark:text-white">{userProfile?.name || "관리자"}</p>
+                <p className="text-[10px] text-zinc-500">{userProfile?.email || "loading..."}</p>
               </div>
               <div className="p-1">
-                <Link
-                  href="/admin/settings/email-templates"
-                  className="flex items-center gap-2 rounded px-3 py-2 text-xs text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-900 dark:hover:text-white"
+                <button
+                  onClick={() => {
+                    setTempName(userProfile?.name || "");
+                    setErrorMsg("");
+                    setIsProfileModalOpen(true);
+                    setIsProfileOpen(false);
+                  }}
+                  className="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-xs text-zinc-650 hover:bg-zinc-50 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-900 dark:hover:text-white"
                 >
-                  Account Settings
-                </Link>
+                  내 정보 수정
+                </button>
                 <button
                   onClick={async () => {
                     await logoutAdmin();
@@ -205,13 +342,66 @@ export default function Header({ isSidebarCollapsed }: HeaderProps) {
                   className="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-xs text-destructive hover:bg-destructive/10"
                 >
                   <LogOutIcon size={14} />
-                  Log Out
+                  로그아웃
                 </button>
               </div>
             </div>
           )}
         </div>
       </div>
+
+      {/* Edit Profile Modal */}
+      {isProfileModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="w-full max-w-sm rounded-xl border border-zinc-200 bg-white p-6 shadow-xl dark:border-zinc-850 dark:bg-zinc-900">
+            <h3 className="text-sm font-bold text-zinc-900 dark:text-white mb-4">내 정보 수정</h3>
+            <form onSubmit={handleSaveProfile} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-zinc-650 dark:text-zinc-350 mb-1.5">이메일 계정</label>
+                <input
+                  type="text"
+                  disabled
+                  value={userProfile?.email || ""}
+                  className="block w-full rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs text-zinc-500 outline-none dark:border-zinc-800 dark:bg-zinc-950"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-zinc-650 dark:text-zinc-350 mb-1.5">이름 (심사원 이름)</label>
+                <input
+                  type="text"
+                  required
+                  value={tempName}
+                  onChange={(e) => setTempName(e.target.value)}
+                  placeholder="본인의 실제 이름을 입력해주세요"
+                  className="block w-full rounded-md border border-zinc-250 bg-white px-3 py-2 text-xs text-zinc-900 outline-none focus:border-zinc-400 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+                />
+              </div>
+
+              {errorMsg && (
+                <p className="text-xs font-semibold text-rose-600">{errorMsg}</p>
+              )}
+
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsProfileModalOpen(false)}
+                  className="rounded-lg border border-zinc-200 bg-white px-3.5 py-1.5 text-xs font-semibold text-zinc-700 hover:bg-zinc-50 dark:border-zinc-850 dark:bg-zinc-900 dark:text-zinc-300"
+                >
+                  취소
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingProfile}
+                  className="rounded-lg bg-zinc-900 px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-100 disabled:opacity-50"
+                >
+                  {isSavingProfile ? "저장 중..." : "저장 완료"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </header>
   );
 }

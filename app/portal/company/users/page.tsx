@@ -42,7 +42,7 @@ export default async function CompanyUsersPage() {
   const rows = users ?? [];
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto">
+    <div className="space-y-6 w-full max-w-7xl">
       {/* Top Header */}
       <div>
         <h1 className="text-xl font-bold text-zinc-900 dark:text-white">소속 사용자 관리</h1>

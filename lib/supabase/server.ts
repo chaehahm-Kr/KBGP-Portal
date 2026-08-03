@@ -1,5 +1,5 @@
 import "server-only";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { createServerClient } from "@supabase/ssr";
 import { publicEnv } from "@/lib/env/public";
 
@@ -14,6 +14,9 @@ import { publicEnv } from "@/lib/env/public";
  */
 export async function createClient() {
   const cookieStore = await cookies();
+  const reqHeaders = await headers();
+  const url = reqHeaders.get("x-url") || reqHeaders.get("referer") || "";
+  const prefix = url.includes("/admin") ? "admin-" : url.includes("/portal") ? "portal-" : "";
 
   return createServerClient(
     publicEnv.NEXT_PUBLIC_SUPABASE_URL,
@@ -21,13 +24,31 @@ export async function createClient() {
     {
       cookies: {
         getAll() {
-          return cookieStore.getAll();
+          const allCookies = cookieStore.getAll();
+          if (!prefix) return allCookies;
+          return allCookies
+            .filter((cookie) => {
+              if (cookie.name.startsWith("sb-")) return false;
+              if (cookie.name.startsWith("admin-sb-") && prefix !== "admin-") return false;
+              if (cookie.name.startsWith("portal-sb-") && prefix !== "portal-") return false;
+              return true;
+            })
+            .map((cookie) => {
+              if (cookie.name.startsWith(prefix)) {
+                return {
+                  name: cookie.name.substring(prefix.length),
+                  value: cookie.value,
+                };
+              }
+              return cookie;
+            });
         },
         setAll(cookiesToSet) {
           try {
-            cookiesToSet.forEach(({ name, value, options }) =>
-              cookieStore.set(name, value, options)
-            );
+            cookiesToSet.forEach(({ name, value, options }) => {
+              const mappedName = prefix && name.startsWith("sb-") ? `${prefix}${name}` : name;
+              cookieStore.set(mappedName, value, options);
+            });
           } catch {
             // Server Component에서 호출되면 쿠키를 쓸 수 없다 — proxy.ts가 세션 갱신을
             // 담당하므로 여기서는 무시해도 안전하다.

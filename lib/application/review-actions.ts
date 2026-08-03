@@ -7,6 +7,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { sendTemplatedEmail, type TemplateKey } from "@/lib/notifications/templates";
 import { canReviewApplication } from "@/lib/application/assignment-dal";
 import { recordActivity } from "@/lib/activity/log";
+import { createNotification } from "@/lib/notification/actions";
 import type { ApplicationStatus } from "@/lib/application/types";
 
 export type ReviewFormState = { error: string } | undefined;
@@ -74,12 +75,31 @@ async function notifyCompanyOfResult(
   const admin = createAdminClient();
   const { data: recipients } = await admin
     .from("company_users")
-    .select("email")
+    .select("id, email")
     .eq("company_id", companyId)
     .eq("status", "active");
 
+  const statusLabel: Record<string, string> = {
+    approved: "최종 승인",
+    partial_approved: "부분 승인",
+    on_hold: "심사 보류",
+    rejected: "심사 반려",
+  };
+
+  const title = `입점 신청 결과 안내`;
+  const content = `신청서(${applicationNumber})의 심사 결과가 [${statusLabel[status] || status}] 상태로 변경되었습니다.`;
+
   for (const recipient of recipients ?? []) {
     await sendTemplatedEmail(templateKey, recipient.email, { applicationNumber });
+
+    // Create database notification for company users
+    await createNotification(
+      recipient.id,
+      null,
+      title,
+      content,
+      `/portal/applications`
+    );
   }
 }
 

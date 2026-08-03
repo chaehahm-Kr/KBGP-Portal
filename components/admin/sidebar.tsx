@@ -47,16 +47,7 @@ export default function Sidebar({ isCollapsed, toggleCollapse }: SidebarProps) {
 
   const menuItems: MenuItem[] = [
     { name: "Dashboard", icon: DashboardIcon, href: "/admin" },
-    {
-      name: "Applications",
-      icon: ApplicationsIcon,
-      subItems: [
-        { name: "All Applications", href: "/admin/applications" },
-        { name: "Review Queue", href: "/admin/applications?status=under_review" },
-        { name: "Approved", href: "/admin/applications?status=approved" },
-        { name: "Rejected", href: "/admin/applications?status=rejected" },
-      ],
-    },
+    { name: "Applications", icon: ApplicationsIcon, href: "/admin/applications" },
     {
       name: "Companies & Brands",
       icon: CompaniesIcon,
@@ -102,6 +93,8 @@ export default function Sidebar({ isCollapsed, toggleCollapse }: SidebarProps) {
       icon: TasksIcon,
       subItems: [
         { name: "Tasks", href: "/admin/tasks" },
+        { name: "Partner Inquiries", href: "/admin/partner-inquiries" },
+        { name: "Onboarding Leads", href: "/admin/inquiries" },
         { name: "Activity Log", href: "/admin/tasks?tab=activity" },
       ],
     },

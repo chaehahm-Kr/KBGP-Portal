@@ -16,6 +16,7 @@ import { CreateInfoRequestForm } from "@/components/application/create-info-requ
 interface ApplicationWorkspaceProps {
   application: any;
   company: any;
+  companyUsers?: any[];
   linkRows: any[];
   productNameById: Map<string, string>;
   infoRequestRows: any[];
@@ -39,6 +40,7 @@ interface ApplicationWorkspaceProps {
 export default function ApplicationWorkspace({
   application,
   company,
+  companyUsers = [],
   linkRows,
   productNameById,
   infoRequestRows,
@@ -60,6 +62,31 @@ export default function ApplicationWorkspace({
   const [activeTab, setActiveTab] = useState<
     "overview" | "company" | "products" | "documents" | "review" | "communication" | "activity"
   >("overview");
+
+  // Parse company metadata
+  let parsedMeta = {
+    description: company?.intro || "",
+    address: "",
+    website: "",
+    contacts: [] as any[],
+    type: "Brand Owner"
+  };
+
+  if (company?.intro && company.intro.startsWith("__COMPANY_METADATA__:")) {
+    try {
+      const jsonStr = company.intro.substring("__COMPANY_METADATA__:".length);
+      const data = JSON.parse(jsonStr);
+      parsedMeta = {
+        description: data.description || "",
+        address: data.address || "",
+        website: data.website || "",
+        contacts: data.contacts || [],
+        type: data.type || "Brand Owner"
+      };
+    } catch (e) {
+      console.error("Error parsing company metadata in workspace:", e);
+    }
+  }
 
   const getProductHistory = (linkId: string) => {
     const history: { status: string; label: string; time: string; reason: string | null; dateObj: Date }[] = [];
@@ -219,15 +246,7 @@ export default function ApplicationWorkspace({
                 </div>
               </div>
 
-              {/* Motivation */}
-              {application.motivation_note && (
-                <div className="rounded-lg border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900">
-                  <h3 className="text-xs font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider mb-2">신청 동기 (Motivation)</h3>
-                  <p className="whitespace-pre-wrap text-sm text-zinc-700 dark:text-zinc-300">
-                    {application.motivation_note}
-                  </p>
-                </div>
-              )}
+
             </div>
 
             {/* Quick Actions / Assignee Panel */}
@@ -245,23 +264,140 @@ export default function ApplicationWorkspace({
         )}
 
         {activeTab === "company" && (
-          <div className="rounded-lg border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900 space-y-4">
-            <h2 className="text-sm font-bold text-zinc-900 dark:text-white">회사 상세 정보 (Company Info)</h2>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 text-xs text-zinc-600 dark:text-zinc-400">
-              <div className="space-y-1.5">
-                <p>회사 이름 (Korean): <span className="font-semibold text-zinc-900 dark:text-white">{company?.name}</span></p>
-                <p>국가 (Country): <span className="font-semibold text-zinc-900 dark:text-white">{company?.country}</span></p>
-              </div>
-              <div className="space-y-1.5">
-                <p>사업자번호: <span className="font-semibold text-zinc-900 dark:text-white">{company?.business_registration_number}</span></p>
+          <div className="space-y-6">
+            {/* 1. 회사 상세 정보 카드 */}
+            <div className="rounded-lg border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-900 space-y-4 shadow-sm">
+              <h2 className="text-xs font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider border-b border-zinc-100 pb-2 dark:border-zinc-800">
+                회사 상세 프로필
+              </h2>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 text-xs text-zinc-600 dark:text-zinc-400">
+                <div className="space-y-2">
+                  <p>회사 이름: <span className="font-bold text-zinc-900 dark:text-white">{company?.name || "-"}</span></p>
+                  <p>국가: <span className="font-semibold text-zinc-800 dark:text-zinc-200">{company?.country || "-"}</span></p>
+                  <p>사업자번호: <span className="font-semibold text-zinc-800 dark:text-zinc-200 font-mono">{company?.business_registration_number || "-"}</span></p>
+                  <p>파트너 유형: <span className="font-semibold text-zinc-800 dark:text-zinc-200">{parsedMeta.type || "-"}</span></p>
+                </div>
+                <div className="space-y-2">
+                  <p>회사 주소: <span className="font-semibold text-zinc-800 dark:text-zinc-200">{parsedMeta.address || "-"}</span></p>
+                  <p>웹사이트: {parsedMeta.website ? (
+                    <a
+                      href={parsedMeta.website.startsWith("http") ? parsedMeta.website : `https://${parsedMeta.website}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="font-bold text-indigo-650 hover:underline underline-offset-2"
+                    >
+                      {parsedMeta.website} ↗
+                    </a>
+                  ) : (
+                    <span className="text-zinc-400">-</span>
+                  )}</p>
+                  {parsedMeta.description && (
+                    <div>
+                      <span className="block text-[10px] text-zinc-400 dark:text-zinc-500 font-bold mb-1">회사 소개</span>
+                      <p className="text-[11px] leading-relaxed text-zinc-655 dark:text-zinc-350 bg-zinc-50 dark:bg-zinc-950 p-2 rounded border border-zinc-100 dark:border-zinc-850 whitespace-pre-wrap">{parsedMeta.description}</p>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
-            <div className="pt-4">
+
+            {/* 2. 회사 소속 담당자 및 포털 가입 계정 */}
+            <div className="rounded-lg border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-900 space-y-4 shadow-sm">
+              <h2 className="text-xs font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider border-b border-zinc-100 pb-2 dark:border-zinc-800">
+                회사 소속 담당자 및 포털 가입 계정 (Contacts & Portal Users)
+              </h2>
+              <div className="overflow-x-auto">
+                <table className="w-full border-collapse text-left text-xs text-zinc-500 dark:text-zinc-455">
+                  <thead>
+                    <tr className="border-b border-zinc-150 bg-zinc-50 font-bold text-zinc-955 dark:border-zinc-850 dark:bg-zinc-900/50 dark:text-white">
+                      <th className="px-4 py-2 font-semibold">이름</th>
+                      <th className="px-4 py-2 font-semibold">부서 / 직함</th>
+                      <th className="px-4 py-2 font-semibold">이메일</th>
+                      <th className="px-4 py-2 font-semibold">연락처</th>
+                      <th className="px-4 py-2 font-semibold">계정 권한 (Role)</th>
+                      <th className="px-4 py-2 font-semibold">메뉴별 세부 권한</th>
+                      <th className="px-4 py-2 font-semibold text-center">이용 상태</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
+                    {companyUsers.map((user: any) => (
+                      <tr key={user.id} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-950/20">
+                        <td className="px-4 py-2.5 font-bold text-zinc-900 dark:text-white">
+                          <div className="flex items-center gap-1.5">
+                            <span>{user.name || "이름 없음"}</span>
+                            {user.is_primary && (
+                              <span className="inline-block rounded bg-emerald-50 text-emerald-700 px-1.5 py-0.5 text-[8px] font-bold border border-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-900">
+                                주 컨택
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-4 py-2.5 text-zinc-600 dark:text-zinc-400">
+                          {user.position || user.title
+                            ? `${user.position || ""} ${user.title ? `(${user.title})` : ""}`
+                            : "-"}
+                        </td>
+                        <td className="px-4 py-2.5 text-zinc-600 dark:text-zinc-455 font-mono">{user.email}</td>
+                        <td className="px-4 py-2.5 text-zinc-650 dark:text-zinc-455 font-mono">{user.phone || "-"}</td>
+                        <td className="px-4 py-2.5 text-zinc-700 dark:text-zinc-300 font-semibold">
+                          {user.company_role === "company_admin" ? "관리자 (Admin)" : "담당자 (Staff)"}
+                        </td>
+                        <td className="px-4 py-2.5 text-[10px] text-zinc-500 dark:text-zinc-400">
+                          {user.permissions ? (
+                            <div className="flex flex-wrap gap-1">
+                              <span className="bg-zinc-50 border border-zinc-100 px-1 py-0.5 rounded dark:bg-zinc-800 dark:border-zinc-750">
+                                신청서:{user.permissions.application === "read_write" ? "쓰기" : user.permissions.application === "read_only" ? "읽기" : "없음"}
+                              </span>
+                              <span className="bg-zinc-50 border border-zinc-100 px-1 py-0.5 rounded dark:bg-zinc-800 dark:border-zinc-750">
+                                브랜드:{user.permissions.brands === "read_write" ? "쓰기" : user.permissions.brands === "read_only" ? "읽기" : "없음"}
+                              </span>
+                              <span className="bg-zinc-50 border border-zinc-100 px-1 py-0.5 rounded dark:bg-zinc-800 dark:border-zinc-750">
+                                제품:{user.permissions.products === "read_write" ? "쓰기" : user.permissions.products === "read_only" ? "읽기" : "없음"}
+                              </span>
+                              <span className="bg-zinc-50 border border-zinc-100 px-1 py-0.5 rounded dark:bg-zinc-800 dark:border-zinc-750">
+                                회사:{user.permissions.company_info === "read_write" ? "쓰기" : user.permissions.company_info === "read_only" ? "읽기" : "없음"}
+                              </span>
+                            </div>
+                          ) : (
+                            "-"
+                          )}
+                        </td>
+                        <td className="px-4 py-2.5 text-center">
+                          {user.status === "active" ? (
+                            <span className="inline-block rounded px-1.5 py-0.5 text-[10px] font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300">
+                              정상 이용
+                            </span>
+                          ) : user.status === "suspended" ? (
+                            <span className="inline-block rounded px-1.5 py-0.5 text-[10px] font-bold bg-rose-50 text-rose-700 dark:bg-rose-950/50 dark:text-rose-300">
+                              이용 일시정지
+                            </span>
+                          ) : (
+                            <span className="inline-block rounded px-1.5 py-0.5 text-[10px] font-bold bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-350">
+                              초대 대기중
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                    {companyUsers.length === 0 && (
+                      <tr>
+                        <td colSpan={7} className="py-6 text-center text-zinc-400">
+                          가입된 포털 사용자가 없습니다.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* 회사 관리 대시보기 바로가기 링크 */}
+            <div className="pt-2">
               <Link
                 href={`/admin/companies/${company?.id}`}
-                className="text-xs font-semibold text-zinc-900 underline underline-offset-2 dark:text-white"
+                className="text-xs font-semibold text-indigo-650 hover:text-indigo-850 underline underline-offset-2 dark:text-indigo-400 dark:hover:text-indigo-300"
               >
-                회사 관리 대시보드 바로가기 →
+                회사 관리 대시보드 바로가기 (브랜드/제품 전체보기) →
               </Link>
             </div>
           </div>

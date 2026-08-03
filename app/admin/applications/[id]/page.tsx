@@ -40,9 +40,15 @@ export default async function AdminApplicationDetailPage({
 
   const { data: company } = await supabase
     .from("companies")
-    .select("id, name, business_registration_number, country")
+    .select("id, name, business_registration_number, country, intro, contact_name, contact_phone")
     .eq("id", application.company_id)
     .single();
+
+  const { data: companyUsers } = await supabase
+    .from("company_users")
+    .select("id, name, email, status, company_role, title, position, phone, is_primary, permissions")
+    .eq("company_id", application.company_id)
+    .order("created_at", { ascending: true });
 
   const { data: links } = await supabase
     .from("application_products")
@@ -106,7 +112,7 @@ export default async function AdminApplicationDetailPage({
   const activityEntityIds = [id, ...linkRows.map((l) => l.id)];
   const { data: activityLogs } = await supabase
     .from("activity_logs")
-    .select("id, entity_type, before_state, after_state, changed_by, reason, created_at")
+    .select("id, entity_id, entity_type, before_state, after_state, changed_by, reason, created_at")
     .in("entity_id", activityEntityIds)
     .order("created_at", { ascending: false });
 
@@ -116,6 +122,7 @@ export default async function AdminApplicationDetailPage({
     <ApplicationWorkspace
       application={application}
       company={company}
+      companyUsers={companyUsers ?? []}
       linkRows={linkRows}
       productNameById={productNameById}
       infoRequestRows={infoRequestRows}

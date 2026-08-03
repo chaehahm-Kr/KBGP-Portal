@@ -17,12 +17,14 @@ export type CertificateType =
   | "ingredient_certification"
   | "trademark"
   | "fda_registration"
+  | "patent"
   | "other";
 
 export const CERTIFICATE_TYPE_LABEL: Record<CertificateType, string> = {
   ingredient_certification: "성분 인증",
   trademark: "상표권",
   fda_registration: "FDA 등록",
+  patent: "특허",
   other: "기타",
 };
 
@@ -37,6 +39,7 @@ export interface Product {
   estimated_retail_price?: number | null;
   ingredients_text?: string | null;
   ingredients_file_path?: string | null;
+  ingredients_file_path_en?: string | null;
   status: "registered" | "selling" | "discontinued";
   created_at: string;
   updated_at: string;
@@ -54,6 +57,8 @@ export interface Product {
   child_sku?: string | null;
   manufacture_sku?: string | null;
   letusto_sku?: string | null;
+  upc?: string | null;
+  ean?: string | null;
 
   // Prices
   price_krw_retail?: number | null;

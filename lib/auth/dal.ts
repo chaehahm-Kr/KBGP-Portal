@@ -50,6 +50,11 @@ async function verifySession(area: AppRole): Promise<VerifiedSession> {
   } = await supabase.auth.getUser();
 
   if (userError || !user) {
+    if (userError) {
+      console.error(`verifySession [${area}] error calling getUser:`, userError);
+    } else {
+      console.warn(`verifySession [${area}] no user found`);
+    }
     redirect(LOGIN_PATH[area]);
   }
 

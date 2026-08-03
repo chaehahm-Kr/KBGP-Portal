@@ -8,6 +8,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { sendTemplatedEmail } from "@/lib/notifications/templates";
 import { publicEnv } from "@/lib/env/public";
 import { SELF_CHECK_ITEMS } from "@/lib/application/types";
+import { createNotification } from "@/lib/notification/actions";
 
 export type ApplicationFormState = { error: string } | undefined;
 
@@ -45,7 +46,6 @@ export async function saveDraftApplication(
   const supabase = await createClient();
 
   const productIds = formData.getAll("productIds").map(String);
-  const motivationNote = String(formData.get("motivationNote") ?? "").trim();
   const selfCheckAnswers = SELF_CHECK_ITEMS.map(
     (_, index) => formData.get(`selfCheck_${index}`) === "on"
   );
@@ -53,7 +53,6 @@ export async function saveDraftApplication(
   const { error: updateError } = await supabase
     .from("applications")
     .update({
-      motivation_note: motivationNote || null,
       self_check_answers: selfCheckAnswers,
       updated_at: new Date().toISOString(),
     })
@@ -159,13 +158,22 @@ async function notifySubmission(
   const [{ data: submitter }, { data: company }, { data: staffMembers }] = await Promise.all([
     admin.from("company_users").select("email").eq("id", submitterId).maybeSingle(),
     admin.from("companies").select("name").eq("id", companyId).maybeSingle(),
-    admin.from("staff_members").select("email").eq("status", "active"),
+    admin.from("staff_members").select("id, email").eq("status", "active"),
   ]);
 
   if (submitter) {
     await sendTemplatedEmail("application_submitted_company", submitter.email, {
       applicationNumber,
     });
+
+    // Create database notification for submitter
+    await createNotification(
+      submitterId,
+      null,
+      "신청서 제출 완료",
+      `입점 신청서(${applicationNumber})가 성공적으로 제출되었습니다.`,
+      `/portal/applications/${applicationId}`
+    );
   }
 
   const link = `${publicEnv.NEXT_PUBLIC_SITE_URL}/admin/applications/${applicationId}`;
@@ -176,5 +184,14 @@ async function notifySubmission(
       productCount: String(productCount),
       link,
     });
+
+    // Create database notification for staff/admin
+    await createNotification(
+      staff.id,
+      submitterId,
+      "신규 입점 신청서 접수",
+      `[${company?.name || "회사"}]에서 신규 입점 신청서(${applicationNumber}, 제품 ${productCount}건)를 제출했습니다.`,
+      `/admin/applications/${applicationId}`
+    );
   }
 }

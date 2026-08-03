@@ -16,7 +16,10 @@ import {
   addProductCertificate, 
   addProductVideoUrl, 
   addProductVideoFile, 
-  removeProductVideo 
+  removeProductVideo,
+  uploadIngredientsFile,
+  deleteIngredientsFile,
+  updateProductImagesOrder
 } from "@/lib/product/actions";
 import { ConfirmForm } from "@/components/common/confirm-form";
 import { AddCertificateForm } from "@/components/product/add-certificate-form";
@@ -24,27 +27,73 @@ import { AddCertificateForm } from "@/components/product/add-certificate-form";
 interface ProductDetailTabsProps {
   product: Product;
   brandName: string;
+  brands: { id: string; name: string }[];
   imageRows: { id: string; storage_path: string }[];
   imageUrls: (string | null)[];
   videoRows: ProductVideo[];
   videoUrls: (string | null)[];
   certificateRows: { id: string; certificate_type: string; storage_path: string; original_filename: string | null; version: number }[];
   certificateUrls: (string | null)[];
+  ingredientsFileUrl: string | null;
+  ingredientsFileUrlEn: string | null;
 }
 
 export function ProductDetailTabs({
   product,
   brandName,
+  brands,
   imageRows,
   imageUrls,
   videoRows,
   videoUrls,
   certificateRows,
   certificateUrls,
+  ingredientsFileUrl,
+  ingredientsFileUrlEn,
 }: ProductDetailTabsProps) {
   const [activeTab, setActiveTab] = useState<"basic" | "price" | "logistics" | "media" | "certs">("basic");
   const [isPending, startTransition] = useTransition();
   const [statusMessage, setStatusMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
+  // Read admin overrides (specifically for Letusto SKU)
+  const adminOverrides = (product.price_additional_info as any)?.admin_overrides || {};
+  const effectiveLetustoSku = adminOverrides.letusto_sku || product.letusto_sku || "";
+  const effectiveManufactureSku = adminOverrides.manufacture_sku !== undefined ? adminOverrides.manufacture_sku : product.manufacture_sku || "";
+
+  // Resolve effective parent/child SKU (considering admin overrides)
+  const getInitialParentState = () => {
+    const ov = adminOverrides.parent_sku;
+    if (ov === "Y") return true;
+    if (ov === "N" || ov === "none") return false;
+    return product.parent_sku === "Y" || product.parent_sku === "true" || product.parent_sku === "yes";
+  };
+
+  const getInitialChildState = () => {
+    const ov = adminOverrides.child_sku;
+    if (ov === "Y") return true;
+    if (ov === "N" || ov === "none") return false;
+    return product.child_sku === "Y" || product.child_sku === "true" || product.child_sku === "yes";
+  };
+
+  const [isParentSku, setIsParentSku] = useState(getInitialParentState());
+  const [isChildSku, setIsChildSku] = useState(getInitialChildState());
+
+  // Parse lead time value and unit
+  const parseLeadTime = (leadTimeStr?: string | null) => {
+    if (!leadTimeStr) return { value: "", unit: "주" };
+    const match = leadTimeStr.trim().match(/^(\d+)\s*(일|주|개월|days|weeks|months|day|week|month)?$/i);
+    if (match) {
+      const val = match[1];
+      let unit = match[2] || "주";
+      if (unit.toLowerCase().startsWith("day") || unit === "일") unit = "일";
+      else if (unit.toLowerCase().startsWith("week") || unit === "주") unit = "주";
+      else if (unit.toLowerCase().startsWith("month") || unit === "개월") unit = "개월";
+      return { value: val, unit };
+    }
+    return { value: leadTimeStr, unit: "주" };
+  };
+
+  const parsedLeadTime = parseLeadTime(product.lead_time);
 
   // Dynamic Bullet Points State
   const [bullets, setBullets] = useState<string[]>(
@@ -63,6 +112,136 @@ export function ProductDetailTabs({
   const [packageDepth, setPackageDepth] = useState(product.package_depth?.toString() || "");
   const [packageHeight, setPackageHeight] = useState(product.package_height?.toString() || "");
   const [packageWeight, setPackageWeight] = useState(product.package_weight?.toString() || "");
+
+  const [packageWidthInch, setPackageWidthInch] = useState(
+    product.package_width ? (product.package_width * 0.393701).toFixed(2) : ""
+  );
+  const [packageDepthInch, setPackageDepthInch] = useState(
+    product.package_depth ? (product.package_depth * 0.393701).toFixed(2) : ""
+  );
+  const [packageHeightInch, setPackageHeightInch] = useState(
+    product.package_height ? (product.package_height * 0.393701).toFixed(2) : ""
+  );
+  const [packageWeightLb, setPackageWeightLb] = useState(
+    product.package_weight ? (product.package_weight * 0.00220462).toFixed(3) : ""
+  );
+  const [packageWeightOz, setPackageWeightOz] = useState(
+    product.package_weight ? (product.package_weight * 0.035274).toFixed(2) : ""
+  );
+
+  const handleWidthCmChange = (val: string) => {
+    setPackageWidth(val);
+    if (val === "") {
+      setPackageWidthInch("");
+    } else {
+      const num = parseFloat(val);
+      if (!isNaN(num)) {
+        setPackageWidthInch((num * 0.393701).toFixed(2));
+      }
+    }
+  };
+
+  const handleWidthInchChange = (val: string) => {
+    setPackageWidthInch(val);
+    if (val === "") {
+      setPackageWidth("");
+    } else {
+      const num = parseFloat(val);
+      if (!isNaN(num)) {
+        setPackageWidth((num * 2.54).toFixed(1));
+      }
+    }
+  };
+
+  const handleDepthCmChange = (val: string) => {
+    setPackageDepth(val);
+    if (val === "") {
+      setPackageDepthInch("");
+    } else {
+      const num = parseFloat(val);
+      if (!isNaN(num)) {
+        setPackageDepthInch((num * 0.393701).toFixed(2));
+      }
+    }
+  };
+
+  const handleDepthInchChange = (val: string) => {
+    setPackageDepthInch(val);
+    if (val === "") {
+      setPackageDepth("");
+    } else {
+      const num = parseFloat(val);
+      if (!isNaN(num)) {
+        setPackageDepth((num * 2.54).toFixed(1));
+      }
+    }
+  };
+
+  const handleHeightCmChange = (val: string) => {
+    setPackageHeight(val);
+    if (val === "") {
+      setPackageHeightInch("");
+    } else {
+      const num = parseFloat(val);
+      if (!isNaN(num)) {
+        setPackageHeightInch((num * 0.393701).toFixed(2));
+      }
+    }
+  };
+
+  const handleHeightInchChange = (val: string) => {
+    setPackageHeightInch(val);
+    if (val === "") {
+      setPackageHeight("");
+    } else {
+      const num = parseFloat(val);
+      if (!isNaN(num)) {
+        setPackageHeight((num * 2.54).toFixed(1));
+      }
+    }
+  };
+
+  const handleWeightGChange = (val: string) => {
+    setPackageWeight(val);
+    if (val === "") {
+      setPackageWeightLb("");
+      setPackageWeightOz("");
+    } else {
+      const num = parseFloat(val);
+      if (!isNaN(num)) {
+        setPackageWeightLb((num * 0.00220462).toFixed(3));
+        setPackageWeightOz((num * 0.035274).toFixed(2));
+      }
+    }
+  };
+
+  const handleWeightLbChange = (val: string) => {
+    setPackageWeightLb(val);
+    if (val === "") {
+      setPackageWeight("");
+      setPackageWeightOz("");
+    } else {
+      const num = parseFloat(val);
+      if (!isNaN(num)) {
+        setPackageWeight((num * 453.59237).toFixed(1));
+        setPackageWeightOz((num * 16).toFixed(2));
+      }
+    }
+  };
+
+  const handleWeightOzChange = (val: string) => {
+    setPackageWeightOz(val);
+    if (val === "") {
+      setPackageWeight("");
+      setPackageWeightLb("");
+    } else {
+      const num = parseFloat(val);
+      if (!isNaN(num)) {
+        setPackageWeight((num * 28.349523).toFixed(1));
+        setPackageWeightLb((num * 0.0625).toFixed(3));
+      }
+    }
+  };
 
   const [cartonPackQty, setCartonPackQty] = useState(product.carton_pack_qty?.toString() || "1");
   const [cartonWidth, setCartonWidth] = useState(product.carton_width?.toString() || "");
@@ -86,10 +265,106 @@ export function ProductDetailTabs({
   const [c40Weight, setC40Weight] = useState(product.container_40fthc_weight?.toString() || "");
   const [c40Cbm, setC40Cbm] = useState(product.container_40fthc_cbm?.toString() || "");
 
+  // FOB price state for dynamic discount calculations
+  const [priceUsdFobState, setPriceUsdFobState] = useState(product.price_usd_fob || 0);
+
   // Video Inputs
   const [videoUrlInput, setVideoUrlInput] = useState("");
   const [videoFilePending, setVideoFilePending] = useState(false);
   const [videoError, setVideoError] = useState<string | null>(null);
+
+  // Tiered Pricing State
+  const [priceTiers, setPriceTiers] = useState<{ qty: number; price: number }[]>(() => {
+    const additionalInfo = product.price_additional_info as Record<string, any> | null;
+    if (additionalInfo && Array.isArray(additionalInfo.price_tiers)) {
+      return additionalInfo.price_tiers;
+    }
+    return [];
+  });
+
+  // Ingredients File State (Korean)
+  const [ingredientsFilePendingKo, setIngredientsFilePendingKo] = useState(false);
+  const [ingredientsErrorKo, setIngredientsErrorKo] = useState<string | null>(null);
+
+  // Ingredients Text State & Translation Tool States
+  const [ingredientsText, setIngredientsText] = useState(product.ingredients_text || "");
+  const [transSourceText, setTransSourceText] = useState("");
+  const [transTargetText, setTransTargetText] = useState("");
+  const [transSourceLang, setTransSourceLang] = useState("ko");
+  const [transTargetLang, setTransTargetLang] = useState("en");
+  const [transPending, setTransPending] = useState(false);
+
+  const handleTranslate = async () => {
+    if (!transSourceText.trim()) return;
+    setTransPending(true);
+    try {
+      const response = await fetch(
+        `https://api.mymemory.translated.net/get?q=${encodeURIComponent(
+          transSourceText.trim()
+        )}&langpair=${transSourceLang}|${transTargetLang}`
+      );
+      if (!response.ok) throw new Error("Translation failed");
+      const data = await response.json();
+      const translation = data.responseData?.translatedText || "";
+      setTransTargetText(translation);
+    } catch (err) {
+      console.error(err);
+      alert("번역 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.");
+    } finally {
+      setTransPending(false);
+    }
+  };
+
+  const handleApplyTranslation = () => {
+    setIngredientsText(transTargetText);
+  };
+
+  // Product Images Drag & Drop Ordering State
+  const [localImages, setLocalImages] = useState(() => {
+    return imageRows.map((row, idx) => ({
+      ...row,
+      url: imageUrls[idx] || null
+    }));
+  });
+
+  useEffect(() => {
+    setLocalImages(
+      imageRows.map((row, idx) => ({
+        ...row,
+        url: imageUrls[idx] || null
+      }))
+    );
+  }, [imageRows, imageUrls]);
+
+  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+
+  const handleDragStart = (e: React.DragEvent, index: number) => {
+    setDraggedIndex(index);
+    e.dataTransfer.effectAllowed = "move";
+  };
+
+  const handleDragOver = (e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    if (draggedIndex === null || draggedIndex === index) return;
+    
+    const items = [...localImages];
+    const draggedItem = items[draggedIndex];
+    items.splice(draggedIndex, 1);
+    items.splice(index, 0, draggedItem);
+    
+    setDraggedIndex(index);
+    setLocalImages(items);
+  };
+
+  const handleDragEnd = async () => {
+    setDraggedIndex(null);
+    const orderedIds = localImages.map((img) => img.id);
+    try {
+      await updateProductImagesOrder(product.id, orderedIds);
+    } catch (err: any) {
+      alert(err.message || "이미지 순서 저장에 실패했습니다.");
+    }
+  };
 
   // Auto calculation of Carton CBM
   useEffect(() => {
@@ -132,17 +407,40 @@ export function ProductDetailTabs({
     setBullets(updated);
   };
 
+  // Tiered Pricing Helpers
+  const addPriceTier = () => setPriceTiers([...priceTiers, { qty: 100, price: 0 }]);
+  const removePriceTier = (idx: number) => {
+    setPriceTiers(priceTiers.filter((_, i) => i !== idx));
+  };
+  const updatePriceTier = (idx: number, field: "qty" | "price", val: number) => {
+    const updated = [...priceTiers];
+    updated[idx] = { ...updated[idx], [field]: val };
+    setPriceTiers(updated);
+  };
+
   const handleMainFormSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setStatusMessage(null);
     
     const formData = new FormData(e.currentTarget);
+
+    // Combine leadTimeValue and leadTimeUnit into leadTime
+    const leadTimeVal = formData.get("leadTimeValue") || "";
+    const leadTimeUnit = formData.get("leadTimeUnit") || "";
+    if (leadTimeVal) {
+      formData.set("leadTime", `${String(leadTimeVal).trim()} ${leadTimeUnit}`);
+    } else {
+      formData.set("leadTime", "");
+    }
     // Append bullet points
     bullets.forEach((b) => {
       if (b.trim()) {
         formData.append("bulletPoints", b.trim());
       }
     });
+
+    // Append price tiers JSON string
+    formData.append("priceTiers", JSON.stringify(priceTiers));
 
     startTransition(async () => {
       const res = await updateProduct(product.id, undefined, formData);
@@ -154,6 +452,43 @@ export function ProductDetailTabs({
       }
     });
   };
+
+  const handleIngredientsFileSubmitKo = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIngredientsErrorKo(null);
+    setIngredientsFilePendingKo(true);
+    setStatusMessage(null);
+    try {
+      const fd = new FormData();
+      fd.append("ingredientsFile", file);
+      await uploadIngredientsFile(product.id, "ko", fd);
+      setStatusMessage({ type: "success", text: "한글 성분 인증 문서가 성공적으로 첨부되었습니다." });
+    } catch (err: any) {
+      setIngredientsErrorKo(err.message || "파일 업로드에 실패했습니다.");
+    } finally {
+      setIngredientsFilePendingKo(false);
+    }
+  };
+
+  const handleIngredientsFileDeleteKo = async () => {
+    if (!window.confirm("정말 이 한글 성분 인증 문서를 삭제하시겠습니까?")) return;
+
+    setIngredientsErrorKo(null);
+    setIngredientsFilePendingKo(true);
+    setStatusMessage(null);
+    try {
+      await deleteIngredientsFile(product.id, "ko");
+      setStatusMessage({ type: "success", text: "한글 성분 인증 문서가 삭제되었습니다." });
+    } catch (err: any) {
+      setIngredientsErrorKo(err.message || "파일 삭제에 실패했습니다.");
+    } finally {
+      setIngredientsFilePendingKo(false);
+    }
+  };
+
+
 
   // Video Actions
   const handleVideoUrlSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -185,7 +520,7 @@ export function ProductDetailTabs({
   };
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto">
+    <div className="space-y-6 w-full max-w-7xl">
       {/* Dynamic Status Banner */}
       {statusMessage && (
         <div 
@@ -224,10 +559,16 @@ export function ProductDetailTabs({
                 <span>브랜드: <strong className="text-zinc-700 dark:text-zinc-300 font-bold">{brandName}</strong></span>
                 <span className="opacity-40">•</span>
                 <span>카테고리: <strong className="text-zinc-700 dark:text-zinc-300 font-bold">{PRODUCT_CATEGORY_LABEL[product.category as ProductCategory] || product.category}</strong></span>
-                {product.letusto_sku && (
+                {product.manufacture_sku && (
                   <>
                     <span className="opacity-40">•</span>
-                    <span>Letusto SKU: <strong className="text-indigo-650 dark:text-indigo-400 font-mono font-bold">{product.letusto_sku}</strong></span>
+                    <span>제조사 SKU: <strong className="text-zinc-700 dark:text-zinc-300 font-mono font-bold">{product.manufacture_sku}</strong></span>
+                  </>
+                )}
+                {effectiveLetustoSku && (
+                  <>
+                    <span className="opacity-40">•</span>
+                    <span>Letusto SKU: <strong className="text-indigo-650 dark:text-indigo-400 font-mono font-bold">{effectiveLetustoSku}</strong></span>
                   </>
                 )}
               </p>
@@ -278,24 +619,71 @@ export function ProductDetailTabs({
             
             <div className="grid gap-6 sm:grid-cols-2">
               <div>
-                <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1.5">제품명 (한글) *</label>
+                <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1.5">제조사 SKU (Manufacture SKU) *</label>
                 <input
-                  name="name"
+                  name="manufactureSku"
                   type="text"
                   required
-                  defaultValue={product.name}
+                  defaultValue={effectiveManufactureSku || ""}
+                  placeholder="제조사의 실제 SKU 코드"
+                  className="block w-full rounded-lg border border-zinc-300 px-3.5 py-2 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-zinc-900 dark:focus:border-white font-mono"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1.5">
+                  Letusto SKU <span className="text-[10px] text-zinc-400 font-normal">(기준 고유 SKU)</span>
+                </label>
+                <input
+                  name="letustoSku"
+                  type="text"
+                  readOnly
+                  defaultValue={effectiveLetustoSku}
+                  placeholder="지정 대기 중"
+                  className="block w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3.5 py-2 text-xs text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400 font-mono cursor-not-allowed select-none focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1.5">제품명 (영문) *</label>
+                <input
+                  name="nameEn"
+                  type="text"
+                  required
+                  defaultValue={product.name_en || ""}
+                  placeholder="English Product Name"
                   className="block w-full rounded-lg border border-zinc-300 px-3.5 py-2 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-zinc-900 dark:focus:border-white"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1.5">제품명 (영문)</label>
+                <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1.5">제품명 (한글)</label>
                 <input
-                  name="nameEn"
+                  name="name"
                   type="text"
-                  defaultValue={product.name_en || ""}
+                  defaultValue={product.name || ""}
+                  placeholder="한글 제품명"
                   className="block w-full rounded-lg border border-zinc-300 px-3.5 py-2 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-zinc-900 dark:focus:border-white"
                 />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1.5">브랜드 *</label>
+                <select
+                  name="brandId"
+                  defaultValue={product.brand_id}
+                  className="block w-full rounded-lg border border-zinc-300 px-3.5 py-2 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-zinc-900 dark:focus:border-white"
+                >
+                  {(() => {
+                    const hasCurrentBrand = brands.some((b) => b.id === product.brand_id);
+                    const selectableBrands = hasCurrentBrand
+                      ? brands
+                      : [{ id: product.brand_id, name: brandName }, ...brands];
+                    return selectableBrands.map((b) => (
+                      <option key={b.id} value={b.id}>{b.name}</option>
+                    ));
+                  })()}
+                </select>
               </div>
 
               <div>
@@ -324,24 +712,56 @@ export function ProductDetailTabs({
 
               <div>
                 <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1.5">원산지 (Origin)</label>
-                <input
+                <select
                   name="origin"
-                  type="text"
                   defaultValue={product.origin || ""}
-                  placeholder="예: 대한민국 (South Korea)"
                   className="block w-full rounded-lg border border-zinc-300 px-3.5 py-2 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-zinc-900 dark:focus:border-white"
-                />
+                >
+                  <option value="">선택 안 함 (None)</option>
+                  <optgroup label="주요 국가 (Major Countries)">
+                    <option value="대한민국">대한민국 (South Korea)</option>
+                    <option value="미국">미국 (United States)</option>
+                    <option value="중국">중국 (China)</option>
+                    <option value="베트남">베트남 (Vietnam)</option>
+                  </optgroup>
+                  <optgroup label="기타 국가 (Other Countries)">
+                    <option value="일본">일본 (Japan)</option>
+                    <option value="대만">대만 (Taiwan)</option>
+                    <option value="태국">태국 (Thailand)</option>
+                    <option value="인도네시아">인도네시아 (Indonesia)</option>
+                    <option value="말레이시아">말레이시아 (Malaysia)</option>
+                    <option value="필리핀">필리핀 (Philippines)</option>
+                    <option value="싱가포르">싱가포르 (Singapore)</option>
+                    <option value="프랑스">프랑스 (France)</option>
+                    <option value="독일">독일 (Germany)</option>
+                    <option value="영국">영국 (United Kingdom)</option>
+                    <option value="이탈리아">이탈리아 (Italy)</option>
+                    <option value="캐나다">캐나다 (Canada)</option>
+                    <option value="호주">호주 (Australia)</option>
+                  </optgroup>
+                </select>
               </div>
 
               <div>
                 <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1.5">리드 타임 (Lead Time)</label>
-                <input
-                  name="leadTime"
-                  type="text"
-                  defaultValue={product.lead_time || ""}
-                  placeholder="예: 발주 후 2-3주"
-                  className="block w-full rounded-lg border border-zinc-300 px-3.5 py-2 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-zinc-900 dark:focus:border-white"
-                />
+                <div className="flex gap-2">
+                  <input
+                    name="leadTimeValue"
+                    type="number"
+                    defaultValue={parsedLeadTime.value}
+                    placeholder="숫자 입력"
+                    className="block w-2/3 rounded-lg border border-zinc-300 px-3.5 py-2 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-zinc-900 dark:focus:border-white"
+                  />
+                  <select
+                    name="leadTimeUnit"
+                    defaultValue={parsedLeadTime.unit}
+                    className="block w-1/3 rounded-lg border border-zinc-300 px-3.5 py-2 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-zinc-900 dark:focus:border-white"
+                  >
+                    <option value="일">일 (Days)</option>
+                    <option value="주">주 (Weeks)</option>
+                    <option value="개월">개월 (Months)</option>
+                  </select>
+                </div>
               </div>
 
               <div>
@@ -357,13 +777,19 @@ export function ProductDetailTabs({
 
               <div>
                 <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1.5">컬러 맵 (Color Map)</label>
-                <input
+                <select
                   name="colorMap"
-                  type="text"
                   defaultValue={product.color_map || ""}
-                  placeholder="예: Pink, Red"
                   className="block w-full rounded-lg border border-zinc-300 px-3.5 py-2 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-zinc-900 dark:focus:border-white"
-                />
+                >
+                  <option value="">선택 안 함 (None)</option>
+                  {[
+                    "White", "Black", "Grey", "Silver", "Gold", "Red", "Pink", "Coral", "Orange", 
+                    "Yellow", "Green", "Blue", "Purple", "Brown", "Beige", "Ivory", "Clear", "Multi-Color"
+                  ].map((c) => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
               </div>
             </div>
 
@@ -383,61 +809,232 @@ export function ProductDetailTabs({
               <textarea
                 name="ingredientsText"
                 rows={4}
-                defaultValue={product.ingredients_text || ""}
-                placeholder="전성분 정보를 입력해주세요."
+                value={ingredientsText}
+                onChange={(e) => setIngredientsText(e.target.value)}
+                placeholder="영문 혹은 한국어 전성분 정보를 입력해주세요. 번역 도구를 사용하여 한글 전성분을 영문으로 번역하여 기입하실 수 있습니다."
                 className="block w-full rounded-lg border border-zinc-300 px-3.5 py-2 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-zinc-900 dark:focus:border-white resize-y"
               />
             </div>
+
+            {/* Ingredients Translation Helper */}
+            <div className="bg-zinc-50/50 dark:bg-zinc-950/20 rounded-xl border border-zinc-200 dark:border-zinc-850 p-5 space-y-4">
+              <div className="flex justify-between items-center border-b border-zinc-100 dark:border-zinc-850 pb-2.5">
+                <div className="flex items-center gap-2">
+                  <span className="text-base">🌐</span>
+                  <span className="text-xs font-bold text-zinc-800 dark:text-zinc-250">전성분 자동 번역 도구 (Ingredients Translator)</span>
+                </div>
+                <span className="text-[10px] font-medium text-zinc-400">화장품/식품 원료 번역 도우미</span>
+              </div>
+              <div className="grid gap-4 md:grid-cols-2">
+                {/* Source (왼쪽) */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[10px] font-bold text-zinc-500 uppercase">원본 언어 (Source Language)</label>
+                    <select
+                      value={transSourceLang}
+                      onChange={(e) => setTransSourceLang(e.target.value)}
+                      className="rounded border border-zinc-200 bg-white px-2 py-0.5 text-[10px] text-zinc-700 focus:outline-none dark:border-zinc-850 dark:bg-zinc-900 dark:text-zinc-350"
+                    >
+                      <option value="ko">한국어 (Korean)</option>
+                      <option value="en">영어 (English)</option>
+                    </select>
+                  </div>
+                  <textarea
+                    rows={3}
+                    value={transSourceText}
+                    onChange={(e) => setTransSourceText(e.target.value)}
+                    placeholder="번역할 전성분을 복사하여 입력해 주세요."
+                    className="block w-full rounded-lg border border-zinc-200 px-3 py-2 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-indigo-500 resize-none font-sans"
+                  />
+                </div>
+
+                {/* Target (오른쪽) */}
+                <div className="space-y-2 relative">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[10px] font-bold text-zinc-500 uppercase">번역 결과 (Target Language)</label>
+                    <select
+                      value={transTargetLang}
+                      onChange={(e) => setTransTargetLang(e.target.value)}
+                      className="rounded border border-zinc-200 bg-white px-2 py-0.5 text-[10px] text-zinc-700 focus:outline-none dark:border-zinc-850 dark:bg-zinc-900 dark:text-zinc-355"
+                    >
+                      <option value="en">영어 (English)</option>
+                      <option value="ko">한국어 (Korean)</option>
+                    </select>
+                  </div>
+                  <textarea
+                    rows={3}
+                    value={transTargetText}
+                    onChange={(e) => setTransTargetText(e.target.value)}
+                    placeholder="번역된 결과가 여기에 표시됩니다."
+                    className="block w-full rounded-lg border border-zinc-200 px-3 py-2 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-indigo-500 resize-none font-sans"
+                  />
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex flex-col sm:flex-row gap-2 items-center justify-between pt-2 border-t border-zinc-100 dark:border-zinc-850">
+                <button
+                  type="button"
+                  onClick={handleTranslate}
+                  disabled={transPending}
+                  className="w-full sm:w-auto rounded bg-zinc-900 px-4 py-2 text-xs font-bold text-white hover:bg-zinc-800 disabled:opacity-50 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-100 flex items-center justify-center gap-1.5 cursor-pointer shadow"
+                >
+                  {transPending ? (
+                    <>
+                      <svg className="animate-spin h-3.5 w-3.5 text-current" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                      </svg>
+                      <span>번역 중...</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>번역하기 (Translate)</span>
+                      <span>➔</span>
+                    </>
+                  )}
+                </button>
+
+                <div className="flex gap-2 w-full sm:w-auto">
+                  <button
+                    type="button"
+                    onClick={handleApplyTranslation}
+                    disabled={!transTargetText.trim()}
+                    className="w-full sm:w-auto rounded border border-indigo-200 bg-indigo-50 px-4 py-2 text-xs font-bold text-indigo-700 hover:bg-indigo-100 disabled:opacity-50 dark:bg-indigo-950/40 dark:text-indigo-300 dark:border-indigo-900 dark:hover:bg-indigo-950/80 cursor-pointer shadow-sm transition-colors text-center"
+                  >
+                    리뷰 완료 및 적용 (Apply to field)
+                  </button>
+                </div>
+              </div>
+            </div>
+
+
+            <div className="border-t border-zinc-100 dark:border-zinc-850 pt-4 space-y-4">
+              <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300">성분 인증 증빙 서류 첨부 (PDF 또는 이미지)</label>
+              
+              <div className="rounded-lg border border-zinc-150 p-4 dark:border-zinc-800 bg-zinc-50/20 space-y-2">
+                {ingredientsErrorKo && (
+                  <p className="text-xs font-semibold text-rose-600">{ingredientsErrorKo}</p>
+                )}
+                {ingredientsFileUrl ? (
+                  <div className="flex items-center justify-between gap-3 bg-white dark:bg-zinc-950 p-2.5 rounded-lg border border-zinc-200 dark:border-zinc-850 text-xs">
+                    <a
+                      href={ingredientsFileUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-zinc-900 dark:text-white font-bold underline hover:text-indigo-650 truncate"
+                    >
+                      성분 인증 서류 보기 ↗
+                    </a>
+                    <button
+                      type="button"
+                      disabled={ingredientsFilePendingKo}
+                      onClick={handleIngredientsFileDeleteKo}
+                      className="text-[11px] font-bold text-rose-600 hover:text-rose-800 cursor-pointer disabled:opacity-50 shrink-0"
+                    >
+                      {ingredientsFilePendingKo ? "삭제 중..." : "파일 삭제"}
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="file"
+                      accept="image/*,application/pdf"
+                      disabled={ingredientsFilePendingKo}
+                      onChange={handleIngredientsFileSubmitKo}
+                      className="block w-full text-xs text-zinc-500 file:mr-3 file:py-1 file:px-2.5 file:rounded file:border-0 file:text-[10px] file:font-bold file:bg-zinc-100 file:text-zinc-700 dark:file:bg-zinc-800 dark:file:text-zinc-350 hover:file:bg-zinc-200 cursor-pointer disabled:opacity-50"
+                    />
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
 
-          {/* SKU Management Card */}
+          {/* Identification Numbers Card */}
           <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 space-y-6">
             <h2 className="text-sm font-bold text-zinc-900 dark:text-white border-b border-zinc-100 pb-3 dark:border-zinc-850">
-              SKU 및 식별 번호 관리
+              식별 관리 번호
             </h2>
             <div className="grid gap-6 sm:grid-cols-2">
-              <div>
-                <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1.5">
-                  Letusto SKU <span className="text-[10px] text-zinc-400 font-normal">(기준 고유 SKU)</span>
-                </label>
-                <input
-                  name="letustoSku"
-                  type="text"
-                  defaultValue={product.letusto_sku || ""}
-                  placeholder="예: LTS-SUN-001"
-                  className="block w-full rounded-lg border border-indigo-250 bg-indigo-50/10 px-3.5 py-2 text-xs text-zinc-900 dark:border-indigo-950 dark:bg-zinc-950 dark:text-indigo-300 focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono"
-                />
+              <div className="sm:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <input type="hidden" name="parentSku" value={isParentSku ? "Y" : ""} />
+                <input type="hidden" name="childSku" value={isChildSku ? "Y" : ""} />
+                
+                <div 
+                  className={`flex items-start gap-3 p-3 rounded-lg border transition-all cursor-pointer select-none bg-white dark:bg-zinc-950/40 ${
+                    isParentSku 
+                      ? "border-indigo-600 ring-1 ring-indigo-600 dark:border-indigo-500 dark:ring-indigo-500" 
+                      : "border-zinc-200 hover:border-zinc-300 dark:border-zinc-800 dark:hover:border-zinc-700"
+                  }`}
+                  onClick={() => { 
+                    const nextVal = !isParentSku;
+                    setIsParentSku(nextVal); 
+                    if (nextVal) setIsChildSku(false); 
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={isParentSku}
+                    onChange={(e) => {
+                      setIsParentSku(e.target.checked);
+                      if (e.target.checked) setIsChildSku(false);
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                    className="h-4 w-4 rounded border-zinc-300 text-indigo-650 focus:ring-indigo-500 cursor-pointer mt-0.5"
+                  />
+                  <div className="space-y-0.5">
+                    <span className="block text-xs font-bold text-zinc-900 dark:text-white">Parent SKU (상위 대표 상품)</span>
+                    <span className="block text-[10px] text-zinc-400 dark:text-zinc-500">본 상품이 여러 옵션들을 대표하는 상위 상품인 경우 선택합니다.</span>
+                  </div>
+                </div>
+
+                <div 
+                  className={`flex items-start gap-3 p-3 rounded-lg border transition-all cursor-pointer select-none bg-white dark:bg-zinc-950/40 ${
+                    isChildSku 
+                      ? "border-indigo-600 ring-1 ring-indigo-600 dark:border-indigo-500 dark:ring-indigo-500" 
+                      : "border-zinc-200 hover:border-zinc-300 dark:border-zinc-800 dark:hover:border-zinc-700"
+                  }`}
+                  onClick={() => { 
+                    const nextVal = !isChildSku;
+                    setIsChildSku(nextVal); 
+                    if (nextVal) setIsParentSku(false); 
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={isChildSku}
+                    onChange={(e) => {
+                      setIsChildSku(e.target.checked);
+                      if (e.target.checked) setIsParentSku(false);
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                    className="h-4 w-4 rounded border-zinc-300 text-indigo-650 focus:ring-indigo-500 cursor-pointer mt-0.5"
+                  />
+                  <div className="space-y-0.5">
+                    <span className="block text-xs font-bold text-zinc-900 dark:text-white">Child SKU (하위 옵션 상품)</span>
+                    <span className="block text-[10px] text-zinc-400 dark:text-zinc-500">본 상품이 상위 상품에 종속되는 개별 옵션 상품인 경우 선택합니다.</span>
+                  </div>
+                </div>
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1.5">제조사 SKU (Manufacture SKU)</label>
+                <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1.5">미국 바코드 (UPC)</label>
                 <input
-                  name="manufactureSku"
+                  name="upc"
                   type="text"
-                  defaultValue={product.manufacture_sku || ""}
-                  placeholder="제조사의 실제 SKU 코드"
+                  defaultValue={product.upc || ""}
+                  placeholder="12자리 미국 바코드 규격"
                   className="block w-full rounded-lg border border-zinc-300 px-3.5 py-2 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-zinc-900 dark:focus:border-white font-mono"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1.5">Parent SKU</label>
+                <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1.5">유럽/글로벌 바코드 (EAN)</label>
                 <input
-                  name="parentSku"
+                  name="ean"
                   type="text"
-                  defaultValue={product.parent_sku || ""}
-                  placeholder="상위 대표 SKU"
-                  className="block w-full rounded-lg border border-zinc-300 px-3.5 py-2 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-zinc-900 dark:focus:border-white font-mono"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1.5">Child SKU</label>
-                <input
-                  name="childSku"
-                  type="text"
-                  defaultValue={product.child_sku || ""}
-                  placeholder="하위 옵션 SKU"
+                  defaultValue={product.ean || ""}
+                  placeholder="13자리 글로벌 바코드 규격"
                   className="block w-full rounded-lg border border-zinc-300 px-3.5 py-2 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-zinc-900 dark:focus:border-white font-mono"
                 />
               </div>
@@ -486,20 +1083,23 @@ export function ProductDetailTabs({
         </div>
 
         {/* Tab Panel 2: 가격 정보 */}
+        {/* Tab Panel 2: 가격 정보 */}
         <div className={activeTab === "price" ? "space-y-6" : "hidden"}>
+          {/* Reference Prices Card */}
           <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 space-y-6">
             <h2 className="text-sm font-bold text-zinc-900 dark:text-white border-b border-zinc-100 pb-3 dark:border-zinc-850">
-              다양한 판매 가격 등록
+              참고 가격 정보 (Reference Prices)
             </h2>
             
-            <div className="grid gap-6 sm:grid-cols-3">
+            <div className="grid gap-6 sm:grid-cols-2 md:grid-cols-4">
               <div>
-                <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1.5">한국 리테일 소비자가 (₩, Retail KRW)</label>
+                <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1.5">한국 소비자가 (₩, Retail KRW) *</label>
                 <div className="relative">
                   <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-xs text-zinc-400">₩</span>
                   <input
                     name="priceKrwRetail"
                     type="number"
+                    required
                     defaultValue={product.price_krw_retail || ""}
                     placeholder="0"
                     className="block w-full rounded-lg border border-zinc-300 pl-8 pr-3.5 py-2 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-zinc-900 dark:focus:border-white"
@@ -522,22 +1122,7 @@ export function ProductDetailTabs({
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1.5">수출용 FOB 가격 ($, Export USD FOB)</label>
-                <div className="relative">
-                  <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-xs text-zinc-400">$</span>
-                  <input
-                    name="priceUsdFob"
-                    type="number"
-                    step="0.01"
-                    defaultValue={product.price_usd_fob || ""}
-                    placeholder="0.00"
-                    className="block w-full rounded-lg border border-zinc-300 pl-8 pr-3.5 py-2 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-zinc-900 dark:focus:border-white"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1.5">추정 소비자가 ($, Retail USD - 기존용)</label>
+                <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1.5">예상 미국 소비자가 ($, Retail USD)</label>
                 <div className="relative">
                   <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-xs text-zinc-400">$</span>
                   <input
@@ -550,286 +1135,523 @@ export function ProductDetailTabs({
                   />
                 </div>
               </div>
+
+              <div>
+                <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1.5">수출용 FOB 가격 ($, Export USD FOB) *</label>
+                <div className="relative">
+                  <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-xs text-zinc-400">$</span>
+                  <input
+                    name="priceUsdFob"
+                    type="number"
+                    required
+                    step="0.01"
+                    value={priceUsdFobState || ""}
+                    onChange={(e) => setPriceUsdFobState(Number(e.target.value) || 0)}
+                    placeholder="0.00"
+                    className="block w-full rounded-lg border border-zinc-300 pl-8 pr-3.5 py-2 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-zinc-900 dark:focus:border-white"
+                  />
+                </div>
+              </div>
             </div>
+          </div>
+
+          {/* Tiered Supply Prices Card */}
+          <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 space-y-4">
+            <div className="flex items-center justify-between border-b border-zinc-100 pb-3 dark:border-zinc-850">
+              <div>
+                <h2 className="text-sm font-bold text-zinc-900 dark:text-white">
+                  수량별 B2B 공급 가격 (Tiered Supply Prices)
+                </h2>
+                <p className="text-[10px] text-zinc-400 dark:text-zinc-500 mt-1">바이어가 발주하는 최소 수량에 따른 할인율 단가를 설정할 수 있습니다.</p>
+              </div>
+              <button
+                type="button"
+                onClick={addPriceTier}
+                className="rounded bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/40 dark:hover:bg-indigo-900/60 px-3 py-1.5 text-xs font-bold text-indigo-600 dark:text-indigo-400 cursor-pointer transition-colors"
+              >
+                + 공급가 구간 추가
+              </button>
+            </div>
+
+            {priceTiers.length === 0 ? (
+              <div className="border border-dashed border-zinc-200 dark:border-zinc-800 p-8 rounded-lg text-center">
+                <p className="text-xs text-zinc-450 dark:text-zinc-500">등록된 수량별 B2B 공급가가 없습니다. 구간별 공급 단가를 설정하려면 우측 상단의 버튼을 클릭해 주세요.</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-zinc-200 dark:divide-zinc-800 text-xs">
+                  <thead>
+                    <tr>
+                      <th className="px-4 py-2 text-left font-bold text-zinc-500 dark:text-zinc-400">최소 주문 수량 (Quantity, 개 이상)</th>
+                      <th className="px-4 py-2 text-left font-bold text-zinc-500 dark:text-zinc-400">구간별 공급 단가 (Unit Price, $)</th>
+                      <th className="px-4 py-2 text-center font-bold text-zinc-500 dark:text-zinc-400 w-24">작업</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-zinc-150 dark:divide-zinc-850">
+                    {priceTiers.map((tier, idx) => (
+                      <tr key={idx}>
+                        <td className="px-4 py-3">
+                          <input
+                            type="number"
+                            min="1"
+                            value={tier.qty}
+                            onChange={(e) => updatePriceTier(idx, "qty", Number(e.target.value))}
+                            placeholder="100"
+                            className="block w-full max-w-[200px] rounded-lg border border-zinc-300 px-3 py-1.5 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-indigo-500"
+                          />
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-3">
+                            <div className="relative w-full max-w-[150px]">
+                              <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-xs text-zinc-450">$</span>
+                              <input
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                value={tier.price}
+                                onChange={(e) => updatePriceTier(idx, "price", Number(e.target.value))}
+                                placeholder="0.00"
+                                className="block w-full rounded-lg border border-zinc-300 pl-8 pr-3 py-1.5 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-indigo-500"
+                              />
+                            </div>
+                            {priceUsdFobState > 0 && tier.price > 0 && (
+                              <span className={`inline-flex items-center rounded px-2 py-1 text-[10px] font-bold ${
+                                priceUsdFobState > tier.price
+                                  ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400 border border-emerald-150 dark:border-emerald-900"
+                                  : "bg-zinc-50 text-zinc-400 dark:bg-zinc-900 dark:text-zinc-650 border border-zinc-150 dark:border-zinc-800"
+                              }`}>
+                                {priceUsdFobState > tier.price
+                                  ? `${(((priceUsdFobState - tier.price) / priceUsdFobState) * 100).toFixed(1)}% 할인`
+                                  : "0% 할인"}
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <button
+                            type="button"
+                            onClick={() => removePriceTier(idx)}
+                            className="text-rose-500 hover:text-rose-700 font-bold px-3 py-1 cursor-pointer transition-colors"
+                          >
+                            제거
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         </div>
 
         {/* Tab Panel 3: 로지스틱스 정보 */}
+        {/* Tab Panel 3: 로지스틱스 정보 */}
         <div className={activeTab === "logistics" ? "space-y-6" : "hidden"}>
-          {/* Item & Package Specs */}
-          <div className="grid gap-6 sm:grid-cols-2">
-            {/* Item */}
-            <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 space-y-6">
-              <h2 className="text-sm font-bold text-zinc-900 dark:text-white border-b border-zinc-100 pb-3 dark:border-zinc-850">
-                1. 단품 규격 (Item Dimension & Weight)
-              </h2>
-              <div className="grid gap-4 grid-cols-2">
-                <div>
-                  <label className="block text-xs font-semibold text-zinc-650 dark:text-zinc-300 mb-1">가로 (Width, cm)</label>
-                  <input
-                    name="itemWidth"
-                    type="number"
-                    step="0.1"
-                    value={itemWidth}
-                    onChange={(e) => setItemWidth(e.target.value)}
-                    placeholder="0.0"
-                    className="block w-full rounded-lg border border-zinc-300 px-3.5 py-1.5 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-zinc-900 dark:focus:border-white"
-                  />
+          {/* Item */}
+          <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 space-y-4">
+            <h2 className="text-sm font-bold text-zinc-900 dark:text-white border-b border-zinc-100 pb-3 dark:border-zinc-850 flex items-center gap-2">
+              <svg className="w-4 h-4 text-indigo-500 shrink-0" viewBox="0 0 64 64" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M28 20V12h8v8" strokeLinecap="round"/>
+                <path d="M24 20h16v32a4 4 0 0 1-4 4H28a4 4 0 0 1-4-4V20z"/>
+                <line x1="32" y1="6" x2="32" y2="12" strokeLinecap="round"/>
+                <path d="M32 20v28" strokeDasharray="3 3"/>
+                <circle cx="32" cy="36" r="3" fill="currentColor"/>
+              </svg>
+              <span>1. 단품 규격 (Item Spec)</span>
+            </h2>
+            <div className="grid gap-4 grid-cols-2 md:grid-cols-4">
+              <div>
+                <label className="block text-xs font-semibold text-zinc-650 dark:text-zinc-300 mb-1">가로 (Width, cm)</label>
+                <input
+                  name="itemWidth"
+                  type="number"
+                  step="0.1"
+                  value={itemWidth}
+                  onChange={(e) => setItemWidth(e.target.value)}
+                  placeholder="0.0"
+                  className="block w-full rounded-lg border border-zinc-300 px-3.5 py-1.5 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-zinc-900 dark:focus:border-white"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-zinc-650 dark:text-zinc-300 mb-1">세로 (Depth, cm)</label>
+                <input
+                  name="itemDepth"
+                  type="number"
+                  step="0.1"
+                  value={itemDepth}
+                  onChange={(e) => setItemDepth(e.target.value)}
+                  placeholder="0.0"
+                  className="block w-full rounded-lg border border-zinc-300 px-3.5 py-1.5 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-zinc-900 dark:focus:border-white"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-zinc-650 dark:text-zinc-300 mb-1">높이 (Height, cm)</label>
+                <input
+                  name="itemHeight"
+                  type="number"
+                  step="0.1"
+                  value={itemHeight}
+                  onChange={(e) => setItemHeight(e.target.value)}
+                  placeholder="0.0"
+                  className="block w-full rounded-lg border border-zinc-300 px-3.5 py-1.5 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-zinc-900 dark:focus:border-white"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-zinc-650 dark:text-zinc-300 mb-1">무게 (Weight, g)</label>
+                <input
+                  name="itemWeight"
+                  type="number"
+                  step="0.1"
+                  value={itemWeight}
+                  onChange={(e) => setItemWeight(e.target.value)}
+                  placeholder="0.0"
+                  className="block w-full rounded-lg border border-zinc-300 px-3.5 py-1.5 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-zinc-900 dark:focus:border-white"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Package */}
+          <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 space-y-4">
+            <h2 className="text-sm font-bold text-zinc-900 dark:text-white border-b border-zinc-100 pb-3 dark:border-zinc-850 flex flex-col gap-1">
+              <div className="flex items-center gap-2">
+                <svg className="w-4 h-4 text-indigo-500 shrink-0" viewBox="0 0 64 64" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M16 12l16-6 16 6v36l-16 6-16-6V12z"/>
+                  <path d="M16 12l16 6 16-6"/>
+                  <path d="M32 18v38"/>
+                  <path d="M16 22l16 6 16-6" opacity="0.6"/>
+                </svg>
+                <span>2. 단품 포장 패키지 규격 (Package Spec)</span>
+              </div>
+              <p className="text-zinc-500 dark:text-zinc-450 text-[10px] font-normal leading-relaxed mt-1">
+                ※ 본 제품이 포장 박스에 포장된 최종 배송 규격을 기재해주세요. 고객에게 발송될 때 박스에 들어가 있거나 포장 완료된 상태의 실 측정 크기(가로/세로/높이)와 무게(g) 정보입니다.
+              </p>
+            </h2>
+            <div className="grid gap-4 sm:grid-cols-2 text-xs">
+              {/* Width */}
+              <div className="space-y-1.5 p-3 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50/20">
+                <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300">가로 (Width, cm/inch) *</label>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <span className="text-[9px] text-zinc-400 font-semibold block">cm</span>
+                    <input
+                      name="packageWidth"
+                      type="number"
+                      step="0.1"
+                      required
+                      placeholder="0.0"
+                      value={packageWidth}
+                      onChange={(e) => handleWidthCmChange(e.target.value)}
+                      className="mt-0.5 block w-full rounded border border-zinc-300 bg-white px-2 py-1 text-xs text-zinc-900 outline-none focus:border-zinc-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+                    />
+                  </div>
+                  <div>
+                    <span className="text-[9px] text-zinc-450 dark:text-zinc-500 font-semibold block">inch (자동 계산)</span>
+                    <input
+                      type="number"
+                      step="0.01"
+                      placeholder="0.00"
+                      value={packageWidthInch}
+                      onChange={(e) => handleWidthInchChange(e.target.value)}
+                      className="mt-0.5 block w-full rounded border border-zinc-300 bg-white px-2 py-1 text-xs text-zinc-900 outline-none focus:border-zinc-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+                    />
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-xs font-semibold text-zinc-650 dark:text-zinc-300 mb-1">세로 (Depth, cm)</label>
-                  <input
-                    name="itemDepth"
-                    type="number"
-                    step="0.1"
-                    value={itemDepth}
-                    onChange={(e) => setItemDepth(e.target.value)}
-                    placeholder="0.0"
-                    className="block w-full rounded-lg border border-zinc-300 px-3.5 py-1.5 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-zinc-900 dark:focus:border-white"
-                  />
+              </div>
+
+              {/* Depth */}
+              <div className="space-y-1.5 p-3 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50/20">
+                <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300">세로 (Depth, cm/inch) *</label>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <span className="text-[9px] text-zinc-400 font-semibold block">cm</span>
+                    <input
+                      name="packageDepth"
+                      type="number"
+                      step="0.1"
+                      required
+                      placeholder="0.0"
+                      value={packageDepth}
+                      onChange={(e) => handleDepthCmChange(e.target.value)}
+                      className="mt-0.5 block w-full rounded border border-zinc-300 bg-white px-2 py-1 text-xs text-zinc-900 outline-none focus:border-zinc-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+                    />
+                  </div>
+                  <div>
+                    <span className="text-[9px] text-zinc-450 dark:text-zinc-500 font-semibold block">inch (자동 계산)</span>
+                    <input
+                      type="number"
+                      step="0.01"
+                      placeholder="0.00"
+                      value={packageDepthInch}
+                      onChange={(e) => handleDepthInchChange(e.target.value)}
+                      className="mt-0.5 block w-full rounded border border-zinc-300 bg-white px-2 py-1 text-xs text-zinc-900 outline-none focus:border-zinc-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+                    />
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-xs font-semibold text-zinc-650 dark:text-zinc-300 mb-1">높이 (Height, cm)</label>
-                  <input
-                    name="itemHeight"
-                    type="number"
-                    step="0.1"
-                    value={itemHeight}
-                    onChange={(e) => setItemHeight(e.target.value)}
-                    placeholder="0.0"
-                    className="block w-full rounded-lg border border-zinc-300 px-3.5 py-1.5 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-zinc-900 dark:focus:border-white"
-                  />
+              </div>
+
+              {/* Height */}
+              <div className="space-y-1.5 p-3 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50/20">
+                <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300">높이 (Height, cm/inch) *</label>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <span className="text-[9px] text-zinc-400 font-semibold block">cm</span>
+                    <input
+                      name="packageHeight"
+                      type="number"
+                      step="0.1"
+                      required
+                      placeholder="0.0"
+                      value={packageHeight}
+                      onChange={(e) => handleHeightCmChange(e.target.value)}
+                      className="mt-0.5 block w-full rounded border border-zinc-300 bg-white px-2 py-1 text-xs text-zinc-900 outline-none focus:border-zinc-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+                    />
+                  </div>
+                  <div>
+                    <span className="text-[9px] text-zinc-450 dark:text-zinc-500 font-semibold block">inch (자동 계산)</span>
+                    <input
+                      type="number"
+                      step="0.01"
+                      placeholder="0.00"
+                      value={packageHeightInch}
+                      onChange={(e) => handleHeightInchChange(e.target.value)}
+                      className="mt-0.5 block w-full rounded border border-zinc-300 bg-white px-2 py-1 text-xs text-zinc-900 outline-none focus:border-zinc-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+                    />
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-xs font-semibold text-zinc-650 dark:text-zinc-300 mb-1">무게 (Weight, g)</label>
-                  <input
-                    name="itemWeight"
-                    type="number"
-                    step="0.1"
-                    value={itemWeight}
-                    onChange={(e) => setItemWeight(e.target.value)}
-                    placeholder="0.0"
-                    className="block w-full rounded-lg border border-zinc-300 px-3.5 py-1.5 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-zinc-900 dark:focus:border-white"
-                  />
+              </div>
+
+              {/* Weight */}
+              <div className="space-y-1.5 p-3 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50/20">
+                <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300">무게 (Weight, g/lb/oz) *</label>
+                <div className="grid grid-cols-3 gap-1.5">
+                  <div>
+                    <span className="text-[9px] text-zinc-400 font-semibold block">g</span>
+                    <input
+                      name="packageWeight"
+                      type="number"
+                      step="0.1"
+                      required
+                      placeholder="0.0"
+                      value={packageWeight}
+                      onChange={(e) => handleWeightGChange(e.target.value)}
+                      className="mt-0.5 block w-full rounded border border-zinc-300 bg-white px-1.5 py-1 text-[11px] text-zinc-900 outline-none focus:border-zinc-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+                    />
+                  </div>
+                  <div>
+                    <span className="text-[9px] text-zinc-450 dark:text-zinc-500 font-semibold block">lb (자동)</span>
+                    <input
+                      type="number"
+                      step="0.001"
+                      placeholder="0.000"
+                      value={packageWeightLb}
+                      onChange={(e) => handleWeightLbChange(e.target.value)}
+                      className="mt-0.5 block w-full rounded border border-zinc-300 bg-white px-1.5 py-1 text-[11px] text-zinc-900 outline-none focus:border-zinc-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+                    />
+                  </div>
+                  <div>
+                    <span className="text-[9px] text-zinc-450 dark:text-zinc-500 font-semibold block">oz (자동)</span>
+                    <input
+                      type="number"
+                      step="0.01"
+                      placeholder="0.00"
+                      value={packageWeightOz}
+                      onChange={(e) => handleWeightOzChange(e.target.value)}
+                      className="mt-0.5 block w-full rounded border border-zinc-300 bg-white px-1.5 py-1 text-[11px] text-zinc-900 outline-none focus:border-zinc-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+                    />
+                  </div>
                 </div>
               </div>
             </div>
+          </div>
 
-            {/* Package */}
-            <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 space-y-6">
-              <h2 className="text-sm font-bold text-zinc-900 dark:text-white border-b border-zinc-100 pb-3 dark:border-zinc-850">
-                2. 포장 패키지 규격 (Package Dimension & Weight)
-              </h2>
-              <div className="grid gap-4 grid-cols-2">
-                <div>
-                  <label className="block text-xs font-semibold text-zinc-650 dark:text-zinc-300 mb-1">가로 (Width, cm)</label>
+          {/* Carton */}
+          <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 space-y-4">
+            <h2 className="text-sm font-bold text-zinc-900 dark:text-white border-b border-zinc-100 pb-3 dark:border-zinc-850 flex items-center gap-2">
+              <svg className="w-4 h-4 text-indigo-500 shrink-0" viewBox="0 0 64 64" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M10 18l22-8 22 8v28l-22 8-22-8V18z"/>
+                <path d="M10 18l22 8 22-8"/>
+                <path d="M32 26v28"/>
+                <path d="M32 10l11 4M32 10L21 14" opacity="0.8"/>
+                <path d="M21 21.5l11 4 11-4" strokeDasharray="2 2"/>
+              </svg>
+              <span>3. 아웃 카톤 규격 (Carton Box Specs)</span>
+            </h2>
+            <div className="grid gap-4 grid-cols-2 md:grid-cols-3 lg:grid-cols-6">
+              <div>
+                <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-1">입수 수량 (Qty, 개) *</label>
+                <input
+                  name="cartonPackQty"
+                  type="number"
+                  value={cartonPackQty}
+                  onChange={(e) => setCartonPackQty(e.target.value)}
+                  placeholder="1"
+                  className="block w-full rounded-lg border border-zinc-300 px-3.5 py-1.5 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-zinc-900 dark:focus:border-white"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-zinc-650 dark:text-zinc-300 mb-1">가로 (Width, cm)</label>
+                <input
+                  name="cartonWidth"
+                  type="number"
+                  step="0.1"
+                  value={cartonWidth}
+                  onChange={(e) => setCartonWidth(e.target.value)}
+                  placeholder="0.0"
+                  className="block w-full rounded-lg border border-zinc-300 px-3.5 py-1.5 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-zinc-900 dark:focus:border-white"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-zinc-650 dark:text-zinc-300 mb-1">세로 (Depth, cm)</label>
+                <input
+                  name="cartonDepth"
+                  type="number"
+                  step="0.1"
+                  value={cartonDepth}
+                  onChange={(e) => setCartonDepth(e.target.value)}
+                  placeholder="0.0"
+                  className="block w-full rounded-lg border border-zinc-300 px-3.5 py-1.5 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-zinc-900 dark:focus:border-white"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-zinc-650 dark:text-zinc-300 mb-1">높이 (Height, cm)</label>
+                <input
+                  name="cartonHeight"
+                  type="number"
+                  step="0.1"
+                  value={cartonHeight}
+                  onChange={(e) => setCartonHeight(e.target.value)}
+                  placeholder="0.0"
+                  className="block w-full rounded-lg border border-zinc-300 px-3.5 py-1.5 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-zinc-900 dark:focus:border-white"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-zinc-650 dark:text-zinc-300 mb-1">중량 (Weight, kg)</label>
+                <input
+                  name="cartonWeight"
+                  type="number"
+                  step="0.01"
+                  value={cartonWeight}
+                  onChange={(e) => setCartonWeight(e.target.value)}
+                  placeholder="0.00"
+                  className="block w-full rounded-lg border border-zinc-300 px-3.5 py-1.5 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-zinc-900 dark:focus:border-white"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-zinc-650 dark:text-zinc-300 mb-1">부피 (CBM)</label>
+                <div className="flex items-center gap-1.5">
                   <input
-                    name="packageWidth"
-                    type="number"
-                    step="0.1"
-                    value={packageWidth}
-                    onChange={(e) => setPackageWidth(e.target.value)}
-                    placeholder="0.0"
-                    className="block w-full rounded-lg border border-zinc-300 px-3.5 py-1.5 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-zinc-900 dark:focus:border-white"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-zinc-650 dark:text-zinc-300 mb-1">세로 (Depth, cm)</label>
-                  <input
-                    name="packageDepth"
-                    type="number"
-                    step="0.1"
-                    value={packageDepth}
-                    onChange={(e) => setPackageDepth(e.target.value)}
-                    placeholder="0.0"
-                    className="block w-full rounded-lg border border-zinc-300 px-3.5 py-1.5 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-zinc-900 dark:focus:border-white"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-zinc-650 dark:text-zinc-300 mb-1">높이 (Height, cm)</label>
-                  <input
-                    name="packageHeight"
-                    type="number"
-                    step="0.1"
-                    value={packageHeight}
-                    onChange={(e) => setPackageHeight(e.target.value)}
-                    placeholder="0.0"
-                    className="block w-full rounded-lg border border-zinc-300 px-3.5 py-1.5 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-zinc-900 dark:focus:border-white"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-zinc-650 dark:text-zinc-300 mb-1">무게 (Weight, g)</label>
-                  <input
-                    name="packageWeight"
-                    type="number"
-                    step="0.1"
-                    value={packageWeight}
-                    onChange={(e) => setPackageWeight(e.target.value)}
-                    placeholder="0.0"
-                    className="block w-full rounded-lg border border-zinc-300 px-3.5 py-1.5 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-zinc-900 dark:focus:border-white"
+                    name="cartonCbm"
+                    type="text"
+                    readOnly
+                    value={cartonCbm}
+                    className="block w-full rounded-lg border border-zinc-300 px-3 py-1.5 text-xs font-mono font-bold text-center bg-zinc-50 dark:bg-zinc-900 text-zinc-900 dark:border-zinc-800 dark:text-white cursor-not-allowed outline-none"
                   />
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Carton & Palette Specs */}
-          <div className="grid gap-6 sm:grid-cols-2">
-            {/* Carton */}
-            <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 space-y-6">
-              <h2 className="text-sm font-bold text-zinc-900 dark:text-white border-b border-zinc-100 pb-3 dark:border-zinc-850">
-                3. 아웃 카톤 규격 (Carton Box Specs)
-              </h2>
-              <div className="grid gap-4 grid-cols-2">
-                <div className="col-span-2">
-                  <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-1">입수 수량 (Pack Qty - 카톤당 패키지 수) *</label>
-                  <input
-                    name="cartonPackQty"
-                    type="number"
-                    value={cartonPackQty}
-                    onChange={(e) => setCartonPackQty(e.target.value)}
-                    placeholder="1"
-                    className="block w-full rounded-lg border border-zinc-300 px-3.5 py-1.5 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-zinc-900 dark:focus:border-white"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-zinc-650 dark:text-zinc-300 mb-1">가로 (Width, cm)</label>
-                  <input
-                    name="cartonWidth"
-                    type="number"
-                    step="0.1"
-                    value={cartonWidth}
-                    onChange={(e) => setCartonWidth(e.target.value)}
-                    placeholder="0.0"
-                    className="block w-full rounded-lg border border-zinc-300 px-3.5 py-1.5 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-zinc-900 dark:focus:border-white"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-zinc-650 dark:text-zinc-300 mb-1">세로 (Depth, cm)</label>
-                  <input
-                    name="cartonDepth"
-                    type="number"
-                    step="0.1"
-                    value={cartonDepth}
-                    onChange={(e) => setCartonDepth(e.target.value)}
-                    placeholder="0.0"
-                    className="block w-full rounded-lg border border-zinc-300 px-3.5 py-1.5 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-zinc-900 dark:focus:border-white"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-zinc-650 dark:text-zinc-300 mb-1">높이 (Height, cm)</label>
-                  <input
-                    name="cartonHeight"
-                    type="number"
-                    step="0.1"
-                    value={cartonHeight}
-                    onChange={(e) => setCartonHeight(e.target.value)}
-                    placeholder="0.0"
-                    className="block w-full rounded-lg border border-zinc-300 px-3.5 py-1.5 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-zinc-900 dark:focus:border-white"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-zinc-650 dark:text-zinc-300 mb-1">총무게 (Gross Weight, kg)</label>
-                  <input
-                    name="cartonWeight"
-                    type="number"
-                    step="0.01"
-                    value={cartonWeight}
-                    onChange={(e) => setCartonWeight(e.target.value)}
-                    placeholder="0.00"
-                    className="block w-full rounded-lg border border-zinc-300 px-3.5 py-1.5 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-zinc-900 dark:focus:border-white"
-                  />
-                </div>
-                <div className="col-span-2 bg-zinc-50 dark:bg-zinc-950 p-3 rounded-lg border border-dashed border-zinc-200 dark:border-zinc-850 flex items-center justify-between mt-2">
-                  <span className="text-xs font-bold text-zinc-500">자동 계산된 카톤 부피 (CBM):</span>
-                  <div className="flex items-center gap-1.5">
-                    <input
-                      name="cartonCbm"
-                      type="text"
-                      value={cartonCbm}
-                      onChange={(e) => setCartonCbm(e.target.value)}
-                      className="w-24 border border-zinc-300 text-center font-mono font-bold text-xs bg-white text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white py-0.5 rounded"
-                    />
-                    <span className="text-[10px] text-zinc-400 font-mono">CBM</span>
-                  </div>
-                </div>
+          {/* Palette */}
+          <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 space-y-4">
+            <h2 className="text-sm font-bold text-zinc-900 dark:text-white border-b border-zinc-100 pb-3 dark:border-zinc-850 flex items-center gap-2">
+              <svg className="w-4 h-4 text-indigo-500 shrink-0" viewBox="0 0 64 64" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M8 50h48v4H8z"/>
+                <path d="M14 50v4M32 50v4M50 50v4"/>
+                <path d="M12 24h18v22H12zm22 6h18v16H34zM20 12h24v12H20z"/>
+              </svg>
+              <span>4. 팔레트 규격 (Palette Specs)</span>
+            </h2>
+            <div className="grid gap-4 grid-cols-2 md:grid-cols-5 text-xs">
+              <div>
+                <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-1">박스수량 (Cartons)</label>
+                <input
+                  name="paletteCartonQty"
+                  type="number"
+                  value={paletteCartonQty}
+                  onChange={(e) => setPaletteCartonQty(e.target.value)}
+                  placeholder="0"
+                  className="block w-full rounded-lg border border-zinc-300 px-3.5 py-1.5 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-zinc-900 dark:focus:border-white"
+                />
               </div>
-            </div>
-
-            {/* Palette */}
-            <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 space-y-6">
-              <h2 className="text-sm font-bold text-zinc-900 dark:text-white border-b border-zinc-100 pb-3 dark:border-zinc-850">
-                4. 팔레트 규격 (Palette Specs)
-              </h2>
-              <div className="grid gap-4 grid-cols-2">
-                <div className="col-span-2">
-                  <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-1">팔레트당 아웃 카톤 적재 수량 (Carton Qty per Palette)</label>
-                  <input
-                    name="paletteCartonQty"
-                    type="number"
-                    value={paletteCartonQty}
-                    onChange={(e) => setPaletteCartonQty(e.target.value)}
-                    placeholder="0"
-                    className="block w-full rounded-lg border border-zinc-300 px-3.5 py-1.5 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-zinc-900 dark:focus:border-white"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-zinc-650 dark:text-zinc-300 mb-1">가로 (Width, cm)</label>
-                  <input
-                    name="paletteWidth"
-                    type="number"
-                    step="0.1"
-                    value={paletteWidth}
-                    onChange={(e) => setPaletteWidth(e.target.value)}
-                    placeholder="0.0"
-                    className="block w-full rounded-lg border border-zinc-300 px-3.5 py-1.5 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-zinc-900 dark:focus:border-white"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-zinc-650 dark:text-zinc-300 mb-1">세로 (Depth, cm)</label>
-                  <input
-                    name="paletteDepth"
-                    type="number"
-                    step="0.1"
-                    value={paletteDepth}
-                    onChange={(e) => setPaletteDepth(e.target.value)}
-                    placeholder="0.0"
-                    className="block w-full rounded-lg border border-zinc-300 px-3.5 py-1.5 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-zinc-900 dark:focus:border-white"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-zinc-650 dark:text-zinc-300 mb-1">높이 (Height, cm)</label>
-                  <input
-                    name="paletteHeight"
-                    type="number"
-                    step="0.1"
-                    value={paletteHeight}
-                    onChange={(e) => setPaletteHeight(e.target.value)}
-                    placeholder="0.0"
-                    className="block w-full rounded-lg border border-zinc-300 px-3.5 py-1.5 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-zinc-900 dark:focus:border-white"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-zinc-650 dark:text-zinc-300 mb-1">총무게 (Total Weight, kg)</label>
-                  <input
-                    name="paletteWeight"
-                    type="number"
-                    step="0.1"
-                    value={paletteWeight}
-                    onChange={(e) => setPaletteWeight(e.target.value)}
-                    placeholder="0.0"
-                    className="block w-full rounded-lg border border-zinc-300 px-3.5 py-1.5 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-zinc-900 dark:focus:border-white"
-                  />
-                </div>
+              <div>
+                <label className="block text-xs font-semibold text-zinc-650 dark:text-zinc-300 mb-1">가로 (Width, cm)</label>
+                <input
+                  name="paletteWidth"
+                  type="number"
+                  step="0.1"
+                  value={paletteWidth}
+                  onChange={(e) => setPaletteWidth(e.target.value)}
+                  placeholder="0.0"
+                  className="block w-full rounded-lg border border-zinc-300 px-3.5 py-1.5 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-zinc-900 dark:focus:border-white"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-zinc-650 dark:text-zinc-300 mb-1">세로 (Depth, cm)</label>
+                <input
+                  name="paletteDepth"
+                  type="number"
+                  step="0.1"
+                  value={paletteDepth}
+                  onChange={(e) => setPaletteDepth(e.target.value)}
+                  placeholder="0.0"
+                  className="block w-full rounded-lg border border-zinc-300 px-3.5 py-1.5 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-zinc-900 dark:focus:border-white"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-zinc-650 dark:text-zinc-300 mb-1">높이 (Height, cm)</label>
+                <input
+                  name="paletteHeight"
+                  type="number"
+                  step="0.1"
+                  value={paletteHeight}
+                  onChange={(e) => setPaletteHeight(e.target.value)}
+                  placeholder="0.0"
+                  className="block w-full rounded-lg border border-zinc-300 px-3.5 py-1.5 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-zinc-900 dark:focus:border-white"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-zinc-650 dark:text-zinc-300 mb-1">중량 (Weight, kg)</label>
+                <input
+                  name="paletteWeight"
+                  type="number"
+                  step="0.1"
+                  value={paletteWeight}
+                  onChange={(e) => setPaletteWeight(e.target.value)}
+                  placeholder="0.0"
+                  className="block w-full rounded-lg border border-zinc-300 px-3.5 py-1.5 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-zinc-900 dark:focus:border-white"
+                />
               </div>
             </div>
           </div>
 
           {/* Container Simulation & Overrides */}
           <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 space-y-6">
-            <h2 className="text-sm font-bold text-zinc-900 dark:text-white border-b border-zinc-100 pb-3 dark:border-zinc-850">
-              5. 컨테이너 적재 시뮬레이터 및 저장 정보
-            </h2>
+            <div className="flex flex-col md:flex-row gap-6 items-center border-b border-zinc-100 dark:border-zinc-850 pb-3">
+              <div className="flex-1">
+                <h2 className="text-sm font-bold text-zinc-900 dark:text-white flex items-center gap-2">
+                  <svg className="w-6 h-4 text-indigo-500 shrink-0" viewBox="0 0 80 40" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M8 15l20-6 44 6v18l-40 6-24-6V15z"/>
+                    <path d="M8 15l20 6 44-6"/>
+                    <path d="M28 21v18"/>
+                    <path d="M13 16.5v16.5M18 18v16M23 19.5v15.5" opacity="0.6"/>
+                    <path d="M36 20v17M44 19v15M52 18v13M60 17v11" opacity="0.6"/>
+                  </svg>
+                  <span>5. 컨테이너 적재 시뮬레이터 및 저장 정보</span>
+                </h2>
+                <p className="text-[10px] text-zinc-400 dark:text-zinc-500 mt-1">포장 규격을 기준으로 선적 컨테이너당 적재 가능량을 가상 계산해 볼 수 있습니다.</p>
+              </div>
+              <div className="shrink-0">
+                <svg className="w-20 h-10 text-indigo-500 dark:text-indigo-400" viewBox="0 0 80 40" fill="none" stroke="currentColor" strokeWidth="1.5">
+                  <path d="M8 15l20-6 44 6v18l-40 6-24-6V15z"/>
+                  <path d="M8 15l20 6 44-6"/>
+                  <path d="M28 21v18"/>
+                  <path d="M13 16.5v16.5M18 18v16M23 19.5v15.5" opacity="0.6"/>
+                  <path d="M36 20v17M44 19v15M52 18v13M60 17v11" opacity="0.6"/>
+                </svg>
+              </div>
+            </div>
             
             <div className="grid gap-6 md:grid-cols-2">
               {/* 20ft Container */}
@@ -985,45 +1807,66 @@ export function ProductDetailTabs({
         {/* Images List */}
         <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 space-y-4">
           <h2 className="text-sm font-bold text-zinc-900 dark:text-white border-b border-zinc-100 pb-3 dark:border-zinc-850">
-            제품 이미지 관리 (최대 5장)
+            제품 이미지 관리 (최대 10장)
           </h2>
           
-          {imageRows.length === 0 ? (
+          {localImages.length === 0 ? (
             <p className="mt-4 text-xs text-zinc-400 dark:text-zinc-500 py-6 text-center">등록된 제품 이미지가 없습니다. 아래 폼에서 이미지를 추가해 주세요.</p>
           ) : (
-            <div className="mt-4 flex flex-wrap gap-4">
-              {imageRows.map((img, i) => (
-                <div key={img.id} className="relative group border border-zinc-150 dark:border-zinc-800 rounded-lg p-1.5 bg-zinc-50/50 dark:bg-zinc-950 shadow-sm transition-all hover:shadow">
-                  {imageUrls[i] && (
-                    <img
-                      src={imageUrls[i]!}
-                      alt={`제품 이미지 ${i + 1}`}
-                      className="h-28 w-28 rounded-lg object-cover"
-                    />
-                  )}
-                  {/* Position Badge */}
-                  <span className="absolute top-2 left-2 rounded bg-zinc-900/70 backdrop-blur px-1.5 py-0.5 text-[9px] font-bold text-white">
-                    {i === 0 ? "대표 이미지" : `서브 ${i}`}
-                  </span>
-                  
-                  <ConfirmForm
-                    action={removeProductImage.bind(null, product.id, img.id)}
-                    className="mt-2 text-center"
-                    message="정말 이 제품 이미지를 삭제하시겠습니까?"
+            <div className="space-y-3">
+              <p className="text-[11px] text-zinc-500 flex items-center gap-1.5 bg-zinc-50 dark:bg-zinc-950/40 p-2.5 rounded-lg border border-zinc-150 dark:border-zinc-850">
+                <span>💡</span>
+                <span>이미지를 마우스로 드래그 앤 드롭하여 순서를 변경할 수 있습니다. <strong>(1번 이미지가 자동으로 대표 이미지로 설정됩니다)</strong></span>
+              </p>
+              <div className="flex flex-wrap gap-4 pt-1">
+                {localImages.map((img, i) => (
+                  <div
+                    key={img.id}
+                    draggable
+                    onDragStart={(e) => handleDragStart(e, i)}
+                    onDragOver={(e) => handleDragOver(e, i)}
+                    onDragEnd={handleDragEnd}
+                    className={`relative group border rounded-lg p-1.5 bg-zinc-50/50 dark:bg-zinc-950 shadow-sm transition-all hover:shadow cursor-grab active:cursor-grabbing ${
+                      draggedIndex === i ? "opacity-40 border-dashed border-indigo-500 ring-2 ring-indigo-500/20" : "border-zinc-150 dark:border-zinc-800"
+                    }`}
                   >
-                    <button
-                      type="submit"
-                      className="text-[10px] font-bold text-rose-600 hover:text-rose-800 hover:underline cursor-pointer py-1"
+                    {img.url && (
+                      <img
+                        src={img.url}
+                        alt={`제품 이미지 ${i + 1}`}
+                        className="h-28 w-28 rounded-lg object-cover pointer-events-none select-none"
+                      />
+                    )}
+                    {/* Position Badge */}
+                    {i === 0 ? (
+                      <span className="absolute top-2 left-2 rounded bg-amber-500 text-white px-2 py-0.5 text-[9px] font-extrabold shadow-sm border border-amber-400">
+                        대표 이미지
+                      </span>
+                    ) : (
+                      <span className="absolute top-2 left-2 rounded bg-zinc-900/70 backdrop-blur px-1.5 py-0.5 text-[9px] font-bold text-white">
+                        서브 {i}
+                      </span>
+                    )}
+                    
+                    <ConfirmForm
+                      action={removeProductImage.bind(null, product.id, img.id)}
+                      className="mt-2 text-center"
+                      message="정말 이 제품 이미지를 삭제하시겠습니까?"
                     >
-                      이미지 삭제
-                    </button>
-                  </ConfirmForm>
-                </div>
-              ))}
+                      <button
+                         type="submit"
+                        className="text-[10px] font-bold text-rose-600 hover:text-rose-800 hover:underline cursor-pointer py-1"
+                      >
+                        이미지 삭제
+                      </button>
+                    </ConfirmForm>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
 
-          {imageRows.length < 5 && (
+          {imageRows.length < 10 && (
             <form
               action={addProductImages.bind(null, product.id)}
               className="mt-6 border-t border-zinc-100 dark:border-zinc-850 pt-4 flex flex-col sm:flex-row sm:items-center gap-3"

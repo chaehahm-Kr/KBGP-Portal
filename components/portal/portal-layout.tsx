@@ -60,7 +60,7 @@ export default function PortalLayout({
       {/* Main Content Area */}
       <div
         className={`flex flex-col min-h-screen transition-all duration-300 ${
-          isSidebarCollapsed ? "pl-16" : "pl-0 lg:pl-64"
+          isSidebarCollapsed ? "pl-16" : "pl-64"
         }`}
       >
         {/* Top Header */}
