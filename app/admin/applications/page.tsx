@@ -46,7 +46,7 @@ export default async function AdminApplicationsPage({
 
   let query = supabase
     .from("applications")
-    .select("id, application_number, status, company_id, submitted_at, created_at, eligibility_responses")
+    .select("id, application_number, status, company_id, submitted_at, created_at, eligibility_responses, self_check_answers")
     .neq("status", "draft")
     .order("created_at", { ascending: false });
 
@@ -254,25 +254,38 @@ export default async function AdminApplicationsPage({
                       </span>
                     </td>
                     <td className="px-6 py-3.5 whitespace-nowrap">
-                      {app.eligibility_responses ? (
-                        (() => {
-                          const list = app.eligibility_responses as any[];
-                          const available = list.filter((r) => r.response === "available").length;
-                          const discussion = list.filter((r) => r.response === "discussion_required").length;
-                          return (
-                            <div className="flex gap-1.5 text-[10px]">
-                              <span className="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 font-semibold text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-350 border border-emerald-100 dark:border-emerald-900/50">
-                                🟢 {available}
-                              </span>
-                              <span className="inline-flex items-center rounded-full bg-amber-50 px-2 py-0.5 font-semibold text-amber-700 dark:bg-amber-950/40 dark:text-amber-350 border border-amber-100 dark:border-amber-900/50">
-                                🟡 {discussion}
-                              </span>
-                            </div>
-                          );
-                        })()
-                      ) : (
-                        <span className="text-zinc-400 font-normal italic">-</span>
-                      )}
+                      {(() => {
+                        const allowedKeys = [
+                          "stable_supply",
+                          "us_regulatory_compliance",
+                          "initial_test_quantity",
+                          "north_america_distribution",
+                          "joint_marketing",
+                          "sales_content_support",
+                        ];
+                        const defaultEligibility = allowedKeys.map((key, index) => {
+                          const isChecked = (app.self_check_answers as boolean[] | null)?.[index] ?? true;
+                          return {
+                            itemKey: key,
+                            response: isChecked ? "available" : "discussion_required",
+                          };
+                        });
+                        const list = app.eligibility_responses
+                          ? (app.eligibility_responses as any[])
+                          : defaultEligibility;
+                        const available = list.filter((r) => r.response === "available").length;
+                        const discussion = list.filter((r) => r.response === "discussion_required").length;
+                        return (
+                          <div className="flex gap-1.5 text-[10px]">
+                            <span className="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 font-semibold text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-350 border border-emerald-100 dark:border-emerald-900/50">
+                              🟢 {available}
+                            </span>
+                            <span className="inline-flex items-center rounded-full bg-amber-50 px-2 py-0.5 font-semibold text-amber-700 dark:bg-amber-950/40 dark:text-amber-350 border border-amber-100 dark:border-amber-900/50">
+                              🟡 {discussion}
+                            </span>
+                          </div>
+                        );
+                      })()}
                     </td>
                     <td className="px-6 py-3.5">
                       {assigneeByApplication.has(app.id) ? (

@@ -394,18 +394,38 @@ export default async function ApplicationDetailPage({
             <h2 className="text-sm font-bold text-zinc-900 dark:text-white border-b border-zinc-100 pb-3 dark:border-zinc-850">
               프로그램 참여 준비 사항
             </h2>
-            {application.eligibility_responses ? (
-              <ul className="mt-4 space-y-3 text-xs">
-                {(application.eligibility_responses as { itemKey: string; response: string }[]).map((item) => {
-                  const READINESS_ITEMS: Record<string, string> = {
-                    stable_supply: "안정적인 생산 및 공급망 확보",
-                    us_regulatory_compliance: "미국 화장품 규제(MoCRA) 준수 및 FDA 등록 준비",
-                    initial_test_quantity: "초기 파트너십 테스트 물량 공급 의향",
-                    north_america_distribution: "북미 온/오프라인 유통 및 가격 정책 동의",
-                    joint_marketing: "북미 현지 공동 마케팅 협력 의향",
-                    sales_content_support: "상세 페이지 및 현지화 마케팅 콘텐츠 지원",
-                  };
-                  return (
+            {(() => {
+              const allowedKeys = [
+                "stable_supply",
+                "us_regulatory_compliance",
+                "initial_test_quantity",
+                "north_america_distribution",
+                "joint_marketing",
+                "sales_content_support",
+              ];
+              const defaultEligibility = allowedKeys.map((key, index) => {
+                const isChecked = (application.self_check_answers as boolean[] | null)?.[index] ?? true;
+                return {
+                  itemKey: key,
+                  response: isChecked ? "available" : "discussion_required",
+                };
+              });
+              const finalResponses = application.eligibility_responses
+                ? (application.eligibility_responses as { itemKey: string; response: string }[])
+                : defaultEligibility;
+
+              const READINESS_ITEMS: Record<string, string> = {
+                stable_supply: "안정적인 생산 및 공급망 확보",
+                us_regulatory_compliance: "미국 화장품 규제(MoCRA) 준수 및 FDA 등록 준비",
+                initial_test_quantity: "초기 파트너십 테스트 물량 공급 의향",
+                north_america_distribution: "북미 온/오프라인 유통 및 가격 정책 동의",
+                joint_marketing: "북미 현지 공동 마케팅 협력 의향",
+                sales_content_support: "상세 페이지 및 현지화 마케팅 콘텐츠 지원",
+              };
+
+              return (
+                <ul className="mt-4 space-y-3 text-xs">
+                  {finalResponses.map((item) => (
                     <li key={item.itemKey} className="flex items-start gap-2.5">
                       <span className="shrink-0 text-sm mt-0.5">
                         {item.response === "available" ? "🟢" : "🟡"}
@@ -419,14 +439,10 @@ export default async function ApplicationDetailPage({
                         </p>
                       </div>
                     </li>
-                  );
-                })}
-              </ul>
-            ) : (
-              <p className="mt-4 text-xs text-zinc-400 dark:text-zinc-500 italic text-center py-4">
-                등록된 응답 기록이 없습니다.
-              </p>
-            )}
+                  ))}
+                </ul>
+              );
+            })()}
           </div>
         </div>
       </div>

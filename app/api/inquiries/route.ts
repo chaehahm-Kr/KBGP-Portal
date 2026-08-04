@@ -219,6 +219,18 @@ export async function POST(request: Request) {
   }
   const applicationNumber = numberResult || `APP-${new Date().toISOString().slice(0, 10).replace(/-/g, "")}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
 
+  const defaultEligibility = [
+    { itemKey: "stable_supply", response: "available" },
+    { itemKey: "us_regulatory_compliance", response: "available" },
+    { itemKey: "initial_test_quantity", response: "available" },
+    { itemKey: "north_america_distribution", response: "available" },
+    { itemKey: "joint_marketing", response: "available" },
+    { itemKey: "sales_content_support", response: "available" },
+  ];
+  const finalEligibility = input.eligibilityResponses && input.eligibilityResponses.length === 6
+    ? input.eligibilityResponses
+    : defaultEligibility;
+
   // 6. 신청서(Applications) 생성 (submitted 상태)
   const { data: application, error: appError } = await admin
     .from("applications")
@@ -228,7 +240,7 @@ export async function POST(request: Request) {
       status: "submitted",
       motivation_note: "공개 마케팅 사이트 파트너십 신청 접수 건",
       self_check_answers: Array(6).fill(true),
-      eligibility_responses: input.eligibilityResponses || null,
+      eligibility_responses: finalEligibility,
       created_by: invited.user.id,
       submitted_at: new Date().toISOString(),
     })
@@ -339,7 +351,7 @@ export async function POST(request: Request) {
     contact_email: input.email,
     contact_phone: input.phone,
     products: input.products,
-    eligibility_responses: input.eligibilityResponses || null,
+    eligibility_responses: finalEligibility,
     status: "converted",
     converted_company_id: company.id,
   });
