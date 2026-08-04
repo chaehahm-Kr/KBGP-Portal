@@ -375,11 +375,16 @@ export function renderEmailHtml(
   extendedVariables.ctaButton = buildCtaButtonHtml(extendedVariables);
 
   const finalSubject = render(subjectTemplate, extendedVariables);
-  const rawBodyText = render(bodyTemplate, extendedVariables);
 
-  // 본문 HTML 포맷팅 및 글로벌 레이아웃 조립
-  const bodyContentHtml = formatBodyTextToHtml(rawBodyText);
+  // 1. 본문 템플릿 텍스트만 먼저 이스케이프 및 키워드 강조 처리
+  const formattedTemplate = formatBodyTextToHtml(bodyTemplate);
+
+  // 2. 포맷팅 완료된 본문에 최종 변수(infoBox, ctaButton 등 HTML 코드 포함)를 치환하여 주입!
+  const bodyContentHtml = render(formattedTemplate, extendedVariables);
   const finalHtml = buildGlobalLayout(finalSubject, bodyContentHtml);
+
+  // Plain Text 폴백용 데이터 준비 (태그 제거)
+  const rawBodyText = render(bodyTemplate, extendedVariables);
 
   return {
     subject: finalSubject,
