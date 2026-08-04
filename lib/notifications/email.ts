@@ -1,7 +1,7 @@
 import "server-only";
 import { serverEnv } from "@/lib/env/server";
 
-export type EmailPayload = { to: string; subject: string; text: string };
+export type EmailPayload = { to: string; subject: string; text: string; html?: string };
 
 /**
  * 09_알림및문서관리규칙.md Part 1: 회원가입 확인·비밀번호 재설정·초대 메일은
@@ -30,6 +30,7 @@ export async function sendEmail(payload: EmailPayload) {
       to: payload.to,
       subject: payload.subject,
       text: payload.text,
+      html: payload.html,
     }),
   });
 
