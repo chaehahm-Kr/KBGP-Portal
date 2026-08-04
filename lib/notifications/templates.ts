@@ -34,7 +34,7 @@ export const DEFAULT_TEMPLATES: Record<
   application_submitted_company: {
     description: "회사 담당자 — 신청서 제출 완료",
     subject: "[K SELECT NETWORK] {{applicationNumber}} 파트너 신청이 접수되었습니다",
-    body: "신청이 정상적으로 접수되었습니다.\n\n안녕하세요, {{contactName}}님.\nK SELECT NETWORK의 K-Beauty Growth Program에 신청해 주셔서 감사합니다.\n제출해 주신 신청서는 아래 접수번호로 정상 등록되었습니다.\n\n{{infoBox}}\n\n제출하신 브랜드와 상품 정보를 검토한 후, 담당자가 영업일 기준 3일 이내에 이메일 또는 전화로 연락드리겠습니다.\n\n{{ctaButton}}",
+    body: "신청이 정상적으로 접수되었습니다.\n\n안녕하세요, {{contactName}}님.\nK SELECT NETWORK의 K-Beauty Growth Program에 신청해 주셔서 감사합니다.\n제출해 주신 신청서는 아래 접수번호로 정상 등록되었습니다.\n\n{{infoBox}}\n\n제출하신 브랜드와 상품 정보를 검토한 후, 담당자가 영업일 기준 3일 이내에 이메일 또는 전화로 연락드리겠습니다.",
   },
   application_received_internal: {
     description: "내부 직원 전체 — 신규 신청서 접수",
@@ -99,7 +99,7 @@ export const DEFAULT_TEMPLATES: Record<
   inquiry_received_applicant: {
     description: "신청자 — 마케팅 사이트 신청서 접수 확인",
     subject: "[K SELECT NETWORK] {{applicationNumber}} 파트너 신청이 접수되었습니다",
-    body: "신청이 정상적으로 접수되었습니다.\n\n안녕하세요, {{contactName}}님.\nK SELECT NETWORK의 K-Beauty Growth Program에 신청해 주셔서 감사합니다.\n제출해 주신 신청서는 아래 접수번호로 정상 등록되었습니다.\n\n{{infoBox}}\n\n제출하신 브랜드와 상품 정보를 검토한 후, 담당자가 영업일 기준 3일 이내에 이메일 또는 전화로 연락드리겠습니다.\n\n{{ctaButton}}",
+    body: "신청이 정상적으로 접수되었습니다.\n\n안녕하세요, {{contactName}}님.\nK SELECT NETWORK의 K-Beauty Growth Program에 신청해 주셔서 감사합니다.\n제출해 주신 신청서는 아래 접수번호로 정상 등록되었습니다.\n\n{{infoBox}}\n\n제출하신 브랜드와 상품 정보를 검토한 후, 담당자가 영업일 기준 3일 이내에 이메일 또는 전화로 연락드리겠습니다.",
   },
   inquiry_received_internal: {
     description: "내부 직원 전체 — 마케팅 사이트 신규 문의 접수",
@@ -179,11 +179,6 @@ function buildInfoCardHtml(variables: Record<string, string>) {
     rows.push({ label: "신청 브랜드", value: brand });
   }
 
-  const assignReason = variables.assignReason || variables.reasonLine?.trim();
-  if (assignReason) {
-    rows.push({ label: "배정 사유", value: assignReason });
-  }
-
   const nextStep = variables.nextStep;
   if (nextStep) {
     rows.push({ label: "다음 단계", value: nextStep });
@@ -241,8 +236,6 @@ function buildCtaButtonHtml(variables: Record<string, string>) {
     buttonLabel = "추가 자료 제출하기";
   }
 
-  const displayUrl = url.replace(/^https?:\/\//, "");
-
   return `
     <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="width:100%;margin:30px 0 0 0;">
       <tr>
@@ -252,8 +245,6 @@ function buildCtaButtonHtml(variables: Record<string, string>) {
       </tr>
       <tr><td style="height:3px;line-height:3px;font-size:0;background:#8C1C2B;">&nbsp;</td></tr>
     </table>
-    <div style="height:14px;line-height:14px;font-size:0;">&nbsp;</div>
-    <div style="font-size:12px;line-height:20px;mso-line-height-rule:exactly;color:#9AA0A9;">버튼이 열리지 않으면 <a href="${url}" target="_blank" style="color:#8C1C2B;text-decoration:underline;">${displayUrl}</a> 로 접속해 주세요.</div>
   `;
 }
 
@@ -454,7 +445,7 @@ export function renderEmailHtml(
         <td align="center" style="padding:24px 24px 8px 24px;">
           <div style="font-family:Arial,Helvetica,sans-serif;font-size:9px;line-height:12px;mso-line-height-rule:exactly;font-weight:bold;letter-spacing:2.4px;color:#8C1C2B;text-transform:uppercase;">CURATED. CONNECTED. GROWING TOGETHER.</div>
           <div style="height:14px;line-height:14px;font-size:0;">&nbsp;</div>
-          <div style="font-size:11px;line-height:19px;mso-line-height-rule:exactly;color:#9E988E;text-align:center;">K SELECT NETWORK · K-Beauty Growth Program<br>서울특별시 강남구 테헤란로 000, 00층<br>본 메일은 파트너 신청 접수 확인을 위해 자동 발송되었습니다.</div>
+          <div style="font-size:11px;line-height:19px;mso-line-height-rule:exactly;color:#9E988E;text-align:center;">K SELECT NETWORK · K-Beauty Growth Program<br>23B, Roland Avenue, Mount Laurel, New Jersey 08054<br>본 메일은 파트너 신청 접수 확인을 위해 자동 발송되었습니다.</div>
           <div style="height:12px;line-height:12px;font-size:0;">&nbsp;</div>
           <div style="font-size:11px;line-height:19px;mso-line-height-rule:exactly;text-align:center;"><a href="${privacyUrl}" target="_blank" style="color:#7B7469;text-decoration:underline;">개인정보 처리방침</a> &nbsp;·&nbsp; <a href="${unsubscribeUrl}" target="_blank" style="color:#7B7469;text-decoration:underline;">수신 거부</a></div>
         </td>

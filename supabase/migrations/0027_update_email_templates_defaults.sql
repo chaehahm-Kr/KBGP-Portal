@@ -2,6 +2,7 @@
 --
 -- 기존 DB에 삽입되어 있던 email_templates 들의 기본 제목 및 본문 문안을
 -- K SELECT NETWORK 공식 파트너 신청 접수 확인 기획 가이드라인에 맞춰 갱신합니다.
+-- (접수 완료 메일의 배정 사유 및 CTA 버튼 제거 요구사항 반영)
 
 UPDATE public.email_templates
 SET 
@@ -14,9 +15,7 @@ K SELECT NETWORK의 K-Beauty Growth Program에 신청해 주셔서 감사합니�
 
 {{infoBox}}
 
-제출하신 브랜드와 상품 정보를 검토한 후, 담당자가 영업일 기준 3일 이내에 이메일 또는 전화로 연락드리겠습니다.
-
-{{ctaButton}}'
+제출하신 브랜드와 상품 정보를 검토한 후, 담당자가 영업일 기준 3일 이내에 이메일 또는 전화로 연락드리겠습니다.'
 WHERE key IN ('application_submitted_company', 'inquiry_received_applicant');
 
 UPDATE public.email_templates
