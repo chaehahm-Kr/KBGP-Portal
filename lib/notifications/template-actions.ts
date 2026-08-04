@@ -92,11 +92,20 @@ export async function sendTestEmail(
     return { error: "테스트를 보낼 이메일 주소를 확인할 수 없습니다." };
   }
 
+  const { renderEmailHtml } = await import("@/lib/notifications/templates");
   const { sendEmail } = await import("@/lib/notifications/email");
+
+  const { subject, text, html } = renderEmailHtml(
+    parsed.data.subject,
+    parsed.data.body,
+    SAMPLE_VARIABLES
+  );
+
   await sendEmail({
     to: session.email,
-    subject: render(parsed.data.subject, SAMPLE_VARIABLES),
-    text: `[테스트 발송 — 예시 변수로 렌더링됨]\n\n${render(parsed.data.body, SAMPLE_VARIABLES)}`,
+    subject: `[테스트] ${subject}`,
+    text: `[테스트 발송 — 예시 변수로 렌더링됨]\n\n${text}`,
+    html: html,
   });
 
   return { success: `${session.email}로 테스트 메일을 보냈습니다.` };

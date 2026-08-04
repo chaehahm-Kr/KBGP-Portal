@@ -126,13 +126,268 @@ function render(template: string, variables: Record<string, string>) {
   return template.replace(/\{\{(\w+)\}\}/g, (_match, name) => variables[name] ?? "");
 }
 
-/**
- * DB에서 템플릿을 읽어 변수 치환 후 발송한다. 09_알림및문서관리규칙.md가 요구하는
- * "Super Admin이 템플릿 문구를 수정할 수 있다"를 만족시키는 지점 — 여기서 하드코딩된
- * 문구를 쓰지 않고 항상 email_templates 테이블을 거친다. 테이블 행이 없으면(마이그레이션
- * 시드가 지워졌거나 새 키를 아직 안 넣은 경우) DEFAULT_TEMPLATES로 폴백해 발송 자체는
- * 끊기지 않게 한다.
- */
+/** 이메일용 접수정보 박스 HTML 조립 */
+function buildInfoBoxHtml(variables: Record<string, string>) {
+  const number = variables.applicationNumber || variables.inquiryNumber || "-";
+  const brand = variables.brandName || "-";
+  const program = variables.programName || "K-Beauty Growth Program";
+  const date = variables.submittedDate || new Date().toLocaleDateString("ko-KR", { year: "numeric", month: "long", day: "numeric" });
+  
+  return `
+    <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #F6F6F4; border: 1px solid #E5E5E5; border-radius: 8px; margin: 24px 0; border-collapse: collapse;">
+      <tr>
+        <td style="padding: 24px; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+          <table border="0" cellpadding="0" cellspacing="0" width="100%">
+            <tr>
+              <td style="padding-bottom: 12px; border-bottom: 1px solid #E5E5E5; text-align: left;">
+                <span style="font-size: 11px; color: #666666; display: block; margin-bottom: 4px; font-weight: bold; text-transform: uppercase;">접수번호</span>
+                <strong style="font-size: 18px; color: #8B1E2D; font-family: monospace; letter-spacing: 0.5px;">${number}</strong>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding: 12px 0; border-bottom: 1px solid #E5E5E5; text-align: left;">
+                <span style="font-size: 11px; color: #666666; display: block; margin-bottom: 4px; font-weight: bold; text-transform: uppercase;">신청 브랜드</span>
+                <strong style="font-size: 15px; color: #111827;">${brand}</strong>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding: 12px 0; border-bottom: 1px solid #E5E5E5; text-align: left;">
+                <span style="font-size: 11px; color: #666666; display: block; margin-bottom: 4px; font-weight: bold; text-transform: uppercase;">신청 프로그램</span>
+                <strong style="font-size: 15px; color: #111827;">${program}</strong>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding-top: 12px; text-align: left;">
+                <span style="font-size: 11px; color: #666666; display: block; margin-bottom: 4px; font-weight: bold; text-transform: uppercase;">접수일</span>
+                <strong style="font-size: 15px; color: #111827;">${date}</strong>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  `;
+}
+
+/** 이메일용 CTA 버튼 HTML 조립 */
+function buildCtaButtonHtml(variables: Record<string, string>) {
+  const url = variables.applicationUrl || "https://www.kselectnetwork.com";
+  return `
+    <table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin: 32px 0 24px 0;">
+      <tr>
+        <td align="left">
+          <table border="0" cellpadding="0" cellspacing="0" style="border-collapse: separate;">
+            <tr>
+              <td align="center" valign="middle" style="background-color: #8B1E2D; border-radius: 6px;">
+                <a href="${url}" target="_blank" style="display: inline-block; padding: 14px 32px; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 15px; font-weight: 600; color: #FFFFFF; text-decoration: none; border-radius: 6px; letter-spacing: 0.5px;">
+                  다른 브랜드 추가 신청
+                </a>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+      <tr>
+        <td style="padding-top: 12px; color: #999999; font-size: 11px; line-height: 1.4; text-align: left;">
+          ※ 위 버튼이 작동하지 않는 경우 아래 링크를 주소창에 복사하여 이동해 주세요.<br/>
+          <a href="${url}" target="_blank" style="color: #8B1E2D; text-decoration: underline;">${url}</a>
+        </td>
+      </tr>
+    </table>
+  `;
+}
+
+/** 본문 텍스트 포맷팅 및 키워드 강조 처리 */
+function formatBodyTextToHtml(text: string) {
+  let html = text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+
+  html = html.replace(/\n/g, "<br/>");
+
+  // 키워드 강조 스타일 매핑
+  html = html.replace(
+    /K SELECT NETWORK/g,
+    `<strong style="color: #111827;">K SELECT NETWORK</strong>`
+  );
+  html = html.replace(
+    /K-Beauty Growth Program/g,
+    `<strong style="color: #111827;">K-Beauty Growth Program</strong>`
+  );
+  html = html.replace(
+    /영업일(?: 기준)?\s*3일\s*이내/g,
+    `<span style="color: #8B1E2D; font-weight: bold;">영업일 기준 3일 이내</span>`
+  );
+
+  return html;
+}
+
+/** 통합 글로벌 이메일 HTML 레이아웃 빌드 */
+function buildGlobalLayout(subject: string, bodyContentHtml: string) {
+  const logoUrl = `${publicEnv.NEXT_PUBLIC_SITE_URL}/ksn-logo-new.png`;
+  const websiteUrl = "https://www.kselectnetwork.com";
+  const privacyUrl = "https://www.kselectnetwork.com";
+
+  return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${subject}</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      width: 100% !important;
+      -webkit-text-size-adjust: 100%;
+      -ms-text-size-adjust: 100%;
+      background-color: #F4F4F2;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+    img {
+      border: 0;
+      outline: none;
+      text-decoration: none;
+      display: block;
+    }
+    table {
+      border-collapse: collapse;
+      mso-table-lspace: 0pt;
+      mso-table-rspace: 0pt;
+    }
+    /* Mobile styles */
+    @media only screen and (max-width: 620px) {
+      .container {
+        width: 100% !important;
+        padding-left: 20px !important;
+        padding-right: 20px !important;
+      }
+      .card {
+        padding: 24px !important;
+      }
+      .logo {
+        max-width: 220px !important;
+      }
+      .title {
+        font-size: 24px !important;
+      }
+    }
+  </style>
+</head>
+<body style="margin: 0; padding: 0; background-color: #F4F4F2; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+  <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #F4F4F2; padding: 40px 0;">
+    <tr>
+      <td align="center">
+        <!--[if (gte mso 9)|(IE)]>
+        <table align="center" border="0" cellspacing="0" cellpadding="0" width="600">
+        <tr>
+        <td align="center" valign="top" width="600">
+        <![endif]-->
+        <table border="0" cellpadding="0" cellspacing="0" width="100%" class="container" style="max-width: 600px; border-collapse: collapse;">
+          <!-- Content Card -->
+          <tr>
+            <td class="card" style="background-color: #FFFFFF; padding: 40px; border-radius: 8px; border: 1px solid #E5E5E5;">
+              <!-- Logo Area -->
+              <table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-bottom: 20px; border-collapse: collapse;">
+                <tr>
+                  <td align="left">
+                    <img class="logo" src="${logoUrl}" alt="K SELECT NETWORK" width="240" style="display: block; max-width: 240px; height: auto;" />
+                  </td>
+                </tr>
+              </table>
+              
+              <!-- Burgundy Line -->
+              <table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-bottom: 32px; border-collapse: collapse;">
+                <tr>
+                  <td style="background-color: #8B1E2D; height: 2px; font-size: 1px; line-height: 1px;">&nbsp;</td>
+                </tr>
+              </table>
+              
+              <!-- Main Content Body -->
+              <table border="0" cellpadding="0" cellspacing="0" width="100%" style="border-collapse: collapse;">
+                <tr>
+                  <td style="color: #333333; font-size: 15px; line-height: 1.7; text-align: left;">
+                    ${bodyContentHtml}
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          
+          <!-- Footer Area -->
+          <tr>
+            <td style="padding: 32px 24px; text-align: center;">
+              <table border="0" cellpadding="0" cellspacing="0" width="100%" style="border-collapse: collapse;">
+                <tr>
+                  <td style="color: #666666; font-size: 12px; line-height: 1.7; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; text-align: center;">
+                    <p style="margin: 0 0 6px 0; font-weight: bold; color: #111827; font-size: 12px;">K SELECT NETWORK K-Beauty Growth Program</p>
+                    <p style="margin: 0 0 16px 0;">
+                      문의: <a href="mailto:support@kselectnetwork.com" style="color: #8B1E2D; text-decoration: none; font-weight: bold;">support@kselectnetwork.com</a> 
+                      &nbsp;&middot;&nbsp; 
+                      웹사이트: <a href="${websiteUrl}" target="_blank" style="color: #8B1E2D; text-decoration: none; font-weight: bold;">kselectnetwork.com</a>
+                    </p>
+                    <p style="margin: 0 0 12px 0; color: #999999; font-size: 11px;">본 메일은 파트너 신청 접수 확인을 위해 자동 발송되었습니다.</p>
+                    <p style="margin: 0 0 16px 0;">
+                      <a href="${privacyUrl}" target="_blank" style="color: #666666; text-decoration: underline; font-weight: 500;">개인정보 처리방침</a>
+                    </p>
+                    <p style="margin: 0; font-size: 10px; color: #8B1E2D; letter-spacing: 1px; font-weight: bold; text-transform: uppercase;">Curated. Connected. Growing Together.</p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+        </table>
+        <!--[if (gte mso 9)|(IE)]>
+        </td>
+        </tr>
+        </table>
+        <![endif]-->
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+  `;
+}
+
+/** 템플릿과 변수들을 조합하여 완벽한 HTML 이메일 정보를 생성하는 범용 헬퍼 */
+export function renderEmailHtml(
+  subjectTemplate: string,
+  bodyTemplate: string,
+  variables: Record<string, string>
+) {
+  const siteUrl = publicEnv.NEXT_PUBLIC_SITE_URL || "https://www.kselectnetwork.com";
+  const contactName = variables.contactName || "브랜드사 담당자";
+
+  const extendedVariables: Record<string, string> = {
+    ...variables,
+    contactName,
+    submittedDate: variables.submittedDate || new Date().toLocaleDateString("ko-KR", { year: "numeric", month: "long", day: "numeric" }),
+    applicationUrl: `${siteUrl}/portal`,
+    websiteUrl: siteUrl,
+    privacyUrl: siteUrl,
+  };
+
+  // 컴포넌트 HTML 동적 주입
+  extendedVariables.infoBox = buildInfoBoxHtml(extendedVariables);
+  extendedVariables.ctaButton = buildCtaButtonHtml(extendedVariables);
+
+  const finalSubject = render(subjectTemplate, extendedVariables);
+  const rawBodyText = render(bodyTemplate, extendedVariables);
+
+  // 본문 HTML 포맷팅 및 글로벌 레이아웃 조립
+  const bodyContentHtml = formatBodyTextToHtml(rawBodyText);
+  const finalHtml = buildGlobalLayout(finalSubject, bodyContentHtml);
+
+  return {
+    subject: finalSubject,
+    text: rawBodyText.replace(/<[^>]*>/g, ""),
+    html: finalHtml,
+  };
+}
+
 export async function sendTemplatedEmail(
   key: TemplateKey,
   to: string,
@@ -148,9 +403,12 @@ export async function sendTemplatedEmail(
   const subjectTemplate = template?.subject_template ?? DEFAULT_TEMPLATES[key].subject;
   const bodyTemplate = template?.body_template ?? DEFAULT_TEMPLATES[key].body;
 
+  const { subject, text, html } = renderEmailHtml(subjectTemplate, bodyTemplate, variables);
+
   await sendEmail({
     to,
-    subject: render(subjectTemplate, variables),
-    text: render(bodyTemplate, variables),
+    subject,
+    text,
+    html,
   });
 }
