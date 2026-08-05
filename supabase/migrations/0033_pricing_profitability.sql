@@ -2,14 +2,6 @@
 
 BEGIN;
 
--- 이전 불완전 생성 테이블 청소 (Drop Cascade)
-DROP TABLE IF EXISTS public.pricing_scenario_logs CASCADE;
-DROP TABLE IF EXISTS public.pricing_calculations CASCADE;
-DROP TABLE IF EXISTS public.pricing_scenario_values CASCADE;
-DROP TABLE IF EXISTS public.pricing_scenario_items CASCADE;
-DROP TABLE IF EXISTS public.pricing_scenario_groups CASCADE;
-DROP TABLE IF EXISTS public.pricing_scenarios CASCADE;
-
 -- 1. 시나리오 테이블
 CREATE TABLE IF NOT EXISTS public.pricing_scenarios (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -108,41 +100,68 @@ CREATE TABLE IF NOT EXISTS public.pricing_scenario_logs (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- -----------------------------------------------------------------------------
+-- [중요] 기존 테이블이 있을 시 누락되었을 수 있는 컬럼들 강제 보장 (Lock-free ALTER)
+-- -----------------------------------------------------------------------------
+ALTER TABLE public.pricing_scenario_values ADD COLUMN IF NOT EXISTS scenario_id UUID;
+ALTER TABLE public.pricing_scenario_values ADD COLUMN IF NOT EXISTS item_id UUID;
+ALTER TABLE public.pricing_scenario_values ADD COLUMN IF NOT EXISTS value NUMERIC;
+
+-- 기존 제약 조건 보완
+ALTER TABLE public.pricing_scenario_values DROP CONSTRAINT IF EXISTS pricing_scenario_values_scenario_id_item_id_key;
+ALTER TABLE public.pricing_scenario_values ADD CONSTRAINT pricing_scenario_values_scenario_id_item_id_key UNIQUE (scenario_id, item_id);
+
+-- 데이터 초기 청소 (시드 데이터 및 외래키 꼬임 방지)
+DELETE FROM public.pricing_scenario_values;
+DELETE FROM public.pricing_scenario_items;
+DELETE FROM public.pricing_scenario_groups;
+DELETE FROM public.pricing_scenarios;
+
 -- RLS 활성화
 ALTER TABLE public.pricing_scenarios ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.pricing_scenario_groups ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.pricing_scenario_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.pricing_scenario_values ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.pricing_calculations ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.pricing_scenario_logs ENABLE ROW LEVEL SECURITY;
 
--- RLS 정책 생성 (Admin 정책: 조회/쓰기 모두 허용, 일반 Company 정책: 자기 소유만)
-CREATE POLICY "pricing_scenarios_select" ON public.pricing_scenarios FOR SELECT TO authenticated USING (TRUE);
-CREATE POLICY "pricing_scenarios_all_admin" ON public.pricing_scenarios FOR ALL TO authenticated USING (public.auth_is_admin());
+-- 정책 생성 시 기존 정책 존재로 인한 에러 방지 (DROP POLICY)
+DROP POLICY IF EXISTS pricing_scenarios_select ON public.pricing_scenarios;
+DROP POLICY IF EXISTS pricing_scenarios_all_admin ON public.pricing_scenarios;
+DROP POLICY IF EXISTS pricing_scenario_groups_select ON public.pricing_scenario_groups;
+DROP POLICY IF EXISTS pricing_scenario_groups_all_admin ON public.pricing_scenario_groups;
+DROP POLICY IF EXISTS pricing_scenario_items_select ON public.pricing_scenario_items;
+DROP POLICY IF EXISTS pricing_scenario_items_all_admin ON public.pricing_scenario_items;
+DROP POLICY IF EXISTS pricing_scenario_values_select ON public.pricing_scenario_values;
+DROP POLICY IF EXISTS pricing_scenario_values_all_admin ON public.pricing_scenario_values;
+DROP POLICY IF EXISTS pricing_calculations_select ON public.pricing_calculations;
+DROP POLICY IF EXISTS pricing_calculations_insert ON public.pricing_calculations;
+DROP POLICY IF EXISTS pricing_calculations_update ON public.pricing_calculations;
+DROP POLICY IF EXISTS pricing_calculations_delete ON public.pricing_calculations;
 
-CREATE POLICY "pricing_scenario_groups_select" ON public.pricing_scenario_groups FOR SELECT TO authenticated USING (TRUE);
-CREATE POLICY "pricing_scenario_groups_all_admin" ON public.pricing_scenario_groups FOR ALL TO authenticated USING (public.auth_is_admin());
+-- 정책 재작성
+CREATE POLICY pricing_scenarios_select ON public.pricing_scenarios FOR SELECT TO authenticated USING (TRUE);
+CREATE POLICY pricing_scenarios_all_admin ON public.pricing_scenarios FOR ALL TO authenticated USING (public.auth_is_admin());
 
-CREATE POLICY "pricing_scenario_items_select" ON public.pricing_scenario_items FOR SELECT TO authenticated USING (TRUE);
-CREATE POLICY "pricing_scenario_items_all_admin" ON public.pricing_scenario_items FOR ALL TO authenticated USING (public.auth_is_admin());
+CREATE POLICY pricing_scenario_groups_select ON public.pricing_scenario_groups FOR SELECT TO authenticated USING (TRUE);
+CREATE POLICY pricing_scenario_groups_all_admin ON public.pricing_scenario_groups FOR ALL TO authenticated USING (public.auth_is_admin());
 
-CREATE POLICY "pricing_scenario_values_select" ON public.pricing_scenario_values FOR SELECT TO authenticated USING (TRUE);
-CREATE POLICY "pricing_scenario_values_all_admin" ON public.pricing_scenario_values FOR ALL TO authenticated USING (public.auth_is_admin());
+CREATE POLICY pricing_scenario_items_select ON public.pricing_scenario_items FOR SELECT TO authenticated USING (TRUE);
+CREATE POLICY pricing_scenario_items_all_admin ON public.pricing_scenario_items FOR ALL TO authenticated USING (public.auth_is_admin());
 
-CREATE POLICY "pricing_calculations_select" ON public.pricing_calculations FOR SELECT TO authenticated 
+CREATE POLICY pricing_scenario_values_select ON public.pricing_scenario_values FOR SELECT TO authenticated USING (TRUE);
+CREATE POLICY pricing_scenario_values_all_admin ON public.pricing_scenario_values FOR ALL TO authenticated USING (public.auth_is_admin());
+
+CREATE POLICY pricing_calculations_select ON public.pricing_calculations FOR SELECT TO authenticated 
   USING (company_id = public.auth_company_id() OR public.auth_is_admin());
-CREATE POLICY "pricing_calculations_insert" ON public.pricing_calculations FOR INSERT TO authenticated 
+CREATE POLICY pricing_calculations_insert ON public.pricing_calculations FOR INSERT TO authenticated 
   WITH CHECK (company_id = public.auth_company_id() OR public.auth_is_admin());
-CREATE POLICY "pricing_calculations_update" ON public.pricing_calculations FOR UPDATE TO authenticated 
+CREATE POLICY pricing_calculations_update ON public.pricing_calculations FOR UPDATE TO authenticated 
   USING (company_id = public.auth_company_id() OR public.auth_is_admin());
-CREATE POLICY "pricing_calculations_delete" ON public.pricing_calculations FOR DELETE TO authenticated 
+CREATE POLICY pricing_calculations_delete ON public.pricing_calculations FOR DELETE TO authenticated 
   USING (company_id = public.auth_company_id() OR public.auth_is_admin());
-
-CREATE POLICY "pricing_scenario_logs_select" ON public.pricing_scenario_logs FOR SELECT TO authenticated USING (public.auth_is_admin());
-CREATE POLICY "pricing_scenario_logs_insert" ON public.pricing_scenario_logs FOR INSERT TO authenticated WITH CHECK (public.auth_is_admin());
 
 -- -----------------------------------------------------------------------------
--- 초기 데이터 시드 (Scenarios, Groups, Items, Values)
+-- 초기 데이터 시드 삽입
 -- -----------------------------------------------------------------------------
 
 -- 시나리오 생성
@@ -150,8 +169,7 @@ INSERT INTO public.pricing_scenarios (id, name, code, description)
 VALUES 
   ('a82d77d7-fca8-47fb-ba0d-7b242b36a100', 'Conservative', 'conservative', '보수적 시나리오: 높은 수입/물류비, 높은 광고비 및 광고비 효율 저하 가정'),
   ('a82d77d7-fca8-47fb-ba0d-7b242b36a101', 'Expected', 'expected', '표준 시나리오: 현재 사업계획 및 평균적 운영 효율 반영'),
-  ('a82d77d7-fca8-47fb-ba0d-7b242b36a102', 'Optimistic', 'optimistic', '낙관적 시나리오: 주문 단위 증가에 따른 물류 단가 절감 및 마케팅 효율 상승 가정')
-ON CONFLICT (code) DO UPDATE SET name = EXCLUDED.name, description = EXCLUDED.description;
+  ('a82d77d7-fca8-47fb-ba0d-7b242b36a102', 'Optimistic', 'optimistic', '낙관적 시나리오: 주문 단위 증가에 따른 물류 단가 절감 및 마케팅 효율 상승 가정');
 
 -- 설정 그룹 생성
 INSERT INTO public.pricing_scenario_groups (id, name, code, display_order)
@@ -163,48 +181,53 @@ VALUES
   ('f0000000-0000-0000-0000-000000000005', 'Fulfillment & Channel Costs', 'fulfillment_channel', 5),
   ('f0000000-0000-0000-0000-000000000006', 'Labor', 'labor', 6),
   ('f0000000-0000-0000-0000-000000000007', 'Administrative & Overhead', 'overhead', 7),
-  ('f0000000-0000-0000-0000-000000000008', 'Financing & Risk', 'financing_risk', 8)
-ON CONFLICT (code) DO UPDATE SET name = EXCLUDED.name, display_order = EXCLUDED.display_order;
+  ('f0000000-0000-0000-0000-000000000008', 'Financing & Risk', 'financing_risk', 8);
 
--- 설정 항목 및 각 시나리오별 값 일괄 생성 헬퍼 프로시저/함수 대신 일반 INSERT로 구성
--- 1. Profit Targets 항목들
+-- 설정 항목 생성
 INSERT INTO public.pricing_scenario_items (id, group_id, name, code, applicable_channel, value_type, cost_basis, profit_stage, display_order)
 VALUES
   ('e0000000-0000-0000-0000-000000000001', 'f0000000-0000-0000-0000-000000000001', 'Target Gross Margin', 'target_gross_margin', 'both', 'percentage', 'net_sales', 'revenue_reduction', 1),
   ('e0000000-0000-0000-0000-000000000002', 'f0000000-0000-0000-0000-000000000001', 'Target Contribution Margin', 'target_contribution_margin', 'both', 'percentage', 'net_sales', 'contribution_cost', 2),
   ('e0000000-0000-0000-0000-000000000003', 'f0000000-0000-0000-0000-000000000001', 'Target Net Margin', 'target_net_margin', 'both', 'percentage', 'net_sales', 'financing_risk', 3),
-  ('e0000000-0000-0000-0000-000000000004', 'f0000000-0000-0000-0000-000000000001', 'Minimum Net Profit per Unit', 'min_net_profit_per_unit', 'both', 'dollar_per_unit', NULL, 'financing_risk', 4)
-ON CONFLICT (code) DO UPDATE SET name = EXCLUDED.name, display_order = EXCLUDED.display_order;
-
--- 1-1. Profit Targets 매핑 값
-INSERT INTO public.pricing_scenario_values (scenario_id, item_id, value) VALUES
-  ('a82d77d7-fca8-47fb-ba0d-7b242b36a100', 'e0000000-0000-0000-0000-000000000001', 30.00), -- Conservative Target Gross Margin
-  ('a82d77d7-fca8-47fb-ba0d-7b242b36a101', 'e0000000-0000-0000-0000-000000000001', 40.00), -- Expected
-  ('a82d77d7-fca8-47fb-ba0d-7b242b36a102', 'e0000000-0000-0000-0000-000000000001', 50.00), -- Optimistic
-  
-  ('a82d77d7-fca8-47fb-ba0d-7b242b36a100', 'e0000000-0000-0000-0000-000000000002', 20.00), -- Conservative Target Contribution Margin
-  ('a82d77d7-fca8-47fb-ba0d-7b242b36a101', 'e0000000-0000-0000-0000-000000000002', 30.00), -- Expected
-  ('a82d77d7-fca8-47fb-ba0d-7b242b36a102', 'e0000000-0000-0000-0000-000000000002', 40.00), -- Optimistic
-  
-  ('a82d77d7-fca8-47fb-ba0d-7b242b36a100', 'e0000000-0000-0000-0000-000000000003', 5.00),  -- Conservative Target Net Margin
-  ('a82d77d7-fca8-47fb-ba0d-7b242b36a101', 'e0000000-0000-0000-0000-000000000003', 15.00), -- Expected
-  ('a82d77d7-fca8-47fb-ba0d-7b242b36a102', 'e0000000-0000-0000-0000-000000000003', 25.00), -- Optimistic
-  
-  ('a82d77d7-fca8-47fb-ba0d-7b242b36a100', 'e0000000-0000-0000-0000-000000000004', 1.00),  -- Conservative Minimum Net Profit per Unit
-  ('a82d77d7-fca8-47fb-ba0d-7b242b36a101', 'e0000000-0000-0000-0000-000000000004', 2.00),  -- Expected
-  ('a82d77d7-fca8-47fb-ba0d-7b242b36a102', 'e0000000-0000-0000-0000-000000000004', 4.00)   -- Optimistic
-ON CONFLICT (scenario_id, item_id) DO UPDATE SET value = EXCLUDED.value;
-
--- 2. Revenue Reductions 항목들
-INSERT INTO public.pricing_scenario_items (id, group_id, name, code, applicable_channel, value_type, cost_basis, profit_stage, display_order)
-VALUES
+  ('e0000000-0000-0000-0000-000000000004', 'f0000000-0000-0000-0000-000000000001', 'Minimum Net Profit per Unit', 'min_net_profit_per_unit', 'both', 'dollar_per_unit', NULL, 'financing_risk', 4),
   ('e0000000-0000-0000-0000-000000000005', 'f0000000-0000-0000-0000-000000000002', 'General Discount Rate', 'general_discount_rate', 'both', 'percentage', 'gross_sales', 'revenue_reduction', 1),
   ('e0000000-0000-0000-0000-000000000006', 'f0000000-0000-0000-0000-000000000002', 'Coupon / Promotion Rate', 'coupon_promotion_rate', 'both', 'percentage', 'gross_sales', 'revenue_reduction', 2),
-  ('e0000000-0000-0000-0000-000000000007', 'f0000000-0000-0000-0000-000000000002', 'Sales Return Rate', 'sales_return_rate', 'both', 'percentage', 'gross_sales', 'revenue_reduction', 3)
-ON CONFLICT (code) DO UPDATE SET name = EXCLUDED.name, display_order = EXCLUDED.display_order;
+  ('e0000000-0000-0000-0000-000000000007', 'f0000000-0000-0000-0000-000000000002', 'Sales Return Rate', 'sales_return_rate', 'both', 'percentage', 'gross_sales', 'revenue_reduction', 3),
+  ('e0000000-0000-0000-0000-000000000008', 'f0000000-0000-0000-0000-000000000003', 'General Import Cost Rate', 'general_import_cost_rate', 'both', 'percentage', 'supplier_cost_usd', 'product_landed_cost', 1),
+  ('e0000000-0000-0000-0000-000000000009', 'f0000000-0000-0000-0000-000000000003', 'Damage and Shrinkage Rate', 'damage_shrinkage_rate', 'both', 'percentage', 'landed_cost', 'product_landed_cost', 2),
+  ('e0000000-0000-0000-0000-000000000010', 'f0000000-0000-0000-0000-000000000004', 'B2B Marketing Rate', 'b2b_marketing_rate', 'b2b', 'percentage', 'net_sales', 'contribution_cost', 1),
+  ('e0000000-0000-0000-0000-000000000011', 'f0000000-0000-0000-0000-000000000004', 'Amazon Advertising Rate', 'amazon_advertising_rate', 'amazon', 'percentage', 'net_sales', 'contribution_cost', 2),
+  ('e0000000-0000-0000-0000-000000000012', 'f0000000-0000-0000-0000-000000000004', 'Sales Commission Rate', 'sales_commission_rate', 'both', 'percentage', 'net_sales', 'contribution_cost', 3),
+  ('e0000000-0000-0000-0000-000000000013', 'f0000000-0000-0000-0000-000000000005', 'Amazon Referral Fee Rate', 'amazon_referral_fee_rate', 'amazon', 'percentage', 'gross_sales', 'contribution_cost', 1),
+  ('e0000000-0000-0000-0000-000000000014', 'f0000000-0000-0000-0000-000000000005', 'B2B Payment Processing Fee Rate', 'b2b_payment_fee_rate', 'b2b', 'percentage', 'gross_sales', 'contribution_cost', 2),
+  ('e0000000-0000-0000-0000-000000000015', 'f0000000-0000-0000-0000-000000000005', 'Store Delivery Cost Rate', 'store_delivery_cost_rate', 'b2b', 'percentage', 'gross_sales', 'contribution_cost', 3),
+  ('e0000000-0000-0000-0000-000000000016', 'f0000000-0000-0000-0000-000000000005', 'FBA Fulfillment Fee Default', 'fba_fulfillment_fee_default', 'amazon', 'dollar_per_unit', NULL, 'contribution_cost', 4),
+  ('e0000000-0000-0000-0000-000000000017', 'f0000000-0000-0000-0000-000000000006', 'Variable Labor Rate', 'variable_labor_rate', 'both', 'percentage', 'net_sales', 'contribution_cost', 1),
+  ('e0000000-0000-0000-0000-000000000018', 'f0000000-0000-0000-0000-000000000006', 'Payroll Allocation Rate', 'payroll_allocation_rate', 'both', 'percentage', 'net_sales', 'operating_expense', 2),
+  ('e0000000-0000-0000-0000-000000000019', 'f0000000-0000-0000-0000-000000000007', 'General Overhead Rate', 'general_overhead_rate', 'both', 'percentage', 'net_sales', 'operating_expense', 1),
+  ('e0000000-0000-0000-0000-000000000020', 'f0000000-0000-0000-0000-000000000008', 'Inventory Financing Rate', 'inventory_financing_rate', 'both', 'percentage', 'landed_cost', 'financing_risk', 1),
+  ('e0000000-0000-0000-0000-000000000021', 'f0000000-0000-0000-0000-000000000008', 'Currency Risk Allowance Rate', 'currency_risk_rate', 'both', 'percentage', 'supplier_cost_usd', 'financing_risk', 2);
 
--- 2-1. Revenue Reductions 매핑 값
+-- 시나리오별 값 매핑 시드 적재
 INSERT INTO public.pricing_scenario_values (scenario_id, item_id, value) VALUES
+  -- Profit Targets
+  ('a82d77d7-fca8-47fb-ba0d-7b242b36a100', 'e0000000-0000-0000-0000-000000000001', 30.00),
+  ('a82d77d7-fca8-47fb-ba0d-7b242b36a101', 'e0000000-0000-0000-0000-000000000001', 40.00),
+  ('a82d77d7-fca8-47fb-ba0d-7b242b36a102', 'e0000000-0000-0000-0000-000000000001', 50.00),
+  
+  ('a82d77d7-fca8-47fb-ba0d-7b242b36a100', 'e0000000-0000-0000-0000-000000000002', 20.00),
+  ('a82d77d7-fca8-47fb-ba0d-7b242b36a101', 'e0000000-0000-0000-0000-000000000002', 30.00),
+  ('a82d77d7-fca8-47fb-ba0d-7b242b36a102', 'e0000000-0000-0000-0000-000000000002', 40.00),
+  
+  ('a82d77d7-fca8-47fb-ba0d-7b242b36a100', 'e0000000-0000-0000-0000-000000000003', 5.00),
+  ('a82d77d7-fca8-47fb-ba0d-7b242b36a101', 'e0000000-0000-0000-0000-000000000003', 15.00),
+  ('a82d77d7-fca8-47fb-ba0d-7b242b36a102', 'e0000000-0000-0000-0000-000000000003', 25.00),
+  
+  ('a82d77d7-fca8-47fb-ba0d-7b242b36a100', 'e0000000-0000-0000-0000-000000000004', 1.00),
+  ('a82d77d7-fca8-47fb-ba0d-7b242b36a101', 'e0000000-0000-0000-0000-000000000004', 2.00),
+  ('a82d77d7-fca8-47fb-ba0d-7b242b36a102', 'e0000000-0000-0000-0000-000000000004', 4.00),
+
+  -- Revenue Reductions
   ('a82d77d7-fca8-47fb-ba0d-7b242b36a100', 'e0000000-0000-0000-0000-000000000005', 5.00),
   ('a82d77d7-fca8-47fb-ba0d-7b242b36a101', 'e0000000-0000-0000-0000-000000000005', 2.00),
   ('a82d77d7-fca8-47fb-ba0d-7b242b36a102', 'e0000000-0000-0000-0000-000000000005', 0.00),
@@ -215,37 +238,18 @@ INSERT INTO public.pricing_scenario_values (scenario_id, item_id, value) VALUES
   
   ('a82d77d7-fca8-47fb-ba0d-7b242b36a100', 'e0000000-0000-0000-0000-000000000007', 3.00),
   ('a82d77d7-fca8-47fb-ba0d-7b242b36a101', 'e0000000-0000-0000-0000-000000000007', 1.50),
-  ('a82d77d7-fca8-47fb-ba0d-7b242b36a102', 'e0000000-0000-0000-0000-000000000007', 0.50)
-ON CONFLICT (scenario_id, item_id) DO UPDATE SET value = EXCLUDED.value;
+  ('a82d77d7-fca8-47fb-ba0d-7b242b36a102', 'e0000000-0000-0000-0000-000000000007', 0.50),
 
--- 3. Product & Import Cost 항목들
-INSERT INTO public.pricing_scenario_items (id, group_id, name, code, applicable_channel, value_type, cost_basis, profit_stage, display_order)
-VALUES
-  ('e0000000-0000-0000-0000-000000000008', 'f0000000-0000-0000-0000-000000000003', 'General Import Cost Rate', 'general_import_cost_rate', 'both', 'percentage', 'supplier_cost_usd', 'product_landed_cost', 1),
-  ('e0000000-0000-0000-0000-000000000009', 'f0000000-0000-0000-0000-000000000003', 'Damage and Shrinkage Rate', 'damage_shrinkage_rate', 'both', 'percentage', 'landed_cost', 'product_landed_cost', 2)
-ON CONFLICT (code) DO UPDATE SET name = EXCLUDED.name, display_order = EXCLUDED.display_order;
-
--- 3-1. Product & Import Cost 매핑 값
-INSERT INTO public.pricing_scenario_values (scenario_id, item_id, value) VALUES
+  -- Product & Import Cost
   ('a82d77d7-fca8-47fb-ba0d-7b242b36a100', 'e0000000-0000-0000-0000-000000000008', 25.00),
   ('a82d77d7-fca8-47fb-ba0d-7b242b36a101', 'e0000000-0000-0000-0000-000000000008', 15.00),
   ('a82d77d7-fca8-47fb-ba0d-7b242b36a102', 'e0000000-0000-0000-0000-000000000008', 10.00),
   
   ('a82d77d7-fca8-47fb-ba0d-7b242b36a100', 'e0000000-0000-0000-0000-000000000009', 2.00),
   ('a82d77d7-fca8-47fb-ba0d-7b242b36a101', 'e0000000-0000-0000-0000-000000000009', 1.00),
-  ('a82d77d7-fca8-47fb-ba0d-7b242b36a102', 'e0000000-0000-0000-0000-000000000009', 0.50)
-ON CONFLICT (scenario_id, item_id) DO UPDATE SET value = EXCLUDED.value;
+  ('a82d77d7-fca8-47fb-ba0d-7b242b36a102', 'e0000000-0000-0000-0000-000000000009', 0.50),
 
--- 4. Marketing & Sales 항목들
-INSERT INTO public.pricing_scenario_items (id, group_id, name, code, applicable_channel, value_type, cost_basis, profit_stage, display_order)
-VALUES
-  ('e0000000-0000-0000-0000-000000000010', 'f0000000-0000-0000-0000-000000000004', 'B2B Marketing Rate', 'b2b_marketing_rate', 'b2b', 'percentage', 'net_sales', 'contribution_cost', 1),
-  ('e0000000-0000-0000-0000-000000000011', 'f0000000-0000-0000-0000-000000000004', 'Amazon Advertising Rate', 'amazon_advertising_rate', 'amazon', 'percentage', 'net_sales', 'contribution_cost', 2),
-  ('e0000000-0000-0000-0000-000000000012', 'f0000000-0000-0000-0000-000000000004', 'Sales Commission Rate', 'sales_commission_rate', 'both', 'percentage', 'net_sales', 'contribution_cost', 3)
-ON CONFLICT (code) DO UPDATE SET name = EXCLUDED.name, display_order = EXCLUDED.display_order;
-
--- 4-1. Marketing & Sales 매핑 값
-INSERT INTO public.pricing_scenario_values (scenario_id, item_id, value) VALUES
+  -- Marketing & Sales
   ('a82d77d7-fca8-47fb-ba0d-7b242b36a100', 'e0000000-0000-0000-0000-000000000010', 10.00),
   ('a82d77d7-fca8-47fb-ba0d-7b242b36a101', 'e0000000-0000-0000-0000-000000000010', 5.00),
   ('a82d77d7-fca8-47fb-ba0d-7b242b36a102', 'e0000000-0000-0000-0000-000000000010', 2.00),
@@ -256,20 +260,9 @@ INSERT INTO public.pricing_scenario_values (scenario_id, item_id, value) VALUES
   
   ('a82d77d7-fca8-47fb-ba0d-7b242b36a100', 'e0000000-0000-0000-0000-000000000012', 5.00),
   ('a82d77d7-fca8-47fb-ba0d-7b242b36a101', 'e0000000-0000-0000-0000-000000000012', 3.00),
-  ('a82d77d7-fca8-47fb-ba0d-7b242b36a102', 'e0000000-0000-0000-0000-000000000012', 1.50)
-ON CONFLICT (scenario_id, item_id) DO UPDATE SET value = EXCLUDED.value;
+  ('a82d77d7-fca8-47fb-ba0d-7b242b36a102', 'e0000000-0000-0000-0000-000000000012', 1.50),
 
--- 5. Fulfillment & Channel Costs 항목들
-INSERT INTO public.pricing_scenario_items (id, group_id, name, code, applicable_channel, value_type, cost_basis, profit_stage, display_order)
-VALUES
-  ('e0000000-0000-0000-0000-000000000013', 'f0000000-0000-0000-0000-000000000005', 'Amazon Referral Fee Rate', 'amazon_referral_fee_rate', 'amazon', 'percentage', 'gross_sales', 'contribution_cost', 1),
-  ('e0000000-0000-0000-0000-000000000014', 'f0000000-0000-0000-0000-000000000005', 'B2B Payment Processing Fee Rate', 'b2b_payment_fee_rate', 'b2b', 'percentage', 'gross_sales', 'contribution_cost', 2),
-  ('e0000000-0000-0000-0000-000000000015', 'f0000000-0000-0000-0000-000000000005', 'Store Delivery Cost Rate', 'store_delivery_cost_rate', 'b2b', 'percentage', 'gross_sales', 'contribution_cost', 3),
-  ('e0000000-0000-0000-0000-000000000016', 'f0000000-0000-0000-0000-000000000005', 'FBA Fulfillment Fee Default', 'fba_fulfillment_fee_default', 'amazon', 'dollar_per_unit', NULL, 'contribution_cost', 4)
-ON CONFLICT (code) DO UPDATE SET name = EXCLUDED.name, display_order = EXCLUDED.display_order;
-
--- 5-1. Fulfillment & Channel Costs 매핑 값
-INSERT INTO public.pricing_scenario_values (scenario_id, item_id, value) VALUES
+  -- Fulfillment & Channel Costs
   ('a82d77d7-fca8-47fb-ba0d-7b242b36a100', 'e0000000-0000-0000-0000-000000000013', 15.00),
   ('a82d77d7-fca8-47fb-ba0d-7b242b36a101', 'e0000000-0000-0000-0000-000000000013', 15.00),
   ('a82d77d7-fca8-47fb-ba0d-7b242b36a102', 'e0000000-0000-0000-0000-000000000013', 15.00),
@@ -284,49 +277,23 @@ INSERT INTO public.pricing_scenario_values (scenario_id, item_id, value) VALUES
   
   ('a82d77d7-fca8-47fb-ba0d-7b242b36a100', 'e0000000-0000-0000-0000-000000000016', 6.50),
   ('a82d77d7-fca8-47fb-ba0d-7b242b36a101', 'e0000000-0000-0000-0000-000000000016', 5.20),
-  ('a82d77d7-fca8-47fb-ba0d-7b242b36a102', 'e0000000-0000-0000-0000-000000000016', 4.50)
-ON CONFLICT (scenario_id, item_id) DO UPDATE SET value = EXCLUDED.value;
+  ('a82d77d7-fca8-47fb-ba0d-7b242b36a102', 'e0000000-0000-0000-0000-000000000016', 4.50),
 
--- 6. Labor 항목들
-INSERT INTO public.pricing_scenario_items (id, group_id, name, code, applicable_channel, value_type, cost_basis, profit_stage, display_order)
-VALUES
-  ('e0000000-0000-0000-0000-000000000017', 'f0000000-0000-0000-0000-000000000006', 'Variable Labor Rate', 'variable_labor_rate', 'both', 'percentage', 'net_sales', 'contribution_cost', 1),
-  ('e0000000-0000-0000-0000-000000000018', 'f0000000-0000-0000-0000-000000000006', 'Payroll Allocation Rate', 'payroll_allocation_rate', 'both', 'percentage', 'net_sales', 'operating_expense', 2)
-ON CONFLICT (code) DO UPDATE SET name = EXCLUDED.name, display_order = EXCLUDED.display_order;
-
--- 6-1. Labor 매핑 값
-INSERT INTO public.pricing_scenario_values (scenario_id, item_id, value) VALUES
+  -- Labor
   ('a82d77d7-fca8-47fb-ba0d-7b242b36a100', 'e0000000-0000-0000-0000-000000000017', 5.00),
   ('a82d77d7-fca8-47fb-ba0d-7b242b36a101', 'e0000000-0000-0000-0000-000000000017', 3.00),
   ('a82d77d7-fca8-47fb-ba0d-7b242b36a102', 'e0000000-0000-0000-0000-000000000017', 1.00),
   
   ('a82d77d7-fca8-47fb-ba0d-7b242b36a100', 'e0000000-0000-0000-0000-000000000018', 12.00),
   ('a82d77d7-fca8-47fb-ba0d-7b242b36a101', 'e0000000-0000-0000-0000-000000000018', 8.00),
-  ('a82d77d7-fca8-47fb-ba0d-7b242b36a102', 'e0000000-0000-0000-0000-000000000018', 5.00)
-ON CONFLICT (scenario_id, item_id) DO UPDATE SET value = EXCLUDED.value;
+  ('a82d77d7-fca8-47fb-ba0d-7b242b36a102', 'e0000000-0000-0000-0000-000000000018', 5.00),
 
--- 7. Administrative & Overhead 항목들
-INSERT INTO public.pricing_scenario_items (id, group_id, name, code, applicable_channel, value_type, cost_basis, profit_stage, display_order)
-VALUES
-  ('e0000000-0000-0000-0000-000000000019', 'f0000000-0000-0000-0000-000000000007', 'General Overhead Rate', 'general_overhead_rate', 'both', 'percentage', 'net_sales', 'operating_expense', 1)
-ON CONFLICT (code) DO UPDATE SET name = EXCLUDED.name, display_order = EXCLUDED.display_order;
-
--- 7-1. Administrative & Overhead 매핑 값
-INSERT INTO public.pricing_scenario_values (scenario_id, item_id, value) VALUES
+  -- Administrative & Overhead
   ('a82d77d7-fca8-47fb-ba0d-7b242b36a100', 'e0000000-0000-0000-0000-000000000019', 15.00),
   ('a82d77d7-fca8-47fb-ba0d-7b242b36a101', 'e0000000-0000-0000-0000-000000000019', 10.00),
-  ('a82d77d7-fca8-47fb-ba0d-7b242b36a102', 'e0000000-0000-0000-0000-000000000019', 6.00)
-ON CONFLICT (scenario_id, item_id) DO UPDATE SET value = EXCLUDED.value;
+  ('a82d77d7-fca8-47fb-ba0d-7b242b36a102', 'e0000000-0000-0000-0000-000000000019', 6.00),
 
--- 8. Financing & Risk 항목들
-INSERT INTO public.pricing_scenario_items (id, group_id, name, code, applicable_channel, value_type, cost_basis, profit_stage, display_order)
-VALUES
-  ('e0000000-0000-0000-0000-000000000020', 'f0000000-0000-0000-0000-000000000008', 'Inventory Financing Rate', 'inventory_financing_rate', 'both', 'percentage', 'landed_cost', 'financing_risk', 1),
-  ('e0000000-0000-0000-0000-000000000021', 'f0000000-0000-0000-0000-000000000008', 'Currency Risk Allowance Rate', 'currency_risk_rate', 'both', 'percentage', 'supplier_cost_usd', 'financing_risk', 2)
-ON CONFLICT (code) DO UPDATE SET name = EXCLUDED.name, display_order = EXCLUDED.display_order;
-
--- 8-1. Financing & Risk 매핑 값
-INSERT INTO public.pricing_scenario_values (scenario_id, item_id, value) VALUES
+  -- Financing & Risk
   ('a82d77d7-fca8-47fb-ba0d-7b242b36a100', 'e0000000-0000-0000-0000-000000000020', 4.00),
   ('a82d77d7-fca8-47fb-ba0d-7b242b36a101', 'e0000000-0000-0000-0000-000000000020', 2.00),
   ('a82d77d7-fca8-47fb-ba0d-7b242b36a102', 'e0000000-0000-0000-0000-000000000020', 1.00),
