@@ -576,3 +576,308 @@ function evaluateStatus(inputs: CalculationInputs, res: ScenarioResult, getValue
     res.statusReason = "일부 마진율 목표에 미달하였습니다. 공급가나 마케팅비 조정을 통해 개선을 권장합니다.";
   }
 }
+
+// =============================================================================
+// [신규 확장] Landed Cost 및 3D Carton 적재 계산기 모듈
+// =============================================================================
+
+export interface CartonVolumeInfo {
+  length: number;
+  width: number;
+  height: number;
+  unitsAlongLength: number;
+  unitsAlongWidth: number;
+  unitsAlongHeight: number;
+  arrangement: string;
+  volumeCm3: number;
+  cbm: number;
+}
+
+export interface CartonDetailResult {
+  unitsCount: number;
+  internalDimensions: { length: number; width: number; height: number };
+  externalDimensions: { length: number; width: number; height: number };
+  netProductWeightKg: number;
+  grossActualWeightKg: number;
+  volumetricWeightKg: number;
+  billableWeightKg: number;
+}
+
+export interface LandedCostCalculationResult {
+  importQuantity: number;
+  packageDataSource: "default" | "partial_default" | "user_entered";
+  preferredDimensionUnit: "cm" | "in";
+  preferredWeightUnit: "g" | "kg" | "lb";
+  
+  // Canonical Metric
+  lengthCm: number;
+  widthCm: number;
+  heightCm: number;
+  weightKg: number;
+
+  // Converted Imperial (FBA 용)
+  lengthIn: number;
+  widthIn: number;
+  heightIn: number;
+  weightLb: number;
+
+  // Carton & Packing
+  maxCartonWeightKg: number;
+  cartonPackingWeightKg: number;
+  cartonSizeAllowanceCm: number;
+  unitsPerCarton: number;
+  fullCartons: number;
+  remainingUnits: number;
+  totalCartons: number;
+
+  // Box Packing Layouts
+  fullCartonLayout: CartonDetailResult | null;
+  partialCartonLayout: CartonDetailResult | null;
+
+  // Shipping cost
+  totalBillableWeightKg: number;
+  totalCbm: number;
+  
+  // Landed Cost Breakdown
+  totalProductCostUSD: number;
+  importTaxAllowancePercentage: number;
+  importTaxAllowanceTotalUSD: number;
+  importTaxAllowancePerUnitUSD: number;
+  totalLandedCostUSD: number;
+  landedCostPerUnitUSD: number;
+}
+
+/**
+ * 1,000개 수입 조건하에 패키지 단위 변환, 3D 카톤 최적 배치, 무게/부피무게 및 Landed Cost 최종 연산
+ */
+export function calculateProductCartonAndLandedCost(
+  inputs: {
+    importQuantity?: number;
+    maxCartonWeightKg?: number;
+    cartonPackingWeightKg?: number;
+    cartonSizeAllowanceCm?: number;
+    importTaxPercentage?: number;
+    
+    // Package 정보 (cm / in / g / kg / lb 중 유저가 입력한 canonical state 기준)
+    lengthCm?: number;
+    widthCm?: number;
+    heightCm?: number;
+    weightKg?: number;
+
+    preferredDimensionUnit?: "cm" | "in";
+    preferredWeightUnit?: "g" | "kg" | "lb";
+  }
+): { success: true; result: LandedCostCalculationResult } | { success: false; error: string } {
+  // 1. 기본값 적용 판단 (Length: 6cm, Width: 4cm, Height: 15cm, Weight: 100g = 0.1kg)
+  const defaultLength = 6.0;
+  const defaultWidth = 4.0;
+  const defaultHeight = 15.0;
+  const defaultWeight = 0.1; // 100g
+
+  const userLength = inputs.lengthCm;
+  const userWidth = inputs.widthCm;
+  const userHeight = inputs.heightCm;
+  const userWeight = inputs.weightKg;
+
+  const lengthCm = userLength !== undefined && userLength > 0 ? userLength : defaultLength;
+  const widthCm = userWidth !== undefined && userWidth > 0 ? userWidth : defaultWidth;
+  const heightCm = userHeight !== undefined && userHeight > 0 ? userHeight : defaultHeight;
+  const weightKg = userWeight !== undefined && userWeight > 0 ? userWeight : defaultWeight;
+
+  // 데이터 소스 플래그 설정
+  let packageDataSource: "default" | "partial_default" | "user_entered" = "user_entered";
+  const anyDefault = (userLength === undefined) || (userWidth === undefined) || (userHeight === undefined) || (userWeight === undefined);
+  const allDefault = (userLength === undefined) && (userWidth === undefined) && (userHeight === undefined) && (userWeight === undefined);
+  
+  if (allDefault) {
+    packageDataSource = "default";
+  } else if (anyDefault) {
+    packageDataSource = "partial_default";
+  }
+
+  // 2. 음수 또는 비정상 입력값 사전 가드
+  if (lengthCm <= 0 || widthCm <= 0 || heightCm <= 0 || weightKg <= 0) {
+    return { success: false, error: "규격이나 무게는 0보다 커야 합니다." };
+  }
+
+  // 개당 중량이 25kg 제한에 근접하거나 초과하면 에러 리턴
+  const maxCartonWeight = inputs.maxCartonWeightKg || 25.0;
+  const emptyWeight = inputs.cartonPackingWeightKg !== undefined ? inputs.cartonPackingWeightKg : 1.0;
+  if (weightKg >= maxCartonWeight - emptyWeight) {
+    return { success: false, error: `개별 상품 무게(${weightKg.toFixed(3)}kg)가 카톤 포장 가능 최대치(${(maxCartonWeight - emptyWeight).toFixed(3)}kg)와 같거나 초과하여 박스 수입 포장이 불가능합니다.` };
+  }
+
+  // 3. Metric -> Imperial 단위 환산 (FBA 대응용)
+  const lengthIn = Number((lengthCm / 2.54).toFixed(4));
+  const widthIn = Number((widthCm / 2.54).toFixed(4));
+  const heightIn = Number((heightCm / 2.54).toFixed(4));
+  const weightLb = Number((weightKg / 0.45359237).toFixed(4));
+
+  // 4. 박스당 적재 가능 제품 수량 (Units per Carton) 계산
+  const availableWeight = maxCartonWeight - emptyWeight;
+  const unitsPerCarton = Math.floor(availableWeight / weightKg);
+  if (unitsPerCarton <= 0) {
+    return { success: false, error: "박스에 들어갈 수 있는 최소 무게 여유가 부족합니다. 총 중량 제한을 확인해주세요." };
+  }
+
+  const importQuantity = inputs.importQuantity || 1000;
+  const fullCartons = Math.floor(importQuantity / unitsPerCarton);
+  const remainingUnits = importQuantity % unitsPerCarton;
+  const totalCartons = fullCartons + (remainingUnits > 0 ? 1 : 0);
+
+  // 5. 3D 최적 적재 시뮬레이션 헬퍼
+  const allowance = inputs.cartonSizeAllowanceCm !== undefined ? inputs.cartonSizeAllowanceCm : 1.5;
+
+  const simulatePacking = (qty: number): CartonDetailResult | null => {
+    if (qty <= 0) return null;
+
+    // 6개 제품 배치 회전에 대한 3차원 적재 그리드 탐색
+    // (가장 카톤 부피를 최소화하고, 가로/세로/높이의 비율이 입체형에 가깝게 유지되는 최적 조합 선택)
+    let minVol = Infinity;
+    let bestArrangement: CartonVolumeInfo | null = null;
+
+    // N개의 아이템을 배치하기 위해 (nx * ny * nz >= qty) 만족하는 최적 조합 탐색
+    // 부피를 최소화하기 위해 1부터 qty까지의 범위를 서칭하되 비정상적으로 길어지지 않게 가드
+    for (let nx = 1; nx <= qty; nx++) {
+      for (let ny = 1; ny <= Math.ceil(qty / nx); ny++) {
+        const nz = Math.ceil(qty / (nx * ny));
+        if (nx * ny * nz < qty) continue;
+
+        // 제품의 회전 상태 6개 조합에 대입
+        const rotations = [
+          { l: lengthCm, w: widthCm, h: heightCm, name: "L-W-H" },
+          { l: lengthCm, w: heightCm, h: widthCm, name: "L-H-W" },
+          { l: widthCm, w: lengthCm, h: heightCm, name: "W-L-H" },
+          { l: widthCm, w: heightCm, h: lengthCm, name: "W-H-L" },
+          { l: heightCm, w: lengthCm, h: widthCm, name: "H-L-W" },
+          { l: heightCm, w: widthCm, h: lengthCm, name: "H-W-L" },
+        ];
+
+        for (const rot of rotations) {
+          const lBox = nx * rot.l;
+          const wBox = ny * rot.w;
+          const hBox = nz * rot.h;
+          
+          const vol = lBox * wBox * hBox;
+
+          // 어느 한쪽이 너무 기형적으로 길어지는 레이아웃 배제 (예: 가로/세로/높이 비율 편차 제한)
+          const maxDim = Math.max(lBox, wBox, hBox);
+          const minDim = Math.min(lBox, wBox, hBox);
+          if (maxDim / minDim > 4.5 && qty > 4) continue; // 극단적인 막대형 박스 필터링
+
+          if (vol < minVol) {
+            minVol = vol;
+            bestArrangement = {
+              length: Number(lBox.toFixed(2)),
+              width: Number(wBox.toFixed(2)),
+              height: Number(hBox.toFixed(2)),
+              unitsAlongLength: nx,
+              unitsAlongWidth: ny,
+              unitsAlongHeight: nz,
+              arrangement: `${rot.name} rotation (Arranged ${nx}x${ny}x${nz})`,
+              volumeCm3: vol,
+              cbm: vol / 1000000,
+            };
+          }
+        }
+      }
+    }
+
+    if (!bestArrangement) {
+      // Fallback: 단순 한줄 나열 적재
+      const vol = (lengthCm * qty) * widthCm * heightCm;
+      bestArrangement = {
+        length: lengthCm * qty,
+        width: widthCm,
+        height: heightCm,
+        unitsAlongLength: qty,
+        unitsAlongWidth: 1,
+        unitsAlongHeight: 1,
+        arrangement: "Fallback Linear",
+        volumeCm3: vol,
+        cbm: vol / 1000000,
+      };
+    }
+
+    const extLength = Number((bestArrangement.length + allowance).toFixed(2));
+    const extWidth = Number((bestArrangement.width + allowance).toFixed(2));
+    const extHeight = Number((bestArrangement.height + allowance).toFixed(2));
+
+    const netProductWeight = qty * weightKg;
+    const grossActualWeight = netProductWeight + emptyWeight;
+
+    // TwoDay 공식 Divisor = 5000 반영 (체적 부피 무게)
+    const volumetricWeight = (extLength * extWidth * extHeight) / 5000;
+    const billableWeight = Math.max(grossActualWeight, volumetricWeight);
+
+    return {
+      unitsCount: qty,
+      internalDimensions: { length: bestArrangement.length, width: bestArrangement.width, height: bestArrangement.height },
+      externalDimensions: { length: extLength, width: extWidth, height: extHeight },
+      netProductWeightKg: Number(netProductWeight.toFixed(3)),
+      grossActualWeightKg: Number(grossActualWeight.toFixed(3)),
+      volumetricWeightKg: Number(volumetricWeight.toFixed(3)),
+      billableWeightKg: Number(billableWeight.toFixed(3)),
+    };
+  };
+
+  const fullCartonLayout = simulatePacking(unitsPerCarton);
+  const partialCartonLayout = simulatePacking(remainingUnits);
+
+  // 6. 전체 청구중량 및 전체 CBM 합산
+  let totalBillableWeightKg = 0;
+  let totalCbm = 0;
+
+  if (fullCartonLayout) {
+    totalBillableWeightKg += fullCartonLayout.billableWeightKg * fullCartons;
+    const fullVol = fullCartonLayout.externalDimensions.length * fullCartonLayout.externalDimensions.width * fullCartonLayout.externalDimensions.height;
+    totalCbm += (fullVol / 1000000) * fullCartons;
+  }
+  if (partialCartonLayout) {
+    totalBillableWeightKg += partialCartonLayout.billableWeightKg;
+    const partVol = partialCartonLayout.externalDimensions.length * partialCartonLayout.externalDimensions.width * partialCartonLayout.externalDimensions.height;
+    totalCbm += (partVol / 1000000);
+  }
+
+  // 7. 예상 세금 및 수입부대비용 (Allowance) 계산
+  // (실무자 조율 가능, 기본 10% 가산)
+  const importTaxPercentage = inputs.importTaxPercentage !== undefined ? inputs.importTaxPercentage : 10.0;
+
+  return {
+    success: true,
+    result: {
+      importQuantity,
+      packageDataSource,
+      preferredDimensionUnit: inputs.preferredDimensionUnit || "cm",
+      preferredWeightUnit: inputs.preferredWeightUnit || "g",
+      lengthCm,
+      widthCm,
+      heightCm,
+      weightKg,
+      lengthIn,
+      widthIn,
+      heightIn,
+      weightLb,
+      maxCartonWeightKg: maxCartonWeight,
+      cartonPackingWeightKg: emptyWeight,
+      cartonSizeAllowanceCm: allowance,
+      unitsPerCarton,
+      fullCartons,
+      remainingUnits,
+      totalCartons,
+      fullCartonLayout,
+      partialCartonLayout,
+      totalBillableWeightKg: Number(totalBillableWeightKg.toFixed(3)),
+      totalCbm: Number(totalCbm.toFixed(4)),
+      
+      // Landed Cost 기반 (배송비는 나중에 클라이언트 단에서 TwoDay API 조회를 거쳐 더해짐)
+      totalProductCostUSD: 0, 
+      importTaxAllowancePercentage: importTaxPercentage,
+      importTaxAllowanceTotalUSD: 0,
+      importTaxAllowancePerUnitUSD: 0,
+      totalLandedCostUSD: 0,
+      landedCostPerUnitUSD: 0,
+    },
+  };
+}
+

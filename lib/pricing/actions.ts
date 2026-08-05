@@ -505,6 +505,43 @@ export async function saveCalculation(data: {
   calculatedResults: any;       // 3개 결과 묶음 JSON
   status: string;
   notes?: string;
+
+  // [신규 확장] Landed Cost 산출 데이터
+  importQuantity?: number;
+  packageLengthCm?: number;
+  packageWidthCm?: number;
+  packageHeightCm?: number;
+  packageWeightKg?: number;
+  packageDataSource?: "default" | "partial_default" | "user_entered";
+  preferredDimensionUnit?: "cm" | "in";
+  preferredWeightUnit?: "g" | "kg" | "lb";
+  maximumCartonWeightKg?: number;
+  cartonPackingWeightKg?: number;
+  cartonSizeAllowance?: number;
+  unitsPerCarton?: number;
+  fullCartons?: number;
+  remainingUnits?: number;
+  totalCartons?: number;
+  fullCartonDimensionsCm?: any;
+  partialCartonDimensionsCm?: any;
+  grossWeightKg?: number | null;
+  volumetricWeightKg?: number | null;
+  billableWeightKg?: number | null;
+  twodayShippingCostKrw?: number;
+  twodayLookupAt?: string | null;
+  twodayLookupStatus?: "pending" | "success" | "failed";
+  shippingCostEntryType?: "automatic" | "manual";
+  twodayErrorMessage?: string | null;
+  exchangeRateSnapshot?: number;
+  exchangeRateUpdatedAt?: string;
+  totalShippingCostUsd?: number;
+  shippingCostPerUnit?: number;
+  importTaxCostPercentage?: number;
+  importTaxCostTotal?: number;
+  importTaxCostPerUnit?: number;
+  totalProductCost?: number;
+  totalLandedCost?: number;
+  landedCostPerUnit?: number;
 }): Promise<{ error: string } | { success: string; id: string }> {
   const supabase = await createClient();
 
@@ -551,6 +588,43 @@ export async function saveCalculation(data: {
       status: data.status,
       notes: data.notes || null,
       created_by: user?.id || null,
+
+      // [신규 확장] Landed Cost DB 필드 매핑
+      import_quantity: data.importQuantity,
+      package_length_cm: data.packageLengthCm,
+      package_width_cm: data.packageWidthCm,
+      package_height_cm: data.packageHeightCm,
+      package_weight_kg: data.packageWeightKg,
+      package_data_source: data.packageDataSource,
+      preferred_dimension_unit: data.preferredDimensionUnit,
+      preferred_weight_unit: data.preferredWeightUnit,
+      maximum_carton_weight_kg: data.maximumCartonWeightKg,
+      carton_packing_weight_kg: data.cartonPackingWeightKg,
+      carton_size_allowance: data.cartonSizeAllowance,
+      units_per_carton: data.unitsPerCarton,
+      full_cartons: data.fullCartons,
+      remaining_units: data.remainingUnits,
+      total_cartons: data.totalCartons,
+      full_carton_dimensions_cm: data.fullCartonDimensionsCm,
+      partial_carton_dimensions_cm: data.partialCartonDimensionsCm,
+      gross_weight_kg: data.grossWeightKg,
+      volumetric_weight_kg: data.volumetricWeightKg,
+      billable_weight_kg: data.billableWeightKg,
+      twoday_shipping_cost_krw: data.twodayShippingCostKrw,
+      twoday_lookup_at: data.twodayLookupAt,
+      twoday_lookup_status: data.twodayLookupStatus,
+      shipping_cost_entry_type: data.shippingCostEntryType,
+      twoday_error_message: data.twodayErrorMessage,
+      exchange_rate_snapshot: data.exchangeRateSnapshot,
+      exchange_rate_updated_at: data.exchangeRateUpdatedAt,
+      total_shipping_cost_usd: data.totalShippingCostUsd,
+      shipping_cost_per_unit: data.shippingCostPerUnit,
+      import_tax_cost_percentage: data.importTaxCostPercentage,
+      import_tax_cost_total: data.importTaxCostTotal,
+      import_tax_cost_per_unit: data.importTaxCostPerUnit,
+      total_product_cost: data.totalProductCost,
+      total_landed_cost: data.totalLandedCost,
+      landed_cost_per_unit: data.landedCostPerUnit,
     })
     .select("id")
     .single();
@@ -653,4 +727,56 @@ export async function getProductsList() {
 export async function fetchLiveExchangeRate() {
   const { getExchangeRate } = await import("@/lib/pricing/exchange");
   return getExchangeRate();
+}
+
+/** TwoDay 실시간 배송비 조회 서버 액션 */
+export async function fetchTwoDayShippingCost(params: {
+  country_code: string;
+  zip_code: string;
+  weight_kg: number;
+  length: number;
+  width: number;
+  height: number;
+}) {
+  try {
+    const res = await fetch("https://twoday.co.kr/api/shipping-calc/rate", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(params),
+    });
+
+    if (!res.ok) {
+      throw new Error(`HTTP error! status: ${res.status}`);
+    }
+
+    const data = await res.json();
+    if (data && data.success) {
+      // 100원 단위 절상 규칙 적용 (meta/k 함수 이식)
+      const totalFee = Number(data.total_fee) || 0;
+      const finalFee = 100 * Math.ceil(totalFee / 100);
+      
+      return {
+        success: true,
+        total_fee_krw: finalFee,
+        raw_total_fee: totalFee,
+        billable_kg: data.billable_kg,
+        vol_kg: data.vol_kg,
+        has_ahs: data.has_ahs,
+        ahs_reason: data.ahs_reason,
+      };
+    } else {
+      return {
+        success: false,
+        error: data?.error || "투데이 API 계산에 실패했습니다.",
+      };
+    }
+  } catch (err: any) {
+    console.error("TwoDay Shipping lookup failed:", err);
+    return {
+      success: false,
+      error: err.message || "네트워크 통신 오류가 발생했습니다.",
+    };
+  }
 }

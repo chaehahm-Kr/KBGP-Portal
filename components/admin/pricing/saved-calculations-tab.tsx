@@ -307,6 +307,7 @@ export function SavedCalculationsTab({
                             <div className="bg-slate-50/50 p-3 rounded-lg border border-slate-200/80 space-y-1">
                               <span className="font-bold text-slate-800 block text-[10px] uppercase">Offline B2B 결과</span>
                               <div className="flex justify-between"><span>계산 도매가:</span><strong>${b2bRes.grossSales?.toFixed(2)}</strong></div>
+                              <div className="flex justify-between"><span>소매점 판매가(MSRP):</span><strong className="text-emerald-700">${(b2bRes.grossSales / (1 - (detailItem.retailer_target_margin || 50) / 100)).toFixed(2)}</strong></div>
                               <div className="flex justify-between"><span>도착 원가 (Landed):</span><strong>${b2bRes.landedCost?.toFixed(2)}</strong></div>
                               <div className="flex justify-between"><span>공헌이익률:</span><strong>{b2bRes.contributionMargin?.toFixed(1)}%</strong></div>
                               <div className="flex justify-between"><span>순이익률:</span><strong className="text-emerald-700">{b2bRes.netMargin?.toFixed(1)}%</strong></div>
