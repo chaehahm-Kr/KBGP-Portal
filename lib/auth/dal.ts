@@ -75,7 +75,8 @@ async function verifySession(area: AppRole): Promise<VerifiedSession> {
       .eq("id", user.id)
       .maybeSingle();
 
-    if (!staffMember || staffMember.status !== "active") {
+    // Allow invited, setting_up, and active to pass verifySession (so they can reach setup-profile page)
+    if (!staffMember || !["active", "invited", "setting_up"].includes(staffMember.status)) {
       redirect(LOGIN_PATH[area]);
     }
   } else {
@@ -99,7 +100,48 @@ async function verifySession(area: AppRole): Promise<VerifiedSession> {
 
 // React cache()로 같은 렌더 패스 안에서는 중복 호출해도 한 번만 실제 검증한다.
 export const verifyPortalSession = cache(() => verifySession("portal"));
-export const verifyAdminSession = cache(() => verifySession("admin"));
+
+/**
+ * 활성화된 일반 직원(Active)만 접근을 허용합니다.
+ * 만약 'invited' 또는 'setting_up' 상태라면 프로필 설정 화면으로 강제 리디렉션합니다.
+ */
+export const verifyAdminSession = cache(async () => {
+  const session = await verifySession("admin");
+  const supabase = await createClient();
+  
+  const { data: staffMember } = await supabase
+    .from("staff_members")
+    .select("status")
+    .eq("id", session.userId)
+    .single();
+
+  if (staffMember && (staffMember.status === "invited" || staffMember.status === "setting_up")) {
+    redirect("/admin/setup-profile");
+  }
+
+  return session;
+});
+
+/**
+ * 최초 로그인 단계에 있는 직원('invited', 'setting_up')만 프로필 설정을 위해 접근을 허용합니다.
+ * 이미 활성화된 직원은 일반 어드민 홈(/admin)으로 돌려보냅니다.
+ */
+export const verifyPendingAdminSession = cache(async () => {
+  const session = await verifySession("admin");
+  const supabase = await createClient();
+  
+  const { data: staffMember } = await supabase
+    .from("staff_members")
+    .select("status")
+    .eq("id", session.userId)
+    .single();
+
+  if (!staffMember || !["invited", "setting_up"].includes(staffMember.status)) {
+    redirect("/admin");
+  }
+
+  return session;
+});
 
 /**
  * 이메일 템플릿 수정처럼 Super Admin 전용인 화면·액션에서 쓴다

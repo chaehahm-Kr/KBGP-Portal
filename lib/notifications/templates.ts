@@ -19,6 +19,7 @@ export const TEMPLATE_KEYS = [
   "invite_expiring_soon",
   "inquiry_received_applicant",
   "inquiry_received_internal",
+  "staff_invited",
 ] as const;
 
 export type TemplateKey = (typeof TEMPLATE_KEYS)[number];
@@ -106,6 +107,11 @@ export const DEFAULT_TEMPLATES: Record<
     subject: "[신규 문의] {{inquiryNumber}} — {{companyName}}, 제품 {{productCount}}건",
     body: "안녕하세요.\n\n신규 문의 접수 완료: {{inquiryNumber}} (회사명: {{companyName}})\n등록 제품 수: {{productCount}}건\n\n아래 버튼을 클릭하시면 접수된 문의 내역의 상세 화면으로 즉시 연결됩니다.\n\n{{ctaButton}}",
   },
+  staff_invited: {
+    description: "내부 직원 — 초대 발송",
+    subject: "[K SELECT NETWORK] {{contactName}}님, 관리자 포털로 초대합니다",
+    body: "안녕하세요, {{contactName}}님.\n\nK SELECT NETWORK 관리자 포털의 내부 직원으로 초대되었습니다.\n\n아래 로그인 정보와 임시 비밀번호로 최초 로그인하신 후, 비밀번호 변경 및 계정 설정 절차를 완료해 주세요.\n\n- 접속 이메일: {{email}}\n- 임시 비밀번호: {{tempPassword}}\n\n* 본 임시 비밀번호는 최초 1회 로그인 전용입니다.\n\n{{ctaButton}}",
+  },
 };
 
 export const SAMPLE_VARIABLES: Record<string, string> = {
@@ -123,6 +129,8 @@ export const SAMPLE_VARIABLES: Record<string, string> = {
   inviteeName: "김샘플",
   inviteeEmail: "sample@brand.co.kr",
   submittedDate: "2026년 8월 4일",
+  email: "newstaff@kselectnetwork.com",
+  tempPassword: "TempPassword123!",
 };
 
 function render(template: string, variables: Record<string, string>) {
@@ -160,6 +168,8 @@ function getBadgeLabel(key: string): string | undefined {
       return "OVERDUE · 회신 기한 초과 안내";
     case "invite_expiring_soon":
       return "EXPIRING · 초청 만료 임박 안내";
+    case "staff_invited":
+      return "INVITED · 관리자 초대 발송";
     default:
       return undefined;
   }
@@ -259,6 +269,9 @@ function buildCtaButtonHtml(variables: Record<string, string>) {
     buttonLabel = "기한 초과 신청서 확인";
   } else if (key === "invite_expiring_soon") {
     buttonLabel = "사용자 관리 화면으로 이동";
+  } else if (key === "staff_invited") {
+    buttonLabel = "관리자 로그인하기";
+    url = `${siteUrl}/admin/login`;
   }
 
   return `
