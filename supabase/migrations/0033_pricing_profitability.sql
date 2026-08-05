@@ -1,5 +1,13 @@
 -- 0033_pricing_profitability.sql — 가격 및 수익성 분석(Pricing & Profitability) 모듈 테이블 스키마 및 기본 데이터 구축
 
+-- 이전 불완전 생성 테이블 청소 (Drop Cascade)
+DROP TABLE IF EXISTS public.pricing_scenario_logs CASCADE;
+DROP TABLE IF EXISTS public.pricing_calculations CASCADE;
+DROP TABLE IF EXISTS public.pricing_scenario_values CASCADE;
+DROP TABLE IF EXISTS public.pricing_scenario_items CASCADE;
+DROP TABLE IF EXISTS public.pricing_scenario_groups CASCADE;
+DROP TABLE IF EXISTS public.pricing_scenarios CASCADE;
+
 -- 1. 시나리오 테이블
 CREATE TABLE IF NOT EXISTS public.pricing_scenarios (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
