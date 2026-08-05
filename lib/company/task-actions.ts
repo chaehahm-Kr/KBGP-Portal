@@ -38,10 +38,18 @@ export async function getCompanyTaskAssignments(companyId: string): Promise<Task
   const admin = createAdminClient();
 
   // 회사 전체 배정 정보 조회
-  const { data: assignments } = await admin
-    .from("company_task_assignments")
-    .select("user_id, task_code, is_primary, email_notify")
-    .eq("company_id", companyId);
+  let assignments: any[] = [];
+  try {
+    const { data, error } = await admin
+      .from("company_task_assignments")
+      .select("user_id, task_code, is_primary, email_notify")
+      .eq("company_id", companyId);
+    if (!error && data) {
+      assignments = data;
+    }
+  } catch (e) {
+    console.warn("company_task_assignments table not ready yet, falling back to empty list", e);
+  }
 
   // 회사 소속 모든 멤버 목록 조회
   const { data: companyUsers } = await admin
@@ -245,13 +253,19 @@ export async function assignTaskPrimaryUser(
 export async function getCompanyTaskSetupStatus(companyId: string) {
   const admin = createAdminClient();
 
-  const { data: assignments } = await admin
-    .from("company_task_assignments")
-    .select("task_code")
-    .eq("company_id", companyId)
-    .eq("is_primary", true);
-
-  const completedCount = assignments?.length || 0;
+  let completedCount = 0;
+  try {
+    const { data: assignments, error } = await admin
+      .from("company_task_assignments")
+      .select("task_code")
+      .eq("company_id", companyId)
+      .eq("is_primary", true);
+    if (!error && assignments) {
+      completedCount = assignments.length;
+    }
+  } catch (e) {
+    console.warn("company_task_assignments table not ready yet, returning 0 completed tasks", e);
+  }
   const totalCount = TASK_DEFINITIONS.length;
 
   return {
