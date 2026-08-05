@@ -28,6 +28,7 @@ interface ApplicationWorkspaceProps {
   activityLogRows: any[];
   canReview: boolean;
   isSuperAdmin: boolean;
+  canDelete?: boolean;
   userId: string;
   // Actions
   reviewAction: any;
@@ -35,6 +36,7 @@ interface ApplicationWorkspaceProps {
   noteAddAction: any;
   noteDeleteAction: any;
   infoRequestAction: any;
+  deleteAction?: any;
 }
 
 export default function ApplicationWorkspace({
@@ -52,12 +54,14 @@ export default function ApplicationWorkspace({
   activityLogRows,
   canReview,
   isSuperAdmin,
+  canDelete = false,
   userId,
   reviewAction,
   assignAction,
   noteAddAction,
   noteDeleteAction,
-  infoRequestAction
+  infoRequestAction,
+  deleteAction
 }: ApplicationWorkspaceProps) {
   const [activeTab, setActiveTab] = useState<
     "overview" | "company" | "products" | "documents" | "review" | "communication" | "activity"
@@ -175,6 +179,30 @@ export default function ApplicationWorkspace({
     return "Do Not Recommend";
   };
 
+  const [isDeleting, setIsDeleting] = useState(false);
+  const handleDeleteApplication = async () => {
+    if (
+      !confirm(
+        `⚠️ [경고] 정말로 이 입점 신청서(${application.application_number})를 삭제하시겠습니까?\n삭제된 신청서는 기본 목록에서 제외되며 필터에서 '삭제 포함'을 체크해야만 조회할 수 있습니다.`
+      )
+    ) {
+      return;
+    }
+
+    setIsDeleting(true);
+    try {
+      if (deleteAction) {
+        await deleteAction(application.id);
+        alert("신청서가 삭제 처리되었습니다.");
+        window.location.href = "/admin/applications";
+      }
+    } catch (err: any) {
+      alert("삭제 중 오류가 발생했습니다: " + (err.message || ""));
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   const weightedScore = parseFloat(calculateWeightedScore());
 
   return (
@@ -197,10 +225,19 @@ export default function ApplicationWorkspace({
             </p>
           </div>
 
-          <div className="flex flex-wrap gap-2">
-            <span className="text-xs text-zinc-500 dark:text-zinc-400 self-center">
+          <div className="flex flex-wrap gap-4 items-center">
+            <span className="text-xs text-zinc-500 dark:text-zinc-400 self-center mr-2">
               담당 심사원: <span className="font-bold text-zinc-800 dark:text-zinc-200">{currentAssignment ? staffNameById.get(currentAssignment.staff_id) : "미배정"}</span>
             </span>
+            {canDelete && (
+              <button
+                onClick={handleDeleteApplication}
+                disabled={isDeleting}
+                className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-xs rounded transition-colors cursor-pointer disabled:opacity-50"
+              >
+                {isDeleting ? "삭제 중..." : "🗑️ 신청서 삭제"}
+              </button>
+            )}
           </div>
         </div>
       </div>

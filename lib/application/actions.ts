@@ -208,3 +208,38 @@ async function notifySubmission(
     );
   }
 }
+
+/**
+ * Super Admin 또는 Admin이 특정 입점 신청서를 삭제 처리(상태값 'deleted'로 소프트 딜리트)합니다.
+ */
+export async function deleteApplicationAction(applicationId: string) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) {
+    throw new Error("인증 세션이 만료되었습니다. 다시 로그인해주세요.");
+  }
+
+  const { data: staff } = await supabase
+    .from("staff_members")
+    .select("base_role")
+    .eq("id", user.id)
+    .maybeSingle();
+
+  const baseRole = staff?.base_role;
+  if (baseRole !== "super_admin" && baseRole !== "admin") {
+    throw new Error("신청서 삭제 권한이 없습니다. 슈퍼 관리자 또는 관리자만 가능합니다.");
+  }
+
+  const admin = createAdminClient();
+  const { error } = await admin
+    .from("applications")
+    .update({ status: "deleted" })
+    .eq("id", applicationId);
+
+  if (error) {
+    throw new Error("신청서 삭제 처리 중 오류가 발생했습니다: " + error.message);
+  }
+
+  revalidatePath("/admin/applications");
+  revalidatePath(`/admin/applications/${applicationId}`);
+}

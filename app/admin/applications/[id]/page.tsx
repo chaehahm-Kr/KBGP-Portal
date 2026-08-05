@@ -11,6 +11,7 @@ import {
   deleteReviewNote,
 } from "@/lib/application/review-note-actions";
 import { getSignedFileUrl } from "@/lib/files/storage";
+import { deleteApplicationAction } from "@/lib/application/actions";
 import ApplicationWorkspace from "@/components/application/application-workspace";
 
 export const metadata: Metadata = {
@@ -103,11 +104,14 @@ export default async function AdminApplicationDetailPage({
   const reviewNoteRows = reviewNotes ?? [];
   const canReview = await canReviewApplication(id, session.userId);
 
-  const { data: callerRoles } = await supabase
-    .from("staff_roles")
-    .select("role")
-    .eq("staff_id", session.userId);
-  const isSuperAdmin = (callerRoles ?? []).some((r) => r.role === "super_admin");
+  const { data: staff } = await supabase
+    .from("staff_members")
+    .select("base_role")
+    .eq("id", session.userId)
+    .maybeSingle();
+  const baseRole = staff?.base_role || "reviewer";
+  const isSuperAdmin = baseRole === "super_admin";
+  const canDelete = baseRole === "super_admin" || baseRole === "admin";
 
   const activityEntityIds = [id, ...linkRows.map((l) => l.id)];
   const { data: activityLogs } = await supabase
@@ -138,12 +142,14 @@ export default async function AdminApplicationDetailPage({
       activityLogRows={activityLogRows}
       canReview={canReview}
       isSuperAdmin={isSuperAdmin}
+      canDelete={canDelete}
       userId={session.userId}
       reviewAction={reviewApplicationProduct}
       assignAction={assignApplication.bind(null, id)}
       noteAddAction={addReviewNote.bind(null, id)}
       noteDeleteAction={deleteReviewNote}
       infoRequestAction={createInfoRequest.bind(null, id)}
+      deleteAction={deleteApplicationAction}
     />
   );
 }

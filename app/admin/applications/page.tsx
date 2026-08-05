@@ -19,6 +19,7 @@ const STATUS_OPTIONS: ApplicationStatus[] = [
   "on_hold",
   "rejected",
   "cancelled",
+  "deleted",
 ];
 
 const STATUS_BADGE_STYLE: Record<ApplicationStatus, string> = {
@@ -33,15 +34,16 @@ const STATUS_BADGE_STYLE: Record<ApplicationStatus, string> = {
   on_hold: "bg-zinc-100 text-zinc-800 dark:bg-zinc-800 dark:text-zinc-300",
   rejected: "bg-red-50 text-red-700 dark:bg-red-950/50 dark:text-red-300",
   cancelled: "bg-zinc-100 text-zinc-800 dark:bg-zinc-800 dark:text-zinc-300",
+  deleted: "bg-rose-50 text-rose-700 dark:bg-rose-950/50 dark:text-rose-300",
 };
 
 export default async function AdminApplicationsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string; company?: string }>;
+  searchParams: Promise<{ status?: string; company?: string; show_deleted?: string }>;
 }) {
   await verifyAdminSession();
-  const { status, company } = await searchParams;
+  const { status, company, show_deleted } = await searchParams;
   const supabase = await createClient();
 
   let query = supabase
@@ -52,6 +54,8 @@ export default async function AdminApplicationsPage({
 
   if (status) {
     query = query.eq("status", status);
+  } else if (show_deleted !== "true") {
+    query = query.neq("status", "deleted");
   }
 
   const { data: applications } = await query;
@@ -203,6 +207,19 @@ export default async function AdminApplicationsPage({
                 </option>
               ))}
             </select>
+          </div>
+
+          <div className="flex h-11 items-center gap-2 pl-2">
+            <label className="flex items-center gap-1.5 text-xs text-zinc-650 dark:text-zinc-400 font-semibold cursor-pointer select-none">
+              <input
+                type="checkbox"
+                name="show_deleted"
+                value="true"
+                defaultChecked={show_deleted === "true"}
+                className="cursor-pointer rounded border-zinc-300 accent-zinc-900 dark:accent-white"
+              />
+              <span>삭제 포함</span>
+            </label>
           </div>
 
           <div className="flex h-11 items-end">

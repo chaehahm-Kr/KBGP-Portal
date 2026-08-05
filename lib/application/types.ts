@@ -9,7 +9,8 @@ export type ApplicationStatus =
   | "approved"
   | "on_hold"
   | "rejected"
-  | "cancelled";
+  | "cancelled"
+  | "deleted";
 
 // 06_상태값정의.md 1번 신청 상태값
 export const APPLICATION_STATUS_LABEL: Record<ApplicationStatus, string> = {
@@ -24,6 +25,7 @@ export const APPLICATION_STATUS_LABEL: Record<ApplicationStatus, string> = {
   on_hold: "보류",
   rejected: "반려",
   cancelled: "취소",
+  deleted: "삭제",
 };
 
 export type ApplicationProductReviewStatus =
