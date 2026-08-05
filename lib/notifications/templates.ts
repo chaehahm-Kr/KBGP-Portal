@@ -64,12 +64,12 @@ export const DEFAULT_TEMPLATES: Record<
   review_result_approved: {
     description: "회사 담당자 — 심사 결과: 승인",
     subject: "[K SELECT NETWORK] {{applicationNumber}} 파트너십 승인 안내",
-    body: "안녕하세요, {{contactName}}님.\n\n축하드립니다! 제출해주신 [{{applicationNumber}}] 신청이 승인되었습니다.\n\n다음 단계인 미국 런칭 상담 예약 및 진행 일정을 곧 안내해 드리겠습니다.",
+    body: "안녕하세요, {{contactName}}님.\n\n축하드립니다! 제출해주신 [{{applicationNumber}}] 신청이 승인되었습니다.\n\n다음 단계 진행을 위해 아래 버튼을 클릭하여 브랜드사 전용 포털에 접속해 주시기 바랍니다.\n\n{{ctaButton}}\n\n포털 로그인 화면에서 계정을 생성한 후, 브랜드 정보와 참여를 희망하는 상품 정보를 등록해 주세요.\n\n미국 런칭 상담 예약 및 진행 일정을 포털 내에서 확인하실 수 있습니다.",
   },
   review_result_partial_approved: {
     description: "회사 담당자 — 심사 결과: 부분승인",
     subject: "[K SELECT NETWORK] {{applicationNumber}} 심사 결과 안내",
-    body: "안녕하세요, {{contactName}}님.\n\n제출해주신 [{{applicationNumber}}] 신청서에 포함된 제품 중 일부가 승인되었습니다.\n\n승인된 제품에 한해 다음 단계를 진행할 예정이며, 상세 내용은 포털에서 확인하실 수 있습니다.",
+    body: "안녕하세요, {{contactName}}님.\n\n제출해주신 [{{applicationNumber}}] 신청서에 포함된 제품 중 일부가 승인되었습니다.\n\n다음 단계 진행을 위해 아래 버튼을 클릭하여 브랜드사 전용 포털에 접속해 주시기 바랍니다.\n\n{{ctaButton}}\n\n승인된 제품에 한해 다음 단계를 진행할 예정이며, 상세 내용은 포털에서 확인하실 수 있습니다.",
   },
   review_result_on_hold: {
     description: "회사 담당자 — 심사 결과: 보류",
@@ -234,6 +234,8 @@ function buildCtaButtonHtml(variables: Record<string, string>) {
     buttonLabel = "포털에서 심사 진행하기";
   } else if (variables.key?.includes("info_request")) {
     buttonLabel = "추가 자료 제출하기";
+  } else if (variables.key === "review_result_approved" || variables.key === "review_result_partial_approved") {
+    buttonLabel = "브랜드사 포털 시작하기";
   }
 
   return `
