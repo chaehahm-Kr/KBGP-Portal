@@ -3,6 +3,7 @@
 import fs from "fs";
 import path from "path";
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
 import { verifyAdminSession } from "@/lib/auth/dal";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { publicEnv } from "@/lib/env/public";
@@ -336,11 +337,16 @@ export async function sendPortalInvitationAction(companyUserId: string) {
     throw new Error("초대 대기중인 사용자에게만 가입 요청을 보낼 수 있습니다.");
   }
 
+  const headersList = await headers();
+  const host = headersList.get("host") || "localhost:3010";
+  const protocol = host.startsWith("localhost") || host.startsWith("127.0.0.1") || host.startsWith("192.168.") ? "http" : "https";
+  const siteUrl = `${protocol}://${host}`;
+
   const { data: linkData, error: linkError } = await admin.auth.admin.generateLink({
     type: "invite",
     email: target.email,
     options: {
-      redirectTo: `${publicEnv.NEXT_PUBLIC_SITE_URL}/portal/invite/accept`,
+      redirectTo: `${siteUrl}/portal/invite/accept`,
     }
   });
 
