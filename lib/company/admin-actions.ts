@@ -337,24 +337,44 @@ export async function sendPortalInvitationAction(companyUserId: string) {
     throw new Error("초대 대기중인 사용자에게만 가입 요청을 보낼 수 있습니다.");
   }
 
+  const { data: authUser, error: authUserError } = await admin.auth.admin.getUserById(companyUserId);
+  if (authUserError || !authUser?.user) {
+    throw new Error("Auth 계정을 찾을 수 없습니다: " + (authUserError?.message || ""));
+  }
+
+  const isConfirmed = Boolean(authUser.user.email_confirmed_at);
+
   const headersList = await headers();
   const host = headersList.get("host") || "localhost:3010";
   const protocol = host.startsWith("localhost") || host.startsWith("127.0.0.1") || host.startsWith("192.168.") ? "http" : "https";
   const siteUrl = `${protocol}://${host}`;
 
-  const { data: linkData, error: linkError } = await admin.auth.admin.generateLink({
-    type: "invite",
-    email: target.email,
-    options: {
-      redirectTo: `${siteUrl}/portal/invite/accept`,
+  let inviteLink = "";
+  if (isConfirmed) {
+    const { data: linkData, error: linkError } = await admin.auth.admin.generateLink({
+      type: "recovery",
+      email: target.email,
+      options: {
+        redirectTo: `${siteUrl}/portal/invite/accept`,
+      }
+    });
+    if (linkError || !linkData?.properties?.action_link) {
+      throw new Error("가입 재요청 링크 생성 실패: " + (linkError?.message || ""));
     }
-  });
-
-  if (linkError || !linkData?.properties?.action_link) {
-    throw new Error("가입 초대 링크 생성 실패: " + (linkError?.message || ""));
+    inviteLink = linkData.properties.action_link;
+  } else {
+    const { data: linkData, error: linkError } = await admin.auth.admin.generateLink({
+      type: "invite",
+      email: target.email,
+      options: {
+        redirectTo: `${siteUrl}/portal/invite/accept`,
+      }
+    });
+    if (linkError || !linkData?.properties?.action_link) {
+      throw new Error("가입 초대 링크 생성 실패: " + (linkError?.message || ""));
+    }
+    inviteLink = linkData.properties.action_link;
   }
-
-  const inviteLink = linkData.properties.action_link;
 
   await sendTemplatedEmail("portal_signup_request", target.email, {
     contactName: target.name || "브랜드사 담당자",
