@@ -8,6 +8,14 @@ import { validateUploadedFile } from "@/lib/files/validate";
 
 export const runtime = "nodejs";
 
+const globalForVerifications = global as unknown as {
+  inMemoryVerifications?: Map<string, { code: string; expiresAt: Date; verified: boolean }>;
+};
+const inMemoryCache = globalForVerifications.inMemoryVerifications || new Map();
+if (!globalForVerifications.inMemoryVerifications) {
+  globalForVerifications.inMemoryVerifications = inMemoryCache;
+}
+
 // 마케팅 사이트(kselectnetwork.com) 신청서 접수 폼과 동일한 한도.
 // lib/application-form.ts(KBeautyWebsite/web)와 값이 반드시 같아야 한다 —
 // 그쪽이 이미 브라우저에서 이 한도로 걸러 보내므로, 여기서 값이 다르면
@@ -21,9 +29,14 @@ const productSchema = z.object({
   category: z.string().trim().min(1),
   priceKrw: z.string().optional().default(""),
   supplyPriceUsd: z.string().optional().default(""),
-  packageVolume: z.string().optional().default(""),
+  packageWidth: z.string().optional().default(""),
+  packageDepth: z.string().optional().default(""),
+  packageHeight: z.string().optional().default(""),
+  dimensionUnit: z.enum(["cm", "inch"]).optional().default("cm"),
   packageWeight: z.string().optional().default(""),
+  weightUnit: z.enum(["kg", "g", "lb"]).optional().default("g"),
   monthlyCapacity: z.string().optional().default(""),
+  leadTime: z.string().optional().default(""),
   note: z.string().optional().default(""),
 });
 
@@ -110,6 +123,47 @@ export async function POST(request: Request) {
   const input = result.data;
 
   const admin = createAdminClient();
+
+  // 이메일 인증 완료 여부 확인
+  const emailLower = input.email.trim().toLowerCase();
+  let isVerified = false;
+
+  try {
+    const { data: verifications, error: verifyError } = await admin
+      .from("email_verifications")
+      .select("id, verified, expires_at")
+      .eq("email", emailLower)
+      .eq("verified", true)
+      .order("created_at", { ascending: false })
+      .limit(1);
+
+    if (!verifyError && verifications && verifications.length > 0) {
+      const v = verifications[0];
+      const notExpired = new Date(v.expires_at) > new Date(Date.now() - 30 * 60 * 1000); // 30분 내
+      if (notExpired) {
+        isVerified = true;
+      }
+    }
+  } catch (dbError) {
+    console.warn("[inquiries] DB verification query failed, checking in-memory:", dbError);
+  }
+
+  if (!isVerified) {
+    const cached = inMemoryCache.get(emailLower);
+    if (cached && cached.verified) {
+      const notExpired = cached.expiresAt > new Date(Date.now() - 30 * 60 * 1000);
+      if (notExpired) {
+        isVerified = true;
+      }
+    }
+  }
+
+  if (!isVerified) {
+    return NextResponse.json(
+      { ok: false, errors: ["이메일 인증이 완료되지 않았습니다. 신청 전에 이메일 인증을 완료해 주세요."] },
+      { status: 400 }
+    );
+  }
 
   // 1. Supabase Auth로 포털 사용자 계정 생성 (이메일은 발송하지 않음)
   const { data: invited, error: inviteError } = await admin.auth.admin.createUser({
@@ -263,11 +317,13 @@ export async function POST(request: Request) {
     "바디/헤어": "hair_scalp",
     "웰니스 패치": "wellness_patch",
     "데일리 케어": "daily_care",
+    "기타": "daily_care",
     "Skincare": "skincare",
     "Hair & Scalp": "hair_scalp",
     "Beauty Tools": "beauty_tools",
     "Daily Care": "daily_care",
     "Wellness Patch": "wellness_patch",
+    "Other": "daily_care",
   };
 
   const MAX_FILES_PER_PRODUCT = 3;
@@ -278,6 +334,30 @@ export async function POST(request: Request) {
     const retailPrice = Number(p.priceKrw.replace(/[^0-9]/g, "")) || null;
     const cat = CATEGORY_MAP[p.category] || "skincare";
 
+    // 가로, 세로, 높이 단위 변환 (inch -> cm)
+    let widthNum = Number(p.packageWidth) || null;
+    let depthNum = Number(p.packageDepth) || null;
+    let heightNum = Number(p.packageHeight) || null;
+    if (p.dimensionUnit === "inch") {
+      if (widthNum !== null) widthNum = Number((widthNum * 2.54).toFixed(3));
+      if (depthNum !== null) depthNum = Number((depthNum * 2.54).toFixed(3));
+      if (heightNum !== null) heightNum = Number((heightNum * 2.54).toFixed(3));
+    }
+
+    // 무게 단위 변환 (kg, lb -> g)
+    let weightNum = Number(p.packageWeight) || null;
+    if (weightNum !== null) {
+      if (p.weightUnit === "kg") {
+        weightNum = Number((weightNum * 1000).toFixed(3));
+      } else if (p.weightUnit === "lb") {
+        weightNum = Number((weightNum * 453.59237).toFixed(3));
+      }
+    }
+
+    const formattedVolume = p.packageWidth && p.packageDepth && p.packageHeight
+      ? `${p.packageWidth}x${p.packageDepth}x${p.packageHeight} ${p.dimensionUnit}`
+      : null;
+
     const { data: product, error: prodError } = await admin
       .from("products")
       .insert({
@@ -285,10 +365,15 @@ export async function POST(request: Request) {
         company_id: company.id,
         name: p.name,
         category: cat,
-        volume: p.packageVolume || null,
+        volume: formattedVolume,
         estimated_retail_price: retailPrice,
         ingredients_text: p.note || null,
         status: "registered",
+        package_width: widthNum,
+        package_depth: depthNum,
+        package_height: heightNum,
+        package_weight: weightNum,
+        lead_time: p.leadTime || null,
       })
       .select("id")
       .single();
