@@ -9,10 +9,6 @@ const verificationSchema = z.object({
     .string()
     .trim()
     .min(1, "사업자등록번호를 입력해주세요."),
-  contactPhone: z
-    .string()
-    .trim()
-    .min(1, "담당자 연락처를 입력해주세요."),
   email: z
     .string()
     .trim()
@@ -26,16 +22,14 @@ export type VerificationResult =
   | { success: true; case: "D"; userId: string; companyName: string; contactName: string; email: string }; // Approved, ready to set password
 
 /**
- * 사업자등록번호, 연락처, 이메일을 기준으로 파트너십 신청서 및 가입 승인 상태를 검증합니다.
+ * 사업자등록번호와 이메일을 기준으로 파트너십 신청서 및 가입 승인 상태를 검증합니다.
  */
 export async function verifyPartnerApplicationAction(
   businessRegistrationNumber: string,
-  contactPhone: string,
   email: string
 ): Promise<VerificationResult> {
   const parsed = verificationSchema.safeParse({
     businessRegistrationNumber,
-    contactPhone,
     email,
   });
 
@@ -48,13 +42,12 @@ export async function verifyPartnerApplicationAction(
   }
 
   const sanitizedBrn = businessRegistrationNumber.replace(/[^0-9]/g, "");
-  const sanitizedPhone = contactPhone.replace(/[^0-9]/g, "");
 
   if (sanitizedBrn.length !== 10) {
     return {
       success: false,
       case: "A",
-      message: "사업자등록번호는 숫자 10자리여야 합니다. (예: 123-45-67890)",
+      message: "사업자등록번호는 숫자 10자리여야 합니다. (대시 없이 숫자만 입력)",
     };
   }
 
@@ -63,7 +56,7 @@ export async function verifyPartnerApplicationAction(
   // 1. 사업자번호가 일치하는 모든 회사 조회
   const { data: companies, error: companyError } = await admin
     .from("companies")
-    .select("id, name, contact_name, contact_phone")
+    .select("id, name, contact_name")
     .eq("business_registration_number", sanitizedBrn);
 
   if (companyError || !companies || companies.length === 0) {
@@ -74,25 +67,14 @@ export async function verifyPartnerApplicationAction(
     };
   }
 
-  // 2. 전화번호 숫자만 추출하여 일치하는 회사 매칭
-  const matchedCompany = companies.find((c) => {
-    const dbPhone = (c.contact_phone || "").replace(/[^0-9]/g, "");
-    return dbPhone === sanitizedPhone;
-  });
+  // 2. 일치하는 회사들의 ID 추출
+  const companyIds = companies.map((c) => c.id);
 
-  if (!matchedCompany) {
-    return {
-      success: false,
-      case: "A",
-      message: "입력하신 연락처와 일치하는 신청 내역을 찾을 수 없습니다. 신청 당시 기재한 연락처를 입력해 주세요.",
-    };
-  }
-
-  // 3. 회사에 소속된 사용자(신청자 계정) 조회
+  // 3. 해당 회사들에 소속된 사용자(신청자 계정) 조회
   const { data: users, error: userError } = await admin
     .from("company_users")
-    .select("id, name, email, status, invited_at, company_role")
-    .eq("company_id", matchedCompany.id);
+    .select("id, name, email, status, invited_at, company_role, company_id")
+    .in("company_id", companyIds);
 
   if (userError || !users || users.length === 0) {
     return {
@@ -102,7 +84,7 @@ export async function verifyPartnerApplicationAction(
     };
   }
 
-  // 입력한 이메일과 일치하는 사용자 매칭 (대소문자 구분 없음)
+  // 4. 입력한 이메일과 일치하는 사용자 매칭 (대소문자 구분 없음)
   const matchedUser = users.find((u) => u.email.toLowerCase() === email.toLowerCase());
 
   if (!matchedUser) {
@@ -113,6 +95,7 @@ export async function verifyPartnerApplicationAction(
     };
   }
 
+  const matchedCompany = companies.find((c) => c.id === matchedUser.company_id)!;
   const primaryUser = matchedUser;
 
   // Case C: 이미 가입 완료 상태인 경우

@@ -21,7 +21,6 @@ export function PortalVerificationSignup() {
 
   // Inputs
   const [brn, setBrn] = useState("");
-  const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [passwordConfirm, setPasswordConfirm] = useState("");
@@ -44,7 +43,7 @@ export function PortalVerificationSignup() {
     setPending(true);
 
     try {
-      const res = await verifyPartnerApplicationAction(brn, phone, email);
+      const res = await verifyPartnerApplicationAction(brn, email);
       setPending(false);
 
       if (res.success) {
@@ -127,27 +126,15 @@ export function PortalVerificationSignup() {
             <input
               id="brn"
               type="text"
-              placeholder="123-45-67890"
+              placeholder="1234567890"
               required
               value={brn}
               onChange={(e) => setBrn(e.target.value)}
               className={inputClass}
             />
-          </div>
-
-          <div>
-            <label htmlFor="phone" className={labelClass}>
-              담당자 연락처
-            </label>
-            <input
-              id="phone"
-              type="text"
-              placeholder="010-1234-5678"
-              required
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              className={inputClass}
-            />
+            <p className="mt-1.5 text-[11px] text-zinc-500 dark:text-zinc-400">
+              * 대시(-) 없이 숫자 10자리만 입력해 주세요.
+            </p>
           </div>
 
           <div>
