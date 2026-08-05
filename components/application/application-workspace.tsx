@@ -212,7 +212,7 @@ export default function ApplicationWorkspace({
             { id: "overview", label: "개요 (Overview)" },
             { id: "company", label: "회사 정보 (Company)" },
             { id: "products", label: "제품 및 심사 (Products)" },
-            { id: "documents", label: "자가진단 (Self-Check)" },
+            { id: "documents", label: "준비 사항 (Readiness)" },
             { id: "review", label: "채점 및 권고 (Scoring)" },
             { id: "communication", label: "의견/자료요청 (Communication)" },
             { id: "activity", label: "활동 이력 (History)" }
@@ -487,24 +487,9 @@ export default function ApplicationWorkspace({
 
         {activeTab === "documents" && (
           <div className="space-y-6">
-            {/* 자가진단 카드 */}
-            <div className="rounded-lg border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900 space-y-4">
-              <h2 className="text-sm font-bold text-zinc-900 dark:text-white">자가진단 응답 결과 (Self-Check)</h2>
-              <ul className="space-y-2 text-xs text-zinc-700 dark:text-zinc-300">
-                {SELF_CHECK_ITEMS.map((item, index) => (
-                  <li key={item} className="flex items-start gap-2 rounded border border-zinc-100 p-2.5 dark:border-zinc-800 bg-white dark:bg-zinc-950">
-                    <span className="text-sm shrink-0">
-                      {(application.self_check_answers as boolean[] | null)?.[index] ? "✅" : "⬜"}
-                    </span>
-                    <span className="self-center">{item}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-
             {/* 준비 사항 카드 */}
             <div className="rounded-lg border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900 space-y-4">
-              <h2 className="text-sm font-bold text-zinc-900 dark:text-white">프로그램 참여 준비 사항 (Readiness)</h2>
+              <h2 className="text-sm font-bold text-zinc-900 dark:text-white">준비 사항 (Readiness)</h2>
               {(() => {
                 const allowedKeys = [
                   "stable_supply",
@@ -536,21 +521,37 @@ export default function ApplicationWorkspace({
 
                 return (
                   <ul className="space-y-2 text-xs">
-                    {finalResponses.map((item) => (
-                      <li key={item.itemKey} className="flex items-start gap-2 rounded border border-zinc-100 p-2.5 dark:border-zinc-800 bg-white dark:bg-zinc-950">
-                        <span className="text-sm shrink-0">
-                          {item.response === "available" ? "🟢" : "🟡"}
-                        </span>
-                        <div className="self-center">
-                          <span className="font-semibold text-zinc-900 dark:text-zinc-200">
-                            {READINESS_ITEMS[item.itemKey] || item.itemKey}
+                    {finalResponses.map((item) => {
+                      const isAvailable = item.response === "available";
+                      return (
+                        <li
+                          key={item.itemKey}
+                          className={`flex items-start gap-3 rounded-lg border p-3.5 transition-all ${
+                            isAvailable
+                              ? "bg-emerald-50/50 border-emerald-100 text-emerald-800 dark:bg-emerald-950/15 dark:border-emerald-900/40 dark:text-emerald-350"
+                              : "bg-amber-50/50 border-amber-100 text-amber-800 dark:bg-amber-950/15 dark:border-amber-900/40 dark:text-amber-350"
+                          }`}
+                        >
+                          <span className="text-sm shrink-0">
+                            {isAvailable ? "🟢" : "🟡"}
                           </span>
-                          <span className="ml-2 text-[10px] text-zinc-400 dark:text-zinc-500">
-                            — {item.response === "available" ? "진행 가능" : "협의 필요"}
-                          </span>
-                        </div>
-                      </li>
-                    ))}
+                          <div className="flex-1 self-center flex items-center justify-between gap-4">
+                            <span className="font-bold text-zinc-900 dark:text-zinc-200">
+                              {READINESS_ITEMS[item.itemKey] || item.itemKey}
+                            </span>
+                            <span
+                              className={`rounded px-2.5 py-0.5 text-[10px] font-extrabold tracking-wide uppercase ${
+                                isAvailable
+                                  ? "bg-emerald-100/80 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300"
+                                  : "bg-amber-100/80 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300"
+                              }`}
+                            >
+                              {isAvailable ? "진행 가능" : "협의 필요"}
+                            </span>
+                          </div>
+                        </li>
+                      );
+                    })}
                   </ul>
                 );
               })()}

@@ -29,7 +29,7 @@ export default async function AdminApplicationDetailPage({
   const { data: application } = await supabase
     .from("applications")
     .select(
-      "id, application_number, status, company_id, motivation_note, self_check_answers, submitted_at"
+      "id, application_number, status, company_id, motivation_note, self_check_answers, eligibility_responses, submitted_at"
     )
     .eq("id", id)
     .single();
