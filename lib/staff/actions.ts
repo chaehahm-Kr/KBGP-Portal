@@ -142,6 +142,7 @@ export async function inviteStaffMemberAction(
       to: email,
       subject,
       html,
+      text: "K SELECT NETWORK 관리자 포털 초대 메일입니다.",
     });
   } catch (e) {
     console.error("Failed to send invitation email:", e);
@@ -520,6 +521,7 @@ export async function resetStaffPasswordAction(targetId: string, reason: string)
       to: staff.email,
       subject,
       html,
+      text: "K SELECT NETWORK 관리자 비밀번호 초기화 안내 메일입니다.",
     });
   } catch (e) {
     console.error("Failed to send reset email:", e);
@@ -587,6 +589,7 @@ export async function reinviteStaffAction(targetId: string) {
       to: staff.email,
       subject,
       html,
+      text: "K SELECT NETWORK 관리자 포털 초대 재발송 메일입니다.",
     });
   } catch (e) {
     console.error("Failed to resend invitation email:", e);

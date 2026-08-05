@@ -5,6 +5,7 @@ import {
   type StaffRole, 
   type StaffStatus, 
   type StaffMenuPermissions,
+  type MenuActionPermissions,
   STAFF_ROLE_LABEL,
   STAFF_STATUS_LABEL,
   DEFAULT_ROLE_PERMISSIONS
@@ -558,7 +559,7 @@ export function StaffWorkspace({
                       <button
                         key={staff.id}
                         type="button"
-                        onClick={() => setSelectedKey(staff.id)} // setSelectedKey is bound via state
+                        onClick={() => setSelectedStaffId(staff.id)} // setSelectedStaffId is bound via state
                         className={`w-full text-left p-2.5 rounded-lg border transition-all cursor-pointer ${
                           isSelected
                             ? "bg-zinc-950 border-zinc-950 text-white dark:bg-white dark:border-white dark:text-zinc-950 font-bold shadow-sm"

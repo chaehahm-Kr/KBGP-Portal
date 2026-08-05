@@ -23,10 +23,10 @@ export function CreateInfoRequestForm({
   return (
     <form
       action={formAction}
-      className="space-y-3 rounded-md border border-zinc-200 p-4"
+      className="space-y-3 rounded-md border border-zinc-200 dark:border-zinc-800 p-4"
     >
       <div>
-        <label className="block text-sm font-medium text-zinc-700">
+        <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
           대상 (선택하지 않으면 신청서 전체 대상)
         </label>
         <select
@@ -43,7 +43,7 @@ export function CreateInfoRequestForm({
         </select>
       </div>
       <div>
-        <label className="block text-sm font-medium text-zinc-700">
+        <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
           요청 내용
         </label>
         <textarea
@@ -61,7 +61,7 @@ export function CreateInfoRequestForm({
       <button
         type="submit"
         disabled={pending}
-        className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-800 disabled:opacity-50"
+        className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-800 disabled:opacity-50 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-100"
       >
         {pending ? "전송 중..." : "추가 자료 요청 보내기"}
       </button>

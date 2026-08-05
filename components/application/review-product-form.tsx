@@ -36,11 +36,11 @@ export function ReviewProductForm({
   return (
     <form
       action={formAction}
-      className="rounded-md border border-zinc-200 p-4"
+      className="rounded-md border border-zinc-200 dark:border-zinc-800 p-4"
     >
       <div className="flex items-center justify-between">
-        <p className="text-sm font-medium text-zinc-900">{productName}</p>
-        <span className="text-xs text-zinc-500">
+        <p className="text-sm font-medium text-zinc-900 dark:text-white">{productName}</p>
+        <span className="text-xs text-zinc-500 dark:text-zinc-400">
           현재: {REVIEW_STATUS_LABEL[currentStatus]}
         </span>
       </div>
@@ -65,19 +65,19 @@ export function ReviewProductForm({
           defaultValue={currentReason ?? ""}
           placeholder="보류·반려 시 사유 필수"
           disabled={disabled}
-          className="min-w-[240px] flex-1 rounded-md border border-zinc-300 px-3 py-1.5 text-sm disabled:opacity-50"
+          className="min-w-[240px] flex-1 rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-sm text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white outline-none focus:border-zinc-500 dark:focus:border-zinc-700 disabled:opacity-50"
         />
         <button
           type="submit"
           disabled={pending || disabled}
-          className="rounded-md bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-zinc-800 disabled:opacity-50"
+          className="rounded-md bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-zinc-800 disabled:opacity-50 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-100"
         >
           {pending ? "저장 중..." : "저장"}
         </button>
       </div>
 
       {disabled && (
-        <p className="mt-2 text-xs text-zinc-500">
+        <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
           배정된 담당자만 이 신청서를 심사할 수 있습니다.
         </p>
       )}

@@ -223,7 +223,7 @@ export default function ApplicationWorkspace({
               className={`border-b-2 px-4 py-2.5 transition-colors ${
                 activeTab === tab.id
                   ? "border-zinc-900 text-zinc-900 dark:border-white dark:text-white font-bold"
-                  : "border-transparent text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300"
+                  : "border-transparent text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-200"
               }`}
             >
               {tab.label}
@@ -316,17 +316,17 @@ export default function ApplicationWorkspace({
                       href={parsedMeta.website.startsWith("http") ? parsedMeta.website : `https://${parsedMeta.website}`}
                       target="_blank"
                       rel="noreferrer"
-                      className="font-bold text-indigo-650 hover:underline underline-offset-2"
+                      className="font-bold text-indigo-600 dark:text-indigo-400 hover:underline underline-offset-2"
                     >
                       {parsedMeta.website} ↗
                     </a>
                   ) : (
-                    <span className="text-zinc-400">-</span>
+                    <span className="text-zinc-400 dark:text-zinc-500">-</span>
                   )}</p>
                   {parsedMeta.description && (
                     <div>
                       <span className="block text-[10px] text-zinc-400 dark:text-zinc-500 font-bold mb-1">회사 소개</span>
-                      <p className="text-[11px] leading-relaxed text-zinc-655 dark:text-zinc-350 bg-zinc-50 dark:bg-zinc-950 p-2 rounded border border-zinc-100 dark:border-zinc-850 whitespace-pre-wrap">{parsedMeta.description}</p>
+                      <p className="text-[11px] leading-relaxed text-zinc-600 dark:text-zinc-300 bg-zinc-50 dark:bg-zinc-950 p-2 rounded border border-zinc-200 dark:border-zinc-800 whitespace-pre-wrap">{parsedMeta.description}</p>
                     </div>
                   )}
                 </div>
@@ -339,9 +339,9 @@ export default function ApplicationWorkspace({
                 회사 소속 담당자 및 포털 가입 계정 (Contacts & Portal Users)
               </h2>
               <div className="overflow-x-auto">
-                <table className="w-full border-collapse text-left text-xs text-zinc-500 dark:text-zinc-455">
+                <table className="w-full border-collapse text-left text-xs text-zinc-500 dark:text-zinc-400">
                   <thead>
-                    <tr className="border-b border-zinc-150 bg-zinc-50 font-bold text-zinc-955 dark:border-zinc-850 dark:bg-zinc-900/50 dark:text-white">
+                    <tr className="border-b border-zinc-200 bg-zinc-50 font-bold text-zinc-900 dark:border-zinc-800 dark:bg-zinc-900/50 dark:text-white">
                       <th className="px-4 py-2 font-semibold">이름</th>
                       <th className="px-4 py-2 font-semibold">부서 / 직함</th>
                       <th className="px-4 py-2 font-semibold">이메일</th>
@@ -369,24 +369,24 @@ export default function ApplicationWorkspace({
                             ? `${user.position || ""} ${user.title ? `(${user.title})` : ""}`
                             : "-"}
                         </td>
-                        <td className="px-4 py-2.5 text-zinc-600 dark:text-zinc-455 font-mono">{user.email}</td>
-                        <td className="px-4 py-2.5 text-zinc-650 dark:text-zinc-455 font-mono">{user.phone || "-"}</td>
+                        <td className="px-4 py-2.5 text-zinc-600 dark:text-zinc-400 font-mono">{user.email}</td>
+                        <td className="px-4 py-2.5 text-zinc-600 dark:text-zinc-400 font-mono">{user.phone || "-"}</td>
                         <td className="px-4 py-2.5 text-zinc-700 dark:text-zinc-300 font-semibold">
                           {user.company_role === "company_admin" ? "관리자 (Admin)" : "담당자 (Staff)"}
                         </td>
                         <td className="px-4 py-2.5 text-[10px] text-zinc-500 dark:text-zinc-400">
                           {user.permissions ? (
                             <div className="flex flex-wrap gap-1">
-                              <span className="bg-zinc-50 border border-zinc-100 px-1 py-0.5 rounded dark:bg-zinc-800 dark:border-zinc-750">
+                              <span className="bg-zinc-50 border border-zinc-100 px-1 py-0.5 rounded dark:bg-zinc-800 dark:border-zinc-700">
                                 신청서:{user.permissions.application === "read_write" ? "쓰기" : user.permissions.application === "read_only" ? "읽기" : "없음"}
                               </span>
-                              <span className="bg-zinc-50 border border-zinc-100 px-1 py-0.5 rounded dark:bg-zinc-800 dark:border-zinc-750">
+                              <span className="bg-zinc-50 border border-zinc-100 px-1 py-0.5 rounded dark:bg-zinc-800 dark:border-zinc-700">
                                 브랜드:{user.permissions.brands === "read_write" ? "쓰기" : user.permissions.brands === "read_only" ? "읽기" : "없음"}
                               </span>
-                              <span className="bg-zinc-50 border border-zinc-100 px-1 py-0.5 rounded dark:bg-zinc-800 dark:border-zinc-750">
+                              <span className="bg-zinc-50 border border-zinc-100 px-1 py-0.5 rounded dark:bg-zinc-800 dark:border-zinc-700">
                                 제품:{user.permissions.products === "read_write" ? "쓰기" : user.permissions.products === "read_only" ? "읽기" : "없음"}
                               </span>
-                              <span className="bg-zinc-50 border border-zinc-100 px-1 py-0.5 rounded dark:bg-zinc-800 dark:border-zinc-750">
+                              <span className="bg-zinc-50 border border-zinc-100 px-1 py-0.5 rounded dark:bg-zinc-800 dark:border-zinc-700">
                                 회사:{user.permissions.company_info === "read_write" ? "쓰기" : user.permissions.company_info === "read_only" ? "읽기" : "없음"}
                               </span>
                             </div>
@@ -440,7 +440,7 @@ export default function ApplicationWorkspace({
             <h2 className="text-sm font-bold text-zinc-900 dark:text-white">신청 제품 리스트 및 심사</h2>
             <div className="space-y-4">
               {linkRows.map((link) => (
-                <div key={link.id} className="rounded border border-zinc-150 p-4 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/50">
+                <div key={link.id} className="rounded border border-zinc-200 p-4 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/50">
                   <ReviewProductForm
                     action={reviewAction.bind(null, link.id, application.id)}
                     productName={productNameById.get(link.product_id) ?? "(삭제된 제품)"}
@@ -459,10 +459,10 @@ export default function ApplicationWorkspace({
                           }`} />
                           <div className="flex flex-wrap items-center gap-1.5">
                             <span className={`font-semibold ${
-                              event.status === "approved" ? "text-emerald-600 dark:text-emerald-450" :
-                              event.status === "rejected" ? "text-rose-600 dark:text-rose-450" :
-                              event.status === "on_hold" ? "text-amber-600 dark:text-amber-450" :
-                              "text-zinc-700 dark:text-zinc-350"
+                              event.status === "approved" ? "text-emerald-600 dark:text-emerald-400" :
+                              event.status === "rejected" ? "text-rose-600 dark:text-rose-400" :
+                              event.status === "on_hold" ? "text-amber-600 dark:text-amber-400" :
+                              "text-zinc-700 dark:text-zinc-300"
                             }`}>
                               [{event.label}]
                             </span>
@@ -471,7 +471,7 @@ export default function ApplicationWorkspace({
                             </span>
                           </div>
                           {event.reason && (
-                            <p className="mt-0.5 pl-3 text-xs text-zinc-650 dark:text-zinc-400 italic">
+                            <p className="mt-0.5 pl-3 text-xs text-zinc-600 dark:text-zinc-400 italic">
                               ↳ 사유: {event.reason}
                             </p>
                           )}

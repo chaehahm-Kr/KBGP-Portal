@@ -212,7 +212,7 @@ export default async function ApplicationDetailPage({
       case "approved":
         return "text-emerald-600 dark:text-emerald-400";
       case "rejected":
-        return "text-rose-600 dark:text-rose-450";
+        return "text-rose-600 dark:text-rose-400";
       case "under_review":
         return "text-blue-600 dark:text-blue-400";
       default:
@@ -251,9 +251,9 @@ export default async function ApplicationDetailPage({
             {pendingRequests.map((request) => (
               <div key={request.id} className="pt-4 first:pt-0 space-y-2">
                 <p className="text-xs text-zinc-700 dark:text-zinc-300 font-medium">
-                  <span className="text-amber-700 dark:text-amber-450">[요청 사항]</span> {request.request_content}
+                  <span className="text-amber-700 dark:text-amber-400">[요청 사항]</span> {request.request_content}
                 </p>
-                <div className="bg-white dark:bg-zinc-950 rounded-lg p-4 border border-zinc-150 dark:border-zinc-800">
+                <div className="bg-white dark:bg-zinc-950 rounded-lg p-4 border border-zinc-200 dark:border-zinc-800">
                   <ReplyInfoRequestForm
                     action={replyToInfoRequest.bind(null, request.id, application.id)}
                   />
@@ -293,18 +293,18 @@ export default async function ApplicationDetailPage({
                           {getProductHistory(link.id).map((event, idx) => (
                             <div key={idx} className="relative text-[11px] text-zinc-500 dark:text-zinc-400">
                               <div className={`absolute -left-[14px] top-1.5 h-1.5 w-1.5 rounded-full ${
-                                idx === 0 ? "bg-emerald-500 dark:bg-emerald-450" : "bg-zinc-300 dark:bg-zinc-700"
+                                idx === 0 ? "bg-emerald-500 dark:bg-emerald-500" : "bg-zinc-300 dark:bg-zinc-700"
                               }`} />
                               <div className="flex flex-wrap items-center gap-1.5">
                                 <span className={`font-semibold ${
                                   event.status === "approved" ? "text-emerald-600 dark:text-emerald-400" :
-                                  event.status === "rejected" ? "text-rose-600 dark:text-rose-450" :
-                                  event.status === "on_hold" ? "text-amber-600 dark:text-amber-450" :
+                                  event.status === "rejected" ? "text-rose-600 dark:text-rose-400" :
+                                  event.status === "on_hold" ? "text-amber-600 dark:text-amber-400" :
                                   "text-zinc-700 dark:text-zinc-300"
                                 }`}>
                                   [{event.label}]
                                 </span>
-                                <span className="font-mono text-[10px] text-zinc-450 dark:text-zinc-500">
+                                <span className="font-mono text-[10px] text-zinc-500 dark:text-zinc-400">
                                   {event.time}
                                 </span>
                               </div>
@@ -337,7 +337,7 @@ export default async function ApplicationDetailPage({
                 {repliedRequests.map((request, i) => (
                   <div key={request.id} className="rounded-lg border border-zinc-100 bg-zinc-50/20 p-4 dark:border-zinc-800 dark:bg-zinc-900/40 text-xs space-y-3">
                     <div className="space-y-1">
-                      <p className="font-bold text-amber-700 dark:text-amber-450">[요청]</p>
+                      <p className="font-bold text-amber-700 dark:text-amber-400">[요청]</p>
                       <p className="text-zinc-800 dark:text-zinc-300">{request.request_content}</p>
                     </div>
                     <div className="border-t border-zinc-100 dark:border-zinc-800 pt-3 space-y-1 bg-white dark:bg-zinc-950 p-3 rounded border">
@@ -349,7 +349,7 @@ export default async function ApplicationDetailPage({
                             href={repliedAttachmentUrls[i]!}
                             target="_blank"
                             rel="noreferrer"
-                            className="inline-flex items-center gap-1 font-semibold text-zinc-900 dark:text-white underline underline-offset-2 hover:text-zinc-650"
+                            className="inline-flex items-center gap-1 font-semibold text-zinc-900 dark:text-white underline underline-offset-2 hover:text-zinc-700 dark:hover:text-zinc-300"
                           >
                             📎 첨부파일 보기
                           </a>
@@ -372,7 +372,7 @@ export default async function ApplicationDetailPage({
             <h2 className="text-sm font-bold text-zinc-900 dark:text-white border-b border-zinc-100 pb-3 dark:border-zinc-850">
               참여 조건 자가진단 결과
             </h2>
-            <ul className="mt-4 space-y-3 text-xs text-zinc-600 dark:text-zinc-450">
+            <ul className="mt-4 space-y-3 text-xs text-zinc-600 dark:text-zinc-400">
               {SELF_CHECK_ITEMS.map((item, index) => {
                 const isChecked = (application.self_check_answers as boolean[] | null)?.[index];
                 return (

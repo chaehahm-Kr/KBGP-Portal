@@ -25,7 +25,7 @@ export function AssignApplicationForm({
   return (
     <form action={formAction} className="flex flex-wrap items-end gap-3">
       <div>
-        <label className="block text-sm font-medium text-zinc-700">담당자</label>
+        <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">담당자</label>
         <select
           name="staffId"
           defaultValue={currentStaffId ?? ""}
@@ -42,18 +42,18 @@ export function AssignApplicationForm({
         </select>
       </div>
       <div className="flex-1">
-        <label className="block text-sm font-medium text-zinc-700">
+        <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
           배정 사유 (선택)
         </label>
         <input
           name="reason"
-          className="mt-1 block w-full rounded-md border border-zinc-300 px-3 py-1.5 text-sm"
+          className="mt-1 block w-full rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-sm text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white outline-none focus:border-zinc-500 dark:focus:border-zinc-700"
         />
       </div>
       <button
         type="submit"
         disabled={pending}
-        className="rounded-md bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-zinc-800 disabled:opacity-50"
+        className="rounded-md bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-zinc-800 disabled:opacity-50 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-100"
       >
         {pending ? "배정 중..." : "배정"}
       </button>
