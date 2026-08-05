@@ -114,3 +114,24 @@ export async function sendTestEmail(
 function render(template: string, variables: Record<string, string>) {
   return template.replace(/\{\{(\w+)\}\}/g, (_match, name) => variables[name] ?? "");
 }
+
+/**
+ * 실시간 이메일 템플릿 미리보기용 HTML을 렌더링하여 반환합니다.
+ */
+export async function getEmailPreviewHtml(
+  key: string,
+  subjectTemplate: string,
+  bodyTemplate: string
+): Promise<{ success: boolean; html: string; error?: string }> {
+  try {
+    await requireSuperAdmin();
+    const { renderEmailHtml } = await import("@/lib/notifications/templates");
+    const { html } = renderEmailHtml(subjectTemplate, bodyTemplate, {
+      ...SAMPLE_VARIABLES,
+      key,
+    });
+    return { success: true, html };
+  } catch (e) {
+    return { success: false, html: "", error: e instanceof Error ? e.message : "미리보기 생성에 실패했습니다." };
+  }
+}
