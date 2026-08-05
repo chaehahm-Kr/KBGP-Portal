@@ -13,6 +13,10 @@ const verificationSchema = z.object({
     .string()
     .trim()
     .min(1, "담당자 연락처를 입력해주세요."),
+  email: z
+    .string()
+    .trim()
+    .email("올바른 이메일 형식이 아닙니다."),
 });
 
 export type VerificationResult =
@@ -22,15 +26,17 @@ export type VerificationResult =
   | { success: true; case: "D"; userId: string; companyName: string; contactName: string; email: string }; // Approved, ready to set password
 
 /**
- * 사업자등록번호와 연락처를 기준으로 파트너십 신청서 및 가입 승인 상태를 검증합니다.
+ * 사업자등록번호, 연락처, 이메일을 기준으로 파트너십 신청서 및 가입 승인 상태를 검증합니다.
  */
 export async function verifyPartnerApplicationAction(
   businessRegistrationNumber: string,
-  contactPhone: string
+  contactPhone: string,
+  email: string
 ): Promise<VerificationResult> {
   const parsed = verificationSchema.safeParse({
     businessRegistrationNumber,
     contactPhone,
+    email,
   });
 
   if (!parsed.success) {
@@ -96,16 +102,18 @@ export async function verifyPartnerApplicationAction(
     };
   }
 
-  // 대표 관리자(company_admin)를 우선 찾고, 없으면 첫 번째 사용자 선택
-  const primaryUser = users.find((u) => u.company_role === "company_admin") || users[0];
+  // 입력한 이메일과 일치하는 사용자 매칭 (대소문자 구분 없음)
+  const matchedUser = users.find((u) => u.email.toLowerCase() === email.toLowerCase());
 
-  if (!primaryUser) {
+  if (!matchedUser) {
     return {
       success: false,
       case: "A",
-      message: "담당자 정보를 식별할 수 없습니다.",
+      message: "입력하신 이메일과 일치하는 담당자 계정을 찾을 수 없습니다. 신청 당시 기재한 이메일을 입력해 주세요.",
     };
   }
+
+  const primaryUser = matchedUser;
 
   // Case C: 이미 가입 완료 상태인 경우
   if (primaryUser.status === "active") {

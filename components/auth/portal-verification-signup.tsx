@@ -22,6 +22,7 @@ export function PortalVerificationSignup() {
   // Inputs
   const [brn, setBrn] = useState("");
   const [phone, setPhone] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [passwordConfirm, setPasswordConfirm] = useState("");
 
@@ -43,7 +44,7 @@ export function PortalVerificationSignup() {
     setPending(true);
 
     try {
-      const res = await verifyPartnerApplicationAction(brn, phone);
+      const res = await verifyPartnerApplicationAction(brn, phone, email);
       setPending(false);
 
       if (res.success) {
@@ -145,6 +146,21 @@ export function PortalVerificationSignup() {
               required
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
+              className={inputClass}
+            />
+          </div>
+
+          <div>
+            <label htmlFor="email" className={labelClass}>
+              이메일 주소
+            </label>
+            <input
+              id="email"
+              type="email"
+              placeholder="example@kselectnetwork.com"
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
               className={inputClass}
             />
           </div>
