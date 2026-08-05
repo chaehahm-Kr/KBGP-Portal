@@ -1,5 +1,11 @@
 -- 0033_pricing_profitability.sql — 가격 및 수익성 분석(Pricing & Profitability) 모듈 테이블 스키마 및 기본 데이터 구축
 
+-- 0. 테이블 락(Lock) 세션 강제 정리
+SELECT pg_terminate_backend(pid) 
+FROM pg_stat_activity 
+WHERE pid <> pg_backend_pid() 
+  AND (query LIKE '%pricing%' OR query LIKE '%calculations%');
+
 -- 이전 불완전 생성 테이블 청소 (Drop Cascade)
 DROP TABLE IF EXISTS public.pricing_scenario_logs CASCADE;
 DROP TABLE IF EXISTS public.pricing_calculations CASCADE;
