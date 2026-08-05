@@ -41,14 +41,21 @@ export async function verifyPartnerApplicationAction(
     };
   }
 
-  const sanitizedBrn = businessRegistrationNumber.replace(/[^0-9]/g, "");
+  const sanitizedBrn = businessRegistrationNumber.replace(/[^a-zA-Z0-9]/g, "");
 
-  if (sanitizedBrn.length !== 10) {
+  if (!sanitizedBrn) {
     return {
       success: false,
       case: "A",
-      message: "사업자등록번호는 숫자 10자리여야 합니다. (대시 없이 숫자만 입력)",
+      message: "사업자등록번호를 입력해주세요.",
     };
+  }
+
+  // 검색 후보군: 대시 제거된 상태, 원본 상태, 그리고 한국 사업자번호(10자리) 형식인 경우 하이픈 포맷도 추가
+  const candidates = [businessRegistrationNumber.trim(), sanitizedBrn];
+  if (sanitizedBrn.length === 10 && /^\d+$/.test(sanitizedBrn)) {
+    const formattedKoreanBrn = `${sanitizedBrn.slice(0, 3)}-${sanitizedBrn.slice(3, 5)}-${sanitizedBrn.slice(5)}`;
+    candidates.push(formattedKoreanBrn);
   }
 
   const admin = createAdminClient();
@@ -57,7 +64,7 @@ export async function verifyPartnerApplicationAction(
   const { data: companies, error: companyError } = await admin
     .from("companies")
     .select("id, name, contact_name")
-    .eq("business_registration_number", sanitizedBrn);
+    .in("business_registration_number", candidates);
 
   if (companyError || !companies || companies.length === 0) {
     return {

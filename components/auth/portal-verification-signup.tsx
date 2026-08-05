@@ -126,14 +126,14 @@ export function PortalVerificationSignup() {
             <input
               id="brn"
               type="text"
-              placeholder="1234567890"
+              placeholder="사업자등록번호 (대시 없이 입력)"
               required
               value={brn}
               onChange={(e) => setBrn(e.target.value)}
               className={inputClass}
             />
             <p className="mt-1.5 text-[11px] text-zinc-500 dark:text-zinc-400">
-              * 대시(-) 없이 숫자 10자리만 입력해 주세요.
+              * 사업자등록번호는 대시(-) 없이 입력해 주세요.
             </p>
           </div>
 
