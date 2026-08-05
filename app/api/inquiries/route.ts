@@ -11,10 +11,10 @@ export const runtime = "nodejs";
 const globalForVerifications = global as unknown as {
   inMemoryVerifications?: Map<string, { code: string; expiresAt: Date; verified: boolean }>;
 };
-const inMemoryCache = globalForVerifications.inMemoryVerifications || new Map();
 if (!globalForVerifications.inMemoryVerifications) {
-  globalForVerifications.inMemoryVerifications = inMemoryCache;
+  globalForVerifications.inMemoryVerifications = new Map();
 }
+const inMemoryCache = globalForVerifications.inMemoryVerifications;
 
 // 마케팅 사이트(kselectnetwork.com) 신청서 접수 폼과 동일한 한도.
 // lib/application-form.ts(KBeautyWebsite/web)와 값이 반드시 같아야 한다 —

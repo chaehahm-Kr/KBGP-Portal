@@ -9,10 +9,10 @@ export const runtime = "nodejs";
 const globalForVerifications = global as unknown as {
   inMemoryVerifications?: Map<string, { code: string; expiresAt: Date; verified: boolean }>;
 };
-const inMemoryCache = globalForVerifications.inMemoryVerifications || new Map();
 if (!globalForVerifications.inMemoryVerifications) {
-  globalForVerifications.inMemoryVerifications = inMemoryCache;
+  globalForVerifications.inMemoryVerifications = new Map();
 }
+const inMemoryCache = globalForVerifications.inMemoryVerifications;
 
 export async function POST(request: Request) {
   // 1. 공유 시크릿 인증 확인 (마케팅 사이트로부터의 위임 요청 검증)
