@@ -19,7 +19,7 @@ import {
 } from "@/lib/pricing/actions";
 
 interface Props {
-  activeSubTab: "calculator" | "landed_cost"; // 부모 pricing-client.tsx 로부터 탭 분기 획득
+  activeSubTab: "calculator" | "landed_cost"; 
   presets: any[];
   scenarios: any[];
   settings: ScenarioGroupStructure[];
@@ -36,35 +36,36 @@ export function CalculatorTab({ activeSubTab, presets, scenarios, settings: init
   const [channel, setChannel] = useState<"b2b" | "amazon" | "both">("b2b");
   
   const [currency, setCurrency] = useState<"KRW" | "USD">("USD");
-  const [exchangeRate, setExchangeRate] = useState<number>(1425); // 현실화된 기본 임시 환율 적용
+  const [exchangeRate, setExchangeRate] = useState<number>(1425); 
   const [exchangeRateDate, setExchangeRateDate] = useState<string>(new Date().toISOString().split("T")[0]);
   const [exchangeRateSource, setExchangeRateSource] = useState<string>("Automatic");
   const [isManualRate, setIsManualRate] = useState<boolean>(false);
   const [rateWarning, setRateWarning] = useState<string | null>(null);
 
-  // 기본 공급가 및 제품 연계
-  const [supplierUnitPrice, setSupplierUnitPrice] = useState<number>(3.50); // FOB 기본 $3.50
+  // [개선 완료]: USD / KRW 동시 실시간 양방향 동기화를 위한 독립적인 입력 스트링 상태 정의
+  const [supplierPriceUSDStr, setSupplierPriceUSDStr] = useState<string>("3.50");
+  const [supplierPriceKRWStr, setSupplierPriceKRWStr] = useState<string>("4988"); 
+
+  const [supplierUnitPrice, setSupplierUnitPrice] = useState<number>(3.50); 
   const [selectedProductId, setSelectedProductId] = useState<string>("");
   const [selectedPresetId, setSelectedPresetId] = useState<string>(presets[0]?.id || "legacy");
   
-  // 모드별 추가 입력
+  // B2B 요율 조율
   const [b2bPriceMode, setB2bPriceMode] = useState<"retail_based" | "wholesale_based">("retail_based");
   const [proposedMSRP, setProposedMSRP] = useState<number>(15.00);
   const [wholesalePrice, setWholesalePrice] = useState<number>(7.50);
   const [amazonListPrice, setAmazonListPrice] = useState<number>(14.99);
-  const [retailerTargetMargin, setRetailerTargetMargin] = useState<number>(50); // 기본 50%
+  const [retailerTargetMargin, setRetailerTargetMargin] = useState<number>(50); 
   
   // Target Pricing용 목표 지표
   const [targetMetric, setTargetMetric] = useState<"net_margin" | "gross_margin" | "contribution_margin">("net_margin");
-  const [targetValue, setTargetValue] = useState<number>(15); // 목표 순이익률 15%
+  const [targetValue, setTargetValue] = useState<number>(15); 
 
-  // 상세/오버라이드 항목들
+  // 상세/오버라이드
   const [fbaFeeSource, setFbaFeeSource] = useState<string>("scenario_default");
   const [overrides, setOverrides] = useState<Record<string, number>>({});
   
-  // -----------------------------------------------------------------------------
   // [기본값 설정] 개별 패키지 정보 기본값 (6 x 4 x 15cm / 100g) 선 대입
-  // -----------------------------------------------------------------------------
   const [lengthCmStr, setLengthCmStr] = useState<string>("6");
   const [lengthInStr, setLengthInStr] = useState<string>("2.36");
   const [widthCmStr, setWidthCmStr] = useState<string>("4");
@@ -76,7 +77,6 @@ export function CalculatorTab({ activeSubTab, presets, scenarios, settings: init
   const [weightKgStr, setWeightKgStr] = useState<string>("0.100");
   const [weightLbStr, setWeightLbStr] = useState<string>("0.220");
 
-  // 실제 연산에 투입될 Canonical Metric 수치 상태 (초기 기본값 대입)
   const [canonicalLengthCm, setCanonicalLengthCm] = useState<number | undefined>(6.0);
   const [canonicalWidthCm, setCanonicalWidthCm] = useState<number | undefined>(4.0);
   const [canonicalHeightCm, setCanonicalHeightCm] = useState<number | undefined>(15.0);
@@ -85,14 +85,14 @@ export function CalculatorTab({ activeSubTab, presets, scenarios, settings: init
   const [preferredDimUnit, setPreferredDimUnit] = useState<"cm" | "in">("cm");
   const [preferredWeightUnit, setPreferredWeightUnit] = useState<"g" | "kg" | "lb">("g");
 
-  // B. 수입 가정 상태
+  // B. 수입 가정
   const [importQuantity, setImportQuantity] = useState<number>(1000);
   const [maxCartonWeight, setMaxCartonWeight] = useState<number>(25.0);
   const [emptyCartonWeight, setEmptyCartonWeight] = useState<number>(1.0);
   const [cartonAllowance, setCartonAllowance] = useState<number>(1.5);
-  const [importTaxAllowanceRate, setImportTaxAllowanceRate] = useState<number>(10.0); // 10% 기본
+  const [importTaxAllowanceRate, setImportTaxAllowanceRate] = useState<number>(10.0); 
 
-  // C. TwoDay 배송비 비동기 상태 관리 및 캐싱
+  // C. TwoDay 배송비 비동기 상태
   const [twodayStatus, setTwodayStatus] = useState<"pending" | "success" | "failed">("pending");
   const [twodayError, setTwodayError] = useState<string | null>(null);
   const [twodayLookupAt, setTwodayLookupAt] = useState<string | null>(null);
@@ -100,25 +100,22 @@ export function CalculatorTab({ activeSubTab, presets, scenarios, settings: init
   const [fullCartonShippingCostKRW, setFullCartonShippingCostKRW] = useState<number>(0);
   const [partialCartonShippingCostKRW, setPartialCartonShippingCostKRW] = useState<number>(0);
   
-  // 수동 입력 배송비 상태 (조회 실패 시 Fallback 활성화)
   const [shippingCostEntryType, setShippingCostEntryType] = useState<"automatic" | "manual">("automatic");
   const [manualFullCartonCostKRW, setManualFullCartonCostKRW] = useState<number>(0);
   const [manualPartialCartonCostKRW, setManualPartialCartonCostKRW] = useState<number>(0);
 
-  // 디바운스 제어용 ref
   const lookupTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const prevLookupKeyRef = useRef<string>("");
 
-  // 현재 프리셋 기준 3개 시나리오 세부 요율 맵
   const [presetSettings, setPresetSettings] = useState<ScenarioGroupStructure[]>(initialSettings);
   const [presetCalcResult, setPresetCalcResult] = useState<PresetCalculationResult | null>(null);
   const [detailedViewScenario, setDetailedViewScenario] = useState<"conservative" | "expected" | "optimistic">("expected");
   const [showOverridesAccordion, setShowOverridesAccordion] = useState<boolean>(false);
 
-  // [신규 확장] Waterfall 명세 항목과 Donut Chart 간 마우스 오버(Hover) 상태 연동
+  // [신규 확장] Waterfall과 Donut Chart 간 마우스 호버 연동 카테고리
   const [hoveredCostCategory, setHoveredCostCategory] = useState<string | null>(null);
 
-  // 저장 모달 상태
+  // 저장 모달
   const [showSaveModal, setShowSaveModal] = useState(false);
   const [calcName, setCalcName] = useState("");
   const [calcNotes, setCalcNotes] = useState("");
@@ -239,7 +236,33 @@ export function CalculatorTab({ activeSubTab, presets, scenarios, settings: init
     }
   };
 
-  // 1) 자동 환율 로드 서비스 연동 (마운트 시점에 화폐단위와 무관하게 1회 강제 로딩 보장)
+  // [개선 완료]: USD / KRW 실시간 상호 양방향 변환 핸들러
+  const handleSupplierPriceUSDChange = (val: string) => {
+    setSupplierPriceUSDStr(val);
+    const num = parseFloat(val) || 0;
+    if (num >= 0) {
+      setSupplierUnitPrice(num);
+      setSupplierPriceKRWStr(Math.round(num * exchangeRate).toString());
+    } else {
+      setSupplierUnitPrice(0);
+      setSupplierPriceKRWStr("");
+    }
+  };
+
+  const handleSupplierPriceKRWChange = (val: string) => {
+    setSupplierPriceKRWStr(val);
+    const num = parseFloat(val) || 0;
+    if (num >= 0) {
+      const usdVal = num / exchangeRate;
+      setSupplierUnitPrice(usdVal);
+      setSupplierPriceUSDStr(usdVal.toFixed(2));
+    } else {
+      setSupplierUnitPrice(0);
+      setSupplierPriceUSDStr("");
+    }
+  };
+
+  // 실시간 환율 마운트 갱신
   const handleLoadAutomaticRate = async () => {
     try {
       const res = await fetchLiveExchangeRate();
@@ -249,10 +272,13 @@ export function CalculatorTab({ activeSubTab, presets, scenarios, settings: init
         setExchangeRateSource(res.source);
         setIsManualRate(false);
         setRateWarning(res.warning || null);
+        
+        // 로드된 환율 기반으로 한화 공급가 한 번 갱신
+        setSupplierPriceKRWStr(Math.round(supplierUnitPrice * res.rate).toString());
       }
     } catch (e) {
-      console.error("Failed to fetch live exchange rate on mount:", e);
-      setRateWarning("실시간 고시 환율을 호출하지 못했습니다. 기본 임시 환율이 가동 중입니다.");
+      console.error("Failed to fetch live exchange rate:", e);
+      setRateWarning("고시 환율 획득 실패. 기본 임시 요율이 유지됩니다.");
     }
   };
 
@@ -260,7 +286,7 @@ export function CalculatorTab({ activeSubTab, presets, scenarios, settings: init
     handleLoadAutomaticRate();
   }, []);
 
-  // 2) 프리셋 변경 시 해당 프리셋 요율 정보 비동기 로딩
+  // 프리셋 변경 시 세팅 로드
   useEffect(() => {
     async function loadPresetValues() {
       try {
@@ -273,13 +299,16 @@ export function CalculatorTab({ activeSubTab, presets, scenarios, settings: init
     loadPresetValues();
   }, [selectedPresetId]);
 
-  // 3) 제품 선택 시 공급가 및 입고수량, 패키지 정보 자동 로드
+  // 제품 선택 시 정보 로드
   useEffect(() => {
     if (!selectedProductId) return;
     const prod = products.find((p) => p.id === selectedProductId);
     if (prod) {
       if (prod.price_usd_fob) {
-        setSupplierUnitPrice(Number(prod.price_usd_fob));
+        const valUSD = Number(prod.price_usd_fob);
+        setSupplierUnitPrice(valUSD);
+        setSupplierPriceUSDStr(valUSD.toFixed(2));
+        setSupplierPriceKRWStr(Math.round(valUSD * exchangeRate).toString());
         setCurrency("USD");
       }
       if (prod.carton_pack_qty) {
@@ -297,7 +326,7 @@ export function CalculatorTab({ activeSubTab, presets, scenarios, settings: init
     }
   }, [selectedProductId, products]);
 
-  // 4) 로드된 데이터 복구 효과
+  // 복구 시 로드
   useEffect(() => {
     if (!initialFormToLoad) return;
     const f = initialFormToLoad;
@@ -306,7 +335,10 @@ export function CalculatorTab({ activeSubTab, presets, scenarios, settings: init
     if (f.original_currency) setCurrency(f.original_currency);
     
     if (f.original_supplier_price !== undefined) {
-      setSupplierUnitPrice(Number(f.original_supplier_price));
+      const originalPrice = Number(f.original_supplier_price);
+      setSupplierUnitPrice(originalPrice);
+      setSupplierPriceUSDStr(originalPrice.toFixed(2));
+      setSupplierPriceKRWStr(Math.round(originalPrice * (f.exchange_rate || exchangeRate)).toString());
     }
     if (f.exchange_rate) {
       setExchangeRate(Number(f.exchange_rate));
@@ -348,9 +380,7 @@ export function CalculatorTab({ activeSubTab, presets, scenarios, settings: init
     }
   }, [initialFormToLoad]);
 
-  // -----------------------------------------------------------------------------
-  // D. 카톤 크기 및 3D 적재 시뮬레이션 즉시 실행
-  // -----------------------------------------------------------------------------
+  // 3D 적재 연산 실행
   const cartonCalcRes = calculateProductCartonAndLandedCost({
     importQuantity,
     maxCartonWeightKg: maxCartonWeight,
@@ -368,9 +398,7 @@ export function CalculatorTab({ activeSubTab, presets, scenarios, settings: init
   const landedCostOutput: LandedCostCalculationResult | null = 
     cartonCalcRes.success ? cartonCalcRes.result : null;
 
-  // -----------------------------------------------------------------------------
-  // E. TwoDay 배송비 비동기 자동 연동 및 디바운싱
-  // -----------------------------------------------------------------------------
+  // TwoDay 배송비 연동
   const triggerTwoDayLookup = async (layout: LandedCostCalculationResult) => {
     if (!layout.fullCartonLayout) return;
     
@@ -448,15 +476,7 @@ export function CalculatorTab({ activeSubTab, presets, scenarios, settings: init
     };
   }, [landedCostOutput, shippingCostEntryType]);
 
-  const handleForceRecalculateShipping = () => {
-    if (landedCostOutput) {
-      triggerTwoDayLookup(landedCostOutput);
-    }
-  };
-
-  // -----------------------------------------------------------------------------
-  // F. 최종 Landed Cost 산출
-  // -----------------------------------------------------------------------------
+  // 최종 Landed Cost 산출
   let calculatedLandedCostPerUnit = 0;
   let calculatedTotalLandedCostUSD = 0;
   let calculatedShippingCostPerUnitUSD = 0;
@@ -466,9 +486,7 @@ export function CalculatorTab({ activeSubTab, presets, scenarios, settings: init
   let totalUSDTaxAllowance = 0;
 
   const appliedExchangeRate = exchangeRate || 1425;
-
-  // FOB 공급가 달러 환산값
-  const brandCostUSD = currency === "KRW" ? supplierUnitPrice / appliedExchangeRate : supplierUnitPrice;
+  const brandCostUSD = supplierUnitPrice; 
 
   if (landedCostOutput) {
     const finalFull = shippingCostEntryType === "manual" ? manualFullCartonCostKRW : fullCartonShippingCostKRW;
@@ -480,7 +498,6 @@ export function CalculatorTab({ activeSubTab, presets, scenarios, settings: init
 
     totalUSDProductCost = brandCostUSD * importQuantity;
 
-    // 과세 기준액 (FOB 총제품원가 + 총배송비)
     const taxBase = totalUSDProductCost + totalUSDShippingCost;
     totalUSDTaxAllowance = taxBase * (importTaxAllowanceRate / 100);
     calculatedTaxCostPerUnitUSD = totalUSDTaxAllowance / importQuantity;
@@ -495,9 +512,7 @@ export function CalculatorTab({ activeSubTab, presets, scenarios, settings: init
     landedCostOutput.landedCostPerUnitUSD = calculatedLandedCostPerUnit;
   }
 
-  // -----------------------------------------------------------------------------
-  // G. 시나리오 설정 맵 추출 헬퍼 (이중 가산 버그 수정 반영)
-  // -----------------------------------------------------------------------------
+  // 시나리오 결과 연산
   const extractScenarioMaps = () => {
     const conservative: Record<string, number> = {};
     const expected: Record<string, number> = {};
@@ -514,7 +529,6 @@ export function CalculatorTab({ activeSubTab, presets, scenarios, settings: init
     return { conservative, expected, optimistic };
   };
 
-  // 실시간 3대 시나리오 일괄 연산 실행
   useEffect(() => {
     if (supplierUnitPrice <= 0) return;
     
@@ -523,7 +537,7 @@ export function CalculatorTab({ activeSubTab, presets, scenarios, settings: init
     const inputs: CalculationInputs = {
       mode,
       channel,
-      supplierUnitPrice: brandCostUSD, // 순수 FOB 달러
+      supplierUnitPrice: brandCostUSD, 
       currency: "USD",
       exchangeRate: appliedExchangeRate,
       exchangeRateDate,
@@ -538,8 +552,8 @@ export function CalculatorTab({ activeSubTab, presets, scenarios, settings: init
       fbaFeeSource,
       overrides,
       detailedImportInfo: {
-        internationalFreight: totalUSDShippingCost, // 총 배송비 USD
-        dutyRate: importTaxAllowanceRate, // 관세 및 부대비율 (10.0%)
+        internationalFreight: totalUSDShippingCost, 
+        dutyRate: importTaxAllowanceRate, 
         orderQuantity: importQuantity
       },
     };
@@ -565,8 +579,12 @@ export function CalculatorTab({ activeSubTab, presets, scenarios, settings: init
     importQuantity
   ]);
 
+  const computedWholesale = b2bPriceMode === "retail_based" 
+    ? proposedMSRP * (1 - retailerTargetMargin / 100) 
+    : wholesalePrice;
+
   // -----------------------------------------------------------------------------
-  // [신규 확장] 스냅샷 저장 핸들러 복구
+  // [신규 확장] 스냅샷 저장 핸들러
   // -----------------------------------------------------------------------------
   const handleSaveSnapshot = async () => {
     if (!calcName.trim() || !presetCalcResult || !landedCostOutput) return;
@@ -658,10 +676,6 @@ export function CalculatorTab({ activeSubTab, presets, scenarios, settings: init
     }
   };
 
-  const computedWholesale = b2bPriceMode === "retail_based" 
-    ? proposedMSRP * (1 - retailerTargetMargin / 100) 
-    : wholesalePrice;
-
   // -----------------------------------------------------------------------------
   // [강조용 서머리 데이터 조율]
   // -----------------------------------------------------------------------------
@@ -669,17 +683,19 @@ export function CalculatorTab({ activeSubTab, presets, scenarios, settings: init
   const activeB2b = activeScenarioRes?.b2b;
   const activeAmazon = activeScenarioRes?.amazon;
 
-  // Letusto Wholesale Price & Net Margin 결정
   const displayWholesale = activeB2b ? activeB2b.grossSales : computedWholesale;
   const displayMSRP = channel === "amazon" ? (activeAmazon ? activeAmazon.grossSales : amazonListPrice) : proposedMSRP;
   
-  // Net Profit & Net Margin (B2B 우선 노출)
   const displayNetProfit = channel === "amazon" 
     ? (activeAmazon ? activeAmazon.netProfit : 0) 
     : (activeB2b ? activeB2b.netProfit : 0);
   const displayNetMargin = channel === "amazon"
     ? (activeAmazon ? activeAmazon.netMargin : 0)
     : (activeB2b ? activeB2b.netMargin : 0);
+
+  // [개선 완료]: Charm MSRP 올림 및 마이너스 0.05 소수점 보정 룰 계산
+  const rawMSRPVal = (channel === "b2b" && activeB2b) ? (activeB2b.grossSales / (1 - retailerTargetMargin / 100 || 1)) : displayMSRP;
+  const charmMSRPVal = rawMSRPVal > 0 ? (Math.ceil(rawMSRPVal) - 0.05) : 0;
 
   return (
     <div className="space-y-6">
@@ -690,8 +706,8 @@ export function CalculatorTab({ activeSubTab, presets, scenarios, settings: init
       {activeSubTab === "calculator" && (
         <div className="space-y-6 animate-fadeIn">
           
-          {/* [개선 완료] 최상단 중요 요약 수치 대시보드 - 영문 타이틀 단독 노출 및 Landed Cost 초강조 */}
-          <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
+          {/* [개선 완료]: 7대 주요 수치 요약 대형 카드 노출 (Charm Retail MSRP 신규 추가) */}
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
             
             <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 text-center">
               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">FOB Cost</span>
@@ -705,7 +721,7 @@ export function CalculatorTab({ activeSubTab, presets, scenarios, settings: init
               <span className="text-[9px] text-slate-400 block mt-1">Shipping + Taxes</span>
             </div>
 
-            {/* Landed Cost (도도착 원가) - 테두리와 보라색 음영으로 대폭 강조 */}
+            {/* Landed Cost - 보라색 음영 강조 */}
             <div className="bg-indigo-50 border-2 border-indigo-500 p-4 rounded-xl text-center shadow-xs">
               <span className="text-[10px] font-bold text-indigo-600 uppercase tracking-wider block mb-1">Landed Cost</span>
               <strong className="text-2xl text-indigo-900 font-black">${calculatedLandedCostPerUnit.toFixed(2)}</strong>
@@ -719,14 +735,23 @@ export function CalculatorTab({ activeSubTab, presets, scenarios, settings: init
             </div>
 
             <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 text-center">
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Estimated Retail MSRP</span>
-              <strong className="text-xl text-emerald-600 font-extrabold">
-                ${((channel === "b2b" && activeB2b) ? (activeB2b.grossSales / (1 - retailerTargetMargin / 100 || 1)) : displayMSRP).toFixed(2)}
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Estimated MSRP</span>
+              <strong className="text-xl text-slate-700 font-extrabold">
+                ${rawMSRPVal.toFixed(2)}
               </strong>
-              <span className="text-[9px] text-slate-400 block mt-1">Store Selling Price</span>
+              <span className="text-[9px] text-slate-400 block mt-1">Calculated Retail MSRP</span>
             </div>
 
-            {/* 우리의 Net Profit & Margin */}
+            {/* [개선 완료] Charm Retail MSRP (올림 -0.05 보정가) */}
+            <div className="bg-amber-50 border border-amber-300 p-4 rounded-xl text-center shadow-2xs">
+              <span className="text-[10px] font-bold text-amber-700 uppercase tracking-wider block mb-1">Charm MSRP</span>
+              <strong className="text-xl text-amber-800 font-extrabold">
+                ${charmMSRPVal.toFixed(2)}
+              </strong>
+              <span className="text-[9px] text-amber-600 block mt-1 font-semibold">Charm Store Price (.95)</span>
+            </div>
+
+            {/* Net Profit */}
             <div className="bg-emerald-50 border border-emerald-300 p-4 rounded-xl text-center">
               <span className="text-[10px] font-bold text-emerald-700 uppercase tracking-wider block mb-1">Net Profit</span>
               <strong className="text-xl text-emerald-800 font-extrabold">
@@ -746,7 +771,7 @@ export function CalculatorTab({ activeSubTab, presets, scenarios, settings: init
               <span className="text-xs text-slate-400">Step 1 ~ 5</span>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 items-end">
               
               {/* Step 1. 분석 모드 */}
               <div>
@@ -785,56 +810,65 @@ export function CalculatorTab({ activeSubTab, presets, scenarios, settings: init
                 </select>
               </div>
 
-              {/* Step 3. 공급가 입력 및 화폐 단위 */}
-              <div>
-                <label className="block text-xs font-bold text-slate-500 mb-1.5">브랜드 공급가 (FOB Cost)</label>
-                <div className="flex rounded-lg shadow-2xs">
-                  <input
-                    type="number"
-                    min="0.01"
-                    step="any"
-                    value={supplierUnitPrice}
-                    onChange={(e) => setSupplierUnitPrice(Math.max(0, parseFloat(e.target.value) || 0))}
-                    className="flex-1 min-w-0 px-3 py-2 text-xs border border-slate-300 rounded-l-lg focus:outline-none focus:border-slate-800 font-bold"
-                  />
-                  <select
-                    value={currency}
-                    onChange={(e) => setCurrency(e.target.value as any)}
-                    className="px-3 py-2 text-xs border-y border-r border-slate-300 rounded-r-lg bg-slate-50 font-bold focus:outline-none"
-                  >
-                    <option value="USD">USD ($)</option>
-                    <option value="KRW">KRW (₩)</option>
-                  </select>
+              {/* [개선 완료] Step 3. 공급가 병렬 동시 입력란 (환율 기반 양방향 실시간 동기화) */}
+              <div className="md:col-span-2 space-y-2">
+                <span className="block text-xs font-bold text-slate-500">Step 3. 브랜드 공급가 (FOB Cost)</span>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[10px] text-slate-400 mb-0.5">FOB Price in USD ($)</label>
+                    <input
+                      type="number"
+                      min="0.01"
+                      step="any"
+                      placeholder="$"
+                      value={supplierPriceUSDStr}
+                      onChange={(e) => handleSupplierPriceUSDChange(e.target.value)}
+                      className="w-full px-3 py-1.5 text-xs border border-slate-300 rounded-lg focus:outline-none focus:border-slate-800 font-bold text-right"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] text-slate-400 mb-0.5">FOB Price in KRW (₩)</label>
+                    <input
+                      type="number"
+                      min="1"
+                      step="any"
+                      placeholder="₩"
+                      value={supplierPriceKRWStr}
+                      onChange={(e) => handleSupplierPriceKRWChange(e.target.value)}
+                      className="w-full px-3 py-1.5 text-xs border border-slate-300 rounded-lg focus:outline-none focus:border-slate-800 font-bold text-right"
+                    />
+                  </div>
                 </div>
               </div>
 
-              {/* 환율 정보 */}
-              {currency === "KRW" ? (
-                <div className="space-y-1">
-                  <span className="block text-xs font-bold text-slate-500">기준 환율 설정</span>
-                  <div className="flex items-center space-x-2">
-                    <input
-                      type="number"
-                      value={exchangeRate}
-                      onChange={(e) => setExchangeRate(parseFloat(e.target.value) || 1425)}
-                      className="w-full px-2 py-1.5 text-xs border border-indigo-500 rounded bg-indigo-50/20 text-right focus:outline-none font-bold"
-                    />
-                    <button
-                      onClick={handleLoadAutomaticRate}
-                      className="px-2 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded text-xs"
-                    >
-                      자동
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div className="space-y-1 bg-slate-50 p-2.5 rounded-lg border border-slate-200/50">
-                  <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">고시 환율 정보 (Yahoo)</span>
-                  <div className="text-xs font-black text-slate-800">₩{exchangeRate.toLocaleString()} / USD</div>
-                  <div className="text-[9px] text-slate-400">환율 고시일: {exchangeRateDate}</div>
-                </div>
-              )}
+            </div>
 
+            {/* [개선 완료] Step 4. 비즈니스 프리셋 요율 타일형 디자인 목록 */}
+            <div className="space-y-2.5 pt-2">
+              <span className="block text-xs font-bold text-slate-500">Step 4. 비즈니스 요율 프리셋 (타일형 카드 중 선택)</span>
+              <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
+                {presets.map((p) => {
+                  const isSelected = selectedPresetId === p.id;
+                  return (
+                    <div
+                      key={p.id}
+                      onClick={() => setSelectedPresetId(p.id)}
+                      className={`p-3 rounded-xl border-2 transition-all cursor-pointer flex flex-col justify-between text-left h-24 ${
+                        isSelected 
+                          ? "border-indigo-600 bg-indigo-50/20 shadow-xs ring-1 ring-indigo-500/25" 
+                          : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50/50"
+                      }`}
+                    >
+                      <span className="text-[11px] font-bold text-slate-800 leading-tight truncate block" title={p.name}>
+                        {p.name}
+                      </span>
+                      <span className="text-[9px] text-slate-400 line-clamp-3 leading-relaxed mt-1 block">
+                        {p.description || "설정 없음"}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
 
             {/* Step 5. 세부 목표 가격 시뮬레이션 설정 */}
@@ -925,29 +959,10 @@ export function CalculatorTab({ activeSubTab, presets, scenarios, settings: init
                   </div>
 
                   <div className="flex items-end pb-1 text-[11px] text-slate-400 italic leading-relaxed">
-                    설정된 목표 Net Margin을 충족하기 위해 최적 B2B Wholesale 가격 및 Amazon MSRP를 역산해 드립니다.
+                    설정된 목표 Net Margin을 충족하기 위해 B2B 도매 공급가 및 MSRP를 역산합니다.
                   </div>
                 </div>
               )}
-            </div>
-          </div>
-
-          {/* 비즈니스 프리셋 선택 영역 */}
-          <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm flex items-center justify-between">
-            <div className="space-y-1">
-              <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block">Step 4. 비즈니스 요율 프리셋</span>
-              <select
-                value={selectedPresetId}
-                onChange={(e) => setSelectedPresetId(e.target.value)}
-                className="px-3 py-2 text-xs border border-indigo-300 rounded-lg font-semibold text-indigo-900 bg-indigo-50/20 focus:outline-none"
-              >
-                {presets.map((p) => (
-                  <option key={p.id} value={p.id}>{p.name}</option>
-                ))}
-              </select>
-            </div>
-            <div className="text-xs text-slate-400 leading-relaxed max-w-lg text-right">
-              {presets.find((p) => p.id === selectedPresetId)?.description || ""}
             </div>
           </div>
 
@@ -957,7 +972,7 @@ export function CalculatorTab({ activeSubTab, presets, scenarios, settings: init
               <div className="flex justify-between items-center">
                 <h2 className="text-base font-bold text-slate-900 flex items-center">
                   <span className="w-2 h-4 bg-indigo-600 rounded-full mr-2"></span>
-                  시나리오별 결과 비교 (Landed Cost 반영)
+                  Scenario Comparison
                 </h2>
                 <button
                   onClick={() => {
@@ -1006,7 +1021,7 @@ export function CalculatorTab({ activeSubTab, presets, scenarios, settings: init
                 />
               </div>
 
-              {/* [개선 완료] Waterfall & 원그래프(Donut) 분해 분석 탭 통합 및 오버 하이라이트 연동 */}
+              {/* Waterfall & Donut Chart 분해 분석 탭 */}
               <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-6">
                 <div className="flex justify-between items-center border-b border-slate-100 pb-3">
                   <div>
@@ -1095,7 +1110,7 @@ export function CalculatorTab({ activeSubTab, presets, scenarios, settings: init
           
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             
-            {/* A. Package Information (개별 패키지 정보) */}
+            {/* A. Package Information */}
             <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
               <div className="flex justify-between items-center border-b border-slate-100 pb-2">
                 <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center">
@@ -1269,7 +1284,7 @@ export function CalculatorTab({ activeSubTab, presets, scenarios, settings: init
               </div>
             </div>
 
-            {/* B. Import Assumptions (수입 가정 조건) */}
+            {/* B. Import Assumptions */}
             <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
               <div className="flex justify-between items-center border-b border-slate-100 pb-2">
                 <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center">
@@ -1345,7 +1360,7 @@ export function CalculatorTab({ activeSubTab, presets, scenarios, settings: init
 
           </div>
 
-          {/* C, D, E를 하나로 통폐합한 수입 카톤 / 부피무게 및 배송비 명세표 */}
+          {/* 통합 Cargo 포장 테이블 */}
           {landedCostOutput && (
             <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
               <div className="flex justify-between items-center border-b border-slate-100 pb-2">
@@ -1374,7 +1389,6 @@ export function CalculatorTab({ activeSubTab, presets, scenarios, settings: init
                 </div>
               </div>
 
-              {/* 통합 요약 테이블 */}
               <div className="overflow-x-auto">
                 <table className="w-full text-xs text-left border-collapse border border-slate-200">
                   <thead>
@@ -1390,7 +1404,6 @@ export function CalculatorTab({ activeSubTab, presets, scenarios, settings: init
                     </tr>
                   </thead>
                   <tbody>
-                    {/* 1. 정규 박스 */}
                     {landedCostOutput.fullCartonLayout && (
                       <tr className="hover:bg-slate-50/50">
                         <td className="p-3 border border-slate-200 font-bold text-slate-800">Full Box</td>
@@ -1425,7 +1438,6 @@ export function CalculatorTab({ activeSubTab, presets, scenarios, settings: init
                       </tr>
                     )}
 
-                    {/* 2. 마지막 부분 박스 */}
                     {landedCostOutput.partialCartonLayout && landedCostOutput.remainingUnits > 0 && (
                       <tr className="hover:bg-slate-50/50 bg-amber-50/10">
                         <td className="p-3 border border-slate-200 font-bold text-amber-800">Partial Box</td>
@@ -1457,7 +1469,6 @@ export function CalculatorTab({ activeSubTab, presets, scenarios, settings: init
                 </table>
               </div>
 
-              {/* 총 배송 요율 & CBM 집계 */}
               <div className="bg-slate-50 p-4 rounded-xl border border-slate-200/80 flex flex-col md:flex-row justify-between text-xs gap-4 mt-2">
                 <div className="space-y-1">
                   <div>• 총 수량: <strong className="text-slate-800">{importQuantity} units</strong></div>
@@ -1488,7 +1499,7 @@ export function CalculatorTab({ activeSubTab, presets, scenarios, settings: init
             </div>
           )}
 
-          {/* F & G. 최종 Landed Cost 합산 결과 카드 */}
+          {/* F & G. 최종 Landed Cost 요약 카드 */}
           {landedCostOutput && (
             <div className="bg-slate-900 text-slate-200 p-6 rounded-2xl border border-slate-800 shadow-lg space-y-4">
               <div className="flex justify-between items-center border-b border-slate-800 pb-2">
@@ -1614,17 +1625,16 @@ function DonutPieChart({
   const supplierRate = (viewResult.landedCost / (viewResult.netSales || 1)) * 100;
   const netMargin = viewResult.netMargin;
 
-  // 10% 이상 주요 청구비용 분리
   const marketingRate = Math.abs(viewResult.waterfall.find(w => w.label.includes("Marketing"))?.percentOfNetSales || 0);
   const adminRate = Math.abs(viewResult.waterfall.find(w => w.label.includes("Administrative") || w.label.includes("Overhead"))?.percentOfNetSales || 0);
   const othersRate = Math.max(0, 100 - supplierRate - netMargin - marketingRate - adminRate);
 
   const segments = [
-    { id: "Landed Cost", label: "Landed Cost", value: Math.max(0, supplierRate), color: "#4f46e5" }, // Indigo
-    { id: "Net Margin", label: "Net Margin", value: Math.max(0, netMargin), color: "#10b981" }, // Emerald
-    { id: "Marketing", label: "Marketing Cost", value: marketingRate, color: "#f43f5e" }, // Rose
-    { id: "Administrative", label: "Administrative Cost", value: adminRate, color: "#f59e0b" }, // Amber
-    { id: "Others", label: "Others", value: othersRate, color: "#64748b" } // Slate
+    { id: "Landed Cost", label: "Landed Cost", value: Math.max(0, supplierRate), color: "#4f46e5" }, 
+    { id: "Net Margin", label: "Net Margin", value: Math.max(0, netMargin), color: "#10b981" }, 
+    { id: "Marketing", label: "Marketing Cost", value: marketingRate, color: "#f43f5e" }, 
+    { id: "Administrative", label: "Administrative Cost", value: adminRate, color: "#f59e0b" }, 
+    { id: "Others", label: "Others", value: othersRate, color: "#64748b" } 
   ];
 
   let cumulative = 0;
@@ -1636,7 +1646,6 @@ function DonutPieChart({
 
   return (
     <div className="bg-slate-50 p-4 rounded-xl border border-slate-200/50 flex flex-col md:flex-row items-center gap-6 justify-center">
-      {/* 원형 도넛 그래픽 */}
       <div 
         className="w-28 h-28 rounded-full flex items-center justify-center relative shadow-xs transition-all duration-300"
         style={{
@@ -1648,7 +1657,6 @@ function DonutPieChart({
         </div>
       </div>
 
-      {/* 우측 비율 텍스트 (마우스 호버 시 해당 라인 초강조) */}
       <div className="space-y-1.5 w-full md:w-auto text-xs">
         {segments.map((seg, idx) => {
           const isHovered = hoveredCategory === seg.id;
@@ -1799,7 +1807,7 @@ function ScenarioResultCard({ title, type, res, channel, mode, isActive, onSelec
 }
 
 // -----------------------------------------------------------------------------
-// [차트 하위 컴포넌트] WaterfallChart (호버 연동 색상 점 추가 및 마우스엔터 연계)
+// [차트 하위 컴포넌트] WaterfallChart
 // -----------------------------------------------------------------------------
 interface WaterfallProps {
   viewResult: ChannelResult;
@@ -1808,7 +1816,6 @@ interface WaterfallProps {
 }
 
 function WaterfallChart({ viewResult, hoveredCategory, setHoveredCategory }: WaterfallProps) {
-  // 도넛 차트 세그먼트와 매칭되는 카테고리 판정 헬퍼
   const getMatchCategory = (label: string): string => {
     if (label.includes("Landed Cost") || label.includes("Supplier Price") || label.includes("Product")) return "Landed Cost";
     if (label.includes("Net Profit") || label.includes("Estimated Net Profit") || label.includes("Operating Profit")) return "Net Margin";
@@ -1847,7 +1854,6 @@ function WaterfallChart({ viewResult, hoveredCategory, setHoveredCategory }: Wat
               isHovered ? "bg-indigo-50/50 shadow-3xs" : "hover:bg-slate-100/50"
             }`}
           >
-            {/* 세그먼트 매치 색상 점 */}
             <span className="w-2.5 h-2.5 rounded-full mr-2 block shrink-0" style={{ backgroundColor: color }}></span>
             
             <div className="w-[35%] font-medium text-slate-700 truncate" title={step.label}>
