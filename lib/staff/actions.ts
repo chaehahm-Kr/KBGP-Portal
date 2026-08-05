@@ -819,3 +819,59 @@ export async function updateMyProfile(data: {
   revalidatePath("/admin");
   revalidatePath("/admin/staff");
 }
+
+/**
+ * Super Admin이 특정 직원 계정을 완전히 삭제합니다. Supabase Auth 및 DB에서 모두 삭제됩니다.
+ */
+export async function deleteStaffAction(targetId: string) {
+  const session = await requireSuperAdmin();
+  
+  if (targetId === session.userId) {
+    throw new Error("자기 자신은 삭제할 수 없습니다.");
+  }
+
+  const admin = createAdminClient();
+
+  // 1. Fetch current staff name/email for logging
+  const { data: staff } = await admin
+    .from("staff_members")
+    .select("name, email")
+    .eq("id", targetId)
+    .single();
+
+  const staffName = staff?.name || staff?.email || "알수없음";
+
+  // 2. Delete from public.staff_members
+  const { error: dbError1 } = await admin
+    .from("staff_members")
+    .delete()
+    .eq("id", targetId);
+
+  if (dbError1) {
+    throw new Error("DB staff_members 삭제 실패: " + dbError1.message);
+  }
+
+  // 3. Delete from public.profiles
+  await admin
+    .from("profiles")
+    .delete()
+    .eq("id", targetId);
+
+  // 4. Delete from Supabase Auth
+  const { error: authError } = await admin.auth.admin.deleteUser(targetId);
+  if (authError) {
+    console.error("Auth user delete failed:", authError);
+    throw new Error("Supabase Auth 계정 삭제 실패: " + authError.message);
+  }
+
+  // 5. Log audit
+  await logAudit({
+    actorId: session.userId,
+    targetId: targetId,
+    actionType: "delete_staff",
+    oldValues: { id: targetId, name: staffName, email: staff?.email },
+    reason: `직원 계정 완전 삭제 (이름: ${staffName})`,
+  });
+
+  revalidatePath("/admin/staff");
+}

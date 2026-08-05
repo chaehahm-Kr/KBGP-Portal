@@ -13,6 +13,7 @@ import {
   toggleDepartmentAction,
   addJobTitleAction,
   toggleJobTitleAction,
+  deleteStaffAction,
 } from "@/lib/staff/actions";
 import { StaffWorkspace } from "@/components/staff/staff-workspace";
 
@@ -126,6 +127,7 @@ export default async function StaffManagementPage() {
         toggleDept={toggleDepartmentAction}
         addTitle={addJobTitleAction}
         toggleTitle={toggleJobTitleAction}
+        deleteStaff={deleteStaffAction}
       />
     </div>
   );

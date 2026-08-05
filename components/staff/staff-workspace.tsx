@@ -75,6 +75,7 @@ type StaffWorkspaceProps = {
   toggleDept: (id: string, active: boolean) => Promise<void>;
   addTitle: (name: string) => Promise<JobTitle>;
   toggleTitle: (id: string, active: boolean) => Promise<void>;
+  deleteStaff: (targetId: string) => Promise<void>;
 };
 
 export function StaffWorkspace({
@@ -94,6 +95,7 @@ export function StaffWorkspace({
   toggleDept,
   addTitle,
   toggleTitle,
+  deleteStaff,
 }: StaffWorkspaceProps) {
   // Panel resizing states
   const [leftWidth, setLeftWidth] = useState(380);
@@ -370,6 +372,35 @@ export function StaffWorkspace({
         setSuccessMsg("초대 이메일이 재발송되었습니다.");
       } catch (err: any) {
         setErrorMsg(err.message || "재발송 실패.");
+      }
+    });
+  };
+
+  // Delete Staff Action
+  const handleDeleteStaff = async () => {
+    setErrorMsg("");
+    setSuccessMsg("");
+    if (!activeStaff) return;
+    
+    const doubleConfirm = confirm(
+      `⚠️ [경고] 정말로 직원 '${activeStaff.name || activeStaff.email}' 계정을 완전히 영구 삭제하시겠습니까?\n이 작업은 되돌릴 수 없으며 Supabase Auth 계정과 DB 프로필 정보가 모두 영구 삭제됩니다.`
+    );
+    if (!doubleConfirm) return;
+
+    startAction(async () => {
+      try {
+        await deleteStaff(activeStaff.id);
+        
+        // Remove from local state staff list
+        setStaffList((prev) => prev.filter((s) => s.id !== activeStaff.id));
+        
+        // Deselect or select first staff member
+        const remaining = staffList.filter((s) => s.id !== activeStaff.id);
+        setSelectedStaffId(remaining[0]?.id || "");
+        
+        setSuccessMsg("직원 계정이 성공적으로 영구 삭제되었습니다.");
+      } catch (err: any) {
+        setErrorMsg(err.message || "계정 삭제에 실패했습니다.");
       }
     });
   };
@@ -844,6 +875,14 @@ export function StaffWorkspace({
                     ✉️ 초대 재발송
                   </button>
                 )}
+                {activeStaff.id !== currentUserId && (
+                  <button
+                    onClick={handleDeleteStaff}
+                    className="px-2.5 py-1.5 bg-rose-600 hover:bg-rose-700 text-white font-extrabold rounded-lg cursor-pointer"
+                  >
+                    🗑️ 직원 삭제
+                  </button>
+                )}
               </div>
             </div>
 
@@ -1194,6 +1233,7 @@ export function StaffWorkspaceWrapper({
   toggleDept,
   addTitle,
   toggleTitle,
+  deleteStaff,
 }: StaffWorkspaceProps) {
   // Use state to manage selected staff ID across workspace callbacks
   const [selectedStaffId, setSelectedStaffId] = useState<string>(initialStaff[0]?.id || "");
@@ -1223,6 +1263,7 @@ export function StaffWorkspaceWrapper({
         toggleDept={toggleDept}
         addTitle={addTitle}
         toggleTitle={toggleTitle}
+        deleteStaff={deleteStaff}
       />
     </div>
   );

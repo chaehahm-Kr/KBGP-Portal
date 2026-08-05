@@ -73,7 +73,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<StaffRole, StaffMenuPermissions> =
     products: { view: true, create: true, edit: true, delete: false, approve: true },
     retail: { view: true, create: true, edit: true, delete: false, approve: false },
     sales: { view: true, create: true, edit: false, delete: false, approve: false },
-    staff: { view: true, create: false, edit: false, delete: false, approve: false }, // Only view staff lists
+    staff: { view: true, create: true, edit: true, delete: true, approve: true },
   },
   reviewer: {
     applications: { view: true, create: false, edit: true, delete: false, approve: true },
