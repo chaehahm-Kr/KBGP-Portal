@@ -249,12 +249,16 @@ function buildCtaButtonHtml(variables: Record<string, string>) {
     buttonLabel = "다른 브랜드 추가 신청";
   } else if (key === "application_received_internal") {
     buttonLabel = "신청서 상세 심사하기";
+    url = "https://admin.kselectnetwork.com/admin/login";
   } else if (key === "inquiry_received_internal") {
     buttonLabel = "문의 내역 확인하기";
+    url = "https://admin.kselectnetwork.com/admin/login";
   } else if (key === "assignment_assigned") {
     buttonLabel = "배정된 신청서 심사하기";
+    url = "https://admin.kselectnetwork.com/admin/login";
   } else if (key === "assignment_unassigned") {
     buttonLabel = "어드민 포털 바로가기";
+    url = "https://admin.kselectnetwork.com/admin/login";
   } else if (key === "info_request_created") {
     buttonLabel = "추가 자료 제출하기";
   } else if (key === "info_request_replied") {
@@ -275,10 +279,10 @@ function buildCtaButtonHtml(variables: Record<string, string>) {
   }
 
   return `
-    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="width:100%;margin:30px 0 0 0;">
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin:30px auto 0 auto;min-width:240px;">
       <tr>
-        <td bgcolor="#131E2E" align="center" style="padding: 17px 24px; background-color: #131E2E">
-          <a href="${url}" target="_blank" style="display:block;font-family:'Apple SD Gothic Neo','Malgun Gothic',Arial,Helvetica,sans-serif;font-size:15px;line-height:18px;mso-line-height-rule:exactly;font-weight:bold;letter-spacing:0.6px;color:#FFFFFF;text-decoration:none;">${buttonLabel}</a>
+        <td bgcolor="#131E2E" align="center" style="padding: 12px 28px; background-color: #131E2E">
+          <a href="${url}" target="_blank" style="display:block;font-family:'Apple SD Gothic Neo','Malgun Gothic',Arial,Helvetica,sans-serif;font-size:14px;line-height:16px;mso-line-height-rule:exactly;font-weight:bold;letter-spacing:0.6px;color:#FFFFFF;text-decoration:none;text-align:center;">${buttonLabel}</a>
         </td>
       </tr>
       <tr><td style="height:3px;line-height:3px;font-size:0;background:#8C1C2B;">&nbsp;</td></tr>
