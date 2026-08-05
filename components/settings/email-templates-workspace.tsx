@@ -177,6 +177,12 @@ export function EmailTemplatesWorkspace({
     inquiry: true,
   });
 
+  // Panel sizing resizable states
+  const [leftWidth, setLeftWidth] = useState(330);
+  const [rightWidth, setRightWidth] = useState(500);
+  const [isResizingLeft, setIsResizingLeft] = useState(false);
+  const [isResizingRight, setIsResizingRight] = useState(false);
+
   // Selected item local states
   const activeTemplate = templates.find((t) => t.key === selectedKey) || initialTemplates[0];
   const [subject, setSubject] = useState("");
@@ -188,6 +194,41 @@ export function EmailTemplatesWorkspace({
   const [previewLoading, setPreviewLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
+
+  // Tracking mouse resize movements
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (isResizingLeft) {
+        // Limit left panel size between 220px and 600px
+        const newWidth = Math.max(220, Math.min(600, e.clientX - 16));
+        setLeftWidth(newWidth);
+      }
+      if (isResizingRight) {
+        // Limit right panel size between 350px and 800px
+        const newWidth = Math.max(350, Math.min(800, window.innerWidth - e.clientX - 16));
+        setRightWidth(newWidth);
+      }
+    };
+
+    const handleMouseUp = () => {
+      setIsResizingLeft(false);
+      setIsResizingRight(false);
+    };
+
+    if (isResizingLeft || isResizingRight) {
+      window.addEventListener("mousemove", handleMouseMove);
+      window.addEventListener("mouseup", handleMouseUp);
+      document.body.style.cursor = "col-resize";
+      document.body.style.userSelect = "none";
+    }
+
+    return () => {
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+  }, [isResizingLeft, isResizingRight]);
 
   // Sync state when template key changes
   useEffect(() => {
@@ -274,15 +315,18 @@ export function EmailTemplatesWorkspace({
   const meta = TEMPLATE_METADATA[selectedKey];
 
   return (
-    <div className="flex h-[calc(100vh-11rem)] gap-4 overflow-hidden text-xs">
-      {/* 1. Left panel: Template List & Categories (Wider: w-[330px]) */}
-      <div className="w-[330px] shrink-0 rounded-lg border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900 flex flex-col overflow-hidden">
+    <div className="flex h-[calc(100vh-11rem)] gap-0.5 overflow-hidden text-xs select-none">
+      {/* 1. Left panel: Template List & Categories */}
+      <div
+        style={{ width: `${leftWidth}px` }}
+        className="shrink-0 rounded-l-lg border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900 flex flex-col overflow-hidden"
+      >
         <div className="p-3.5 border-b border-zinc-150 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-950/20">
           <h3 className="font-extrabold text-zinc-900 dark:text-white">이메일 템플릿</h3>
           <p className="text-[10px] text-zinc-400 dark:text-zinc-500 mt-0.5">발송 유형을 선택해 주세요.</p>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-2.5 space-y-3">
+        <div className="flex-1 overflow-y-auto p-2.5 space-y-3 select-text">
           {TEMPLATE_CATEGORIES.map((category) => {
             const categoryTemplates = templates.filter((t) => category.keys.includes(t.key));
             if (categoryTemplates.length === 0) return null;
@@ -294,7 +338,7 @@ export function EmailTemplatesWorkspace({
                 <button
                   type="button"
                   onClick={() => toggleCategory(category.id)}
-                  className="w-full flex items-center justify-between p-1.5 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 font-extrabold text-zinc-600 dark:text-zinc-400 text-left transition-colors cursor-pointer"
+                  className="w-full flex items-center justify-between p-1.5 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 font-extrabold text-zinc-600 dark:text-zinc-400 text-left transition-colors cursor-pointer select-none"
                 >
                   <span>{category.name}</span>
                   <span className="text-[9px] text-zinc-400">{isOpen ? "▲" : "▼"}</span>
@@ -324,8 +368,18 @@ export function EmailTemplatesWorkspace({
         </div>
       </div>
 
-      {/* 2. Center panel: Compact Edit form (Flex-1, fills middle) */}
-      <div className="flex-1 min-w-[340px] flex flex-col rounded-lg border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900 overflow-hidden">
+      {/* Resize Splitter 1 */}
+      <div
+        onMouseDown={() => setIsResizingLeft(true)}
+        className={`w-2 shrink-0 self-stretch hover:bg-zinc-300 dark:hover:bg-zinc-700 active:bg-zinc-400 dark:active:bg-zinc-500 transition-colors cursor-col-resize flex items-center justify-center select-none ${
+          isResizingLeft ? "bg-zinc-400 dark:bg-zinc-500" : "bg-transparent"
+        }`}
+      >
+        <div className="h-6 w-0.5 bg-zinc-300 dark:bg-zinc-700 rounded" />
+      </div>
+
+      {/* 2. Center panel: Compact Edit form */}
+      <div className="flex-1 min-w-[340px] border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900 flex flex-col overflow-hidden">
         <div className="p-3.5 border-b border-zinc-150 dark:border-zinc-800 flex items-center justify-between bg-zinc-50/50 dark:bg-zinc-950/20 shrink-0">
           <div className="space-y-0.5">
             <span className="font-mono text-[9px] text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">{selectedKey}</span>
@@ -333,10 +387,10 @@ export function EmailTemplatesWorkspace({
           </div>
         </div>
 
-        <form onSubmit={handleSave} className="flex-1 p-4 flex flex-col gap-3 min-h-0 overflow-y-auto">
+        <form onSubmit={handleSave} className="flex-1 p-4 flex flex-col gap-3 min-h-0 overflow-y-auto select-text">
           {/* Metadata Display Cards */}
           {meta && (
-            <div className="rounded-xl border border-zinc-100 bg-zinc-50/30 p-3.5 dark:border-zinc-800/80 dark:bg-zinc-950/20 space-y-2 shrink-0">
+            <div className="rounded-xl border border-zinc-100 bg-zinc-50/30 p-3.5 dark:border-zinc-800/80 dark:bg-zinc-950/20 space-y-2 shrink-0 select-none">
               <div className="flex flex-wrap gap-2 items-center">
                 {/* Recipient Target Badge */}
                 <span
@@ -366,7 +420,7 @@ export function EmailTemplatesWorkspace({
               {/* Specific Send Trigger Explanation */}
               <div className="text-[10px] text-zinc-500 dark:text-zinc-400 leading-normal font-medium bg-white dark:bg-zinc-950/60 p-2.5 rounded-lg border border-zinc-100 dark:border-zinc-800 flex items-start gap-2">
                 <span className="text-sm shrink-0">ℹ️</span>
-                <span className="self-center">{meta.triggerCondition}</span>
+                <span className="self-center select-text">{meta.triggerCondition}</span>
               </div>
             </div>
           )}
@@ -394,11 +448,11 @@ export function EmailTemplatesWorkspace({
           </div>
 
           <div className="flex-1 flex flex-col space-y-1 min-h-[140px]">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between select-none">
               <label className="block font-bold text-zinc-700 dark:text-zinc-300">
                 본문 내용 <span className="font-normal text-zinc-400">(치환자 변수 적용 가능)</span>
               </label>
-              <span className="text-[10px] text-zinc-400 font-mono">{"{{변수명}}"}</span>
+              <span className="text-[10px] text-zinc-400 font-mono">{"{{ctaButton}}"} 적용 권장</span>
             </div>
             <textarea
               value={body}
@@ -408,7 +462,7 @@ export function EmailTemplatesWorkspace({
             />
           </div>
 
-          <div className="pt-2 border-t border-zinc-100 dark:border-zinc-800 flex items-center justify-between gap-2 shrink-0">
+          <div className="pt-2 border-t border-zinc-100 dark:border-zinc-800 flex items-center justify-between gap-2 shrink-0 select-none">
             <button
               type="submit"
               disabled={isSaving}
@@ -428,8 +482,21 @@ export function EmailTemplatesWorkspace({
         </form>
       </div>
 
-      {/* 3. Right panel: Desktop Email Preview mockup (Wider: w-[500px]) */}
-      <div className="w-[500px] shrink-0 rounded-lg border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900 flex flex-col overflow-hidden">
+      {/* Resize Splitter 2 */}
+      <div
+        onMouseDown={() => setIsResizingRight(true)}
+        className={`w-2 shrink-0 self-stretch hover:bg-zinc-300 dark:hover:bg-zinc-700 active:bg-zinc-400 dark:active:bg-zinc-500 transition-colors cursor-col-resize flex items-center justify-center select-none ${
+          isResizingRight ? "bg-zinc-400 dark:bg-zinc-500" : "bg-transparent"
+        }`}
+      >
+        <div className="h-6 w-0.5 bg-zinc-300 dark:bg-zinc-700 rounded" />
+      </div>
+
+      {/* 3. Right panel: Desktop Email Preview mockup */}
+      <div
+        style={{ width: `${rightWidth}px` }}
+        className="shrink-0 rounded-r-lg border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900 flex flex-col overflow-hidden"
+      >
         <div className="p-3.5 border-b border-zinc-150 dark:border-zinc-800 flex items-center justify-between bg-zinc-50/50 dark:bg-zinc-950/20 shrink-0">
           <h3 className="font-extrabold text-zinc-900 dark:text-white">미리보기 (Preview)</h3>
           <span className="text-[9px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/20 px-1.5 py-0.5 rounded flex items-center gap-1">
@@ -452,7 +519,7 @@ export function EmailTemplatesWorkspace({
             </div>
 
             {/* Email subject preview */}
-            <div className="p-2.5 border-b border-zinc-100 dark:border-zinc-800/80 shrink-0 bg-white dark:bg-zinc-900">
+            <div className="p-2.5 border-b border-zinc-100 dark:border-zinc-800/80 shrink-0 bg-white dark:bg-zinc-900 select-text">
               <span className="font-extrabold text-zinc-400 mr-2 text-[10px]">Subject:</span>
               <span className="font-bold text-zinc-800 dark:text-zinc-200 text-[10px] break-all leading-tight">
                 {subject || "(제목 없음)"}
