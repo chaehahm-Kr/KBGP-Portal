@@ -3,7 +3,8 @@
 import React, { useState, useTransition } from "react";
 import { updateCompanyUser, reinviteCompanyUser } from "@/lib/company/invite-actions";
 import { isInviteExpired } from "@/lib/company/types";
-import { TASK_DEFINITIONS, updateUserTaskAssignments } from "@/lib/company/task-actions";
+import { updateUserTaskAssignments } from "@/lib/company/task-actions";
+import { TASK_DEFINITIONS } from "@/lib/company/task-constants";
 
 interface CompanyUsersManagerProps {
   initialUsers: any[];

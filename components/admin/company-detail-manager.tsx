@@ -12,12 +12,12 @@ import {
 } from "@/lib/company/admin-actions";
 import { type PartnerStatusConfig } from "@/lib/settings/actions";
 import { 
-  TASK_DEFINITIONS, 
   updateUserTaskAssignments, 
   assignTaskPrimaryUser, 
   handleUserSuspensionTaskCheck, 
   type TaskAssignmentItem 
 } from "@/lib/company/task-actions";
+import { TASK_DEFINITIONS } from "@/lib/company/task-constants";
 
 const STATUS_LABEL: Record<string, string> = {
   invited: "초대됨",
