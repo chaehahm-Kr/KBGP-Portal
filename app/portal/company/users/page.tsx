@@ -41,6 +41,17 @@ export default async function CompanyUsersPage() {
 
   const rows = users ?? [];
 
+  // Query all task assignments for this company to hydrate the users manager component
+  const { data: assignments } = await supabase
+    .from("company_task_assignments")
+    .select("user_id, task_code, is_primary, email_notify")
+    .eq("company_id", companyId);
+
+  const hydratedRows = rows.map((u: any) => ({
+    ...u,
+    task_assignments: (assignments ?? []).filter((a: any) => a.user_id === u.id)
+  }));
+
   return (
     <div className="space-y-6 w-full max-w-7xl">
       {/* Top Header */}
@@ -58,7 +69,7 @@ export default async function CompanyUsersPage() {
       </div>
 
       {/* Unified User Manager Component */}
-      <CompanyUsersManager initialUsers={rows} currentUserId={userId} />
+      <CompanyUsersManager initialUsers={hydratedRows} currentUserId={userId} />
     </div>
   );
 }

@@ -63,11 +63,17 @@ export default async function PortalCompanyInfoPage() {
   // Overwrite contacts in parsedMeta with the actual database company_users
   parsedMeta.contacts = contacts;
 
+  // Query task assignments
+  const { getCompanyTaskAssignments } = await import("@/lib/company/task-actions");
+  const taskAssignments = await getCompanyTaskAssignments(membership.companyId);
+
   return (
     <CompanyProfileManager
       company={company}
       parsedMeta={parsedMeta}
       companyRole={membership.companyRole}
+      taskAssignments={taskAssignments}
+      companyUsers={dbUsers ?? []}
     />
   );
 }

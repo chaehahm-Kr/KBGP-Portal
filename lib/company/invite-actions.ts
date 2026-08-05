@@ -241,6 +241,10 @@ export async function updateCompanyUser(
   if (!targetIsSelf && (deactivated || roleChanged)) {
     await deactivateUserSessions(targetUserId);
   }
+  if (deactivated) {
+    const { handleUserSuspensionTaskCheck } = await import("./task-actions");
+    await handleUserSuspensionTaskCheck(targetUserId, target.company_id);
+  }
 
   revalidatePath("/portal/company/users");
   revalidatePath("/portal/company/info");

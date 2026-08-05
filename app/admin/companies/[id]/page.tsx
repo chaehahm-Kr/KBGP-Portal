@@ -98,19 +98,35 @@ export default async function AdminCompanyDetailPage({
     .eq("company_id", id)
     .order("created_at", { ascending: true });
 
+  // Hydrate task assignments on companyUsers
+  const { data: assignments } = await supabase
+    .from("company_task_assignments")
+    .select("user_id, task_code, is_primary, email_notify")
+    .eq("company_id", id);
+
+  const hydratedUsers = (companyUsers ?? []).map((u: any) => ({
+    ...u,
+    task_assignments: (assignments ?? []).filter((a: any) => a.user_id === u.id)
+  }));
+
   const brandNameById = new Map(brandsData.map((b) => [b.id, b.name]));
+
+  // Query task assignments
+  const { getCompanyTaskAssignments } = await import("@/lib/company/task-actions");
+  const taskAssignments = await getCompanyTaskAssignments(id);
 
   return (
     <CompanyDetailManager
       company={company}
       parsedMeta={parsedMeta}
-      companyUsers={companyUsers ?? []}
+      companyUsers={hydratedUsers}
       brands={resolvedBrands}
       products={products ?? []}
       applications={applications ?? []}
       brandNameById={brandNameById}
       typeOptions={configs.company_types}
       statusOptions={configs.partner_statuses}
+      taskAssignments={taskAssignments}
     />
   );
 }

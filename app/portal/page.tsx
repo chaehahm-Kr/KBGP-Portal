@@ -78,6 +78,14 @@ export default async function PortalHomePage() {
     }
   };
 
+  // Query company task assignments setup progress
+  const { getCompanyTaskSetupStatus } = await import("@/lib/company/task-actions");
+  const taskStatus = companyUser
+    ? await getCompanyTaskSetupStatus(companyUser.company_id)
+    : { completedCount: 6, totalCount: 6, percent: 100 };
+
+  const isCompanyAdmin = companyUser?.company_role === "company_admin";
+
   return (
     <div className="space-y-8 w-full max-w-7xl">
       {/* Top Banner */}
@@ -94,6 +102,29 @@ export default async function PortalHomePage() {
           </p>
         )}
       </div>
+
+      {/* Task Assignment Setup Reminder Banner for Company Admins */}
+      {isCompanyAdmin && taskStatus.completedCount < taskStatus.totalCount && (
+        <div className="rounded-lg border border-indigo-200 bg-indigo-50/50 p-5 dark:border-indigo-950 dark:bg-indigo-950/20 shadow-xs">
+          <div className="flex items-center gap-2 text-indigo-800 dark:text-indigo-400">
+            <span className="h-2 w-2 rounded-full bg-indigo-500 animate-pulse" />
+            <h2 className="text-sm font-bold">
+              업무별 주 담당자를 설정해 주세요
+            </h2>
+          </div>
+          <p className="mt-1 text-xs text-indigo-650 dark:text-indigo-300">
+            현재 6개 업무 중 {taskStatus.totalCount - taskStatus.completedCount}개 업무의 주 담당자가 지정되지 않았습니다. 원활한 신청, 계약, 제품 등록, 발주 및 정산 업무를 위해 업무별 주 담당자를 지정해 주세요. (진행 상태: {taskStatus.completedCount}/{taskStatus.totalCount} 완료)
+          </p>
+          <div className="mt-3">
+            <Link
+              href="/portal/company/info"
+              className="inline-flex items-center rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-indigo-700 transition"
+            >
+              담당자 설정하기
+            </Link>
+          </div>
+        </div>
+      )}
 
       {/* Info Requests Alert Banner */}
       {pendingRequestRows.length > 0 && (

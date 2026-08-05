@@ -3,6 +3,7 @@
 import React, { useState, useTransition } from "react";
 import { updateCompanyPortalMetadata } from "@/lib/company/portal-actions";
 import { type CompanyContact, type CompanyParsedMetadata } from "@/lib/company/admin-actions";
+import { assignTaskPrimaryUser, type TaskAssignmentItem } from "@/lib/company/task-actions";
 
 interface CompanyProfileManagerProps {
   company: {
@@ -14,39 +15,90 @@ interface CompanyProfileManagerProps {
     created_at: string;
   };
   parsedMeta: CompanyParsedMetadata;
-  companyRole: string; // "company_admin" | "company_staff"
+  companyRole: string; 
+  taskAssignments: TaskAssignmentItem[];
+  companyUsers: any[];
 }
 
 export function CompanyProfileManager({
   company,
   parsedMeta,
   companyRole,
+  taskAssignments,
+  companyUsers,
 }: CompanyProfileManagerProps) {
   const isCompanyAdmin = companyRole === "company_admin";
   const [isPending, startTransition] = useTransition();
 
-  // Company editable states
   const [address, setAddress] = useState(parsedMeta.address);
   const [website, setWebsite] = useState(parsedMeta.website);
-  
-  // Contacts state
   const contacts = parsedMeta.contacts;
 
-  // Edit modes
   const [isEditingMeta, setIsEditingMeta] = useState(false);
-
-  // Temp edit states
   const [tempAddress, setTempAddress] = useState(address);
   const [tempWebsite, setTempWebsite] = useState(website);
 
-  // Form handlers
+  // [신규 기능]: 담당 업무 상태 로컬 관리
+  const [tasks, setTasks] = useState<TaskAssignmentItem[]>(taskAssignments);
+
+  // [신규 기능]: 인쇄할 이메일 알림 수신자 목록 헬퍼
+  const getEmailRecipientsForTask = (taskCode: string) => {
+    // 해당 업무의 이메일 알림을 활성화한 활성 멤버들의 이름 수집
+    return companyUsers
+      .filter(u => u.status === "active" && u.task_assignments?.some((a: any) => a.task_code === taskCode && a.email_notify))
+      .map(u => u.name || "(이름 없음)")
+      .join(", ") || "없음";
+  };
+
+  // [신규 기능]: 주 담당자 직접 변경 핸들러
+  const handleAssignPrimaryUser = async (taskCode: string, targetUserId: string | null) => {
+    const targetUser = companyUsers.find(u => u.id === targetUserId);
+    const currentPrimary = tasks.find(t => t.taskCode === taskCode);
+
+    if (targetUserId && currentPrimary?.userId && currentPrimary.userId !== targetUserId) {
+      const confirmChange = confirm(
+        `현재 이 업무에는 다른 주 담당자(${currentPrimary.userName || "미지정"})가 지정되어 있습니다. 주 담당자를 변경하시겠습니까?`
+      );
+      if (!confirmChange) return;
+    }
+
+    startTransition(async () => {
+      try {
+        await assignTaskPrimaryUser(company.id, taskCode, targetUserId, "portal");
+
+        // 로컬 상태 동기화 갱신
+        setTasks(prev => 
+          prev.map(t => {
+            if (t.taskCode === taskCode) {
+              return {
+                ...t,
+                userId: targetUserId,
+                isPrimary: !!targetUserId,
+                userName: targetUser?.name || null,
+                userTitle: targetUser?.title || null,
+                userPosition: targetUser?.position || null,
+                userEmail: targetUser?.email || null,
+                userPhone: targetUser?.phone || null,
+              };
+            }
+            return t;
+          })
+        );
+
+        alert("담당자 배정이 완료되었습니다.");
+      } catch (err) {
+        alert(err instanceof Error ? err.message : "담당자 배정에 실패했습니다.");
+      }
+    });
+  };
+
   const handleSaveMeta = async () => {
     startTransition(async () => {
       try {
         await updateCompanyPortalMetadata(company.id, {
           address: tempAddress,
           website: tempWebsite,
-          contacts, // Keep contacts unchanged
+          contacts, 
         });
         setAddress(tempAddress);
         setWebsite(tempWebsite);
@@ -66,6 +118,9 @@ export function CompanyProfileManager({
     return "bg-zinc-50 text-zinc-700 border-zinc-100 dark:bg-zinc-800 dark:text-zinc-350 dark:border-zinc-700";
   };
 
+  // 활성 상태의 소속 사용자만 선택 가능
+  const activeMembers = companyUsers.filter(u => u.status === "active");
+
   return (
     <div className="space-y-6">
       <div>
@@ -78,7 +133,6 @@ export function CompanyProfileManager({
       <div className="grid grid-cols-1 gap-6 md:grid-cols-3 items-start">
         {/* Left Column: General & Legal Info */}
         <div className="md:col-span-1 space-y-6">
-          {/* General Profile Card */}
           <div className="rounded-lg border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 relative">
             <div className="flex items-center justify-between mb-4 pb-2 border-b border-zinc-100 dark:border-zinc-800">
               <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">
@@ -117,7 +171,6 @@ export function CompanyProfileManager({
             </div>
 
             <div className="space-y-4 text-xs">
-              {/* Partner Status */}
               <div>
                 <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase block">파트너 상태</span>
                 <span className={`mt-1 inline-block rounded px-2.5 py-0.5 text-[10px] font-bold border ${getStatusBadgeClass()}`}>
@@ -125,37 +178,32 @@ export function CompanyProfileManager({
                 </span>
               </div>
 
-              {/* Company Type */}
               <div>
                 <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase block">회사 유형</span>
                 <span className="font-semibold text-zinc-900 dark:text-white mt-0.5 block">{parsedMeta.type}</span>
               </div>
 
-              {/* Country (ReadOnly) */}
               <div>
                 <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase flex items-center gap-1">
-                  설립 국가 <span title="어드민 전용 필드로 수정이 불가합니다.">🔒</span>
+                  설립 국가 🔒
                 </span>
                 <span className="font-semibold text-zinc-500 dark:text-zinc-400 mt-0.5 block bg-zinc-50/50 p-1.5 rounded dark:bg-zinc-950/20">{company.country}</span>
               </div>
 
-              {/* Business Registration Number (ReadOnly) */}
               <div>
                 <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase flex items-center gap-1">
-                  사업자등록번호 <span title="어드민 전용 필드로 수정이 불가합니다.">🔒</span>
+                  사업자등록번호 🔒
                 </span>
                 <span className="font-semibold text-zinc-500 dark:text-zinc-400 mt-0.5 block bg-zinc-50/50 p-1.5 rounded dark:bg-zinc-950/20">{company.business_registration_number}</span>
               </div>
 
-              {/* Official Corporate Name (ReadOnly) */}
               <div>
                 <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase flex items-center gap-1">
-                  공식 법인명 <span title="어드민 전용 필드로 수정이 불가합니다.">🔒</span>
+                  공식 법인명 🔒
                 </span>
                 <span className="font-semibold text-zinc-500 dark:text-zinc-400 mt-0.5 block bg-zinc-50/50 p-1.5 rounded dark:bg-zinc-950/20">{company.name}</span>
               </div>
 
-              {/* Address (Editable) */}
               <div>
                 <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase block">회사 주소</span>
                 {isEditingMeta ? (
@@ -173,7 +221,6 @@ export function CompanyProfileManager({
                 )}
               </div>
 
-              {/* Website (Editable) */}
               <div>
                 <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase block">웹사이트</span>
                 {isEditingMeta ? (
@@ -198,17 +245,18 @@ export function CompanyProfileManager({
                     <span className="font-semibold text-zinc-400 mt-0.5 block">웹사이트 미등록</span>
                   )
                 )}
+              </div>
             </div>
           </div>
         </div>
-      </div>
 
-      {/* Right Column: Contacts List */}
-      <div className="md:col-span-2 space-y-6">
-        <div className="rounded-lg border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-          <div className="flex items-center justify-between mb-4 pb-2 border-b border-zinc-100 dark:border-zinc-800">
-            <h3 className="text-sm font-bold text-zinc-950 dark:text-white">소속 담당자 목록 ({contacts.length})</h3>
-          </div>
+        {/* Right Column: Contacts & Task Assignments */}
+        <div className="md:col-span-2 space-y-6">
+          {/* Contacts List Card */}
+          <div className="rounded-lg border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+            <div className="flex items-center justify-between mb-4 pb-2 border-b border-zinc-100 dark:border-zinc-800">
+              <h3 className="text-sm font-bold text-zinc-950 dark:text-white">소속 담당자 목록 ({contacts.length})</h3>
+            </div>
 
             <div className="space-y-4">
               {contacts.length > 0 ? (
@@ -259,6 +307,92 @@ export function CompanyProfileManager({
                 </a>
               </div>
             )}
+          </div>
+
+          {/* [신규 기능]: 담당 업무 및 주 담당자 관리 테이블 카드 */}
+          <div className="rounded-lg border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+            <div className="flex items-center justify-between mb-4 pb-2 border-b border-zinc-100 dark:border-zinc-800">
+              <h3 className="text-sm font-bold text-zinc-950 dark:text-white">담당 업무 및 주 담당자</h3>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="border-b border-zinc-200 bg-zinc-50/50 text-[10px] font-bold text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900/50">
+                    <th className="px-4 py-3">업무명</th>
+                    <th className="px-4 py-3">주 담당자 정보</th>
+                    <th className="px-4 py-3">알림 수신인</th>
+                    <th className="px-4 py-3 text-center w-28">지정 상태</th>
+                    {isCompanyAdmin && <th className="px-4 py-3 text-right">담당자 변경</th>}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800/60">
+                  {tasks.map((task) => {
+                    const notifyNames = getEmailRecipientsForTask(task.taskCode);
+                    return (
+                      <tr key={task.taskCode} className="hover:bg-zinc-50/20">
+                        <td className="px-4 py-3.5">
+                          <span className="font-bold text-zinc-850 dark:text-zinc-200 block">{task.label}</span>
+                          <span className="text-[9px] text-zinc-400 block mt-0.5 leading-relaxed max-w-xs">{task.desc}</span>
+                        </td>
+                        <td className="px-4 py-3.5 text-zinc-700 dark:text-zinc-350">
+                          {task.userId ? (
+                            <div className="space-y-0.5">
+                              <a
+                                href="/portal/company/users"
+                                className="font-semibold text-emerald-600 hover:underline dark:text-emerald-450 text-[13px]"
+                              >
+                                {task.userName}
+                              </a>
+                              {task.userTitle || task.userPosition ? (
+                                <p className="text-[10px] text-zinc-400">
+                                  {task.userTitle || ""}{task.userTitle && task.userPosition ? " / " : ""}{task.userPosition || ""}
+                                </p>
+                              ) : null}
+                              <p className="text-[9px] text-zinc-450 font-mono">{task.userEmail}</p>
+                              {task.userPhone && <p className="text-[9px] text-zinc-400">📞 {task.userPhone}</p>}
+                            </div>
+                          ) : (
+                            <span className="text-zinc-450 italic">주 담당자 미지정</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3.5 text-zinc-500 dark:text-zinc-400 max-w-xxs truncate" title={notifyNames}>
+                          {notifyNames}
+                        </td>
+                        <td className="px-4 py-3.5 text-center">
+                          {task.userId ? (
+                            <span className="inline-block rounded bg-emerald-50 text-emerald-700 px-2 py-0.5 text-[10px] font-bold border border-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-900">
+                              설정 완료
+                            </span>
+                          ) : (
+                            <span className="inline-block rounded bg-rose-50 text-rose-700 px-2 py-0.5 text-[10px] font-bold border border-rose-100 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-900">
+                              미지정
+                            </span>
+                          )}
+                        </td>
+                        {isCompanyAdmin && (
+                          <td className="px-4 py-3.5 text-right">
+                            <select
+                              value={task.userId || ""}
+                              onChange={(e) => handleAssignPrimaryUser(task.taskCode, e.target.value || null)}
+                              disabled={isPending}
+                              className="rounded border border-zinc-200 bg-white p-1 text-[11px] text-zinc-800 outline-none dark:border-zinc-800 dark:bg-zinc-950 dark:text-white max-w-xs focus:ring-1 focus:ring-emerald-500 cursor-pointer"
+                            >
+                              <option value="">-- 담당자 선택 --</option>
+                              {activeMembers.map(u => (
+                                <option key={u.id} value={u.id}>
+                                  {u.name || "(이름 없음)"} ({u.title || "멤버"})
+                                </option>
+                              ))}
+                            </select>
+                          </td>
+                        )}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       </div>

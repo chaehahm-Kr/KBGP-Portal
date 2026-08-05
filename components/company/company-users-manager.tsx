@@ -3,6 +3,7 @@
 import React, { useState, useTransition } from "react";
 import { updateCompanyUser, reinviteCompanyUser } from "@/lib/company/invite-actions";
 import { isInviteExpired } from "@/lib/company/types";
+import { TASK_DEFINITIONS, updateUserTaskAssignments } from "@/lib/company/task-actions";
 
 interface CompanyUsersManagerProps {
   initialUsers: any[];
@@ -48,6 +49,11 @@ export function CompanyUsersManager({ initialUsers, currentUserId }: CompanyUser
     company_info: "none",
   });
 
+  // [신규 기능]: 6대 담당 업무 배정 체크박스 상태 선언
+  const [formTaskAssignments, setFormTaskAssignments] = useState<
+    Record<string, { is_primary: boolean; email_notify: boolean }>
+  >({});
+
   const [isPending, startTransition] = useTransition();
 
   const handleOpenEdit = (user: any) => {
@@ -66,6 +72,57 @@ export function CompanyUsersManager({ initialUsers, currentUserId }: CompanyUser
       company_info: user.permissions?.company_info || "none",
       ...user.permissions,
     });
+
+    // 해당 유저의 담당 업무 6개 상태 매핑
+    const initialTasks: Record<string, { is_primary: boolean; email_notify: boolean }> = {};
+    TASK_DEFINITIONS.forEach(def => {
+      const found = user.task_assignments?.find((a: any) => a.task_code === def.code);
+      initialTasks[def.code] = {
+        is_primary: found ? found.is_primary : false,
+        email_notify: found ? found.email_notify : false,
+      };
+    });
+    setFormTaskAssignments(initialTasks);
+  };
+
+  // [신규 기능]: 주 담당자 중복 방지 알럿 컨펌 및 이메일 자동 수신 체크
+  const handleTaskCheckboxChange = (
+    taskCode: string,
+    field: "is_primary" | "email_notify",
+    checked: boolean
+  ) => {
+    if (field === "is_primary" && checked) {
+      // 본인을 제외하고 이 회사의 해당 업무 주 담당자가 이미 지정되어 있는지 확인
+      const activePrimaryUser = users.find(u => {
+        if (u.id === editingUser.id) return false;
+        return u.task_assignments?.some((a: any) => a.task_code === taskCode && a.is_primary);
+      });
+
+      if (activePrimaryUser) {
+        const confirmChange = confirm(
+          `현재 이 업무에는 다른 주 담당자(${activePrimaryUser.name || "미지정"})가 지정되어 있습니다. 주 담당자를 변경하시겠습니까?`
+        );
+        if (!confirmChange) return;
+      }
+
+      // 주 담당자로 지정 시 이메일 수신 알림은 기본적으로 같이 체크(true) 처리
+      setFormTaskAssignments(prev => ({
+        ...prev,
+        [taskCode]: {
+          ...prev[taskCode],
+          is_primary: true,
+          email_notify: true
+        }
+      }));
+    } else {
+      setFormTaskAssignments(prev => ({
+        ...prev,
+        [taskCode]: {
+          ...prev[taskCode],
+          [field]: checked
+        }
+      }));
+    }
   };
 
   const handleSave = () => {
@@ -77,6 +134,7 @@ export function CompanyUsersManager({ initialUsers, currentUserId }: CompanyUser
 
     startTransition(async () => {
       try {
+        // 1. 기존 권한 및 인적정보 업데이트
         await updateCompanyUser(editingUser.id, {
           name: formName,
           title: formTitle,
@@ -88,27 +146,54 @@ export function CompanyUsersManager({ initialUsers, currentUserId }: CompanyUser
           permissions: formPermissions,
         });
 
-        // Local state update
-        setUsers(
-          users.map((u) =>
-            u.id === editingUser.id
-              ? {
-                  ...u,
-                  name: formName,
-                  title: formTitle,
-                  position: formPosition,
-                  phone: formPhone,
-                  company_role: formRole,
-                  status: formStatus,
-                  is_primary: formIsPrimary,
-                  permissions: formPermissions,
-                }
-              : formIsPrimary
-              ? { ...u, is_primary: false } // Reset primary contact for other users if this one is set
-              : u
-          )
-        );
-        
+        // 2. [신규 기능]: 담당 업무 저장 (양방향 동기화)
+        const payload = Object.entries(formTaskAssignments).map(([code, val]) => ({
+          task_code: code,
+          is_primary: val.is_primary,
+          email_notify: val.email_notify,
+        }));
+        await updateUserTaskAssignments(editingUser.id, editingUser.company_id, payload, "portal");
+
+        // 3. 로컬 상태 동기화
+        let updatedUsers = users.map((u) => {
+          if (u.id === editingUser.id) {
+            const newAssignments = Object.entries(formTaskAssignments).map(([code, val]) => ({
+              user_id: u.id,
+              task_code: code,
+              is_primary: val.is_primary,
+              email_notify: val.email_notify,
+            }));
+            return {
+              ...u,
+              name: formName,
+              title: formTitle,
+              position: formPosition,
+              phone: formPhone,
+              company_role: formRole,
+              status: formStatus,
+              is_primary: formIsPrimary,
+              permissions: formPermissions,
+              task_assignments: newAssignments,
+            };
+          } else {
+            // 다른 유저의 주 담당자 해제 상태 연쇄 동기화
+            const updatedAssignments = u.task_assignments?.map((a: any) => {
+              const targetTask = formTaskAssignments[a.task_code];
+              if (targetTask?.is_primary) {
+                return { ...a, is_primary: false };
+              }
+              return a;
+            }) || [];
+
+            return {
+              ...u,
+              is_primary: formIsPrimary ? false : u.is_primary,
+              task_assignments: updatedAssignments,
+            };
+          }
+        });
+
+        setUsers(updatedUsers);
         setEditingUser(null);
         alert("수정이 완료되었습니다.");
       } catch (err) {
@@ -149,7 +234,6 @@ export function CompanyUsersManager({ initialUsers, currentUserId }: CompanyUser
               {users.map((row) => {
                 const expired = isInviteExpired(row);
                 
-                // 가입 상태 계산
                 let joinStatusText = "가입완료";
                 let joinStatusClass = "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/20";
                 if (expired) {
@@ -160,7 +244,6 @@ export function CompanyUsersManager({ initialUsers, currentUserId }: CompanyUser
                   joinStatusClass = "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-500/10 dark:text-amber-400 dark:border-amber-500/20";
                 }
 
-                // 이용 상태 계산
                 let usageStatusText = "정상이용";
                 let usageStatusClass = "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/20";
                 if (row.status === "invited" || expired) {
@@ -264,7 +347,7 @@ export function CompanyUsersManager({ initialUsers, currentUserId }: CompanyUser
               </button>
             </div>
 
-            <div className="p-5 space-y-4 max-h-[80vh] overflow-y-auto">
+            <div className="p-5 space-y-4 max-h-[70vh] overflow-y-auto">
               {/* Profile fields */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -358,7 +441,7 @@ export function CompanyUsersManager({ initialUsers, currentUserId }: CompanyUser
               {/* ACL Permissions Matrix */}
               <div className="space-y-2.5">
                 <div className="flex items-center justify-between">
-                  <h4 className="text-xs font-bold text-zinc-900 dark:text-white">메뉴별 세부 권한 설정</h4>
+                  <h4 className="text-xs font-bold text-zinc-900 dark:text-white">포털 메뉴별 세부 권한 설정</h4>
                   {formRole === "company_admin" && (
                     <span className="text-[9px] font-bold text-emerald-650 bg-emerald-50 border border-emerald-100 px-1.5 py-0.5 rounded dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-900">
                       관리자는 항상 모든 권한 소유
@@ -449,6 +532,57 @@ export function CompanyUsersManager({ initialUsers, currentUserId }: CompanyUser
                       </div>
                     </div>
                   </div>
+                </div>
+              </div>
+
+              {/* [신규 기능]: 담당 업무 설정 섹션 */}
+              <div className="space-y-2.5 pt-2 border-t border-zinc-100 dark:border-zinc-800">
+                <div>
+                  <h4 className="text-xs font-bold text-zinc-900 dark:text-white">담당 업무</h4>
+                  <p className="text-[10px] text-zinc-500 mt-1 leading-relaxed">
+                    업무별 주 담당자와 이메일 알림 수신 여부를 설정합니다. 해당 업무에서 요청, 승인, 보완 또는 이슈가 발생하면 설정된 담당자에게 알림이 전달됩니다.
+                  </p>
+                </div>
+
+                <div className="rounded-lg border border-zinc-200 overflow-hidden dark:border-zinc-800">
+                  <table className="w-full text-left border-collapse text-[11px]">
+                    <thead>
+                      <tr className="bg-zinc-50 text-[10px] font-bold text-zinc-500 border-b border-zinc-200 dark:bg-zinc-950/20 dark:border-zinc-800">
+                        <th className="p-2">업무명 및 설명</th>
+                        <th className="p-2 text-center w-20">주 담당자</th>
+                        <th className="p-2 text-center w-24">이메일 알림</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/80">
+                      {TASK_DEFINITIONS.map(def => {
+                        const state = formTaskAssignments[def.code] || { is_primary: false, email_notify: false };
+                        return (
+                          <tr key={def.code} className="hover:bg-zinc-50/20">
+                            <td className="p-2">
+                              <span className="font-bold text-zinc-800 dark:text-zinc-200 block">{def.label}</span>
+                              <span className="text-[9px] text-zinc-400 block mt-0.5">{def.desc}</span>
+                            </td>
+                            <td className="p-2 text-center">
+                              <input
+                                type="checkbox"
+                                checked={state.is_primary}
+                                onChange={(e) => handleTaskCheckboxChange(def.code, "is_primary", e.target.checked)}
+                                className="rounded border-zinc-300 text-indigo-600 focus:ring-indigo-500 h-3.5 w-3.5"
+                              />
+                            </td>
+                            <td className="p-2 text-center">
+                              <input
+                                type="checkbox"
+                                checked={state.email_notify}
+                                onChange={(e) => handleTaskCheckboxChange(def.code, "email_notify", e.target.checked)}
+                                className="rounded border-zinc-300 text-indigo-600 focus:ring-indigo-500 h-3.5 w-3.5"
+                              />
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
                 </div>
               </div>
             </div>
