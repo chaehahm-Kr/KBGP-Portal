@@ -719,6 +719,11 @@ export default function ApplicationWorkspace({
                       <p className="font-bold text-zinc-900 dark:text-white">{req.request_content}</p>
                       <div className="mt-1 text-[10px] text-zinc-400">
                         <span>{new Date(req.requested_at).toLocaleDateString()} 요청 · </span>
+                        {req.reply_due_at && (
+                          <span className="font-semibold text-rose-600 dark:text-rose-400">
+                            기한: {new Date(req.reply_due_at).toLocaleDateString()} ·{" "}
+                          </span>
+                        )}
                         <span className={req.status === "replied" ? "text-emerald-500 font-bold" : "text-amber-500"}>
                           {req.status === "replied" ? "회신완료" : "회신대기"}
                         </span>

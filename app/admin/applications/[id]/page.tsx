@@ -67,7 +67,7 @@ export default async function AdminApplicationDetailPage({
   const { data: infoRequests } = await supabase
     .from("additional_info_requests")
     .select(
-      "id, product_id, request_content, requested_at, reply_content, reply_attachment_path, status, replied_at"
+      "id, product_id, request_content, requested_at, reply_content, reply_attachment_path, status, replied_at, reply_due_at"
     )
     .eq("application_id", id)
     .order("requested_at", { ascending: false });

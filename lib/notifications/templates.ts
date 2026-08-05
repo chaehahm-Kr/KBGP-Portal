@@ -528,7 +528,14 @@ export async function sendTemplatedEmail(
     .maybeSingle();
 
   const subjectTemplate = template?.subject_template ?? DEFAULT_TEMPLATES[key].subject;
-  const bodyTemplate = template?.body_template ?? DEFAULT_TEMPLATES[key].body;
+  let bodyTemplate = template?.body_template ?? DEFAULT_TEMPLATES[key].body;
+
+  if (key === "info_request_created" && !variables.dueDate) {
+    bodyTemplate = bodyTemplate
+      .replace("회신 기한인 {{dueDate}}까지 ", "")
+      .replace("회신 기한인 까지 ", "")
+      .replace("회신 기한인  까지 ", "");
+  }
 
   // 템플릿 키를 variables에 같이 넘겨서 파셜 구조화에 활용
   const { subject, text, html } = renderEmailHtml(subjectTemplate, bodyTemplate, {

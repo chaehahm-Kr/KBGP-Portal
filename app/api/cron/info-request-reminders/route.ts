@@ -24,7 +24,7 @@ export async function GET(request: Request) {
 
   const admin = createAdminClient();
   const now = new Date();
-  const soonThreshold = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+  const soonThreshold = new Date(now.getTime() + 2 * 24 * 60 * 60 * 1000);
 
   let dueSoonSent = 0;
   let overdueSent = 0;
@@ -49,7 +49,7 @@ export async function GET(request: Request) {
       .from("company_users")
       .select("email")
       .eq("company_id", req.company_id)
-      .eq("status", "active");
+      .in("status", ["active", "invited"]);
 
     for (const recipient of recipients ?? []) {
       await sendTemplatedEmail("info_request_due_soon", recipient.email, {

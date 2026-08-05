@@ -61,7 +61,13 @@ export async function createInfoRequest(
     return { error: "신청서를 찾을 수 없습니다." };
   }
 
-  const dueAt = new Date(Date.now() + REPLY_DUE_DAYS * 24 * 60 * 60 * 1000);
+  const hasDeadline = formData.get("hasDeadline") === "true";
+  const replyDueAtStr = formData.get("replyDueAt");
+
+  let replyDueAt: string | null = null;
+  if (hasDeadline && typeof replyDueAtStr === "string") {
+    replyDueAt = new Date(`${replyDueAtStr}T23:59:59`).toISOString();
+  }
 
   const { error: insertError } = await admin.from("additional_info_requests").insert({
     application_id: applicationId,
@@ -69,7 +75,7 @@ export async function createInfoRequest(
     product_id: parsed.data.productId || null,
     request_content: parsed.data.requestContent,
     requested_by: session.userId,
-    reply_due_at: dueAt.toISOString(),
+    reply_due_at: replyDueAt,
   });
 
   if (insertError) {
@@ -113,11 +119,13 @@ export async function createInfoRequest(
     );
   }
 
+  const dueDateVal = replyDueAt ? formatDueDate(replyDueAt) : "";
+
   for (const recipient of recipients ?? []) {
     await sendTemplatedEmail("info_request_created", recipient.email, {
       applicationNumber: application.application_number,
       requestContent: parsed.data.requestContent,
-      dueDate: formatDueDate(dueAt.toISOString()),
+      dueDate: dueDateVal,
     });
   }
 

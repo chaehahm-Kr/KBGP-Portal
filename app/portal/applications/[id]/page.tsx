@@ -81,7 +81,7 @@ export default async function ApplicationDetailPage({
   const { data: infoRequests } = await supabase
     .from("additional_info_requests")
     .select(
-      "id, product_id, request_content, requested_at, reply_content, reply_attachment_path, status, replied_at"
+      "id, product_id, request_content, requested_at, reply_content, reply_attachment_path, status, replied_at, reply_due_at"
     )
     .eq("application_id", id)
     .order("requested_at", { ascending: false });
@@ -250,8 +250,19 @@ export default async function ApplicationDetailPage({
           <div className="space-y-4 divide-y divide-amber-100 dark:divide-amber-900/30">
             {pendingRequests.map((request) => (
               <div key={request.id} className="pt-4 first:pt-0 space-y-2">
-                <p className="text-xs text-zinc-700 dark:text-zinc-300 font-medium">
-                  <span className="text-amber-700 dark:text-amber-400">[요청 사항]</span> {request.request_content}
+                <p className="text-xs text-zinc-700 dark:text-zinc-300 font-medium flex flex-wrap items-center justify-between gap-2">
+                  <span>
+                    <span className="text-amber-700 dark:text-amber-400">[요청 사항]</span> {request.request_content}
+                  </span>
+                  {request.reply_due_at && (
+                    <span className="text-[10px] bg-amber-100 text-amber-800 px-2 py-0.5 rounded font-bold dark:bg-amber-950 dark:text-amber-300 shrink-0">
+                      회신 기한: {new Date(request.reply_due_at).toLocaleDateString("ko-KR", {
+                        year: "numeric",
+                        month: "long",
+                        day: "numeric",
+                      })}까지
+                    </span>
+                  )}
                 </p>
                 <div className="bg-white dark:bg-zinc-950 rounded-lg p-4 border border-zinc-200 dark:border-zinc-800">
                   <ReplyInfoRequestForm
