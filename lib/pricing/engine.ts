@@ -134,7 +134,7 @@ function computeSingleScenario(
     const customs = (detailed.customsBrokerage ?? 0) / qty;
     const inbound = (detailed.domesticInboundFreight ?? 0) / qty;
     const receiving = (detailed.warehouseReceiving ?? 0) / qty;
-    const duty = supplierUnitPriceUSD * ((detailed.dutyRate ?? 0) / 100);
+    const duty = (supplierUnitPriceUSD + freight) * ((detailed.dutyRate ?? 0) / 100); // 배송비를 합산한 금액 기준으로 10% 관세/부대비용 산출
     importCost = freight + customs + inbound + receiving + duty;
   } else {
     const importRate = getValue("general_import_cost_rate", 15) / 100;
