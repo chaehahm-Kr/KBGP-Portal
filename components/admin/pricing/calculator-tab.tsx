@@ -476,6 +476,12 @@ export function CalculatorTab({ activeSubTab, presets, scenarios, settings: init
     };
   }, [landedCostOutput, shippingCostEntryType]);
 
+  const handleForceRecalculateShipping = () => {
+    if (landedCostOutput) {
+      triggerTwoDayLookup(landedCostOutput);
+    }
+  };
+
   // 최종 Landed Cost 산출
   let calculatedLandedCostPerUnit = 0;
   let calculatedTotalLandedCostUSD = 0;
