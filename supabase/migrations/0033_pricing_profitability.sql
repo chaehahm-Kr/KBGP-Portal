@@ -1,10 +1,6 @@
 -- 0033_pricing_profitability.sql — 가격 및 수익성 분석(Pricing & Profitability) 모듈 테이블 스키마 및 기본 데이터 구축
 
--- 0. 테이블 락(Lock) 세션 강제 정리
-SELECT pg_terminate_backend(pid) 
-FROM pg_stat_activity 
-WHERE pid <> pg_backend_pid() 
-  AND (query LIKE '%pricing%' OR query LIKE '%calculations%');
+BEGIN;
 
 -- 이전 불완전 생성 테이블 청소 (Drop Cascade)
 DROP TABLE IF EXISTS public.pricing_scenario_logs CASCADE;
@@ -339,3 +335,5 @@ INSERT INTO public.pricing_scenario_values (scenario_id, item_id, value) VALUES
   ('a82d77d7-fca8-47fb-ba0d-7b242b36a101', 'e0000000-0000-0000-0000-000000000021', 1.00),
   ('a82d77d7-fca8-47fb-ba0d-7b242b36a102', 'e0000000-0000-0000-0000-000000000021', 0.00)
 ON CONFLICT (scenario_id, item_id) DO UPDATE SET value = EXCLUDED.value;
+
+COMMIT;
