@@ -12,8 +12,8 @@ type EmailTemplateData = {
 
 type EmailTemplatesWorkspaceProps = {
   initialTemplates: EmailTemplateData[];
-  updateAction: (key: string, formData: FormData) => Promise<TemplateFormState>;
-  testAction: (key: string, formData: FormData) => Promise<TemplateFormState>;
+  updateAction: (key: string, prevState: TemplateFormState, formData: FormData) => Promise<TemplateFormState>;
+  testAction: (key: string, prevState: TemplateFormState, formData: FormData) => Promise<TemplateFormState>;
   previewAction: (key: string, subject: string, body: string) => Promise<{ success: boolean; html: string; error?: string }>;
 };
 
@@ -241,7 +241,7 @@ export function EmailTemplatesWorkspace({
       fd.append("subject", subject);
       fd.append("body", body);
 
-      const res = await updateAction(selectedKey, fd);
+      const res = await updateAction(selectedKey, undefined, fd);
       if (res && "error" in res) {
         setErrorMsg(res.error);
       } else if (res && "success" in res) {
@@ -262,7 +262,7 @@ export function EmailTemplatesWorkspace({
       fd.append("subject", subject);
       fd.append("body", body);
 
-      const res = await testAction(selectedKey, fd);
+      const res = await testAction(selectedKey, undefined, fd);
       if (res && "error" in res) {
         setErrorMsg(res.error);
       } else if (res && "success" in res) {
