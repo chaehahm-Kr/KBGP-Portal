@@ -50,26 +50,19 @@ export async function convertInquiryToCompany(
     return { error: "이미 처리된 접수 건입니다." };
   }
 
-  // 초대를 먼저 시도한다 — companies를 먼저 만들면 초대 실패 시(잘못된 이메일,
-  // 이미 가입된 계정 등) 아무도 못 쓰는 회사 행만 남는 문제가 있었다(실제로
-  // 검증 중 발견). 여기 실패하면 아무것도 만들어지지 않은 채 재시도할 수 있다.
-  const { data: invited, error: inviteError } = await admin.auth.admin.inviteUserByEmail(
-    inquiry.contact_email,
-    {
-      data: { role: "portal", display_name: inquiry.contact_name },
-      redirectTo: `${publicEnv.NEXT_PUBLIC_SITE_URL}/portal/invite/accept`,
-    }
-  );
+  // 계정을 먼저 생성한다 (이메일은 가입 요청 시 발송)
+  const { data: invited, error: inviteError } = await admin.auth.admin.createUser({
+    email: inquiry.contact_email,
+    email_confirm: false,
+    user_metadata: { role: "portal", display_name: inquiry.contact_name },
+  });
 
   if (inviteError || !invited.user) {
-    if (inviteError?.code === "over_email_send_rate_limit") {
-      return { error: "이메일 발송 한도를 초과했습니다. 잠시 후 다시 시도해주세요." };
-    }
     if (inviteError?.code === "email_exists") {
       return { error: "이미 다른 회사 계정으로 가입된 이메일입니다." };
     }
     return {
-      error: `초대에 실패했습니다: ${inviteError?.message ?? "알 수 없는 오류"}`,
+      error: `계정 생성에 실패했습니다: ${inviteError?.message ?? "알 수 없는 오류"}`,
     };
   }
 
@@ -101,7 +94,7 @@ export async function convertInquiryToCompany(
     company_role: "company_admin",
     status: "invited",
     invited_by: session.userId,
-    invited_at: new Date().toISOString(),
+    invited_at: null,
   });
 
   if (companyUserError) {

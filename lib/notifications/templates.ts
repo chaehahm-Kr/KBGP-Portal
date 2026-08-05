@@ -10,6 +10,7 @@ export const TEMPLATE_KEYS = [
   "assignment_unassigned",
   "info_request_created",
   "info_request_replied",
+  "portal_signup_request",
   "review_result_approved",
   "review_result_partial_approved",
   "review_result_on_hold",
@@ -56,6 +57,11 @@ export const DEFAULT_TEMPLATES: Record<
     description: "회사 담당자 — 추가 자료 요청 발송",
     subject: "[K SELECT NETWORK] {{applicationNumber}} 추가 자료 요청",
     body: "안녕하세요, {{contactName}}님.\n\n{{applicationNumber}} 신청서 심사를 위해 추가 자료가 필요합니다.\n\n요청 내용:\n{{requestContent}}\n\n회신 기한인 {{dueDate}}까지 아래 버튼을 눌러 포털에 로그인하신 후 추가 자료를 제출해 주시기 바랍니다.\n\n{{ctaButton}}",
+  },
+  portal_signup_request: {
+    description: "회사 담당자 — 포털 가입 요청",
+    subject: "[K SELECT NETWORK] 브랜드사 포털 가입 요청 안내",
+    body: "안녕하세요, {{contactName}}님.\n\n귀사의 입점 신청서를 검토한 결과, 상세 심사 단계를 진행하기 위해 브랜드사 포털 가입을 요청드립니다.\n\n아래 버튼을 클릭하여 회원가입 및 비밀번호 설정을 완료하신 후 포털에 로그인하여 주시기 바랍니다.\n\n{{ctaButton}}",
   },
   info_request_replied: {
     description: "내부 담당자 — 추가 자료 회신 도착",
@@ -261,6 +267,8 @@ function buildCtaButtonHtml(variables: Record<string, string>) {
     url = "https://admin.kselectnetwork.com/admin/login";
   } else if (key === "info_request_created") {
     buttonLabel = "추가 자료 제출하기";
+  } else if (key === "portal_signup_request") {
+    buttonLabel = "포털 가입 시작하기";
   } else if (key === "info_request_replied") {
     buttonLabel = "회신 자료 검토하기";
   } else if (key === "review_result_approved" || key === "review_result_partial_approved") {

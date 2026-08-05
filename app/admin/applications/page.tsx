@@ -3,6 +3,7 @@ import Link from "next/link";
 import { verifyAdminSession } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { APPLICATION_STATUS_LABEL, type ApplicationStatus } from "@/lib/application/types";
+import { sendPortalInvitationAction } from "@/lib/company/admin-actions";
 
 export const metadata: Metadata = {
   title: "신청서 관리 | K SELECT NETWORK 어드민",
@@ -66,7 +67,7 @@ export default async function AdminApplicationsPage({
 
   const { data: companyUsers } = await supabase
     .from("company_users")
-    .select("company_id, name, email, phone, title, position, is_primary, status")
+    .select("id, company_id, name, email, phone, title, position, is_primary, status, invited_at")
     .order("created_at", { ascending: true });
   
   const companyMap = new Map<
@@ -245,6 +246,7 @@ export default async function AdminApplicationsPage({
                 <th className="px-6 py-3 font-semibold">준비 사항</th>
                 <th className="px-6 py-3 font-semibold">담당 심사원</th>
                 <th className="px-6 py-3 font-semibold text-center">브랜드 담당자</th>
+                <th className="px-6 py-3 font-semibold">포털 가입 상태</th>
                 <th className="px-6 py-3 font-semibold">제출일</th>
               </tr>
             </thead>
@@ -351,6 +353,53 @@ export default async function AdminApplicationsPage({
                         "-"
                       )}
                     </td>
+                    <td className="px-6 py-3.5 whitespace-nowrap">
+                      {(() => {
+                        const usersOfCompany = (companyUsers ?? []).filter((u) => u.company_id === app.company_id);
+                        const primaryUser = usersOfCompany.find((u) => u.is_primary) || usersOfCompany[0];
+                        if (!primaryUser) return <span className="text-zinc-400">-</span>;
+                        
+                        let badgeClass = "bg-zinc-100 text-zinc-800 dark:bg-zinc-800 dark:text-zinc-300";
+                        let label = "요청 전";
+                        let showBtn = false;
+                        let btnText = "";
+                        
+                        if (primaryUser.status === "active") {
+                          badgeClass = "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-350 border border-emerald-100 dark:border-emerald-900/50";
+                          label = "가입 완료";
+                        } else if (primaryUser.status === "invited") {
+                          if (primaryUser.invited_at) {
+                            badgeClass = "bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-350 border border-amber-100 dark:border-amber-900/50";
+                            label = "가입 대기";
+                            showBtn = true;
+                            btnText = "재요청";
+                          } else {
+                            badgeClass = "bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 border border-zinc-250 dark:border-zinc-700";
+                            label = "요청 전";
+                            showBtn = true;
+                            btnText = "가입 요청";
+                          }
+                        }
+                        
+                        return (
+                          <div className="flex items-center gap-2">
+                            <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold ${badgeClass}`}>
+                              {label}
+                            </span>
+                            {showBtn && (
+                              <form action={sendPortalInvitationAction.bind(null, primaryUser.id)}>
+                                <button
+                                  type="submit"
+                                  className="inline-flex items-center justify-center rounded px-2 py-1 text-[10px] font-semibold bg-zinc-900 hover:bg-zinc-800 text-white dark:bg-white dark:text-zinc-955 dark:hover:bg-zinc-100 transition-colors h-6 cursor-pointer"
+                                >
+                                  {btnText}
+                                </button>
+                              </form>
+                            )}
+                          </div>
+                        );
+                      })()}
+                    </td>
                     <td className="px-6 py-3.5 text-zinc-650 dark:text-zinc-400">
                       {app.submitted_at ? (
                         <div className="flex flex-col gap-0.5">
@@ -374,7 +423,7 @@ export default async function AdminApplicationsPage({
               })}
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="py-12 text-center text-sm text-zinc-400">
+                  <td colSpan={8} className="py-12 text-center text-sm text-zinc-400">
                     조건에 부합하는 신청서 내역이 없습니다.
                   </td>
                 </tr>

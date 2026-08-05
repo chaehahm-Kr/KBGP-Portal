@@ -47,7 +47,7 @@ export default async function AdminApplicationDetailPage({
 
   const { data: companyUsers } = await supabase
     .from("company_users")
-    .select("id, name, email, status, company_role, title, position, phone, is_primary, permissions")
+    .select("id, name, email, status, company_role, title, position, phone, is_primary, permissions, invited_at")
     .eq("company_id", application.company_id)
     .order("created_at", { ascending: true });
 

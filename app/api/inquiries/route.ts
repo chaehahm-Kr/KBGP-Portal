@@ -111,17 +111,15 @@ export async function POST(request: Request) {
 
   const admin = createAdminClient();
 
-  // 1. Supabase Auth로 포털 사용자 초대 및 계정 생성
-  const { data: invited, error: inviteError } = await admin.auth.admin.inviteUserByEmail(
-    input.email,
-    {
-      data: { role: "portal", display_name: input.contactName },
-      redirectTo: `${publicEnv.NEXT_PUBLIC_SITE_URL}/portal/invite/accept`,
-    }
-  );
+  // 1. Supabase Auth로 포털 사용자 계정 생성 (이메일은 발송하지 않음)
+  const { data: invited, error: inviteError } = await admin.auth.admin.createUser({
+    email: input.email,
+    email_confirm: false,
+    user_metadata: { role: "portal", display_name: input.contactName },
+  });
 
   if (inviteError || !invited.user) {
-    console.error("[inquiries] invite user failed", inviteError);
+    console.error("[inquiries] create user failed", inviteError);
     if (inviteError?.code === "email_exists") {
       return NextResponse.json(
         { ok: false, errors: ["이미 등록된 이메일 주소입니다. 브랜드 포털에서 로그인해 주세요."] },
@@ -129,7 +127,7 @@ export async function POST(request: Request) {
       );
     }
     return NextResponse.json(
-      { ok: false, errors: ["회원 초대(계정 생성)에 실패했습니다. 잠시 후 다시 시도해주세요."] },
+      { ok: false, errors: ["포털 계정 생성에 실패했습니다. 잠시 후 다시 시도해주세요."] },
       { status: 500 }
     );
   }
@@ -179,7 +177,7 @@ export async function POST(request: Request) {
     email: input.email,
     company_role: "company_admin",
     status: "invited",
-    invited_at: new Date().toISOString(),
+    invited_at: null,
   });
 
   if (companyUserError) {

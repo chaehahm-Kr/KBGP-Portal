@@ -5,6 +5,8 @@ import path from "path";
 import { revalidatePath } from "next/cache";
 import { verifyAdminSession } from "@/lib/auth/dal";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { publicEnv } from "@/lib/env/public";
+import { sendTemplatedEmail } from "@/lib/notifications/templates";
 
 export interface CompanyContact {
   id: string;
@@ -312,4 +314,59 @@ export async function adminDeleteCompanyUser(companyId: string, targetUserId: st
   await admin.auth.admin.deleteUser(targetUserId);
 
   revalidatePath(`/admin/companies/${companyId}`);
+}
+
+/**
+ * Super Admin 또는 Admin이 특정 회사 유저에게 포털 가입 요청 이메일을 발송합니다.
+ */
+export async function sendPortalInvitationAction(companyUserId: string) {
+  const session = await verifyAdminSession();
+  const admin = createAdminClient();
+
+  const { data: target } = await admin
+    .from("company_users")
+    .select("email, name, company_id, status")
+    .eq("id", companyUserId)
+    .single();
+
+  if (!target) {
+    throw new Error("대상 사용자를 찾을 수 없습니다.");
+  }
+  if (target.status !== "invited") {
+    throw new Error("초대 대기중인 사용자에게만 가입 요청을 보낼 수 있습니다.");
+  }
+
+  const { data: linkData, error: linkError } = await admin.auth.admin.generateLink({
+    type: "invite",
+    email: target.email,
+    options: {
+      redirectTo: `${publicEnv.NEXT_PUBLIC_SITE_URL}/portal/invite/accept`,
+    }
+  });
+
+  if (linkError || !linkData?.properties?.action_link) {
+    throw new Error("가입 초대 링크 생성 실패: " + (linkError?.message || ""));
+  }
+
+  const inviteLink = linkData.properties.action_link;
+
+  await sendTemplatedEmail("portal_signup_request", target.email, {
+    contactName: target.name || "브랜드사 담당자",
+    portalUrl: inviteLink,
+  });
+
+  const { error: updateError } = await admin
+    .from("company_users")
+    .update({
+      invited_at: new Date().toISOString(),
+    })
+    .eq("id", companyUserId);
+
+  if (updateError) {
+    throw new Error("DB 업데이트 실패: " + updateError.message);
+  }
+
+  revalidatePath("/admin/applications");
+  revalidatePath("/admin/companies");
+  revalidatePath(`/admin/companies/${target.company_id}`);
 }

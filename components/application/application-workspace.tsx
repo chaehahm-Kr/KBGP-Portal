@@ -12,6 +12,7 @@ import { ReviewProductForm } from "@/components/application/review-product-form"
 import { AssignApplicationForm } from "@/components/application/assign-application-form";
 import { AddReviewNoteForm } from "@/components/application/add-review-note-form";
 import { CreateInfoRequestForm } from "@/components/application/create-info-request-form";
+import { sendPortalInvitationAction } from "@/lib/company/admin-actions";
 
 interface ApplicationWorkspaceProps {
   application: any;
@@ -66,6 +67,29 @@ export default function ApplicationWorkspace({
   const [activeTab, setActiveTab] = useState<
     "overview" | "company" | "products" | "documents" | "review" | "communication" | "activity"
   >("overview");
+
+  const [invitingIds, setInvitingIds] = useState<Set<string>>(new Set());
+
+  const handleSendInvite = async (companyUserId: string) => {
+    if (invitingIds.has(companyUserId)) return;
+    setInvitingIds((prev) => {
+      const next = new Set(prev);
+      next.add(companyUserId);
+      return next;
+    });
+    try {
+      await sendPortalInvitationAction(companyUserId);
+      alert("포털 가입 요청 이메일을 성공적으로 발송했습니다.");
+    } catch (err: any) {
+      alert("요청 발송 중 오류가 발생했습니다: " + err.message);
+    } finally {
+      setInvitingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(companyUserId);
+        return next;
+      });
+    }
+  };
 
   // Parse company metadata
   let parsedMeta = {
@@ -431,20 +455,46 @@ export default function ApplicationWorkspace({
                             "-"
                           )}
                         </td>
-                        <td className="px-4 py-2.5 text-center">
-                          {user.status === "active" ? (
-                            <span className="inline-block rounded px-1.5 py-0.5 text-[10px] font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300">
-                              정상 이용
-                            </span>
-                          ) : user.status === "suspended" ? (
-                            <span className="inline-block rounded px-1.5 py-0.5 text-[10px] font-bold bg-rose-50 text-rose-700 dark:bg-rose-950/50 dark:text-rose-300">
-                              이용 일시정지
-                            </span>
-                          ) : (
-                            <span className="inline-block rounded px-1.5 py-0.5 text-[10px] font-bold bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-350">
-                              초대 대기중
-                            </span>
-                          )}
+                        <td className="px-4 py-2.5">
+                          <div className="flex items-center justify-center gap-2">
+                            {user.status === "active" ? (
+                              <span className="inline-block rounded px-1.5 py-0.5 text-[10px] font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300">
+                                가입 완료
+                              </span>
+                            ) : user.status === "suspended" ? (
+                              <span className="inline-block rounded px-1.5 py-0.5 text-[10px] font-bold bg-rose-50 text-rose-700 dark:bg-rose-950/50 dark:text-rose-300">
+                                이용 일시정지
+                              </span>
+                            ) : user.invited_at ? (
+                              <>
+                                <span className="inline-block rounded px-1.5 py-0.5 text-[10px] font-bold bg-amber-50 text-amber-700 dark:bg-amber-955/50 dark:text-amber-300 border border-amber-100 dark:border-amber-900/50">
+                                  가입 대기
+                                </span>
+                                <button
+                                  type="button"
+                                  disabled={invitingIds.has(user.id)}
+                                  onClick={() => handleSendInvite(user.id)}
+                                  className="rounded px-2 py-0.5 text-[9px] font-bold bg-zinc-900 text-white hover:bg-zinc-800 disabled:opacity-50 transition-colors cursor-pointer dark:bg-white dark:text-zinc-950 h-5"
+                                >
+                                  {invitingIds.has(user.id) ? "전송 중..." : "재요청"}
+                                </button>
+                              </>
+                            ) : (
+                              <>
+                                <span className="inline-block rounded px-1.5 py-0.5 text-[10px] font-bold bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-350 border border-zinc-200 dark:border-zinc-700">
+                                  요청 전
+                                </span>
+                                <button
+                                  type="button"
+                                  disabled={invitingIds.has(user.id)}
+                                  onClick={() => handleSendInvite(user.id)}
+                                  className="rounded px-2 py-0.5 text-[9px] font-bold bg-zinc-900 text-white hover:bg-zinc-800 disabled:opacity-50 transition-colors cursor-pointer dark:bg-white dark:text-zinc-955 h-5"
+                                >
+                                  {invitingIds.has(user.id) ? "전송 중..." : "가입 요청"}
+                                </button>
+                              </>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     ))}
