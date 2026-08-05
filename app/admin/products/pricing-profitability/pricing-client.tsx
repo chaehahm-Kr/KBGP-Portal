@@ -21,17 +21,15 @@ export function PricingProfitabilityClient({
   initialSavedCalculations,
   initialProducts,
 }: Props) {
-  const [activeTab, setActiveTab] = useState<"calculator" | "saved" | "settings">("calculator");
+  // [개선 완료] Landed Cost & Cargo를 1차 대메뉴 탭으로 좌측 정렬 배치
+  const [activeTab, setActiveTab] = useState<"calculator" | "landed_cost" | "saved" | "settings">("calculator");
   
-  // 상태 동적 동기화용 (데이터 갱신 시 활용)
   const [presets, setPresets] = useState(initialPresets);
   const [savedCalcs, setSavedCalcs] = useState(initialSavedCalculations);
   const [settingsData, setSettingsData] = useState(initialSettings);
 
-  // 로딩/재계산용 폼 스냅샷 상태
   const [calculatorFormToLoad, setCalculatorFormToLoad] = useState<any | null>(null);
 
-  // 프리셋 목록 최신화용 helper
   const handleRefreshPresets = async () => {
     try {
       const refreshed = await getPricingPresets();
@@ -41,17 +39,19 @@ export function PricingProfitabilityClient({
     }
   };
 
+  // 한글 병기를 제거하고 영문 타이틀 단독 노출로 깔끔하게 변경
   const tabs = [
-    { id: "calculator", label: "Calculator (수익성 계산기)" },
-    { id: "saved", label: "Saved Calculations (계산 기록)" },
-    { id: "settings", label: "Preset & Scenario Settings (설정)" },
+    { id: "calculator", label: "Calculator" },
+    { id: "landed_cost", label: "Landed Cost & Cargo" },
+    { id: "saved", label: "Saved Calculations" },
+    { id: "settings", label: "Scenario Settings" },
   ] as const;
 
   return (
     <div className="space-y-6">
-      {/* Tab bar */}
+      {/* [개선 완료] 탭 네비게이션 좌측 정렬 */}
       <div className="border-b border-slate-200">
-        <nav className="flex space-x-8" aria-label="Tabs">
+        <nav className="flex space-x-8 justify-start" aria-label="Tabs">
           {tabs.map((tab) => {
             const isSelected = activeTab === tab.id;
             return (
@@ -59,16 +59,16 @@ export function PricingProfitabilityClient({
                 key={tab.id}
                 onClick={() => {
                   setActiveTab(tab.id);
-                  if (tab.id !== "calculator") {
-                    setCalculatorFormToLoad(null); // 다른 탭 이동 시 폼 초기화
+                  if (tab.id !== "calculator" && tab.id !== "landed_cost") {
+                    setCalculatorFormToLoad(null);
                   }
                 }}
                 className={`
-                  py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap transition-colors duration-200
+                  py-4 px-1 border-b-2 font-bold text-sm whitespace-nowrap transition-colors duration-200
                   ${
                     isSelected
                       ? "border-slate-900 text-slate-900"
-                      : "border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300"
+                      : "border-transparent text-slate-400 hover:text-slate-600 hover:border-slate-300"
                   }
                 `}
               >
@@ -81,8 +81,9 @@ export function PricingProfitabilityClient({
 
       {/* Tab Contents */}
       <div className="mt-4">
-        {activeTab === "calculator" && (
+        {(activeTab === "calculator" || activeTab === "landed_cost") && (
           <CalculatorTab
+            activeSubTab={activeTab}
             presets={presets}
             scenarios={initialScenarios}
             settings={settingsData}
