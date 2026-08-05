@@ -573,7 +573,7 @@ export function CompanyDetailManager({
                 {brands.length > 0 ? (
                   <div className="space-y-4 divide-y divide-zinc-100 dark:divide-zinc-800/80">
                     {brands.map((brand, idx) => (
-                      <div key={brand.id} className={`flex flex-col md:flex-row gap-4 ${idx > 0 ? "pt-4" : ""}`}>
+                      <div id={`brand-${brand.id}`} key={brand.id} className={`flex flex-col md:flex-row gap-4 scroll-mt-20 ${idx > 0 ? "pt-4" : ""}`}>
                         {/* Logo */}
                         <div className="shrink-0">
                           {brand.logoUrl ? (
@@ -670,9 +670,26 @@ export function CompanyDetailManager({
                       <tbody className="divide-y divide-zinc-50 dark:divide-zinc-850">
                         {products.map((product) => (
                           <tr key={product.id}>
-                            <td className="py-3 font-semibold text-zinc-900 dark:text-white">{product.name}</td>
+                            <td className="py-3 font-semibold text-zinc-900 dark:text-white">
+                              <Link
+                                href={`/admin/products/${product.id}`}
+                                className="text-emerald-600 hover:underline dark:text-emerald-450 font-bold"
+                              >
+                                {product.name}
+                              </Link>
+                            </td>
                             <td className="py-3 text-zinc-550 dark:text-zinc-400">
-                              {brandNameById.get(product.brand_id) || "-"}
+                              <button
+                                onClick={() => {
+                                  setActiveTab("brands");
+                                  setTimeout(() => {
+                                    document.getElementById(`brand-${product.brand_id}`)?.scrollIntoView({ behavior: "smooth" });
+                                  }, 100);
+                                }}
+                                className="text-emerald-600 hover:underline dark:text-emerald-450 font-bold text-left cursor-pointer"
+                              >
+                                {brandNameById.get(product.brand_id) || "-"}
+                              </button>
                             </td>
                           </tr>
                         ))}
