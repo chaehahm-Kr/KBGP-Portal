@@ -39,27 +39,27 @@ export const DEFAULT_TEMPLATES: Record<
   application_received_internal: {
     description: "내부 직원 전체 — 신규 신청서 접수",
     subject: "[신규 접수] {{applicationNumber}} — {{companyName}}, 제품 {{productCount}}건",
-    body: "안녕하세요.\n\n신청번호 {{applicationNumber}} 신규 접수 완료되었습니다.\n\n회사명: {{companyName}}\n등록 제품 수: {{productCount}}건\n\n상세 확인 링크: {{link}}",
+    body: "안녕하세요.\n\n신청번호 {{applicationNumber}} 신규 접수 완료되었습니다.\n\n회사명: {{companyName}}\n등록 제품 수: {{productCount}}건\n\n아래 버튼을 클릭하시면 접수된 신청서 상세 화면으로 즉시 연결됩니다.\n\n{{ctaButton}}",
   },
   assignment_assigned: {
     description: "내부 직원 — 담당자로 배정됨",
     subject: "[K SELECT NETWORK] {{applicationNumber}} 담당자로 배정되었습니다",
-    body: "안녕하세요.\n\n신청번호 {{applicationNumber}}의 담당자로 배정되었습니다.{{reasonLine}}\n\n포털에서 확인 후 심사를 진행해 주세요.",
+    body: "안녕하세요.\n\n신청번호 {{applicationNumber}}의 담당자로 배정되었습니다.{{reasonLine}}\n\n아래 버튼을 클릭하여 포털에서 배정된 신청서의 심사를 진행해 주세요.\n\n{{ctaButton}}",
   },
   assignment_unassigned: {
     description: "내부 직원 — 담당자 배정 해제됨",
     subject: "[K SELECT NETWORK] {{applicationNumber}} 담당자 배정이 해제되었습니다",
-    body: "안녕하세요.\n\n참고용 안내입니다 — 신청번호 {{applicationNumber}}의 담당자에서 해제되었습니다.",
+    body: "안녕하세요.\n\n참고용 안내입니다 — 신청번호 {{applicationNumber}}의 담당자에서 해제되었습니다.\n\n{{ctaButton}}",
   },
   info_request_created: {
     description: "회사 담당자 — 추가 자료 요청 발송",
     subject: "[K SELECT NETWORK] {{applicationNumber}} 추가 자료 요청",
-    body: "안녕하세요, {{contactName}}님.\n\n{{applicationNumber}} 신청서 심사를 위해 추가 자료가 필요합니다.\n\n요청 내용:\n{{requestContent}}\n\n회신 기한인 {{dueDate}}까지 포털에 로그인하여 추가 자료를 제출해 주시기 바랍니다.",
+    body: "안녕하세요, {{contactName}}님.\n\n{{applicationNumber}} 신청서 심사를 위해 추가 자료가 필요합니다.\n\n요청 내용:\n{{requestContent}}\n\n회신 기한인 {{dueDate}}까지 아래 버튼을 눌러 포털에 로그인하신 후 추가 자료를 제출해 주시기 바랍니다.\n\n{{ctaButton}}",
   },
   info_request_replied: {
     description: "내부 담당자 — 추가 자료 회신 도착",
     subject: "[K SELECT NETWORK] {{applicationNumber}} 추가 자료 회신 도착",
-    body: "안녕하세요.\n\n{{applicationNumber}} 신청서에 대한 추가 자료 회신이 도착했습니다. 포털에서 확인 및 검토해 주세요.",
+    body: "안녕하세요.\n\n{{applicationNumber}} 신청서에 대한 추가 자료 회신이 도착했습니다.\n\n아래 버튼을 클릭하여 파트너사가 업로드한 회신 자료를 검토해 주세요.\n\n{{ctaButton}}",
   },
   review_result_approved: {
     description: "회사 담당자 — 심사 결과: 승인",
@@ -74,27 +74,27 @@ export const DEFAULT_TEMPLATES: Record<
   review_result_on_hold: {
     description: "회사 담당자 — 심사 결과: 보류",
     subject: "[K SELECT NETWORK] {{applicationNumber}} 심사 결과 안내",
-    body: "안녕하세요, {{contactName}}님.\n\n제출해주신 [{{applicationNumber}}] 신청은 현재 시점에는 진행이 어렵다는 보류 판단을 받았습니다.\n\n상세한 보류 사유와 재신청 가능 일정은 포털 내 신청 이력에서 확인해 주시기 바랍니다.",
+    body: "안녕하세요, {{contactName}}님.\n\n제출해주신 [{{applicationNumber}}] 신청은 현재 시점에는 진행이 어렵다는 보류 판단을 받았습니다.\n\n상세한 보류 사유와 재신청 가능 일정은 아래 버튼을 클릭하여 포털 내 신청 이력에서 확인해 주시기 바랍니다.\n\n{{ctaButton}}",
   },
   review_result_rejected: {
     description: "회사 담당자 — 심사 결과: 반려",
     subject: "[K SELECT NETWORK] {{applicationNumber}} 심사 결과 안내",
-    body: "안녕하세요, {{contactName}}님.\n\n제출해주신 [{{applicationNumber}}] 신청은 참여 조건을 충족하지 못해 이번에는 진행이 어렵다는 판단입니다.\n\n자세한 사유는 포털에서 확인 가능합니다. 참여해 주셔서 감사합니다.",
+    body: "안녕하세요, {{contactName}}님.\n\n제출해주신 [{{applicationNumber}}] 신청은 참여 조건을 충족하지 못해 이번에는 진행이 어렵다는 판단입니다.\n\n자세한 반려 사유는 아래 버튼을 클릭하여 포털 내에서 확인하실 수 있습니다.\n\n{{ctaButton}}\n\n참여해 주셔서 감사합니다.",
   },
   info_request_due_soon: {
     description: "회사 담당자 — 추가 자료 회신 기한 임박",
     subject: "[K SELECT NETWORK] {{applicationNumber}} 추가 자료 회신 기한이 곧 마감됩니다",
-    body: "안녕하세요, {{contactName}}님.\n\n{{applicationNumber}} 신청서의 추가 자료 요청 회신 기한이 {{dueDate}}까지입니다. 아직 회신 전이라면 기한 내에 포털을 통해 회신해 주시기 바랍니다.",
+    body: "안녕하세요, {{contactName}}님.\n\n{{applicationNumber}} 신청서의 추가 자료 요청 회신 기한이 {{dueDate}}까지입니다.\n\n아직 회신 전이라면 아래 버튼을 클릭하여 기한 내에 포털을 통해 회신해 주시기 바랍니다.\n\n{{ctaButton}}",
   },
   info_request_overdue: {
     description: "내부 담당자 — 추가 자료 회신 기한 초과",
     subject: "[K SELECT NETWORK] {{applicationNumber}} 추가 자료 회신 기한 초과",
-    body: "안녕하세요.\n\n{{applicationNumber}} 신청서의 추가 자료 요청 회신 기한({{dueDate}})이 초과되었습니다. 확인 후 직접 연락해 주시기 바랍니다.",
+    body: "안녕하세요.\n\n{{applicationNumber}} 신청서의 추가 자료 요청 회신 기한({{dueDate}})이 초과되었습니다.\n\n아래 버튼을 클릭하여 기한 초과 신청서 상태를 점검하시고, 파트너사 담당자에게 연락해 주시기 바랍니다.\n\n{{ctaButton}}",
   },
   invite_expiring_soon: {
     description: "초대한 Company Admin — 초대 만료 임박",
     subject: "[K SELECT NETWORK] {{inviteeName}}님 초대가 곧 만료됩니다",
-    body: "안녕하세요.\n\n{{inviteeName}}({{inviteeEmail}})님께 보낸 초대가 24시간 내에 만료됩니다. 계속 진행하려면 사용자 관리 화면에서 재초대해 주세요.",
+    body: "안녕하세요.\n\n{{inviteeName}}({{inviteeEmail}})님께 보낸 초대가 24시간 내에 만료됩니다.\n\n초대 링크가 만료되기 전에 아래 버튼을 눌러 사용자 관리 화면에서 재초대해 주시기 바랍니다.\n\n{{ctaButton}}",
   },
   inquiry_received_applicant: {
     description: "신청자 — 마케팅 사이트 신청서 접수 확인",
@@ -104,7 +104,7 @@ export const DEFAULT_TEMPLATES: Record<
   inquiry_received_internal: {
     description: "내부 직원 전체 — 마케팅 사이트 신규 문의 접수",
     subject: "[신규 문의] {{inquiryNumber}} — {{companyName}}, 제품 {{productCount}}건",
-    body: "안녕하세요.\n\n신규 문의 접수 완료: {{inquiryNumber}} (회사명: {{companyName}})\n등록 제품 수: {{productCount}}건\n\n상세 확인: {{link}}",
+    body: "안녕하세요.\n\n신규 문의 접수 완료: {{inquiryNumber}} (회사명: {{companyName}})\n등록 제품 수: {{productCount}}건\n\n아래 버튼을 클릭하시면 접수된 문의 내역의 상세 화면으로 즉시 연결됩니다.\n\n{{ctaButton}}",
   },
 };
 
@@ -225,17 +225,40 @@ function buildInfoCardHtml(variables: Record<string, string>) {
 
 /** 이메일용 CTA 버튼 HTML 조립 (k-select-network-email.html 준수) */
 function buildCtaButtonHtml(variables: Record<string, string>) {
-  const url = variables.portalUrl || variables.applicationUrl || "https://www.kselectnetwork.com/portal";
-  
+  const siteUrl = publicEnv.NEXT_PUBLIC_SITE_URL || "https://www.kselectnetwork.com";
+  let url = variables.portalUrl || variables.applicationUrl || `${siteUrl}/portal`;
   let buttonLabel = "포털에서 확인하기";
-  if (variables.key === "application_submitted_company" || variables.key === "inquiry_received_applicant") {
+
+  // If a specific link is provided in variables (e.g. admin detail link), use it
+  if (variables.link) {
+    url = variables.link;
+  }
+
+  const key = variables.key;
+  if (key === "application_submitted_company" || key === "inquiry_received_applicant") {
     buttonLabel = "다른 브랜드 추가 신청";
-  } else if (variables.key === "assignment_assigned") {
-    buttonLabel = "포털에서 심사 진행하기";
-  } else if (variables.key?.includes("info_request")) {
+  } else if (key === "application_received_internal") {
+    buttonLabel = "신청서 상세 심사하기";
+  } else if (key === "inquiry_received_internal") {
+    buttonLabel = "문의 내역 확인하기";
+  } else if (key === "assignment_assigned") {
+    buttonLabel = "배정된 신청서 심사하기";
+  } else if (key === "assignment_unassigned") {
+    buttonLabel = "어드민 포털 바로가기";
+  } else if (key === "info_request_created") {
     buttonLabel = "추가 자료 제출하기";
-  } else if (variables.key === "review_result_approved" || variables.key === "review_result_partial_approved") {
+  } else if (key === "info_request_replied") {
+    buttonLabel = "회신 자료 검토하기";
+  } else if (key === "review_result_approved" || key === "review_result_partial_approved") {
     buttonLabel = "브랜드사 포털 시작하기";
+  } else if (key === "review_result_on_hold" || key === "review_result_rejected") {
+    buttonLabel = "포털에서 심사 결과 보기";
+  } else if (key === "info_request_due_soon") {
+    buttonLabel = "기한 내 자료 제출하기";
+  } else if (key === "info_request_overdue") {
+    buttonLabel = "기한 초과 신청서 확인";
+  } else if (key === "invite_expiring_soon") {
+    buttonLabel = "사용자 관리 화면으로 이동";
   }
 
   return `
