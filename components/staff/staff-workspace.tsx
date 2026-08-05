@@ -22,6 +22,7 @@ type StaffMember = {
   region: string | null;
   timezone: string | null;
   language: string;
+  birthday: string | null;
   department_id: string | null;
   job_title_id: string | null;
   manager_id: string | null;
@@ -122,6 +123,7 @@ export function StaffWorkspace({
   const [region, setRegion] = useState("");
   const [timezone, setTimezone] = useState("");
   const [language, setLanguage] = useState("");
+  const [birthday, setBirthday] = useState("");
 
   const [departmentId, setDepartmentId] = useState("");
   const [jobTitleId, setJobTitleId] = useState("");
@@ -192,6 +194,7 @@ export function StaffWorkspace({
       setRegion(activeStaff.region || "");
       setTimezone(activeStaff.timezone || "Asia/Seoul");
       setLanguage(activeStaff.language || "ko");
+      setBirthday(activeStaff.birthday || "");
 
       setDepartmentId(activeStaff.department_id || "");
       setJobTitleId(activeStaff.job_title_id || "");
@@ -244,13 +247,14 @@ export function StaffWorkspace({
           region,
           timezone,
           language,
+          birthday: birthday || null,
         }, actionReason || "직원 기본 정보 직접 변경");
 
         // Sync local state
         setStaffList(prev =>
           prev.map(s => s.id === activeStaff.id ? { 
             ...s, 
-            name, english_name: englishName, nickname, phone, region, timezone, language 
+            name, english_name: englishName, nickname, phone, region, timezone, language, birthday: birthday || null 
           } : s)
         );
         setSuccessMsg("기본 정보가 저장되었습니다.");
@@ -918,7 +922,7 @@ export function StaffWorkspace({
                   </div>
 
                   <div className="space-y-0.5">
-                    <label className="block text-zinc-500 font-bold select-none">근무 지역 / 시간대</label>
+                    <label className="block text-zinc-500 font-bold select-none">근무 도시 / 시간대</label>
                     <div className="flex gap-1">
                       <input
                         type="text"
@@ -940,16 +944,28 @@ export function StaffWorkspace({
                     </div>
                   </div>
 
-                  <div className="space-y-0.5">
-                    <label className="block text-zinc-500 font-bold select-none">선호 언어</label>
-                    <select
-                      value={language}
-                      onChange={(e) => setLanguage(e.target.value)}
-                      className="w-full bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white border border-zinc-200 dark:border-zinc-800 rounded px-2.5 py-1 cursor-pointer"
-                    >
-                      <option value="ko">한국어 (Korean)</option>
-                      <option value="en">English (영어)</option>
-                    </select>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-0.5">
+                      <label className="block text-zinc-500 font-bold select-none">생년월일</label>
+                      <input
+                        type="date"
+                        value={birthday}
+                        onChange={(e) => setBirthday(e.target.value)}
+                        className="w-full bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white border border-zinc-200 dark:border-zinc-800 rounded px-2.5 py-1 cursor-pointer text-xs"
+                      />
+                    </div>
+
+                    <div className="space-y-0.5">
+                      <label className="block text-zinc-500 font-bold select-none">선호 언어</label>
+                      <select
+                        value={language}
+                        onChange={(e) => setLanguage(e.target.value)}
+                        className="w-full bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white border border-zinc-200 dark:border-zinc-800 rounded px-2.5 py-1 cursor-pointer"
+                      >
+                        <option value="ko">한국어 (Korean)</option>
+                        <option value="en">English (영어)</option>
+                      </select>
+                    </div>
                   </div>
 
                   <button

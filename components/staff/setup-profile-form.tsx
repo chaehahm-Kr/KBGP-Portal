@@ -22,9 +22,10 @@ export function SetupProfileForm({ email, completeAction }: SetupProfileFormProp
   const [englishName, setEnglishName] = useState("");
   const [nickname, setNickname] = useState("");
   const [phone, setPhone] = useState("");
-  const [region, setRegion] = useState("Seoul, South Korea");
+  const [region, setRegion] = useState("Seoul");
   const [timezone, setTimezone] = useState("Asia/Seoul");
   const [language, setLanguage] = useState("ko");
+  const [birthday, setBirthday] = useState("");
   const [agreePolicy, setAgreePolicy] = useState(false);
 
   const [isSubmittingProfile, startSubmitProfile] = useTransition();
@@ -74,6 +75,7 @@ export function SetupProfileForm({ email, completeAction }: SetupProfileFormProp
     if (!englishName.trim()) return setProfileError("영문 이름을 입력해주세요.");
     if (!nickname.trim()) return setProfileError("닉네임을 입력해주세요.");
     if (!phone.trim()) return setProfileError("연락처를 입력해주세요.");
+    if (!birthday) return setProfileError("생년월일을 입력해주세요.");
     if (!agreePolicy) return setProfileError("이용 및 보안 정책에 동의해 주세요.");
 
     startSubmitProfile(async () => {
@@ -85,6 +87,7 @@ export function SetupProfileForm({ email, completeAction }: SetupProfileFormProp
       fd.append("region", region);
       fd.append("timezone", timezone);
       fd.append("language", language);
+      fd.append("birthday", birthday);
 
       const res = await completeAction(null, fd);
       if (res && res.error) {
@@ -220,16 +223,29 @@ export function SetupProfileForm({ email, completeAction }: SetupProfileFormProp
         </div>
       </div>
 
-      <div className="space-y-0.5">
-        <label className="block text-zinc-300 font-bold">근무 지역</label>
-        <input
-          type="text"
-          required
-          placeholder="Seoul, South Korea"
-          value={region}
-          onChange={(e) => setRegion(e.target.value)}
-          className="w-full bg-zinc-950 border border-zinc-800 text-white rounded-lg px-3 py-2 outline-none focus:border-zinc-700 transition-colors"
-        />
+      <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-0.5">
+          <label className="block text-zinc-300 font-bold">근무 도시</label>
+          <input
+            type="text"
+            required
+            placeholder="Seoul"
+            value={region}
+            onChange={(e) => setRegion(e.target.value)}
+            className="w-full bg-zinc-950 border border-zinc-800 text-white rounded-lg px-3 py-2 outline-none focus:border-zinc-700 transition-colors"
+          />
+        </div>
+
+        <div className="space-y-0.5">
+          <label className="block text-zinc-300 font-bold">생년월일</label>
+          <input
+            type="date"
+            required
+            value={birthday}
+            onChange={(e) => setBirthday(e.target.value)}
+            className="w-full bg-zinc-950 border border-zinc-800 text-white rounded-lg px-3 py-2 outline-none focus:border-zinc-700 transition-colors cursor-pointer"
+          />
+        </div>
       </div>
 
       <div className="grid grid-cols-2 gap-3">

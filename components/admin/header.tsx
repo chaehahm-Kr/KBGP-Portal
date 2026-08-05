@@ -14,7 +14,7 @@ import {
 } from "./icons";
 import { logoutAdmin } from "@/lib/auth/actions";
 import { createClient } from "@/lib/supabase/client";
-import { updateMyName } from "@/lib/staff/actions";
+import { updateMyName, updateMyProfile } from "@/lib/staff/actions";
 import {
   getNotifications,
   markNotificationAsRead,
@@ -77,9 +77,30 @@ export default function Header({ isSidebarCollapsed }: HeaderProps) {
   };
 
   // Profile management states
-  const [userProfile, setUserProfile] = useState<{ name: string; email: string } | null>(null);
+  const [userProfile, setUserProfile] = useState<{
+    name: string;
+    email: string;
+    englishName: string;
+    nickname: string;
+    phone: string;
+    region: string;
+    timezone: string;
+    language: string;
+    birthday: string;
+  } | null>(null);
+
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+  
+  // Profile edit temp states
   const [tempName, setTempName] = useState("");
+  const [tempEnglishName, setTempEnglishName] = useState("");
+  const [tempNickname, setTempNickname] = useState("");
+  const [tempPhone, setTempPhone] = useState("");
+  const [tempRegion, setTempRegion] = useState("");
+  const [tempTimezone, setTempTimezone] = useState("Asia/Seoul");
+  const [tempLanguage, setTempLanguage] = useState("ko");
+  const [tempBirthday, setTempBirthday] = useState("");
+
   const [errorMsg, setErrorMsg] = useState("");
   const [isSavingProfile, setIsSavingProfile] = useState(false);
 
@@ -90,7 +111,7 @@ export default function Header({ isSidebarCollapsed }: HeaderProps) {
       if (user) {
         const { data: staff } = await supabase
           .from("staff_members")
-          .select("name, email")
+          .select("name, email, english_name, nickname, phone, region, timezone, language, birthday")
           .eq("id", user.id)
           .maybeSingle();
 
@@ -98,12 +119,33 @@ export default function Header({ isSidebarCollapsed }: HeaderProps) {
           setUserProfile({
             name: staff.name || "관리자",
             email: staff.email || user.email || "",
+            englishName: staff.english_name || "",
+            nickname: staff.nickname || "",
+            phone: staff.phone || "",
+            region: staff.region || "",
+            timezone: staff.timezone || "Asia/Seoul",
+            language: staff.language || "ko",
+            birthday: staff.birthday || "",
           });
           setTempName(staff.name || "");
+          setTempEnglishName(staff.english_name || "");
+          setTempNickname(staff.nickname || "");
+          setTempPhone(staff.phone || "");
+          setTempRegion(staff.region || "");
+          setTempTimezone(staff.timezone || "Asia/Seoul");
+          setTempLanguage(staff.language || "ko");
+          setTempBirthday(staff.birthday || "");
         } else {
           setUserProfile({
             name: "관리자",
             email: user.email || "",
+            englishName: "",
+            nickname: "",
+            phone: "",
+            region: "",
+            timezone: "Asia/Seoul",
+            language: "ko",
+            birthday: "",
           });
           setTempName("관리자");
         }
@@ -122,12 +164,21 @@ export default function Header({ isSidebarCollapsed }: HeaderProps) {
     setErrorMsg("");
     setIsSavingProfile(true);
     try {
-      await updateMyName(tempName);
+      await updateMyProfile({
+        name: tempName,
+        englishName: tempEnglishName,
+        nickname: tempNickname,
+        phone: tempPhone,
+        region: tempRegion,
+        timezone: tempTimezone,
+        language: tempLanguage,
+        birthday: tempBirthday || null,
+      });
       await fetchProfile();
       setIsProfileModalOpen(false);
       setIsProfileOpen(false);
     } catch (err) {
-      setErrorMsg(err instanceof Error ? err.message : "프로필 이름 수정에 실패했습니다.");
+      setErrorMsg(err instanceof Error ? err.message : "프로필 수정에 실패했습니다.");
     } finally {
       setIsSavingProfile(false);
     }
@@ -325,7 +376,16 @@ export default function Header({ isSidebarCollapsed }: HeaderProps) {
               <div className="p-1">
                 <button
                   onClick={() => {
-                    setTempName(userProfile?.name || "");
+                    if (userProfile) {
+                      setTempName(userProfile.name);
+                      setTempEnglishName(userProfile.englishName);
+                      setTempNickname(userProfile.nickname);
+                      setTempPhone(userProfile.phone);
+                      setTempRegion(userProfile.region);
+                      setTempTimezone(userProfile.timezone);
+                      setTempLanguage(userProfile.language);
+                      setTempBirthday(userProfile.birthday);
+                    }
                     setErrorMsg("");
                     setIsProfileModalOpen(true);
                     setIsProfileOpen(false);
@@ -353,7 +413,7 @@ export default function Header({ isSidebarCollapsed }: HeaderProps) {
       {/* Edit Profile Modal */}
       {isProfileModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-          <div className="w-full max-w-sm rounded-xl border border-zinc-200 bg-white p-6 shadow-xl dark:border-zinc-850 dark:bg-zinc-900">
+          <div className="w-full max-w-lg rounded-xl border border-zinc-200 bg-white p-6 shadow-xl dark:border-zinc-850 dark:bg-zinc-900">
             <h3 className="text-sm font-bold text-zinc-900 dark:text-white mb-4">내 정보 수정</h3>
             <form onSubmit={handleSaveProfile} className="space-y-4">
               <div>
@@ -366,16 +426,105 @@ export default function Header({ isSidebarCollapsed }: HeaderProps) {
                 />
               </div>
 
-              <div>
-                <label className="block text-xs font-bold text-zinc-650 dark:text-zinc-350 mb-1.5">이름 (심사원 이름)</label>
-                <input
-                  type="text"
-                  required
-                  value={tempName}
-                  onChange={(e) => setTempName(e.target.value)}
-                  placeholder="본인의 실제 이름을 입력해주세요"
-                  className="block w-full rounded-md border border-zinc-250 bg-white px-3 py-2 text-xs text-zinc-900 outline-none focus:border-zinc-400 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
-                />
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-zinc-650 dark:text-zinc-350 mb-1.5">이름 (한글)</label>
+                  <input
+                    type="text"
+                    required
+                    value={tempName}
+                    onChange={(e) => setTempName(e.target.value)}
+                    placeholder="홍길동"
+                    className="block w-full rounded-md border border-zinc-250 bg-white px-3 py-2 text-xs text-zinc-900 outline-none focus:border-zinc-400 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-zinc-650 dark:text-zinc-350 mb-1.5">영문 이름</label>
+                  <input
+                    type="text"
+                    required
+                    value={tempEnglishName}
+                    onChange={(e) => setTempEnglishName(e.target.value)}
+                    placeholder="Gildong Hong"
+                    className="block w-full rounded-md border border-zinc-250 bg-white px-3 py-2 text-xs text-zinc-900 outline-none focus:border-zinc-400 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-zinc-650 dark:text-zinc-350 mb-1.5">닉네임</label>
+                  <input
+                    type="text"
+                    required
+                    value={tempNickname}
+                    onChange={(e) => setTempNickname(e.target.value)}
+                    placeholder="닉네임"
+                    className="block w-full rounded-md border border-zinc-250 bg-white px-3 py-2 text-xs text-zinc-900 outline-none focus:border-zinc-400 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-zinc-650 dark:text-zinc-350 mb-1.5">연락처 (휴대폰)</label>
+                  <input
+                    type="text"
+                    required
+                    value={tempPhone}
+                    onChange={(e) => setTempPhone(e.target.value)}
+                    placeholder="010-1234-5678"
+                    className="block w-full rounded-md border border-zinc-250 bg-white px-3 py-2 text-xs text-zinc-900 outline-none focus:border-zinc-400 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-zinc-650 dark:text-zinc-350 mb-1.5">근무 도시</label>
+                  <input
+                    type="text"
+                    required
+                    value={tempRegion}
+                    onChange={(e) => setTempRegion(e.target.value)}
+                    placeholder="Seoul"
+                    className="block w-full rounded-md border border-zinc-250 bg-white px-3 py-2 text-xs text-zinc-900 outline-none focus:border-zinc-400 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-zinc-650 dark:text-zinc-350 mb-1.5">생년월일</label>
+                  <input
+                    type="date"
+                    required
+                    value={tempBirthday}
+                    onChange={(e) => setTempBirthday(e.target.value)}
+                    className="block w-full rounded-md border border-zinc-250 bg-white px-3 py-2 text-xs text-zinc-900 outline-none focus:border-zinc-400 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white cursor-pointer"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-zinc-650 dark:text-zinc-350 mb-1.5">시간대 (Timezone)</label>
+                  <select
+                    value={tempTimezone}
+                    onChange={(e) => setTempTimezone(e.target.value)}
+                    className="block w-full rounded-md border border-zinc-250 bg-white px-3 py-2 text-xs text-zinc-900 outline-none focus:border-zinc-400 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white cursor-pointer"
+                  >
+                    <option value="Asia/Seoul">Seoul (GMT+9)</option>
+                    <option value="America/New_York">New York (EST/EDT)</option>
+                    <option value="America/Los_Angeles">Los Angeles (PST/PDT)</option>
+                    <option value="UTC">Coordinated Universal Time (UTC)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-zinc-650 dark:text-zinc-350 mb-1.5">선호 언어</label>
+                  <select
+                    value={tempLanguage}
+                    onChange={(e) => setTempLanguage(e.target.value)}
+                    className="block w-full rounded-md border border-zinc-250 bg-white px-3 py-2 text-xs text-zinc-900 outline-none focus:border-zinc-400 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white cursor-pointer"
+                  >
+                    <option value="ko">한국어 (Korean)</option>
+                    <option value="en">English (영어)</option>
+                  </select>
+                </div>
               </div>
 
               {errorMsg && (

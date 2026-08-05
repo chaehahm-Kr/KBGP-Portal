@@ -176,6 +176,7 @@ const setupProfileSchema = z.object({
   region: z.string().trim().min(1, "근무 지역을 입력해주세요."),
   timezone: z.string().trim().min(1, "시간대를 선택해주세요."),
   language: z.string().trim().min(1, "선호 언어를 선택해주세요."),
+  birthday: z.string().trim().optional().nullable(),
 });
 
 /**
@@ -201,6 +202,7 @@ export async function setupProfileCompleteAction(
     region: formData.get("region"),
     timezone: formData.get("timezone"),
     language: formData.get("language"),
+    birthday: formData.get("birthday"),
   });
 
   if (!parsed.success) {
@@ -231,6 +233,7 @@ export async function setupProfileCompleteAction(
       region: parsed.data.region,
       timezone: parsed.data.timezone,
       language: parsed.data.language,
+      birthday: parsed.data.birthday || null,
       status: "active",
       must_change_password: false,
     })
@@ -370,6 +373,7 @@ export async function updateStaffBasicInfoAction(
     region: string;
     timezone: string;
     language: string;
+    birthday: string | null;
   },
   reason: string
 ) {
@@ -378,7 +382,7 @@ export async function updateStaffBasicInfoAction(
 
   const { data: oldData } = await admin
     .from("staff_members")
-    .select("name, english_name, nickname, phone, region, timezone, language")
+    .select("name, english_name, nickname, phone, region, timezone, language, birthday")
     .eq("id", targetId)
     .single();
 
@@ -392,6 +396,7 @@ export async function updateStaffBasicInfoAction(
       region: basicData.region,
       timezone: basicData.timezone,
       language: basicData.language,
+      birthday: basicData.birthday || null,
     })
     .eq("id", targetId);
 
@@ -763,6 +768,54 @@ export async function updateMyName(name: string) {
     .update({ display_name: trimmed })
     .eq("id", userId);
   
+  revalidatePath("/admin");
+  revalidatePath("/admin/staff");
+}
+
+/**
+ * 어드민 헤더 내 프로필 정보 관리창에서 자신의 전체 프로필을 직접 수정합니다.
+ */
+export async function updateMyProfile(data: {
+  name: string;
+  englishName: string;
+  nickname: string;
+  phone: string;
+  region: string;
+  timezone: string;
+  language: string;
+  birthday: string | null;
+}) {
+  const { userId } = await verifyAdminSession();
+  
+  const nameTrimmed = data.name.trim();
+  if (!nameTrimmed) {
+    throw new Error("이름을 입력해주세요.");
+  }
+
+  const admin = createAdminClient();
+  const { error } = await admin
+    .from("staff_members")
+    .update({
+      name: nameTrimmed,
+      english_name: data.englishName.trim(),
+      nickname: data.nickname.trim(),
+      phone: data.phone.trim(),
+      region: data.region.trim(),
+      timezone: data.timezone,
+      language: data.language,
+      birthday: data.birthday || null,
+    })
+    .eq("id", userId);
+
+  if (error) {
+    throw new Error("프로필 변경에 실패했습니다: " + error.message);
+  }
+
+  await admin
+    .from("profiles")
+    .update({ display_name: nameTrimmed })
+    .eq("id", userId);
+
   revalidatePath("/admin");
   revalidatePath("/admin/staff");
 }

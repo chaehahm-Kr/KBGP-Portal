@@ -47,6 +47,7 @@ export default async function StaffManagementPage() {
       menu_permissions,
       must_change_password,
       last_login_at,
+      birthday,
       created_at
     `)
     .order("created_at", { ascending: true });
