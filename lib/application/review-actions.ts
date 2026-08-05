@@ -77,7 +77,7 @@ async function notifyCompanyOfResult(
     .from("company_users")
     .select("id, email")
     .eq("company_id", companyId)
-    .eq("status", "active");
+    .in("status", ["active", "invited"]);
 
   const statusLabel: Record<string, string> = {
     approved: "최종 승인",

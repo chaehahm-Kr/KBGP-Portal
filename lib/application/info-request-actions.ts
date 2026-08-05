@@ -85,7 +85,7 @@ export async function createInfoRequest(
     .from("company_users")
     .select("id, email")
     .eq("company_id", application.company_id)
-    .eq("status", "active");
+    .in("status", ["active", "invited"]);
 
   const firstUserId = recipients?.[0]?.id;
   if (firstUserId) {
