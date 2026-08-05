@@ -1,21 +1,22 @@
-import { publicEnv } from "@/lib/env/public";
-
 export interface CalculationInputs {
   mode: "analyze_profitability" | "calculate_pricing";
   channel: "b2b" | "amazon" | "both";
-  supplierUnitPrice: number; // 공급가 (원화 또는 달러)
+  supplierUnitPrice: number; // 공급가 원본 금액
   currency: "KRW" | "USD";
   exchangeRate: number;
-  proposedMSRP?: number;
-  wholesalePrice?: number; // B2B 판매가
+  exchangeRateDate?: string;
+  exchangeRateSource?: string;
+  proposedMSRP?: number; // MSRP
+  b2bPriceMode?: "retail_based" | "wholesale_based"; // B2B 가격 입력 모드
+  wholesalePrice?: number; // B2B 도매 공급가
   amazonListPrice?: number; // Amazon 판매가
-  retailerTargetMargin?: number; // B2B 소매점 마진 목표 (%)
+  retailerTargetMargin?: number; // B2B 소매 마진 목표 (%)
   targetMetric?: "gross_margin" | "contribution_margin" | "operating_margin" | "net_margin" | "min_profit";
   targetValue?: number; // 목표 마진율 (%) 또는 금액 ($)
   fbaFeeSource?: string; // 'scenario_default' | 'manual'
   packageInfo?: Record<string, any>;
   detailedImportInfo?: Record<string, any>;
-  overrides?: Record<string, number>; // 화면에서 개별 조정한 값들 (비율 등)
+  overrides?: Record<string, number>; // 화면 조율 오버라이드
 }
 
 export interface WaterfallStep {
@@ -42,7 +43,7 @@ export interface ChannelResult {
   requiredReduction: number;
 }
 
-export interface CalculationResult {
+export interface ScenarioResult {
   warnings: string[];
   status: "approved" | "conditional" | "review_required" | "not_viable";
   statusReason: string;
@@ -50,16 +51,63 @@ export interface CalculationResult {
   amazon?: ChannelResult;
 }
 
+export interface PresetCalculationResult {
+  originalSupplierPrice: number;
+  originalCurrency: "KRW" | "USD";
+  convertedSupplierPriceUSD: number;
+  appliedExchangeRate: number;
+  exchangeRateDate: string;
+  exchangeRateSource: string;
+  conservative: ScenarioResult;
+  expected: ScenarioResult;
+  optimistic: ScenarioResult;
+}
+
 /**
- * 계산 엔진: Analyze Current Profitability & Calculate Target Pricing 지원
+ * 3대 시나리오(Conservative, Expected, Optimistic) 동시 연산 처리
  */
-export function calculateProfitability(
+export function calculatePresetProfitability(
   inputs: CalculationInputs,
+  presetScenarioValues: {
+    conservative: Record<string, number>;
+    expected: Record<string, number>;
+    optimistic: Record<string, number>;
+  }
+): PresetCalculationResult {
+  // 1. 달러 공급가 환산 및 정보 보존
+  const appliedExchangeRate = inputs.exchangeRate || 1350.00;
+  const convertedSupplierPriceUSD =
+    inputs.currency === "KRW"
+      ? inputs.supplierUnitPrice / appliedExchangeRate
+      : inputs.supplierUnitPrice;
+
+  // 2. 각 시나리오별 결과 개별 연산
+  const conservativeResult = computeSingleScenario(inputs, convertedSupplierPriceUSD, presetScenarioValues.conservative);
+  const expectedResult = computeSingleScenario(inputs, convertedSupplierPriceUSD, presetScenarioValues.expected);
+  const optimisticResult = computeSingleScenario(inputs, convertedSupplierPriceUSD, presetScenarioValues.optimistic);
+
+  return {
+    originalSupplierPrice: inputs.supplierUnitPrice,
+    originalCurrency: inputs.currency,
+    convertedSupplierPriceUSD,
+    appliedExchangeRate,
+    exchangeRateDate: inputs.exchangeRateDate || new Date().toISOString().split("T")[0],
+    exchangeRateSource: inputs.exchangeRateSource || "Fallback",
+    conservative: conservativeResult,
+    expected: expectedResult,
+    optimistic: optimisticResult,
+  };
+}
+
+/** 단일 시나리오 요율 기준 계산 */
+function computeSingleScenario(
+  inputs: CalculationInputs,
+  supplierUnitPriceUSD: number,
   scenarioValues: Record<string, number>
-): CalculationResult {
+): ScenarioResult {
   const warnings: string[] = [];
-  
-  // 1. 값 병합 헬퍼 (Overrides > Scenario Default > Global Default)
+
+  // 값 획득 헬퍼 (Overrides > Scenario Default)
   const getValue = (code: string, fallback: number = 0): number => {
     if (inputs.overrides && inputs.overrides[code] !== undefined) {
       return inputs.overrides[code];
@@ -67,17 +115,7 @@ export function calculateProfitability(
     return scenarioValues[code] ?? fallback;
   };
 
-  // 2. 공급가 달러 환산
-  const supplierUnitPriceUSD =
-    inputs.currency === "KRW"
-      ? inputs.supplierUnitPrice / inputs.exchangeRate
-      : inputs.supplierUnitPrice;
-
-  // 3. 중복 계산 방지 분석 및 Landed Cost 계산
-  let packagingCost = inputs.overrides?.product_packaging_cost ?? 0;
-  let prepCost = inputs.overrides?.product_prep_cost ?? 0;
-
-  // 상세 수입 물류비 정보가 있는지 파악
+  // 상세 수입 물류 정보 파악
   const detailed = inputs.detailedImportInfo || {};
   const hasDetailedImport =
     (detailed.internationalFreight ?? 0) > 0 ||
@@ -85,14 +123,17 @@ export function calculateProfitability(
     (detailed.customsBrokerage ?? 0) > 0 ||
     (detailed.domesticInboundFreight ?? 0) > 0;
 
+  let packagingCost = inputs.overrides?.product_packaging_cost ?? 0;
+  let prepCost = inputs.overrides?.product_prep_cost ?? 0;
   let importCost = 0;
+
   if (hasDetailedImport) {
     warnings.push("Detailed Import Cost가 입력되어 General Import Cost Rate(%)는 연산에서 제외되었습니다.");
-    // 상세 내역 합산
-    const freight = (detailed.internationalFreight ?? 0) / (detailed.orderQuantity || 1);
-    const customs = (detailed.customsBrokerage ?? 0) / (detailed.orderQuantity || 1);
-    const inbound = (detailed.domesticInboundFreight ?? 0) / (detailed.orderQuantity || 1);
-    const receiving = (detailed.warehouseReceiving ?? 0) / (detailed.orderQuantity || 1);
+    const qty = detailed.orderQuantity || 1;
+    const freight = (detailed.internationalFreight ?? 0) / qty;
+    const customs = (detailed.customsBrokerage ?? 0) / qty;
+    const inbound = (detailed.domesticInboundFreight ?? 0) / qty;
+    const receiving = (detailed.warehouseReceiving ?? 0) / qty;
     const duty = supplierUnitPriceUSD * ((detailed.dutyRate ?? 0) / 100);
     importCost = freight + customs + inbound + receiving + duty;
   } else {
@@ -102,41 +143,52 @@ export function calculateProfitability(
 
   const landedCost = supplierUnitPriceUSD + packagingCost + prepCost + importCost;
 
-  // 결과 취합 객체
-  const res: CalculationResult = {
+  const result: ScenarioResult = {
     warnings,
     status: "review_required",
     statusReason: "",
   };
 
-  // 4. 채널별 연산 수행
+  // B2B 연산
   if (inputs.channel === "b2b" || inputs.channel === "both") {
-    res.b2b = computeB2BChannel(inputs, landedCost, supplierUnitPriceUSD, getValue, warnings);
+    result.b2b = computeB2BChannel(inputs, landedCost, supplierUnitPriceUSD, getValue);
   }
-  
+
+  // Amazon B2C 연산
   if (inputs.channel === "amazon" || inputs.channel === "both") {
-    res.amazon = computeAmazonChannel(inputs, landedCost, supplierUnitPriceUSD, getValue, warnings);
+    result.amazon = computeAmazonChannel(inputs, landedCost, supplierUnitPriceUSD, getValue);
   }
 
-  // 5. 자동 상태 진단 (Approved / Conditional / Review Required / Not Viable)
-  evaluateStatus(inputs, res, getValue);
+  // 상태 해석
+  evaluateStatus(inputs, result, getValue);
 
-  return res;
+  return result;
 }
 
-/** B2B 채널 연산 */
+/** B2B 채널 상세 연산 */
 function computeB2BChannel(
   inputs: CalculationInputs,
   landedCost: number,
   supplierUnitPriceUSD: number,
-  getValue: (code: string, fallback?: number) => number,
-  warnings: string[]
+  getValue: (code: string, fallback?: number) => number
 ): ChannelResult {
   let wholesalePrice = inputs.wholesalePrice || 0;
+  let msrp = inputs.proposedMSRP || 0;
+  const retailerMargin = (inputs.retailerTargetMargin ?? 50) / 100;
 
-  // 가격 역산 모드일 경우 B2B 도매가 역산
+  // B2B 가격 결정 방식 자동 판별 (Retail Price Based vs Wholesale Price Based)
+  if (inputs.b2bPriceMode === "retail_based") {
+    // MSRP & Retailer Margin을 바탕으로 B2B 공급가(Wholesale)를 구함
+    wholesalePrice = msrp * (1 - retailerMargin);
+  } else if (inputs.b2bPriceMode === "wholesale_based") {
+    // Wholesale & Retailer Margin을 바탕으로 MSRP 권장 소비자가를 구함
+    msrp = wholesalePrice / (1 - retailerMargin || 1);
+  }
+
+  // 가격 역산 모드일 경우 Wholesale Price 역산
   if (inputs.mode === "calculate_pricing" && inputs.targetMetric && inputs.targetValue !== undefined) {
     wholesalePrice = reversePriceB2B(inputs, landedCost, supplierUnitPriceUSD, getValue);
+    msrp = wholesalePrice / (1 - retailerMargin || 1);
   }
 
   // Waterfall 계산
@@ -176,7 +228,7 @@ function computeB2BChannel(
   const netProfit = operatingProfit - financing - currencyRisk;
   const netMargin = netSales > 0 ? (netProfit / netSales) * 100 : 0;
 
-  // 손익 분기점 역산 (BEP Wholesale Price)
+  // 손익 분기점 B2B Wholesale Price
   const totalVariableRate = discountRate + couponRate + returnRate + 
     ((marketing + commission + variableLabor + payroll + overhead) / (netSales || 1)) * (1 - (discountRate + couponRate + returnRate));
   const totalFixedCosts = landedCost + paymentFee + delivery + financing + currencyRisk;
@@ -187,7 +239,7 @@ function computeB2BChannel(
   const maxAcceptableSupplierPrice = reverseMaxSupplierPriceB2B(inputs, wholesalePrice, targetNetMargin, getValue);
   const requiredReduction = Math.max(0, supplierUnitPriceUSD - maxAcceptableSupplierPrice);
 
-  // Waterfall 스냅샷 조립
+  // Waterfall 구성
   const waterfall: WaterfallStep[] = [
     { label: "Gross Sales", amount: grossSales, percentOfNetSales: netSales > 0 ? (grossSales / netSales) * 100 : 0 },
     { label: "Revenue Reductions", amount: -reductions, percentOfNetSales: netSales > 0 ? (-reductions / netSales) * 100 : 0 },
@@ -224,13 +276,12 @@ function computeB2BChannel(
   };
 }
 
-/** Amazon 채널 연산 */
+/** Amazon 채널 상세 연산 */
 function computeAmazonChannel(
   inputs: CalculationInputs,
   landedCost: number,
   supplierUnitPriceUSD: number,
-  getValue: (code: string, fallback?: number) => number,
-  warnings: string[]
+  getValue: (code: string, fallback?: number) => number
 ): ChannelResult {
   let amazonPrice = inputs.amazonListPrice || 0;
 
@@ -251,7 +302,7 @@ function computeAmazonChannel(
   const grossProfit = netSales - landedCost;
   const grossMargin = netSales > 0 ? (grossProfit / netSales) * 100 : 0;
 
-  // FBA Fee 소스
+  // FBA Fee 소스 판별
   let fbaFee = getValue("fba_fulfillment_fee_default", 5.2);
   if (inputs.fbaFeeSource === "manual" && inputs.overrides?.fba_fulfillment_fee !== undefined) {
     fbaFee = inputs.overrides.fba_fulfillment_fee;
@@ -281,7 +332,7 @@ function computeAmazonChannel(
   const netProfit = operatingProfit - financing - currencyRisk;
   const netMargin = netSales > 0 ? (netProfit / netSales) * 100 : 0;
 
-  // 손익 분기점 역산 (BEP Amazon List Price)
+  // 손익 분기점 Amazon List Price
   const totalVariableRate = discountRate + couponRate + returnRate + 
     ((adSpend + commission + variableLabor + payroll + overhead) / (netSales || 1)) * (1 - (discountRate + couponRate + returnRate));
   const totalFixedCosts = landedCost + referral + fbaFee + financing + currencyRisk;
@@ -351,15 +402,13 @@ function reversePriceB2B(
   const financing = landedCost * (getValue("inventory_financing_rate") / 100);
   const currencyRisk = supplierUnitPriceUSD * (getValue("currency_risk_rate") / 100);
 
-  // 일차방정식 역산
-  // Wholesale * (1 - reductions) * (1 - TargetMargin - marketing - commission - labor - payroll - overhead) - Wholesale * (paymentFee + delivery) = landedCost + financing + currencyRisk
   const red = discountRate + couponRate + returnRate;
   const term1 = (1 - red) * (1 - targetVal - marketing - commission - labor - payroll - overhead);
   const term2 = paymentFee + delivery;
   const denominator = term1 - term2;
 
   if (denominator <= 0.05) {
-    return landedCost * 1.5; // 분모 이상 작동시 백업
+    return landedCost * 1.5;
   }
 
   return (landedCost + financing + currencyRisk) / denominator;
@@ -433,14 +482,11 @@ function reverseMaxSupplierPriceB2B(
   const red = discountRate + couponRate + returnRate;
   const netSales = wholesalePrice * (1 - red);
 
-  // 이익액 및 비용 합산
   const targetProfit = netSales * targetNetMargin;
   const varCosts = netSales * (marketing + commission + labor + payroll + overhead) + wholesalePrice * (paymentFee + delivery);
   
   const availableLanded = netSales - targetProfit - varCosts;
 
-  // Landed Cost = SupplierUSD * (1 + ImportRate) + Pack + Prep + LandedCost * FinancingRate + SupplierUSD * CurrencyRate
-  // SupplierUSD * (1 + ImportRate) * (1 + FinancingRate) + SupplierUSD * CurrencyRate = availableLanded - (Pack + Prep) * (1 + FinancingRate)
   const termSupplier = (1 + importRate) * (1 + financingRate) + currencyRate;
   const maxUSD = (availableLanded - (packagingCost + prepCost) * (1 + financingRate)) / termSupplier;
 
@@ -490,8 +536,8 @@ function reverseMaxSupplierPriceAmazon(
   return Math.max(0, maxUSD);
 }
 
-/** 이익 및 마진 기반의 자동 승인/상태 진단 알고리즘 */
-function evaluateStatus(inputs: CalculationInputs, res: CalculationResult, getValue: (code: string) => number) {
+/** 자동 상태 진단 */
+function evaluateStatus(inputs: CalculationInputs, res: ScenarioResult, getValue: (code: string) => number) {
   const targetNetMargin = getValue("target_net_margin") ?? 15;
   const targetGrossMargin = getValue("target_gross_margin") ?? 40;
   

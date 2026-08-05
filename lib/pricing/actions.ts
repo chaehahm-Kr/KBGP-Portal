@@ -33,6 +33,35 @@ export interface ScenarioGroupStructure {
   items: ScenarioItemStructure[];
 }
 
+export interface PricingPresetStructure {
+  id: string;
+  name: string;
+  code: string;
+  description: string | null;
+  recommended_use_case: string | null;
+  applicable_channel: "b2b" | "amazon" | "both";
+  is_active: boolean;
+  is_system: boolean;
+  created_at: string;
+}
+
+/** 1. 비즈니스 프리셋 목록 로드 */
+export async function getPricingPresets(): Promise<PricingPresetStructure[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("pricing_presets")
+    .select("*")
+    .eq("is_active", true)
+    .order("is_system", { ascending: false })
+    .order("created_at", { ascending: true });
+
+  if (error) {
+    console.error("Error fetching pricing presets:", error);
+    return [];
+  }
+  return data || [];
+}
+
 /** 시나리오 목록 & 코드 기준의 기본 값 맵 조회 */
 export async function getPricingScenarios() {
   const supabase = await createClient();
@@ -48,11 +77,11 @@ export async function getPricingScenarios() {
   return scenarios;
 }
 
-/** Scenario Settings용 전체 동적 설정 그룹 및 설정 항목 트리 로드 */
-export async function getScenarioSettings(): Promise<ScenarioGroupStructure[]> {
+/** 2. Preset & Scenario Settings용 특정 프리셋 기준 설정 그룹/항목 트리 로드 */
+export async function getScenarioSettings(presetId: string | null): Promise<ScenarioGroupStructure[]> {
   const supabase = await createClient();
   
-  // 1. 그룹 조회
+  // 1) 그룹 조회
   const { data: groups, error: groupErr } = await supabase
     .from("pricing_scenario_groups")
     .select("id, name, code, display_order, is_active")
@@ -64,7 +93,7 @@ export async function getScenarioSettings(): Promise<ScenarioGroupStructure[]> {
     return [];
   }
 
-  // 2. 항목 조회 (is_archived = false 인 것들만 노출)
+  // 2) 항목 조회 (보관되지 않은 활성 항목들만)
   const { data: items, error: itemErr } = await supabase
     .from("pricing_scenario_items")
     .select("id, group_id, name, code, description, applicable_channel, value_type, cost_basis, profit_stage, decimal_precision, product_override_allowed, is_required, is_active, is_archived, display_order, tooltip")
@@ -76,17 +105,24 @@ export async function getScenarioSettings(): Promise<ScenarioGroupStructure[]> {
     return [];
   }
 
-  // 3. 각 시나리오별 항목의 현재 값들 조회
-  const { data: valList, error: valErr } = await supabase
+  // 3) 특정 프리셋 하위 값 매핑 조회
+  let query = supabase
     .from("pricing_scenario_values")
     .select("scenario_id, item_id, value, pricing_scenarios(code)");
-
-  if (valErr) {
-    console.error("Error fetching scenario values:", valErr);
+  
+  if (!presetId || presetId === "legacy" || presetId === "null") {
+    query = query.is("preset_id", null);
+  } else {
+    query = query.eq("preset_id", presetId);
   }
 
-  // 매핑 데이터 작성
-  const valuesMap: Record<string, Record<string, number>> = {}; // item_id -> { scenario_code -> value }
+  const { data: valList, error: valErr } = await query;
+  if (valErr) {
+    console.error("Error fetching scenario values for preset:", valErr);
+  }
+
+  // 매핑 데이터 작성 (item_id -> { scenario_code -> value })
+  const valuesMap: Record<string, Record<string, number>> = {};
   valList?.forEach((row: any) => {
     const itemId = row.item_id;
     const code = row.pricing_scenarios?.code;
@@ -116,38 +152,203 @@ export async function getScenarioSettings(): Promise<ScenarioGroupStructure[]> {
   });
 }
 
-/** 시나리오 개별 항목의 특정 시나리오 값 변경 */
-export async function updateScenarioValue(
+/** 3. 프리셋 하위 시나리오 개별 항목값 수정 */
+export async function updatePresetScenarioValue(
+  presetId: string | null,
   scenarioId: string,
   itemId: string,
   value: number
 ): Promise<ScenarioFormState> {
   const supabase = await createClient();
 
+  const activePresetId = (presetId === "legacy" || presetId === "null") ? null : presetId;
+
+  // UUID 유니크 조건 보정을 태우기 위한 upsert
   const { error } = await supabase
     .from("pricing_scenario_values")
     .upsert({
+      preset_id: activePresetId,
       scenario_id: scenarioId,
       item_id: itemId,
       value,
       updated_at: new Date().toISOString(),
     }, {
-      onConflict: "scenario_id,item_id"
+      onConflict: "preset_id,scenario_id,item_id"
     });
 
   if (error) {
-    console.error("Error updating scenario value:", error);
+    console.error("Error updating preset scenario value:", error);
     return { error: `저장 실패: ${error.message}` };
   }
 
   revalidatePath("/admin/products/pricing-profitability");
-  return { success: "설정값이 성공적으로 변경되었습니다." };
+  return { success: "프리셋 설정값이 변경되었습니다." };
+}
+
+/** 4. 커스텀 비즈니스 프리셋 신설 */
+export async function createCustomPreset(
+  name: string,
+  description: string,
+  recommendedUseCase: string,
+  applicableChannel: "b2b" | "amazon" | "both"
+): Promise<{ error: string } | { success: string; presetId: string }> {
+  const supabase = await createClient();
+  const code = `custom_${Date.now()}`;
+
+  const { data: newPreset, error: err } = await supabase
+    .from("pricing_presets")
+    .insert({
+      name,
+      code,
+      description,
+      recommended_use_case: recommendedUseCase,
+      applicable_channel: applicableChannel,
+      is_system: false,
+    })
+    .select("id")
+    .single();
+
+  if (err || !newPreset) {
+    console.error("Error creating custom preset:", err);
+    return { error: `프리셋 생성 실패: ${err?.message || "알 수 없는 오류"}` };
+  }
+
+  // 기본 글로벌 템플릿(레거시/Null Preset 하위 값) 복사해서 채워주기
+  try {
+    const { data: defaults } = await supabase
+      .from("pricing_scenario_values")
+      .select("scenario_id, item_id, value")
+      .is("preset_id", null);
+
+    if (defaults && defaults.length > 0) {
+      const copyValues = defaults.map((d) => ({
+        preset_id: newPreset.id,
+        scenario_id: d.scenario_id,
+        item_id: d.item_id,
+        value: d.value,
+      }));
+      await supabase.from("pricing_scenario_values").insert(copyValues);
+    }
+  } catch (copyErr) {
+    console.error("Failed to copy default scenario values to new preset:", copyErr);
+  }
+
+  revalidatePath("/admin/products/pricing-profitability");
+  return { success: "새로운 비즈니스 프리셋이 생성되었습니다.", presetId: newPreset.id };
+}
+
+/** 5. 비즈니스 프리셋 복제 (Duplicate) */
+export async function duplicatePreset(
+  sourcePresetId: string,
+  targetName: string
+): Promise<{ error: string } | { success: string; presetId: string }> {
+  const supabase = await createClient();
+
+  // 1) 소스 프리셋 조회
+  const { data: src, error: srcErr } = await supabase
+    .from("pricing_presets")
+    .select("*")
+    .eq("id", sourcePresetId)
+    .single();
+
+  if (srcErr || !src) {
+    return { error: "복제 원본 프리셋을 찾을 수 없습니다." };
+  }
+
+  // 2) 신규 프리셋 삽입
+  const code = `custom_dup_${Date.now()}`;
+  const { data: target, error: tgtErr } = await supabase
+    .from("pricing_presets")
+    .insert({
+      name: targetName,
+      code,
+      description: `${src.name} 복사본 - ${src.description || ""}`,
+      recommended_use_case: src.recommended_use_case,
+      applicable_channel: src.applicable_channel,
+      is_system: false,
+    })
+    .select("id")
+    .single();
+
+  if (tgtErr || !target) {
+    return { error: `프리셋 복제 실패: ${tgtErr?.message}` };
+  }
+
+  // 3) 기존 프리셋 요율 데이터 전체 복제
+  const { data: vals } = await supabase
+    .from("pricing_scenario_values")
+    .select("scenario_id, item_id, value")
+    .eq("preset_id", sourcePresetId);
+
+  if (vals && vals.length > 0) {
+    const dups = vals.map((v) => ({
+      preset_id: target.id,
+      scenario_id: v.scenario_id,
+      item_id: v.item_id,
+      value: v.value,
+    }));
+    await supabase.from("pricing_scenario_values").insert(dups);
+  }
+
+  revalidatePath("/admin/products/pricing-profitability");
+  return { success: "비즈니스 프리셋 복제가 완료되었습니다.", presetId: target.id };
+}
+
+/** 6. 커스텀 프리셋 삭제 (시스템 프리셋 차단) */
+export async function deleteCustomPreset(presetId: string): Promise<ScenarioFormState> {
+  const supabase = await createClient();
+
+  // 시스템 여부 조회
+  const { data: p } = await supabase
+    .from("pricing_presets")
+    .select("is_system")
+    .eq("id", presetId)
+    .single();
+
+  if (p?.is_system) {
+    return { error: "시스템 기본 비즈니스 프리셋은 삭제할 수 없습니다." };
+  }
+
+  const { error } = await supabase
+    .from("pricing_presets")
+    .delete()
+    .eq("id", presetId);
+
+  if (error) {
+    return { error: `프리셋 삭제 실패: ${error.message}` };
+  }
+
+  revalidatePath("/admin/products/pricing-profitability");
+  return { success: "커스텀 프리셋이 삭제되었습니다." };
+}
+
+/** 7. 프리셋 이름/설명 수정 */
+export async function renamePreset(
+  presetId: string,
+  newName: string,
+  description: string
+): Promise<ScenarioFormState> {
+  const supabase = await createClient();
+
+  const { error } = await supabase
+    .from("pricing_presets")
+    .update({
+      name: newName,
+      description,
+    })
+    .eq("id", presetId);
+
+  if (error) {
+    return { error: `수정 실패: ${error.message}` };
+  }
+
+  revalidatePath("/admin/products/pricing-profitability");
+  return { success: "프리셋 정보가 수정되었습니다." };
 }
 
 /** 신규 설정 그룹 추가 */
 export async function addScenarioGroup(name: string, code: string, displayOrder: number): Promise<ScenarioFormState> {
   const supabase = await createClient();
-
   const { error } = await supabase
     .from("pricing_scenario_groups")
     .insert({
@@ -212,7 +413,7 @@ export async function addScenarioItem(data: {
     return { error: `항목 생성 실패: ${itemErr?.message || "알 수 없는 오류"}` };
   }
 
-  // 2. 각 시나리오별 기본값 삽입
+  // 2. 각 시나리오별 기본값 삽입 (레거시용 NULL preset_id 세팅)
   const { data: scenarios, error: scenErr } = await supabase
     .from("pricing_scenarios")
     .select("id, code");
@@ -227,6 +428,7 @@ export async function addScenarioItem(data: {
     if (scen.code === "optimistic") val = data.defaultValueOptimistic;
     
     return {
+      preset_id: null,
       scenario_id: scen.id,
       item_id: item.id,
       value: val,
@@ -275,36 +477,39 @@ export async function archiveScenarioItem(itemId: string): Promise<ScenarioFormS
   return { success: "항목이 보관함으로 이동하였습니다." };
 }
 
-/** 계산 결과 스냅샷 저장 */
+/** 8. 계산 결과 스냅샷 저장 (Preset & 환율 메타 추가) */
 export async function saveCalculation(data: {
   name: string;
   mode: "analyze_profitability" | "calculate_pricing";
   channel: "b2b" | "amazon" | "both";
-  scenarioId: string;
+  scenarioId: string; // 호환용 (Expected의 id 혹은 첫번째 시나리오 id)
+  presetId?: string | null;
   productId?: string | null;
   targetMetric?: string;
   targetValue?: number;
   supplierUnitPrice: number;
+  originalSupplierPrice?: number;
+  originalCurrency?: "KRW" | "USD";
   proposedMsrp?: number;
   wholesalePrice?: number;
   amazonListPrice?: number;
   retailerTargetMargin?: number;
   exchangeRate: number;
+  exchangeRateDate?: string;
+  exchangeRateSource?: string;
   fbaFeeSource: string;
   packageInfo?: any;
   detailedImportInfo?: any;
   inputOverrides?: any;
-  appliedScenarioSnapshot: any;
-  calculatedResults: any;
+  appliedScenarioSnapshot: any; // Conservative, Expected, Optimistic 3종 스냅샷 통째 보관
+  calculatedResults: any;       // 3개 결과 묶음 JSON
   status: string;
   notes?: string;
 }): Promise<{ error: string } | { success: string; id: string }> {
   const supabase = await createClient();
 
-  // 1. 현재 사용자 세션 확인
   const { data: { user } } = await supabase.auth.getUser();
 
-  // 2. 기존 Product와 매핑된 경우 company_id 획득
   let companyId: string | null = null;
   if (data.productId) {
     const { data: prod } = await supabase
@@ -315,7 +520,6 @@ export async function saveCalculation(data: {
     companyId = prod?.company_id || null;
   }
 
-  // 3. 저장
   const { data: inserted, error } = await supabase
     .from("pricing_calculations")
     .insert({
@@ -323,16 +527,21 @@ export async function saveCalculation(data: {
       mode: data.mode,
       channel: data.channel,
       scenario_id: data.scenarioId,
+      preset_id: data.presetId || null,
       product_id: data.productId || null,
       company_id: companyId,
       target_metric: data.targetMetric || null,
       target_value: data.targetValue || null,
-      supplier_unit_price: data.supplierUnitPrice,
+      supplier_unit_price: data.supplierUnitPrice, // 달러 환산된 수치
+      original_supplier_price: data.originalSupplierPrice ?? data.supplierUnitPrice,
+      original_currency: data.originalCurrency ?? "USD",
       proposed_msrp: data.proposedMsrp || null,
       wholesale_price: data.wholesalePrice || null,
       amazon_list_price: data.amazonListPrice || null,
       retailer_target_margin: data.retailerTargetMargin || null,
       exchange_rate: data.exchangeRate,
+      exchange_rate_date: data.exchangeRateDate || null,
+      exchange_rate_source: data.exchangeRateSource || null,
       fba_fee_source: data.fbaFeeSource,
       package_info: data.packageInfo || {},
       detailed_import_info: data.detailedImportInfo || {},
@@ -355,12 +564,12 @@ export async function saveCalculation(data: {
   return { success: "계산 기록이 안전하게 저장되었습니다.", id: inserted.id };
 }
 
-/** 저장된 계산 내역 리스트 조회 */
+/** 저장된 계산 내역 리스트 조회 (기존 호환 쿼리 유지) */
 export async function getSavedCalculations() {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("pricing_calculations")
-    .select("id, name, mode, channel, created_at, status, supplier_unit_price, calculated_results, products(name)")
+    .select("id, name, mode, channel, created_at, status, supplier_unit_price, original_supplier_price, original_currency, calculated_results, products(name), preset_id")
     .order("created_at", { ascending: false });
 
   if (error) {
@@ -398,7 +607,7 @@ export async function duplicateCalculation(id: string): Promise<ScenarioFormStat
       ...detail,
       id: undefined, // 새 uuid 생성 유도
       name: `${detail.name} (복사본)`,
-      created_at: undefined, // 새 시점 입력
+      created_at: undefined,
     });
 
   if (error) {
@@ -438,4 +647,10 @@ export async function getProductsList() {
     return [];
   }
   return data;
+}
+
+/** 실시간 고시 환율 획득 Wrapper (서버 액션) */
+export async function fetchLiveExchangeRate() {
+  const { getExchangeRate } = await import("@/lib/pricing/exchange");
+  return getExchangeRate();
 }
