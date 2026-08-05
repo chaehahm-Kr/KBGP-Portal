@@ -41,7 +41,7 @@ export async function verifyPartnerApplicationAction(
     };
   }
 
-  const sanitizedBrn = businessRegistrationNumber.replace(/[^a-zA-Z0-9]/g, "");
+  const sanitizedBrn = businessRegistrationNumber.replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
 
   if (!sanitizedBrn) {
     return {
@@ -51,22 +51,30 @@ export async function verifyPartnerApplicationAction(
     };
   }
 
-  // 검색 후보군: 대시 제거된 상태, 원본 상태, 그리고 한국 사업자번호(10자리) 형식인 경우 하이픈 포맷도 추가
-  const candidates = [businessRegistrationNumber.trim(), sanitizedBrn];
-  if (sanitizedBrn.length === 10 && /^\d+$/.test(sanitizedBrn)) {
-    const formattedKoreanBrn = `${sanitizedBrn.slice(0, 3)}-${sanitizedBrn.slice(3, 5)}-${sanitizedBrn.slice(5)}`;
-    candidates.push(formattedKoreanBrn);
-  }
-
   const admin = createAdminClient();
 
-  // 1. 사업자번호가 일치하는 모든 회사 조회
-  const { data: companies, error: companyError } = await admin
+  // 1. 전체 회사 목록 조회 (대소문자/공백/대시 무시 매칭 수행)
+  const { data: allCompanies, error: companyError } = await admin
     .from("companies")
-    .select("id, name, contact_name")
-    .in("business_registration_number", candidates);
+    .select("id, name, business_registration_number, contact_name");
 
-  if (companyError || !companies || companies.length === 0) {
+  if (companyError || !allCompanies) {
+    return {
+      success: false,
+      case: "A",
+      message: "회사 정보를 조회하는 중 오류가 발생했습니다.",
+    };
+  }
+
+  // 2. 입력받은 사업자번호와 DB 사업자번호를 동일하게 위생처리하여 비교
+  const matchedCompanies = allCompanies.filter((c) => {
+    const dbSanitized = (c.business_registration_number || "")
+      .replace(/[^a-zA-Z0-9]/g, "")
+      .toLowerCase();
+    return dbSanitized === sanitizedBrn;
+  });
+
+  if (matchedCompanies.length === 0) {
     return {
       success: false,
       case: "A",
@@ -74,10 +82,10 @@ export async function verifyPartnerApplicationAction(
     };
   }
 
-  // 2. 일치하는 회사들의 ID 추출
-  const companyIds = companies.map((c) => c.id);
+  // 3. 일치하는 회사들의 ID 추출
+  const companyIds = matchedCompanies.map((c) => c.id);
 
-  // 3. 해당 회사들에 소속된 사용자(신청자 계정) 조회
+  // 4. 해당 회사들에 소속된 사용자(신청자 계정) 조회
   const { data: users, error: userError } = await admin
     .from("company_users")
     .select("id, name, email, status, invited_at, company_role, company_id")
@@ -102,7 +110,7 @@ export async function verifyPartnerApplicationAction(
     };
   }
 
-  const matchedCompany = companies.find((c) => c.id === matchedUser.company_id)!;
+  const matchedCompany = matchedCompanies.find((c) => c.id === matchedUser.company_id)!;
   const primaryUser = matchedUser;
 
   // Case C: 이미 가입 완료 상태인 경우
