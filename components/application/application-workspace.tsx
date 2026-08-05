@@ -193,12 +193,12 @@ export default function ApplicationWorkspace({
     try {
       if (deleteAction) {
         await deleteAction(application.id);
-        alert("신청서가 삭제 처리되었습니다.");
-        window.location.href = "/admin/applications";
       }
     } catch (err: any) {
+      if (err.digest?.startsWith("NEXT_REDIRECT") || err.message?.includes("NEXT_REDIRECT")) {
+        return;
+      }
       alert("삭제 중 오류가 발생했습니다: " + (err.message || ""));
-    } finally {
       setIsDeleting(false);
     }
   };

@@ -35,7 +35,7 @@ export default async function AdminApplicationDetailPage({
     .eq("id", id)
     .single();
 
-  if (!application || application.status === "draft") {
+  if (!application || application.status === "draft" || application.status === "deleted") {
     notFound();
   }
 

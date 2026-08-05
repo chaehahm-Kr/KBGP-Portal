@@ -241,5 +241,5 @@ export async function deleteApplicationAction(applicationId: string) {
   }
 
   revalidatePath("/admin/applications");
-  revalidatePath(`/admin/applications/${applicationId}`);
+  redirect("/admin/applications");
 }
