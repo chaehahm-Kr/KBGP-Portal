@@ -32,6 +32,10 @@ export async function POST(request: Request) {
   const email = (body.email || "").trim().toLowerCase();
   const code = (body.code || "").trim();
 
+  console.log("[verify-code] checking email:", email, "code:", code);
+  console.log("[verify-code] inMemoryCache keys:", Array.from(inMemoryCache.keys()));
+  console.log("[verify-code] inMemoryCache value for email:", inMemoryCache.get(email));
+
   if (!email || !code) {
     return NextResponse.json({ ok: false, errors: ["이메일과 인증 번호를 모두 입력해 주세요."] }, { status: 400 });
   }

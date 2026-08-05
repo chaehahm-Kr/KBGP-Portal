@@ -64,6 +64,7 @@ export async function POST(request: Request) {
       expiresAt,
       verified: false,
     });
+    console.log("[send-verification] stored in inMemoryCache:", email, { code, expiresAt });
   }
 
   // 3. Resend를 통해 메일 발송
