@@ -450,13 +450,13 @@ export function CalculatorTab({ presets, scenarios, settings: initialSettings, p
     const lookupKey = `${fLayout.billableWeightKg}-${fLayout.externalDimensions.length}-${fLayout.externalDimensions.width}-${fLayout.externalDimensions.height}-${pLayout?.billableWeightKg || 0}`;
     
     if (lookupKey === prevLookupKeyRef.current) return;
-    prevLookupKeyRef.current = lookupKey;
 
     if (lookupTimeoutRef.current) {
       clearTimeout(lookupTimeoutRef.current);
     }
 
     lookupTimeoutRef.current = setTimeout(() => {
+      prevLookupKeyRef.current = lookupKey; // 실제 API 조회가 수행되는 시점에 키 고정
       triggerTwoDayLookup(landedCostOutput);
     }, 800); // 800ms 디바운스 적용
 
