@@ -42,14 +42,22 @@ export default async function CompanyUsersPage() {
   const rows = users ?? [];
 
   // Query all task assignments for this company to hydrate the users manager component
-  const { data: assignments } = await supabase
-    .from("company_task_assignments")
-    .select("user_id, task_code, is_primary, email_notify")
-    .eq("company_id", companyId);
+  let assignments: any[] = [];
+  try {
+    const { data, error } = await supabase
+      .from("company_task_assignments")
+      .select("user_id, task_code, is_primary, email_notify")
+      .eq("company_id", companyId);
+    if (!error && data) {
+      assignments = data;
+    }
+  } catch (e) {
+    console.warn("company_task_assignments table not ready in portal users page", e);
+  }
 
   const hydratedRows = rows.map((u: any) => ({
     ...u,
-    task_assignments: (assignments ?? []).filter((a: any) => a.user_id === u.id)
+    task_assignments: assignments.filter((a: any) => a.user_id === u.id)
   }));
 
   return (

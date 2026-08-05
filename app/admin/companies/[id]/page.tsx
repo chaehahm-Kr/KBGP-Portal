@@ -99,14 +99,22 @@ export default async function AdminCompanyDetailPage({
     .order("created_at", { ascending: true });
 
   // Hydrate task assignments on companyUsers
-  const { data: assignments } = await supabase
-    .from("company_task_assignments")
-    .select("user_id, task_code, is_primary, email_notify")
-    .eq("company_id", id);
+  let assignments: any[] = [];
+  try {
+    const { data, error } = await supabase
+      .from("company_task_assignments")
+      .select("user_id, task_code, is_primary, email_notify")
+      .eq("company_id", id);
+    if (!error && data) {
+      assignments = data;
+    }
+  } catch (e) {
+    console.warn("company_task_assignments table not ready in admin detail page", e);
+  }
 
   const hydratedUsers = (companyUsers ?? []).map((u: any) => ({
     ...u,
-    task_assignments: (assignments ?? []).filter((a: any) => a.user_id === u.id)
+    task_assignments: assignments.filter((a: any) => a.user_id === u.id)
   }));
 
   const brandNameById = new Map(brandsData.map((b) => [b.id, b.name]));
