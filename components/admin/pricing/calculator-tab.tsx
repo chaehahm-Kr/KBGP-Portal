@@ -565,6 +565,99 @@ export function CalculatorTab({ activeSubTab, presets, scenarios, settings: init
     importQuantity
   ]);
 
+  // -----------------------------------------------------------------------------
+  // [신규 확장] 스냅샷 저장 핸들러 복구
+  // -----------------------------------------------------------------------------
+  const handleSaveSnapshot = async () => {
+    if (!calcName.trim() || !presetCalcResult || !landedCostOutput) return;
+    setSaving(true);
+    setSaveError(null);
+
+    const res = await saveCalculation({
+      name: calcName,
+      mode,
+      channel,
+      scenarioId: "a82d77d7-fca8-47fb-ba0d-7b242b36a101",
+      presetId: selectedPresetId,
+      productId: selectedProductId || null,
+      targetMetric: mode === "calculate_pricing" ? targetMetric : undefined,
+      targetValue: mode === "calculate_pricing" ? targetValue : undefined,
+      supplierUnitPrice: brandCostUSD,
+      originalSupplierPrice: supplierUnitPrice,
+      originalCurrency: currency,
+      proposedMsrp: proposedMSRP,
+      wholesalePrice: computedWholesale,
+      amazonListPrice,
+      retailerTargetMargin,
+      exchangeRate: appliedExchangeRate,
+      exchangeRateDate,
+      exchangeRateSource: isManualRate ? "Manual" : exchangeRateSource,
+      fbaFeeSource,
+      notes: calcNotes,
+      status: "draft",
+
+      importQuantity,
+      packageLengthCm: landedCostOutput.lengthCm,
+      packageWidthCm: landedCostOutput.widthCm,
+      packageHeightCm: landedCostOutput.heightCm,
+      packageWeightKg: landedCostOutput.weightKg,
+      packageDataSource: landedCostOutput.packageDataSource,
+      preferredDimensionUnit: preferredDimUnit,
+      preferredWeightUnit: preferredWeightUnit,
+      maximumCartonWeightKg: maxCartonWeight,
+      cartonPackingWeightKg: emptyCartonWeight,
+      cartonSizeAllowance: cartonAllowance,
+      unitsPerCarton: landedCostOutput.unitsPerCarton,
+      fullCartons: landedCostOutput.fullCartons,
+      remainingUnits: landedCostOutput.remainingUnits,
+      totalCartons: landedCostOutput.totalCartons,
+      fullCartonDimensionsCm: landedCostOutput.fullCartonLayout?.externalDimensions || null,
+      partialCartonDimensionsCm: landedCostOutput.partialCartonLayout?.externalDimensions || null,
+      grossWeightKg: landedCostOutput.fullCartonLayout?.grossActualWeightKg || null,
+      volumetricWeightKg: landedCostOutput.fullCartonLayout?.volumetricWeightKg || null,
+      billableWeightKg: landedCostOutput.fullCartonLayout?.billableWeightKg || null,
+      twodayShippingCostKrw: (shippingCostEntryType === "manual" ? manualFullCartonCostKRW : fullCartonShippingCostKRW),
+      twodayLookupAt: twodayLookupAt,
+      twodayLookupStatus: twodayStatus,
+      shippingCostEntryType: shippingCostEntryType,
+      twodayErrorMessage: twodayError,
+      exchangeRateSnapshot: appliedExchangeRate,
+      exchangeRateUpdatedAt: exchangeRateDate,
+      totalShippingCostUsd: totalUSDShippingCost,
+      shippingCostPerUnit: calculatedShippingCostPerUnitUSD,
+      importTaxCostPercentage: importTaxAllowanceRate,
+      importTaxCostTotal: totalUSDTaxAllowance,
+      importTaxCostPerUnit: calculatedTaxCostPerUnitUSD,
+      totalProductCost: totalUSDProductCost,
+      totalLandedCost: calculatedTotalLandedCostUSD,
+      landedCostPerUnit: calculatedLandedCostPerUnit,
+      appliedScenarioSnapshot: extractScenarioMaps(),
+      calculatedResults: presetCalcResult,
+    });
+
+    setSaving(false);
+    if ("success" in res) {
+      setShowSaveModal(false);
+      onSaveSuccess({
+        id: res.id,
+        name: calcName,
+        mode,
+        channel,
+        supplier_unit_price: brandCostUSD,
+        original_supplier_price: supplierUnitPrice,
+        original_currency: currency,
+        calculated_results: presetCalcResult,
+        created_at: new Date().toISOString(),
+        status: "draft",
+        products: selectedProductId ? { name: products.find(p => p.id === selectedProductId)?.name } : null,
+      });
+      setCalcName("");
+      setCalcNotes("");
+    } else {
+      setSaveError(res.error);
+    }
+  };
+
   const computedWholesale = b2bPriceMode === "retail_based" 
     ? proposedMSRP * (1 - retailerTargetMargin / 100) 
     : wholesalePrice;
