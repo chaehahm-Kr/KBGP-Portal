@@ -461,7 +461,7 @@ export function StaffWorkspace({
             className={`flex-1 py-3 font-bold border-b-2 text-center transition-colors cursor-pointer ${
               activeTab === "list"
                 ? "border-zinc-950 text-zinc-950 dark:border-white dark:text-white"
-                : "border-transparent text-zinc-500 hover:text-zinc-800"
+                : "border-transparent text-zinc-500 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200"
             }`}
           >
             📋 직원 목록
@@ -471,7 +471,7 @@ export function StaffWorkspace({
             className={`flex-1 py-3 font-bold border-b-2 text-center transition-colors cursor-pointer ${
               activeTab === "invite"
                 ? "border-zinc-950 text-zinc-950 dark:border-white dark:text-white"
-                : "border-transparent text-zinc-500 hover:text-zinc-800"
+                : "border-transparent text-zinc-500 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200"
             }`}
           >
             ✉️ 초대하기
@@ -481,7 +481,7 @@ export function StaffWorkspace({
             className={`flex-1 py-3 font-bold border-b-2 text-center transition-colors cursor-pointer ${
               activeTab === "dept_title"
                 ? "border-zinc-950 text-zinc-950 dark:border-white dark:text-white"
-                : "border-transparent text-zinc-500 hover:text-zinc-800"
+                : "border-transparent text-zinc-500 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200"
             }`}
           >
             🏢 조직 관리
@@ -491,7 +491,7 @@ export function StaffWorkspace({
             className={`flex-1 py-3 font-bold border-b-2 text-center transition-colors cursor-pointer ${
               activeTab === "audit"
                 ? "border-zinc-950 text-zinc-950 dark:border-white dark:text-white"
-                : "border-transparent text-zinc-500 hover:text-zinc-800"
+                : "border-transparent text-zinc-500 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200"
             }`}
           >
             📜 변경 이력
@@ -511,13 +511,13 @@ export function StaffWorkspace({
                   placeholder="이름 또는 이메일 검색..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full bg-zinc-50/50 dark:bg-zinc-950 rounded border border-zinc-200 dark:border-zinc-800 px-2.5 py-1.5 outline-none focus:border-zinc-500 font-medium"
+                  className="w-full bg-zinc-50/50 dark:bg-zinc-950 rounded border border-zinc-200 dark:border-zinc-800 px-2.5 py-1.5 outline-none focus:border-zinc-500 font-medium text-zinc-900 dark:text-white"
                 />
                 <div className="grid grid-cols-3 gap-1">
                   <select
                     value={deptFilter}
                     onChange={(e) => setDeptFilter(e.target.value)}
-                    className="bg-zinc-50/50 dark:bg-zinc-950 rounded border border-zinc-200 dark:border-zinc-800 p-1 outline-none cursor-pointer"
+                    className="bg-zinc-50/50 dark:bg-zinc-950 rounded border border-zinc-200 dark:border-zinc-800 p-1 outline-none cursor-pointer text-zinc-900 dark:text-white"
                   >
                     <option value="">전체 부서</option>
                     {departments.filter(d => d.is_active).map(d => (
@@ -527,7 +527,7 @@ export function StaffWorkspace({
                   <select
                     value={roleFilter}
                     onChange={(e) => setRoleFilter(e.target.value)}
-                    className="bg-zinc-50/50 dark:bg-zinc-950 rounded border border-zinc-200 dark:border-zinc-800 p-1 outline-none cursor-pointer"
+                    className="bg-zinc-50/50 dark:bg-zinc-950 rounded border border-zinc-200 dark:border-zinc-800 p-1 outline-none cursor-pointer text-zinc-900 dark:text-white"
                   >
                     <option value="">전체 역할</option>
                     {Object.entries(STAFF_ROLE_LABEL).map(([k, v]) => (
@@ -537,7 +537,7 @@ export function StaffWorkspace({
                   <select
                     value={statusFilter}
                     onChange={(e) => setStatusFilter(e.target.value)}
-                    className="bg-zinc-50/50 dark:bg-zinc-950 rounded border border-zinc-200 dark:border-zinc-800 p-1 outline-none cursor-pointer"
+                    className="bg-zinc-50/50 dark:bg-zinc-950 rounded border border-zinc-200 dark:border-zinc-800 p-1 outline-none cursor-pointer text-zinc-900 dark:text-white"
                   >
                     <option value="">전체 상태</option>
                     {Object.entries(STAFF_STATUS_LABEL).map(([k, v]) => (
@@ -607,7 +607,7 @@ export function StaffWorkspace({
                   placeholder="staff@kselectnetwork.com"
                   value={inviteEmail}
                   onChange={(e) => setInviteEmail(e.target.value)}
-                  className="w-full rounded border border-zinc-200 dark:border-zinc-800 px-3 py-1.5 outline-none focus:border-zinc-500 font-semibold"
+                  className="w-full bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white rounded border border-zinc-200 dark:border-zinc-800 px-3 py-1.5 outline-none focus:border-zinc-500 font-semibold"
                 />
               </div>
 
@@ -619,7 +619,7 @@ export function StaffWorkspace({
                   placeholder="김심사"
                   value={inviteName}
                   onChange={(e) => setInviteName(e.target.value)}
-                  className="w-full rounded border border-zinc-200 dark:border-zinc-800 px-3 py-1.5 outline-none focus:border-zinc-500 font-semibold"
+                  className="w-full bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white rounded border border-zinc-200 dark:border-zinc-800 px-3 py-1.5 outline-none focus:border-zinc-500 font-semibold"
                 />
               </div>
 
@@ -630,7 +630,7 @@ export function StaffWorkspace({
                     required
                     value={inviteDept}
                     onChange={(e) => setInviteDept(e.target.value)}
-                    className="w-full rounded border border-zinc-200 dark:border-zinc-800 p-1.5 outline-none cursor-pointer"
+                    className="w-full bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white rounded border border-zinc-200 dark:border-zinc-800 p-1.5 outline-none cursor-pointer"
                   >
                     <option value="">부서 선택</option>
                     {departments.filter(d => d.is_active).map(d => (
@@ -644,7 +644,7 @@ export function StaffWorkspace({
                     required
                     value={inviteTitle}
                     onChange={(e) => setInviteTitle(e.target.value)}
-                    className="w-full rounded border border-zinc-200 dark:border-zinc-800 p-1.5 outline-none cursor-pointer"
+                    className="w-full bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white rounded border border-zinc-200 dark:border-zinc-800 p-1.5 outline-none cursor-pointer"
                   >
                     <option value="">직책 선택</option>
                     {jobTitles.filter(j => j.is_active).map(j => (
@@ -659,7 +659,7 @@ export function StaffWorkspace({
                 <select
                   value={inviteRole}
                   onChange={(e) => setInviteRole(e.target.value as StaffRole)}
-                  className="w-full rounded border border-zinc-200 dark:border-zinc-800 p-1.5 outline-none cursor-pointer"
+                  className="w-full bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white rounded border border-zinc-200 dark:border-zinc-800 p-1.5 outline-none cursor-pointer"
                 >
                   {Object.entries(STAFF_ROLE_LABEL).map(([k, v]) => (
                     <option key={k} value={k}>{v}</option>
@@ -673,7 +673,7 @@ export function StaffWorkspace({
                   placeholder="예: 영업 마케팅 부서 매니저로의 입사를 축하합니다."
                   value={inviteMsg}
                   onChange={(e) => setInviteMsg(e.target.value)}
-                  className="w-full h-20 rounded border border-zinc-200 dark:border-zinc-800 p-2 outline-none focus:border-zinc-500 resize-none"
+                  className="w-full h-20 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white rounded border border-zinc-200 dark:border-zinc-800 p-2 outline-none focus:border-zinc-500 resize-none"
                 />
               </div>
 
@@ -699,7 +699,7 @@ export function StaffWorkspace({
                     placeholder="신규 부서 이름"
                     value={newDeptName}
                     onChange={(e) => setNewDeptName(e.target.value)}
-                    className="flex-1 rounded border border-zinc-200 dark:border-zinc-800 px-2 py-1 outline-none"
+                    className="flex-1 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white rounded border border-zinc-200 dark:border-zinc-800 px-2 py-1 outline-none"
                   />
                   <button type="submit" className="bg-zinc-950 text-white dark:bg-white dark:text-zinc-950 px-2.5 py-1 rounded font-bold cursor-pointer">추가</button>
                 </form>
@@ -731,7 +731,7 @@ export function StaffWorkspace({
                     placeholder="신규 직책 이름"
                     value={newTitleName}
                     onChange={(e) => setNewTitleName(e.target.value)}
-                    className="flex-1 rounded border border-zinc-200 dark:border-zinc-800 px-2 py-1 outline-none"
+                    className="flex-1 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white rounded border border-zinc-200 dark:border-zinc-800 px-2 py-1 outline-none"
                   />
                   <button type="submit" className="bg-zinc-950 text-white dark:bg-white dark:text-zinc-950 px-2.5 py-1 rounded font-bold cursor-pointer">추가</button>
                 </form>
@@ -873,7 +873,7 @@ export function StaffWorkspace({
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 
                 {/* FORM A: Basic Info */}
-                <form onSubmit={handleBasicInfoSave} className="space-y-3 bg-zinc-50/20 p-3.5 rounded-xl border border-zinc-150/50">
+                <form onSubmit={handleBasicInfoSave} className="space-y-3 bg-zinc-50/20 p-3.5 rounded-xl border border-zinc-200 dark:border-zinc-800/50">
                   <h4 className="font-extrabold text-zinc-900 dark:text-white border-b pb-1 select-none">👤 인적 정보 (기본 정보)</h4>
                   
                   <div className="space-y-0.5">
@@ -883,7 +883,7 @@ export function StaffWorkspace({
                       required
                       value={name}
                       onChange={(e) => setName(e.target.value)}
-                      className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded px-2.5 py-1"
+                      className="w-full bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white border border-zinc-200 dark:border-zinc-800 rounded px-2.5 py-1"
                     />
                   </div>
 
@@ -893,7 +893,7 @@ export function StaffWorkspace({
                       type="text"
                       value={englishName}
                       onChange={(e) => setEnglishName(e.target.value)}
-                      className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded px-2.5 py-1"
+                      className="w-full bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white border border-zinc-200 dark:border-zinc-800 rounded px-2.5 py-1"
                     />
                   </div>
 
@@ -903,7 +903,7 @@ export function StaffWorkspace({
                       type="text"
                       value={nickname}
                       onChange={(e) => setNickname(e.target.value)}
-                      className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded px-2.5 py-1"
+                      className="w-full bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white border border-zinc-200 dark:border-zinc-800 rounded px-2.5 py-1"
                     />
                   </div>
 
@@ -913,7 +913,7 @@ export function StaffWorkspace({
                       type="text"
                       value={phone}
                       onChange={(e) => setPhone(e.target.value)}
-                      className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded px-2.5 py-1"
+                      className="w-full bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white border border-zinc-200 dark:border-zinc-800 rounded px-2.5 py-1"
                     />
                   </div>
 
@@ -925,12 +925,12 @@ export function StaffWorkspace({
                         value={region}
                         onChange={(e) => setRegion(e.target.value)}
                         placeholder="Seoul"
-                        className="flex-1 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded px-2.5 py-1"
+                        className="flex-1 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white border border-zinc-200 dark:border-zinc-800 rounded px-2.5 py-1"
                       />
                       <select
                         value={timezone}
                         onChange={(e) => setTimezone(e.target.value)}
-                        className="w-1/2 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded px-1.5 py-1 cursor-pointer"
+                        className="w-1/2 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white border border-zinc-200 dark:border-zinc-800 rounded px-1.5 py-1 cursor-pointer"
                       >
                         <option value="Asia/Seoul">KST (GMT+9)</option>
                         <option value="America/New_York">EST (GMT-5)</option>
@@ -945,7 +945,7 @@ export function StaffWorkspace({
                     <select
                       value={language}
                       onChange={(e) => setLanguage(e.target.value)}
-                      className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded px-2.5 py-1 cursor-pointer"
+                      className="w-full bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white border border-zinc-200 dark:border-zinc-800 rounded px-2.5 py-1 cursor-pointer"
                     >
                       <option value="ko">한국어 (Korean)</option>
                       <option value="en">English (영어)</option>
@@ -962,7 +962,7 @@ export function StaffWorkspace({
                 </form>
 
                 {/* FORM B: Organizational Info */}
-                <form onSubmit={handleOrgInfoSave} className="space-y-3 bg-zinc-50/20 p-3.5 rounded-xl border border-zinc-150/50">
+                <form onSubmit={handleOrgInfoSave} className="space-y-3 bg-zinc-50/20 p-3.5 rounded-xl border border-zinc-200 dark:border-zinc-800/50">
                   <h4 className="font-extrabold text-zinc-900 dark:text-white border-b pb-1 select-none">🏢 인사 정보 (조직 배정)</h4>
                   
                   <div className="space-y-0.5">
@@ -970,7 +970,7 @@ export function StaffWorkspace({
                     <select
                       value={departmentId}
                       onChange={(e) => setDepartmentId(e.target.value)}
-                      className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded px-2.5 py-1 cursor-pointer"
+                      className="w-full bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white border border-zinc-200 dark:border-zinc-800 rounded px-2.5 py-1 cursor-pointer"
                     >
                       <option value="">소속 없음</option>
                       {departments.filter(d => d.is_active).map(d => (
@@ -984,7 +984,7 @@ export function StaffWorkspace({
                     <select
                       value={jobTitleId}
                       onChange={(e) => setJobTitleId(e.target.value)}
-                      className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded px-2.5 py-1 cursor-pointer"
+                      className="w-full bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white border border-zinc-200 dark:border-zinc-800 rounded px-2.5 py-1 cursor-pointer"
                     >
                       <option value="">직책 없음</option>
                       {jobTitles.filter(j => j.is_active).map(j => (
@@ -998,7 +998,7 @@ export function StaffWorkspace({
                     <select
                       value={managerId}
                       onChange={(e) => setManagerId(e.target.value)}
-                      className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded px-2.5 py-1 cursor-pointer"
+                      className="w-full bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white border border-zinc-200 dark:border-zinc-800 rounded px-2.5 py-1 cursor-pointer"
                     >
                       <option value="">지정 없음</option>
                       {staffList.filter(s => s.id !== activeStaff.id && s.status === 'active').map(s => (
@@ -1013,7 +1013,7 @@ export function StaffWorkspace({
                       type="date"
                       value={hireDate}
                       onChange={(e) => setHireDate(e.target.value)}
-                      className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded px-2.5 py-1 cursor-pointer"
+                      className="w-full bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white border border-zinc-200 dark:border-zinc-800 rounded px-2.5 py-1 cursor-pointer"
                     />
                   </div>
 
@@ -1083,7 +1083,7 @@ export function StaffWorkspace({
                 <select
                   value={baseRole}
                   onChange={(e) => handleBaseRoleChange(e.target.value as StaffRole)}
-                  className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded px-2 py-1.5 outline-none font-semibold cursor-pointer"
+                  className="w-full bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white border border-zinc-200 dark:border-zinc-800 rounded px-2 py-1.5 outline-none font-semibold cursor-pointer"
                 >
                   {Object.entries(STAFF_ROLE_LABEL).map(([k, v]) => (
                     <option key={k} value={k}>{v}</option>
