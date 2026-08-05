@@ -3,7 +3,6 @@
 import fs from "fs";
 import path from "path";
 import { revalidatePath } from "next/cache";
-import { headers } from "next/headers";
 import { verifyAdminSession } from "@/lib/auth/dal";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { publicEnv } from "@/lib/env/public";
@@ -344,10 +343,7 @@ export async function sendPortalInvitationAction(companyUserId: string) {
 
   const isConfirmed = Boolean(authUser.user.email_confirmed_at);
 
-  const headersList = await headers();
-  const host = headersList.get("host") || "localhost:3010";
-  const protocol = host.startsWith("localhost") || host.startsWith("127.0.0.1") || host.startsWith("192.168.") ? "http" : "https";
-  const siteUrl = `${protocol}://${host}`;
+  const siteUrl = publicEnv.NEXT_PUBLIC_SITE_URL;
 
   let inviteLink = "";
   if (isConfirmed) {
