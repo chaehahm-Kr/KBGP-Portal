@@ -131,6 +131,20 @@ const TEMPLATE_METADATA: Record<string, TemplateMetadata> = {
     triggerLabel: "자동 발송 (Auto)",
     triggerCondition: "마케팅 소개 웹사이트에서 신규 가입 문의가 접수되었을 때 어드민 내부 전원에게 실시간 모니터링 알림으로 발송됩니다.",
   },
+  portal_signup_request: {
+    recipientType: "partner",
+    recipientLabel: "회사 담당자 (Partner)",
+    triggerType: "manual",
+    triggerLabel: "수동 액션 (Manual)",
+    triggerCondition: "어드민이 입점 신청서 또는 회사 상세 페이지에서 브랜드사에 포털 회원가입 및 최초 비밀번호 설정을 요청할 때 발송됩니다.",
+  },
+  staff_invited: {
+    recipientType: "internal",
+    recipientLabel: "내부 담당자 (Internal)",
+    triggerType: "manual",
+    triggerLabel: "수동 액션 (Manual)",
+    triggerCondition: "어드민이 내부 직원 관리 화면에서 신규 직원을 관리자 포털로 초대할 때(임시 비밀번호 포함) 발송됩니다.",
+  },
 };
 
 const TEMPLATE_CATEGORIES = [
@@ -156,8 +170,14 @@ const TEMPLATE_CATEGORIES = [
   },
   {
     id: "inquiry",
-    name: "📩 문의 및 기타 (Inquiry & Invites)",
-    keys: ["inquiry_received_applicant", "inquiry_received_internal", "invite_expiring_soon"]
+    name: "📩 문의 및 초대 (Inquiry & Invites)",
+    keys: [
+      "inquiry_received_applicant",
+      "inquiry_received_internal",
+      "invite_expiring_soon",
+      "portal_signup_request",
+      "staff_invited"
+    ]
   }
 ];
 

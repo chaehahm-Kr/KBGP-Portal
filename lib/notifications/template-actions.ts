@@ -7,6 +7,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import {
   TEMPLATE_KEYS,
   SAMPLE_VARIABLES,
+  DEFAULT_TEMPLATES,
   type TemplateKey,
 } from "@/lib/notifications/templates";
 
@@ -44,15 +45,17 @@ export async function updateEmailTemplate(
   }
 
   const admin = createAdminClient();
+  const fallback = DEFAULT_TEMPLATES[keyResult.data];
   const { error } = await admin
     .from("email_templates")
-    .update({
+    .upsert({
+      key: keyResult.data,
+      description: fallback.description,
       subject_template: parsed.data.subject,
       body_template: parsed.data.body,
       updated_at: new Date().toISOString(),
       updated_by: session.userId,
-    })
-    .eq("key", keyResult.data);
+    }, { onConflict: "key" });
 
   if (error) {
     return { error: "저장하지 못했습니다. 잠시 후 다시 시도해주세요." };
