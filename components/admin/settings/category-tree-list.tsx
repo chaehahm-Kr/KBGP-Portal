@@ -306,16 +306,16 @@ export function CategoryTreeList({ initialTree }: { initialTree: CategoryNode[] 
 
           <div className="flex items-center gap-4">
             <span className={`
-              text-[10px] px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider
-              ${depth === 0 ? 'bg-violet-100 text-violet-700 border border-violet-200 dark:bg-violet-950/40 dark:text-violet-400 dark:border-violet-900/30' : ''}
-              ${depth === 1 ? 'bg-blue-100 text-blue-700 border border-blue-200 dark:bg-blue-950/40 dark:text-blue-400 dark:border-blue-900/30' : ''}
-              ${depth === 2 ? 'bg-emerald-100 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800/30' : ''}
+              text-[9px] px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider border
+              ${depth === 0 ? 'bg-zinc-100 dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200 border-zinc-200 dark:border-zinc-700' : ''}
+              ${depth === 1 ? 'bg-zinc-100/50 dark:bg-zinc-900/50 text-zinc-600 dark:text-zinc-350 border-zinc-200/60 dark:border-zinc-800/60' : ''}
+              ${depth === 2 ? 'bg-zinc-50 dark:bg-zinc-950 text-zinc-500 dark:text-zinc-500 border-zinc-200/40 dark:border-zinc-900/40' : ''}
             `}>
               Depth {depth + 1}
             </span>
 
             {node.isFinal && (
-              <span className="text-[10px] px-2.5 py-0.5 bg-amber-100 text-amber-700 border border-amber-200 rounded-full font-semibold dark:bg-amber-950/30 dark:text-amber-400 dark:border-amber-800/20">
+              <span className="text-[9px] px-2.5 py-0.5 bg-amber-50 text-amber-700 border border-amber-200 rounded-full font-bold dark:bg-amber-950/20 dark:text-amber-400 dark:border-amber-900/30">
                 최종분류
               </span>
             )}
@@ -325,7 +325,7 @@ export function CategoryTreeList({ initialTree }: { initialTree: CategoryNode[] 
               {depth < 2 && (
                 <button
                   onClick={() => handleOpenCreate(node.code, depth + 2)}
-                  className="px-2 py-1 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 rounded text-[10px] font-bold cursor-pointer"
+                  className="px-2 py-1 bg-zinc-900 hover:bg-zinc-850 dark:bg-zinc-100 dark:hover:bg-zinc-200 text-white dark:text-zinc-950 border border-zinc-900 dark:border-zinc-100 rounded text-[10px] font-bold cursor-pointer transition-all duration-150"
                   title="하위 카테고리 신설"
                 >
                   + 하위
@@ -333,13 +333,13 @@ export function CategoryTreeList({ initialTree }: { initialTree: CategoryNode[] 
               )}
               <button
                 onClick={() => handleOpenEdit(node.code as any ? node : node, depth + 1)}
-                className="px-2 py-1 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/40 dark:hover:bg-indigo-900/40 text-indigo-650 dark:text-indigo-400 rounded text-[10px] font-bold cursor-pointer"
+                className="px-2 py-1 bg-white hover:bg-zinc-100 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-750 rounded text-[10px] font-bold cursor-pointer transition-all duration-150"
               >
                 수정
               </button>
               <button
                 onClick={() => handleDeleteCategory(node.code)}
-                className="px-2 py-1 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900/40 text-rose-650 dark:text-rose-450 rounded text-[10px] font-bold cursor-pointer"
+                className="px-2 py-1 bg-white hover:bg-rose-50/50 dark:bg-zinc-800 dark:hover:bg-rose-950/20 text-rose-600 dark:text-rose-450 border border-rose-200 dark:border-rose-900/30 rounded text-[10px] font-bold cursor-pointer transition-all duration-150"
               >
                 삭제
               </button>

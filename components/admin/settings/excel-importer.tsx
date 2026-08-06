@@ -67,25 +67,12 @@ export function ExcelImporter() {
       }
       
       const base64 = response.data!;
-      const raw = window.atob(base64);
-      const rawLength = raw.length;
-      const array = new Uint8Array(new ArrayBuffer(rawLength));
-
-      for (let i = 0; i < rawLength; i++) {
-        array[i] = raw.charCodeAt(i);
-      }
-
-      const blob = new Blob([array], {
-        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      });
-
-      const url = window.URL.createObjectURL(blob);
+      const url = `data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,${base64}`;
       const a = document.createElement("a");
       a.href = url;
       a.download = `K_Select_Category_Attribute_Master_Exported.xlsx`;
       document.body.appendChild(a);
       a.click();
-      window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
     } catch (err: any) {
       setError(err.message || "엑셀 다운로드 중 오류가 발생했습니다.");
