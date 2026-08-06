@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { verifyAdminSession } from "@/lib/auth/dal";
 
 export interface CategoryNode {
   code: string;
@@ -646,3 +647,288 @@ export async function getAllAttributesWithDetails(): Promise<AttributeMasterItem
       })),
   }));
 }
+
+/**
+ * 9. 웹 UI용 카테고리 추가/수정 (CUD)
+ */
+export async function saveCategory(category: {
+  code: string;
+  nameKo: string;
+  nameEn?: string | null;
+  depth: number;
+  parentCode?: string | null;
+  isFinal: boolean;
+  isActive?: boolean;
+}) {
+  await verifyAdminSession();
+  const admin = createAdminClient();
+
+  const payload = {
+    code: category.code.trim().toUpperCase(),
+    name_ko: category.nameKo.trim(),
+    name_en: category.nameEn?.trim() || null,
+    depth: category.depth,
+    parent_code: category.parentCode || null,
+    is_final: category.isFinal,
+    is_active: category.isActive !== undefined ? category.isActive : true,
+    updated_at: new Date().toISOString(),
+  };
+
+  const { error } = await admin
+    .from("categories")
+    .upsert(payload, { onConflict: "code" });
+
+  if (error) {
+    throw new Error(`카테고리 저장 실패: ${error.message}`);
+  }
+
+  revalidatePath("/admin/settings/categories");
+  return { success: true };
+}
+
+/**
+ * 10. 웹 UI용 카테고리 삭제 (Soft Delete / 비활성화)
+ */
+export async function deleteCategory(code: string) {
+  await verifyAdminSession();
+  const admin = createAdminClient();
+
+  const { error } = await admin
+    .from("categories")
+    .update({ is_active: false })
+    .eq("code", code);
+
+  if (error) {
+    throw new Error(`카테고리 삭제 실패: ${error.message}`);
+  }
+
+  revalidatePath("/admin/settings/categories");
+  return { success: true };
+}
+
+/**
+ * 11. 웹 UI용 속성 마스터 및 옵션 일괄 추가/수정 (CUD)
+ */
+export async function saveAttribute(
+  attribute: {
+    code: string;
+    nameKo: string;
+    nameEn?: string | null;
+    scope: "COMMON" | "PROFILE";
+    attrGroup?: string | null;
+    inputType: string;
+    isMultiple: boolean;
+    unitSet?: string | null;
+    isRequired: boolean;
+    allowNa?: boolean;
+    allowUnknown?: boolean;
+    allowOther?: boolean;
+    brandEditable: boolean;
+    adminOnly: boolean;
+    isSearchable: boolean;
+    displayOrder: number;
+    helpText?: string | null;
+    isActive?: boolean;
+  },
+  options: Array<{
+    optionCode: string;
+    optionKo: string;
+    optionEn?: string | null;
+    displayOrder: number;
+  }>
+) {
+  await verifyAdminSession();
+  const admin = createAdminClient();
+
+  const attrCode = attribute.code.trim().toUpperCase();
+
+  const attrPayload = {
+    code: attrCode,
+    name_ko: attribute.nameKo.trim(),
+    name_en: attribute.nameEn?.trim() || null,
+    scope: attribute.scope,
+    attr_group: attribute.attrGroup?.trim() || null,
+    input_type: attribute.inputType,
+    is_multiple: attribute.isMultiple,
+    unit_set: attribute.unitSet || null,
+    is_required: attribute.isRequired,
+    allow_na: attribute.allowNa !== undefined ? attribute.allowNa : true,
+    allow_unknown: attribute.allowUnknown !== undefined ? attribute.allowUnknown : true,
+    allow_other: attribute.allowOther !== undefined ? attribute.allowOther : false,
+    brand_editable: attribute.brandEditable,
+    admin_only: attribute.adminOnly,
+    is_searchable: attribute.isSearchable,
+    display_order: attribute.displayOrder,
+    help_text: attribute.helpText || null,
+    is_active: attribute.isActive !== undefined ? attribute.isActive : true,
+    updated_at: new Date().toISOString(),
+  };
+
+  // 11.1 속성 테이블 UPSERT
+  const { error: attrError } = await admin
+    .from("attributes")
+    .upsert(attrPayload, { onConflict: "code" });
+
+  if (attrError) {
+    throw new Error(`속성 명세 저장 실패: ${attrError.message}`);
+  }
+
+  // 11.2 기존 옵션 전체 비활성/삭제 후 재등록 (옵션 수가 많지 않으므로 트랜잭션 대신 순차 삭제-등록)
+  await admin
+    .from("attribute_options")
+    .delete()
+    .eq("attribute_code", attrCode);
+
+  if (options.length > 0) {
+    const optionRows = options.map((opt) => ({
+      attribute_code: attrCode,
+      option_code: opt.optionCode.trim().toUpperCase(),
+      option_ko: opt.optionKo.trim(),
+      option_en: opt.optionEn?.trim() || null,
+      display_order: opt.displayOrder,
+      is_active: true,
+    }));
+
+    const { error: optError } = await admin
+      .from("attribute_options")
+      .insert(optionRows);
+
+    if (optError) {
+      throw new Error(`속성 옵션 저장 실패: ${optError.message}`);
+    }
+  }
+
+  revalidatePath("/admin/settings/attributes");
+  return { success: true };
+}
+
+/**
+ * 12. 웹 UI용 속성 마스터 삭제 (비활성화)
+ */
+export async function deleteAttribute(code: string) {
+  await verifyAdminSession();
+  const admin = createAdminClient();
+
+  const { error } = await admin
+    .from("attributes")
+    .update({ is_active: false })
+    .eq("code", code);
+
+  if (error) {
+    throw new Error(`속성 비활성화 실패: ${error.message}`);
+  }
+
+  revalidatePath("/admin/settings/attributes");
+  return { success: true };
+}
+
+/**
+ * 13. 웹 UI용 속성 프로필 추가/수정 (CUD)
+ */
+export async function saveAttributeProfile(profile: {
+  code: string;
+  nameKo: string;
+  nameEn?: string | null;
+  isActive?: boolean;
+}) {
+  await verifyAdminSession();
+  const admin = createAdminClient();
+
+  const payload = {
+    code: profile.code.trim().toUpperCase(),
+    name_ko: profile.nameKo.trim(),
+    name_en: profile.nameEn?.trim() || null,
+    is_active: profile.isActive !== undefined ? profile.isActive : true,
+    updated_at: new Date().toISOString(),
+  };
+
+  const { error } = await admin
+    .from("attribute_profiles")
+    .upsert(payload, { onConflict: "code" });
+
+  if (error) {
+    throw new Error(`프로필 저장 실패: ${error.message}`);
+  }
+
+  revalidatePath("/admin/settings/attribute-profiles");
+  return { success: true };
+}
+
+/**
+ * 14. 웹 UI용 프로필 소속 속성 매핑 일괄 변경
+ */
+export async function saveProfileAttributeMappings(
+  profileCode: string,
+  mappings: Array<{
+    attributeCode: string;
+    isRequiredOverride: boolean;
+    displayOrder: number;
+  }>
+) {
+  await verifyAdminSession();
+  const admin = createAdminClient();
+
+  // 14.1 기존 매핑 삭제
+  const { error: deleteError } = await admin
+    .from("profile_attributes")
+    .delete()
+    .eq("profile_code", profileCode);
+
+  if (deleteError) {
+    throw new Error(`기존 프로필 속성 매핑 삭제 실패: ${deleteError.message}`);
+  }
+
+  // 14.2 신규 매핑 인서트
+  if (mappings.length > 0) {
+    const insertRows = mappings.map((m) => ({
+      profile_code: profileCode,
+      attribute_code: m.attributeCode,
+      is_required_override: m.isRequiredOverride,
+      display_order: m.displayOrder,
+      is_active: true,
+    }));
+
+    const { error: insertError } = await admin
+      .from("profile_attributes")
+      .insert(insertRows);
+
+    if (insertError) {
+      throw new Error(`프로필 속성 매핑 등록 실패: ${insertError.message}`);
+    }
+  }
+
+  revalidatePath("/admin/settings/attribute-profiles");
+  return { success: true };
+}
+
+/**
+ * 15. 웹 UI용 카테고리-프로필 매핑 저장
+ */
+export async function saveCategoryProfileMapping(categoryCode: string, profileCode: string | null) {
+  await verifyAdminSession();
+  const admin = createAdminClient();
+
+  if (!profileCode) {
+    // 매핑 삭제
+    const { error } = await admin
+      .from("category_profile_mappings")
+      .delete()
+      .eq("category_code", categoryCode);
+    if (error) throw new Error(`카테고리 프로필 매핑 삭제 실패: ${error.message}`);
+  } else {
+    // 매핑 등록/업데이트
+    const { error } = await admin
+      .from("category_profile_mappings")
+      .upsert({
+        category_code: categoryCode,
+        profile_code: profileCode,
+        is_active: true,
+        updated_at: new Date().toISOString()
+      }, { onConflict: "category_code" });
+    if (error) throw new Error(`카테고리 프로필 매핑 저장 실패: ${error.message}`);
+  }
+
+  revalidatePath("/admin/settings/categories");
+  return { success: true };
+}
+
