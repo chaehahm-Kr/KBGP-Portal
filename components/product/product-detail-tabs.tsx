@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useTransition } from "react";
+import Link from "next/link";
 import { 
   type Product, 
   type ProductVideo, 
@@ -58,7 +59,7 @@ export function ProductDetailTabs({
   // Read admin overrides (specifically for Letusto SKU)
   const adminOverrides = (product.price_additional_info as any)?.admin_overrides || {};
   const effectiveLetustoSku = adminOverrides.letusto_sku || product.letusto_sku || "";
-  const effectiveManufactureSku = adminOverrides.manufacture_sku !== undefined ? adminOverrides.manufacture_sku : product.manufacture_sku || "";
+  const effectiveManufactureSku = adminOverrides.manufacture_sku || product.manufacture_sku || "";
 
   // Resolve effective parent/child SKU (considering admin overrides)
   const getInitialParentState = () => {
@@ -747,7 +748,13 @@ export function ProductDetailTabs({
             </div>
           </div>
           
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            <Link
+              href="/portal/products"
+              className="w-full sm:w-auto text-center rounded-lg border border-zinc-300 bg-white hover:bg-zinc-50 px-5 py-2.5 text-xs font-bold text-zinc-700 transition-all dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-300 dark:hover:bg-zinc-900 cursor-pointer"
+            >
+              목록으로 돌아가기
+            </Link>
             <button
               type="submit"
               disabled={isPending}
