@@ -33,6 +33,7 @@ export default function Header({ isSidebarCollapsed }: HeaderProps) {
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const [uuidNameMap, setUuidNameMap] = useState<Record<string, string>>({});
 
   const loadNotifications = async () => {
     const data = await getNotifications();
@@ -44,6 +45,68 @@ export default function Header({ isSidebarCollapsed }: HeaderProps) {
     const interval = setInterval(loadNotifications, 30000);
     return () => clearInterval(interval);
   }, []);
+
+  // Resolve dynamic names for UUID paths in breadcrumbs
+  useEffect(() => {
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const paths = pathname.split("/").filter(Boolean);
+    const uuidPath = paths.find(p => uuidRegex.test(p));
+
+    if (uuidPath && !uuidNameMap[uuidPath]) {
+      const resolveUuid = async () => {
+        const supabase = createClient();
+        
+        // 1. Check companies table
+        const { data: comp } = await supabase
+          .from("companies")
+          .select("name")
+          .eq("id", uuidPath)
+          .maybeSingle();
+
+        if (comp?.name) {
+          setUuidNameMap(prev => ({ ...prev, [uuidPath]: comp.name }));
+          return;
+        }
+
+        // 2. Check products table
+        const { data: prod } = await supabase
+          .from("products")
+          .select("name")
+          .eq("id", uuidPath)
+          .maybeSingle();
+
+        if (prod?.name) {
+          setUuidNameMap(prev => ({ ...prev, [uuidPath]: prod.name }));
+          return;
+        }
+
+        // 3. Check brands table
+        const { data: brand } = await supabase
+          .from("brands")
+          .select("name")
+          .eq("id", uuidPath)
+          .maybeSingle();
+
+        if (brand?.name) {
+          setUuidNameMap(prev => ({ ...prev, [uuidPath]: brand.name }));
+          return;
+        }
+
+        // 4. Check applications table
+        const { data: app } = await supabase
+          .from("applications")
+          .select("application_number")
+          .eq("id", uuidPath)
+          .maybeSingle();
+
+        if (app?.application_number) {
+          setUuidNameMap(prev => ({ ...prev, [uuidPath]: `신청서 (#${app.application_number})` }));
+          return;
+        }
+      };
+      resolveUuid();
+    }
+  }, [pathname, uuidNameMap]);
 
   const handleNotificationClick = async (n: NotificationItem) => {
     if (!n.is_read) {
@@ -222,9 +285,11 @@ export default function Header({ isSidebarCollapsed }: HeaderProps) {
     return paths.map((path, index) => {
       const href = "/" + paths.slice(0, index + 1).join("/");
       const label =
-        path === "admin"
-          ? "Admin"
-          : path.charAt(0).toUpperCase() + path.slice(1).replace("-", " ");
+        uuidNameMap[path] || (
+          path === "admin"
+            ? "Admin"
+            : path.charAt(0).toUpperCase() + path.slice(1).replace("-", " ")
+        );
       return { label, href, isLast: index === paths.length - 1 };
     });
   };
