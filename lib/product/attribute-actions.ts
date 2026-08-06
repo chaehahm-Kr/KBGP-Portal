@@ -306,31 +306,55 @@ export async function saveProductAttributeValues(
     throw new Error(`제품 카테고리 갱신 실패: ${productError.message}`);
   }
 
-  // 4.2 product_attribute_values 동적 속성들 일괄 UPSERT
-  const attrEntries = Object.entries(values);
-  if (attrEntries.length === 0) {
-    revalidatePath(`/admin/products/${productId}`);
-    revalidatePath(`/portal/products/${productId}`);
-    return { success: true };
-  }
+  // 4.2 동적 속성값 분류 (유효한 값은 UPSERT, 비어있는 값은 DELETE)
+  const upsertRows: any[] = [];
+  const deleteCodes: string[] = [];
 
-  // UPSERT 페이로드 구성
-  const upsertRows = attrEntries.map(([code, val]) => {
-    return {
-      product_id: productId,
-      attribute_code: code,
-      value_json: val,
-      text_value: textValues[code] || null,
-      updated_at: new Date().toISOString(),
-    };
+  Object.entries(values).forEach(([code, val]) => {
+    let isEmpty = false;
+    if (val === null || val === undefined) {
+      isEmpty = true;
+    } else if (typeof val === "string" && val.trim() === "") {
+      isEmpty = true;
+    } else if (Array.isArray(val) && val.length === 0) {
+      isEmpty = true;
+    }
+
+    if (isEmpty) {
+      deleteCodes.push(code);
+    } else {
+      upsertRows.push({
+        product_id: productId,
+        attribute_code: code,
+        value_json: val,
+        text_value: textValues[code] || null,
+        updated_at: new Date().toISOString(),
+      });
+    }
   });
 
-  const { error: upsertError } = await admin
-    .from("product_attribute_values")
-    .upsert(upsertRows, { onConflict: "product_id,attribute_code" });
+  // 4.3 빈 값에 해당하는 기존 속성 행들 일괄 삭제
+  if (deleteCodes.length > 0) {
+    const { error: deleteError } = await admin
+      .from("product_attribute_values")
+      .delete()
+      .eq("product_id", productId)
+      .in("attribute_code", deleteCodes);
 
-  if (upsertError) {
-    throw new Error(`동적 속성 저장 실패: ${upsertError.message}`);
+    if (deleteError) {
+      console.error(`일부 속성값 초기화 삭제 실패: ${deleteError.message}`);
+    }
+  }
+
+  // 4.4 유효한 속성값 일괄 UPSERT
+  if (upsertRows.length > 0) {
+    const { error: upsertError } = await admin
+      .from("product_attribute_values")
+      .upsert(upsertRows, { onConflict: "product_id,attribute_code" });
+
+    if (upsertError) {
+      throw new Error(`동적 속성 저장 실패: ${upsertError.message}`);
+    }
   }
 
   revalidatePath(`/admin/products/${productId}`);
