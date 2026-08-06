@@ -669,7 +669,6 @@ export async function saveCategory(category: {
       parent_code: category.parentCode || null,
       is_final: category.isFinal,
       is_active: category.isActive !== undefined ? category.isActive : true,
-      updated_at: new Date().toISOString(),
     };
 
     const { error } = await admin
