@@ -16,6 +16,60 @@ interface FlatCategoryPath {
   pathName: string;
 }
 
+// 카테고리 코드별 유사어/연관 키워드 사전 정의
+const CATEGORY_SYNONYMS: Record<string, string[]> = {
+  // 선케어 / 자외선 차단
+  "SK_SUNSCREEN": ["선크림", "썬크림", "자외선차단제", "선블록", "선케어", "비비", "비비크림", "bbcream", "sunscreen", "suncream"],
+  "SK_SUN_STICK": ["선스틱", "썬스틱", "선케어", "썬케어", "sunstick"],
+  "SK_SUN_CUSHION": ["선쿠션", "썬쿠션", "선케어", "suncushion"],
+  "SK_AFTER_SUN": ["수딩젤", "알로에", "알로에수딩젤", "알로에젤", "진정젤", "애프터선", "애프터썬", "수딩겔", "썬번", "탄피부", "진정", "진정크림"],
+  
+  // 메이크업 베이스
+  "MU_BB_CC": ["비비", "비비크림", "씨씨크림", "cc크림", "bb크림", "bbcream", "cccream", "메이크업베이스", "베이스", "톤업", "톤업크림"],
+  "MU_FOUNDATION": ["파운데이션", "파데", "리퀴드파데", "쿠션팩트", "foundation"],
+  "MU_CUSHION": ["쿠션", "쿠션팩트", "팩트", "쿠션파데", "cushion"],
+  "MU_CONCEALER": ["컨실러", "커버", "잡티커버", "concealer"],
+  
+  // 클렌징 / 세안
+  "SK_CLEANSING_FOAM": ["폼클렌징", "클렌징폼", "세안제", "클렌저", "폼클렌저", "젤클렌저", "세수", "cleansingfoam", "cleanser"],
+  "SK_CLEANSING_OIL": ["클렌징오일", "오일클렌저", "화장지우는오일", "cleansingoil"],
+  "SK_CLEANSING_BALM": ["클렌징밤", "밤클렌저", "샤베트클렌저", "cleansingbalm"],
+  "SK_CLEANSING_WATER": ["클렌징워터", "립앤아이리무버", "cleansingwater"],
+  "SK_CLEANSING_WIPES": ["클렌징티슈", "클렌징패드", "리무버패드", "wipes", "티슈"],
+  
+  // 기초 케어
+  "SK_TONER": ["스킨", "토너", "닦토", "콧물스킨", "toner", "스킨케어"],
+  "SK_ESSENCE_TONER": ["에센스토너", "스킨에센스", "essencetoner"],
+  "SK_TONER_PAD": ["토너패드", "필링패드", "스킨패드", "tonerpad", "패드"],
+  "SK_ESSENCE": ["에센스", "수분에센스", "essence"],
+  "SK_SERUM": ["세럼", "serum"],
+  "SK_AMPOULE": ["앰플", "ampoule"],
+  "SK_FACE_CREAM": ["크림", "수분크림", "영양크림", "보습크림", "cream"],
+  "SK_BARRIER_CREAM": ["장벽크림", "재생크림", "시카크림", "barriercream", "시카", "cica"],
+  "SK_GEL_CREAM": ["젤크림", "수딩크림", "젤타입크림", "gelcream", "수딩젤", "수딩겔", "알로에젤"],
+  "SK_FACE_OIL": ["페이스오일", "오일", "faceoil"],
+  
+  // 아이 / 립 케어
+  "SK_LIP_BALM": ["립밤", "입술보호제", "립케어", "립글로스", "lipbalm", "립에센스"],
+  "SK_LIP_MASK": ["립마스크", "입술팩", "lipmask"],
+  "SK_EYE_CREAM": ["아이크림", "눈가주름", "eyecream"],
+  
+  // 헤어 케어
+  "HC_SHAMPOO": ["샴푸", "shampoo", "머리감기", "세정제"],
+  "HC_SCALP_SHAMPOO": ["두피샴푸", "탈모샴푸", "비듬샴푸", "scalpshampoo"],
+  "HC_RINSE": ["린스", "rinse"],
+  "HC_TREATMENT": ["트리트먼트", "헤어팩", "treatment", "모발케어"],
+  "HC_HAIR_ESSENCE": ["헤어에센스", "머리에센스", "hairessence"],
+  "HC_HAIR_OIL": ["헤어오일", "헤어세럼", "hairoil"],
+  
+  // 바디 케어
+  "BC_BODY_WASH": ["바디워시", "바디소프", "샤워젤", "bodywash"],
+  "BC_BODY_LOTION": ["바디로션", "바디보습", "bodylotion"],
+  "BC_BODY_CREAM": ["바디크림", "bodycream"],
+  "BC_BODY_SCRUB": ["바디스크럽", "살구씨스크럽", "bodyscrub"],
+  "BC_HAND_CREAM": ["핸드크림", "손크림", "handcream"],
+};
+
 // 카테고리 트리를 탐색하며 최종 카테고리(isFinal)에 해당하는 전체 경로 목록을 반환
 function getFlatFinalCategories(nodes: CategoryNode[], currentPath: string[] = []): FlatCategoryPath[] {
   let results: FlatCategoryPath[] = [];
@@ -76,13 +130,33 @@ export function CategoryAttributeForm({
     return getFlatFinalCategories(categoriesTree);
   }, [categoriesTree]);
 
-  // 검색어에 매칭되는 목록 필터링
+  // 검색어에 매칭되는 목록 필터링 (동의어/유사어 사전 기반 연관 검색 고도화)
   const searchResults = useMemo(() => {
     if (!catSearchQuery.trim()) return [];
-    const q = catSearchQuery.toLowerCase();
-    return flatCategories.filter(
-      item => item.pathName.toLowerCase().includes(q) || item.code.toLowerCase().includes(q)
-    );
+    
+    // 검색어 정제 (공백 제거, 소문자화)
+    const q = catSearchQuery.toLowerCase().replace(/\s+/g, "");
+    
+    return flatCategories.filter(item => {
+      // 1) 전체 경로명 매칭
+      const cleanPath = item.pathName.toLowerCase().replace(/\s+/g, "");
+      if (cleanPath.includes(q)) return true;
+      
+      // 2) 카테고리 코드 매칭
+      if (item.code.toLowerCase().includes(q)) return true;
+      
+      // 3) 유사어 사전 매칭
+      const synonyms = CATEGORY_SYNONYMS[item.code];
+      if (synonyms) {
+        // 검색어가 유사어 리스트 중 하나를 포함하거나, 유사어 리스트가 검색어를 포함하는지 양방향 매치
+        return synonyms.some(syn => {
+          const cleanSyn = syn.toLowerCase().replace(/\s+/g, "");
+          return cleanSyn.includes(q) || q.includes(cleanSyn);
+        });
+      }
+      
+      return false;
+    });
   }, [catSearchQuery, flatCategories]);
 
   const [profileName, setProfileName] = useState<string | null>(null);
