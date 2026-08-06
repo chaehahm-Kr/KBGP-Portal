@@ -19,10 +19,15 @@ export default async function ProductsPage() {
     .eq("company_id", companyId)
     .order("created_at", { ascending: false });
 
-  if (queryError && (queryError.message?.includes("deleted_at") || queryError.code === "PGRST100")) {
+  if (queryError && (
+    queryError.message?.includes("deleted_at") || 
+    queryError.message?.includes("category_code") || 
+    queryError.code === "PGRST100" || 
+    queryError.message?.includes("column")
+  )) {
     const fallbackResult = await supabase
       .from("products")
-      .select("id, name, name_en, category, brand_id, letusto_sku, manufacture_sku, price_krw_retail, price_usd_fob, package_width, package_depth, package_height, package_weight, price_additional_info, origin, upc, ean, selling_online, selling_offline, sales_link_1, sales_link_2, category_code")
+      .select("id, name, name_en, category, brand_id, letusto_sku, manufacture_sku, price_krw_retail, price_usd_fob, package_width, package_depth, package_height, package_weight, price_additional_info, origin, upc, ean, selling_online, selling_offline, sales_link_1, sales_link_2")
       .eq("company_id", companyId)
       .order("created_at", { ascending: false });
     products = fallbackResult.data;
