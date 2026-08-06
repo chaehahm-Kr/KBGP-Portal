@@ -22,19 +22,52 @@ export default function InviteAcceptPage() {
   useEffect(() => {
     const supabase = createClient();
 
+    const handleHashAuth = async () => {
+      try {
+        const hash = window.location.hash;
+        if (hash) {
+          const params = new URLSearchParams(hash.substring(1));
+          const accessToken = params.get("access_token");
+          const refreshToken = params.get("refresh_token");
+
+          if (accessToken && refreshToken) {
+            const { data, error } = await supabase.auth.setSession({
+              access_token: accessToken,
+              refresh_token: refreshToken,
+            });
+
+            if (data.session) {
+              setStatus("ready");
+              return;
+            }
+            if (error) {
+              console.error("Error setting session from URL hash:", error);
+            }
+          }
+        }
+      } catch (err) {
+        console.error("Error parsing URL hash:", err);
+      }
+
+      const { data } = await supabase.auth.getSession();
+      if (data.session) {
+        setStatus("ready");
+      }
+    };
+
     const { data: subscription } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
-        if (session) setStatus("ready");
+      (event, session) => {
+        if (session || event === "PASSWORD_RECOVERY") {
+          setStatus("ready");
+        }
       }
     );
 
-    supabase.auth.getSession().then(({ data }) => {
-      if (data.session) setStatus("ready");
-    });
+    handleHashAuth();
 
     const timeout = setTimeout(() => {
       setStatus((current) => (current === "checking" ? "invalid" : current));
-    }, 4000);
+    }, 6000);
 
     return () => {
       subscription.subscription.unsubscribe();
