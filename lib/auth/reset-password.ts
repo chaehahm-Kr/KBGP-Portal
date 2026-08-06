@@ -75,3 +75,22 @@ export async function requestPasswordReset(
       "입력하신 이메일로 가입된 계정이 있다면, 비밀번호 재설정 링크를 보내드렸습니다.",
   };
 }
+
+export async function completePasswordResetActivation() {
+  const { createClient } = await import("@/lib/supabase/server");
+  const { createAdminClient } = await import("@/lib/supabase/admin");
+  
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (user) {
+    const admin = createAdminClient();
+    await admin
+      .from("company_users")
+      .update({ status: "active", joined_at: new Date().toISOString() })
+      .eq("id", user.id)
+      .eq("status", "invited");
+  }
+}
