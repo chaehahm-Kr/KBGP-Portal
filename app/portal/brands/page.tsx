@@ -64,7 +64,7 @@ export default async function BrandsPage() {
         </div>
         <Link
           href="/portal/brands/new"
-          className="w-full sm:w-auto text-center rounded-md bg-zinc-900 px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-zinc-800 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-100"
+          className="w-full sm:w-auto text-center rounded-md bg-[#131E2E] hover:bg-[#1f3047] px-4 py-2 text-xs font-semibold text-white transition-colors dark:bg-white dark:text-[#131E2E] dark:hover:bg-zinc-100"
         >
           새 브랜드 추가
         </Link>
@@ -80,7 +80,7 @@ export default async function BrandsPage() {
           {resolvedBrands.map((brand) => (
             <div
               key={brand.id}
-              className="flex flex-col justify-between rounded-lg border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 hover:shadow-md transition-shadow"
+              className="flex flex-col justify-between rounded-lg border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 hover:shadow-md hover:border-[#131E2E] dark:hover:border-zinc-700 transition-all"
             >
               <div className="space-y-4">
                 <div className="flex items-center gap-3">
@@ -108,37 +108,38 @@ export default async function BrandsPage() {
                   <div className="flex items-center justify-between">
                     <span>대한민국 상표권 등록 여부</span>
                     {brand.hasKr ? (
-                      <span className="text-emerald-600 dark:text-emerald-450 font-bold bg-emerald-50/60 dark:bg-emerald-950/30 px-1.5 py-0.5 rounded">보유</span>
+                      <span className="text-[#131E2E] dark:text-[#a8c5eb] bg-[#F2F1EE] dark:bg-zinc-800/80 px-2 py-0.5 rounded text-[9px] font-extrabold border border-zinc-200/60 dark:border-zinc-700">보유</span>
                     ) : (
-                      <span className="text-zinc-400 dark:text-zinc-650 font-medium">미보유</span>
+                      <span className="text-zinc-400 dark:text-zinc-650 font-medium px-2 py-0.5 rounded text-[9px] border border-transparent">미보유</span>
                     )}
                   </div>
                   <div className="flex items-center justify-between">
                     <span>미국 USPTO 상표권 등록 여부</span>
                     {brand.hasUs ? (
-                      <span className="text-emerald-600 dark:text-emerald-450 font-bold bg-emerald-50/60 dark:bg-emerald-950/30 px-1.5 py-0.5 rounded">보유</span>
+                      <span className="text-[#131E2E] dark:text-[#a8c5eb] bg-[#F2F1EE] dark:bg-zinc-800/80 px-2 py-0.5 rounded text-[9px] font-extrabold border border-zinc-200/60 dark:border-zinc-700">보유</span>
                     ) : (
-                      <span className="text-zinc-400 dark:text-zinc-650 font-medium">미보유</span>
+                      <span className="text-zinc-400 dark:text-zinc-650 font-medium px-2 py-0.5 rounded text-[9px] border border-transparent">미보유</span>
                     )}
                   </div>
                 </div>
               </div>
 
               {/* Actions */}
-              <div className="mt-4 flex items-center justify-between border-t border-zinc-50 pt-3 dark:border-zinc-800 text-xs">
+              <div className="mt-4 flex items-center gap-2 border-t border-zinc-100 pt-4 dark:border-zinc-800">
                 <Link
                   href={`/portal/brands/${brand.id}`}
-                  className="font-semibold text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white"
+                  className="flex-1 text-center py-2 px-3 rounded-md bg-[#131E2E] text-white font-bold text-xs hover:bg-[#1f3047] dark:bg-white dark:text-[#131E2E] dark:hover:bg-zinc-100 transition-colors"
                 >
                   브랜드 수정
                 </Link>
                 <ConfirmForm
                   action={deactivateBrand.bind(null, brand.id)}
                   message="정말 이 브랜드를 사용 중단하시겠습니까?\n(사용 중단된 브랜드는 신청서 및 제품 목록에서 비활성화됩니다.)"
+                  className="flex-1"
                 >
                   <button
                     type="submit"
-                    className="font-semibold text-destructive hover:underline cursor-pointer"
+                    className="w-full text-center py-2 px-3 rounded-md border border-[#8C1C2B] text-[#8C1C2B] font-bold text-xs hover:bg-[#8C1C2B]/5 transition-colors dark:border-red-500 dark:text-red-400 dark:hover:bg-red-950/20 cursor-pointer"
                   >
                     사용 중단
                   </button>
