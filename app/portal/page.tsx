@@ -35,13 +35,22 @@ export default async function PortalHomePage() {
     : { count: 0 };
 
   // 2. Query products count
-  const { count: productCount } = companyUser
-    ? await supabase
+  let productCount = 0;
+  if (companyUser) {
+    let countRes = await supabase
+      .from("products")
+      .select("id", { count: "exact", head: true })
+      .eq("company_id", companyUser.company_id)
+      .is("deleted_at", null);
+      
+    if (countRes.error) {
+      countRes = await supabase
         .from("products")
         .select("id", { count: "exact", head: true })
-        .eq("company_id", companyUser.company_id)
-        .is("deleted_at", null)
-    : { count: 0 };
+        .eq("company_id", companyUser.company_id);
+    }
+    productCount = countRes.count ?? 0;
+  }
 
   const { data: applications } = await supabase
     .from("applications")
