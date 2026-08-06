@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState, useTransition } from "react";
+import React, { useState, useEffect, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { PRODUCT_CATEGORY_LABEL, type ProductCategory } from "@/lib/product/types";
 import { adminUpdateProductOverrides } from "@/lib/product/admin-actions";
@@ -63,10 +64,21 @@ const SALES_LABELS: Record<string, string> = {
 };
 
 export function AdminProductsList({ initialProducts }: AdminProductsListProps) {
+  const router = useRouter();
   const [products, setProducts] = useState<AdminProductItem[]>(initialProducts);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [isPending, startTransition] = useTransition();
+
+  // Sync initialProducts props from server to local state
+  useEffect(() => {
+    setProducts(initialProducts);
+  }, [initialProducts]);
+
+  // Refresh server components to fetch fresh database state on page mount
+  useEffect(() => {
+    router.refresh();
+  }, [router]);
 
   // 1. 제품 등록 상태 (복수 선택 가능, 디폴트: Active + Draft)
   const [selectedRegStatuses, setSelectedRegStatuses] = useState<string[]>(["active", "draft"]);
