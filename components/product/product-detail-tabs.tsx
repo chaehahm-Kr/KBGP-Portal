@@ -805,7 +805,6 @@ export function ProductDetailTabs({
                 <input
                   name="manufactureSku"
                   type="text"
-                  required
                   value={manufactureSku} onChange={(e) => setManufactureSku(e.target.value)}
                   placeholder="제조사의 실제 SKU 코드"
                   className={`block w-full rounded-lg border px-3.5 py-2 text-xs text-zinc-900 dark:bg-zinc-950 dark:text-white focus:outline-none font-mono ${!manufactureSku.trim() ? "border-rose-350 dark:border-rose-900/60 focus:border-rose-500" : "border-zinc-300 dark:border-zinc-800 focus:border-zinc-900 dark:focus:border-white"}`}
@@ -831,7 +830,6 @@ export function ProductDetailTabs({
                 <input
                   name="nameEn"
                   type="text"
-                  required
                   value={nameEn} onChange={(e) => setNameEn(e.target.value)}
                   placeholder="English Product Name"
                   className={`block w-full rounded-lg border px-3.5 py-2 text-xs text-zinc-900 dark:bg-zinc-950 dark:text-white focus:outline-none ${!nameEn.trim() ? "border-rose-350 dark:border-rose-900/60 focus:border-rose-500" : "border-zinc-300 dark:border-zinc-800 focus:border-zinc-900 dark:focus:border-white"}`}
@@ -1337,7 +1335,6 @@ export function ProductDetailTabs({
                   <input
                     name="priceKrwRetail"
                     type="number"
-                    required
                     value={priceKrwRetail} onChange={(e) => setPriceKrwRetail(e.target.value)}
                     placeholder="0"
                     className="block w-full rounded-lg border border-zinc-300 pl-8 pr-3.5 py-2 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-zinc-900 dark:focus:border-white"
@@ -1381,7 +1378,6 @@ export function ProductDetailTabs({
                   <input
                     name="priceUsdFob"
                     type="number"
-                    required
                     step="0.01"
                     value={priceUsdFobState || ""}
                     onChange={(e) => setPriceUsdFobState(Number(e.target.value) || 0)}
@@ -1577,7 +1573,6 @@ export function ProductDetailTabs({
                       name="packageWidth"
                       type="number"
                       step="0.1"
-                      required
                       placeholder="0.0"
                       value={packageWidth}
                       onChange={(e) => handleWidthCmChange(e.target.value)}
@@ -1608,7 +1603,6 @@ export function ProductDetailTabs({
                       name="packageDepth"
                       type="number"
                       step="0.1"
-                      required
                       placeholder="0.0"
                       value={packageDepth}
                       onChange={(e) => handleDepthCmChange(e.target.value)}
@@ -1639,7 +1633,6 @@ export function ProductDetailTabs({
                       name="packageHeight"
                       type="number"
                       step="0.1"
-                      required
                       placeholder="0.0"
                       value={packageHeight}
                       onChange={(e) => handleHeightCmChange(e.target.value)}
@@ -1670,7 +1663,6 @@ export function ProductDetailTabs({
                       name="packageWeight"
                       type="number"
                       step="0.1"
-                      required
                       placeholder="0.0"
                       value={packageWeight}
                       onChange={(e) => handleWeightGChange(e.target.value)}
