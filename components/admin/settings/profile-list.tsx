@@ -202,7 +202,7 @@ export function ProfileList({ initialProfiles }: { initialProfiles: ProfileSumma
       <div className="flex justify-end">
         <button
           onClick={handleOpenCreate}
-          className="bg-indigo-650 hover:bg-indigo-750 text-white font-bold text-xs px-4 py-2.5 rounded-xl shadow cursor-pointer flex items-center gap-1.5"
+          className="bg-zinc-900 hover:bg-zinc-800 dark:bg-zinc-100 dark:hover:bg-zinc-200 text-white dark:text-zinc-950 border border-zinc-900 dark:border-zinc-100 font-bold text-xs px-4 py-2.5 rounded-xl shadow cursor-pointer flex items-center gap-1.5 transition-all duration-150"
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 4v16m8-8H4" />
@@ -334,8 +334,8 @@ export function ProfileList({ initialProfiles }: { initialProfiles: ProfileSumma
                 />
               </div>
               <div className="flex justify-end gap-2 pt-4 border-t border-zinc-100 dark:border-zinc-800">
-                <button type="button" onClick={() => setIsProfileModalOpen(false)} className="px-4 py-2.5 rounded-xl border border-zinc-200 text-xs font-bold cursor-pointer">취소</button>
-                <button type="submit" disabled={isPending} className="px-5 py-2.5 bg-indigo-650 hover:bg-indigo-750 text-white text-xs font-bold rounded-xl cursor-pointer">저장</button>
+                <button type="button" onClick={() => setIsProfileModalOpen(false)} className="px-4 py-2.5 rounded-xl border border-zinc-200 text-xs font-bold cursor-pointer hover:bg-zinc-55">취소</button>
+                <button type="submit" disabled={isPending} className="px-5 py-2.5 bg-zinc-900 hover:bg-zinc-800 dark:bg-zinc-100 dark:hover:bg-zinc-200 text-white dark:text-zinc-950 border border-zinc-900 dark:border-zinc-100 text-xs font-bold rounded-xl cursor-pointer transition-all duration-150">저장</button>
               </div>
             </form>
           </div>
@@ -421,8 +421,8 @@ export function ProfileList({ initialProfiles }: { initialProfiles: ProfileSumma
               </div>
 
               <div className="flex justify-end gap-2 pt-4 border-t border-zinc-100 dark:border-zinc-800">
-                <button type="button" onClick={() => setIsMappingModalOpen(false)} className="px-4 py-2.5 rounded-xl border border-zinc-200 text-xs font-bold cursor-pointer">취소</button>
-                <button type="submit" disabled={isPending} className="px-5 py-2.5 bg-indigo-650 hover:bg-indigo-750 text-white text-xs font-bold rounded-xl cursor-pointer">매핑 연동 저장</button>
+                <button type="button" onClick={() => setIsMappingModalOpen(false)} className="px-4 py-2.5 rounded-xl border border-zinc-200 text-xs font-bold cursor-pointer hover:bg-zinc-55">취소</button>
+                <button type="submit" disabled={isPending} className="px-5 py-2.5 bg-zinc-900 hover:bg-zinc-800 dark:bg-zinc-100 dark:hover:bg-zinc-200 text-white dark:text-zinc-950 border border-zinc-900 dark:border-zinc-100 text-xs font-bold rounded-xl cursor-pointer transition-all duration-150">매핑 연동 저장</button>
               </div>
             </form>
           </div>

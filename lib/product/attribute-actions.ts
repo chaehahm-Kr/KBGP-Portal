@@ -737,69 +737,72 @@ export async function saveAttribute(
     displayOrder: number;
   }>
 ) {
-  await verifyAdminSession();
-  const admin = createAdminClient();
+  try {
+    await verifyAdminSession();
+    const admin = createAdminClient();
 
-  const attrCode = attribute.code.trim().toUpperCase();
+    const attrCode = attribute.code.trim().toUpperCase();
 
-  const attrPayload = {
-    code: attrCode,
-    name_ko: attribute.nameKo.trim(),
-    name_en: attribute.nameEn?.trim() || null,
-    scope: attribute.scope,
-    attr_group: attribute.attrGroup?.trim() || null,
-    input_type: attribute.inputType,
-    is_multiple: attribute.isMultiple,
-    unit_set: attribute.unitSet || null,
-    is_required: attribute.isRequired,
-    allow_na: attribute.allowNa !== undefined ? attribute.allowNa : true,
-    allow_unknown: attribute.allowUnknown !== undefined ? attribute.allowUnknown : true,
-    allow_other: attribute.allowOther !== undefined ? attribute.allowOther : false,
-    brand_editable: attribute.brandEditable,
-    admin_only: attribute.adminOnly,
-    is_searchable: attribute.isSearchable,
-    display_order: attribute.displayOrder,
-    help_text: attribute.helpText || null,
-    is_active: attribute.isActive !== undefined ? attribute.isActive : true,
-    updated_at: new Date().toISOString(),
-  };
+    const attrPayload = {
+      code: attrCode,
+      name_ko: attribute.nameKo.trim(),
+      name_en: attribute.nameEn?.trim() || null,
+      scope: attribute.scope,
+      attr_group: attribute.attrGroup?.trim() || null,
+      input_type: attribute.inputType,
+      is_multiple: attribute.isMultiple,
+      unit_set: attribute.unitSet || null,
+      is_required: attribute.isRequired,
+      allow_na: attribute.allowNa !== undefined ? attribute.allowNa : true,
+      allow_unknown: attribute.allowUnknown !== undefined ? attribute.allowUnknown : true,
+      allow_other: attribute.allowOther !== undefined ? attribute.allowOther : false,
+      brand_editable: attribute.brandEditable,
+      admin_only: attribute.adminOnly,
+      is_searchable: attribute.isSearchable,
+      display_order: attribute.displayOrder,
+      help_text: attribute.helpText || null,
+      is_active: attribute.isActive !== undefined ? attribute.isActive : true,
+    };
 
-  // 11.1 속성 테이블 UPSERT
-  const { error: attrError } = await admin
-    .from("attributes")
-    .upsert(attrPayload, { onConflict: "code" });
+    // 11.1 속성 테이블 UPSERT
+    const { error: attrError } = await admin
+      .from("attributes")
+      .upsert(attrPayload, { onConflict: "code" });
 
-  if (attrError) {
-    throw new Error(`속성 명세 저장 실패: ${attrError.message}`);
-  }
-
-  // 11.2 기존 옵션 전체 비활성/삭제 후 재등록 (옵션 수가 많지 않으므로 트랜잭션 대신 순차 삭제-등록)
-  await admin
-    .from("attribute_options")
-    .delete()
-    .eq("attribute_code", attrCode);
-
-  if (options.length > 0) {
-    const optionRows = options.map((opt) => ({
-      attribute_code: attrCode,
-      option_code: opt.optionCode.trim().toUpperCase(),
-      option_ko: opt.optionKo.trim(),
-      option_en: opt.optionEn?.trim() || null,
-      display_order: opt.displayOrder,
-      is_active: true,
-    }));
-
-    const { error: optError } = await admin
-      .from("attribute_options")
-      .insert(optionRows);
-
-    if (optError) {
-      throw new Error(`속성 옵션 저장 실패: ${optError.message}`);
+    if (attrError) {
+      return { success: false, error: `속성 명세 저장 실패: ${attrError.message}` };
     }
-  }
 
-  revalidatePath("/admin/settings/attributes");
-  return { success: true };
+    // 11.2 기존 옵션 전체 비활성/삭제 후 재등록
+    await admin
+      .from("attribute_options")
+      .delete()
+      .eq("attribute_code", attrCode);
+
+    if (options.length > 0) {
+      const optionRows = options.map((opt) => ({
+        attribute_code: attrCode,
+        option_code: opt.optionCode.trim().toUpperCase(),
+        option_ko: opt.optionKo.trim(),
+        option_en: opt.optionEn?.trim() || null,
+        display_order: opt.displayOrder,
+        is_active: true,
+      }));
+
+      const { error: optError } = await admin
+        .from("attribute_options")
+        .insert(optionRows);
+
+      if (optError) {
+        return { success: false, error: `속성 옵션 저장 실패: ${optError.message}` };
+      }
+    }
+
+    revalidatePath("/admin/settings/attributes");
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err.message || "속성 저장에 실패했습니다." };
+  }
 }
 
 /**

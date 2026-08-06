@@ -179,7 +179,7 @@ export function AttributeList({ initialAttributes }: { initialAttributes: Attrib
 
     startTransition(async () => {
       try {
-        await saveAttribute(
+        const res = await saveAttribute(
           {
             code: modalData.code,
             nameKo: modalData.nameKo,
@@ -202,7 +202,15 @@ export function AttributeList({ initialAttributes }: { initialAttributes: Attrib
           },
           optionsList
         );
-        window.location.reload();
+
+        if (!res.success) {
+          setErrorMsg(res.error || "속성 저장에 실패했습니다.");
+          return;
+        }
+
+        setTimeout(() => {
+          window.location.reload();
+        }, 150);
       } catch (err: any) {
         setErrorMsg(err.message || "속성 저장에 실패했습니다.");
       }
@@ -257,7 +265,7 @@ export function AttributeList({ initialAttributes }: { initialAttributes: Attrib
         <div className="flex items-center gap-2 self-end sm:self-auto">
           <button
             onClick={handleOpenCreate}
-            className="bg-indigo-650 hover:bg-indigo-750 text-white font-bold text-xs px-4 py-2.5 rounded-xl shadow cursor-pointer mr-4"
+            className="bg-zinc-900 hover:bg-zinc-800 dark:bg-zinc-100 dark:hover:bg-zinc-200 text-white dark:text-zinc-950 border border-zinc-900 dark:border-zinc-100 font-bold text-xs px-4 py-2.5 rounded-xl shadow cursor-pointer mr-4 transition-all duration-150"
           >
             + 신규 속성 정의
           </button>
@@ -269,10 +277,10 @@ export function AttributeList({ initialAttributes }: { initialAttributes: Attrib
               key={scope}
               onClick={() => setFilterScope(scope)}
               className={`
-                px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer
+                px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer border
                 ${filterScope === scope 
-                  ? 'bg-indigo-600 text-white shadow' 
-                  : 'bg-white dark:bg-zinc-900 text-zinc-650 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200 border border-zinc-200 dark:border-zinc-800'
+                  ? 'bg-zinc-900 border-zinc-900 text-white dark:bg-zinc-100 dark:border-zinc-100 dark:text-zinc-950 shadow' 
+                  : 'bg-white dark:bg-zinc-900 text-zinc-650 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200 border-zinc-200 dark:border-zinc-800'
                 }
               `}
             >
@@ -376,13 +384,13 @@ export function AttributeList({ initialAttributes }: { initialAttributes: Attrib
                       <div className="flex items-center justify-center gap-2">
                         <button
                           onClick={() => handleOpenEdit(a)}
-                          className="px-2.5 py-1 bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-900/30 text-xs font-bold rounded cursor-pointer hover:bg-indigo-100/60 dark:hover:bg-indigo-900/60"
+                          className="px-2.5 py-1 bg-white hover:bg-zinc-100 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-750 text-xs font-bold rounded cursor-pointer transition-all duration-150"
                         >
                           수정
                         </button>
                         <button
                           onClick={() => handleDeleteAttribute(a.code)}
-                          className="px-2.5 py-1 bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-450 border border-rose-100 dark:border-rose-900/30 text-xs font-bold rounded cursor-pointer hover:bg-rose-100/60 dark:hover:bg-rose-900/60"
+                          className="px-2.5 py-1 bg-white hover:bg-rose-50/50 dark:bg-zinc-800 dark:hover:bg-rose-950/20 text-rose-600 dark:text-rose-450 border border-rose-250/30 dark:border-rose-900/30 text-xs font-bold rounded cursor-pointer transition-all duration-150"
                         >
                           삭제
                         </button>
@@ -597,11 +605,11 @@ export function AttributeList({ initialAttributes }: { initialAttributes: Attrib
               {(modalData.inputType === "SINGLE_SELECT" || modalData.inputType === "MULTI_SELECT") && (
                 <div className="flex flex-col gap-2 p-4 bg-indigo-500/5 border border-indigo-500/10 rounded-xl space-y-3">
                   <div className="flex justify-between items-center">
-                    <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400">📝 객관식 선택 옵션 구성 ({optionsList.length}개)</span>
+                    <span className="text-xs font-bold text-zinc-900 dark:text-zinc-100">📝 객관식 선택 옵션 구성 ({optionsList.length}개)</span>
                     <button
                       type="button"
                       onClick={handleAddOptionRow}
-                      className="px-2.5 py-1.5 bg-indigo-600 hover:bg-indigo-750 text-white rounded text-[10px] font-bold cursor-pointer"
+                      className="px-2.5 py-1 bg-zinc-900 hover:bg-zinc-800 dark:bg-zinc-100 dark:hover:bg-zinc-200 text-white dark:text-zinc-950 border border-zinc-900 dark:border-zinc-100 rounded text-[10px] font-bold cursor-pointer transition-all duration-150"
                     >
                       + 옵션 행 추가
                     </button>
@@ -676,7 +684,7 @@ export function AttributeList({ initialAttributes }: { initialAttributes: Attrib
                 <button
                   type="submit"
                   disabled={isPending}
-                  className="px-5 py-2.5 bg-indigo-650 hover:bg-indigo-750 text-white text-xs font-bold rounded-xl shadow-md disabled:opacity-50 cursor-pointer"
+                  className="px-5 py-2.5 bg-zinc-900 hover:bg-zinc-800 dark:bg-zinc-100 dark:hover:bg-zinc-200 text-white dark:text-zinc-950 border border-zinc-900 dark:border-zinc-100 text-xs font-bold rounded-xl shadow-md disabled:opacity-50 cursor-pointer transition-all duration-150"
                 >
                   {isPending ? "저장 중..." : "속성 저장"}
                 </button>
