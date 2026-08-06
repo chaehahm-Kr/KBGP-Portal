@@ -60,7 +60,13 @@ export function ExcelImporter() {
     setSuccess(false);
 
     try {
-      const base64 = await exportMasterExcelWithGuide();
+      const response = await exportMasterExcelWithGuide();
+      if (!response.success) {
+        setError(response.error || "엑셀 파일 생성에 실패했습니다.");
+        return;
+      }
+      
+      const base64 = response.data!;
       const raw = window.atob(base64);
       const rawLength = raw.length;
       const array = new Uint8Array(new ArrayBuffer(rawLength));
