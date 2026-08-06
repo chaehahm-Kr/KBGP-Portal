@@ -1527,7 +1527,7 @@ export function ProductOverrideTabs({
                   <div className="p-4 rounded-lg border border-zinc-150 bg-zinc-50/50 dark:border-zinc-800 dark:bg-zinc-950/40 text-xs space-y-2">
                     <span className="text-[10px] font-bold text-zinc-400 uppercase block">성분 인증 증빙 서류</span>
                     {ingredientsFileUrl ? (
-                      <a href={ingredientsFileUrl} target="_blank" rel="noreferrer" className="inline-block rounded bg-indigo-650 hover:bg-indigo-750 text-white px-3 py-1.5 font-bold shadow-sm transition-colors">
+                      <a href={ingredientsFileUrl} target="_blank" rel="noreferrer" className="inline-block rounded bg-[#18181b] hover:bg-[#27272a] dark:bg-[#f4f4f5] dark:hover:bg-[#e4e4e7] text-white dark:text-[#09090b] border border-[#18181b] dark:border-[#f4f4f5] px-3 py-1.5 font-bold shadow-sm transition-all duration-150">
                         인증 서류 다운로드 ↗
                       </a>
                     ) : (

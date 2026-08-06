@@ -510,7 +510,7 @@ export function CategoryAttributeForm({
                       await loadAttributes(result.code, storedValues);
                       setCatSearchQuery(""); // 검색창 리셋
                     }}
-                    className="bg-indigo-650 hover:bg-indigo-750 active:scale-95 transition-all text-white font-bold text-[11px] px-3 py-1.5 rounded-lg shadow cursor-pointer"
+                    className="bg-[#18181b] hover:bg-[#27272a] dark:bg-[#f4f4f5] dark:hover:bg-[#e4e4e7] active:scale-95 transition-all text-white dark:text-[#09090b] border border-[#18181b] dark:border-[#f4f4f5] font-bold text-[11px] px-3 py-1.5 rounded-lg shadow cursor-pointer"
                   >
                     선택 적용
                   </button>
@@ -673,7 +673,7 @@ export function CategoryAttributeForm({
               flex items-center gap-2 px-8 py-4 rounded-xl font-bold text-sm shadow-md transition-all duration-300 cursor-pointer
               ${saving || isPending
                 ? 'bg-zinc-250 dark:bg-zinc-800 text-zinc-400 dark:text-zinc-500 cursor-not-allowed border border-zinc-200 dark:border-zinc-750'
-                : 'bg-indigo-650 hover:bg-indigo-750 text-white hover:scale-[1.02] active:scale-[0.98]'
+                : 'bg-[#18181b] hover:bg-[#27272a] dark:bg-[#f4f4f5] dark:hover:bg-[#e4e4e7] text-white dark:text-[#09090b] border border-[#18181b] dark:border-[#f4f4f5] hover:scale-[1.02] active:scale-[0.98]'
               }
             `}
           >
