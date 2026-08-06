@@ -194,8 +194,11 @@ export function CategoryTreeList({ initialTree }: { initialTree: CategoryNode[] 
           await saveCategoryProfileMapping(modalData.code, null); // Clear mapping
         }
 
-        // 3. 브라우저 트래킹 데이터 갱신 (전체 강제 리로드 또는 심플 갱신)
-        window.location.reload();
+        // 3. 모달 창을 즉시 닫고, RSC 스트리밍 응답이 브라우저에 안전하게 주입된 후에 새로고침 처리 (RSC Aborted 방지)
+        setIsModalOpen(false);
+        setTimeout(() => {
+          window.location.reload();
+        }, 150);
       } catch (err: any) {
         setErrorMsg(err.message || "작업을 완료할 수 없습니다.");
       }
