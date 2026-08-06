@@ -104,21 +104,21 @@ export default async function BrandsPage() {
                 </div>
 
                 {/* Professional Trademark Statuses */}
-                <div className="pt-3 border-t border-zinc-100 dark:border-zinc-800 space-y-2 text-[10px] font-semibold text-zinc-550 dark:text-zinc-400">
+                <div className="pt-3 border-t border-zinc-100 dark:border-zinc-800 space-y-2 text-xs font-semibold text-zinc-550 dark:text-zinc-400">
                   <div className="flex items-center justify-between">
                     <span>대한민국 상표권 등록 여부</span>
                     {brand.hasKr ? (
-                      <span className="text-[#131E2E] dark:text-[#a8c5eb] bg-[#F2F1EE] dark:bg-zinc-800/80 px-2 py-0.5 rounded text-[9px] font-extrabold border border-zinc-200/60 dark:border-zinc-700">보유</span>
+                      <span className="text-[#131E2E] dark:text-[#a8c5eb] bg-[#F2F1EE] dark:bg-zinc-800/80 px-2 py-0.5 rounded text-[10px] font-extrabold border border-zinc-200/60 dark:border-zinc-700">보유</span>
                     ) : (
-                      <span className="text-zinc-400 dark:text-zinc-650 font-medium px-2 py-0.5 rounded text-[9px] border border-transparent">미보유</span>
+                      <span className="text-zinc-400 dark:text-zinc-650 font-medium px-2 py-0.5 rounded text-[10px] border border-transparent">미보유</span>
                     )}
                   </div>
                   <div className="flex items-center justify-between">
                     <span>미국 USPTO 상표권 등록 여부</span>
                     {brand.hasUs ? (
-                      <span className="text-[#131E2E] dark:text-[#a8c5eb] bg-[#F2F1EE] dark:bg-zinc-800/80 px-2 py-0.5 rounded text-[9px] font-extrabold border border-zinc-200/60 dark:border-zinc-700">보유</span>
+                      <span className="text-[#131E2E] dark:text-[#a8c5eb] bg-[#F2F1EE] dark:bg-zinc-800/80 px-2 py-0.5 rounded text-[10px] font-extrabold border border-zinc-200/60 dark:border-zinc-700">보유</span>
                     ) : (
-                      <span className="text-zinc-400 dark:text-zinc-650 font-medium px-2 py-0.5 rounded text-[9px] border border-transparent">미보유</span>
+                      <span className="text-zinc-400 dark:text-zinc-650 font-medium px-2 py-0.5 rounded text-[10px] border border-transparent">미보유</span>
                     )}
                   </div>
                 </div>
