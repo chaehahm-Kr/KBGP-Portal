@@ -178,7 +178,7 @@ export function AdminProductsList({ initialProducts }: AdminProductsListProps) {
   });
 
   return (
-    <div className="space-y-6 w-full max-w-7xl">
+    <div className="space-y-6 w-full text-zinc-900 dark:text-zinc-100">
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
@@ -190,7 +190,7 @@ export function AdminProductsList({ initialProducts }: AdminProductsListProps) {
       </div>
 
       {/* Filter and Search Bar Card */}
-      <div className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 space-y-4">
+      <div className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 space-y-5">
         <div className="flex flex-col md:flex-row gap-3">
           {/* Search bar */}
           <div className="relative flex-1">
@@ -223,20 +223,20 @@ export function AdminProductsList({ initialProducts }: AdminProductsListProps) {
           </div>
         </div>
 
-        {/* 4. Overhauled Filters Grid */}
-        <div className="border-t border-zinc-150 pt-4 dark:border-zinc-850 space-y-3">
+        {/* 4. Overhauled Filters Grid (3 Columns) */}
+        <div className="border-t border-zinc-150 pt-4 dark:border-zinc-850 grid grid-cols-1 md:grid-cols-3 gap-6">
           
           {/* ① 제품 등록 상태 필터 */}
-          <div className="flex flex-wrap items-center gap-2 text-xs">
-            <span className="font-bold text-zinc-500 w-24">제품 등록 상태:</span>
-            <div className="flex items-center gap-1.5">
+          <div className="flex flex-col gap-2 text-xs">
+            <span className="font-bold text-zinc-400 dark:text-zinc-500">제품 등록 상태</span>
+            <div className="flex items-center gap-1.5 flex-wrap">
               <button
                 type="button"
                 onClick={() => handleRegStatusToggle("all")}
                 className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${
                   selectedRegStatuses.length === 3
                     ? "bg-zinc-950 text-white border-zinc-950 dark:bg-white dark:text-zinc-950"
-                    : "bg-zinc-50 text-zinc-650 border-zinc-200 hover:bg-zinc-100 dark:bg-zinc-950 dark:text-zinc-400 dark:border-zinc-850"
+                    : "bg-zinc-50 text-zinc-600 border-zinc-200 hover:bg-zinc-100 dark:bg-zinc-950 dark:text-zinc-400 dark:border-zinc-850"
                 }`}
               >
                 All
@@ -262,7 +262,7 @@ export function AdminProductsList({ initialProducts }: AdminProductsListProps) {
                       type="checkbox"
                       checked={isSelected}
                       readOnly
-                      className="mr-1 h-3 w-3 accent-indigo-650 pointer-events-none rounded border-zinc-300"
+                      className="mr-1 h-3 w-3 accent-zinc-950 pointer-events-none rounded border-zinc-300"
                     />
                     {tab.label}
                   </button>
@@ -272,8 +272,8 @@ export function AdminProductsList({ initialProducts }: AdminProductsListProps) {
           </div>
 
           {/* ② 제품 선정 상태 필터 */}
-          <div className="flex flex-wrap items-center gap-2 text-xs">
-            <span className="font-bold text-zinc-500 w-24">제품 선정 상태:</span>
+          <div className="flex flex-col gap-2 text-xs">
+            <span className="font-bold text-zinc-400 dark:text-zinc-500">제품 선정 상태</span>
             <div className="flex items-center gap-1.5 flex-wrap">
               <button
                 type="button"
@@ -307,8 +307,8 @@ export function AdminProductsList({ initialProducts }: AdminProductsListProps) {
           </div>
 
           {/* ③ 판매 상태 필터 */}
-          <div className="flex flex-wrap items-center gap-2 text-xs">
-            <span className="font-bold text-zinc-500 w-24">판매 상태:</span>
+          <div className="flex flex-col gap-2 text-xs">
+            <span className="font-bold text-zinc-400 dark:text-zinc-500">판매 상태</span>
             <div className="flex items-center gap-1.5 flex-wrap">
               <button
                 type="button"
@@ -343,7 +343,7 @@ export function AdminProductsList({ initialProducts }: AdminProductsListProps) {
         </div>
 
         {/* Quick Filter Info */}
-        <div className="text-[10px] text-zinc-450 dark:text-zinc-500 flex justify-between items-center">
+        <div className="text-[10px] text-zinc-455 dark:text-zinc-500 flex justify-between items-center pt-2">
           <span>검색 결과: <strong className="text-zinc-800 dark:text-zinc-200 font-bold">{filteredProducts.length}</strong> 건</span>
           {(searchTerm || selectedCategory !== "all" || selectedRegStatuses.length !== 2 || !selectedRegStatuses.includes("active") || !selectedRegStatuses.includes("draft") || selectedSelectionStatus !== "all" || selectedSalesStatus !== "all") && (
             <button
@@ -354,32 +354,29 @@ export function AdminProductsList({ initialProducts }: AdminProductsListProps) {
                 setSelectedSelectionStatus("all");
                 setSelectedSalesStatus("all");
               }}
-              className="text-indigo-650 hover:underline dark:text-indigo-400 font-semibold"
+              className="text-zinc-900 hover:underline dark:text-zinc-250 font-semibold"
             >
               필터 초기화
             </button>
           )}
         </div>
       </div>
-
-      {/* Products Table Card */}
       <div className="rounded-xl border border-zinc-200 bg-white overflow-hidden shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse text-xs">
             <thead>
               <tr className="border-b border-zinc-200 bg-zinc-50/50 text-zinc-500 font-bold dark:border-zinc-800 dark:bg-zinc-900/50">
-                <th className="px-6 py-3.5">사진</th>
-                <th className="px-6 py-3.5">Letusto SKU</th>
-                <th className="px-6 py-3.5">제조사 SKU</th>
-                <th className="px-6 py-3.5">제품명</th>
-                <th className="px-6 py-3.5">회사명</th>
-                <th className="px-6 py-3.5">브랜드</th>
-                <th className="px-6 py-3.5">카테고리</th>
-                {/* 5. 세 개 컬럼 배지로 분할 표시 */}
-                <th className="px-6 py-3.5">등록 상태</th>
-                <th className="px-6 py-3.5">선정 상태</th>
-                <th className="px-6 py-3.5">판매 상태</th>
-                <th className="px-6 py-3.5 text-right">관리</th>
+                <th className="px-6 py-3.5 whitespace-nowrap">사진</th>
+                <th className="px-6 py-3.5 whitespace-nowrap">Letusto SKU</th>
+                <th className="px-6 py-3.5 whitespace-nowrap">제조사 SKU</th>
+                <th className="px-6 py-3.5 whitespace-nowrap">제품명</th>
+                <th className="px-6 py-3.5 whitespace-nowrap">회사명</th>
+                <th className="px-6 py-3.5 whitespace-nowrap">브랜드</th>
+                <th className="px-6 py-3.5 whitespace-nowrap">카테고리</th>
+                <th className="px-6 py-3.5 whitespace-nowrap">등록 상태</th>
+                <th className="px-6 py-3.5 whitespace-nowrap">선정 상태</th>
+                <th className="px-6 py-3.5 whitespace-nowrap">판매 상태</th>
+                <th className="px-6 py-3.5 whitespace-nowrap text-right">관리</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-150 dark:divide-zinc-800/80">
@@ -391,7 +388,7 @@ export function AdminProductsList({ initialProducts }: AdminProductsListProps) {
                     className="hover:bg-zinc-50/50 dark:hover:bg-zinc-850/20 transition-colors"
                   >
                     {/* Photo Column */}
-                    <td className="px-6 py-4">
+                    <td className="px-6 py-4 align-middle">
                       {product.photoUrl ? (
                         <div className="h-12 w-12 rounded-md bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 flex items-center justify-center p-1 shadow-sm overflow-hidden">
                           <img
@@ -408,30 +405,30 @@ export function AdminProductsList({ initialProducts }: AdminProductsListProps) {
                     </td>
 
                     {/* Letusto SKU */}
-                    <td className="px-6 py-4 font-mono font-bold text-zinc-950 dark:text-white">
+                    <td className="px-6 py-4 align-middle font-mono font-bold text-zinc-955 dark:text-white whitespace-nowrap">
                       {product.letusto_sku || (
                         <span className="text-zinc-350 dark:text-zinc-650 italic font-sans font-normal">지정 대기 중</span>
                       )}
                     </td>
 
                     {/* Manufacture SKU */}
-                    <td className="px-6 py-4 font-mono font-semibold text-zinc-900 dark:text-white">
+                    <td className="px-6 py-4 align-middle font-mono font-semibold text-zinc-900 dark:text-white whitespace-nowrap">
                       {product.display_manufacture_sku || (
                         <span className="text-zinc-350 dark:text-zinc-650 italic">미입력</span>
                       )}
                     </td>
 
                     {/* Product Name */}
-                    <td className="px-6 py-4 font-bold text-zinc-955 dark:text-white max-w-xxs">
+                    <td className="px-6 py-4 align-middle font-bold text-zinc-900 dark:text-white min-w-[200px]">
                       <div className="flex flex-col gap-1">
                         <Link
                           href={`/admin/products/${product.id}`}
-                          className="hover:text-indigo-650 hover:underline transition-all block text-sm"
+                          className="hover:text-zinc-950 dark:hover:text-white hover:underline transition-all block text-sm"
                         >
                           {product.display_name}
                         </Link>
                         {!product.category_code && (
-                          <span className="inline-flex items-center w-fit rounded-md bg-amber-500/10 dark:bg-amber-950/30 px-2 py-0.5 text-[9px] font-bold text-amber-600 dark:text-amber-400 border border-amber-500/20 animate-pulse">
+                          <span className="inline-flex items-center w-fit rounded bg-amber-500/10 dark:bg-amber-950/30 px-2 py-0.5 text-[9px] font-bold text-amber-600 dark:text-amber-400 border border-amber-500/20 animate-pulse">
                             ⚠️ 카테고리 재분류 필요
                           </span>
                         )}
@@ -439,46 +436,46 @@ export function AdminProductsList({ initialProducts }: AdminProductsListProps) {
                     </td>
 
                     {/* Company Name */}
-                    <td className="px-6 py-4 text-zinc-600 dark:text-zinc-355 font-medium max-w-xxs truncate">
+                    <td className="px-6 py-4 align-middle text-zinc-600 dark:text-zinc-355 font-medium whitespace-nowrap max-w-[120px] truncate">
                       {product.companyName}
                     </td>
 
                     {/* Brand Name */}
-                    <td className="px-6 py-4 text-zinc-600 dark:text-zinc-300 font-medium max-w-xxs truncate">
+                    <td className="px-6 py-4 align-middle text-zinc-600 dark:text-zinc-300 font-medium whitespace-nowrap max-w-[120px] truncate">
                       {product.brandName}
                     </td>
 
-                    {/* Category */}
-                    <td className="px-6 py-4">
-                      <span className="inline-flex items-center rounded-full bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 text-[10px] font-semibold text-zinc-700 dark:text-zinc-300 border border-zinc-150 dark:border-zinc-700">
+                    {/* Category (Redesigned from rounded-full circle to rounded-md card) */}
+                    <td className="px-6 py-4 align-middle">
+                      <span className="inline-flex items-center rounded-md bg-zinc-100 dark:bg-zinc-800 px-2.5 py-1 text-[10px] font-bold text-zinc-700 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700 whitespace-nowrap">
                         {PRODUCT_CATEGORY_LABEL[product.category as ProductCategory] || product.category}
                       </span>
                     </td>
 
                     {/* ① 제품 등록 상태 배지 */}
-                    <td className="px-6 py-4">
+                    <td className="px-6 py-4 align-middle">
                       {product.deleted_at ? (
-                        <span className="inline-flex items-center rounded bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400 px-2 py-0.5 text-[10px] font-bold border border-zinc-200 dark:border-zinc-700">
+                        <span className="inline-flex items-center rounded bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400 px-2 py-0.5 text-[10px] font-bold border border-zinc-200 dark:border-zinc-700 whitespace-nowrap">
                           Deleted (삭제됨)
                         </span>
                       ) : product.is_draft ? (
-                        <span className="inline-flex items-center rounded bg-amber-50 text-amber-700 dark:bg-amber-950/20 dark:text-amber-400 px-2 py-0.5 text-[10px] font-bold border border-amber-200 dark:border-amber-900/50">
+                        <span className="inline-flex items-center rounded bg-amber-50 text-amber-700 dark:bg-amber-950/20 dark:text-amber-400 px-2 py-0.5 text-[10px] font-bold border border-amber-200 dark:border-amber-900/50 whitespace-nowrap">
                           Draft (보완 대기)
                         </span>
                       ) : (
-                        <span className="inline-flex items-center rounded bg-emerald-50 text-emerald-700 dark:bg-emerald-950/20 dark:text-emerald-400 px-2 py-0.5 text-[10px] font-bold border border-emerald-250 dark:border-emerald-900/50">
+                        <span className="inline-flex items-center rounded bg-emerald-50 text-emerald-700 dark:bg-emerald-950/20 dark:text-emerald-400 px-2 py-0.5 text-[10px] font-bold border border-emerald-250 dark:border-emerald-900/50 whitespace-nowrap">
                           Active
                         </span>
                       )}
                     </td>
 
                     {/* ② 제품 선정 상태 인라인 셀렉터 */}
-                    <td className="px-6 py-4">
+                    <td className="px-6 py-4 align-middle">
                       <select
                         value={product.selection_status}
                         onChange={(e) => handleInlineStatusChange(product.id, "selection_status", e.target.value)}
                         disabled={isPending}
-                        className={`rounded border text-[11px] font-bold px-2 py-1 outline-none transition cursor-pointer select-none ${
+                        className={`rounded border text-[11px] font-bold px-2 py-1 outline-none transition cursor-pointer select-none whitespace-nowrap ${
                           SELECTION_COLORS[product.selection_status]
                         }`}
                       >
@@ -490,13 +487,13 @@ export function AdminProductsList({ initialProducts }: AdminProductsListProps) {
                       </select>
                     </td>
 
-                    {/* ③ 제품 판매 상태 인라인 셀렉터 (비선정 시 비활성화 + 툴팁 가이드 제공) */}
-                    <td className="px-6 py-4" title={!isSelected ? "선정된 제품만 판매 상태를 변경할 수 있습니다." : undefined}>
+                    {/* ③ 제품 판매 상태 인라인 셀렉터 */}
+                    <td className="px-6 py-4 align-middle" title={!isSelected ? "선정된 제품만 판매 상태를 변경할 수 있습니다." : undefined}>
                       <select
                         value={product.sales_status}
                         onChange={(e) => handleInlineStatusChange(product.id, "sales_status", e.target.value)}
                         disabled={isPending || !isSelected}
-                        className={`rounded border text-[11px] font-bold px-2 py-1 outline-none transition select-none ${
+                        className={`rounded border text-[11px] font-bold px-2 py-1 outline-none transition select-none whitespace-nowrap ${
                           !isSelected 
                             ? "bg-zinc-50 text-zinc-350 border-zinc-200 cursor-not-allowed dark:bg-zinc-900 dark:text-zinc-700 dark:border-zinc-800" 
                             : SALES_COLORS[product.sales_status as keyof typeof SALES_COLORS] || "border-zinc-200"
@@ -510,13 +507,13 @@ export function AdminProductsList({ initialProducts }: AdminProductsListProps) {
                       </select>
                     </td>
 
-                    {/* Actions */}
-                    <td className="px-6 py-4 text-right">
+                    {/* Actions (Prevent line wrapping) */}
+                    <td className="px-6 py-4 align-middle text-right whitespace-nowrap">
                       <Link
                         href={`/admin/products/${product.id}`}
-                        className="rounded bg-zinc-100 dark:bg-zinc-800 px-2.5 py-1.5 font-bold text-zinc-700 hover:bg-zinc-200 dark:text-zinc-300 dark:hover:bg-zinc-700 hover:underline transition-all"
+                        className="rounded bg-zinc-900 hover:bg-zinc-850 dark:bg-zinc-100 dark:hover:bg-zinc-200 text-white dark:text-zinc-950 border border-zinc-900 dark:border-zinc-100 px-3 py-2 font-bold text-xs transition-all"
                       >
-                        상세 및 수정
+                        상세/수정
                       </Link>
                     </td>
                   </tr>
