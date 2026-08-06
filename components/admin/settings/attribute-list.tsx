@@ -265,7 +265,7 @@ export function AttributeList({ initialAttributes }: { initialAttributes: Attrib
         <div className="flex items-center gap-2 self-end sm:self-auto">
           <button
             onClick={handleOpenCreate}
-            className="bg-zinc-900 hover:bg-zinc-800 dark:bg-zinc-100 dark:hover:bg-zinc-200 text-white dark:text-zinc-950 border border-zinc-900 dark:border-zinc-100 font-bold text-xs px-4 py-2.5 rounded-xl shadow cursor-pointer mr-4 transition-all duration-150"
+            className="bg-[#18181b] hover:bg-[#27272a] dark:bg-[#f4f4f5] dark:hover:bg-[#e4e4e7] text-white dark:text-[#09090b] border border-[#18181b] dark:border-[#f4f4f5] font-bold text-xs px-4 py-2.5 rounded-xl shadow cursor-pointer mr-4 transition-all duration-150"
           >
             + 신규 속성 정의
           </button>
@@ -279,8 +279,8 @@ export function AttributeList({ initialAttributes }: { initialAttributes: Attrib
               className={`
                 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer border
                 ${filterScope === scope 
-                  ? 'bg-zinc-900 border-zinc-900 text-white dark:bg-zinc-100 dark:border-zinc-100 dark:text-zinc-950 shadow' 
-                  : 'bg-white dark:bg-zinc-900 text-zinc-650 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200 border-zinc-200 dark:border-zinc-800'
+                  ? 'bg-[#18181b] border-[#18181b] text-white dark:bg-[#f4f4f5] dark:border-[#f4f4f5] dark:text-[#09090b] shadow' 
+                  : 'bg-white dark:bg-zinc-900 text-zinc-650 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200 border border-zinc-200 dark:border-zinc-800'
                 }
               `}
             >
@@ -295,19 +295,20 @@ export function AttributeList({ initialAttributes }: { initialAttributes: Attrib
         <table className="min-w-full divide-y divide-zinc-200 dark:divide-zinc-800 text-left text-sm text-zinc-700 dark:text-zinc-300">
           <thead className="bg-zinc-50 dark:bg-zinc-950/40 text-xs font-bold uppercase tracking-wider text-zinc-500">
             <tr>
-              <th className="px-6 py-4">속성 정보 (그룹/코드)</th>
-              <th className="px-6 py-4">한/영 속성명</th>
-              <th className="px-6 py-4">입력 형식</th>
-              <th className="px-6 py-4">속성 옵션 (Options)</th>
-              <th className="px-6 py-4 text-center">브랜드 수정</th>
-              <th className="px-6 py-4 text-center">필수여부</th>
-              <th className="px-6 py-4 text-center">제어</th>
+              <th className="px-6 py-4 whitespace-nowrap">속성 정보 (그룹/코드)</th>
+              <th className="px-6 py-4 whitespace-nowrap">한/영 속성명</th>
+              <th className="px-6 py-4 whitespace-nowrap">분류 범위</th>
+              <th className="px-6 py-4 whitespace-nowrap">입력 형식</th>
+              <th className="px-6 py-4 whitespace-nowrap">속성 옵션 (Options)</th>
+              <th className="px-6 py-4 text-center whitespace-nowrap">브랜드 수정</th>
+              <th className="px-6 py-4 text-center whitespace-nowrap">필수여부</th>
+              <th className="px-6 py-4 text-center whitespace-nowrap">제어</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-zinc-150 dark:divide-zinc-900/60 bg-transparent">
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={7} className="px-6 py-12 text-center text-zinc-400 dark:text-zinc-500 text-xs">
+                <td colSpan={8} className="px-6 py-12 text-center text-zinc-400 dark:text-zinc-500 text-xs">
                   검색 조건에 맞는 속성이 존재하지 않습니다.
                 </td>
               </tr>
@@ -332,6 +333,17 @@ export function AttributeList({ initialAttributes }: { initialAttributes: Attrib
                         <span className="font-semibold text-zinc-900 dark:text-zinc-100">{a.nameKo}</span>
                         {a.nameEn && <span className="text-xs text-zinc-400 dark:text-zinc-500 font-normal">{a.nameEn}</span>}
                       </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap align-middle">
+                      {a.scope === "COMMON" ? (
+                        <span className="inline-flex items-center rounded-md bg-zinc-950 dark:bg-zinc-100 text-white dark:text-zinc-950 px-2 py-0.5 text-[9px] font-bold border border-zinc-950 dark:border-zinc-100 tracking-wider">
+                          공통 (COMMON)
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center rounded-md bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 px-2 py-0.5 text-[9px] font-bold border border-zinc-200 dark:border-zinc-700 tracking-wider">
+                          프로필군 (PROFILE)
+                        </span>
+                      )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex flex-col gap-0.5">
