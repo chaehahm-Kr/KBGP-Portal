@@ -87,6 +87,11 @@ export default async function AdminProductsPage() {
       if (p.selling_online && !p.sales_link_1?.trim()) {
         missingFields.push("온라인 판매 링크");
       }
+      
+      const hasImages = (productImages ?? []).some((img) => img.product_id === p.id);
+      if (!hasImages) {
+        missingFields.push("대표 이미지");
+      }
 
       const isDraft = missingFields.length > 0;
 

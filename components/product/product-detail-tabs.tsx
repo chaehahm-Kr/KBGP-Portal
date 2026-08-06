@@ -293,6 +293,23 @@ export function ProductDetailTabs({
   const [salesLink1, setSalesLink1] = useState(product.sales_link_1 || "");
   const [salesLink2, setSalesLink2] = useState(product.sales_link_2 || "");
 
+  // Product Images Drag & Drop Ordering State
+  const [localImages, setLocalImages] = useState(() => {
+    return imageRows.map((row, idx) => ({
+      ...row,
+      url: imageUrls[idx] || null
+    }));
+  });
+
+  useEffect(() => {
+    setLocalImages(
+      imageRows.map((row, idx) => ({
+        ...row,
+        url: imageUrls[idx] || null
+      }))
+    );
+  }, [imageRows, imageUrls]);
+
   // Required Fields States for reactive validation
   const [nameEn, setNameEn] = useState(product.name_en || "");
   const [manufactureSku, setManufactureSku] = useState(effectiveManufactureSku || "");
@@ -342,6 +359,11 @@ export function ProductDetailTabs({
     const wt = Number(packageWeight || 0);
     if (!packageWidth || w <= 0 || !packageDepth || d <= 0 || !packageHeight || h <= 0 || !packageWeight || wt <= 0) {
       missing.push({ tab: "logistics", field: "단품 포장 패키지 규격(가로/세로/높이/무게)", inputName: "packageWidth" });
+    }
+    
+    // Media tab
+    if (localImages.length === 0) {
+      missing.push({ tab: "media", field: "대표 이미지 (최소 1개 이상의 제품 이미지 필수)", inputName: "images" });
     }
     
     return missing;
@@ -418,22 +440,7 @@ export function ProductDetailTabs({
     setIngredientsText(transTargetText);
   };
 
-  // Product Images Drag & Drop Ordering State
-  const [localImages, setLocalImages] = useState(() => {
-    return imageRows.map((row, idx) => ({
-      ...row,
-      url: imageUrls[idx] || null
-    }));
-  });
 
-  useEffect(() => {
-    setLocalImages(
-      imageRows.map((row, idx) => ({
-        ...row,
-        url: imageUrls[idx] || null
-      }))
-    );
-  }, [imageRows, imageUrls]);
 
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
 
