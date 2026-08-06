@@ -342,14 +342,15 @@ export async function saveProductAttributeValues(
  * 5. 엑셀 업로드를 통한 마스터 데이터(카테고리, 속성, 프로필, 옵션, 매핑) 일괄 임포트
  */
 export async function adminImportMasterExcel(base64Data: string) {
-  const { verifyAdminSession } = await import("@/lib/auth/dal");
-  await verifyAdminSession();
+  try {
+    const { verifyAdminSession } = await import("@/lib/auth/dal");
+    await verifyAdminSession();
 
-  const XLSX = await import("xlsx");
-  const admin = createAdminClient();
+    const XLSX = await import("xlsx");
+    const admin = createAdminClient();
 
-  const buffer = Buffer.from(base64Data, "base64");
-  const workbook = XLSX.read(buffer, { type: "buffer" });
+    const buffer = Buffer.from(base64Data, "base64");
+    const workbook = XLSX.read(buffer, { type: "buffer" });
 
   const parseSheetData = (sheetName: string) => {
     const sheet = workbook.Sheets[sheetName];
@@ -478,6 +479,10 @@ export async function adminImportMasterExcel(base64Data: string) {
   revalidatePath("/admin/settings/attributes");
   revalidatePath("/admin/settings/attribute-profiles");
   return { success: true };
+  } catch (error: any) {
+    console.error("Excel import failed:", error);
+    return { success: false, error: error?.message || String(error) };
+  }
 }
 
 /**

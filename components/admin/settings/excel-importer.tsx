@@ -30,7 +30,7 @@ export function ExcelImporter() {
           if (response.success) {
             setSuccess(true);
           } else {
-            setError("임포트 처리가 정상 완료되지 않았습니다.");
+            setError(response.error || "임포트 처리가 정상 완료되지 않았습니다.");
           }
         } catch (err: any) {
           setError(err.message || "엑셀 업로드 중 오류가 발생했습니다.");
