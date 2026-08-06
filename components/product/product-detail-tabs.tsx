@@ -292,6 +292,61 @@ export function ProductDetailTabs({
   const [salesLink1, setSalesLink1] = useState(product.sales_link_1 || "");
   const [salesLink2, setSalesLink2] = useState(product.sales_link_2 || "");
 
+  // Required Fields States for reactive validation
+  const [nameEn, setNameEn] = useState(product.name_en || "");
+  const [manufactureSku, setManufactureSku] = useState(effectiveManufactureSku || "");
+  const [brandId, setBrandId] = useState(product.brand_id || "");
+  const [category, setCategory] = useState(product.category || "");
+  const [origin, setOrigin] = useState(product.origin || "");
+  const [priceKrwRetail, setPriceKrwRetail] = useState(product.price_krw_retail?.toString() || "");
+  const [priceUsdFob, setPriceUsdFob] = useState(product.price_usd_fob?.toString() || "");
+  const [upc, setUpc] = useState(product.upc || "");
+  const [ean, setEan] = useState(product.ean || "");
+
+  const getMissingFieldsList = () => {
+    const missing = [];
+    
+    // Basic Info tab
+    if (!brandId) missing.push({ tab: "basic", field: "브랜드", inputName: "brandId" });
+    if (!category) missing.push({ tab: "basic", field: "카테고리", inputName: "category" });
+    if (!nameEn.trim()) missing.push({ tab: "basic", field: "영문 제품명", inputName: "nameEn" });
+    if (!manufactureSku.trim()) missing.push({ tab: "basic", field: "제조사 SKU", inputName: "manufactureSku" });
+    if (!origin) missing.push({ tab: "basic", field: "원산지", inputName: "origin" });
+    
+    const hasUpc = !!upc.trim();
+    const hasEan = !!ean.trim();
+    if (!hasUpc && !hasEan) {
+      missing.push({ tab: "basic", field: "식별 바코드 (UPC 또는 EAN 중 최소 하나 필수)", inputName: "upc" });
+    } else if (hasUpc && hasEan) {
+      missing.push({ tab: "basic", field: "식별 바코드 (UPC와 EAN은 동시에 입력할 수 없습니다)", inputName: "upc" });
+    }
+    
+    if (sellingOnline && !salesLink1.trim()) {
+      missing.push({ tab: "basic", field: "온라인 판매 링크 1", inputName: "salesLink1" });
+    }
+    
+    // Price Info tab
+    const krw = Number(priceKrwRetail || 0);
+    if (!priceKrwRetail || krw <= 0) {
+      missing.push({ tab: "price", field: "한국 소비자 판매가", inputName: "priceKrwRetail" });
+    }
+    const usd = Number(priceUsdFob || 0);
+    if (!priceUsdFob || usd <= 0) {
+      missing.push({ tab: "price", field: "미국 수출 FOB 가격", inputName: "priceUsdFob" });
+    }
+    
+    // Logistics tab
+    const w = Number(packageWidth || 0);
+    const d = Number(packageDepth || 0);
+    const h = Number(packageHeight || 0);
+    const wt = Number(packageWeight || 0);
+    if (!packageWidth || w <= 0 || !packageDepth || d <= 0 || !packageHeight || h <= 0 || !packageWeight || wt <= 0) {
+      missing.push({ tab: "logistics", field: "단품 포장 패키지 규격(가로/세로/높이/무게)", inputName: "packageWidth" });
+    }
+    
+    return missing;
+  };
+
   // Ingredients Text State & Translation Tool States
   const [ingredientsText, setIngredientsText] = useState(product.ingredients_text || "");
   const [transSourceText, setTransSourceText] = useState("");
@@ -427,34 +482,46 @@ export function ProductDetailTabs({
   const handleMainFormSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setStatusMessage(null);
+
+    const missingList = getMissingFieldsList();
+    if (missingList.length > 0) {
+      const firstError = missingList[0];
+      setActiveTab(firstError.tab as any);
+      
+      setTimeout(() => {
+        const inputElement = document.getElementsByName(firstError.inputName)[0] as HTMLInputElement | undefined;
+        if (inputElement) {
+          inputElement.focus();
+          if (inputElement.select) inputElement.select();
+        }
+      }, 80);
+
+      setStatusMessage({ 
+        type: "error", 
+        text: `필수 정보가 누락되었거나 형식이 올바르지 않습니다: "${firstError.field}" 항목을 입력해 주세요.` 
+      });
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
     
     const formData = new FormData(e.currentTarget);
-
-    // Client-side validations
-    const upcVal = formData.get("upc")?.toString().trim() || "";
-    const eanVal = formData.get("ean")?.toString().trim() || "";
-
-    if (!upcVal && !eanVal) {
-      setStatusMessage({ type: "error", text: "UPC 또는 EAN 번호 중 최소 하나는 반드시 입력해야 합니다." });
-      window.scrollTo({ top: 0, behavior: "smooth" });
-      return;
-    }
-    if (upcVal && eanVal) {
-      setStatusMessage({ type: "error", text: "UPC와 EAN 번호는 동시에 입력할 수 없습니다. 둘 중 하나만 입력해 주세요." });
-      window.scrollTo({ top: 0, behavior: "smooth" });
-      return;
-    }
-    if (sellingOnline && !salesLink1.trim()) {
-      setStatusMessage({ type: "error", text: "온라인 판매 중인 경우, 최소 한 개 이상의 판매 링크(링크 1)를 입력해 주세요." });
-      window.scrollTo({ top: 0, behavior: "smooth" });
-      return;
-    }
 
     // Set checkboxes explicitly as strings for action validation
     formData.set("sellingOnline", sellingOnline ? "true" : "false");
     formData.set("sellingOffline", sellingOffline ? "true" : "false");
     formData.set("salesLink1", salesLink1.trim());
     formData.set("salesLink2", salesLink2.trim());
+    
+    // Explicitly set bound values in formData to ensure they are captured correctly
+    formData.set("nameEn", nameEn.trim());
+    formData.set("manufactureSku", manufactureSku.trim());
+    formData.set("brandId", brandId);
+    formData.set("category", category);
+    formData.set("origin", origin);
+    formData.set("upc", upc.trim());
+    formData.set("ean", ean.trim());
+    formData.set("priceKrwRetail", priceKrwRetail.trim());
+    formData.set("priceUsdFob", priceUsdFob.trim());
 
     // Combine leadTimeValue and leadTimeUnit into leadTime
     const leadTimeVal = formData.get("leadTimeValue") || "";
@@ -567,6 +634,42 @@ export function ProductDetailTabs({
         </div>
       )}
 
+      {/* Missing Fields Warning Banner */}
+      {getMissingFieldsList().length > 0 && (
+        <div className="rounded-xl border border-rose-250 bg-rose-50/40 p-5 dark:border-rose-950/30 dark:bg-rose-950/10 shadow-xs animate-fadeIn">
+          <div className="flex items-start gap-3 text-rose-800 dark:text-rose-400">
+            <span className="mt-0.5 inline-flex items-center justify-center w-5 h-5 rounded-full bg-rose-100 text-rose-800 text-[11px] font-bold dark:bg-rose-900/50 dark:text-rose-300">!</span>
+            <div className="space-y-1.5">
+              <h4 className="text-xs font-bold text-rose-900 dark:text-rose-400">필수 정보 보완 필요 (Draft 상태)</h4>
+              <p className="text-[11px] leading-relaxed text-rose-700 dark:text-rose-455">
+                본 제품은 필수 정보가 누락되어 있습니다. 다음 탭으로 이동하여 해당 항목들을 모두 입력하고 전체 변경사항을 저장해 주세요:
+              </p>
+              <div className="flex flex-wrap gap-2 mt-2">
+                {getMissingFieldsList().map((item, idx) => (
+                  <button 
+                    key={idx} 
+                    type="button"
+                    onClick={() => {
+                      setActiveTab(item.tab as any);
+                      setTimeout(() => {
+                        const inputElement = document.getElementsByName(item.inputName)[0] as HTMLInputElement | undefined;
+                        if (inputElement) {
+                          inputElement.focus();
+                          if (inputElement.select) inputElement.select();
+                        }
+                      }, 80);
+                    }}
+                    className="inline-flex items-center rounded-md bg-rose-100/70 hover:bg-rose-150 px-2.5 py-1 text-[10px] font-semibold text-rose-800 dark:bg-rose-900/30 dark:text-rose-300 border border-rose-200/50 dark:border-rose-800/40 transition-colors cursor-pointer"
+                  >
+                    [{item.tab === "basic" ? "기본 정보" : item.tab === "price" ? "가격 정보" : "로지스틱스"}] {item.field}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Main Form wraps all the fields to save text parameters */}
       <form onSubmit={handleMainFormSubmit} className="space-y-6">
         {/* Top Product Header Card */}
@@ -626,20 +729,30 @@ export function ProductDetailTabs({
             { id: "logistics", label: "로지스틱스" },
             { id: "media", label: "미디어 (이미지/비디오)" },
             { id: "certs", label: "인허가 & 보증서" }
-          ].map((tab) => (
-            <button
-              key={tab.id}
-              type="button"
-              onClick={() => setActiveTab(tab.id as any)}
-              className={`px-5 py-3 text-xs font-bold whitespace-nowrap border-b-2 transition-all cursor-pointer ${
-                activeTab === tab.id
-                  ? "border-zinc-900 text-zinc-900 dark:border-white dark:text-white"
-                  : "border-transparent text-zinc-400 hover:text-zinc-700 dark:text-zinc-500 dark:hover:text-zinc-300"
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
+          ].map((tab) => {
+            const missingList = getMissingFieldsList();
+            const hasError = missingList.some((item) => item.tab === tab.id);
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setActiveTab(tab.id as any)}
+                className={`px-5 py-3 text-xs font-bold whitespace-nowrap border-b-2 transition-all cursor-pointer flex items-center gap-1.5 ${
+                  activeTab === tab.id
+                    ? "border-zinc-900 text-zinc-900 dark:border-white dark:text-white"
+                    : "border-transparent text-zinc-400 hover:text-zinc-700 dark:text-zinc-500 dark:hover:text-zinc-300"
+                }`}
+              >
+                <span>{tab.label}</span>
+                {hasError && (
+                  <span 
+                    className="h-2 w-2 rounded-full bg-rose-600 animate-pulse" 
+                    title="이 탭에 누락 정보 또는 유효성 오류가 있습니다."
+                  />
+                )}
+              </button>
+            );
+          })}
         </div>
 
         {/* Tab Panel 1: 기본 정보 */}
@@ -651,14 +764,14 @@ export function ProductDetailTabs({
             
             <div className="grid gap-6 sm:grid-cols-2">
               <div>
-                <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1.5">제조사 SKU (Manufacture SKU) *</label>
+                <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1.5">제조사 SKU (Manufacture SKU) <span className="text-rose-600 dark:text-rose-400 font-bold ml-0.5">*</span></label>
                 <input
                   name="manufactureSku"
                   type="text"
                   required
-                  defaultValue={effectiveManufactureSku || ""}
+                  value={manufactureSku} onChange={(e) => setManufactureSku(e.target.value)}
                   placeholder="제조사의 실제 SKU 코드"
-                  className="block w-full rounded-lg border border-zinc-300 px-3.5 py-2 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-zinc-900 dark:focus:border-white font-mono"
+                  className={`block w-full rounded-lg border px-3.5 py-2 text-xs text-zinc-900 dark:bg-zinc-950 dark:text-white focus:outline-none font-mono ${!manufactureSku.trim() ? "border-rose-350 dark:border-rose-900/60 focus:border-rose-500" : "border-zinc-300 dark:border-zinc-800 focus:border-zinc-900 dark:focus:border-white"}`}
                 />
               </div>
 
@@ -677,14 +790,14 @@ export function ProductDetailTabs({
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1.5">제품명 (영문) *</label>
+                <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1.5">제품명 (영문) <span className="text-rose-600 dark:text-rose-400 font-bold ml-0.5">*</span></label>
                 <input
                   name="nameEn"
                   type="text"
                   required
-                  defaultValue={product.name_en || ""}
+                  value={nameEn} onChange={(e) => setNameEn(e.target.value)}
                   placeholder="English Product Name"
-                  className="block w-full rounded-lg border border-zinc-300 px-3.5 py-2 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-zinc-900 dark:focus:border-white"
+                  className={`block w-full rounded-lg border px-3.5 py-2 text-xs text-zinc-900 dark:bg-zinc-950 dark:text-white focus:outline-none ${!nameEn.trim() ? "border-rose-350 dark:border-rose-900/60 focus:border-rose-500" : "border-zinc-300 dark:border-zinc-800 focus:border-zinc-900 dark:focus:border-white"}`}
                 />
               </div>
 
@@ -700,11 +813,11 @@ export function ProductDetailTabs({
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1.5">브랜드 *</label>
+                <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1.5">브랜드 <span className="text-rose-600 dark:text-rose-400 font-bold ml-0.5">*</span></label>
                 <select
                   name="brandId"
-                  defaultValue={product.brand_id}
-                  className="block w-full rounded-lg border border-zinc-300 px-3.5 py-2 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-zinc-900 dark:focus:border-white"
+                  value={brandId} onChange={(e) => setBrandId(e.target.value)}
+                  className={`block w-full rounded-lg border px-3.5 py-2 text-xs text-zinc-900 dark:bg-zinc-950 dark:text-white focus:outline-none ${!brandId ? "border-rose-350 dark:border-rose-900/60 focus:border-rose-500" : "border-zinc-300 dark:border-zinc-800 focus:border-zinc-900 dark:focus:border-white"}`}
                 >
                   {(() => {
                     const hasCurrentBrand = brands.some((b) => b.id === product.brand_id);
@@ -719,11 +832,11 @@ export function ProductDetailTabs({
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1.5">카테고리 *</label>
+                <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1.5">카테고리 <span className="text-rose-600 dark:text-rose-400 font-bold ml-0.5">*</span></label>
                 <select
                   name="category"
-                  defaultValue={product.category}
-                  className="block w-full rounded-lg border border-zinc-300 px-3.5 py-2 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-zinc-900 dark:focus:border-white"
+                  value={category} onChange={(e) => setCategory(e.target.value)}
+                  className={`block w-full rounded-lg border px-3.5 py-2 text-xs text-zinc-900 dark:bg-zinc-950 dark:text-white focus:outline-none ${!category ? "border-rose-350 dark:border-rose-900/60 focus:border-rose-500" : "border-zinc-300 dark:border-zinc-800 focus:border-zinc-900 dark:focus:border-white"}`}
                 >
                   {Object.entries(PRODUCT_CATEGORY_LABEL).map(([val, label]) => (
                     <option key={val} value={val}>{label}</option>
@@ -743,11 +856,11 @@ export function ProductDetailTabs({
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1.5">원산지 (Origin)</label>
+                <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1.5">원산지 (Origin) <span className="text-rose-600 dark:text-rose-400 font-bold ml-0.5">*</span></label>
                 <select
                   name="origin"
-                  defaultValue={product.origin || ""}
-                  className="block w-full rounded-lg border border-zinc-300 px-3.5 py-2 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-zinc-900 dark:focus:border-white"
+                  value={origin} onChange={(e) => setOrigin(e.target.value)}
+                  className={`block w-full rounded-lg border px-3.5 py-2 text-xs text-zinc-900 dark:bg-zinc-950 dark:text-white focus:outline-none ${!origin ? "border-rose-350 dark:border-rose-900/60 focus:border-rose-500" : "border-zinc-300 dark:border-zinc-800 focus:border-zinc-900 dark:focus:border-white"}`}
                 >
                   <option value="">선택 안 함 (None)</option>
                   <optgroup label="주요 국가 (Major Countries)">
@@ -1050,24 +1163,24 @@ export function ProductDetailTabs({
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1.5">미국 바코드 (UPC)</label>
+                <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1.5">미국 바코드 (UPC) {!ean.trim() && <span className="text-rose-600 dark:text-rose-400 font-bold ml-0.5">*</span>}</label>
                 <input
                   name="upc"
                   type="text"
-                  defaultValue={product.upc || ""}
+                  value={upc} onChange={(e) => setUpc(e.target.value)}
                   placeholder="12자리 미국 바코드 규격"
-                  className="block w-full rounded-lg border border-zinc-300 px-3.5 py-2 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-zinc-900 dark:focus:border-white font-mono"
+                  className={`block w-full rounded-lg border px-3.5 py-2 text-xs text-zinc-900 dark:bg-zinc-950 dark:text-white focus:outline-none font-mono ${(!upc.trim() && !ean.trim()) || (upc.trim() && ean.trim()) ? "border-rose-350 dark:border-rose-900/60 focus:border-rose-500" : "border-zinc-300 dark:border-zinc-800 focus:border-zinc-900 dark:focus:border-white"}`}
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1.5">유럽/글로벌 바코드 (EAN)</label>
+                <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1.5">유럽/글로벌 바코드 (EAN) {!upc.trim() && <span className="text-rose-600 dark:text-rose-400 font-bold ml-0.5">*</span>}</label>
                 <input
                   name="ean"
                   type="text"
-                  defaultValue={product.ean || ""}
+                  value={ean} onChange={(e) => setEan(e.target.value)}
                   placeholder="13자리 글로벌 바코드 규격"
-                  className="block w-full rounded-lg border border-zinc-300 px-3.5 py-2 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-zinc-900 dark:focus:border-white font-mono"
+                  className={`block w-full rounded-lg border px-3.5 py-2 text-xs text-zinc-900 dark:bg-zinc-950 dark:text-white focus:outline-none font-mono ${(!upc.trim() && !ean.trim()) || (upc.trim() && ean.trim()) ? "border-rose-350 dark:border-rose-900/60 focus:border-rose-500" : "border-zinc-300 dark:border-zinc-800 focus:border-zinc-900 dark:focus:border-white"}`}
                 />
               </div>
             </div>
@@ -1181,14 +1294,14 @@ export function ProductDetailTabs({
             
             <div className="grid gap-6 sm:grid-cols-2 md:grid-cols-4">
               <div>
-                <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1.5">한국 소비자가 (₩, Retail KRW) *</label>
+                <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1.5">한국 소비자가 (₩, Retail KRW) <span className="text-rose-600 dark:text-rose-400 font-bold ml-0.5">*</span></label>
                 <div className="relative">
                   <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-xs text-zinc-400">₩</span>
                   <input
                     name="priceKrwRetail"
                     type="number"
                     required
-                    defaultValue={product.price_krw_retail || ""}
+                    value={priceKrwRetail} onChange={(e) => setPriceKrwRetail(e.target.value)}
                     placeholder="0"
                     className="block w-full rounded-lg border border-zinc-300 pl-8 pr-3.5 py-2 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-zinc-900 dark:focus:border-white"
                   />
@@ -1225,7 +1338,7 @@ export function ProductDetailTabs({
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1.5">수출용 FOB 가격 ($, Export USD FOB) *</label>
+                <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1.5">수출용 FOB 가격 ($, Export USD FOB) <span className="text-rose-600 dark:text-rose-400 font-bold ml-0.5">*</span></label>
                 <div className="relative">
                   <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-xs text-zinc-400">$</span>
                   <input
@@ -1419,7 +1532,7 @@ export function ProductDetailTabs({
             <div className="grid gap-4 sm:grid-cols-2 text-xs">
               {/* Width */}
               <div className="space-y-1.5 p-3 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50/20">
-                <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300">가로 (Width, cm/inch) *</label>
+                <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300">가로 (Width, cm/inch) <span className="text-rose-600 dark:text-rose-400 font-bold ml-0.5">*</span></label>
                 <div className="grid grid-cols-2 gap-2">
                   <div>
                     <span className="text-[9px] text-zinc-400 font-semibold block">cm</span>
@@ -1450,7 +1563,7 @@ export function ProductDetailTabs({
 
               {/* Depth */}
               <div className="space-y-1.5 p-3 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50/20">
-                <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300">세로 (Depth, cm/inch) *</label>
+                <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300">세로 (Depth, cm/inch) <span className="text-rose-600 dark:text-rose-400 font-bold ml-0.5">*</span></label>
                 <div className="grid grid-cols-2 gap-2">
                   <div>
                     <span className="text-[9px] text-zinc-400 font-semibold block">cm</span>
@@ -1481,7 +1594,7 @@ export function ProductDetailTabs({
 
               {/* Height */}
               <div className="space-y-1.5 p-3 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50/20">
-                <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300">높이 (Height, cm/inch) *</label>
+                <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300">높이 (Height, cm/inch) <span className="text-rose-600 dark:text-rose-400 font-bold ml-0.5">*</span></label>
                 <div className="grid grid-cols-2 gap-2">
                   <div>
                     <span className="text-[9px] text-zinc-400 font-semibold block">cm</span>
@@ -1512,7 +1625,7 @@ export function ProductDetailTabs({
 
               {/* Weight */}
               <div className="space-y-1.5 p-3 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50/20">
-                <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300">무게 (Weight, g/lb/oz) *</label>
+                <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300">무게 (Weight, g/lb/oz) <span className="text-rose-600 dark:text-rose-400 font-bold ml-0.5">*</span></label>
                 <div className="grid grid-cols-3 gap-1.5">
                   <div>
                     <span className="text-[9px] text-zinc-400 font-semibold block">g</span>
