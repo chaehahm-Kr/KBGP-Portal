@@ -176,7 +176,7 @@ export function CategoryTreeList({ initialTree }: { initialTree: CategoryNode[] 
     startTransition(async () => {
       try {
         // 1. 카테고리 UPSERT
-        await saveCategory({
+        const resCat = await saveCategory({
           code: modalData.code,
           nameKo: modalData.nameKo,
           nameEn: modalData.nameEn || null,
@@ -186,12 +186,25 @@ export function CategoryTreeList({ initialTree }: { initialTree: CategoryNode[] 
           isActive: modalData.isActive
         });
 
+        if (!resCat.success) {
+          setErrorMsg(resCat.error || "카테고리 저장에 실패했습니다.");
+          return;
+        }
+
         // 2. 최종 카테고리일 시 프로필 매핑 처리
         if (modalData.isFinal) {
-          await saveCategoryProfileMapping(modalData.code, modalData.profileCode || null);
+          const resMap = await saveCategoryProfileMapping(modalData.code, modalData.profileCode || null);
+          if (!resMap.success) {
+            setErrorMsg(resMap.error || "프로필 매핑 연동에 실패했습니다.");
+            return;
+          }
           setMappings(prev => ({ ...prev, [modalData.code]: modalData.profileCode }));
         } else {
-          await saveCategoryProfileMapping(modalData.code, null); // Clear mapping
+          const resMap = await saveCategoryProfileMapping(modalData.code, null); // Clear mapping
+          if (!resMap.success) {
+            setErrorMsg(resMap.error || "프로필 매핑 해제에 실패했습니다.");
+            return;
+          }
         }
 
         // 3. 모달 창을 즉시 닫고, RSC 스트리밍 응답이 브라우저에 안전하게 주입된 후에 새로고침 처리 (RSC Aborted 방지)

@@ -648,9 +648,6 @@ export async function getAllAttributesWithDetails(): Promise<AttributeMasterItem
   }));
 }
 
-/**
- * 9. 웹 UI용 카테고리 추가/수정 (CUD)
- */
 export async function saveCategory(category: {
   code: string;
   nameKo: string;
@@ -660,30 +657,34 @@ export async function saveCategory(category: {
   isFinal: boolean;
   isActive?: boolean;
 }) {
-  await verifyAdminSession();
-  const admin = createAdminClient();
+  try {
+    await verifyAdminSession();
+    const admin = createAdminClient();
 
-  const payload = {
-    code: category.code.trim().toUpperCase(),
-    name_ko: category.nameKo.trim(),
-    name_en: category.nameEn?.trim() || null,
-    depth: category.depth,
-    parent_code: category.parentCode || null,
-    is_final: category.isFinal,
-    is_active: category.isActive !== undefined ? category.isActive : true,
-    updated_at: new Date().toISOString(),
-  };
+    const payload = {
+      code: category.code.trim().toUpperCase(),
+      name_ko: category.nameKo.trim(),
+      name_en: category.nameEn?.trim() || null,
+      depth: category.depth,
+      parent_code: category.parentCode || null,
+      is_final: category.isFinal,
+      is_active: category.isActive !== undefined ? category.isActive : true,
+      updated_at: new Date().toISOString(),
+    };
 
-  const { error } = await admin
-    .from("categories")
-    .upsert(payload, { onConflict: "code" });
+    const { error } = await admin
+      .from("categories")
+      .upsert(payload, { onConflict: "code" });
 
-  if (error) {
-    throw new Error(`카테고리 저장 실패: ${error.message}`);
+    if (error) {
+      return { success: false, error: `카테고리 테이블 저장 실패: ${error.message}` };
+    }
+
+    revalidatePath("/admin/settings/categories");
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err.message || "카테고리 저장 중 예외가 발생했습니다." };
   }
-
-  revalidatePath("/admin/settings/categories");
-  return { success: true };
 }
 
 /**
@@ -905,35 +906,39 @@ export async function saveProfileAttributeMappings(
  * 15. 웹 UI용 카테고리-프로필 매핑 저장
  */
 export async function saveCategoryProfileMapping(categoryCode: string, profileCode: string | null) {
-  await verifyAdminSession();
-  const admin = createAdminClient();
+  try {
+    await verifyAdminSession();
+    const admin = createAdminClient();
 
-  // 15.1 기존 카테고리 매핑 삭제
-  const { error: deleteError } = await admin
-    .from("category_profile_mappings")
-    .delete()
-    .eq("category_code", categoryCode);
-
-  if (deleteError) {
-    throw new Error(`카테고리 프로필 기존 매핑 삭제 실패: ${deleteError.message}`);
-  }
-
-  // 15.2 신규 매핑 지정 시 추가
-  if (profileCode) {
-    const { error: insertError } = await admin
+    // 15.1 기존 카테고리 매핑 삭제
+    const { error: deleteError } = await admin
       .from("category_profile_mappings")
-      .insert({
-        category_code: categoryCode,
-        profile_code: profileCode,
-        is_active: true
-      });
+      .delete()
+      .eq("category_code", categoryCode);
 
-    if (insertError) {
-      throw new Error(`카테고리 프로필 매핑 연동 실패: ${insertError.message}`);
+    if (deleteError) {
+      return { success: false, error: `카테고리 프로필 기존 매핑 삭제 실패: ${deleteError.message}` };
     }
-  }
 
-  revalidatePath("/admin/settings/categories");
-  return { success: true };
+    // 15.2 신규 매핑 지정 시 추가
+    if (profileCode) {
+      const { error: insertError } = await admin
+        .from("category_profile_mappings")
+        .insert({
+          category_code: categoryCode,
+          profile_code: profileCode,
+          is_active: true
+        });
+
+      if (insertError) {
+        return { success: false, error: `카테고리 프로필 매핑 연동 실패: ${insertError.message}` };
+      }
+    }
+
+    revalidatePath("/admin/settings/categories");
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err.message || "카테고리 프로필 매핑 중 예외가 발생했습니다." };
+  }
 }
 
