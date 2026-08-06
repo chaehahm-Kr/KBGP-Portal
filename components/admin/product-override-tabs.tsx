@@ -11,6 +11,7 @@ import {
   type CertificateType
 } from "@/lib/product/types";
 import { adminUpdateProductOverrides } from "@/lib/product/admin-actions";
+import { CategoryAttributeForm } from "@/components/product/category-attribute-form";
 
 interface ProductOverrideTabsProps {
   product: Product;
@@ -41,7 +42,7 @@ export function ProductOverrideTabs({
   ingredientsFileUrl,
   ingredientsFileUrlEn,
 }: ProductOverrideTabsProps) {
-  const [activeTab, setActiveTab] = useState<"basic" | "price" | "logistics" | "media" | "certs">("basic");
+  const [activeTab, setActiveTab] = useState<"basic" | "category_attributes" | "price" | "logistics" | "media" | "certs">("basic");
   const [isPending, startTransition] = useTransition();
   const [statusMessage, setStatusMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
@@ -462,6 +463,16 @@ export function ProductOverrideTabs({
           }`}
         >
           기본 정보
+        </button>
+        <button
+          onClick={() => setActiveTab("category_attributes")}
+          className={`px-4 py-2.5 text-xs font-bold transition-all border-b-2 -mb-[2px] ${
+            activeTab === "category_attributes"
+              ? "border-zinc-950 text-zinc-955 dark:border-white dark:text-white"
+              : "border-transparent text-zinc-400 hover:text-zinc-650"
+          }`}
+        >
+          카테고리 & 속성
         </button>
         <button
           onClick={() => setActiveTab("price")}
@@ -1055,6 +1066,26 @@ export function ProductOverrideTabs({
                 )}
               </div>
             </div>
+          </div>
+        )}
+
+        {/* Category & Attributes Tab */}
+        {activeTab === "category_attributes" && (
+          <div className="bg-slate-900/10 p-2 rounded-2xl">
+            <CategoryAttributeForm
+              productId={product.id}
+              initialCategoryCode={(product as any).category_code || null}
+              brandName={brandName}
+              companyName={companyName}
+              productName={product.name}
+              productNameEn={product.name_en || null}
+              manufactureSku={product.manufacture_sku || null}
+              letustoSku={product.letusto_sku || null}
+              origin={product.origin || null}
+              volume={product.volume || null}
+              colorMap={product.color_map || null}
+              isAdmin={true}
+            />
           </div>
         )}
 

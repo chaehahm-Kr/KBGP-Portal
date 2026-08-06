@@ -22,8 +22,9 @@ interface AdminProductItem {
   photoUrl: string | null;
   is_draft: boolean;
   deleted_at: string | null;
-  selection_status: string; // UNREVIEWED, UNDER_REVIEW, INFO_REQUESTED, SELECTED, NOT_SELECTED
-  sales_status: string; // PREPARING, ON_SALE, PAUSED, ENDED
+  selection_status: string;
+  sales_status: string;
+  category_code?: string | null;
 }
 
 interface AdminProductsListProps {
@@ -421,13 +422,20 @@ export function AdminProductsList({ initialProducts }: AdminProductsListProps) {
                     </td>
 
                     {/* Product Name */}
-                    <td className="px-6 py-4 font-bold text-zinc-950 dark:text-white max-w-xxs truncate">
-                      <Link
-                        href={`/admin/products/${product.id}`}
-                        className="hover:text-indigo-650 hover:underline transition-all"
-                      >
-                        {product.display_name}
-                      </Link>
+                    <td className="px-6 py-4 font-bold text-zinc-955 dark:text-white max-w-xxs">
+                      <div className="flex flex-col gap-1">
+                        <Link
+                          href={`/admin/products/${product.id}`}
+                          className="hover:text-indigo-650 hover:underline transition-all block text-sm"
+                        >
+                          {product.display_name}
+                        </Link>
+                        {!product.category_code && (
+                          <span className="inline-flex items-center w-fit rounded-md bg-amber-500/10 dark:bg-amber-950/30 px-2 py-0.5 text-[9px] font-bold text-amber-600 dark:text-amber-400 border border-amber-500/20 animate-pulse">
+                            ⚠️ 카테고리 재분류 필요
+                          </span>
+                        )}
+                      </div>
                     </td>
 
                     {/* Company Name */}
@@ -491,7 +499,7 @@ export function AdminProductsList({ initialProducts }: AdminProductsListProps) {
                         className={`rounded border text-[11px] font-bold px-2 py-1 outline-none transition select-none ${
                           !isSelected 
                             ? "bg-zinc-50 text-zinc-350 border-zinc-200 cursor-not-allowed dark:bg-zinc-900 dark:text-zinc-700 dark:border-zinc-800" 
-                            : SALES_COLORS[product.sales_status]
+                            : SALES_COLORS[product.sales_status as keyof typeof SALES_COLORS] || "border-zinc-200"
                         }`}
                       >
                         {Object.entries(SALES_LABELS).map(([code, label]) => (

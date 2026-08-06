@@ -18,6 +18,7 @@ interface PortalProductItem {
   is_draft: boolean;
   missing_fields?: string[];
   deleted_at: string | null;
+  category_code?: string | null;
 }
 
 interface PortalProductsListProps {
@@ -242,12 +243,19 @@ export function PortalProductsList({ initialProducts, hasBrand }: PortalProducts
 
                   {/* Product Name */}
                   <td className="px-6 py-4 font-bold text-zinc-900 dark:text-white">
-                    <Link
-                      href={`/portal/products/${product.id}`}
-                      className="hover:underline hover:text-indigo-650"
-                    >
-                      {product.display_name}
-                    </Link>
+                    <div className="flex flex-col gap-1">
+                      <Link
+                        href={`/portal/products/${product.id}`}
+                        className="hover:underline hover:text-indigo-650 block text-sm"
+                      >
+                        {product.display_name}
+                      </Link>
+                      {!product.category_code && (
+                        <span className="inline-flex items-center w-fit rounded-md bg-amber-500/10 dark:bg-amber-950/30 px-2 py-0.5 text-[9px] font-bold text-amber-600 dark:text-amber-400 border border-amber-500/20 animate-pulse">
+                          ⚠️ 카테고리 재분류 필요
+                        </span>
+                      )}
+                    </div>
                   </td>
 
                   {/* Brand */}

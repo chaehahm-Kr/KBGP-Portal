@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useTransition } from "react";
 import Link from "next/link";
+import { CategoryAttributeForm } from "@/components/product/category-attribute-form";
 import { 
   type Product, 
   type ProductVideo, 
@@ -52,7 +53,7 @@ export function ProductDetailTabs({
   ingredientsFileUrl,
   ingredientsFileUrlEn,
 }: ProductDetailTabsProps) {
-  const [activeTab, setActiveTab] = useState<"basic" | "price" | "logistics" | "media" | "certs">("basic");
+  const [activeTab, setActiveTab] = useState<"basic" | "category_attributes" | "price" | "logistics" | "media" | "certs">("basic");
   const [isPending, startTransition] = useTransition();
   const [statusMessage, setStatusMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
@@ -776,6 +777,7 @@ export function ProductDetailTabs({
         <div className="flex border-b border-zinc-200 dark:border-zinc-800 overflow-x-auto no-scrollbar scroll-smooth gap-1">
           {[
             { id: "basic", label: "기본 정보" },
+            { id: "category_attributes", label: "카테고리 & 속성" },
             { id: "price", label: "가격 정보" },
             { id: "logistics", label: "로지스틱스" },
             { id: "media", label: "미디어 (이미지/비디오)" },
@@ -1491,6 +1493,24 @@ export function ProductDetailTabs({
               </div>
             )}
           </div>
+        </div>
+
+        {/* Tab Panel: 카테고리 & 속성 */}
+        <div className={activeTab === "category_attributes" ? "space-y-6" : "hidden"}>
+          <CategoryAttributeForm
+            productId={product.id}
+            initialCategoryCode={(product as any).category_code || null}
+            brandName={brandName}
+            companyName={brands.find(b => b.id === product.brand_id)?.name || ""}
+            productName={product.name}
+            productNameEn={product.name_en || null}
+            manufactureSku={product.manufacture_sku || null}
+            letustoSku={product.letusto_sku || null}
+            origin={product.origin || null}
+            volume={product.volume || null}
+            colorMap={product.color_map || null}
+            isAdmin={false}
+          />
         </div>
 
         {/* Tab Panel 3: 로지스틱스 정보 */}
