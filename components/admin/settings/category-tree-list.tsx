@@ -382,7 +382,7 @@ export function CategoryTreeList({ initialTree }: { initialTree: CategoryNode[] 
       <div className="flex justify-end mb-4">
         <button
           onClick={() => handleOpenCreate("", 1)}
-          className="bg-indigo-650 hover:bg-indigo-750 text-white font-bold text-xs px-4 py-2.5 rounded-xl shadow transition-all cursor-pointer flex items-center gap-1.5"
+          className="bg-[#18181b] hover:bg-[#27272a] dark:bg-[#f4f4f5] dark:hover:bg-[#e4e4e7] text-white dark:text-[#09090b] border border-[#18181b] dark:border-[#f4f4f5] font-bold text-xs px-4 py-2.5 rounded-xl shadow transition-all cursor-pointer flex items-center gap-1.5 duration-150"
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 4v16m8-8H4" />
@@ -543,7 +543,7 @@ export function CategoryTreeList({ initialTree }: { initialTree: CategoryNode[] 
                 <button
                   type="submit"
                   disabled={isPending}
-                  className="px-5 py-2.5 bg-indigo-650 hover:bg-indigo-750 text-white text-xs font-bold rounded-xl shadow-md disabled:opacity-50 cursor-pointer"
+                  className="px-5 py-2.5 bg-[#18181b] hover:bg-[#27272a] dark:bg-[#f4f4f5] dark:hover:bg-[#e4e4e7] text-white dark:text-[#09090b] border border-[#18181b] dark:border-[#f4f4f5] text-xs font-bold rounded-xl shadow-md disabled:opacity-50 cursor-pointer transition-all duration-150"
                 >
                   {isPending ? "저장 중..." : "카테고리 저장"}
                 </button>
