@@ -356,9 +356,9 @@ export async function adminImportMasterExcel(base64Data: string) {
     const sheet = workbook.Sheets[sheetName];
     if (!sheet) return [];
     const rawRows = XLSX.utils.sheet_to_json<any[]>(sheet, { header: 1, defval: null });
-    if (rawRows.length < 3) return [];
-    const headers = rawRows[1].map(h => h ? String(h).trim() : null);
-    const dataRows = rawRows.slice(2);
+    if (rawRows.length < 4) return [];
+    const headers = rawRows[2].map(h => h ? String(h).trim() : null);
+    const dataRows = rawRows.slice(3);
     
     const parsed: any[] = [];
     dataRows.forEach(row => {
