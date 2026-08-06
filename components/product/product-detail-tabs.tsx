@@ -299,7 +299,6 @@ export function ProductDetailTabs({
   const [category, setCategory] = useState(product.category || "");
   const [origin, setOrigin] = useState(product.origin || "");
   const [priceKrwRetail, setPriceKrwRetail] = useState(product.price_krw_retail?.toString() || "");
-  const [priceUsdFob, setPriceUsdFob] = useState(product.price_usd_fob?.toString() || "");
   const [upc, setUpc] = useState(product.upc || "");
   const [ean, setEan] = useState(product.ean || "");
 
@@ -330,8 +329,8 @@ export function ProductDetailTabs({
     if (!priceKrwRetail || krw <= 0) {
       missing.push({ tab: "price", field: "한국 소비자 판매가", inputName: "priceKrwRetail" });
     }
-    const usd = Number(priceUsdFob || 0);
-    if (!priceUsdFob || usd <= 0) {
+    const usd = Number(priceUsdFobState || 0);
+    if (!priceUsdFobState || usd <= 0) {
       missing.push({ tab: "price", field: "미국 수출 FOB 가격", inputName: "priceUsdFob" });
     }
     
@@ -345,6 +344,44 @@ export function ProductDetailTabs({
     }
     
     return missing;
+  };
+
+  const getCriticalErrors = () => {
+    const errors = [];
+    
+    // 1. Barcode conflict (both entered)
+    const hasUpc = !!upc.trim();
+    const hasEan = !!ean.trim();
+    if (hasUpc && hasEan) {
+      errors.push({ 
+        tab: "basic", 
+        field: "식별 바코드", 
+        inputName: "upc", 
+        message: "미국 바코드(UPC)와 유럽 바코드(EAN)는 동시에 입력할 수 없습니다. 하나만 입력해 주세요." 
+      });
+    }
+    
+    // 2. Barcode missing (both empty)
+    if (!hasUpc && !hasEan) {
+      errors.push({ 
+        tab: "basic", 
+        field: "식별 바코드", 
+        inputName: "upc", 
+        message: "미국 바코드(UPC) 또는 유럽 바코드(EAN) 중 최소 하나는 반드시 입력해야 합니다." 
+      });
+    }
+    
+    // 3. Online sales link missing
+    if (sellingOnline && !salesLink1.trim()) {
+      errors.push({ 
+        tab: "basic", 
+        field: "온라인 판매 링크 1", 
+        inputName: "salesLink1", 
+        message: "온라인 판매 중인 경우, 최소 한 개 이상의 판매 링크(링크 1)를 입력해 주세요." 
+      });
+    }
+    
+    return errors;
   };
 
   // Ingredients Text State & Translation Tool States
@@ -483,9 +520,9 @@ export function ProductDetailTabs({
     e.preventDefault();
     setStatusMessage(null);
 
-    const missingList = getMissingFieldsList();
-    if (missingList.length > 0) {
-      const firstError = missingList[0];
+    const criticalErrors = getCriticalErrors();
+    if (criticalErrors.length > 0) {
+      const firstError = criticalErrors[0];
       setActiveTab(firstError.tab as any);
       
       setTimeout(() => {
@@ -498,7 +535,7 @@ export function ProductDetailTabs({
 
       setStatusMessage({ 
         type: "error", 
-        text: `필수 정보가 누락되었거나 형식이 올바르지 않습니다: "${firstError.field}" 항목을 입력해 주세요.` 
+        text: firstError.message
       });
       window.scrollTo({ top: 0, behavior: "smooth" });
       return;
@@ -521,7 +558,7 @@ export function ProductDetailTabs({
     formData.set("upc", upc.trim());
     formData.set("ean", ean.trim());
     formData.set("priceKrwRetail", priceKrwRetail.trim());
-    formData.set("priceUsdFob", priceUsdFob.trim());
+    formData.set("priceUsdFob", priceUsdFobState ? priceUsdFobState.toString() : "");
 
     // Combine leadTimeValue and leadTimeUnit into leadTime
     const leadTimeVal = formData.get("leadTimeValue") || "";
