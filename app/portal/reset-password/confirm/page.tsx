@@ -104,7 +104,16 @@ export default function ResetPasswordConfirmPage() {
 
     if (updateError) {
       setPending(false);
-      setError("비밀번호를 변경하지 못했습니다. 링크가 만료되었을 수 있습니다.");
+      const msg = updateError.message || "";
+      if (
+        msg.toLowerCase().includes("different") ||
+        msg.toLowerCase().includes("old password") ||
+        msg.toLowerCase().includes("same as")
+      ) {
+        setError("새 비밀번호는 기존 비밀번호와 달라야 합니다. 다른 비밀번호를 입력해주세요.");
+      } else {
+        setError("비밀번호를 변경하지 못했습니다. 링크가 만료되었을 수 있습니다.");
+      }
       return;
     }
 
