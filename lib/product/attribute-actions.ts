@@ -908,24 +908,29 @@ export async function saveCategoryProfileMapping(categoryCode: string, profileCo
   await verifyAdminSession();
   const admin = createAdminClient();
 
-  if (!profileCode) {
-    // 매핑 삭제
-    const { error } = await admin
+  // 15.1 기존 카테고리 매핑 삭제
+  const { error: deleteError } = await admin
+    .from("category_profile_mappings")
+    .delete()
+    .eq("category_code", categoryCode);
+
+  if (deleteError) {
+    throw new Error(`카테고리 프로필 기존 매핑 삭제 실패: ${deleteError.message}`);
+  }
+
+  // 15.2 신규 매핑 지정 시 추가
+  if (profileCode) {
+    const { error: insertError } = await admin
       .from("category_profile_mappings")
-      .delete()
-      .eq("category_code", categoryCode);
-    if (error) throw new Error(`카테고리 프로필 매핑 삭제 실패: ${error.message}`);
-  } else {
-    // 매핑 등록/업데이트
-    const { error } = await admin
-      .from("category_profile_mappings")
-      .upsert({
+      .insert({
         category_code: categoryCode,
         profile_code: profileCode,
-        is_active: true,
-        updated_at: new Date().toISOString()
-      }, { onConflict: "category_code" });
-    if (error) throw new Error(`카테고리 프로필 매핑 저장 실패: ${error.message}`);
+        is_active: true
+      });
+
+    if (insertError) {
+      throw new Error(`카테고리 프로필 매핑 연동 실패: ${insertError.message}`);
+    }
   }
 
   revalidatePath("/admin/settings/categories");
