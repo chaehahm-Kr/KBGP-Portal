@@ -68,6 +68,32 @@ export function CategoryTreeList({ initialTree }: { initialTree: CategoryNode[] 
     loadMetadata();
   }, []);
 
+  // 카테고리 코드 실시간 자동완성 (신규 등록 시에만 작동)
+  useEffect(() => {
+    if (editingNode) return; // 수정 시에는 코드 고정
+
+    const cleanName = modalData.nameEn
+      .toUpperCase()
+      .replace(/\s+/g, "_")
+      .replace(/[^A-Z0-9_]/g, "");
+
+    let autoCode = "";
+    if (modalData.depth === 1) {
+      autoCode = cleanName;
+    } else {
+      if (modalData.parentCode) {
+        autoCode = `${modalData.parentCode}_${cleanName}`;
+      } else {
+        autoCode = cleanName;
+      }
+    }
+
+    setModalData((prev) => {
+      if (prev.code === autoCode) return prev;
+      return { ...prev, code: autoCode };
+    });
+  }, [modalData.nameEn, modalData.parentCode, modalData.depth, editingNode]);
+
   const handleToggleExpand = (code: string) => {
     setExpanded((prev) => ({ ...prev, [code]: !prev[code] }));
   };
