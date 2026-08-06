@@ -16,7 +16,7 @@ export default async function AdminProductsPage() {
   let products: any[] | null = null;
   const { data: firstQueryProducts, error: queryError } = await supabase
     .from("products")
-    .select("id, name, name_en, category, brand_id, company_id, manufacture_sku, letusto_sku, parent_sku, child_sku, price_krw_retail, price_usd_fob, package_width, package_depth, package_height, package_weight, price_additional_info, deleted_at, origin, upc, ean, selling_online, selling_offline, sales_link_1, sales_link_2, category_code")
+    .select("id, name, name_en, category, brand_id, company_id, manufacture_sku, letusto_sku, parent_sku, child_sku, price_krw_retail, price_usd_fob, package_width, package_depth, package_height, package_weight, price_additional_info, deleted_at, origin, upc, ean, selling_online, selling_offline, sales_link_1, sales_link_2, category_code, selection_status, sales_status")
     .order("created_at", { ascending: false });
 
   if (queryError && (
@@ -27,7 +27,7 @@ export default async function AdminProductsPage() {
   )) {
     const fallbackResult = await supabase
       .from("products")
-      .select("id, name, name_en, category, brand_id, company_id, manufacture_sku, letusto_sku, parent_sku, child_sku, price_krw_retail, price_usd_fob, package_width, package_depth, package_height, package_weight, price_additional_info, origin, upc, ean, selling_online, selling_offline, sales_link_1, sales_link_2")
+      .select("id, name, name_en, category, brand_id, company_id, manufacture_sku, letusto_sku, parent_sku, child_sku, price_krw_retail, price_usd_fob, package_width, package_depth, package_height, package_weight, price_additional_info, origin, upc, ean, selling_online, selling_offline, sales_link_1, sales_link_2, selection_status, sales_status")
       .order("created_at", { ascending: false });
     products = fallbackResult.data;
   } else {
