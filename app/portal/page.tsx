@@ -21,10 +21,27 @@ export default async function PortalHomePage() {
   const { data: company } = companyUser
     ? await supabase
         .from("companies")
-        .select("name")
+        .select("name, intro")
         .eq("id", companyUser.company_id)
         .single()
     : { data: null };
+
+  // 1. Query company users count
+  const { count: memberCount } = companyUser
+    ? await supabase
+        .from("company_users")
+        .select("id", { count: "exact", head: true })
+        .eq("company_id", companyUser.company_id)
+    : { count: 0 };
+
+  // 2. Query products count
+  const { count: productCount } = companyUser
+    ? await supabase
+        .from("products")
+        .select("id", { count: "exact", head: true })
+        .eq("company_id", companyUser.company_id)
+        .is("deleted_at", null)
+    : { count: 0 };
 
   const { data: applications } = await supabase
     .from("applications")
@@ -84,6 +101,55 @@ export default async function PortalHomePage() {
     ? await getCompanyTaskSetupStatus(companyUser.company_id)
     : { completedCount: 6, totalCount: 6, percent: 100 };
 
+  // 4. Parse company address status
+  const { parseCompanyMetadata } = await import("@/lib/company/admin-actions");
+  const parsedMeta = company ? await parseCompanyMetadata(company) : null;
+  const hasAddress = !!parsedMeta?.address_1;
+
+  // Onboarding checklist steps
+  const onboardingSteps = [
+    {
+      id: "invite_members",
+      label: "소속 팀원 초대",
+      desc: "포털을 함께 관리할 브랜드사 팀원(최소 2명 이상)을 초대하세요.",
+      isComplete: (memberCount ?? 0) >= 2,
+      progressText: `현재 ${(memberCount ?? 0)}명`,
+      href: "/portal/company/users",
+      actionText: "팀원 초대하기",
+    },
+    {
+      id: "assign_primary",
+      label: "업무별 주 담당자 지정",
+      desc: "계약, 가격, 물류 등 6대 핵심 업무의 주 담당자를 지정하세요.",
+      isComplete: taskStatus.completedCount === taskStatus.totalCount,
+      progressText: `${taskStatus.completedCount}/${taskStatus.totalCount} 완료`,
+      href: "/portal/company/info",
+      actionText: "담당자 설정하기",
+    },
+    {
+      id: "fill_address",
+      label: "회사 주소 필수 입력",
+      desc: "세분화된 주소(기본 주소, 시, 도, 우편번호)를 모두 기입하세요.",
+      isComplete: hasAddress,
+      progressText: hasAddress ? "등록 완료" : "미등록",
+      href: "/portal/company/info",
+      actionText: "주소 입력하기",
+    },
+    {
+      id: "register_product",
+      label: "최소 1개 이상의 제품 등록",
+      desc: "글로벌 유통 및 파트너 매칭을 위해 1개 이상의 제품을 등록하세요.",
+      isComplete: (productCount ?? 0) >= 1,
+      progressText: `현재 ${(productCount ?? 0)}개`,
+      href: "/portal/products",
+      actionText: "제품 등록하기",
+    },
+  ];
+
+  const completedStepsCount = onboardingSteps.filter(s => s.isComplete).length;
+  const onboardingPercent = Math.round((completedStepsCount / onboardingSteps.length) * 100);
+  const showOnboarding = onboardingPercent < 100;
+
   const isCompanyAdmin = companyUser?.company_role === "company_admin";
 
   return (
@@ -103,25 +169,69 @@ export default async function PortalHomePage() {
         )}
       </div>
 
-      {/* Task Assignment Setup Reminder Banner for Company Admins */}
-      {isCompanyAdmin && taskStatus.completedCount < taskStatus.totalCount && (
-        <div className="rounded-lg border border-indigo-200 bg-indigo-50/50 p-5 dark:border-indigo-950 dark:bg-indigo-950/20 shadow-xs">
-          <div className="flex items-center gap-2 text-indigo-800 dark:text-indigo-400">
-            <span className="h-2 w-2 rounded-full bg-indigo-500 animate-pulse" />
-            <h2 className="text-sm font-bold">
-              업무별 주 담당자를 설정해 주세요
-            </h2>
+      {/* Onboarding Checklist Guide */}
+      {showOnboarding && (
+        <div className="rounded-lg border border-zinc-200 bg-white p-6 shadow-xs dark:border-zinc-800 dark:bg-zinc-900 animate-fadeIn">
+          <div className="flex flex-wrap items-center justify-between gap-4 border-b border-zinc-100 pb-4 dark:border-zinc-800">
+            <div>
+              <h2 className="text-sm font-bold text-zinc-950 dark:text-white flex items-center gap-2">
+                <span className="flex h-2.5 w-2.5 rounded-full bg-[#8C1C2B] animate-pulse" />
+                포털 시작하기 필수 가이드 (온보딩 체크리스트)
+              </h2>
+              <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
+                K SELECT NETWORK 입점 심사 및 원활한 글로벌 파트너 매칭을 위해 아래 4개 필수 단계를 완료해 주세요.
+              </p>
+            </div>
+            <div className="flex items-center gap-2.5">
+              <span className="text-xs font-bold text-zinc-650 dark:text-zinc-300 font-mono">진행 상태 {onboardingPercent}%</span>
+              <div className="h-2 w-32 rounded-full bg-zinc-100 dark:bg-zinc-800 overflow-hidden border border-zinc-200 dark:border-zinc-700/50">
+                <div 
+                  className="h-full bg-[#131E2E] dark:bg-indigo-500 transition-all duration-500" 
+                  style={{ width: `${onboardingPercent}%` }}
+                />
+              </div>
+            </div>
           </div>
-          <p className="mt-1 text-xs text-indigo-650 dark:text-indigo-300">
-            현재 6개 업무 중 {taskStatus.totalCount - taskStatus.completedCount}개 업무의 주 담당자가 지정되지 않았습니다. 원활한 신청, 계약, 제품 등록, 발주 및 정산 업무를 위해 업무별 주 담당자를 지정해 주세요. (진행 상태: {taskStatus.completedCount}/{taskStatus.totalCount} 완료)
-          </p>
-          <div className="mt-3">
-            <Link
-              href="/portal/company/info"
-              className="inline-flex items-center rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-indigo-700 transition"
-            >
-              담당자 설정하기
-            </Link>
+
+          <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {onboardingSteps.map((step, idx) => (
+              <div 
+                key={step.id} 
+                className={`relative flex flex-col justify-between p-4 rounded-lg border transition-all ${
+                  step.isComplete 
+                    ? "bg-emerald-50/20 border-emerald-250 dark:bg-emerald-950/10 dark:border-emerald-900/50" 
+                    : "bg-zinc-50/50 border-zinc-200 hover:border-zinc-300 dark:bg-zinc-950/20 dark:border-zinc-800 dark:hover:border-zinc-700"
+                }`}
+              >
+                <div>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[9px] font-bold text-zinc-400 dark:text-zinc-500 font-mono">STEP 0${idx + 1}</span>
+                    {step.isComplete ? (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 text-[9px] font-bold text-emerald-700 dark:text-emerald-300 border border-emerald-150 dark:border-emerald-900/50">
+                        ✓ 완료
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 dark:bg-amber-950/40 px-2 py-0.5 text-[9px] font-bold text-amber-700 dark:text-amber-300 border border-amber-150 dark:border-amber-900/50">
+                        대기
+                      </span>
+                    )}
+                  </div>
+                  <h3 className="text-xs font-bold text-zinc-850 dark:text-white mt-2">{step.label}</h3>
+                  <p className="text-[10px] text-zinc-450 dark:text-zinc-400 mt-1 leading-relaxed">{step.desc}</p>
+                </div>
+                <div className="mt-4 pt-3 border-t border-zinc-100 dark:border-zinc-800/80 flex items-center justify-between gap-2">
+                  <span className="text-[10px] font-bold text-zinc-500 dark:text-zinc-405 font-mono">{step.progressText}</span>
+                  {!step.isComplete && (
+                    <Link
+                      href={step.href}
+                      className="inline-flex items-center rounded-md bg-[#131E2E] dark:bg-indigo-650 hover:bg-[#8C1C2B] dark:hover:bg-indigo-700 px-2.5 py-1.5 text-[10px] font-bold text-white transition-all"
+                    >
+                      {step.actionText}
+                    </Link>
+                  )}
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       )}

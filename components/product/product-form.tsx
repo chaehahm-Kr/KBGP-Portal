@@ -27,6 +27,14 @@ export function ProductForm({ action, brands }: ProductFormProps) {
   const [priceKrwRetail, setPriceKrwRetail] = useState("");
   const [priceUsdFob, setPriceUsdFob] = useState("");
   
+  // New States
+  const [upc, setUpc] = useState("");
+  const [ean, setEan] = useState("");
+  const [sellingOnline, setSellingOnline] = useState(false);
+  const [sellingOffline, setSellingOffline] = useState(false);
+  const [salesLink1, setSalesLink1] = useState("");
+  const [salesLink2, setSalesLink2] = useState("");
+  
   // Dimensions & weight with metric-imperial sync
   const [packageWidth, setPackageWidth] = useState("");
   const [packageWidthInch, setPackageWidthInch] = useState("");
@@ -167,12 +175,36 @@ export function ProductForm({ action, brands }: ProductFormProps) {
     packageWidth !== "" ||
     packageDepth !== "" ||
     packageHeight !== "" ||
-    packageWeight !== "";
+    packageWeight !== "" ||
+    upc.trim() !== "" ||
+    ean.trim() !== "" ||
+    sellingOnline ||
+    sellingOffline ||
+    salesLink1.trim() !== "" ||
+    salesLink2.trim() !== "";
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+
+    if (!upc.trim() && !ean.trim()) {
+      alert("UPC 또는 EAN 번호 중 최소 하나는 반드시 입력해야 합니다.");
+      return;
+    }
+    if (upc.trim() && ean.trim()) {
+      alert("UPC와 EAN 번호는 동시에 입력할 수 없습니다. 둘 중 하나만 입력해 주세요.");
+      return;
+    }
+    if (sellingOnline && !salesLink1.trim()) {
+      alert("온라인 판매 중인 경우, 최소 한 개 이상의 온라인 판매 링크(링크 1)를 입력해 주세요.");
+      return;
+    }
+
     const form = e.currentTarget;
     const formData = new FormData(form);
+    // Append boolean values explicitly as string/flag
+    formData.set("sellingOnline", sellingOnline ? "true" : "false");
+    formData.set("sellingOffline", sellingOffline ? "true" : "false");
+
     startTransition(() => {
       formAction(formData);
     });
@@ -295,6 +327,35 @@ export function ProductForm({ action, brands }: ProductFormProps) {
               />
             </div>
           </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <label htmlFor="upc" className={labelClass}>
+                미국 바코드 (UPC)
+              </label>
+              <input
+                id="upc"
+                name="upc"
+                placeholder="12자리 미국 바코드 규격"
+                value={upc}
+                onChange={(e) => setUpc(e.target.value)}
+                className={`${inputClass} font-mono`}
+              />
+            </div>
+            <div>
+              <label htmlFor="ean" className={labelClass}>
+                유럽/글로벌 바코드 (EAN)
+              </label>
+              <input
+                id="ean"
+                name="ean"
+                placeholder="13자리 글로벌 바코드 규격"
+                value={ean}
+                onChange={(e) => setEan(e.target.value)}
+                className={`${inputClass} font-mono`}
+              />
+            </div>
+          </div>
         </div>
 
         {/* Section 2: 가격 정보 */}
@@ -346,10 +407,72 @@ export function ProductForm({ action, brands }: ProductFormProps) {
           </div>
         </div>
 
-        {/* Section 3: 제품 패키지 정보 */}
+        {/* 신규 섹션: 판매 정보 및 채널 */}
+        <div className="space-y-4">
+          <h2 className="text-sm font-bold text-zinc-900 dark:text-white border-b border-zinc-100 pb-2 dark:border-zinc-800">
+            3. 판매 채널 및 정보
+          </h2>
+          
+          <div className="flex gap-6 py-1">
+            <label className="flex items-center gap-2 text-xs font-semibold text-zinc-700 dark:text-zinc-300 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={sellingOnline}
+                onChange={(e) => setSellingOnline(e.target.checked)}
+                className="h-4 w-4 rounded border-zinc-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+              />
+              온라인 판매 중 (Online)
+            </label>
+            <label className="flex items-center gap-2 text-xs font-semibold text-zinc-700 dark:text-zinc-300 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={sellingOffline}
+                onChange={(e) => setSellingOffline(e.target.checked)}
+                className="h-4 w-4 rounded border-zinc-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+              />
+              오프라인 판매 중 (Offline)
+            </label>
+          </div>
+
+          {sellingOnline && (
+            <div className="grid gap-4 sm:grid-cols-2 p-3 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50/10 animate-fadeIn">
+              <div>
+                <label htmlFor="salesLink1" className={labelClass}>
+                  온라인 판매 링크 1 *
+                </label>
+                <input
+                  id="salesLink1"
+                  name="salesLink1"
+                  type="url"
+                  required={sellingOnline}
+                  placeholder="https://example.com/product/1"
+                  value={salesLink1}
+                  onChange={(e) => setSalesLink1(e.target.value)}
+                  className={inputClass}
+                />
+              </div>
+              <div>
+                <label htmlFor="salesLink2" className={labelClass}>
+                  온라인 판매 링크 2 (선택)
+                </label>
+                <input
+                  id="salesLink2"
+                  name="salesLink2"
+                  type="url"
+                  placeholder="https://example.com/product/2"
+                  value={salesLink2}
+                  onChange={(e) => setSalesLink2(e.target.value)}
+                  className={inputClass}
+                />
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Section 4: 제품 패키지 정보 */}
         <div className="space-y-4">
           <h2 className="text-sm font-bold text-zinc-900 dark:text-white border-b border-zinc-100 pb-2 dark:border-zinc-800 flex items-center">
-            <span>3. 단품 포장 패키지 정보 (배송 규격)</span>
+            <span>4. 단품 포장 패키지 정보 (배송 규격)</span>
             <div className="relative group inline-block ml-1.5 cursor-help">
               <span className="inline-flex items-center justify-center w-3.5 h-3.5 rounded-full bg-zinc-200 text-zinc-650 text-[10px] font-bold dark:bg-zinc-800 dark:text-zinc-450 hover:bg-zinc-300 transition-colors">?</span>
               <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 w-72 hidden group-hover:block bg-zinc-950 text-white dark:bg-white dark:text-zinc-950 text-[10px] rounded-lg p-3 shadow-lg z-50 leading-relaxed font-normal normal-case">

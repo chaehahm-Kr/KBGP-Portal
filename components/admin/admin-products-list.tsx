@@ -20,6 +20,7 @@ interface AdminProductItem {
   brandName: string;
   photoUrl: string | null;
   is_draft: boolean;
+  missing_fields?: string[];
   deleted_at: string | null;
 }
 
@@ -252,9 +253,17 @@ export function AdminProductsList({ initialProducts }: AdminProductsListProps) {
                         Deleted (삭제됨)
                       </span>
                     ) : product.is_draft ? (
-                      <span className="inline-flex items-center rounded bg-rose-50 text-rose-700 dark:bg-rose-950/20 dark:text-rose-400 px-2 py-0.5 text-[10px] font-bold border border-rose-100 dark:border-rose-900/50">
-                        Draft (보완 대기)
-                      </span>
+                      <div className="space-y-1">
+                        <span className="inline-flex items-center rounded bg-rose-50 text-rose-700 dark:bg-rose-950/20 dark:text-rose-400 px-2 py-0.5 text-[10px] font-bold border border-rose-100 dark:border-rose-900/50">
+                          Draft (보완 대기)
+                        </span>
+                        {product.missing_fields && product.missing_fields.length > 0 && (
+                          <div className="text-[9px] text-rose-600 dark:text-rose-450 leading-normal max-w-[160px]">
+                            <span className="font-semibold block">* 필수 정보 누락:</span>
+                            <span className="block">{product.missing_fields.join(", ")}</span>
+                          </div>
+                        )}
+                      </div>
                     ) : (
                       <span className="inline-flex items-center rounded bg-emerald-50 text-emerald-700 dark:bg-emerald-950/20 dark:text-emerald-400 px-2 py-0.5 text-[10px] font-bold border border-emerald-100 dark:border-emerald-900/50">
                         Active

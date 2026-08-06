@@ -100,6 +100,12 @@ export interface Product {
   container_40fthc_qty?: number | null;
   container_40fthc_weight?: number | null;
   container_40fthc_cbm?: number | null;
+
+  // New Selling Fields
+  selling_online?: boolean;
+  selling_offline?: boolean;
+  sales_link_1?: string | null;
+  sales_link_2?: string | null;
 }
 
 export interface ProductVideo {

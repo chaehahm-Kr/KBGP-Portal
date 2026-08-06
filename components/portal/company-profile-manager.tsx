@@ -3,7 +3,7 @@
 import React, { useState, useTransition } from "react";
 import { updateCompanyPortalMetadata } from "@/lib/company/portal-actions";
 import { type CompanyContact, type CompanyParsedMetadata } from "@/lib/company/admin-actions";
-import { assignTaskPrimaryUser, type TaskAssignmentItem } from "@/lib/company/task-actions";
+import { assignTaskPrimaryUser, type TaskAssignmentItem, toggleTaskEmailNotification } from "@/lib/company/task-actions";
 
 interface CompanyProfileManagerProps {
   company: {
@@ -31,23 +31,58 @@ export function CompanyProfileManager({
   const [isPending, startTransition] = useTransition();
 
   const [address, setAddress] = useState(parsedMeta.address);
+  const [address1, setAddress1] = useState(parsedMeta.address_1 || "");
+  const [address2, setAddress2] = useState(parsedMeta.address_2 || "");
+  const [city, setCity] = useState(parsedMeta.city || "");
+  const [stateProv, setStateProv] = useState(parsedMeta.state || "");
+  const [zipCode, setZipCode] = useState(parsedMeta.zip_code || "");
+
   const [website, setWebsite] = useState(parsedMeta.website);
   const contacts = parsedMeta.contacts;
 
   const [isEditingMeta, setIsEditingMeta] = useState(false);
-  const [tempAddress, setTempAddress] = useState(address);
+  const [tempAddress1, setTempAddress1] = useState(address1);
+  const [tempAddress2, setTempAddress2] = useState(address2);
+  const [tempCity, setTempCity] = useState(city);
+  const [tempStateProv, setTempStateProv] = useState(stateProv);
+  const [tempZipCode, setTempZipCode] = useState(zipCode);
   const [tempWebsite, setTempWebsite] = useState(website);
 
   // [신규 기능]: 담당 업무 상태 로컬 관리
   const [tasks, setTasks] = useState<TaskAssignmentItem[]>(taskAssignments);
 
-  // [신규 기능]: 인쇄할 이메일 알림 수신자 목록 헬퍼
+  // [신규 기능]: 인쇄할 이메일 알림 수신자 목록 헬퍼 (로컬 수집 보강)
   const getEmailRecipientsForTask = (taskCode: string) => {
-    // 해당 업무의 이메일 알림을 활성화한 활성 멤버들의 이름 수집
     return companyUsers
       .filter(u => u.status === "active" && u.task_assignments?.some((a: any) => a.task_code === taskCode && a.email_notify))
       .map(u => u.name || "(이름 없음)")
       .join(", ") || "없음";
+  };
+
+  // [신규 기능]: 알림 수신인 인라인 토글
+  const handleToggleEmailNotification = async (taskCode: string, userId: string, checked: boolean) => {
+    startTransition(async () => {
+      try {
+        await toggleTaskEmailNotification(company.id, taskCode, userId, checked, "portal");
+        // 로컬 상태 동기화 갱신
+        const matchedUser = companyUsers.find(u => u.id === userId);
+        if (matchedUser) {
+          if (!matchedUser.task_assignments) {
+            matchedUser.task_assignments = [];
+          }
+          const taskAssign = matchedUser.task_assignments.find((a: any) => a.task_code === taskCode);
+          if (taskAssign) {
+            taskAssign.email_notify = checked;
+          } else {
+            matchedUser.task_assignments.push({ task_code: taskCode, is_primary: false, email_notify: checked });
+          }
+        }
+        // 강제로 컴포넌트 리렌더링 유도를 위해 tasks 상태 업데이트
+        setTasks(prev => [...prev]);
+      } catch (err) {
+        alert(err instanceof Error ? err.message : "알림 설정 수정 실패");
+      }
+    });
   };
 
   // [신규 기능]: 주 담당자 직접 변경 핸들러
@@ -85,6 +120,24 @@ export function CompanyProfileManager({
           })
         );
 
+        // companyUsers 측에서도 주담당자 정보(is_primary) 업데이트 처리
+        companyUsers.forEach(u => {
+          if (!u.task_assignments) u.task_assignments = [];
+          const taskAssign = u.task_assignments.find((a: any) => a.task_code === taskCode);
+          if (u.id === targetUserId) {
+            if (taskAssign) {
+              taskAssign.is_primary = true;
+              taskAssign.email_notify = true; // 주담당자는 이메일 알림 기본 활성화
+            } else {
+              u.task_assignments.push({ task_code: taskCode, is_primary: true, email_notify: true });
+            }
+          } else {
+            if (taskAssign) {
+              taskAssign.is_primary = false;
+            }
+          }
+        });
+
         alert("담당자 배정이 완료되었습니다.");
       } catch (err) {
         alert(err instanceof Error ? err.message : "담당자 배정에 실패했습니다.");
@@ -93,14 +146,31 @@ export function CompanyProfileManager({
   };
 
   const handleSaveMeta = async () => {
+    if (!tempAddress1.trim() || !tempCity.trim() || !tempStateProv.trim() || !tempZipCode.trim()) {
+      alert("회사 주소 중 기본 주소, 시, 도, 우편번호는 필수 기입 항목입니다.");
+      return;
+    }
+
     startTransition(async () => {
       try {
+        const fullAddress = `${tempAddress1.trim()}${tempAddress2.trim() ? " " + tempAddress2.trim() : ""}${tempCity.trim() ? ", " + tempCity.trim() : ""}${tempStateProv.trim() ? ", " + tempStateProv.trim() : ""}${tempZipCode.trim() ? " (" + tempZipCode.trim() + ")" : ""}`;
+
         await updateCompanyPortalMetadata(company.id, {
-          address: tempAddress,
+          address: fullAddress,
+          address_1: tempAddress1.trim(),
+          address_2: tempAddress2.trim(),
+          city: tempCity.trim(),
+          state: tempStateProv.trim(),
+          zip_code: tempZipCode.trim(),
           website: tempWebsite,
           contacts, 
         });
-        setAddress(tempAddress);
+        setAddress1(tempAddress1.trim());
+        setAddress2(tempAddress2.trim());
+        setCity(tempCity.trim());
+        setStateProv(tempStateProv.trim());
+        setZipCode(tempZipCode.trim());
+        setAddress(fullAddress);
         setWebsite(tempWebsite);
         setIsEditingMeta(false);
       } catch (err) {
@@ -142,7 +212,11 @@ export function CompanyProfileManager({
                 !isEditingMeta ? (
                   <button
                     onClick={() => {
-                      setTempAddress(address);
+                      setTempAddress1(address1);
+                      setTempAddress2(address2);
+                      setTempCity(city);
+                      setTempStateProv(stateProv);
+                      setTempZipCode(zipCode);
                       setTempWebsite(website);
                       setIsEditingMeta(true);
                     }}
@@ -204,18 +278,69 @@ export function CompanyProfileManager({
                 <span className="font-semibold text-zinc-500 dark:text-zinc-400 mt-0.5 block bg-zinc-50/50 p-1.5 rounded dark:bg-zinc-950/20">{company.name}</span>
               </div>
 
-              <div>
+              <div className="space-y-2">
                 <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase block">회사 주소</span>
                 {isEditingMeta ? (
-                  <input
-                    type="text"
-                    value={tempAddress}
-                    onChange={(e) => setTempAddress(e.target.value)}
-                    placeholder="회사 주소를 입력해주세요"
-                    className="mt-1 w-full rounded border border-zinc-200 p-1.5 text-xs outline-none bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
-                  />
+                  <div className="space-y-2 mt-1">
+                    <div>
+                      <span className="text-[9px] text-zinc-400 block font-semibold">기본 주소 (필수)</span>
+                      <input
+                        type="text"
+                        value={tempAddress1}
+                        onChange={(e) => setTempAddress1(e.target.value)}
+                        placeholder="기본 주소를 입력하세요"
+                        required
+                        className="mt-0.5 w-full rounded border border-zinc-200 p-1.5 text-xs outline-none bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+                      />
+                    </div>
+                    <div>
+                      <span className="text-[9px] text-zinc-400 block font-semibold">상세 주소 (선택)</span>
+                      <input
+                        type="text"
+                        value={tempAddress2}
+                        onChange={(e) => setTempAddress2(e.target.value)}
+                        placeholder="상세 주소를 입력하세요"
+                        className="mt-0.5 w-full rounded border border-zinc-200 p-1.5 text-xs outline-none bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-1.5">
+                      <div>
+                        <span className="text-[9px] text-zinc-400 block font-semibold">시 (City, 필수)</span>
+                        <input
+                          type="text"
+                          value={tempCity}
+                          onChange={(e) => setTempCity(e.target.value)}
+                          placeholder="예: 서울특별시 / New York"
+                          required
+                          className="mt-0.5 w-full rounded border border-zinc-200 p-1.5 text-xs outline-none bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+                        />
+                      </div>
+                      <div>
+                        <span className="text-[9px] text-zinc-400 block font-semibold">도 (State/Province, 필수)</span>
+                        <input
+                          type="text"
+                          value={tempStateProv}
+                          onChange={(e) => setTempStateProv(e.target.value)}
+                          placeholder="예: 경기도 / NY"
+                          required
+                          className="mt-0.5 w-full rounded border border-zinc-200 p-1.5 text-xs outline-none bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <span className="text-[9px] text-zinc-400 block font-semibold">우편번호 (Zip Code, 필수)</span>
+                      <input
+                        type="text"
+                        value={tempZipCode}
+                        onChange={(e) => setTempZipCode(e.target.value)}
+                        placeholder="우편번호 입력"
+                        required
+                        className="mt-0.5 w-full rounded border border-zinc-200 p-1.5 text-xs outline-none bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+                      />
+                    </div>
+                  </div>
                 ) : (
-                  <span className="font-semibold text-zinc-700 dark:text-zinc-300 mt-0.5 block whitespace-pre-wrap">
+                  <span className="font-semibold text-zinc-700 dark:text-zinc-300 mt-0.5 block whitespace-pre-wrap leading-relaxed">
                     {address || "주소 미등록"}
                   </span>
                 )}
@@ -356,8 +481,28 @@ export function CompanyProfileManager({
                             <span className="text-zinc-450 italic">주 담당자 미지정</span>
                           )}
                         </td>
-                        <td className="px-4 py-3.5 text-zinc-500 dark:text-zinc-400 max-w-xxs truncate" title={notifyNames}>
-                          {notifyNames}
+                        <td className="px-4 py-3.5 text-zinc-500 dark:text-zinc-400">
+                          {isCompanyAdmin ? (
+                            <div className="flex flex-col gap-1 max-h-24 overflow-y-auto p-1.5 rounded border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 w-[140px] shadow-2xs">
+                              {activeMembers.map(u => {
+                                const isNotified = u.task_assignments?.some((a: any) => a.task_code === task.taskCode && a.email_notify);
+                                return (
+                                  <label key={u.id} className="flex items-center gap-1.5 text-[10px] font-semibold text-zinc-700 dark:text-zinc-300 cursor-pointer select-none">
+                                    <input
+                                      type="checkbox"
+                                      checked={!!isNotified}
+                                      onChange={(e) => handleToggleEmailNotification(task.taskCode, u.id, e.target.checked)}
+                                      disabled={isPending}
+                                      className="h-3.5 w-3.5 rounded border-zinc-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                                    />
+                                    <span className="truncate max-w-[80px]" title={u.name || "(이름 없음)"}>{u.name || "(이름 없음)"}</span>
+                                  </label>
+                                );
+                              })}
+                            </div>
+                          ) : (
+                            <span className="truncate max-w-xxs block" title={notifyNames}>{notifyNames}</span>
+                          )}
                         </td>
                         <td className="px-4 py-3.5 text-center">
                           {task.userId ? (

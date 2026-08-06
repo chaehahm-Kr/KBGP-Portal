@@ -9,6 +9,11 @@ export async function updateCompanyPortalMetadata(
   companyId: string,
   payload: {
     address: string;
+    address_1?: string;
+    address_2?: string;
+    city?: string;
+    state?: string;
+    zip_code?: string;
     website: string;
     contacts: CompanyContact[];
   }
@@ -51,6 +56,11 @@ export async function updateCompanyPortalMetadata(
   const metaObj = {
     description: baseDescription,
     address: payload.address,
+    address_1: payload.address_1 || "",
+    address_2: payload.address_2 || "",
+    city: payload.city || "",
+    state: payload.state || "",
+    zip_code: payload.zip_code || "",
     website: payload.website,
     admin_memo: company && (company as any).admin_memo ? (company as any).admin_memo : "", // Preserve admin notes if any
     contacts: payload.contacts,

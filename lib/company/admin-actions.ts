@@ -21,6 +21,11 @@ export interface CompanyContact {
 export interface CompanyParsedMetadata {
   description: string;
   address: string;
+  address_1?: string;
+  address_2?: string;
+  city?: string;
+  state?: string;
+  zip_code?: string;
   website: string;
   adminMemo: string;
   contacts: CompanyContact[];
@@ -34,9 +39,26 @@ export async function parseCompanyMetadata(company: any): Promise<CompanyParsedM
     try {
       const jsonStr = intro.substring("__COMPANY_METADATA__:".length);
       const data = JSON.parse(jsonStr);
+      
+      const addr1 = data.address_1 || "";
+      const addr2 = data.address_2 || "";
+      const cityVal = data.city || "";
+      const stateVal = data.state || "";
+      const zipVal = data.zip_code || "";
+      
+      // If address_1 exists, build full address for backward compatibility, otherwise fallback to data.address
+      const fullAddress = addr1
+        ? `${addr1}${addr2 ? " " + addr2 : ""}${cityVal ? ", " + cityVal : ""}${stateVal ? ", " + stateVal : ""}${zipVal ? " (" + zipVal + ")" : ""}`
+        : (data.address || "");
+
       return {
         description: data.description || "",
-        address: data.address || "",
+        address: fullAddress,
+        address_1: addr1,
+        address_2: addr2,
+        city: cityVal,
+        state: stateVal,
+        zip_code: zipVal,
         website: data.website || "",
         adminMemo: data.admin_memo || "",
         contacts: (data.contacts || []).map((c: any) => ({
@@ -73,6 +95,11 @@ export async function parseCompanyMetadata(company: any): Promise<CompanyParsedM
   return {
     description: company.intro || "",
     address: "",
+    address_1: "",
+    address_2: "",
+    city: "",
+    state: "",
+    zip_code: "",
     website: "",
     adminMemo: "",
     contacts: defaultContacts,

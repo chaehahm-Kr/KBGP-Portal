@@ -30,6 +30,8 @@ const productSchema = z.object({
   packageDepth: z.preprocess((val) => (val === "" || val === null ? undefined : val), z.coerce.number().min(0).optional()),
   packageHeight: z.preprocess((val) => (val === "" || val === null ? undefined : val), z.coerce.number().min(0).optional()),
   packageWeight: z.preprocess((val) => (val === "" || val === null ? undefined : val), z.coerce.number().min(0).optional()),
+  upc: z.string().trim().nullable().optional(),
+  ean: z.string().trim().nullable().optional(),
 });
 
 function extensionFor(mime: string) {
@@ -62,10 +64,32 @@ export async function createProduct(
     packageDepth: formData.get("packageDepth"),
     packageHeight: formData.get("packageHeight"),
     packageWeight: formData.get("packageWeight"),
+    upc: formData.get("upc"),
+    ean: formData.get("ean"),
   });
 
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "입력값을 확인해주세요." };
+  }
+
+  // UPC / EAN 상호 배타적 검증
+  const upc = parsed.data.upc || null;
+  const ean = parsed.data.ean || null;
+
+  if (!upc && !ean) {
+    return { error: "UPC 또는 EAN 번호 중 하나는 반드시 입력해야 합니다." };
+  }
+  if (upc && ean) {
+    return { error: "UPC와 EAN 번호는 동시에 입력할 수 없습니다. 둘 중 하나만 입력해 주세요." };
+  }
+
+  const sellingOnline = formData.get("sellingOnline") === "true" || formData.get("sellingOnline") === "on";
+  const sellingOffline = formData.get("sellingOffline") === "true" || formData.get("sellingOffline") === "on";
+  const salesLink1 = formData.get("salesLink1")?.toString().trim() || null;
+  const salesLink2 = formData.get("salesLink2")?.toString().trim() || null;
+
+  if (sellingOnline && !salesLink1) {
+    return { error: "온라인 판매 중인 경우, 최소 한 개 이상의 온라인 판매 링크(링크 1)를 입력해 주세요." };
   }
 
   const supabase = await createClient();
@@ -97,6 +121,12 @@ export async function createProduct(
       package_depth: parsed.data.packageDepth ?? null,
       package_height: parsed.data.packageHeight ?? null,
       package_weight: parsed.data.packageWeight ?? null,
+      upc,
+      ean,
+      selling_online: sellingOnline,
+      selling_offline: sellingOffline,
+      sales_link_1: salesLink1,
+      sales_link_2: salesLink2,
     })
     .select("id")
     .single();
@@ -287,6 +317,12 @@ const productUpdateSchema = z.object({
   childSku: z.string().trim().nullable().optional(),
   manufactureSku: z.string().trim().nullable().optional(),
   letustoSku: z.string().trim().nullable().optional(),
+  upc: z.string().trim().nullable().optional(),
+  ean: z.string().trim().nullable().optional(),
+  sellingOnline: z.boolean().optional(),
+  sellingOffline: z.boolean().optional(),
+  salesLink1: z.string().trim().nullable().optional(),
+  salesLink2: z.string().trim().nullable().optional(),
 
   // Prices
   priceKrwRetail: z
@@ -371,6 +407,12 @@ export async function updateProduct(
     childSku: formData.get("childSku") || null,
     manufactureSku: formData.get("manufactureSku") || null,
     letustoSku: formData.get("letustoSku") || null,
+    upc: formData.get("upc") || null,
+    ean: formData.get("ean") || null,
+    sellingOnline: formData.get("sellingOnline") === "true" || formData.get("sellingOnline") === "on",
+    sellingOffline: formData.get("sellingOffline") === "true" || formData.get("sellingOffline") === "on",
+    salesLink1: formData.get("salesLink1") || null,
+    salesLink2: formData.get("salesLink2") || null,
 
     priceKrwRetail: formData.get("priceKrwRetail") || null,
     priceKrwWholesale: formData.get("priceKrwWholesale") || null,
@@ -413,6 +455,21 @@ export async function updateProduct(
     return { error: parsed.error.issues[0]?.message ?? "입력값을 확인해주세요." };
   }
 
+  // UPC / EAN 상호 배타적 검증
+  const upc = parsed.data.upc || null;
+  const ean = parsed.data.ean || null;
+
+  if (!upc && !ean) {
+    return { error: "UPC 또는 EAN 번호 중 하나는 반드시 입력해야 합니다." };
+  }
+  if (upc && ean) {
+    return { error: "UPC와 EAN 번호는 동시에 입력할 수 없습니다. 둘 중 하나만 입력해 주세요." };
+  }
+
+  if (parsed.data.sellingOnline && !parsed.data.salesLink1) {
+    return { error: "온라인 판매 중인 경우, 최소 한 개 이상의 온라인 판매 링크(링크 1)를 입력해 주세요." };
+  }
+
   const { error: updateError } = await supabase
     .from("products")
     .update({
@@ -433,6 +490,12 @@ export async function updateProduct(
       child_sku: parsed.data.childSku || null,
       manufacture_sku: parsed.data.manufactureSku || null,
       letusto_sku: parsed.data.letustoSku || null,
+      upc: upc,
+      ean: ean,
+      selling_online: !!parsed.data.sellingOnline,
+      selling_offline: !!parsed.data.sellingOffline,
+      sales_link_1: parsed.data.salesLink1 || null,
+      sales_link_2: parsed.data.salesLink2 || null,
 
       price_krw_retail: parsed.data.priceKrwRetail,
       price_krw_wholesale: parsed.data.priceKrwWholesale,

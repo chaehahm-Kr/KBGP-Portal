@@ -308,3 +308,76 @@ export async function handleUserSuspensionTaskCheck(userId: string, companyId: s
   revalidatePath("/portal/company/info");
   revalidatePath("/portal");
 }
+
+/**
+ * 6. 특정 업무의 추가 알림 수신인(이메일 알림) 개별 토글 처리
+ */
+export async function toggleTaskEmailNotification(
+  companyId: string,
+  taskCode: string,
+  userId: string,
+  emailNotify: boolean,
+  path: "portal" | "admin"
+) {
+  const admin = createAdminClient();
+
+  // 변경자 ID 획 heels
+  let changerId: string | null = null;
+  try {
+    if (path === "admin") {
+      const sess = await verifyAdminSession();
+      changerId = sess.userId;
+    } else {
+      const supabase = await createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      changerId = user?.id || null;
+    }
+  } catch (e) {}
+
+  // 1. 기존 배정 정보 확인 (is_primary 상태 보존)
+  const { data: existing } = await admin
+    .from("company_task_assignments")
+    .select("is_primary")
+    .eq("company_id", companyId)
+    .eq("user_id", userId)
+    .eq("task_code", taskCode)
+    .maybeSingle();
+
+  const isPrimaryValue = existing ? existing.is_primary : false;
+
+  const { error: upsertError } = await admin
+    .from("company_task_assignments")
+    .upsert({
+      company_id: companyId,
+      user_id: userId,
+      task_code: taskCode,
+      is_primary: isPrimaryValue,
+      email_notify: emailNotify,
+      updated_at: new Date().toISOString(),
+      updated_by: changerId,
+      updated_path: path
+    }, {
+      onConflict: "company_id,user_id,task_code"
+    });
+
+  if (upsertError) {
+    throw new Error(`알림 수신 설정 업데이트 실패: ${upsertError.message}`);
+  }
+
+  // 2. 변경 로그 기록
+  await admin.from("company_task_assignment_logs").insert({
+    company_id: companyId,
+    user_id: userId,
+    task_code: taskCode,
+    is_primary: isPrimaryValue,
+    email_notify: emailNotify,
+    changed_at: new Date().toISOString(),
+    changed_by: changerId,
+    changed_path: path
+  });
+
+  revalidatePath(`/admin/companies/${companyId}`);
+  revalidatePath("/portal/company/users");
+  revalidatePath("/portal/company/info");
+  revalidatePath("/portal");
+}

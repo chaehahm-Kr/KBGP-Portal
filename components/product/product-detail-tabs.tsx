@@ -286,6 +286,12 @@ export function ProductDetailTabs({
   const [ingredientsFilePendingKo, setIngredientsFilePendingKo] = useState(false);
   const [ingredientsErrorKo, setIngredientsErrorKo] = useState<string | null>(null);
 
+  // New Selling States
+  const [sellingOnline, setSellingOnline] = useState(!!product.selling_online);
+  const [sellingOffline, setSellingOffline] = useState(!!product.selling_offline);
+  const [salesLink1, setSalesLink1] = useState(product.sales_link_1 || "");
+  const [salesLink2, setSalesLink2] = useState(product.sales_link_2 || "");
+
   // Ingredients Text State & Translation Tool States
   const [ingredientsText, setIngredientsText] = useState(product.ingredients_text || "");
   const [transSourceText, setTransSourceText] = useState("");
@@ -423,6 +429,32 @@ export function ProductDetailTabs({
     setStatusMessage(null);
     
     const formData = new FormData(e.currentTarget);
+
+    // Client-side validations
+    const upcVal = formData.get("upc")?.toString().trim() || "";
+    const eanVal = formData.get("ean")?.toString().trim() || "";
+
+    if (!upcVal && !eanVal) {
+      setStatusMessage({ type: "error", text: "UPC 또는 EAN 번호 중 최소 하나는 반드시 입력해야 합니다." });
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
+    if (upcVal && eanVal) {
+      setStatusMessage({ type: "error", text: "UPC와 EAN 번호는 동시에 입력할 수 없습니다. 둘 중 하나만 입력해 주세요." });
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
+    if (sellingOnline && !salesLink1.trim()) {
+      setStatusMessage({ type: "error", text: "온라인 판매 중인 경우, 최소 한 개 이상의 판매 링크(링크 1)를 입력해 주세요." });
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
+
+    // Set checkboxes explicitly as strings for action validation
+    formData.set("sellingOnline", sellingOnline ? "true" : "false");
+    formData.set("sellingOffline", sellingOffline ? "true" : "false");
+    formData.set("salesLink1", salesLink1.trim());
+    formData.set("salesLink2", salesLink2.trim());
 
     // Combine leadTimeValue and leadTimeUnit into leadTime
     const leadTimeVal = formData.get("leadTimeValue") || "";
@@ -1039,6 +1071,62 @@ export function ProductDetailTabs({
                 />
               </div>
             </div>
+          </div>
+
+          {/* [신규 카드]: 판매 채널 및 정보 */}
+          <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 space-y-4">
+            <h2 className="text-sm font-bold text-zinc-900 dark:text-white border-b border-zinc-100 pb-3 dark:border-zinc-850">
+              현재 제품 판매 채널 및 링크
+            </h2>
+            <div className="flex gap-6 py-1">
+              <label className="flex items-center gap-2 text-xs font-semibold text-zinc-700 dark:text-zinc-300 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={sellingOnline}
+                  onChange={(e) => setSellingOnline(e.target.checked)}
+                  className="h-4 w-4 rounded border-zinc-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                />
+                온라인 판매 중 (Online)
+              </label>
+              <label className="flex items-center gap-2 text-xs font-semibold text-zinc-700 dark:text-zinc-300 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={sellingOffline}
+                  onChange={(e) => setSellingOffline(e.target.checked)}
+                  className="h-4 w-4 rounded border-zinc-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                />
+                오프라인 판매 중 (Offline)
+              </label>
+            </div>
+
+            {sellingOnline && (
+              <div className="grid gap-6 md:grid-cols-2 p-4 rounded-lg border border-zinc-150 dark:border-zinc-850 bg-zinc-50/10">
+                <div>
+                  <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1.5">
+                    온라인 판매 링크 1 *
+                  </label>
+                  <input
+                    type="url"
+                    value={salesLink1}
+                    onChange={(e) => setSalesLink1(e.target.value)}
+                    placeholder="https://example.com/product/1"
+                    className="block w-full rounded-lg border border-zinc-300 px-3.5 py-2 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-zinc-900 dark:focus:border-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1.5">
+                    온라인 판매 링크 2 (선택)
+                  </label>
+                  <input
+                    type="url"
+                    value={salesLink2}
+                    onChange={(e) => setSalesLink2(e.target.value)}
+                    placeholder="https://example.com/product/2"
+                    className="block w-full rounded-lg border border-zinc-300 px-3.5 py-2 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-zinc-900 dark:focus:border-white"
+                  />
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Bullet Points Management Card */}

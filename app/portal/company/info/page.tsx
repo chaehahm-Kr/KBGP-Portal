@@ -28,7 +28,10 @@ export default async function PortalCompanyInfoPage() {
   // Query actual company users from the database for the contacts list
   let { data: dbUsers, error: usersError } = await supabase
     .from("company_users")
-    .select("id, name, email, company_role, status, title, position, phone, is_primary")
+    .select(`
+      id, name, email, company_role, status, title, position, phone, is_primary,
+      task_assignments:company_task_assignments(task_code, is_primary, email_notify)
+    `)
     .eq("company_id", membership.companyId)
     .order("created_at", { ascending: true });
 
