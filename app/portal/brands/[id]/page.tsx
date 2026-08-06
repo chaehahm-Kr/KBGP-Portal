@@ -58,7 +58,7 @@ export default async function EditBrandPage({
         <h1 className="text-xl font-bold text-zinc-900 dark:text-white">브랜드 수정</h1>
         <p className="text-xs text-zinc-500 dark:text-zinc-400">등록된 브랜드 정보를 업데이트합니다.</p>
       </div>
-      <div className="rounded-lg border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-900">
+      <div className="rounded-lg border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-900 hover:border-[#131E2E]/80 transition-colors shadow-sm">
         <BrandForm
           action={updateBrand.bind(null, brandData.id)}
           defaultName={brandData.name}

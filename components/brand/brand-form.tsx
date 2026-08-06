@@ -5,7 +5,7 @@ import type { BrandFormState } from "@/lib/brand/actions";
 import { compressImageIfNeeded } from "@/lib/files/client-compress";
 
 const inputClass =
-  "mt-1 block w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 outline-none transition-all focus:border-zinc-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white dark:focus:border-zinc-700";
+  "mt-1 block w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 outline-none transition-all focus:border-[#131E2E] dark:border-zinc-800 dark:bg-zinc-950 dark:text-white dark:focus:border-zinc-700";
 const labelClass = "block text-sm font-medium text-zinc-700 dark:text-zinc-300";
 
 type BrandFormProps = {
@@ -212,7 +212,7 @@ export function BrandForm({
             type="checkbox"
             checked={hasKrTrademark}
             onChange={(e) => setHasKrTrademark(e.target.checked)}
-            className="h-4 w-4 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-500 dark:border-zinc-850"
+            className="h-4 w-4 rounded border-zinc-300 text-[#131E2E] focus:ring-[#131E2E] dark:border-zinc-850"
           />
         </div>
 
@@ -281,7 +281,7 @@ export function BrandForm({
             type="checkbox"
             checked={hasUsTrademark}
             onChange={(e) => setHasUsTrademark(e.target.checked)}
-            className="h-4 w-4 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-500 dark:border-zinc-850"
+            className="h-4 w-4 rounded border-zinc-300 text-[#131E2E] focus:ring-[#131E2E] dark:border-zinc-850"
           />
         </div>
 
@@ -348,7 +348,7 @@ export function BrandForm({
       <button
         type="submit"
         disabled={pending || compressing}
-        className="rounded-md bg-zinc-950 px-4 py-2.5 text-xs font-semibold text-white transition-colors hover:bg-zinc-800 disabled:opacity-50 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-100 w-full"
+        className="rounded-md bg-[#131E2E] px-4 py-2.5 text-xs font-semibold text-white transition-colors hover:bg-[#1f3047] disabled:opacity-50 dark:bg-white dark:text-[#131E2E] dark:hover:bg-zinc-100 w-full cursor-pointer"
       >
         {pending || compressing ? (compressing ? "이미지 압축 중..." : "저장 중...") : submitLabel}
       </button>
