@@ -1,7 +1,9 @@
 "use server";
 
-import { createClient } from "@/lib/supabase/server";
-import { publicEnv } from "@/lib/env/public";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { renderEmailHtml } from "@/lib/notifications/templates";
+import { sendEmail } from "@/lib/notifications/email";
+import { headers } from "next/headers";
 
 export type ResetRequestState = { message: string } | undefined;
 
@@ -20,10 +22,52 @@ export async function requestPasswordReset(
   const email = formData.get("email");
 
   if (typeof email === "string" && email) {
-    const supabase = await createClient();
-    await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${publicEnv.NEXT_PUBLIC_SITE_URL}/portal/reset-password/confirm`,
+    const emailStr = email.trim();
+    const adminClient = createAdminClient();
+    
+    // Get current site URL dynamically from headers to prevent localhost redirection bugs
+    const headersList = await headers();
+    const host = headersList.get("host") || "portal.kselectnetwork.com";
+    const protocol = host.includes("localhost") || host.includes("127.0.0.1") ? "http" : "https";
+    const siteUrl = `${protocol}://${host}`;
+
+    // Generate the recovery link
+    const { data, error } = await adminClient.auth.admin.generateLink({
+      type: "recovery",
+      email: emailStr,
+      options: {
+        redirectTo: `${siteUrl}/portal/reset-password/confirm`,
+      },
     });
+
+    if (!error && data?.properties?.action_link) {
+      const actionLink = data.properties.action_link;
+
+      // Render branded email HTML
+      const subjectTemplate = "[K SELECT NETWORK] 비밀번호 재설정 안내";
+      const bodyTemplate = `비밀번호를 재설정해 주세요.
+안녕하세요. K SELECT NETWORK 포털 비밀번호 재설정 요청이 접수되었습니다.
+아래 버튼을 클릭하여 새로운 비밀번호 설정을 완료해 주세요.
+본 비밀번호 재설정 링크는 30분 동안 유효합니다.
+
+{{ctaButton}}`;
+
+      const { subject, text, html } = renderEmailHtml(subjectTemplate, bodyTemplate, {
+        link: actionLink,
+        key: "password_reset",
+      });
+
+      // Send the email via Resend
+      await sendEmail({
+        to: emailStr,
+        subject,
+        text,
+        html,
+      });
+    } else {
+      // In case of error (e.g. user does not exist), log it but don't expose it to the user
+      console.error("[resetPassword] Failed to generate recovery link:", error?.message);
+    }
   }
 
   return {

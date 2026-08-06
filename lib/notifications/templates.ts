@@ -176,6 +176,8 @@ function getBadgeLabel(key: string): string | undefined {
       return "EXPIRING · 초청 만료 임박 안내";
     case "staff_invited":
       return "INVITED · 관리자 초대 발송";
+    case "password_reset":
+      return "PASSWORD RESET · 비밀번호 재설정";
     default:
       return undefined;
   }
@@ -284,6 +286,8 @@ function buildCtaButtonHtml(variables: Record<string, string>) {
   } else if (key === "staff_invited") {
     buttonLabel = "관리자 로그인하기";
     url = `${siteUrl}/admin/login`;
+  } else if (key === "password_reset") {
+    buttonLabel = "비밀번호 재설정하기";
   }
 
   return `
