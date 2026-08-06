@@ -128,7 +128,7 @@ export function ExcelImporter() {
             rounded-xl font-semibold text-sm transition-all duration-300 shadow-md
             ${loading 
               ? 'bg-zinc-200 dark:bg-zinc-800 text-zinc-400 dark:text-zinc-500 cursor-not-allowed border border-zinc-300 dark:border-zinc-700' 
-              : 'bg-indigo-650 hover:bg-indigo-750 text-white hover:scale-[1.02] active:scale-[0.98]'
+              : 'bg-zinc-900 hover:bg-zinc-800 dark:bg-zinc-100 dark:hover:bg-zinc-200 text-white dark:text-zinc-950 border border-zinc-900 dark:border-zinc-100 hover:scale-[1.02] active:scale-[0.98]'
             }
           `}>
             {loading ? (

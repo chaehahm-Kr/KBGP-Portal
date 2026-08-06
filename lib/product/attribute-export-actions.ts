@@ -114,7 +114,7 @@ export async function exportMasterExcelWithGuide(): Promise<{ success: boolean; 
     ];
 
     const guideSheet = XLSX.utils.aoa_to_sheet(guideAOA);
-    XLSX.utils.book_append_sheet(wb, guideSheet, " [마스터 엑셀 가이드]");
+    XLSX.utils.book_append_sheet(wb, guideSheet, "마스터 엑셀 가이드");
 
     // 4. Categories 시트
     const catSheet = XLSX.utils.json_to_sheet(
