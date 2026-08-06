@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useTransition } from "react";
+import { useState, useEffect, useTransition, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import { 
   getCategoriesTree, 
   getCategoryAttributes, 
@@ -9,6 +10,29 @@ import {
   type CategoryNode,
   type AttributeMasterItem
 } from "@/lib/product/attribute-actions";
+
+interface FlatCategoryPath {
+  code: string;
+  pathName: string;
+}
+
+// 카테고리 트리를 탐색하며 최종 카테고리(isFinal)에 해당하는 전체 경로 목록을 반환
+function getFlatFinalCategories(nodes: CategoryNode[], currentPath: string[] = []): FlatCategoryPath[] {
+  let results: FlatCategoryPath[] = [];
+  nodes.forEach(node => {
+    const newPath = [...currentPath, node.nameKo];
+    if (node.isFinal || (!node.children || node.children.length === 0)) {
+      results.push({
+        code: node.code,
+        pathName: newPath.join(" > ")
+      });
+    }
+    if (node.children && node.children.length > 0) {
+      results = results.concat(getFlatFinalCategories(node.children, newPath));
+    }
+  });
+  return results;
+}
 
 interface CategoryAttributeFormProps {
   productId: string;
@@ -39,10 +63,27 @@ export function CategoryAttributeForm({
   colorMap,
   isAdmin,
 }: CategoryAttributeFormProps) {
+  const router = useRouter();
   const [categoriesTree, setCategoriesTree] = useState<CategoryNode[]>([]);
   const [selectedCat1, setSelectedCat1] = useState<string>("");
   const [selectedCat2, setSelectedCat2] = useState<string>("");
   const [selectedCat3, setSelectedCat3] = useState<string>("");
+  const [hasInitialized, setHasInitialized] = useState(false);
+  const [catSearchQuery, setCatSearchQuery] = useState("");
+
+  // 전체 리프 카테고리 경로 목록 계산
+  const flatCategories = useMemo(() => {
+    return getFlatFinalCategories(categoriesTree);
+  }, [categoriesTree]);
+
+  // 검색어에 매칭되는 목록 필터링
+  const searchResults = useMemo(() => {
+    if (!catSearchQuery.trim()) return [];
+    const q = catSearchQuery.toLowerCase();
+    return flatCategories.filter(
+      item => item.pathName.toLowerCase().includes(q) || item.code.toLowerCase().includes(q)
+    );
+  }, [catSearchQuery, flatCategories]);
 
   const [profileName, setProfileName] = useState<string | null>(null);
   const [attributes, setAttributes] = useState<AttributeMasterItem[]>([]);
@@ -75,14 +116,18 @@ export function CategoryAttributeForm({
           // 카테고리 미정 시 공통 속성만 로드
           await loadAttributes(null, values);
         }
+        setHasInitialized(true);
       } catch (err) {
         console.error("데이터 로드 에러:", err);
       } finally {
         setLoading(false);
       }
     }
-    init();
-  }, [productId, initialCategoryCode]);
+    
+    if (!hasInitialized || productId) {
+      init();
+    }
+  }, [productId]);
 
   // 카테고리 선택 값에 따라 콤보박스들 세팅
   const setupCategorySelectors = (tree: CategoryNode[], code: string) => {
@@ -208,6 +253,15 @@ export function CategoryAttributeForm({
     return null;
   };
 
+  const formatUnit = (unit: string | null) => {
+    if (!unit) return "";
+    const u = unit.toUpperCase();
+    if (u === "CELSIUS") return "℃";
+    if (u === "MONTH") return "개월";
+    if (u === "PERCENT") return "%";
+    return unit;
+  };
+
   const finalCat = getSelectedFinalCategory();
   const isFinalCategorySelected = finalCat ? finalCat.isFinal : false;
 
@@ -260,6 +314,7 @@ export function CategoryAttributeForm({
     startTransition(async () => {
       try {
         await saveProductAttributeValues(productId, categoryCode, formValues, formTextValues);
+        router.refresh();
         setFeedback({
           type: "success",
           text: "카테고리 및 동적 속성 정보가 데이터베이스에 안전하게 저장되었습니다.",
@@ -350,6 +405,62 @@ export function CategoryAttributeForm({
           )}
         </div>
 
+        {/* 2.1 카테고리 검색 & 추천 입력 상자 */}
+        <div className="mb-6 p-4 bg-slate-950/40 border border-slate-850/60 rounded-xl relative">
+          <label className="text-xs font-bold text-slate-400 block mb-2">
+            🔍 카테고리 간편 검색 및 추천 (예: 비비크림, 샴푸, 립밤 등 키워드 입력)
+          </label>
+          <div className="relative">
+            <input
+              type="text"
+              placeholder="카테고리명 또는 키워드를 입력해 보세요..."
+              value={catSearchQuery}
+              onChange={(e) => setCatSearchQuery(e.target.value)}
+              className="w-full bg-slate-950 border border-slate-850 rounded-xl px-4 py-2.5 text-sm text-slate-200 focus:outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-500"
+            />
+            {catSearchQuery && (
+              <button
+                type="button"
+                onClick={() => setCatSearchQuery("")}
+                className="absolute right-3 top-3 text-slate-500 hover:text-slate-350 text-xs font-bold"
+              >
+                지우기
+              </button>
+            )}
+          </div>
+
+          {/* 검색 추천 결과 목록 */}
+          {searchResults.length > 0 && (
+            <div className="mt-3 bg-slate-950 border border-slate-800 rounded-xl max-h-60 overflow-y-auto divide-y divide-slate-900 shadow-2xl z-30 relative">
+              {searchResults.map((result) => (
+                <div key={result.code} className="p-3 flex items-center justify-between hover:bg-slate-900/40 transition-colors">
+                  <div className="flex flex-col gap-0.5">
+                    <span className="text-xs text-slate-300 font-medium">{result.pathName}</span>
+                    <span className="text-[10px] text-slate-600 font-mono">{result.code}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      setupCategorySelectors(categoriesTree, result.code);
+                      await loadAttributes(result.code, storedValues);
+                      setCatSearchQuery(""); // 검색창 리셋
+                    }}
+                    className="bg-violet-600 hover:bg-violet-500 active:scale-95 transition-all text-white font-bold text-[11px] px-3 py-1.5 rounded-lg shadow"
+                  >
+                    선택 적용
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {catSearchQuery.trim() !== "" && searchResults.length === 0 && (
+            <div className="mt-2 text-xs text-slate-500 italic p-1">
+              일치하는 카테고리 추천 정보가 없습니다. 다른 단어로 검색해 보세요.
+            </div>
+          )}
+        </div>
+
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-4">
           {/* 1Depth */}
           <div className="flex flex-col gap-2">
@@ -430,7 +541,7 @@ export function CategoryAttributeForm({
             카테고리를 선택하시면 작성 가능한 속성 폼이 여기에 생성됩니다.
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
             {attributes.map((attr) => {
               // RLS / Editable 가드 체크
               const isEditable = isAdmin ? true : (attr.brandEditable && !attr.adminOnly);
@@ -586,7 +697,7 @@ export function CategoryAttributeForm({
                       />
                       {attr.unitSet && (
                         <span className="bg-slate-800/80 border border-slate-850 px-3 py-2.5 rounded-xl text-xs font-bold text-slate-400 shrink-0">
-                          {attr.unitSet}
+                          {formatUnit(attr.unitSet)}
                         </span>
                       )}
                     </div>
@@ -622,7 +733,7 @@ export function CategoryAttributeForm({
                       />
                       {attr.unitSet && (
                         <span className="bg-slate-800/80 border border-slate-850 px-3 py-2.5 rounded-xl text-xs font-bold text-slate-400 shrink-0">
-                          {attr.unitSet}
+                          {formatUnit(attr.unitSet)}
                         </span>
                       )}
                     </div>

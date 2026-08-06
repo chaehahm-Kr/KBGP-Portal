@@ -415,8 +415,6 @@ export function ProductOverrideTabs({
             <span className="opacity-40">•</span>
             <span>제조사: <strong className="text-zinc-700 dark:text-zinc-300 font-bold">{companyName}</strong></span>
             <span className="opacity-40">•</span>
-            <span>카테고리: <strong className="text-zinc-700 dark:text-zinc-300 font-bold">{PRODUCT_CATEGORY_LABEL[ovCategory as ProductCategory || product.category as ProductCategory] || product.category}</strong></span>
-            <span className="opacity-40">•</span>
             <span>Letusto SKU: <strong className="text-indigo-650 dark:text-indigo-400 font-mono font-bold">{ovLetustoSku || product.letusto_sku || "지정 대기 중"}</strong></span>
           </div>
           <h1 className="text-xl font-bold text-zinc-900 dark:text-white">

@@ -738,8 +738,6 @@ export function ProductDetailTabs({
               <h1 className="text-2xl font-extrabold text-zinc-900 dark:text-white mt-0.5">{product.name}</h1>
               <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1.5 flex flex-wrap gap-2 items-center">
                 <span>브랜드: <strong className="text-zinc-700 dark:text-zinc-300 font-bold">{brandName}</strong></span>
-                <span className="opacity-40">•</span>
-                <span>카테고리: <strong className="text-zinc-700 dark:text-zinc-300 font-bold">{PRODUCT_CATEGORY_LABEL[product.category as ProductCategory] || product.category}</strong></span>
                 {product.manufacture_sku && (
                   <>
                     <span className="opacity-40">•</span>
