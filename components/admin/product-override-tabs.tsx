@@ -2,6 +2,7 @@
 
 import React, { useState, useTransition } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { 
   type Product, 
   type ProductVideo,
@@ -42,7 +43,9 @@ export function ProductOverrideTabs({
   ingredientsFileUrl,
   ingredientsFileUrlEn,
 }: ProductOverrideTabsProps) {
-  const [activeTab, setActiveTab] = useState<"basic" | "category_attributes" | "price" | "logistics" | "media" | "certs">("basic");
+  const searchParams = useSearchParams();
+  const initialTab = searchParams.get("tab") === "category" ? "category_attributes" : "basic";
+  const [activeTab, setActiveTab] = useState<"basic" | "category_attributes" | "price" | "logistics" | "media" | "certs">(initialTab);
   const [isPending, startTransition] = useTransition();
   const [statusMessage, setStatusMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
