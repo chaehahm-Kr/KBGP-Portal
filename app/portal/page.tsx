@@ -34,22 +34,58 @@ export default async function PortalHomePage() {
         .eq("company_id", companyUser.company_id)
     : { count: 0 };
 
-  // 2. Query products count
-  let productCount = 0;
+  // 2. Query products count (Active products only)
+  let activeProductCount = 0;
   if (companyUser) {
-    let countRes = await supabase
+    const { data: products } = await supabase
       .from("products")
-      .select("id", { count: "exact", head: true })
-      .eq("company_id", companyUser.company_id)
-      .is("deleted_at", null);
-      
-    if (countRes.error) {
-      countRes = await supabase
-        .from("products")
-        .select("id", { count: "exact", head: true })
-        .eq("company_id", companyUser.company_id);
+      .select("id, name, name_en, category, brand_id, letusto_sku, manufacture_sku, price_krw_retail, price_usd_fob, package_width, package_depth, package_height, package_weight, price_additional_info, origin, upc, ean, selling_online, selling_offline, sales_link_1, sales_link_2")
+      .eq("company_id", companyUser.company_id);
+
+    const { data: productImages } = await supabase
+      .from("product_images")
+      .select("id, product_id")
+      .eq("company_id", companyUser.company_id);
+
+    const imageMap = new Set((productImages ?? []).map(img => img.product_id));
+
+    if (products) {
+      for (const p of products) {
+        const adminOverrides = (p.price_additional_info as any)?.admin_overrides || {};
+        const effectiveManufactureSku = adminOverrides.manufacture_sku || p.manufacture_sku || "";
+
+        const missingFields = [];
+        if (!p.brand_id) missingFields.push("브랜드");
+        if (!p.category) missingFields.push("카테고리");
+        if (!p.name_en?.trim()) missingFields.push("영문 제품명");
+        if (!effectiveManufactureSku.trim()) missingFields.push("제조사 SKU");
+        if (!p.origin?.trim()) missingFields.push("원산지");
+        if (!p.price_krw_retail || Number(p.price_krw_retail) <= 0) missingFields.push("소비자 판매가");
+        if (!p.price_usd_fob || Number(p.price_usd_fob) <= 0) missingFields.push("FOB 수출 가격");
+        
+        const widthVal = Number(p.package_width || 0);
+        const depthVal = Number(p.package_depth || 0);
+        const heightVal = Number(p.package_height || 0);
+        const weightVal = Number(p.package_weight || 0);
+        if (widthVal <= 0 || depthVal <= 0 || heightVal <= 0 || weightVal <= 0) {
+          missingFields.push("패키지 배송 규격");
+        }
+        
+        if (!p.upc?.trim() && !p.ean?.trim()) {
+          missingFields.push("식별 바코드");
+        }
+        if (p.selling_online && !p.sales_link_1?.trim()) {
+          missingFields.push("온라인 판매 링크");
+        }
+        if (!imageMap.has(p.id)) {
+          missingFields.push("대표 이미지");
+        }
+
+        if (missingFields.length === 0) {
+          activeProductCount++;
+        }
+      }
     }
-    productCount = countRes.count ?? 0;
   }
 
   const { data: applications } = await supabase
@@ -148,8 +184,8 @@ export default async function PortalHomePage() {
       id: "register_product",
       label: "최소 1개 이상의 제품 등록",
       desc: "글로벌 유통 및 파트너 매칭을 위해 1개 이상의 제품을 등록하세요.",
-      isComplete: (productCount ?? 0) >= 1,
-      progressText: `현재 ${(productCount ?? 0)}개`,
+      isComplete: activeProductCount >= 1,
+      progressText: `현재 ${activeProductCount}개`,
       href: "/portal/products",
       actionText: "제품 등록하기",
     },

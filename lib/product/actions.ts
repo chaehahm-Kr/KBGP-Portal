@@ -189,14 +189,7 @@ export async function removeProductImage(productId: string, imageId: string) {
   const { companyId } = await requireCompanyMembership();
   const supabase = await createClient();
 
-  const { count } = await supabase
-    .from("product_images")
-    .select("id", { count: "exact", head: true })
-    .eq("product_id", productId);
 
-  if ((count ?? 0) <= 1) {
-    throw new Error("제품 이미지는 최소 1장이 있어야 합니다.");
-  }
 
   await supabase
     .from("product_images")
