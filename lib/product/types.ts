@@ -106,6 +106,8 @@ export interface Product {
   selling_offline?: boolean;
   sales_link_1?: string | null;
   sales_link_2?: string | null;
+  selection_status?: string | null;
+  sales_status?: string | null;
 }
 
 export interface ProductVideo {

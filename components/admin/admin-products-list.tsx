@@ -1,8 +1,9 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useTransition } from "react";
 import Link from "next/link";
 import { PRODUCT_CATEGORY_LABEL, type ProductCategory } from "@/lib/product/types";
+import { adminUpdateProductOverrides } from "@/lib/product/admin-actions";
 
 interface AdminProductItem {
   id: string;
@@ -20,20 +21,127 @@ interface AdminProductItem {
   brandName: string;
   photoUrl: string | null;
   is_draft: boolean;
-  missing_fields?: string[];
   deleted_at: string | null;
+  selection_status: string; // UNREVIEWED, UNDER_REVIEW, INFO_REQUESTED, SELECTED, NOT_SELECTED
+  sales_status: string; // PREPARING, ON_SALE, PAUSED, ENDED
 }
 
 interface AdminProductsListProps {
   initialProducts: AdminProductItem[];
 }
 
+// 6. 권장 배지/드롭다운 색상 맵
+const SELECTION_COLORS: Record<string, string> = {
+  UNREVIEWED: "bg-zinc-100 text-zinc-700 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:border-zinc-700",
+  UNDER_REVIEW: "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/20 dark:text-blue-400 dark:border-blue-900/50",
+  INFO_REQUESTED: "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/20 dark:text-amber-400 dark:border-amber-900/50",
+  SELECTED: "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/20 dark:text-emerald-400 dark:border-emerald-900/50",
+  NOT_SELECTED: "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/20 dark:text-rose-400 dark:border-rose-900/50",
+};
+
+const SELECTION_LABELS: Record<string, string> = {
+  UNREVIEWED: "미검토",
+  UNDER_REVIEW: "검토 중",
+  INFO_REQUESTED: "정보 요청",
+  SELECTED: "선정",
+  NOT_SELECTED: "미선정",
+};
+
+const SALES_COLORS: Record<string, string> = {
+  PREPARING: "bg-zinc-100 text-zinc-500 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:border-zinc-700",
+  ON_SALE: "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/20 dark:text-emerald-400 dark:border-emerald-900/50",
+  PAUSED: "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/20 dark:text-amber-400 dark:border-amber-900/50",
+  ENDED: "bg-zinc-250 text-zinc-650 border-zinc-300 dark:bg-zinc-950 dark:text-zinc-500 dark:border-zinc-850",
+};
+
+const SALES_LABELS: Record<string, string> = {
+  PREPARING: "판매 준비",
+  ON_SALE: "판매 중",
+  PAUSED: "일시 중지",
+  ENDED: "판매 종료",
+};
+
 export function AdminProductsList({ initialProducts }: AdminProductsListProps) {
+  const [products, setProducts] = useState<AdminProductItem[]>(initialProducts);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
-  const [selectedStatus, setSelectedStatus] = useState<string>("active_draft"); // 디폴트 값: 활성/보완 대기
+  const [isPending, startTransition] = useTransition();
 
-  const filteredProducts = initialProducts.filter((product) => {
+  // 1. 제품 등록 상태 (복수 선택 가능, 디폴트: Active + Draft)
+  const [selectedRegStatuses, setSelectedRegStatuses] = useState<string[]>(["active", "draft"]);
+
+  // 2. 제품 선정 상태 필터 (디폴트: All)
+  const [selectedSelectionStatus, setSelectedSelectionStatus] = useState<string>("all");
+
+  // 3. 판매 상태 필터 (디폴트: All)
+  const [selectedSalesStatus, setSelectedSalesStatus] = useState<string>("all");
+
+  // 복수 선택 토글 핸들러
+  const handleRegStatusToggle = (status: string) => {
+    if (status === "all") {
+      if (selectedRegStatuses.length === 3) {
+        setSelectedRegStatuses(["active", "draft"]); // 복원
+      } else {
+        setSelectedRegStatuses(["active", "draft", "deleted"]); // 전체 켜기
+      }
+      return;
+    }
+
+    setSelectedRegStatuses((prev) => {
+      const next = prev.includes(status)
+        ? prev.filter((s) => s !== status)
+        : [...prev, status];
+      return next.length === 0 ? ["active", "draft"] : next; // 최소 하나 이상은 켜두기 보정
+    });
+  };
+
+  // 인라인 선정/판매 상태 변경 서버 액션 호출
+  const handleInlineStatusChange = async (
+    productId: string,
+    field: "selection_status" | "sales_status",
+    value: string
+  ) => {
+    const original = products.find((p) => p.id === productId);
+    if (!original) return;
+
+    // 만약 판매 상태를 변경하려는데 선정되지 않은 상태라면 가드 작동
+    if (field === "sales_status" && original.selection_status !== "SELECTED") {
+      alert("선정된 제품만 판매 상태를 변경할 수 있습니다.");
+      return;
+    }
+
+    // 만약 선정 상태를 'SELECTED' 외의 것으로 변경하면 판매 상태는 자동으로 'PREPARING'으로 초기화 적용
+    const nextSelectionStatus = field === "selection_status" ? value : original.selection_status;
+    const nextSalesStatus = field === "sales_status"
+      ? value
+      : nextSelectionStatus !== "SELECTED"
+      ? "PREPARING"
+      : original.sales_status;
+
+    startTransition(async () => {
+      try {
+        const payload: Record<string, any> = {
+          selection_status: nextSelectionStatus,
+          sales_status: nextSalesStatus,
+        };
+
+        await adminUpdateProductOverrides(productId, payload);
+
+        // 로컬 상태 즉각 동기화 반영
+        setProducts((prev) =>
+          prev.map((p) =>
+            p.id === productId
+              ? { ...p, selection_status: nextSelectionStatus, sales_status: nextSalesStatus }
+              : p
+          )
+        );
+      } catch (err: any) {
+        alert(err.message || "상태 변경 실패");
+      }
+    });
+  };
+
+  const filteredProducts = products.filter((product) => {
     // 1. Search filter
     const searchLower = searchTerm.toLowerCase();
     const matchesSearch =
@@ -49,27 +157,23 @@ export function AdminProductsList({ initialProducts }: AdminProductsListProps) {
     const matchesCategory =
       selectedCategory === "all" || product.category === selectedCategory;
 
-    // 3. Status filter (Active vs Draft vs Deleted vs Active+Draft)
-    const matchesStatus = (() => {
-      if (selectedStatus === "active_draft") {
-        return !product.deleted_at; // 삭제되지 않은 활성 + 보완대기 전체
-      }
-      if (selectedStatus === "active") {
-        return !product.deleted_at && !product.is_draft;
-      }
-      if (selectedStatus === "draft") {
-        return !product.deleted_at && product.is_draft;
-      }
-      if (selectedStatus === "deleted") {
-        return !!product.deleted_at;
-      }
-      if (selectedStatus === "all") {
-        return true; // 전체 (삭제 포함)
-      }
-      return true;
+    // 3. 제품 등록 상태 복수 선택 필터링
+    const matchesRegStatus = (() => {
+      if (selectedRegStatuses.includes("active") && !product.deleted_at && !product.is_draft) return true;
+      if (selectedRegStatuses.includes("draft") && !product.deleted_at && product.is_draft) return true;
+      if (selectedRegStatuses.includes("deleted") && product.deleted_at) return true;
+      return false;
     })();
 
-    return matchesSearch && matchesCategory && matchesStatus;
+    // 4. 제품 선정 상태 필터링
+    const matchesSelectionStatus =
+      selectedSelectionStatus === "all" || product.selection_status === selectedSelectionStatus;
+
+    // 5. 판매 상태 필터링
+    const matchesSalesStatus =
+      selectedSalesStatus === "all" || product.sales_status === selectedSalesStatus;
+
+    return matchesSearch && matchesCategory && matchesRegStatus && matchesSelectionStatus && matchesSalesStatus;
   });
 
   return (
@@ -78,8 +182,8 @@ export function AdminProductsList({ initialProducts }: AdminProductsListProps) {
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-xl font-bold text-zinc-900 dark:text-white">제품 통합 관리</h1>
-          <p className="text-xs text-zinc-500 dark:text-zinc-400">
-            모든 브랜드사에서 포털에 등록한 제품 카탈로그 및 어드민 오버라이드를 확인하고 관리합니다.
+          <p className="text-xs text-zinc-550 dark:text-zinc-400">
+            모든 브랜드사에서 포털에 등록한 제품 카탈로그 및 선정 상태와 판매 상태를 모니터링하고 제어합니다.
           </p>
         </div>
       </div>
@@ -89,7 +193,7 @@ export function AdminProductsList({ initialProducts }: AdminProductsListProps) {
         <div className="flex flex-col md:flex-row gap-3">
           {/* Search bar */}
           <div className="relative flex-1">
-            <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-zinc-400 dark:text-zinc-500">
+            <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-zinc-400 dark:text-zinc-550">
               🔍
             </span>
             <input
@@ -116,46 +220,138 @@ export function AdminProductsList({ initialProducts }: AdminProductsListProps) {
               <option value="wellness_patch">웰니스 패치</option>
             </select>
           </div>
-
         </div>
 
-        {/* Exposed Status Tab Filters */}
-        <div className="flex flex-wrap items-center gap-1.5 border-t border-zinc-150 pt-4 dark:border-zinc-800">
-          <span className="text-xs font-bold text-zinc-500 mr-2">상태 필터:</span>
-          {[
-            { id: "active_draft", label: "활성/보완 대기 (기본)" },
-            { id: "active", label: "Active" },
-            { id: "draft", label: "Draft" },
-            { id: "deleted", label: "Deleted" },
-            { id: "all", label: "All" },
-          ].map((tab) => {
-            const isActive = selectedStatus === tab.id;
-            return (
+        {/* 4. Overhauled Filters Grid */}
+        <div className="border-t border-zinc-150 pt-4 dark:border-zinc-850 space-y-3">
+          
+          {/* ① 제품 등록 상태 필터 */}
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <span className="font-bold text-zinc-500 w-24">제품 등록 상태:</span>
+            <div className="flex items-center gap-1.5">
               <button
-                key={tab.id}
                 type="button"
-                onClick={() => setSelectedStatus(tab.id)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer border ${
-                  isActive
-                    ? "bg-zinc-950 text-white border-zinc-950 dark:bg-white dark:text-zinc-950 dark:border-white shadow-sm"
-                    : "bg-zinc-50 text-zinc-600 border-zinc-200 hover:bg-zinc-100 hover:text-zinc-900 dark:bg-zinc-950 dark:text-zinc-400 dark:border-zinc-850 dark:hover:bg-zinc-900"
+                onClick={() => handleRegStatusToggle("all")}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${
+                  selectedRegStatuses.length === 3
+                    ? "bg-zinc-950 text-white border-zinc-950 dark:bg-white dark:text-zinc-950"
+                    : "bg-zinc-50 text-zinc-650 border-zinc-200 hover:bg-zinc-100 dark:bg-zinc-950 dark:text-zinc-400 dark:border-zinc-850"
                 }`}
               >
-                {tab.label}
+                All
               </button>
-            );
-          })}
+              {[
+                { id: "active", label: "Active" },
+                { id: "draft", label: "Draft" },
+                { id: "deleted", label: "Deleted" },
+              ].map((tab) => {
+                const isSelected = selectedRegStatuses.includes(tab.id);
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => handleRegStatusToggle(tab.id)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border flex items-center gap-1 ${
+                      isSelected
+                        ? "bg-zinc-900 text-white border-zinc-900 dark:bg-zinc-100 dark:text-zinc-950"
+                        : "bg-zinc-50 text-zinc-600 border-zinc-200 hover:bg-zinc-100 dark:bg-zinc-950 dark:text-zinc-400 dark:border-zinc-850"
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      readOnly
+                      className="mr-1 h-3 w-3 accent-indigo-650 pointer-events-none rounded border-zinc-300"
+                    />
+                    {tab.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* ② 제품 선정 상태 필터 */}
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <span className="font-bold text-zinc-500 w-24">제품 선정 상태:</span>
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <button
+                type="button"
+                onClick={() => setSelectedSelectionStatus("all")}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${
+                  selectedSelectionStatus === "all"
+                    ? "bg-zinc-950 text-white border-zinc-950 dark:bg-white dark:text-zinc-950"
+                    : "bg-zinc-50 text-zinc-600 border-zinc-200 hover:bg-zinc-100 dark:bg-zinc-950 dark:text-zinc-400 dark:border-zinc-850"
+                }`}
+              >
+                All
+              </button>
+              {Object.entries(SELECTION_LABELS).map(([code, label]) => {
+                const isSelected = selectedSelectionStatus === code;
+                return (
+                  <button
+                    key={code}
+                    type="button"
+                    onClick={() => setSelectedSelectionStatus(code)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${
+                      isSelected
+                        ? "bg-zinc-900 text-white border-zinc-900 dark:bg-zinc-100 dark:text-zinc-950"
+                        : "bg-zinc-50 text-zinc-600 border-zinc-200 hover:bg-zinc-100 dark:bg-zinc-950 dark:text-zinc-400 dark:border-zinc-850"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* ③ 판매 상태 필터 */}
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <span className="font-bold text-zinc-500 w-24">판매 상태:</span>
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <button
+                type="button"
+                onClick={() => setSelectedSalesStatus("all")}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${
+                  selectedSalesStatus === "all"
+                    ? "bg-zinc-950 text-white border-zinc-950 dark:bg-white dark:text-zinc-950"
+                    : "bg-zinc-50 text-zinc-600 border-zinc-200 hover:bg-zinc-100 dark:bg-zinc-950 dark:text-zinc-400 dark:border-zinc-850"
+                }`}
+              >
+                All
+              </button>
+              {Object.entries(SALES_LABELS).map(([code, label]) => {
+                const isSelected = selectedSalesStatus === code;
+                return (
+                  <button
+                    key={code}
+                    type="button"
+                    onClick={() => setSelectedSalesStatus(code)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${
+                      isSelected
+                        ? "bg-zinc-900 text-white border-zinc-900 dark:bg-zinc-100 dark:text-zinc-950"
+                        : "bg-zinc-50 text-zinc-600 border-zinc-200 hover:bg-zinc-100 dark:bg-zinc-950 dark:text-zinc-400 dark:border-zinc-850"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
         </div>
 
         {/* Quick Filter Info */}
         <div className="text-[10px] text-zinc-450 dark:text-zinc-500 flex justify-between items-center">
           <span>검색 결과: <strong className="text-zinc-800 dark:text-zinc-200 font-bold">{filteredProducts.length}</strong> 건</span>
-          {(searchTerm || selectedCategory !== "all" || selectedStatus !== "active_draft") && (
+          {(searchTerm || selectedCategory !== "all" || selectedRegStatuses.length !== 2 || !selectedRegStatuses.includes("active") || !selectedRegStatuses.includes("draft") || selectedSelectionStatus !== "all" || selectedSalesStatus !== "all") && (
             <button
               onClick={() => {
                 setSearchTerm("");
                 setSelectedCategory("all");
-                setSelectedStatus("active_draft");
+                setSelectedRegStatuses(["active", "draft"]);
+                setSelectedSelectionStatus("all");
+                setSelectedSalesStatus("all");
               }}
               className="text-indigo-650 hover:underline dark:text-indigo-400 font-semibold"
             >
@@ -178,115 +374,151 @@ export function AdminProductsList({ initialProducts }: AdminProductsListProps) {
                 <th className="px-6 py-3.5">회사명</th>
                 <th className="px-6 py-3.5">브랜드</th>
                 <th className="px-6 py-3.5">카테고리</th>
-                <th className="px-6 py-3.5">상태</th>
+                {/* 5. 세 개 컬럼 배지로 분할 표시 */}
+                <th className="px-6 py-3.5">등록 상태</th>
+                <th className="px-6 py-3.5">선정 상태</th>
+                <th className="px-6 py-3.5">판매 상태</th>
                 <th className="px-6 py-3.5 text-right">관리</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-150 dark:divide-zinc-800/80">
-              {filteredProducts.map((product) => (
-                <tr
-                  key={product.id}
-                  className="hover:bg-zinc-50/50 dark:hover:bg-zinc-850/20 transition-colors"
-                >
-                  {/* Photo Column */}
-                  <td className="px-6 py-4">
-                    {product.photoUrl ? (
-                      <div className="h-12 w-12 rounded-md bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 flex items-center justify-center p-1 shadow-sm overflow-hidden">
-                        <img
-                          src={product.photoUrl}
-                          alt={product.display_name}
-                          className="h-full w-full object-contain"
-                        />
-                      </div>
-                    ) : (
-                      <div className="h-12 w-12 rounded-md bg-zinc-100 flex items-center justify-center text-zinc-400 dark:bg-zinc-800 text-[10px] font-bold border border-dashed border-zinc-200 dark:border-zinc-700">
-                        No Pic
-                      </div>
-                    )}
-                  </td>
+              {filteredProducts.map((product) => {
+                const isSelected = product.selection_status === "SELECTED";
+                return (
+                  <tr
+                    key={product.id}
+                    className="hover:bg-zinc-50/50 dark:hover:bg-zinc-850/20 transition-colors"
+                  >
+                    {/* Photo Column */}
+                    <td className="px-6 py-4">
+                      {product.photoUrl ? (
+                        <div className="h-12 w-12 rounded-md bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 flex items-center justify-center p-1 shadow-sm overflow-hidden">
+                          <img
+                            src={product.photoUrl}
+                            alt={product.display_name}
+                            className="h-full w-full object-contain"
+                          />
+                        </div>
+                      ) : (
+                        <div className="h-12 w-12 rounded-md bg-zinc-100 flex items-center justify-center text-zinc-400 dark:bg-zinc-800 text-[10px] font-bold border border-dashed border-zinc-200 dark:border-zinc-700">
+                          No Pic
+                        </div>
+                      )}
+                    </td>
 
-                  {/* Letusto SKU */}
-                  <td className="px-6 py-4 font-mono font-bold text-zinc-950 dark:text-white">
-                    {product.letusto_sku || (
-                      <span className="text-zinc-350 dark:text-zinc-650 italic font-sans font-normal">지정 대기 중</span>
-                    )}
-                  </td>
+                    {/* Letusto SKU */}
+                    <td className="px-6 py-4 font-mono font-bold text-zinc-950 dark:text-white">
+                      {product.letusto_sku || (
+                        <span className="text-zinc-350 dark:text-zinc-650 italic font-sans font-normal">지정 대기 중</span>
+                      )}
+                    </td>
 
-                  {/* Manufacture SKU (1st text column as requested!) */}
-                  <td className="px-6 py-4 font-mono font-semibold text-zinc-900 dark:text-white">
-                    {product.display_manufacture_sku || (
-                      <span className="text-zinc-350 dark:text-zinc-650 italic">미입력</span>
-                    )}
-                  </td>
+                    {/* Manufacture SKU */}
+                    <td className="px-6 py-4 font-mono font-semibold text-zinc-900 dark:text-white">
+                      {product.display_manufacture_sku || (
+                        <span className="text-zinc-350 dark:text-zinc-650 italic">미입력</span>
+                      )}
+                    </td>
 
-                  {/* Product Name */}
-                  <td className="px-6 py-4 font-bold text-zinc-950 dark:text-white">
-                    <Link
-                      href={`/admin/products/${product.id}`}
-                      className="hover:text-indigo-650 hover:underline transition-all"
-                    >
-                      {product.display_name}
-                    </Link>
-                  </td>
+                    {/* Product Name */}
+                    <td className="px-6 py-4 font-bold text-zinc-950 dark:text-white max-w-xxs truncate">
+                      <Link
+                        href={`/admin/products/${product.id}`}
+                        className="hover:text-indigo-650 hover:underline transition-all"
+                      >
+                        {product.display_name}
+                      </Link>
+                    </td>
 
-                  {/* Company Name */}
-                  <td className="px-6 py-4 text-zinc-600 dark:text-zinc-355 font-medium">
-                    {product.companyName}
-                  </td>
+                    {/* Company Name */}
+                    <td className="px-6 py-4 text-zinc-600 dark:text-zinc-355 font-medium max-w-xxs truncate">
+                      {product.companyName}
+                    </td>
 
-                  {/* Brand Name */}
-                  <td className="px-6 py-4 text-zinc-600 dark:text-zinc-300 font-medium">
-                    {product.brandName}
-                  </td>
+                    {/* Brand Name */}
+                    <td className="px-6 py-4 text-zinc-600 dark:text-zinc-300 font-medium max-w-xxs truncate">
+                      {product.brandName}
+                    </td>
 
-                  {/* Category */}
-                  <td className="px-6 py-4">
-                    <span className="inline-flex items-center rounded-full bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 text-[10px] font-semibold text-zinc-700 dark:text-zinc-300 border border-zinc-150 dark:border-zinc-700">
-                      {PRODUCT_CATEGORY_LABEL[product.category as ProductCategory] || product.category}
-                    </span>
-                  </td>
-
-                  {/* Status Badge */}
-                  <td className="px-6 py-4">
-                    {product.deleted_at ? (
-                      <span className="inline-flex items-center rounded bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400 px-2 py-0.5 text-[10px] font-bold border border-zinc-200 dark:border-zinc-700">
-                        Deleted (삭제됨)
+                    {/* Category */}
+                    <td className="px-6 py-4">
+                      <span className="inline-flex items-center rounded-full bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 text-[10px] font-semibold text-zinc-700 dark:text-zinc-300 border border-zinc-150 dark:border-zinc-700">
+                        {PRODUCT_CATEGORY_LABEL[product.category as ProductCategory] || product.category}
                       </span>
-                    ) : product.is_draft ? (
-                      <div className="space-y-1">
-                        <span className="inline-flex items-center rounded bg-rose-50 text-rose-700 dark:bg-rose-950/20 dark:text-rose-400 px-2 py-0.5 text-[10px] font-bold border border-rose-100 dark:border-rose-900/50">
+                    </td>
+
+                    {/* ① 제품 등록 상태 배지 */}
+                    <td className="px-6 py-4">
+                      {product.deleted_at ? (
+                        <span className="inline-flex items-center rounded bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400 px-2 py-0.5 text-[10px] font-bold border border-zinc-200 dark:border-zinc-700">
+                          Deleted (삭제됨)
+                        </span>
+                      ) : product.is_draft ? (
+                        <span className="inline-flex items-center rounded bg-amber-50 text-amber-700 dark:bg-amber-950/20 dark:text-amber-400 px-2 py-0.5 text-[10px] font-bold border border-amber-200 dark:border-amber-900/50">
                           Draft (보완 대기)
                         </span>
-                        {product.missing_fields && product.missing_fields.length > 0 && (
-                          <div className="text-[9px] text-rose-600 dark:text-rose-450 leading-normal max-w-[160px]">
-                            <span className="font-semibold block">* 필수 정보 누락:</span>
-                            <span className="block">{product.missing_fields.join(", ")}</span>
-                          </div>
-                        )}
-                      </div>
-                    ) : (
-                      <span className="inline-flex items-center rounded bg-emerald-50 text-emerald-700 dark:bg-emerald-950/20 dark:text-emerald-400 px-2 py-0.5 text-[10px] font-bold border border-emerald-100 dark:border-emerald-900/50">
-                        Active
-                      </span>
-                    )}
-                  </td>
+                      ) : (
+                        <span className="inline-flex items-center rounded bg-emerald-50 text-emerald-700 dark:bg-emerald-950/20 dark:text-emerald-400 px-2 py-0.5 text-[10px] font-bold border border-emerald-250 dark:border-emerald-900/50">
+                          Active
+                        </span>
+                      )}
+                    </td>
 
-                  {/* Actions */}
-                  <td className="px-6 py-4 text-right">
-                    <Link
-                      href={`/admin/products/${product.id}`}
-                      className="rounded bg-zinc-100 dark:bg-zinc-800 px-2.5 py-1.5 font-bold text-zinc-700 hover:bg-zinc-200 dark:text-zinc-300 dark:hover:bg-zinc-700 hover:underline transition-all"
-                    >
-                      상세 및 수정
-                    </Link>
-                  </td>
-                </tr>
-              ))}
+                    {/* ② 제품 선정 상태 인라인 셀렉터 */}
+                    <td className="px-6 py-4">
+                      <select
+                        value={product.selection_status}
+                        onChange={(e) => handleInlineStatusChange(product.id, "selection_status", e.target.value)}
+                        disabled={isPending}
+                        className={`rounded border text-[11px] font-bold px-2 py-1 outline-none transition cursor-pointer select-none ${
+                          SELECTION_COLORS[product.selection_status]
+                        }`}
+                      >
+                        {Object.entries(SELECTION_LABELS).map(([code, label]) => (
+                          <option key={code} value={code} className="bg-white text-zinc-900 dark:bg-zinc-950 dark:text-white">
+                            {label}
+                          </option>
+                        ))}
+                      </select>
+                    </td>
+
+                    {/* ③ 제품 판매 상태 인라인 셀렉터 (비선정 시 비활성화 + 툴팁 가이드 제공) */}
+                    <td className="px-6 py-4" title={!isSelected ? "선정된 제품만 판매 상태를 변경할 수 있습니다." : undefined}>
+                      <select
+                        value={product.sales_status}
+                        onChange={(e) => handleInlineStatusChange(product.id, "sales_status", e.target.value)}
+                        disabled={isPending || !isSelected}
+                        className={`rounded border text-[11px] font-bold px-2 py-1 outline-none transition select-none ${
+                          !isSelected 
+                            ? "bg-zinc-50 text-zinc-350 border-zinc-200 cursor-not-allowed dark:bg-zinc-900 dark:text-zinc-700 dark:border-zinc-800" 
+                            : SALES_COLORS[product.sales_status]
+                        }`}
+                      >
+                        {Object.entries(SALES_LABELS).map(([code, label]) => (
+                          <option key={code} value={code} className="bg-white text-zinc-900 dark:bg-zinc-950 dark:text-white">
+                            {label}
+                          </option>
+                        ))}
+                      </select>
+                    </td>
+
+                    {/* Actions */}
+                    <td className="px-6 py-4 text-right">
+                      <Link
+                        href={`/admin/products/${product.id}`}
+                        className="rounded bg-zinc-100 dark:bg-zinc-800 px-2.5 py-1.5 font-bold text-zinc-700 hover:bg-zinc-200 dark:text-zinc-300 dark:hover:bg-zinc-700 hover:underline transition-all"
+                      >
+                        상세 및 수정
+                      </Link>
+                    </td>
+                  </tr>
+                );
+              })}
 
               {filteredProducts.length === 0 && (
                 <tr>
                   <td
-                    colSpan={9}
+                    colSpan={11}
                     className="px-6 py-12 text-center text-zinc-400 dark:text-zinc-500"
                   >
                     일치하는 등록 제품이 존재하지 않습니다.

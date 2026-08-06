@@ -16,13 +16,13 @@ export default async function AdminProductsPage() {
   let products: any[] | null = null;
   const { data: firstQueryProducts, error: queryError } = await supabase
     .from("products")
-    .select("id, name, name_en, category, brand_id, company_id, manufacture_sku, letusto_sku, parent_sku, child_sku, price_krw_retail, price_usd_fob, package_width, package_depth, package_height, package_weight, price_additional_info, deleted_at, origin, upc, ean, selling_online, selling_offline, sales_link_1, sales_link_2")
+    .select("id, name, name_en, category, brand_id, company_id, manufacture_sku, letusto_sku, parent_sku, child_sku, price_krw_retail, price_usd_fob, package_width, package_depth, package_height, package_weight, price_additional_info, deleted_at, selection_status, sales_status")
     .order("created_at", { ascending: false });
 
-  if (queryError && (queryError.message?.includes("deleted_at") || queryError.code === "PGRST100")) {
+  if (queryError && (queryError.message?.includes("deleted_at") || queryError.code === "PGRST100" || queryError.message?.includes("selection_status"))) {
     const fallbackResult = await supabase
       .from("products")
-      .select("id, name, name_en, category, brand_id, company_id, manufacture_sku, letusto_sku, parent_sku, child_sku, price_krw_retail, price_usd_fob, package_width, package_depth, package_height, package_weight, price_additional_info, origin, upc, ean, selling_online, selling_offline, sales_link_1, sales_link_2")
+      .select("id, name, name_en, category, brand_id, company_id, manufacture_sku, letusto_sku, parent_sku, child_sku, price_krw_retail, price_usd_fob, package_width, package_depth, package_height, package_weight, price_additional_info")
       .order("created_at", { ascending: false });
     products = fallbackResult.data;
   } else {
@@ -63,37 +63,24 @@ export default async function AdminProductsPage() {
       const adminOverrides = (p.price_additional_info as any)?.admin_overrides || {};
       const effectiveManufactureSku = adminOverrides.manufacture_sku !== undefined ? adminOverrides.manufacture_sku : p.manufacture_sku;
       
-      // 누락 항목 분석
-      const missingFields: string[] = [];
-      if (!p.brand_id) missingFields.push("브랜드");
-      if (!p.category) missingFields.push("카테고리");
-      if (!p.name_en?.trim()) missingFields.push("영문 제품명");
-      if (!(effectiveManufactureSku || "").trim()) missingFields.push("제조사 SKU");
-      if (!p.origin?.trim()) missingFields.push("원산지");
-      if (!p.price_krw_retail || Number(p.price_krw_retail) <= 0) missingFields.push("소비자 판매가");
-      if (!p.price_usd_fob || Number(p.price_usd_fob) <= 0) missingFields.push("FOB 수출 가격");
-      
-      const widthVal = Number(p.package_width || 0);
-      const depthVal = Number(p.package_depth || 0);
-      const heightVal = Number(p.package_height || 0);
-      const weightVal = Number(p.package_weight || 0);
-      if (widthVal <= 0 || depthVal <= 0 || heightVal <= 0 || weightVal <= 0) {
-        missingFields.push("패키지 배송 규격");
-      }
-      
-      if (!p.upc?.trim() && !p.ean?.trim()) {
-        missingFields.push("식별 바코드(UPC 또는 EAN)");
-      }
-      if (p.selling_online && !p.sales_link_1?.trim()) {
-        missingFields.push("온라인 판매 링크");
-      }
-      
-      const hasImages = (productImages ?? []).some((img) => img.product_id === p.id);
-      if (!hasImages) {
-        missingFields.push("대표 이미지");
-      }
-
-      const isDraft = missingFields.length > 0;
+      // 브랜드, 카테고리, 영문 제품명, 제조사 SKU, 한국 소비자 판매가, FOB 수출 가격, 패키지 규격(가로, 세로, 높이, 무게) 중 하나라도 누락되면 Draft(보완 대기) 상태로 판정
+      const isDraft =
+        !p.brand_id ||
+        !p.category ||
+        !p.name_en?.trim() ||
+        !(effectiveManufactureSku || "").trim() ||
+        !p.price_krw_retail ||
+        Number(p.price_krw_retail) <= 0 ||
+        !p.price_usd_fob ||
+        Number(p.price_usd_fob) <= 0 ||
+        !p.package_width ||
+        Number(p.package_width) <= 0 ||
+        !p.package_depth ||
+        Number(p.package_depth) <= 0 ||
+        !p.package_height ||
+        Number(p.package_height) <= 0 ||
+        !p.package_weight ||
+        Number(p.package_weight) <= 0;
 
       return {
         id: p.id,
@@ -111,7 +98,6 @@ export default async function AdminProductsPage() {
         brandName: brandNameById.get(p.brand_id) || "(미지정 브랜드)",
         photoUrl,
         is_draft: isDraft,
-        missing_fields: missingFields,
         deleted_at: p.deleted_at,
         selection_status: p.selection_status || "UNREVIEWED",
         sales_status: p.sales_status || "PREPARING",
