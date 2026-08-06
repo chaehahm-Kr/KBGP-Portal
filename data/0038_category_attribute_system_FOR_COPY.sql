@@ -1,6 +1,18 @@
 -- 0038_category_attribute_system.sql
 -- 3Depth 카테고리 구조 및 dynamic EAV 속성 테이블 및 Seed 데이터
 
+-- [0037 병합] 제품 선정 상태(selection_status) 및 판매 상태(sales_status) 컬럼 추가
+ALTER TABLE public.products 
+ADD COLUMN IF NOT EXISTS selection_status text NOT NULL DEFAULT 'UNREVIEWED' 
+CHECK (selection_status IN ('UNREVIEWED', 'UNDER_REVIEW', 'INFO_REQUESTED', 'SELECTED', 'NOT_SELECTED'));
+
+ALTER TABLE public.products 
+ADD COLUMN IF NOT EXISTS sales_status text NOT NULL DEFAULT 'PREPARING' 
+CHECK (sales_status IN ('PREPARING', 'ON_SALE', 'PAUSED', 'ENDED'));
+
+COMMENT ON COLUMN public.products.selection_status IS '제품 선정 상태 (UNREVIEWED: 미검토, UNDER_REVIEW: 검토 중, INFO_REQUESTED: 정보 요청, SELECTED: 선정, NOT_SELECTED: 미선정)';
+COMMENT ON COLUMN public.products.sales_status IS '제품 판매 상태 (PREPARING: 판매 준비, ON_SALE: 판매 중, PAUSED: 일시 중지, ENDED: 판매 종료)';
+
 CREATE TABLE IF NOT EXISTS public.categories (
   code text PRIMARY KEY,
   name_ko text NOT NULL,
