@@ -218,6 +218,9 @@ export async function getCategoryAttributes(categoryCode: string | null): Promis
 
   const profileAttributes: AttributeMasterItem[] = (profileAttrs || [])
     .map((pa) => {
+      // 이미 공통 속성에 등록된 속성이면 프로필 속성에서는 중복 노출 방지를 위해 제외
+      if (commonCodes.includes(pa.attribute_code)) return null;
+
       const attr = attrMasterData?.find((a) => a.code === pa.attribute_code);
       if (!attr) return null;
 

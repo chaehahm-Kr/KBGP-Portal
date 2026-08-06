@@ -835,8 +835,8 @@ export function CategoryAttributeForm({
           </div>
         )}
 
-        {/* 3.4 NUMBER_UNIT (숫자 + 단위) */}
-        {attr.inputType === "NUMBER_UNIT" && (
+        {/* 3.4 NUMBER_UNIT (숫자 + 단위) 또는 NUMBER (단위 없는 순수 숫자) */}
+        {(attr.inputType === "NUMBER_UNIT" || attr.inputType === "NUMBER") && (
           <div className="flex items-center gap-2">
             <input
               id={`attr-number-input-${attr.code}`}
@@ -847,7 +847,7 @@ export function CategoryAttributeForm({
               onChange={(e) => updateValue(attr.code, e.target.value === "" ? "" : Number(e.target.value))}
               className="bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 text-zinc-900 dark:text-zinc-100 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:bg-white dark:focus:bg-zinc-950 focus:border-zinc-900 dark:focus:border-zinc-100 disabled:opacity-60"
             />
-            {attr.unitSet && (
+            {attr.inputType === "NUMBER_UNIT" && attr.unitSet && (
               <span className="bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 px-3 py-2.5 rounded-xl text-xs font-bold text-zinc-500 dark:text-zinc-450 shrink-0">
                 {formatUnit(attr.unitSet)}
               </span>
