@@ -1173,7 +1173,7 @@ export function CompanyDetailManager({
                         setAddBrandUsNum("");
                         setIsAddBrandOpen(true);
                       }}
-                      className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-650 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-indigo-600 transition-colors cursor-pointer"
+                      className="inline-flex items-center gap-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-850 dark:bg-zinc-100 dark:hover:bg-zinc-200 text-white dark:text-zinc-950 px-3 py-1.5 text-xs font-bold transition-all shadow-sm cursor-pointer"
                     >
                       + 신규 브랜드 추가
                     </button>

@@ -35,7 +35,7 @@ export default async function AdminNewProductPage() {
         <div className="pt-2">
           <Link
             href="/admin/companies/new"
-            className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-650 px-5 py-2.5 text-xs font-semibold text-white shadow-sm hover:bg-indigo-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-650 transition-colors cursor-pointer"
+            className="inline-flex items-center gap-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-850 dark:bg-zinc-100 dark:hover:bg-zinc-200 text-white dark:text-zinc-950 px-5 py-2.5 text-xs font-bold transition-all shadow-sm cursor-pointer"
           >
             + 신규 회사 추가하러 가기
           </Link>

@@ -633,7 +633,7 @@ export function AdminProductCreateForm({ companies, brands }: AdminProductCreate
         <button
           type="submit"
           disabled={pending || !brandId}
-          className="rounded-xl bg-indigo-650 px-5 py-2.5 text-xs font-bold text-white shadow-sm transition-colors hover:bg-indigo-600 disabled:opacity-50 cursor-pointer"
+          className="rounded-xl bg-zinc-900 hover:bg-zinc-850 dark:bg-zinc-100 dark:hover:bg-zinc-200 text-white dark:text-zinc-950 px-5 py-2.5 text-xs font-bold transition-all shadow-sm disabled:opacity-50 cursor-pointer"
         >
           {pending ? "등록 중..." : "제품 등록"}
         </button>

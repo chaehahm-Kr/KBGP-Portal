@@ -91,7 +91,7 @@ export default async function AdminCompaniesPage() {
         <div className="shrink-0">
           <Link
             href="/admin/companies/new"
-            className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-650 px-4 py-2.5 text-xs font-semibold text-white shadow-sm hover:bg-indigo-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-650 transition-colors cursor-pointer"
+            className="inline-flex items-center gap-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-850 dark:bg-zinc-100 dark:hover:bg-zinc-200 text-white dark:text-zinc-955 px-4 py-2.5 text-xs font-bold transition-all shadow-sm cursor-pointer"
           >
             <span className="text-sm font-bold">+</span> 신규 회사 추가
           </Link>

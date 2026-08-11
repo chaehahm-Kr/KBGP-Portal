@@ -71,6 +71,7 @@ export function AdminProductsList({ initialProducts }: AdminProductsListProps) {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [isPending, startTransition] = useTransition();
+  const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
 
   // Sync initialProducts props from server to local state
   useEffect(() => {
@@ -202,12 +203,12 @@ export function AdminProductsList({ initialProducts }: AdminProductsListProps) {
           </p>
         </div>
         <div className="shrink-0">
-          <Link
-            href="/admin/products/new"
-            className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-650 px-4 py-2.5 text-xs font-semibold text-white shadow-sm hover:bg-indigo-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-650 transition-colors cursor-pointer"
+          <button
+            onClick={() => setIsConfirmModalOpen(true)}
+            className="inline-flex items-center gap-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-850 dark:bg-zinc-100 dark:hover:bg-zinc-200 text-white dark:text-zinc-950 px-4 py-2.5 text-xs font-bold transition-all shadow-sm cursor-pointer"
           >
             <span className="text-sm font-bold">+</span> 신규 제품 등록
-          </Link>
+          </button>
         </div>
       </div>
 
@@ -567,6 +568,57 @@ export function AdminProductsList({ initialProducts }: AdminProductsListProps) {
           </table>
         </div>
       </div>
+
+      {/* 회사 및 브랜드 등록 사전 질문 모달 */}
+      {isConfirmModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-xl border border-zinc-200 bg-white shadow-2xl dark:border-zinc-800 dark:bg-zinc-900 overflow-hidden animate-in fade-in zoom-in-95 duration-150 text-xs">
+            <div className="flex items-center justify-between border-b border-zinc-100 bg-zinc-50/50 px-5 py-4 dark:border-zinc-800 dark:bg-zinc-950/20">
+              <h3 className="text-sm font-bold text-zinc-900 dark:text-white">회사 및 브랜드 등록 확인</h3>
+              <button
+                type="button"
+                onClick={() => setIsConfirmModalOpen(false)}
+                className="rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-150 cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4">
+              <p className="text-zinc-600 dark:text-zinc-350 leading-relaxed text-[11px]">
+                신규 제품을 등록하기 전에 해당 제품의 **회사 정보와 브랜드**가 어드민 시스템에 먼저 등록되어 있어야 합니다. 회사와 브랜드 정보가 이미 세팅되어 있습니까?
+              </p>
+
+              <div className="flex flex-col gap-2 pt-2">
+                <button
+                  onClick={() => {
+                    setIsConfirmModalOpen(false);
+                    router.push("/admin/products/new");
+                  }}
+                  className="w-full rounded-xl bg-zinc-950 px-4 py-2.5 font-bold text-white hover:bg-zinc-850 dark:bg-white dark:text-zinc-955 dark:hover:bg-zinc-100 text-xs transition-all cursor-pointer text-center"
+                >
+                  예, 등록되어 있습니다 (제품 등록으로 이동)
+                </button>
+                <button
+                  onClick={() => {
+                    setIsConfirmModalOpen(false);
+                    router.push("/admin/companies/new");
+                  }}
+                  className="w-full rounded-xl border border-zinc-300 bg-white px-4 py-2.5 font-bold text-zinc-700 hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-300 dark:hover:bg-zinc-900 text-xs transition-all cursor-pointer text-center"
+                >
+                  아니오, 회사 정보를 먼저 세팅하겠습니다
+                </button>
+                <button
+                  onClick={() => setIsConfirmModalOpen(false)}
+                  className="w-full rounded-xl bg-zinc-100 px-4 py-2.5 font-semibold text-zinc-500 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-750 text-xs transition-all cursor-pointer text-center"
+                >
+                  취소
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
