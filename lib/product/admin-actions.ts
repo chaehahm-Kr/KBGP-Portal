@@ -749,6 +749,37 @@ export async function adminRemoveProductImage(productId: string, imageId: string
   revalidatePath(`/admin/products/${productId}`);
 }
 
+export async function adminUpdateProductImagesOrder(productId: string, imageIdsInOrder: string[]) {
+  await verifyAdminSession();
+  const supabase = createAdminClient();
+
+  const { data: currentImages } = await supabase
+    .from("product_images")
+    .select("id")
+    .eq("product_id", productId);
+
+  const currentIds = new Set((currentImages ?? []).map((img) => img.id));
+  if (currentIds.size !== imageIdsInOrder.length || !imageIdsInOrder.every(id => currentIds.has(id))) {
+    throw new Error("올바르지 않은 이미지 목록입니다.");
+  }
+
+  for (let index = 0; index < imageIdsInOrder.length; index++) {
+    const id = imageIdsInOrder[index];
+    const { error } = await supabase
+      .from("product_images")
+      .update({ position: index })
+      .eq("id", id)
+      .eq("product_id", productId);
+
+    if (error) {
+      console.error("Failed to update image position:", error);
+      throw new Error(`이미지 순서 저장 실패: ${error.message}`);
+    }
+  }
+
+  revalidatePath(`/admin/products/${productId}`);
+}
+
 export async function adminAddProductVideoUrl(productId: string, videoUrl: string) {
   await verifyAdminSession();
   const supabase = createAdminClient();

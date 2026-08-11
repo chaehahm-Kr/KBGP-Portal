@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useTransition } from "react";
+import React, { useState, useTransition, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useSearchParams, useRouter } from "next/navigation";
 import { 
@@ -16,6 +16,7 @@ import {
   adminUpdateProductCuration,
   adminAddProductImages,
   adminRemoveProductImage,
+  adminUpdateProductImagesOrder,
   adminAddProductVideoUrl,
   adminAddProductVideoFile,
   adminRemoveProductVideo,
@@ -78,6 +79,58 @@ export function ProductOverrideTabs({
   // Local state for media / cert updates loading
   const [mediaPending, setMediaPending] = useState(false);
   const [mediaError, setMediaError] = useState<string | null>(null);
+
+  // Product Images Drag & Drop Ordering State
+  const [localImages, setLocalImages] = useState(() => {
+    return imageRows.map((row, idx) => ({
+      ...row,
+      url: imageUrls[idx] || null
+    }));
+  });
+
+  useEffect(() => {
+    setLocalImages(
+      imageRows.map((row, idx) => ({
+        ...row,
+        url: imageUrls[idx] || null
+      }))
+    );
+  }, [imageRows, imageUrls]);
+
+  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+
+  const handleDragStart = (e: React.DragEvent, index: number) => {
+    setDraggedIndex(index);
+    e.dataTransfer.effectAllowed = "move";
+  };
+
+  const handleDragOver = (e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    if (draggedIndex === null || draggedIndex === index) return;
+    
+    const items = [...localImages];
+    const draggedItem = items[draggedIndex];
+    items.splice(draggedIndex, 1);
+    items.splice(index, 0, draggedItem);
+    
+    setDraggedIndex(index);
+    setLocalImages(items);
+  };
+
+  const handleDragEnd = async () => {
+    setDraggedIndex(null);
+    const orderedIds = localImages.map((img) => img.id);
+    setMediaPending(true);
+    setMediaError(null);
+    try {
+      await adminUpdateProductImagesOrder(product.id, orderedIds);
+      router.refresh();
+    } catch (err: any) {
+      setMediaError(err.message || "이미지 순서 저장에 실패했습니다.");
+    } finally {
+      setMediaPending(false);
+    }
+  };
 
   // 1. Image upload handler
   const handleImageUpload = (e: React.FormEvent<HTMLFormElement>) => {
@@ -1981,16 +2034,36 @@ export function ProductOverrideTabs({
 
               {/* Images list */}
               <div className="space-y-4">
-                <h4 className="text-xs font-bold text-zinc-800 dark:text-white">등록 상품 이미지 목록 ({imageUrls.length}개 / 최대 10개)</h4>
-                {imageUrls.length > 0 ? (
+                <div className="flex flex-col gap-1">
+                  <h4 className="text-xs font-bold text-zinc-800 dark:text-white">등록 상품 이미지 목록 ({localImages.length}개 / 최대 10개)</h4>
+                  {localImages.length > 0 && (
+                    <p className="text-[10px] text-zinc-500 dark:text-zinc-400 flex items-center gap-1.5 bg-zinc-50 dark:bg-zinc-950/20 p-2.5 rounded-lg border border-zinc-150 dark:border-zinc-850">
+                      <span>💡</span>
+                      <span>이미지를 마우스로 드래그 앤 드롭하여 순서를 변경할 수 있습니다. <strong>(1번 이미지가 자동으로 대표 이미지로 설정됩니다)</strong></span>
+                    </p>
+                  )}
+                </div>
+                {localImages.length > 0 ? (
                   <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-5 gap-4">
-                    {imageUrls.map((url, idx) => {
-                      const imgRow = imageRows[idx];
+                    {localImages.map((img, idx) => {
                       return (
-                        <div key={idx} className="relative rounded-lg overflow-hidden border border-zinc-200 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950/40 group shadow-sm flex flex-col justify-between aspect-square p-2">
-                          <div className="relative w-full flex-1 rounded overflow-hidden">
-                            {url ? (
-                              <img src={url} alt={`제품 사진 ${idx + 1}`} className="w-full h-full object-cover" />
+                        <div
+                          key={img.id}
+                          draggable
+                          onDragStart={(e) => handleDragStart(e, idx)}
+                          onDragOver={(e) => handleDragOver(e, idx)}
+                          onDragEnd={handleDragEnd}
+                          className={`relative rounded-lg overflow-hidden border bg-zinc-50 dark:bg-zinc-950/40 group shadow-sm flex flex-col justify-between aspect-square p-2 transition-all cursor-grab active:cursor-grabbing ${
+                            draggedIndex === idx
+                              ? "opacity-40 border-dashed border-indigo-500 ring-2 ring-indigo-500/20"
+                              : idx === 0
+                                ? "border-amber-500 dark:border-amber-400 border-2 shadow-amber-100/50 dark:shadow-none ring-2 ring-amber-500/10"
+                                : "border-zinc-200 dark:border-zinc-800"
+                          }`}
+                        >
+                          <div className="relative w-full flex-1 rounded overflow-hidden select-none pointer-events-none">
+                            {img.url ? (
+                              <img src={img.url} alt={`제품 사진 ${idx + 1}`} className="w-full h-full object-cover select-none pointer-events-none" />
                             ) : (
                               <div className="w-full h-full flex items-center justify-center text-[10px] text-rose-500 font-bold">로딩 실패</div>
                             )}
@@ -2004,16 +2077,14 @@ export function ProductOverrideTabs({
                               </span>
                             )}
                           </div>
-                          {imgRow && (
-                            <button
-                              type="button"
-                              onClick={() => handleImageDelete(imgRow.id)}
-                              disabled={mediaPending}
-                              className="mt-1.5 w-full text-center text-[9px] font-bold text-rose-600 hover:text-rose-800 hover:underline cursor-pointer disabled:opacity-50"
-                            >
-                              이미지 삭제
-                            </button>
-                          )}
+                          <button
+                            type="button"
+                            onClick={() => handleImageDelete(img.id)}
+                            disabled={mediaPending}
+                            className="mt-1.5 w-full text-center text-[9px] font-bold text-rose-600 hover:text-rose-800 hover:underline cursor-pointer disabled:opacity-50"
+                          >
+                            이미지 삭제
+                          </button>
                         </div>
                       );
                     })}
