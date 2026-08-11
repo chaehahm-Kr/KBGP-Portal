@@ -1655,7 +1655,9 @@ export function ProductOverrideTabs({
                 {/* Width */}
                 <div className="space-y-1.5 p-3 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50/20">
                   <div className="flex justify-between items-center">
-                    <label className="text-xs font-bold text-zinc-700 dark:text-zinc-300">가로 (Width, cm/inch) *</label>
+                    <label className="text-xs font-bold text-zinc-700 dark:text-zinc-300">
+                      가로 (Width, cm/inch) <span className="text-rose-500 dark:text-rose-400 font-bold ml-0.5">*</span>
+                    </label>
                     <span className="text-[9px] text-zinc-400 font-mono">원본: {product.package_width || 0} cm</span>
                   </div>
                   <div className="grid grid-cols-2 gap-2">
@@ -1664,7 +1666,7 @@ export function ProductOverrideTabs({
                       <input
                         type="number"
                         step="0.1"
-                        placeholder="0.0"
+                        placeholder={product.package_width?.toString() || "0.0"}
                         value={ovPackageWidth}
                         onChange={(e) => handleWidthCmChange(e.target.value)}
                         className="mt-0.5 block w-full rounded border border-zinc-300 bg-white px-2 py-1 text-xs text-zinc-900 outline-none focus:border-zinc-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
@@ -1675,7 +1677,7 @@ export function ProductOverrideTabs({
                       <input
                         type="number"
                         step="0.01"
-                        placeholder="0.00"
+                        placeholder={product.package_width ? (product.package_width * 0.393701).toFixed(2) : "0.00"}
                         value={ovPackageWidthInch}
                         onChange={(e) => handleWidthInchChange(e.target.value)}
                         className="mt-0.5 block w-full rounded border border-zinc-300 bg-white px-2 py-1 text-xs text-zinc-900 outline-none focus:border-zinc-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
@@ -1687,7 +1689,9 @@ export function ProductOverrideTabs({
                 {/* Depth */}
                 <div className="space-y-1.5 p-3 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50/20">
                   <div className="flex justify-between items-center">
-                    <label className="text-xs font-bold text-zinc-700 dark:text-zinc-300">세로 (Depth, cm/inch) *</label>
+                    <label className="text-xs font-bold text-zinc-700 dark:text-zinc-300">
+                      세로 (Depth, cm/inch) <span className="text-rose-500 dark:text-rose-400 font-bold ml-0.5">*</span>
+                    </label>
                     <span className="text-[9px] text-zinc-400 font-mono">원본: {product.package_depth || 0} cm</span>
                   </div>
                   <div className="grid grid-cols-2 gap-2">
@@ -1696,18 +1700,18 @@ export function ProductOverrideTabs({
                       <input
                         type="number"
                         step="0.1"
-                        placeholder="0.0"
+                        placeholder={product.package_depth?.toString() || "0.0"}
                         value={ovPackageDepth}
                         onChange={(e) => handleDepthCmChange(e.target.value)}
                         className="mt-0.5 block w-full rounded border border-zinc-300 bg-white px-2 py-1 text-xs text-zinc-900 outline-none focus:border-zinc-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
                       />
                     </div>
                     <div>
-                      <span className="text-[9px] text-zinc-450 dark:text-zinc-500 font-semibold block">inch (자동)</span>
+                      <span className="text-[9px] text-zinc-455 dark:text-zinc-500 font-semibold block">inch (자동)</span>
                       <input
                         type="number"
                         step="0.01"
-                        placeholder="0.00"
+                        placeholder={product.package_depth ? (product.package_depth * 0.393701).toFixed(2) : "0.00"}
                         value={ovPackageDepthInch}
                         onChange={(e) => handleDepthInchChange(e.target.value)}
                         className="mt-0.5 block w-full rounded border border-zinc-300 bg-white px-2 py-1 text-xs text-zinc-900 outline-none focus:border-zinc-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
@@ -1719,7 +1723,9 @@ export function ProductOverrideTabs({
                 {/* Height */}
                 <div className="space-y-1.5 p-3 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50/20">
                   <div className="flex justify-between items-center">
-                    <label className="text-xs font-bold text-zinc-700 dark:text-zinc-300">높이 (Height, cm/inch) *</label>
+                    <label className="text-xs font-bold text-zinc-700 dark:text-zinc-300">
+                      높이 (Height, cm/inch) <span className="text-rose-500 dark:text-rose-400 font-bold ml-0.5">*</span>
+                    </label>
                     <span className="text-[9px] text-zinc-400 font-mono">원본: {product.package_height || 0} cm</span>
                   </div>
                   <div className="grid grid-cols-2 gap-2">
@@ -1728,7 +1734,7 @@ export function ProductOverrideTabs({
                       <input
                         type="number"
                         step="0.1"
-                        placeholder="0.0"
+                        placeholder={product.package_height?.toString() || "0.0"}
                         value={ovPackageHeight}
                         onChange={(e) => handleHeightCmChange(e.target.value)}
                         className="mt-0.5 block w-full rounded border border-zinc-300 bg-white px-2 py-1 text-xs text-zinc-900 outline-none focus:border-zinc-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
@@ -1739,7 +1745,7 @@ export function ProductOverrideTabs({
                       <input
                         type="number"
                         step="0.01"
-                        placeholder="0.00"
+                        placeholder={product.package_height ? (product.package_height * 0.393701).toFixed(2) : "0.00"}
                         value={ovPackageHeightInch}
                         onChange={(e) => handleHeightInchChange(e.target.value)}
                         className="mt-0.5 block w-full rounded border border-zinc-300 bg-white px-2 py-1 text-xs text-zinc-900 outline-none focus:border-zinc-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
@@ -1751,7 +1757,9 @@ export function ProductOverrideTabs({
                 {/* Weight */}
                 <div className="space-y-1.5 p-3 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50/20">
                   <div className="flex justify-between items-center">
-                    <label className="text-xs font-bold text-zinc-700 dark:text-zinc-300">무게 (Weight, g/lb/oz) *</label>
+                    <label className="text-xs font-bold text-zinc-700 dark:text-zinc-300">
+                      무게 (Weight, g/lb/oz) <span className="text-rose-500 dark:text-rose-400 font-bold ml-0.5">*</span>
+                    </label>
                     <span className="text-[9px] text-zinc-400 font-mono">원본: {product.package_weight || 0} g</span>
                   </div>
                   <div className="grid grid-cols-3 gap-1.5">
@@ -1760,7 +1768,7 @@ export function ProductOverrideTabs({
                       <input
                         type="number"
                         step="0.1"
-                        placeholder="0.0"
+                        placeholder={product.package_weight?.toString() || "0.0"}
                         value={ovPackageWeight}
                         onChange={(e) => handleWeightGChange(e.target.value)}
                         className="mt-0.5 block w-full rounded border border-zinc-300 bg-white px-1.5 py-1 text-[11px] text-zinc-900 outline-none focus:border-zinc-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
@@ -1771,7 +1779,7 @@ export function ProductOverrideTabs({
                       <input
                         type="number"
                         step="0.001"
-                        placeholder="0.000"
+                        placeholder={product.package_weight ? (product.package_weight * 0.00220462).toFixed(3) : "0.000"}
                         value={ovPackageWeightLb}
                         onChange={(e) => handleWeightLbChange(e.target.value)}
                         className="mt-0.5 block w-full rounded border border-zinc-300 bg-white px-1.5 py-1 text-[11px] text-zinc-900 outline-none focus:border-zinc-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
@@ -1782,7 +1790,7 @@ export function ProductOverrideTabs({
                       <input
                         type="number"
                         step="0.01"
-                        placeholder="0.00"
+                        placeholder={product.package_weight ? (product.package_weight * 0.035274).toFixed(2) : "0.00"}
                         value={ovPackageWeightOz}
                         onChange={(e) => handleWeightOzChange(e.target.value)}
                         className="mt-0.5 block w-full rounded border border-zinc-300 bg-white px-1.5 py-1 text-[11px] text-zinc-900 outline-none focus:border-zinc-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
