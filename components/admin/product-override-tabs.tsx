@@ -50,6 +50,7 @@ interface ProductOverrideTabsProps {
   curators: { id: string; name: string; email: string }[];
   apProfiles: { id: number; display_program: string; code: string; name: string; description: string | null; is_active: boolean }[];
   displayPrograms: { code: string; name: string; description: string | null; min_sku?: number; max_sku?: number; is_active: boolean }[];
+  hasMissingRequiredAttributes?: boolean;
 }
 
 export function ProductOverrideTabs({
@@ -70,6 +71,7 @@ export function ProductOverrideTabs({
   curators,
   apProfiles,
   displayPrograms,
+  hasMissingRequiredAttributes = false,
 }: ProductOverrideTabsProps) {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -604,7 +606,11 @@ export function ProductOverrideTabs({
   const pkgWeight = ovPackageWeight.trim() !== "" ? parseFloat(ovPackageWeight) : Number(product.package_weight || 0);
 
   if (!effectiveBrandId) missingFields.push("브랜드 지정");
-  if (!effectiveCategory) missingFields.push("카테고리 지정");
+  if (!(product as any).category_code) {
+    missingFields.push("카테고리 지정");
+  } else if (hasMissingRequiredAttributes) {
+    missingFields.push("카테고리 필수 속성 누락");
+  }
   if (!(effectiveNameEn || "").trim()) missingFields.push("영문 제품명");
   if (!(effectiveManufactureSku || "").trim()) missingFields.push("제조사 SKU");
   if (!(effectiveOrigin || "").trim()) missingFields.push("원산지");
@@ -625,7 +631,7 @@ export function ProductOverrideTabs({
 
   // 탭별 실시간 필수 항목 누락 여부 연산
   const isBasicTabMissing = !effectiveBrandId || !(effectiveNameEn || "").trim() || !(effectiveManufactureSku || "").trim() || !(effectiveOrigin || "").trim() || (!(effectiveUpc || "").trim() && !(effectiveEan || "").trim());
-  const isCategoryTabMissing = !(product as any).category_code;
+  const isCategoryTabMissing = !(product as any).category_code || hasMissingRequiredAttributes;
   const isPriceTabMissing = Number(effectivePriceKrwRetail) <= 0 || Number(effectivePriceUsdFob) <= 0;
   const isLogisticsTabMissing = pkgWidth <= 0 || pkgDepth <= 0 || pkgHeight <= 0 || pkgWeight <= 0;
   const isMediaTabMissing = !hasImages;

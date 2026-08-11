@@ -131,6 +131,52 @@ export default async function AdminProductsPage() {
     return Math.round((filled / targetAttrCodes.size) * 100);
   };
 
+  // Create a map of attribute code to its default is_required status
+  const attrRequiredMap = new Map((dbAllAttrs ?? []).map(a => [a.code, a.is_required]));
+
+  // Build required attributes list per profile code
+  const profileRequiredAttrs = new Map<string, string[]>();
+  (dbProfAttrs ?? []).forEach((pa) => {
+    const isRequired = pa.is_required_override !== null 
+      ? pa.is_required_override 
+      : (attrRequiredMap.get(pa.attribute_code) ?? false);
+    
+    if (isRequired) {
+      const list = profileRequiredAttrs.get(pa.profile_code) || [];
+      list.push(pa.attribute_code);
+      profileRequiredAttrs.set(pa.profile_code, list);
+    }
+  });
+
+  // Common required attributes
+  const commonRequiredAttrCodes = (dbAllAttrs ?? [])
+    .filter((a) => a.scope === "COMMON" && a.is_required)
+    .map((a) => a.code);
+
+  const getProductHasMissingRequiredAttributes = (productId: string, categoryCode: string | null | undefined): boolean => {
+    if (!categoryCode) return false;
+    const profileCode = catToProfile.get(categoryCode);
+    const requiredAttrCodes = new Set<string>(commonRequiredAttrCodes);
+    if (profileCode) {
+      const pRequiredAttrs = profileRequiredAttrs.get(profileCode) || [];
+      pRequiredAttrs.forEach((code) => requiredAttrCodes.add(code));
+    }
+    if (requiredAttrCodes.size === 0) return false;
+
+    const pValues = valuesByProduct.get(productId) || new Map<string, any>();
+    for (const code of requiredAttrCodes) {
+      const valObj = pValues.get(code);
+      if (!valObj) return true;
+      const val = valObj.value_json;
+      if (Array.isArray(val)) {
+        if (val.length === 0) return true;
+      } else if (val === null || val === undefined || String(val).trim() === "") {
+        return true;
+      }
+    }
+    return false;
+  };
+
   // 5. Fetch first images (lowest position) for products to display thumbnail
   const { data: productImages } = await supabase
     .from("product_images")
@@ -170,7 +216,7 @@ export default async function AdminProductsPage() {
       const completenessRate = getProductCompleteness(p.id, p.category_code);
       const missingFields: string[] = [];
       if (!effectiveBrandId) missingFields.push("브랜드");
-      if (!p.category_code || completenessRate < 100) missingFields.push("카테고리");
+      if (!p.category_code || getProductHasMissingRequiredAttributes(p.id, p.category_code)) missingFields.push("카테고리");
       if (!(effectiveNameEn || "").trim()) missingFields.push("영문 제품명");
       if (!(effectiveManufactureSku || "").trim()) missingFields.push("제조사 SKU");
       if (!(effectiveOrigin || "").trim()) missingFields.push("원산지");

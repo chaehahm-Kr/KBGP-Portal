@@ -731,6 +731,9 @@ export function CategoryAttributeForm({
               className="bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 text-zinc-900 dark:text-zinc-100 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:bg-white dark:focus:bg-zinc-950 focus:border-zinc-900 dark:focus:border-zinc-100 disabled:opacity-60"
             >
               <option value="">선택 안함</option>
+              {attr.allowNa && (
+                <option value="NA">해당 없음 (N/A)</option>
+              )}
               {attr.options.map(o => (
                 <option key={o.optionCode} value={o.optionCode}>{o.optionKo}</option>
               ))}
@@ -755,6 +758,23 @@ export function CategoryAttributeForm({
         {/* 3.2 MULTI_SELECT 체크박스 그룹 */}
         {attr.inputType === "MULTI_SELECT" && (
           <div className="flex flex-col gap-2.5 bg-zinc-50/50 dark:bg-zinc-950/40 p-4 rounded-xl border border-zinc-200 dark:border-zinc-800">
+            {attr.allowNa && (
+              <div className="flex items-center gap-2 mb-2 pb-2 border-b border-zinc-200 dark:border-zinc-800">
+                <label className="flex items-center gap-2.5 px-3 py-1 rounded-lg cursor-pointer text-xs font-bold text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200">
+                  <input
+                    id={`attr-checkbox-na-${attr.code}`}
+                    type="checkbox"
+                    checked={val === "NA"}
+                    disabled={!isEditable || saving}
+                    onChange={(e) => {
+                      updateValue(attr.code, e.target.checked ? "NA" : []);
+                    }}
+                    className="rounded text-indigo-650 focus:ring-indigo-500 bg-white dark:bg-zinc-950 border-zinc-300 dark:border-zinc-800"
+                  />
+                  해당 없음 (N/A)
+                </label>
+              </div>
+            )}
             <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-2">
               {attr.options.map(o => {
                 const list = Array.isArray(val) ? val : [];
@@ -767,14 +787,14 @@ export function CategoryAttributeForm({
                       ${checked 
                         ? 'bg-indigo-50 dark:bg-indigo-950/20 text-indigo-700 dark:text-indigo-400 font-semibold border border-indigo-100 dark:border-indigo-900/30' 
                         : 'hover:bg-zinc-100 dark:hover:bg-zinc-900/50 text-zinc-600 dark:text-zinc-400 border border-transparent'}
-                      ${!isEditable ? 'opacity-65 cursor-not-allowed' : ''}
+                      ${(!isEditable || val === "NA") ? 'opacity-65 cursor-not-allowed' : ''}
                     `}
                   >
                     <input
                       id={`attr-checkbox-${attr.code}-${o.optionCode}`}
                       type="checkbox"
                       checked={checked}
-                      disabled={!isEditable || saving}
+                      disabled={!isEditable || saving || val === "NA"}
                       onChange={(e) => {
                         if (e.target.checked) {
                           updateValue(attr.code, [...list, o.optionCode]);
@@ -797,7 +817,7 @@ export function CategoryAttributeForm({
                   type="text"
                   placeholder="콤마(,) 등으로 구분하여 입력..."
                   value={textVal}
-                  disabled={!isEditable || saving}
+                  disabled={!isEditable || saving || val === "NA"}
                   onChange={(e) => updateTextValue(attr.code, e.target.value)}
                   className="bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-1.5 text-xs text-zinc-900 dark:text-zinc-200 w-full focus:outline-none"
                 />
@@ -842,15 +862,29 @@ export function CategoryAttributeForm({
               id={`attr-number-input-${attr.code}`}
               type="number"
               placeholder="숫자 입력"
-              value={val || ""}
-              disabled={!isEditable || saving}
+              value={val === "NA" ? "" : val || ""}
+              disabled={!isEditable || saving || val === "NA"}
               onChange={(e) => updateValue(attr.code, e.target.value === "" ? "" : Number(e.target.value))}
-              className="bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 text-zinc-900 dark:text-zinc-100 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:bg-white dark:focus:bg-zinc-950 focus:border-zinc-900 dark:focus:border-zinc-100 disabled:opacity-60"
+              className="bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 text-zinc-900 dark:text-zinc-100 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:bg-white dark:focus:bg-zinc-950 focus:border-zinc-900 dark:focus:border-zinc-100 disabled:opacity-60 w-32"
             />
             {attr.inputType === "NUMBER_UNIT" && attr.unitSet && (
               <span className="bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 px-3 py-2.5 rounded-xl text-xs font-bold text-zinc-500 dark:text-zinc-450 shrink-0">
                 {formatUnit(attr.unitSet)}
               </span>
+            )}
+            {attr.allowNa && (
+              <label className="flex items-center gap-1.5 ml-2 cursor-pointer text-xs font-semibold text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200 select-none">
+                <input
+                  type="checkbox"
+                  checked={val === "NA"}
+                  disabled={!isEditable || saving}
+                  onChange={(e) => {
+                    updateValue(attr.code, e.target.checked ? "NA" : "");
+                  }}
+                  className="rounded text-indigo-650 focus:ring-indigo-500 bg-white dark:bg-zinc-950 border-zinc-300 dark:border-zinc-800"
+                />
+                해당 없음
+              </label>
             )}
           </div>
         )}
@@ -862,59 +896,105 @@ export function CategoryAttributeForm({
               id={`attr-range-min-${attr.code}`}
               type="number"
               placeholder="최소"
-              value={Array.isArray(val) ? val[0] || "" : ""}
-              disabled={!isEditable || saving}
+              value={val === "NA" ? "" : (Array.isArray(val) ? val[0] || "" : "")}
+              disabled={!isEditable || saving || val === "NA"}
               onChange={(e) => {
                 const max = Array.isArray(val) ? val[1] || "" : "";
                 updateValue(attr.code, [e.target.value === "" ? "" : Number(e.target.value), max]);
               }}
-              className="bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 text-zinc-900 dark:text-zinc-100 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:bg-white dark:focus:bg-zinc-950 focus:border-zinc-900 dark:focus:border-zinc-100 disabled:opacity-60"
+              className="bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 text-zinc-900 dark:text-zinc-100 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:bg-white dark:focus:bg-zinc-950 focus:border-zinc-900 dark:focus:border-zinc-100 disabled:opacity-60 w-24"
             />
             <span className="text-zinc-400 dark:text-zinc-600 font-bold shrink-0">~</span>
             <input
               id={`attr-range-max-${attr.code}`}
               type="number"
               placeholder="최대"
-              value={Array.isArray(val) ? val[1] || "" : ""}
-              disabled={!isEditable || saving}
+              value={val === "NA" ? "" : (Array.isArray(val) ? val[1] || "" : "")}
+              disabled={!isEditable || saving || val === "NA"}
               onChange={(e) => {
                 const min = Array.isArray(val) ? val[0] || "" : "";
                 updateValue(attr.code, [min, e.target.value === "" ? "" : Number(e.target.value)]);
               }}
-              className="bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 text-zinc-900 dark:text-zinc-100 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:bg-white dark:focus:bg-zinc-950 focus:border-zinc-900 dark:focus:border-zinc-100 disabled:opacity-60"
+              className="bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 text-zinc-900 dark:text-zinc-100 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:bg-white dark:focus:bg-zinc-950 focus:border-zinc-900 dark:focus:border-zinc-100 disabled:opacity-60 w-24"
             />
             {attr.unitSet && (
               <span className="bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 px-3 py-2.5 rounded-xl text-xs font-bold text-zinc-500 dark:text-zinc-450 shrink-0">
                 {formatUnit(attr.unitSet)}
               </span>
             )}
+            {attr.allowNa && (
+              <label className="flex items-center gap-1.5 ml-2 cursor-pointer text-xs font-semibold text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200 select-none">
+                <input
+                  type="checkbox"
+                  checked={val === "NA"}
+                  disabled={!isEditable || saving}
+                  onChange={(e) => {
+                    updateValue(attr.code, e.target.checked ? "NA" : ["", ""]);
+                  }}
+                  className="rounded text-indigo-650 focus:ring-indigo-500 bg-white dark:bg-zinc-950 border-zinc-300 dark:border-zinc-800"
+                />
+                해당 없음
+              </label>
+            )}
           </div>
         )}
 
         {/* 3.6 TEXT (단문 텍스트) */}
         {attr.inputType === "TEXT" && (
-          <input
-            id={`attr-text-field-${attr.code}`}
-            type="text"
-            placeholder="내용 입력"
-            value={val || ""}
-            disabled={!isEditable || saving}
-            onChange={(e) => updateValue(attr.code, e.target.value)}
-            className="bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 text-zinc-900 dark:text-zinc-100 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:bg-white dark:focus:bg-zinc-950 focus:border-zinc-900 dark:focus:border-zinc-100 disabled:opacity-60"
-          />
+          <div className="flex items-center gap-2">
+            <input
+              id={`attr-text-field-${attr.code}`}
+              type="text"
+              placeholder="내용 입력"
+              value={val === "NA" ? "" : val || ""}
+              disabled={!isEditable || saving || val === "NA"}
+              onChange={(e) => updateValue(attr.code, e.target.value)}
+              className="bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 text-zinc-900 dark:text-zinc-100 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:bg-white dark:focus:bg-zinc-950 focus:border-zinc-900 dark:focus:border-zinc-100 disabled:opacity-60 flex-1 max-w-xs"
+            />
+            {attr.allowNa && (
+              <label className="flex items-center gap-1.5 ml-2 cursor-pointer text-xs font-semibold text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200 select-none">
+                <input
+                  type="checkbox"
+                  checked={val === "NA"}
+                  disabled={!isEditable || saving}
+                  onChange={(e) => {
+                    updateValue(attr.code, e.target.checked ? "NA" : "");
+                  }}
+                  className="rounded text-indigo-650 focus:ring-indigo-500 bg-white dark:bg-zinc-950 border-zinc-300 dark:border-zinc-800"
+                />
+                해당 없음
+              </label>
+            )}
+          </div>
         )}
 
         {/* 3.7 LONG_TEXT (장문 텍스트) */}
         {attr.inputType === "LONG_TEXT" && (
-          <textarea
-            id={`attr-textarea-field-${attr.code}`}
-            placeholder="상세 내용 기재..."
-            rows={3}
-            value={val || ""}
-            disabled={!isEditable || saving}
-            onChange={(e) => updateValue(attr.code, e.target.value)}
-            className="bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 text-zinc-900 dark:text-zinc-100 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:bg-white dark:focus:bg-zinc-950 focus:border-zinc-900 dark:focus:border-zinc-100 disabled:opacity-60 resize-y"
-          />
+          <div className="flex flex-col gap-2">
+            <textarea
+              id={`attr-textarea-field-${attr.code}`}
+              placeholder="상세 내용 기재..."
+              rows={3}
+              value={val === "NA" ? "" : val || ""}
+              disabled={!isEditable || saving || val === "NA"}
+              onChange={(e) => updateValue(attr.code, e.target.value)}
+              className="bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 text-zinc-900 dark:text-zinc-100 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:bg-white dark:focus:bg-zinc-950 focus:border-zinc-900 dark:focus:border-zinc-100 disabled:opacity-60 resize-y max-w-md w-full"
+            />
+            {attr.allowNa && (
+              <label className="flex items-center gap-1.5 cursor-pointer text-xs font-semibold text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200 select-none w-fit">
+                <input
+                  type="checkbox"
+                  checked={val === "NA"}
+                  disabled={!isEditable || saving}
+                  onChange={(e) => {
+                    updateValue(attr.code, e.target.checked ? "NA" : "");
+                  }}
+                  className="rounded text-indigo-650 focus:ring-indigo-500 bg-white dark:bg-zinc-950 border-zinc-300 dark:border-zinc-800"
+                />
+                해당 없음
+              </label>
+            )}
+          </div>
         )}
       </div>
     );

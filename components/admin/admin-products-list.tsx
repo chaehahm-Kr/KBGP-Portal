@@ -440,7 +440,7 @@ export function AdminProductsList({ initialProducts }: AdminProductsListProps) {
                         >
                           {product.display_name}
                         </Link>
-                        {product.category_code && product.completeness_rate === 100 && product.category_full_path ? (
+                        {product.category_code && product.category_full_path ? (
                           <span className="text-[10px] font-semibold text-zinc-500 dark:text-zinc-400 block pt-0.5">
                             {product.category_full_path}
                           </span>
