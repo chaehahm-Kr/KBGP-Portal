@@ -561,7 +561,7 @@ export function APDetailClient({
                 })
               ) : (
                 <tr>
-                  <td colSpan={10} className="p-8 text-center text-zinc-400 italic">
+                  <td colSpan={11} className="p-8 text-center text-zinc-400 italic">
                     선택된 진열 상품이 없습니다. 상단 우측 [+ 진열 상품 추가] 버튼을 눌러 상품을 큐레이션 하세요.
                   </td>
                 </tr>

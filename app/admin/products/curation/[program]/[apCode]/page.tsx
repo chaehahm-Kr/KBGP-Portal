@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { verifyAdminSession } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { APDetailClient } from "./ap-detail-client";
+import { getSignedFileUrl } from "@/lib/files/storage";
 
 export const metadata = {
   title: "Assortment Profile (AP) 진열 관리 | K SELECT NETWORK 어드민",
@@ -48,6 +49,14 @@ export default async function APDetailPage({
         price_additional_info,
         brands (
           name
+        ),
+        product_curations (
+          wholesale_price,
+          suggest_retail_price
+        ),
+        product_images (
+          storage_path,
+          position
         )
       )
     `)
@@ -74,39 +83,100 @@ export default async function APDetailPage({
       price_additional_info,
       brands (
         name
+      ),
+      product_curations (
+        wholesale_price,
+        suggest_retail_price
+      ),
+      product_images (
+        storage_path,
+        position
       )
     `)
-    .eq("deleted_at", null)
+    .is("deleted_at", null)
     .order("name", { ascending: true });
 
   // Map product details with curation roles
-  const selectedProducts = (matrixItems || []).map((row: any) => {
+  // Map product details with curation roles
+  const selectedProducts = await Promise.all((matrixItems || []).map(async (row: any) => {
     const prod = row.products;
     const info = prod.price_additional_info as any;
+    const overrides = info?.admin_overrides || {};
+    const productName = overrides.name ? overrides.name.trim() : prod.name;
+    const curation = prod.product_curations;
+
+    // Image path & sign url
+    const imgRows = prod.product_images || [];
+    const firstImg = imgRows.sort((a: any, b: any) => (a.position || 0) - (b.position || 0))[0];
+    const imageUrl = firstImg ? await getSignedFileUrl(firstImg.storage_path) : null;
     
     // Parse supply and retail prices
-    const wholesalePrice = info?.wholesale_price !== undefined && info?.wholesale_price !== null
-      ? parseFloat(info.wholesale_price)
+    const wholesalePrice = curation?.wholesale_price !== undefined && curation?.wholesale_price !== null
+      ? parseFloat(curation.wholesale_price)
       : prod.price_usd_fob || 0;
       
-    const suggestRetailPrice = info?.suggest_retail_price !== undefined && info?.suggest_retail_price !== null
-      ? parseFloat(info.suggest_retail_price)
+    const suggestRetailPrice = curation?.suggest_retail_price !== undefined && curation?.suggest_retail_price !== null
+      ? parseFloat(curation.suggest_retail_price)
       : prod.estimated_retail_price || 0;
+
+    const retailerMarginPercent = suggestRetailPrice > 0
+      ? parseFloat((((suggestRetailPrice - wholesalePrice) / suggestRetailPrice) * 100).toFixed(1))
+      : 0;
 
     return {
       id: prod.id,
-      name: prod.name,
+      name: productName,
       letusto_sku: prod.letusto_sku || "지정 대기 중",
       brandName: prod.brands?.name || "(미지정)",
       brand_id: prod.brand_id,
       category_code: prod.category_code,
       estimated_retail_price: suggestRetailPrice, // SRP (소비자가)
       price_usd_fob: wholesalePrice, // 공급가 (Wholesale)
+      retailerMarginPercent,
+      imageUrl,
       sales_status: prod.sales_status,
       selection_status: prod.selection_status,
       curationRole: row.priority_role,
     };
-  });
+  }));
+
+  const mappedAllProducts = await Promise.all((allProducts || []).map(async (p: any) => {
+    const info = p.price_additional_info as any;
+    const overrides = info?.admin_overrides || {};
+    const productName = overrides.name ? overrides.name.trim() : p.name;
+    const curation = p.product_curations;
+
+    const imgRows = p.product_images || [];
+    const firstImg = imgRows.sort((a: any, b: any) => (a.position || 0) - (b.position || 0))[0];
+    const imageUrl = firstImg ? await getSignedFileUrl(firstImg.storage_path) : null;
+
+    const wholesalePrice = curation?.wholesale_price !== undefined && curation?.wholesale_price !== null
+      ? parseFloat(curation.wholesale_price)
+      : p.price_usd_fob || 0;
+      
+    const suggestRetailPrice = curation?.suggest_retail_price !== undefined && curation?.suggest_retail_price !== null
+      ? parseFloat(curation.suggest_retail_price)
+      : p.estimated_retail_price || 0;
+
+    const retailerMarginPercent = suggestRetailPrice > 0
+      ? parseFloat((((suggestRetailPrice - wholesalePrice) / suggestRetailPrice) * 100).toFixed(1))
+      : 0;
+
+    return {
+      id: p.id,
+      name: productName,
+      letusto_sku: p.letusto_sku || "대기",
+      brandName: p.brands?.name || "미지정",
+      brand_id: p.brand_id,
+      category_code: p.category_code,
+      estimated_retail_price: suggestRetailPrice, // SRP (소비자가)
+      price_usd_fob: wholesalePrice, // 공급가 (Wholesale)
+      retailerMarginPercent,
+      imageUrl,
+      sales_status: p.sales_status,
+      selection_status: p.selection_status,
+    };
+  }));
 
   return (
     <div className="space-y-6 w-full max-w-7xl pb-12">
@@ -131,29 +201,7 @@ export default async function APDetailPage({
         ap={ap}
         selectedProducts={selectedProducts}
         categories={categories || []}
-        allProducts={(allProducts || []).map((p: any) => {
-          const info = p.price_additional_info as any;
-          const wholesalePrice = info?.wholesale_price !== undefined && info?.wholesale_price !== null
-            ? parseFloat(info.wholesale_price)
-            : p.price_usd_fob || 0;
-            
-          const suggestRetailPrice = info?.suggest_retail_price !== undefined && info?.suggest_retail_price !== null
-            ? parseFloat(info.suggest_retail_price)
-            : p.estimated_retail_price || 0;
-
-          return {
-            id: p.id,
-            name: p.name,
-            letusto_sku: p.letusto_sku || "대기",
-            brandName: p.brands?.name || "미지정",
-            brand_id: p.brand_id,
-            category_code: p.category_code,
-            estimated_retail_price: suggestRetailPrice, // SRP (소비자가)
-            price_usd_fob: wholesalePrice, // 공급가 (Wholesale)
-            sales_status: p.sales_status,
-            selection_status: p.selection_status,
-          };
-        })}
+        allProducts={mappedAllProducts}
       />
     </div>
   );
