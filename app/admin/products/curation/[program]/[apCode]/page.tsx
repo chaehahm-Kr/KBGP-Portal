@@ -45,6 +45,7 @@ export default async function APDetailPage({
         letusto_sku,
         brand_id,
         category_code,
+        price_additional_info,
         brands (
           name
         )
@@ -70,6 +71,7 @@ export default async function APDetailPage({
       price_usd_fob,
       sales_status,
       selection_status,
+      price_additional_info,
       brands (
         name
       )
@@ -80,6 +82,17 @@ export default async function APDetailPage({
   // Map product details with curation roles
   const selectedProducts = (matrixItems || []).map((row: any) => {
     const prod = row.products;
+    const info = prod.price_additional_info as any;
+    
+    // Parse supply and retail prices
+    const wholesalePrice = info?.wholesale_price !== undefined && info?.wholesale_price !== null
+      ? parseFloat(info.wholesale_price)
+      : prod.price_usd_fob || 0;
+      
+    const suggestRetailPrice = info?.suggest_retail_price !== undefined && info?.suggest_retail_price !== null
+      ? parseFloat(info.suggest_retail_price)
+      : prod.estimated_retail_price || 0;
+
     return {
       id: prod.id,
       name: prod.name,
@@ -87,8 +100,8 @@ export default async function APDetailPage({
       brandName: prod.brands?.name || "(미지정)",
       brand_id: prod.brand_id,
       category_code: prod.category_code,
-      estimated_retail_price: prod.estimated_retail_price || 0,
-      price_usd_fob: prod.price_usd_fob || 0,
+      estimated_retail_price: suggestRetailPrice, // SRP (소비자가)
+      price_usd_fob: wholesalePrice, // 공급가 (Wholesale)
       sales_status: prod.sales_status,
       selection_status: prod.selection_status,
       curationRole: row.priority_role,
@@ -118,18 +131,29 @@ export default async function APDetailPage({
         ap={ap}
         selectedProducts={selectedProducts}
         categories={categories || []}
-        allProducts={(allProducts || []).map((p: any) => ({
-          id: p.id,
-          name: p.name,
-          letusto_sku: p.letusto_sku || "대기",
-          brandName: p.brands?.name || "미지정",
-          brand_id: p.brand_id,
-          category_code: p.category_code,
-          estimated_retail_price: p.estimated_retail_price || 0,
-          price_usd_fob: p.price_usd_fob || 0,
-          sales_status: p.sales_status,
-          selection_status: p.selection_status,
-        }))}
+        allProducts={(allProducts || []).map((p: any) => {
+          const info = p.price_additional_info as any;
+          const wholesalePrice = info?.wholesale_price !== undefined && info?.wholesale_price !== null
+            ? parseFloat(info.wholesale_price)
+            : p.price_usd_fob || 0;
+            
+          const suggestRetailPrice = info?.suggest_retail_price !== undefined && info?.suggest_retail_price !== null
+            ? parseFloat(info.suggest_retail_price)
+            : p.estimated_retail_price || 0;
+
+          return {
+            id: p.id,
+            name: p.name,
+            letusto_sku: p.letusto_sku || "대기",
+            brandName: p.brands?.name || "미지정",
+            brand_id: p.brand_id,
+            category_code: p.category_code,
+            estimated_retail_price: suggestRetailPrice, // SRP (소비자가)
+            price_usd_fob: wholesalePrice, // 공급가 (Wholesale)
+            sales_status: p.sales_status,
+            selection_status: p.selection_status,
+          };
+        })}
       />
     </div>
   );

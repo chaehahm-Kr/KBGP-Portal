@@ -581,6 +581,17 @@ export function ProductOverrideTabs({
     setStatusMessage(null);
     startTransition(async () => {
       try {
+        // Auto-upload pending images if any
+        const imageFileInput = document.querySelector('input[type="file"][accept*="image"]') as HTMLInputElement;
+        if (imageFileInput && imageFileInput.files && imageFileInput.files.length > 0) {
+          const formData = new FormData();
+          for (const file of Array.from(imageFileInput.files)) {
+            formData.append("images", file);
+          }
+          await adminAddProductImages(product.id, formData);
+          imageFileInput.value = "";
+        }
+
         const payload: Record<string, any> = {};
 
         // Parse helper

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { verifyAdminSession } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { getSignedFileUrl } from "@/lib/files/storage";
 import { ProductOverrideTabs } from "@/components/admin/product-override-tabs";
 import type { Product, ProductVideo } from "@/lib/product/types";
@@ -67,19 +68,21 @@ export default async function AdminProductDetailPage({
     .eq("status", "active")
     .order("name", { ascending: true });
 
-  const { data: images } = await supabase
+  const adminSupabase = createAdminClient();
+
+  const { data: images } = await adminSupabase
     .from("product_images")
     .select("id, storage_path")
     .eq("product_id", id)
     .order("position", { ascending: true });
 
-  const { data: videos } = await supabase
+  const { data: videos } = await adminSupabase
     .from("product_videos")
     .select("id, storage_path, video_url, position")
     .eq("product_id", id)
     .order("position", { ascending: true });
 
-  const { data: certificates } = await supabase
+  const { data: certificates } = await adminSupabase
     .from("product_certificates")
     .select("id, certificate_type, storage_path, original_filename, version")
     .eq("product_id", id)

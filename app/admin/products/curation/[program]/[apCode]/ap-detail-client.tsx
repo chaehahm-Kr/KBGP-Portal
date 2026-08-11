@@ -114,25 +114,33 @@ export function APDetailClient({
   const brandCount = new Set(products.map((p) => p.brand_id)).size;
   const categoryCount = new Set(products.map((p) => p.category_code).filter(Boolean)).size;
 
-  let msrpSum = 0;
-  let msrpCount = 0;
+  let srpSum = 0;
+  let srpCount = 0;
+  let supplySum = 0;
+  let supplyCount = 0;
   let marginSum = 0;
   let marginCount = 0;
 
   products.forEach((p) => {
-    const msrp = p.estimated_retail_price;
-    const fob = p.price_usd_fob;
-    if (msrp > 0) {
-      msrpSum += msrp;
-      msrpCount++;
+    const srp = p.estimated_retail_price;
+    const supply = p.price_usd_fob;
+    
+    if (srp > 0) {
+      srpSum += srp;
+      srpCount++;
     }
-    if (msrp > 0 && fob > 0) {
-      marginSum += ((msrp - fob) / msrp) * 100;
+    if (supply > 0) {
+      supplySum += supply;
+      supplyCount++;
+    }
+    if (srp > 0 && supply > 0) {
+      marginSum += ((srp - supply) / srp) * 100;
       marginCount++;
     }
   });
 
-  const avgMsp = msrpCount > 0 ? msrpSum / msrpCount : 0;
+  const avgSrp = srpCount > 0 ? srpSum / srpCount : 0;
+  const avgSupply = supplyCount > 0 ? supplySum / supplyCount : 0;
   const avgMargin = marginCount > 0 ? marginSum / marginCount : 0;
 
   // Warning Checks
@@ -389,8 +397,8 @@ export function APDetailClient({
         </div>
       )}
 
-      {/* 2. Top KPI Dashboard Summary */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+            {/* 2. Top KPI Dashboard Summary */}
+      <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
         <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
           <p className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">Target SKU</p>
           <p className="text-xl font-bold text-zinc-900 dark:text-white mt-1">{ap.target_sku}</p>
@@ -406,16 +414,39 @@ export function APDetailClient({
           <p className="text-xl font-bold text-zinc-900 dark:text-white mt-1">{brandCount}</p>
         </div>
         <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-          <p className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">Avg MSRP</p>
-          <p className="text-xl font-bold text-zinc-900 dark:text-white mt-1">${avgMsp.toFixed(2)}</p>
+          <p className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">Avg Retail SRP</p>
+          <p className="text-xl font-bold text-zinc-900 dark:text-white mt-1">${avgSrp.toFixed(2)}</p>
         </div>
-        <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 col-span-2 md:col-span-1">
+        <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+          <p className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">Avg Supply Price</p>
+          <p className="text-xl font-bold text-zinc-900 dark:text-white mt-1">${avgSupply.toFixed(2)}</p>
+        </div>
+        <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
           <p className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">Avg Retailer Margin</p>
           <p className="text-xl font-bold text-zinc-900 dark:text-white mt-1">{avgMargin.toFixed(1)}%</p>
         </div>
       </div>
 
-      {/* 3. Selected Product List Management */}
+      {/* 3. Curation Report Dashboard Area (Moved here, above Selected Products) */}
+      <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 space-y-6">
+        <div className="border-b border-zinc-150 pb-2 dark:border-zinc-800">
+          <h3 className="text-sm font-bold text-zinc-850 dark:text-white">큐레이션 분석 보고서 (Curation Report)</h3>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+          {renderMixBar("Main Category Mix (1Depth)", categoryMix)}
+          {renderMixBar("Subcategory Mix (2Depth)", subcategoryMix)}
+          {renderMixBar("Brand Mix", brandMix)}
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 pt-6 border-t border-zinc-100 dark:border-zinc-800">
+          {renderMixBar("Price Mix (SRP)", priceMix)}
+          {renderMixBar("Curation Role Mix", roleMix)}
+          {renderMixBar("Product Sales Status Mix", statusMix)}
+        </div>
+      </div>
+
+      {/* 4. Selected Product List Management */}
       <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 space-y-4">
         <div className="border-b border-zinc-155 pb-2 dark:border-zinc-800 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -445,7 +476,8 @@ export function APDetailClient({
                 <th className="p-3 font-bold">Main Category</th>
                 <th className="p-3 font-bold">Subcategory</th>
                 <th className="p-3 font-bold text-center w-[12%]">Curation Role</th>
-                <th className="p-3 font-bold text-center">MSRP</th>
+                <th className="p-3 font-bold text-center">공급가</th>
+                <th className="p-3 font-bold text-center">SRP (소비자가)</th>
                 <th className="p-3 font-bold text-center">Status</th>
                 <th className="p-3 font-bold text-center w-[15%]">Actions</th>
               </tr>
@@ -458,7 +490,7 @@ export function APDetailClient({
                   return (
                     <tr
                       key={p.id}
-                      className="border-b border-zinc-150 dark:border-zinc-850 hover:bg-zinc-50/20 dark:hover:bg-zinc-950/20"
+                      className="border-b border-zinc-150 dark:border-zinc-850 hover:bg-zinc-50/20 dark:hover:bg-zinc-955/20"
                     >
                       <td className="p-3 font-mono text-indigo-650 dark:text-indigo-400 font-bold">
                         {p.letusto_sku}
@@ -479,7 +511,7 @@ export function APDetailClient({
                         <select
                           value={p.curationRole}
                           onChange={(e) => handleChangeRole(p.id, e.target.value)}
-                          className="rounded border border-zinc-200 bg-white p-1 text-[11px] font-semibold focus:border-zinc-950 outline-none w-full dark:bg-zinc-950 dark:border-zinc-800 dark:text-white"
+                          className="rounded border border-zinc-200 bg-white p-1 text-[11px] font-semibold focus:border-zinc-955 outline-none w-full dark:bg-zinc-955 dark:border-zinc-800 dark:text-white"
                         >
                           <option value="REQUIRED">Required</option>
                           <option value="CORE">Core</option>
@@ -488,11 +520,14 @@ export function APDetailClient({
                         </select>
                       </td>
                       <td className="p-3 font-bold text-center text-zinc-900 dark:text-white">
+                        ${p.price_usd_fob.toFixed(2)}
+                      </td>
+                      <td className="p-3 font-bold text-center text-zinc-900 dark:text-white">
                         ${p.estimated_retail_price.toFixed(2)}
                       </td>
                       <td className="p-3 text-center space-y-1">
                         {isInactive ? (
-                          <span className="inline-block rounded bg-red-50 text-red-700 px-2 py-0.5 text-[9px] font-bold border border-red-100 dark:bg-red-950/20 dark:text-red-400 dark:border-red-900">
+                          <span className="inline-block rounded bg-red-50 text-red-700 px-2 py-0.5 text-[9px] font-bold border border-red-100 dark:bg-red-955/20 dark:text-red-400 dark:border-red-900">
                             INACTIVE
                           </span>
                         ) : (
@@ -501,7 +536,7 @@ export function APDetailClient({
                           </span>
                         )}
                         {hasComplianceIssue && (
-                          <span className="block rounded bg-amber-50 text-amber-700 px-1 py-0.5 text-[9px] font-bold border border-amber-100 dark:bg-amber-950/20 dark:text-amber-400 dark:border-amber-900">
+                          <span className="block rounded bg-amber-50 text-amber-700 px-1 py-0.5 text-[9px] font-bold border border-amber-100 dark:bg-amber-955/20 dark:text-amber-400 dark:border-amber-900">
                             COMPLIANCE
                           </span>
                         )}
@@ -509,7 +544,7 @@ export function APDetailClient({
                       <td className="p-3 text-center space-x-1">
                         <button
                           onClick={() => setReplacingProduct(p)}
-                          className="text-[10px] font-bold text-zinc-550 hover:underline dark:text-zinc-400 cursor-pointer"
+                          className="text-[10px] font-bold text-zinc-555 hover:underline dark:text-zinc-400 cursor-pointer"
                         >
                           대체
                         </button>
@@ -526,7 +561,7 @@ export function APDetailClient({
                 })
               ) : (
                 <tr>
-                  <td colSpan={9} className="p-8 text-center text-zinc-400 italic">
+                  <td colSpan={10} className="p-8 text-center text-zinc-400 italic">
                     선택된 진열 상품이 없습니다. 상단 우측 [+ 진열 상품 추가] 버튼을 눌러 상품을 큐레이션 하세요.
                   </td>
                 </tr>
@@ -536,26 +571,7 @@ export function APDetailClient({
         </div>
       </div>
 
-      {/* 4. Curation Report Dashboard Area */}
-      <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 space-y-6">
-        <div className="border-b border-zinc-150 pb-2 dark:border-zinc-800">
-          <h3 className="text-sm font-bold text-zinc-850 dark:text-white">큐레이션 분석 보고서 (Curation Report)</h3>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-          {renderMixBar("Main Category Mix (1Depth)", categoryMix)}
-          {renderMixBar("Subcategory Mix (2Depth)", subcategoryMix)}
-          {renderMixBar("Brand Mix", brandMix)}
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 pt-6 border-t border-zinc-100 dark:border-zinc-800">
-          {renderMixBar("Price Mix (MSRP)", priceMix)}
-          {renderMixBar("Curation Role Mix", roleMix)}
-          {renderMixBar("Product Sales Status Mix", statusMix)}
-        </div>
-      </div>
-
-      {/* 5. Add Product Modal */}
+{/* 5. Add Product Modal */}
       {isAddOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 backdrop-blur-[2px]">
           <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-6 w-[90%] max-w-lg shadow-2xl space-y-4 max-h-[85vh] flex flex-col">
