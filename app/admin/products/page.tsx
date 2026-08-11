@@ -29,7 +29,7 @@ export default async function AdminProductsPage() {
   )) {
     const fallbackResult = await supabase
       .from("products")
-      .select("id, name, name_en, category, brand_id, company_id, manufacture_sku, letusto_sku, parent_sku, child_sku, price_krw_retail, price_usd_fob, package_width, package_depth, package_height, package_weight, price_additional_info, origin, upc, ean, selling_online, selling_offline, sales_link_1, sales_link_2, selection_status, sales_status")
+      .select("id, name, name_en, category, category_code, brand_id, company_id, manufacture_sku, letusto_sku, parent_sku, child_sku, price_krw_retail, price_usd_fob, package_width, package_depth, package_height, package_weight, price_additional_info, deleted_at, origin, upc, ean, selling_online, selling_offline, sales_link_1, sales_link_2, selection_status, sales_status")
       .order("created_at", { ascending: false });
     products = fallbackResult.data;
   } else {
