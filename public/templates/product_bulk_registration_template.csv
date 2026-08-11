@@ -1,0 +1,4 @@
+﻿company_id,brand_id,manufacture_sku,name_en,category,price_krw_retail,price_usd_fob,package_width_cm,package_depth_cm,package_height_cm,package_weight_g,upc,ean
+회사 고유 ID (필수),브랜드 고유 ID (필수),제조사 SKU (필수),영문 제품명 (필수),카테고리 코드 (필수),소비자 판매가 (선택),수출 FOB 가격 (선택),단품 가로 cm (선택),단품 세로 cm (선택),단품 높이 cm (선택),단품 무게 g (선택),미국 UPC 바코드 (선택),유럽 EAN 바코드 (선택)
+"UUID 형식 예: f47ac10b-58cc-4372-a567-0e02b2c3d479","UUID 형식 예: a94bc51a-12cf-4621-b456-1f92e3c4d579",영문대문자/숫자/하이픈(-)/언더스코어(_)만 허용 (공백 및 특수문자 금지),영문 상품명 기입,"skincare, hair_scalp, beauty_tools, daily_care, wellness_patch 중 택일",원화(\) 정수 입력,미국 달러($) 실수 입력,실수 입력,실수 입력,실수 입력,정수/실수 입력,12자리 숫자 형식 (EAN과 중복입력 불가),13자리 숫자 형식 (UPC와 중복입력 불가)
+f47ac10b-58cc-4372-a567-0e02b2c3d479,a94bc51a-12cf-4621-b456-1f92e3c4d579,VH-POUCH-001,by.jll Organic Aloe Vera Soothing Gel Pouch 30,skincare,25000,12.50,10.5,3.5,15.0,150,123456789012,

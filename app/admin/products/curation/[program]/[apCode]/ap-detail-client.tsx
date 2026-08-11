@@ -710,10 +710,10 @@ export function APDetailClient({
               <div className="h-4 w-full flex rounded-full overflow-hidden bg-zinc-100 dark:bg-zinc-800 shadow-inner">
                 {priceMix.map((segment, idx) => {
                   const colors = [
-                    "bg-zinc-900 dark:bg-zinc-100",
-                    "bg-zinc-650 dark:bg-zinc-350",
-                    "bg-zinc-450 dark:bg-zinc-500",
-                    "bg-zinc-300 dark:bg-zinc-655",
+                    "bg-emerald-600 dark:bg-emerald-500",
+                    "bg-indigo-600 dark:bg-indigo-400",
+                    "bg-sky-500 dark:bg-sky-400",
+                    "bg-amber-500 dark:bg-amber-400",
                   ];
                   if (segment.value === 0) return null;
                   return (
@@ -732,10 +732,10 @@ export function APDetailClient({
               <div className="grid grid-cols-2 gap-2 text-[10px]">
                 {priceMix.map((segment, idx) => {
                   const colors = [
-                    "bg-zinc-900 dark:bg-zinc-100",
-                    "bg-zinc-650 dark:bg-zinc-300",
-                    "bg-zinc-450 dark:bg-zinc-500",
-                    "bg-zinc-300 dark:bg-zinc-650",
+                    "bg-emerald-600 dark:bg-emerald-500",
+                    "bg-indigo-600 dark:bg-indigo-400",
+                    "bg-sky-500 dark:bg-sky-400",
+                    "bg-amber-500 dark:bg-amber-400",
                   ];
                   return (
                     <div
