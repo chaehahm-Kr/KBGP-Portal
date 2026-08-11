@@ -2089,7 +2089,11 @@ export function ProductDetailTabs({
                     onDragOver={(e) => handleDragOver(e, i)}
                     onDragEnd={handleDragEnd}
                     className={`relative group border rounded-lg p-1.5 bg-zinc-50/50 dark:bg-zinc-950 shadow-sm transition-all hover:shadow cursor-grab active:cursor-grabbing ${
-                      draggedIndex === i ? "opacity-40 border-dashed border-indigo-500 ring-2 ring-indigo-500/20" : "border-zinc-150 dark:border-zinc-800"
+                      draggedIndex === i 
+                        ? "opacity-40 border-dashed border-indigo-500 ring-2 ring-indigo-500/20" 
+                        : i === 0
+                          ? "border-amber-500 dark:border-amber-400 border-2 shadow-amber-100/50 dark:shadow-none ring-2 ring-amber-500/10"
+                          : "border-zinc-150 dark:border-zinc-800"
                     }`}
                   >
                     {img.url && (
