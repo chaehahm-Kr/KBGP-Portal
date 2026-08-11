@@ -46,6 +46,7 @@ interface AllProduct {
   letusto_sku: string;
   brandName: string;
   brand_id: string;
+  category_code: string | null;
   estimated_retail_price: number;
   price_usd_fob: number;
   sales_status: string;

@@ -1,4 +1,5 @@
 import React from "react";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { verifyAdminSession } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
@@ -64,6 +65,7 @@ export default async function APDetailPage({
       name,
       letusto_sku,
       brand_id,
+      category_code,
       estimated_retail_price,
       price_usd_fob,
       sales_status,
@@ -72,7 +74,7 @@ export default async function APDetailPage({
         name
       )
     `)
-    .eq("deleted_at", null) // Exclude deleted products if soft delete exists
+    .eq("deleted_at", null)
     .order("name", { ascending: true });
 
   // Map product details with curation roles
@@ -122,6 +124,7 @@ export default async function APDetailPage({
           letusto_sku: p.letusto_sku || "대기",
           brandName: p.brands?.name || "미지정",
           brand_id: p.brand_id,
+          category_code: p.category_code,
           estimated_retail_price: p.estimated_retail_price || 0,
           price_usd_fob: p.price_usd_fob || 0,
           sales_status: p.sales_status,
