@@ -361,7 +361,7 @@ export async function adminUpdateAPInfo(
 
 export async function adminUpdateAPSettings(
   apId: number,
-  info: { name: string; description: string; is_active: boolean }
+  info: { name: string; description: string; target_sku: number; is_active: boolean }
 ) {
   await verifyAdminSession();
   const supabase = createAdminClient();
@@ -371,6 +371,7 @@ export async function adminUpdateAPSettings(
     .update({
       name: info.name,
       description: info.description || null,
+      target_sku: info.target_sku,
       is_active: info.is_active,
       updated_at: new Date().toISOString(),
     })
@@ -378,6 +379,50 @@ export async function adminUpdateAPSettings(
 
   if (error) {
     throw new Error(`AP 설정 저장 실패: ${error.message}`);
+  }
+
+  revalidatePath(`/admin/products/curation`);
+  revalidatePath(`/admin/settings/curation`);
+  return { success: true };
+}
+
+export async function adminCreateAPSettings(info: {
+  display_program: string;
+  code: string;
+  name: string;
+  description: string;
+  target_sku: number;
+  is_active: boolean;
+}) {
+  await verifyAdminSession();
+  const supabase = createAdminClient();
+
+  // Check if code already exists for this program
+  const { data: exist } = await supabase
+    .from("assortment_profiles")
+    .select("id")
+    .eq("display_program", info.display_program)
+    .eq("code", info.code.trim().toUpperCase())
+    .maybeSingle();
+
+  if (exist) {
+    throw new Error(`해당 프로그램에 이미 존재하는 AP Code입니다: ${info.code.toUpperCase()}`);
+  }
+
+  const { error } = await supabase
+    .from("assortment_profiles")
+    .insert({
+      display_program: info.display_program,
+      code: info.code.trim().toUpperCase(),
+      name: info.name,
+      description: info.description || null,
+      target_sku: info.target_sku,
+      is_active: info.is_active,
+      updated_at: new Date().toISOString(),
+    });
+
+  if (error) {
+    throw new Error(`AP 생성 실패: ${error.message}`);
   }
 
   revalidatePath(`/admin/products/curation`);

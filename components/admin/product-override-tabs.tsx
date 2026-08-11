@@ -1894,75 +1894,76 @@ export function ProductOverrideTabs({
                     </tr>
                   </thead>
                   <tbody>
-                    {["AP-01", "AP-02", "AP-03", "AP-04", "AP-05", "AP-06"].map((apCode) => {
-                      const order: Record<string, number> = { START_4FT: 1, GROW_8FT: 2, EXPAND_12FT: 3 };
-                      const sortedProgs = [...displayPrograms].sort((a, b) => {
-                        const orderA = order[a.code] || 999;
-                        const orderB = order[b.code] || 999;
-                        return orderA !== orderB ? orderA - orderB : a.code.localeCompare(b.code);
-                      });
+                    {(() => {
+                      const apCodes = Array.from(new Set(apProfiles.map((p) => p.code))).sort((a, b) => a.localeCompare(b));
+                      return apCodes.map((apCode) => {
+                        const order: Record<string, number> = { START_4FT: 1, GROW_8FT: 2, EXPAND_12FT: 3 };
+                        const sortedProgs = [...displayPrograms].sort((a, b) => {
+                          const orderA = order[a.code] || 999;
+                          const orderB = order[b.code] || 999;
+                          return orderA !== orderB ? orderA - orderB : a.code.localeCompare(b.code);
+                        });
 
-                      // AP Name Label maps from the first matched active profile
-                      const sampleProfile = apProfiles.find((p) => p.code === apCode);
-                      const nameLabel = sampleProfile?.name.replace(/^START 4FT - /, "").replace(/^START 4FT -/, "").replace(/^GROW 8FT - /, "").replace(/^EXPAND 12FT - /, "") || apCode;
+                        const sampleProfile = apProfiles.find((p) => p.code === apCode);
+                        const nameLabel = sampleProfile?.name.replace(/^START 4FT - /, "").replace(/^START 4FT -/, "").replace(/^GROW 8FT - /, "").replace(/^EXPAND 12FT - /, "") || apCode;
 
-                      return (
-                        <tr key={apCode} className="border-b border-zinc-100 dark:border-zinc-850 hover:bg-zinc-50/20 dark:hover:bg-zinc-950/20">
-                          <td className="p-3 font-bold text-zinc-800 dark:text-zinc-200">
-                            <div className="flex items-center gap-1.5">
-                              <span>{apCode} · {nameLabel}</span>
-                              {/* AP info tooltip (dynamic) */}
-                              <div className="relative group/ap-tooltip inline-block cursor-pointer align-middle">
-                                <span className="text-zinc-400 hover:text-zinc-650 dark:text-zinc-500 text-xs">ⓘ</span>
-                                <div className="absolute left-0 bottom-full mb-2 w-72 p-3 bg-zinc-950 text-white rounded-lg shadow-xl text-[10px] leading-relaxed transition-all duration-200 opacity-0 invisible group-hover/ap-tooltip:opacity-100 group-hover/ap-tooltip:visible z-50 font-normal normal-case">
-                                  <p className="font-bold border-b border-zinc-800 pb-1 mb-1.5">AP 세부 설명 ({apCode})</p>
-                                  <div className="space-y-1.5">
-                                    {sortedProgs.map((p) => {
-                                      const apProfile = apProfiles.find((ap) => ap.display_program === p.code && ap.code === apCode);
-                                      return apProfile ? (
-                                        <p key={p.code}><strong>{p.name}:</strong> {apProfile.description || "설명 없음"}</p>
-                                      ) : null;
-                                    })}
+                        return (
+                          <tr key={apCode} className="border-b border-zinc-100 dark:border-zinc-850 hover:bg-zinc-50/20 dark:hover:bg-zinc-950/20">
+                            <td className="p-3 font-bold text-zinc-800 dark:text-zinc-200">
+                              <div className="flex items-center gap-1.5">
+                                <span>{apCode} · {nameLabel}</span>
+                                <div className="relative group/ap-tooltip inline-block cursor-pointer align-middle">
+                                  <span className="text-zinc-400 hover:text-zinc-650 dark:text-zinc-500 text-xs">ⓘ</span>
+                                  <div className="absolute left-0 bottom-full mb-2 w-72 p-3 bg-zinc-950 text-white rounded-lg shadow-xl text-[10px] leading-relaxed transition-all duration-200 opacity-0 invisible group-hover/ap-tooltip:opacity-100 group-hover/ap-tooltip:visible z-50 font-normal normal-case">
+                                    <p className="font-bold border-b border-zinc-800 pb-1 mb-1.5">AP 세부 설명 ({apCode})</p>
+                                    <div className="space-y-1.5">
+                                      {sortedProgs.map((p) => {
+                                        const apProfile = apProfiles.find((ap) => ap.display_program === p.code && ap.code === apCode);
+                                        return apProfile ? (
+                                          <p key={p.code}><strong>{p.name}:</strong> {apProfile.description || "설명 없음"}</p>
+                                        ) : null;
+                                      })}
+                                    </div>
                                   </div>
                                 </div>
                               </div>
-                            </div>
-                          </td>
-                          {sortedProgs.map((prog) => {
-                            const matrixKey = `${prog.code}:${apCode}`;
-                            const val = ovMatrix[matrixKey] || "EXCLUDE";
-                            return (
-                              <td key={prog.code} className="p-2 text-center">
-                                <select
-                                  value={val}
-                                  onChange={(e) => {
-                                    const newVal = e.target.value;
-                                    setOvMatrix((prev) => ({ ...prev, [matrixKey]: newVal }));
-                                  }}
-                                  className={`rounded border p-1.5 text-xs focus:border-zinc-950 outline-none w-[90%] font-semibold ${
-                                    val === "EXCLUDE"
-                                      ? "border-zinc-200 bg-zinc-50 text-zinc-400 dark:border-zinc-850 dark:bg-zinc-950 dark:text-zinc-600"
-                                      : val === "REQUIRED"
-                                      ? "border-emerald-250 bg-emerald-50 text-emerald-800 dark:border-emerald-950 dark:bg-emerald-950/20 dark:text-emerald-450"
-                                      : val === "CORE"
-                                      ? "border-indigo-250 bg-indigo-50 text-indigo-800 dark:border-indigo-950 dark:bg-indigo-950/20 dark:text-indigo-450"
-                                      : val === "OPTIONAL"
-                                      ? "border-amber-250 bg-amber-50 text-amber-800 dark:border-amber-950 dark:bg-amber-950/20 dark:text-amber-450"
-                                      : "border-sky-250 bg-sky-50 text-sky-800 dark:border-sky-950 dark:bg-sky-950/20 dark:text-sky-450"
-                                  }`}
-                                >
-                                  <option value="EXCLUDE">Exclude (미진열)</option>
-                                  <option value="REQUIRED">Required (필수 진열)</option>
-                                  <option value="CORE">Core (표준 진열)</option>
-                                  <option value="OPTIONAL">Optional (선택 진열)</option>
-                                  <option value="TEST">Test (임시 테스트)</option>
-                                </select>
-                              </td>
-                            );
-                          })}
-                        </tr>
-                      );
-                    })}
+                            </td>
+                            {sortedProgs.map((prog) => {
+                              const matrixKey = `${prog.code}:${apCode}`;
+                              const val = ovMatrix[matrixKey] || "EXCLUDE";
+                              return (
+                                <td key={prog.code} className="p-2 text-center">
+                                  <select
+                                    value={val}
+                                    onChange={(e) => {
+                                      const newVal = e.target.value;
+                                      setOvMatrix((prev) => ({ ...prev, [matrixKey]: newVal }));
+                                    }}
+                                    className={`rounded border p-1.5 text-xs focus:border-zinc-950 outline-none w-[90%] font-semibold ${
+                                      val === "EXCLUDE"
+                                        ? "border-zinc-200 bg-zinc-50 text-zinc-400 dark:border-zinc-850 dark:bg-zinc-950 dark:text-zinc-600"
+                                        : val === "REQUIRED"
+                                        ? "border-emerald-250 bg-emerald-50 text-emerald-800 dark:border-emerald-950 dark:bg-emerald-950/20 dark:text-emerald-450"
+                                        : val === "CORE"
+                                        ? "border-indigo-250 bg-indigo-50 text-indigo-800 dark:border-indigo-950 dark:bg-indigo-950/20 dark:text-indigo-450"
+                                        : val === "OPTIONAL"
+                                        ? "border-amber-250 bg-amber-50 text-amber-800 dark:border-amber-950 dark:bg-amber-950/20 dark:text-amber-450"
+                                        : "border-sky-250 bg-sky-50 text-sky-800 dark:border-sky-950 dark:bg-sky-950/20 dark:text-sky-450"
+                                    }`}
+                                  >
+                                    <option value="EXCLUDE">Exclude (미진열)</option>
+                                    <option value="REQUIRED">Required (필수 진열)</option>
+                                    <option value="CORE">Core (표준 진열)</option>
+                                    <option value="OPTIONAL">Optional (선택 진열)</option>
+                                    <option value="TEST">Test (임시 테스트)</option>
+                                  </select>
+                                </td>
+                              );
+                            })}
+                          </tr>
+                        );
+                      })
+                    })()}
                   </tbody>
                 </table>
               </div>

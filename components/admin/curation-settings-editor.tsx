@@ -5,6 +5,7 @@ import {
   adminUpdateDisplayProgram,
   adminUpdateAPSettings,
   adminCreateDisplayProgram,
+  adminCreateAPSettings,
 } from "@/lib/product/admin-actions";
 
 interface DisplayProgram {
@@ -22,6 +23,7 @@ interface AssortmentProfile {
   code: string;
   name: string;
   description: string | null;
+  target_sku?: number;
   is_active: boolean;
 }
 
@@ -43,14 +45,23 @@ export function CurationSettingsEditor({ initialPrograms, initialProfiles }: Pro
   const [editingProgram, setEditingProgram] = useState<DisplayProgram | null>(null);
   const [editingProfile, setEditingProfile] = useState<AssortmentProfile | null>(null);
   const [isCreatingProgram, setIsCreatingProgram] = useState(false);
+  const [isCreatingProfile, setIsCreatingProfile] = useState(false);
 
-  // Creation form states
+  // Program creation form states
   const [newProgCode, setNewProgCode] = useState("");
   const [newProgName, setNewProgName] = useState("");
   const [newProgDesc, setNewProgDesc] = useState("");
   const [newProgMinSku, setNewProgMinSku] = useState(0);
   const [newProgMaxSku, setNewProgMaxSku] = useState(0);
   const [newProgActive, setNewProgActive] = useState(true);
+
+  // AP creation form states
+  const [newApProgram, setNewApProgram] = useState("START_4FT");
+  const [newApCode, setNewApCode] = useState("");
+  const [newApName, setNewApName] = useState("");
+  const [newApDesc, setNewApDesc] = useState("");
+  const [newApTargetSku, setNewApTargetSku] = useState(10);
+  const [newApActive, setNewApActive] = useState(true);
 
   // Custom sort: START -> GROW -> EXPAND, then others
   const sortPrograms = (list: DisplayProgram[]) => {
@@ -79,7 +90,6 @@ export function CurationSettingsEditor({ initialPrograms, initialProfiles }: Pro
 
     const cleanCode = newProgCode.trim().toUpperCase();
 
-    // Check duplicate local code
     if (programs.some((p) => p.code === cleanCode)) {
       setMessage({ type: "error", text: `이미 존재하는 식별 코드입니다: ${cleanCode}` });
       return;
@@ -109,20 +119,19 @@ export function CurationSettingsEditor({ initialPrograms, initialProfiles }: Pro
 
           setPrograms((prev) => [...prev, addedProgram]);
 
-          // Locally auto-generate default AP-01~06 profiles to match database insert
+          // Sync default APs (AP-01 ~ AP-06) locally
           const addedProfiles: AssortmentProfile[] = [
-            { id: Date.now() + 1, display_program: cleanCode, code: "AP-01", name: `${newProgName} - 기본 구성 01`, description: "표준형 Assortment 01", is_active: true },
-            { id: Date.now() + 2, display_program: cleanCode, code: "AP-02", name: `${newProgName} - 기본 구성 02`, description: "표준형 Assortment 02", is_active: true },
-            { id: Date.now() + 3, display_program: cleanCode, code: "AP-03", name: `${newProgName} - 기본 구성 03`, description: "표준형 Assortment 03", is_active: true },
-            { id: Date.now() + 4, display_program: cleanCode, code: "AP-04", name: `${newProgName} - 기본 구성 04`, description: "표준형 Assortment 04", is_active: true },
-            { id: Date.now() + 5, display_program: cleanCode, code: "AP-05", name: `${newProgName} - 기본 구성 05`, description: "표준형 Assortment 05", is_active: true },
-            { id: Date.now() + 6, display_program: cleanCode, code: "AP-06", name: `${newProgName} - 기본 구성 06`, description: "표준형 Assortment 06", is_active: true },
+            { id: Date.now() + 1, display_program: cleanCode, code: "AP-01", name: `${newProgName} - 기본 구성 01`, description: "표준형 Assortment 01", target_sku: 10, is_active: true },
+            { id: Date.now() + 2, display_program: cleanCode, code: "AP-02", name: `${newProgName} - 기본 구성 02`, description: "표준형 Assortment 02", target_sku: 10, is_active: true },
+            { id: Date.now() + 3, display_program: cleanCode, code: "AP-03", name: `${newProgName} - 기본 구성 03`, description: "표준형 Assortment 03", target_sku: 10, is_active: true },
+            { id: Date.now() + 4, display_program: cleanCode, code: "AP-04", name: `${newProgName} - 기본 구성 04`, description: "표준형 Assortment 04", target_sku: 10, is_active: true },
+            { id: Date.now() + 5, display_program: cleanCode, code: "AP-05", name: `${newProgName} - 기본 구성 05`, description: "표준형 Assortment 05", target_sku: 10, is_active: true },
+            { id: Date.now() + 6, display_program: cleanCode, code: "AP-06", name: `${newProgName} - 기본 구성 06`, description: "표준형 Assortment 06", target_sku: 10, is_active: true },
           ];
           setProfiles((prev) => [...prev, ...addedProfiles]);
 
           setMessage({ type: "success", text: `Display Program ${cleanCode}이 정상 등록되었습니다.` });
           setIsCreatingProgram(false);
-          // Clear inputs
           setNewProgCode("");
           setNewProgName("");
           setNewProgDesc("");
@@ -172,7 +181,60 @@ export function CurationSettingsEditor({ initialPrograms, initialProfiles }: Pro
     });
   };
 
-  // Profile Update
+  // AP Creation
+  const handleCreateProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newApCode.trim() || !newApName.trim()) {
+      setMessage({ type: "error", text: "AP Code와 이름은 필수 항목입니다." });
+      return;
+    }
+
+    const cleanApCode = newApCode.trim().toUpperCase();
+
+    // Check duplicate code under program
+    if (profiles.some((p) => p.display_program === newApProgram && p.code === cleanApCode)) {
+      setMessage({ type: "error", text: `해당 프로그램에 이미 존재하는 AP Code입니다: ${cleanApCode}` });
+      return;
+    }
+
+    setMessage(null);
+    startTransition(async () => {
+      try {
+        const res = await adminCreateAPSettings({
+          display_program: newApProgram,
+          code: cleanApCode,
+          name: newApName,
+          description: newApDesc,
+          target_sku: newApTargetSku,
+          is_active: newApActive,
+        });
+
+        if (res.success) {
+          const addedAp: AssortmentProfile = {
+            id: Date.now(), // Temp unique numeric key for local list
+            display_program: newApProgram,
+            code: cleanApCode,
+            name: newApName,
+            description: newApDesc,
+            target_sku: newApTargetSku,
+            is_active: newApActive,
+          };
+          setProfiles((prev) => [...prev, addedAp]);
+          setMessage({ type: "success", text: `AP ${cleanApCode}가 성공적으로 추가되었습니다.` });
+          setIsCreatingProfile(false);
+          setNewApCode("");
+          setNewApName("");
+          setNewApDesc("");
+          setNewApTargetSku(10);
+          setNewApActive(true);
+        }
+      } catch (err: any) {
+        setMessage({ type: "error", text: err.message || "AP 추가 실패" });
+      }
+    });
+  };
+
+  // AP Update
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingProfile) return;
@@ -183,6 +245,7 @@ export function CurationSettingsEditor({ initialPrograms, initialProfiles }: Pro
         const res = await adminUpdateAPSettings(editingProfile.id, {
           name: editingProfile.name,
           description: editingProfile.description || "",
+          target_sku: editingProfile.target_sku || 0,
           is_active: editingProfile.is_active,
         });
 
@@ -236,6 +299,7 @@ export function CurationSettingsEditor({ initialPrograms, initialProfiles }: Pro
             setEditingProgram(null);
             setEditingProfile(null);
             setIsCreatingProgram(false);
+            setIsCreatingProfile(false);
           }}
           className={`px-4 py-2.5 text-xs font-bold border-b-2 transition-all ${
             activeTab === "programs"
@@ -252,6 +316,8 @@ export function CurationSettingsEditor({ initialPrograms, initialProfiles }: Pro
             setEditingProgram(null);
             setEditingProfile(null);
             setIsCreatingProgram(false);
+            setIsCreatingProfile(false);
+            setNewApProgram(selectedProgramFilter); // Set program context
           }}
           className={`px-4 py-2.5 text-xs font-bold border-b-2 transition-all ${
             activeTab === "profiles"
@@ -276,6 +342,7 @@ export function CurationSettingsEditor({ initialPrograms, initialProfiles }: Pro
                     setIsCreatingProgram(true);
                     setEditingProgram(null);
                     setEditingProfile(null);
+                    setIsCreatingProfile(false);
                     setMessage(null);
                   }}
                   className="bg-zinc-950 hover:bg-zinc-800 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-100 text-white font-bold text-[11px] px-3.5 py-1.5 rounded transition-all shadow-sm"
@@ -294,6 +361,7 @@ export function CurationSettingsEditor({ initialPrograms, initialProfiles }: Pro
                         setEditingProgram(prog);
                         setEditingProfile(null);
                         setIsCreatingProgram(false);
+                        setIsCreatingProfile(false);
                         setMessage(null);
                       }}
                       className={`rounded-xl border p-5 bg-white shadow-sm dark:bg-zinc-900 flex items-start justify-between cursor-pointer transition-all hover:border-zinc-400 ${
@@ -340,21 +408,39 @@ export function CurationSettingsEditor({ initialPrograms, initialProfiles }: Pro
           {activeTab === "profiles" && (
             <div className="space-y-4">
               {/* Program filter header */}
-              <div className="flex flex-wrap items-center gap-2 bg-zinc-50 dark:bg-zinc-900/50 p-2 rounded-lg border border-zinc-200 dark:border-zinc-800">
-                <span className="text-[10px] font-bold text-zinc-400 uppercase px-2">프로그램 필터:</span>
-                {programs.map((p) => (
-                  <button
-                    key={p.code}
-                    onClick={() => setSelectedProgramFilter(p.code)}
-                    className={`px-3 py-1.5 rounded text-xs font-bold transition-all ${
-                      selectedProgramFilter === p.code
-                        ? "bg-zinc-950 text-white dark:bg-white dark:text-zinc-950"
-                        : "text-zinc-650 hover:bg-zinc-150/40 dark:text-zinc-400"
-                    }`}
-                  >
-                    {getProgramBadgeText(p.code)}
-                  </button>
-                ))}
+              <div className="flex flex-wrap items-center justify-between gap-4 bg-zinc-50 dark:bg-zinc-900/50 p-2.5 rounded-lg border border-zinc-200 dark:border-zinc-800">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-[10px] font-bold text-zinc-400 uppercase px-2">프로그램 필터:</span>
+                  {programs.map((p) => (
+                    <button
+                      key={p.code}
+                      onClick={() => {
+                        setSelectedProgramFilter(p.code);
+                        setNewApProgram(p.code);
+                      }}
+                      className={`px-3 py-1.5 rounded text-xs font-bold transition-all ${
+                        selectedProgramFilter === p.code
+                          ? "bg-zinc-950 text-white dark:bg-white dark:text-zinc-950"
+                          : "text-zinc-650 hover:bg-zinc-150/40 dark:text-zinc-400"
+                      }`}
+                    >
+                      {getProgramBadgeText(p.code)}
+                    </button>
+                  ))}
+                </div>
+                <button
+                  onClick={() => {
+                    setIsCreatingProfile(true);
+                    setEditingProfile(null);
+                    setEditingProgram(null);
+                    setIsCreatingProgram(false);
+                    setNewApProgram(selectedProgramFilter);
+                    setMessage(null);
+                  }}
+                  className="bg-zinc-950 hover:bg-zinc-800 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-100 text-white font-bold text-[11px] px-3.5 py-1.5 rounded transition-all shadow-sm shrink-0"
+                >
+                  + 신규 AP 추가
+                </button>
               </div>
 
               {/* Profiles Table */}
@@ -362,10 +448,10 @@ export function CurationSettingsEditor({ initialPrograms, initialProfiles }: Pro
                 <table className="w-full text-left text-xs border-collapse">
                   <thead>
                     <tr className="border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/50">
-                      <th className="p-3 font-bold text-zinc-500 w-20">AP Code</th>
-                      <th className="p-3 font-bold text-zinc-550">AP 명칭 (Name)</th>
-                      <th className="p-3 font-bold text-zinc-500 w-20">Status</th>
-                      <th className="p-3 font-bold text-zinc-500 w-16 text-center">Action</th>
+                      <th className="p-3 font-bold text-zinc-550 w-20">AP Code</th>
+                      <th className="p-3 font-bold text-zinc-555">AP 명칭 (Name) & Target SKU</th>
+                      <th className="p-3 font-bold text-zinc-550 w-20">Status</th>
+                      <th className="p-3 font-bold text-zinc-550 w-16 text-center">Action</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -380,6 +466,7 @@ export function CurationSettingsEditor({ initialPrograms, initialProfiles }: Pro
                               setEditingProfile(prof);
                               setEditingProgram(null);
                               setIsCreatingProgram(false);
+                              setIsCreatingProfile(false);
                               setMessage(null);
                             }}
                             className={`border-b border-zinc-100 dark:border-zinc-850 hover:bg-zinc-50/20 dark:hover:bg-zinc-950/20 cursor-pointer ${
@@ -390,7 +477,12 @@ export function CurationSettingsEditor({ initialPrograms, initialProfiles }: Pro
                               {prof.code}
                             </td>
                             <td className="p-3">
-                              <div className="font-bold text-zinc-800 dark:text-zinc-200">{prof.name}</div>
+                              <div className="flex items-baseline gap-2">
+                                <span className="font-bold text-zinc-800 dark:text-zinc-200">{prof.name}</span>
+                                <span className="text-[10px] text-zinc-400 font-semibold bg-zinc-50 dark:bg-zinc-950 px-1.5 py-0.5 rounded">
+                                  목표: {prof.target_sku ?? 0} SKU
+                                </span>
+                              </div>
                               <div className="text-[10px] text-zinc-400 mt-0.5 line-clamp-1">
                                 {prof.description || "설명 없음"}
                               </div>
@@ -422,7 +514,7 @@ export function CurationSettingsEditor({ initialPrograms, initialProfiles }: Pro
         </div>
 
         {/* Right Column (Width: 2/5 - Detail Editing Form) */}
-        <div className="w-full lg:w-2/5 bg-zinc-50 dark:bg-zinc-900/30 border border-zinc-200 dark:border-zinc-800 rounded-xl p-5 shadow-sm min-h-[350px] flex flex-col justify-between">
+        <div className="w-full lg:w-2/5 bg-zinc-50 dark:bg-zinc-900/30 border border-zinc-200 dark:border-zinc-800 rounded-xl p-5 shadow-sm min-h-[380px] flex flex-col justify-between">
           {/* Edit Program Form */}
           {editingProgram && !isCreatingProgram && (
             <form onSubmit={handleSaveProgram} className="space-y-4">
@@ -469,7 +561,7 @@ export function CurationSettingsEditor({ initialPrograms, initialProfiles }: Pro
                         onChange={(e) =>
                           setEditingProgram({ ...editingProgram, min_sku: parseInt(e.target.value) || 0 })
                         }
-                        className="w-full rounded border border-zinc-200 dark:border-zinc-855 dark:bg-zinc-950 dark:text-white p-2 text-xs outline-none focus:border-zinc-950"
+                        className="w-full rounded border border-zinc-200 dark:border-zinc-855 dark:bg-zinc-950 dark:text-white p-2 text-xs outline-none focus:border-zinc-950 font-bold"
                         min="0"
                       />
                     </div>
@@ -481,7 +573,7 @@ export function CurationSettingsEditor({ initialPrograms, initialProfiles }: Pro
                         onChange={(e) =>
                           setEditingProgram({ ...editingProgram, max_sku: parseInt(e.target.value) || 0 })
                         }
-                        className="w-full rounded border border-zinc-200 dark:border-zinc-855 dark:bg-zinc-950 dark:text-white p-2 text-xs outline-none focus:border-zinc-950"
+                        className="w-full rounded border border-zinc-200 dark:border-zinc-855 dark:bg-zinc-950 dark:text-white p-2 text-xs outline-none focus:border-zinc-950 font-bold"
                         min="0"
                       />
                     </div>
@@ -578,7 +670,7 @@ export function CurationSettingsEditor({ initialPrograms, initialProfiles }: Pro
                         type="number"
                         value={newProgMinSku}
                         onChange={(e) => setNewProgMinSku(parseInt(e.target.value) || 0)}
-                        className="w-full rounded border border-zinc-200 dark:border-zinc-855 dark:bg-zinc-950 dark:text-white p-2 text-xs outline-none focus:border-zinc-950"
+                        className="w-full rounded border border-zinc-200 dark:border-zinc-855 dark:bg-zinc-950 dark:text-white p-2 text-xs outline-none focus:border-zinc-950 font-bold"
                         min="0"
                       />
                     </div>
@@ -588,7 +680,7 @@ export function CurationSettingsEditor({ initialPrograms, initialProfiles }: Pro
                         type="number"
                         value={newProgMaxSku}
                         onChange={(e) => setNewProgMaxSku(parseInt(e.target.value) || 0)}
-                        className="w-full rounded border border-zinc-200 dark:border-zinc-855 dark:bg-zinc-950 dark:text-white p-2 text-xs outline-none focus:border-zinc-950"
+                        className="w-full rounded border border-zinc-200 dark:border-zinc-855 dark:bg-zinc-950 dark:text-white p-2 text-xs outline-none focus:border-zinc-950 font-bold"
                         min="0"
                       />
                     </div>
@@ -632,7 +724,7 @@ export function CurationSettingsEditor({ initialPrograms, initialProfiles }: Pro
           )}
 
           {/* Edit AP Profile Form */}
-          {editingProfile && !isCreatingProgram && (
+          {editingProfile && !isCreatingProfile && !isCreatingProgram && (
             <form onSubmit={handleSaveProfile} className="space-y-4">
               <div>
                 <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-wider border-b pb-2 dark:border-zinc-800 mb-4">
@@ -666,13 +758,26 @@ export function CurationSettingsEditor({ initialPrograms, initialProfiles }: Pro
                     />
                   </div>
                   <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-zinc-500 uppercase">Target SKU (목표 상품 개수)</label>
+                    <input
+                      type="number"
+                      value={editingProfile.target_sku ?? 0}
+                      onChange={(e) =>
+                        setEditingProfile({ ...editingProfile, target_sku: parseInt(e.target.value) || 0 })
+                      }
+                      className="w-full rounded border border-zinc-200 dark:border-zinc-850 dark:bg-zinc-950 dark:text-white p-2 text-xs outline-none focus:border-zinc-950 font-bold"
+                      min="0"
+                      required
+                    />
+                  </div>
+                  <div className="space-y-1">
                     <label className="text-[10px] font-bold text-zinc-500 uppercase">상세 설명 (Description)</label>
                     <textarea
                       value={editingProfile.description || ""}
                       onChange={(e) =>
                         setEditingProfile({ ...editingProfile, description: e.target.value })
                       }
-                      className="w-full rounded border border-zinc-200 dark:border-zinc-850 dark:bg-zinc-950 dark:text-white p-2 text-xs outline-none focus:border-zinc-950 h-24 resize-none leading-relaxed"
+                      className="w-full rounded border border-zinc-200 dark:border-zinc-855 dark:bg-zinc-950 dark:text-white p-2 text-xs outline-none focus:border-zinc-950 h-24 resize-none leading-relaxed"
                     />
                   </div>
                   <div className="flex items-center gap-2 pt-2">
@@ -714,13 +819,116 @@ export function CurationSettingsEditor({ initialPrograms, initialProfiles }: Pro
             </form>
           )}
 
+          {/* Creation AP Profile Form */}
+          {isCreatingProfile && (
+            <form onSubmit={handleCreateProfile} className="space-y-4">
+              <div>
+                <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-wider border-b pb-2 dark:border-zinc-800 mb-4">
+                  신규 Assortment Profile (AP) 등록
+                </h3>
+                <div className="space-y-3.5">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-zinc-500 uppercase">Target Program</label>
+                      <select
+                        value={newApProgram}
+                        onChange={(e) => setNewApProgram(e.target.value)}
+                        className="w-full rounded border border-zinc-200 dark:border-zinc-850 dark:bg-zinc-950 dark:text-white p-2 text-xs outline-none focus:border-zinc-950 font-semibold"
+                      >
+                        {programs.map((p) => (
+                          <option key={p.code} value={p.code}>
+                            {getProgramBadgeText(p.code)}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-zinc-500 uppercase">AP Code</label>
+                      <input
+                        type="text"
+                        placeholder="예: AP-07"
+                        value={newApCode}
+                        onChange={(e) => setNewApCode(e.target.value)}
+                        className="w-full rounded border border-zinc-200 dark:border-zinc-850 dark:bg-zinc-950 dark:text-white p-2 text-xs outline-none focus:border-zinc-950 font-mono font-bold uppercase"
+                        required
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-zinc-500 uppercase">AP 이름 (Name)</label>
+                    <input
+                      type="text"
+                      placeholder="예: START 4FT - 기본 구성 07"
+                      value={newApName}
+                      onChange={(e) => setNewApName(e.target.value)}
+                      className="w-full rounded border border-zinc-200 dark:border-zinc-850 dark:bg-zinc-950 dark:text-white p-2 text-xs outline-none focus:border-zinc-950 font-semibold"
+                      required
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-zinc-500 uppercase">Target SKU (목표 상품 개수)</label>
+                    <input
+                      type="number"
+                      value={newApTargetSku}
+                      onChange={(e) => setNewApTargetSku(parseInt(e.target.value) || 0)}
+                      className="w-full rounded border border-zinc-200 dark:border-zinc-850 dark:bg-zinc-950 dark:text-white p-2 text-xs outline-none focus:border-zinc-950 font-bold"
+                      min="0"
+                      required
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-zinc-500 uppercase">상세 설명 (Description)</label>
+                    <textarea
+                      placeholder="AP 상세 용도 및 목적 기술"
+                      value={newApDesc}
+                      onChange={(e) => setNewApDesc(e.target.value)}
+                      className="w-full rounded border border-zinc-200 dark:border-zinc-855 dark:bg-zinc-950 dark:text-white p-2 text-xs outline-none focus:border-zinc-950 h-20 resize-none leading-relaxed"
+                    />
+                  </div>
+                  <div className="flex items-center gap-2 pt-2">
+                    <input
+                      type="checkbox"
+                      id="new_ap_active"
+                      checked={newApActive}
+                      onChange={(e) => setNewApActive(e.target.checked)}
+                      className="rounded border-zinc-300 accent-zinc-950 dark:accent-white cursor-pointer"
+                    />
+                    <label
+                      htmlFor="new_ap_active"
+                      className="text-xs font-bold text-zinc-700 dark:text-zinc-300 cursor-pointer"
+                    >
+                      AP 활성화 (Active Status)
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-4 border-t dark:border-zinc-800">
+                <button
+                  type="button"
+                  onClick={() => setIsCreatingProfile(false)}
+                  className="px-3 py-1.5 text-xs font-bold rounded border hover:bg-zinc-150/40"
+                >
+                  취소
+                </button>
+                <button
+                  type="submit"
+                  disabled={isPending}
+                  className="px-4 py-1.5 text-xs font-bold rounded bg-zinc-950 text-white dark:bg-white dark:text-zinc-950 hover:opacity-90 disabled:opacity-50"
+                >
+                  {isPending ? "추가 중..." : "추가"}
+                </button>
+              </div>
+            </form>
+          )}
+
           {/* Empty State detail guide */}
-          {!editingProgram && !editingProfile && !isCreatingProgram && (
+          {!editingProgram && !editingProfile && !isCreatingProgram && !isCreatingProfile && (
             <div className="h-full flex flex-col justify-center items-center text-center p-6 space-y-2">
               <span className="text-zinc-300 text-3xl">⚙️</span>
               <h4 className="text-xs font-bold text-zinc-700 dark:text-zinc-300">편집기 상세 패널</h4>
               <p className="text-[11px] text-zinc-400 dark:text-zinc-500 leading-relaxed max-w-[220px]">
-                좌측 목록에서 편집할 프로그램 또는 AP 항목을 클릭하거나, 신규 프로그램을 추가해 주세요.
+                좌측 목록에서 편집할 프로그램 또는 AP 항목을 클릭하거나, 신규 항목을 추가해 주세요.
               </p>
             </div>
           )}

@@ -64,7 +64,7 @@ export default async function AdminProductDetailPage({
   const { data: curators } = await supabase
     .from("staff_members")
     .select("id, name, email")
-    .eq("status", "ACTIVE")
+    .eq("status", "active")
     .order("name", { ascending: true });
 
   const { data: images } = await supabase

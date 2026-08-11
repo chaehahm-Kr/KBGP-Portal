@@ -1,8 +1,7 @@
 "use client";
 
-import React, { useState, useTransition } from "react";
+import React, { useState } from "react";
 import Link from "next/link";
-import { adminUpdateAPInfo } from "@/lib/product/admin-actions";
 
 interface ProgramInfo {
   key: string;
@@ -36,14 +35,7 @@ export function CurationControlClient({
   initialAPs,
 }: CurationControlClientProps) {
   const [selectedProgram, setSelectedProgram] = useState<string>("START_4FT");
-  const [aps, setAps] = useState<APInfo[]>(initialAPs);
-  const [editingAP, setEditingAP] = useState<APInfo | null>(null);
-  const [isPending, startTransition] = useTransition();
-
-  // Edit fields state
-  const [editName, setEditName] = useState("");
-  const [editDesc, setEditDesc] = useState("");
-  const [editTargetSku, setEditTargetSku] = useState("");
+  const [aps] = useState<APInfo[]>(initialAPs);
 
   const filteredAPs = aps.filter((ap) => ap.display_program === selectedProgram);
 
@@ -58,41 +50,6 @@ export function CurationControlClient({
       default:
         return key;
     }
-  };
-
-  const handleEditClick = (ap: APInfo) => {
-    setEditingAP(ap);
-    setEditName(ap.name);
-    setEditDesc(ap.description);
-    setEditTargetSku(ap.target_sku.toString());
-  };
-
-  const handleSaveEdit = () => {
-    if (!editingAP) return;
-    const targetSkuNum = parseInt(editTargetSku) || 0;
-
-    startTransition(async () => {
-      try {
-        await adminUpdateAPInfo(editingAP.id, {
-          name: editName,
-          description: editDesc,
-          target_sku: targetSkuNum,
-        });
-
-        // Update local state
-        setAps((prev) =>
-          prev.map((ap) =>
-            ap.id === editingAP.id
-              ? { ...ap, name: editName, description: editDesc, target_sku: targetSkuNum }
-              : ap
-          )
-        );
-
-        setEditingAP(null);
-      } catch (err: any) {
-        alert(err.message || "AP 정보 수정 실패");
-      }
-    });
   };
 
   return (
@@ -128,19 +85,19 @@ export function CurationControlClient({
               <div className="grid grid-cols-3 gap-4 mt-6 pt-4 border-t border-zinc-100 dark:border-zinc-800 text-xs">
                 <div>
                   <p className="text-[10px] text-zinc-400 font-medium">Active SKU</p>
-                  <p className="text-base font-bold text-zinc-900 dark:text-white mt-0.5">
+                  <p className="text-base font-bold text-zinc-800 dark:text-zinc-250 mt-1">
                     {prog.activeSku}
                   </p>
                 </div>
                 <div>
                   <p className="text-[10px] text-zinc-400 font-medium">AP Count</p>
-                  <p className="text-base font-bold text-zinc-900 dark:text-white mt-0.5">
+                  <p className="text-base font-bold text-zinc-800 dark:text-zinc-250 mt-1">
                     {prog.apCount}
                   </p>
                 </div>
                 <div>
                   <p className="text-[10px] text-zinc-400 font-medium">Brands</p>
-                  <p className="text-base font-bold text-zinc-950 dark:text-white mt-0.5">
+                  <p className="text-base font-bold text-zinc-800 dark:text-zinc-250 mt-1">
                     {prog.brandCount}
                   </p>
                 </div>
@@ -153,7 +110,7 @@ export function CurationControlClient({
       {/* AP List for Selected Program */}
       <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 space-y-4">
         <div className="border-b border-zinc-150 pb-2 dark:border-zinc-800 flex items-center justify-between">
-          <h3 className="text-sm font-bold text-zinc-850 dark:text-white">
+          <h3 className="text-sm font-bold text-zinc-855 dark:text-white">
             {getProgramLabel(selectedProgram)} - Assortment Profiles (AP-01 ~ AP-06)
           </h3>
           <span className="text-[10px] font-bold text-zinc-450 dark:text-zinc-500 uppercase tracking-wider">
@@ -220,14 +177,7 @@ export function CurationControlClient({
                     <td className="p-3 font-bold text-center text-zinc-900 dark:text-white">
                       {ap.avgMargin > 0 ? `${ap.avgMargin.toFixed(1)}%` : "-"}
                     </td>
-                    <td className="p-3 text-center space-x-2">
-                      <button
-                        onClick={() => handleEditClick(ap)}
-                        className="text-[11px] font-bold text-zinc-550 hover:underline dark:text-zinc-400 cursor-pointer"
-                      >
-                        설정
-                      </button>
-                      <span className="text-zinc-300 dark:text-zinc-700">|</span>
+                    <td className="p-3 text-center">
                       <Link
                         href={`/admin/products/curation/${ap.display_program}/${ap.code}`}
                         className="text-[11px] font-bold text-indigo-650 hover:underline dark:text-indigo-400"
@@ -242,68 +192,6 @@ export function CurationControlClient({
           </table>
         </div>
       </div>
-
-      {/* Edit AP Modal */}
-      {editingAP && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 backdrop-blur-[2px]">
-          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-6 w-[90%] max-w-md shadow-2xl space-y-4">
-            <div>
-              <h4 className="text-sm font-bold text-zinc-900 dark:text-white">
-                Assortment Profile 설정 수정 ({editingAP.code})
-              </h4>
-              <p className="text-[10px] text-zinc-400">AP의 타겟 정보 및 메타데이터를 편집합니다.</p>
-            </div>
-
-            <div className="space-y-3">
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold text-zinc-500">AP 이름</label>
-                <input
-                  type="text"
-                  value={editName}
-                  onChange={(e) => setEditName(e.target.value)}
-                  className="w-full rounded border border-zinc-200 p-2 text-xs text-zinc-900 bg-white dark:border-zinc-850 dark:bg-zinc-950 dark:text-white outline-none focus:border-zinc-950"
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold text-zinc-500">설명</label>
-                <textarea
-                  value={editDesc}
-                  onChange={(e) => setEditDesc(e.target.value)}
-                  rows={2}
-                  className="w-full rounded border border-zinc-200 p-2 text-xs text-zinc-900 bg-white dark:border-zinc-850 dark:bg-zinc-950 dark:text-white outline-none focus:border-zinc-950 resize-none"
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold text-zinc-500">Target SKU (목표 상품 개수)</label>
-                <input
-                  type="number"
-                  value={editTargetSku}
-                  onChange={(e) => setEditTargetSku(e.target.value)}
-                  className="w-full rounded border border-zinc-200 p-2 text-xs text-zinc-900 bg-white dark:border-zinc-850 dark:bg-zinc-950 dark:text-white outline-none focus:border-zinc-950"
-                />
-              </div>
-            </div>
-
-            <div className="flex justify-end gap-2 pt-2">
-              <button
-                onClick={() => setEditingAP(null)}
-                className="rounded border border-zinc-200 bg-white px-3 py-1.5 text-xs font-bold text-zinc-650 hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-400 dark:hover:bg-zinc-900 cursor-pointer"
-              >
-                취소
-              </button>
-              <button
-                onClick={handleSaveEdit}
-                disabled={isPending}
-                className="rounded bg-zinc-950 px-4 py-1.5 text-xs font-bold text-white hover:bg-zinc-800 disabled:opacity-50 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-100 cursor-pointer"
-              >
-                {isPending ? "저장 중..." : "저장"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
