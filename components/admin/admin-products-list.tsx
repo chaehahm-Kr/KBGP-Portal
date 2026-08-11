@@ -26,6 +26,7 @@ interface AdminProductItem {
   selection_status: string;
   sales_status: string;
   category_code?: string | null;
+  category_full_path?: string | null;
 }
 
 interface AdminProductsListProps {
@@ -384,7 +385,6 @@ export function AdminProductsList({ initialProducts }: AdminProductsListProps) {
                 <th className="px-6 py-3.5 whitespace-nowrap">제품명</th>
                 <th className="px-6 py-3.5 whitespace-nowrap">회사명</th>
                 <th className="px-6 py-3.5 whitespace-nowrap">브랜드</th>
-                <th className="px-6 py-3.5 whitespace-nowrap">카테고리</th>
                 <th className="px-6 py-3.5 whitespace-nowrap">등록 상태</th>
                 <th className="px-6 py-3.5 whitespace-nowrap">선정 상태</th>
                 <th className="px-6 py-3.5 whitespace-nowrap">판매 상태</th>
@@ -439,7 +439,11 @@ export function AdminProductsList({ initialProducts }: AdminProductsListProps) {
                         >
                           {product.display_name}
                         </Link>
-                        {!product.category_code && !product.category && (
+                        {product.category_code && product.category_full_path ? (
+                          <span className="text-[10px] font-semibold text-zinc-500 dark:text-zinc-400 block pt-0.5">
+                            {product.category_full_path}
+                          </span>
+                        ) : (
                           <Link
                             href={`/admin/products/${product.id}?tab=category`}
                             className="inline-flex items-center w-fit rounded bg-amber-500/10 hover:bg-amber-500/20 dark:bg-amber-950/30 dark:hover:bg-amber-950/50 px-2 py-0.5 text-[9px] font-bold text-amber-600 dark:text-amber-400 border border-amber-500/20 animate-pulse transition-colors cursor-pointer"
@@ -460,12 +464,7 @@ export function AdminProductsList({ initialProducts }: AdminProductsListProps) {
                       {product.brandName}
                     </td>
 
-                    {/* Category (Redesigned from rounded-full circle to rounded-md card) */}
-                    <td className="px-6 py-4 align-middle">
-                      <span className="inline-flex items-center rounded-md bg-zinc-100 dark:bg-zinc-800 px-2.5 py-1 text-[10px] font-bold text-zinc-700 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700 whitespace-nowrap">
-                        {PRODUCT_CATEGORY_LABEL[product.category as ProductCategory] || product.category}
-                      </span>
-                    </td>
+
 
                     {/* ① 제품 등록 상태 배지 */}
                     <td className="px-6 py-4 align-middle">

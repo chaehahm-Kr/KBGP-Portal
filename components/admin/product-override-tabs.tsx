@@ -561,6 +561,13 @@ export function ProductOverrideTabs({
   }
   const isDraft = missingFields.length > 0;
 
+  // 탭별 실시간 필수 항목 누락 여부 연산
+  const isBasicTabMissing = !effectiveBrandId || !(effectiveNameEn || "").trim() || !(effectiveManufactureSku || "").trim() || !(effectiveOrigin || "").trim() || (!(effectiveUpc || "").trim() && !(effectiveEan || "").trim());
+  const isCategoryTabMissing = !(product as any).category_code;
+  const isPriceTabMissing = Number(effectivePriceKrwRetail) <= 0 || Number(effectivePriceUsdFob) <= 0;
+  const isLogisticsTabMissing = pkgWidth <= 0 || pkgDepth <= 0 || pkgHeight <= 0 || pkgWeight <= 0;
+  const isMediaTabMissing = !hasImages;
+
   const handleSave = () => {
     setStatusMessage(null);
     startTransition(async () => {
@@ -764,7 +771,12 @@ export function ProductOverrideTabs({
               : "border-transparent text-zinc-400 hover:text-zinc-650"
           }`}
         >
-          기본 정보
+          <span className="flex items-center gap-1.5">
+            기본 정보
+            {isBasicTabMissing && (
+              <span className="w-2 h-2 rounded-full bg-rose-500 dark:bg-rose-400 animate-pulse shadow-sm border border-rose-300 dark:border-rose-600" title="필수 항목 누락" />
+            )}
+          </span>
         </button>
         <button
           onClick={() => setActiveTab("category_attributes")}
@@ -774,7 +786,12 @@ export function ProductOverrideTabs({
               : "border-transparent text-zinc-400 hover:text-zinc-650"
           }`}
         >
-          카테고리 & 속성
+          <span className="flex items-center gap-1.5">
+            카테고리 & 속성
+            {isCategoryTabMissing && (
+              <span className="w-2 h-2 rounded-full bg-rose-500 dark:bg-rose-400 animate-pulse shadow-sm border border-rose-300 dark:border-rose-600" title="필수 항목 누락" />
+            )}
+          </span>
         </button>
         <button
           onClick={() => setActiveTab("price")}
@@ -784,7 +801,12 @@ export function ProductOverrideTabs({
               : "border-transparent text-zinc-400 hover:text-zinc-650"
           }`}
         >
-          가격 정보
+          <span className="flex items-center gap-1.5">
+            가격 정보
+            {isPriceTabMissing && (
+              <span className="w-2 h-2 rounded-full bg-rose-500 dark:bg-rose-400 animate-pulse shadow-sm border border-rose-300 dark:border-rose-600" title="필수 항목 누락" />
+            )}
+          </span>
         </button>
         <button
           onClick={() => setActiveTab("logistics")}
@@ -794,7 +816,12 @@ export function ProductOverrideTabs({
               : "border-transparent text-zinc-400 hover:text-zinc-650"
           }`}
         >
-          로지스틱스
+          <span className="flex items-center gap-1.5">
+            로지스틱스
+            {isLogisticsTabMissing && (
+              <span className="w-2 h-2 rounded-full bg-rose-500 dark:bg-rose-400 animate-pulse shadow-sm border border-rose-300 dark:border-rose-600" title="필수 항목 누락" />
+            )}
+          </span>
         </button>
         <button
           onClick={() => setActiveTab("media")}
@@ -804,7 +831,12 @@ export function ProductOverrideTabs({
               : "border-transparent text-zinc-400 hover:text-zinc-650"
           }`}
         >
-          미디어 (이미지/비디오)
+          <span className="flex items-center gap-1.5">
+            미디어 (이미지/비디오)
+            {isMediaTabMissing && (
+              <span className="w-2 h-2 rounded-full bg-rose-500 dark:bg-rose-400 animate-pulse shadow-sm border border-rose-300 dark:border-rose-600" title="필수 항목 누락" />
+            )}
+          </span>
         </button>
         <button
           onClick={() => setActiveTab("certs")}

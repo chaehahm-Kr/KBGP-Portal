@@ -46,7 +46,24 @@ export default async function AdminProductsPage() {
     .select("id, name");
   const brandNameById = new Map((brands ?? []).map((b) => [b.id, b.name]));
 
-  // 4. Fetch first images (lowest position) for products to display thumbnail
+  // 4. Fetch all categories to build full path mappings
+  const { data: dbCategories } = await supabase
+    .from("categories")
+    .select("code, name_ko, parent_code, depth");
+  const categoryMap = new Map((dbCategories ?? []).map((c) => [c.code, c]));
+
+  const getCategoryFullPath = (code: string | null | undefined): string => {
+    if (!code) return "";
+    const path: string[] = [];
+    let current = categoryMap.get(code);
+    while (current) {
+      path.unshift(current.name_ko);
+      current = current.parent_code ? categoryMap.get(current.parent_code) : undefined;
+    }
+    return path.join(" > ");
+  };
+
+  // 5. Fetch first images (lowest position) for products to display thumbnail
   const { data: productImages } = await supabase
     .from("product_images")
     .select("id, product_id, storage_path, position")
@@ -66,31 +83,36 @@ export default async function AdminProductsPage() {
       }
 
       const adminOverrides = (p.price_additional_info as any)?.admin_overrides || {};
-      const effectiveManufactureSku = adminOverrides.manufacture_sku !== undefined ? adminOverrides.manufacture_sku : p.manufacture_sku;
-      
-      // 누락 항목 분석
+      const effectiveBrandId = p.brand_id;
+      const effectiveCategory = adminOverrides.category !== undefined && adminOverrides.category !== "" ? adminOverrides.category : p.category;
+      const effectiveNameEn = adminOverrides.name_en !== undefined && adminOverrides.name_en !== "" ? adminOverrides.name_en : p.name_en;
+      const effectiveManufactureSku = adminOverrides.manufacture_sku !== undefined && adminOverrides.manufacture_sku !== "" ? adminOverrides.manufacture_sku : p.manufacture_sku;
+      const effectiveOrigin = adminOverrides.origin !== undefined && adminOverrides.origin !== "" ? adminOverrides.origin : p.origin;
+      const effectivePriceKrwRetail = adminOverrides.price_krw_retail !== undefined ? parseFloat(adminOverrides.price_krw_retail) : (p.price_krw_retail || 0);
+      const effectivePriceUsdFob = adminOverrides.price_usd_fob !== undefined ? parseFloat(adminOverrides.price_usd_fob) : (p.price_usd_fob || 0);
+      const effectiveUpc = adminOverrides.upc !== undefined && adminOverrides.upc !== "" ? adminOverrides.upc : p.upc;
+      const effectiveEan = adminOverrides.ean !== undefined && adminOverrides.ean !== "" ? adminOverrides.ean : p.ean;
+
+      const pkgWidth = adminOverrides.package_width !== undefined ? parseFloat(adminOverrides.package_width) : Number(p.package_width || 0);
+      const pkgDepth = adminOverrides.package_depth !== undefined ? parseFloat(adminOverrides.package_depth) : Number(p.package_depth || 0);
+      const pkgHeight = adminOverrides.package_height !== undefined ? parseFloat(adminOverrides.package_height) : Number(p.package_height || 0);
+      const pkgWeight = adminOverrides.package_weight !== undefined ? parseFloat(adminOverrides.package_weight) : Number(p.package_weight || 0);
+
+      // 누락 항목 분석 (상세 페이지의 ov 상태 반영된 Draft 판정과 완전히 동기화)
       const missingFields: string[] = [];
-      if (!p.brand_id) missingFields.push("브랜드");
-      if (!p.category) missingFields.push("카테고리");
-      if (!p.name_en?.trim()) missingFields.push("영문 제품명");
+      if (!effectiveBrandId) missingFields.push("브랜드");
+      if (!p.category_code && !effectiveCategory) missingFields.push("카테고리");
+      if (!(effectiveNameEn || "").trim()) missingFields.push("영문 제품명");
       if (!(effectiveManufactureSku || "").trim()) missingFields.push("제조사 SKU");
-      if (!p.origin?.trim()) missingFields.push("원산지");
-      if (!p.price_krw_retail || Number(p.price_krw_retail) <= 0) missingFields.push("소비자 판매가");
-      if (!p.price_usd_fob || Number(p.price_usd_fob) <= 0) missingFields.push("FOB 수출 가격");
+      if (!(effectiveOrigin || "").trim()) missingFields.push("원산지");
+      if (Number(effectivePriceKrwRetail) <= 0) missingFields.push("소비자 판매가");
+      if (Number(effectivePriceUsdFob) <= 0) missingFields.push("FOB 수출 가격");
       
-      const widthVal = Number(p.package_width || 0);
-      const depthVal = Number(p.package_depth || 0);
-      const heightVal = Number(p.package_height || 0);
-      const weightVal = Number(p.package_weight || 0);
-      if (widthVal <= 0 || depthVal <= 0 || heightVal <= 0 || weightVal <= 0) {
+      if (pkgWidth <= 0 || pkgDepth <= 0 || pkgHeight <= 0 || pkgWeight <= 0) {
         missingFields.push("패키지 배송 규격");
       }
-      
-      if (!p.upc?.trim() && !p.ean?.trim()) {
+      if (!(effectiveUpc || "").trim() && !(effectiveEan || "").trim()) {
         missingFields.push("식별 바코드(UPC 또는 EAN)");
-      }
-      if (p.selling_online && !p.sales_link_1?.trim()) {
-        missingFields.push("온라인 판매 링크");
       }
       
       const hasImages = (productImages ?? []).some((img) => img.product_id === p.id);
@@ -121,6 +143,7 @@ export default async function AdminProductsPage() {
         selection_status: p.selection_status || "UNREVIEWED",
         sales_status: p.sales_status || "PREPARING",
         category_code: p.category_code || null,
+        category_full_path: p.category_code ? getCategoryFullPath(p.category_code) : null,
       };
     })
   );
