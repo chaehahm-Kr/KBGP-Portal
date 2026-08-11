@@ -4,6 +4,8 @@ import { verifyAdminSession } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { revalidatePath } from "next/cache";
+import { validateUploadedFile } from "@/lib/files/validate";
+import crypto from "crypto";
 
 export async function adminUpdateProductOverrides(
   productId: string,
@@ -137,6 +139,9 @@ export async function adminGetProductCuration(productId: string) {
       last_review_date: null,
       next_review_date: null,
       role: "SUPPORT",
+      landed_cost: null,
+      wholesale_price: null,
+      suggest_retail_price: null,
     },
     matrix,
   };
@@ -150,6 +155,9 @@ export async function adminUpdateProductCuration(
     last_review_date: string | null;
     next_review_date: string | null;
     role: string;
+    landed_cost?: number | null;
+    wholesale_price?: number | null;
+    suggest_retail_price?: number | null;
   },
   matrixPayload: Record<string, string>
 ) {
@@ -197,17 +205,26 @@ export async function adminUpdateProductCuration(
     const curCurator = dbCuration.curator || "";
     const curRole = dbCuration.role || "SUPPORT";
     const curNextReview = dbCuration.next_review_date || "";
+    const curLanded = dbCuration.landed_cost;
+    const curWholesale = dbCuration.wholesale_price;
+    const curSrp = dbCuration.suggest_retail_price;
 
     const newStatus = curationPayload.status || "NOT_REVIEWED";
     const newCurator = curationPayload.curator || "";
     const newRole = curationPayload.role || "SUPPORT";
     const newNextReview = curationPayload.next_review_date || "";
+    const newLanded = curationPayload.landed_cost !== undefined ? curationPayload.landed_cost : null;
+    const newWholesale = curationPayload.wholesale_price !== undefined ? curationPayload.wholesale_price : null;
+    const newSrp = curationPayload.suggest_retail_price !== undefined ? curationPayload.suggest_retail_price : null;
 
     if (
       curStatus !== newStatus ||
       curCurator !== newCurator ||
       curRole !== newRole ||
-      curNextReview !== newNextReview
+      curNextReview !== newNextReview ||
+      Number(curLanded || 0) !== Number(newLanded || 0) ||
+      Number(curWholesale || 0) !== Number(newWholesale || 0) ||
+      Number(curSrp || 0) !== Number(newSrp || 0)
     ) {
       isCurationChanged = true;
     }
@@ -253,6 +270,9 @@ export async function adminUpdateProductCuration(
       last_review_date: finalLastReviewDate,
       next_review_date: finalNextReviewDate,
       role: curationPayload.role,
+      landed_cost: curationPayload.landed_cost !== undefined ? curationPayload.landed_cost : null,
+      wholesale_price: curationPayload.wholesale_price !== undefined ? curationPayload.wholesale_price : null,
+      suggest_retail_price: curationPayload.suggest_retail_price !== undefined ? curationPayload.suggest_retail_price : null,
       updated_at: new Date().toISOString(),
     });
 
@@ -651,4 +671,301 @@ async function logCurationHistory(apId: number, note: string) {
       updated_by: "어드민 운영자", // 임의 하드코딩 또는 세션 이메일
       change_note: note,
     });
+}
+
+function extensionFor(mime: string) {
+  if (mime === "image/png") return "png";
+  if (mime === "image/webp") return "webp";
+  if (mime === "application/pdf") return "pdf";
+  if (mime === "text/csv") return "csv";
+  if (mime.includes("spreadsheet")) return "xlsx";
+  return "jpg";
+}
+
+export async function adminAddProductImages(productId: string, formData: FormData) {
+  await verifyAdminSession();
+  const supabase = createAdminClient();
+
+  const { data: prod } = await supabase
+    .from("products")
+    .select("company_id")
+    .eq("id", productId)
+    .single();
+  const companyId = prod?.company_id;
+  if (!companyId) throw new Error("제품의 회사 정보를 찾을 수 없습니다.");
+
+  const images = formData
+    .getAll("images")
+    .filter((f): f is File => f instanceof File && f.size > 0);
+
+  const { count } = await supabase
+    .from("product_images")
+    .select("id", { count: "exact", head: true })
+    .eq("product_id", productId);
+
+  for (const [i, image] of images.entries()) {
+    const validation = await validateUploadedFile(image, ["image"]);
+    if (!validation.ok) continue;
+    const path = `${companyId}/products/${productId}/images/${crypto.randomUUID()}.${extensionFor(
+      validation.detectedMime
+    )}`;
+    const { error: uploadError } = await supabase.storage
+      .from("company-uploads")
+      .upload(path, image, { contentType: validation.detectedMime });
+    if (!uploadError) {
+      await supabase.from("product_images").insert({
+        product_id: productId,
+        company_id: companyId,
+        storage_path: path,
+        position: (count ?? 0) + i,
+      });
+    }
+  }
+
+  revalidatePath(`/admin/products/${productId}`);
+}
+
+export async function adminRemoveProductImage(productId: string, imageId: string) {
+  await verifyAdminSession();
+  const supabase = createAdminClient();
+
+  const { data: img } = await supabase
+    .from("product_images")
+    .select("storage_path")
+    .eq("id", imageId)
+    .single();
+
+  if (img?.storage_path) {
+    await supabase.storage.from("company-uploads").remove([img.storage_path]);
+  }
+
+  await supabase.from("product_images").delete().eq("id", imageId);
+  revalidatePath(`/admin/products/${productId}`);
+}
+
+export async function adminAddProductVideoUrl(productId: string, videoUrl: string) {
+  await verifyAdminSession();
+  const supabase = createAdminClient();
+
+  const { data: prod } = await supabase
+    .from("products")
+    .select("company_id")
+    .eq("id", productId)
+    .single();
+  const companyId = prod?.company_id;
+  if (!companyId) throw new Error("제품의 회사 정보를 찾을 수 없습니다.");
+
+  await supabase.from("product_videos").insert({
+    product_id: productId,
+    company_id: companyId,
+    video_url: videoUrl,
+  });
+
+  revalidatePath(`/admin/products/${productId}`);
+}
+
+export async function adminAddProductVideoFile(productId: string, formData: FormData) {
+  await verifyAdminSession();
+  const supabase = createAdminClient();
+
+  const { data: prod } = await supabase
+    .from("products")
+    .select("company_id")
+    .eq("id", productId)
+    .single();
+  const companyId = prod?.company_id;
+  if (!companyId) throw new Error("제품의 회사 정보를 찾을 수 없습니다.");
+
+  const file = formData.get("video");
+  if (!(file instanceof File) || file.size === 0) {
+    throw new Error("유효한 비디오 파일이 없습니다.");
+  }
+
+  const path = `${companyId}/products/${productId}/videos/${crypto.randomUUID()}.${extensionFor(file.type)}`;
+  const { error: uploadError } = await supabase.storage
+    .from("company-uploads")
+    .upload(path, file, { contentType: file.type });
+
+  if (uploadError) {
+    throw new Error(`비디오 파일 업로드 실패: ${uploadError.message}`);
+  }
+
+  await supabase.from("product_videos").insert({
+    product_id: productId,
+    company_id: companyId,
+    storage_path: path,
+  });
+
+  revalidatePath(`/admin/products/${productId}`);
+}
+
+export async function adminRemoveProductVideo(productId: string, videoId: string) {
+  await verifyAdminSession();
+  const supabase = createAdminClient();
+
+  const { data: video } = await supabase
+    .from("product_videos")
+    .select("storage_path")
+    .eq("id", videoId)
+    .single();
+
+  if (video?.storage_path) {
+    await supabase.storage.from("company-uploads").remove([video.storage_path]);
+  }
+
+  await supabase.from("product_videos").delete().eq("id", videoId);
+  revalidatePath(`/admin/products/${productId}`);
+}
+
+export async function adminAddProductCertificate(
+  productId: string,
+  type: string,
+  originalFilename: string,
+  formData: FormData
+) {
+  await verifyAdminSession();
+  const supabase = createAdminClient();
+
+  const { data: prod } = await supabase
+    .from("products")
+    .select("company_id")
+    .eq("id", productId)
+    .single();
+  const companyId = prod?.company_id;
+  if (!companyId) throw new Error("제품의 회사 정보를 찾을 수 없습니다.");
+
+  const file = formData.get("file");
+  if (!(file instanceof File) || file.size === 0) {
+    throw new Error("유효한 인증서 파일이 없습니다.");
+  }
+
+  const validation = await validateUploadedFile(file, ["document", "image"]);
+  if (!validation.ok) {
+    throw new Error("허용되지 않는 파일 형식입니다. PDF나 이미지 파일만 가능합니다.");
+  }
+
+  const path = `${companyId}/products/${productId}/certificates/${crypto.randomUUID()}.${extensionFor(
+    validation.detectedMime
+  )}`;
+
+  const { error: uploadError } = await supabase.storage
+    .from("company-uploads")
+    .upload(path, file, { contentType: validation.detectedMime });
+
+  if (uploadError) {
+    throw new Error(`인증서 파일 업로드 실패: ${uploadError.message}`);
+  }
+
+  // Set previous certificates of this type for this product to not current
+  await supabase
+    .from("product_certificates")
+    .update({ is_current: false })
+    .eq("product_id", productId)
+    .eq("certificate_type", type);
+
+  // Get next version number
+  const { data: existing } = await supabase
+    .from("product_certificates")
+    .select("version")
+    .eq("product_id", productId)
+    .eq("certificate_type", type)
+    .order("version", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const nextVersion = (existing?.version || 0) + 1;
+
+  await supabase.from("product_certificates").insert({
+    product_id: productId,
+    company_id: companyId,
+    certificate_type: type,
+    storage_path: path,
+    original_filename: originalFilename,
+    version: nextVersion,
+    is_current: true,
+  });
+
+  revalidatePath(`/admin/products/${productId}`);
+}
+
+export async function adminUploadIngredientsFile(
+  productId: string,
+  language: "ko" | "en",
+  formData: FormData
+) {
+  await verifyAdminSession();
+  const supabase = createAdminClient();
+
+  const { data: prod } = await supabase
+    .from("products")
+    .select("company_id, ingredients_file_path, ingredients_file_path_en")
+    .eq("id", productId)
+    .single();
+
+  const companyId = prod?.company_id;
+  if (!companyId) throw new Error("제품의 회사 정보를 찾을 수 없습니다.");
+
+  const file = formData.get("file");
+  if (!(file instanceof File) || file.size === 0) {
+    throw new Error("유효한 성분표 파일이 없습니다.");
+  }
+
+  const validation = await validateUploadedFile(file, ["document", "image"]);
+  if (!validation.ok) {
+    throw new Error("허용되지 않는 파일 형식입니다. PDF나 이미지 파일만 가능합니다.");
+  }
+
+  // Delete existing file if exists
+  const existingPath = language === "ko" ? prod.ingredients_file_path : prod.ingredients_file_path_en;
+  if (existingPath) {
+    await supabase.storage.from("company-uploads").remove([existingPath]);
+  }
+
+  const path = `${companyId}/products/${productId}/ingredients/${language}_${crypto.randomUUID()}.${extensionFor(
+    validation.detectedMime
+  )}`;
+
+  const { error: uploadError } = await supabase.storage
+    .from("company-uploads")
+    .upload(path, file, { contentType: validation.detectedMime });
+
+  if (uploadError) {
+    throw new Error(`성분표 파일 업로드 실패: ${uploadError.message}`);
+  }
+
+  const updateData: Record<string, any> = {};
+  if (language === "ko") {
+    updateData.ingredients_file_path = path;
+  } else {
+    updateData.ingredients_file_path_en = path;
+  }
+
+  await supabase.from("products").update(updateData).eq("id", productId);
+  revalidatePath(`/admin/products/${productId}`);
+}
+
+export async function adminDeleteIngredientsFile(productId: string, language: "ko" | "en") {
+  await verifyAdminSession();
+  const supabase = createAdminClient();
+
+  const { data: prod } = await supabase
+    .from("products")
+    .select("ingredients_file_path, ingredients_file_path_en")
+    .eq("id", productId)
+    .single();
+
+  const existingPath = language === "ko" ? prod?.ingredients_file_path : prod?.ingredients_file_path_en;
+  if (existingPath) {
+    await supabase.storage.from("company-uploads").remove([existingPath]);
+  }
+
+  const updateData: Record<string, any> = {};
+  if (language === "ko") {
+    updateData.ingredients_file_path = null;
+  } else {
+    updateData.ingredients_file_path_en = null;
+  }
+
+  await supabase.from("products").update(updateData).eq("id", productId);
+  revalidatePath(`/admin/products/${productId}`);
 }

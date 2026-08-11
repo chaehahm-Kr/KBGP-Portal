@@ -11,7 +11,18 @@ import {
   CERTIFICATE_TYPE_LABEL,
   type CertificateType
 } from "@/lib/product/types";
-import { adminUpdateProductOverrides, adminUpdateProductCuration } from "@/lib/product/admin-actions";
+import { 
+  adminUpdateProductOverrides, 
+  adminUpdateProductCuration,
+  adminAddProductImages,
+  adminRemoveProductImage,
+  adminAddProductVideoUrl,
+  adminAddProductVideoFile,
+  adminRemoveProductVideo,
+  adminAddProductCertificate,
+  adminUploadIngredientsFile,
+  adminDeleteIngredientsFile
+} from "@/lib/product/admin-actions";
 import { CategoryAttributeForm } from "@/components/product/category-attribute-form";
 
 interface ProductOverrideTabsProps {
@@ -62,6 +73,169 @@ export function ProductOverrideTabs({
   const searchParams = useSearchParams();
   const initialTab = searchParams.get("tab") === "category" ? "category_attributes" : "basic";
   const [activeTab, setActiveTab] = useState<"basic" | "category_attributes" | "price" | "logistics" | "media" | "certs" | "curation">(initialTab as any);
+
+  // Local state for media / cert updates loading
+  const [mediaPending, setMediaPending] = useState(false);
+  const [mediaError, setMediaError] = useState<string | null>(null);
+
+  // 1. Image upload handler
+  const handleImageUpload = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const form = e.currentTarget;
+    const fileInput = form.querySelector('input[type="file"]') as HTMLInputElement;
+    if (!fileInput || !fileInput.files || fileInput.files.length === 0) return;
+
+    setMediaPending(true);
+    setMediaError(null);
+    startTransition(async () => {
+      try {
+        const formData = new FormData();
+        for (const file of Array.from(fileInput.files || [])) {
+          formData.append("images", file);
+        }
+        await adminAddProductImages(product.id, formData);
+        form.reset();
+      } catch (err: any) {
+        setMediaError(err.message || "이미지 업로드 실패");
+      } finally {
+        setMediaPending(false);
+      }
+    });
+  };
+
+  // 2. Image delete handler
+  const handleImageDelete = (imageId: string) => {
+    if (!confirm("정말 이 제품 이미지를 삭제하시겠습니까?")) return;
+    setMediaPending(true);
+    setMediaError(null);
+    startTransition(async () => {
+      try {
+        await adminRemoveProductImage(product.id, imageId);
+      } catch (err: any) {
+        setMediaError(err.message || "이미지 삭제 실패");
+      } finally {
+        setMediaPending(false);
+      }
+    });
+  };
+
+  // 3. Video upload file handler
+  const handleVideoFileUpload = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const form = e.currentTarget;
+    const fileInput = form.querySelector('input[type="file"]') as HTMLInputElement;
+    const file = fileInput?.files?.[0];
+    if (!file) return;
+
+    setMediaPending(true);
+    setMediaError(null);
+    startTransition(async () => {
+      try {
+        const formData = new FormData();
+        formData.append("video", file);
+        await adminAddProductVideoFile(product.id, formData);
+        form.reset();
+      } catch (err: any) {
+        setMediaError(err.message || "동영상 업로드 실패");
+      } finally {
+        setMediaPending(false);
+      }
+    });
+  };
+
+  // 4. Video Link upload handler
+  const [videoLinkInput, setVideoLinkInput] = useState("");
+  const handleVideoLinkUpload = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!videoLinkInput.trim()) return;
+
+    setMediaPending(true);
+    setMediaError(null);
+    startTransition(async () => {
+      try {
+        await adminAddProductVideoUrl(product.id, videoLinkInput.trim());
+        setVideoLinkInput("");
+      } catch (err: any) {
+        setMediaError(err.message || "동영상 링크 등록 실패");
+      } finally {
+        setMediaPending(false);
+      }
+    });
+  };
+
+  // 5. Video delete handler
+  const handleVideoDelete = (videoId: string) => {
+    if (!confirm("정말 이 동영상을 삭제하시겠습니까?")) return;
+    setMediaPending(true);
+    setMediaError(null);
+    startTransition(async () => {
+      try {
+        await adminRemoveProductVideo(product.id, videoId);
+      } catch (err: any) {
+        setMediaError(err.message || "동영상 삭제 실패");
+      } finally {
+        setMediaPending(false);
+      }
+    });
+  };
+
+  // 6. Ingredients File Upload handler
+  const handleIngredientsUpload = (lang: "ko" | "en", file: File) => {
+    setMediaPending(true);
+    setMediaError(null);
+    startTransition(async () => {
+      try {
+        const formData = new FormData();
+        formData.append("file", file);
+        await adminUploadIngredientsFile(product.id, lang, formData);
+      } catch (err: any) {
+        setMediaError(err.message || "성분표 업로드 실패");
+      } finally {
+        setMediaPending(false);
+      }
+    });
+  };
+
+  // 7. Ingredients File Delete handler
+  const handleIngredientsDelete = (lang: "ko" | "en") => {
+    if (!confirm("정말 성분표 문서를 삭제하시겠습니까?")) return;
+    setMediaPending(true);
+    setMediaError(null);
+    startTransition(async () => {
+      try {
+        await adminDeleteIngredientsFile(product.id, lang);
+      } catch (err: any) {
+        setMediaError(err.message || "성분표 삭제 실패");
+      } finally {
+        setMediaPending(false);
+      }
+    });
+  };
+
+  // 8. General Certificate Upload handler
+  const [certTypeInput, setCertTypeInput] = useState("ingredient_certification");
+  const handleCertificateUpload = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const form = e.currentTarget;
+    const fileInput = form.querySelector('input[type="file"]') as HTMLInputElement;
+    const file = fileInput?.files?.[0];
+    if (!file) return;
+
+    setMediaPending(true);
+    setMediaError(null);
+    startTransition(async () => {
+      try {
+        const formData = new FormData();
+        formData.append("file", file);
+        await adminAddProductCertificate(product.id, certTypeInput, file.name, formData);
+        form.reset();
+      } catch (err: any) {
+        setMediaError(err.message || "인허가 서류 업로드 실패");
+      } finally {
+        setMediaPending(false);
+      }
+    });
+  };
   const [isPending, startTransition] = useTransition();
   const [statusMessage, setStatusMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
@@ -93,8 +267,43 @@ export function ProductOverrideTabs({
   const [curationRole, setCurationRole] = useState(curation.role || "SUPPORT");
   const [ovMatrix, setOvMatrix] = useState<Record<string, string>>(matrix || {});
 
+  // Admin Curation Pricing States
+  const [ovLandedCost, setOvLandedCost] = useState<string>((curation as any).landed_cost?.toString() || "");
+  const [ovWholesalePrice, setOvWholesalePrice] = useState<string>((curation as any).wholesale_price?.toString() || "");
+  const [ovSuggestRetailPrice, setOvSuggestRetailPrice] = useState<string>((curation as any).suggest_retail_price?.toString() || "");
+
   // Load existing overrides
   const overrides = (product.price_additional_info as any)?.admin_overrides || {};
+
+  // 누락 항목 분석 (Draft 상태 판정)
+  const missingFields: string[] = [];
+  const effectiveManufactureSku = overrides.manufacture_sku !== undefined ? overrides.manufacture_sku : product.manufacture_sku;
+  
+  if (!product.brand_id) missingFields.push("브랜드 지정");
+  if (!product.category) missingFields.push("카테고리 지정");
+  if (!product.name_en?.trim()) missingFields.push("영문 제품명");
+  if (!(effectiveManufactureSku || "").trim()) missingFields.push("제조사 SKU");
+  if (!product.origin?.trim()) missingFields.push("원산지");
+  if (!product.price_krw_retail || Number(product.price_krw_retail) <= 0) missingFields.push("소비자 판매가");
+  if (!product.price_usd_fob || Number(product.price_usd_fob) <= 0) missingFields.push("FOB 수출 가격");
+  
+  const widthVal = Number(product.package_width || 0);
+  const depthVal = Number(product.package_depth || 0);
+  const heightVal = Number(product.package_height || 0);
+  const weightVal = Number(product.package_weight || 0);
+  if (widthVal <= 0 || depthVal <= 0 || heightVal <= 0 || weightVal <= 0) {
+    missingFields.push("패키지 배송 규격");
+  }
+  
+  if (!product.upc?.trim() && !product.ean?.trim()) {
+    missingFields.push("식별 바코드 (UPC 또는 EAN)");
+  }
+  
+  const hasImages = imageUrls.length > 0 && imageUrls[0] !== null;
+  if (!hasImages) {
+    missingFields.push("대표 이미지 업로드");
+  }
+  const isDraft = missingFields.length > 0;
 
   // Form States for Overrides
   const [ovName, setOvName] = useState(overrides.name || "");
@@ -434,6 +643,9 @@ export function ProductOverrideTabs({
             last_review_date: ovLastReviewDate || null,
             next_review_date: ovNextReviewDate || null,
             role: curationRole,
+            landed_cost: ovLandedCost.trim() !== "" ? parseFloat(ovLandedCost) : null,
+            wholesale_price: ovWholesalePrice.trim() !== "" ? parseFloat(ovWholesalePrice) : null,
+            suggest_retail_price: ovSuggestRetailPrice.trim() !== "" ? parseFloat(ovSuggestRetailPrice) : null,
           },
           ovMatrix
         );
@@ -476,8 +688,8 @@ export function ProductOverrideTabs({
             <span>Letusto SKU: <strong className="text-indigo-650 dark:text-indigo-400 font-mono font-bold">{ovLetustoSku || product.letusto_sku || "지정 대기 중"}</strong></span>
           </div>
           <h1 className="text-xl font-bold text-zinc-900 dark:text-white">
-            {ovName || product.name}
-            {ovName && (
+            {ovNameEn || product.name_en || ovName || product.name}
+            {(ovNameEn || ovName) && (
               <span className="ml-2 inline-block rounded bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300 px-2 py-0.5 text-[10px] font-bold border border-indigo-100 dark:border-indigo-900">
                 어드민 명칭 적용됨
               </span>
@@ -497,6 +709,30 @@ export function ProductOverrideTabs({
           )}
         </div>
       </div>
+
+      {isDraft && (
+        <div className="rounded-xl border border-amber-250 bg-amber-50/55 p-5 shadow-sm dark:border-amber-900/50 dark:bg-amber-950/20 text-xs space-y-2">
+          <div className="flex items-center gap-2 text-amber-800 dark:text-amber-300 font-bold">
+            <span>⚠️ 정보 보완 필요 (Draft 상태)</span>
+            <span className="text-[10px] font-normal px-2 py-0.5 rounded bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-300">
+              미입력 항목 {missingFields.length}개
+            </span>
+          </div>
+          <p className="text-[11px] text-zinc-550 dark:text-zinc-400">
+            브랜드사(제조사) 또는 어드민 관리자가 아래 필수 항목들을 보완 완료해야만 최종 'Active' 등록 상태로 전환할 수 있습니다:
+          </p>
+          <div className="flex flex-wrap gap-2 pt-1">
+            {missingFields.map((field) => (
+              <span
+                key={field}
+                className="inline-flex items-center rounded-md bg-amber-50 px-2 py-1 text-[10px] font-bold text-amber-700 ring-1 ring-inset ring-amber-600/10 dark:bg-amber-950/40 dark:text-amber-450 dark:ring-amber-900/30"
+              >
+                • {field}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
 
       {statusMessage && (
         <div className={`p-3.5 rounded-lg border text-xs font-semibold ${
@@ -1131,6 +1367,114 @@ export function ProductOverrideTabs({
                   <p className="text-xs text-zinc-400 italic">설정된 슬라이딩 가격 스케일이 없습니다.</p>
                 )}
               </div>
+
+              {/* Admin Curation Pricing & Realtime Margin Calculator */}
+              <div className="pt-6 border-t border-zinc-100 dark:border-zinc-800 space-y-4">
+                <div className="border-b border-zinc-100 pb-2 dark:border-zinc-800 flex items-center gap-2">
+                  <span className="text-xs font-bold text-zinc-700 dark:text-zinc-300 uppercase tracking-wider">
+                    어드민 핵심 가격 책정 & 마진 계산기 (Curation Base)
+                  </span>
+                  <span className="inline-flex rounded-full bg-indigo-50 px-2 py-0.5 text-[9px] font-bold text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-900">
+                    어드민 전용
+                  </span>
+                </div>
+                <p className="text-[10px] text-zinc-400">
+                  당사의 실질 수입 원가, 뷰티 서플라이 공급가, 권장 소비자가를 책정하여 당사 도매 마진과 소매점 마진을 실시간으로 확인하고 큐레이션 가격 원천으로 사용합니다.
+                </p>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  {/* Landed Cost */}
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-bold text-zinc-650 dark:text-zinc-450 block">
+                      Landed Cost ($)
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      placeholder="수입 원가 (배송/통관 포함)..."
+                      value={ovLandedCost}
+                      onChange={(e) => setOvLandedCost(e.target.value)}
+                      className="w-full rounded border border-zinc-200 p-2 text-xs text-zinc-900 bg-white dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:border-zinc-950 outline-none"
+                    />
+                  </div>
+
+                  {/* Beauty Supply Wholesale Price */}
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-bold text-zinc-650 dark:text-zinc-455 block">
+                      Beauty Supply 공급가 ($)
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      placeholder="뷰티 서플라이 납품 도매가..."
+                      value={ovWholesalePrice}
+                      onChange={(e) => setOvWholesalePrice(e.target.value)}
+                      className="w-full rounded border border-zinc-200 p-2 text-xs text-zinc-900 bg-white dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:border-zinc-950 outline-none"
+                    />
+                  </div>
+
+                  {/* Suggested Retail Price */}
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-bold text-zinc-650 dark:text-zinc-455 block">
+                      Suggested Retail Price (SRP, $)
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      placeholder="권장 미국 소비자가 (MSRP)..."
+                      value={ovSuggestRetailPrice}
+                      onChange={(e) => setOvSuggestRetailPrice(e.target.value)}
+                      className="w-full rounded border border-zinc-200 p-2 text-xs text-zinc-900 bg-white dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:border-zinc-950 outline-none"
+                    />
+                  </div>
+                </div>
+
+                {/* Margin Calculator Gauge / Cards */}
+                {(() => {
+                  const landed = parseFloat(ovLandedCost) || 0;
+                  const wholesale = parseFloat(ovWholesalePrice) || 0;
+                  const srp = parseFloat(ovSuggestRetailPrice) || 0;
+
+                  const ourMargin = wholesale > 0 ? ((wholesale - landed) / wholesale) * 100 : 0;
+                  const retailMargin = srp > 0 ? ((srp - wholesale) / srp) * 100 : 0;
+
+                  return (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+                      {/* Our Margin Card */}
+                      <div className="p-3.5 rounded-lg border border-indigo-100 bg-indigo-50/20 dark:border-indigo-950/40 dark:bg-indigo-950/10 space-y-1.5 shadow-sm">
+                        <div className="flex justify-between items-center text-xs">
+                          <span className="font-bold text-indigo-800 dark:text-indigo-300">당사 도매 마진 (Our Margin)</span>
+                          <span className="text-[9px] text-zinc-400 font-mono">((공급가 - 원가) / 공급가)</span>
+                        </div>
+                        <div className="flex items-baseline gap-2 pt-1">
+                          <span className="text-xl font-extrabold text-indigo-750 dark:text-indigo-400">
+                            {ourMargin > 0 ? `${ourMargin.toFixed(1)}%` : "0.0%"}
+                          </span>
+                          <span className="text-[10px] text-zinc-400">
+                            (수익: ${wholesale > landed ? (wholesale - landed).toFixed(2) : "0.00"})
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Retailer Margin Card */}
+                      <div className="p-3.5 rounded-lg border border-emerald-100 bg-emerald-50/20 dark:border-emerald-950/40 dark:bg-emerald-950/10 space-y-1.5 shadow-sm">
+                        <div className="flex justify-between items-center text-xs">
+                          <span className="font-bold text-emerald-800 dark:text-emerald-300">소매상 마진 (Retailer Margin)</span>
+                          <span className="text-[9px] text-zinc-400 font-mono">((SRP - 공급가) / SRP)</span>
+                        </div>
+                        <div className="flex items-baseline gap-2 pt-1">
+                          <span className="text-xl font-extrabold text-emerald-700 dark:text-emerald-450">
+                            {retailMargin > 0 ? `${retailMargin.toFixed(1)}%` : "0.0%"}
+                          </span>
+                          <span className="text-[10px] text-zinc-400">
+                            (수익: ${srp > wholesale ? (srp - wholesale).toFixed(2) : "0.00"})
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
             </div>
           </div>
         )}
@@ -1508,64 +1852,153 @@ export function ProductOverrideTabs({
           </div>
         )}
 
-        {/* Media Tab (Read Only Reference) */}
+        {/* Media Tab */}
         {activeTab === "media" && (
           <div className="space-y-6">
             <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 space-y-4">
-              <h3 className="text-xs font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider border-b border-zinc-100 pb-2 dark:border-zinc-800">
-                등록 미디어 자료 조회 (포털 원본 파일)
-              </h3>
+              <div className="flex justify-between items-center border-b border-zinc-100 pb-2 dark:border-zinc-800">
+                <h3 className="text-xs font-bold text-zinc-700 dark:text-zinc-300 uppercase tracking-wider">
+                  제품 미디어 자료 관리 (이미지 및 동영상)
+                </h3>
+                {mediaPending && (
+                  <span className="text-[10px] text-indigo-650 dark:text-indigo-400 font-bold animate-pulse">
+                    처리 중...
+                  </span>
+                )}
+              </div>
+
+              {mediaError && (
+                <div className="p-3 bg-rose-50 border border-rose-200 text-rose-800 rounded-lg text-xs font-semibold dark:bg-rose-950/20 dark:border-rose-900 dark:text-rose-450">
+                  ⚠️ {mediaError}
+                </div>
+              )}
 
               {/* Images list */}
-              <div className="space-y-2">
-                <h4 className="text-xs font-bold text-zinc-800 dark:text-white">등록 상품 이미지 목록 ({imageUrls.length}개)</h4>
+              <div className="space-y-4">
+                <h4 className="text-xs font-bold text-zinc-800 dark:text-white">등록 상품 이미지 목록 ({imageUrls.length}개 / 최대 10개)</h4>
                 {imageUrls.length > 0 ? (
                   <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-5 gap-4">
-                    {imageUrls.map((url, idx) => (
-                      <div key={idx} className="relative rounded-lg overflow-hidden border border-zinc-200 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950/40 group shadow-sm aspect-square">
-                        {url ? (
-                          <img src={url} alt={`제품 사진 ${idx + 1}`} className="w-full h-full object-cover" />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center text-[10px] text-rose-500 font-bold">로딩 실패</div>
-                        )}
-                        {idx === 0 ? (
-                          <span className="absolute top-2 left-2 rounded bg-amber-500 text-white px-2 py-0.5 text-[9px] font-extrabold shadow-sm border border-amber-400">
-                            대표 이미지
-                          </span>
-                        ) : (
-                          <span className="absolute top-2 left-2 rounded bg-black/60 text-white px-1.5 py-0.5 text-[9px] font-semibold">
-                            서브 {idx}
-                          </span>
-                        )}
-                      </div>
-                    ))}
+                    {imageUrls.map((url, idx) => {
+                      const imgRow = imageRows[idx];
+                      return (
+                        <div key={idx} className="relative rounded-lg overflow-hidden border border-zinc-200 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950/40 group shadow-sm flex flex-col justify-between aspect-square p-2">
+                          <div className="relative w-full flex-1 rounded overflow-hidden">
+                            {url ? (
+                              <img src={url} alt={`제품 사진 ${idx + 1}`} className="w-full h-full object-cover" />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center text-[10px] text-rose-500 font-bold">로딩 실패</div>
+                            )}
+                            {idx === 0 ? (
+                              <span className="absolute top-1 left-1 rounded bg-amber-500 text-white px-1.5 py-0.5 text-[8px] font-extrabold shadow-sm border border-amber-400">
+                                대표 이미지
+                              </span>
+                            ) : (
+                              <span className="absolute top-1 left-1 rounded bg-black/60 text-white px-1.5 py-0.5 text-[8px] font-semibold">
+                                서브 {idx}
+                              </span>
+                            )}
+                          </div>
+                          {imgRow && (
+                            <button
+                              type="button"
+                              onClick={() => handleImageDelete(imgRow.id)}
+                              disabled={mediaPending}
+                              className="mt-1.5 w-full text-center text-[9px] font-bold text-rose-600 hover:text-rose-800 hover:underline cursor-pointer disabled:opacity-50"
+                            >
+                              이미지 삭제
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 ) : (
                   <p className="text-xs text-zinc-400 italic py-3 text-center">등록된 사진 이미지가 없습니다.</p>
                 )}
+
+                {/* Image upload form */}
+                {imageUrls.length < 10 && (
+                  <form
+                    onSubmit={handleImageUpload}
+                    className="border-t border-zinc-100 dark:border-zinc-850 pt-3 flex flex-col sm:flex-row sm:items-center gap-3"
+                  >
+                    <div className="flex-1">
+                      <input
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp"
+                        multiple
+                        disabled={mediaPending}
+                        className="block text-xs text-zinc-500 dark:text-zinc-400 file:mr-4 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-zinc-100 file:text-zinc-700 dark:file:bg-zinc-800 dark:file:text-zinc-300 hover:file:bg-zinc-200 dark:hover:file:bg-zinc-750 cursor-pointer disabled:opacity-50"
+                      />
+                    </div>
+                    <button
+                      type="submit"
+                      disabled={mediaPending}
+                      className="rounded-lg border border-zinc-300 px-4 py-1.5 text-xs font-bold text-zinc-700 hover:bg-zinc-50 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-850 cursor-pointer disabled:opacity-50"
+                    >
+                      이미지 추가
+                    </button>
+                  </form>
+                )}
               </div>
 
               {/* Videos list */}
-              <div className="pt-4 border-t border-zinc-100 dark:border-zinc-800 space-y-2">
+              <div className="pt-6 border-t border-zinc-100 dark:border-zinc-850 space-y-4">
                 <h4 className="text-xs font-bold text-zinc-800 dark:text-white font-sans">등록 상품 홍보 동영상 ({videoUrls.length}개)</h4>
                 {videoUrls.length > 0 ? (
-                  <div className="space-y-4">
+                  <div className="grid gap-6 sm:grid-cols-2">
                     {videoRows.map((v, idx) => {
                       const url = videoUrls[idx];
                       return (
-                        <div key={v.id} className="p-4 rounded-lg border border-zinc-150 bg-zinc-50/50 dark:border-zinc-800 dark:bg-zinc-950/40 flex flex-col md:flex-row gap-4 items-start">
-                          <div className="text-xs font-semibold text-zinc-500 w-16">동영상 {idx + 1}</div>
-                          <div className="flex-1 space-y-2 text-xs">
+                        <div key={v.id} className="p-3.5 rounded-lg border border-zinc-150 bg-zinc-50/50 dark:border-zinc-800 dark:bg-zinc-950/40 flex flex-col justify-between gap-3 shadow-sm">
+                          <div className="space-y-2 text-xs">
                             {v.video_url ? (
-                              <p>외부 링크: <a href={v.video_url} target="_blank" rel="noreferrer" className="text-indigo-650 hover:underline font-mono dark:text-indigo-400">{v.video_url}</a></p>
+                              <p className="truncate">외부 링크: <a href={v.video_url} target="_blank" rel="noreferrer" className="text-indigo-650 hover:underline font-mono dark:text-indigo-400">{v.video_url}</a></p>
                             ) : (
-                              <p className="text-zinc-600 dark:text-zinc-400">직접 업로드 비디오 파일</p>
+                              <p className="text-zinc-650 dark:text-zinc-400">직접 업로드 비디오 파일</p>
                             )}
-                            {url && (
-                              <div className="max-w-md rounded border border-zinc-200 overflow-hidden shadow-sm">
-                                <video src={url} controls className="w-full max-h-56" />
+                            {v.video_url ? (
+                              <div className="aspect-video w-full rounded-lg overflow-hidden border border-zinc-200 bg-black flex items-center justify-center text-xs text-zinc-400">
+                                {v.video_url.includes("youtube.com") || v.video_url.includes("youtu.be") ? (
+                                  <iframe
+                                    width="100%"
+                                    height="100%"
+                                    src={`https://www.youtube.com/embed/${
+                                      v.video_url.includes("watch?v=")
+                                        ? v.video_url.split("watch?v=")[1]?.split("&")[0]
+                                        : v.video_url.split("/").pop()
+                                    }`}
+                                    title="YouTube video"
+                                    frameBorder="0"
+                                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                    allowFullScreen
+                                  ></iframe>
+                                ) : (
+                                  <a href={v.video_url} target="_blank" rel="noreferrer" className="text-indigo-650 hover:underline font-bold px-2 py-1 dark:text-indigo-400">
+                                    외부 동영상 링크 열기 ↗
+                                  </a>
+                                )}
                               </div>
+                            ) : (
+                              url && (
+                                <div className="max-w-md rounded border border-zinc-200 overflow-hidden shadow-sm aspect-video">
+                                  <video src={url} controls className="w-full h-full object-contain bg-black" />
+                                </div>
+                              )
                             )}
+                          </div>
+                          <div className="flex justify-between items-center pt-2 border-t border-zinc-100 dark:border-zinc-800">
+                            <span className="text-[9px] font-bold text-zinc-400 uppercase tracking-wider">
+                              {v.video_url ? "외부 링크" : "직접 업로드"}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => handleVideoDelete(v.id)}
+                              disabled={mediaPending}
+                              className="text-[10px] font-bold text-rose-600 hover:text-rose-800 hover:underline cursor-pointer disabled:opacity-50"
+                            >
+                              동영상 삭제
+                            </button>
                           </div>
                         </div>
                       );
@@ -1574,6 +2007,55 @@ export function ProductOverrideTabs({
                 ) : (
                   <p className="text-xs text-zinc-400 italic py-3 text-center">등록된 홍보 동영상이 없습니다.</p>
                 )}
+
+                {/* Add Video Options */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 border-t border-zinc-100 dark:border-zinc-850 pt-4">
+                  {/* Video Link form */}
+                  <form onSubmit={handleVideoLinkUpload} className="space-y-2">
+                    <label className="text-[11px] font-bold text-zinc-650 dark:text-zinc-450 block">
+                      방법 A: 외부 동영상 링크 등록 (YouTube 등)
+                    </label>
+                    <div className="flex gap-2">
+                      <input
+                        type="url"
+                        placeholder="https://www.youtube.com/watch?v=..."
+                        value={videoLinkInput}
+                        onChange={(e) => setVideoLinkInput(e.target.value)}
+                        disabled={mediaPending}
+                        className="flex-1 rounded border border-zinc-200 px-3 py-1.5 text-xs text-zinc-900 bg-white dark:border-zinc-800 dark:bg-zinc-950 dark:text-white outline-none focus:border-zinc-950 disabled:opacity-50"
+                      />
+                      <button
+                        type="submit"
+                        disabled={mediaPending}
+                        className="rounded-lg border border-zinc-300 px-4 py-1.5 text-xs font-bold text-zinc-700 hover:bg-zinc-50 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-850 cursor-pointer disabled:opacity-50"
+                      >
+                        링크 등록
+                      </button>
+                    </div>
+                  </form>
+
+                  {/* Video File form */}
+                  <form onSubmit={handleVideoFileUpload} className="space-y-2">
+                    <label className="text-[11px] font-bold text-zinc-650 dark:text-zinc-455 block">
+                      방법 B: 동영상 파일 직접 업로드 (MP4 등)
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="file"
+                        accept="video/mp4,video/quicktime,video/webm"
+                        disabled={mediaPending}
+                        className="block text-xs text-zinc-500 dark:text-zinc-400 file:mr-4 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-zinc-100 file:text-zinc-700 dark:file:bg-zinc-800 dark:file:text-zinc-300 hover:file:bg-zinc-200 dark:hover:file:bg-zinc-750 cursor-pointer disabled:opacity-50"
+                      />
+                      <button
+                        type="submit"
+                        disabled={mediaPending}
+                        className="rounded-lg border border-zinc-300 px-4 py-1.5 text-xs font-bold text-zinc-700 hover:bg-zinc-50 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-850 cursor-pointer disabled:opacity-50"
+                      >
+                        비디오 파일 업로드
+                      </button>
+                    </div>
+                  </form>
+                </div>
               </div>
             </div>
           </div>
@@ -1583,24 +2065,100 @@ export function ProductOverrideTabs({
         {activeTab === "certs" && (
           <div className="space-y-6">
             <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 space-y-4">
-              <h3 className="text-xs font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider border-b border-zinc-100 pb-2 dark:border-zinc-800">
-                원료 및 인허가 보증서 조회 (포털 원본 문서)
-              </h3>
+              <div className="flex justify-between items-center border-b border-zinc-100 pb-2 dark:border-zinc-800">
+                <h3 className="text-xs font-bold text-zinc-700 dark:text-zinc-300 uppercase tracking-wider">
+                  원료 및 인허가 보증서 관리
+                </h3>
+                {mediaPending && (
+                  <span className="text-[10px] text-indigo-650 dark:text-indigo-400 font-bold animate-pulse">
+                    처리 중...
+                  </span>
+                )}
+              </div>
+
+              {mediaError && (
+                <div className="p-3 bg-rose-50 border border-rose-200 text-rose-800 rounded-lg text-xs font-semibold dark:bg-rose-950/20 dark:border-rose-900 dark:text-rose-450">
+                  ⚠️ {mediaError}
+                </div>
+              )}
 
               {/* Special files: Ingredient Certs */}
-              <div className="space-y-3">
+              <div className="space-y-4">
                 <h4 className="text-xs font-bold text-zinc-850 dark:text-white">성분 표 및 인증서 (Ingredients Sheets)</h4>
-                <div className="grid grid-cols-1 gap-4">
-                  {/* Unified Sheet */}
-                  <div className="p-4 rounded-lg border border-zinc-150 bg-zinc-50/50 dark:border-zinc-800 dark:bg-zinc-950/40 text-xs space-y-2">
-                    <span className="text-[10px] font-bold text-zinc-400 uppercase block">성분 인증 증빙 서류</span>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* KO Sheet */}
+                  <div className="p-4 rounded-lg border border-zinc-150 bg-zinc-50/50 dark:border-zinc-800 dark:bg-zinc-950/40 text-xs space-y-3">
+                    <span className="text-[10px] font-bold text-zinc-400 uppercase block">성분 인증 증빙 서류 (국문)</span>
                     {ingredientsFileUrl ? (
-                      <a href={ingredientsFileUrl} target="_blank" rel="noreferrer" className="inline-block rounded bg-[#18181b] hover:bg-[#27272a] dark:bg-[#f4f4f5] dark:hover:bg-[#e4e4e7] text-white dark:text-[#09090b] border border-[#18181b] dark:border-[#f4f4f5] px-3 py-1.5 font-bold shadow-sm transition-all duration-150">
-                        인증 서류 다운로드 ↗
-                      </a>
+                      <div className="flex items-center justify-between">
+                        <a href={ingredientsFileUrl} target="_blank" rel="noreferrer" className="inline-block rounded bg-[#18181b] hover:bg-[#27272a] dark:bg-[#f4f4f5] dark:hover:bg-[#e4e4e7] text-white dark:text-[#09090b] border border-[#18181b] dark:border-[#f4f4f5] px-3 py-1.5 font-bold shadow-sm transition-all duration-150">
+                          국문 서류 다운로드 ↗
+                        </a>
+                        <button
+                          type="button"
+                          disabled={mediaPending}
+                          onClick={() => handleIngredientsDelete("ko")}
+                          className="text-[10px] font-bold text-rose-600 hover:text-rose-800 hover:underline cursor-pointer disabled:opacity-50"
+                        >
+                          파일 삭제
+                        </button>
+                      </div>
                     ) : (
-                      <span className="text-zinc-400 italic block py-1">첨부된 성분 인증 서류 파일이 없습니다.</span>
+                      <span className="text-zinc-400 italic block py-1">첨부된 국문 성분 인증 서류가 없습니다.</span>
                     )}
+
+                    <div className="pt-2 border-t border-zinc-200/50 dark:border-zinc-800/50">
+                      <label className="text-[9px] font-bold text-zinc-500 block mb-1">국문 서류 업로드/갱신</label>
+                      <input
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp,application/pdf"
+                        disabled={mediaPending}
+                        onChange={(e) => {
+                          if (e.target.files && e.target.files.length > 0) {
+                            handleIngredientsUpload("ko", e.target.files[0]);
+                          }
+                        }}
+                        className="block w-full text-[10px] text-zinc-500 dark:text-zinc-400 file:mr-3 file:py-1 file:px-2 file:rounded file:border-0 file:text-[10px] file:font-semibold file:bg-zinc-100 file:text-zinc-700 dark:file:bg-zinc-800 dark:file:text-zinc-300 hover:file:bg-zinc-200 cursor-pointer disabled:opacity-50"
+                      />
+                    </div>
+                  </div>
+
+                  {/* EN Sheet */}
+                  <div className="p-4 rounded-lg border border-zinc-150 bg-zinc-50/50 dark:border-zinc-800 dark:bg-zinc-950/40 text-xs space-y-3">
+                    <span className="text-[10px] font-bold text-zinc-400 uppercase block">성분 인증 증빙 서류 (영문)</span>
+                    {ingredientsFileUrlEn ? (
+                      <div className="flex items-center justify-between">
+                        <a href={ingredientsFileUrlEn} target="_blank" rel="noreferrer" className="inline-block rounded bg-[#18181b] hover:bg-[#27272a] dark:bg-[#f4f4f5] dark:hover:bg-[#e4e4e7] text-white dark:text-[#09090b] border border-[#18181b] dark:border-[#f4f4f5] px-3 py-1.5 font-bold shadow-sm transition-all duration-150">
+                          영문 서류 다운로드 ↗
+                        </a>
+                        <button
+                          type="button"
+                          disabled={mediaPending}
+                          onClick={() => handleIngredientsDelete("en")}
+                          className="text-[10px] font-bold text-rose-600 hover:text-rose-800 hover:underline cursor-pointer disabled:opacity-50"
+                        >
+                          파일 삭제
+                        </button>
+                      </div>
+                    ) : (
+                      <span className="text-zinc-400 italic block py-1">첨부된 영문 성분 인증 서류가 없습니다.</span>
+                    )}
+
+                    <div className="pt-2 border-t border-zinc-200/50 dark:border-zinc-800/50">
+                      <label className="text-[9px] font-bold text-zinc-500 block mb-1">영문 서류 업로드/갱신</label>
+                      <input
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp,application/pdf"
+                        disabled={mediaPending}
+                        onChange={(e) => {
+                          if (e.target.files && e.target.files.length > 0) {
+                            handleIngredientsUpload("en", e.target.files[0]);
+                          }
+                        }}
+                        className="block w-full text-[10px] text-zinc-500 dark:text-zinc-400 file:mr-3 file:py-1 file:px-2 file:rounded file:border-0 file:text-[10px] file:font-semibold file:bg-zinc-100 file:text-zinc-700 dark:file:bg-zinc-800 dark:file:text-zinc-300 hover:file:bg-zinc-200 cursor-pointer disabled:opacity-50"
+                      />
+                    </div>
                   </div>
                 </div>
 
@@ -1614,7 +2172,7 @@ export function ProductOverrideTabs({
               </div>
 
               {/* General Certificates List */}
-              <div className="pt-6 border-t border-zinc-100 dark:border-zinc-800 space-y-3">
+              <div className="pt-6 border-t border-zinc-100 dark:border-zinc-800 space-y-4">
                 <h4 className="text-xs font-bold text-zinc-850 dark:text-white">보증서 인증 파일 목록 ({certificateRows.length}개)</h4>
                 {certificateRows.length > 0 ? (
                   <div className="space-y-2">
@@ -1641,6 +2199,45 @@ export function ProductOverrideTabs({
                 ) : (
                   <p className="text-xs text-zinc-400 italic py-3 text-center">업로드된 추가 보증서 서류가 없습니다.</p>
                 )}
+
+                {/* Upload new Certificate */}
+                <form
+                  onSubmit={handleCertificateUpload}
+                  className="border-t border-zinc-100 dark:border-zinc-850 pt-4 space-y-3"
+                >
+                  <label className="text-[11px] font-bold text-zinc-650 dark:text-zinc-450 block">
+                    인허가/보증서 신규 파일 등록
+                  </label>
+                  <div className="flex flex-col sm:flex-row gap-3">
+                    <select
+                      value={certTypeInput}
+                      onChange={(e) => setCertTypeInput(e.target.value)}
+                      disabled={mediaPending}
+                      className="rounded border border-zinc-200 px-2.5 py-1.5 text-xs text-zinc-900 bg-white dark:border-zinc-800 dark:bg-zinc-950 dark:text-white outline-none focus:border-zinc-950 disabled:opacity-50"
+                    >
+                      <option value="ingredient_certification">성분 분석 인증서 (Ingredients Sheets)</option>
+                      <option value="fda_registration">FDA 등록 증빙 (FDA Registration)</option>
+                      <option value="trademark">상표 등록증 (Trademark)</option>
+                      <option value="other">기타 인증서/보증서 (Other)</option>
+                    </select>
+
+                    <div className="flex-1 flex gap-2">
+                      <input
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp,application/pdf"
+                        disabled={mediaPending}
+                        className="block flex-1 text-xs text-zinc-500 dark:text-zinc-400 file:mr-4 file:py-1.5 file:px-3 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-zinc-100 file:text-zinc-700 dark:file:bg-zinc-800 dark:file:text-zinc-300 hover:file:bg-zinc-200 cursor-pointer disabled:opacity-50"
+                      />
+                      <button
+                        type="submit"
+                        disabled={mediaPending}
+                        className="rounded-lg border border-zinc-300 px-4 py-1.5 text-xs font-bold text-zinc-700 hover:bg-zinc-50 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-850 cursor-pointer disabled:opacity-50"
+                      >
+                        문서 업로드
+                      </button>
+                    </div>
+                  </div>
+                </form>
               </div>
             </div>
           </div>

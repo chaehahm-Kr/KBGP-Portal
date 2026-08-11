@@ -439,7 +439,7 @@ export function AdminProductsList({ initialProducts }: AdminProductsListProps) {
                         >
                           {product.display_name}
                         </Link>
-                        {!product.category_code && (
+                        {!product.category_code && !product.category && (
                           <Link
                             href={`/admin/products/${product.id}?tab=category`}
                             className="inline-flex items-center w-fit rounded bg-amber-500/10 hover:bg-amber-500/20 dark:bg-amber-950/30 dark:hover:bg-amber-950/50 px-2 py-0.5 text-[9px] font-bold text-amber-600 dark:text-amber-400 border border-amber-500/20 animate-pulse transition-colors cursor-pointer"
