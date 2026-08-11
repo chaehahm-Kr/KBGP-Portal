@@ -889,11 +889,12 @@ export function APDetailClient({
             <thead>
               <tr className="border-b border-zinc-250 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/50 text-zinc-500">
                 <th className="p-3 font-bold text-center whitespace-nowrap">L.SKU</th>
-                <th className="p-3 font-bold w-[25%]">Product</th>
+                <th className="p-3 font-bold w-[20%]">Product</th>
                 <th className="p-3 font-bold">Brand</th>
                 <th className="p-3 font-bold">Main Category</th>
                 <th className="p-3 font-bold">Subcategory</th>
-                <th className="p-3 font-bold text-center w-[12%]">Curation Role</th>
+                <th className="p-3 font-bold">Detail Category</th>
+                <th className="p-3 font-bold text-center w-[10%]">Curation Role</th>
                 <th className="p-3 font-bold text-center whitespace-nowrap">Supply Price</th>
                 <th className="p-3 font-bold text-center whitespace-nowrap">Retailer Margin</th>
                 <th className="p-3 font-bold text-center whitespace-nowrap">MSRP (Retail Price)</th>
@@ -944,6 +945,9 @@ export function APDetailClient({
                       <td className="p-3 text-zinc-650 dark:text-zinc-400">
                         {getSubcategory(p.category_code)}
                       </td>
+                      <td className="p-3 text-zinc-650 dark:text-zinc-400 font-medium">
+                        {getDetailCategory(p.category_code)}
+                      </td>
                       <td className="p-2 text-center">
                         <select
                           value={p.curationRole}
@@ -959,8 +963,11 @@ export function APDetailClient({
                       <td className="p-3 font-bold text-center text-zinc-900 dark:text-white">
                         ${p.price_usd_fob.toFixed(2)}
                       </td>
-                      <td className="p-3 font-bold text-center text-emerald-600 dark:text-emerald-450 whitespace-nowrap">
-                        ${(p.estimated_retail_price - p.price_usd_fob).toFixed(2)} ({p.retailerMarginPercent !== undefined ? p.retailerMarginPercent.toFixed(1) : "0.0"}%)
+                      <td className="p-3 font-bold text-center text-emerald-600 dark:text-emerald-450 whitespace-nowrap leading-tight">
+                        <div>${(p.estimated_retail_price - p.price_usd_fob).toFixed(2)}</div>
+                        <div className="text-[10px] text-zinc-400 dark:text-zinc-500 font-semibold mt-0.5">
+                          ({p.retailerMarginPercent !== undefined ? p.retailerMarginPercent.toFixed(1) : "0.0"}%)
+                        </div>
                       </td>
                       <td className="p-3 font-bold text-center text-zinc-900 dark:text-white">
                         ${p.estimated_retail_price.toFixed(2)}
@@ -1240,9 +1247,9 @@ export function APDetailClient({
                                 {item.value}개 ({item.percentage.toFixed(1)}%)
                               </span>
                             </div>
-                            <div className="h-1.5 w-full bg-zinc-100 rounded-full overflow-hidden mt-2 dark:bg-zinc-800">
+                            <div className="h-2 w-full bg-zinc-100 rounded-full overflow-hidden mt-2 dark:bg-zinc-800">
                               <div
-                                className="h-full bg-zinc-900 dark:bg-zinc-200 transition-all group-hover:bg-indigo-650"
+                                className={`h-full transition-all group-hover:opacity-85 ${getRankColorClass(rankIndex - 1)}`}
                                 style={{ width: `${item.percentage}%` }}
                               />
                             </div>
