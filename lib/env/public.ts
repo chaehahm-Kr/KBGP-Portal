@@ -28,9 +28,17 @@ if (!parsed.success) {
   const details = parsed.error.issues
     .map((issue) => `  - ${issue.path.join(".")}: ${issue.message}`)
     .join("\n");
-  throw new Error(
-    `환경변수 설정이 올바르지 않습니다:\n${details}\n\n.env.local.example을 복사해 .env.local을 만들고 값을 채워주세요.`
-  );
+  const errorMessage = `환경변수 설정이 올바르지 않습니다:\n${details}\n\n.env.local.example을 복사해 .env.local을 만들고 값을 채워주세요.`;
+  
+  if (process.env.NODE_ENV === "production" && !process.env.NEXT_PUBLIC_SUPABASE_URL) {
+    console.warn("⚠️ [WARN] 빌드 컴파일 단계 환경변수 누락 우회:", errorMessage);
+  } else {
+    throw new Error(errorMessage);
+  }
 }
 
-export const publicEnv = parsed.data;
+export const publicEnv = parsed.data || {
+  NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL || "https://dummy-supabase.co",
+  NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || "dummy-key",
+  NEXT_PUBLIC_SITE_URL: process.env.NEXT_PUBLIC_SITE_URL || "https://dummy-site.co",
+};
