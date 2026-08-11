@@ -73,6 +73,19 @@ export function APDetailClient({
   const [products, setProducts] = useState<SelectedProduct[]>(initialProducts);
   const [isPending, startTransition] = useTransition();
 
+  // Curation Report Dashboard States
+  const [subcatLimit, setSubcatLimit] = useState<number>(10);
+  const [brandLimit, setBrandLimit] = useState<number>(10);
+  const [activeDrawer, setActiveDrawer] = useState<"subcategory" | "brand" | null>(null);
+  const [drawerSearch, setDrawerSearch] = useState("");
+  const [drawerSort, setDrawerSort] = useState<"count" | "name">("count");
+  const [drawerPage, setDrawerPage] = useState(1);
+  const [chartFilter, setChartFilter] = useState<{
+    type: "category" | "subcategory" | "detailCategory" | "brand" | "role" | "status" | "price";
+    value: string;
+    label: string;
+  } | null>(null);
+
   // Search & Modals state
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -292,6 +305,14 @@ export function APDetailClient({
     p.sales_status === "ON_SALE" ? "Active (판매 중)" : "Inactive (판매대기/종료)"
   );
   
+  // Price range helper for filter checks
+  const getPriceRangeLabel = (msrp: number): string => {
+    if (msrp < 15) return "$15 미만";
+    if (msrp < 25) return "$15 - $25";
+    if (msrp < 40) return "$25 - $40";
+    return "$40 이상";
+  };
+
   // Price Mix (MSRP range setup)
   const priceMix = React.useMemo(() => {
     const ranges = [
@@ -339,6 +360,32 @@ export function APDetailClient({
       </div>
     );
   };
+
+  // Map and filter Selected Products table
+  const filteredProductsByChart = React.useMemo(() => {
+    if (!chartFilter) return products;
+    return products.filter((p) => {
+      switch (chartFilter.type) {
+        case "category":
+          return getMainCategory(p.category_code) === chartFilter.value;
+        case "subcategory":
+          return getSubcategory(p.category_code) === chartFilter.value;
+        case "detailCategory":
+          return getDetailCategory(p.category_code) === chartFilter.value;
+        case "brand":
+          return p.brandName === chartFilter.value;
+        case "role":
+          return p.curationRole === chartFilter.value;
+        case "status":
+          const statusText = p.sales_status === "ON_SALE" ? "Active (판매 중)" : "Inactive (판매대기/종료)";
+          return statusText === chartFilter.value;
+        case "price":
+          return getPriceRangeLabel(p.estimated_retail_price) === chartFilter.value;
+        default:
+          return true;
+      }
+    });
+  }, [products, chartFilter]);
 
   const getProgramLabel = (key: string) => {
     switch (key) {
@@ -453,23 +500,344 @@ export function APDetailClient({
         </div>
       </div>
 
-      {/* 3. Curation Report Dashboard Area (Moved here, above Selected Products) */}
-      <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 space-y-6">
-        <div className="border-b border-zinc-150 pb-2 dark:border-zinc-800">
-          <h3 className="text-sm font-bold text-zinc-850 dark:text-white">큐레이션 분석 보고서 (Curation Report)</h3>
+      {/* 3. Curation Report Analytics Dashboard */}
+      <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 space-y-8">
+        <div className="flex flex-col md:flex-row md:items-center justify-between border-b border-zinc-150 pb-4 dark:border-zinc-800 gap-4">
+          <div>
+            <h3 className="text-sm font-bold text-zinc-900 dark:text-white">큐레이션 분석 보고서 (Curation Report)</h3>
+            <p className="text-[10px] text-zinc-400 dark:text-zinc-500 mt-0.5">Assortment 세트 진열 구성을 실시간으로 다각 분석합니다. (각 그래프를 누르면 하단 리스트가 필터링됩니다)</p>
+          </div>
+
+          {/* Curation Health Summary */}
+          <div className="flex flex-wrap gap-2 text-[10px] font-bold">
+            <span className="inline-flex items-center px-2 py-1 rounded bg-zinc-50 border border-zinc-200 text-zinc-600 dark:bg-zinc-800/40 dark:border-zinc-700 dark:text-zinc-300">
+              Selected: <strong className="ml-1 text-zinc-900 dark:text-white">{selectedSkuCount}/{ap.target_sku} SKU</strong>
+            </span>
+            <span className="inline-flex items-center px-2 py-1 rounded bg-zinc-50 border border-zinc-200 text-zinc-600 dark:bg-zinc-800/40 dark:border-zinc-700 dark:text-zinc-300">
+              Categories: <strong className="ml-1 text-zinc-900 dark:text-white">{categoryCount} 대분류</strong>
+            </span>
+            <span className="inline-flex items-center px-2 py-1 rounded bg-zinc-50 border border-zinc-200 text-zinc-600 dark:bg-zinc-800/40 dark:border-zinc-700 dark:text-zinc-300">
+              Brands: <strong className="ml-1 text-zinc-900 dark:text-white">{brandCount}개</strong>
+            </span>
+            <span className="inline-flex items-center px-2 py-1 rounded bg-red-50 border border-red-100 text-red-700 dark:bg-red-955/20 dark:border-red-900/50 dark:text-red-400">
+              Inactive SKU: <strong className="ml-1">{products.filter((p) => p.sales_status !== "ON_SALE").length}개</strong>
+            </span>
+            <span className="inline-flex items-center px-2 py-1 rounded bg-amber-50 border border-amber-100 text-amber-700 dark:bg-amber-955/20 dark:border-amber-900/50 dark:text-amber-400">
+              Issues: <strong className="ml-1">{products.filter((p) => !["SELECTED"].includes(p.selection_status)).length}개</strong>
+            </span>
+          </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-          {renderMixBar("Main Category Mix (1Depth)", categoryMix)}
-          {renderMixBar("Subcategory Mix (2Depth)", subcategoryMix)}
-          {renderMixBar("Detail Category Mix (3Depth)", detailCategoryMix)}
-          {renderMixBar("Brand Mix", brandMix)}
+        {/* 1st Row: Main / Sub / Detail Categories & Brands */}
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+          {/* Main Category Mix (1Depth) - 전체 다 보여주기 */}
+          <div className="space-y-4">
+            <h4 className="text-[11px] font-bold text-zinc-500 uppercase tracking-wider">Main Category (1Depth)</h4>
+            <div className="space-y-3 max-h-[280px] overflow-y-auto pr-1">
+              {categoryMix.map((item) => (
+                <div
+                  key={item.name}
+                  onClick={() => setChartFilter({ type: "category", value: item.name, label: `대분류: ${item.name}` })}
+                  className="group cursor-pointer space-y-1"
+                >
+                  <div className="flex justify-between text-[11px]">
+                    <span className="font-semibold text-zinc-800 dark:text-zinc-250 group-hover:underline">{item.name}</span>
+                    <span className="text-zinc-400">{item.value}개 ({item.percentage.toFixed(1)}%)</span>
+                  </div>
+                  <div className="h-1.5 w-full bg-zinc-100 rounded-full overflow-hidden dark:bg-zinc-800">
+                    <div
+                      className="h-full bg-zinc-900 dark:bg-zinc-100 transition-all group-hover:bg-indigo-650"
+                      style={{ width: `${item.percentage}%` }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Subcategory Mix (2Depth) - TOP 5/10/20 + 전체보기 */}
+          <div className="space-y-4">
+            <div className="flex justify-between items-center">
+              <h4 className="text-[11px] font-bold text-zinc-500 uppercase tracking-wider">Subcategory (2Depth)</h4>
+              <div className="flex items-center gap-2">
+                <select
+                  value={subcatLimit}
+                  onChange={(e) => setSubcatLimit(Number(e.target.value))}
+                  className="rounded border border-zinc-200 bg-white px-1 py-0.5 text-[9px] font-bold outline-none dark:bg-zinc-950 dark:border-zinc-800 dark:text-white"
+                >
+                  <option value={5}>TOP 5</option>
+                  <option value={10}>TOP 10</option>
+                  <option value={20}>TOP 20</option>
+                </select>
+                <button
+                  onClick={() => {
+                    setDrawerSearch("");
+                    setDrawerSort("count");
+                    setDrawerPage(1);
+                    setActiveDrawer("subcategory");
+                  }}
+                  className="text-[9px] font-bold text-indigo-600 hover:underline dark:text-indigo-400"
+                >
+                  전체보기
+                </button>
+              </div>
+            </div>
+            <div className="space-y-3 max-h-[280px] overflow-y-auto pr-1">
+              {subcategoryMix.slice(0, subcatLimit).map((item, idx) => (
+                <div
+                  key={item.name}
+                  onClick={() => setChartFilter({ type: "subcategory", value: item.name, label: `중분류: ${item.name}` })}
+                  className="group cursor-pointer space-y-1"
+                >
+                  <div className="flex justify-between text-[11px]">
+                    <span className="font-semibold text-zinc-800 dark:text-zinc-250 group-hover:underline">
+                      <span className="text-zinc-400 mr-1 font-mono font-bold">#{idx + 1}</span>
+                      {item.name}
+                    </span>
+                    <span className="text-zinc-400">{item.value}개 ({item.percentage.toFixed(1)}%)</span>
+                  </div>
+                  <div className="h-1.5 w-full bg-zinc-100 rounded-full overflow-hidden dark:bg-zinc-800">
+                    <div
+                      className="h-full bg-zinc-700 dark:bg-zinc-300 transition-all group-hover:bg-indigo-650"
+                      style={{ width: `${item.percentage}%` }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Detail Category Mix (3Depth) - 전체 표시 */}
+          <div className="space-y-4">
+            <h4 className="text-[11px] font-bold text-zinc-500 uppercase tracking-wider">Detail Category (3Depth)</h4>
+            <div className="space-y-3 max-h-[280px] overflow-y-auto pr-1">
+              {detailCategoryMix.map((item, idx) => (
+                <div
+                  key={item.name}
+                  onClick={() => setChartFilter({ type: "detailCategory", value: item.name, label: `소분류: ${item.name}` })}
+                  className="group cursor-pointer space-y-1"
+                >
+                  <div className="flex justify-between text-[11px]">
+                    <span className="font-semibold text-zinc-800 dark:text-zinc-250 group-hover:underline">
+                      <span className="text-zinc-400 mr-1 font-mono font-bold">#{idx + 1}</span>
+                      {item.name}
+                    </span>
+                    <span className="text-zinc-400">{item.value}개 ({item.percentage.toFixed(1)}%)</span>
+                  </div>
+                  <div className="h-1.5 w-full bg-zinc-100 rounded-full overflow-hidden dark:bg-zinc-800">
+                    <div
+                      className="h-full bg-zinc-550 dark:bg-zinc-400 transition-all group-hover:bg-indigo-650"
+                      style={{ width: `${item.percentage}%` }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Brand Mix - TOP 5/10/20 + 전체보기 */}
+          <div className="space-y-4">
+            <div className="flex justify-between items-center">
+              <h4 className="text-[11px] font-bold text-zinc-500 uppercase tracking-wider">Brand Mix</h4>
+              <div className="flex items-center gap-2">
+                <select
+                  value={brandLimit}
+                  onChange={(e) => setBrandLimit(Number(e.target.value))}
+                  className="rounded border border-zinc-200 bg-white px-1 py-0.5 text-[9px] font-bold outline-none dark:bg-zinc-955 dark:border-zinc-800 dark:text-white"
+                >
+                  <option value={5}>TOP 5</option>
+                  <option value={10}>TOP 10</option>
+                  <option value={20}>TOP 20</option>
+                </select>
+                <button
+                  onClick={() => {
+                    setDrawerSearch("");
+                    setDrawerSort("count");
+                    setDrawerPage(1);
+                    setActiveDrawer("brand");
+                  }}
+                  className="text-[9px] font-bold text-indigo-600 hover:underline dark:text-indigo-400"
+                >
+                  전체보기
+                </button>
+              </div>
+            </div>
+            <div className="space-y-3 max-h-[280px] overflow-y-auto pr-1">
+              {brandMix.slice(0, brandLimit).map((item, idx) => (
+                <div
+                  key={item.name}
+                  onClick={() => setChartFilter({ type: "brand", value: item.name, label: `브랜드: ${item.name}` })}
+                  className="group cursor-pointer space-y-1"
+                >
+                  <div className="flex justify-between text-[11px]">
+                    <span className="font-semibold text-zinc-800 dark:text-zinc-250 group-hover:underline">
+                      <span className="text-zinc-400 mr-1 font-mono font-bold">#{idx + 1}</span>
+                      {item.name}
+                    </span>
+                    <span className="text-zinc-400">{item.value}개 ({item.percentage.toFixed(1)}%)</span>
+                  </div>
+                  <div className="h-1.5 w-full bg-zinc-100 rounded-full overflow-hidden dark:bg-zinc-800">
+                    <div
+                      className="h-full bg-zinc-800 dark:bg-zinc-200 transition-all group-hover:bg-indigo-650"
+                      style={{ width: `${item.percentage}%` }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 pt-6 border-t border-zinc-100 dark:border-zinc-800">
-          {renderMixBar("Price Mix (SRP)", priceMix)}
-          {renderMixBar("Curation Role Mix", roleMix)}
-          {renderMixBar("Product Sales Status Mix", statusMix)}
+        {/* 2nd Row: Price Mix, Curation Role, Sales Status Donut */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 pt-8 border-t border-zinc-150 dark:border-zinc-800">
+          
+          {/* 1. Price Mix - Segmented Horizontal Distribution Bar */}
+          <div className="space-y-4">
+            <h4 className="text-[11px] font-bold text-zinc-500 uppercase tracking-wider">Price Mix (SRP)</h4>
+            <div className="space-y-6 pt-2">
+              {/* Segmented Bar Container */}
+              <div className="h-4 w-full flex rounded-full overflow-hidden bg-zinc-100 dark:bg-zinc-800 shadow-inner">
+                {priceMix.map((segment, idx) => {
+                  const colors = [
+                    "bg-zinc-900 dark:bg-zinc-100",
+                    "bg-zinc-650 dark:bg-zinc-350",
+                    "bg-zinc-450 dark:bg-zinc-500",
+                    "bg-zinc-300 dark:bg-zinc-655",
+                  ];
+                  if (segment.value === 0) return null;
+                  return (
+                    <div
+                      key={segment.name}
+                      onClick={() => setChartFilter({ type: "price", value: segment.name, label: `가격대: ${segment.name}` })}
+                      className={`h-full cursor-pointer hover:opacity-85 transition-opacity ${colors[idx % colors.length]}`}
+                      style={{ width: `${segment.percentage}%` }}
+                      title={`${segment.name}: ${segment.value}개 (${segment.percentage.toFixed(1)}%)`}
+                    />
+                  );
+                })}
+              </div>
+
+              {/* Legends Table */}
+              <div className="grid grid-cols-2 gap-2 text-[10px]">
+                {priceMix.map((segment, idx) => {
+                  const colors = [
+                    "bg-zinc-900 dark:bg-zinc-100",
+                    "bg-zinc-650 dark:bg-zinc-300",
+                    "bg-zinc-450 dark:bg-zinc-500",
+                    "bg-zinc-300 dark:bg-zinc-650",
+                  ];
+                  return (
+                    <div
+                      key={segment.name}
+                      onClick={() => setChartFilter({ type: "price", value: segment.name, label: `가격대: ${segment.name}` })}
+                      className="flex items-center gap-1.5 cursor-pointer hover:underline"
+                    >
+                      <span className={`w-2 h-2 rounded-full ${colors[idx % colors.length]}`} />
+                      <span className="text-zinc-600 dark:text-zinc-400 font-medium">{segment.name}:</span>
+                      <strong className="text-zinc-800 dark:text-zinc-200">{segment.value}개 ({segment.percentage.toFixed(1)}%)</strong>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
+          {/* 2. Curation Role Mix - 전체 콤팩트 가로 바 */}
+          <div className="space-y-4">
+            <h4 className="text-[11px] font-bold text-zinc-500 uppercase tracking-wider">Curation Role Mix</h4>
+            <div className="space-y-3 max-h-[160px] overflow-y-auto pr-1">
+              {roleMix.map((item) => (
+                <div
+                  key={item.name}
+                  onClick={() => setChartFilter({ type: "role", value: item.name, label: `Curation Role: ${item.name}` })}
+                  className="group cursor-pointer space-y-1"
+                >
+                  <div className="flex justify-between text-[11px]">
+                    <span className="font-semibold text-zinc-800 dark:text-zinc-250 group-hover:underline">{item.name}</span>
+                    <span className="text-zinc-400">{item.value}개 ({item.percentage.toFixed(1)}%)</span>
+                  </div>
+                  <div className="h-1.5 w-full bg-zinc-100 rounded-full overflow-hidden dark:bg-zinc-800">
+                    <div
+                      className="h-full bg-zinc-900 dark:bg-zinc-100 transition-all group-hover:bg-indigo-650"
+                      style={{ width: `${item.percentage}%` }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* 3. Product Sales Status - SVG Donut Chart */}
+          <div className="space-y-4">
+            <h4 className="text-[11px] font-bold text-zinc-500 uppercase tracking-wider">Product Sales Status</h4>
+            <div className="flex items-center justify-center gap-6 pt-2">
+              {/* Pure SVG Donut Chart */}
+              <div className="relative w-20 h-20 flex items-center justify-center">
+                <svg className="w-full h-full transform -rotate-90" viewBox="0 0 80 80">
+                  <circle
+                    cx="40"
+                    cy="40"
+                    r="30"
+                    fill="transparent"
+                    stroke="#f4f4f5"
+                    strokeWidth="8"
+                    className="dark:stroke-zinc-800"
+                  />
+                  {(() => {
+                    let accumulatedOffset = 0;
+                    return statusMix.map((seg, idx) => {
+                      const colors = ["#09090b", "#71717a", "#d4d4d8"]; // zinc dark scale
+                      const strokeDash = 2 * Math.PI * 30; // 188.49
+                      const strokeLen = (seg.percentage / 100) * strokeDash;
+                      const offset = strokeDash - strokeLen + accumulatedOffset;
+                      accumulatedOffset -= strokeLen;
+
+                      return (
+                        <circle
+                          key={seg.name}
+                          cx="40"
+                          cy="40"
+                          r="30"
+                          fill="transparent"
+                          stroke={colors[idx % colors.length]}
+                          strokeWidth="8"
+                          strokeDasharray={strokeDash}
+                          strokeDashoffset={offset}
+                          className="transition-all hover:stroke-indigo-650 cursor-pointer"
+                          onClick={() => setChartFilter({ type: "status", value: seg.name, label: `상태: ${seg.name}` })}
+                        >
+                          <title>{`${seg.name}: ${seg.value}개`}</title>
+                        </circle>
+                      );
+                    });
+                  })()}
+                </svg>
+                {/* Central SKU Counter */}
+                <div className="absolute flex flex-col items-center justify-center text-center">
+                  <span className="text-[14px] font-bold text-zinc-900 dark:text-white leading-none">{selectedSkuCount}</span>
+                  <span className="text-[7px] text-zinc-400 uppercase tracking-tighter mt-0.5">Total</span>
+                </div>
+              </div>
+
+              {/* Legends list */}
+              <div className="flex flex-col gap-2 text-[10px]">
+                {statusMix.map((seg, idx) => {
+                  const colors = ["bg-zinc-950 dark:bg-zinc-100", "bg-zinc-500", "bg-zinc-300"];
+                  return (
+                    <div
+                      key={seg.name}
+                      onClick={() => setChartFilter({ type: "status", value: seg.name, label: `상태: ${seg.name}` })}
+                      className="flex items-center gap-1.5 cursor-pointer hover:underline"
+                    >
+                      <span className={`w-2.5 h-2.5 rounded-sm ${colors[idx % colors.length]}`} />
+                      <span className="text-zinc-600 dark:text-zinc-400 font-medium">{seg.name}</span>
+                      <strong className="text-zinc-800 dark:text-zinc-200">{seg.value}개 ({seg.percentage.toFixed(1)}%)</strong>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -478,6 +846,18 @@ export function APDetailClient({
         <div className="border-b border-zinc-155 pb-2 dark:border-zinc-800 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <h3 className="text-sm font-bold text-zinc-850 dark:text-white">진열 상품 리스트 (Selected Products)</h3>
+            {chartFilter && (
+              <span className="inline-flex items-center gap-1 rounded bg-indigo-50 border border-indigo-200 text-indigo-700 dark:bg-indigo-950/40 dark:border-indigo-900/50 dark:text-indigo-300 px-2 py-0.5 text-[9px] font-bold">
+                필터: {chartFilter.label}
+                <button
+                  onClick={() => setChartFilter(null)}
+                  className="hover:text-red-600 font-mono font-bold ml-1 text-xs cursor-pointer"
+                  title="필터 해제"
+                >
+                  ×
+                </button>
+              </span>
+            )}
             <Link
               href="/admin/products/curation"
               className="text-[11px] font-bold text-zinc-450 hover:underline dark:text-zinc-500"
@@ -749,6 +1129,146 @@ export function APDetailClient({
               >
                 취소
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Side Drawer for Full Curation Analysis */}
+      {activeDrawer && (
+        <div className="fixed inset-0 z-50 flex justify-end">
+          {/* Overlay Background */}
+          <div
+            className="absolute inset-0 bg-black/40 backdrop-blur-sm transition-opacity"
+            onClick={() => setActiveDrawer(null)}
+          />
+
+          {/* Drawer Body Container */}
+          <div className="relative w-full max-w-lg h-full bg-white dark:bg-zinc-900 shadow-2xl flex flex-col border-l border-zinc-200 dark:border-zinc-800 animate-slide-in">
+            {/* Drawer Header */}
+            <div className="p-5 border-b border-zinc-150 dark:border-zinc-800 flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-bold text-zinc-900 dark:text-white">
+                  {activeDrawer === "subcategory" ? "Subcategory (2Depth) 전체 분석" : "Brand Mix 전체 분석"}
+                </h3>
+                <p className="text-[10px] text-zinc-400 mt-0.5">AP 내에 구성된 전체 유통 비중 데이터입니다.</p>
+              </div>
+              <button
+                onClick={() => setActiveDrawer(null)}
+                className="w-7 h-7 rounded-full bg-zinc-100 text-zinc-500 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-700 font-mono font-bold text-xs flex items-center justify-center cursor-pointer"
+              >
+                ×
+              </button>
+            </div>
+
+            {/* Filter controls */}
+            <div className="p-4 border-b border-zinc-150 dark:border-zinc-800 flex gap-3">
+              <input
+                type="text"
+                value={drawerSearch}
+                onChange={(e) => {
+                  setDrawerSearch(e.target.value);
+                  setDrawerPage(1);
+                }}
+                placeholder="이름 검색..."
+                className="flex-1 rounded border border-zinc-200 bg-white px-3 py-1.5 text-xs font-semibold focus:border-zinc-900 outline-none dark:bg-zinc-950 dark:border-zinc-800 dark:text-white"
+              />
+              <select
+                value={drawerSort}
+                onChange={(e) => {
+                  setDrawerSort(e.target.value as "count" | "name");
+                  setDrawerPage(1);
+                }}
+                className="rounded border border-zinc-200 bg-white px-2 py-1 text-xs font-bold outline-none dark:bg-zinc-950 dark:border-zinc-800 dark:text-white"
+              >
+                <option value="count">건수 많은 순</option>
+                <option value="name">가나다 순</option>
+              </select>
+            </div>
+
+            {/* Scrollable Data List */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+              {(() => {
+                const sourceMix = activeDrawer === "subcategory" ? subcategoryMix : brandMix;
+                const filtered = sourceMix.filter((item) =>
+                  item.name.toLowerCase().includes(drawerSearch.toLowerCase())
+                );
+                const sorted = [...filtered].sort((a, b) => {
+                  if (drawerSort === "count") return b.value - a.value;
+                  return a.name.localeCompare(b.name, "ko");
+                });
+
+                const pageSize = 10;
+                const totalPage = Math.ceil(sorted.length / pageSize) || 1;
+                const paginated = sorted.slice((drawerPage - 1) * pageSize, drawerPage * pageSize);
+
+                return (
+                  <>
+                    <div className="space-y-4">
+                      {paginated.map((item) => {
+                        const rankIndex = sorted.findIndex((s) => s.name === item.name) + 1;
+                        return (
+                          <div
+                            key={item.name}
+                            onClick={() => {
+                              setChartFilter({
+                                type: activeDrawer,
+                                value: item.name,
+                                label: `${activeDrawer === "subcategory" ? "중분류" : "브랜드"}: ${item.name}`
+                              });
+                              setActiveDrawer(null);
+                            }}
+                            className="group cursor-pointer p-2.5 rounded-lg border border-zinc-150 hover:border-zinc-400 bg-zinc-50/30 hover:bg-zinc-50/70 transition-all dark:border-zinc-800 dark:hover:border-zinc-700"
+                          >
+                            <div className="flex justify-between items-center text-xs">
+                              <span className="font-bold text-zinc-900 dark:text-white group-hover:underline">
+                                <span className="text-zinc-400 mr-1.5 font-mono">#{rankIndex}</span>
+                                {item.name}
+                              </span>
+                              <span className="text-zinc-500 font-medium">
+                                {item.value}개 ({item.percentage.toFixed(1)}%)
+                              </span>
+                            </div>
+                            <div className="h-1.5 w-full bg-zinc-100 rounded-full overflow-hidden mt-2 dark:bg-zinc-800">
+                              <div
+                                className="h-full bg-zinc-900 dark:bg-zinc-200 transition-all group-hover:bg-indigo-650"
+                                style={{ width: `${item.percentage}%` }}
+                              />
+                            </div>
+                          </div>
+                        );
+                      })}
+
+                      {sorted.length === 0 && (
+                        <p className="text-center text-xs text-zinc-400 py-12">검색 결과가 존재하지 않습니다.</p>
+                      )}
+                    </div>
+
+                    {/* Pagination Controls */}
+                    {totalPage > 1 && (
+                      <div className="flex items-center justify-center gap-4 pt-4 text-xs font-bold">
+                        <button
+                          disabled={drawerPage === 1}
+                          onClick={() => setDrawerPage((prev) => Math.max(prev - 1, 1))}
+                          className="rounded border border-zinc-200 px-3 py-1 bg-white hover:bg-zinc-50 disabled:opacity-50 dark:bg-zinc-955 dark:border-zinc-800 dark:hover:bg-zinc-900 cursor-pointer"
+                        >
+                          이전
+                        </button>
+                        <span className="text-zinc-500">
+                          {drawerPage} / {totalPage}
+                        </span>
+                        <button
+                          disabled={drawerPage === totalPage}
+                          onClick={() => setDrawerPage((prev) => Math.min(prev + 1, totalPage))}
+                          className="rounded border border-zinc-200 px-3 py-1 bg-white hover:bg-zinc-50 disabled:opacity-50 dark:bg-zinc-955 dark:border-zinc-800 dark:hover:bg-zinc-900 cursor-pointer"
+                        >
+                          다음
+                        </button>
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
             </div>
           </div>
         </div>
