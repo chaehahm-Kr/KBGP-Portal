@@ -35,6 +35,8 @@ interface ProductOverrideTabsProps {
     role: string;
   };
   matrix: Record<string, string>;
+  curators: { id: string; name: string; email: string }[];
+  apProfiles: { id: number; display_program: string; code: string; name: string; description: string | null; is_active: boolean }[];
 }
 
 export function ProductOverrideTabs({
@@ -52,6 +54,8 @@ export function ProductOverrideTabs({
   ingredientsFileUrlEn,
   curation,
   matrix,
+  curators,
+  apProfiles,
 }: ProductOverrideTabsProps) {
   const searchParams = useSearchParams();
   const initialTab = searchParams.get("tab") === "category" ? "category_attributes" : "basic";
@@ -59,11 +63,22 @@ export function ProductOverrideTabs({
   const [isPending, startTransition] = useTransition();
   const [statusMessage, setStatusMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
+  // 90 days calculator helper
+  const get90DaysLater = (dateStr?: string | null) => {
+    const baseDate = dateStr ? new Date(dateStr) : new Date();
+    baseDate.setDate(baseDate.getDate() + 90);
+    return baseDate.toISOString().split("T")[0];
+  };
+
   // Curation States
   const [curationStatus, setCurationStatus] = useState(curation.status || "NOT_REVIEWED");
-  const [ovCurator, setOvCurator] = useState(curation.curator || "");
+  const [ovCurator, setOvCurator] = useState(curation.curator || ""); // Stores Curator UUID (staff_members.id)
+  const [isCuratorOpen, setIsCuratorOpen] = useState(false);
+  const [curatorSearch, setCuratorSearch] = useState("");
   const [ovLastReviewDate, setOvLastReviewDate] = useState(curation.last_review_date || "");
-  const [ovNextReviewDate, setOvNextReviewDate] = useState(curation.next_review_date || "");
+  const [ovNextReviewDate, setOvNextReviewDate] = useState(
+    curation.next_review_date || get90DaysLater(curation.last_review_date || new Date().toISOString().split("T")[0])
+  );
   const [curationRole, setCurationRole] = useState(curation.role || "SUPPORT");
   const [ovMatrix, setOvMatrix] = useState<Record<string, string>>(matrix || {});
 
@@ -1631,10 +1646,32 @@ export function ProductOverrideTabs({
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {/* 큐레이션 상태 */}
                 <div className="space-y-1.5">
-                  <label className="text-[11px] font-bold text-zinc-650 dark:text-zinc-450">큐레이션 상태 (Curation Status)</label>
+                  <div className="flex items-center">
+                    <label className="text-[11px] font-bold text-zinc-650 dark:text-zinc-450">큐레이션 상태 (Curation Status)</label>
+                    <div className="relative group/tooltip inline-block ml-1.5 align-middle cursor-pointer">
+                      <span className="text-zinc-400 hover:text-zinc-600 dark:text-zinc-500 dark:hover:text-zinc-350 text-xs">ⓘ</span>
+                      <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 w-64 p-3 bg-zinc-950 text-white rounded-lg shadow-xl text-[10px] leading-relaxed transition-all duration-200 opacity-0 invisible group-hover/tooltip:opacity-100 group-hover/tooltip:visible z-50 font-normal">
+                        <p className="font-bold border-b border-zinc-800 pb-1 mb-1">Curation Status 안내</p>
+                        <ul className="space-y-1">
+                          <li><strong>Not Reviewed</strong>: 아직 검토하지 않은 상품</li>
+                          <li><strong>Candidate</strong>: 큐레이션 후보로 평가 중</li>
+                          <li><strong>Approved</strong>: 큐레이션 사용 승인 완료</li>
+                          <li><strong>Active</strong>: 현재 실제 Curation Set에서 사용 중</li>
+                          <li><strong>Hold</strong>: 일시적으로 사용 보류</li>
+                          <li><strong>Removed</strong>: 큐레이션 대상에서 제외</li>
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
                   <select
                     value={curationStatus}
-                    onChange={(e) => setCurationStatus(e.target.value)}
+                    onChange={(e) => {
+                      setCurationStatus(e.target.value);
+                      // Update next review automatically if empty or unset
+                      if (!ovNextReviewDate) {
+                        setOvNextReviewDate(get90DaysLater(ovLastReviewDate || new Date().toISOString().split("T")[0]));
+                      }
+                    }}
                     className="w-full rounded border border-zinc-200 p-2.5 text-xs text-zinc-900 bg-white dark:border-zinc-850 dark:bg-zinc-950 dark:text-white focus:border-zinc-950 outline-none font-bold"
                   >
                     <option value="NOT_REVIEWED">Not Reviewed (미검토)</option>
@@ -1648,7 +1685,24 @@ export function ProductOverrideTabs({
 
                 {/* 큐레이션 역할 */}
                 <div className="space-y-1.5">
-                  <label className="text-[11px] font-bold text-zinc-650 dark:text-zinc-450">큐레이션 역할 (Curation Role)</label>
+                  <div className="flex items-center">
+                    <label className="text-[11px] font-bold text-zinc-650 dark:text-zinc-450">큐레이션 역할 (Curation Role)</label>
+                    <div className="relative group/tooltip inline-block ml-1.5 align-middle cursor-pointer">
+                      <span className="text-zinc-400 hover:text-zinc-600 dark:text-zinc-500 dark:hover:text-zinc-350 text-xs">ⓘ</span>
+                      <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 w-64 p-3 bg-zinc-950 text-white rounded-lg shadow-xl text-[10px] leading-relaxed transition-all duration-200 opacity-0 invisible group-hover/tooltip:opacity-100 group-hover/tooltip:visible z-50 font-normal">
+                        <p className="font-bold border-b border-zinc-800 pb-1 mb-1">Curation Role 안내</p>
+                        <ul className="space-y-1">
+                          <li><strong>Hero</strong>: 카테고리를 대표하는 핵심/추천 상품</li>
+                          <li><strong>Core</strong>: 지속적으로 유지해야 하는 기본 상품</li>
+                          <li><strong>Traffic</strong>: 고객 유입과 구매를 유도하는 상품</li>
+                          <li><strong>Trend</strong>: 현재 K-Beauty 트렌드를 반영하는 상품</li>
+                          <li><strong>Margin</strong>: Retailer 수익성이 높은 상품</li>
+                          <li><strong>Trial</strong>: 시장 반응 테스트용 상품</li>
+                          <li><strong>Support</strong>: 카테고리 구성을 보완하는 상품</li>
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
                   <select
                     value={curationRole}
                     onChange={(e) => setCurationRole(e.target.value)}
@@ -1664,28 +1718,87 @@ export function ProductOverrideTabs({
                   </select>
                 </div>
 
-                {/* 담당 큐레이터 */}
-                <div className="space-y-1.5">
+                {/* 담당 큐레이터 (Searchable Dropdown) */}
+                <div className="space-y-1.5 relative">
                   <label className="text-[11px] font-bold text-zinc-650 dark:text-zinc-455">담당 큐레이터 (Curator)</label>
-                  <input
-                    type="text"
-                    value={ovCurator}
-                    onChange={(e) => setOvCurator(e.target.value)}
-                    placeholder="담당자 이름 입력"
-                    className="w-full rounded border border-zinc-200 p-2.5 text-xs text-zinc-900 bg-white dark:border-zinc-850 dark:bg-zinc-950 dark:text-white focus:border-zinc-950 outline-none font-medium"
-                  />
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setIsCuratorOpen(!isCuratorOpen)}
+                      className="w-full rounded border border-zinc-200 p-2.5 text-xs text-left text-zinc-900 bg-white dark:border-zinc-850 dark:bg-zinc-950 dark:text-white focus:border-zinc-950 outline-none font-medium flex items-center justify-between cursor-pointer"
+                    >
+                      <span className="truncate">
+                        {curators.find((c) => c.id === ovCurator)
+                          ? `${curators.find((c) => c.id === ovCurator)?.name} (${curators.find((c) => c.id === ovCurator)?.email})`
+                          : "담당 큐레이터 선택 (미지정)"}
+                      </span>
+                      <span className="text-zinc-400 text-[10px]">▼</span>
+                    </button>
+
+                    {isCuratorOpen && (
+                      <div className="absolute left-0 right-0 mt-1 z-50 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-md shadow-lg max-h-60 flex flex-col overflow-hidden">
+                        <div className="p-2 border-b border-zinc-100 dark:border-zinc-800">
+                          <input
+                            type="text"
+                            value={curatorSearch}
+                            onChange={(e) => setCuratorSearch(e.target.value)}
+                            placeholder="이름 또는 이메일 검색..."
+                            className="w-full p-1.5 text-xs rounded border border-zinc-200 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white outline-none focus:border-zinc-950"
+                          />
+                        </div>
+                        <div className="overflow-y-auto flex-1 divide-y divide-zinc-55 dark:divide-zinc-850">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setOvCurator("");
+                              setIsCuratorOpen(false);
+                              setCuratorSearch("");
+                            }}
+                            className="w-full text-left p-2.5 text-xs hover:bg-zinc-50 dark:hover:bg-zinc-800/40 text-red-600 dark:text-red-400 font-bold"
+                          >
+                            비우기 (미지정)
+                          </button>
+                          {curators
+                            .filter(
+                              (c) =>
+                                c.name.toLowerCase().includes(curatorSearch.toLowerCase()) ||
+                                c.email.toLowerCase().includes(curatorSearch.toLowerCase())
+                            )
+                            .map((c) => (
+                              <button
+                                key={c.id}
+                                type="button"
+                                onClick={() => {
+                                  setOvCurator(c.id);
+                                  setIsCuratorOpen(false);
+                                  setCuratorSearch("");
+                                }}
+                                className={`w-full text-left p-2.5 text-xs hover:bg-zinc-50 dark:hover:bg-zinc-800/40 ${
+                                  ovCurator === c.id
+                                    ? "bg-zinc-55 font-bold text-zinc-900 dark:bg-zinc-800 dark:text-white"
+                                    : "text-zinc-700 dark:text-zinc-350"
+                                }`}
+                              >
+                                {c.name} ({c.email})
+                              </button>
+                            ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 {/* 검토 일자 피커 */}
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1.5">
-                    <label className="text-[11px] font-bold text-zinc-650 dark:text-zinc-450">최종 검토일</label>
+                    <label className="text-[11px] font-bold text-zinc-600 dark:text-zinc-400">최종 검토일</label>
                     <input
                       type="date"
                       value={ovLastReviewDate}
-                      onChange={(e) => setOvLastReviewDate(e.target.value)}
-                      className="w-full rounded border border-zinc-200 p-2 text-xs text-zinc-900 bg-white dark:border-zinc-850 dark:bg-zinc-950 dark:text-white focus:border-zinc-950 outline-none"
+                      disabled
+                      className="w-full rounded border border-zinc-200 p-2 text-xs text-zinc-400 bg-zinc-50 dark:border-zinc-850 dark:bg-zinc-950 dark:text-zinc-500 focus:outline-none cursor-not-allowed font-medium"
                     />
+                    <span className="text-[9px] text-zinc-400 dark:text-zinc-500 block">* 저장 시 당일로 자동 갱신됩니다.</span>
                   </div>
                   <div className="space-y-1.5">
                     <label className="text-[11px] font-bold text-zinc-650 dark:text-zinc-450">차기 검토 예정일</label>
@@ -1720,43 +1833,73 @@ export function ProductOverrideTabs({
                     </tr>
                   </thead>
                   <tbody>
-                    {["AP-01", "AP-02", "AP-03", "AP-04", "AP-05", "AP-06"].map((apCode) => (
-                      <tr key={apCode} className="border-b border-zinc-100 dark:border-zinc-850 hover:bg-zinc-50/20 dark:hover:bg-zinc-950/20">
-                        <td className="p-3 font-bold text-zinc-800 dark:text-zinc-200">{apCode}</td>
-                        {["START_4FT", "GROW_8FT", "EXPAND_12FT"].map((prog) => {
-                          const matrixKey = `${prog}:${apCode}`;
-                          const val = ovMatrix[matrixKey] || "EXCLUDE";
-                          return (
-                            <td key={prog} className="p-2 text-center">
-                              <select
-                                value={val}
-                                onChange={(e) => {
-                                  const newVal = e.target.value;
-                                  setOvMatrix((prev) => ({ ...prev, [matrixKey]: newVal }));
-                                }}
-                                className={`rounded border p-1.5 text-xs focus:border-zinc-950 outline-none w-[90%] font-semibold ${
-                                  val === "EXCLUDE"
-                                    ? "border-zinc-200 bg-zinc-50 text-zinc-400 dark:border-zinc-850 dark:bg-zinc-950 dark:text-zinc-600"
-                                    : val === "REQUIRED"
-                                    ? "border-emerald-250 bg-emerald-50 text-emerald-800 dark:border-emerald-950 dark:bg-emerald-950/20 dark:text-emerald-450"
-                                    : val === "CORE"
-                                    ? "border-indigo-250 bg-indigo-50 text-indigo-800 dark:border-indigo-950 dark:bg-indigo-950/20 dark:text-indigo-450"
-                                    : val === "OPTIONAL"
-                                    ? "border-amber-250 bg-amber-50 text-amber-800 dark:border-amber-950 dark:bg-amber-950/20 dark:text-amber-450"
-                                    : "border-sky-250 bg-sky-50 text-sky-800 dark:border-sky-950 dark:bg-sky-950/20 dark:text-sky-450"
-                                }`}
-                              >
-                                <option value="EXCLUDE">Exclude (미진열)</option>
-                                <option value="REQUIRED">Required (필수 진열)</option>
-                                <option value="CORE">Core (표준 진열)</option>
-                                <option value="OPTIONAL">Optional (선택 진열)</option>
-                                <option value="TEST">Test (임시 테스트)</option>
-                              </select>
-                            </td>
-                          );
-                        })}
-                      </tr>
-                    ))}
+                    {["AP-01", "AP-02", "AP-03", "AP-04", "AP-05", "AP-06"].map((apCode) => {
+                      const startAP = apProfiles.find((p) => p.display_program === "START_4FT" && p.code === apCode);
+                      const growAP = apProfiles.find((p) => p.display_program === "GROW_8FT" && p.code === apCode);
+                      const expandAP = apProfiles.find((p) => p.display_program === "EXPAND_12FT" && p.code === apCode);
+
+                      const nameLabel = startAP?.name.replace("START 4FT - ", "").replace("START 4FT -", "") || apCode;
+
+                      return (
+                        <tr key={apCode} className="border-b border-zinc-100 dark:border-zinc-850 hover:bg-zinc-50/20 dark:hover:bg-zinc-950/20">
+                          <td className="p-3 font-bold text-zinc-800 dark:text-zinc-200">
+                            <div className="flex items-center gap-1.5">
+                              <span>{apCode} · {nameLabel}</span>
+                              {/* AP info tooltip */}
+                              <div className="relative group/ap-tooltip inline-block cursor-pointer align-middle">
+                                <span className="text-zinc-400 hover:text-zinc-650 dark:text-zinc-500 text-xs">ⓘ</span>
+                                <div className="absolute left-0 bottom-full mb-2 w-72 p-3 bg-zinc-950 text-white rounded-lg shadow-xl text-[10px] leading-relaxed transition-all duration-200 opacity-0 invisible group-hover/ap-tooltip:opacity-100 group-hover/ap-tooltip:visible z-50 font-normal normal-case">
+                                  <p className="font-bold border-b border-zinc-800 pb-1 mb-1.5">AP 세부 설명 ({apCode})</p>
+                                  <div className="space-y-1.5">
+                                    {startAP && (
+                                      <p><strong>START 4FT:</strong> {startAP.description || "설명 없음"}</p>
+                                    )}
+                                    {growAP && (
+                                      <p><strong>GROW 8FT:</strong> {growAP.description || "설명 없음"}</p>
+                                    )}
+                                    {expandAP && (
+                                      <p><strong>EXPAND 12FT:</strong> {expandAP.description || "설명 없음"}</p>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </td>
+                          {["START_4FT", "GROW_8FT", "EXPAND_12FT"].map((prog) => {
+                            const matrixKey = `${prog}:${apCode}`;
+                            const val = ovMatrix[matrixKey] || "EXCLUDE";
+                            return (
+                              <td key={prog} className="p-2 text-center">
+                                <select
+                                  value={val}
+                                  onChange={(e) => {
+                                    const newVal = e.target.value;
+                                    setOvMatrix((prev) => ({ ...prev, [matrixKey]: newVal }));
+                                  }}
+                                  className={`rounded border p-1.5 text-xs focus:border-zinc-950 outline-none w-[90%] font-semibold ${
+                                    val === "EXCLUDE"
+                                      ? "border-zinc-200 bg-zinc-50 text-zinc-400 dark:border-zinc-850 dark:bg-zinc-950 dark:text-zinc-600"
+                                      : val === "REQUIRED"
+                                      ? "border-emerald-250 bg-emerald-50 text-emerald-800 dark:border-emerald-950 dark:bg-emerald-950/20 dark:text-emerald-450"
+                                      : val === "CORE"
+                                      ? "border-indigo-250 bg-indigo-50 text-indigo-800 dark:border-indigo-950 dark:bg-indigo-950/20 dark:text-indigo-450"
+                                      : val === "OPTIONAL"
+                                      ? "border-amber-250 bg-amber-50 text-amber-800 dark:border-amber-950 dark:bg-amber-950/20 dark:text-amber-450"
+                                      : "border-sky-250 bg-sky-50 text-sky-800 dark:border-sky-950 dark:bg-sky-950/20 dark:text-sky-450"
+                                  }`}
+                                >
+                                  <option value="EXCLUDE">Exclude (미진열)</option>
+                                  <option value="REQUIRED">Required (필수 진열)</option>
+                                  <option value="CORE">Core (표준 진열)</option>
+                                  <option value="OPTIONAL">Optional (선택 진열)</option>
+                                  <option value="TEST">Test (임시 테스트)</option>
+                                </select>
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>

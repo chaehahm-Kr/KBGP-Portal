@@ -36,7 +36,7 @@ export default async function AdminProductDetailPage({
       selection_status, sales_status, category_code
     `)
     .eq("id", id)
-    .single();
+    .maybeSingle();
 
   if (!product) {
     notFound();
@@ -46,7 +46,7 @@ export default async function AdminProductDetailPage({
     .from("brands")
     .select("name")
     .eq("id", product.brand_id)
-    .single();
+    .maybeSingle();
 
   const { data: brands } = await supabase
     .from("brands")
@@ -58,7 +58,14 @@ export default async function AdminProductDetailPage({
     .from("companies")
     .select("name")
     .eq("id", product.company_id)
-    .single();
+    .maybeSingle();
+
+  // Fetch active curators (staff members)
+  const { data: curators } = await supabase
+    .from("staff_members")
+    .select("id, name, email")
+    .eq("status", "ACTIVE")
+    .order("name", { ascending: true });
 
   const { data: images } = await supabase
     .from("product_images")
@@ -123,6 +130,12 @@ export default async function AdminProductDetailPage({
 
   const { curation, matrix } = await adminGetProductCuration(product.id);
 
+  // Fetch assortment profiles for matrix name mappings
+  const { data: apProfiles } = await supabase
+    .from("assortment_profiles")
+    .select("id, display_program, code, name, description, is_active")
+    .order("code", { ascending: true });
+
   return (
     <ProductOverrideTabs
       product={product as unknown as Product}
@@ -139,6 +152,8 @@ export default async function AdminProductDetailPage({
       ingredientsFileUrlEn={ingredientsFileUrlEn}
       curation={curation}
       matrix={matrix}
+      curators={curators ?? []}
+      apProfiles={apProfiles ?? []}
     />
   );
 }

@@ -144,28 +144,115 @@ export async function adminGetProductCuration(productId: string) {
 
 export async function adminUpdateProductCuration(
   productId: string,
-  curation: {
+  curationPayload: {
     status: string;
     curator: string;
     last_review_date: string | null;
     next_review_date: string | null;
     role: string;
   },
-  matrix: Record<string, string>
+  matrixPayload: Record<string, string>
 ) {
   await verifyAdminSession();
   const supabase = createAdminClient();
 
-  // 1. Upsert product_curations
+  // 1. Fetch current DB product_curations & matrix for delta-check
+  const { data: dbCuration } = await supabase
+    .from("product_curations")
+    .select("*")
+    .eq("product_id", productId)
+    .maybeSingle();
+
+  const { data: dbMatrixRows } = await supabase
+    .from("product_curation_matrix")
+    .select(`
+      priority_role,
+      assortment_profiles (
+        display_program,
+        code
+      )
+    `)
+    .eq("product_id", productId);
+
+  // Convert db matrix to key-value
+  const dbMatrix: Record<string, string> = {};
+  if (dbMatrixRows) {
+    dbMatrixRows.forEach((row: any) => {
+      const ap = row.assortment_profiles;
+      if (ap) {
+        dbMatrix[`${ap.display_program}:${ap.code}`] = row.priority_role;
+      }
+    });
+  }
+
+  // Delta check helper
+  let isCurationChanged = false;
+
+  if (!dbCuration) {
+    // If there is no DB curation yet, it's a new entry -> definitely changed
+    isCurationChanged = true;
+  } else {
+    // Compare basic fields
+    const curStatus = dbCuration.status || "NOT_REVIEWED";
+    const curCurator = dbCuration.curator || "";
+    const curRole = dbCuration.role || "SUPPORT";
+    const curNextReview = dbCuration.next_review_date || "";
+
+    const newStatus = curationPayload.status || "NOT_REVIEWED";
+    const newCurator = curationPayload.curator || "";
+    const newRole = curationPayload.role || "SUPPORT";
+    const newNextReview = curationPayload.next_review_date || "";
+
+    if (
+      curStatus !== newStatus ||
+      curCurator !== newCurator ||
+      curRole !== newRole ||
+      curNextReview !== newNextReview
+    ) {
+      isCurationChanged = true;
+    }
+
+    // Compare matrix rows (18 permutations)
+    const programs = ["START_4FT", "GROW_8FT", "EXPAND_12FT"];
+    const apCodes = ["AP-01", "AP-02", "AP-03", "AP-04", "AP-05", "AP-06"];
+    for (const prog of programs) {
+      for (const code of apCodes) {
+        const key = `${prog}:${code}`;
+        const dbVal = dbMatrix[key] || "EXCLUDE";
+        const newVal = matrixPayload[key] || "EXCLUDE";
+        if (dbVal !== newVal) {
+          isCurationChanged = true;
+        }
+      }
+    }
+  }
+
+  // Calculate review dates
+  let finalLastReviewDate = dbCuration?.last_review_date || null;
+  let finalNextReviewDate = curationPayload.next_review_date || null;
+
+  if (isCurationChanged) {
+    // If changed, automatically set last review date to today
+    finalLastReviewDate = new Date().toISOString().split("T")[0];
+
+    // If next review date is blank, suggest/auto-calculate last_review_date + 90 days
+    if (!finalNextReviewDate) {
+      const nextDate = new Date();
+      nextDate.setDate(nextDate.getDate() + 90);
+      finalNextReviewDate = nextDate.toISOString().split("T")[0];
+    }
+  }
+
+  // 2. Upsert product_curations
   const { error: curationError } = await supabase
     .from("product_curations")
     .upsert({
       product_id: productId,
-      status: curation.status,
-      curator: curation.curator || null,
-      last_review_date: curation.last_review_date || null,
-      next_review_date: curation.next_review_date || null,
-      role: curation.role,
+      status: curationPayload.status,
+      curator: curationPayload.curator || null,
+      last_review_date: finalLastReviewDate,
+      next_review_date: finalNextReviewDate,
+      role: curationPayload.role,
       updated_at: new Date().toISOString(),
     });
 
@@ -173,7 +260,7 @@ export async function adminUpdateProductCuration(
     throw new Error(`큐레이션 정보 저장 실패: ${curationError.message}`);
   }
 
-  // 2. Fetch all assortment profiles to map program+code to ID
+  // 3. Fetch all assortment profiles to map program+code to ID
   const { data: profiles, error: profileError } = await supabase
     .from("assortment_profiles")
     .select("id, display_program, code");
@@ -192,14 +279,13 @@ export async function adminUpdateProductCuration(
   const upsertRows: any[] = [];
   const deleteApIds: number[] = [];
 
-  // Loop through all 18 possibilities
   const programs = ["START_4FT", "GROW_8FT", "EXPAND_12FT"];
   const apCodes = ["AP-01", "AP-02", "AP-03", "AP-04", "AP-05", "AP-06"];
 
   for (const prog of programs) {
     for (const code of apCodes) {
       const key = `${prog}:${code}`;
-      const role = matrix[key] || "EXCLUDE";
+      const role = matrixPayload[key] || "EXCLUDE";
       const apId = profileMap[key];
 
       if (apId) {
@@ -268,6 +354,71 @@ export async function adminUpdateAPInfo(
   }
 
   revalidatePath(`/admin/products/curation`);
+  revalidatePath(`/admin/settings/curation`);
+  return { success: true };
+}
+
+export async function adminUpdateAPSettings(
+  apId: number,
+  info: { name: string; description: string; is_active: boolean }
+) {
+  await verifyAdminSession();
+  const supabase = createAdminClient();
+
+  const { error } = await supabase
+    .from("assortment_profiles")
+    .update({
+      name: info.name,
+      description: info.description || null,
+      is_active: info.is_active,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", apId);
+
+  if (error) {
+    throw new Error(`AP 설정 저장 실패: ${error.message}`);
+  }
+
+  revalidatePath(`/admin/products/curation`);
+  revalidatePath(`/admin/settings/curation`);
+  return { success: true };
+}
+
+export async function adminUpdateDisplayProgram(
+  code: string,
+  info: { name: string; description: string; is_active: boolean }
+) {
+  await verifyAdminSession();
+  const supabase = createAdminClient();
+
+  const { error } = await supabase
+    .from("display_programs")
+    .update({
+      name: info.name,
+      description: info.description || null,
+      is_active: info.is_active,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("code", code);
+
+  if (error) {
+    throw new Error(`Display Program 설정 저장 실패: ${error.message}`);
+  }
+
+  // If a display program is deactivated, also deactivate all its assortment profiles!
+  if (!info.is_active) {
+    const { error: apDeactivateError } = await supabase
+      .from("assortment_profiles")
+      .update({ is_active: false })
+      .eq("display_program", code);
+
+    if (apDeactivateError) {
+      console.error("Failed to deactivate profiles for deactivated program:", apDeactivateError);
+    }
+  }
+
+  revalidatePath(`/admin/products/curation`);
+  revalidatePath(`/admin/settings/curation`);
   return { success: true };
 }
 

@@ -1,7 +1,17 @@
 -- 0039_product_curation_system.sql
--- 큐레이션 관리 기능을 위한 테이블 정의 및 Seed 데이터
+-- 큐레이션 관리 기능을 위한 테이블 정의 및 Seed 데이터 (Display Programs 마스터 통합 버전)
 
--- 1. 개별 상품 큐레이션 프로필 (1:1 관계)
+-- 1. Display Programs 마스터 테이블 생성
+CREATE TABLE IF NOT EXISTS public.display_programs (
+  code text PRIMARY KEY CHECK (code IN ('START_4FT', 'GROW_8FT', 'EXPAND_12FT')),
+  name text NOT NULL,
+  description text,
+  is_active boolean NOT NULL DEFAULT true,
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now()
+);
+
+-- 2. 개별 상품 큐레이션 프로필 (1:1 관계)
 CREATE TABLE IF NOT EXISTS public.product_curations (
   product_id uuid PRIMARY KEY REFERENCES public.products(id) ON DELETE CASCADE,
   status text NOT NULL DEFAULT 'NOT_REVIEWED' CHECK (status IN ('NOT_REVIEWED', 'CANDIDATE', 'APPROVED', 'ACTIVE', 'HOLD', 'REMOVED')),
@@ -13,10 +23,10 @@ CREATE TABLE IF NOT EXISTS public.product_curations (
   updated_at timestamptz DEFAULT now()
 );
 
--- 2. Assortment Profile (AP) 마스터 테이블
+-- 3. Assortment Profile (AP) 마스터 테이블 (Display Program 외래키 연동)
 CREATE TABLE IF NOT EXISTS public.assortment_profiles (
   id serial PRIMARY KEY,
-  display_program text NOT NULL CHECK (display_program IN ('START_4FT', 'GROW_8FT', 'EXPAND_12FT')),
+  display_program text NOT NULL REFERENCES public.display_programs(code) ON DELETE CASCADE,
   code text NOT NULL CHECK (code IN ('AP-01', 'AP-02', 'AP-03', 'AP-04', 'AP-05', 'AP-06')),
   name text NOT NULL,
   description text,
@@ -27,7 +37,7 @@ CREATE TABLE IF NOT EXISTS public.assortment_profiles (
   CONSTRAINT unique_program_ap_code UNIQUE (display_program, code)
 );
 
--- 3. Product x AP Matrix 테이블 (M:N 관계 매핑)
+-- 4. Product x AP Matrix 테이블 (M:N 관계 매핑)
 CREATE TABLE IF NOT EXISTS public.product_curation_matrix (
   product_id uuid NOT NULL REFERENCES public.products(id) ON DELETE CASCADE,
   ap_id integer NOT NULL REFERENCES public.assortment_profiles(id) ON DELETE CASCADE,
@@ -37,7 +47,7 @@ CREATE TABLE IF NOT EXISTS public.product_curation_matrix (
   PRIMARY KEY (product_id, ap_id)
 );
 
--- 4. Curation Version & Snapshot History (변경 이력 관리)
+-- 5. Curation Version & Snapshot History (변경 이력 관리)
 CREATE TABLE IF NOT EXISTS public.curation_history (
   id bigserial PRIMARY KEY,
   ap_id integer NOT NULL REFERENCES public.assortment_profiles(id) ON DELETE CASCADE,
@@ -49,20 +59,31 @@ CREATE TABLE IF NOT EXISTS public.curation_history (
 );
 
 -- RLS 정책 설정
+ALTER TABLE public.display_programs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.product_curations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.assortment_profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.product_curation_matrix ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.curation_history ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "display_programs_all" ON public.display_programs;
 DROP POLICY IF EXISTS "product_curations_all" ON public.product_curations;
 DROP POLICY IF EXISTS "assortment_profiles_all" ON public.assortment_profiles;
 DROP POLICY IF EXISTS "product_curation_matrix_all" ON public.product_curation_matrix;
 DROP POLICY IF EXISTS "curation_history_all" ON public.curation_history;
 
+CREATE POLICY "display_programs_all" ON public.display_programs FOR ALL TO authenticated USING (true);
 CREATE POLICY "product_curations_all" ON public.product_curations FOR ALL TO authenticated USING (true);
 CREATE POLICY "assortment_profiles_all" ON public.assortment_profiles FOR ALL TO authenticated USING (true);
 CREATE POLICY "product_curation_matrix_all" ON public.product_curation_matrix FOR ALL TO authenticated USING (true);
 CREATE POLICY "curation_history_all" ON public.curation_history FOR ALL TO authenticated USING (true);
+
+-- Seed display_programs 기본값
+INSERT INTO public.display_programs (code, name, description, is_active) VALUES
+('START_4FT', 'START · 4FT', '소규모 스토어를 위한 표준형 진열 세트', true),
+('GROW_8FT', 'GROW · 8FT', '중규모 리테일 채널용 표준 진열 세트', true),
+('EXPAND_12FT', 'EXPAND · 12FT', '대형 플래그십 매장을 위한 풀 포트폴리오 진열 세트', true)
+ON CONFLICT (code) DO UPDATE 
+SET name = EXCLUDED.name, description = EXCLUDED.description;
 
 -- Seed assortment_profiles
 INSERT INTO public.assortment_profiles (display_program, code, name, description, target_sku) VALUES

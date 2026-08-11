@@ -111,6 +111,7 @@ export default function Sidebar({ isCollapsed, toggleCollapse }: SidebarProps) {
         { name: "Categories", href: "/admin/settings/categories" },
         { name: "Attribute Profiles", href: "/admin/settings/attribute-profiles" },
         { name: "Attributes & Options", href: "/admin/settings/attributes" },
+        { name: "Curation Settings", href: "/admin/settings/curation" },
       ],
     },
   ];
