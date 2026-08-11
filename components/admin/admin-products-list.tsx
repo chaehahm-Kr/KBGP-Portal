@@ -201,6 +201,14 @@ export function AdminProductsList({ initialProducts }: AdminProductsListProps) {
             모든 브랜드사에서 포털에 등록한 제품 카탈로그 및 선정 상태와 판매 상태를 모니터링하고 제어합니다.
           </p>
         </div>
+        <div className="shrink-0">
+          <Link
+            href="/admin/products/new"
+            className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-650 px-4 py-2.5 text-xs font-semibold text-white shadow-sm hover:bg-indigo-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-650 transition-colors cursor-pointer"
+          >
+            <span className="text-sm font-bold">+</span> 신규 제품 등록
+          </Link>
+        </div>
       </div>
 
       {/* Filter and Search Bar Card */}

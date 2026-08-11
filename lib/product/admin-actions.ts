@@ -6,6 +6,9 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { revalidatePath } from "next/cache";
 import { validateUploadedFile } from "@/lib/files/validate";
 import crypto from "crypto";
+import { z } from "zod";
+import { redirect } from "next/navigation";
+import type { ProductCategory } from "@/lib/product/types";
 
 export async function adminUpdateProductOverrides(
   productId: string,
@@ -1005,4 +1008,121 @@ export async function adminDeleteIngredientsFile(productId: string, language: "k
 
   await supabase.from("products").update(updateData).eq("id", productId);
   revalidatePath(`/admin/products/${productId}`);
+}
+
+const adminProductSchema = z.object({
+  companyId: z.string().uuid("회사를 선택해주세요."),
+  brandId: z.string().uuid("브랜드를 선택해주세요."),
+  manufactureSku: z.string().trim().min(1, "제조사 SKU를 입력해주세요."),
+  nameEn: z.string().trim().min(1, "영문 제품명을 입력해주세요."),
+  category: z.enum([
+    "skincare",
+    "hair_scalp",
+    "beauty_tools",
+    "daily_care",
+    "wellness_patch",
+  ] as const satisfies readonly ProductCategory[]),
+  priceKrwRetail: z.preprocess((val) => (val === "" || val === null ? undefined : val), z.coerce.number().min(0).optional()),
+  priceUsdFob: z.preprocess((val) => (val === "" || val === null ? undefined : val), z.coerce.number().min(0).optional()),
+  packageWidth: z.preprocess((val) => (val === "" || val === null ? undefined : val), z.coerce.number().min(0).optional()),
+  packageDepth: z.preprocess((val) => (val === "" || val === null ? undefined : val), z.coerce.number().min(0).optional()),
+  packageHeight: z.preprocess((val) => (val === "" || val === null ? undefined : val), z.coerce.number().min(0).optional()),
+  packageWeight: z.preprocess((val) => (val === "" || val === null ? undefined : val), z.coerce.number().min(0).optional()),
+  upc: z.string().trim().nullable().optional(),
+  ean: z.string().trim().nullable().optional(),
+});
+
+export type AdminProductFormState = { error: string } | undefined;
+
+export async function adminCreateProduct(
+  _prevState: AdminProductFormState,
+  formData: FormData
+): Promise<AdminProductFormState> {
+  await verifyAdminSession();
+  const supabase = createAdminClient();
+
+  const parsed = adminProductSchema.safeParse({
+    companyId: formData.get("companyId"),
+    brandId: formData.get("brandId"),
+    manufactureSku: formData.get("manufactureSku"),
+    nameEn: formData.get("nameEn"),
+    category: formData.get("category"),
+    priceKrwRetail: formData.get("priceKrwRetail"),
+    priceUsdFob: formData.get("priceUsdFob"),
+    packageWidth: formData.get("packageWidth"),
+    packageDepth: formData.get("packageDepth"),
+    packageHeight: formData.get("packageHeight"),
+    packageWeight: formData.get("packageWeight"),
+    upc: formData.get("upc"),
+    ean: formData.get("ean"),
+  });
+
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "입력값을 확인해주세요." };
+  }
+
+  // UPC / EAN 상호 배타적 검증
+  const upc = parsed.data.upc || null;
+  const ean = parsed.data.ean || null;
+
+  if (!upc && !ean) {
+    return { error: "UPC 또는 EAN 번호 중 하나는 반드시 입력해야 합니다." };
+  }
+  if (upc && ean) {
+    return { error: "UPC와 EAN 번호는 동시에 입력할 수 없습니다. 둘 중 하나만 입력해 주세요." };
+  }
+
+  const sellingOnline = formData.get("sellingOnline") === "true" || formData.get("sellingOnline") === "on";
+  const sellingOffline = formData.get("sellingOffline") === "true" || formData.get("sellingOffline") === "on";
+  const salesLink1 = formData.get("salesLink1")?.toString().trim() || null;
+  const salesLink2 = formData.get("salesLink2")?.toString().trim() || null;
+
+  if (sellingOnline && !salesLink1) {
+    return { error: "온라인 판매 중인 경우, 최소 한 개 이상의 온라인 판매 링크(링크 1)를 입력해 주세요." };
+  }
+
+  // 회사 및 브랜드 존재 및 소유 매핑 검증
+  const { data: brand } = await supabase
+    .from("brands")
+    .select("id")
+    .eq("id", parsed.data.brandId)
+    .eq("company_id", parsed.data.companyId)
+    .single();
+
+  if (!brand) {
+    return { error: "선택한 브랜드를 찾을 수 없거나 해당 회사에 속한 브랜드가 아닙니다." };
+  }
+
+  const { data: product, error: insertError } = await supabase
+    .from("products")
+    .insert({
+      brand_id: parsed.data.brandId,
+      company_id: parsed.data.companyId,
+      name: parsed.data.nameEn,
+      name_en: parsed.data.nameEn,
+      category: parsed.data.category,
+      manufacture_sku: parsed.data.manufactureSku,
+      price_krw_retail: parsed.data.priceKrwRetail ?? null,
+      price_usd_fob: parsed.data.priceUsdFob ?? null,
+      package_width: parsed.data.packageWidth ?? null,
+      package_depth: parsed.data.packageDepth ?? null,
+      package_height: parsed.data.packageHeight ?? null,
+      package_weight: parsed.data.packageWeight ?? null,
+      upc,
+      ean,
+      selling_online: sellingOnline,
+      selling_offline: sellingOffline,
+      sales_link_1: salesLink1,
+      sales_link_2: salesLink2,
+    })
+    .select("id")
+    .single();
+
+  if (insertError || !product) {
+    console.error("Admin insert product error:", insertError);
+    return { error: "제품 등록에 실패했습니다. 잠시 후 다시 시도해주세요." };
+  }
+
+  revalidatePath("/admin/products");
+  redirect(`/admin/products/${product.id}`);
 }
