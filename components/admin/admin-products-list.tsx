@@ -256,9 +256,9 @@ export function AdminProductsList({ initialProducts }: AdminProductsListProps) {
                 All
               </button>
               {[
-                { id: "active", label: "Active" },
-                { id: "draft", label: "Draft" },
-                { id: "deleted", label: "Deleted" },
+                { id: "active", label: "Complete (등록 완료)" },
+                { id: "draft", label: "Draft (보완 대기)" },
+                { id: "deleted", label: "Deleted (삭제됨)" },
               ].map((tab) => {
                 const isSelected = selectedRegStatuses.includes(tab.id);
                 return (
@@ -489,7 +489,7 @@ export function AdminProductsList({ initialProducts }: AdminProductsListProps) {
                         </span>
                       ) : (
                         <span className="inline-flex items-center rounded bg-emerald-50 text-emerald-700 dark:bg-emerald-950/20 dark:text-emerald-400 px-2 py-0.5 text-[10px] font-bold border border-emerald-250 dark:border-emerald-900/50 whitespace-nowrap">
-                          Active
+                          Complete (등록 완료)
                         </span>
                       )}
                     </td>

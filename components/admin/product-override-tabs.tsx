@@ -2,7 +2,7 @@
 
 import React, { useState, useTransition } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import { 
   type Product, 
   type ProductVideo,
@@ -71,6 +71,7 @@ export function ProductOverrideTabs({
   displayPrograms,
 }: ProductOverrideTabsProps) {
   const searchParams = useSearchParams();
+  const router = useRouter();
   const initialTab = searchParams.get("tab") === "category" ? "category_attributes" : "basic";
   const [activeTab, setActiveTab] = useState<"basic" | "category_attributes" | "price" | "logistics" | "media" | "certs" | "curation">(initialTab as any);
 
@@ -95,6 +96,7 @@ export function ProductOverrideTabs({
         }
         await adminAddProductImages(product.id, formData);
         form.reset();
+        router.refresh();
       } catch (err: any) {
         setMediaError(err.message || "이미지 업로드 실패");
       } finally {
@@ -111,6 +113,7 @@ export function ProductOverrideTabs({
     startTransition(async () => {
       try {
         await adminRemoveProductImage(product.id, imageId);
+        router.refresh();
       } catch (err: any) {
         setMediaError(err.message || "이미지 삭제 실패");
       } finally {
@@ -135,6 +138,7 @@ export function ProductOverrideTabs({
         formData.append("video", file);
         await adminAddProductVideoFile(product.id, formData);
         form.reset();
+        router.refresh();
       } catch (err: any) {
         setMediaError(err.message || "동영상 업로드 실패");
       } finally {
@@ -155,6 +159,7 @@ export function ProductOverrideTabs({
       try {
         await adminAddProductVideoUrl(product.id, videoLinkInput.trim());
         setVideoLinkInput("");
+        router.refresh();
       } catch (err: any) {
         setMediaError(err.message || "동영상 링크 등록 실패");
       } finally {
@@ -171,6 +176,7 @@ export function ProductOverrideTabs({
     startTransition(async () => {
       try {
         await adminRemoveProductVideo(product.id, videoId);
+        router.refresh();
       } catch (err: any) {
         setMediaError(err.message || "동영상 삭제 실패");
       } finally {
@@ -188,6 +194,7 @@ export function ProductOverrideTabs({
         const formData = new FormData();
         formData.append("file", file);
         await adminUploadIngredientsFile(product.id, lang, formData);
+        router.refresh();
       } catch (err: any) {
         setMediaError(err.message || "성분표 업로드 실패");
       } finally {
@@ -204,6 +211,7 @@ export function ProductOverrideTabs({
     startTransition(async () => {
       try {
         await adminDeleteIngredientsFile(product.id, lang);
+        router.refresh();
       } catch (err: any) {
         setMediaError(err.message || "성분표 삭제 실패");
       } finally {
@@ -229,6 +237,7 @@ export function ProductOverrideTabs({
         formData.append("file", file);
         await adminAddProductCertificate(product.id, certTypeInput, file.name, formData);
         form.reset();
+        router.refresh();
       } catch (err: any) {
         setMediaError(err.message || "인허가 서류 업로드 실패");
       } finally {
@@ -313,7 +322,7 @@ export function ProductOverrideTabs({
 
   // SKU overrides
   const [ovManufactureSku, setOvManufactureSku] = useState(overrides.manufacture_sku || "");
-  const [ovLetustoSku, setOvLetustoSku] = useState(overrides.letusto_sku || "");
+  const [ovLetustoSku, setOvLetustoSku] = useState(product.letusto_sku || "");
   const [ovParentSku, setOvParentSku] = useState(overrides.parent_sku || "");
   const [ovChildSku, setOvChildSku] = useState(overrides.child_sku || "");
 
@@ -716,13 +725,20 @@ export function ProductOverrideTabs({
             포털에서 입력한 모든 정보들을 검토하고 어드민 측에서 필요 시 커스텀 오버라이드 값을 씌울 수 있습니다.
           </p>
         </div>
-        <div className="flex gap-2">
-          {imageUrls[0] && (
-            <img
-              src={imageUrls[0]}
-              alt={product.name}
-              className="h-16 w-16 object-cover rounded-md border border-zinc-200 dark:border-zinc-800 shadow-sm"
-            />
+        <div className="flex gap-2 items-center">
+          {imageUrls[0] ? (
+            <div className="relative group">
+              <img
+                src={imageUrls[0]}
+                alt={ovNameEn || product.name_en || ovName || product.name}
+                className="h-20 w-20 object-cover rounded-xl border border-zinc-200 dark:border-zinc-800 shadow-md ring-4 ring-zinc-50 dark:ring-zinc-800/30 transition-transform duration-300 hover:scale-105"
+              />
+            </div>
+          ) : (
+            <div className="h-20 w-20 rounded-xl bg-zinc-50 dark:bg-zinc-950 flex flex-col items-center justify-center border border-dashed border-zinc-200 dark:border-zinc-800 text-zinc-400 dark:text-zinc-500 shadow-inner">
+              <span className="text-[20px] mb-1">🖼️</span>
+              <span className="text-[9px] font-bold uppercase tracking-wider">No Image</span>
+            </div>
           )}
         </div>
       </div>
@@ -736,7 +752,7 @@ export function ProductOverrideTabs({
             </span>
           </div>
           <p className="text-[11px] text-zinc-550 dark:text-zinc-400">
-            브랜드사(제조사) 또는 어드민 관리자가 아래 필수 항목들을 보완 완료해야만 최종 'Active' 등록 상태로 전환할 수 있습니다:
+            브랜드사(제조사) 또는 어드민 관리자가 아래 필수 항목들을 보완 완료해야만 최종 'Complete (등록 완료)' 상태로 전환할 수 있습니다:
           </p>
           <div className="flex flex-wrap gap-2 pt-1">
             {missingFields.map((field) => (

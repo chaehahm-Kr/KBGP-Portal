@@ -1007,7 +1007,7 @@ export function CompanyDetailManager({
                                   </span>
                                 ) : (
                                   <span className="rounded bg-emerald-50 text-emerald-700 px-2 py-0.5 text-[9px] font-bold border border-emerald-100 dark:bg-emerald-955/30 dark:text-emerald-400 dark:border-emerald-900/30">
-                                    Active (정상)
+                                    Complete (등록 완료)
                                   </span>
                                 )}
                               </td>
