@@ -2,9 +2,12 @@
 
 import fs from "fs";
 import path from "path";
+import crypto from "crypto";
 import { revalidatePath } from "next/cache";
 import { verifyAdminSession } from "@/lib/auth/dal";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { getSignedFileUrl } from "@/lib/files/storage";
+import { validateUploadedFile } from "@/lib/files/validate";
 import { publicEnv } from "@/lib/env/public";
 import { sendTemplatedEmail } from "@/lib/notifications/templates";
 
@@ -31,6 +34,8 @@ export interface CompanyParsedMetadata {
   contacts: CompanyContact[];
   type: string;
   status: string;
+  logoPath?: string | null;
+  logoUrl?: string | null;
 }
 
 export async function parseCompanyMetadata(company: any): Promise<CompanyParsedMetadata> {
@@ -50,6 +55,9 @@ export async function parseCompanyMetadata(company: any): Promise<CompanyParsedM
       const fullAddress = addr1
         ? `${addr1}${addr2 ? " " + addr2 : ""}${cityVal ? ", " + cityVal : ""}${stateVal ? ", " + stateVal : ""}${zipVal ? " (" + zipVal + ")" : ""}`
         : (data.address || "");
+
+      const logoPath = data.logo_path || null;
+      const logoUrl = logoPath ? await getSignedFileUrl(logoPath) : null;
 
       return {
         description: data.description || "",
@@ -72,6 +80,8 @@ export async function parseCompanyMetadata(company: any): Promise<CompanyParsedM
         })),
         type: data.type || "Brand Owner",
         status: data.status || (company.status === "active" ? "Active" : "Inactive"),
+        logoPath,
+        logoUrl,
       };
     } catch (e) {
       // ignore
@@ -105,6 +115,8 @@ export async function parseCompanyMetadata(company: any): Promise<CompanyParsedM
     contacts: defaultContacts,
     type: "Brand Owner",
     status: company.status === "active" ? "Active" : "Inactive",
+    logoPath: null,
+    logoUrl: null,
   };
 }
 
@@ -117,12 +129,14 @@ export async function updateCompanyAdminMetadata(
     contacts: CompanyContact[];
     type: string;
     status: string;
+    businessRegistrationNumber?: string;
+    createdAt?: string;
   }
 ) {
   await verifyAdminSession();
   const supabase = createAdminClient(); // Bypasses RLS to allow admin updates
 
-  // Fetch current company record to preserve the original intro description
+  // Fetch current company record to preserve the original intro description and logo path
   const { data: company } = await supabase
     .from("companies")
     .select("intro")
@@ -130,12 +144,14 @@ export async function updateCompanyAdminMetadata(
     .single();
 
   let baseDescription = "";
+  let baseLogoPath = null;
   if (company) {
     if (company.intro && company.intro.startsWith("__COMPANY_METADATA__:")) {
       try {
         const jsonStr = company.intro.substring("__COMPANY_METADATA__:".length);
         const parsed = JSON.parse(jsonStr);
         baseDescription = parsed.description || "";
+        baseLogoPath = parsed.logo_path || null;
       } catch (e) {}
     } else {
       baseDescription = company.intro || "";
@@ -150,6 +166,7 @@ export async function updateCompanyAdminMetadata(
     contacts: payload.contacts,
     type: payload.type,
     status: payload.status,
+    logo_path: baseLogoPath,
   };
 
   const introString = `__COMPANY_METADATA__:${JSON.stringify(metaObj)}`;
@@ -162,6 +179,13 @@ export async function updateCompanyAdminMetadata(
     status: payload.status === "Active" ? "active" : "inactive",
     updated_at: new Date().toISOString(),
   };
+
+  if (payload.businessRegistrationNumber) {
+    updatePayload.business_registration_number = payload.businessRegistrationNumber;
+  }
+  if (payload.createdAt) {
+    updatePayload.created_at = new Date(payload.createdAt).toISOString();
+  }
 
   if (primaryContact) {
     updatePayload.contact_name = primaryContact.name || null;
@@ -179,6 +203,71 @@ export async function updateCompanyAdminMetadata(
   if (error) {
     console.error("Database update error:", error);
     throw new Error(`회사 정보를 업데이트하지 못했습니다: ${error.message}`);
+  }
+
+  revalidatePath(`/admin/companies/${companyId}`);
+  revalidatePath("/admin/companies");
+}
+
+export async function adminUploadCompanyLogo(companyId: string, formData: FormData) {
+  await verifyAdminSession();
+  const supabase = createAdminClient();
+
+  const file = formData.get("logo");
+  if (!(file instanceof File) || file.size === 0) {
+    throw new Error("로고 파일이 전송되지 않았습니다.");
+  }
+
+  const validation = await validateUploadedFile(file, ["image"]);
+  if (!validation.ok) {
+    throw new Error(`로고 유효성 에러: ${validation.error}`);
+  }
+
+  const ext = validation.detectedMime === "image/png" ? "png" : validation.detectedMime === "image/webp" ? "webp" : "jpg";
+  const path = `${companyId}/logo/${crypto.randomUUID()}.${ext}`;
+
+  const { error: uploadError } = await supabase.storage
+    .from("company-uploads")
+    .upload(path, file, { contentType: validation.detectedMime, upsert: false });
+
+  if (uploadError) {
+    throw new Error("로고 이미지 파일 업로드에 실패했습니다.");
+  }
+
+  // Fetch current company intro to update logo path
+  const { data: company } = await supabase
+    .from("companies")
+    .select("intro")
+    .eq("id", companyId)
+    .single();
+
+  let metaObj: any = {
+    description: "",
+    address: "",
+    website: "",
+    admin_memo: "",
+    contacts: [],
+    type: "Brand Owner",
+    status: "Active",
+    logo_path: null
+  };
+
+  if (company && company.intro && company.intro.startsWith("__COMPANY_METADATA__:")) {
+    try {
+      metaObj = JSON.parse(company.intro.substring("__COMPANY_METADATA__:".length));
+    } catch (e) {}
+  }
+
+  metaObj.logo_path = path;
+  const introString = `__COMPANY_METADATA__:${JSON.stringify(metaObj)}`;
+
+  const { error: updateError } = await supabase
+    .from("companies")
+    .update({ intro: introString })
+    .eq("id", companyId);
+
+  if (updateError) {
+    throw new Error(`로고 메타데이터 DB 저장 실패: ${updateError.message}`);
   }
 
   revalidatePath(`/admin/companies/${companyId}`);

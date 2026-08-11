@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireCompanyAdmin } from "./dal";
 import { createClient } from "@/lib/supabase/server";
 import { type CompanyContact } from "./admin-actions";
+import { validateUploadedFile } from "@/lib/files/validate";
 
 export async function updateCompanyPortalMetadata(
   companyId: string,
@@ -98,4 +99,73 @@ export async function updateCompanyPortalMetadata(
   revalidatePath(`/portal/company/info`);
   revalidatePath(`/admin/companies/${companyId}`);
   revalidatePath("/admin/companies");
+}
+
+export async function portalUploadCompanyLogo(companyId: string, formData: FormData) {
+  const membership = await requireCompanyAdmin();
+  if (membership.companyId !== companyId) {
+    throw new Error("소속 회사 정보의 로고만 변경할 수 있습니다.");
+  }
+
+  const supabase = await createClient();
+
+  const file = formData.get("logo");
+  if (!(file instanceof File) || file.size === 0) {
+    throw new Error("로고 파일이 전송되지 않았습니다.");
+  }
+
+  const validation = await validateUploadedFile(file, ["image"]);
+  if (!validation.ok) {
+    throw new Error(`로고 유효성 에러: ${validation.error}`);
+  }
+
+  const ext = validation.detectedMime === "image/png" ? "png" : validation.detectedMime === "image/webp" ? "webp" : "jpg";
+  const path = `${companyId}/logo/${crypto.randomUUID()}.${ext}`;
+
+  const { error: uploadError } = await supabase.storage
+    .from("company-uploads")
+    .upload(path, file, { contentType: validation.detectedMime, upsert: false });
+
+  if (uploadError) {
+    throw new Error("로고 이미지 파일 업로드에 실패했습니다.");
+  }
+
+  // Fetch current company intro to update logo path
+  const { data: company } = await supabase
+    .from("companies")
+    .select("intro")
+    .eq("id", companyId)
+    .single();
+
+  let metaObj: any = {
+    description: "",
+    address: "",
+    website: "",
+    admin_memo: "",
+    contacts: [],
+    type: "Brand Owner",
+    status: "Active",
+    logo_path: null
+  };
+
+  if (company && company.intro && company.intro.startsWith("__COMPANY_METADATA__:")) {
+    try {
+      metaObj = JSON.parse(company.intro.substring("__COMPANY_METADATA__:".length));
+    } catch (e) {}
+  }
+
+  metaObj.logo_path = path;
+  const introString = `__COMPANY_METADATA__:${JSON.stringify(metaObj)}`;
+
+  const { error: updateError } = await supabase
+    .from("companies")
+    .update({ intro: introString })
+    .eq("id", companyId);
+
+  if (updateError) {
+    throw new Error(`로고 메타데이터 DB 저장 실패: ${updateError.message}`);
+  }
+
+  revalidatePath(`/portal/company/info`);
+  revalidatePath(`/admin/companies/${companyId}`);
 }

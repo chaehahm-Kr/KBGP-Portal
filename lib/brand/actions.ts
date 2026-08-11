@@ -4,7 +4,9 @@ import { z } from "zod";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { requireCompanyMembership } from "@/lib/company/dal";
+import { verifyAdminSession } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { validateUploadedFile } from "@/lib/files/validate";
 
 export type BrandFormState = { error: string } | undefined;
@@ -428,6 +430,142 @@ export async function updateBrand(
   }
 
   redirect("/portal/brands");
+}
+
+export async function adminUpdateBrand(
+  brandId: string,
+  companyId: string,
+  _prevState: BrandFormState,
+  formData: FormData
+): Promise<BrandFormState> {
+  await verifyAdminSession();
+  const supabase = createAdminClient();
+
+  const parsed = brandSchema.safeParse({
+    name: formData.get("name"),
+    intro: formData.get("intro"),
+  });
+
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "입력값을 확인해주세요." };
+  }
+
+  const hasKrTrademark = formData.get("hasKrTrademark") === "true";
+  const krTrademarkNumber = hasKrTrademark ? (formData.get("krTrademarkNumber") as string)?.trim() || null : null;
+  const hasUsTrademark = formData.get("hasUsTrademark") === "true";
+  const usTrademarkNumber = hasUsTrademark ? (formData.get("usTrademarkNumber") as string)?.trim() || null : null;
+
+  // Upload logo
+  const { path: logoPath, error: logoError } = await uploadLogoIfProvided(
+    supabase,
+    companyId,
+    brandId,
+    formData
+  );
+  if (logoError) {
+    return { error: logoError };
+  }
+
+  // Upload KR trademark file
+  let krPathToUpdate: string | null | undefined = undefined;
+  if (hasKrTrademark) {
+    const fileRes = await uploadTrademarkFileIfProvided(supabase, companyId, brandId, "krTrademarkFile", "kr_trademark", formData);
+    if (fileRes.error) return { error: fileRes.error };
+    if (fileRes.path) {
+      krPathToUpdate = fileRes.path;
+    }
+  } else {
+    krPathToUpdate = null;
+  }
+
+  if (formData.get("deleteKrTrademarkFile") === "true") {
+    krPathToUpdate = null;
+  }
+
+  // Upload US trademark file
+  let usPathToUpdate: string | null | undefined = undefined;
+  if (hasUsTrademark) {
+    const fileRes = await uploadTrademarkFileIfProvided(supabase, companyId, brandId, "usTrademarkFile", "us_trademark", formData);
+    if (fileRes.error) return { error: fileRes.error };
+    if (fileRes.path) {
+      usPathToUpdate = fileRes.path;
+    }
+  } else {
+    usPathToUpdate = null;
+  }
+
+  if (formData.get("deleteUsTrademarkFile") === "true") {
+    usPathToUpdate = null;
+  }
+
+  const updatePayload: Record<string, any> = {
+    name: parsed.data.name,
+    intro: parsed.data.intro || null,
+    updated_at: new Date().toISOString(),
+    ...(logoPath ? { logo_path: logoPath } : {}),
+  };
+
+  const trademarkPayload = {
+    has_kr_trademark: hasKrTrademark,
+    kr_trademark_number: krTrademarkNumber,
+    has_us_trademark: hasUsTrademark,
+    us_trademark_number: usTrademarkNumber,
+    ...(krPathToUpdate !== undefined ? { kr_trademark_path: krPathToUpdate } : {}),
+    ...(usPathToUpdate !== undefined ? { us_trademark_path: usPathToUpdate } : {}),
+  };
+
+  // Attempt database columns update
+  const { error: updateError } = await supabase
+    .from("brands")
+    .update({ ...updatePayload, ...trademarkPayload })
+    .eq("id", brandId);
+
+  // Fallback to JSON serialization if columns don't exist yet
+  if (updateError && (updateError.code === "42703" || updateError.code === "PGRST204")) {
+    const currentKrPath = formData.get("currentKrTrademarkPath") as string || null;
+    const currentUsPath = formData.get("currentUsTrademarkPath") as string || null;
+
+    const fallbackIntroObj = {
+      description: parsed.data.intro || "",
+      trademarks: {
+        has_kr_trademark: hasKrTrademark,
+        kr_trademark_number: krTrademarkNumber,
+        kr_trademark_path: krPathToUpdate !== undefined ? krPathToUpdate : currentKrPath,
+        has_us_trademark: hasUsTrademark,
+        us_trademark_number: usTrademarkNumber,
+        us_trademark_path: usPathToUpdate !== undefined ? usPathToUpdate : currentUsPath,
+      }
+    };
+
+    if (krPathToUpdate === null) fallbackIntroObj.trademarks.kr_trademark_path = null;
+    if (usPathToUpdate === null) fallbackIntroObj.trademarks.us_trademark_path = null;
+
+    const fallbackIntroString = `__JSON_METADATA__:${JSON.stringify(fallbackIntroObj)}`;
+
+    const { error: fallbackUpdateError } = await supabase
+      .from("brands")
+      .update({
+        ...updatePayload,
+        intro: fallbackIntroString
+      })
+      .eq("id", brandId);
+
+    if (fallbackUpdateError) {
+      if (fallbackUpdateError.code === "23505") {
+        return { error: "이미 같은 이름의 브랜드가 등록되어 있습니다." };
+      }
+      return { error: "브랜드 정보를 저장하지 못했습니다." };
+    }
+  } else if (updateError) {
+    console.error("adminUpdateBrand query error:", updateError);
+    if (updateError.code === "23505") {
+      return { error: "이미 같은 이름의 브랜드가 등록되어 있습니다." };
+    }
+    return { error: "브랜드 정보를 저장하지 못했습니다." };
+  }
+
+  revalidatePath(`/admin/companies/${companyId}`);
+  return undefined;
 }
 
 /**

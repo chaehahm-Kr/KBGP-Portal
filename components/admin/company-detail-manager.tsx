@@ -7,9 +7,11 @@ import {
   adminInviteCompanyUser,
   adminUpdateCompanyUser,
   adminDeleteCompanyUser,
+  adminUploadCompanyLogo,
   type CompanyContact,
   type CompanyParsedMetadata
 } from "@/lib/company/admin-actions";
+import { adminUpdateBrand } from "@/lib/brand/actions";
 import { type PartnerStatusConfig } from "@/lib/settings/actions";
 import { 
   updateUserTaskAssignments, 
@@ -99,6 +101,9 @@ export function CompanyDetailManager({
   const [adminMemo, setAdminMemo] = useState(parsedMeta.adminMemo);
   const [type, setType] = useState(parsedMeta.type);
   const [status, setStatus] = useState(parsedMeta.status);
+  const [logoUrl, setLogoUrl] = useState(parsedMeta.logoUrl || null);
+  const [businessRegNum, setBusinessRegNum] = useState(company.business_registration_number);
+  const [createdAt, setCreatedAt] = useState(company.created_at);
   
   // Editing modes
   const [isEditingMeta, setIsEditingMeta] = useState(false);
@@ -109,6 +114,25 @@ export function CompanyDetailManager({
   const [tempAdminMemo, setTempAdminMemo] = useState(adminMemo);
   const [tempType, setTempType] = useState(type);
   const [tempStatus, setTempStatus] = useState(status);
+  const [tempLogoFile, setTempLogoFile] = useState<File | null>(null);
+  const [tempBusinessRegNum, setTempBusinessRegNum] = useState(businessRegNum);
+  const [tempCreatedAt, setTempCreatedAt] = useState(createdAt);
+
+  // Brand Edit Modal States
+  const [isEditBrandOpen, setIsEditBrandOpen] = useState(false);
+  const [selectedBrand, setSelectedBrand] = useState<any>(null);
+  const [editBrandName, setEditBrandName] = useState("");
+  const [editBrandIntro, setEditBrandIntro] = useState("");
+  const [editBrandLogoFile, setEditBrandLogoFile] = useState<File | null>(null);
+  const [editBrandLogoUrl, setEditBrandLogoUrl] = useState<string | null>(null);
+  const [editBrandHasKr, setEditBrandHasKr] = useState(false);
+  const [editBrandKrNum, setEditBrandKrNum] = useState("");
+  const [editBrandKrFile, setEditBrandKrFile] = useState<File | null>(null);
+  const [editBrandKrUrl, setEditBrandKrUrl] = useState<string | null>(null);
+  const [editBrandHasUs, setEditBrandHasUs] = useState(false);
+  const [editBrandUsNum, setEditBrandUsNum] = useState("");
+  const [editBrandUsFile, setEditBrandUsFile] = useState<File | null>(null);
+  const [editBrandUsUrl, setEditBrandUsUrl] = useState<string | null>(null);
 
   // New States for Portal User Manager
   const [isAddUserOpen, setIsAddUserOpen] = useState(false);
@@ -153,6 +177,65 @@ export function CompanyDetailManager({
   const [editTaskAssignments, setEditTaskAssignments] = useState<
     Record<string, { is_primary: boolean; email_notify: boolean }>
   >({});
+
+  const handleOpenEditBrand = (brand: any) => {
+    setSelectedBrand(brand);
+    setEditBrandName(brand.name || "");
+    setEditBrandIntro(brand.introText || "");
+    setEditBrandLogoFile(null);
+    setEditBrandLogoUrl(brand.logoUrl || null);
+    setEditBrandHasKr(brand.hasKr || false);
+    setEditBrandKrNum(brand.krNum || "");
+    setEditBrandKrFile(null);
+    setEditBrandKrUrl(brand.krUrl || null);
+    setEditBrandHasUs(brand.hasUs || false);
+    setEditBrandUsNum(brand.usNum || "");
+    setEditBrandUsFile(null);
+    setEditBrandUsUrl(brand.usUrl || null);
+    setIsEditBrandOpen(true);
+  };
+
+  const handleUpdateBrandSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedBrand) return;
+    if (!editBrandName.trim()) {
+      alert("브랜드명은 필수입니다.");
+      return;
+    }
+
+    startTransition(async () => {
+      try {
+        const formData = new FormData();
+        formData.append("name", editBrandName.trim());
+        formData.append("intro", editBrandIntro.trim());
+        formData.append("hasKrTrademark", editBrandHasKr ? "true" : "false");
+        formData.append("krTrademarkNumber", editBrandKrNum.trim());
+        formData.append("hasUsTrademark", editBrandHasUs ? "true" : "false");
+        formData.append("usTrademarkNumber", editBrandUsNum.trim());
+
+        if (editBrandLogoFile) {
+          formData.append("logo", editBrandLogoFile);
+        }
+        if (editBrandKrFile) {
+          formData.append("krTrademarkFile", editBrandKrFile);
+        }
+        if (editBrandUsFile) {
+          formData.append("usTrademarkFile", editBrandUsFile);
+        }
+
+        const res = await adminUpdateBrand(selectedBrand.id, company.id, undefined, formData);
+        if (res && res.error) {
+          alert(res.error);
+        } else {
+          setIsEditBrandOpen(false);
+          alert("브랜드 정보가 성공적으로 수정되었습니다. 변경 사항 반영을 위해 화면이 리로드됩니다.");
+          window.location.reload();
+        }
+      } catch (err: any) {
+        alert(err.message || "브랜드 수정 실패");
+      }
+    });
+  };
 
   const handleOpenEdit = (user: any) => {
     setSelectedUser(user);
@@ -480,6 +563,12 @@ export function CompanyDetailManager({
   const handleSaveMeta = async () => {
     startTransition(async () => {
       try {
+        if (tempLogoFile) {
+          const formData = new FormData();
+          formData.append("logo", tempLogoFile);
+          await adminUploadCompanyLogo(company.id, formData);
+        }
+
         await updateCompanyAdminMetadata(company.id, {
           address: tempAddress,
           website: tempWebsite,
@@ -487,13 +576,20 @@ export function CompanyDetailManager({
           contacts: [], 
           type: tempType,
           status: tempStatus,
+          businessRegistrationNumber: tempBusinessRegNum,
+          createdAt: tempCreatedAt,
         });
         setAddress(tempAddress);
         setWebsite(tempWebsite);
         setAdminMemo(tempAdminMemo);
         setType(tempType);
         setStatus(tempStatus);
+        setBusinessRegNum(tempBusinessRegNum);
+        setCreatedAt(tempCreatedAt);
+        setTempLogoFile(null);
         setIsEditingMeta(false);
+        alert("회사 정보가 성공적으로 저장되었습니다. 로고 등 변경 사항 반영을 위해 화면이 리로드됩니다.");
+        window.location.reload();
       } catch (err) {
         alert(err instanceof Error ? err.message : "회사 정보 저장 실패");
       }
@@ -557,6 +653,33 @@ export function CompanyDetailManager({
             </div>
 
             <div className="space-y-4 text-xs">
+              <div className="flex flex-col items-center gap-2 p-3 bg-zinc-50 dark:bg-zinc-950/40 rounded-lg border border-zinc-150 dark:border-zinc-850">
+                {logoUrl ? (
+                  <img
+                    src={logoUrl}
+                    alt="Company Logo"
+                    className="h-16 w-16 rounded object-cover border border-zinc-200 dark:border-zinc-800"
+                  />
+                ) : (
+                  <div className="h-16 w-16 rounded border border-zinc-200 bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-850 flex items-center justify-center text-[10px] font-bold text-zinc-400 font-sans">
+                    LOGO
+                  </div>
+                )}
+                {isEditingMeta && (
+                  <div className="w-full mt-1">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => setTempLogoFile(e.target.files?.[0] || null)}
+                      className="block w-full text-[10px] text-zinc-555 dark:text-zinc-400 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-[10px] file:font-semibold file:bg-zinc-200 file:text-zinc-700 dark:file:bg-zinc-800 dark:file:text-zinc-300 hover:file:bg-zinc-300 dark:hover:file:bg-zinc-750 cursor-pointer"
+                    />
+                    {tempLogoFile && (
+                      <p className="text-[9px] text-emerald-600 font-semibold mt-1">✓ 파일 대기 중: {tempLogoFile.name}</p>
+                    )}
+                  </div>
+                )}
+              </div>
+
               <div>
                 <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase block">파트너 상태</span>
                 {isEditingMeta ? (
@@ -603,13 +726,32 @@ export function CompanyDetailManager({
               </div>
               <div>
                 <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase block">사업자등록번호</span>
-                <span className="font-semibold text-zinc-900 dark:text-white mt-0.5 block">{company.business_registration_number}</span>
+                {isEditingMeta ? (
+                  <input
+                    type="text"
+                    value={tempBusinessRegNum}
+                    onChange={(e) => setTempBusinessRegNum(e.target.value)}
+                    placeholder="사업자등록번호 입력"
+                    className="mt-1 w-full rounded border border-zinc-200 p-1.5 text-xs outline-none bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white font-mono"
+                  />
+                ) : (
+                  <span className="font-semibold text-zinc-900 dark:text-white mt-0.5 block font-mono">{businessRegNum}</span>
+                )}
               </div>
               <div>
                 <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase block">등록일</span>
-                <span className="font-semibold text-zinc-900 dark:text-white mt-0.5 block">
-                  {new Date(company.created_at).toLocaleDateString()}
-                </span>
+                {isEditingMeta ? (
+                  <input
+                    type="date"
+                    value={tempCreatedAt ? new Date(tempCreatedAt).toISOString().split('T')[0] : ""}
+                    onChange={(e) => setTempCreatedAt(e.target.value)}
+                    className="mt-1 w-full rounded border border-zinc-200 p-1.5 text-xs outline-none bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+                  />
+                ) : (
+                  <span className="font-semibold text-zinc-900 dark:text-white mt-0.5 block">
+                    {createdAt ? new Date(createdAt).toLocaleDateString() : "(미지정)"}
+                  </span>
+                )}
               </div>
 
               <div>
@@ -886,14 +1028,22 @@ export function CompanyDetailManager({
                     brands.map((brand) => (
                       <div key={brand.id} className="rounded-lg border border-zinc-150 p-4 bg-zinc-50/30 dark:border-zinc-855 dark:bg-zinc-900/40 space-y-4">
                         <div className="flex items-center justify-between border-b border-zinc-100 pb-2 dark:border-zinc-800">
-                          <div>
-                            <h4 className="text-sm font-bold text-zinc-900 dark:text-white">{brand.name}</h4>
+                          <div className="flex-1">
+                            <div className="flex items-center gap-3">
+                              <h4 className="text-sm font-bold text-zinc-900 dark:text-white">{brand.name}</h4>
+                              <button
+                                onClick={() => handleOpenEditBrand(brand)}
+                                className="text-[10px] font-semibold text-zinc-555 hover:underline dark:text-zinc-400 flex items-center gap-0.5 border border-zinc-250 px-1.5 py-0.5 rounded cursor-pointer transition-colors"
+                              >
+                                ✏️ 수정
+                              </button>
+                            </div>
                             <p className="text-[10px] text-zinc-400 mt-1">{brand.introText || "브랜드 소개글이 등록되지 않았습니다."}</p>
                           </div>
                           {brand.logoUrl ? (
                             <img src={brand.logoUrl} alt={brand.name} className="h-8 w-8 rounded border border-zinc-200 object-cover dark:border-zinc-800" />
                           ) : (
-                            <div className="h-8 w-8 rounded border border-zinc-200 bg-zinc-100 flex items-center justify-center text-[8px] font-bold text-zinc-400 dark:border-zinc-800 dark:bg-zinc-850">LOGO</div>
+                            <div className="h-8 w-8 rounded border border-zinc-200 bg-zinc-100 flex items-center justify-center text-[8px] font-bold text-zinc-400 dark:border-zinc-800 dark:bg-zinc-850 font-sans">LOGO</div>
                           )}
                         </div>
 
@@ -1468,6 +1618,168 @@ export function CompanyDetailManager({
                     {isPending ? "저장중..." : "변경 사항 저장"}
                   </button>
                 </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Brand Modal */}
+      {isEditBrandOpen && selectedBrand && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-lg rounded-xl border border-zinc-200 bg-white shadow-2xl dark:border-zinc-800 dark:bg-zinc-900 overflow-hidden animate-in fade-in zoom-in-95 duration-150 text-xs">
+            <div className="flex items-center justify-between border-b border-zinc-100 bg-zinc-50/50 px-5 py-4 dark:border-zinc-800 dark:bg-zinc-950/20">
+              <div>
+                <h3 className="text-sm font-bold text-zinc-900 dark:text-white">브랜드 정보 수정</h3>
+                <p className="text-[10px] text-zinc-450 mt-0.5">{selectedBrand.name}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsEditBrandOpen(false)}
+                className="rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-150"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdateBrandSubmit} className="p-5 space-y-4 max-h-[75vh] overflow-y-auto">
+              <div>
+                <label className="text-[10px] font-bold text-zinc-400 block mb-1">브랜드명 *</label>
+                <input
+                  type="text"
+                  required
+                  value={editBrandName}
+                  onChange={(e) => setEditBrandName(e.target.value)}
+                  className="w-full rounded border border-zinc-200 p-2 text-xs outline-none bg-white focus:border-zinc-400 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+                />
+              </div>
+
+              <div>
+                <label className="text-[10px] font-bold text-zinc-400 block mb-1">브랜드 소개글</label>
+                <textarea
+                  value={editBrandIntro}
+                  onChange={(e) => setEditBrandIntro(e.target.value)}
+                  rows={3}
+                  placeholder="브랜드 소개 정보를 입력하세요"
+                  className="w-full rounded border border-zinc-200 p-2 text-xs outline-none bg-white focus:border-zinc-400 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white resize-none"
+                />
+              </div>
+
+              <div>
+                <label className="text-[10px] font-bold text-zinc-400 block mb-1">브랜드 로고 이미지</label>
+                {editBrandLogoUrl && !editBrandLogoFile && (
+                  <div className="mb-2 flex items-center gap-2">
+                    <img src={editBrandLogoUrl} alt="logo preview" className="h-10 w-10 rounded border border-zinc-200 object-cover" />
+                    <span className="text-[10px] text-zinc-450">기존 로고 이미지 등록됨</span>
+                  </div>
+                )}
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => setEditBrandLogoFile(e.target.files?.[0] || null)}
+                  className="block w-full text-[11px] text-zinc-555 dark:text-zinc-400 file:mr-3 file:py-1.5 file:px-3 file:rounded file:border-0 file:text-[10px] file:font-semibold file:bg-zinc-100 file:text-zinc-700 dark:file:bg-zinc-800 dark:file:text-zinc-300 hover:file:bg-zinc-200 cursor-pointer"
+                />
+              </div>
+
+              {/* KR Trademark Info */}
+              <div className="p-3 bg-zinc-50 dark:bg-zinc-950/20 border border-zinc-150 dark:border-zinc-850 rounded-lg space-y-3">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="edit-brand-has-kr"
+                    checked={editBrandHasKr}
+                    onChange={(e) => setEditBrandHasKr(e.target.checked)}
+                    className="rounded border-zinc-300 text-indigo-650 focus:ring-indigo-500 h-4 w-4"
+                  />
+                  <label htmlFor="edit-brand-has-kr" className="text-[11px] font-bold text-zinc-700 dark:text-zinc-300">
+                    대한민국 상표권 보유
+                  </label>
+                </div>
+                {editBrandHasKr && (
+                  <div className="space-y-2 pt-1">
+                    <div>
+                      <label className="text-[9px] font-bold text-zinc-400 block mb-0.5">등록번호</label>
+                      <input
+                        type="text"
+                        value={editBrandKrNum}
+                        onChange={(e) => setEditBrandKrNum(e.target.value)}
+                        placeholder="등록번호를 입력하세요"
+                        className="w-full rounded border border-zinc-200 p-1.5 text-xs outline-none bg-white dark:border-zinc-800 dark:bg-zinc-950 dark:text-white font-mono"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[9px] font-bold text-zinc-400 block mb-0.5">증빙 서류 변경</label>
+                      {editBrandKrUrl && (
+                        <p className="text-[10px] text-zinc-455 mb-1 font-semibold">📁 기존 인증서 파일 등록됨</p>
+                      )}
+                      <input
+                        type="file"
+                        accept="image/*,application/pdf"
+                        onChange={(e) => setEditBrandKrFile(e.target.files?.[0] || null)}
+                        className="block w-full text-[10px] text-zinc-555 file:mr-2 file:py-1 file:px-2 file:rounded file:bg-zinc-200 cursor-pointer"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* US Trademark Info */}
+              <div className="p-3 bg-zinc-50 dark:bg-zinc-950/20 border border-zinc-150 dark:border-zinc-850 rounded-lg space-y-3">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="edit-brand-has-us"
+                    checked={editBrandHasUs}
+                    onChange={(e) => setEditBrandHasUs(e.target.checked)}
+                    className="rounded border-zinc-300 text-indigo-650 focus:ring-indigo-500 h-4 w-4"
+                  />
+                  <label htmlFor="edit-brand-has-us" className="text-[11px] font-bold text-zinc-700 dark:text-zinc-300">
+                    미국 USPTO 상표권 보유
+                  </label>
+                </div>
+                {editBrandHasUs && (
+                  <div className="space-y-2 pt-1">
+                    <div>
+                      <label className="text-[9px] font-bold text-zinc-400 block mb-0.5">등록번호</label>
+                      <input
+                        type="text"
+                        value={editBrandUsNum}
+                        onChange={(e) => setEditBrandUsNum(e.target.value)}
+                        placeholder="등록번호를 입력하세요"
+                        className="w-full rounded border border-zinc-200 p-1.5 text-xs outline-none bg-white dark:border-zinc-800 dark:bg-zinc-950 dark:text-white font-mono"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[9px] font-bold text-zinc-400 block mb-0.5">증빙 서류 변경</label>
+                      {editBrandUsUrl && (
+                        <p className="text-[10px] text-zinc-455 mb-1 font-semibold">📁 기존 인증서 파일 등록됨</p>
+                      )}
+                      <input
+                        type="file"
+                        accept="image/*,application/pdf"
+                        onChange={(e) => setEditBrandUsFile(e.target.files?.[0] || null)}
+                        className="block w-full text-[10px] text-zinc-555 file:mr-2 file:py-1 file:px-2 file:rounded file:bg-zinc-200 cursor-pointer"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-zinc-100 dark:border-zinc-800">
+                <button
+                  type="button"
+                  onClick={() => setIsEditBrandOpen(false)}
+                  className="rounded border border-zinc-200 px-4 py-2 font-bold text-zinc-555 hover:bg-zinc-50 dark:border-zinc-850 dark:hover:bg-zinc-950 text-[11px]"
+                >
+                  취소
+                </button>
+                <button
+                  type="submit"
+                  disabled={isPending}
+                  className="rounded bg-zinc-950 px-4 py-2 font-bold text-white hover:bg-zinc-850 disabled:opacity-50 dark:bg-white dark:text-zinc-955 dark:hover:bg-zinc-100 text-[11px]"
+                >
+                  {isPending ? "저장중..." : "변경 사항 저장"}
+                </button>
               </div>
             </form>
           </div>

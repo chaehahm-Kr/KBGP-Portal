@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useTransition } from "react";
-import { updateCompanyPortalMetadata } from "@/lib/company/portal-actions";
+import { updateCompanyPortalMetadata, portalUploadCompanyLogo } from "@/lib/company/portal-actions";
 import { type CompanyContact, type CompanyParsedMetadata } from "@/lib/company/admin-actions";
 import { assignTaskPrimaryUser, type TaskAssignmentItem, toggleTaskEmailNotification } from "@/lib/company/task-actions";
 
@@ -39,6 +39,8 @@ export function CompanyProfileManager({
 
   const [website, setWebsite] = useState(parsedMeta.website);
   const contacts = parsedMeta.contacts;
+  const [logoUrl, setLogoUrl] = useState(parsedMeta.logoUrl || null);
+  const [tempLogoFile, setTempLogoFile] = useState<File | null>(null);
 
   const [isEditingMeta, setIsEditingMeta] = useState(false);
   const [tempAddress1, setTempAddress1] = useState(address1);
@@ -153,6 +155,12 @@ export function CompanyProfileManager({
 
     startTransition(async () => {
       try {
+        if (tempLogoFile) {
+          const formData = new FormData();
+          formData.append("logo", tempLogoFile);
+          await portalUploadCompanyLogo(company.id, formData);
+        }
+
         const fullAddress = `${tempAddress1.trim()}${tempAddress2.trim() ? " " + tempAddress2.trim() : ""}${tempCity.trim() ? ", " + tempCity.trim() : ""}${tempStateProv.trim() ? ", " + tempStateProv.trim() : ""}${tempZipCode.trim() ? " (" + tempZipCode.trim() + ")" : ""}`;
 
         await updateCompanyPortalMetadata(company.id, {
@@ -172,7 +180,10 @@ export function CompanyProfileManager({
         setZipCode(tempZipCode.trim());
         setAddress(fullAddress);
         setWebsite(tempWebsite);
+        setTempLogoFile(null);
         setIsEditingMeta(false);
+        alert("회사 정보가 성공적으로 저장되었습니다. 로고 이미지 반영을 위해 화면이 리로드됩니다.");
+        window.location.reload();
       } catch (err) {
         alert(err instanceof Error ? err.message : "회사 정보 저장 실패");
       }
@@ -245,6 +256,33 @@ export function CompanyProfileManager({
             </div>
 
             <div className="space-y-4 text-xs">
+              <div className="flex flex-col items-center gap-2 p-3 bg-zinc-50 dark:bg-zinc-950/40 rounded-lg border border-zinc-150 dark:border-zinc-850">
+                {logoUrl ? (
+                  <img
+                    src={logoUrl}
+                    alt="Company Logo"
+                    className="h-16 w-16 rounded object-cover border border-zinc-200 dark:border-zinc-800"
+                  />
+                ) : (
+                  <div className="h-16 w-16 rounded border border-zinc-200 bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-850 flex items-center justify-center text-[10px] font-bold text-zinc-400 font-sans">
+                    LOGO
+                  </div>
+                )}
+                {isEditingMeta && (
+                  <div className="w-full mt-1">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => setTempLogoFile(e.target.files?.[0] || null)}
+                      className="block w-full text-[10px] text-zinc-555 dark:text-zinc-400 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-[10px] file:font-semibold file:bg-zinc-200 file:text-zinc-700 dark:file:bg-zinc-800 dark:file:text-zinc-300 hover:file:bg-zinc-300 dark:hover:file:bg-zinc-750 cursor-pointer"
+                    />
+                    {tempLogoFile && (
+                      <p className="text-[9px] text-emerald-600 font-semibold mt-1">✓ 파일 대기 중: {tempLogoFile.name}</p>
+                    )}
+                  </div>
+                )}
+              </div>
+
               <div>
                 <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase block">파트너 상태</span>
                 <span className={`mt-1 inline-block rounded px-2.5 py-0.5 text-[10px] font-bold border ${getStatusBadgeClass()}`}>
