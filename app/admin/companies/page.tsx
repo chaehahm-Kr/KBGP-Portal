@@ -81,11 +81,21 @@ export default async function AdminCompaniesPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-xl font-bold text-zinc-950 dark:text-white">회사 관리</h1>
-        <p className="text-xs text-zinc-500 dark:text-zinc-400">
-          K SELECT NETWORK 플랫폼에 등록된 한국 뷰티 기업들의 파트너 상태와 관련 브랜드를 관리합니다.
-        </p>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-xl font-bold text-zinc-950 dark:text-white">회사 관리</h1>
+          <p className="text-xs text-zinc-500 dark:text-zinc-400">
+            K SELECT NETWORK 플랫폼에 등록된 한국 뷰티 기업들의 파트너 상태와 관련 브랜드를 관리합니다.
+          </p>
+        </div>
+        <div className="shrink-0">
+          <Link
+            href="/admin/companies/new"
+            className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-650 px-4 py-2.5 text-xs font-semibold text-white shadow-sm hover:bg-indigo-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-650 transition-colors cursor-pointer"
+          >
+            <span className="text-sm font-bold">+</span> 신규 회사 추가
+          </Link>
+        </div>
       </div>
 
       {/* Companies Table */}

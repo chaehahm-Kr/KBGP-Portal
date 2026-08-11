@@ -4,6 +4,8 @@ import fs from "fs";
 import path from "path";
 import crypto from "crypto";
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
+import { z } from "zod";
 import { verifyAdminSession } from "@/lib/auth/dal";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getSignedFileUrl } from "@/lib/files/storage";
@@ -123,7 +125,14 @@ export async function parseCompanyMetadata(company: any): Promise<CompanyParsedM
 export async function updateCompanyAdminMetadata(
   companyId: string,
   payload: {
+    name?: string;
+    country?: string;
     address: string;
+    address_1?: string;
+    address_2?: string;
+    city?: string;
+    state?: string;
+    zipCode?: string;
     website: string;
     adminMemo: string;
     contacts: CompanyContact[];
@@ -161,6 +170,11 @@ export async function updateCompanyAdminMetadata(
   const metaObj = {
     description: baseDescription,
     address: payload.address,
+    address_1: payload.address_1 || "",
+    address_2: payload.address_2 || "",
+    city: payload.city || "",
+    state: payload.state || "",
+    zip_code: payload.zipCode || "",
     website: payload.website,
     admin_memo: payload.adminMemo,
     contacts: payload.contacts,
@@ -180,6 +194,12 @@ export async function updateCompanyAdminMetadata(
     updated_at: new Date().toISOString(),
   };
 
+  if (payload.name) {
+    updatePayload.name = payload.name;
+  }
+  if (payload.country) {
+    updatePayload.country = payload.country;
+  }
   if (payload.businessRegistrationNumber) {
     updatePayload.business_registration_number = payload.businessRegistrationNumber;
   }
@@ -474,4 +494,116 @@ export async function sendPortalInvitationAction(companyUserId: string) {
   revalidatePath("/admin/applications");
   revalidatePath("/admin/companies");
   revalidatePath(`/admin/companies/${target.company_id}`);
+}
+
+const adminCompanySchema = z.object({
+  name: z.string().trim().min(1, "회사명을 입력해주세요."),
+  businessNumber: z.string().trim().min(1, "사업자등록번호를 입력해주세요."),
+  country: z.string().trim().min(1, "국가를 입력해주세요."),
+  type: z.string().trim().min(1, "회사 유형을 선택해주세요."),
+  status: z.string().trim().min(1, "파트너 상태를 선택해주세요."),
+  address1: z.string().trim().optional(),
+  address2: z.string().trim().optional(),
+  city: z.string().trim().optional(),
+  state: z.string().trim().optional(),
+  zipCode: z.string().trim().optional(),
+  website: z.string().trim().optional(),
+  adminMemo: z.string().trim().optional(),
+  contactName: z.string().trim().min(1, "담당자 이름을 입력해주세요."),
+  contactEmail: z.string().trim().email("올바른 이메일 형식이 아닙니다."),
+  contactPhone: z.string().trim().min(1, "담당자 연락처를 입력해주세요."),
+  contactTitle: z.string().trim().optional(),
+  contactPosition: z.string().trim().optional(),
+});
+
+export type AdminCompanyFormState = { error: string } | undefined;
+
+export async function adminCreateCompany(
+  _prevState: AdminCompanyFormState,
+  formData: FormData
+): Promise<AdminCompanyFormState> {
+  await verifyAdminSession();
+  const admin = createAdminClient();
+
+  const parsed = adminCompanySchema.safeParse({
+    name: formData.get("name"),
+    businessNumber: formData.get("businessNumber"),
+    country: formData.get("country"),
+    type: formData.get("type"),
+    status: formData.get("status"),
+    address1: formData.get("address1"),
+    address2: formData.get("address2"),
+    city: formData.get("city"),
+    state: formData.get("state"),
+    zipCode: formData.get("zipCode"),
+    website: formData.get("website"),
+    adminMemo: formData.get("adminMemo"),
+    contactName: formData.get("contactName"),
+    contactEmail: formData.get("contactEmail"),
+    contactPhone: formData.get("contactPhone"),
+    contactTitle: formData.get("contactTitle"),
+    contactPosition: formData.get("contactPosition"),
+  });
+
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "입력값을 확인해주세요." };
+  }
+
+  const data = parsed.data;
+  
+  // Build fullAddress
+  const fullAddress = data.address1
+    ? `${data.address1}${data.address2 ? " " + data.address2 : ""}${data.city ? ", " + data.city : ""}${data.state ? ", " + data.state : ""}${data.zipCode ? " (" + data.zipCode + ")" : ""}`
+    : "";
+
+  const intro = `__COMPANY_METADATA__:${JSON.stringify({
+    description: "",
+    address: fullAddress,
+    address_1: data.address1 || "",
+    address_2: data.address2 || "",
+    city: data.city || "",
+    state: data.state || "",
+    zip_code: data.zipCode || "",
+    website: data.website || "",
+    admin_memo: data.adminMemo || "",
+    contacts: [
+      {
+        id: crypto.randomUUID(),
+        name: data.contactName,
+        title: data.contactTitle || "",
+        position: data.contactPosition || "",
+        email: data.contactEmail,
+        phone: data.contactPhone,
+        isPrimary: true,
+      }
+    ],
+    type: data.type,
+    status: data.status,
+    logo_path: null,
+  })}`;
+
+  const { data: newCompany, error: insertError } = await admin
+    .from("companies")
+    .insert({
+      name: data.name,
+      business_registration_number: data.businessNumber,
+      country: data.country,
+      status: data.status === "Active" ? "active" : "inactive",
+      intro: intro,
+      contact_name: data.contactName,
+      contact_phone: data.contactPhone,
+    })
+    .select("id")
+    .single();
+
+  if (insertError || !newCompany) {
+    console.error("adminCreateCompany insert failed:", insertError);
+    if (insertError?.code === "23505") {
+      return { error: "이미 등록된 사업자등록번호 또는 회사명입니다." };
+    }
+    return { error: "회사 등록에 실패했습니다. 잠시 후 다시 시도해주세요." };
+  }
+
+  revalidatePath("/admin/companies");
+  redirect(`/admin/companies/${newCompany.id}`);
 }

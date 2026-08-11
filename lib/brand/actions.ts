@@ -585,3 +585,44 @@ export async function deactivateBrand(brandId: string) {
 
   revalidatePath("/portal/brands");
 }
+
+export async function adminCreateBrand(
+  companyId: string,
+  name: string,
+  intro: string | null,
+  hasKrTrademark: boolean,
+  krTrademarkNumber: string | null,
+  hasUsTrademark: boolean,
+  usTrademarkNumber: string | null
+) {
+  await verifyAdminSession();
+  const supabase = createAdminClient();
+
+  const insertPayload = {
+    company_id: companyId,
+    name: name.trim(),
+    intro: intro || null,
+    has_kr_trademark: hasKrTrademark,
+    kr_trademark_number: krTrademarkNumber,
+    has_us_trademark: hasUsTrademark,
+    us_trademark_number: usTrademarkNumber,
+  };
+
+  const { data: brand, error } = await supabase
+    .from("brands")
+    .insert(insertPayload)
+    .select("id")
+    .single();
+
+  if (error || !brand) {
+    console.error("adminCreateBrand query error:", error);
+    if (error?.code === "23505") {
+      throw new Error("이미 이 회사에 같은 이름의 브랜드가 등록되어 있습니다.");
+    }
+    throw new Error(error?.message || "브랜드 등록에 실패했습니다.");
+  }
+
+  revalidatePath(`/admin/companies/${companyId}`);
+  revalidatePath("/admin/brands");
+  return brand;
+}

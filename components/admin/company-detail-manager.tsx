@@ -11,7 +11,7 @@ import {
   type CompanyContact,
   type CompanyParsedMetadata
 } from "@/lib/company/admin-actions";
-import { adminUpdateBrand } from "@/lib/brand/actions";
+import { adminUpdateBrand, adminCreateBrand } from "@/lib/brand/actions";
 import { type PartnerStatusConfig } from "@/lib/settings/actions";
 import { 
   updateUserTaskAssignments, 
@@ -96,7 +96,15 @@ export function CompanyDetailManager({
   const [isPending, startTransition] = useTransition();
 
   // Company general metadata states
+  const [name, setName] = useState(company.name);
+  const [country, setCountry] = useState(company.country);
   const [address, setAddress] = useState(parsedMeta.address);
+  const [address1, setAddress1] = useState(parsedMeta.address_1 || "");
+  const [address2, setAddress2] = useState(parsedMeta.address_2 || "");
+  const [city, setCity] = useState(parsedMeta.city || "");
+  const [stateVal, setStateVal] = useState(parsedMeta.state || "");
+  const [zipCode, setZipCode] = useState(parsedMeta.zip_code || "");
+  
   const [website, setWebsite] = useState(parsedMeta.website);
   const [adminMemo, setAdminMemo] = useState(parsedMeta.adminMemo);
   const [type, setType] = useState(parsedMeta.type);
@@ -109,7 +117,15 @@ export function CompanyDetailManager({
   const [isEditingMeta, setIsEditingMeta] = useState(false);
 
   // Temporary edit states
+  const [tempName, setTempName] = useState(name);
+  const [tempCountry, setTempCountry] = useState(country);
   const [tempAddress, setTempAddress] = useState(address);
+  const [tempAddress1, setTempAddress1] = useState(address1);
+  const [tempAddress2, setTempAddress2] = useState(address2);
+  const [tempCity, setTempCity] = useState(city);
+  const [tempStateVal, setTempStateVal] = useState(stateVal);
+  const [tempZipCode, setTempZipCode] = useState(zipCode);
+  
   const [tempWebsite, setTempWebsite] = useState(website);
   const [tempAdminMemo, setTempAdminMemo] = useState(adminMemo);
   const [tempType, setTempType] = useState(type);
@@ -177,6 +193,42 @@ export function CompanyDetailManager({
   const [editTaskAssignments, setEditTaskAssignments] = useState<
     Record<string, { is_primary: boolean; email_notify: boolean }>
   >({});
+
+  // Brand Create Modal States
+  const [isAddBrandOpen, setIsAddBrandOpen] = useState(false);
+  const [addBrandName, setAddBrandName] = useState("");
+  const [addBrandIntro, setAddBrandIntro] = useState("");
+  const [addBrandHasKr, setAddBrandHasKr] = useState(false);
+  const [addBrandKrNum, setAddBrandKrNum] = useState("");
+  const [addBrandHasUs, setAddBrandHasUs] = useState(false);
+  const [addBrandUsNum, setAddBrandUsNum] = useState("");
+
+  const handleCreateBrandSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!addBrandName.trim()) {
+      alert("브랜드명은 필수입니다.");
+      return;
+    }
+
+    startTransition(async () => {
+      try {
+        await adminCreateBrand(
+          company.id,
+          addBrandName.trim(),
+          addBrandIntro.trim(),
+          addBrandHasKr,
+          addBrandKrNum.trim() || null,
+          addBrandHasUs,
+          addBrandUsNum.trim() || null
+        );
+        setIsAddBrandOpen(false);
+        alert("브랜드가 성공적으로 등록되었습니다. 변경 사항 반영을 위해 화면이 리로드됩니다.");
+        window.location.reload();
+      } catch (err: any) {
+        alert(err.message || "브랜드 등록 실패");
+      }
+    });
+  };
 
   const handleOpenEditBrand = (brand: any) => {
     setSelectedBrand(brand);
@@ -561,6 +613,11 @@ export function CompanyDetailManager({
   };
 
   const handleSaveMeta = async () => {
+    if (!tempName.trim()) {
+      alert("회사명을 입력해주세요.");
+      return;
+    }
+
     startTransition(async () => {
       try {
         if (tempLogoFile) {
@@ -569,17 +626,35 @@ export function CompanyDetailManager({
           await adminUploadCompanyLogo(company.id, formData);
         }
 
+        const mergedAddress = tempAddress1
+          ? `${tempAddress1}${tempAddress2 ? " " + tempAddress2 : ""}${tempCity ? ", " + tempCity : ""}${tempStateVal ? ", " + tempStateVal : ""}${tempZipCode ? " (" + tempZipCode + ")" : ""}`
+          : tempAddress;
+
         await updateCompanyAdminMetadata(company.id, {
-          address: tempAddress,
+          name: tempName,
+          country: tempCountry,
+          address: mergedAddress,
+          address_1: tempAddress1,
+          address_2: tempAddress2,
+          city: tempCity,
+          state: tempStateVal,
+          zipCode: tempZipCode,
           website: tempWebsite,
           adminMemo: tempAdminMemo,
-          contacts: [], 
+          contacts: parsedMeta.contacts || [], 
           type: tempType,
           status: tempStatus,
           businessRegistrationNumber: tempBusinessRegNum,
           createdAt: tempCreatedAt,
         });
-        setAddress(tempAddress);
+        setName(tempName);
+        setCountry(tempCountry);
+        setAddress(mergedAddress);
+        setAddress1(tempAddress1);
+        setAddress2(tempAddress2);
+        setCity(tempCity);
+        setStateVal(tempStateVal);
+        setZipCode(tempZipCode);
         setWebsite(tempWebsite);
         setAdminMemo(tempAdminMemo);
         setType(tempType);
@@ -622,7 +697,14 @@ export function CompanyDetailManager({
               {!isEditingMeta ? (
                 <button
                   onClick={() => {
+                    setTempName(name);
+                    setTempCountry(country);
                     setTempAddress(address);
+                    setTempAddress1(address1);
+                    setTempAddress2(address2);
+                    setTempCity(city);
+                    setTempStateVal(stateVal);
+                    setTempZipCode(zipCode);
                     setTempWebsite(website);
                     setTempAdminMemo(adminMemo);
                     setTempType(type);
@@ -681,6 +763,20 @@ export function CompanyDetailManager({
               </div>
 
               <div>
+                <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase block">회사명</span>
+                {isEditingMeta ? (
+                  <input
+                    type="text"
+                    value={tempName}
+                    onChange={(e) => setTempName(e.target.value)}
+                    className="mt-1 w-full rounded border border-zinc-200 p-1.5 text-xs outline-none bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white font-bold"
+                  />
+                ) : (
+                  <span className="font-bold text-zinc-900 dark:text-white mt-0.5 block">{name}</span>
+                )}
+              </div>
+
+              <div>
                 <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase block">파트너 상태</span>
                 {isEditingMeta ? (
                   <select
@@ -688,11 +784,11 @@ export function CompanyDetailManager({
                     onChange={(e) => setTempStatus(e.target.value)}
                     className="mt-1 w-full rounded border border-zinc-200 p-1.5 text-xs outline-none bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
                   >
-                    {statusOptions.map((opt) => (
-                      <option key={opt.id} value={opt.id}>
-                        {opt.label}
-                      </option>
-                    ))}
+                     {statusOptions.map((opt) => (
+                       <option key={opt.id} value={opt.id}>
+                         {opt.label}
+                       </option>
+                     ))}
                   </select>
                 ) : (
                   <span className={`mt-1 inline-block rounded px-2.5 py-0.5 text-[10px] font-bold border ${statusColorClass}`}>
@@ -722,8 +818,18 @@ export function CompanyDetailManager({
 
               <div>
                 <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase block">국가</span>
-                <span className="font-semibold text-zinc-900 dark:text-white mt-0.5 block">{company.country}</span>
+                {isEditingMeta ? (
+                  <input
+                    type="text"
+                    value={tempCountry}
+                    onChange={(e) => setTempCountry(e.target.value)}
+                    className="mt-1 w-full rounded border border-zinc-200 p-1.5 text-xs outline-none bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+                  />
+                ) : (
+                  <span className="font-semibold text-zinc-900 dark:text-white mt-0.5 block">{country}</span>
+                )}
               </div>
+              
               <div>
                 <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase block">사업자등록번호</span>
                 {isEditingMeta ? (
@@ -757,15 +863,47 @@ export function CompanyDetailManager({
               <div>
                 <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase block">회사 주소</span>
                 {isEditingMeta ? (
-                  <input
-                    type="text"
-                    value={tempAddress}
-                    onChange={(e) => setTempAddress(e.target.value)}
-                    placeholder="회사 주소를 입력해주세요"
-                    className="mt-1 w-full rounded border border-zinc-200 p-1.5 text-xs outline-none bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
-                  />
+                  <div className="space-y-1.5 mt-1">
+                    <input
+                      type="text"
+                      value={tempAddress1}
+                      onChange={(e) => setTempAddress1(e.target.value)}
+                      placeholder="기본 주소 (Address Line 1)"
+                      className="w-full rounded border border-zinc-200 p-1.5 text-[11px] outline-none bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+                    />
+                    <input
+                      type="text"
+                      value={tempAddress2}
+                      onChange={(e) => setTempAddress2(e.target.value)}
+                      placeholder="상세 주소 (Address Line 2)"
+                      className="w-full rounded border border-zinc-200 p-1.5 text-[11px] outline-none bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+                    />
+                    <div className="grid grid-cols-3 gap-1">
+                      <input
+                        type="text"
+                        value={tempCity}
+                        onChange={(e) => setTempCity(e.target.value)}
+                        placeholder="도시 (City)"
+                        className="w-full rounded border border-zinc-200 p-1.5 text-[10px] outline-none bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+                      />
+                      <input
+                        type="text"
+                        value={tempStateVal}
+                        onChange={(e) => setTempStateVal(e.target.value)}
+                        placeholder="주/도 (State)"
+                        className="w-full rounded border border-zinc-200 p-1.5 text-[10px] outline-none bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+                      />
+                      <input
+                        type="text"
+                        value={tempZipCode}
+                        onChange={(e) => setTempZipCode(e.target.value)}
+                        placeholder="우편번호"
+                        className="w-full rounded border border-zinc-200 p-1.5 text-[10px] outline-none bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white font-mono"
+                      />
+                    </div>
+                  </div>
                 ) : (
-                  <span className="font-semibold text-zinc-700 dark:text-zinc-300 mt-0.5 block whitespace-pre-wrap">
+                  <span className="font-semibold text-zinc-750 dark:text-zinc-300 mt-0.5 block whitespace-pre-wrap">
                     {address || "주소 미등록"}
                   </span>
                 )}
@@ -1023,7 +1161,24 @@ export function CompanyDetailManager({
 
               {/* 3. Brands Tab */}
               {activeTab === "brands" && (
-                <div className="grid grid-cols-1 gap-4">
+                <div className="space-y-4">
+                  <div className="flex justify-end">
+                    <button
+                      onClick={() => {
+                        setAddBrandName("");
+                        setAddBrandIntro("");
+                        setAddBrandHasKr(false);
+                        setAddBrandKrNum("");
+                        setAddBrandHasUs(false);
+                        setAddBrandUsNum("");
+                        setIsAddBrandOpen(true);
+                      }}
+                      className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-650 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-indigo-600 transition-colors cursor-pointer"
+                    >
+                      + 신규 브랜드 추가
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-1 gap-4">
                   {brands.length > 0 ? (
                     brands.map((brand) => (
                       <div key={brand.id} className="rounded-lg border border-zinc-150 p-4 bg-zinc-50/30 dark:border-zinc-855 dark:bg-zinc-900/40 space-y-4">
@@ -1108,6 +1263,7 @@ export function CompanyDetailManager({
                   ) : (
                     <p className="text-zinc-400 italic py-4 text-center">보유한 브랜드가 존재하지 않습니다.</p>
                   )}
+                  </div>
                 </div>
               )}
 
@@ -1776,9 +1932,127 @@ export function CompanyDetailManager({
                 <button
                   type="submit"
                   disabled={isPending}
-                  className="rounded bg-zinc-950 px-4 py-2 font-bold text-white hover:bg-zinc-850 disabled:opacity-50 dark:bg-white dark:text-zinc-955 dark:hover:bg-zinc-100 text-[11px]"
+                  className="rounded bg-zinc-955 px-4 py-2 font-bold text-white hover:bg-zinc-850 disabled:opacity-50 dark:bg-white dark:text-zinc-955 dark:hover:bg-zinc-100 text-[11px]"
                 >
                   {isPending ? "저장중..." : "변경 사항 저장"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Add Brand Modal */}
+      {isAddBrandOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-lg rounded-xl border border-zinc-200 bg-white shadow-2xl dark:border-zinc-800 dark:bg-zinc-900 overflow-hidden animate-in fade-in zoom-in-95 duration-150 text-xs">
+            <div className="flex items-center justify-between border-b border-zinc-100 bg-zinc-50/50 px-5 py-4 dark:border-zinc-800 dark:bg-zinc-950/20">
+              <div>
+                <h3 className="text-sm font-bold text-zinc-900 dark:text-white">신규 브랜드 추가</h3>
+                <p className="text-[10px] text-zinc-450 mt-0.5">{name}에 새 브랜드 등록</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsAddBrandOpen(false)}
+                className="rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-150"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateBrandSubmit} className="p-5 space-y-4 max-h-[75vh] overflow-y-auto">
+              <div>
+                <label className="text-[10px] font-bold text-zinc-400 block mb-1">브랜드명 *</label>
+                <input
+                  type="text"
+                  required
+                  value={addBrandName}
+                  onChange={(e) => setAddBrandName(e.target.value)}
+                  className="w-full rounded border border-zinc-200 p-2 text-xs outline-none bg-white focus:border-zinc-400 dark:border-zinc-800 dark:bg-zinc-955 dark:text-white"
+                />
+              </div>
+
+              <div>
+                <label className="text-[10px] font-bold text-zinc-400 block mb-1">브랜드 소개글</label>
+                <textarea
+                  value={addBrandIntro}
+                  onChange={(e) => setAddBrandIntro(e.target.value)}
+                  rows={3}
+                  placeholder="브랜드 소개 정보를 입력하세요"
+                  className="w-full rounded border border-zinc-200 p-2 text-xs outline-none bg-white focus:border-zinc-400 dark:border-zinc-800 dark:bg-zinc-955 dark:text-white resize-none"
+                />
+              </div>
+
+              {/* KR Trademark Info */}
+              <div className="p-3 bg-zinc-50 dark:bg-zinc-950/20 border border-zinc-150 dark:border-zinc-850 rounded-lg space-y-3">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="add-brand-has-kr"
+                    checked={addBrandHasKr}
+                    onChange={(e) => setAddBrandHasKr(e.target.checked)}
+                    className="rounded border-zinc-300 text-indigo-650 focus:ring-indigo-500 h-4 w-4"
+                  />
+                  <label htmlFor="add-brand-has-kr" className="text-[11px] font-bold text-zinc-700 dark:text-zinc-300">
+                    대한민국 상표권 보유
+                  </label>
+                </div>
+                {addBrandHasKr && (
+                  <div>
+                    <label className="text-[9px] font-bold text-zinc-400 block mb-0.5">등록번호</label>
+                    <input
+                      type="text"
+                      value={addBrandKrNum}
+                      onChange={(e) => setAddBrandKrNum(e.target.value)}
+                      placeholder="등록번호를 입력하세요"
+                      className="w-full rounded border border-zinc-200 p-1.5 text-xs outline-none bg-white dark:border-zinc-800 dark:bg-zinc-955 dark:text-white font-mono"
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* US Trademark Info */}
+              <div className="p-3 bg-zinc-50 dark:bg-zinc-950/20 border border-zinc-150 dark:border-zinc-850 rounded-lg space-y-3">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="add-brand-has-us"
+                    checked={addBrandHasUs}
+                    onChange={(e) => setAddBrandHasUs(e.target.checked)}
+                    className="rounded border-zinc-300 text-indigo-650 focus:ring-indigo-500 h-4 w-4"
+                  />
+                  <label htmlFor="add-brand-has-us" className="text-[11px] font-bold text-zinc-700 dark:text-zinc-300">
+                    미국 USPTO 상표권 보유
+                  </label>
+                </div>
+                {addBrandHasUs && (
+                  <div>
+                    <label className="text-[9px] font-bold text-zinc-400 block mb-0.5">등록번호</label>
+                    <input
+                      type="text"
+                      value={addBrandUsNum}
+                      onChange={(e) => setAddBrandUsNum(e.target.value)}
+                      placeholder="등록번호를 입력하세요"
+                      className="w-full rounded border border-zinc-200 p-1.5 text-xs outline-none bg-white dark:border-zinc-800 dark:bg-zinc-955 dark:text-white font-mono"
+                    />
+                  </div>
+                )}
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-zinc-100 dark:border-zinc-800">
+                <button
+                  type="button"
+                  onClick={() => setIsAddBrandOpen(false)}
+                  className="rounded border border-zinc-200 px-4 py-2 font-bold text-zinc-555 hover:bg-zinc-50 dark:border-zinc-850 dark:hover:bg-zinc-950 text-[11px]"
+                >
+                  취소
+                </button>
+                <button
+                  type="submit"
+                  disabled={isPending}
+                  className="rounded bg-zinc-950 px-4 py-2 font-bold text-white hover:bg-zinc-855 disabled:opacity-50 dark:bg-white dark:text-zinc-955 dark:hover:bg-zinc-100 text-[11px]"
+                >
+                  {isPending ? "등록중..." : "브랜드 등록"}
                 </button>
               </div>
             </form>
