@@ -136,6 +136,12 @@ export default async function AdminProductDetailPage({
     .select("id, display_program, code, name, description, is_active")
     .order("code", { ascending: true });
 
+  // Fetch active display programs for matrix columns
+  const { data: displayPrograms } = await supabase
+    .from("display_programs")
+    .select("code, name, description, min_sku, max_sku, is_active")
+    .eq("is_active", true);
+
   return (
     <ProductOverrideTabs
       product={product as unknown as Product}
@@ -154,6 +160,7 @@ export default async function AdminProductDetailPage({
       matrix={matrix}
       curators={curators ?? []}
       apProfiles={apProfiles ?? []}
+      displayPrograms={displayPrograms ?? []}
     />
   );
 }

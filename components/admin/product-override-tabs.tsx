@@ -37,6 +37,7 @@ interface ProductOverrideTabsProps {
   matrix: Record<string, string>;
   curators: { id: string; name: string; email: string }[];
   apProfiles: { id: number; display_program: string; code: string; name: string; description: string | null; is_active: boolean }[];
+  displayPrograms: { code: string; name: string; description: string | null; min_sku?: number; max_sku?: number; is_active: boolean }[];
 }
 
 export function ProductOverrideTabs({
@@ -56,6 +57,7 @@ export function ProductOverrideTabs({
   matrix,
   curators,
   apProfiles,
+  displayPrograms,
 }: ProductOverrideTabsProps) {
   const searchParams = useSearchParams();
   const initialTab = searchParams.get("tab") === "category" ? "category_attributes" : "basic";
@@ -70,12 +72,21 @@ export function ProductOverrideTabs({
     return baseDate.toISOString().split("T")[0];
   };
 
+  // Automated date helper from intervals
+  const updateNextReviewDate = (days: number, baseDateStr?: string | null) => {
+    const base = baseDateStr ? new Date(baseDateStr) : new Date();
+    base.setDate(base.getDate() + days);
+    setOvNextReviewDate(base.toISOString().split("T")[0]);
+  };
+
   // Curation States
   const [curationStatus, setCurationStatus] = useState(curation.status || "NOT_REVIEWED");
   const [ovCurator, setOvCurator] = useState(curation.curator || ""); // Stores Curator UUID (staff_members.id)
   const [isCuratorOpen, setIsCuratorOpen] = useState(false);
   const [curatorSearch, setCuratorSearch] = useState("");
   const [ovLastReviewDate, setOvLastReviewDate] = useState(curation.last_review_date || "");
+  const [reviewInterval, setReviewInterval] = useState<string>("90");
+  const [customReviewDays, setCustomReviewDays] = useState<number>(90);
   const [ovNextReviewDate, setOvNextReviewDate] = useState(
     curation.next_review_date || get90DaysLater(curation.last_review_date || new Date().toISOString().split("T")[0])
   );
@@ -1788,7 +1799,7 @@ export function ProductOverrideTabs({
                   </div>
                 </div>
 
-                {/* 검토 일자 피커 */}
+                {/* 검토 일자 피커 및 간편 일수 입력 툴 */}
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1.5">
                     <label className="text-[11px] font-bold text-zinc-600 dark:text-zinc-400">최종 검토일</label>
@@ -1801,12 +1812,52 @@ export function ProductOverrideTabs({
                     <span className="text-[9px] text-zinc-400 dark:text-zinc-500 block">* 저장 시 당일로 자동 갱신됩니다.</span>
                   </div>
                   <div className="space-y-1.5">
-                    <label className="text-[11px] font-bold text-zinc-650 dark:text-zinc-450">차기 검토 예정일</label>
+                    <label className="text-[11px] font-bold text-zinc-650 dark:text-zinc-450">차기 검토 예정일 설정</label>
+                    <div className="flex gap-2">
+                      <select
+                        value={reviewInterval}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setReviewInterval(val);
+                          if (val !== "custom") {
+                            const days = parseInt(val);
+                            setCustomReviewDays(days);
+                            updateNextReviewDate(days, ovLastReviewDate || new Date().toISOString().split("T")[0]);
+                          }
+                        }}
+                        className="rounded border border-zinc-200 p-1.5 text-xs text-zinc-900 bg-white dark:border-zinc-850 dark:bg-zinc-950 dark:text-white outline-none font-semibold flex-1"
+                      >
+                        <option value="14">14일 후</option>
+                        <option value="30">30일 후</option>
+                        <option value="90">90일 후 (기본)</option>
+                        <option value="120">120일 후</option>
+                        <option value="custom">직접 일수 입력</option>
+                      </select>
+                      {reviewInterval === "custom" && (
+                        <div className="flex items-center gap-1 shrink-0">
+                          <input
+                            type="number"
+                            min="1"
+                            value={customReviewDays}
+                            onChange={(e) => {
+                              const days = parseInt(e.target.value) || 0;
+                              setCustomReviewDays(days);
+                              updateNextReviewDate(days, ovLastReviewDate || new Date().toISOString().split("T")[0]);
+                            }}
+                            className="w-16 rounded border border-zinc-200 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white p-1 text-xs outline-none focus:border-zinc-950 font-bold"
+                          />
+                          <span className="text-[10px] text-zinc-400">일 후</span>
+                        </div>
+                      )}
+                    </div>
                     <input
                       type="date"
                       value={ovNextReviewDate}
-                      onChange={(e) => setOvNextReviewDate(e.target.value)}
-                      className="w-full rounded border border-zinc-200 p-2 text-xs text-zinc-900 bg-white dark:border-zinc-850 dark:bg-zinc-950 dark:text-white focus:border-zinc-950 outline-none"
+                      onChange={(e) => {
+                        setOvNextReviewDate(e.target.value);
+                        setReviewInterval("custom"); // Manually chosen date -> set custom
+                      }}
+                      className="w-full rounded border border-zinc-200 p-1.5 text-xs text-zinc-900 bg-white dark:border-zinc-850 dark:bg-zinc-950 dark:text-white focus:border-zinc-950 outline-none font-medium mt-1.5"
                     />
                   </div>
                 </div>
@@ -1827,49 +1878,61 @@ export function ProductOverrideTabs({
                   <thead>
                     <tr className="border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/50">
                       <th className="p-3 font-bold text-zinc-500 dark:text-zinc-455 w-1/4">Assortment Profile (AP)</th>
-                      <th className="p-3 font-bold text-zinc-550 dark:text-zinc-350 text-center w-1/4">START · 4FT</th>
-                      <th className="p-3 font-bold text-zinc-550 dark:text-zinc-350 text-center w-1/4">GROW · 8FT</th>
-                      <th className="p-3 font-bold text-zinc-550 dark:text-zinc-350 text-center w-1/4">EXPAND · 12FT</th>
+                      {(() => {
+                        const order: Record<string, number> = { START_4FT: 1, GROW_8FT: 2, EXPAND_12FT: 3 };
+                        const sortedProgs = [...displayPrograms].sort((a, b) => {
+                          const orderA = order[a.code] || 999;
+                          const orderB = order[b.code] || 999;
+                          return orderA !== orderB ? orderA - orderB : a.code.localeCompare(b.code);
+                        });
+                        return sortedProgs.map((p) => (
+                          <th key={p.code} className="p-3 font-bold text-zinc-550 dark:text-zinc-350 text-center w-1/4">
+                            {p.name}
+                          </th>
+                        ));
+                      })()}
                     </tr>
                   </thead>
                   <tbody>
                     {["AP-01", "AP-02", "AP-03", "AP-04", "AP-05", "AP-06"].map((apCode) => {
-                      const startAP = apProfiles.find((p) => p.display_program === "START_4FT" && p.code === apCode);
-                      const growAP = apProfiles.find((p) => p.display_program === "GROW_8FT" && p.code === apCode);
-                      const expandAP = apProfiles.find((p) => p.display_program === "EXPAND_12FT" && p.code === apCode);
+                      const order: Record<string, number> = { START_4FT: 1, GROW_8FT: 2, EXPAND_12FT: 3 };
+                      const sortedProgs = [...displayPrograms].sort((a, b) => {
+                        const orderA = order[a.code] || 999;
+                        const orderB = order[b.code] || 999;
+                        return orderA !== orderB ? orderA - orderB : a.code.localeCompare(b.code);
+                      });
 
-                      const nameLabel = startAP?.name.replace("START 4FT - ", "").replace("START 4FT -", "") || apCode;
+                      // AP Name Label maps from the first matched active profile
+                      const sampleProfile = apProfiles.find((p) => p.code === apCode);
+                      const nameLabel = sampleProfile?.name.replace(/^START 4FT - /, "").replace(/^START 4FT -/, "").replace(/^GROW 8FT - /, "").replace(/^EXPAND 12FT - /, "") || apCode;
 
                       return (
                         <tr key={apCode} className="border-b border-zinc-100 dark:border-zinc-850 hover:bg-zinc-50/20 dark:hover:bg-zinc-950/20">
                           <td className="p-3 font-bold text-zinc-800 dark:text-zinc-200">
                             <div className="flex items-center gap-1.5">
                               <span>{apCode} · {nameLabel}</span>
-                              {/* AP info tooltip */}
+                              {/* AP info tooltip (dynamic) */}
                               <div className="relative group/ap-tooltip inline-block cursor-pointer align-middle">
                                 <span className="text-zinc-400 hover:text-zinc-650 dark:text-zinc-500 text-xs">ⓘ</span>
                                 <div className="absolute left-0 bottom-full mb-2 w-72 p-3 bg-zinc-950 text-white rounded-lg shadow-xl text-[10px] leading-relaxed transition-all duration-200 opacity-0 invisible group-hover/ap-tooltip:opacity-100 group-hover/ap-tooltip:visible z-50 font-normal normal-case">
                                   <p className="font-bold border-b border-zinc-800 pb-1 mb-1.5">AP 세부 설명 ({apCode})</p>
                                   <div className="space-y-1.5">
-                                    {startAP && (
-                                      <p><strong>START 4FT:</strong> {startAP.description || "설명 없음"}</p>
-                                    )}
-                                    {growAP && (
-                                      <p><strong>GROW 8FT:</strong> {growAP.description || "설명 없음"}</p>
-                                    )}
-                                    {expandAP && (
-                                      <p><strong>EXPAND 12FT:</strong> {expandAP.description || "설명 없음"}</p>
-                                    )}
+                                    {sortedProgs.map((p) => {
+                                      const apProfile = apProfiles.find((ap) => ap.display_program === p.code && ap.code === apCode);
+                                      return apProfile ? (
+                                        <p key={p.code}><strong>{p.name}:</strong> {apProfile.description || "설명 없음"}</p>
+                                      ) : null;
+                                    })}
                                   </div>
                                 </div>
                               </div>
                             </div>
                           </td>
-                          {["START_4FT", "GROW_8FT", "EXPAND_12FT"].map((prog) => {
-                            const matrixKey = `${prog}:${apCode}`;
+                          {sortedProgs.map((prog) => {
+                            const matrixKey = `${prog.code}:${apCode}`;
                             const val = ovMatrix[matrixKey] || "EXCLUDE";
                             return (
-                              <td key={prog} className="p-2 text-center">
+                              <td key={prog.code} className="p-2 text-center">
                                 <select
                                   value={val}
                                   onChange={(e) => {

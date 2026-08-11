@@ -279,7 +279,8 @@ export async function adminUpdateProductCuration(
   const upsertRows: any[] = [];
   const deleteApIds: number[] = [];
 
-  const programs = ["START_4FT", "GROW_8FT", "EXPAND_12FT"];
+  const { data: dbPrograms } = await supabase.from("display_programs").select("code");
+  const programs = dbPrograms?.map((p) => p.code) || ["START_4FT", "GROW_8FT", "EXPAND_12FT"];
   const apCodes = ["AP-01", "AP-02", "AP-03", "AP-04", "AP-05", "AP-06"];
 
   for (const prog of programs) {
@@ -386,7 +387,7 @@ export async function adminUpdateAPSettings(
 
 export async function adminUpdateDisplayProgram(
   code: string,
-  info: { name: string; description: string; is_active: boolean }
+  info: { name: string; description: string; min_sku: number; max_sku: number; is_active: boolean }
 ) {
   await verifyAdminSession();
   const supabase = createAdminClient();
@@ -396,6 +397,8 @@ export async function adminUpdateDisplayProgram(
     .update({
       name: info.name,
       description: info.description || null,
+      min_sku: info.min_sku,
+      max_sku: info.max_sku,
       is_active: info.is_active,
       updated_at: new Date().toISOString(),
     })
@@ -415,6 +418,57 @@ export async function adminUpdateDisplayProgram(
     if (apDeactivateError) {
       console.error("Failed to deactivate profiles for deactivated program:", apDeactivateError);
     }
+  }
+
+  revalidatePath(`/admin/products/curation`);
+  revalidatePath(`/admin/settings/curation`);
+  return { success: true };
+}
+
+export async function adminCreateDisplayProgram(info: {
+  code: string;
+  name: string;
+  description: string;
+  min_sku: number;
+  max_sku: number;
+  is_active: boolean;
+}) {
+  await verifyAdminSession();
+  const supabase = createAdminClient();
+
+  // 1. Insert into display_programs
+  const { error: insertError } = await supabase
+    .from("display_programs")
+    .insert({
+      code: info.code,
+      name: info.name,
+      description: info.description || null,
+      min_sku: info.min_sku,
+      max_sku: info.max_sku,
+      is_active: info.is_active,
+      updated_at: new Date().toISOString(),
+    });
+
+  if (insertError) {
+    throw new Error(`Display Program 생성 실패: ${insertError.message}`);
+  }
+
+  // 2. Automatically generate AP-01 ~ AP-06 default profiles for this program
+  const defaultProfiles = [
+    { display_program: info.code, code: "AP-01", name: `${info.name} - 기본 구성 01`, description: "표준형 Assortment 01", target_sku: 10, is_active: true },
+    { display_program: info.code, code: "AP-02", name: `${info.name} - 기본 구성 02`, description: "표준형 Assortment 02", target_sku: 10, is_active: true },
+    { display_program: info.code, code: "AP-03", name: `${info.name} - 기본 구성 03`, description: "표준형 Assortment 03", target_sku: 10, is_active: true },
+    { display_program: info.code, code: "AP-04", name: `${info.name} - 기본 구성 04`, description: "표준형 Assortment 04", target_sku: 10, is_active: true },
+    { display_program: info.code, code: "AP-05", name: `${info.name} - 기본 구성 05`, description: "표준형 Assortment 05", target_sku: 10, is_active: true },
+    { display_program: info.code, code: "AP-06", name: `${info.name} - 기본 구성 06`, description: "표준형 Assortment 06", target_sku: 10, is_active: true }
+  ];
+
+  const { error: apInsertError } = await supabase
+    .from("assortment_profiles")
+    .insert(defaultProfiles);
+
+  if (apInsertError) {
+    console.error("Failed to automatically generate default APs for new program:", apInsertError);
   }
 
   revalidatePath(`/admin/products/curation`);
