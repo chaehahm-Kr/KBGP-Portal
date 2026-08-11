@@ -698,9 +698,9 @@ export function ProductOverrideTabs({
       <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 flex flex-col sm:flex-row gap-6 items-start justify-between">
         <div className="space-y-2">
           <div className="flex flex-wrap gap-2 items-center text-xs text-zinc-500 dark:text-zinc-400 font-medium">
-            <span>브랜드: <strong className="text-zinc-700 dark:text-zinc-300 font-bold">{brandName}</strong></span>
+            <span>브랜드: <Link href={`/admin/brands?search=${encodeURIComponent(brandName)}`} className="text-zinc-700 dark:text-zinc-300 font-bold hover:underline hover:text-zinc-950 dark:hover:text-white transition-colors">{brandName}</Link></span>
             <span className="opacity-40">•</span>
-            <span>제조사: <strong className="text-zinc-700 dark:text-zinc-300 font-bold">{companyName}</strong></span>
+            <span>제조사: <Link href={`/admin/companies/${product.company_id}`} className="text-zinc-700 dark:text-zinc-300 font-bold hover:underline hover:text-zinc-950 dark:hover:text-white transition-colors">{companyName}</Link></span>
             <span className="opacity-40">•</span>
             <span>Letusto SKU: <strong className="text-indigo-650 dark:text-indigo-400 font-mono font-bold">{ovLetustoSku || product.letusto_sku || "지정 대기 중"}</strong></span>
           </div>

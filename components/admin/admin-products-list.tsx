@@ -27,6 +27,7 @@ interface AdminProductItem {
   sales_status: string;
   category_code?: string | null;
   category_full_path?: string | null;
+  completeness_rate?: number;
 }
 
 interface AdminProductsListProps {
@@ -439,7 +440,7 @@ export function AdminProductsList({ initialProducts }: AdminProductsListProps) {
                         >
                           {product.display_name}
                         </Link>
-                        {product.category_code && product.category_full_path ? (
+                        {product.category_code && product.completeness_rate === 100 && product.category_full_path ? (
                           <span className="text-[10px] font-semibold text-zinc-500 dark:text-zinc-400 block pt-0.5">
                             {product.category_full_path}
                           </span>
@@ -456,12 +457,22 @@ export function AdminProductsList({ initialProducts }: AdminProductsListProps) {
 
                     {/* Company Name */}
                     <td className="px-6 py-4 align-middle text-zinc-600 dark:text-zinc-355 font-medium whitespace-nowrap max-w-[120px] truncate">
-                      {product.companyName}
+                      <Link
+                        href={`/admin/companies/${product.company_id}`}
+                        className="hover:underline hover:text-zinc-950 dark:hover:text-white cursor-pointer transition-colors"
+                      >
+                        {product.companyName}
+                      </Link>
                     </td>
 
                     {/* Brand Name */}
                     <td className="px-6 py-4 align-middle text-zinc-600 dark:text-zinc-300 font-medium whitespace-nowrap max-w-[120px] truncate">
-                      {product.brandName}
+                      <Link
+                        href={`/admin/brands?search=${encodeURIComponent(product.brandName)}`}
+                        className="hover:underline hover:text-zinc-950 dark:hover:text-white cursor-pointer transition-colors"
+                      >
+                        {product.brandName}
+                      </Link>
                     </td>
 
 

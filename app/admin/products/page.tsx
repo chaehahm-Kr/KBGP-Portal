@@ -63,6 +63,72 @@ export default async function AdminProductsPage() {
     return path.join(" > ");
   };
 
+  // 4.1 Fetch attributes master data for completeness rate computation
+  const { data: dbAllAttrs } = await supabase
+    .from("attributes")
+    .select("code, scope, is_required")
+    .eq("is_active", true);
+  const commonAttrCodes = (dbAllAttrs ?? [])
+    .filter((a) => a.scope === "COMMON")
+    .map((a) => a.code);
+
+  // 4.2 Fetch category-profile mappings
+  const { data: dbCatProfileMaps } = await supabase
+    .from("category_profile_mappings")
+    .select("category_code, profile_code")
+    .eq("is_active", true);
+  const catToProfile = new Map((dbCatProfileMaps ?? []).map((m) => [m.category_code, m.profile_code]));
+
+  // 4.3 Fetch profile-attributes mappings
+  const { data: dbProfAttrs } = await supabase
+    .from("profile_attributes")
+    .select("profile_code, attribute_code, is_required_override")
+    .eq("is_active", true);
+
+  const profileToAttrs = new Map<string, string[]>();
+  (dbProfAttrs ?? []).forEach((pa) => {
+    const list = profileToAttrs.get(pa.profile_code) || [];
+    list.push(pa.attribute_code);
+    profileToAttrs.set(pa.profile_code, list);
+  });
+
+  // 4.4 Fetch all product attribute values
+  const { data: dbAllAttrValues } = await supabase
+    .from("product_attribute_values")
+    .select("product_id, attribute_code, value_json, text_value");
+
+  const valuesByProduct = new Map<string, Map<string, any>>();
+  (dbAllAttrValues ?? []).forEach((val) => {
+    const pMap = valuesByProduct.get(val.product_id) || new Map<string, any>();
+    pMap.set(val.attribute_code, val);
+    valuesByProduct.set(val.product_id, pMap);
+  });
+
+  const getProductCompleteness = (productId: string, categoryCode: string | null | undefined): number => {
+    if (!categoryCode) return 0;
+    const profileCode = catToProfile.get(categoryCode);
+    const targetAttrCodes = new Set<string>(commonAttrCodes);
+    if (profileCode) {
+      const pAttrs = profileToAttrs.get(profileCode) || [];
+      pAttrs.forEach((code) => targetAttrCodes.add(code));
+    }
+    if (targetAttrCodes.size === 0) return 100;
+    const pValues = valuesByProduct.get(productId) || new Map<string, any>();
+    let filled = 0;
+    targetAttrCodes.forEach((code) => {
+      const valObj = pValues.get(code);
+      if (valObj) {
+        const val = valObj.value_json;
+        if (Array.isArray(val)) {
+          if (val.length > 0) filled++;
+        } else if (val !== null && val !== undefined && String(val).trim() !== "") {
+          filled++;
+        }
+      }
+    });
+    return Math.round((filled / targetAttrCodes.size) * 100);
+  };
+
   // 5. Fetch first images (lowest position) for products to display thumbnail
   const { data: productImages } = await supabase
     .from("product_images")
@@ -99,9 +165,10 @@ export default async function AdminProductsPage() {
       const pkgWeight = adminOverrides.package_weight !== undefined ? parseFloat(adminOverrides.package_weight) : Number(p.package_weight || 0);
 
       // 누락 항목 분석 (상세 페이지의 ov 상태 반영된 Draft 판정과 완전히 동기화)
+      const completenessRate = getProductCompleteness(p.id, p.category_code);
       const missingFields: string[] = [];
       if (!effectiveBrandId) missingFields.push("브랜드");
-      if (!p.category_code && !effectiveCategory) missingFields.push("카테고리");
+      if (!p.category_code || completenessRate < 100) missingFields.push("카테고리");
       if (!(effectiveNameEn || "").trim()) missingFields.push("영문 제품명");
       if (!(effectiveManufactureSku || "").trim()) missingFields.push("제조사 SKU");
       if (!(effectiveOrigin || "").trim()) missingFields.push("원산지");
@@ -144,6 +211,7 @@ export default async function AdminProductsPage() {
         sales_status: p.sales_status || "PREPARING",
         category_code: p.category_code || null,
         category_full_path: p.category_code ? getCategoryFullPath(p.category_code) : null,
+        completeness_rate: completenessRate,
       };
     })
   );

@@ -56,7 +56,9 @@ interface CompanyDetailManagerProps {
   products: {
     id: string;
     name: string;
+    name_en?: string | null;
     brand_id: string;
+    price_additional_info?: any;
   }[];
   applications: {
     id: string;
@@ -891,14 +893,23 @@ export function CompanyDetailManager({
               {activeTab === "products" && (
                 <div className="space-y-2">
                   {products.length > 0 ? (
-                    products.map((prod) => (
-                      <div key={prod.id} className="flex justify-between border-b border-zinc-50 pb-1.5 last:border-0 dark:border-zinc-800/50">
-                        <span className="font-semibold text-zinc-850 dark:text-zinc-200">{prod.name}</span>
-                        <span className="text-[10px] text-zinc-450 font-medium">
-                          브랜드: {brandNameById.get(prod.brand_id) || "알 수 없음"}
-                        </span>
-                      </div>
-                    ))
+                    products.map((prod) => {
+                      const overrides = (prod.price_additional_info as any)?.admin_overrides || {};
+                      const prodDisplayName = overrides.name_en || prod.name_en || overrides.name || prod.name;
+                      return (
+                        <div key={prod.id} className="flex justify-between items-center border-b border-zinc-50 pb-1.5 last:border-0 dark:border-zinc-800/50">
+                          <Link
+                            href={`/admin/products/${prod.id}`}
+                            className="font-semibold text-zinc-850 hover:underline hover:text-zinc-950 dark:text-zinc-200 dark:hover:text-white transition-colors"
+                          >
+                            {prodDisplayName}
+                          </Link>
+                          <span className="text-[10px] text-zinc-450 font-medium">
+                            브랜드: {brandNameById.get(prod.brand_id) || "알 수 없음"}
+                          </span>
+                        </div>
+                      );
+                    })
                   ) : (
                     <p className="text-zinc-400 italic">등록된 제품이 없습니다.</p>
                   )}

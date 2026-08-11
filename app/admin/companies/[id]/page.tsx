@@ -83,7 +83,7 @@ export default async function AdminCompanyDetailPage({
 
     const { data: products } = await supabase
       .from("products")
-      .select("id, name, brand_id")
+      .select("id, name, name_en, brand_id, price_additional_info")
       .eq("company_id", id);
 
     const { data: applications } = await supabase
