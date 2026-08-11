@@ -534,7 +534,7 @@ export function APDetailClient({
           <div className="space-y-4">
             <h4 className="text-[11px] font-bold text-zinc-500 uppercase tracking-wider">Main Category (1Depth)</h4>
             <div className="space-y-3 max-h-[280px] overflow-y-auto pr-1">
-              {categoryMix.map((item) => (
+              {categoryMix.map((item, idx) => (
                 <div
                   key={item.name}
                   onClick={() => setChartFilter({ type: "category", value: item.name, label: `대분류: ${item.name}` })}
@@ -746,7 +746,7 @@ export function APDetailClient({
           <div className="space-y-4">
             <h4 className="text-[11px] font-bold text-zinc-500 uppercase tracking-wider">Curation Role Mix</h4>
             <div className="space-y-3 max-h-[160px] overflow-y-auto pr-1">
-              {roleMix.map((item) => (
+              {roleMix.map((item, idx) => (
                 <div
                   key={item.name}
                   onClick={() => setChartFilter({ type: "role", value: item.name, label: `Curation Role: ${item.name}` })}
