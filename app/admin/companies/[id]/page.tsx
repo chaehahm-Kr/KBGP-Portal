@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { verifyAdminSession } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { parseBrandTrademarks } from "@/lib/brand/actions";
 import { getSignedFileUrl } from "@/lib/files/storage";
 import { parseCompanyMetadata } from "@/lib/company/admin-actions";
@@ -81,10 +82,140 @@ export default async function AdminCompanyDetailPage({
       })
     );
 
-    const { data: products } = await supabase
+    const admin = createAdminClient();
+
+    // 4.1 Fetch attributes master data for completeness rate computation (Use admin client to bypass RLS)
+    const { data: dbAllAttrs } = await admin
+      .from("attributes")
+      .select("code, scope, is_required")
+      .eq("is_active", true);
+    const commonAttrCodes = (dbAllAttrs ?? [])
+      .filter((a) => a.scope === "COMMON")
+      .map((a) => a.code);
+
+    // 4.2 Fetch category-profile mappings
+    const { data: dbCatProfileMaps } = await admin
+      .from("category_profile_mappings")
+      .select("category_code, profile_code")
+      .eq("is_active", true);
+    const catToProfile = new Map((dbCatProfileMaps ?? []).map((m) => [m.category_code, m.profile_code]));
+
+    // 4.3 Fetch profile-attributes mappings
+    const { data: dbProfAttrs } = await admin
+      .from("profile_attributes")
+      .select("profile_code, attribute_code, is_required_override")
+      .eq("is_active", true);
+
+    const profileToAttrs = new Map<string, string[]>();
+    (dbProfAttrs ?? []).forEach((pa) => {
+      const list = profileToAttrs.get(pa.profile_code) || [];
+      list.push(pa.attribute_code);
+      profileToAttrs.set(pa.profile_code, list);
+    });
+
+    // 4.4 Fetch all product attribute values
+    const { data: dbAllAttrValues } = await admin
+      .from("product_attribute_values")
+      .select("product_id, attribute_code, value_json, text_value");
+
+    const valuesByProduct = new Map<string, Map<string, any>>();
+    (dbAllAttrValues ?? []).forEach((val) => {
+      const pMap = valuesByProduct.get(val.product_id) || new Map<string, any>();
+      pMap.set(val.attribute_code, val);
+      valuesByProduct.set(val.product_id, pMap);
+    });
+
+    // 4.5 Fetch product images product_id set to evaluate images upload status for draft qualification
+    const { data: dbProductImages } = await admin
+      .from("product_images")
+      .select("product_id");
+    const productImagesForDraft = new Set((dbProductImages ?? []).map((img) => img.product_id));
+
+    const getProductCompleteness = (productId: string, categoryCode: string | null | undefined): number => {
+      if (!categoryCode) return 0;
+      const profileCode = catToProfile.get(categoryCode);
+      const targetAttrCodes = new Set<string>(commonAttrCodes);
+      if (profileCode) {
+        const pAttrs = profileToAttrs.get(profileCode) || [];
+        pAttrs.forEach((code) => targetAttrCodes.add(code));
+      }
+      if (targetAttrCodes.size === 0) return 100;
+      const pValues = valuesByProduct.get(productId) || new Map<string, any>();
+      let filled = 0;
+      targetAttrCodes.forEach((code) => {
+        const valObj = pValues.get(code);
+        if (valObj) {
+          const val = valObj.value_json;
+          if (Array.isArray(val)) {
+            if (val.length > 0) filled++;
+          } else if (val !== null && val !== undefined && String(val).trim() !== "") {
+            filled++;
+          }
+        }
+      });
+      return Math.round((filled / targetAttrCodes.size) * 100);
+    };
+
+    const { data: rawProducts } = await supabase
       .from("products")
-      .select("id, name, name_en, brand_id, price_additional_info")
+      .select("id, name, name_en, category, category_code, brand_id, company_id, manufacture_sku, letusto_sku, parent_sku, child_sku, price_krw_retail, price_usd_fob, package_width, package_depth, package_height, package_weight, price_additional_info, origin, upc, ean, selection_status, sales_status")
       .eq("company_id", id);
+
+    const resolvedProducts = (rawProducts ?? []).map((p) => {
+      const adminOverrides = (p.price_additional_info as any)?.admin_overrides || {};
+      const effectiveBrandId = p.brand_id;
+      const effectiveCategory = adminOverrides.category !== undefined && adminOverrides.category !== "" ? adminOverrides.category : p.category;
+      const effectiveNameEn = adminOverrides.name_en !== undefined && adminOverrides.name_en !== "" ? adminOverrides.name_en : p.name_en;
+      const effectiveManufactureSku = adminOverrides.manufacture_sku !== undefined && adminOverrides.manufacture_sku !== "" ? adminOverrides.manufacture_sku : p.manufacture_sku;
+      const effectiveOrigin = adminOverrides.origin !== undefined && adminOverrides.origin !== "" ? adminOverrides.origin : p.origin;
+      const effectivePriceKrwRetail = adminOverrides.price_krw_retail !== undefined ? parseFloat(adminOverrides.price_krw_retail) : (p.price_krw_retail || 0);
+      const effectivePriceUsdFob = adminOverrides.price_usd_fob !== undefined ? parseFloat(adminOverrides.price_usd_fob) : (p.price_usd_fob || 0);
+      const effectiveUpc = adminOverrides.upc !== undefined && adminOverrides.upc !== "" ? adminOverrides.upc : p.upc;
+      const effectiveEan = adminOverrides.ean !== undefined && adminOverrides.ean !== "" ? adminOverrides.ean : p.ean;
+
+      const pkgWidth = adminOverrides.package_width !== undefined ? parseFloat(adminOverrides.package_width) : Number(p.package_width || 0);
+      const pkgDepth = adminOverrides.package_depth !== undefined ? parseFloat(adminOverrides.package_depth) : Number(p.package_depth || 0);
+      const pkgHeight = adminOverrides.package_height !== undefined ? parseFloat(adminOverrides.package_height) : Number(p.package_height || 0);
+      const pkgWeight = adminOverrides.package_weight !== undefined ? parseFloat(adminOverrides.package_weight) : Number(p.package_weight || 0);
+
+      const completenessRate = getProductCompleteness(p.id, p.category_code);
+      const missingFields: string[] = [];
+      if (!effectiveBrandId) missingFields.push("브랜드");
+      if (!p.category_code || completenessRate < 100) missingFields.push("카테고리");
+      if (!(effectiveNameEn || "").trim()) missingFields.push("영문 제품명");
+      if (!(effectiveManufactureSku || "").trim()) missingFields.push("제조사 SKU");
+      if (!(effectiveOrigin || "").trim()) missingFields.push("원산지");
+      if (Number(effectivePriceKrwRetail) <= 0) missingFields.push("소비자 판매가");
+      if (Number(effectivePriceUsdFob) <= 0) missingFields.push("FOB 수출 가격");
+      
+      if (pkgWidth <= 0 || pkgDepth <= 0 || pkgHeight <= 0 || pkgWeight <= 0) {
+        missingFields.push("패키지 배송 규격");
+      }
+      if (!(effectiveUpc || "").trim() && !(effectiveEan || "").trim()) {
+        missingFields.push("식별 바코드(UPC 또는 EAN)");
+      }
+      
+      const hasImages = productImagesForDraft.has(p.id);
+      if (!hasImages) {
+        missingFields.push("대표 이미지");
+      }
+
+      const isDraft = missingFields.length > 0;
+
+      return {
+        id: p.id,
+        name: p.name,
+        name_en: p.name_en,
+        brand_id: p.brand_id,
+        price_additional_info: p.price_additional_info,
+        manufacture_sku: p.manufacture_sku,
+        display_manufacture_sku: effectiveManufactureSku,
+        letusto_sku: adminOverrides.letusto_sku !== undefined ? adminOverrides.letusto_sku : p.letusto_sku,
+        is_draft: isDraft,
+        selection_status: p.selection_status || "UNREVIEWED",
+        sales_status: p.sales_status || "PREPARING",
+      };
+    });
 
     const { data: applications } = await supabase
       .from("applications")
@@ -130,7 +261,7 @@ export default async function AdminCompanyDetailPage({
         parsedMeta={parsedMeta}
         companyUsers={hydratedUsers}
         brands={resolvedBrands}
-        products={products ?? []}
+        products={resolvedProducts}
         applications={applications ?? []}
         brandNameById={brandNameById}
         typeOptions={configs.company_types}

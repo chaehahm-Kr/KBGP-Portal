@@ -59,6 +59,12 @@ interface CompanyDetailManagerProps {
     name_en?: string | null;
     brand_id: string;
     price_additional_info?: any;
+    manufacture_sku?: string | null;
+    display_manufacture_sku?: string | null;
+    letusto_sku?: string | null;
+    is_draft: boolean;
+    selection_status: string;
+    sales_status: string;
   }[];
   applications: {
     id: string;
@@ -84,7 +90,7 @@ export function CompanyDetailManager({
   statusOptions,
   taskAssignments,
 }: CompanyDetailManagerProps) {
-  const [activeTab, setActiveTab] = useState<"brands" | "products" | "applications">("brands");
+  const [activeTab, setActiveTab] = useState<"staff" | "tasks" | "brands" | "products" | "applications">("staff");
   const [isPending, startTransition] = useTransition();
 
   // Company general metadata states
@@ -639,7 +645,7 @@ export function CompanyDetailManager({
                       href={website.startsWith("http") ? website : `https://${website}`}
                       target="_blank"
                       rel="noreferrer"
-                      className="font-semibold text-emerald-600 dark:text-emerald-450 hover:underline mt-0.5 inline-block"
+                      className="font-semibold text-emerald-650 hover:underline dark:text-emerald-450 mt-0.5 inline-block"
                     >
                       {website}
                     </a>
@@ -650,7 +656,7 @@ export function CompanyDetailManager({
               </div>
 
               <div className="pt-3 border-t border-zinc-100 dark:border-zinc-800">
-                <span className="text-[10px] font-bold text-zinc-450 dark:text-zinc-550 uppercase block">관리자 메모</span>
+                <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-550 uppercase block">관리자 메모</span>
                 {isEditingMeta ? (
                   <textarea
                     value={tempAdminMemo}
@@ -669,182 +675,14 @@ export function CompanyDetailManager({
           </div>
         </div>
 
-        {/* Right Column: User Management, Brands & Products tabs */}
+        {/* Right Column: Integrated Tabs Container */}
         <div className="md:col-span-2 space-y-6">
           
-          {/* User list */}
-          <div className="rounded-lg border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-            <div className="flex items-center justify-between mb-4 pb-2 border-b border-zinc-100 dark:border-zinc-800">
-              <h3 className="text-xs font-bold text-zinc-950 dark:text-white">담당자 및 포털 사용자 ({users.length})</h3>
-              <button
-                onClick={() => setIsAddUserOpen(true)}
-                className="rounded bg-zinc-900 px-2 py-1 text-[10px] font-bold text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-100"
-              >
-                + 신규 담당자 초대
-              </button>
-            </div>
-
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse text-xs">
-                <thead>
-                  <tr className="border-b border-zinc-200 bg-zinc-50/50 text-[10px] font-bold text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900/50">
-                    <th className="px-4 py-2">이름</th>
-                    <th className="px-4 py-2">이메일/연락처</th>
-                    <th className="px-4 py-2">직함/부서</th>
-                    <th className="px-4 py-2">역할</th>
-                    <th className="px-4 py-2">상태</th>
-                    <th className="px-4 py-2 text-right">설정</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800/60">
-                  {users.map((row) => (
-                    <tr key={row.id} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-850/10">
-                      <td className="px-4 py-3 font-semibold text-zinc-900 dark:text-white">
-                        <div className="flex items-center gap-1.5">
-                          {row.name || "(이름 없음)"}
-                          {row.is_primary && (
-                            <span className="rounded bg-emerald-50 text-emerald-700 px-1.5 py-0.5 text-[8px] font-bold border border-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-900">
-                              주 컨택
-                            </span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <p className="font-mono text-[11px] text-zinc-600 dark:text-zinc-350">{row.email}</p>
-                        {row.phone && <p className="text-[10px] text-zinc-400">📞 {row.phone}</p>}
-                      </td>
-                      <td className="px-4 py-3">
-                        {row.title || row.position ? (
-                          <>
-                            {row.title && <span className="font-medium text-zinc-800 dark:text-zinc-200">{row.title}</span>}
-                            {row.position && <span className="text-[10px] text-zinc-400 block">{row.position}</span>}
-                          </>
-                        ) : (
-                          <span className="text-[10px] text-zinc-400 italic">등록 없음</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className="rounded bg-zinc-100 px-2 py-0.5 text-[10px] border border-zinc-200 text-zinc-700 dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-300">
-                          {ROLE_LABEL[row.company_role]}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className={`inline-block rounded px-2 py-0.5 text-[10px] font-bold border ${
-                          row.status === "active"
-                            ? "bg-emerald-50 text-emerald-700 border-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-300"
-                            : row.status === "invited"
-                            ? "bg-amber-50 text-amber-700 border-amber-100 dark:bg-amber-950/40 dark:text-amber-300"
-                            : "bg-rose-50 text-rose-700 border-rose-100 dark:bg-rose-950/40 dark:text-rose-300"
-                        }`}>
-                          {STATUS_LABEL[row.status] || row.status}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        <button
-                          onClick={() => handleOpenEdit(row)}
-                          className="font-bold text-indigo-650 hover:underline dark:text-indigo-400"
-                        >
-                          상세 및 권한
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          {/* [신규 기능]: 담당 업무 및 주 담당자 관리 테이블 카드 */}
-          <div className="rounded-lg border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-            <div className="flex items-center justify-between mb-4 pb-2 border-b border-zinc-100 dark:border-zinc-800">
-              <h3 className="text-xs font-bold text-zinc-950 dark:text-white uppercase tracking-wider">담당 업무 및 주 담당자</h3>
-            </div>
-
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse text-xs">
-                <thead>
-                  <tr className="border-b border-zinc-200 bg-zinc-50/50 text-[10px] font-bold text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900/50">
-                    <th className="px-4 py-3">업무명</th>
-                    <th className="px-4 py-3">주 담당자 정보</th>
-                    <th className="px-4 py-3">알림 수신인</th>
-                    <th className="px-4 py-3 text-center w-28">지정 상태</th>
-                    <th className="px-4 py-3 text-right">담당자 직접 변경</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800/60">
-                  {tasks.map((task) => {
-                    const notifyNames = getEmailRecipientsForTask(task.taskCode);
-                    const matchingUser = users.find(u => u.id === task.userId);
-                    return (
-                      <tr key={task.taskCode} className="hover:bg-zinc-50/20">
-                        <td className="px-4 py-3.5">
-                          <span className="font-bold text-zinc-850 dark:text-zinc-200 block">{task.label}</span>
-                          <span className="text-[9px] text-zinc-400 block mt-0.5 leading-relaxed max-w-xs">{task.desc}</span>
-                        </td>
-                        <td className="px-4 py-3.5 text-zinc-700 dark:text-zinc-350">
-                          {task.userId ? (
-                            <div className="space-y-0.5">
-                              {/* 담당자 이름을 클릭하면 해당 사용자의 권한 수정 모달 오픈 */}
-                              <button
-                                onClick={() => matchingUser && handleOpenEdit(matchingUser)}
-                                className="font-semibold text-emerald-600 hover:underline dark:text-emerald-450 text-[13px] text-left cursor-pointer"
-                              >
-                                {task.userName}
-                              </button>
-                              {task.userTitle || task.userPosition ? (
-                                <p className="text-[10px] text-zinc-400">
-                                  {task.userTitle || ""}{task.userTitle && task.userPosition ? " / " : ""}{task.userPosition || ""}
-                                </p>
-                              ) : null}
-                              <p className="text-[9px] text-zinc-455 font-mono">{task.userEmail}</p>
-                              {task.userPhone && <p className="text-[9px] text-zinc-400">📞 {task.userPhone}</p>}
-                            </div>
-                          ) : (
-                            <span className="text-zinc-450 italic">주 담당자 미지정</span>
-                          )}
-                        </td>
-                        <td className="px-4 py-3.5 text-zinc-500 dark:text-zinc-400 max-w-xxs truncate" title={notifyNames}>
-                          {notifyNames}
-                        </td>
-                        <td className="px-4 py-3.5 text-center">
-                          {task.userId ? (
-                            <span className="inline-block rounded bg-emerald-50 text-emerald-700 px-2 py-0.5 text-[10px] font-bold border border-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-300">
-                              설정 완료
-                            </span>
-                          ) : (
-                            <span className="inline-block rounded bg-rose-50 text-rose-700 px-2 py-0.5 text-[10px] font-bold border border-rose-100 dark:bg-rose-950/40 dark:text-rose-300">
-                              미지정
-                            </span>
-                          )}
-                        </td>
-                        <td className="px-4 py-3.5 text-right">
-                          <select
-                            value={task.userId || ""}
-                            onChange={(e) => handleAssignPrimaryUser(task.taskCode, e.target.value || null)}
-                            disabled={isPending}
-                            className="rounded border border-zinc-200 bg-white p-1 text-[11px] text-zinc-800 outline-none dark:border-zinc-800 dark:bg-zinc-950 dark:text-white max-w-xs focus:ring-1 focus:ring-indigo-500 cursor-pointer"
-                          >
-                            <option value="">-- 담당자 선택 --</option>
-                            {activeMembers.map(u => (
-                              <option key={u.id} value={u.id}>
-                                {u.name || "(이름 없음)"} ({u.title || "멤버"})
-                              </option>
-                            ))}
-                          </select>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          {/* Brands, Products, Applications Tabs */}
           <div className="rounded-lg border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900 overflow-hidden">
+            {/* Tab Navigation Headers */}
             <div className="border-b border-zinc-100 bg-zinc-50/50 px-5 py-3 dark:border-zinc-800 dark:bg-zinc-950/20">
-              <nav className="flex gap-4 text-xs font-bold text-zinc-400">
-                {(["brands", "products", "applications"] as const).map((tab) => (
+              <nav className="flex flex-wrap gap-4 text-xs font-bold text-zinc-400">
+                {(["staff", "tasks", "brands", "products", "applications"] as const).map((tab) => (
                   <button
                     key={tab}
                     onClick={() => setActiveTab(tab)}
@@ -854,68 +692,377 @@ export function CompanyDetailManager({
                         : "border-transparent hover:text-zinc-600"
                     }`}
                   >
-                    {tab === "brands" ? "보유 브랜드" : tab === "products" ? "등록 제품" : "입점 신청서"}
+                    {tab === "staff"
+                      ? `담당자 & 포털 사용자 (${users.length})`
+                      : tab === "tasks"
+                      ? "담당 업무 지정"
+                      : tab === "brands"
+                      ? "보유 브랜드"
+                      : tab === "products"
+                      ? "등록 제품"
+                      : "입점 신청서"}
                   </button>
                 ))}
               </nav>
             </div>
 
             <div className="p-5 text-xs">
+              
+              {/* 1. Staff Tab */}
+              {activeTab === "staff" && (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between pb-2 border-b border-zinc-100 dark:border-zinc-800">
+                    <h3 className="text-xs font-bold text-zinc-950 dark:text-white">담당자 및 포털 사용자 ({users.length})</h3>
+                    <button
+                      onClick={() => setIsAddUserOpen(true)}
+                      className="rounded bg-zinc-900 px-2 py-1 text-[10px] font-bold text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-100"
+                    >
+                      + 신규 담당자 초대
+                    </button>
+                  </div>
+
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse text-xs">
+                      <thead>
+                        <tr className="border-b border-zinc-200 bg-zinc-50/50 text-[10px] font-bold text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900/50">
+                          <th className="px-4 py-2">이름</th>
+                          <th className="px-4 py-2">이메일/연락처</th>
+                          <th className="px-4 py-2">직함/부서</th>
+                          <th className="px-4 py-2">역할</th>
+                          <th className="px-4 py-2">상태</th>
+                          <th className="px-4 py-2 text-right">설정</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800/60">
+                        {users.map((row) => (
+                          <tr key={row.id} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-850/10">
+                            <td className="px-4 py-3 font-semibold text-zinc-900 dark:text-white">
+                              <div className="flex items-center gap-1.5">
+                                {row.name || "(이름 없음)"}
+                                {row.is_primary && (
+                                  <span className="rounded bg-emerald-50 text-emerald-700 px-1.5 py-0.5 text-[8px] font-bold border border-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-900">
+                                    주 컨택
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="px-4 py-3">
+                              <p className="font-mono text-[11px] text-zinc-600 dark:text-zinc-350">{row.email}</p>
+                              {row.phone && <p className="text-[10px] text-zinc-400">📞 {row.phone}</p>}
+                            </td>
+                            <td className="px-4 py-3">
+                              {row.title || row.position ? (
+                                <>
+                                  {row.title && <span className="font-medium text-zinc-800 dark:text-zinc-200">{row.title}</span>}
+                                  {row.position && <span className="text-[10px] text-zinc-400 block">{row.position}</span>}
+                                </>
+                              ) : (
+                                <span className="text-[10px] text-zinc-400 italic">등록 없음</span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3">
+                              <span className="rounded bg-zinc-100 px-2 py-0.5 text-[10px] border border-zinc-200 text-zinc-700 dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-300">
+                                {ROLE_LABEL[row.company_role]}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3">
+                              <span className={`inline-block rounded px-2 py-0.5 text-[10px] font-bold border ${
+                                row.status === "active"
+                                  ? "bg-emerald-50 text-emerald-700 border-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-300"
+                                  : row.status === "invited"
+                                  ? "bg-amber-50 text-amber-700 border-amber-100 dark:bg-amber-950/40 dark:text-amber-300"
+                                  : "bg-rose-50 text-rose-700 border-rose-100 dark:bg-rose-950/40 dark:text-rose-300"
+                              }`}>
+                                {STATUS_LABEL[row.status] || row.status}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 text-right">
+                              <button
+                                onClick={() => handleOpenEdit(row)}
+                                className="font-bold text-indigo-650 hover:underline dark:text-indigo-400"
+                              >
+                                상세 및 권한
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* 2. Tasks Tab */}
+              {activeTab === "tasks" && (
+                <div className="space-y-4">
+                  <div className="pb-2 border-b border-zinc-100 dark:border-zinc-800">
+                    <h3 className="text-xs font-bold text-zinc-950 dark:text-white uppercase tracking-wider">담당 업무 및 주 담당자</h3>
+                  </div>
+
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse text-xs">
+                      <thead>
+                        <tr className="border-b border-zinc-200 bg-zinc-50/50 text-[10px] font-bold text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900/50">
+                          <th className="px-4 py-3">업무명</th>
+                          <th className="px-4 py-3">주 담당자 정보</th>
+                          <th className="px-4 py-3">알림 수신인</th>
+                          <th className="px-4 py-3 text-center w-28">지정 상태</th>
+                          <th className="px-4 py-3 text-right">담당자 직접 변경</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800/60">
+                        {tasks.map((task) => {
+                          const notifyNames = getEmailRecipientsForTask(task.taskCode);
+                          const matchingUser = users.find(u => u.id === task.userId);
+                          return (
+                            <tr key={task.taskCode} className="hover:bg-zinc-50/20">
+                              <td className="px-4 py-3.5">
+                                <span className="font-bold text-zinc-850 dark:text-zinc-200 block">{task.label}</span>
+                                <span className="text-[9px] text-zinc-400 block mt-0.5 leading-relaxed max-w-xs">{task.desc}</span>
+                              </td>
+                              <td className="px-4 py-3.5 text-zinc-700 dark:text-zinc-350">
+                                {task.userId ? (
+                                  <div className="space-y-0.5">
+                                    <button
+                                      onClick={() => matchingUser && handleOpenEdit(matchingUser)}
+                                      className="font-semibold text-emerald-600 hover:underline dark:text-emerald-450 text-[13px] text-left cursor-pointer"
+                                    >
+                                      {task.userName}
+                                    </button>
+                                    {task.userTitle || task.userPosition ? (
+                                      <p className="text-[10px] text-zinc-400">
+                                        {task.userTitle || ""}{task.userTitle && task.userPosition ? " / " : ""}{task.userPosition || ""}
+                                      </p>
+                                    ) : null}
+                                    <p className="text-[9px] text-zinc-455 font-mono">{task.userEmail}</p>
+                                    {task.userPhone && <p className="text-[9px] text-zinc-400">📞 {task.userPhone}</p>}
+                                  </div>
+                                ) : (
+                                  <span className="text-zinc-455 italic">주 담당자 미지정</span>
+                                )}
+                              </td>
+                              <td className="px-4 py-3.5 text-zinc-500 dark:text-zinc-400 max-w-xxs truncate" title={notifyNames}>
+                                {notifyNames}
+                              </td>
+                              <td className="px-4 py-3.5 text-center">
+                                {task.userId ? (
+                                  <span className="inline-block rounded bg-emerald-50 text-emerald-700 px-2 py-0.5 text-[10px] font-bold border border-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-300">
+                                    설정 완료
+                                  </span>
+                                ) : (
+                                  <span className="inline-block rounded bg-rose-50 text-rose-700 px-2 py-0.5 text-[10px] font-bold border border-rose-100 dark:bg-rose-950/40 dark:text-rose-300">
+                                    미지정
+                                  </span>
+                                )}
+                              </td>
+                              <td className="px-4 py-3.5 text-right">
+                                <select
+                                  value={task.userId || ""}
+                                  onChange={(e) => handleAssignPrimaryUser(task.taskCode, e.target.value || null)}
+                                  disabled={isPending}
+                                  className="rounded border border-zinc-200 bg-white p-1 text-[11px] text-zinc-800 outline-none dark:border-zinc-800 dark:bg-zinc-950 dark:text-white max-w-xs focus:ring-1 focus:ring-indigo-500 cursor-pointer"
+                                >
+                                  <option value="">-- 담당자 선택 --</option>
+                                  {activeMembers.map(u => (
+                                    <option key={u.id} value={u.id}>
+                                      {u.name || "(이름 없음)"} ({u.title || "멤버"})
+                                    </option>
+                                  ))}
+                                </select>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* 3. Brands Tab */}
               {activeTab === "brands" && (
-                <div className="space-y-3">
+                <div className="grid grid-cols-1 gap-4">
                   {brands.length > 0 ? (
                     brands.map((brand) => (
-                      <div key={brand.id} className="flex items-center justify-between border-b border-zinc-50 pb-2 last:border-0 dark:border-zinc-800/50">
-                        <div>
-                          <p className="font-bold text-zinc-850 dark:text-zinc-200">{brand.name}</p>
-                          <p className="text-[10px] text-zinc-400 mt-0.5">{brand.introText || "브랜드 소개글이 없습니다."}</p>
+                      <div key={brand.id} className="rounded-lg border border-zinc-150 p-4 bg-zinc-50/30 dark:border-zinc-855 dark:bg-zinc-900/40 space-y-4">
+                        <div className="flex items-center justify-between border-b border-zinc-100 pb-2 dark:border-zinc-800">
+                          <div>
+                            <h4 className="text-sm font-bold text-zinc-900 dark:text-white">{brand.name}</h4>
+                            <p className="text-[10px] text-zinc-400 mt-1">{brand.introText || "브랜드 소개글이 등록되지 않았습니다."}</p>
+                          </div>
+                          {brand.logoUrl ? (
+                            <img src={brand.logoUrl} alt={brand.name} className="h-8 w-8 rounded border border-zinc-200 object-cover dark:border-zinc-800" />
+                          ) : (
+                            <div className="h-8 w-8 rounded border border-zinc-200 bg-zinc-100 flex items-center justify-center text-[8px] font-bold text-zinc-400 dark:border-zinc-800 dark:bg-zinc-850">LOGO</div>
+                          )}
                         </div>
-                        <div className="flex gap-1.5">
-                          {brand.hasKr && (
-                            <span className="rounded bg-zinc-100 border border-zinc-200 px-1.5 py-0.5 text-[9px] dark:bg-zinc-800 dark:border-zinc-700">
-                              KR 상표
-                            </span>
-                          )}
-                          {brand.hasUs && (
-                            <span className="rounded bg-zinc-100 border border-zinc-200 px-1.5 py-0.5 text-[9px] dark:bg-zinc-800 dark:border-zinc-700">
-                              US 상표
-                            </span>
-                          )}
+
+                        {/* 상표권 정보 */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-[11px]">
+                          {/* 대한민국 상표권 */}
+                          <div className="space-y-2 border-r border-zinc-100 pr-2 last:border-0 dark:border-zinc-800">
+                            <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-550 block">대한민국 상표권</span>
+                            {brand.hasKr ? (
+                              <div className="space-y-1">
+                                <p className="font-semibold text-zinc-850 dark:text-zinc-250">
+                                  상태: <span className="text-emerald-600 dark:text-emerald-450 font-bold">보유</span>
+                                </p>
+                                <p className="text-zinc-655 dark:text-zinc-400">
+                                  등록번호: <span className="font-mono font-semibold">{brand.krNum || "(미등록)"}</span>
+                                </p>
+                                {brand.krUrl && (
+                                  <a
+                                    href={brand.krUrl}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="inline-flex items-center text-[10px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline gap-1 mt-1 cursor-pointer"
+                                  >
+                                    📁 상표권 인증서 다운로드 ↗
+                                  </a>
+                                )}
+                              </div>
+                            ) : (
+                              <p className="text-zinc-400 italic">미보유</p>
+                            )}
+                          </div>
+
+                          {/* 미국 USPTO 상표권 */}
+                          <div className="space-y-2">
+                            <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-550 block">미국 USPTO 상표권</span>
+                            {brand.hasUs ? (
+                              <div className="space-y-1">
+                                <p className="font-semibold text-zinc-850 dark:text-zinc-250">
+                                  상태: <span className="text-emerald-600 dark:text-emerald-450 font-bold">보유</span>
+                                </p>
+                                <p className="text-zinc-655 dark:text-zinc-400">
+                                  등록번호: <span className="font-mono font-semibold">{brand.usNum || "(미등록)"}</span>
+                                </p>
+                                {brand.usUrl && (
+                                  <a
+                                    href={brand.usUrl}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="inline-flex items-center text-[10px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline gap-1 mt-1 cursor-pointer"
+                                  >
+                                    📁 USPTO 인증서 다운로드 ↗
+                                  </a>
+                                )}
+                              </div>
+                            ) : (
+                              <p className="text-zinc-400 italic">미보유</p>
+                            )}
+                          </div>
                         </div>
                       </div>
                     ))
                   ) : (
-                    <p className="text-zinc-400 italic">보유한 브랜드가 없습니다.</p>
+                    <p className="text-zinc-400 italic py-4 text-center">보유한 브랜드가 존재하지 않습니다.</p>
                   )}
                 </div>
               )}
 
+              {/* 4. Products Tab */}
               {activeTab === "products" && (
-                <div className="space-y-2">
-                  {products.length > 0 ? (
-                    products.map((prod) => {
-                      const overrides = (prod.price_additional_info as any)?.admin_overrides || {};
-                      const prodDisplayName = overrides.name_en || prod.name_en || overrides.name || prod.name;
-                      return (
-                        <div key={prod.id} className="flex justify-between items-center border-b border-zinc-50 pb-1.5 last:border-0 dark:border-zinc-800/50">
-                          <Link
-                            href={`/admin/products/${prod.id}`}
-                            className="font-semibold text-zinc-850 hover:underline hover:text-zinc-950 dark:text-zinc-200 dark:hover:text-white transition-colors"
-                          >
-                            {prodDisplayName}
-                          </Link>
-                          <span className="text-[10px] text-zinc-450 font-medium">
-                            브랜드: {brandNameById.get(prod.brand_id) || "알 수 없음"}
-                          </span>
-                        </div>
-                      );
-                    })
-                  ) : (
-                    <p className="text-zinc-400 italic">등록된 제품이 없습니다.</p>
-                  )}
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="border-b border-zinc-200 bg-zinc-50/50 text-[10px] font-bold text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900/50">
+                        <th className="px-4 py-2.5">업체 SKU</th>
+                        <th className="px-4 py-2.5">Letusto SKU</th>
+                        <th className="px-4 py-2.5">제품명</th>
+                        <th className="px-4 py-2.5">브랜드</th>
+                        <th className="px-4 py-2.5">등록 상태</th>
+                        <th className="px-4 py-2.5">선정 상태</th>
+                        <th className="px-4 py-2.5">판매 상태</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800/60">
+                      {products.length > 0 ? (
+                        products.map((prod) => {
+                          const overrides = (prod.price_additional_info as any)?.admin_overrides || {};
+                          const prodDisplayName = overrides.name_en || prod.name_en || overrides.name || prod.name;
+                          return (
+                            <tr key={prod.id} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-850/10">
+                              <td className="px-4 py-3 font-mono text-[11px] text-zinc-650 dark:text-zinc-350">
+                                {prod.display_manufacture_sku || prod.manufacture_sku || <span className="text-zinc-400 italic">미입력</span>}
+                              </td>
+                              <td className="px-4 py-3 font-mono text-[11px] text-zinc-655 dark:text-zinc-350">
+                                {prod.letusto_sku || <span className="text-zinc-400 italic">미발급</span>}
+                              </td>
+                              <td className="px-4 py-3 font-semibold text-zinc-900 dark:text-white">
+                                <Link
+                                  href={`/admin/products/${prod.id}`}
+                                  className="hover:underline text-zinc-900 dark:text-white hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
+                                >
+                                  {prodDisplayName}
+                                </Link>
+                              </td>
+                              <td className="px-4 py-3 text-zinc-550 dark:text-zinc-400">
+                                {brandNameById.get(prod.brand_id) || "알 수 없음"}
+                              </td>
+                              <td className="px-4 py-3">
+                                {prod.is_draft ? (
+                                  <span className="rounded bg-amber-50 text-amber-700 px-2 py-0.5 text-[9px] font-bold border border-amber-100 dark:bg-amber-955/30 dark:text-amber-400 dark:border-amber-900/30">
+                                    Draft (보완 대기)
+                                  </span>
+                                ) : (
+                                  <span className="rounded bg-emerald-50 text-emerald-700 px-2 py-0.5 text-[9px] font-bold border border-emerald-100 dark:bg-emerald-955/30 dark:text-emerald-400 dark:border-emerald-900/30">
+                                    Active (정상)
+                                  </span>
+                                )}
+                              </td>
+                              <td className="px-4 py-3">
+                                <span className={`inline-block rounded px-2 py-0.5 text-[9px] font-bold border ${
+                                  prod.selection_status === "SELECTED"
+                                    ? "bg-emerald-50 text-emerald-700 border-emerald-100 dark:bg-emerald-955/30 dark:text-emerald-400"
+                                    : prod.selection_status === "PENDING"
+                                    ? "bg-amber-50 text-amber-700 border-amber-100 dark:bg-emerald-955/30 dark:text-emerald-400"
+                                    : prod.selection_status === "REJECTED"
+                                    ? "bg-rose-50 text-rose-700 border-rose-100 dark:bg-emerald-955/30 dark:text-rose-400"
+                                    : "bg-zinc-50 text-zinc-600 border-zinc-150 dark:bg-zinc-950/40 dark:text-zinc-400"
+                                }`}>
+                                  {prod.selection_status === "SELECTED"
+                                    ? "선정"
+                                    : prod.selection_status === "PENDING"
+                                    ? "검토 중"
+                                    : prod.selection_status === "REJECTED"
+                                    ? "미선정"
+                                    : "미검토"}
+                                </span>
+                              </td>
+                              <td className="px-4 py-3">
+                                <span className={`inline-block rounded px-2 py-0.5 text-[9px] font-bold border ${
+                                  prod.sales_status === "SELLING"
+                                    ? "bg-emerald-50 text-emerald-700 border-emerald-100 dark:bg-emerald-955/30 dark:text-emerald-400"
+                                    : prod.sales_status === "PAUSED"
+                                    ? "bg-amber-50 text-amber-700 border-amber-100 dark:bg-emerald-955/30 dark:text-amber-400"
+                                    : prod.sales_status === "STOPPED"
+                                    ? "bg-rose-50 text-rose-700 border-rose-100 dark:bg-emerald-955/30 dark:text-rose-400"
+                                    : "bg-zinc-50 text-zinc-650 border-zinc-150 dark:bg-zinc-950/40 dark:text-zinc-400"
+                                }`}>
+                                  {prod.sales_status === "SELLING"
+                                    ? "판매 중"
+                                    : prod.sales_status === "PAUSED"
+                                    ? "일시 중지"
+                                    : prod.sales_status === "STOPPED"
+                                    ? "판매 종료"
+                                    : "판매 준비"}
+                                </span>
+                              </td>
+                            </tr>
+                          );
+                        })
+                      ) : (
+                        <tr>
+                          <td colSpan={7} className="text-zinc-400 italic py-4 text-center">등록된 제품이 존재하지 않습니다.</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
                 </div>
               )}
 
+              {/* 5. Applications Tab */}
               {activeTab === "applications" && (
                 <div className="space-y-2">
                   {applications.length > 0 ? (
@@ -956,6 +1103,7 @@ export function CompanyDetailManager({
                   )}
                 </div>
               )}
+
             </div>
           </div>
 
