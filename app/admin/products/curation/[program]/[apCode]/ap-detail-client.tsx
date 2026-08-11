@@ -27,6 +27,8 @@ interface SelectedProduct {
   category_code: string | null;
   estimated_retail_price: number;
   price_usd_fob: number;
+  retailerMarginPercent?: number;
+  imageUrl?: string | null;
   sales_status: string;
   selection_status: string;
   curationRole: string; // REQUIRED, CORE, OPTIONAL, TEST
@@ -49,6 +51,8 @@ interface AllProduct {
   category_code: string | null;
   estimated_retail_price: number;
   price_usd_fob: number;
+  retailerMarginPercent?: number;
+  imageUrl?: string | null;
   sales_status: string;
   selection_status: string;
 }
@@ -104,6 +108,16 @@ export function APDetailClient({
       curr = catMap[curr.parent_code];
     }
     if (curr.depth === 2) {
+      return curr.name_ko || curr.name_en || "기타 (Other)";
+    }
+    return "기타 (Other)";
+  };
+
+  // Find Depth 3 Detail Category for a category code
+  const getDetailCategory = (code: string | null): string => {
+    if (!code || !catMap[code]) return "기타 (Other)";
+    const curr = catMap[code];
+    if (curr.depth === 3) {
       return curr.name_ko || curr.name_en || "기타 (Other)";
     }
     return "기타 (Other)";
@@ -271,6 +285,7 @@ export function APDetailClient({
   // Mixes
   const categoryMix = calcDistribution(products, (p) => getMainCategory(p.category_code));
   const subcategoryMix = calcDistribution(products, (p) => getSubcategory(p.category_code));
+  const detailCategoryMix = calcDistribution(products, (p) => getDetailCategory(p.category_code));
   const brandMix = calcDistribution(products, (p) => p.brandName);
   const roleMix = calcDistribution(products, (p) => p.curationRole);
   const statusMix = calcDistribution(products, (p) =>
@@ -399,6 +414,7 @@ export function APDetailClient({
 
             {/* 2. Top KPI Dashboard Summary */}
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4">
+        {/* Total 계열 (1~6) */}
         <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
           <p className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">Target SKU</p>
           <p className="text-xl font-bold text-zinc-900 dark:text-white mt-1">{ap.target_sku}</p>
@@ -422,16 +438,18 @@ export function APDetailClient({
           <p className="text-xl font-bold text-zinc-900 dark:text-white mt-1">${srpSum.toFixed(2)}</p>
         </div>
         <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-          <p className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">Avg Supply Price</p>
-          <p className="text-xl font-bold text-zinc-900 dark:text-white mt-1">${avgSupply.toFixed(2)}</p>
-        </div>
-        <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-          <p className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">Avg Retail SRP</p>
-          <p className="text-xl font-bold text-zinc-900 dark:text-white mt-1">${avgSrp.toFixed(2)}</p>
-        </div>
-        <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-          <p className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">Avg Retailer Margin</p>
+          <p className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">Total Retailer Margin</p>
           <p className="text-xl font-bold text-zinc-900 dark:text-white mt-1">{avgMargin.toFixed(1)}%</p>
+        </div>
+
+        {/* Average 계열 (7~8) - 구분하기 쉬운 연한 인디고 틴트 테마 */}
+        <div className="rounded-xl border border-indigo-100 bg-indigo-50/20 p-4 shadow-sm dark:border-indigo-950/40 dark:bg-indigo-950/10">
+          <p className="text-[10px] font-bold text-indigo-500 dark:text-indigo-400 uppercase tracking-wider">Avg Supply Price</p>
+          <p className="text-xl font-bold text-indigo-950 dark:text-indigo-200 mt-1">${avgSupply.toFixed(2)}</p>
+        </div>
+        <div className="rounded-xl border border-indigo-100 bg-indigo-50/20 p-4 shadow-sm dark:border-indigo-950/40 dark:bg-indigo-950/10">
+          <p className="text-[10px] font-bold text-indigo-500 dark:text-indigo-400 uppercase tracking-wider">Avg Retail SRP</p>
+          <p className="text-xl font-bold text-indigo-950 dark:text-indigo-200 mt-1">${avgSrp.toFixed(2)}</p>
         </div>
       </div>
 
@@ -441,9 +459,10 @@ export function APDetailClient({
           <h3 className="text-sm font-bold text-zinc-850 dark:text-white">큐레이션 분석 보고서 (Curation Report)</h3>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
           {renderMixBar("Main Category Mix (1Depth)", categoryMix)}
           {renderMixBar("Subcategory Mix (2Depth)", subcategoryMix)}
+          {renderMixBar("Detail Category Mix (3Depth)", detailCategoryMix)}
           {renderMixBar("Brand Mix", brandMix)}
         </div>
 
@@ -478,13 +497,14 @@ export function APDetailClient({
           <table className="w-full text-left text-xs border-collapse">
             <thead>
               <tr className="border-b border-zinc-250 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/50 text-zinc-500">
-                <th className="p-3 font-bold">SKU</th>
+                <th className="p-3 font-bold text-center">L.SKU</th>
                 <th className="p-3 font-bold w-[25%]">Product</th>
                 <th className="p-3 font-bold">Brand</th>
                 <th className="p-3 font-bold">Main Category</th>
                 <th className="p-3 font-bold">Subcategory</th>
                 <th className="p-3 font-bold text-center w-[12%]">Curation Role</th>
                 <th className="p-3 font-bold text-center">공급가</th>
+                <th className="p-3 font-bold text-center">소매 마진</th>
                 <th className="p-3 font-bold text-center">SRP (소비자가)</th>
                 <th className="p-3 font-bold text-center">Status</th>
                 <th className="p-3 font-bold text-center w-[15%]">Actions</th>
@@ -500,11 +520,29 @@ export function APDetailClient({
                       key={p.id}
                       className="border-b border-zinc-150 dark:border-zinc-850 hover:bg-zinc-50/20 dark:hover:bg-zinc-955/20"
                     >
-                      <td className="p-3 font-mono text-indigo-650 dark:text-indigo-400 font-bold">
-                        {p.letusto_sku}
+                      <td className="p-3 text-center">
+                        <a
+                          href={`/admin/products/${p.id}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="font-mono text-indigo-650 dark:text-indigo-400 font-bold hover:underline"
+                        >
+                          {p.letusto_sku}
+                        </a>
                       </td>
-                      <td className="p-3 font-bold text-zinc-900 dark:text-white">
-                        {p.name}
+                      <td className="p-3 font-bold text-zinc-900 dark:text-white flex items-center gap-3">
+                        {p.imageUrl ? (
+                          <img
+                            src={p.imageUrl}
+                            alt={p.name}
+                            className="h-10 w-10 rounded object-cover border border-zinc-200 dark:border-zinc-800 animate-fade-in"
+                          />
+                        ) : (
+                          <div className="h-10 w-10 rounded border border-zinc-200 bg-zinc-100 flex items-center justify-center text-[8px] font-bold text-zinc-400 dark:border-zinc-800 dark:bg-zinc-850 font-sans">
+                            NO IMG
+                          </div>
+                        )}
+                        <span className="truncate max-w-[200px]" title={p.name}>{p.name}</span>
                       </td>
                       <td className="p-3 text-zinc-600 dark:text-zinc-400 font-medium">
                         {p.brandName}
@@ -529,6 +567,9 @@ export function APDetailClient({
                       </td>
                       <td className="p-3 font-bold text-center text-zinc-900 dark:text-white">
                         ${p.price_usd_fob.toFixed(2)}
+                      </td>
+                      <td className="p-3 font-bold text-center text-emerald-600 dark:text-emerald-450 whitespace-nowrap">
+                        ${(p.estimated_retail_price - p.price_usd_fob).toFixed(2)} ({p.retailerMarginPercent !== undefined ? p.retailerMarginPercent.toFixed(1) : "0.0"}%)
                       </td>
                       <td className="p-3 font-bold text-center text-zinc-900 dark:text-white">
                         ${p.estimated_retail_price.toFixed(2)}

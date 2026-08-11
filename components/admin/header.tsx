@@ -283,7 +283,14 @@ export default function Header({ isSidebarCollapsed }: HeaderProps) {
   const getBreadcrumbs = () => {
     const paths = pathname.split("/").filter(Boolean);
     return paths.map((path, index) => {
-      const href = "/" + paths.slice(0, index + 1).join("/");
+      let href = "/" + paths.slice(0, index + 1).join("/");
+      
+      // Redirect curation program links to prevent 404
+      const uPath = path.toUpperCase();
+      if (uPath === "START_4FT" || uPath === "GROW_8FT" || uPath === "EXPAND_12FT" || path.toLowerCase() === "start-forfeit") {
+        href = "/admin/products/curation";
+      }
+
       const label =
         uuidNameMap[path] || (
           path === "admin"
