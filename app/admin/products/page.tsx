@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { verifyAdminSession } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { getSignedFileUrl } from "@/lib/files/storage";
 import { AdminProductsList } from "@/components/admin/admin-products-list";
 
@@ -11,6 +12,7 @@ export const metadata: Metadata = {
 export default async function AdminProductsPage() {
   await verifyAdminSession();
   const supabase = await createClient();
+  const admin = createAdminClient();
 
   // 1. Fetch all products from all companies
   let products: any[] | null = null;
@@ -63,8 +65,8 @@ export default async function AdminProductsPage() {
     return path.join(" > ");
   };
 
-  // 4.1 Fetch attributes master data for completeness rate computation
-  const { data: dbAllAttrs } = await supabase
+  // 4.1 Fetch attributes master data for completeness rate computation (Use admin client to bypass RLS)
+  const { data: dbAllAttrs } = await admin
     .from("attributes")
     .select("code, scope, is_required")
     .eq("is_active", true);
@@ -73,14 +75,14 @@ export default async function AdminProductsPage() {
     .map((a) => a.code);
 
   // 4.2 Fetch category-profile mappings
-  const { data: dbCatProfileMaps } = await supabase
+  const { data: dbCatProfileMaps } = await admin
     .from("category_profile_mappings")
     .select("category_code, profile_code")
     .eq("is_active", true);
   const catToProfile = new Map((dbCatProfileMaps ?? []).map((m) => [m.category_code, m.profile_code]));
 
   // 4.3 Fetch profile-attributes mappings
-  const { data: dbProfAttrs } = await supabase
+  const { data: dbProfAttrs } = await admin
     .from("profile_attributes")
     .select("profile_code, attribute_code, is_required_override")
     .eq("is_active", true);
@@ -93,7 +95,7 @@ export default async function AdminProductsPage() {
   });
 
   // 4.4 Fetch all product attribute values
-  const { data: dbAllAttrValues } = await supabase
+  const { data: dbAllAttrValues } = await admin
     .from("product_attribute_values")
     .select("product_id, attribute_code, value_json, text_value");
 
