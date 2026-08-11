@@ -2667,7 +2667,31 @@ export function ProductOverrideTabs({
                         });
                         return sortedProgs.map((p) => (
                           <th key={p.code} className="p-3 font-bold text-zinc-550 dark:text-zinc-350 text-center w-1/4">
-                            {p.name}
+                            <div className="flex flex-col items-center gap-1">
+                              <span className="whitespace-nowrap">{p.name}</span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const apCodes = Array.from(new Set(apProfiles.map((ap) => ap.code))).sort((a, b) => a.localeCompare(b));
+                                  const firstApCode = apCodes[0];
+                                  if (firstApCode) {
+                                    const sourceKey = `${p.code}:${firstApCode}`;
+                                    const sourceVal = ovMatrix[sourceKey] || "EXCLUDE";
+                                    setOvMatrix((prev) => {
+                                      const next = { ...prev };
+                                      apCodes.forEach((code) => {
+                                        next[`${p.code}:${code}`] = sourceVal;
+                                      });
+                                      return next;
+                                    });
+                                  }
+                                }}
+                                className="inline-flex items-center gap-1 rounded bg-zinc-100 hover:bg-zinc-200 px-1.5 py-0.5 text-[9px] font-bold text-zinc-600 transition-colors border border-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 dark:border-zinc-700 dark:text-zinc-400 mt-1 cursor-pointer"
+                                title="AP-01 설정을 하위 모든 AP에 일괄 복사합니다."
+                              >
+                                <span>⬇️ 일괄 적용</span>
+                              </button>
+                            </div>
                           </th>
                         ));
                       })()}
