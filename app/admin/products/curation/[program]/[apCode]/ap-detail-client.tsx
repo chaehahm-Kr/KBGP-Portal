@@ -845,7 +845,7 @@ export function APDetailClient({
       <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 space-y-4">
         <div className="border-b border-zinc-155 pb-2 dark:border-zinc-800 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <h3 className="text-sm font-bold text-zinc-850 dark:text-white">진열 상품 리스트 (Selected Products)</h3>
+            <h3 className="text-sm font-bold text-zinc-850 dark:text-white">Selected Products</h3>
             {chartFilter && (
               <span className="inline-flex items-center gap-1 rounded bg-indigo-50 border border-indigo-200 text-indigo-700 dark:bg-indigo-950/40 dark:border-indigo-900/50 dark:text-indigo-300 px-2 py-0.5 text-[9px] font-bold">
                 필터: {chartFilter.label}
@@ -862,14 +862,14 @@ export function APDetailClient({
               href="/admin/products/curation"
               className="text-[11px] font-bold text-zinc-450 hover:underline dark:text-zinc-500"
             >
-              ← 목록으로
+              ← Back to Curation
             </Link>
           </div>
           <button
             onClick={() => setIsAddOpen(true)}
             className="rounded bg-zinc-950 px-3 py-1.5 text-xs font-bold text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-955 dark:hover:bg-zinc-100 transition-colors shadow-md cursor-pointer flex items-center gap-1"
           >
-            <span>+</span> 진열 상품 추가
+            <span>+</span> Add Product
           </button>
         </div>
 
@@ -877,15 +877,15 @@ export function APDetailClient({
           <table className="w-full text-left text-xs border-collapse">
             <thead>
               <tr className="border-b border-zinc-250 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/50 text-zinc-500">
-                <th className="p-3 font-bold text-center">L.SKU</th>
+                <th className="p-3 font-bold text-center whitespace-nowrap">L.SKU</th>
                 <th className="p-3 font-bold w-[25%]">Product</th>
                 <th className="p-3 font-bold">Brand</th>
                 <th className="p-3 font-bold">Main Category</th>
                 <th className="p-3 font-bold">Subcategory</th>
                 <th className="p-3 font-bold text-center w-[12%]">Curation Role</th>
-                <th className="p-3 font-bold text-center">공급가</th>
-                <th className="p-3 font-bold text-center">소매 마진</th>
-                <th className="p-3 font-bold text-center">SRP (소비자가)</th>
+                <th className="p-3 font-bold text-center whitespace-nowrap">Supply Price</th>
+                <th className="p-3 font-bold text-center whitespace-nowrap">Retailer Margin</th>
+                <th className="p-3 font-bold text-center whitespace-nowrap">MSRP (Retail Price)</th>
                 <th className="p-3 font-bold text-center">Status</th>
                 <th className="p-3 font-bold text-center w-[15%]">Actions</th>
               </tr>
@@ -900,7 +900,7 @@ export function APDetailClient({
                       key={p.id}
                       className="border-b border-zinc-150 dark:border-zinc-850 hover:bg-zinc-50/20 dark:hover:bg-zinc-955/20"
                     >
-                      <td className="p-3 text-center">
+                      <td className="p-3 text-center whitespace-nowrap">
                         <a
                           href={`/admin/products/${p.id}`}
                           target="_blank"
