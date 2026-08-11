@@ -398,7 +398,7 @@ export function APDetailClient({
       )}
 
             {/* 2. Top KPI Dashboard Summary */}
-      <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4">
         <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
           <p className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">Target SKU</p>
           <p className="text-xl font-bold text-zinc-900 dark:text-white mt-1">{ap.target_sku}</p>
@@ -414,12 +414,20 @@ export function APDetailClient({
           <p className="text-xl font-bold text-zinc-900 dark:text-white mt-1">{brandCount}</p>
         </div>
         <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-          <p className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">Avg Retail SRP</p>
-          <p className="text-xl font-bold text-zinc-900 dark:text-white mt-1">${avgSrp.toFixed(2)}</p>
+          <p className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">Total Supply Price</p>
+          <p className="text-xl font-bold text-zinc-900 dark:text-white mt-1">${supplySum.toFixed(2)}</p>
+        </div>
+        <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+          <p className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">Total Retail MSRP</p>
+          <p className="text-xl font-bold text-zinc-900 dark:text-white mt-1">${srpSum.toFixed(2)}</p>
         </div>
         <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
           <p className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">Avg Supply Price</p>
           <p className="text-xl font-bold text-zinc-900 dark:text-white mt-1">${avgSupply.toFixed(2)}</p>
+        </div>
+        <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+          <p className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">Avg Retail SRP</p>
+          <p className="text-xl font-bold text-zinc-900 dark:text-white mt-1">${avgSrp.toFixed(2)}</p>
         </div>
         <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
           <p className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">Avg Retailer Margin</p>

@@ -33,7 +33,11 @@ export default async function CurationControlCenterPage() {
         brand_id,
         estimated_retail_price,
         price_usd_fob,
-        sales_status
+        sales_status,
+        product_curations (
+          wholesale_price,
+          suggest_retail_price
+        )
       )
     `)
     .neq("priority_role", "EXCLUDE");
@@ -52,20 +56,16 @@ export default async function CurationControlCenterPage() {
   const apStats: Record<number, {
     selectedSku: number;
     brandIds: Set<string>;
+    supplySum: number;
     msrpSum: number;
-    msrpCount: number;
-    marginSum: number;
-    marginCount: number;
   }> = {};
 
   (aps || []).forEach((ap) => {
     apStats[ap.id] = {
       selectedSku: 0,
       brandIds: new Set(),
+      supplySum: 0,
       msrpSum: 0,
-      msrpCount: 0,
-      marginSum: 0,
-      marginCount: 0,
     };
   });
 
@@ -95,19 +95,21 @@ export default async function CurationControlCenterPage() {
         stats.brandIds.add(prod.brand_id);
       }
 
-      // MSRP Price
-      const msrp = prod.estimated_retail_price || 0;
+      // Fetch pricing using product_curations values first
+      const curation = prod.product_curations;
+      const supply = curation?.wholesale_price !== undefined && curation?.wholesale_price !== null
+        ? parseFloat(curation.wholesale_price)
+        : (prod.price_usd_fob || 0);
+
+      const msrp = curation?.suggest_retail_price !== undefined && curation?.suggest_retail_price !== null
+        ? parseFloat(curation.suggest_retail_price)
+        : (prod.estimated_retail_price || 0);
+
+      if (supply > 0) {
+        stats.supplySum += supply;
+      }
       if (msrp > 0) {
         stats.msrpSum += msrp;
-        stats.msrpCount++;
-      }
-
-      // Margin
-      const fob = prod.price_usd_fob || 0;
-      if (msrp > 0 && fob > 0) {
-        const margin = ((msrp - fob) / msrp) * 100;
-        stats.marginSum += margin;
-        stats.marginCount++;
       }
     }
   });
@@ -122,7 +124,11 @@ export default async function CurationControlCenterPage() {
   }));
 
   const serializableAPs = (aps || []).map((ap) => {
-    const stats = apStats[ap.id] || { selectedSku: 0, brandIds: new Set(), msrpSum: 0, msrpCount: 0, marginSum: 0, marginCount: 0 };
+    const stats = apStats[ap.id] || { selectedSku: 0, brandIds: new Set(), supplySum: 0, msrpSum: 0 };
+    const totalSupply = stats.supplySum;
+    const totalMsrp = stats.msrpSum;
+    const totalMargin = totalMsrp > 0 ? ((totalMsrp - totalSupply) / totalMsrp) * 100 : 0;
+
     return {
       id: ap.id,
       display_program: ap.display_program,
@@ -132,8 +138,9 @@ export default async function CurationControlCenterPage() {
       target_sku: ap.target_sku,
       selectedSku: stats.selectedSku,
       brandCount: stats.brandIds.size,
-      avgMsp: stats.msrpCount > 0 ? stats.msrpSum / stats.msrpCount : 0,
-      avgMargin: stats.marginCount > 0 ? stats.marginSum / stats.marginCount : 0,
+      totalSupply,
+      totalMsrp,
+      totalMargin,
       status: ap.is_active ? "ACTIVE" : "HOLD",
     };
   });
