@@ -559,7 +559,7 @@ export function ProductOverrideTabs({
   if (Number(effectivePriceUsdFob) <= 0) missingFields.push("FOB 수출 가격");
   
   if (pkgWidth <= 0 || pkgDepth <= 0 || pkgHeight <= 0 || pkgWeight <= 0) {
-    missingFields.push("패키지 배송 규격");
+    missingFields.push("단품 포장 패키지 스펙 (로지스틱스)");
   }
   if (!(effectiveUpc || "").trim() && !(effectiveEan || "").trim()) {
     missingFields.push("식별 바코드 (UPC 또는 EAN)");
@@ -948,7 +948,9 @@ export function ProductOverrideTabs({
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {/* Manufacture SKU */}
                 <div className="space-y-1">
-                  <label className="text-[11px] font-bold text-zinc-600 dark:text-zinc-400">제조사 SKU *</label>
+                  <label className="text-[11px] font-bold text-zinc-600 dark:text-zinc-400">
+                    제조사 SKU <span className="text-rose-500 dark:text-rose-400 font-bold ml-0.5">*</span>
+                  </label>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
                     <div className="p-2 rounded bg-zinc-50 border border-zinc-150 text-zinc-500 dark:bg-zinc-950/40 dark:border-zinc-850 font-mono">
                       <span className="text-[8px] font-bold text-zinc-400 block mb-0.5 uppercase font-sans">포털 원본</span>
@@ -984,7 +986,9 @@ export function ProductOverrideTabs({
 
                 {/* Product Name (EN) */}
                 <div className="space-y-1">
-                  <label className="text-[11px] font-bold text-zinc-600 dark:text-zinc-400">제품명 (영문) *</label>
+                  <label className="text-[11px] font-bold text-zinc-600 dark:text-zinc-400">
+                    제품명 (영문) <span className="text-rose-500 dark:text-rose-400 font-bold ml-0.5">*</span>
+                  </label>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
                     <div className="p-2 rounded bg-zinc-50 border border-zinc-150 text-zinc-500 dark:bg-zinc-950/40 dark:border-zinc-850">
                       <span className="text-[8px] font-bold text-zinc-400 block mb-0.5 uppercase">포털 원본</span>
@@ -1020,7 +1024,9 @@ export function ProductOverrideTabs({
 
                 {/* Brand */}
                 <div className="space-y-1">
-                  <label className="text-[11px] font-bold text-zinc-600 dark:text-zinc-400">브랜드 *</label>
+                  <label className="text-[11px] font-bold text-zinc-600 dark:text-zinc-400">
+                    브랜드 <span className="text-rose-500 dark:text-rose-400 font-bold ml-0.5">*</span>
+                  </label>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
                     <div className="p-2 rounded bg-zinc-50 border border-zinc-150 text-zinc-500 dark:bg-zinc-950/40 dark:border-zinc-850">
                       <span className="text-[8px] font-bold text-zinc-400 block mb-0.5 uppercase">포털 원본</span>
@@ -1046,7 +1052,9 @@ export function ProductOverrideTabs({
 
                 {/* Category */}
                 <div className="space-y-1">
-                  <label className="text-[11px] font-bold text-zinc-600 dark:text-zinc-400">카테고리 *</label>
+                  <label className="text-[11px] font-bold text-zinc-600 dark:text-zinc-400">
+                    카테고리 <span className="text-rose-500 dark:text-rose-400 font-bold ml-0.5">*</span>
+                  </label>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
                     <div className="p-2 rounded bg-zinc-50 border border-zinc-150 text-zinc-500 dark:bg-zinc-950/40 dark:border-zinc-850">
                       <span className="text-[8px] font-bold text-zinc-400 block mb-0.5 uppercase">포털 원본</span>
@@ -1085,7 +1093,9 @@ export function ProductOverrideTabs({
 
                 {/* Origin */}
                 <div className="space-y-1">
-                  <label className="text-[11px] font-bold text-zinc-600 dark:text-zinc-400">원산지 (Origin)</label>
+                  <label className="text-[11px] font-bold text-zinc-600 dark:text-zinc-400">
+                    원산지 (Origin) <span className="text-rose-500 dark:text-rose-400 font-bold ml-0.5">*</span>
+                  </label>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
                     <div className="p-2 rounded bg-zinc-50 border border-zinc-150 text-zinc-500 dark:bg-zinc-950/40 dark:border-zinc-850">
                       <span className="text-[8px] font-bold text-zinc-400 block mb-0.5 uppercase">포털 원본</span>
@@ -1331,7 +1341,9 @@ export function ProductOverrideTabs({
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {/* KRW Retail */}
                 <div className="space-y-1">
-                  <label className="text-[11px] font-bold text-zinc-600 dark:text-zinc-400">한국 소비자가 (Retail KRW) *</label>
+                  <label className="text-[11px] font-bold text-zinc-600 dark:text-zinc-400">
+                    한국 소비자가 (Retail KRW) <span className="text-rose-500 dark:text-rose-400 font-bold ml-0.5">*</span>
+                  </label>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
                     <div className="p-2 rounded bg-zinc-50 border border-zinc-150 text-zinc-500 dark:bg-zinc-950/40 dark:border-zinc-850">
                       <span className="text-[8px] font-bold text-zinc-400 block mb-0.5 uppercase">포털 원본</span>
@@ -1367,7 +1379,9 @@ export function ProductOverrideTabs({
 
                 {/* FOB supply price (USD) */}
                 <div className="space-y-1">
-                  <label className="text-[11px] font-bold text-zinc-600 dark:text-zinc-400">FOB 공급 가격 (USD) *</label>
+                  <label className="text-[11px] font-bold text-zinc-600 dark:text-zinc-400">
+                    FOB 공급 가격 (USD) <span className="text-rose-500 dark:text-rose-400 font-bold ml-0.5">*</span>
+                  </label>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
                     <div className="p-2 rounded bg-zinc-50 border border-zinc-150 text-zinc-500 dark:bg-zinc-950/40 dark:border-zinc-850">
                       <span className="text-[8px] font-bold text-zinc-400 block mb-0.5 uppercase">포털 원본</span>
@@ -1601,27 +1615,27 @@ export function ProductOverrideTabs({
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
                 {/* Width */}
                 <div className="space-y-1">
-                  <label className="font-bold text-zinc-600 dark:text-zinc-450 block">가로 (Width, mm)</label>
+                  <label className="font-bold text-zinc-600 dark:text-zinc-455 block">가로 (Width, mm)</label>
                   <div className="p-1 rounded bg-zinc-50 text-[10px] text-zinc-400 dark:bg-zinc-950/20 font-mono text-center">원본: {product.item_width || 0}</div>
-                  <input type="number" step="0.1" value={ovItemWidth} onChange={(e) => setOvItemWidth(e.target.value)} className="w-full rounded border border-zinc-200 p-1.5 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white outline-none" />
+                  <input type="number" step="0.1" placeholder={product.item_width?.toString() || "0"} value={ovItemWidth} onChange={(e) => setOvItemWidth(e.target.value)} className="w-full rounded border border-zinc-200 p-1.5 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white outline-none" />
                 </div>
                 {/* Depth */}
                 <div className="space-y-1">
                   <label className="font-bold text-zinc-600 dark:text-zinc-455 block">세로 (Depth, mm)</label>
                   <div className="p-1 rounded bg-zinc-50 text-[10px] text-zinc-400 dark:bg-zinc-950/20 font-mono text-center">원본: {product.item_depth || 0}</div>
-                  <input type="number" step="0.1" value={ovItemDepth} onChange={(e) => setOvItemDepth(e.target.value)} className="w-full rounded border border-zinc-200 p-1.5 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white outline-none" />
+                  <input type="number" step="0.1" placeholder={product.item_depth?.toString() || "0"} value={ovItemDepth} onChange={(e) => setOvItemDepth(e.target.value)} className="w-full rounded border border-zinc-200 p-1.5 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white outline-none" />
                 </div>
                 {/* Height */}
                 <div className="space-y-1">
                   <label className="font-bold text-zinc-600 dark:text-zinc-455 block">높이 (Height, mm)</label>
                   <div className="p-1 rounded bg-zinc-50 text-[10px] text-zinc-400 dark:bg-zinc-950/20 font-mono text-center">원본: {product.item_height || 0}</div>
-                  <input type="number" step="0.1" value={ovItemHeight} onChange={(e) => setOvItemHeight(e.target.value)} className="w-full rounded border border-zinc-200 p-1.5 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white outline-none" />
+                  <input type="number" step="0.1" placeholder={product.item_height?.toString() || "0"} value={ovItemHeight} onChange={(e) => setOvItemHeight(e.target.value)} className="w-full rounded border border-zinc-200 p-1.5 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white outline-none" />
                 </div>
                 {/* Weight */}
                 <div className="space-y-1">
                   <label className="font-bold text-zinc-600 dark:text-zinc-455 block">중량 (Weight, g)</label>
                   <div className="p-1 rounded bg-zinc-50 text-[10px] text-zinc-400 dark:bg-zinc-950/20 font-mono text-center">원본: {product.item_weight || 0}</div>
-                  <input type="number" step="0.1" value={ovItemWeight} onChange={(e) => setOvItemWeight(e.target.value)} className="w-full rounded border border-zinc-200 p-1.5 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white outline-none" />
+                  <input type="number" step="0.1" placeholder={product.item_weight?.toString() || "0"} value={ovItemWeight} onChange={(e) => setOvItemWeight(e.target.value)} className="w-full rounded border border-zinc-200 p-1.5 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white outline-none" />
                 </div>
               </div>
             </div>
@@ -1796,37 +1810,37 @@ export function ProductOverrideTabs({
                 <div className="space-y-1">
                   <label className="font-bold text-zinc-600 dark:text-zinc-455 block">입수량 (Qty, 개)</label>
                   <div className="p-1 rounded bg-zinc-50 text-[10px] text-zinc-400 dark:bg-zinc-950/20 font-mono text-center">원본: {product.carton_pack_qty || 1}</div>
-                  <input type="number" value={ovCartonPackQty} onChange={(e) => setOvCartonPackQty(e.target.value)} className="w-full rounded border border-zinc-200 p-1.5 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white outline-none" />
+                  <input type="number" placeholder={product.carton_pack_qty?.toString() || "1"} value={ovCartonPackQty} onChange={(e) => setOvCartonPackQty(e.target.value)} className="w-full rounded border border-zinc-200 p-1.5 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white outline-none" />
                 </div>
                 {/* Width */}
                 <div className="space-y-1">
                   <label className="font-bold text-zinc-600 dark:text-zinc-455 block">가로 (Width, cm)</label>
                   <div className="p-1 rounded bg-zinc-50 text-[10px] text-zinc-400 dark:bg-zinc-950/20 font-mono text-center">원본: {product.carton_width || 0}</div>
-                  <input type="number" step="0.1" value={ovCartonWidth} onChange={(e) => setOvCartonWidth(e.target.value)} className="w-full rounded border border-zinc-200 p-1.5 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white outline-none" />
+                  <input type="number" step="0.1" placeholder={product.carton_width?.toString() || "0"} value={ovCartonWidth} onChange={(e) => setOvCartonWidth(e.target.value)} className="w-full rounded border border-zinc-200 p-1.5 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white outline-none" />
                 </div>
                 {/* Depth */}
                 <div className="space-y-1">
                   <label className="font-bold text-zinc-600 dark:text-zinc-455 block">세로 (Depth, cm)</label>
                   <div className="p-1 rounded bg-zinc-50 text-[10px] text-zinc-400 dark:bg-zinc-950/20 font-mono text-center">원본: {product.carton_depth || 0}</div>
-                  <input type="number" step="0.1" value={ovCartonDepth} onChange={(e) => setOvCartonDepth(e.target.value)} className="w-full rounded border border-zinc-200 p-1.5 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white outline-none" />
+                  <input type="number" step="0.1" placeholder={product.carton_depth?.toString() || "0"} value={ovCartonDepth} onChange={(e) => setOvCartonDepth(e.target.value)} className="w-full rounded border border-zinc-200 p-1.5 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white outline-none" />
                 </div>
                 {/* Height */}
                 <div className="space-y-1">
                   <label className="font-bold text-zinc-600 dark:text-zinc-455 block">높이 (Height, cm)</label>
-                  <div className="p-1 rounded bg-zinc-50 text-[10px] text-zinc-400 dark:bg-zinc-950/20 font-mono text-center">원본: {product.carton_height || 0}</div>
-                  <input type="number" step="0.1" value={ovCartonHeight} onChange={(e) => setOvCartonHeight(e.target.value)} className="w-full rounded border border-zinc-200 p-1.5 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white outline-none" />
+                  <div className="p-1 rounded bg-zinc-50 text-[10px] text-zinc-450 dark:text-zinc-500 font-mono text-center">원본: {product.carton_height || 0}</div>
+                  <input type="number" step="0.1" placeholder={product.carton_height?.toString() || "0"} value={ovCartonHeight} onChange={(e) => setOvCartonHeight(e.target.value)} className="w-full rounded border border-zinc-200 p-1.5 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white outline-none" />
                 </div>
                 {/* Weight */}
                 <div className="space-y-1">
                   <label className="font-bold text-zinc-600 dark:text-zinc-455 block">중량 (Weight, kg)</label>
                   <div className="p-1 rounded bg-zinc-50 text-[10px] text-zinc-400 dark:bg-zinc-950/20 font-mono text-center">원본: {product.carton_weight || 0}</div>
-                  <input type="number" step="0.1" value={ovCartonWeight} onChange={(e) => setOvCartonWeight(e.target.value)} className="w-full rounded border border-zinc-200 p-1.5 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white outline-none" />
+                  <input type="number" step="0.1" placeholder={product.carton_weight?.toString() || "0"} value={ovCartonWeight} onChange={(e) => setOvCartonWeight(e.target.value)} className="w-full rounded border border-zinc-200 p-1.5 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white outline-none" />
                 </div>
                 {/* CBM */}
                 <div className="space-y-1">
                   <label className="font-bold text-zinc-600 dark:text-zinc-455 block">부피 (CBM)</label>
                   <div className="p-1 rounded bg-zinc-50 text-[10px] text-zinc-400 dark:bg-zinc-950/20 font-mono text-center">원본: {product.carton_cbm || 0}</div>
-                  <input type="number" step="0.001" value={ovCartonCbm} onChange={(e) => setOvCartonCbm(e.target.value)} className="w-full rounded border border-zinc-200 p-1.5 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white outline-none" />
+                  <input type="number" step="0.001" placeholder={product.carton_cbm?.toString() || "0"} value={ovCartonCbm} onChange={(e) => setOvCartonCbm(e.target.value)} className="w-full rounded border border-zinc-200 p-1.5 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white outline-none" />
                 </div>
               </div>
             </div>
@@ -1846,31 +1860,31 @@ export function ProductOverrideTabs({
                 <div className="space-y-1">
                   <label className="font-bold text-zinc-600 dark:text-zinc-455 block">박스수량 (Cartons)</label>
                   <div className="p-1 rounded bg-zinc-50 text-[10px] text-zinc-400 dark:bg-zinc-950/20 font-mono text-center">원본: {product.palette_carton_qty || 0}</div>
-                  <input type="number" value={ovPaletteCartonQty} onChange={(e) => setOvPaletteCartonQty(e.target.value)} className="w-full rounded border border-zinc-200 p-1.5 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white outline-none" />
+                  <input type="number" placeholder={product.palette_carton_qty?.toString() || "0"} value={ovPaletteCartonQty} onChange={(e) => setOvPaletteCartonQty(e.target.value)} className="w-full rounded border border-zinc-200 p-1.5 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white outline-none" />
                 </div>
                 {/* Width */}
                 <div className="space-y-1">
                   <label className="font-bold text-zinc-600 dark:text-zinc-455 block">가로 (Width, mm)</label>
                   <div className="p-1 rounded bg-zinc-50 text-[10px] text-zinc-400 dark:bg-zinc-950/20 font-mono text-center">원본: {product.palette_width || 0}</div>
-                  <input type="number" value={ovPaletteWidth} onChange={(e) => setOvPaletteWidth(e.target.value)} className="w-full rounded border border-zinc-200 p-1.5 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white outline-none" />
+                  <input type="number" placeholder={product.palette_width?.toString() || "0"} value={ovPaletteWidth} onChange={(e) => setOvPaletteWidth(e.target.value)} className="w-full rounded border border-zinc-200 p-1.5 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white outline-none" />
                 </div>
                 {/* Depth */}
                 <div className="space-y-1">
                   <label className="font-bold text-zinc-600 dark:text-zinc-455 block">세로 (Depth, mm)</label>
                   <div className="p-1 rounded bg-zinc-50 text-[10px] text-zinc-400 dark:bg-zinc-950/20 font-mono text-center">원본: {product.palette_depth || 0}</div>
-                  <input type="number" value={ovPaletteDepth} onChange={(e) => setOvPaletteDepth(e.target.value)} className="w-full rounded border border-zinc-200 p-1.5 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white outline-none" />
+                  <input type="number" placeholder={product.palette_depth?.toString() || "0"} value={ovPaletteDepth} onChange={(e) => setOvPaletteDepth(e.target.value)} className="w-full rounded border border-zinc-200 p-1.5 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white outline-none" />
                 </div>
                 {/* Height */}
                 <div className="space-y-1">
                   <label className="font-bold text-zinc-600 dark:text-zinc-455 block">높이 (Height, mm)</label>
                   <div className="p-1 rounded bg-zinc-50 text-[10px] text-zinc-400 dark:bg-zinc-950/20 font-mono text-center">원본: {product.palette_height || 0}</div>
-                  <input type="number" value={ovPaletteHeight} onChange={(e) => setOvPaletteHeight(e.target.value)} className="w-full rounded border border-zinc-200 p-1.5 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white outline-none" />
+                  <input type="number" placeholder={product.palette_height?.toString() || "0"} value={ovPaletteHeight} onChange={(e) => setOvPaletteHeight(e.target.value)} className="w-full rounded border border-zinc-200 p-1.5 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white outline-none" />
                 </div>
                 {/* Weight */}
                 <div className="space-y-1">
                   <label className="font-bold text-zinc-600 dark:text-zinc-455 block">중량 (Weight, kg)</label>
                   <div className="p-1 rounded bg-zinc-50 text-[10px] text-zinc-400 dark:bg-zinc-950/20 font-mono text-center">원본: {product.palette_weight || 0}</div>
-                  <input type="number" value={ovPaletteWeight} onChange={(e) => setOvPaletteWeight(e.target.value)} className="w-full rounded border border-zinc-200 p-1.5 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white outline-none" />
+                  <input type="number" placeholder={product.palette_weight?.toString() || "0"} value={ovPaletteWeight} onChange={(e) => setOvPaletteWeight(e.target.value)} className="w-full rounded border border-zinc-200 p-1.5 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white outline-none" />
                 </div>
               </div>
             </div>
