@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useTransition, useActionState, startTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { PRODUCT_CATEGORY_LABEL, type ProductCategory } from "@/lib/product/types";
+import { PRODUCT_CATEGORY_LABEL, type ProductCategory, sanitizeSku, trimSkuSeparators } from "@/lib/product/types";
 import { adminCreateProduct, type AdminProductFormState } from "@/lib/product/admin-actions";
 
 const inputClass =
@@ -218,6 +218,7 @@ export function AdminProductCreateForm({ companies, brands }: AdminProductCreate
     const formData = new FormData(form);
     formData.set("sellingOnline", sellingOnline ? "true" : "false");
     formData.set("sellingOffline", sellingOffline ? "true" : "false");
+    formData.set("manufactureSku", trimSkuSeparators(manufactureSku));
 
     startTransition(() => {
       formAction(formData);
@@ -317,9 +318,13 @@ export function AdminProductCreateForm({ companies, brands }: AdminProductCreate
               required
               placeholder="예: ABC-123-001"
               value={manufactureSku}
-              onChange={(e) => setManufactureSku(e.target.value)}
+              onChange={(e) => setManufactureSku(sanitizeSku(e.target.value))}
+              onBlur={(e) => setManufactureSku(trimSkuSeparators(e.target.value))}
               className={`${inputClass} font-mono`}
             />
+            <p className="text-[10px] text-zinc-400 dark:text-zinc-500 mt-1 leading-normal">
+              ※ 영문 대문자, 숫자, 하이픈(-), 언더스코어(_)만 허용됩니다. (소문자는 자동 대문자 변환, 공백 및 기타 특수문자 제한)
+            </p>
           </div>
         </div>
 

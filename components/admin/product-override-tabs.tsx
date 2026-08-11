@@ -9,7 +9,9 @@ import {
   PRODUCT_CATEGORY_LABEL, 
   type ProductCategory,
   CERTIFICATE_TYPE_LABEL,
-  type CertificateType
+  type CertificateType,
+  sanitizeSku,
+  trimSkuSeparators
 } from "@/lib/product/types";
 import { 
   adminUpdateProductOverrides, 
@@ -686,8 +688,8 @@ export function ProductOverrideTabs({
         if (cleanedBullets.length > 0) payload["bullet_points"] = cleanedBullets;
         else payload["bullet_points"] = null;
 
-        addString("manufacture_sku", ovManufactureSku);
-        addString("letusto_sku", ovLetustoSku);
+        addString("manufacture_sku", trimSkuSeparators(ovManufactureSku));
+        addString("letusto_sku", trimSkuSeparators(ovLetustoSku));
         addString("parent_sku", ovParentSku);
         addString("child_sku", ovChildSku);
         addString("upc", ovUpc);
@@ -1018,11 +1020,15 @@ export function ProductOverrideTabs({
                     <input
                       type="text"
                       value={ovManufactureSku}
-                      onChange={(e) => setOvManufactureSku(e.target.value)}
+                      onChange={(e) => setOvManufactureSku(sanitizeSku(e.target.value))}
+                      onBlur={(e) => setOvManufactureSku(trimSkuSeparators(e.target.value))}
                       placeholder="제조사 SKU 오버라이드..."
                       className="w-full rounded border border-zinc-200 p-2 text-xs text-zinc-900 bg-white dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:border-zinc-950 outline-none font-mono"
                     />
                   </div>
+                  <p className="text-[9px] text-zinc-400 dark:text-zinc-500 leading-normal">
+                    ※ 대문자, 숫자, -, _만 허용 (소문자 자동 변환, 공백/특수문자 제한)
+                  </p>
                 </div>
 
                 {/* Letusto SKU */}
@@ -1036,11 +1042,15 @@ export function ProductOverrideTabs({
                     <input
                       type="text"
                       value={ovLetustoSku}
-                      onChange={(e) => setOvLetustoSku(e.target.value)}
+                      onChange={(e) => setOvLetustoSku(sanitizeSku(e.target.value))}
+                      onBlur={(e) => setOvLetustoSku(trimSkuSeparators(e.target.value))}
                       placeholder="Letusto SKU 오버라이드..."
                       className="w-full rounded border border-zinc-200 p-2 text-xs text-zinc-900 bg-white dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:border-zinc-950 outline-none font-mono"
                     />
                   </div>
+                  <p className="text-[9px] text-zinc-400 dark:text-zinc-550 leading-normal">
+                    ※ 대문자, 숫자, -, _만 허용 (소문자 자동 변환, 공백/특수문자 제한)
+                  </p>
                 </div>
 
                 {/* Product Name (EN) */}

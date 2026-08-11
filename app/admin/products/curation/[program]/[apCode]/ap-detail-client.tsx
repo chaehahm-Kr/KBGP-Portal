@@ -313,6 +313,17 @@ export function APDetailClient({
     return "$40 이상";
   };
 
+  // Rank-based color class mapping
+  const getRankColorClass = (idx: number): string => {
+    switch (idx) {
+      case 0: return "bg-emerald-600 dark:bg-emerald-500"; // 1위 (Required 그린)
+      case 1: return "bg-indigo-600 dark:bg-indigo-400";   // 2위 (Core 보라/인디고)
+      case 2: return "bg-sky-500 dark:bg-sky-400";         // 3위 (Test 블루)
+      case 3: return "bg-amber-500 dark:bg-amber-400";     // 4위 (Optional 옐로우/오렌지)
+      default: return "bg-zinc-400 dark:bg-zinc-650";      // 5위 이하 (회색)
+    }
+  };
+
   // Price Mix (MSRP range setup)
   const priceMix = React.useMemo(() => {
     const ranges = [
@@ -544,9 +555,9 @@ export function APDetailClient({
                     <span className="font-semibold text-zinc-800 dark:text-zinc-250 group-hover:underline">{item.name}</span>
                     <span className="text-zinc-400">{item.value}개 ({item.percentage.toFixed(1)}%)</span>
                   </div>
-                  <div className="h-1.5 w-full bg-zinc-100 rounded-full overflow-hidden dark:bg-zinc-800">
+                  <div className="h-2 w-full bg-zinc-100 rounded-full overflow-hidden dark:bg-zinc-800">
                     <div
-                      className="h-full bg-zinc-900 dark:bg-zinc-100 transition-all group-hover:bg-indigo-650"
+                      className={`h-full transition-all group-hover:opacity-85 ${getRankColorClass(idx)}`}
                       style={{ width: `${item.percentage}%` }}
                     />
                   </div>
@@ -596,9 +607,9 @@ export function APDetailClient({
                     </span>
                     <span className="text-zinc-400">{item.value}개 ({item.percentage.toFixed(1)}%)</span>
                   </div>
-                  <div className="h-1.5 w-full bg-zinc-100 rounded-full overflow-hidden dark:bg-zinc-800">
+                  <div className="h-2 w-full bg-zinc-100 rounded-full overflow-hidden dark:bg-zinc-800">
                     <div
-                      className="h-full bg-zinc-700 dark:bg-zinc-300 transition-all group-hover:bg-indigo-650"
+                      className={`h-full transition-all group-hover:opacity-85 ${getRankColorClass(idx)}`}
                       style={{ width: `${item.percentage}%` }}
                     />
                   </div>
@@ -624,9 +635,9 @@ export function APDetailClient({
                     </span>
                     <span className="text-zinc-400">{item.value}개 ({item.percentage.toFixed(1)}%)</span>
                   </div>
-                  <div className="h-1.5 w-full bg-zinc-100 rounded-full overflow-hidden dark:bg-zinc-800">
+                  <div className="h-2 w-full bg-zinc-100 rounded-full overflow-hidden dark:bg-zinc-800">
                     <div
-                      className="h-full bg-zinc-550 dark:bg-zinc-400 transition-all group-hover:bg-indigo-650"
+                      className={`h-full transition-all group-hover:opacity-85 ${getRankColorClass(idx)}`}
                       style={{ width: `${item.percentage}%` }}
                     />
                   </div>
@@ -676,9 +687,9 @@ export function APDetailClient({
                     </span>
                     <span className="text-zinc-400">{item.value}개 ({item.percentage.toFixed(1)}%)</span>
                   </div>
-                  <div className="h-1.5 w-full bg-zinc-100 rounded-full overflow-hidden dark:bg-zinc-800">
+                  <div className="h-2 w-full bg-zinc-100 rounded-full overflow-hidden dark:bg-zinc-800">
                     <div
-                      className="h-full bg-zinc-800 dark:bg-zinc-200 transition-all group-hover:bg-indigo-650"
+                      className={`h-full transition-all group-hover:opacity-85 ${getRankColorClass(idx)}`}
                       style={{ width: `${item.percentage}%` }}
                     />
                   </div>
@@ -756,9 +767,9 @@ export function APDetailClient({
                     <span className="font-semibold text-zinc-800 dark:text-zinc-250 group-hover:underline">{item.name}</span>
                     <span className="text-zinc-400">{item.value}개 ({item.percentage.toFixed(1)}%)</span>
                   </div>
-                  <div className="h-1.5 w-full bg-zinc-100 rounded-full overflow-hidden dark:bg-zinc-800">
+                  <div className="h-2 w-full bg-zinc-100 rounded-full overflow-hidden dark:bg-zinc-800">
                     <div
-                      className="h-full bg-zinc-900 dark:bg-zinc-100 transition-all group-hover:bg-indigo-650"
+                      className={`h-full transition-all group-hover:opacity-85 ${getRankColorClass(idx)}`}
                       style={{ width: `${item.percentage}%` }}
                     />
                   </div>

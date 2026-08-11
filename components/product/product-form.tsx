@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useTransition, useActionState, startTransition } from "react";
 import type { ProductFormState } from "@/lib/product/actions";
-import { PRODUCT_CATEGORY_LABEL, type ProductCategory } from "@/lib/product/types";
+import { PRODUCT_CATEGORY_LABEL, type ProductCategory, sanitizeSku, trimSkuSeparators } from "@/lib/product/types";
 
 const inputClass =
   "mt-1 block w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 outline-none transition-all focus:border-zinc-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white dark:focus:border-zinc-700";
@@ -204,6 +204,7 @@ export function ProductForm({ action, brands }: ProductFormProps) {
     // Append boolean values explicitly as string/flag
     formData.set("sellingOnline", sellingOnline ? "true" : "false");
     formData.set("sellingOffline", sellingOffline ? "true" : "false");
+    formData.set("manufactureSku", trimSkuSeparators(manufactureSku));
 
     startTransition(() => {
       formAction(formData);
@@ -307,9 +308,13 @@ export function ProductForm({ action, brands }: ProductFormProps) {
                 required
                 placeholder="예: ABC-123-001"
                 value={manufactureSku}
-                onChange={(e) => setManufactureSku(e.target.value)}
+                onChange={(e) => setManufactureSku(sanitizeSku(e.target.value))}
+                onBlur={(e) => setManufactureSku(trimSkuSeparators(e.target.value))}
                 className={`${inputClass} font-mono`}
               />
+              <p className="text-[10px] text-zinc-400 dark:text-zinc-550 mt-1 leading-normal">
+                ※ 영문 대문자, 숫자, 하이픈(-), 언더스코어(_)만 허용됩니다. (소문자는 자동 대문자 변환, 공백 및 기타 특수문자 제한)
+              </p>
             </div>
 
             <div>

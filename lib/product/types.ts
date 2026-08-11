@@ -120,3 +120,19 @@ export interface ProductVideo {
   created_at: string;
 }
 
+export function sanitizeSku(val: string): string {
+  // Convert to uppercase
+  let cleaned = val.toUpperCase();
+  // Allow only A-Z, 0-9, -, _ (Prohibit other special characters & spaces)
+  cleaned = cleaned.replace(/[^A-Z0-9\-_]/g, "");
+  // Block consecutive separators
+  cleaned = cleaned.replace(/[\-_]{2,}/g, (match) => match[match.length - 1]);
+  // Prevent leading separator
+  cleaned = cleaned.replace(/^[\-_]/g, "");
+  return cleaned;
+}
+
+export function trimSkuSeparators(val: string): string {
+  return val.replace(/^[\-_]+|[\-_]+$/g, "");
+}
+

@@ -9,7 +9,9 @@ import {
   PRODUCT_CATEGORY_LABEL, 
   type ProductCategory,
   CERTIFICATE_TYPE_LABEL,
-  type CertificateType
+  type CertificateType,
+  sanitizeSku,
+  trimSkuSeparators
 } from "@/lib/product/types";
 import { 
   updateProduct, 
@@ -560,7 +562,7 @@ export function ProductDetailTabs({
     
     // Explicitly set bound values in formData to ensure they are captured correctly
     formData.set("nameEn", nameEn.trim());
-    formData.set("manufactureSku", manufactureSku.trim());
+    formData.set("manufactureSku", trimSkuSeparators(manufactureSku));
     formData.set("brandId", brandId);
     formData.set("category", category);
     formData.set("origin", origin);
@@ -819,10 +821,15 @@ export function ProductDetailTabs({
                 <input
                   name="manufactureSku"
                   type="text"
-                  value={manufactureSku} onChange={(e) => setManufactureSku(e.target.value)}
+                  value={manufactureSku} 
+                  onChange={(e) => setManufactureSku(sanitizeSku(e.target.value))}
+                  onBlur={(e) => setManufactureSku(trimSkuSeparators(e.target.value))}
                   placeholder="제조사의 실제 SKU 코드"
                   className={`block w-full rounded-lg border px-3.5 py-2 text-xs text-zinc-900 dark:bg-zinc-950 dark:text-white focus:outline-none font-mono ${!manufactureSku.trim() ? "border-rose-350 dark:border-rose-900/60 focus:border-rose-500" : "border-zinc-300 dark:border-zinc-800 focus:border-zinc-900 dark:focus:border-white"}`}
                 />
+                <p className="text-[10px] text-zinc-400 dark:text-zinc-550 mt-1 leading-normal">
+                  ※ 영문 대문자, 숫자, 하이픈(-), 언더스코어(_)만 허용됩니다. (소문자는 자동 대문자 변환, 공백 및 기타 특수문자 제한)
+                </p>
               </div>
 
               <div>
