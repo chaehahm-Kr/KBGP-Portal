@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getSignedFileUrl } from "@/lib/files/storage";
 import { ProductOverrideTabs } from "@/components/admin/product-override-tabs";
 import type { Product, ProductVideo } from "@/lib/product/types";
+import { adminGetProductCuration } from "@/lib/product/admin-actions";
 
 export const metadata: Metadata = {
   title: "제품 오버라이드 관리 | K SELECT NETWORK 어드민",
@@ -120,6 +121,8 @@ export default async function AdminProductDetailPage({
     }
   }
 
+  const { curation, matrix } = await adminGetProductCuration(product.id);
+
   return (
     <ProductOverrideTabs
       product={product as unknown as Product}
@@ -134,6 +137,8 @@ export default async function AdminProductDetailPage({
       certificateUrls={certificateUrls}
       ingredientsFileUrl={ingredientsFileUrl}
       ingredientsFileUrlEn={ingredientsFileUrlEn}
+      curation={curation}
+      matrix={matrix}
     />
   );
 }

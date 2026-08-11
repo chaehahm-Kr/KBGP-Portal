@@ -11,7 +11,7 @@ import {
   CERTIFICATE_TYPE_LABEL,
   type CertificateType
 } from "@/lib/product/types";
-import { adminUpdateProductOverrides } from "@/lib/product/admin-actions";
+import { adminUpdateProductOverrides, adminUpdateProductCuration } from "@/lib/product/admin-actions";
 import { CategoryAttributeForm } from "@/components/product/category-attribute-form";
 
 interface ProductOverrideTabsProps {
@@ -27,6 +27,14 @@ interface ProductOverrideTabsProps {
   certificateUrls: (string | null)[];
   ingredientsFileUrl: string | null;
   ingredientsFileUrlEn: string | null;
+  curation: {
+    status: string;
+    curator: string | null;
+    last_review_date: string | null;
+    next_review_date: string | null;
+    role: string;
+  };
+  matrix: Record<string, string>;
 }
 
 export function ProductOverrideTabs({
@@ -42,12 +50,22 @@ export function ProductOverrideTabs({
   certificateUrls,
   ingredientsFileUrl,
   ingredientsFileUrlEn,
+  curation,
+  matrix,
 }: ProductOverrideTabsProps) {
   const searchParams = useSearchParams();
   const initialTab = searchParams.get("tab") === "category" ? "category_attributes" : "basic";
-  const [activeTab, setActiveTab] = useState<"basic" | "category_attributes" | "price" | "logistics" | "media" | "certs">(initialTab);
+  const [activeTab, setActiveTab] = useState<"basic" | "category_attributes" | "price" | "logistics" | "media" | "certs" | "curation">(initialTab as any);
   const [isPending, startTransition] = useTransition();
   const [statusMessage, setStatusMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
+  // Curation States
+  const [curationStatus, setCurationStatus] = useState(curation.status || "NOT_REVIEWED");
+  const [ovCurator, setOvCurator] = useState(curation.curator || "");
+  const [ovLastReviewDate, setOvLastReviewDate] = useState(curation.last_review_date || "");
+  const [ovNextReviewDate, setOvNextReviewDate] = useState(curation.next_review_date || "");
+  const [curationRole, setCurationRole] = useState(curation.role || "SUPPORT");
+  const [ovMatrix, setOvMatrix] = useState<Record<string, string>>(matrix || {});
 
   // Load existing overrides
   const overrides = (product.price_additional_info as any)?.admin_overrides || {};
@@ -382,7 +400,18 @@ export function ProductOverrideTabs({
         addNum("container_40fthc_cbm", ovC40Cbm);
 
         await adminUpdateProductOverrides(product.id, payload);
-        setStatusMessage({ type: "success", text: "어드민 오버라이드가 성공적으로 저장되었습니다." });
+        await adminUpdateProductCuration(
+          product.id,
+          {
+            status: curationStatus,
+            curator: ovCurator,
+            last_review_date: ovLastReviewDate || null,
+            next_review_date: ovNextReviewDate || null,
+            role: curationRole,
+          },
+          ovMatrix
+        );
+        setStatusMessage({ type: "success", text: "어드민 오버라이드 및 큐레이션 설정이 성공적으로 저장되었습니다." });
       } catch (err: any) {
         setStatusMessage({ type: "error", text: err.message || "저장 실패" });
       }
@@ -514,6 +543,16 @@ export function ProductOverrideTabs({
           }`}
         >
           인허가 & 보증서
+        </button>
+        <button
+          onClick={() => setActiveTab("curation")}
+          className={`px-4 py-2.5 text-xs font-bold transition-all border-b-2 -mb-[2px] ${
+            activeTab === "curation"
+              ? "border-zinc-950 text-zinc-955 dark:border-white dark:text-white"
+              : "border-transparent text-zinc-400 hover:text-zinc-650"
+          }`}
+        >
+          큐레이션 (Curation)
         </button>
       </div>
 
@@ -1576,6 +1615,150 @@ export function ProductOverrideTabs({
                 ) : (
                   <p className="text-xs text-zinc-400 italic py-3 text-center">업로드된 추가 보증서 서류가 없습니다.</p>
                 )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Curation Tab */}
+        {activeTab === "curation" && (
+          <div className="space-y-6">
+            {/* 1. 큐레이션 기본 정보 설정 */}
+            <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 space-y-4">
+              <h3 className="text-xs font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider border-b border-zinc-100 pb-2 dark:border-zinc-800">
+                큐레이션 기본 설정
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* 큐레이션 상태 */}
+                <div className="space-y-1.5">
+                  <label className="text-[11px] font-bold text-zinc-650 dark:text-zinc-450">큐레이션 상태 (Curation Status)</label>
+                  <select
+                    value={curationStatus}
+                    onChange={(e) => setCurationStatus(e.target.value)}
+                    className="w-full rounded border border-zinc-200 p-2.5 text-xs text-zinc-900 bg-white dark:border-zinc-850 dark:bg-zinc-950 dark:text-white focus:border-zinc-950 outline-none font-bold"
+                  >
+                    <option value="NOT_REVIEWED">Not Reviewed (미검토)</option>
+                    <option value="CANDIDATE">Candidate (후보)</option>
+                    <option value="APPROVED">Approved (승인)</option>
+                    <option value="ACTIVE">Active (활성)</option>
+                    <option value="HOLD">Hold (보류)</option>
+                    <option value="REMOVED">Removed (제외)</option>
+                  </select>
+                </div>
+
+                {/* 큐레이션 역할 */}
+                <div className="space-y-1.5">
+                  <label className="text-[11px] font-bold text-zinc-650 dark:text-zinc-450">큐레이션 역할 (Curation Role)</label>
+                  <select
+                    value={curationRole}
+                    onChange={(e) => setCurationRole(e.target.value)}
+                    className="w-full rounded border border-zinc-200 p-2.5 text-xs text-zinc-900 bg-white dark:border-zinc-850 dark:bg-zinc-950 dark:text-white focus:border-zinc-950 outline-none font-bold"
+                  >
+                    <option value="HERO">Hero (핵심 유입 제품)</option>
+                    <option value="CORE">Core (표준 구성)</option>
+                    <option value="TRAFFIC">Traffic (볼륨 및 인지도 유도)</option>
+                    <option value="TREND">Trend (시즌 트렌드 대응)</option>
+                    <option value="MARGIN">Margin (수익률 특화)</option>
+                    <option value="TRIAL">Trial (초기 매대 진입 테스트)</option>
+                    <option value="SUPPORT">Support (기타 보완 제품)</option>
+                  </select>
+                </div>
+
+                {/* 담당 큐레이터 */}
+                <div className="space-y-1.5">
+                  <label className="text-[11px] font-bold text-zinc-650 dark:text-zinc-455">담당 큐레이터 (Curator)</label>
+                  <input
+                    type="text"
+                    value={ovCurator}
+                    onChange={(e) => setOvCurator(e.target.value)}
+                    placeholder="담당자 이름 입력"
+                    className="w-full rounded border border-zinc-200 p-2.5 text-xs text-zinc-900 bg-white dark:border-zinc-850 dark:bg-zinc-950 dark:text-white focus:border-zinc-950 outline-none font-medium"
+                  />
+                </div>
+
+                {/* 검토 일자 피커 */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-[11px] font-bold text-zinc-650 dark:text-zinc-450">최종 검토일</label>
+                    <input
+                      type="date"
+                      value={ovLastReviewDate}
+                      onChange={(e) => setOvLastReviewDate(e.target.value)}
+                      className="w-full rounded border border-zinc-200 p-2 text-xs text-zinc-900 bg-white dark:border-zinc-850 dark:bg-zinc-950 dark:text-white focus:border-zinc-950 outline-none"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-[11px] font-bold text-zinc-650 dark:text-zinc-450">차기 검토 예정일</label>
+                    <input
+                      type="date"
+                      value={ovNextReviewDate}
+                      onChange={(e) => setOvNextReviewDate(e.target.value)}
+                      className="w-full rounded border border-zinc-200 p-2 text-xs text-zinc-900 bg-white dark:border-zinc-850 dark:bg-zinc-950 dark:text-white focus:border-zinc-950 outline-none"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* 2. Display Program & AP 3x6 설정 Matrix */}
+            <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 space-y-4">
+              <div className="border-b border-zinc-100 pb-2 dark:border-zinc-800">
+                <h3 className="text-xs font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">
+                  Display Program Assortment Matrix
+                </h3>
+                <p className="text-[10px] text-zinc-400 dark:text-zinc-500 mt-1">각 6개 AP별로 이 상품이 가질 진열 역할(Required / Core / Optional / Test)을 정하고 미진열은 Exclude로 선택합니다.</p>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/50">
+                      <th className="p-3 font-bold text-zinc-500 dark:text-zinc-455 w-1/4">Assortment Profile (AP)</th>
+                      <th className="p-3 font-bold text-zinc-550 dark:text-zinc-350 text-center w-1/4">START · 4FT</th>
+                      <th className="p-3 font-bold text-zinc-550 dark:text-zinc-350 text-center w-1/4">GROW · 8FT</th>
+                      <th className="p-3 font-bold text-zinc-550 dark:text-zinc-350 text-center w-1/4">EXPAND · 12FT</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {["AP-01", "AP-02", "AP-03", "AP-04", "AP-05", "AP-06"].map((apCode) => (
+                      <tr key={apCode} className="border-b border-zinc-100 dark:border-zinc-850 hover:bg-zinc-50/20 dark:hover:bg-zinc-950/20">
+                        <td className="p-3 font-bold text-zinc-800 dark:text-zinc-200">{apCode}</td>
+                        {["START_4FT", "GROW_8FT", "EXPAND_12FT"].map((prog) => {
+                          const matrixKey = `${prog}:${apCode}`;
+                          const val = ovMatrix[matrixKey] || "EXCLUDE";
+                          return (
+                            <td key={prog} className="p-2 text-center">
+                              <select
+                                value={val}
+                                onChange={(e) => {
+                                  const newVal = e.target.value;
+                                  setOvMatrix((prev) => ({ ...prev, [matrixKey]: newVal }));
+                                }}
+                                className={`rounded border p-1.5 text-xs focus:border-zinc-950 outline-none w-[90%] font-semibold ${
+                                  val === "EXCLUDE"
+                                    ? "border-zinc-200 bg-zinc-50 text-zinc-400 dark:border-zinc-850 dark:bg-zinc-950 dark:text-zinc-600"
+                                    : val === "REQUIRED"
+                                    ? "border-emerald-250 bg-emerald-50 text-emerald-800 dark:border-emerald-950 dark:bg-emerald-950/20 dark:text-emerald-450"
+                                    : val === "CORE"
+                                    ? "border-indigo-250 bg-indigo-50 text-indigo-800 dark:border-indigo-950 dark:bg-indigo-950/20 dark:text-indigo-450"
+                                    : val === "OPTIONAL"
+                                    ? "border-amber-250 bg-amber-50 text-amber-800 dark:border-amber-950 dark:bg-amber-950/20 dark:text-amber-450"
+                                    : "border-sky-250 bg-sky-50 text-sky-800 dark:border-sky-950 dark:bg-sky-950/20 dark:text-sky-450"
+                                }`}
+                              >
+                                <option value="EXCLUDE">Exclude (미진열)</option>
+                                <option value="REQUIRED">Required (필수 진열)</option>
+                                <option value="CORE">Core (표준 진열)</option>
+                                <option value="OPTIONAL">Optional (선택 진열)</option>
+                                <option value="TEST">Test (임시 테스트)</option>
+                              </select>
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             </div>
           </div>

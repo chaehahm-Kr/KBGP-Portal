@@ -63,6 +63,7 @@ export default function Sidebar({ isCollapsed, toggleCollapse }: SidebarProps) {
         { name: "All Products", href: "/admin/products" },
         { name: "Compliance", href: "/admin/products?status=compliance" },
         { name: "Pricing & Profitability", href: "/admin/products/pricing-profitability" },
+        { name: "Curation", href: "/admin/products/curation" },
       ],
     },
     {

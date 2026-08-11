@@ -94,3 +94,311 @@ export async function adminUpdateProductOverrides(
   revalidatePath(`/portal/products`);
   return { success: true };
 }
+
+export async function adminGetProductCuration(productId: string) {
+  await verifyAdminSession();
+  const supabase = createAdminClient();
+
+  // 1. Get product curation info
+  const { data: curation } = await supabase
+    .from("product_curations")
+    .select("*")
+    .eq("product_id", productId)
+    .maybeSingle();
+
+  // 2. Get matrix roles
+  const { data: matrixRows } = await supabase
+    .from("product_curation_matrix")
+    .select(`
+      ap_id,
+      priority_role,
+      assortment_profiles (
+        display_program,
+        code
+      )
+    `)
+    .eq("product_id", productId);
+
+  // Convert matrix list to flat record
+  const matrix: Record<string, string> = {};
+  if (matrixRows) {
+    matrixRows.forEach((row: any) => {
+      const ap = row.assortment_profiles;
+      if (ap) {
+        matrix[`${ap.display_program}:${ap.code}`] = row.priority_role;
+      }
+    });
+  }
+
+  return {
+    curation: curation || {
+      status: "NOT_REVIEWED",
+      curator: "",
+      last_review_date: null,
+      next_review_date: null,
+      role: "SUPPORT",
+    },
+    matrix,
+  };
+}
+
+export async function adminUpdateProductCuration(
+  productId: string,
+  curation: {
+    status: string;
+    curator: string;
+    last_review_date: string | null;
+    next_review_date: string | null;
+    role: string;
+  },
+  matrix: Record<string, string>
+) {
+  await verifyAdminSession();
+  const supabase = createAdminClient();
+
+  // 1. Upsert product_curations
+  const { error: curationError } = await supabase
+    .from("product_curations")
+    .upsert({
+      product_id: productId,
+      status: curation.status,
+      curator: curation.curator || null,
+      last_review_date: curation.last_review_date || null,
+      next_review_date: curation.next_review_date || null,
+      role: curation.role,
+      updated_at: new Date().toISOString(),
+    });
+
+  if (curationError) {
+    throw new Error(`큐레이션 정보 저장 실패: ${curationError.message}`);
+  }
+
+  // 2. Fetch all assortment profiles to map program+code to ID
+  const { data: profiles, error: profileError } = await supabase
+    .from("assortment_profiles")
+    .select("id, display_program, code");
+
+  if (profileError || !profiles) {
+    throw new Error(`Assortment Profile 로드 실패: ${profileError?.message || "데이터 없음"}`);
+  }
+
+  // Build mapping map
+  const profileMap: Record<string, number> = {};
+  profiles.forEach((p) => {
+    profileMap[`${p.display_program}:${p.code}`] = p.id;
+  });
+
+  // Prepare batch upsert for matrix
+  const upsertRows: any[] = [];
+  const deleteApIds: number[] = [];
+
+  // Loop through all 18 possibilities
+  const programs = ["START_4FT", "GROW_8FT", "EXPAND_12FT"];
+  const apCodes = ["AP-01", "AP-02", "AP-03", "AP-04", "AP-05", "AP-06"];
+
+  for (const prog of programs) {
+    for (const code of apCodes) {
+      const key = `${prog}:${code}`;
+      const role = matrix[key] || "EXCLUDE";
+      const apId = profileMap[key];
+
+      if (apId) {
+        if (role === "EXCLUDE") {
+          deleteApIds.push(apId);
+        } else {
+          upsertRows.push({
+            product_id: productId,
+            ap_id: apId,
+            priority_role: role,
+            updated_at: new Date().toISOString(),
+          });
+        }
+      }
+    }
+  }
+
+  // Execute Upsert for matrix
+  if (upsertRows.length > 0) {
+    const { error: upsertError } = await supabase
+      .from("product_curation_matrix")
+      .upsert(upsertRows);
+
+    if (upsertError) {
+      throw new Error(`매트릭스 롤 저장 실패: ${upsertError.message}`);
+    }
+  }
+
+  // Execute Delete/Clean-up for EXCLUDE ones
+  if (deleteApIds.length > 0) {
+    const { error: deleteError } = await supabase
+      .from("product_curation_matrix")
+      .delete()
+      .eq("product_id", productId)
+      .in("ap_id", deleteApIds);
+
+    if (deleteError) {
+      throw new Error(`매트릭스 제외 처리 실패: ${deleteError.message}`);
+    }
+  }
+
+  revalidatePath(`/admin/products/${productId}`);
+  revalidatePath(`/admin/products/curation`);
+  return { success: true };
+}
+
+export async function adminUpdateAPInfo(
+  apId: number,
+  info: { name: string; description: string; target_sku: number }
+) {
+  await verifyAdminSession();
+  const supabase = createAdminClient();
+
+  const { error } = await supabase
+    .from("assortment_profiles")
+    .update({
+      name: info.name,
+      description: info.description || null,
+      target_sku: info.target_sku,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", apId);
+
+  if (error) {
+    throw new Error(`AP 정보 저장 실패: ${error.message}`);
+  }
+
+  revalidatePath(`/admin/products/curation`);
+  return { success: true };
+}
+
+export async function adminAddProductToAP(apId: number, productId: string, role: string) {
+  await verifyAdminSession();
+  const supabase = createAdminClient();
+
+  const { error } = await supabase
+    .from("product_curation_matrix")
+    .upsert({
+      product_id: productId,
+      ap_id: apId,
+      priority_role: role,
+      updated_at: new Date().toISOString(),
+    });
+
+  if (error) {
+    throw new Error(`상품 추가 실패: ${error.message}`);
+  }
+
+  await logCurationHistory(apId, `상품 추가 (제품 ID: ${productId}, 역할: ${role})`);
+  revalidatePath(`/admin/products/curation`);
+  return { success: true };
+}
+
+export async function adminRemoveProductFromAP(apId: number, productId: string) {
+  await verifyAdminSession();
+  const supabase = createAdminClient();
+
+  const { error } = await supabase
+    .from("product_curation_matrix")
+    .delete()
+    .eq("product_id", productId)
+    .eq("ap_id", apId);
+
+  if (error) {
+    throw new Error(`상품 제외 실패: ${error.message}`);
+  }
+
+  await logCurationHistory(apId, `상품 제외 (제품 ID: ${productId})`);
+  revalidatePath(`/admin/products/curation`);
+  return { success: true };
+}
+
+export async function adminChangeProductRoleInAP(apId: number, productId: string, role: string) {
+  await verifyAdminSession();
+  const supabase = createAdminClient();
+
+  const { error } = await supabase
+    .from("product_curation_matrix")
+    .update({
+      priority_role: role,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("product_id", productId)
+    .eq("ap_id", apId);
+
+  if (error) {
+    throw new Error(`진열 우선순위 역할 변경 실패: ${error.message}`);
+  }
+
+  await logCurationHistory(apId, `상품 역할 변경 (제품 ID: ${productId} ➡️ ${role})`);
+  revalidatePath(`/admin/products/curation`);
+  return { success: true };
+}
+
+export async function adminReplaceProductInAP(apId: number, oldProductId: string, newProductId: string, role: string) {
+  await verifyAdminSession();
+  const supabase = createAdminClient();
+
+  // 1. Delete old
+  const { error: delError } = await supabase
+    .from("product_curation_matrix")
+    .delete()
+    .eq("product_id", oldProductId)
+    .eq("ap_id", apId);
+
+  if (delError) {
+    throw new Error(`대체 대상 삭제 실패: ${delError.message}`);
+  }
+
+  // 2. Insert new
+  const { error: insError } = await supabase
+    .from("product_curation_matrix")
+    .upsert({
+      product_id: newProductId,
+      ap_id: apId,
+      priority_role: role,
+      updated_at: new Date().toISOString(),
+    });
+
+  if (insError) {
+    throw new Error(`대체품 등록 실패: ${insError.message}`);
+  }
+
+  await logCurationHistory(apId, `상품 대체 (이전 ID: ${oldProductId} ➡️ 신규 ID: ${newProductId})`);
+  revalidatePath(`/admin/products/curation`);
+  return { success: true };
+}
+
+// 헬퍼: 히스토리 기록기
+async function logCurationHistory(apId: number, note: string) {
+  const supabase = createAdminClient();
+
+  // 1. Get current max version
+  const { data: latest } = await supabase
+    .from("curation_history")
+    .select("version")
+    .eq("ap_id", apId)
+    .order("version", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const nextVer = (latest?.version || 0) + 1;
+
+  // 2. Get current matrix snapshot
+  const { data: matrix } = await supabase
+    .from("product_curation_matrix")
+    .select("product_id, priority_role")
+    .eq("ap_id", apId);
+
+  const snapshot = matrix || [];
+
+  // 3. Insert history
+  await supabase
+    .from("curation_history")
+    .insert({
+      ap_id: apId,
+      version: nextVer,
+      snapshot_json: snapshot,
+      updated_by: "어드민 운영자", // 임의 하드코딩 또는 세션 이메일
+      change_note: note,
+    });
+}
