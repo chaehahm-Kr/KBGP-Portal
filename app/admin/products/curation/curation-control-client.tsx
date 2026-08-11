@@ -64,7 +64,7 @@ export function CurationControlClient({
               onClick={() => setSelectedProgram(prog.key)}
               className={`rounded-xl border p-6 shadow-sm cursor-pointer transition-all duration-200 ${
                 isSelected
-                  ? "border-zinc-950 bg-white ring-2 ring-zinc-950 dark:border-white dark:ring-white dark:bg-zinc-900"
+                  ? "border-zinc-900 bg-zinc-50/10 ring-1 ring-zinc-900 dark:border-zinc-100 dark:ring-zinc-100 dark:bg-zinc-950/40"
                   : "border-zinc-200 bg-white hover:border-zinc-400 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-zinc-700"
               }`}
             >
@@ -84,19 +84,19 @@ export function CurationControlClient({
 
               <div className="grid grid-cols-3 gap-4 mt-6 pt-4 border-t border-zinc-100 dark:border-zinc-800 text-xs">
                 <div>
-                  <p className="text-[10px] text-zinc-400 font-medium">Active SKU</p>
+                  <p className="text-[10px] text-zinc-400 font-semibold uppercase tracking-wider">Active SKU</p>
                   <p className="text-base font-bold text-zinc-800 dark:text-zinc-250 mt-1">
                     {prog.activeSku}
                   </p>
                 </div>
                 <div>
-                  <p className="text-[10px] text-zinc-400 font-medium">AP Count</p>
+                  <p className="text-[10px] text-zinc-400 font-semibold uppercase tracking-wider">AP Count</p>
                   <p className="text-base font-bold text-zinc-800 dark:text-zinc-250 mt-1">
                     {prog.apCount}
                   </p>
                 </div>
                 <div>
-                  <p className="text-[10px] text-zinc-400 font-medium">Brands</p>
+                  <p className="text-[10px] text-zinc-400 font-semibold uppercase tracking-wider">Brands</p>
                   <p className="text-base font-bold text-zinc-800 dark:text-zinc-250 mt-1">
                     {prog.brandCount}
                   </p>
@@ -108,9 +108,9 @@ export function CurationControlClient({
       </div>
 
       {/* AP List for Selected Program */}
-      <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 space-y-4">
-        <div className="border-b border-zinc-150 pb-2 dark:border-zinc-800 flex items-center justify-between">
-          <h3 className="text-sm font-bold text-zinc-855 dark:text-white">
+      <div className="rounded-xl border border-zinc-200 bg-white overflow-hidden shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+        <div className="p-6 pb-4 flex items-center justify-between border-b border-zinc-150 dark:border-zinc-800">
+          <h3 className="text-sm font-bold text-zinc-900 dark:text-white">
             {getProgramLabel(selectedProgram)} - Assortment Profiles (AP-01 ~ AP-06)
           </h3>
           <span className="text-[10px] font-bold text-zinc-450 dark:text-zinc-500 uppercase tracking-wider">
@@ -119,20 +119,20 @@ export function CurationControlClient({
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs border-collapse">
+          <table className="w-full text-left border-collapse text-xs">
             <thead>
-              <tr className="border-b border-zinc-250 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/50 text-zinc-500">
-                <th className="p-3 font-bold w-[15%]">Code</th>
-                <th className="p-3 font-bold w-[25%]">AP Name & Description</th>
-                <th className="p-3 font-bold text-center w-[12%]">Target SKU</th>
-                <th className="p-3 font-bold text-center w-[12%]">Selected SKU</th>
-                <th className="p-3 font-bold text-center w-[10%]">Brands</th>
-                <th className="p-3 font-bold text-center w-[12%]">Avg MSRP</th>
-                <th className="p-3 font-bold text-center w-[12%]">Avg Margin</th>
-                <th className="p-3 font-bold text-center w-[12%]">Actions</th>
+              <tr className="border-b border-zinc-200 bg-zinc-50/50 text-zinc-500 font-bold dark:border-zinc-800 dark:bg-zinc-900/50">
+                <th className="px-6 py-3.5 whitespace-nowrap w-[15%]">Code</th>
+                <th className="px-6 py-3.5 whitespace-nowrap w-[25%]">AP Name & Description</th>
+                <th className="px-6 py-3.5 whitespace-nowrap text-center w-[12%]">Target SKU</th>
+                <th className="px-6 py-3.5 whitespace-nowrap text-center w-[12%]">Selected SKU</th>
+                <th className="px-6 py-3.5 whitespace-nowrap text-center w-[10%]">Brands</th>
+                <th className="px-6 py-3.5 whitespace-nowrap text-center w-[12%]">Avg MSRP</th>
+                <th className="px-6 py-3.5 whitespace-nowrap text-center w-[12%]">Avg Margin</th>
+                <th className="px-6 py-3.5 whitespace-nowrap text-right w-[12%]">Actions</th>
               </tr>
             </thead>
-            <tbody>
+            <tbody className="divide-y divide-zinc-150 dark:divide-zinc-800/80">
               {filteredAPs.map((ap) => {
                 const targetMatch = ap.selectedSku === ap.target_sku;
                 return (
