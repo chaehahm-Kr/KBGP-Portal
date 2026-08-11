@@ -271,39 +271,10 @@ export function ProductOverrideTabs({
   const [ovLandedCost, setOvLandedCost] = useState<string>((curation as any).landed_cost?.toString() || "");
   const [ovWholesalePrice, setOvWholesalePrice] = useState<string>((curation as any).wholesale_price?.toString() || "");
   const [ovSuggestRetailPrice, setOvSuggestRetailPrice] = useState<string>((curation as any).suggest_retail_price?.toString() || "");
+  const [ovMapPrice, setOvMapPrice] = useState<string>((curation as any).map_price?.toString() || "");
 
   // Load existing overrides
   const overrides = (product.price_additional_info as any)?.admin_overrides || {};
-
-  // 누락 항목 분석 (Draft 상태 판정)
-  const missingFields: string[] = [];
-  const effectiveManufactureSku = overrides.manufacture_sku !== undefined ? overrides.manufacture_sku : product.manufacture_sku;
-  
-  if (!product.brand_id) missingFields.push("브랜드 지정");
-  if (!product.category) missingFields.push("카테고리 지정");
-  if (!product.name_en?.trim()) missingFields.push("영문 제품명");
-  if (!(effectiveManufactureSku || "").trim()) missingFields.push("제조사 SKU");
-  if (!product.origin?.trim()) missingFields.push("원산지");
-  if (!product.price_krw_retail || Number(product.price_krw_retail) <= 0) missingFields.push("소비자 판매가");
-  if (!product.price_usd_fob || Number(product.price_usd_fob) <= 0) missingFields.push("FOB 수출 가격");
-  
-  const widthVal = Number(product.package_width || 0);
-  const depthVal = Number(product.package_depth || 0);
-  const heightVal = Number(product.package_height || 0);
-  const weightVal = Number(product.package_weight || 0);
-  if (widthVal <= 0 || depthVal <= 0 || heightVal <= 0 || weightVal <= 0) {
-    missingFields.push("패키지 배송 규격");
-  }
-  
-  if (!product.upc?.trim() && !product.ean?.trim()) {
-    missingFields.push("식별 바코드 (UPC 또는 EAN)");
-  }
-  
-  const hasImages = imageUrls.length > 0 && imageUrls[0] !== null;
-  if (!hasImages) {
-    missingFields.push("대표 이미지 업로드");
-  }
-  const isDraft = missingFields.length > 0;
 
   // Form States for Overrides
   const [ovName, setOvName] = useState(overrides.name || "");
@@ -552,6 +523,44 @@ export function ProductOverrideTabs({
   const [ovC40Weight, setOvC40Weight] = useState(overrides.container_40fthc_weight?.toString() || "");
   const [ovC40Cbm, setOvC40Cbm] = useState(overrides.container_40fthc_cbm?.toString() || "");
 
+  // 누락 항목 분석 (Draft 상태 판정) - 오버라이드 실시간 입력값 연동 반영
+  const missingFields: string[] = [];
+
+  const effectiveBrandId = ovBrandId || product.brand_id;
+  const effectiveCategory = ovCategory.trim() !== "" ? ovCategory : product.category;
+  const effectiveNameEn = ovNameEn.trim() !== "" ? ovNameEn : product.name_en;
+  const effectiveManufactureSku = ovManufactureSku.trim() !== "" ? ovManufactureSku : product.manufacture_sku;
+  const effectiveOrigin = ovOrigin.trim() !== "" ? ovOrigin : product.origin;
+  const effectivePriceKrwRetail = ovPriceKrwRetail.trim() !== "" ? parseFloat(ovPriceKrwRetail) : (product.price_krw_retail || 0);
+  const effectivePriceUsdFob = ovPriceUsdFob.trim() !== "" ? parseFloat(ovPriceUsdFob) : (product.price_usd_fob || 0);
+  const effectiveUpc = ovUpc.trim() !== "" ? ovUpc : product.upc;
+  const effectiveEan = ovEan.trim() !== "" ? ovEan : product.ean;
+
+  const pkgWidth = ovPackageWidth.trim() !== "" ? parseFloat(ovPackageWidth) : Number(product.package_width || 0);
+  const pkgDepth = ovPackageDepth.trim() !== "" ? parseFloat(ovPackageDepth) : Number(product.package_depth || 0);
+  const pkgHeight = ovPackageHeight.trim() !== "" ? parseFloat(ovPackageHeight) : Number(product.package_height || 0);
+  const pkgWeight = ovPackageWeight.trim() !== "" ? parseFloat(ovPackageWeight) : Number(product.package_weight || 0);
+
+  if (!effectiveBrandId) missingFields.push("브랜드 지정");
+  if (!effectiveCategory) missingFields.push("카테고리 지정");
+  if (!(effectiveNameEn || "").trim()) missingFields.push("영문 제품명");
+  if (!(effectiveManufactureSku || "").trim()) missingFields.push("제조사 SKU");
+  if (!(effectiveOrigin || "").trim()) missingFields.push("원산지");
+  if (Number(effectivePriceKrwRetail) <= 0) missingFields.push("소비자 판매가");
+  if (Number(effectivePriceUsdFob) <= 0) missingFields.push("FOB 수출 가격");
+  
+  if (pkgWidth <= 0 || pkgDepth <= 0 || pkgHeight <= 0 || pkgWeight <= 0) {
+    missingFields.push("패키지 배송 규격");
+  }
+  if (!(effectiveUpc || "").trim() && !(effectiveEan || "").trim()) {
+    missingFields.push("식별 바코드 (UPC 또는 EAN)");
+  }
+  const hasImages = imageUrls.length > 0 && imageUrls[0] !== null;
+  if (!hasImages) {
+    missingFields.push("대표 이미지 업로드");
+  }
+  const isDraft = missingFields.length > 0;
+
   const handleSave = () => {
     setStatusMessage(null);
     startTransition(async () => {
@@ -646,6 +655,7 @@ export function ProductOverrideTabs({
             landed_cost: ovLandedCost.trim() !== "" ? parseFloat(ovLandedCost) : null,
             wholesale_price: ovWholesalePrice.trim() !== "" ? parseFloat(ovWholesalePrice) : null,
             suggest_retail_price: ovSuggestRetailPrice.trim() !== "" ? parseFloat(ovSuggestRetailPrice) : null,
+            map_price: ovMapPrice.trim() !== "" ? parseFloat(ovMapPrice) : null,
           },
           ovMatrix
         );
@@ -1382,7 +1392,7 @@ export function ProductOverrideTabs({
                   당사의 실질 수입 원가, 뷰티 서플라이 공급가, 권장 소비자가를 책정하여 당사 도매 마진과 소매점 마진을 실시간으로 확인하고 큐레이션 가격 원천으로 사용합니다.
                 </p>
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
                   {/* Landed Cost */}
                   <div className="space-y-1">
                     <label className="text-[11px] font-bold text-zinc-650 dark:text-zinc-450 block">
@@ -1394,6 +1404,21 @@ export function ProductOverrideTabs({
                       placeholder="수입 원가 (배송/통관 포함)..."
                       value={ovLandedCost}
                       onChange={(e) => setOvLandedCost(e.target.value)}
+                      className="w-full rounded border border-zinc-200 p-2 text-xs text-zinc-900 bg-white dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:border-zinc-950 outline-none"
+                    />
+                  </div>
+
+                  {/* MAP Price */}
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-bold text-zinc-650 dark:text-zinc-450 block">
+                      MAP Price ($)
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      placeholder="최저 판매 제한가..."
+                      value={ovMapPrice}
+                      onChange={(e) => setOvMapPrice(e.target.value)}
                       className="w-full rounded border border-zinc-200 p-2 text-xs text-zinc-900 bg-white dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:border-zinc-950 outline-none"
                     />
                   </div>
@@ -1450,7 +1475,7 @@ export function ProductOverrideTabs({
                           <span className="text-xl font-extrabold text-indigo-750 dark:text-indigo-400">
                             {ourMargin > 0 ? `${ourMargin.toFixed(1)}%` : "0.0%"}
                           </span>
-                          <span className="text-[10px] text-zinc-400">
+                          <span className="text-sm font-bold text-zinc-700 dark:text-zinc-300 ml-1.5">
                             (수익: ${wholesale > landed ? (wholesale - landed).toFixed(2) : "0.00"})
                           </span>
                         </div>
@@ -1466,7 +1491,7 @@ export function ProductOverrideTabs({
                           <span className="text-xl font-extrabold text-emerald-700 dark:text-emerald-450">
                             {retailMargin > 0 ? `${retailMargin.toFixed(1)}%` : "0.0%"}
                           </span>
-                          <span className="text-[10px] text-zinc-400">
+                          <span className="text-sm font-bold text-zinc-750 dark:text-zinc-300 ml-1.5">
                             (수익: ${srp > wholesale ? (srp - wholesale).toFixed(2) : "0.00"})
                           </span>
                         </div>

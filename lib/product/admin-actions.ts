@@ -142,6 +142,7 @@ export async function adminGetProductCuration(productId: string) {
       landed_cost: null,
       wholesale_price: null,
       suggest_retail_price: null,
+      map_price: null,
     },
     matrix,
   };
@@ -158,6 +159,7 @@ export async function adminUpdateProductCuration(
     landed_cost?: number | null;
     wholesale_price?: number | null;
     suggest_retail_price?: number | null;
+    map_price?: number | null;
   },
   matrixPayload: Record<string, string>
 ) {
@@ -208,6 +210,7 @@ export async function adminUpdateProductCuration(
     const curLanded = dbCuration.landed_cost;
     const curWholesale = dbCuration.wholesale_price;
     const curSrp = dbCuration.suggest_retail_price;
+    const curMap = dbCuration.map_price;
 
     const newStatus = curationPayload.status || "NOT_REVIEWED";
     const newCurator = curationPayload.curator || "";
@@ -216,6 +219,7 @@ export async function adminUpdateProductCuration(
     const newLanded = curationPayload.landed_cost !== undefined ? curationPayload.landed_cost : null;
     const newWholesale = curationPayload.wholesale_price !== undefined ? curationPayload.wholesale_price : null;
     const newSrp = curationPayload.suggest_retail_price !== undefined ? curationPayload.suggest_retail_price : null;
+    const newMap = curationPayload.map_price !== undefined ? curationPayload.map_price : null;
 
     if (
       curStatus !== newStatus ||
@@ -224,7 +228,8 @@ export async function adminUpdateProductCuration(
       curNextReview !== newNextReview ||
       Number(curLanded || 0) !== Number(newLanded || 0) ||
       Number(curWholesale || 0) !== Number(newWholesale || 0) ||
-      Number(curSrp || 0) !== Number(newSrp || 0)
+      Number(curSrp || 0) !== Number(newSrp || 0) ||
+      Number(curMap || 0) !== Number(newMap || 0)
     ) {
       isCurationChanged = true;
     }
@@ -273,6 +278,7 @@ export async function adminUpdateProductCuration(
       landed_cost: curationPayload.landed_cost !== undefined ? curationPayload.landed_cost : null,
       wholesale_price: curationPayload.wholesale_price !== undefined ? curationPayload.wholesale_price : null,
       suggest_retail_price: curationPayload.suggest_retail_price !== undefined ? curationPayload.suggest_retail_price : null,
+      map_price: curationPayload.map_price !== undefined ? curationPayload.map_price : null,
       updated_at: new Date().toISOString(),
     });
 
