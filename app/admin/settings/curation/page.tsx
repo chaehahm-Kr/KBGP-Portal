@@ -20,7 +20,19 @@ export default async function AdminCurationSettingsPage() {
   // 2. Fetch assortment profiles
   const { data: profiles } = await supabase
     .from("assortment_profiles")
-    .select("*")
+    .select(`
+      *,
+      ap_matching_tags(
+        display_order,
+        matching_tags(
+          id,
+          tag_code,
+          name_ko,
+          name_en,
+          is_active
+        )
+      )
+    `)
     .order("display_program", { ascending: true })
     .order("code", { ascending: true });
 

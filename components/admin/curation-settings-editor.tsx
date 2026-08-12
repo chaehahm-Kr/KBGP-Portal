@@ -6,6 +6,8 @@ import {
   adminUpdateAPSettings,
   adminCreateDisplayProgram,
   adminCreateAPSettings,
+  adminSearchMatchingTags,
+  adminCreateMatchingTag,
 } from "@/lib/product/admin-actions";
 
 interface DisplayProgram {
@@ -17,6 +19,19 @@ interface DisplayProgram {
   is_active: boolean;
 }
 
+interface MatchingTag {
+  id: number;
+  tag_code: string;
+  name_ko: string;
+  name_en: string;
+  is_active: boolean;
+}
+
+interface ApMatchingTagRelation {
+  display_order: number;
+  matching_tags: MatchingTag | null;
+}
+
 interface AssortmentProfile {
   id: number;
   display_program: string;
@@ -25,6 +40,7 @@ interface AssortmentProfile {
   description: string | null;
   target_sku?: number;
   is_active: boolean;
+  ap_matching_tags?: ApMatchingTagRelation[];
 }
 
 interface Props {
@@ -46,6 +62,88 @@ export function CurationSettingsEditor({ initialPrograms, initialProfiles }: Pro
   const [editingProfile, setEditingProfile] = useState<AssortmentProfile | null>(null);
   const [isCreatingProgram, setIsCreatingProgram] = useState(false);
   const [isCreatingProfile, setIsCreatingProfile] = useState(false);
+
+  // Tag editor states
+  const [isSearchingTag, setIsSearchingTag] = useState(false);
+  const [isCreatingTag, setIsCreatingTag] = useState(false);
+  const [tagQuery, setTagQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<MatchingTag[]>([]);
+
+  const [newTagCode, setNewTagCode] = useState("");
+  const [newTagNameKo, setNewTagNameKo] = useState("");
+  const [newTagNameEn, setNewTagNameEn] = useState("");
+
+  const handleTagSearch = async (query: string) => {
+    setTagQuery(query);
+    if (!query.trim()) {
+      setSearchResults([]);
+      return;
+    }
+    try {
+      const results = await adminSearchMatchingTags(query);
+      setSearchResults(results || []);
+    } catch (err) {
+      console.error("Tag search failed:", err);
+    }
+  };
+
+  const handleAddTag = (tag: MatchingTag) => {
+    if (!editingProfile) return;
+    const currentTags = editingProfile.ap_matching_tags || [];
+    if (currentTags.some((rel) => rel.matching_tags?.id === tag.id)) {
+      return;
+    }
+    const updatedTags = [
+      ...currentTags,
+      {
+        display_order: currentTags.length,
+        matching_tags: tag,
+      },
+    ];
+    setEditingProfile({
+      ...editingProfile,
+      ap_matching_tags: updatedTags,
+    });
+    setTagQuery("");
+    setSearchResults([]);
+    setIsSearchingTag(false);
+  };
+
+  const handleRemoveTag = (tagId: number) => {
+    if (!editingProfile) return;
+    const currentTags = editingProfile.ap_matching_tags || [];
+    const updatedTags = currentTags
+      .filter((rel) => rel.matching_tags?.id !== tagId)
+      .map((rel, idx) => ({ ...rel, display_order: idx }));
+    setEditingProfile({
+      ...editingProfile,
+      ap_matching_tags: updatedTags,
+    });
+  };
+
+  const handleCreateNewTag = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newTagCode.trim() || !newTagNameKo.trim() || !newTagNameEn.trim()) {
+      alert("모든 태그 항목(코드, 국문명, 영문명)을 입력해야 합니다.");
+      return;
+    }
+    try {
+      const newTag = await adminCreateMatchingTag({
+        tag_code: newTagCode.trim().toUpperCase(),
+        name_ko: newTagNameKo.trim(),
+        name_en: newTagNameEn.trim(),
+      });
+      if (newTag) {
+        handleAddTag(newTag);
+        setNewTagCode("");
+        setNewTagNameKo("");
+        setNewTagNameEn("");
+        setIsCreatingTag(false);
+      }
+    } catch (err: any) {
+      alert(err.message || "태그 생성 실패");
+    }
+  };
 
   // Program creation form states
   const [newProgCode, setNewProgCode] = useState("");
@@ -242,12 +340,20 @@ export function CurationSettingsEditor({ initialPrograms, initialProfiles }: Pro
     setMessage(null);
     startTransition(async () => {
       try {
-        const res = await adminUpdateAPSettings(editingProfile.id, {
-          name: editingProfile.name,
-          description: editingProfile.description || "",
-          target_sku: editingProfile.target_sku || 0,
-          is_active: editingProfile.is_active,
-        });
+        const tagIds = editingProfile.ap_matching_tags
+          ?.map((rel) => rel.matching_tags?.id)
+          .filter((id): id is number => typeof id === "number");
+
+        const res = await adminUpdateAPSettings(
+          editingProfile.id,
+          {
+            name: editingProfile.name,
+            description: editingProfile.description || "",
+            target_sku: editingProfile.target_sku || 0,
+            is_active: editingProfile.is_active,
+          },
+          tagIds
+        );
 
         if (res.success) {
           setProfiles((prev) =>
@@ -468,6 +574,13 @@ export function CurationSettingsEditor({ initialPrograms, initialProfiles }: Pro
                               setIsCreatingProgram(false);
                               setIsCreatingProfile(false);
                               setMessage(null);
+                              setIsSearchingTag(false);
+                              setIsCreatingTag(false);
+                              setTagQuery("");
+                              setSearchResults([]);
+                              setNewTagCode("");
+                              setNewTagNameKo("");
+                              setNewTagNameEn("");
                             }}
                             className={`border-b border-zinc-100 dark:border-zinc-850 hover:bg-zinc-50/20 dark:hover:bg-zinc-950/20 cursor-pointer ${
                               isSelected ? "bg-zinc-50/70 dark:bg-zinc-800/40" : ""
@@ -780,6 +893,193 @@ export function CurationSettingsEditor({ initialPrograms, initialProfiles }: Pro
                       className="w-full rounded border border-zinc-200 dark:border-zinc-855 dark:bg-zinc-950 dark:text-white p-2 text-xs outline-none focus:border-zinc-950 h-24 resize-none leading-relaxed"
                     />
                   </div>
+                  {/* MATCHING TAGS SECTION */}
+                  <div className="space-y-1.5 border-t border-zinc-100 dark:border-zinc-800 pt-3.5">
+                    <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block">
+                      Matching Tags (추천 매칭 태그)
+                    </label>
+                    <p className="text-[9px] text-zinc-400 dark:text-zinc-500 leading-normal">
+                      Growth Simulator에서 매장 특성 및 리테일러 답변과 해당 AP를 매칭하기 위해 사용하는 태그입니다.
+                    </p>
+
+                    {/* Tags List */}
+                    <div className="flex flex-wrap gap-1.5 pt-1 max-h-36 overflow-y-auto pr-1">
+                      {editingProfile.ap_matching_tags?.map((rel) => {
+                        const tag = rel.matching_tags;
+                        if (!tag) return null;
+                        return (
+                          <span
+                            key={tag.id}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-855 text-zinc-800 dark:text-zinc-200 text-[10px] font-semibold border border-zinc-200 dark:border-zinc-800"
+                          >
+                            {tag.name_ko}
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveTag(tag.id)}
+                              className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 font-extrabold cursor-pointer text-[10px] w-3 h-3 flex items-center justify-center rounded-full hover:bg-zinc-200 dark:hover:bg-zinc-750"
+                            >
+                              ×
+                            </button>
+                          </span>
+                        );
+                      })}
+                      {(!editingProfile.ap_matching_tags || editingProfile.ap_matching_tags.length === 0) && (
+                        <span className="text-[10px] text-zinc-400 dark:text-zinc-500 italic block py-0.5">
+                          등록된 매칭 태그가 없습니다.
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Tag Search/Add Panel */}
+                    <div className="pt-1.5">
+                      {!isSearchingTag ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsSearchingTag(true);
+                            setIsCreatingTag(false);
+                          }}
+                          className="inline-flex items-center text-[10px] font-bold text-zinc-500 hover:text-zinc-900 dark:hover:text-white border border-zinc-250 dark:border-zinc-800 rounded px-2 py-1 bg-zinc-50 dark:bg-zinc-950 transition-colors cursor-pointer"
+                        >
+                          + 태그 추가
+                        </button>
+                      ) : (
+                        <div className="space-y-2 border border-zinc-200 dark:border-zinc-800 rounded p-2.5 bg-zinc-50/50 dark:bg-zinc-950/20">
+                          {!isCreatingTag ? (
+                            <div className="space-y-2">
+                              <div className="flex items-center gap-2">
+                                <input
+                                  type="text"
+                                  placeholder="태그 검색 (예: 피부, 트렌드, HAIR)..."
+                                  value={tagQuery}
+                                  onChange={(e) => handleTagSearch(e.target.value)}
+                                  className="flex-1 rounded border border-zinc-200 dark:border-zinc-850 dark:bg-zinc-950 dark:text-white p-1.5 text-[11px] outline-none"
+                                  autoFocus
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setIsSearchingTag(false);
+                                    setTagQuery("");
+                                    setSearchResults([]);
+                                  }}
+                                  className="text-[11px] font-bold text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 px-1 py-0.5 cursor-pointer"
+                                >
+                                  닫기
+                                </button>
+                              </div>
+
+                              {/* Autocomplete Results */}
+                              {tagQuery.trim() !== "" && (
+                                <div className="max-h-36 overflow-y-auto border border-zinc-150 dark:border-zinc-850 bg-white dark:bg-zinc-950 rounded shadow-sm text-[11px] divide-y divide-zinc-100 dark:divide-zinc-850">
+                                  {searchResults
+                                    .filter(t => !(editingProfile.ap_matching_tags || []).some(rel => rel.matching_tags?.id === t.id))
+                                    .map((tag) => (
+                                      <div
+                                        key={tag.id}
+                                        onClick={() => handleAddTag(tag)}
+                                        className="p-2 cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-900 transition-colors flex justify-between items-center"
+                                      >
+                                        <span className="font-semibold text-zinc-800 dark:text-zinc-200">{tag.name_ko} ({tag.name_en})</span>
+                                        <span className="text-[9px] text-zinc-400 font-mono bg-zinc-100 dark:bg-zinc-800 px-1 rounded">{tag.tag_code}</span>
+                                      </div>
+                                    ))}
+                                  {searchResults.filter(t => !(editingProfile.ap_matching_tags || []).some(rel => rel.matching_tags?.id === t.id)).length === 0 && (
+                                    <div className="p-2 text-zinc-400 italic text-center">
+                                      검색된 기존 태그가 없습니다.
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+
+                              <div className="flex justify-between items-center pt-0.5">
+                                <span className="text-[9px] text-zinc-400 italic">
+                                  기존에 등록된 태그를 검색해 바로 매핑하세요.
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => setIsCreatingTag(true)}
+                                  className="text-[10px] font-bold text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-300 cursor-pointer"
+                                >
+                                  새 태그 만들기
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            // Create New Tag Form
+                            <div className="space-y-2">
+                              <div className="text-[10px] font-bold text-zinc-600 dark:text-zinc-300 border-b border-zinc-100 dark:border-zinc-800 pb-1.5 flex justify-between">
+                                <span>새 매칭 태그 추가</span>
+                                <button
+                                  type="button"
+                                  onClick={() => setIsCreatingTag(false)}
+                                  className="text-zinc-400 hover:text-zinc-600 cursor-pointer"
+                                >
+                                  이전
+                                </button>
+                              </div>
+                              <div className="space-y-1.5">
+                                <div className="grid grid-cols-3 gap-2">
+                                  <div className="col-span-1 space-y-0.5">
+                                    <label className="text-[9px] font-semibold text-zinc-400">태그 코드 (영어)</label>
+                                    <input
+                                      type="text"
+                                      placeholder="NEW_TAG"
+                                      value={newTagCode}
+                                      onChange={(e) => setNewTagCode(e.target.value.toUpperCase())}
+                                      className="w-full rounded border border-zinc-200 dark:border-zinc-850 dark:bg-zinc-950 p-1 text-[10px] outline-none font-mono"
+                                    />
+                                  </div>
+                                  <div className="col-span-1 space-y-0.5">
+                                    <label className="text-[9px] font-semibold text-zinc-400">한국어 이름</label>
+                                    <input
+                                      type="text"
+                                      placeholder="새 태그"
+                                      value={newTagNameKo}
+                                      onChange={(e) => setNewTagNameKo(e.target.value)}
+                                      className="w-full rounded border border-zinc-200 dark:border-zinc-850 dark:bg-zinc-950 p-1 text-[10px] outline-none"
+                                    />
+                                  </div>
+                                  <div className="col-span-1 space-y-0.5">
+                                    <label className="text-[9px] font-semibold text-zinc-400">영어 이름</label>
+                                    <input
+                                      type="text"
+                                      placeholder="New Tag"
+                                      value={newTagNameEn}
+                                      onChange={(e) => setNewTagNameEn(e.target.value)}
+                                      className="w-full rounded border border-zinc-200 dark:border-zinc-850 dark:bg-zinc-950 p-1 text-[10px] outline-none"
+                                    />
+                                  </div>
+                                </div>
+                                <div className="flex justify-end gap-1.5 pt-1">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setIsCreatingTag(false);
+                                      setNewTagCode("");
+                                      setNewTagNameKo("");
+                                      setNewTagNameEn("");
+                                    }}
+                                    className="px-2 py-1 rounded border text-[9px] font-bold hover:bg-zinc-100 dark:hover:bg-zinc-900 cursor-pointer"
+                                  >
+                                    취소
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={handleCreateNewTag}
+                                    className="px-2 py-1 rounded bg-zinc-950 text-white dark:bg-white dark:text-zinc-950 text-[9px] font-bold hover:opacity-90 cursor-pointer"
+                                  >
+                                    생성 및 추가
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
                   <div className="flex items-center gap-2 pt-2">
                     <input
                       type="checkbox"

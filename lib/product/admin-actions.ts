@@ -390,7 +390,8 @@ export async function adminUpdateAPInfo(
 
 export async function adminUpdateAPSettings(
   apId: number,
-  info: { name: string; description: string; target_sku: number; is_active: boolean }
+  info: { name: string; description: string; target_sku: number; is_active: boolean },
+  tagIds?: number[]
 ) {
   await verifyAdminSession();
   const supabase = createAdminClient();
@@ -410,10 +411,94 @@ export async function adminUpdateAPSettings(
     throw new Error(`AP 설정 저장 실패: ${error.message}`);
   }
 
+  // Update matching tags if tagIds is provided
+  if (tagIds) {
+    const { error: deleteError } = await supabase
+      .from("ap_matching_tags")
+      .delete()
+      .eq("ap_id", apId);
+
+    if (deleteError) {
+      throw new Error(`AP 매칭 태그 삭제 실패: ${deleteError.message}`);
+    }
+
+    if (tagIds.length > 0) {
+      const rows = tagIds.map((tagId, idx) => ({
+        ap_id: apId,
+        tag_id: tagId,
+        display_order: idx,
+      }));
+
+      const { error: insertError } = await supabase
+        .from("ap_matching_tags")
+        .insert(rows);
+
+      if (insertError) {
+        throw new Error(`AP 매칭 태그 저장 실패: ${insertError.message}`);
+      }
+    }
+  }
+
   revalidatePath(`/admin/products/curation`);
   revalidatePath(`/admin/settings/curation`);
   return { success: true };
 }
+
+export async function adminSearchMatchingTags(query: string) {
+  await verifyAdminSession();
+  const supabase = createAdminClient();
+
+  const { data, error } = await supabase
+    .from("matching_tags")
+    .select("*")
+    .or(`name_ko.ilike.%${query}%,name_en.ilike.%${query}%,tag_code.ilike.%${query}%`)
+    .eq("is_active", true)
+    .limit(10);
+
+  if (error) {
+    throw new Error(`태그 검색 실패: ${error.message}`);
+  }
+
+  return data;
+}
+
+export async function adminCreateMatchingTag(info: {
+  tag_code: string;
+  name_ko: string;
+  name_en: string;
+}) {
+  await verifyAdminSession();
+  const supabase = createAdminClient();
+
+  // Check if tag_code already exists
+  const { data: exist } = await supabase
+    .from("matching_tags")
+    .select("id")
+    .eq("tag_code", info.tag_code.trim().toUpperCase())
+    .maybeSingle();
+
+  if (exist) {
+    throw new Error(`이미 존재하는 태그 코드입니다: ${info.tag_code}`);
+  }
+
+  const { data, error } = await supabase
+    .from("matching_tags")
+    .insert({
+      tag_code: info.tag_code.trim().toUpperCase(),
+      name_ko: info.name_ko.trim(),
+      name_en: info.name_en.trim(),
+      is_active: true,
+    })
+    .select()
+    .single();
+
+  if (error) {
+    throw new Error(`태그 생성 실패: ${error.message}`);
+  }
+
+  return data;
+}
+
 
 export async function adminCreateAPSettings(info: {
   display_program: string;
