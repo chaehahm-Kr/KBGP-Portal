@@ -2729,7 +2729,7 @@ export function ProductOverrideTabs({
                                 <span>{apCode} · {nameLabel}</span>
                                 <div className="relative group/ap-tooltip inline-block cursor-pointer align-middle">
                                   <span className="text-zinc-400 hover:text-zinc-650 dark:text-zinc-500 text-xs">ⓘ</span>
-                                  <div className="absolute left-0 bottom-full mb-2 w-72 p-3 bg-zinc-950 text-white rounded-lg shadow-xl text-[10px] leading-relaxed transition-all duration-200 opacity-0 invisible group-hover/ap-tooltip:opacity-100 group-hover/ap-tooltip:visible z-50 font-normal normal-case">
+                                  <div className="absolute left-full top-1/2 -translate-y-1/2 ml-2 w-72 p-3 bg-zinc-950 text-white rounded-lg shadow-xl text-[10px] leading-relaxed transition-all duration-200 opacity-0 invisible group-hover/ap-tooltip:opacity-100 group-hover/ap-tooltip:visible z-50 font-normal normal-case">
                                     <p className="font-bold border-b border-zinc-800 pb-1 mb-1.5">AP 세부 설명 ({apCode})</p>
                                     <div className="space-y-1.5">
                                       {sortedProgs.map((p) => {
