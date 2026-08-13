@@ -69,9 +69,7 @@ export function CurationSettingsEditor({ initialPrograms, initialProfiles }: Pro
   const [tagQuery, setTagQuery] = useState("");
   const [searchResults, setSearchResults] = useState<MatchingTag[]>([]);
 
-  const [newTagCode, setNewTagCode] = useState("");
   const [newTagNameKo, setNewTagNameKo] = useState("");
-  const [newTagNameEn, setNewTagNameEn] = useState("");
 
   const handleTagSearch = async (query: string) => {
     setTagQuery(query);
@@ -123,21 +121,17 @@ export function CurationSettingsEditor({ initialPrograms, initialProfiles }: Pro
 
   const handleCreateNewTag = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newTagCode.trim() || !newTagNameKo.trim() || !newTagNameEn.trim()) {
-      alert("모든 태그 항목(코드, 국문명, 영문명)을 입력해야 합니다.");
+    if (!newTagNameKo.trim()) {
+      alert("태그 이름을 입력해야 합니다.");
       return;
     }
     try {
       const newTag = await adminCreateMatchingTag({
-        tag_code: newTagCode.trim().toUpperCase(),
-        name_ko: newTagNameKo.trim(),
-        name_en: newTagNameEn.trim(),
+        name: newTagNameKo.trim(),
       });
       if (newTag) {
         handleAddTag(newTag);
-        setNewTagCode("");
         setNewTagNameKo("");
-        setNewTagNameEn("");
         setIsCreatingTag(false);
       }
     } catch (err: any) {
@@ -578,9 +572,7 @@ export function CurationSettingsEditor({ initialPrograms, initialProfiles }: Pro
                               setIsCreatingTag(false);
                               setTagQuery("");
                               setSearchResults([]);
-                              setNewTagCode("");
                               setNewTagNameKo("");
-                              setNewTagNameEn("");
                             }}
                             className={`border-b border-zinc-100 dark:border-zinc-850 hover:bg-zinc-50/20 dark:hover:bg-zinc-950/20 cursor-pointer ${
                               isSelected ? "bg-zinc-50/70 dark:bg-zinc-800/40" : ""
@@ -1007,7 +999,7 @@ export function CurationSettingsEditor({ initialPrograms, initialProfiles }: Pro
                             </div>
                           ) : (
                             // Create New Tag Form
-                            <div className="space-y-2">
+                            <div className="space-y-2.5">
                               <div className="text-[10px] font-bold text-zinc-600 dark:text-zinc-300 border-b border-zinc-100 dark:border-zinc-800 pb-1.5 flex justify-between">
                                 <span>새 매칭 태그 추가</span>
                                 <button
@@ -1018,56 +1010,32 @@ export function CurationSettingsEditor({ initialPrograms, initialProfiles }: Pro
                                   이전
                                 </button>
                               </div>
-                              <div className="space-y-1.5">
-                                <div className="grid grid-cols-3 gap-2">
-                                  <div className="col-span-1 space-y-0.5">
-                                    <label className="text-[9px] font-semibold text-zinc-400">태그 코드 (영어)</label>
-                                    <input
-                                      type="text"
-                                      placeholder="NEW_TAG"
-                                      value={newTagCode}
-                                      onChange={(e) => setNewTagCode(e.target.value.toUpperCase())}
-                                      className="w-full rounded border border-zinc-200 dark:border-zinc-850 dark:bg-zinc-950 p-1 text-[10px] outline-none font-mono"
-                                    />
-                                  </div>
-                                  <div className="col-span-1 space-y-0.5">
-                                    <label className="text-[9px] font-semibold text-zinc-400">한국어 이름</label>
-                                    <input
-                                      type="text"
-                                      placeholder="새 태그"
-                                      value={newTagNameKo}
-                                      onChange={(e) => setNewTagNameKo(e.target.value)}
-                                      className="w-full rounded border border-zinc-200 dark:border-zinc-850 dark:bg-zinc-950 p-1 text-[10px] outline-none"
-                                    />
-                                  </div>
-                                  <div className="col-span-1 space-y-0.5">
-                                    <label className="text-[9px] font-semibold text-zinc-400">영어 이름</label>
-                                    <input
-                                      type="text"
-                                      placeholder="New Tag"
-                                      value={newTagNameEn}
-                                      onChange={(e) => setNewTagNameEn(e.target.value)}
-                                      className="w-full rounded border border-zinc-200 dark:border-zinc-850 dark:bg-zinc-950 p-1 text-[10px] outline-none"
-                                    />
-                                  </div>
+                              <div className="space-y-2">
+                                <div className="space-y-1">
+                                  <label className="text-[9px] font-semibold text-zinc-400">태그 이름 (한국어 또는 영어)</label>
+                                  <input
+                                    type="text"
+                                    placeholder="예: 피부 트러블 케어 또는 Skin Trouble Care"
+                                    value={newTagNameKo}
+                                    onChange={(e) => setNewTagNameKo(e.target.value)}
+                                    className="w-full rounded border border-zinc-200 dark:border-zinc-850 dark:bg-zinc-950 dark:text-white p-2 text-xs outline-none focus:border-zinc-950"
+                                  />
                                 </div>
                                 <div className="flex justify-end gap-1.5 pt-1">
                                   <button
                                     type="button"
                                     onClick={() => {
                                       setIsCreatingTag(false);
-                                      setNewTagCode("");
                                       setNewTagNameKo("");
-                                      setNewTagNameEn("");
                                     }}
-                                    className="px-2 py-1 rounded border text-[9px] font-bold hover:bg-zinc-100 dark:hover:bg-zinc-900 cursor-pointer"
+                                    className="px-3 py-1 rounded border text-[10px] font-bold hover:bg-zinc-100 dark:hover:bg-zinc-900 cursor-pointer"
                                   >
                                     취소
                                   </button>
                                   <button
                                     type="button"
                                     onClick={handleCreateNewTag}
-                                    className="px-2 py-1 rounded bg-zinc-950 text-white dark:bg-white dark:text-zinc-950 text-[9px] font-bold hover:opacity-90 cursor-pointer"
+                                    className="px-3 py-1 rounded bg-zinc-950 text-white dark:bg-white dark:text-zinc-950 text-[10px] font-bold hover:opacity-90 cursor-pointer"
                                   >
                                     생성 및 추가
                                   </button>

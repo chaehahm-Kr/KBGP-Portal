@@ -462,31 +462,86 @@ export async function adminSearchMatchingTags(query: string) {
   return data;
 }
 
-export async function adminCreateMatchingTag(info: {
-  tag_code: string;
-  name_ko: string;
-  name_en: string;
-}) {
+export async function adminCreateMatchingTag(info: { name: string }) {
   await verifyAdminSession();
   const supabase = createAdminClient();
+  const crypto = await import("crypto");
 
-  // Check if tag_code already exists
-  const { data: exist } = await supabase
-    .from("matching_tags")
-    .select("id")
-    .eq("tag_code", info.tag_code.trim().toUpperCase())
-    .maybeSingle();
-
-  if (exist) {
-    throw new Error(`이미 존재하는 태그 코드입니다: ${info.tag_code}`);
+  const text = info.name.trim();
+  if (!text) {
+    throw new Error("태그 이름이 비어있습니다.");
   }
 
+  // 1. Language detection & translation
+  const hasKorean = /[ㄱ-ㅎ|ㅏ-ㅣ|가-힣]/.test(text);
+  let name_ko = "";
+  let name_en = "";
+
+  const translateText = async (input: string, sl: string, tl: string) => {
+    try {
+      const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${sl}&tl=${tl}&dt=t&q=${encodeURIComponent(input)}`;
+      const res = await fetch(url);
+      const json = await res.json();
+      return json[0][0][0];
+    } catch (e) {
+      console.error("Translation helper error:", e);
+      return null;
+    }
+  };
+
+  if (hasKorean) {
+    name_ko = text;
+    const translated = await translateText(text, "ko", "en");
+    name_en = translated || text;
+  } else {
+    name_en = text;
+    const translated = await translateText(text, "en", "ko");
+    name_ko = translated || text;
+  }
+
+  // 2. Generate tag code from English name
+  let tagCode = name_en
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9\s-_]/g, "")
+    .replace(/[\s-_]+/g, "_");
+
+  if (!tagCode || tagCode.replace(/_/g, "") === "") {
+    tagCode = "TAG_" + crypto.randomBytes(4).toString("hex").toUpperCase();
+  }
+
+  // 3. Check if tag already exists (by name or code)
+  const { data: existByNameKo } = await supabase
+    .from("matching_tags")
+    .select("*")
+    .eq("name_ko", name_ko)
+    .maybeSingle();
+
+  if (existByNameKo) return existByNameKo;
+
+  const { data: existByNameEn } = await supabase
+    .from("matching_tags")
+    .select("*")
+    .eq("name_en", name_en)
+    .maybeSingle();
+
+  if (existByNameEn) return existByNameEn;
+
+  const { data: existByCode } = await supabase
+    .from("matching_tags")
+    .select("*")
+    .eq("tag_code", tagCode)
+    .maybeSingle();
+
+  if (existByCode) return existByCode;
+
+  // 4. Insert new tag
   const { data, error } = await supabase
     .from("matching_tags")
     .insert({
-      tag_code: info.tag_code.trim().toUpperCase(),
-      name_ko: info.name_ko.trim(),
-      name_en: info.name_en.trim(),
+      tag_code: tagCode,
+      name_ko,
+      name_en,
       is_active: true,
     })
     .select()
