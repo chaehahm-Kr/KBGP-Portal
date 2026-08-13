@@ -2719,7 +2719,8 @@ export function ProductOverrideTabs({
                         });
 
                         const sampleProfile = apProfiles.find((p) => p.code === apCode);
-                        const nameLabel = sampleProfile?.name.replace(/^START 4FT - /, "").replace(/^START 4FT -/, "").replace(/^GROW 8FT - /, "").replace(/^EXPAND 12FT - /, "") || apCode;
+                        const nameLabel = sampleProfile?.name
+                          .replace(/^(START|GROW|EXPAND)[-\s]?(4FT|8FT|12FT)[-\s]*/i, "") || apCode;
 
                         return (
                           <tr key={apCode} className="border-b border-zinc-100 dark:border-zinc-850 hover:bg-zinc-50/20 dark:hover:bg-zinc-950/20">
