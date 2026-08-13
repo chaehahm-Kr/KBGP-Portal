@@ -126,11 +126,30 @@ export function CurationSettingsEditor({ initialPrograms, initialProfiles }: Pro
       return;
     }
     try {
-      const newTag = await adminCreateMatchingTag({
+      const newTags = await adminCreateMatchingTag({
         name: newTagNameKo.trim(),
       });
-      if (newTag) {
-        handleAddTag(newTag);
+      if (newTags && newTags.length > 0) {
+        if (!editingProfile) return;
+        let currentTags = editingProfile.ap_matching_tags || [];
+
+        for (const tag of newTags) {
+          if (!currentTags.some((rel) => rel.matching_tags?.id === tag.id)) {
+            currentTags = [
+              ...currentTags,
+              {
+                display_order: currentTags.length,
+                matching_tags: tag,
+              },
+            ];
+          }
+        }
+
+        setEditingProfile({
+          ...editingProfile,
+          ap_matching_tags: currentTags,
+        });
+
         setNewTagNameKo("");
         setIsCreatingTag(false);
       }
@@ -899,12 +918,13 @@ export function CurationSettingsEditor({ initialPrograms, initialProfiles }: Pro
                       {editingProfile.ap_matching_tags?.map((rel) => {
                         const tag = rel.matching_tags;
                         if (!tag) return null;
+                        const displayName = tag.name_ko === tag.name_en ? tag.name_ko : `${tag.name_ko} (${tag.name_en})`;
                         return (
                           <span
                             key={tag.id}
                             className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-855 text-zinc-800 dark:text-zinc-200 text-[10px] font-semibold border border-zinc-200 dark:border-zinc-800"
                           >
-                            {tag.name_ko}
+                            {displayName}
                             <button
                               type="button"
                               onClick={() => handleRemoveTag(tag.id)}

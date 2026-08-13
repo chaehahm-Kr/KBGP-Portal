@@ -467,15 +467,18 @@ export async function adminCreateMatchingTag(info: { name: string }) {
   const supabase = createAdminClient();
   const crypto = await import("crypto");
 
-  const text = info.name.trim();
-  if (!text) {
+  const rawText = info.name.trim();
+  if (!rawText) {
     throw new Error("태그 이름이 비어있습니다.");
   }
 
-  // 1. Language detection & translation
-  const hasKorean = /[ㄱ-ㅎ|ㅏ-ㅣ|가-힣]/.test(text);
-  let name_ko = "";
-  let name_en = "";
+  // Split by comma
+  const names = rawText.split(",").map(n => n.trim()).filter(Boolean);
+  if (names.length === 0) {
+    throw new Error("올바른 태그 이름을 입력해주세요.");
+  }
+
+  const createdTags: any[] = [];
 
   const translateText = async (input: string, sl: string, tl: string) => {
     try {
@@ -489,69 +492,87 @@ export async function adminCreateMatchingTag(info: { name: string }) {
     }
   };
 
-  if (hasKorean) {
-    name_ko = text;
-    const translated = await translateText(text, "ko", "en");
-    name_en = translated || text;
-  } else {
-    name_en = text;
-    const translated = await translateText(text, "en", "ko");
-    name_ko = translated || text;
+  for (const name of names) {
+    // 1. Language detection & translation
+    const hasKorean = /[ㄱ-ㅎ|ㅏ-ㅣ|가-힣]/.test(name);
+    let name_ko = "";
+    let name_en = "";
+
+    if (hasKorean) {
+      name_ko = name;
+      const translated = await translateText(name, "ko", "en");
+      name_en = translated || name;
+    } else {
+      name_en = name;
+      const translated = await translateText(name, "en", "ko");
+      name_ko = translated || name;
+    }
+
+    // 2. Generate tag code from English name
+    let tagCode = name_en
+      .trim()
+      .toUpperCase()
+      .replace(/[^A-Z0-9\s-_]/g, "")
+      .replace(/[\s-_]+/g, "_");
+
+    if (!tagCode || tagCode.replace(/_/g, "") === "") {
+      tagCode = "TAG_" + crypto.randomBytes(4).toString("hex").toUpperCase();
+    }
+
+    // 3. Check if tag already exists (by name or code)
+    const { data: existByNameKo } = await supabase
+      .from("matching_tags")
+      .select("*")
+      .eq("name_ko", name_ko)
+      .maybeSingle();
+
+    if (existByNameKo) {
+      createdTags.push(existByNameKo);
+      continue;
+    }
+
+    const { data: existByNameEn } = await supabase
+      .from("matching_tags")
+      .select("*")
+      .eq("name_en", name_en)
+      .maybeSingle();
+
+    if (existByNameEn) {
+      createdTags.push(existByNameEn);
+      continue;
+    }
+
+    const { data: existByCode } = await supabase
+      .from("matching_tags")
+      .select("*")
+      .eq("tag_code", tagCode)
+      .maybeSingle();
+
+    if (existByCode) {
+      createdTags.push(existByCode);
+      continue;
+    }
+
+    // 4. Insert new tag
+    const { data, error } = await supabase
+      .from("matching_tags")
+      .insert({
+        tag_code: tagCode,
+        name_ko,
+        name_en,
+        is_active: true,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      throw new Error(`태그 생성 실패 (${name}): ${error.message}`);
+    }
+
+    createdTags.push(data);
   }
 
-  // 2. Generate tag code from English name
-  let tagCode = name_en
-    .trim()
-    .toUpperCase()
-    .replace(/[^A-Z0-9\s-_]/g, "")
-    .replace(/[\s-_]+/g, "_");
-
-  if (!tagCode || tagCode.replace(/_/g, "") === "") {
-    tagCode = "TAG_" + crypto.randomBytes(4).toString("hex").toUpperCase();
-  }
-
-  // 3. Check if tag already exists (by name or code)
-  const { data: existByNameKo } = await supabase
-    .from("matching_tags")
-    .select("*")
-    .eq("name_ko", name_ko)
-    .maybeSingle();
-
-  if (existByNameKo) return existByNameKo;
-
-  const { data: existByNameEn } = await supabase
-    .from("matching_tags")
-    .select("*")
-    .eq("name_en", name_en)
-    .maybeSingle();
-
-  if (existByNameEn) return existByNameEn;
-
-  const { data: existByCode } = await supabase
-    .from("matching_tags")
-    .select("*")
-    .eq("tag_code", tagCode)
-    .maybeSingle();
-
-  if (existByCode) return existByCode;
-
-  // 4. Insert new tag
-  const { data, error } = await supabase
-    .from("matching_tags")
-    .insert({
-      tag_code: tagCode,
-      name_ko,
-      name_en,
-      is_active: true,
-    })
-    .select()
-    .single();
-
-  if (error) {
-    throw new Error(`태그 생성 실패: ${error.message}`);
-  }
-
-  return data;
+  return createdTags;
 }
 
 
