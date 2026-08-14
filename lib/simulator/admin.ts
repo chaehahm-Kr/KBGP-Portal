@@ -314,30 +314,32 @@ export async function getSimulationResultDetail(id: string) {
     .order("created_at", { ascending: true });
 
   const matchingRevs = (revRows || []).filter(r => {
-    let snap = r.result_snapshot;
+    const item = r as any;
+    let snap = item.result_snapshot;
     if (typeof snap === "string") {
       try { snap = JSON.parse(snap); } catch (e) {}
     }
     const meta = snap?.session_meta || {};
-    return r.id === baseId || r.base_simulation_id === baseId || meta.base_simulation_id === baseId || (row.email && r.email && r.email === row.email);
+    return item.id === baseId || item.base_simulation_id === baseId || meta.base_simulation_id === baseId || (row.email && item.email && item.email === row.email);
   }).map(r => {
-    let snap = r.result_snapshot;
+    const item = r as any;
+    let snap = item.result_snapshot;
     if (typeof snap === "string") {
       try { snap = JSON.parse(snap); } catch (e) {}
     }
     const meta = snap?.session_meta || {};
-    const code = r.simulation_code || meta.simulation_code || `GS-${r.id.slice(0, 8)}`;
+    const code = item.simulation_code || meta.simulation_code || `GS-${item.id.slice(0, 8)}`;
     const codeMatch = code.match(/-R(\d+)$/i);
     const codeRevNo = codeMatch ? parseInt(codeMatch[1], 10) : 0;
-    const numR = Number(r.revision_no);
+    const numR = Number(item.revision_no);
     const numMeta = Number(meta.revision_no);
     const effectiveRevNo = (!isNaN(numR) && numR > 0) ? numR : ((!isNaN(numMeta) && numMeta > 0) ? numMeta : codeRevNo);
 
     return {
-      ...r,
+      ...item,
       simulation_code: code,
       revision_no: effectiveRevNo,
-      is_latest: r.is_latest ?? meta.is_latest ?? true,
+      is_latest: item.is_latest ?? meta.is_latest ?? true,
       result_snapshot: snap
     };
   });
