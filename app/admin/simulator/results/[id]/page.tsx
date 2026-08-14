@@ -26,13 +26,17 @@ export default async function SimulationResultDetailPage({
     );
   }
 
-  const { row, labelMapping } = detail;
+  const { row, labelMapping, revision_history } = detail;
 
   return (
     <SimulationDetailClient
       id={row.id}
       created_at={row.created_at}
       email={row.email}
+      simulation_code={row.simulation_code || `GS-${row.id.substring(0, 8)}`}
+      revision_no={row.revision_no ?? 0}
+      base_simulation_id={row.base_simulation_id || row.id}
+      revision_history={revision_history || [row]}
       result_snapshot={row.result_snapshot}
       calculation_trace={row.calculation_trace}
       labelMapping={labelMapping}

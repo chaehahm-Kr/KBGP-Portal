@@ -9,6 +9,10 @@ interface DetailClientProps {
   id: string;
   created_at: string;
   email: string;
+  simulation_code?: string;
+  revision_no?: number;
+  base_simulation_id?: string;
+  revision_history?: any[];
   result_snapshot: any;
   calculation_trace: any;
   labelMapping: Record<string, { qLabelKo: string; qLabelEn: string; aLabelKo: string; aLabelEn: string }>;
@@ -24,6 +28,10 @@ export default function SimulationDetailClient({
   id,
   created_at,
   email,
+  simulation_code,
+  revision_no = 0,
+  base_simulation_id,
+  revision_history = [],
   result_snapshot: res,
   calculation_trace: trace,
   labelMapping,
@@ -137,6 +145,14 @@ export default function SimulationDetailClient({
           </div>
           <div className="flex items-center gap-3">
             <h1 className="text-xl font-bold text-zinc-950 dark:text-white">시뮬레이션 상세 분석 및 상담 관리</h1>
+            <span className="font-mono text-xs font-extrabold px-2.5 py-1 bg-zinc-900 text-cyan-400 rounded-md border border-zinc-700">
+              {simulation_code || `GS-${id.substring(0, 8)}`}
+            </span>
+            {revision_no > 0 && (
+              <span className="font-mono text-xs font-extrabold px-2 py-0.5 bg-amber-500/10 text-amber-500 border border-amber-500/30 rounded">
+                REVISION R{revision_no}
+              </span>
+            )}
             {isSandbox ? (
               <span className="rounded bg-purple-50 text-purple-700 border border-purple-200 px-2 py-0.5 text-xs font-bold dark:bg-purple-950/40 dark:text-purple-300 dark:border-purple-900">
                 SANDBOX / TEST
@@ -157,6 +173,54 @@ export default function SimulationDetailClient({
           </Link>
         </div>
       </div>
+
+      {/* Revision History Timeline Section */}
+      {revision_history && revision_history.length > 1 && (
+        <div className="rounded-lg border border-cyan-500/20 bg-cyan-950/10 p-5 dark:border-cyan-500/30 space-y-3">
+          <div className="flex justify-between items-center border-b border-cyan-500/20 pb-2.5">
+            <h3 className="text-xs font-bold text-cyan-400 uppercase tracking-widest flex items-center gap-2">
+              📜 ANALYSIS REVISION HISTORY ({revision_history.length} REVISIONS IN THIS SESSION)
+            </h3>
+            <span className="text-[11px] text-zinc-400">Base ID: {base_simulation_id || id}</span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 pt-1">
+            {revision_history.map((rev: any) => {
+              const revNo = rev.revision_no ?? 0;
+              const isCurrent = rev.id === id;
+              const revRes = rev.result_snapshot || {};
+              const revTime = new Date(rev.created_at).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+              const revCode = rev.simulation_code || (revNo === 0 ? "Original" : `R${revNo}`);
+
+              return (
+                <Link
+                  key={rev.id}
+                  href={`/admin/simulator/results/${rev.id}`}
+                  className={`p-3 rounded-lg border text-left transition-all ${
+                    isCurrent
+                      ? "bg-cyan-500/20 border-cyan-500 text-white font-bold ring-1 ring-cyan-500"
+                      : "bg-zinc-900/60 border-zinc-800 text-zinc-400 hover:border-zinc-700 hover:text-white"
+                  }`}
+                >
+                  <div className="flex justify-between items-center mb-1">
+                    <span className="font-mono text-xs font-black text-cyan-400">
+                      {revNo === 0 ? "Original (R0)" : `Revision R${revNo}`}
+                    </span>
+                    {rev.is_latest && (
+                      <span className="text-[9px] bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 px-1.5 py-0.2 rounded font-bold">
+                        LATEST
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-xs font-extrabold text-white">
+                    {revRes.display?.program || "START"} · {revRes.assortment?.primary || "BALANCE"}
+                  </div>
+                  <div className="text-[10px] text-zinc-500 mt-1 font-mono">{revTime}</div>
+                </Link>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* 1. Follow-up Status Management Card (Item 8) */}
       <div className="rounded-lg border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 space-y-4">

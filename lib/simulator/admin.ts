@@ -18,7 +18,7 @@ export async function getSimulatorOverviewStats() {
 
   const { data: rows, error } = await supabase
     .from("simulation_results")
-    .select("id, created_at, result_snapshot");
+    .select("id, created_at, result_snapshot, is_latest, revision_no");
 
   if (error) {
     console.error("Error fetching overview stats:", error);
@@ -54,6 +54,9 @@ export async function getSimulatorOverviewStats() {
   const results = rows || [];
 
   results.forEach((row) => {
+    // Only count latest revision per Session for Overview stats
+    if (row.is_latest === false) return;
+
     const res = (row.result_snapshot as any) || {};
     if (res.is_sandbox) {
       sandboxSimulations++;
@@ -266,9 +269,18 @@ export async function getSimulationResultDetail(id: string) {
     });
   }
 
+  // Fetch Revision History for this Base Session
+  const baseId = row.base_simulation_id || row.id;
+  const { data: revisionHistory } = await supabase
+    .from("simulation_results")
+    .select("id, created_at, simulation_code, revision_no, is_latest, result_snapshot")
+    .or(`id.eq.${baseId},base_simulation_id.eq.${baseId}`)
+    .order("revision_no", { ascending: true });
+
   return {
     row,
     labelMapping,
+    revision_history: revisionHistory || [row],
   };
 }
 

@@ -1,0 +1,190 @@
+import { createAdminClient } from "@/lib/supabase/admin";
+
+export interface SessionResult {
+  simulation_id: string;
+  simulation_code: string;
+  base_simulation_id: string;
+  revision_no: number;
+  is_latest: boolean;
+  is_no_change: boolean;
+}
+
+/**
+ * Generate human-readable Simulation Code
+ * Format: GS-YYMMDD-HHMMSS-XXXX
+ * Example: GS-260814-125533-A7F2
+ */
+export function generateSimulationCode(date: Date = new Date()): string {
+  const yy = String(date.getUTCFullYear()).slice(2);
+  const mm = String(date.getUTCMonth() + 1).padStart(2, "0");
+  const dd = String(date.getUTCDate()).padStart(2, "0");
+  const hh = String(date.getUTCHours()).padStart(2, "0");
+  const min = String(date.getUTCMinutes()).padStart(2, "0");
+  const ss = String(date.getUTCSeconds()).padStart(2, "0");
+  const suffix = Math.random().toString(36).substring(2, 6).toUpperCase();
+  return `GS-${yy}${mm}${dd}-${hh}${min}${ss}-${suffix}`;
+}
+
+/**
+ * Deep equality comparison for answer snapshots to detect answer changes
+ */
+export function areAnswersEqual(ans1: any, ans2: any): boolean {
+  if (!ans1 || !ans2) return false;
+  const str1 = JSON.stringify(sortObject(ans1));
+  const str2 = JSON.stringify(sortObject(ans2));
+  return str1 === str2;
+}
+
+function sortObject(obj: any): any {
+  if (obj === null || typeof obj !== "object") return obj;
+  if (Array.isArray(obj)) return obj.map(sortObject);
+  const sorted: Record<string, any> = {};
+  Object.keys(obj).sort().forEach(key => {
+    sorted[key] = sortObject(obj[key]);
+  });
+  return sorted;
+}
+
+/**
+ * Save or Revision a Simulation Session
+ */
+export async function persistSimulationSession(params: {
+  email?: string | null;
+  answers: Record<string, any>;
+  result: Record<string, any>;
+  baseSimulationIdInput?: string | null;
+}): Promise<SessionResult> {
+  const supabase = createAdminClient();
+  const { email, answers, result, baseSimulationIdInput } = params;
+
+  // 1. If baseSimulationIdInput is provided, try to find existing Base Session
+  if (baseSimulationIdInput) {
+    // Find parent record by ID or Code
+    let query = supabase.from("simulation_results").select("*");
+    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(baseSimulationIdInput)) {
+      query = query.eq("id", baseSimulationIdInput);
+    } else {
+      query = query.eq("simulation_code", baseSimulationIdInput);
+    }
+
+    const { data: parentRecords } = await query.limit(1);
+    const parentRecord = parentRecords && parentRecords.length > 0 ? parentRecords[0] : null;
+
+    if (parentRecord) {
+      const baseId = parentRecord.base_simulation_id || parentRecord.id;
+      const baseCode = (parentRecord.simulation_code || "").split("-R")[0] || generateSimulationCode();
+
+      // Fetch all revisions for this Base Session to get latest revision
+      const { data: revisions } = await supabase
+        .from("simulation_results")
+        .select("id, revision_no, answers_snapshot, is_latest, simulation_code")
+        .or(`id.eq.${baseId},base_simulation_id.eq.${baseId}`)
+        .order("revision_no", { ascending: false });
+
+      const latestRev = revisions && revisions.length > 0 ? revisions[0] : parentRecord;
+
+      // Check for answer equality with latest revision
+      if (latestRev && areAnswersEqual(latestRev.answers_snapshot, answers)) {
+        console.log(`[Session] No answer change detected for Base ${baseId}. Returning latest revision without insert.`);
+        return {
+          simulation_id: latestRev.id,
+          simulation_code: latestRev.simulation_code || `${baseCode}-R${latestRev.revision_no || 0}`,
+          base_simulation_id: baseId,
+          revision_no: latestRev.revision_no || 0,
+          is_latest: true,
+          is_no_change: true
+        };
+      }
+
+      // Answer changed -> Create New Revision!
+      const nextRevNo = (latestRev?.revision_no || 0) + 1;
+      const newRevCode = `${baseCode}-R${nextRevNo}`;
+
+      // Mark previous revisions as is_latest = false
+      await supabase
+        .from("simulation_results")
+        .update({ is_latest: false })
+        .or(`id.eq.${baseId},base_simulation_id.eq.${baseId}`);
+
+      // Insert new Revision record
+      const insertPayload: Record<string, any> = {
+        email: email || parentRecord.email || null,
+        answers_snapshot: answers,
+        result_snapshot: result,
+        questionnaire_id: result.versions?.questionnaire_id || null,
+        calculation_trace: result.trace || null,
+        questionnaire_version: result.versions?.questionnaire_version || null,
+        mapping_version: result.versions?.mapping_version || null,
+        calibration_version: result.versions?.calibration_version || null,
+        engine_version: result.versions?.engine_version || null,
+        financial_assumption_version: result.versions?.financial_assumption_version || null,
+        base_simulation_id: baseId,
+        revision_no: nextRevNo,
+        simulation_code: newRevCode,
+        is_latest: true
+      };
+
+      const { data: inserted, error: insErr } = await supabase
+        .from("simulation_results")
+        .insert(insertPayload)
+        .select("id, simulation_code, revision_no, base_simulation_id")
+        .single();
+
+      if (!insErr && inserted) {
+        return {
+          simulation_id: inserted.id,
+          simulation_code: inserted.simulation_code || newRevCode,
+          base_simulation_id: baseId,
+          revision_no: nextRevNo,
+          is_latest: true,
+          is_no_change: false
+        };
+      } else {
+        console.warn("⚠️ Revision insert error, falling back to base insert:", insErr?.message);
+      }
+    }
+  }
+
+  // 2. New Base Simulation (Original / R0)
+  const newBaseCode = generateSimulationCode();
+  const baseInsertPayload: Record<string, any> = {
+    email: email || null,
+    answers_snapshot: answers,
+    result_snapshot: result,
+    questionnaire_id: result.versions?.questionnaire_id || null,
+    calculation_trace: result.trace || null,
+    questionnaire_version: result.versions?.questionnaire_version || null,
+    mapping_version: result.versions?.mapping_version || null,
+    calibration_version: result.versions?.calibration_version || null,
+    engine_version: result.versions?.engine_version || null,
+    financial_assumption_version: result.versions?.financial_assumption_version || null,
+    revision_no: 0,
+    simulation_code: newBaseCode,
+    is_latest: true
+  };
+
+  const { data: insertedBase, error: baseErr } = await supabase
+    .from("simulation_results")
+    .insert(baseInsertPayload)
+    .select("id, simulation_code, revision_no")
+    .single();
+
+  if (baseErr || !insertedBase) {
+    throw new Error(`Failed to insert Base Simulation: ${baseErr?.message}`);
+  }
+
+  // Set base_simulation_id to self ID
+  await supabase
+    .from("simulation_results")
+    .update({ base_simulation_id: insertedBase.id })
+    .eq("id", insertedBase.id);
+
+  return {
+    simulation_id: insertedBase.id,
+    simulation_code: insertedBase.simulation_code || newBaseCode,
+    base_simulation_id: insertedBase.id,
+    revision_no: 0,
+    is_latest: true,
+    is_no_change: false
+  };
+}

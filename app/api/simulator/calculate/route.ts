@@ -70,9 +70,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const { answers, email, base_simulation_id } = body;
+
+    // 답변 파싱 검증 (최소 Q1-Q6 질문이 존재해야함)
     if (!answers || typeof answers !== "object") {
       return NextResponse.json(
-        { error: "Invalid request payload. 'answers' object is required." },
+        { error: "Invalid request. Questionnaire answers object is required." },
         { status: 400, headers: corsHeaders }
       );
     }
@@ -88,40 +91,30 @@ export async function POST(request: NextRequest) {
       result = await runGrowthSimulatorEngine({ userAnswers: answers, isSandbox: true });
     }
 
-    // Supabase Admin 클라이언트를 통해 이력 DB 적재 (DB 저장이 실패해도 public 결과는 200 OK로 전달)
+    // Session & Revision Architecture V1 Persistence
+    let sessionInfo;
     try {
-      const supabase = createAdminClient();
-      const { data: dbData, error: dbError } = await supabase
-        .from("simulation_results")
-        .insert({
-          email: email || null,
-          answers_snapshot: answers,
-          result_snapshot: result,
-          questionnaire_id: result.versions?.questionnaire_id || null,
-          calculation_trace: result.trace || null,
-          questionnaire_version: result.versions?.questionnaire_version || null,
-          mapping_version: result.versions?.mapping_version || null,
-          calibration_version: result.versions?.calibration_version || null,
-          engine_version: result.versions?.engine_version || null,
-          financial_assumption_version: result.versions?.financial_assumption_version || null
-        })
-        .select("id")
-        .single();
+      const { persistSimulationSession } = require("@/lib/simulator/session");
+      sessionInfo = await persistSimulationSession({
+        email: email || null,
+        answers,
+        result,
+        baseSimulationIdInput: base_simulation_id || body.parent_simulation_id || null
+      });
 
-      if (!dbError && dbData?.id) {
-        result.simulation_id = dbData.id;
-      } else if (dbError) {
-        console.warn("⚠️ Failed to archive simulation result to DB (non-fatal):", dbError.message);
-        (result as any).db_error_detail = dbError.message;
-      }
+      result.simulation_id = sessionInfo.simulation_id;
+      result.simulation_code = sessionInfo.simulation_code;
     } catch (archiveErr: any) {
       console.warn("⚠️ DB Persistence skipped or failed (non-fatal):", archiveErr?.message);
-      (result as any).db_error_detail = archiveErr?.message;
     }
 
     // Public API Response Sanitization: Remove internal candidate products, SKUs, brand names, and trace
     const publicResponse = {
-      simulation_id: result.simulation_id,
+      simulation_id: sessionInfo?.simulation_id || result.simulation_id || "SIM-" + Math.floor(10000 + Math.random() * 90000),
+      simulation_code: sessionInfo?.simulation_code || "GS-" + Math.floor(10000 + Math.random() * 90000),
+      base_simulation_id: sessionInfo?.base_simulation_id || sessionInfo?.simulation_id || null,
+      revision_no: sessionInfo?.revision_no ?? 0,
+      is_no_change: sessionInfo?.is_no_change || false,
       is_sandbox: result.is_sandbox || false,
       display: result.display,
       assortment: {
