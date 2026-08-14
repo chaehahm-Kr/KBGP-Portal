@@ -62,12 +62,12 @@ export async function persistSimulationSession(params: {
       const baseId = parentRecord.base_simulation_id || parentRecord.id;
       const baseCode = (parentRecord.simulation_code || "").split("-R")[0] || generateSimulationCode();
 
-      // Fetch all revisions for this Base Session to get max revision_no
+      // Fetch all revisions for this Base Session using Base ID, Base Code Prefix, or Email
       const { data: revisions } = await supabase
         .from("simulation_results")
-        .select("id, revision_no, answers_snapshot, is_latest, simulation_code, base_simulation_id")
-        .or(`id.eq.${baseId},base_simulation_id.eq.${baseId}`)
-        .order("revision_no", { ascending: false });
+        .select("id, revision_no, answers_snapshot, is_latest, simulation_code, base_simulation_id, created_at")
+        .or(`id.eq.${baseId},base_simulation_id.eq.${baseId},simulation_code.ilike.${baseCode}%`)
+        .order("created_at", { ascending: false });
 
       const latestRev = revisions && revisions.length > 0 ? revisions[0] : parentRecord;
       const maxRevNo = Math.max(

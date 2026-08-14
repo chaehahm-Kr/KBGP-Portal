@@ -115,7 +115,7 @@ export async function runAutoInsightEngine(options: RunOptions): Promise<EngineR
     networkDraftsCount = quotaResult.networkDraftsCount;
     hubDraftsCount = quotaResult.hubDraftsCount;
     sharedCoreDraftsCount = quotaResult.sharedCoreCount;
-    uniqueCoreDraftsCount = quotaResult.uniqueCount;
+    uniqueCoreDraftsCount = quotaResult.uniqueCoreCount;
 
     if (selectedTopics.length === 0) {
       noDraftReason = candidatesGte80 === 0
@@ -150,7 +150,7 @@ export async function runAutoInsightEngine(options: RunOptions): Promise<EngineR
     if (options.mode !== "DRY_RUN") {
       for (const draft of draftPayloads) {
         try {
-          const draftId = `draft-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+          const draftId = crypto.randomUUID();
           const slug = draft.title_en
             ? draft.title_en.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)+/g, "") + `-${Date.now().toString().slice(-4)}`
             : `insight-${Date.now()}`;
@@ -169,6 +169,10 @@ export async function runAutoInsightEngine(options: RunOptions): Promise<EngineR
             author: "K SELECT Auto Insight Engine",
             publish_date: todayStr,
             sources: draft.sources_detail,
+            claims: draft.claims,
+            claim_risk_summary: draft.claim_risk_summary,
+            content_layers: draft.content_layers,
+            research_brief: draft.research_brief,
             seo_title: draft.title_ko,
             meta_description: draft.summary_ko,
             status: "AI_DRAFT", // STRICT HUMAN GATE
@@ -183,27 +187,12 @@ export async function runAutoInsightEngine(options: RunOptions): Promise<EngineR
             brand_actions: draft.network_brand_actions_ko,
             retailer_takeaway: draft.hub_retailer_takeaway_en,
             retailer_actions: draft.hub_retailer_actions_en,
-            claim_risk_summary: draft.claim_risk_summary,
-            content_layers: draft.content_layers,
-            research_brief: draft.research_brief,
           };
 
           let { error: insertErr } = await supabase.from("insights_articles").insert(dbRow);
-          
           if (insertErr) {
-            // Fallback retry without newly added columns in case PostgREST schema cache hasn't refreshed
-            const fallbackRow = { ...dbRow };
-            delete fallbackRow.claim_risk_summary;
-            delete fallbackRow.content_layers;
-            delete fallbackRow.research_brief;
-
-            const { error: fallbackErr } = await supabase.from("insights_articles").insert(fallbackRow);
-            if (fallbackErr) {
-              console.error("[Engine] Error inserting draft into insights_articles (fallback failed):", fallbackErr);
-              errorCount++;
-            } else {
-              createdDraftIds.push(draftId);
-            }
+            console.error("[Engine] Error inserting draft into insights_articles:", JSON.stringify(insertErr));
+            errorCount++;
           } else {
             createdDraftIds.push(draftId);
           }

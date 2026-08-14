@@ -5,7 +5,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 const KNOWN_COLUMNS = new Set([
   "id", "title", "slug", "subtitle", "category", "content_type", 
   "hero_image", "excerpt", "body_blocks", "author", "publish_date", 
-  "sources", "seo_title", "meta_description", "status", "audience", 
+  "sources", "claims", "claim_risk_summary", "content_layers", "research_brief",
+  "seo_title", "meta_description", "status", "audience", 
   "publish_channels", "featured", "trending", "brand_takeaway", 
   "brand_actions", "retailer_takeaway", "retailer_actions", 
   "created_at", "updated_at"
