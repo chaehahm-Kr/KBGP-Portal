@@ -64,17 +64,22 @@ export async function persistSimulationSession(params: {
       const rawCode = parentRecord.simulation_code || parentMeta.simulation_code || "";
       const baseCode = (rawCode.split("-R")[0] || "").trim() || `GS-BASE-${baseId.substring(0, 8).toUpperCase()}`;
 
-      // Fetch all revisions for this Base Session using baseId, baseCode prefix, or email
-      let filterOr = `id.eq.${baseId},base_simulation_id.eq.${baseId},simulation_code.ilike.${baseCode}%`;
+      // Fetch all simulations for this email or baseId safely
+      let revQuery = supabase
+        .from("simulation_results")
+        .select("id, revision_no, answers_snapshot, is_latest, simulation_code, base_simulation_id, result_snapshot, created_at");
+
       if (parentRecord.email) {
-        filterOr += `,email.eq.${parentRecord.email}`;
+        revQuery = revQuery.eq("email", parentRecord.email);
+      } else {
+        revQuery = revQuery.eq("id", baseId);
       }
 
-      const { data: revisionsRaw } = await supabase
-        .from("simulation_results")
-        .select("id, revision_no, answers_snapshot, is_latest, simulation_code, base_simulation_id, result_snapshot, created_at")
-        .or(filterOr)
-        .order("created_at", { ascending: false });
+      const { data: revisionsRaw, error: revErr } = await revQuery.order("created_at", { ascending: false });
+
+      if (revErr) {
+        console.warn("⚠️ Revisions query warning:", revErr.message);
+      }
 
       const revisions = (revisionsRaw || []).map((r: any) => {
         const meta = r.result_snapshot?.session_meta || {};
