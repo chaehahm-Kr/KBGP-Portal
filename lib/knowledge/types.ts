@@ -130,9 +130,11 @@ export interface SystemImpactTrigger {
   created_at: string;
 }
 
+export type UserRole = "admin" | "brand" | "retailer" | "public" | "anonymous";
+
 export interface SecurityUserContext {
   userId: string;
-  role: "admin" | "brand" | "retailer" | "public" | "anonymous";
+  role: UserRole;
   staffRoles?: string[];
   companyId?: string;
   brandId?: string;
