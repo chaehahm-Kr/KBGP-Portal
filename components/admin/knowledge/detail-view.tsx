@@ -116,7 +116,7 @@ export default function DetailView({ id }: { id: string }) {
 
   if (loading || !data) {
     return (
-      <div className="p-8 max-w-7xl mx-auto space-y-4">
+      <div className="space-y-6">
         <div className="h-8 w-48 bg-zinc-200 dark:bg-zinc-800 rounded animate-pulse" />
         <div className="h-64 bg-zinc-100 dark:bg-zinc-900 rounded-xl animate-pulse" />
       </div>
@@ -129,7 +129,7 @@ export default function DetailView({ id }: { id: string }) {
   const isEnComplete = Boolean(item.title_en && item.content_en);
 
   return (
-    <div className="p-8 max-w-7xl mx-auto space-y-6">
+    <div className="space-y-6">
       <KnowledgeNavTabs />
       {/* Top Breadcrumb & Actions Header */}
       <div className="flex items-center justify-between border-b border-zinc-200 dark:border-zinc-800 pb-5">

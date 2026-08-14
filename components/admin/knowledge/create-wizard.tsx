@@ -86,7 +86,7 @@ export default function CreateWizard() {
   );
 
   return (
-    <div className="p-8 max-w-4xl mx-auto space-y-8">
+    <div className="space-y-8 max-w-5xl">
       <KnowledgeNavTabs />
       {/* Wizard Header */}
       <div className="border-b border-zinc-200 dark:border-zinc-800 pb-5">

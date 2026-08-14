@@ -42,7 +42,7 @@ export default function OverviewView() {
 
   if (loading) {
     return (
-      <div className="p-8 space-y-4">
+      <div className="space-y-6">
         <div className="h-8 w-64 bg-zinc-200 dark:bg-zinc-800 rounded animate-pulse" />
         <div className="grid grid-cols-5 gap-4">
           {[1, 2, 3, 4, 5].map((i) => (
@@ -63,7 +63,7 @@ export default function OverviewView() {
   };
 
   return (
-    <div className="p-8 max-w-7xl mx-auto space-y-8">
+    <div className="space-y-8">
       <KnowledgeNavTabs />
       {/* Header */}
       <div className="flex items-center justify-between border-b border-zinc-200 dark:border-zinc-800 pb-5">

@@ -60,7 +60,7 @@ export default function LibraryView() {
   };
 
   return (
-    <div className="p-8 max-w-7xl mx-auto space-y-6">
+    <div className="space-y-6">
       <KnowledgeNavTabs />
       {/* Top Header */}
       <div className="flex items-center justify-between border-b border-zinc-200 dark:border-zinc-800 pb-5">
