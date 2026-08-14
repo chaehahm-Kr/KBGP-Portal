@@ -59,10 +59,13 @@ export async function persistSimulationSession(params: {
     const parentRecord = parentRecords && parentRecords.length > 0 ? parentRecords[0] : null;
 
     if (parentRecord) {
-      const parentMeta = parentRecord.result_snapshot?.session_meta || {};
-      const baseId = parentRecord.base_simulation_id || parentMeta.base_simulation_id || parentRecord.id;
-      const rawCode = parentRecord.simulation_code || parentMeta.simulation_code || "";
+      const p = parentRecord as any;
+      const parentMeta = p.result_snapshot?.session_meta || {};
+      const baseId = p.base_simulation_id || parentMeta.base_simulation_id || p.id;
+      const rawCode = p.simulation_code || parentMeta.simulation_code || "";
       const baseCode = (rawCode.split("-R")[0] || "").trim() || `GS-BASE-${baseId.substring(0, 8).toUpperCase()}`;
+
+      let candidates: any[] = [];
 
       // 1. Primary Query: Select existing core columns safely without failing on missing DDL columns
       let dbQuery = supabase
@@ -131,9 +134,9 @@ export async function persistSimulationSession(params: {
       }
       const parentMetaResolved = parentSnap?.session_meta || parentMeta || {};
 
-      const parentCodeMatch = (parentRecord.simulation_code || parentMetaResolved.simulation_code || "").match(/-R(\d+)$/i);
+      const parentCodeMatch = (p.simulation_code || parentMetaResolved.simulation_code || "").match(/-R(\d+)$/i);
       const parentCodeRevNo = parentCodeMatch ? parseInt(parentCodeMatch[1], 10) : 0;
-      const numPR = Number(parentRecord.revision_no);
+      const numPR = Number(p.revision_no);
       const numPM = Number(parentMetaResolved.revision_no);
 
       const parentRevNo = (!isNaN(numPR) && numPR > 0)
