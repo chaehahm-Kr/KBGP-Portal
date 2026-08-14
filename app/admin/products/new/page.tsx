@@ -45,7 +45,7 @@ export default async function AdminNewProductPage() {
   }
 
   return (
-    <div className="w-full max-w-4xl mx-auto space-y-6 py-6 px-4">
+    <div className="w-full space-y-6">
       {/* Breadcrumb & Navigation */}
       <div className="flex items-center gap-2 text-xs text-zinc-555 dark:text-zinc-400">
         <Link href="/admin/products" className="hover:text-zinc-800 dark:hover:text-zinc-200 transition-colors">

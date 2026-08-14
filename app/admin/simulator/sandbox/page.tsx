@@ -59,7 +59,7 @@ export default async function SimulatorSandboxPage() {
   const { questions, version } = await getQuestionsAndAnswers();
 
   return (
-    <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+    <div className="w-full space-y-6">
       <SimulatorSandboxClient questions={questions} version={version} />
     </div>
   );

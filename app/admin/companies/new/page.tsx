@@ -11,7 +11,7 @@ export default async function AdminNewCompanyPage() {
   await verifyAdminSession();
 
   return (
-    <div className="w-full max-w-4xl mx-auto space-y-6 py-6 px-4">
+    <div className="w-full space-y-6">
       {/* Breadcrumb */}
       <div className="flex items-center gap-2 text-xs text-zinc-550 dark:text-zinc-400">
         <Link href="/admin/companies" className="hover:text-zinc-800 dark:hover:text-zinc-200 transition-colors">

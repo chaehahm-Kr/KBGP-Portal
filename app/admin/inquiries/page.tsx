@@ -39,7 +39,7 @@ export default async function InquiriesPage({
   const { data: inquiries } = await query;
 
   return (
-    <div className="mx-auto max-w-4xl px-6 py-16">
+    <div className="w-full space-y-6">
       <h1 className="text-lg font-semibold text-zinc-900">신청 접수</h1>
       <p className="mt-1 text-sm text-zinc-500">
         마케팅 사이트에서 들어온 문의입니다. 검토 후 거래할 회사만 "전환"해서 포털

@@ -179,7 +179,7 @@ export default async function APDetailPage({
   }));
 
   return (
-    <div className="space-y-6 w-full max-w-7xl pb-12">
+    <div className="w-full space-y-6">
       <div className="flex flex-col gap-1">
         <div className="text-xs font-bold text-zinc-400 dark:text-zinc-500 flex items-center gap-1.5">
           <Link href="/admin/products/curation" className="hover:underline">

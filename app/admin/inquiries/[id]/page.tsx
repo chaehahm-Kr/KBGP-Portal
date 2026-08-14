@@ -55,7 +55,7 @@ export default async function InquiryDetailPage({
   const products = (inquiry.products ?? []) as InquiryProduct[];
 
   return (
-    <div className="mx-auto max-w-2xl px-6 py-16">
+    <div className="w-full space-y-6">
       <h1 className="text-lg font-semibold text-zinc-900">{inquiry.inquiry_number}</h1>
       <p className="mt-1 text-sm text-zinc-500">
         {new Date(inquiry.received_at).toLocaleString("ko-KR")} 접수

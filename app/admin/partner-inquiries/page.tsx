@@ -12,7 +12,7 @@ export default async function AdminPartnerInquiriesPage() {
   const inquiries = await getAdminPartnerInquiries();
 
   return (
-    <div className="w-full max-w-7xl">
+    <div className="w-full space-y-6">
       <AdminPartnerInquiries initialInquiries={inquiries} answerAction={answerPartnerInquiry} />
     </div>
   );

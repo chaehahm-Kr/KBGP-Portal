@@ -146,7 +146,7 @@ export default async function CurationControlCenterPage() {
   });
 
   return (
-    <div className="space-y-6 w-full max-w-7xl pb-12">
+    <div className="w-full space-y-6">
       <div className="flex flex-col gap-1">
         <h1 className="text-xl font-bold text-zinc-900 dark:text-white">큐레이션 컨트롤 센터 (Curation Control Center)</h1>
         <p className="text-xs text-zinc-400 dark:text-zinc-500">

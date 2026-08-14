@@ -52,7 +52,7 @@ export default function InsightsAuthorsPage() {
   };
 
   return (
-    <div className="p-6 md:p-8 space-y-6 max-w-5xl mx-auto">
+    <div className="w-full space-y-6">
       <div className="border-b border-zinc-200 dark:border-zinc-800 pb-6">
         <span className="text-xs font-extrabold text-blue-600 dark:text-blue-400 uppercase tracking-widest">
           Editorial Team

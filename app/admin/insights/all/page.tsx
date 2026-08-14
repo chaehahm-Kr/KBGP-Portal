@@ -87,7 +87,7 @@ export default function AllInsightsPage() {
   };
 
   return (
-    <div className="p-6 md:p-8 space-y-6 max-w-7xl mx-auto">
+    <div className="w-full space-y-6">
       
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-zinc-200 dark:border-zinc-800 pb-6">
@@ -105,7 +105,7 @@ export default function AllInsightsPage() {
 
         <button
           onClick={handleCreateNewDraft}
-          className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-xs font-bold text-white shadow hover:bg-blue-700 transition-all self-start sm:self-auto"
+          className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-xs font-bold text-white shadow hover:bg-blue-700 transition-all self-start sm:self-auto shrink-0"
         >
           <PlusIcon size={16} />
           <span>Add New Insight</span>
@@ -113,8 +113,8 @@ export default function AllInsightsPage() {
       </div>
 
       {/* Filter & Search Bar */}
-      <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-950 space-y-3">
-        <form onSubmit={handleSearchSubmit} className="flex flex-col md:flex-row items-center gap-3">
+      <div className="w-full rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-950 space-y-3">
+        <form onSubmit={handleSearchSubmit} className="flex flex-col lg:flex-row items-center gap-3">
           
           {/* Search Input */}
           <div className="relative flex-1 w-full">
@@ -132,7 +132,7 @@ export default function AllInsightsPage() {
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-xs font-medium text-zinc-800 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200"
+            className="w-full lg:w-auto rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-xs font-medium text-zinc-800 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200"
           >
             <option value="ALL">All Statuses</option>
             <option value="AI_DRAFT">AI_DRAFT</option>
@@ -148,7 +148,7 @@ export default function AllInsightsPage() {
           <select
             value={channelFilter}
             onChange={(e) => setChannelFilter(e.target.value)}
-            className="rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-xs font-medium text-zinc-800 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200"
+            className="w-full lg:w-auto rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-xs font-medium text-zinc-800 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200"
           >
             <option value="ALL">All Channels</option>
             <option value="K_SELECT_NETWORK">K SELECT NETWORK</option>
@@ -159,7 +159,7 @@ export default function AllInsightsPage() {
           <select
             value={categoryFilter}
             onChange={(e) => setCategoryFilter(e.target.value)}
-            className="rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-xs font-medium text-zinc-800 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200"
+            className="w-full lg:w-auto rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-xs font-medium text-zinc-800 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200"
           >
             <option value="ALL">All Categories</option>
             <option value="U.S. MARKET ENTRY">U.S. MARKET ENTRY</option>
@@ -172,7 +172,7 @@ export default function AllInsightsPage() {
           <select
             value={sortBy}
             onChange={(e) => setSortBy(e.target.value)}
-            className="rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-xs font-medium text-zinc-800 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200"
+            className="w-full lg:w-auto rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-xs font-medium text-zinc-800 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200"
           >
             <option value="latest">Sort: Latest First</option>
             <option value="oldest">Sort: Oldest First</option>
@@ -182,7 +182,7 @@ export default function AllInsightsPage() {
 
           <button
             type="submit"
-            className="rounded-lg bg-zinc-900 px-4 py-1.5 text-xs font-bold text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-950"
+            className="w-full lg:w-auto rounded-lg bg-zinc-900 px-4 py-1.5 text-xs font-bold text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-950 shrink-0"
           >
             Search
           </button>
@@ -190,7 +190,7 @@ export default function AllInsightsPage() {
       </div>
 
       {/* Table */}
-      <div className="rounded-2xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-950 overflow-hidden">
+      <div className="w-full rounded-2xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-950 overflow-hidden">
         {isLoading ? (
           <div className="p-12 text-center text-sm text-zinc-500">Fetching insight directory...</div>
         ) : articles.length === 0 ? (
@@ -268,27 +268,27 @@ export default function AllInsightsPage() {
                     </td>
 
                     {/* Actions */}
-                    <td className="px-5 py-4 text-right">
-                      <div className="flex items-center justify-end gap-1.5">
+                    <td className="px-5 py-4 text-right whitespace-nowrap">
+                      <div className="inline-flex items-center justify-end gap-2 whitespace-nowrap">
                         <button
                           onClick={() => {
                             setSelectedArticle(art);
                             setIsPreviewOpen(true);
                           }}
-                          className="rounded bg-zinc-100 px-2 py-1 text-xs font-semibold text-zinc-700 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-300"
+                          className="rounded-md bg-zinc-100 px-2.5 py-1 text-xs font-semibold text-zinc-700 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 transition-colors"
                         >
                           Preview
                         </button>
                         <Link
                           href={`/admin/insights/${art.id}`}
-                          className="rounded bg-blue-600 px-2.5 py-1 text-xs font-bold text-white hover:bg-blue-700"
+                          className="rounded-md bg-blue-600 px-3 py-1 text-xs font-bold text-white hover:bg-blue-700 transition-colors"
                         >
-                          Edit / Manage
+                          Manage
                         </Link>
                         {art.status !== "ARCHIVED" && (
                           <button
                             onClick={() => handleArchive(art.id)}
-                            className="rounded px-1.5 py-1 text-xs text-zinc-400 hover:text-rose-600"
+                            className="rounded-md px-2 py-1 text-xs text-zinc-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors"
                           >
                             Archive
                           </button>
