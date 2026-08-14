@@ -86,7 +86,6 @@ export async function persistSimulationSession(params: {
         };
       });
 
-      const parentMeta = parentRecord.result_snapshot?.session_meta || {};
       const parentRevNo = parentRecord.revision_no ?? parentMeta.revision_no ?? 0;
 
       const latestRev = revisions && revisions.length > 0 ? revisions[0] : parentRecord;
