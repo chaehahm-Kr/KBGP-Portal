@@ -62,17 +62,29 @@ export async function persistSimulationSession(params: {
       const baseId = parentRecord.base_simulation_id || parentRecord.id;
       const baseCode = (parentRecord.simulation_code || "").split("-R")[0] || generateSimulationCode();
 
-      // Fetch all revisions for this Base Session using Base ID, Base Code Prefix, or Email
-      const { data: revisions } = await supabase
+      // Fetch all revisions for this Base Session
+      const { data: revisionsRaw } = await supabase
         .from("simulation_results")
-        .select("id, revision_no, answers_snapshot, is_latest, simulation_code, base_simulation_id, created_at")
-        .or(`id.eq.${baseId},base_simulation_id.eq.${baseId},simulation_code.ilike.${baseCode}%`)
+        .select("id, revision_no, answers_snapshot, is_latest, simulation_code, base_simulation_id, result_snapshot, created_at")
+        .or(`id.eq.${baseId},base_simulation_id.eq.${baseId},result_snapshot->session_meta->>base_simulation_id.eq.${baseId}`)
         .order("created_at", { ascending: false });
+
+      const revisions = (revisionsRaw || []).map((r: any) => {
+        const meta = r.result_snapshot?.session_meta || {};
+        return {
+          ...r,
+          revision_no: r.revision_no ?? meta.revision_no ?? 0,
+          base_simulation_id: r.base_simulation_id || meta.base_simulation_id || r.id,
+          simulation_code: r.simulation_code || meta.simulation_code || `GS-REV-${r.id.slice(0, 4)}`
+        };
+      });
+
+      const parentMeta = parentRecord.result_snapshot?.session_meta || {};
+      const parentRevNo = parentRecord.revision_no ?? parentMeta.revision_no ?? 0;
 
       const latestRev = revisions && revisions.length > 0 ? revisions[0] : parentRecord;
       const maxRevNo = Math.max(
-        latestRev?.revision_no || 0,
-        parentRecord?.revision_no || 0,
+        parentRevNo,
         ...(revisions?.map(r => r.revision_no || 0) || [0])
       );
 
@@ -101,6 +113,14 @@ export async function persistSimulationSession(params: {
           .or(`id.eq.${baseId},base_simulation_id.eq.${baseId}`);
       } catch (e) {}
 
+      // Attach session metadata into result_snapshot for 100% persistence resilience
+      result.session_meta = {
+        base_simulation_id: baseId,
+        simulation_code: newRevCode,
+        revision_no: nextRevNo,
+        is_latest: true
+      };
+
       const insertPayload: Record<string, any> = {
         email: email || parentRecord.email || null,
         answers_snapshot: answers,
@@ -118,7 +138,7 @@ export async function persistSimulationSession(params: {
         is_latest: true
       };
 
-      // Remove undefined/unsupported fields if schema column missing
+      // Try inserting with new DDL columns
       const { data: inserted, error: insErr } = await supabase
         .from("simulation_results")
         .insert(insertPayload)
@@ -135,8 +155,7 @@ export async function persistSimulationSession(params: {
           is_no_change: false
         };
       } else {
-        console.warn("⚠️ Revision insert error, falling back without new DDL columns:", insErr?.message);
-        // Fallback insert without extra columns if DDL pending
+        console.warn("⚠️ Revision DDL column pending, saving resiliently via JSONB snapshot:", insErr?.message);
         delete insertPayload.base_simulation_id;
         delete insertPayload.revision_no;
         delete insertPayload.simulation_code;
