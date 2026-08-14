@@ -84,19 +84,30 @@ export async function persistSimulationSession(params: {
       const revisions = (revisionsRaw || []).map((r: any) => {
         const meta = r.result_snapshot?.session_meta || {};
         const code = r.simulation_code || meta.simulation_code || "";
-        const codeRevMatch = code.match(/-R(\d+)$/);
+        const codeRevMatch = code.match(/-R(\d+)$/i);
         const codeRevNo = codeRevMatch ? parseInt(codeRevMatch[1], 10) : 0;
+
+        const effectiveRevNo = (r.revision_no && r.revision_no > 0)
+          ? r.revision_no
+          : ((meta.revision_no && meta.revision_no > 0)
+            ? meta.revision_no
+            : codeRevNo);
 
         return {
           ...r,
-          revision_no: r.revision_no ?? meta.revision_no ?? codeRevNo ?? 0,
+          revision_no: effectiveRevNo,
           base_simulation_id: r.base_simulation_id || meta.base_simulation_id || r.id,
           simulation_code: code || `GS-REV-${r.id.slice(0, 4)}`
         };
       });
 
-      const parentCodeMatch = (parentRecord.simulation_code || parentMeta.simulation_code || "").match(/-R(\d+)$/);
-      const parentRevNo = parentRecord.revision_no ?? parentMeta.revision_no ?? (parentCodeMatch ? parseInt(parentCodeMatch[1], 10) : 0);
+      const parentCodeMatch = (parentRecord.simulation_code || parentMeta.simulation_code || "").match(/-R(\d+)$/i);
+      const parentCodeRevNo = parentCodeMatch ? parseInt(parentCodeMatch[1], 10) : 0;
+      const parentRevNo = (parentRecord.revision_no && parentRecord.revision_no > 0)
+        ? parentRecord.revision_no
+        : ((parentMeta.revision_no && parentMeta.revision_no > 0)
+          ? parentMeta.revision_no
+          : parentCodeRevNo);
 
       const latestRev = revisions && revisions.length > 0 ? revisions[0] : parentRecord;
       const maxRevNo = Math.max(
