@@ -112,14 +112,17 @@ export async function POST(request: NextRequest) {
         result.simulation_id = dbData.id;
       } else if (dbError) {
         console.warn("⚠️ Failed to archive simulation result to DB (non-fatal):", dbError.message);
+        (result as any).db_error_detail = dbError.message;
       }
     } catch (archiveErr: any) {
       console.warn("⚠️ DB Persistence skipped or failed (non-fatal):", archiveErr?.message);
+      (result as any).db_error_detail = archiveErr?.message;
     }
 
     // Public API Response Sanitization: Remove internal candidate products, SKUs, brand names, and trace
     const publicResponse = {
       simulation_id: result.simulation_id || "SIM-" + Math.floor(10000 + Math.random() * 90000),
+      db_error_detail: (result as any).db_error_detail || null,
       is_sandbox: result.is_sandbox || false,
       display: result.display,
       assortment: {

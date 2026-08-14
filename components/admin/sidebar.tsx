@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -16,6 +16,7 @@ import {
   ReportsIcon,
   UsersIcon,
   SettingsIcon,
+  InsightsIcon,
   ChevronDownIcon,
   ChevronRightIcon
 } from "./icons";
@@ -41,10 +42,18 @@ export default function Sidebar({ isCollapsed, toggleCollapse }: SidebarProps) {
     "Retail Network": false,
     "Sales & Performance": false,
     "Growth Simulator": false,
+    INSIGHTS: true,
     Amazon: false,
     "Tasks & Communication": false,
     Settings: false,
   });
+
+  // Auto-expand INSIGHTS menu if current route is under /admin/insights
+  useEffect(() => {
+    if (pathname && pathname.startsWith("/admin/insights")) {
+      setExpandedMenus((prev) => ({ ...prev, INSIGHTS: true }));
+    }
+  }, [pathname]);
 
   const menuItems: MenuItem[] = [
     { name: "Dashboard", icon: DashboardIcon, href: "/admin" },
@@ -94,6 +103,19 @@ export default function Sidebar({ isCollapsed, toggleCollapse }: SidebarProps) {
       ],
     },
     {
+      name: "INSIGHTS",
+      icon: InsightsIcon,
+      subItems: [
+        { name: "Overview", href: "/admin/insights" },
+        { name: "Review Queue", href: "/admin/insights/queue" },
+        { name: "All Insights", href: "/admin/insights/all" },
+        { name: "Categories", href: "/admin/insights/categories" },
+        { name: "Authors", href: "/admin/insights/authors" },
+        { name: "Editorial Rules", href: "/admin/insights/rules" },
+        { name: "Automation Runs", href: "/admin/insights/automation-runs" },
+      ],
+    },
+    {
       name: "Amazon",
       icon: AmazonIcon,
       subItems: [
@@ -137,7 +159,16 @@ export default function Sidebar({ isCollapsed, toggleCollapse }: SidebarProps) {
   const isMenuItemActive = (item: MenuItem): boolean => {
     if (item.href === pathname) return true;
     if (item.subItems) {
-      return item.subItems.some((sub) => sub.href === pathname);
+      return item.subItems.some((sub) => {
+        if (sub.href === pathname) return true;
+        if (sub.href === "/admin/insights" && (pathname === "/admin/insights" || pathname.startsWith("/admin/insights/"))) {
+          return true;
+        }
+        if (sub.href !== "/admin/insights" && pathname.startsWith(sub.href + "/")) {
+          return true;
+        }
+        return false;
+      });
     }
     return false;
   };
@@ -181,7 +212,7 @@ export default function Sidebar({ isCollapsed, toggleCollapse }: SidebarProps) {
                   onClick={() => handleToggleExpand(item.name)}
                   className={`flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
                     isActive
-                      ? "bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-white"
+                      ? "bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-white font-semibold"
                       : "text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-900 dark:hover:text-white"
                   }`}
                 >
@@ -202,7 +233,7 @@ export default function Sidebar({ isCollapsed, toggleCollapse }: SidebarProps) {
                   href={item.href || "/admin"}
                   className={`flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
                     isActive
-                      ? "bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-white"
+                      ? "bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-white font-semibold"
                       : "text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-900 dark:hover:text-white"
                   }`}
                 >
@@ -215,15 +246,15 @@ export default function Sidebar({ isCollapsed, toggleCollapse }: SidebarProps) {
               {hasSubItems && isExpanded && (
                 <div className="pl-9 space-y-1">
                   {item.subItems?.map((sub) => {
-                    const isSubActive = pathname === sub.href;
+                    const isSubActive = pathname === sub.href || (sub.href === "/admin/insights" && pathname === "/admin/insights");
                     return (
                       <Link
                         key={sub.name}
                         href={sub.href}
                         className={`block rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
                           isSubActive
-                            ? "text-zinc-900 dark:text-white font-semibold"
-                            : "text-zinc-500 hover:text-zinc-900 dark:text-zinc-500 dark:hover:text-white"
+                            ? "text-zinc-900 dark:text-white font-bold bg-zinc-100/70 dark:bg-zinc-800/70"
+                            : "text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white"
                         }`}
                       >
                         {sub.name}
