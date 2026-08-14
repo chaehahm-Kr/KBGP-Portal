@@ -1,19 +1,74 @@
-// Phase 2 Auto Insight Engine Type Definitions
-
 export type SourceTier = "TIER_A" | "TIER_B" | "TIER_C" | "SIGNAL";
 
+export type ClaimRiskLevel = "HIGH" | "MEDIUM" | "LOW";
+
+export type ClaimStatus =
+  | "VERIFIED"
+  | "INFERRED"
+  | "ESTIMATE"
+  | "SIGNAL"
+  | "INTERNAL"
+  | "UNSUPPORTED";
+
+export type InternalSourceType =
+  | "K_SELECT_INTERNAL_DATA"
+  | "K_SELECT_INTERNAL_RULE"
+  | "K_SELECT_EXPERIENCE"
+  | "K_SELECT_RECOMMENDATION";
+
+export type AuditorAction = "PASS" | "DOWNGRADE" | "REWRITE" | "REMOVE" | "FAIL";
+
 export interface SourceItem {
-  id?: string;
+  id: string;
   sourceName: string;
   sourceTitle: string;
   url: string;
-  publishedDate?: string;
+  publishedDate: string | null;
   accessedDate: string;
   sourceLanguage: "KO" | "EN";
   sourceTier: SourceTier;
   keyFinding: string;
   relevantClaim: string;
   audienceRelevance: "NETWORK" | "HUB" | "BOTH";
+}
+
+export interface VerifiedClaim {
+  claim_text: string;
+  source_name: string;
+  source_url?: string;
+  status: ClaimStatus;
+  risk_level?: ClaimRiskLevel;
+  metric_type?: "%" | "$" | "Sales" | "Ranking" | "Regulatory" | "Internal";
+  internal_type?: InternalSourceType;
+  evidence_excerpt?: string;
+  auditor_action?: AuditorAction;
+  downgrade_reason?: string;
+}
+
+export interface AuditedClaim extends VerifiedClaim {
+  risk_level: ClaimRiskLevel;
+  auditor_action: AuditorAction;
+}
+
+export interface ClaimRiskSummary {
+  high_risk_count: number;
+  medium_risk_count: number;
+  low_risk_count: number;
+  verified_count: number;
+  inferred_count: number;
+  signal_count: number;
+  internal_count: number;
+  unsupported_count: number;
+  downgraded_count: number;
+  fact_check_status: "PASS" | "NEEDS_ATTENTION";
+  headline_audit: "PASS" | "REWRITTEN";
+}
+
+export interface ContentLayers {
+  market_facts: string[];
+  market_signals: string[];
+  k_select_views: string[];
+  k_select_actions: string[];
 }
 
 export interface TopicCandidate {
@@ -23,13 +78,13 @@ export interface TopicCandidate {
   primarySignal: string;
   whyNow: string;
   targetAudience: "NETWORK" | "HUB" | "BOTH";
-  networkRelevanceScore: number; // 0-100
-  hubRelevanceScore: number;     // 0-100
+  networkRelevanceScore: number;
+  hubRelevanceScore: number;
   possibleDecision: string;
   possibleAction: string;
   supportingSources: SourceItem[];
   riskOrCounterEvidence: string;
-  initialConfidence: number;     // 0-100
+  initialConfidence: number;
 }
 
 export interface ScoreBreakdown {
@@ -52,10 +107,8 @@ export interface CriticalConditions {
   fail_reasons: string[];
 }
 
-export type RelationType = "NEW" | "UPDATE" | "FOLLOW_UP" | "DUPLICATE";
-
 export interface RelationCheckResult {
-  relationType: RelationType;
+  relationType: "NEW" | "UPDATE" | "FOLLOW_UP" | "DUPLICATE";
   relatedInsightId?: string;
   reason: string;
 }
@@ -75,26 +128,19 @@ export interface CoreResearchBrief {
   hubImplication: string;
 }
 
-export interface VerifiedClaim {
-  claim_text: string;
-  source_name: string;
-  status: "VERIFIED" | "INFERRED" | "UNSUPPORTED";
-  metric_type?: "%" | "$" | "Market Size" | "Growth Rate" | "Ranking" | "Year" | "Sales" | "Regulatory";
-}
-
 export interface VisualAssetPayload {
   id: string;
-  type: "hero" | "thumbnail" | "chart" | "infographic" | "illustration";
-  source_type: "AI_GENERATED" | "DATA_GENERATED" | "LICENSED" | "UPLOADED" | "EXTERNAL_REFERENCE";
+  type: "hero" | "chart" | "infographic" | "thumbnail";
+  source_type: "AI_GENERATED" | "DATA_GENERATED" | "REAL_PHOTO" | "USER_UPLOADED";
   title: string;
   url: string;
-  caption?: string;
+  caption: string;
   copyright_clean: boolean;
 }
 
 export interface AnimationRecommendation {
-  type: "Count-up" | "Chart Reveal" | "Data Highlight" | "Scroll Reveal" | "Infographic Motion" | "Category Motion";
-  status: "Suggested" | "Ready for Review" | "Approved" | "Rejected" | "Disabled";
+  type: string;
+  status: "Ready for Review" | "Approved";
   description: string;
 }
 
@@ -104,11 +150,10 @@ export interface GeneratedArticlePayload {
   topic_score: number;
   topic_score_breakdown: ScoreBreakdown;
   critical_conditions: CriticalConditions;
-  relation_type: RelationType;
+  relation_type: "NEW" | "UPDATE" | "FOLLOW_UP" | "DUPLICATE";
   related_insight_id?: string;
   research_brief: CoreResearchBrief;
   
-  // Titles & Core Summaries
   title_ko: string;
   title_en: string;
   subtitle_ko: string;
@@ -118,7 +163,6 @@ export interface GeneratedArticlePayload {
   body_blocks_ko: any[];
   body_blocks_en: any[];
   
-  // NETWORK Channel Adaptation
   network_enabled: boolean;
   network_category: string;
   network_brand_takeaway_ko: string;
@@ -131,7 +175,6 @@ export interface GeneratedArticlePayload {
   network_cta_en: string;
   network_suitability: "HIGH" | "MEDIUM" | "LOW";
   
-  // HUB Channel Adaptation
   hub_enabled: boolean;
   hub_category: string;
   hub_retailer_takeaway_ko: string;
@@ -146,32 +189,23 @@ export interface GeneratedArticlePayload {
   hub_cta_en: string;
   hub_suitability: "HIGH" | "MEDIUM" | "LOW";
   
-  // Verifications & Visuals
   sources_detail: SourceItem[];
   claims: VerifiedClaim[];
+  claim_risk_summary?: ClaimRiskSummary;
+  content_layers?: ContentLayers;
   visuals: VisualAssetPayload[];
-  visual_status: "APPROVED" | "PENDING_REVIEW" | "FAILED";
+  visual_status: "APPROVED" | "PENDING";
   animation_recommendations: AnimationRecommendation[];
   
-  // Terminal Status (STRICTLY AI_DRAFT)
   status: "AI_DRAFT";
-}
-
-export interface EngineRunOptions {
-  mode: "SCHEDULED" | "MANUAL" | "DRY_RUN";
-  triggeredBy?: string;
 }
 
 export interface EngineRunResult {
   runId: string;
-  runMode: "SCHEDULED" | "MANUAL" | "DRY_RUN";
-  runDate: string;
-  scheduledTime: string;
-  timezone: string;
   startedAt: string;
   completedAt: string;
-  status: "COMPLETED" | "PARTIAL" | "FAILED";
-  
+  scheduledTime: string;
+  timezone: string;
   sourcesScanned: number;
   sourcesAccepted: number;
   candidatesGenerated: number;
@@ -179,16 +213,22 @@ export interface EngineRunResult {
   candidatesGte80: number;
   criticalRejects: number;
   duplicateRejects: number;
-  
   networkDrafts: number;
   hubDrafts: number;
   sharedCoreDrafts: number;
   uniqueCoreDrafts: number;
-  
+  createdDraftIds: string[];
+  highRiskClaimsCount?: number;
+  highRiskPassedCount?: number;
+  mediumRiskClaimsCount?: number;
+  claimsDowngradedCount?: number;
+  unsupportedNumericCount?: number;
+  regulatoryFailuresCount?: number;
+  draftsRewrittenByAuditor?: number;
   visualSuccess: number;
   visualFailed: number;
   errorCount: number;
-  errors: Array<{ candidateId?: string; message: string; step: string }>;
+  status: "COMPLETED" | "PARTIAL" | "FAILED" | "SKIPPED_DUPLICATE" | "SKIPPED_TIME_WINDOW";
   noDraftReason?: string;
-  createdDraftIds: string[];
+  runMode: "SCHEDULED" | "MANUAL" | "DRY_RUN";
 }

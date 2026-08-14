@@ -7,24 +7,26 @@ import {
   SourceItem,
 } from "./types";
 import { EvaluatedTopic } from "./topic-evaluator";
+import { auditArticleClaims } from "./claim-auditor";
 
 /**
- * Draft Generator Module.
+ * Phase 2.1 Draft Generator Module.
  * Generates Core Research Brief, Dual-Language Articles (KO/EN),
- * Channel Adaptations (NETWORK & HUB), Claims Validation,
- * Visual Assets with Source Type, and sets status strictly to `AI_DRAFT`.
+ * Channel Adaptations (NETWORK & HUB), Risk-Based Claims Verification,
+ * Content Layering (Facts, Signals, Views, Actions),
+ * Visual Assets, and sets status strictly to `AI_DRAFT`.
  */
 export function generateDraftPayload(evaluated: EvaluatedTopic): GeneratedArticlePayload {
   const candidate = evaluated.candidate;
   const todayStr = new Date().toISOString().split("T")[0];
 
-  // 1. Generate Core Research Brief
+  // 1. Core Research Brief
   const research_brief: CoreResearchBrief = {
     topic: candidate.proposedTopic,
     whyNow: candidate.whyNow,
     primarySignal: candidate.primarySignal,
     keyQuestion: candidate.targetAudience === "HUB"
-      ? "How does this market shift change the ordering & display strategy for U.S. Independent Retailers?"
+      ? "How does this market shift change ordering & display strategy for U.S. Independent Retailers?"
       : candidate.targetAudience === "NETWORK"
       ? "How does this regulatory & pricing shift alter U.S. market entry strategy for Korean Beauty Brands?"
       : "How does this core insight drive immediate business decisions for both K-Beauty Brands & U.S. Retailers?",
@@ -38,9 +40,9 @@ export function generateDraftPayload(evaluated: EvaluatedTopic): GeneratedArticl
     hubImplication: candidate.possibleAction,
   };
 
-  // 2. Dual Language Generation (KO & EN)
-  const title_ko = candidate.proposedHeadline;
-  const title_en = candidate.proposedTopic;
+  // 2. Initial Dual Language Titles
+  const rawTitleKo = candidate.proposedHeadline;
+  const rawTitleEn = candidate.proposedTopic;
 
   const subtitle_ko = `미국 FDA 규제 및 유통 트렌드 분석: K-Beauty 브랜드 및 미국 독립 바이어를 위한 전략적 가이드라인 (${todayStr})`;
   const subtitle_en = `U.S. Market & Retail Strategy Guide for K-Beauty Brands and Independent Beauty Supply Retailers (${todayStr})`;
@@ -56,7 +58,7 @@ export function generateDraftPayload(evaluated: EvaluatedTopic): GeneratedArticl
     },
     {
       type: "paragraph",
-      content: `${candidate.primarySignal} 최근 미국 수입 관세청 및 FDA의 단속 강화로 인해 규제 미비 제품의 U.S. 입항 보류 리스크가 급증하고 있습니다.`,
+      content: `${candidate.primarySignal} 최근 미국 입항 절차 및 FDA 가이드라인에 따른 사전 검증이 중요해지고 있습니다.`,
     },
     {
       type: "header",
@@ -173,8 +175,8 @@ export function generateDraftPayload(evaluated: EvaluatedTopic): GeneratedArticl
   const hub_cta_ko = "K SELECT HUB 파트너스 매장 전용 신규 K-Beauty 스타터 팩을 주문하세요.";
   const hub_cta_en = "Order the Verified K-Beauty Retailer Starter Pack on K SELECT HUB today.";
 
-  // 5. Claims Validation
-  const claims: VerifiedClaim[] = candidate.supportingSources.map((s: SourceItem) => {
+  // 5. Build Initial Verified Claims & Internal Recommendations
+  const rawClaims: VerifiedClaim[] = candidate.supportingSources.map((s: SourceItem) => {
     const text = s.relevantClaim;
     let metricType: VerifiedClaim["metric_type"] = "Sales";
     if (text.includes("%")) metricType = "%";
@@ -185,12 +187,27 @@ export function generateDraftPayload(evaluated: EvaluatedTopic): GeneratedArticl
     return {
       claim_text: text,
       source_name: s.sourceName,
-      status: s.sourceTier === "TIER_A" || s.sourceTier === "TIER_B" ? "VERIFIED" : "INFERRED",
+      source_url: s.url,
+      status: s.sourceTier === "TIER_A" || s.sourceTier === "TIER_B" ? "VERIFIED" : "SIGNAL",
       metric_type: metricType,
+      evidence_excerpt: s.keyFinding,
     };
   });
 
-  // 6. Visual Assets Preparation with Source Type
+  // Append Low-Risk K SELECT Recommendations
+  rawClaims.push({
+    claim_text: "K SELECT recommends testing a focused 4FT assortment with top 5-8 priority SKUs to maximize inventory turns.",
+    source_name: "K SELECT Internal Merchandising Rule",
+    status: "INTERNAL",
+    metric_type: "Internal",
+    internal_type: "K_SELECT_RECOMMENDATION",
+    evidence_excerpt: "Derived from K SELECT Retail Growth Simulator & Inventory Turn Principles.",
+  });
+
+  // 6. Perform Independent Risk-Based Claim Audit
+  const auditResult = auditArticleClaims(rawClaims, candidate.supportingSources, rawTitleKo, rawTitleEn);
+
+  // 7. Visual Assets Preparation
   const visuals: VisualAssetPayload[] = [
     {
       id: "vis-1",
@@ -221,7 +238,7 @@ export function generateDraftPayload(evaluated: EvaluatedTopic): GeneratedArticl
     },
   ];
 
-  // 7. Animation Recommendations
+  // 8. Animation Recommendations
   const animation_recommendations: AnimationRecommendation[] = [
     {
       type: "Chart Reveal",
@@ -246,8 +263,8 @@ export function generateDraftPayload(evaluated: EvaluatedTopic): GeneratedArticl
     related_insight_id: evaluated.relationCheck.relatedInsightId,
     research_brief,
     
-    title_ko,
-    title_en,
+    title_ko: auditResult.auditedTitleKo,
+    title_en: auditResult.auditedTitleEn,
     subtitle_ko,
     subtitle_en,
     summary_ko,
@@ -282,7 +299,9 @@ export function generateDraftPayload(evaluated: EvaluatedTopic): GeneratedArticl
     hub_suitability: evaluated.hubSuitability,
     
     sources_detail: candidate.supportingSources,
-    claims,
+    claims: auditResult.auditedClaims,
+    claim_risk_summary: auditResult.claimRiskSummary,
+    content_layers: auditResult.contentLayers,
     visuals,
     visual_status: "APPROVED",
     animation_recommendations,

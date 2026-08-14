@@ -62,16 +62,21 @@ export async function persistSimulationSession(params: {
       const baseId = parentRecord.base_simulation_id || parentRecord.id;
       const baseCode = (parentRecord.simulation_code || "").split("-R")[0] || generateSimulationCode();
 
-      // Fetch all revisions for this Base Session
+      // Fetch all revisions for this Base Session to get max revision_no
       const { data: revisions } = await supabase
         .from("simulation_results")
-        .select("id, revision_no, answers_snapshot, is_latest, simulation_code")
+        .select("id, revision_no, answers_snapshot, is_latest, simulation_code, base_simulation_id")
         .or(`id.eq.${baseId},base_simulation_id.eq.${baseId}`)
-        .order("created_at", { ascending: false });
+        .order("revision_no", { ascending: false });
 
       const latestRev = revisions && revisions.length > 0 ? revisions[0] : parentRecord;
+      const maxRevNo = Math.max(
+        latestRev?.revision_no || 0,
+        parentRecord?.revision_no || 0,
+        ...(revisions?.map(r => r.revision_no || 0) || [0])
+      );
 
-      // Check for answer equality
+      // Check for answer equality with latest revision
       if (latestRev && areAnswersEqual(latestRev.answers_snapshot, answers)) {
         console.log(`[Session] No answer change detected for Base ${baseId}. Returning latest revision.`);
         return {
@@ -85,7 +90,7 @@ export async function persistSimulationSession(params: {
       }
 
       // Answer changed -> Create New Revision!
-      const nextRevNo = ((latestRev?.revision_no ?? parentRecord?.revision_no ?? 0) as number) + 1;
+      const nextRevNo = maxRevNo + 1;
       const newRevCode = `${baseCode}-R${nextRevNo}`;
 
       // Mark previous revisions as is_latest = false
