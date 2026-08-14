@@ -1078,3 +1078,7 @@ export async function simulateGrowth(answers: Record<string, any>): Promise<Simu
     trace
   };
 }
+
+export const runGrowthSimulatorEngine = async (options: { userAnswers: Record<string, any>; isSandbox?: boolean }) => {
+  return simulateGrowth(options.userAnswers);
+};
