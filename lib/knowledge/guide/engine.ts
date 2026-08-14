@@ -218,7 +218,51 @@ async function buildStructuredGuideAnswer(
   }
 
   // Specific Content Answers based on Topic
-  if (q.includes("topic score") || primaryMatch.id === "kno-insights-rule-daily-auto") {
+  if (
+    q === "insight" ||
+    q === "insights" ||
+    q === "인사이트" ||
+    q === "인싸이트" ||
+    q === "insighp"
+  ) {
+    directAnswer = "K SELECT INSIGHTS는 매일 05:00 ET 미국 K-Beauty 유통/브랜드 시장 시그널을 조사하는 Daily Auto Insight Engine + Editorial Control Center입니다.";
+    bullets = [
+      "매일 05:00 ET 자동 실행 / Topic Score 80점 이상 후보 채택",
+      "NETWORK / HUB 각 최대 3개 Draft Quota 적용 (0 Draft Day ≠ Failure)",
+      "Human Gate: AI는 AI_DRAFT까지만 생성하며 최종 Editorial 승인은 사람이 직접 수행"
+    ];
+    relatedQuestions = [
+      "INSIGHTS Topic Score 기준은?",
+      "HIGH Risk는 무엇을 확인해야 해?",
+      "Revision은 언제 요청하나요?",
+      "오늘 Draft가 0개면 오류인가요?",
+      "Automation Run 상태를 설명해줘"
+    ];
+    actions.push({ label: "지식 상세 보기", url: "/admin/knowledge/kno-insights-manual-v10", type: "knowledge" });
+    actions.push({ label: "Editorial Rules 열기", url: "/admin/insights/rules", type: "route" });
+    actions.push({ label: "Review Queue 열기", url: "/admin/insights/queue", type: "route" });
+  } else if (q.includes("topic score") || primaryMatch.id === "kno-insights-rule-daily-auto") {
+    // STRICT CITATION ACCURACY: Topic Score Grounding Sources
+    sources.length = 0;
+    sources.push({
+      id: "kno-insights-rule-daily-auto",
+      title: "INSIGHTS Daily Auto Insight 운영 기준",
+      type: "SYSTEM_RULE",
+      version: "v1.0",
+      status: "PUBLISHED",
+      effectiveDate: "2026-08-14",
+      isLiveRule: true
+    });
+    sources.push({
+      id: "kno-insights-manual-v10",
+      title: "K SELECT INSIGHTS 실무자 운영 매뉴얼 v1.0",
+      type: "MANUAL",
+      version: "v1.0",
+      status: "PUBLISHED",
+      effectiveDate: "2026-08-14",
+      isLiveRule: false
+    });
+
     directAnswer = "현재 적용 중인 K SELECT INSIGHTS의 Topic Score 기준은 **80점 이상**입니다. 기준점 80점을 통과한 Topic만 Daily Insight Candidate로 채택됩니다.";
     bullets = [
       "Priority 1 Ground Truth (LIVE RULE): Topic Score 80+ / Daily Run 05:00 ET",

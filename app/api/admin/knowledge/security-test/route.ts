@@ -410,6 +410,29 @@ export async function GET() {
       });
     }
 
+    // ----------------------------------------------------
+    // Scenario Q: Citation Grounding Accuracy Verification
+    // ----------------------------------------------------
+    const topicAnswer = await processGuideQuestion("INSIGHTS Topic Score 기준은?", adminContext, "/admin/insights");
+    const hasBrandFaqCitation = topicAnswer.sources.some(s => s.id === "kno-002-brand-faq" || s.title.includes("온보딩"));
+    const hasRuleCitation = topicAnswer.sources.some(s => s.id === "kno-insights-rule-daily-auto");
+
+    if (!hasBrandFaqCitation && hasRuleCitation) {
+      results.push({
+        scenario: "Scenario Q",
+        name: "Citation Accuracy & Grounding Isolation Guard",
+        status: "PASS",
+        details: "Topic Score query correctly cited 'INSIGHTS Daily Auto Insight 운영 기준' and strictly excluded 'Brand Onboarding FAQ'."
+      });
+    } else {
+      results.push({
+        scenario: "Scenario Q",
+        name: "Citation Accuracy & Grounding Isolation Guard",
+        status: "FAIL",
+        details: "Topic Score query failed citation grounding verification."
+      });
+    }
+
     const allPassed = results.every(r => r.status === "PASS");
 
     return NextResponse.json({

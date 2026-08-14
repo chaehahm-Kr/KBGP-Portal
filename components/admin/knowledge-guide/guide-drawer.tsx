@@ -9,39 +9,82 @@ interface GuideDrawerProps {
   onClose: () => void;
 }
 
-// Contextual Quick Questions Map
-const CONTEXTUAL_QUESTIONS: Record<string, string[]> = {
-  INSIGHTS: [
-    "INSIGHTS Topic Score 기준은?",
-    "HIGH Risk는 무엇을 확인해야 해?",
-    "Revision은 언제 요청해?",
-    "오늘 Draft가 0개면 오류인가요?",
-    "Automation Run 상태를 설명해줘"
-  ],
-  KNOWLEDGE: [
-    "새 매뉴얼은 어떻게 등록해?",
-    "Published Knowledge를 수정하려면?",
-    "Audience 차이는 뭐야?",
-    "Potentially Outdated가 뭐야?",
-    "PDF Manual은 어떻게 관리해?"
-  ],
-  DEFAULT: [
-    "INSIGHTS Topic Score 기준은?",
-    "HIGH Risk는 무엇을 확인해야 해?",
-    "새 매뉴얼은 어떻게 등록해?",
-    "Published Knowledge를 수정하려면?",
-    "Potentially Outdated가 뭐야?"
-  ]
-};
+// Module Discovery Structure & Representative Questions
+interface ModuleDiscovery {
+  id: string;
+  name: string;
+  badge?: string;
+  questions: string[];
+}
 
-// Search suggestions map for real-time query assistance
+const MODULE_DISCOVERY_LIST: ModuleDiscovery[] = [
+  {
+    id: "INSIGHTS",
+    name: "INSIGHTS",
+    badge: "Core",
+    questions: [
+      "INSIGHTS Topic Score 기준은?",
+      "HIGH Risk는 무엇을 확인해야 해?",
+      "Revision은 언제 요청해?",
+      "오늘 Draft가 0개면 오류인가요?",
+      "Automation Run 상태를 설명해줘"
+    ]
+  },
+  {
+    id: "KNOWLEDGE",
+    name: "Knowledge Center",
+    badge: "Core",
+    questions: [
+      "새 매뉴얼은 어떻게 등록해?",
+      "Published Knowledge를 수정하려면?",
+      "Audience 차이는 뭐야?",
+      "Potentially Outdated가 뭐야?",
+      "PDF Manual은 어떻게 관리해?"
+    ]
+  },
+  {
+    id: "PRODUCTS",
+    name: "Products",
+    questions: [
+      "Product Curation 기준은?",
+      "Attribute Profile 적용 방법",
+      "Pricing Profitability 계산 기준"
+    ]
+  },
+  {
+    id: "SIMULATOR",
+    name: "Growth Simulator",
+    questions: [
+      "시뮬레이션 모형 설정 방법",
+      "Profitability 시뮬레이션 실행"
+    ]
+  },
+  {
+    id: "APPLICATIONS",
+    name: "Applications",
+    questions: [
+      "브랜드 파트너 입점 신청 검토 기준",
+      "온보딩 심사 절차"
+    ]
+  }
+];
+
+// Search Suggestions Map (Supports Korean / English / Typos / Synonyms)
 const SUGGESTION_MAP: Record<string, string[]> = {
-  인싸: ["INSIGHTS Topic Score 기준은?", "INSIGHTS High Risk 수칙"],
+  인사이트: ["INSIGHTS Topic Score 기준은?", "INSIGHTS High Risk 수칙", "Automation Run 상태"],
+  인싸이트: ["INSIGHTS Topic Score 기준은?", "INSIGHTS High Risk 수칙"],
   insigh: ["INSIGHTS Topic Score 기준은?", "INSIGHTS Automation Run Status"],
-  메뉴: ["K SELECT 매뉴얼 열람", "새 매뉴얼 등록 방법", "Manual Version 관리"],
+  insight: ["INSIGHTS Topic Score 기준은?", "INSIGHTS High Risk 수칙"],
+  insighp: ["INSIGHTS Topic Score 기준은?", "INSIGHTS High Risk 수칙"],
+  메뉴얼: ["K SELECT INSIGHTS 실무자 운영 매뉴얼", "새 매뉴얼 등록 방법", "Manual Version 관리"],
+  매뉴얼: ["K SELECT INSIGHTS 실무자 운영 매뉴얼", "새 매뉴얼 등록 방법", "Manual Version 관리"],
   manu: ["K SELECT INSIGHTS Operations Manual", "Manual Versioning Guide"],
+  manual: ["K SELECT INSIGHTS Operations Manual", "Manual Versioning Guide"],
   승인: ["INSIGHTS Review Queue 승인 가이드", "GO APPROVE 판정 수칙"],
-  수정: ["Create New Version 사용법", "FIX REQUEST REVISION 수칙"]
+  approve: ["GO APPROVE decision guide", "Review Queue Approval"],
+  수정: ["Create New Version 사용법", "FIX REQUEST REVISION 수칙"],
+  revision: ["FIX REQUEST REVISION guide", "Create New Version procedure"],
+  outdated: ["Potentially Outdated 처리 지침", "Review & Updates 관리"]
 };
 
 export default function GuideDrawer({ isOpen, onClose }: GuideDrawerProps) {
@@ -55,24 +98,38 @@ export default function GuideDrawer({ isOpen, onClose }: GuideDrawerProps) {
   const [feedbackSubmitted, setFeedbackSubmitted] = useState<Record<string, boolean>>({});
   const [showFeedbackModal, setShowFeedbackModal] = useState<string | null>(null);
   const [gapSubmitted, setGapSubmitted] = useState<Record<string, boolean>>({});
-  const [activeRouteCategory, setActiveRouteCategory] = useState<string>("DEFAULT");
+  const [activeModuleId, setActiveModuleId] = useState<string>("INSIGHTS");
 
-  // Update Route Category and Reset to Home on Route Change
+  // Track Drawer Open/Close Transitions:
+  // When user re-opens Drawer after having closed it, reset to Current Route Home!
+  // BUT when Drawer stays open across route navigation (ISSUE 4), PRESERVE current answer!
+  const [wasOpen, setWasOpen] = useState(false);
+
   useEffect(() => {
-    if (pathname.includes("/admin/insights")) {
-      setActiveRouteCategory("INSIGHTS");
-    } else if (pathname.includes("/admin/knowledge")) {
-      setActiveRouteCategory("KNOWLEDGE");
-    } else {
-      setActiveRouteCategory("DEFAULT");
+    if (isOpen && !wasOpen) {
+      // Fresh re-open: set context home
+      if (pathname.includes("/admin/insights")) {
+        setActiveModuleId("INSIGHTS");
+      } else if (pathname.includes("/admin/knowledge")) {
+        setActiveModuleId("KNOWLEDGE");
+      } else if (pathname.includes("/admin/products")) {
+        setActiveModuleId("PRODUCTS");
+      } else if (pathname.includes("/admin/simulator")) {
+        setActiveModuleId("SIMULATOR");
+      } else if (pathname.includes("/admin/applications")) {
+        setActiveModuleId("APPLICATIONS");
+      } else {
+        setActiveModuleId("INSIGHTS");
+      }
+      // If reopening fresh, show home view
+      setCurrentAnswer(null);
     }
-    // Route Change Reset: Reset current answer to show Contextual Home
-    setCurrentAnswer(null);
-  }, [pathname]);
+    setWasOpen(isOpen);
+  }, [isOpen, pathname]);
 
   if (!isOpen) return null;
 
-  const currentQuickQuestions = CONTEXTUAL_QUESTIONS[activeRouteCategory] || CONTEXTUAL_QUESTIONS.DEFAULT;
+  const activeModule = MODULE_DISCOVERY_LIST.find(m => m.id === activeModuleId) || MODULE_DISCOVERY_LIST[0];
 
   const handleAsk = async (qText: string) => {
     if (!qText.trim() || loading) return;
@@ -132,19 +189,21 @@ export default function GuideDrawer({ isOpen, onClose }: GuideDrawerProps) {
     } catch (e) {}
   };
 
+  // ISSUE 4 FIX: Internal Navigation link click DOES NOT close Drawer!
+  // Main admin page navigates while Drawer stays open & task is preserved!
   const handleActionClick = (url: string, actionType: string) => {
     if (url === "#gap") return;
     if (actionType === "download" || actionType === "manual") {
       window.open(url, "_blank");
     } else {
       router.push(url);
-      onClose();
+      // DO NOT CALL onClose() HERE! Keep Guide Drawer open while navigating main page!
     }
   };
 
-  // Real-time suggestions based on input
+  // ISSUE 6B: Real-time search suggestions matching raw input
   const currentSuggestions = Object.entries(SUGGESTION_MAP).find(([key]) =>
-    questionInput.toLowerCase().includes(key)
+    questionInput.toLowerCase().trim().includes(key)
   )?.[1] || [];
 
   return (
@@ -208,8 +267,8 @@ export default function GuideDrawer({ isOpen, onClose }: GuideDrawerProps) {
                   type="text"
                   value={questionInput}
                   onChange={(e) => setQuestionInput(e.target.value)}
-                  placeholder="무엇을 찾고 계신가요? (e.g. Topic Score 기준)"
-                  className="w-full px-3.5 py-2 text-xs rounded-xl bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 focus:outline-none focus:ring-2 focus:ring-zinc-900 text-zinc-900 dark:text-zinc-100 shadow-2xs"
+                  placeholder="무엇을 찾고 계신가요? (e.g. 인사이트, 매뉴얼)"
+                  className="w-full px-3.5 py-2 text-xs rounded-xl bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 focus:outline-none focus:ring-2 focus:ring-zinc-900 text-zinc-900 dark:text-zinc-100 shadow-2xs font-medium"
                 />
               </div>
               <button
@@ -221,15 +280,15 @@ export default function GuideDrawer({ isOpen, onClose }: GuideDrawerProps) {
               </button>
             </form>
 
-            {/* Real-time Search Suggestions */}
+            {/* ISSUE 6B: Search Suggestions */}
             {currentSuggestions.length > 0 && (
-              <div className="mt-2 flex flex-wrap items-center gap-1.5 pt-1 border-t border-zinc-200/60 dark:border-zinc-700/60">
-                <span className="text-[10px] font-bold text-zinc-500 uppercase">추천:</span>
+              <div className="mt-2 flex flex-wrap items-center gap-1.5 pt-1.5 border-t border-zinc-200/60 dark:border-zinc-700/60">
+                <span className="text-[10px] font-extrabold text-amber-700 dark:text-amber-400 uppercase">💡 추천 검색:</span>
                 {currentSuggestions.map((sug, idx) => (
                   <button
                     key={idx}
                     onClick={() => handleAsk(sug)}
-                    className="px-2 py-0.5 rounded-md bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 text-[11px] font-medium text-zinc-700 dark:text-zinc-300 hover:border-zinc-500 transition"
+                    className="px-2 py-0.5 rounded-md bg-white dark:bg-zinc-900 border border-amber-300 dark:border-amber-700 text-[11px] font-semibold text-zinc-800 dark:text-zinc-200 hover:border-zinc-500 transition shadow-2xs"
                   >
                     {sug}
                   </button>
@@ -267,54 +326,81 @@ export default function GuideDrawer({ isOpen, onClose }: GuideDrawerProps) {
           {/* MAIN BODY AREA (Scrollable) */}
           <div className="flex-1 overflow-y-auto p-5 space-y-5">
 
-            {/* Back Button (If in Answer View) */}
+            {/* ISSUE 6A: Prominent Back Button (Answer View) */}
             {currentAnswer && (
-              <div className="flex items-center justify-between border-b border-zinc-200 dark:border-zinc-800 pb-2">
+              <div className="flex items-center justify-between border-b border-zinc-200 dark:border-zinc-800 pb-2.5">
                 <button
                   onClick={() => setCurrentAnswer(null)}
-                  className="text-xs font-bold text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition flex items-center gap-1"
+                  className="px-3 py-1.5 rounded-lg bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-xs font-black text-zinc-900 dark:text-white transition flex items-center gap-1.5 border border-zinc-300 dark:border-zinc-700 shadow-2xs cursor-pointer"
                 >
-                  <span>← 가이드 홈</span>
+                  <span className="text-base leading-none">←</span>
+                  <span>가이드 홈 (Guide Home)</span>
                 </button>
-                <span className="text-[11px] text-zinc-400 font-mono">Current Task View</span>
+                <span className="text-[11px] text-zinc-400 font-mono font-semibold">Current Task View</span>
               </div>
             )}
 
-            {/* GUIDE HOME VIEW (If no current primary answer view) */}
+            {/* GUIDE HOME VIEW */}
             {!currentAnswer && (
               <div className="space-y-5">
-                <div className="p-4 rounded-xl bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-800">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="text-xs px-2 py-0.5 rounded bg-zinc-900 text-white font-bold">
-                      {activeRouteCategory} CONTEXT
-                    </span>
-                    <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">
-                      무엇을 도와드릴까요?
-                    </h3>
+                
+                {/* ISSUE 5: Module Discovery Chips */}
+                <div>
+                  <div className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-2 flex items-center justify-between">
+                    <span>업무 영역 (Module Discovery)</span>
+                    <span className="text-[10px] text-zinc-400">Select Area</span>
                   </div>
-                  <p className="text-xs text-zinc-600 dark:text-zinc-400 leading-relaxed mt-1">
-                    현재 작업 중인 페이지의 공식 지식, SOP 및 매뉴얼을 탐색합니다.
-                  </p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {MODULE_DISCOVERY_LIST.map((mod) => {
+                      const isActive = mod.id === activeModuleId;
+                      return (
+                        <button
+                          key={mod.id}
+                          onClick={() => setActiveModuleId(mod.id)}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1 border ${
+                            isActive
+                              ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 border-zinc-900 dark:border-zinc-100 shadow-2xs"
+                              : "bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 border-zinc-200 dark:border-zinc-700 hover:border-zinc-400"
+                          }`}
+                        >
+                          <span>{mod.name}</span>
+                          {mod.badge && (
+                            <span className={`text-[9px] font-black px-1 rounded ${
+                              isActive ? "bg-amber-400 text-zinc-950" : "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300"
+                            }`}>
+                              {mod.badge}
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
 
-                <div>
-                  <div className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-2.5 flex items-center justify-between">
-                    <span>추천 운영 질문</span>
-                    <span className="text-[10px] text-zinc-400">Contextual Questions</span>
+                {/* Representative Questions for Selected Module */}
+                <div className="p-4 rounded-xl bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-800 space-y-3">
+                  <div className="flex items-center justify-between border-b border-zinc-200/80 dark:border-zinc-700/80 pb-2">
+                    <h3 className="text-xs font-bold text-zinc-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
+                      <span>📌</span>
+                      <span>{activeModule.name} 대표 운영 질문</span>
+                    </h3>
+                    <span className="text-[10px] text-zinc-400 font-semibold">{activeModule.questions.length} Questions</span>
                   </div>
+
                   <div className="flex flex-col gap-2">
-                    {currentQuickQuestions.map((q, idx) => (
+                    {activeModule.questions.map((q, idx) => (
                       <button
                         key={idx}
                         onClick={() => handleAsk(q)}
                         className="text-left px-3.5 py-2.5 rounded-xl bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 hover:border-zinc-400 text-xs font-medium text-zinc-800 dark:text-zinc-200 transition shadow-2xs flex items-center justify-between group"
                       >
                         <span className="group-hover:text-zinc-900 dark:group-hover:text-white">{q}</span>
-                        <span className="text-zinc-400 text-xs font-bold">→</span>
+                        <span className="text-zinc-400 text-xs font-bold group-hover:text-amber-500 transition">→</span>
                       </button>
                     ))}
                   </div>
                 </div>
+
               </div>
             )}
 
@@ -376,7 +462,7 @@ export default function GuideDrawer({ isOpen, onClose }: GuideDrawerProps) {
                     </div>
                   )}
 
-                  {/* 4. 근거 자료 */}
+                  {/* 4. 근거 자료 (Grounding Sources Only) */}
                   {currentAnswer.sources && currentAnswer.sources.length > 0 && (
                     <div className="pt-2 border-t border-zinc-200/60 dark:border-zinc-700/60 space-y-1.5">
                       <div className="text-[11px] font-bold text-zinc-500 uppercase tracking-wider">
@@ -386,7 +472,7 @@ export default function GuideDrawer({ isOpen, onClose }: GuideDrawerProps) {
                         {currentAnswer.sources.map((src) => (
                           <button
                             key={src.id}
-                            onClick={() => router.push(`/admin/knowledge/${src.id}`)}
+                            onClick={() => handleActionClick(`/admin/knowledge/${src.id}`, "knowledge")}
                             className="w-full text-left p-2 rounded-lg bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 hover:border-zinc-400 transition flex items-center justify-between text-xs group"
                           >
                             <div className="truncate font-bold text-zinc-800 dark:text-zinc-200 group-hover:text-zinc-900 dark:group-hover:text-white">
@@ -474,7 +560,7 @@ export default function GuideDrawer({ isOpen, onClose }: GuideDrawerProps) {
                     </div>
                   )}
 
-                  {/* 7. 관련 메뉴 */}
+                  {/* 7. 관련 메뉴 (ISSUE 4 FIX: Internal links navigate main page, Drawer stays open!) */}
                   {currentAnswer.actions && currentAnswer.actions.length > 0 && (
                     <div className="pt-2 border-t border-zinc-200/60 dark:border-zinc-700/60 space-y-1.5">
                       <div className="text-[11px] font-bold text-zinc-500 uppercase tracking-wider">
@@ -508,7 +594,7 @@ export default function GuideDrawer({ isOpen, onClose }: GuideDrawerProps) {
                     </div>
                   )}
 
-                  {/* 8. 평가 (Helpful / Not Helpful) */}
+                  {/* 8. 평가 */}
                   <div className="pt-2 border-t border-zinc-200/60 dark:border-zinc-700/60 flex items-center justify-between text-[11px] text-zinc-500">
                     <span>이 답변이 도움이 되었나요?</span>
                     {feedbackSubmitted[currentAnswer.id] ? (

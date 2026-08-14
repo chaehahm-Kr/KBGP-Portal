@@ -19,12 +19,19 @@ export async function POST(request: NextRequest) {
     let isAuthenticated = false;
 
     try {
+      const allCookies = request.cookies.getAll();
+      const mappedCookies = allCookies.map(c => {
+        if (c.name.startsWith("admin-sb-")) return { name: c.name.replace("admin-sb-", "sb-"), value: c.value };
+        if (c.name.startsWith("portal-sb-")) return { name: c.name.replace("portal-sb-", "sb-"), value: c.value };
+        return c;
+      });
+
       const supabase = createServerClient(
         publicEnv.NEXT_PUBLIC_SUPABASE_URL,
         publicEnv.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
         {
           cookies: {
-            getAll: () => request.cookies.getAll(),
+            getAll: () => mappedCookies,
             setAll: () => {}
           }
         }

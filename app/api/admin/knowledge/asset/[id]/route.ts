@@ -40,14 +40,21 @@ export async function GET(
       userRole = roleHeader as UserRole;
       if (idHeader) userId = idHeader;
     } else {
-      // Check Supabase Auth Session Cookie
+      // Check Supabase Auth Session Cookie with admin- / portal- prefix mapping
       try {
+        const allCookies = request.cookies.getAll();
+        const mappedCookies = allCookies.map(c => {
+          if (c.name.startsWith("admin-sb-")) return { name: c.name.replace("admin-sb-", "sb-"), value: c.value };
+          if (c.name.startsWith("portal-sb-")) return { name: c.name.replace("portal-sb-", "sb-"), value: c.value };
+          return c;
+        });
+
         const supabase = createServerClient(
           publicEnv.NEXT_PUBLIC_SUPABASE_URL,
           publicEnv.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
           {
             cookies: {
-              getAll: () => request.cookies.getAll(),
+              getAll: () => mappedCookies,
               setAll: () => {}
             }
           }
@@ -55,11 +62,22 @@ export async function GET(
         const { data: { user } } = await supabase.auth.getUser();
         if (user) {
           userId = user.id;
-          const roleMeta = user.user_metadata?.role || user.app_metadata?.role || "admin";
-          userRole = roleMeta as UserRole;
+
+          // Lookup trusted role from Supabase DB profiles table
+          const { data: profile } = await supabase
+            .from("profiles")
+            .select("role")
+            .eq("id", user.id)
+            .maybeSingle();
+
+          if (profile?.role) {
+            userRole = profile.role as UserRole;
+          } else {
+            userRole = (user.app_metadata?.role || user.user_metadata?.role || "admin") as UserRole;
+          }
         }
       } catch (e) {
-        // Fallback to anonymous
+        // Fallback to anonymous if auth fails
       }
     }
 
