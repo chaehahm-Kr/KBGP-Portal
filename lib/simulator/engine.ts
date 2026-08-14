@@ -554,12 +554,10 @@ export async function simulateGrowth(answers: Record<string, any>): Promise<Simu
             ? `${process.env.NEXT_PUBLIC_SUPABASE_URL || "https://shzfrppdobpmrstcjfqu.supabase.co"}/storage/v1/object/public/company-uploads/${mainImg.storage_path}`
             : null;
 
-          // Wholesale Price SoT Resolution: Matrix Override > Product FOB > Retail * 0.50 Proxy
+          // Wholesale Price SoT Resolution: Matrix Wholesale Override > Retail * 0.50 Proxy
           let wholesale: number | null = null;
           if (item.wholesale_price !== undefined && item.wholesale_price !== null) {
             wholesale = parseFloat(item.wholesale_price);
-          } else if (prod.price_usd_fob !== undefined && prod.price_usd_fob !== null) {
-            wholesale = parseFloat(prod.price_usd_fob);
           }
 
           return {
@@ -580,13 +578,13 @@ export async function simulateGrowth(answers: Record<string, any>): Promise<Simu
         financial_pricing_basket = eligibleItems.map((item: any) => {
           const prod = item.product;
           let wholesale: number | null = null;
+          let isCurationWholesale = false;
           let isProxy = false;
 
-          if (item.wholesale_price !== undefined && item.wholesale_price !== null) {
+          if (item.wholesale_price !== undefined && item.wholesale_price !== null && parseFloat(item.wholesale_price) > 0) {
             wholesale = parseFloat(item.wholesale_price);
-          } else if (prod.price_usd_fob !== undefined && prod.price_usd_fob !== null) {
-            wholesale = parseFloat(prod.price_usd_fob);
-          } else if (prod.estimated_retail_price) {
+            isCurationWholesale = true;
+          } else if (prod.estimated_retail_price && parseFloat(prod.estimated_retail_price) > 0) {
             wholesale = parseFloat(prod.estimated_retail_price) * 0.50;
             isProxy = true;
           }
@@ -594,6 +592,7 @@ export async function simulateGrowth(answers: Record<string, any>): Promise<Simu
           return {
             id: prod.id,
             wholesale_price: wholesale,
+            is_curation_wholesale: isCurationWholesale,
             is_proxy: isProxy,
             is_synthetic: false
           };
@@ -629,6 +628,7 @@ export async function simulateGrowth(answers: Record<string, any>): Promise<Simu
         financial_pricing_basket = synthList.map((p: any) => ({
           id: p.id,
           wholesale_price: p.wholesale_price,
+          is_curation_wholesale: false,
           is_proxy: false,
           is_synthetic: true
         }));
@@ -698,42 +698,54 @@ export async function simulateGrowth(answers: Record<string, any>): Promise<Simu
   const initialQtyPerSku = 12; // V1.1.1 SoT: 12 units / SKU
   const totalInitialUnits = targetSkuCount * initialQtyPerSku;
 
+  let curationWholesalePricedCount = 0;
+  let fobPricedCount = 0; // 0 for Retailer Wholesale Source
+  let retail50pctProxyCount = 0;
+  let estimatedMissingSkuCount = 0;
+
   let actualInvestmentComponent = 0;
   let estimatedInvestmentComponent = 0;
-  let estimatedSkuCount = 0;
 
   // Process available basket items up to targetSkuCount
   const basketSlice = financial_pricing_basket.slice(0, targetSkuCount);
   basketSlice.forEach((item: any) => {
     if (item.wholesale_price && item.wholesale_price > 0) {
-      actualPricedCount++;
-      if (item.is_proxy) proxyPriceCount++;
+      if (item.is_curation_wholesale) {
+        curationWholesalePricedCount++;
+      } else if (item.is_proxy) {
+        retail50pctProxyCount++;
+      }
       actualInvestmentComponent += (item.wholesale_price * initialQtyPerSku);
+    } else {
+      // Product exists in basket but missing valid price -> Shift to estimated missing
+      estimatedMissingSkuCount++;
     }
   });
 
-  // Calculate missing SKU count and estimated component
+  // Add unfulfilled target SKU slots to estimated missing
   if (basketSlice.length < targetSkuCount) {
-    estimatedSkuCount = targetSkuCount - basketSlice.length;
+    estimatedMissingSkuCount += (targetSkuCount - basketSlice.length);
   }
+
+  const validPricedCount = curationWholesalePricedCount + retail50pctProxyCount;
   
-  // If actualPricedCount > 0, update estimatedWholesaleCost with actual priced average if higher priority
-  if (actualPricedCount > 0) {
-    const avgActualWholesale = actualInvestmentComponent / (actualPricedCount * initialQtyPerSku);
+  // If validPricedCount > 0, update estimatedWholesaleCost with actual priced average from current basket
+  if (validPricedCount > 0) {
+    const avgActualWholesale = actualInvestmentComponent / (validPricedCount * initialQtyPerSku);
     estimatedWholesaleCost = parseFloat(avgActualWholesale.toFixed(2));
     estimatedWholesaleSource = `BASKET_ACTUAL_AVERAGE ($${estimatedWholesaleCost})`;
   }
 
-  estimatedInvestmentComponent = estimatedSkuCount * estimatedWholesaleCost * initialQtyPerSku;
+  estimatedInvestmentComponent = estimatedMissingSkuCount * estimatedWholesaleCost * initialQtyPerSku;
 
   const finalInitialInvestment = Math.round(actualInvestmentComponent + estimatedInvestmentComponent);
   const investment = finalInitialInvestment;
 
   // Determination of Investment Calculation Mode
   let investmentCalculationMode: "ACTUAL" | "HYBRID_ESTIMATE" | "FULL_ESTIMATE" = "FULL_ESTIMATE";
-  if (actualPricedCount === targetSkuCount && proxyPriceCount === 0) {
+  if (validPricedCount === targetSkuCount && retail50pctProxyCount === 0) {
     investmentCalculationMode = "ACTUAL";
-  } else if (actualPricedCount > 0) {
+  } else if (validPricedCount > 0) {
     investmentCalculationMode = "HYBRID_ESTIMATE";
   } else {
     investmentCalculationMode = "FULL_ESTIMATE";
@@ -997,13 +1009,10 @@ export async function simulateGrowth(answers: Record<string, any>): Promise<Simu
     ap_scores: apScores,
     investment_trace: {
       target_sku_count: targetSkuCount,
-      recommended_candidate_count: recommended_products.length,
-      financial_pricing_sku_count: targetSkuCount,
-      actual_priced_sku_count: actualPricedCount,
-      proxy_price_used_count: proxyPriceCount,
-      estimated_sku_count: estimatedSkuCount,
-      live_sku_count: liveSkuCount,
-      synthetic_reference_sku_count: synthSkuCount,
+      curation_wholesale_priced_count: curationWholesalePricedCount,
+      fob_priced_count: fobPricedCount,
+      retail_50pct_proxy_count: retail50pctProxyCount,
+      estimated_missing_sku_count: estimatedMissingSkuCount,
       estimated_wholesale_cost: estimatedWholesaleCost,
       estimated_wholesale_source: estimatedWholesaleSource,
       initial_qty_per_sku: initialQtyPerSku,
