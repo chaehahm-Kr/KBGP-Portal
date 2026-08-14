@@ -62,7 +62,7 @@ export async function persistSimulationSession(params: {
       const parentMeta = parentRecord.result_snapshot?.session_meta || {};
       const baseId = parentRecord.base_simulation_id || parentMeta.base_simulation_id || parentRecord.id;
       const rawCode = parentRecord.simulation_code || parentMeta.simulation_code || "";
-      const baseCode = (rawCode.split("-R")[0] || "").trim() || generateSimulationCode();
+      const baseCode = (rawCode.split("-R")[0] || "").trim() || `GS-BASE-${baseId.substring(0, 8).toUpperCase()}`;
 
       // Fetch all revisions for this Base Session
       let filterOr = `id.eq.${baseId},base_simulation_id.eq.${baseId},result_snapshot->session_meta->>base_simulation_id.eq.${baseId}`;
@@ -187,6 +187,14 @@ export async function persistSimulationSession(params: {
 
   // 2. New Base Simulation (Original / R0)
   const newBaseCode = generateSimulationCode();
+
+  result.session_meta = {
+    base_simulation_id: null, // Will set below or use self id
+    simulation_code: newBaseCode,
+    revision_no: 0,
+    is_latest: true
+  };
+
   const baseInsertPayload: Record<string, any> = {
     email: email || null,
     answers_snapshot: answers,
@@ -232,11 +240,15 @@ export async function persistSimulationSession(params: {
     };
   }
 
-  // Set base_simulation_id to self ID
+  // Update session_meta and base_simulation_id to self ID
   try {
+    result.session_meta.base_simulation_id = insertedBase.id;
     await supabase
       .from("simulation_results")
-      .update({ base_simulation_id: insertedBase.id })
+      .update({
+        base_simulation_id: insertedBase.id,
+        result_snapshot: result
+      })
       .eq("id", insertedBase.id);
   } catch (e) {}
 
