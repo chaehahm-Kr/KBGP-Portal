@@ -44,7 +44,31 @@ export async function POST(request: NextRequest) {
   
   try {
     const body = await request.json();
-    const { answers, email } = body;
+    const { answers, email, simulation_id } = body;
+
+    // 만약 이메일 등록/업데이트 요청인 경우
+    if (simulation_id && email && !answers) {
+      const supabase = createAdminClient();
+      const { data: dbData, error: dbError } = await supabase
+        .from("simulation_results")
+        .update({ email })
+        .eq("id", simulation_id)
+        .select("id")
+        .single();
+
+      if (dbError) {
+        console.error("Failed to update email for simulation:", dbError);
+        return NextResponse.json(
+          { error: "Failed to update email", details: dbError.message },
+          { status: 500, headers: corsHeaders }
+        );
+      }
+
+      return NextResponse.json(
+        { success: true, simulation_id: dbData.id, message: "Email registered successfully." },
+        { status: 200, headers: corsHeaders }
+      );
+    }
 
     if (!answers || typeof answers !== "object") {
       return NextResponse.json(
@@ -58,17 +82,33 @@ export async function POST(request: NextRequest) {
 
     // Supabase Admin 클라이언트를 통해 이력 DB 적재
     const supabase = createAdminClient();
-    const { error: dbError } = await supabase
+    const { data: dbData, error: dbError } = await supabase
       .from("simulation_results")
       .insert({
         email: email || null,
         answers_snapshot: answers,
-        result_snapshot: result
-      });
+        result_snapshot: result,
+        questionnaire_id: result.versions?.questionnaire_id || null,
+        calculation_trace: result.trace || null,
+        questionnaire_version: result.versions?.questionnaire_version || null,
+        mapping_version: result.versions?.mapping_version || null,
+        calibration_version: result.versions?.calibration_version || null,
+        engine_version: result.versions?.engine_version || null,
+        financial_assumption_version: result.versions?.financial_assumption_version || null
+      })
+      .select("id")
+      .single();
 
     if (dbError) {
       console.error("Failed to archive simulation result:", dbError);
-      // DB 적재가 실패하더라도 사용자 경험을 위해 계산 결과는 전달
+      return NextResponse.json(
+        { error: "Database Persistence Failure", details: dbError.message },
+        { status: 500, headers: corsHeaders }
+      );
+    }
+
+    if (dbData?.id) {
+      result.simulation_id = dbData.id;
     }
 
     return NextResponse.json(result, {

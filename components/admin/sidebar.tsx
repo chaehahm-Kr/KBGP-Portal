@@ -40,6 +40,7 @@ export default function Sidebar({ isCollapsed, toggleCollapse }: SidebarProps) {
     Products: false,
     "Retail Network": false,
     "Sales & Performance": false,
+    "Growth Simulator": false,
     Amazon: false,
     "Tasks & Communication": false,
     Settings: false,
@@ -80,6 +81,16 @@ export default function Sidebar({ isCollapsed, toggleCollapse }: SidebarProps) {
       subItems: [
         { name: "Overview", href: "/admin/sales" },
         { name: "SKU Performance", href: "/admin/sales?tab=sku" },
+      ],
+    },
+    {
+      name: "Growth Simulator",
+      icon: SamplesIcon,
+      subItems: [
+        { name: "Overview", href: "/admin/simulator" },
+        { name: "Simulation Results", href: "/admin/simulator/results" },
+        { name: "Configuration", href: "/admin/simulator/configuration" },
+        { name: "Test Sandbox", href: "/admin/simulator/sandbox" },
       ],
     },
     {

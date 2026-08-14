@@ -32,6 +32,7 @@ export interface SimulationResult {
     gross_profit: number;
     initial_product_investment: number;
     payback_months: number;
+    budget_fit: "HIGH" | "MEDIUM" | "LOW" | "VERY LOW";
   };
   confidence: {
     level: "BASIC" | "GOOD" | "HIGH";
