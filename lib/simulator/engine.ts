@@ -283,7 +283,7 @@ export async function simulateGrowth(answers: Record<string, any>): Promise<Simu
     GROW: { cost: 6800 },
     EXPAND: { cost: 10500 }
   };
-  const investment = programDefaults[program]?.cost || (program === "START" ? 3500 : program === "GROW" ? 6800 : 10500);
+  const defaultInvestment = programDefaults[program]?.cost || (program === "START" ? 3500 : program === "GROW" ? 6800 : 10500);
 
   const width_ft = program === "START" ? 4 : program === "GROW" ? 8 : 12;
   const sku_count = program === "START" ? 24 : program === "GROW" ? 48 : 72;
@@ -631,10 +631,38 @@ export async function simulateGrowth(answers: Record<string, any>): Promise<Simu
     ];
   }
 
-  // 5. Turnover & Financial Project Calibration
+  // 5. Turnover & Financial Calculation V1.1 Calibration
+  // A. Dynamic Initial Investment Calculation (SKU Count * 12 units * Wholesale Cost)
+  const initialQtyPerSku = 12; // V1.1 SoT: 12 units / SKU
+  const totalInitialUnits = sku_count * initialQtyPerSku;
+  
+  let dynamicInvestment = 0;
+  if (recommended_products && recommended_products.length > 0) {
+    dynamicInvestment = recommended_products.reduce((sum: number, p: any) => {
+      const wholesale = p.wholesale_price || (p.estimated_retail_price * 0.50);
+      return sum + (wholesale * initialQtyPerSku);
+    }, 0);
+    dynamicInvestment = Math.round(dynamicInvestment);
+  }
+
+  // Fallback to estimated average if recommended_products is 0 or unassigned
+  const investment = dynamicInvestment > 0 ? dynamicInvestment : Math.round(sku_count * initialQtyPerSku * 12.00);
+
+  // Target Budget Range Warning Check
+  let investmentTargetWarning: string | null = null;
+  if (program === "START" && (investment < 2500 || investment > 4500)) {
+    investmentTargetWarning = `Calculated initial investment ($${investment}) is outside target START budget range ($2,500–$4,500)`;
+  } else if (program === "GROW" && (investment < 5000 || investment > 8500)) {
+    investmentTargetWarning = `Calculated initial investment ($${investment}) is outside target GROW budget range ($5,000–$8,500)`;
+  } else if (program === "EXPAND" && (investment < 8000 || investment > 13000)) {
+    investmentTargetWarning = `Calculated initial investment ($${investment}) is outside target EXPAND budget range ($8,000–$13,000)`;
+  }
+
+  // B. Multi-Signal Turnover V1.1 (Q35 Base + Q36 + Q37 + Support Signals)
   const turnover_params = config.parameters.turnover || {
-    q35_base_turns: [2.4, 3.6, 5.0, 6.8, 8.2, 10.0],
-    q37_multipliers: [1.15, 1.07, 1.00, 0.90, 0.80],
+    q35_base_turns: [1.8, 2.4, 3.0, 3.6, 4.2], // Calibrated Q35 base range to prevent single-question dominance
+    q36_multipliers: [1.00, 1.04, 1.08, 1.04, 0.98], // Q36 integration (Half=1.00, 4-6=1.04, 2-3=1.08, 1=1.04, Sellout=0.98)
+    q37_multipliers: [1.15, 1.08, 1.00, 0.92, 0.85],
     inquiry_adjustments: 1.05,
     traffic_adjustments: 1.05,
     replenishment_penalty_stockout: 0.85,
@@ -642,7 +670,8 @@ export async function simulateGrowth(answers: Record<string, any>): Promise<Simu
     scenario_multipliers: { conservative: 0.85, expected: 1.00, growth: 1.15 }
   };
 
-  let baseTurnover = 5.5;
+  // Signal 1: Q35 Base Turnover (Primary Range)
+  let baseTurnover = 3.0;
   const q35_ans = resolvedAnswers["Q35"]?.[0];
   if (q35_ans) {
     const idx = parseInt(q35_ans.split('_A')[1]) - 1;
@@ -652,8 +681,19 @@ export async function simulateGrowth(answers: Record<string, any>): Promise<Simu
   }
 
   let turnover = baseTurnover;
-  
-  // Q37 Multiplier
+
+  // Signal 2: Q36 Reorder Inventory Level Multiplier (V1.1 Integrated)
+  let q36_mult = 1.00;
+  const q36_ans = resolvedAnswers["Q36"]?.[0];
+  if (q36_ans) {
+    const idx = parseInt(q36_ans.split('_A')[1]) - 1;
+    if (idx >= 0 && idx < (turnover_params.q36_multipliers || [1.00, 1.04, 1.08, 1.04, 0.98]).length) {
+      q36_mult = (turnover_params.q36_multipliers || [1.00, 1.04, 1.08, 1.04, 0.98])[idx];
+    }
+  }
+  turnover *= q36_mult;
+
+  // Signal 3: Q37 60-Day Reorder Rate Multiplier
   let q37_mult = 1.00;
   const q37_ans = resolvedAnswers["Q37"]?.[0];
   if (q37_ans) {
@@ -664,7 +704,7 @@ export async function simulateGrowth(answers: Record<string, any>): Promise<Simu
   }
   turnover *= q37_mult;
 
-  // Q10 Inquiry Adjustment
+  // Support Signals: Q10, Q32, Q21, Q18
   let q10_mult = 1.00;
   if (resolvedAnswers["Q10"]?.includes("Q10_A1") || resolvedAnswers["Q10"]?.includes("Q10_A2")) {
     q10_mult = turnover_params.inquiry_adjustments || 1.05;
@@ -673,7 +713,6 @@ export async function simulateGrowth(answers: Record<string, any>): Promise<Simu
   }
   turnover *= q10_mult;
 
-  // Q32 Traffic Adjustment
   let q32_mult = 1.00;
   if (resolvedAnswers["Q32"]?.includes("Q32_A5")) {
     q32_mult = turnover_params.traffic_adjustments || 1.05;
@@ -682,14 +721,12 @@ export async function simulateGrowth(answers: Record<string, any>): Promise<Simu
   }
   turnover *= q32_mult;
 
-  // Q21 stockout penalty
   let q21_mult = 1.00;
   if (resolvedAnswers["Q21"]?.includes("Q21_A1")) {
     q21_mult = turnover_params.replenishment_penalty_stockout || 0.85;
   }
   turnover *= q21_mult;
 
-  // Q18 reorder frequency discipline
   let q18_mult = 1.00;
   if (resolvedAnswers["Q18"]?.includes("Q18_A5")) {
     q18_mult = turnover_params.replenishment_penalty_discipline || 0.90;
@@ -698,17 +735,43 @@ export async function simulateGrowth(answers: Record<string, any>): Promise<Simu
 
   const expectedTurnover = parseFloat(turnover.toFixed(2));
   
-  // Scenarios turnovers
+  // Scenarios Turnover
   const sc_params = turnover_params.scenario_multipliers || { conservative: 0.85, expected: 1.00, growth: 1.15 };
   const conservativeTurnover = parseFloat((expectedTurnover * sc_params.conservative).toFixed(2));
   const growthTurnover = parseFloat((expectedTurnover * sc_params.growth).toFixed(2));
 
-  // expected financial calculation
+  // C. Year-1 Ramp-Up & Monthly Cumulative Payback Calculation
   const gross_margin = config.parameters.financial?.global_gross_margin || 0.50;
-  const cogs = investment * expectedTurnover;
-  const annual_sales = Math.round(cogs / (1 - gross_margin));
-  const gross_profit = annual_sales - Math.round(cogs);
-  const payback_months = Math.ceil((investment / (gross_profit / 12)) || 3);
+  const steadyStateAnnualCogs = investment * expectedTurnover;
+  const steadyStateMonthlyCogs = steadyStateAnnualCogs / 12;
+
+  // Monthly Ramp-Up Factors: M1-3 = 70%, M4-6 = 90%, M7-12 = 100%
+  const rampUpFactors = [0.70, 0.70, 0.70, 0.90, 0.90, 0.90, 1.00, 1.00, 1.00, 1.00, 1.00, 1.00];
+  
+  let year1AnnualCogs = 0;
+  let year1AnnualSales = 0;
+  let year1GrossProfit = 0;
+  let cumulativeGrossProfit = 0;
+  let paybackMonths = 13; // 13 indicates 12+ months
+
+  for (let m = 1; m <= 12; m++) {
+    const factor = rampUpFactors[m - 1];
+    const mCogs = steadyStateMonthlyCogs * factor;
+    const mSales = mCogs / (1 - gross_margin);
+    const mGrossProfit = mSales - mCogs;
+
+    year1AnnualCogs += mCogs;
+    year1AnnualSales += mSales;
+    year1GrossProfit += mGrossProfit;
+
+    cumulativeGrossProfit += mGrossProfit;
+    if (paybackMonths === 13 && cumulativeGrossProfit >= investment) {
+      paybackMonths = m;
+    }
+  }
+
+  const annual_sales = Math.round(year1AnnualSales);
+  const gross_profit = Math.round(year1GrossProfit);
 
   // Budget Fit (Range-aware calculation)
   let budget_fit: "HIGH" | "MEDIUM" | "LOW" | "VERY LOW" = "HIGH";
@@ -836,6 +899,7 @@ export async function simulateGrowth(answers: Record<string, any>): Promise<Simu
     ap_scores: apScores,
     turnover_details: {
       base_turnover: baseTurnover,
+      q36_multiplier: q36_mult,
       q37_multiplier: q37_mult,
       q10_multiplier: q10_mult,
       q32_multiplier: q32_mult,
@@ -843,7 +907,8 @@ export async function simulateGrowth(answers: Record<string, any>): Promise<Simu
       q18_multiplier: q18_mult,
       expected_turnover: expectedTurnover,
       conservative_turnover: conservativeTurnover,
-      growth_turnover: growthTurnover
+      growth_turnover: growthTurnover,
+      investment_target_warning: investmentTargetWarning
     },
     confidence_details: {
       score: confScore,
@@ -859,7 +924,7 @@ export async function simulateGrowth(answers: Record<string, any>): Promise<Simu
       program,
       width_ft,
       sku_count,
-      initial_units,
+      initial_units: totalInitialUnits,
       investment,
       reasons
     },
@@ -879,7 +944,7 @@ export async function simulateGrowth(answers: Record<string, any>): Promise<Simu
       gross_margin,
       gross_profit,
       initial_product_investment: investment,
-      payback_months,
+      payback_months: paybackMonths,
       budget_fit
     },
     confidence: {
