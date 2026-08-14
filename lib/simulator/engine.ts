@@ -445,7 +445,56 @@ export async function simulateGrowth(answers: Record<string, any>): Promise<Simu
     .eq("code", primaryApCode)
     .single();
 
+  // Product Eligibility Filter Helper
+  function isEligibleProduct(prod: any): { eligible: boolean; reason?: string } {
+    if (!prod) return { eligible: false, reason: "Product is null" };
+
+    // 1. 브랜드 활성화 상태 체크 (is_active !== false)
+    if (prod.brand && prod.brand.is_active === false) {
+      return { eligible: false, reason: "Brand is inactive" };
+    }
+
+    // 2. 단종 및 판매 종료/중지 체크
+    if (prod.status === "discontinued") {
+      return { eligible: false, reason: "Status is discontinued" };
+    }
+    if (prod.sales_status === "ENDED" || prod.sales_status === "PAUSED") {
+      return { eligible: false, reason: `Sales status is ${prod.sales_status}` };
+    }
+
+    // 3. 미선정(NOT_SELECTED) 상품 제외
+    if (prod.selection_status === "NOT_SELECTED") {
+      return { eligible: false, reason: "Selection status is NOT_SELECTED" };
+    }
+
+    // 4. 구조적 더미/테스트 상품 제외 (Brand: Test, Product: test, test123, 스크립트검증 등)
+    const brandName = (prod.brand?.name || "").trim().toLowerCase();
+    const prodName = (prod.name || "").trim().toLowerCase();
+
+    if (
+      brandName === "test" ||
+      brandName === "테스트 브랜드" ||
+      brandName.startsWith("test-") ||
+      brandName.startsWith("test ")
+    ) {
+      return { eligible: false, reason: `Dummy brand '${prod.brand?.name}'` };
+    }
+
+    if (
+      prodName === "test" ||
+      prodName.startsWith("test") ||
+      prodName.includes("스크립트검증") ||
+      prodName.includes("테스트")
+    ) {
+      return { eligible: false, reason: `Dummy product '${prod.name}'` };
+    }
+
+    return { eligible: true };
+  }
+
   let recommended_products: any[] = [];
+  let candidateDiagnosis: string | null = null;
+
   if (apProfile) {
     const { data: matrixItems } = await supabase
       .from("product_curation_matrix")
@@ -454,11 +503,15 @@ export async function simulateGrowth(answers: Record<string, any>): Promise<Simu
         product:product_id (
           id,
           name,
-          estimated_retail_price,
+          status,
           sales_status,
+          selection_status,
+          estimated_retail_price,
           category_code,
           brand:brand_id (
-            name
+            id,
+            name,
+            is_active
           ),
           product_images (
             storage_path,
@@ -469,30 +522,40 @@ export async function simulateGrowth(answers: Record<string, any>): Promise<Simu
       .eq("ap_id", apProfile.id)
       .in("priority_role", ["REQUIRED", "CORE", "OPTIONAL"])
       .order("priority_role", { ascending: true })
-      .limit(10);
+      .limit(20);
 
     if (matrixItems) {
-      recommended_products = matrixItems
-        .filter((item: any) => item.product !== null)
-        .map((item: any) => {
-          const prod = item.product;
-          const images = prod.product_images || [];
-          const mainImg = images.find((i: any) => i.position === 0) || images[0];
-          const imgUrl = mainImg 
-            ? `${process.env.NEXT_PUBLIC_SUPABASE_URL || "https://shzfrppdobpmrstcjfqu.supabase.co"}/storage/v1/object/public/company-uploads/${mainImg.storage_path}`
-            : null;
+      const eligibleItems = matrixItems.filter((item: any) => {
+        const prod = item.product;
+        const check = isEligibleProduct(prod);
+        return check.eligible;
+      });
 
-          return {
-            id: prod.id,
-            name: prod.name,
-            brand_name: prod.brand?.name || "(미확인 브랜드)",
-            estimated_retail_price: parseFloat(prod.estimated_retail_price) || 0,
-            sales_status: prod.sales_status,
-            category_code: prod.category_code,
-            image_url: imgUrl,
-            priority_role: item.priority_role
-          };
-        });
+      if (eligibleItems.length === 0) {
+        candidateDiagnosis = "eligible product candidate insufficient";
+      }
+
+      recommended_products = eligibleItems.map((item: any) => {
+        const prod = item.product;
+        const images = prod.product_images || [];
+        const mainImg = images.find((i: any) => i.position === 0) || images[0];
+        const imgUrl = mainImg 
+          ? `${process.env.NEXT_PUBLIC_SUPABASE_URL || "https://shzfrppdobpmrstcjfqu.supabase.co"}/storage/v1/object/public/company-uploads/${mainImg.storage_path}`
+          : null;
+
+        return {
+          id: prod.id,
+          name: prod.name,
+          brand_name: prod.brand?.name || "(미확인 브랜드)",
+          estimated_retail_price: parseFloat(prod.estimated_retail_price) || 0,
+          sales_status: prod.sales_status,
+          category_code: prod.category_code,
+          image_url: imgUrl,
+          priority_role: item.priority_role
+        };
+      });
+    } else {
+      candidateDiagnosis = "eligible product candidate insufficient";
     }
   }
 
