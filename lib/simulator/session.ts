@@ -59,11 +59,13 @@ export async function persistSimulationSession(params: {
     const parentRecord = parentRecords && parentRecords.length > 0 ? parentRecords[0] : null;
 
     if (parentRecord) {
-      const baseId = parentRecord.base_simulation_id || parentRecord.id;
-      const baseCode = (parentRecord.simulation_code || "").replace(/-R\d+$/, "") || generateSimulationCode();
+      const parentMeta = parentRecord.result_snapshot?.session_meta || {};
+      const baseId = parentRecord.base_simulation_id || parentMeta.base_simulation_id || parentRecord.id;
+      const rawCode = parentRecord.simulation_code || parentMeta.simulation_code || "";
+      const baseCode = (rawCode.split("-R")[0] || "").trim() || generateSimulationCode();
 
-      // Fetch all revisions for this Base Session using baseId, baseCode, or email
-      let filterOr = `id.eq.${baseId},base_simulation_id.eq.${baseId},simulation_code.ilike.${baseCode}%`;
+      // Fetch all revisions for this Base Session
+      let filterOr = `id.eq.${baseId},base_simulation_id.eq.${baseId},result_snapshot->session_meta->>base_simulation_id.eq.${baseId}`;
       if (parentRecord.email) {
         filterOr += `,email.eq.${parentRecord.email}`;
       }
