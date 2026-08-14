@@ -149,6 +149,12 @@ export async function persistSimulationSession(params: {
         ...(revisions?.map(r => r.revision_no || 0) || [0])
       );
 
+      console.log(`[SESSION DEBUG] baseId: ${baseId}, candidates count: ${candidates.length}, revisions count: ${revisions.length}`);
+      revisions.forEach((r, idx) => {
+        console.log(`  * Rev[${idx}]: id=${r.id}, code=${r.simulation_code}, revNo=${r.revision_no}`);
+      });
+      console.log(`  * parentRevNo: ${parentRevNo}, maxRevNo: ${maxRevNo}, nextRevNo: ${maxRevNo + 1}`);
+
       // Check for answer equality with latest revision
       if (latestRev && areAnswersEqual(latestRev.answers_snapshot, answers)) {
         console.log(`[Session] No answer change detected for Base ${baseId}. Returning latest revision.`);
