@@ -173,8 +173,10 @@ async function buildStructuredGuideAnswer(
   let liveRuleNote: string | null = null;
   const actions: GuideActionLink[] = [];
   const sources: GuideSourceCitation[] = [];
+  const relatedManuals: any[] = [];
+  let relatedQuestions: string[] = [];
 
-  // Build Primary Citation
+  // Grounding Citation: ONLY Primary Match and strictly category-matching items
   sources.push({
     id: primaryMatch.id,
     title: primaryMatch.title_ko || primaryMatch.title,
@@ -185,9 +187,9 @@ async function buildStructuredGuideAnswer(
     isLiveRule: primaryMatch.source_type === "LIVE_SYSTEM" || primaryMatch.source_type === "HYBRID"
   });
 
-  // Additional Matches as Citations
+  // Secondary Citations: Only add items that share the EXACT same category (no cross-category leakage)
   allMatches.slice(1).forEach(m => {
-    if (!sources.some(s => s.id === m.id)) {
+    if (m.category === primaryMatch.category && !sources.some(s => s.id === m.id)) {
       sources.push({
         id: m.id,
         title: m.title_ko || m.title,
@@ -200,6 +202,21 @@ async function buildStructuredGuideAnswer(
     }
   });
 
+  // Attach Related PDF Manual if INSIGHTS or Manual exists
+  if (primaryMatch.category === "INSIGHTS" || primaryMatch.type === "MANUAL" || q.includes("매뉴얼") || q.includes("insights")) {
+    relatedManuals.push({
+      id: "kno-insights-manual-v10",
+      title: "K SELECT INSIGHTS 실무자 운영 매뉴얼",
+      version: "v1.0",
+      status: "CURRENT",
+      audience: "INTERNAL",
+      isOutdatedWarning: primaryMatch.system_impact_status === "POTENTIALLY_OUTDATED",
+      assetId: "asset-insights-manual-v10",
+      viewUrl: "/api/admin/knowledge/asset/asset-insights-manual-v10?action=view",
+      downloadUrl: "/api/admin/knowledge/asset/asset-insights-manual-v10?action=download"
+    });
+  }
+
   // Specific Content Answers based on Topic
   if (q.includes("topic score") || primaryMatch.id === "kno-insights-rule-daily-auto") {
     directAnswer = "현재 적용 중인 K SELECT INSIGHTS의 Topic Score 기준은 **80점 이상**입니다. 기준점 80점을 통과한 Topic만 Daily Insight Candidate로 채택됩니다.";
@@ -208,8 +225,13 @@ async function buildStructuredGuideAnswer(
       "NETWORK 모듈: 최대 3 Draft / HUB 모듈: 최대 3 Draft 생성 Quota 적용",
       "기준점 80점을 통과하는 Topic이 없는 경우 당일 생성 Draft가 0개일 수 있으며, 이는 정상적인 품질 검증 보호 동작입니다 (0 Draft Day ≠ Failure)."
     ];
-    actions.push({ label: "View Knowledge Detail", url: `/admin/knowledge/${primaryMatch.id}`, type: "knowledge" });
-    actions.push({ label: "Go to Editorial Rules", url: "/admin/insights/rules", type: "route" });
+    relatedQuestions = [
+      "오늘 Draft가 0개면 오류인가요?",
+      "HIGH Risk 기준은 무엇인가요?",
+      "Revision은 언제 요청하나요?"
+    ];
+    actions.push({ label: "지식 상세 보기", url: `/admin/knowledge/${primaryMatch.id}`, type: "knowledge" });
+    actions.push({ label: "Editorial Rules 열기", url: "/admin/insights/rules", type: "route" });
 
     if (primaryMatch.system_impact_status === "POTENTIALLY_OUTDATED") {
       liveRuleNote = "⚠️ 현재 관련 지식 항목에 System Setting 변경에 따른 POTENTIALLY_OUTDATED 검토 알림이 생성되어 있습니다.";
@@ -222,8 +244,13 @@ async function buildStructuredGuideAnswer(
       "MEDIUM Risk: 시장 트렌드, 검색 모멘텀 ('signals suggest' 수준 확인)",
       "LOW Risk: K SELECT 자체 운영 해석 및 체크리스트"
     ];
-    actions.push({ label: "View Knowledge Detail", url: `/admin/knowledge/${primaryMatch.id}`, type: "knowledge" });
-    actions.push({ label: "Go to Review Queue", url: "/admin/insights/queue", type: "route" });
+    relatedQuestions = [
+      "MEDIUM Risk와 LOW Risk 기준은?",
+      "Claim Status 정의 보기",
+      "Revision 요청 가이드"
+    ];
+    actions.push({ label: "지식 상세 보기", url: `/admin/knowledge/${primaryMatch.id}`, type: "knowledge" });
+    actions.push({ label: "Review Queue 열기", url: "/admin/insights/queue", type: "route" });
   } else if (q.includes("automation") || q.includes("status") || primaryMatch.id === "kno-insights-guide-automation-run-status") {
     directAnswer = "Daily Automation Run 상태는 **COMPLETED, PARTIAL, FAILED, SKIPPED_DUPLICATE, SKIPPED_TIME_WINDOW** 5가지로 구분됩니다.";
     bullets = [
@@ -233,8 +260,13 @@ async function buildStructuredGuideAnswer(
       "SKIPPED_DUPLICATE: 오늘 이미 실행 성공하여 중복 실행 방지됨",
       "핵심 원칙: '0 Draft Day ≠ Failure' (수량을 채우기 위한 저품질 작성 금지)"
     ];
-    actions.push({ label: "View Knowledge Detail", url: `/admin/knowledge/${primaryMatch.id}`, type: "knowledge" });
-    actions.push({ label: "Go to Automation Runs", url: "/admin/insights/automation-runs", type: "route" });
+    relatedQuestions = [
+      "0 Draft Day란 무엇인가요?",
+      "FAILED 시 오류 조치법",
+      "Editorial Rules 설정 열기"
+    ];
+    actions.push({ label: "지식 상세 보기", url: `/admin/knowledge/${primaryMatch.id}`, type: "knowledge" });
+    actions.push({ label: "Automation Runs 열기", url: "/admin/insights/automation-runs", type: "route" });
   } else if (q.includes("claim status") || primaryMatch.id === "kno-insights-def-claim-status") {
     directAnswer = "INSIGHTS Claim Status는 **FACT VERIFIED, VIEW INFERRED, SIGNAL, INTERNAL, ESTIMATE, STOP / UNSUPPORTED** 6가지로 정의됩니다.";
     bullets = [
@@ -244,8 +276,13 @@ async function buildStructuredGuideAnswer(
       "ESTIMATE: 공개 데이터 기반 자체 모델링 추정치",
       "STOP / UNSUPPORTED: 근거가 부족하여 게재가 중단되거나 지지되지 않는 주소"
     ];
-    actions.push({ label: "View Knowledge Detail", url: `/admin/knowledge/${primaryMatch.id}`, type: "knowledge" });
-    actions.push({ label: "Go to Review Queue", url: "/admin/insights/queue", type: "route" });
+    relatedQuestions = [
+      "FACT VERIFIED 검증 수칙",
+      "HIGH Risk 수치 검증 수칙",
+      "Revision 요청 가이드"
+    ];
+    actions.push({ label: "지식 상세 보기", url: `/admin/knowledge/${primaryMatch.id}`, type: "knowledge" });
+    actions.push({ label: "Review Queue 열기", url: "/admin/insights/queue", type: "route" });
   } else if (q.includes("revision") || q.includes("reject") || primaryMatch.id === "kno-insights-sop-review-decision") {
     directAnswer = "승인 검토 시 판단 기준은 **GO · APPROVE, FIX · REQUEST REVISION, STOP · REJECT** 3가지입니다.";
     bullets = [
@@ -253,8 +290,13 @@ async function buildStructuredGuideAnswer(
       "FIX · REQUEST REVISION: 수치 근거 미흡, 타겟 독자군 표현 어색함 ➔ (어느 독자 / 어느 섹션 / 무엇을 어떻게 수정할지) 원칙 제시",
       "STOP · REJECT: 근거 불분명, 허위 수치, 독자층에 부적절한 기사 ➔ 거절 처리"
     ];
-    actions.push({ label: "View Knowledge Detail", url: `/admin/knowledge/${primaryMatch.id}`, type: "knowledge" });
-    actions.push({ label: "Go to Review Queue", url: "/admin/insights/queue", type: "route" });
+    relatedQuestions = [
+      "HIGH Risk 수치 검증 수칙",
+      "GO APPROVE 판정 가이드",
+      "Knowledge 개정 방법"
+    ];
+    actions.push({ label: "지식 상세 보기", url: `/admin/knowledge/${primaryMatch.id}`, type: "knowledge" });
+    actions.push({ label: "Review Queue 열기", url: "/admin/insights/queue", type: "route" });
   } else if (q.includes("매뉴얼") || primaryMatch.id === "kno-insights-manual-v10") {
     directAnswer = "현재 등록된 공식 매뉴얼은 **K SELECT INSIGHTS 실무자 운영 매뉴얼 v1.0**입니다. 수동 등록, 승인, 보안 및 시스템 룰 연동 표준 절차가 수록되어 있습니다.";
     bullets = [
@@ -262,14 +304,12 @@ async function buildStructuredGuideAnswer(
       "Audience: INTERNAL ONLY (외부 유출 금지)",
       "연결된 PDF Asset: K_SELECT_INSIGHTS_Operations_Manual_v1.0.pdf (7.2MB)"
     ];
-    actions.push({ label: "View Knowledge Detail", url: `/admin/knowledge/${primaryMatch.id}`, type: "knowledge" });
-
-    // Attach Secure Manual PDF Delivery Asset Link if available
-    const assets = await getStoreAssets(primaryMatch.id);
-    if (assets.length > 0) {
-      actions.push({ label: "View Manual (Secure PDF)", url: `/api/admin/knowledge/asset/${assets[0].id}?action=view`, type: "manual" });
-      actions.push({ label: "Download Manual PDF", url: `/api/admin/knowledge/asset/${assets[0].id}?action=download`, type: "download" });
-    }
+    relatedQuestions = [
+      "Create New Version 사용법",
+      "Audience 지정 가이드",
+      "Potentially Outdated 조치 방법"
+    ];
+    actions.push({ label: "지식 상세 보기", url: `/admin/knowledge/${primaryMatch.id}`, type: "knowledge" });
   } else if (q.includes("create new version") || q.includes("버전") || q.includes("수정")) {
     directAnswer = "이미 배포된 `PUBLISHED` 지식의 운영 기준이나 정책이 변경된 경우, 덮어쓰지 않고 **`Create New Version`**을 실행해야 합니다.";
     bullets = [
@@ -277,7 +317,12 @@ async function buildStructuredGuideAnswer(
       "2. 무엇이 변경되었는지(What)와 왜 변경되었는지(Why) 필수 기록",
       "3. v1.1 Draft 작성 및 승인 ➔ Publish 시 기존 v1.0은 자동으로 `SUPERSEDED` 스냅샷 전환"
     ];
-    actions.push({ label: "Go to Knowledge Library", url: "/admin/knowledge/library", type: "route" });
+    relatedQuestions = [
+      "Audience 지정 가이드",
+      "Potentially Outdated 조치 방법",
+      "매뉴얼 관리 방법"
+    ];
+    actions.push({ label: "Knowledge Library 열기", url: "/admin/knowledge/library", type: "route" });
   } else if (q.includes("audience") || q.includes("brand") || q.includes("sensitive")) {
     directAnswer = "Knowledge Center의 모든 신규 등록 지식 기본값은 **`INTERNAL ONLY`**입니다. 외부 공개(BRAND, RETAILER, PUBLIC) 지정 시 승인 워크플로우를 거칩니다.";
     bullets = [
@@ -285,20 +330,35 @@ async function buildStructuredGuideAnswer(
       "BRAND / RETAILER / PUBLIC: 외부 검토 승인(APPROVED) 및 PUBLISHED 필수",
       "Sensitive Internal: 마진, 원가, 내부 심사점수, 고유 알고리즘 등 절대 외부 공개 금지"
     ];
-    actions.push({ label: "Go to Knowledge Library", url: "/admin/knowledge/library", type: "route" });
+    relatedQuestions = [
+      "Sensitive Internal 수칙",
+      "외부 공개 리뷰 절차",
+      "Knowledge Library 열기"
+    ];
+    actions.push({ label: "Knowledge Library 열기", url: "/admin/knowledge/library", type: "route" });
   } else if (q.includes("outdated")) {
     directAnswer = "`POTENTIALLY_OUTDATED`는 지식을 삭제하라는 의미가 아니라, **어드민 시스템 설정(Rule)이 변경되어 사람이 현재 지식 내용의 유효성을 재검토해야 함**을 의미합니다.";
     bullets = [
       "조치 1: 변경된 시스템 설정에 맞추어 `Create Updated Version`으로 개정 배포",
       "조치 2: 지식 내용이 여전히 유효함을 확인 후 사유(Reason) 입력 및 `No Update Required` 실행"
     ];
-    actions.push({ label: "Go to Review & Updates", url: "/admin/knowledge/review", type: "route" });
+    relatedQuestions = [
+      "Create New Version 사용법",
+      "No Update Required 처리법",
+      "Review & Updates 열기"
+    ];
+    actions.push({ label: "Review & Updates 열기", url: "/admin/knowledge/review", type: "route" });
   } else {
     // Default Fallback Summary from Knowledge Content
     directAnswer = primaryMatch.summary_ko || primaryMatch.summary_en || primaryMatch.title_ko;
     const cleanLines = (primaryMatch.content_ko || "").split("\n").filter(l => l.startsWith("- ") || l.startsWith("1. ") || l.startsWith("2. ")).slice(0, 4);
     bullets = cleanLines.length > 0 ? cleanLines.map(l => l.replace(/^[-1234567890.]*\s*/, "")) : [primaryMatch.summary_ko];
-    actions.push({ label: "View Knowledge Detail", url: `/admin/knowledge/${primaryMatch.id}`, type: "knowledge" });
+    relatedQuestions = [
+      "관련 운영 정책 보기",
+      "관련 SOP 절차 보기",
+      "Knowledge Library에서 검색"
+    ];
+    actions.push({ label: "지식 상세 보기", url: `/admin/knowledge/${primaryMatch.id}`, type: "knowledge" });
   }
 
   // Attach Related Route Links if defined in Knowledge Relations
@@ -306,7 +366,7 @@ async function buildStructuredGuideAnswer(
   relations.forEach(r => {
     if (r.related_route && !actions.some(a => a.url === r.related_route)) {
       actions.push({
-        label: `Go to ${r.related_menu || "Related Page"}`,
+        label: `${r.related_menu || "관련 페이지"} 열기`,
         url: r.related_route,
         type: "route"
       });
@@ -320,6 +380,8 @@ async function buildStructuredGuideAnswer(
     currentRuleBullets: bullets,
     liveRuleNote,
     sources,
+    relatedManuals,
+    relatedQuestions,
     actions,
     isUnknown: false,
     isReadonlyActionAttempt: false,

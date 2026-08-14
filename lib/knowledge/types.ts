@@ -169,6 +169,18 @@ export interface GuideSourceCitation {
   isLiveRule?: boolean;
 }
 
+export interface GuideRelatedManual {
+  id: string;
+  title: string;
+  version: string;
+  status: string;
+  audience: string;
+  isOutdatedWarning?: boolean;
+  assetId: string;
+  viewUrl: string;
+  downloadUrl: string;
+}
+
 export interface GuideAnswerResponse {
   id: string;
   question: string;
@@ -176,6 +188,8 @@ export interface GuideAnswerResponse {
   currentRuleBullets?: string[];
   liveRuleNote?: string | null;
   sources: GuideSourceCitation[];
+  relatedManuals?: GuideRelatedManual[];
+  relatedQuestions?: string[];
   actions: GuideActionLink[];
   isUnknown: boolean;
   isReadonlyActionAttempt: boolean;
