@@ -7,7 +7,7 @@ import { publicEnv } from "@/lib/env/public";
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { question, currentRoute } = body;
+    const { question, currentRoute, selectedModule } = body;
 
     if (!question || typeof question !== "string" || !question.trim()) {
       return NextResponse.json({ error: "Question string is required" }, { status: 400 });
@@ -96,7 +96,7 @@ export async function POST(request: NextRequest) {
     };
 
     // Process Natural Language Question with Deny-Before-Generation Security
-    const answer = await processGuideQuestion(question, userContext, currentRoute || "/admin");
+    const answer = await processGuideQuestion(question, userContext, currentRoute || "/admin", selectedModule);
 
     return NextResponse.json(answer);
   } catch (error: any) {

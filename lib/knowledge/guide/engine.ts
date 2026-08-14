@@ -19,7 +19,8 @@ const memoryFeedback: GuideFeedbackRecord[] = [];
 export async function processGuideQuestion(
   question: string,
   userContext: SecurityUserContext,
-  currentRoute: string = "/admin"
+  currentRoute: string = "/admin",
+  selectedModule?: string
 ): Promise<GuideAnswerResponse> {
   const now = new Date().toISOString();
   const q = question.toLowerCase().trim();
@@ -31,7 +32,8 @@ export async function processGuideQuestion(
   const searchResult = await searchKnowledgeCore(question, {
     mode: "GUIDE",
     userContext,
-    currentRoute
+    currentRoute,
+    selectedModule
   });
 
   const matchedItems = searchResult.items;
@@ -43,7 +45,7 @@ export async function processGuideQuestion(
 
   const bestMatch = matchedItems.length > 0 ? matchedItems[0] : null;
 
-  // 5. Handle Unknown / Insufficient Authorized Knowledge
+  // 5. Handle Unknown / Insufficient Authorized Knowledge (Module-Scoped vs Global)
   if (!bestMatch) {
     recordKnowledgeGap({
       id: `gap-${Date.now()}`,
@@ -54,18 +56,27 @@ export async function processGuideQuestion(
       created_at: now
     });
 
+    const moduleDisplayName = selectedModule
+      ? selectedModule === "SIMULATOR" ? "Growth Simulator"
+        : selectedModule === "KNOWLEDGE" ? "Knowledge Center"
+        : selectedModule === "INSIGHTS" ? "INSIGHTS"
+        : selectedModule === "PRODUCTS" ? "Products"
+        : selectedModule === "APPLICATIONS" ? "Applications"
+        : selectedModule
+      : "K SELECT";
+
     return {
       id: `ans-${Date.now()}`,
       question,
-      directAnswer: "현재 승인된 K SELECT Knowledge에서 이 질문에 대한 충분한 공식 운영 기준을 확인하지 못했습니다.",
+      directAnswer: `현재 승인된 ${moduleDisplayName} Knowledge에서 이 질문에 대한 충분한 공식 운영 기준을 확인하지 못했습니다.`,
       currentRuleBullets: [
-        "질문 내용에 해당하는 공식 Knowledge가 등록되지 않았거나, 열람 권한이 제한되어 있을 수 있습니다.",
-        "K SELECT Knowledge Library에서 직접 검색하거나 Knowledge Gap 보고서를 제출해 주세요."
+        `${moduleDisplayName} 영역에 해당하는 공식 Knowledge가 아직 등록되지 않았거나 검토 중일 수 있습니다.`,
+        `K SELECT Knowledge Library에서 관련 태그로 검색하시거나 ${moduleDisplayName} Knowledge Gap으로 접수해 주세요.`
       ],
       sources: [],
       actions: [
         { label: "Knowledge Library에서 검색", url: `/admin/knowledge/library?search=${encodeURIComponent(question)}`, type: "library" },
-        { label: "Knowledge Gap 보고", url: "#gap", type: "gap" }
+        { label: `${moduleDisplayName} Knowledge Gap 보고`, url: "#gap", type: "gap" }
       ],
       isUnknown: true,
       isReadonlyActionAttempt: false,
@@ -218,7 +229,22 @@ async function buildStructuredGuideAnswer(
   }
 
   // Specific Content Answers based on Topic
-  if (
+  if (q.includes("시뮬레이터") || q.includes("simulator") || primaryMatch.category === "SIMULATOR") {
+    directAnswer = "Growth Simulator는 K-Beauty 브랜드 및 리테일 네트워크의 마진(Margin), 원가(COGS), 플랫폼 수수료 및 예상 수익성(Profitability)을 계산하는 어드민 시뮬레이션 도구입니다.";
+    bullets = [
+      "모형 파라미터 기준: 제조원가(COGS 35%~45%), 플랫폼 수수료(15%), 통관/배송비($3.50) 설정",
+      "실행 경로: Admin → Growth Simulator → Sandbox (/admin/simulator/sandbox)",
+      "목표 지표: 미국 진출 시 목표 순마진(Target Net Margin) 20% 이상 확보 여부 시나리오 검증"
+    ];
+    relatedQuestions = [
+      "Profitability 시뮬레이션 실행 가이드",
+      "마진 파라미터 설정 방법",
+      "시뮬레이션 결과 리포트 저장법"
+    ];
+    actions.push({ label: "Growth Simulator Configuration 열기", url: "/admin/simulator/configuration", type: "route" });
+    actions.push({ label: "Growth Simulator Sandbox 열기", url: "/admin/simulator/sandbox", type: "route" });
+    actions.push({ label: "Growth Simulator Results 열기", url: "/admin/simulator/results", type: "route" });
+  } else if (
     q === "insight" ||
     q === "insights" ||
     q === "인사이트" ||

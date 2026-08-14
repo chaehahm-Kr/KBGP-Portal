@@ -68,6 +68,7 @@ export interface SearchCoreOptions {
   userContext: SecurityUserContext;
   filters?: KnowledgeFilterOptions;
   currentRoute?: string;
+  selectedModule?: string;
 }
 
 export interface SearchCoreResult {
@@ -85,7 +86,7 @@ export async function searchKnowledgeCore(
   rawQuery: string,
   options: SearchCoreOptions
 ): Promise<SearchCoreResult> {
-  const { mode, userContext, filters = {}, currentRoute = "/admin" } = options;
+  const { mode, userContext, filters = {}, currentRoute = "/admin", selectedModule } = options;
   const rawItems = await getStoreKnowledgeItems();
 
   // 1. SECURITY: Enforce Strict Audience Security (Deny-by-Default)
@@ -99,6 +100,12 @@ export async function searchKnowledgeCore(
     candidatePool = candidatePool.filter(
       item => item.status === "PUBLISHED" && !item.current_version.toLowerCase().includes("draft")
     );
+
+    // MODULE-SCOPED RETRIEVAL RULE:
+    // If selectedModule is specified (e.g. SIMULATOR, KNOWLEDGE, INSIGHTS), restrict candidatePool strictly to that module.
+    if (selectedModule) {
+      candidatePool = candidatePool.filter(item => item.category === selectedModule);
+    }
   } else {
     // Library Mode: Apply Status Filter
     if (filters.status && filters.status !== "ALL") {

@@ -372,6 +372,89 @@ Six strict prohibition rules for K SELECT INSIGHTS internal editors.
 5. **DO NOT approve Visuals merely as decoration**.
 6. **DO NOT alter Super Admin accounts for production auth testing**.`
     },
+    {
+      id: "kno-simulator-rule-config",
+      slug: "growth-simulator-model-configuration-rule",
+      title: "Growth Simulator 모형 설정 및 마진 시뮬레이션 기준",
+      title_ko: "Growth Simulator 모형 설정 및 마진 시뮬레이션 기준",
+      title_en: "Growth Simulator Model Configuration & Margin Simulation Rules",
+      summary_ko: "Growth Simulator 모형 파라미터(원가, 수수료, 물류비, 마케팅비) 설정 및 Profitability 계산 기준",
+      summary_en: "Model parameters (COGS, fee, logistics, marketing) setup and profitability calculation rules for Growth Simulator.",
+      type: "SYSTEM_RULE",
+      source_type: "HYBRID",
+      linked_system_setting_key: "simulator_config_rule",
+      linked_system_setting_name: "Growth Simulator Configuration Rules",
+      linked_system_setting_value: "Default COGS 40% | Platform Fee 15% | Target Net Margin 20%",
+      category: "SIMULATOR",
+      tags: ["SIMULATOR", "Growth Simulator", "SYSTEM_RULE", "Margin", "Profitability"],
+      owner_id: "staff-admin-01",
+      owner_name: "K SELECT Strategy Desk",
+      status: "PUBLISHED",
+      system_impact_status: "NORMAL",
+      audience: ["INTERNAL", "ADMIN / MANAGEMENT"],
+      is_sensitive_internal: false,
+      requires_external_approval: false,
+      external_review_status: "NONE",
+      current_version: "v1.0",
+      effective_date: today,
+      created_at: "2026-08-14T08:00:00Z",
+      updated_at: now,
+      content_ko: `## 1. 개요 (Overview)
+Growth Simulator는 한국 K-Beauty 브랜드 및 리테일러의 미국 진출 수익성(Profitability) 및 마진 시뮬레이션을 실행하는 어드민 가이던스 툴입니다.
+
+## 2. 시뮬레이터 모형 설정 파라미터 (Model Parameters)
+- **COGS (제조원가)**: 공급가 기준 기본 35%~45% 범위 적용
+- **Platform Fee (플랫폼 수수료)**: 기본 15% 설정 (프로그램별 차등 적용)
+- **Logistics & Duty (물류비 및 관세)**: 건당 통관/배송비 $3.50 및 US Customs Tariff 적용
+- **Target Net Margin (목표 순마진)**: 최소 20% 이상 확보를 목표로 수치 모델링
+
+## 3. 실행 절차
+1. Admin → Growth Simulator → Configuration (\`/admin/simulator/configuration\`) 이동
+2. 브랜드/상품별 입력값 설정 및 저장
+3. Sandbox (\`/admin/simulator/sandbox\`)에서 시나리오 실행 및 마진 리포트 확인`,
+      content_en: `## 1. Overview
+Growth Simulator guides K-Beauty brand profitability and margin modeling for US market entry.
+
+## 2. Parameters
+- **COGS**: 35%-45% default
+- **Platform Fee**: 15% default
+- **Target Net Margin**: Minimum 20% target.`
+    },
+    {
+      id: "kno-simulator-guide-execution",
+      slug: "growth-simulator-profitability-execution-guide",
+      title: "Growth Simulator Profitability 시뮬레이션 실행 가이드",
+      title_ko: "Growth Simulator Profitability 시뮬레이션 실행 가이드",
+      title_en: "Growth Simulator Profitability Simulation Execution Guide",
+      summary_ko: "Profitability 시뮬레이션 실행 방법, 시나리오 분석 및 결과 데이터 해석 가이드",
+      summary_en: "Execution guide for profitability simulation, scenario analysis, and result interpretation.",
+      type: "GUIDE",
+      source_type: "CONTENT",
+      category: "SIMULATOR",
+      tags: ["SIMULATOR", "Growth Simulator", "GUIDE", "Profitability", "Scenario"],
+      owner_id: "staff-admin-01",
+      owner_name: "K SELECT Strategy Desk",
+      status: "PUBLISHED",
+      system_impact_status: "NORMAL",
+      audience: ["INTERNAL"],
+      is_sensitive_internal: false,
+      requires_external_approval: false,
+      external_review_status: "NONE",
+      current_version: "v1.0",
+      effective_date: today,
+      created_at: "2026-08-14T08:00:00Z",
+      updated_at: now,
+      content_ko: `## 1. 개요 (Overview)
+Growth Simulator 시뮬레이션 실행 및 결과 데이터 해석을 위한 가이드입니다.
+
+## 2. 시뮬레이션 실행 방법
+1. Admin → Growth Simulator → Sandbox (\`/admin/simulator/sandbox\`)
+2. 대상 브랜드 및 상품군 선택
+3. 마진 변수(COGS, Marketing Spend, Retain Rate) 슬라이더 조절 후 'Calculate Profitability' 실행
+4. 생성된 리포트 결과를 시뮬레이션 결과 목록 (\`/admin/simulator/results\`)에 저장 및 공유`,
+      content_en: `## 1. Overview
+Execution guide for Growth Simulator sandbox calculations.`
+    },
     // Retaining legacy fallback mock items for full filter testing
     {
       id: "kno-001-internal-manual",
