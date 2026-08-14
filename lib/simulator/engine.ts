@@ -531,31 +531,52 @@ export async function simulateGrowth(answers: Record<string, any>): Promise<Simu
         return check.eligible;
       });
 
-      if (eligibleItems.length === 0) {
+      if (eligibleItems.length > 0) {
+        recommended_products = eligibleItems.map((item: any) => {
+          const prod = item.product;
+          const images = prod.product_images || [];
+          const mainImg = images.find((i: any) => i.position === 0) || images[0];
+          const imgUrl = mainImg 
+            ? `${process.env.NEXT_PUBLIC_SUPABASE_URL || "https://shzfrppdobpmrstcjfqu.supabase.co"}/storage/v1/object/public/company-uploads/${mainImg.storage_path}`
+            : null;
+
+          return {
+            id: prod.id,
+            name: prod.name,
+            brand_name: prod.brand?.name || "(미확인 브랜드)",
+            estimated_retail_price: parseFloat(prod.estimated_retail_price) || 0,
+            sales_status: prod.sales_status,
+            category_code: prod.category_code,
+            image_url: imgUrl,
+            priority_role: item.priority_role,
+            is_synthetic: false
+          };
+        });
+      } else {
         candidateDiagnosis = "eligible product candidate insufficient";
       }
-
-      recommended_products = eligibleItems.map((item: any) => {
-        const prod = item.product;
-        const images = prod.product_images || [];
-        const mainImg = images.find((i: any) => i.position === 0) || images[0];
-        const imgUrl = mainImg 
-          ? `${process.env.NEXT_PUBLIC_SUPABASE_URL || "https://shzfrppdobpmrstcjfqu.supabase.co"}/storage/v1/object/public/company-uploads/${mainImg.storage_path}`
-          : null;
-
-        return {
-          id: prod.id,
-          name: prod.name,
-          brand_name: prod.brand?.name || "(미확인 브랜드)",
-          estimated_retail_price: parseFloat(prod.estimated_retail_price) || 0,
-          sales_status: prod.sales_status,
-          category_code: prod.category_code,
-          image_url: imgUrl,
-          priority_role: item.priority_role
-        };
-      });
     } else {
       candidateDiagnosis = "eligible product candidate insufficient";
+    }
+
+    // Calibration Mode / Sandbox Fallback: Load Synthetic Catalog if live eligible products are 0
+    if (recommended_products.length === 0) {
+      const { getSyntheticProductsForAp } = require("./synthetic-catalog");
+      const synthList = getSyntheticProductsForAp(primaryApCode);
+      if (synthList && synthList.length > 0) {
+        recommended_products = synthList.map((p: any) => ({
+          id: p.id,
+          name: p.name,
+          brand_name: p.brand_name,
+          estimated_retail_price: p.estimated_retail_price,
+          wholesale_price: p.wholesale_price,
+          sales_status: p.sales_status,
+          category_code: p.category_code,
+          image_url: p.image_url,
+          priority_role: p.curation_role,
+          is_synthetic: true
+        }));
+      }
     }
   }
 
@@ -850,6 +871,8 @@ export async function simulateGrowth(answers: Record<string, any>): Promise<Simu
       category_mix,
       recommended_products
     },
+    internal_candidate_products: recommended_products,
+    candidate_diagnosis: candidateDiagnosis,
     financial: {
       turnover: expectedTurnover,
       annual_sales,

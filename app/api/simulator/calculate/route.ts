@@ -111,7 +111,27 @@ export async function POST(request: NextRequest) {
       result.simulation_id = dbData.id;
     }
 
-    return NextResponse.json(result, {
+    // Public API Response Sanitization: Remove internal candidate products, SKUs, brand names, and trace
+    const publicResponse = {
+      simulation_id: result.simulation_id,
+      is_sandbox: result.is_sandbox || false,
+      display: result.display,
+      assortment: {
+        primary: result.assortment.primary,
+        secondary: result.assortment.secondary,
+        primary_description_ko: result.assortment.primary_description_ko,
+        secondary_description_ko: result.assortment.secondary_description_ko,
+        primary_description_en: result.assortment.primary_description_en,
+        secondary_description_en: result.assortment.secondary_description_en,
+        category_mix: result.assortment.category_mix,
+        price_mix: result.assortment.price_mix || []
+      },
+      financial: result.financial,
+      confidence: result.confidence,
+      action_plan_90d: result.action_plan_90d || null
+    };
+
+    return NextResponse.json(publicResponse, {
       status: 200,
       headers: corsHeaders
     });

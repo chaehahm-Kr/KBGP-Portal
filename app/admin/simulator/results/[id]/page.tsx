@@ -282,7 +282,69 @@ export default async function SimulationResultDetailPage({
             </div>
           </div>
 
-          {/* Raw JSON Trace dropdown */}
+          {/* Candidate Products Section (Admin Internal View) */}
+      <div className="rounded-lg border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 space-y-4">
+        <div className="flex justify-between items-center border-b border-zinc-100 dark:border-zinc-800 pb-2">
+          <h2 className="text-sm font-bold text-zinc-900 dark:text-white">
+            F. 내부 추천 후보 SKU 목록 (Internal Candidate Products)
+          </h2>
+          <span className="text-[11px] font-medium text-zinc-500 bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 rounded">
+            총 {(res.internal_candidate_products || res.assortment?.recommended_products || []).length}개 Candidate SKU
+          </span>
+        </div>
+
+        {(res.internal_candidate_products || res.assortment?.recommended_products || []).length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-zinc-50 dark:bg-zinc-850 text-zinc-500 dark:text-zinc-400 font-semibold border-b border-zinc-200 dark:border-zinc-800">
+                <tr>
+                  <th className="py-2.5 px-3">상품 / 브랜드</th>
+                  <th className="py-2.5 px-3">Curation Role</th>
+                  <th className="py-2.5 px-3">Category Code</th>
+                  <th className="py-2.5 px-3">권장 소비자가 (MSRP)</th>
+                  <th className="py-2.5 px-3">상태</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800 text-zinc-800 dark:text-zinc-200">
+                {(res.internal_candidate_products || res.assortment?.recommended_products || []).map((prod: any, idx: number) => (
+                  <tr key={idx} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-800/40">
+                    <td className="py-2.5 px-3">
+                      <div className="font-bold text-zinc-900 dark:text-white">{prod.name}</div>
+                      <div className="text-[11px] text-zinc-400">{prod.brand_name}</div>
+                    </td>
+                    <td className="py-2.5 px-3">
+                      <span className="inline-block px-2 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border border-amber-200/50 dark:border-amber-900/50">
+                        {prod.priority_role || prod.curation_role || "CORE"}
+                      </span>
+                    </td>
+                    <td className="py-2.5 px-3 font-mono text-zinc-600 dark:text-zinc-400">
+                      {prod.category_code || "-"}
+                    </td>
+                    <td className="py-2.5 px-3 font-semibold text-emerald-600 dark:text-emerald-400">
+                      ${prod.estimated_retail_price || 0}
+                    </td>
+                    <td className="py-2.5 px-3">
+                      <span className="inline-block px-1.5 py-0.5 rounded text-[10px] bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 font-mono">
+                        {prod.sales_status || "ON_SALE"}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="p-4 rounded-lg bg-zinc-50 dark:bg-zinc-800/30 text-center text-xs text-zinc-400">
+            {res.candidate_diagnosis ? (
+              <span className="text-amber-6-0 font-medium">⚠️ 진단: {res.candidate_diagnosis} (조건을 만족하는 Strict Candidate SKU가 현재 DB에 0개입니다)</span>
+            ) : (
+              <span>추천된 Candidate SKU 데이터가 없습니다.</span>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Raw JSON Trace Section */}
           <div className="border-t border-zinc-100 dark:border-zinc-800 pt-4">
             <details className="cursor-pointer group">
               <summary className="text-xs font-bold text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white select-none">

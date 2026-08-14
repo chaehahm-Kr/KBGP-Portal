@@ -46,3 +46,4 @@ dev.log
 scratch/
 
 .vercel
+.mcp.json*
