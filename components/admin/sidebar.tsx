@@ -17,6 +17,7 @@ import {
   UsersIcon,
   SettingsIcon,
   InsightsIcon,
+  KnowledgeIcon,
   ChevronDownIcon,
   ChevronRightIcon
 } from "./icons";
@@ -42,17 +43,27 @@ export default function Sidebar({ isCollapsed, toggleCollapse }: SidebarProps) {
     "Retail Network": false,
     "Sales & Performance": false,
     "Growth Simulator": false,
-    INSIGHTS: true,
+    INSIGHTS: false,
     Amazon: false,
     "Tasks & Communication": false,
     Settings: false,
   });
 
-  // Auto-expand INSIGHTS menu if current route is under /admin/insights
+  // Auto-expand parent menu matching current pathname
   useEffect(() => {
-    if (pathname && pathname.startsWith("/admin/insights")) {
-      setExpandedMenus((prev) => ({ ...prev, INSIGHTS: true }));
-    }
+    if (!pathname) return;
+    setExpandedMenus({
+      Applications: pathname.startsWith("/admin/applications"),
+      "Companies & Brands": pathname.startsWith("/admin/companies") || pathname.startsWith("/admin/brands"),
+      Products: pathname.startsWith("/admin/products"),
+      "Retail Network": pathname.startsWith("/admin/stores"),
+      "Sales & Performance": pathname.startsWith("/admin/sales"),
+      "Growth Simulator": pathname.startsWith("/admin/simulator"),
+      INSIGHTS: pathname.startsWith("/admin/insights"),
+      Amazon: pathname.startsWith("/admin/amazon"),
+      "Tasks & Communication": pathname.startsWith("/admin/tasks") || pathname.startsWith("/admin/partner-inquiries") || pathname.startsWith("/admin/inquiries"),
+      Settings: pathname.startsWith("/admin/settings") || pathname.startsWith("/admin/knowledge"),
+    });
   }, [pathname]);
 
   const menuItems: MenuItem[] = [
@@ -139,6 +150,7 @@ export default function Sidebar({ isCollapsed, toggleCollapse }: SidebarProps) {
       name: "Settings",
       icon: SettingsIcon,
       subItems: [
+        { name: "Knowledge Center", href: "/admin/knowledge" },
         { name: "Email Templates", href: "/admin/settings/email-templates" },
         { name: "Company Configs", href: "/admin/settings/company-configs" },
         { name: "Categories", href: "/admin/settings/categories" },
@@ -164,7 +176,10 @@ export default function Sidebar({ isCollapsed, toggleCollapse }: SidebarProps) {
         if (sub.href === "/admin/insights" && (pathname === "/admin/insights" || pathname.startsWith("/admin/insights/"))) {
           return true;
         }
-        if (sub.href !== "/admin/insights" && pathname.startsWith(sub.href + "/")) {
+        if (sub.href === "/admin/knowledge" && (pathname === "/admin/knowledge" || pathname.startsWith("/admin/knowledge/"))) {
+          return true;
+        }
+        if (sub.href !== "/admin/insights" && sub.href !== "/admin/knowledge" && pathname.startsWith(sub.href + "/")) {
           return true;
         }
         return false;
@@ -246,7 +261,10 @@ export default function Sidebar({ isCollapsed, toggleCollapse }: SidebarProps) {
               {hasSubItems && isExpanded && (
                 <div className="pl-9 space-y-1">
                   {item.subItems?.map((sub) => {
-                    const isSubActive = pathname === sub.href || (sub.href === "/admin/insights" && pathname === "/admin/insights");
+                    const isSubActive = pathname === sub.href ||
+                      (sub.href === "/admin/insights" && pathname.startsWith("/admin/insights")) ||
+                      (sub.href === "/admin/knowledge" && pathname.startsWith("/admin/knowledge"));
+
                     return (
                       <Link
                         key={sub.name}
