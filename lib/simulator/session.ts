@@ -60,13 +60,18 @@ export async function persistSimulationSession(params: {
 
     if (parentRecord) {
       const baseId = parentRecord.base_simulation_id || parentRecord.id;
-      const baseCode = (parentRecord.simulation_code || "").split("-R")[0] || generateSimulationCode();
+      const baseCode = (parentRecord.simulation_code || "").replace(/-R\d+$/, "") || generateSimulationCode();
 
-      // Fetch all revisions for this Base Session
+      // Fetch all revisions for this Base Session using baseId, baseCode, or email
+      let filterOr = `id.eq.${baseId},base_simulation_id.eq.${baseId},simulation_code.ilike.${baseCode}%`;
+      if (parentRecord.email) {
+        filterOr += `,email.eq.${parentRecord.email}`;
+      }
+
       const { data: revisionsRaw } = await supabase
         .from("simulation_results")
         .select("id, revision_no, answers_snapshot, is_latest, simulation_code, base_simulation_id, result_snapshot, created_at")
-        .or(`id.eq.${baseId},base_simulation_id.eq.${baseId},result_snapshot->session_meta->>base_simulation_id.eq.${baseId}`)
+        .or(filterOr)
         .order("created_at", { ascending: false });
 
       const revisions = (revisionsRaw || []).map((r: any) => {
