@@ -15,10 +15,12 @@ export default async function SimulationResultsPage({
 }: {
   searchParams: Promise<{
     search?: string;
+    type?: string;
     display?: string;
     primaryAp?: string;
     confidence?: string;
     budgetFit?: string;
+    followupStatus?: string;
     sortBy?: string;
     page?: string;
   }>;
@@ -27,20 +29,24 @@ export default async function SimulationResultsPage({
   const params = await searchParams;
 
   const search = params.search || "";
+  const type = params.type || "LIVE";
   const display = params.display || "";
   const primaryAp = params.primaryAp || "";
   const confidence = params.confidence || "";
   const budgetFit = params.budgetFit || "";
+  const followupStatus = params.followupStatus || "";
   const sortBy = params.sortBy || "newest";
   const page = Number(params.page || "1");
   const limit = 20;
 
   const { data, total } = await getSimulationResultsList({
     search,
+    type,
     display,
     primaryAp,
     confidence,
     budgetFit,
+    followupStatus,
     sortBy,
     page,
     limit,
@@ -61,10 +67,12 @@ export default async function SimulationResultsPage({
         initialData={data}
         total={total}
         search={search}
+        type={type}
         display={display}
         primaryAp={primaryAp}
         confidence={confidence}
         budgetFit={budgetFit}
+        followupStatus={followupStatus}
         sortBy={sortBy}
         page={page}
         limit={limit}

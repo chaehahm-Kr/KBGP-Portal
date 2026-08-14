@@ -29,7 +29,8 @@ export async function getSimulatorOverviewStats() {
   const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
   const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
 
-  let totalSimulations = 0;
+  let liveSimulations = 0;
+  let sandboxSimulations = 0;
   let last7Days = 0;
   let last30Days = 0;
 
@@ -51,14 +52,18 @@ export async function getSimulatorOverviewStats() {
   };
 
   const results = rows || [];
-  totalSimulations = results.length;
 
   results.forEach((row) => {
+    const res = (row.result_snapshot as any) || {};
+    if (res.is_sandbox) {
+      sandboxSimulations++;
+      return; // Exclude sandbox from live business analytics
+    }
+
+    liveSimulations++;
     const createdAt = new Date(row.created_at);
     if (createdAt >= sevenDaysAgo) last7Days++;
     if (createdAt >= thirtyDaysAgo) last30Days++;
-
-    const res = (row.result_snapshot as any) || {};
 
     // Recommended Display
     const displayProg = res.display?.program;
@@ -86,7 +91,8 @@ export async function getSimulatorOverviewStats() {
   });
 
   return {
-    totalSimulations,
+    totalSimulations: liveSimulations,
+    sandboxSimulations,
     last7Days,
     last30Days,
     displayDistribution,
@@ -101,19 +107,23 @@ export async function getSimulatorOverviewStats() {
  */
 export async function getSimulationResultsList({
   search = "",
+  type = "LIVE", // "LIVE" | "SANDBOX" | "ALL"
   display = "",
   primaryAp = "",
   confidence = "",
   budgetFit = "",
+  followupStatus = "",
   sortBy = "newest",
   page = 1,
   limit = 20,
 }: {
   search?: string;
+  type?: string;
   display?: string;
   primaryAp?: string;
   confidence?: string;
   budgetFit?: string;
+  followupStatus?: string;
   sortBy?: string;
   page?: number;
   limit?: number;
@@ -147,14 +157,39 @@ export async function getSimulationResultsList({
 
   let results = rows || [];
 
-  // Search filter (ID or Email)
+  // Live vs Sandbox filtering (Default: LIVE)
+  if (type === "LIVE") {
+    results = results.filter((r) => {
+      const snap = (r.result_snapshot as any) || {};
+      return !snap.is_sandbox;
+    });
+  } else if (type === "SANDBOX") {
+    results = results.filter((r) => {
+      const snap = (r.result_snapshot as any) || {};
+      return snap.is_sandbox === true;
+    });
+  }
+
+  // Follow-up status filtering
+  if (followupStatus) {
+    results = results.filter((r) => {
+      const snap = (r.result_snapshot as any) || {};
+      const status = snap.followup_status || "NEW";
+      return status === followupStatus;
+    });
+  }
+
+  // Search filter (ID, Email, Store Name, Contact Name)
   if (search.trim()) {
     const s = search.toLowerCase();
-    results = results.filter(
-      (r) =>
-        r.id.toLowerCase().includes(s) ||
-        (r.email && r.email.toLowerCase().includes(s))
-    );
+    results = results.filter((r) => {
+      const snap = (r.result_snapshot as any) || {};
+      const storeName = (snap.retailer_info?.store_name || "").toLowerCase();
+      const contactName = (snap.retailer_info?.contact_name || "").toLowerCase();
+      const email = (r.email || "").toLowerCase();
+      const id = r.id.toLowerCase();
+      return id.includes(s) || email.includes(s) || storeName.includes(s) || contactName.includes(s);
+    });
   }
 
   // Sorting
@@ -173,6 +208,8 @@ export async function getSimulationResultsList({
     total,
   };
 }
+
+
 
 /**
  * Fetch detailed simulation result by UUID

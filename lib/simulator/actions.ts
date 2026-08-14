@@ -10,10 +10,54 @@ import {
   validateDraftConfig as validateDraft,
 } from "./admin";
 
+export async function updateSimulationFollowupAction({
+  id,
+  followupStatus,
+  notes,
+  assignedStaff
+}: {
+  id: string;
+  followupStatus: string;
+  notes?: string;
+  assignedStaff?: string;
+}) {
+  await verifyAdminSession();
+  const supabase = createAdminClient();
+
+  const { data: row, error: fetchErr } = await supabase
+    .from("simulation_results")
+    .select("result_snapshot")
+    .eq("id", id)
+    .single();
+
+  if (fetchErr || !row) {
+    return { error: `Submission ${id}를 찾을 수 없습니다.` };
+  }
+
+  const snap = (row.result_snapshot as any) || {};
+  snap.followup_status = followupStatus;
+  if (notes !== undefined) snap.followup_notes = notes;
+  if (assignedStaff !== undefined) snap.assigned_staff = assignedStaff;
+  snap.last_followup_at = new Date().toISOString();
+
+  const { error: updateErr } = await supabase
+    .from("simulation_results")
+    .update({ result_snapshot: snap })
+    .eq("id", id);
+
+  if (updateErr) {
+    return { error: `상태 업데이트 실패: ${updateErr.message}` };
+  }
+
+  revalidatePath("/admin/simulator/results");
+  revalidatePath(`/admin/simulator/results/${id}`);
+
+  return { success: true };
+}
+
 // Re-export core draft actions with Admin session validation
 export async function createDraftConfig(userId: string) {
   const session = await verifyAdminSession();
-  // UI 호환성을 유지하되, 서버 단에서 확인된 session.userId를 반드시 우선 신뢰하여 처리
   const activeUserId = session.userId || userId;
   return createDraft(activeUserId);
 }
@@ -57,7 +101,6 @@ export async function updateQuestionAction(
   await verifyAdminSession();
   const supabase = createAdminClient();
 
-  // Verify the question belongs to the draft questionnaire
   const { data: q } = await supabase
     .from("simulator_questions")
     .select("id, question_id")
@@ -96,7 +139,6 @@ export async function addAnswerOptionAction(
   await verifyAdminSession();
   const supabase = createAdminClient();
 
-  // Verify the question belongs to the draft
   const { data: q } = await supabase
     .from("simulator_questions")
     .select("id")
@@ -108,7 +150,6 @@ export async function addAnswerOptionAction(
     return { error: "질문을 찾을 수 없거나 편집할 권한이 없습니다." };
   }
 
-  // Insert the answer option
   const { data: newAns, error: ansErr } = await supabase
     .from("simulator_answers")
     .insert({
@@ -126,7 +167,6 @@ export async function addAnswerOptionAction(
     return { error: `답변 옵션 추가 실패: ${ansErr?.message}` };
   }
 
-  // Insert default neutral mapping for this answer
   await supabase.from("simulator_answer_mappings").insert({
     answer_id: newAns.id,
     validation_status: "NEUTRAL_CONFIRMED",
@@ -189,7 +229,6 @@ export async function updateMappingAction(
   await verifyAdminSession();
   const supabase = createAdminClient();
 
-  // Try to update or insert mapping
   const { error } = await supabase
     .from("simulator_answer_mappings")
     .upsert({
