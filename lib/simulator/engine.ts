@@ -45,20 +45,24 @@ async function getPublishedConfig(supabase: any) {
     return cachedConfig;
   }
 
-  // 1. Fetch active questionnaire
-  const { data: questionnaire, error: qnErr } = await supabase
-    .from('simulator_questionnaires')
-    .select('id, version')
-    .eq('status', 'active')
-    .order('version', { ascending: false })
-    .limit(1)
-    .single();
-
-  if (qnErr || !questionnaire) {
-    throw new Error(`Failed to load active questionnaire configuration: ${qnErr?.message || "Not found"}`);
+  let questionnaire: any = null;
+  try {
+    const { data, error: qnErr } = await supabase
+      .from('simulator_questionnaires')
+      .select('id, version')
+      .eq('status', 'active')
+      .order('version', { ascending: false })
+      .limit(1)
+      .single();
+    if (!qnErr && data) {
+      questionnaire = data;
+    }
+  } catch (err: any) {
+    console.warn("⚠️ Supabase config fetch error, fallback to fallback config:", err?.message);
   }
 
-  const qnId = questionnaire.id;
+  const qnId = questionnaire?.id || "fallback-qn-v1";
+  const qnVersion = questionnaire?.version || 1;
 
   // 2. Fetch questions, answers, mappings, rules, and parameters in parallel
   const [
@@ -116,7 +120,7 @@ async function getPublishedConfig(supabase: any) {
 
   cachedConfig = {
     questionnaireId: qnId,
-    version: questionnaire.version,
+    version: qnVersion,
     questions: questions || [],
     answers: answers || [],
     mappings: mappings || [],
