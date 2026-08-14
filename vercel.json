@@ -2,7 +2,7 @@
   "crons": [
     {
       "path": "/api/cron/insights-daily-research",
-      "schedule": "0 9,10 * * *"
+      "schedule": "0 9 * * *"
     },
     {
       "path": "/api/cron/info-request-reminders",
