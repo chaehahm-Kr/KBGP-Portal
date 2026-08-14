@@ -224,6 +224,59 @@ export async function GET() {
       });
     }
 
+    // ----------------------------------------------------
+    // Scenario I: Internal Manual PDF Asset Audience Access Control
+    // ----------------------------------------------------
+    const targetAssetId = "asset-insights-manual-v10";
+    const internalManualDoc = allItems.find(i => i.id === "kno-insights-manual-v10");
+
+    if (internalManualDoc) {
+      const anonAllowed = isAuthorizedForAudience({ userId: "anon", role: "anonymous" }, internalManualDoc);
+      const brandAllowed = isAuthorizedForAudience({ userId: "brand-1", role: "brand" }, internalManualDoc);
+      const retailerAllowed = isAuthorizedForAudience({ userId: "retailer-1", role: "retailer" }, internalManualDoc);
+      const adminAllowed = isAuthorizedForAudience({ userId: "admin-1", role: "admin" }, internalManualDoc);
+
+      if (!anonAllowed && !brandAllowed && !retailerAllowed && adminAllowed) {
+        results.push({
+          scenario: "Scenario I",
+          name: "Internal Manual PDF Asset Audience Security",
+          status: "PASS",
+          details: "Anonymous, Brand, and Retailer contexts strictly denied PDF asset access (Admin context allowed)."
+        });
+      } else {
+        results.push({
+          scenario: "Scenario I",
+          name: "Internal Manual PDF Asset Audience Security",
+          status: "FAIL",
+          details: "Internal PDF asset audience authorization check failed."
+        });
+      }
+    }
+
+    // ----------------------------------------------------
+    // Scenario J: Public Static File Removal & Unauthenticated Bypass Guard
+    // ----------------------------------------------------
+    const fs = require("fs");
+    const path = require("path");
+    const publicManualPath = path.join(process.cwd(), "public", "manuals", "K_SELECT_INSIGHTS_Operations_Manual_v1.0.pdf");
+    const isPublicFileExposed = fs.existsSync(publicManualPath);
+
+    if (!isPublicFileExposed) {
+      results.push({
+        scenario: "Scenario J",
+        name: "Public Static File Exposure Removal Guard",
+        status: "PASS",
+        details: "Internal PDF file removed from public static directory (Direct URL bypass impossible)."
+      });
+    } else {
+      results.push({
+        scenario: "Scenario J",
+        name: "Public Static File Exposure Removal Guard",
+        status: "FAIL",
+        details: "Internal PDF file still exposed in public static directory!"
+      });
+    }
+
     const allPassed = results.every(r => r.status === "PASS");
 
     return NextResponse.json({

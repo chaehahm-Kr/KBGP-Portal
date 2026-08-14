@@ -559,7 +559,7 @@ Six strict prohibition rules for K SELECT INSIGHTS internal editors.
       version: "v1.0",
       language: "KO",
       is_current: true,
-      file_url: "/manuals/K_SELECT_INSIGHTS_Operations_Manual_v1.0.pdf",
+      file_url: "/api/admin/knowledge/asset/asset-insights-manual-v10",
       file_name: "K_SELECT_INSIGHTS_실무자_운영_메뉴얼_v1.0.pdf",
       file_size: 7239179,
       published_date: today,
@@ -711,6 +711,22 @@ export async function getStoreAssets(knowledgeId: string): Promise<ManualAsset[]
   memAssets.forEach(a => assetMap.set(a.id, a));
   dbAssets.forEach(a => assetMap.set(a.id, a));
   return Array.from(assetMap.values());
+}
+
+export async function getStoreAssetById(assetId: string): Promise<ManualAsset | undefined> {
+  initSeedData();
+  const foundMem = memoryAssets.find(a => a.id === assetId);
+  if (foundMem) return foundMem;
+  try {
+    const supabase = createAdminClient();
+    const { data } = await supabase
+      .from("knowledge_manual_assets")
+      .select("*")
+      .eq("id", assetId)
+      .single();
+    if (data) return data as ManualAsset;
+  } catch (e) {}
+  return undefined;
 }
 
 export async function saveStoreAsset(asset: ManualAsset): Promise<ManualAsset> {

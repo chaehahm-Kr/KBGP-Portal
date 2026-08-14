@@ -1,0 +1,1409 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>K SELECT Knowledge Center 실무자 활용·운영 매뉴얼 v1.0</title>
+  <style>
+    @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
+
+    @page {
+      size: A4 portrait;
+      margin: 0;
+    }
+
+    * {
+      box-sizing: border-box;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, Roboto, sans-serif;
+      background-color: #F8FAFC;
+      color: #1E293B;
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    .page {
+      width: 210mm;
+      min-height: 297mm;
+      padding: 20mm 18mm 20mm 18mm;
+      margin: 0 auto;
+      background: #FFFFFF;
+      position: relative;
+      page-break-after: always;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+
+    .page-cover {
+      background-color: #0F172A;
+      color: #FFFFFF;
+      justify-content: space-between;
+      padding: 28mm 22mm 22mm 22mm;
+    }
+
+    .cover-top {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .logo-badge {
+      width: 52px;
+      height: 52px;
+      background: #FFFFFF;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 900;
+      font-size: 24px;
+      color: #0F172A;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    }
+
+    .cover-subtitle {
+      font-size: 13px;
+      letter-spacing: 2px;
+      font-weight: 700;
+      color: #94A3B8;
+      text-transform: uppercase;
+    }
+
+    .cover-title {
+      font-size: 32px;
+      font-weight: 800;
+      line-height: 1.25;
+      color: #FFFFFF;
+      margin-top: 8px;
+    }
+
+    .cover-desc {
+      font-size: 15px;
+      color: #CBD5E1;
+      line-height: 1.7;
+      margin-top: 16px;
+      max-width: 540px;
+    }
+
+    .cover-tags {
+      display: flex;
+      gap: 10px;
+      margin-top: 32px;
+    }
+
+    .cover-tag {
+      background: rgba(255,255,255,0.1);
+      border: 1px solid rgba(255,255,255,0.2);
+      padding: 6px 14px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 700;
+      color: #F8FAFC;
+    }
+
+    .cover-tag.red {
+      background: #991B1B;
+      border-color: #B91C1C;
+    }
+
+    .cover-footer {
+      border-top: 1px solid rgba(255,255,255,0.15);
+      padding-top: 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 11px;
+      color: #64748B;
+    }
+
+    /* Page Headers & Footers */
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 2px solid #E2E8F0;
+      padding-bottom: 10px;
+      margin-bottom: 20px;
+    }
+
+    .header-title {
+      font-size: 11px;
+      font-weight: 800;
+      color: #0F172A;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+    }
+
+    .header-meta {
+      font-size: 11px;
+      color: #64748B;
+      font-weight: 600;
+    }
+
+    .footer {
+      border-top: 1px solid #E2E8F0;
+      padding-top: 10px;
+      margin-top: 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 10px;
+      color: #94A3B8;
+    }
+
+    .section-num {
+      font-size: 11px;
+      font-weight: 800;
+      color: #991B1B;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+    }
+
+    .section-title {
+      font-size: 20px;
+      font-weight: 800;
+      color: #0F172A;
+      margin: 4px 0 16px 0;
+      line-height: 1.3;
+    }
+
+    .content-body {
+      flex: 1;
+    }
+
+    /* Card Components */
+    .card-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px;
+      margin: 16px 0;
+    }
+
+    .card-grid-3 {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      margin: 16px 0;
+    }
+
+    .card {
+      background: #F8FAFC;
+      border: 1px solid #E2E8F0;
+      border-radius: 8px;
+      padding: 14px;
+    }
+
+    .card-navy {
+      background: #0F172A;
+      color: #FFFFFF;
+      border: none;
+    }
+
+    .card-header {
+      font-size: 12px;
+      font-weight: 800;
+      color: #0F172A;
+      margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .card-navy .card-header {
+      color: #FFFFFF;
+    }
+
+    .card-body {
+      font-size: 12px;
+      color: #475569;
+      line-height: 1.55;
+    }
+
+    .card-navy .card-body {
+      color: #CBD5E1;
+    }
+
+    /* Callout Boxes */
+    .callout {
+      border-left: 4px solid #0F172A;
+      background: #F1F5F9;
+      padding: 14px 16px;
+      border-radius: 0 8px 8px 0;
+      margin: 16px 0;
+    }
+
+    .callout-important {
+      border-left-color: #991B1B;
+      background: #FEF2F2;
+    }
+
+    .callout-warning {
+      border-left-color: #D97706;
+      background: #FFFBEB;
+    }
+
+    .callout-success {
+      border-left-color: #059669;
+      background: #ECFDF5;
+    }
+
+    .callout-title {
+      font-size: 12px;
+      font-weight: 800;
+      margin-bottom: 4px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .callout-important .callout-title { color: #991B1B; }
+    .callout-warning .callout-title { color: #B45309; }
+    .callout-success .callout-title { color: #047857; }
+
+    .callout-desc {
+      font-size: 12px;
+      color: #334155;
+      line-height: 1.6;
+    }
+
+    /* Key Statement Quote */
+    .key-statement {
+      background: #0F172A;
+      color: #FFFFFF;
+      padding: 16px 20px;
+      border-radius: 8px;
+      margin: 16px 0;
+      text-align: center;
+    }
+
+    .key-statement-label {
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: 1.5px;
+      color: #94A3B8;
+      margin-bottom: 4px;
+      text-transform: uppercase;
+    }
+
+    .key-statement-text {
+      font-size: 15px;
+      font-weight: 800;
+      color: #FFFFFF;
+      line-height: 1.5;
+    }
+
+    /* UI Mock Containers & Badges */
+    .ui-box {
+      border: 1px solid #CBD5E1;
+      border-radius: 8px;
+      background: #FFFFFF;
+      padding: 14px;
+      margin: 14px 0;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.03);
+    }
+
+    .ui-topbar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      border-bottom: 1px solid #E2E8F0;
+      padding-bottom: 8px;
+      margin-bottom: 12px;
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 3px 8px;
+      border-radius: 4px;
+      font-size: 10px;
+      font-weight: 800;
+      line-height: 1;
+    }
+
+    .badge-navy { background: #0F172A; color: #FFF; }
+    .badge-red { background: #991B1B; color: #FFF; }
+    .badge-green { background: #DCFCE7; color: #15803D; }
+    .badge-amber { background: #FEF3C7; color: #B45309; }
+    .badge-blue { background: #DBEAFE; color: #1D4ED8; }
+    .badge-gray { background: #F1F5F9; color: #475569; }
+
+    /* Tables */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 14px 0;
+      font-size: 12px;
+    }
+
+    th {
+      background: #F1F5F9;
+      color: #0F172A;
+      font-weight: 800;
+      text-align: left;
+      padding: 8px 12px;
+      border-bottom: 2px solid #CBD5E1;
+    }
+
+    td {
+      padding: 8px 12px;
+      border-bottom: 1px solid #E2E8F0;
+      color: #334155;
+      vertical-align: top;
+    }
+
+    tr:nth-child(even) td {
+      background: #F8FAFC;
+    }
+
+    /* Workflow Diagram */
+    .flow-steps {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      margin: 16px 0;
+    }
+
+    .flow-step {
+      flex: 1;
+      background: #F1F5F9;
+      border: 1px solid #CBD5E1;
+      border-radius: 6px;
+      padding: 10px 8px;
+      text-align: center;
+    }
+
+    .flow-step-active {
+      background: #0F172A;
+      color: #FFF;
+      border-color: #0F172A;
+    }
+
+    .flow-step-num {
+      font-size: 10px;
+      font-weight: 800;
+      color: #64748B;
+    }
+
+    .flow-step-active .flow-step-num { color: #94A3B8; }
+
+    .flow-step-title {
+      font-size: 11px;
+      font-weight: 800;
+      margin-top: 2px;
+    }
+
+    .flow-arrow {
+      font-weight: 900;
+      color: #94A3B8;
+    }
+
+    /* List items */
+    ul, ol {
+      margin: 8px 0;
+      padding-left: 20px;
+    }
+
+    li {
+      margin-bottom: 6px;
+      line-height: 1.5;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- COVER PAGE -->
+  <div class="page page-cover">
+    <div class="cover-top">
+      <div class="logo-badge">K</div>
+      <div class="cover-subtitle">K SELECT NETWORK · INTERNAL OPERATIONS GUIDE</div>
+      <div class="cover-title">Knowledge Center<br>실무자 활용·운영 매뉴얼</div>
+      <div class="cover-desc">
+        K SELECT Network Admin Single Source of Truth — 처음 접하는 실무자가 Knowledge 조회, 신규 등록, 버전 개정, 보안 및 System Rule 연동 조치를 정확히 수행할 수 있도록 정의한 공식 표준 운영 매뉴얼입니다.
+      </div>
+      <div class="cover-tags">
+        <div class="cover-tag red">VERSION 1.0</div>
+        <div class="cover-tag">2026.08.14</div>
+        <div class="cover-tag">INTERNAL USE ONLY</div>
+      </div>
+    </div>
+    <div class="cover-footer">
+      <div>K SELECT KNOWLEDGE CENTER · FROM OPERATIONAL RULES TO PLATFORM TRUTH</div>
+      <div>01 / 16</div>
+    </div>
+  </div>
+
+  <!-- PAGE 2: SECTION 01 -->
+  <div class="page">
+    <div>
+      <div class="header">
+        <div class="header-title">K SELECT KNOWLEDGE CENTER OPERATIONS GUIDE</div>
+        <div class="header-meta">VERSION 1.0 · SECTION 01</div>
+      </div>
+      <div class="content-body">
+        <div class="section-num">SECTION 01</div>
+        <div class="section-title">Knowledge Center란?</div>
+
+        <p>K SELECT Knowledge Center는 단순한 문서 저장소나 PDF 파일 보관함이 아닙니다. 플랫폼 전체(Manual, Policy, FAQ, System Rule, Admin Guide, Brand Guide, Retailer Guide)의 <strong>공통 Source of Truth (단일 진실 출처)</strong> 역할을 수행하는 장기 운영 지식 중앙 통제 모듈입니다.</p>
+
+        <div class="key-statement">
+          <div class="key-statement-label">기억할 한 문장</div>
+          <div class="key-statement-text">PDF를 보관하는 곳이 아니라, K SELECT의 현재 운영 기준과 정책을 안전하게 관리하는 곳입니다.</div>
+        </div>
+
+        <div class="card-grid">
+          <div class="card">
+            <div class="card-header">📌 Single Source of Truth</div>
+            <div class="card-body">여러 부서와 시스템에 파편화될 수 있는 운영 규칙과 정책을 하나의 검증된 중앙 데이터베이스로 일원화하여 관리를 보장합니다.</div>
+          </div>
+          <div class="card">
+            <div class="card-header">🔒 Strict Audience Isolation</div>
+            <div class="card-body">INTERNAL, ADMIN, BRAND, RETAILER, PUBLIC 5단계 권한 엔진이 데이터 수집(Retrieval) 레벨에서 외부 유출을 원천 차단합니다.</div>
+          </div>
+          <div class="card">
+            <div class="card-header">🔄 Immutable Versioning</div>
+            <div class="card-body">기존 운영 기준을 직접 덮어쓰지 않고, 버전 이력(v1.0 -> v1.1)을 스냅샷으로 보존하며 안전하게 승인 및 개정합니다.</div>
+          </div>
+          <div class="card">
+            <div class="card-header">⚡ Live System Rule Impact</div>
+            <div class="card-body">실제 Insights/어드민 시스템 설정값이 변경되면 관련 지식 항목을 감지하여 `POTENTIALLY_OUTDATED` 상태로 검토 요청을 자동 생성합니다.</div>
+          </div>
+        </div>
+
+        <div class="callout callout-important">
+          <div class="callout-title">⚠️ Knowledge Record vs PDF Manual 차이점</div>
+          <div class="callout-desc">
+            <strong>Knowledge Record</strong>: 시스템 데이터베이스에 저장되는 최우선 표준 지식 (Source of Truth)<br>
+            <strong>PDF Manual Asset</strong>: 시각적 배포 및 교육을 위해 연결된 부속 문서 (Asset)<br>
+            <em>* 따라서 PDF 파일만 교체하고 Knowledge Record의 내용이나 버전을 업데이트하지 않는 조치는 엄격히 금지됩니다.</em>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="footer">
+      <div>K SELECT KNOWLEDGE CENTER · CONFIDENTIAL / INTERNAL USE ONLY</div>
+      <div>02 / 16</div>
+    </div>
+  </div>
+
+  <!-- PAGE 3: SECTION 02 -->
+  <div class="page">
+    <div>
+      <div class="header">
+        <div class="header-title">K SELECT KNOWLEDGE CENTER OPERATIONS GUIDE</div>
+        <div class="header-meta">VERSION 1.0 · SECTION 02</div>
+      </div>
+      <div class="content-body">
+        <div class="section-num">SECTION 02</div>
+        <div class="section-title">언제 Knowledge Center를 사용하는가?</div>
+
+        <p>실무자는 업무 중 발생하는 다양한 상황에 따라 다음과 같이 Knowledge Center를 활용합니다.</p>
+
+        <table>
+          <thead>
+            <tr>
+              <th style="width: 35%;">실무 상황 (Situation)</th>
+              <th style="width: 30%;">이동 화면 (Menu / Tab)</th>
+              <th style="width: 35%;">실무자 행동 가이드 (Action)</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>"어떤 메뉴나 기능의 사용법을 모르겠습니다."</strong></td>
+              <td><code>Library</code> 탭</td>
+              <td>검색창에 메뉴명(예: <em>Topic Score</em>, <em>Fact Check</em>) 입력 후 <code>MANUAL</code> 또는 <code>GUIDE</code> 조회</td>
+            </tr>
+            <tr>
+              <td><strong>"현재 적용 중인 공식 운영 정책을 확인하고 싶습니다."</strong></td>
+              <td><code>Library</code> 탭</td>
+              <td>Type 필터를 <code>POLICY</code> 또는 <code>SYSTEM_RULE</code>로 선택하여 최신 <code>PUBLISHED</code> 건 확인</td>
+            </tr>
+            <tr>
+              <td><strong>"신규 운영 매뉴얼 PDF가 완성되었습니다."</strong></td>
+              <td><code>+ Create Knowledge</code></td>
+              <td>Type을 <code>MANUAL</code>로 선택, 정보 작성 후 4단계에서 PDF Asset 파일 연결</td>
+            </tr>
+            <tr>
+              <td><strong>"기존 정책이나 승인 기준이 변경되었습니다."</strong></td>
+              <td>Detail → <code>VERSIONS</code> 탭</td>
+              <td>기존 글 직접 수정 금지 ❌ → <code>Create New Version</code> 버튼을 눌러 v1.1 Draft 작성 및 승인 배포</td>
+            </tr>
+            <tr>
+              <td><strong>"외부 브랜드/리테일러에 공개해도 되는지 검증이 필요합니다."</strong></td>
+              <td>Detail → <code>ACCESS</code> 탭</td>
+              <td>Audience 확인 및 <code>Preview As (Brand / Retailer)</code> 기능으로 시뮬레이션 검증</td>
+            </tr>
+            <tr>
+              <td><strong>"어드민 시스템 설정(Rule)이 변경되었습니다."</strong></td>
+              <td><code>Review & Updates</code> 탭</td>
+              <td><code>System Change Impact</code> 항목에서 <code>POTENTIALLY_OUTDATED</code> 상태 건 재검토 수행</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="callout callout-warning">
+          <div class="callout-title">💡 실무 추천 이동 경로 (Recommended Navigation Flow)</div>
+          <div class="callout-desc">
+            일상 업무: <strong>Admin → Settings → Knowledge Center → Library</strong>에서 검색 및 조회<br>
+            정책 변경 시: <strong>Knowledge Detail → VERSIONS → Create New Version → Review & Publish</strong>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="footer">
+      <div>K SELECT KNOWLEDGE CENTER · CONFIDENTIAL / INTERNAL USE ONLY</div>
+      <div>03 / 16</div>
+    </div>
+  </div>
+
+  <!-- PAGE 4: SECTION 03 & 04 -->
+  <div class="page">
+    <div>
+      <div class="header">
+        <div class="header-title">K SELECT KNOWLEDGE CENTER OPERATIONS GUIDE</div>
+        <div class="header-meta">VERSION 1.0 · SECTION 03 & 04</div>
+      </div>
+      <div class="content-body">
+        <div class="section-num">SECTION 03 & 04</div>
+        <div class="section-title">화면 구조 및 Overview 대시보드 활용법</div>
+
+        <p>Knowledge Center는 어드민 좌측 사이드바 <strong>Admin → Settings → Knowledge Center</strong>로 진입하며, 상단 3개 탭으로 구성됩니다.</p>
+
+        <div class="ui-box">
+          <div class="ui-topbar">
+            <span class="badge badge-navy">Navigation</span>
+            <span>Settings → Knowledge Center Navigation Tabs</span>
+          </div>
+          <div class="flow-steps">
+            <div class="flow-step flow-step-active">
+              <div class="flow-step-num">TAB 01</div>
+              <div class="flow-step-title">Overview</div>
+            </div>
+            <div class="flow-arrow">›</div>
+            <div class="flow-step">
+              <div class="flow-step-num">TAB 02</div>
+              <div class="flow-step-title">Library</div>
+            </div>
+            <div class="flow-arrow">›</div>
+            <div class="flow-step">
+              <div class="flow-step-num">TAB 03</div>
+              <div class="flow-step-title">Review & Updates</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card-grid-3">
+          <div class="card">
+            <div class="card-header">📊 1. Overview</div>
+            <div class="card-body">지식 센터의 전체 지표, 요약 카운트, 조치가 필요한 항목(Needs Your Attention)을 한눈에 보는 대시보드입니다.</div>
+          </div>
+          <div class="card">
+            <div class="card-header">📚 2. Library</div>
+            <div class="card-body">등록된 모든 지식을 검색, 유형/권한별 필터링하고 상세 내용을 확인하는 실무 중심 검색 화면입니다.</div>
+          </div>
+          <div class="card">
+            <div class="card-header">🔔 3. Review & Updates</div>
+            <div class="card-body">외부 공개 승인 대기(Awaiting Approval), 검토 필요, 시스템 변경 영향(System Impact)을 관리합니다.</div>
+          </div>
+        </div>
+
+        <div class="section-num" style="margin-top: 20px;">SECTION 04 — OVERVIEW MONITORING</div>
+        <p>Overview에 출근 후 접속하면 모든 숫자를 일일이 확인할 필요 없이, <strong>Needs Your Attention</strong> 섹션을 가장 먼저 확인합니다.</p>
+
+        <div class="card-grid">
+          <div class="card">
+            <div class="card-header">
+              <span class="badge badge-green">PUBLISHED</span> 지식 현황
+            </div>
+            <div class="card-body">현재 정상 운영 적용 중인 지식 총 건수입니다.</div>
+          </div>
+          <div class="card">
+            <div class="card-header">
+              <span class="badge badge-amber">DRAFT / IN_REVIEW</span> 초안
+            </div>
+            <div class="card-body">작성 중이거나 개정 검토 중인 지식 항목 수입니다.</div>
+          </div>
+          <div class="card">
+            <div class="card-header">
+              <span class="badge badge-blue">EXTERNAL REVIEW</span> 승인 대기
+            </div>
+            <div class="card-body">Brand / Retailer / Public 공개를 위해 외부 검토가 요청된 수입니다.</div>
+          </div>
+          <div class="card">
+            <div class="card-header">
+              <span class="badge badge-red">OUTDATED</span> 영향 받은 지식
+            </div>
+            <div class="card-body">어드민 시스템 설정 변경으로 재검토가 필요한 지식 항목 수입니다.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="footer">
+      <div>K SELECT KNOWLEDGE CENTER · CONFIDENTIAL / INTERNAL USE ONLY</div>
+      <div>04 / 16</div>
+    </div>
+  </div>
+
+  <!-- PAGE 5: SECTION 05 -->
+  <div class="page">
+    <div>
+      <div class="header">
+        <div class="header-title">K SELECT KNOWLEDGE CENTER OPERATIONS GUIDE</div>
+        <div class="header-meta">VERSION 1.0 · SECTION 05</div>
+      </div>
+      <div class="content-body">
+        <div class="section-num">SECTION 05</div>
+        <div class="section-title">Library — 가장 많이 사용하는 실무 화면</div>
+
+        <p>Library는 지식 검색과 다차원 필터링을 통해 원하는 정책과 가이드를 빠르게 검색하는 메인 작업 공간입니다.</p>
+
+        <div class="ui-box">
+          <div class="ui-topbar">
+            <span class="badge badge-navy">Search & Filter Interface</span>
+            <span>Library 검색 및 6개 콤보박스 필터 구조</span>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>필터 항목 (Filter)</th>
+                <th>선택 옵션 (Available Options)</th>
+                <th>실무 활용법 (Usage)</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>Search (검색어)</strong></td>
+                <td>자유 텍스트 (Title, Summary, Content, Tag 검색)</td>
+                <td>궁금한 키워드 직접 입력 (예: <code>Topic Score</code>, <code>Fact Check</code>)</td>
+              </tr>
+              <tr>
+                <td><strong>Type (지식 유형)</strong></td>
+                <td>MANUAL, POLICY, SOP, FAQ, SYSTEM_RULE, DEFINITION, GUIDE...</td>
+                <td>찾고자 하는 지식의 성격 지정 (예: <code>SYSTEM_RULE</code>)</td>
+              </tr>
+              <tr>
+                <td><strong>Audience (접근 권한)</strong></td>
+                <td>INTERNAL, ADMIN / MANAGEMENT, BRAND, RETAILER, PUBLIC</td>
+                <td>열람 대상 지정 (기본적으로 권한 엔진이 허용된 항목만 출력)</td>
+              </tr>
+              <tr>
+                <td><strong>Module (연관 모듈)</strong></td>
+                <td>INSIGHTS, OPERATIONS, ONBOARDING, RETAIL_NETWORK...</td>
+                <td>관련 업무 영역 필터링</td>
+              </tr>
+              <tr>
+                <td><strong>Status (상태)</strong></td>
+                <td>PUBLISHED, DRAFT, IN_REVIEW, APPROVED, SUPERSEDED, ARCHIVED</td>
+                <td>기본 검색 시 <code>SUPERSEDED</code>/<code>ARCHIVED</code> 자동 제외</td>
+              </tr>
+              <tr>
+                <td><strong>Language (언어)</strong></td>
+                <td>KO, EN, BOTH</td>
+                <td>국문/영문 작성 완결 여부 기준 검색</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="card-grid">
+          <div class="card">
+            <div class="card-header">🔍 검색 예시 1: Topic Score</div>
+            <div class="card-body">
+              <strong>결과</strong>: <code>INSIGHTS Daily Auto Insight 운영 기준</code> (SYSTEM_RULE)<br>
+              <strong>내용</strong>: 매일 05:00 ET 실행, 최소 80점 통과 기준, Quota Max 3 확인
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-header">🔍 검색 예시 2: Fact Check</div>
+            <div class="card-body">
+              <strong>결과</strong>: <code>INSIGHTS Fact Check & Risk Review 기준</code> (POLICY)<br>
+              <strong>내용</strong>: HIGH/MEDIUM/LOW Risk 판정 기준 및 근거 확인 조치법
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="footer">
+      <div>K SELECT KNOWLEDGE CENTER · CONFIDENTIAL / INTERNAL USE ONLY</div>
+      <div>05 / 16</div>
+    </div>
+  </div>
+
+  <!-- PAGE 6: SECTION 06 -->
+  <div class="page">
+    <div>
+      <div class="header">
+        <div class="header-title">K SELECT KNOWLEDGE CENTER OPERATIONS GUIDE</div>
+        <div class="header-meta">VERSION 1.0 · SECTION 06</div>
+      </div>
+      <div class="content-body">
+        <div class="section-num">SECTION 06</div>
+        <div class="section-title">Knowledge Type 가이드</div>
+
+        <p>지식을 새롭게 등록할 때 기술적 정의가 아닌 <strong>"어떤 경우 이 Type을 선택해야 하는가?"</strong>를 기준으로 정합니다.</p>
+
+        <table>
+          <thead>
+            <tr>
+              <th style="width: 25%;">Type</th>
+              <th style="width: 40%;">실무 정의 (Operational Definition)</th>
+              <th style="width: 35%;">선택 가이드 (When to Choose)</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><span class="badge badge-navy">MANUAL</span></td>
+              <td>종합 운영 지침서 및 공식 매뉴얼</td>
+              <td>PDF 가이드북 파일과 함께 전체 시스템을 안내할 때</td>
+            </tr>
+            <tr>
+              <td><span class="badge badge-red">POLICY</span></td>
+              <td>회사의 공식 운영 원칙 및 규정/기준</td>
+              <td>실무자가 반드시 지켜야 하는 원칙이나 위험 관리 기준 지정 시</td>
+            </tr>
+            <tr>
+              <td><span class="badge badge-blue">SOP</span></td>
+              <td>표준 운영 절차 (Standard Operating Procedure)</td>
+              <td>업무를 순서대로 진행해야 하는 단계별 프로세스 안내 시</td>
+            </tr>
+            <tr>
+              <td><span class="badge badge-green">SYSTEM_RULE</span></td>
+              <td>실제 시스템 설정(Setting)과 연동된 운영 기준</td>
+              <td>어드민 설정값(점수, 시간, 수량 등)과 연동되어 관리가 필요할 때</td>
+            </tr>
+            <tr>
+              <td><span class="badge badge-amber">DEFINITION</span></td>
+              <td>용어, 상태(Status), 필드 및 메트릭의 정합성 정의</td>
+              <td>상태 코드나 분류의 의미를 명확히 정의할 때</td>
+            </tr>
+            <tr>
+              <td><span class="badge badge-gray">GUIDE</span></td>
+              <td>시스템 실행 결과 해석 및 장애 처리 안내 가이드</td>
+              <td>에러 코드 해석이나 특정 대시보드 상태를 안내할 때</td>
+            </tr>
+            <tr>
+              <td><span class="badge badge-gray">FAQ</span></td>
+              <td>자주 묻는 질문과 답변 안내</td>
+              <td>브랜드사나 리테일러가 자주 묻는 질문을 정리할 때</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="callout callout-success">
+          <div class="callout-title">💡 Type 선택 팁</div>
+          <div class="callout-desc">
+            시스템 설정(Setting) 변경에 따라 자동으로 영향을 받아야 한다면 <strong>SYSTEM_RULE (Source Type: HYBRID)</strong>을 선택하세요.
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="footer">
+      <div>K SELECT KNOWLEDGE CENTER · CONFIDENTIAL / INTERNAL USE ONLY</div>
+      <div>06 / 16</div>
+    </div>
+  </div>
+
+  <!-- PAGE 7: SECTION 07 -->
+  <div class="page">
+    <div>
+      <div class="header">
+        <div class="header-title">K SELECT KNOWLEDGE CENTER OPERATIONS GUIDE</div>
+        <div class="header-meta">VERSION 1.0 · SECTION 07</div>
+      </div>
+      <div class="content-body">
+        <div class="section-num">SECTION 07</div>
+        <div class="section-title">새로운 Knowledge 등록 Workflow</div>
+
+        <p>상단 <code>+ Create Knowledge</code> 버튼을 누르면 5단계 Guided Wizard를 통해 안전하게 등록할 수 있습니다.</p>
+
+        <div class="flow-steps">
+          <div class="flow-step flow-step-active">
+            <div class="flow-step-num">STEP 1</div>
+            <div class="flow-step-title">What is this?</div>
+          </div>
+          <div class="flow-arrow">›</div>
+          <div class="flow-step">
+            <div class="flow-step-num">STEP 2</div>
+            <div class="flow-step-title">Who is it for?</div>
+          </div>
+          <div class="flow-arrow">›</div>
+          <div class="flow-step">
+            <div class="flow-step-num">STEP 3</div>
+            <div class="flow-step-title">Content</div>
+          </div>
+          <div class="flow-arrow">›</div>
+          <div class="flow-step">
+            <div class="flow-step-num">STEP 4</div>
+            <div class="flow-step-title">Connections</div>
+          </div>
+          <div class="flow-arrow">›</div>
+          <div class="flow-step">
+            <div class="flow-step-num">STEP 5</div>
+            <div class="flow-step-title">Review & Publish</div>
+          </div>
+        </div>
+
+        <div class="card-grid">
+          <div class="card">
+            <div class="card-header">1️⃣ Step 1: What is this?</div>
+            <div class="card-body">
+              - Knowledge Type 선택 (MANUAL, POLICY, SOP 등)<br>
+              - Title (국문 필수, 영문 선택) 작성<br>
+              - Module 및 태그(Tags) 지정
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-header">2️⃣ Step 2: Who is it for?</div>
+            <div class="card-body">
+              - Audience 지정 (기본값: INTERNAL ONLY)<br>
+              - Sensitive Internal 여부 선택<br>
+              - 외부 공개 대상 포함 시 승인 요청 자동 지정
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-header">3️⃣ Step 3: Content</div>
+            <div class="card-body">
+              - Summary (요약) 작성<br>
+              - Markdown 본문 작성 (국문 필수, 영문 선택)<br>
+              - Alerts, Callouts, Tables 활용
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-header">4️⃣ Step 4: Connections & Assets</div>
+            <div class="card-body">
+              - PDF Manual 파일 업로드 및 연결<br>
+              - Related Menu / Route / System Setting 선택<br>
+              - 상위 Manual 지식 연동
+            </div>
+          </div>
+        </div>
+
+        <div class="callout callout-important">
+          <div class="callout-title">⚠️ Step 5: Review & Publish 완료 시 주의</div>
+          <div class="callout-desc">
+            INTERNAL 전용 지식은 등록 완료 즉시 <code>PUBLISHED</code> 처리됩니다. 외부 공개 대상(BRAND, RETAILER, PUBLIC)이 포함된 지식은 바로 배포되지 않고 <code>IN_REVIEW (External Approval Required)</code> 상태로 대기합니다.
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="footer">
+      <div>K SELECT KNOWLEDGE CENTER · CONFIDENTIAL / INTERNAL USE ONLY</div>
+      <div>07 / 16</div>
+    </div>
+  </div>
+
+  <!-- PAGE 8: SECTION 08 -->
+  <div class="page">
+    <div>
+      <div class="header">
+        <div class="header-title">K SELECT KNOWLEDGE CENTER OPERATIONS GUIDE</div>
+        <div class="header-meta">VERSION 1.0 · SECTION 08</div>
+      </div>
+      <div class="content-body">
+        <div class="section-num">SECTION 08</div>
+        <div class="section-title">Audience & 보안 정책 (Deny-by-Default)</div>
+
+        <p>Knowledge Center는 데이터 리트리버(Retrieval) 레벨에서 무권한 열람을 차단하는 <strong>Deny-by-Default 보안 엔진</strong>을 사용합니다.</p>
+
+        <div class="key-statement">
+          <div class="key-statement-label">보안 절대 수칙</div>
+          <div class="key-statement-text">모든 신규 Knowledge의 기본값은 INTERNAL ONLY입니다.<br>외부 공개를 확신할 수 없으면 INTERNAL 상태를 유지하세요.</div>
+        </div>
+
+        <table>
+          <thead>
+            <tr>
+              <th style="width: 25%;">Audience 구분</th>
+              <th style="width: 45%;">열람 가능 대상 (Authorized Role)</th>
+              <th style="width: 30%;">보안 격리 상태</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><span class="badge badge-navy">INTERNAL</span></td>
+              <td>K SELECT 내부 임직원 및 어드민 관리자 전용</td>
+              <td>외부 브랜드/리테일러 검색 0건 (원천 차단)</td>
+            </tr>
+            <tr>
+              <td><span class="badge badge-navy">ADMIN / MANAGEMENT</span></td>
+              <td>Super Admin 및 경영진/승인권자 전용</td>
+              <td>내부 일반 편집자에게도 제한 가능</td>
+            </tr>
+            <tr>
+              <td><span class="badge badge-blue">BRAND</span></td>
+              <td>입점 한국 브랜드사 파트너 (포털 로그인 계정)</td>
+              <td>외부 검토 승인 후 공개 가능</td>
+            </tr>
+            <tr>
+              <td><span class="badge badge-amber">RETAILER</span></td>
+              <td>미국 오프라인 뷰티 수플라이 / 리테일 바이어</td>
+              <td>외부 검토 승인 후 공개 가능</td>
+            </tr>
+            <tr>
+              <td><span class="badge badge-green">PUBLIC</span></td>
+              <td>인증 없이 방문하는 모든 외부 이용자</td>
+              <td>최고 단계 승인 후 공개 가능</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="callout callout-warning">
+          <div class="callout-title">🔒 Retrieval Level Security 조치</div>
+          <div class="callout-desc">
+            화면 UI에서 숨기는 방식이 아닙니다. 서버 데이터베이스 조회 시 권한이 없는 계정(Brand/Retailer)으로 요청되면 API 결과 배열 자체가 0건으로 반환됩니다.
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="footer">
+      <div>K SELECT KNOWLEDGE CENTER · CONFIDENTIAL / INTERNAL USE ONLY</div>
+      <div>08 / 16</div>
+    </div>
+  </div>
+
+  <!-- PAGE 9: SECTION 09 & 10 -->
+  <div class="page">
+    <div>
+      <div class="header">
+        <div class="header-title">K SELECT KNOWLEDGE CENTER OPERATIONS GUIDE</div>
+        <div class="header-meta">VERSION 1.0 · SECTION 09 & 10</div>
+      </div>
+      <div class="content-body">
+        <div class="section-num">SECTION 09 & 10</div>
+        <div class="section-title">External Publication & Sensitive Internal</div>
+
+        <p>외부 Audience(BRAND, RETAILER, PUBLIC)를 지정할 때는 엄격한 승인 워크플로우와 민감 정보 차단 절차를 거칩니다.</p>
+
+        <div class="card-grid">
+          <div class="card">
+            <div class="card-header">1️⃣ External Review Request</div>
+            <div class="card-body">외부 공개 지정 시 즉시 <code>IN_REVIEW</code>로 전환되며 관리자에게 승인 요청이 전달됩니다.</div>
+          </div>
+          <div class="card">
+            <div class="card-header">2️⃣ Preview As 시뮬레이션</div>
+            <div class="card-body">승인 전 <code>Preview As Brand</code> 또는 <code>Preview As Retailer</code>로 실제 외부 화면을 미리 검증합니다.</div>
+          </div>
+        </div>
+
+        <div class="callout callout-important">
+          <div class="callout-title">⛔ 외부 공개 자료 절대 포함 금지 항목 (Prohibited Items)</div>
+          <div class="callout-desc">
+            Brand 또는 Retailer 공개 자료에는 다음 영업 비밀 및 영업 기밀 정보가 절대로 포함되어서는 안 됩니다:
+            <ul>
+              <li>내부 마진율 계산 로직 (Margin Logic & FOB Margin Weight)</li>
+              <li>공급가 원가 (Supplier Cost & Sourcing Cost)</li>
+              <li>내부 브랜드/제조사 심사 가중치 점수표</li>
+              <li>미국 리테일러 바이어 협상 가이드라인 (Negotiation Rules)</li>
+              <li>자사 고유 알고리즘 (Proprietary Score Logic)</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="section-num" style="margin-top: 20px;">SECTION 10 — SENSITIVE INTERNAL</div>
+        <p>지식 등록 시 <code>Is Sensitive Internal</code> 스위치를 활성화하면 내부 직원 중에서도 높은 보안 등급으로 지정되며 외부 공개 전환이 철저히 차단됩니다.</p>
+
+        <div class="callout callout-warning">
+          <div class="callout-title">⚠️ Sensitive Internal 조치 수칙</div>
+          <div class="callout-desc">
+            `Sensitive Internal`로 지정된 지식 항목을 훗날 외부 공개(BRAND/RETAILER)로 변경하려면, 비공개 마진/원가/알고리즘 문구가 완전히 삭제되었는지 2인 이상의 승인권자 재검토가 필요합니다.
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="footer">
+      <div>K SELECT KNOWLEDGE CENTER · CONFIDENTIAL / INTERNAL USE ONLY</div>
+      <div>09 / 16</div>
+    </div>
+  </div>
+
+  <!-- PAGE 10: SECTION 11 -->
+  <div class="page">
+    <div>
+      <div class="header">
+        <div class="header-title">K SELECT KNOWLEDGE CENTER OPERATIONS GUIDE</div>
+        <div class="header-meta">VERSION 1.0 · SECTION 11</div>
+      </div>
+      <div class="content-body">
+        <div class="section-num">SECTION 11</div>
+        <div class="section-title">Knowledge 수정과 Version 관리</div>
+
+        <p>운영 정책이나 시스템 룰이 개정되었을 때 기존 <code>PUBLISHED</code> 문서를 직접 수정하거나 덮어쓰는 행위는 이력 관리상 <strong>엄격히 금지</strong>됩니다.</p>
+
+        <div class="ui-box">
+          <div class="ui-topbar">
+            <span class="badge badge-navy">Version Lifecycle Workflow</span>
+            <span>버전 개정 및 스냅샷 자동 승계 이력 워크플로우</span>
+          </div>
+          <div class="flow-steps">
+            <div class="flow-step">
+              <div class="flow-step-num">STATE 1</div>
+              <div class="flow-step-title">v1.0 PUBLISHED</div>
+            </div>
+            <div class="flow-arrow">›</div>
+            <div class="flow-step flow-step-active">
+              <div class="flow-step-num">ACTION</div>
+              <div class="flow-step-title">Create New Version</div>
+            </div>
+            <div class="flow-arrow">›</div>
+            <div class="flow-step">
+              <div class="flow-step-num">STATE 2</div>
+              <div class="flow-step-title">v1.1 DRAFT</div>
+            </div>
+            <div class="flow-arrow">›</div>
+            <div class="flow-step flow-step-active">
+              <div class="flow-step-num">ACTION</div>
+              <div class="flow-step-title">Publish Version</div>
+            </div>
+            <div class="flow-arrow">›</div>
+            <div class="flow-step">
+              <div class="flow-step-num">STATE 3</div>
+              <div class="flow-step-title">v1.0 SUPERSEDED<br>v1.1 PUBLISHED</div>
+            </div>
+          </div>
+        </div>
+
+        <table>
+          <thead>
+            <tr>
+              <th style="width: 30%;">수정 유형</th>
+              <th style="width: 35%;">올바른 조치 방법</th>
+              <th style="width: 35%;">주의사항</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>단순 오타 / 띄어쓰기 수정</strong></td>
+              <td>DRAFT 상태 문서인 경우 직접 수정 가능</td>
+              <td>이미 PUBLISHED된 정책은 오타라 해도 Version 생성 권장</td>
+            </tr>
+            <tr>
+              <td><strong>운영 기준 / 숫자 / 정책 개정</strong></td>
+              <td>Detail → VERSIONS → <code>Create New Version</code> 실행</td>
+              <td>무엇이 바뀌었는지(What), 왜 바뀌었는지(Why) 필수 입력</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="callout callout-important">
+          <div class="callout-title">⚠️ Auto-Superseding 메커니즘</div>
+          <div class="callout-desc">
+            새로운 버전(v1.1)이 <code>PUBLISHED</code> 상태가 되는 순간, 이전 버전(v1.0)은 자동으로 <code>SUPERSEDED</code>(구 버전 승계 처리)로 전환되며 변경 이력 탭에서 언제든 과거 버전을 비교(Compare) 및 복원할 수 있습니다.
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="footer">
+      <div>K SELECT KNOWLEDGE CENTER · CONFIDENTIAL / INTERNAL USE ONLY</div>
+      <div>10 / 16</div>
+    </div>
+  </div>
+
+  <!-- PAGE 11: SECTION 12 & 13 -->
+  <div class="page">
+    <div>
+      <div class="header">
+        <div class="header-title">K SELECT KNOWLEDGE CENTER OPERATIONS GUIDE</div>
+        <div class="header-meta">VERSION 1.0 · SECTION 12 & 13</div>
+      </div>
+      <div class="content-body">
+        <div class="section-num">SECTION 12 & 13</div>
+        <div class="section-title">Manual Asset 연결 및 Relations 활용법</div>
+
+        <p>PDF 매뉴얼 파일 연결 시 삼위일체 원칙을 준수하며, 지식 간 관계(Relations)를 통해 연동성을 확보합니다.</p>
+
+        <div class="key-statement">
+          <div class="key-statement-label">삼위일체(Trinity) 원칙</div>
+          <div class="key-statement-text">PDF 파일명 (v1.0) = PDF 표지 버전 (1.0) = Knowledge Record Version (v1.0)<br>세 가지 버전을 반드시 동일하게 유지하세요.</div>
+        </div>
+
+        <div class="section-num" style="margin-top: 20px;">SECTION 13 — RELATIONS (관계 연동)</div>
+        <p>Knowledge Detail의 <code>RELATIONS</code> 탭에서는 해당 정책이나 가이드가 실제 어드민의 어느 메뉴 및 시스템 설정과 연관되어 있는지 매핑합니다.</p>
+
+        <div class="card-grid">
+          <div class="card">
+            <div class="card-header">🔗 Related Menu / Route</div>
+            <div class="card-body">
+              어드민 실무 메뉴(예: <code>Review Queue</code>, <code>Editorial Rules</code>)와 실제 라우트(<code>/admin/insights/queue</code>)를 연결하여 해당 화면에서 지식을 바로 조회하게 합니다.
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-header">⚙️ Related System Setting</div>
+            <div class="card-body">
+              시스템 설정 Key(예: <code>insights_daily_auto_rule</code>)를 연결하여 시스템 설정 변경 시 자동 재검토 알림이 발생하도록 만듭니다.
+            </div>
+          </div>
+        </div>
+
+        <div class="callout callout-warning">
+          <div class="callout-title">💡 Related Manual 연결</div>
+          <div class="callout-desc">
+            세부 규칙(SYSTEM_RULE, POLICY, SOP)은 상위 <strong>K SELECT INSIGHTS 실무자 운영 매뉴얼 v1.0</strong>과 Related Manual 관계를 형성하여 지식이 계층 구조를 갖도록 설정합니다.
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="footer">
+      <div>K SELECT KNOWLEDGE CENTER · CONFIDENTIAL / INTERNAL USE ONLY</div>
+      <div>11 / 16</div>
+    </div>
+  </div>
+
+  <!-- PAGE 12: SECTION 14 & 15 -->
+  <div class="page">
+    <div>
+      <div class="header">
+        <div class="header-title">K SELECT KNOWLEDGE CENTER OPERATIONS GUIDE</div>
+        <div class="header-meta">VERSION 1.0 · SECTION 14 & 15</div>
+      </div>
+      <div class="content-body">
+        <div class="section-num">SECTION 14 & 15</div>
+        <div class="section-title">Review & Updates 대시보드 및 System Impact</div>
+
+        <p><strong>Review & Updates</strong> 화면은 지식 센터가 항상 최신성을 유지하도록 3가지 검토 영역을 제공합니다.</p>
+
+        <div class="card-grid-3">
+          <div class="card">
+            <div class="card-header">1. Awaiting Approval</div>
+            <div class="card-body">외부 공개(Brand/Retailer) 승인이 필요한 지식 목록</div>
+          </div>
+          <div class="card">
+            <div class="card-header">2. Needs Review</div>
+            <div class="card-body">작성 중이거나 수정 요청된 초안 목록</div>
+          </div>
+          <div class="card">
+            <div class="card-header">3. System Impact</div>
+            <div class="card-body">시스템 설정 변경으로 검토가 필요한 항목</div>
+          </div>
+        </div>
+
+        <div class="section-num" style="margin-top: 20px;">SECTION 15 — SYSTEM CHANGE IMPACT (POTENTIALLY_OUTDATED)</div>
+
+        <div class="callout callout-important">
+          <div class="callout-title">⚠️ POTENTIALLY_OUTDATED의 정확한 의미</div>
+          <div class="callout-desc">
+            지식을 삭제해야 한다는 뜻이 아닙니다! 어드민 시스템 설정(예: Daily Run Time, Minimum Topic Score)이 변경되어 본 지식에 기록된 내용이 여전히 유효한지 <strong>사람이 재검토해야 함</strong>을 의미합니다.
+          </div>
+        </div>
+
+        <div class="ui-box">
+          <div class="ui-topbar">
+            <span class="badge badge-navy">System Impact Resolution Flow</span>
+            <span>시스템 변경에 따른 지식 재검토 및 조치 절차</span>
+          </div>
+          <div class="flow-steps">
+            <div class="flow-step">
+              <div class="flow-step-num">EVENT</div>
+              <div class="flow-step-title">System Setting Modified</div>
+            </div>
+            <div class="flow-arrow">›</div>
+            <div class="flow-step flow-step-active">
+              <div class="flow-step-num">STATUS</div>
+              <div class="flow-step-title">POTENTIALLY_OUTDATED</div>
+            </div>
+            <div class="flow-arrow">›</div>
+            <div class="flow-step">
+              <div class="flow-step-num">HUMAN REVIEW</div>
+              <div class="flow-step-title">Create Version OR No Update Required</div>
+            </div>
+          </div>
+        </div>
+
+        <p>실무자는 재검토 후 두 가지 조치 중 하나를 선택합니다:</p>
+        <ol>
+          <li><strong>Create Updated Version</strong>: 시스템 변경 내용에 맞추어 새로운 Draft 버전을 생성하여 개정 배포.</li>
+          <li><strong>No Update Required</strong>: 본문의 내용이 여전히 유효함을 확인하고 이유(Reason) 기록 후 NORMAL 상태로 복구.</li>
+        </ol>
+      </div>
+    </div>
+    <div class="footer">
+      <div>K SELECT KNOWLEDGE CENTER · CONFIDENTIAL / INTERNAL USE ONLY</div>
+      <div>12 / 16</div>
+    </div>
+  </div>
+
+  <!-- PAGE 13: SECTION 16 & 17 -->
+  <div class="page">
+    <div>
+      <div class="header">
+        <div class="header-title">K SELECT KNOWLEDGE CENTER OPERATIONS GUIDE</div>
+        <div class="header-meta">VERSION 1.0 · SECTION 16 & 17</div>
+      </div>
+      <div class="content-body">
+        <div class="section-num">SECTION 16 & 17</div>
+        <div class="section-title">Archive 관리 및 상황별 대응 가이드</div>
+
+        <p>지식의 삭제 및 보관 정책과 업무 중 발생하는 문제 상황에 대한 대응 지침입니다.</p>
+
+        <div class="card-grid">
+          <div class="card">
+            <div class="card-header">🗑️ 물리적 삭제(Physical Delete) 금지</div>
+            <div class="card-body">한 번이라도 배포(PUBLISHED)되었던 지식 기록은 감사(Audit) 및 이력 관리를 위해 물리적으로 DB에서 삭제되지 않습니다.</div>
+          </div>
+          <div class="card">
+            <div class="card-header">📦 Archive (보관 처리)</div>
+            <div class="card-body">더 이상 사용하지 않는 오래된 지식은 `ARCHIVED` 상태로 변경하여 기본 검색 결과에서 숨기고 이력을 보존합니다.</div>
+          </div>
+        </div>
+
+        <div class="section-num" style="margin-top: 20px;">SECTION 17 — TROUBLESHOOTING GUIDE</div>
+
+        <table>
+          <thead>
+            <tr>
+              <th style="width: 35%;">문제 상황 (Problem)</th>
+              <th style="width: 65%;">해결 방법 (Solution)</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>"특정 기능의 최신 정책인지 확신할 수 없습니다."</strong></td>
+              <td>지식 상세 화면의 Status가 <code>PUBLISHED</code>이고 Effective Date 및 Current Version을 확인하세요.</td>
+            </tr>
+            <tr>
+              <td><strong>"검색 결과가 너무 많이 나옵니다."</strong></td>
+              <td>Type 필터를 <code>SYSTEM_RULE</code> 또는 <code>POLICY</code>로 한정하고 Module을 지정하세요.</td>
+            </tr>
+            <tr>
+              <td><strong>"지식 항목에 Outdated 경고가 떠 있습니다."</strong></td>
+              <td><code>Review & Updates</code> 탭에서 어느 시스템 설정이 변경되었는지 사유를 확인하고 재검토 조치를 수행하세요.</td>
+            </tr>
+            <tr>
+              <td><strong>"Brand 파트너에게 이 지식을 전달해도 될지 모르겠습니다."</strong></td>
+              <td>Detail → <code>ACCESS</code> 탭에서 <code>Preview As Brand</code> 버튼을 눌러 비공개 마진/원가/알고리즘이 가려지는지 먼저 시뮬레이션하세요.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="footer">
+      <div>K SELECT KNOWLEDGE CENTER · CONFIDENTIAL / INTERNAL USE ONLY</div>
+      <div>13 / 16</div>
+    </div>
+  </div>
+
+  <!-- PAGE 14: SECTION 18 -->
+  <div class="page">
+    <div>
+      <div class="header">
+        <div class="header-title">K SELECT KNOWLEDGE CENTER OPERATIONS GUIDE</div>
+        <div class="header-meta">VERSION 1.0 · SECTION 18</div>
+      </div>
+      <div class="content-body">
+        <div class="section-num">SECTION 18</div>
+        <div class="section-title">실무자를 위한 DO & DON'T</div>
+
+        <p>Knowledge Center를 운영할 때 실무자가 반드시 준수해야 할 6대 권장사항(DO)과 6대 절대 금지사항(DON'T)입니다.</p>
+
+        <div class="card-grid">
+          <div class="card" style="background: #ECFDF5; border-color: #A7F3D0;">
+            <div class="card-header" style="color: #065F46;">✅ DO (권장 수칙)</div>
+            <div class="card-body" style="color: #047857;">
+              <ul>
+                <li><strong>DO 1</strong>: 신규 등록 시 최우선적으로 <code>INTERNAL ONLY</code>를 적용하세요.</li>
+                <li><strong>DO 2</strong>: 정책 변경 시 <code>Create New Version</code>으로 개정 이력을 보존하세요.</li>
+                <li><strong>DO 3</strong>: 외부 공개 전 <code>Preview As</code>로 시뮬레이션 검증을 수행하세요.</li>
+                <li><strong>DO 4</strong>: 시스템 변경 알림(Outdated) 발생 시 사유를 확인하고 조치하세요.</li>
+                <li><strong>DO 5</strong>: PDF 파일명, 표지 버전, Knowledge Record 버전을 일치시키세요.</li>
+                <li><strong>DO 6</strong>: 세부 지식에 연관 모듈, 라우트, 상위 매뉴얼 관계를 연결하세요.</li>
+              </ul>
+            </div>
+          </div>
+
+          <div class="card" style="background: #FEF2F2; border-color: #FCA5A5;">
+            <div class="card-header" style="color: #991B1B;">❌ DON'T (절대 금지 수칙)</div>
+            <div class="card-body" style="color: #B91C1C;">
+              <ul>
+                <li><strong>DON'T 1</strong>: 이미 <code>PUBLISHED</code>된 지식을 몰래 직접 덮어쓰지 마세요.</li>
+                <li><strong>DON'T 2</strong>: 마진, 원가, 내부 심사점수를 외부 공개 지식에 포함하지 마세요.</li>
+                <li><strong>DON'T 3</strong>: PDF 파일만 슬그머니 교체하고 버전을 유지하지 마세요.</li>
+                <li><strong>DON'T 4</strong>: 테스트 목적으로 실제 어드민 System Rule을 임의 변경하지 마세요.</li>
+                <li><strong>DON'T 5</strong>: 오래된 <code>SUPERSEDED</code> 지식을 검증 없이 최신 정책으로 인용하지 마세요.</li>
+                <li><strong>DON'T 6</strong>: 외부 공개 승인 요청 절차 없이 외부 파트너에 지식을 전달하지 마세요.</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="footer">
+      <div>K SELECT KNOWLEDGE CENTER · CONFIDENTIAL / INTERNAL USE ONLY</div>
+      <div>14 / 16</div>
+    </div>
+  </div>
+
+  <!-- PAGE 15: SECTION 19 -->
+  <div class="page">
+    <div>
+      <div class="header">
+        <div class="header-title">K SELECT KNOWLEDGE CENTER OPERATIONS GUIDE</div>
+        <div class="header-meta">VERSION 1.0 · SECTION 19</div>
+      </div>
+      <div class="content-body">
+        <div class="section-num">SECTION 19</div>
+        <div class="section-title">5분 Quick Start Guide & 최종 운영 원칙</div>
+
+        <p>처음 사용하는 직원이 업무 현장에서 빠르게 참조할 수 있는 5분 요약 가이드입니다.</p>
+
+        <div class="ui-box">
+          <div class="ui-topbar">
+            <span class="badge badge-navy">5분 업무 가이드</span>
+            <span>Task-Oriented Quick Reference</span>
+          </div>
+          <div class="flow-steps">
+            <div class="flow-step">
+              <div class="flow-step-num">STEP 1</div>
+              <div class="flow-step-title">1분: 자료 찾기</div>
+              <div style="font-size: 10px; color: #64748B; margin-top: 4px;">Settings → Knowledge Center → Library 검색</div>
+            </div>
+            <div class="flow-arrow">›</div>
+            <div class="flow-step">
+              <div class="flow-step-num">STEP 2</div>
+              <div class="flow-step-title">1분: 새 지식 등록</div>
+              <div style="font-size: 10px; color: #64748B; margin-top: 4px;">+ Create Knowledge → 5단계 Wizard</div>
+            </div>
+            <div class="flow-arrow">›</div>
+            <div class="flow-step">
+              <div class="flow-step-num">STEP 3</div>
+              <div class="flow-step-title">1분: 정책 개정</div>
+              <div style="font-size: 10px; color: #64748B; margin-top: 4px;">Detail → VERSIONS → Create New Version</div>
+            </div>
+            <div class="flow-arrow">›</div>
+            <div class="flow-step">
+              <div class="flow-step-num">STEP 4</div>
+              <div class="flow-step-title">1분: 외부 공개</div>
+              <div style="font-size: 10px; color: #64748B; margin-top: 4px;">ACCESS → Preview As → Review Request</div>
+            </div>
+            <div class="flow-arrow">›</div>
+            <div class="flow-step">
+              <div class="flow-step-num">STEP 5</div>
+              <div class="flow-step-title">1분: 변경 감지</div>
+              <div style="font-size: 10px; color: #64748B; margin-top: 4px;">Review & Updates → Potentially Outdated 조치</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="key-statement" style="margin-top: 24px;">
+          <div class="key-statement-label">K SELECT KNOWLEDGE CENTER 최종 운영 원칙</div>
+          <div class="key-statement-text">
+            "출처는 단 하나로, 보안은 철저하게, 이력은 투명하게."<br>
+            이것이 K SELECT Knowledge Center 운영의 기본 원칙입니다.
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="footer">
+      <div>K SELECT KNOWLEDGE CENTER · CONFIDENTIAL / INTERNAL USE ONLY</div>
+      <div>15 / 16</div>
+    </div>
+  </div>
+
+</body>
+</html>
