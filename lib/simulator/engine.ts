@@ -493,13 +493,23 @@ export async function simulateGrowth(answers: Record<string, any>): Promise<Simu
   }
 
   let recommended_products: any[] = [];
+  let financial_pricing_basket: any[] = [];
   let candidateDiagnosis: string | null = null;
 
+  let actualPricedCount = 0;
+  let proxyPriceCount = 0;
+  let liveSkuCount = 0;
+  let synthSkuCount = 0;
+  let estimatedWholesaleSource = "GLOBAL_SYNTHETIC_AVERAGE ($12.00)";
+  let estimatedWholesaleCost = 12.00;
+
   if (apProfile) {
+    // 1. Fetch full eligible matrix items for Financial Basket (without limit restriction)
     const { data: matrixItems } = await supabase
       .from("product_curation_matrix")
       .select(`
         priority_role,
+        wholesale_price,
         product:product_id (
           id,
           name,
@@ -507,6 +517,7 @@ export async function simulateGrowth(answers: Record<string, any>): Promise<Simu
           sales_status,
           selection_status,
           estimated_retail_price,
+          price_usd_fob,
           category_code,
           brand:brand_id (
             id,
@@ -521,8 +532,7 @@ export async function simulateGrowth(answers: Record<string, any>): Promise<Simu
       `)
       .eq("ap_id", apProfile.id)
       .in("priority_role", ["REQUIRED", "CORE", "OPTIONAL"])
-      .order("priority_role", { ascending: true })
-      .limit(20);
+      .order("priority_role", { ascending: true });
 
     if (matrixItems) {
       const eligibleItems = matrixItems.filter((item: any) => {
@@ -532,7 +542,11 @@ export async function simulateGrowth(answers: Record<string, any>): Promise<Simu
       });
 
       if (eligibleItems.length > 0) {
-        recommended_products = eligibleItems.map((item: any) => {
+        liveSkuCount = eligibleItems.length;
+
+        // Admin Preview Top 20 Limitation
+        const previewItems = eligibleItems.slice(0, 20);
+        recommended_products = previewItems.map((item: any) => {
           const prod = item.product;
           const images = prod.product_images || [];
           const mainImg = images.find((i: any) => i.position === 0) || images[0];
@@ -540,11 +554,20 @@ export async function simulateGrowth(answers: Record<string, any>): Promise<Simu
             ? `${process.env.NEXT_PUBLIC_SUPABASE_URL || "https://shzfrppdobpmrstcjfqu.supabase.co"}/storage/v1/object/public/company-uploads/${mainImg.storage_path}`
             : null;
 
+          // Wholesale Price SoT Resolution: Matrix Override > Product FOB > Retail * 0.50 Proxy
+          let wholesale: number | null = null;
+          if (item.wholesale_price !== undefined && item.wholesale_price !== null) {
+            wholesale = parseFloat(item.wholesale_price);
+          } else if (prod.price_usd_fob !== undefined && prod.price_usd_fob !== null) {
+            wholesale = parseFloat(prod.price_usd_fob);
+          }
+
           return {
             id: prod.id,
             name: prod.name,
             brand_name: prod.brand?.name || "(미확인 브랜드)",
             estimated_retail_price: parseFloat(prod.estimated_retail_price) || 0,
+            wholesale_price: wholesale,
             sales_status: prod.sales_status,
             category_code: prod.category_code,
             image_url: imgUrl,
@@ -552,6 +575,30 @@ export async function simulateGrowth(answers: Record<string, any>): Promise<Simu
             is_synthetic: false
           };
         });
+
+        // Financial Basket Resolution for Target SKU Count
+        financial_pricing_basket = eligibleItems.map((item: any) => {
+          const prod = item.product;
+          let wholesale: number | null = null;
+          let isProxy = false;
+
+          if (item.wholesale_price !== undefined && item.wholesale_price !== null) {
+            wholesale = parseFloat(item.wholesale_price);
+          } else if (prod.price_usd_fob !== undefined && prod.price_usd_fob !== null) {
+            wholesale = parseFloat(prod.price_usd_fob);
+          } else if (prod.estimated_retail_price) {
+            wholesale = parseFloat(prod.estimated_retail_price) * 0.50;
+            isProxy = true;
+          }
+
+          return {
+            id: prod.id,
+            wholesale_price: wholesale,
+            is_proxy: isProxy,
+            is_synthetic: false
+          };
+        });
+
       } else {
         candidateDiagnosis = "eligible product candidate insufficient";
       }
@@ -559,11 +606,13 @@ export async function simulateGrowth(answers: Record<string, any>): Promise<Simu
       candidateDiagnosis = "eligible product candidate insufficient";
     }
 
-    // Calibration Mode / Sandbox Fallback: Load Synthetic Catalog if live eligible products are 0
+    // 2. Calibration Mode / Sandbox Fallback: Load Synthetic Catalog if live eligible products are 0
     if (recommended_products.length === 0) {
       const { getSyntheticProductsForAp } = require("./synthetic-catalog");
       const synthList = getSyntheticProductsForAp(primaryApCode);
       if (synthList && synthList.length > 0) {
+        synthSkuCount = synthList.length;
+
         recommended_products = synthList.map((p: any) => ({
           id: p.id,
           name: p.name,
@@ -576,6 +625,18 @@ export async function simulateGrowth(answers: Record<string, any>): Promise<Simu
           priority_role: p.curation_role,
           is_synthetic: true
         }));
+
+        financial_pricing_basket = synthList.map((p: any) => ({
+          id: p.id,
+          wholesale_price: p.wholesale_price,
+          is_proxy: false,
+          is_synthetic: true
+        }));
+
+        // Calculate AP-specific average wholesale from Synthetic Catalog
+        const totalApWholesale = synthList.reduce((acc: number, p: any) => acc + p.wholesale_price, 0);
+        estimatedWholesaleCost = parseFloat((totalApWholesale / synthList.length).toFixed(2));
+        estimatedWholesaleSource = `SYNTHETIC_AP_AVERAGE (${primaryApCode}: $${estimatedWholesaleCost})`;
       }
     }
   }
@@ -631,22 +692,52 @@ export async function simulateGrowth(answers: Record<string, any>): Promise<Simu
     ];
   }
 
-  // 5. Turnover & Financial Calculation V1.1 Calibration
-  // A. Dynamic Initial Investment Calculation (SKU Count * 12 units * Wholesale Cost)
-  const initialQtyPerSku = 12; // V1.1 SoT: 12 units / SKU
-  const totalInitialUnits = sku_count * initialQtyPerSku;
+  // 5. Turnover & Financial Calculation V1.1.1 Calibration
+  // A. Target SKU Basket Investment Calculation (3 Calculation Modes)
+  const targetSkuCount = sku_count; // START: 24, GROW: 48, EXPAND: 72
+  const initialQtyPerSku = 12; // V1.1.1 SoT: 12 units / SKU
+  const totalInitialUnits = targetSkuCount * initialQtyPerSku;
+
+  let actualInvestmentComponent = 0;
+  let estimatedInvestmentComponent = 0;
+  let estimatedSkuCount = 0;
+
+  // Process available basket items up to targetSkuCount
+  const basketSlice = financial_pricing_basket.slice(0, targetSkuCount);
+  basketSlice.forEach((item: any) => {
+    if (item.wholesale_price && item.wholesale_price > 0) {
+      actualPricedCount++;
+      if (item.is_proxy) proxyPriceCount++;
+      actualInvestmentComponent += (item.wholesale_price * initialQtyPerSku);
+    }
+  });
+
+  // Calculate missing SKU count and estimated component
+  if (basketSlice.length < targetSkuCount) {
+    estimatedSkuCount = targetSkuCount - basketSlice.length;
+  }
   
-  let dynamicInvestment = 0;
-  if (recommended_products && recommended_products.length > 0) {
-    dynamicInvestment = recommended_products.reduce((sum: number, p: any) => {
-      const wholesale = p.wholesale_price || (p.estimated_retail_price * 0.50);
-      return sum + (wholesale * initialQtyPerSku);
-    }, 0);
-    dynamicInvestment = Math.round(dynamicInvestment);
+  // If actualPricedCount > 0, update estimatedWholesaleCost with actual priced average if higher priority
+  if (actualPricedCount > 0) {
+    const avgActualWholesale = actualInvestmentComponent / (actualPricedCount * initialQtyPerSku);
+    estimatedWholesaleCost = parseFloat(avgActualWholesale.toFixed(2));
+    estimatedWholesaleSource = `BASKET_ACTUAL_AVERAGE ($${estimatedWholesaleCost})`;
   }
 
-  // Fallback to estimated average if recommended_products is 0 or unassigned
-  const investment = dynamicInvestment > 0 ? dynamicInvestment : Math.round(sku_count * initialQtyPerSku * 12.00);
+  estimatedInvestmentComponent = estimatedSkuCount * estimatedWholesaleCost * initialQtyPerSku;
+
+  const finalInitialInvestment = Math.round(actualInvestmentComponent + estimatedInvestmentComponent);
+  const investment = finalInitialInvestment;
+
+  // Determination of Investment Calculation Mode
+  let investmentCalculationMode: "ACTUAL" | "HYBRID_ESTIMATE" | "FULL_ESTIMATE" = "FULL_ESTIMATE";
+  if (actualPricedCount === targetSkuCount && proxyPriceCount === 0) {
+    investmentCalculationMode = "ACTUAL";
+  } else if (actualPricedCount > 0) {
+    investmentCalculationMode = "HYBRID_ESTIMATE";
+  } else {
+    investmentCalculationMode = "FULL_ESTIMATE";
+  }
 
   // Target Budget Range Warning Check
   let investmentTargetWarning: string | null = null;
@@ -658,19 +749,15 @@ export async function simulateGrowth(answers: Record<string, any>): Promise<Simu
     investmentTargetWarning = `Calculated initial investment ($${investment}) is outside target EXPAND budget range ($8,000–$13,000)`;
   }
 
-  // B. Multi-Signal Turnover V1.1 (Q35 Base + Q36 + Q37 + Support Signals)
+  // B. Turnover Signal Matrix (CORE + DIRECT SUPPORT Bounded Multipliers)
   const turnover_params = config.parameters.turnover || {
-    q35_base_turns: [1.8, 2.4, 3.0, 3.6, 4.2], // Calibrated Q35 base range to prevent single-question dominance
-    q36_multipliers: [1.00, 1.04, 1.08, 1.04, 0.98], // Q36 integration (Half=1.00, 4-6=1.04, 2-3=1.08, 1=1.04, Sellout=0.98)
-    q37_multipliers: [1.15, 1.08, 1.00, 0.92, 0.85],
-    inquiry_adjustments: 1.05,
-    traffic_adjustments: 1.05,
-    replenishment_penalty_stockout: 0.85,
-    replenishment_penalty_discipline: 0.90,
+    q35_base_turns: [1.8, 2.4, 3.0, 3.6, 4.2], // CORE: Q35 base range
+    q36_multipliers: [1.00, 1.04, 1.08, 1.04, 0.98], // CORE: Q36 integration
+    q37_multipliers: [1.15, 1.08, 1.00, 0.92, 0.85], // CORE: Q37 integration
     scenario_multipliers: { conservative: 0.85, expected: 1.00, growth: 1.15 }
   };
 
-  // Signal 1: Q35 Base Turnover (Primary Range)
+  // CORE SIGNAL 1: Q35 Base Turnover
   let baseTurnover = 3.0;
   const q35_ans = resolvedAnswers["Q35"]?.[0];
   if (q35_ans) {
@@ -682,7 +769,7 @@ export async function simulateGrowth(answers: Record<string, any>): Promise<Simu
 
   let turnover = baseTurnover;
 
-  // Signal 2: Q36 Reorder Inventory Level Multiplier (V1.1 Integrated)
+  // CORE SIGNAL 2: Q36 Reorder Inventory Level
   let q36_mult = 1.00;
   const q36_ans = resolvedAnswers["Q36"]?.[0];
   if (q36_ans) {
@@ -693,7 +780,7 @@ export async function simulateGrowth(answers: Record<string, any>): Promise<Simu
   }
   turnover *= q36_mult;
 
-  // Signal 3: Q37 60-Day Reorder Rate Multiplier
+  // CORE SIGNAL 3: Q37 60-Day Reorder Rate
   let q37_mult = 1.00;
   const q37_ans = resolvedAnswers["Q37"]?.[0];
   if (q37_ans) {
@@ -704,34 +791,45 @@ export async function simulateGrowth(answers: Record<string, any>): Promise<Simu
   }
   turnover *= q37_mult;
 
-  // Support Signals: Q10, Q32, Q21, Q18
-  let q10_mult = 1.00;
-  if (resolvedAnswers["Q10"]?.includes("Q10_A1") || resolvedAnswers["Q10"]?.includes("Q10_A2")) {
-    q10_mult = turnover_params.inquiry_adjustments || 1.05;
-  } else if (resolvedAnswers["Q10"]?.includes("Q10_A4") || resolvedAnswers["Q10"]?.includes("Q10_A5")) {
-    q10_mult = 0.90;
+  // DIRECT SUPPORT SIGNALS (Bounded & Capped Multipliers)
+  let supportMult = 1.00;
+  
+  // Q18 Reorder Frequency
+  if (resolvedAnswers["Q18"]?.includes("Q18_A1") || resolvedAnswers["Q18"]?.includes("Q18_A2")) {
+    supportMult *= 1.04;
+  } else if (resolvedAnswers["Q18"]?.includes("Q18_A5")) {
+    supportMult *= 0.92;
   }
-  turnover *= q10_mult;
 
-  let q32_mult = 1.00;
-  if (resolvedAnswers["Q32"]?.includes("Q32_A5")) {
-    q32_mult = turnover_params.traffic_adjustments || 1.05;
-  } else if (resolvedAnswers["Q32"]?.includes("Q32_A1") || resolvedAnswers["Q32"]?.includes("Q32_A2")) {
-    q32_mult = 0.90;
+  // Q20 Reorder Quantity
+  if (resolvedAnswers["Q20"]?.includes("Q20_A1") || resolvedAnswers["Q20"]?.includes("Q20_A2")) {
+    supportMult *= 1.03;
+  } else if (resolvedAnswers["Q20"]?.includes("Q20_A5")) {
+    supportMult *= 0.97;
   }
-  turnover *= q32_mult;
 
-  let q21_mult = 1.00;
+  // Q21 Stockout Frequency
   if (resolvedAnswers["Q21"]?.includes("Q21_A1")) {
-    q21_mult = turnover_params.replenishment_penalty_stockout || 0.85;
+    supportMult *= 0.88;
   }
-  turnover *= q21_mult;
 
-  let q18_mult = 1.00;
-  if (resolvedAnswers["Q18"]?.includes("Q18_A5")) {
-    q18_mult = turnover_params.replenishment_penalty_discipline || 0.90;
+  // Q10 K-Beauty Customer Demand
+  if (resolvedAnswers["Q10"]?.includes("Q10_A1") || resolvedAnswers["Q10"]?.includes("Q10_A2")) {
+    supportMult *= 1.04;
+  } else if (resolvedAnswers["Q10"]?.includes("Q10_A4") || resolvedAnswers["Q10"]?.includes("Q10_A5")) {
+    supportMult *= 0.94;
   }
-  turnover *= q18_mult;
+
+  // Q11 K-Beauty Demand Trend
+  if (resolvedAnswers["Q11"]?.includes("Q11_A1") || resolvedAnswers["Q11"]?.includes("Q11_A2")) {
+    supportMult *= 1.03;
+  } else if (resolvedAnswers["Q11"]?.includes("Q11_A4") || resolvedAnswers["Q11"]?.includes("Q11_A5")) {
+    supportMult *= 0.97;
+  }
+
+  // Bounded Cap for Support Multipliers [0.80, 1.20]
+  supportMult = Math.max(0.80, Math.min(1.20, supportMult));
+  turnover *= supportMult;
 
   const expectedTurnover = parseFloat(turnover.toFixed(2));
   
@@ -897,18 +995,34 @@ export async function simulateGrowth(answers: Record<string, any>): Promise<Simu
     valid_programs: Array.from(validPrograms),
     program_scores: programScores,
     ap_scores: apScores,
+    investment_trace: {
+      target_sku_count: targetSkuCount,
+      recommended_candidate_count: recommended_products.length,
+      financial_pricing_sku_count: targetSkuCount,
+      actual_priced_sku_count: actualPricedCount,
+      proxy_price_used_count: proxyPriceCount,
+      estimated_sku_count: estimatedSkuCount,
+      live_sku_count: liveSkuCount,
+      synthetic_reference_sku_count: synthSkuCount,
+      estimated_wholesale_cost: estimatedWholesaleCost,
+      estimated_wholesale_source: estimatedWholesaleSource,
+      initial_qty_per_sku: initialQtyPerSku,
+      total_initial_units: totalInitialUnits,
+      actual_investment_component: Math.round(actualInvestmentComponent),
+      estimated_investment_component: Math.round(estimatedInvestmentComponent),
+      final_initial_investment: finalInitialInvestment,
+      investment_calculation_mode: investmentCalculationMode,
+      investment_target_warning: investmentTargetWarning
+    },
     turnover_details: {
       base_turnover: baseTurnover,
+      q35_base_turnover: baseTurnover,
       q36_multiplier: q36_mult,
       q37_multiplier: q37_mult,
-      q10_multiplier: q10_mult,
-      q32_multiplier: q32_mult,
-      q21_multiplier: q21_mult,
-      q18_multiplier: q18_mult,
+      support_multiplier_bounded: supportMult,
       expected_turnover: expectedTurnover,
       conservative_turnover: conservativeTurnover,
-      growth_turnover: growthTurnover,
-      investment_target_warning: investmentTargetWarning
+      growth_turnover: growthTurnover
     },
     confidence_details: {
       score: confScore,
