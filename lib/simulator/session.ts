@@ -48,11 +48,11 @@ export async function persistSimulationSession(params: {
 
   // 1. Check if base_simulation_id is provided for Revision lookup
   if (baseSimulationIdInput) {
-    let query = supabase.from("simulation_results").select("*");
+    let query = supabase.from("simulation_results").select("id, answers_snapshot, result_snapshot, created_at, email");
     if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(baseSimulationIdInput)) {
       query = query.eq("id", baseSimulationIdInput);
     } else {
-      query = query.eq("simulation_code", baseSimulationIdInput);
+      query = query.eq("result_snapshot->session_meta->>simulation_code", baseSimulationIdInput);
     }
 
     const { data: parentRecords } = await query.limit(1);
@@ -64,23 +64,23 @@ export async function persistSimulationSession(params: {
       const rawCode = parentRecord.simulation_code || parentMeta.simulation_code || "";
       const baseCode = (rawCode.split("-R")[0] || "").trim() || `GS-BASE-${baseId.substring(0, 8).toUpperCase()}`;
 
-      // Fetch candidate revisions safely and filter in memory by base_simulation_id / session_meta
-      let candidates: any[] = [];
-
-      // 1. Primary Query: Try selecting by base_simulation_id and id
-      const { data: dbRevs } = await supabase
+      // 1. Primary Query: Select existing core columns safely without failing on missing DDL columns
+      let dbQuery = supabase
         .from("simulation_results")
-        .select("id, revision_no, answers_snapshot, is_latest, simulation_code, base_simulation_id, result_snapshot, created_at, email")
-        .or(`id.eq.${baseId},base_simulation_id.eq.${baseId}${parentRecord.email ? `,email.eq.${parentRecord.email}` : ""}`)
-        .order("created_at", { ascending: false });
+        .select("id, answers_snapshot, result_snapshot, created_at, email");
+
+      if (parentRecord.email) {
+        dbQuery = dbQuery.eq("email", parentRecord.email);
+      }
+
+      const { data: dbRevs, error: dbErr } = await dbQuery.order("created_at", { ascending: false });
 
       if (dbRevs && dbRevs.length > 0) {
         candidates = dbRevs;
       } else {
-        // 2. Fallback Query: Fetch recent 100 simulations
         const { data: recentRevs } = await supabase
           .from("simulation_results")
-          .select("id, revision_no, answers_snapshot, is_latest, simulation_code, base_simulation_id, result_snapshot, created_at, email")
+          .select("id, answers_snapshot, result_snapshot, created_at, email")
           .order("created_at", { ascending: false })
           .limit(100);
         candidates = recentRevs || [];
@@ -88,13 +88,12 @@ export async function persistSimulationSession(params: {
 
       // Filter in memory for matching session (baseId match or email match)
       const revisionsRaw = candidates.filter((r: any) => {
-        if (r.id === baseId || r.base_simulation_id === baseId) return true;
         let snap = r.result_snapshot;
         if (typeof snap === "string") {
           try { snap = JSON.parse(snap); } catch (e) {}
         }
         const meta = snap?.session_meta || {};
-        if (meta.base_simulation_id === baseId) return true;
+        if (r.id === baseId || r.base_simulation_id === baseId || meta.base_simulation_id === baseId) return true;
         if (parentRecord.email && r.email && r.email === parentRecord.email) return true;
         return false;
       });
