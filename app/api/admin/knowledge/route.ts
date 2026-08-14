@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
       role: "admin"
     };
 
-    const { items, total } = await getAuthorizedKnowledgeList(userContext, {
+    const { items, total, suggestionNotice } = await getAuthorizedKnowledgeList(userContext, {
       type,
       audience,
       module,
@@ -60,6 +60,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       items,
       total,
+      suggestionNotice,
       metrics,
       needsAttention,
       recentlyUpdated

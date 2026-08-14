@@ -9,25 +9,12 @@ import {
   KnowledgeType
 } from "../types";
 import { getAuthorizedKnowledgeList } from "../retrieval";
+import { searchKnowledgeCore } from "../search";
 import { getStoreAssets, getStoreRelations, getStoreKnowledgeById } from "../store";
 
 // Storage for Knowledge Gaps and Feedback in memory
 const memoryGaps: KnowledgeGapRecord[] = [];
 const memoryFeedback: GuideFeedbackRecord[] = [];
-
-// Priority ranking weight for Knowledge Types
-const TYPE_PRIORITY_WEIGHTS: Record<KnowledgeType, number> = {
-  SYSTEM_RULE: 100,
-  POLICY: 90,
-  SOP: 80,
-  MANUAL: 70,
-  GUIDE: 60,
-  FAQ: 60,
-  DEFINITION: 50,
-  TRAINING: 50,
-  DECISION_RECORD: 40,
-  INTERNAL_RULE: 90
-};
 
 export async function processGuideQuestion(
   question: string,
@@ -40,71 +27,21 @@ export async function processGuideQuestion(
   // 1. Check for Read-Only Mutation / Action Attempts
   const isWriteAttempt = checkWriteActionAttempt(q);
 
-  // 2. RETRIEVAL-LEVEL SECURITY: Fetch ONLY Authorized Knowledge items for this user
-  const { items: authorizedItems } = await getAuthorizedKnowledgeList(userContext, {
-    status: "PUBLISHED"
+  // 2. RETRIEVAL-LEVEL SECURITY & SHARED SEARCH CORE: Fetch ONLY Authorized Knowledge items for this user in GUIDE Mode
+  const searchResult = await searchKnowledgeCore(question, {
+    mode: "GUIDE",
+    userContext,
+    currentRoute
   });
 
-  // Filter out SUPERSEDED and ARCHIVED from default retrieval
-  const activeAuthorizedItems = authorizedItems.filter(
-    i => i.status === "PUBLISHED" && !i.current_version.toLowerCase().includes("draft")
-  );
+  const matchedItems = searchResult.items;
 
   // 3. Handle Write Action Attempts immediately (Read-Only Enforcement)
   if (isWriteAttempt.isAttempt) {
-    return buildReadonlyActionResponse(question, isWriteAttempt.actionType, activeAuthorizedItems, now);
+    return buildReadonlyActionResponse(question, isWriteAttempt.actionType, matchedItems, now);
   }
 
-  // 4. Rank and Find Best Matching Knowledge Items
-  const scoredItems = activeAuthorizedItems.map(item => {
-    let score = 0;
-    const itemTitle = (item.title + " " + item.title_ko + " " + item.title_en).toLowerCase();
-    const itemSummary = (item.summary_ko + " " + item.summary_en).toLowerCase();
-    const itemContent = (item.content_ko + " " + item.content_en).toLowerCase();
-    const itemTags = item.tags.map(t => t.toLowerCase());
-
-    // Keyword matching
-    const keywords = q.split(/\s+/).filter(k => k.length > 1);
-    keywords.forEach(kw => {
-      if (itemTitle.includes(kw)) score += 30;
-      if (itemTags.some(t => t.includes(kw))) score += 25;
-      if (itemSummary.includes(kw)) score += 15;
-      if (itemContent.includes(kw)) score += 5;
-    });
-
-    // Exact phrase bonus
-    if (q.includes("topic score") && (itemTitle.includes("topic score") || itemContent.includes("topic score"))) score += 50;
-    if (q.includes("fact check") && (itemTitle.includes("fact check") || itemContent.includes("fact check"))) score += 50;
-    if (q.includes("automation") && (itemTitle.includes("automation") || itemContent.includes("automation"))) score += 50;
-    if (q.includes("high risk") && itemContent.includes("high risk")) score += 50;
-    if (q.includes("medium risk") && itemContent.includes("medium risk")) score += 50;
-    if (q.includes("claim status") && itemTitle.includes("claim status")) score += 50;
-    if (q.includes("revision") && (itemTitle.includes("approve") || itemContent.includes("revision"))) score += 50;
-    if (q.includes("reject") && (itemTitle.includes("approve") || itemContent.includes("reject"))) score += 50;
-    if (q.includes("매뉴얼") && (item.type === "MANUAL" || itemTitle.includes("매뉴얼"))) score += 50;
-    if (q.includes("version") || q.includes("버전") || q.includes("수정")) {
-      if (itemTitle.includes("매뉴얼") || itemContent.includes("version")) score += 40;
-    }
-    if (q.includes("brand") || q.includes("공개") || q.includes("audience")) {
-      if (itemTitle.includes("faq") || itemTitle.includes("금지사항") || itemContent.includes("audience")) score += 40;
-    }
-    if (q.includes("outdated") || q.includes("system rule") || q.includes("rule")) {
-      if (item.type === "SYSTEM_RULE" || itemContent.includes("outdated")) score += 40;
-    }
-
-    // Context aware weighting (currentRoute)
-    if (currentRoute.includes("/admin/insights") && item.category === "INSIGHTS") score += 15;
-    if (currentRoute.includes("/admin/knowledge") && item.category === "OPERATIONS") score += 15;
-
-    // Type Priority Weighting
-    score += (TYPE_PRIORITY_WEIGHTS[item.type] || 0) * 0.1;
-
-    return { item, score };
-  });
-
-  scoredItems.sort((a, b) => b.score - a.score);
-
-  const bestMatch = scoredItems.length > 0 && scoredItems[0].score > 15 ? scoredItems[0].item : null;
+  const bestMatch = matchedItems.length > 0 ? matchedItems[0] : null;
 
   // 5. Handle Unknown / Insufficient Authorized Knowledge
   if (!bestMatch) {
@@ -137,7 +74,7 @@ export async function processGuideQuestion(
   }
 
   // 6. Generate Answer from Best Matching Knowledge & Priority Hierarchy
-  const topMatches = scoredItems.filter(s => s.score > 15).slice(0, 3).map(s => s.item);
+  const topMatches = matchedItems.slice(0, 3);
   return buildStructuredGuideAnswer(question, bestMatch, topMatches, userContext, currentRoute, now);
 }
 

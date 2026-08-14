@@ -15,6 +15,8 @@ export default function LibraryView() {
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [langFilter, setLangFilter] = useState("ALL");
 
+  const [suggestionNotice, setSuggestionNotice] = useState<string | null>(null);
+
   useEffect(() => {
     fetchLibrary();
   }, [typeFilter, audienceFilter, moduleFilter, statusFilter, langFilter, search]);
@@ -34,12 +36,22 @@ export default function LibraryView() {
       if (res.ok) {
         const json = await res.json();
         setItems(json.items || []);
+        setSuggestionNotice(json.suggestionNotice || null);
       }
     } catch (e) {
       console.error("Failed to fetch library:", e);
     } finally {
       setLoading(false);
     }
+  };
+
+  const clearAllFilters = () => {
+    setSearch("");
+    setTypeFilter("ALL");
+    setAudienceFilter("ALL");
+    setModuleFilter("ALL");
+    setStatusFilter("ALL");
+    setLangFilter("ALL");
   };
 
   const getStatusBadge = (status: string) => {
@@ -81,22 +93,31 @@ export default function LibraryView() {
       </div>
 
       {/* Search Bar */}
-      <div className="relative">
-        <input
-          type="text"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search knowledge, policies, manuals, FAQs..."
-          className="w-full rounded-xl border border-zinc-300 bg-white px-4 py-3 pl-11 text-sm text-zinc-900 shadow-sm focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white dark:placeholder-zinc-500"
-        />
-        <svg
-          className="absolute left-4 top-3.5 h-4 w-4 text-zinc-400"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-        </svg>
+      <div className="space-y-2">
+        <div className="relative">
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search knowledge, policies, manuals, FAQs (e.g. 인사이트, 매뉴얼, SOP)..."
+            className="w-full rounded-xl border border-zinc-300 bg-white px-4 py-3 pl-11 text-sm text-zinc-900 shadow-sm focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white dark:placeholder-zinc-500"
+          />
+          <svg
+            className="absolute left-4 top-3.5 h-4 w-4 text-zinc-400"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+        </div>
+
+        {suggestionNotice && (
+          <div className="px-3.5 py-1.5 rounded-lg bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/50 text-xs font-bold text-amber-800 dark:text-amber-300 flex items-center gap-1.5">
+            <span>💡</span>
+            <span>{suggestionNotice}</span>
+          </div>
+        )}
       </div>
 
       {/* Filters Bar */}
@@ -193,8 +214,39 @@ export default function LibraryView() {
         {loading ? (
           <div className="p-12 text-center text-sm text-zinc-500">Loading library records...</div>
         ) : items.length === 0 ? (
-          <div className="p-12 text-center text-sm text-zinc-500">
-            No knowledge records match the selected filters.
+          <div className="p-10 text-center space-y-4">
+            <div className="w-12 h-12 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-400 mx-auto flex items-center justify-center text-xl font-bold">
+              🔍
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-zinc-900 dark:text-white">
+                관련 지식 항목을 찾지 못했습니다.
+              </h3>
+              <p className="mt-1 text-xs text-zinc-500 max-w-md mx-auto">
+                검색어의 띄어쓰기나 철자를 확인하시거나, 아래 추천 키워드로 재검색해보세요.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap justify-center gap-2 pt-1">
+              {["INSIGHTS", "MANUAL", "SOP", "SYSTEM_RULE", "POLICY"].map((kw) => (
+                <button
+                  key={kw}
+                  onClick={() => setSearch(kw)}
+                  className="px-3 py-1.5 rounded-lg bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-xs font-semibold text-zinc-700 dark:text-zinc-300 transition"
+                >
+                  {kw}
+                </button>
+              ))}
+            </div>
+
+            <div className="pt-2">
+              <button
+                onClick={clearAllFilters}
+                className="px-4 py-2 rounded-lg bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 text-xs font-bold hover:bg-zinc-800 transition"
+              >
+                Clear All Filters & Reset
+              </button>
+            </div>
           </div>
         ) : (
           <div className="overflow-x-auto">

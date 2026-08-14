@@ -35,8 +35,19 @@ export async function POST(request: NextRequest) {
       if (user) {
         isAuthenticated = true;
         userId = user.id;
-        // Server-resolved role from Supabase metadata
-        userRole = (user.user_metadata?.role || user.app_metadata?.role || "admin") as UserRole;
+
+        // Query Trusted Server DB Profile Role (never trust client metadata alone)
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("role")
+          .eq("id", user.id)
+          .maybeSingle();
+
+        if (profile?.role) {
+          userRole = profile.role as UserRole;
+        } else {
+          userRole = (user.app_metadata?.role || user.user_metadata?.role || "admin") as UserRole;
+        }
       }
     } catch (e) {
       // Fallback unauthenticated

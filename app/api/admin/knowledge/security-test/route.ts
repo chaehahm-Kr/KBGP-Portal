@@ -5,6 +5,7 @@ import { triggerSystemSettingChange } from "@/lib/knowledge/system-impact";
 import { createNewDraftVersion, publishDraftVersion } from "@/lib/knowledge/versioning";
 import { SecurityUserContext, KnowledgeItem } from "@/lib/knowledge/types";
 import { processGuideQuestion } from "@/lib/knowledge/guide/engine";
+import { searchKnowledgeCore } from "@/lib/knowledge/search";
 
 export async function GET() {
   const results: { scenario: string; name: string; status: "PASS" | "FAIL"; details: string }[] = [];
@@ -357,6 +358,55 @@ export async function GET() {
         name: "Client-Side Role Spoofing & Anonymous Denial Guard",
         status: "FAIL",
         details: "Anonymous context accessed internal knowledge items."
+      });
+    }
+
+    // ----------------------------------------------------
+    // Scenario O: Shared Search Core KO / Alias / Typo Matching
+    // ----------------------------------------------------
+    const resKo = await searchKnowledgeCore("인사이트", { mode: "LIBRARY", userContext: adminContext });
+    const resTypoKo = await searchKnowledgeCore("인싸이트", { mode: "LIBRARY", userContext: adminContext });
+    const resTypoEn = await searchKnowledgeCore("insighp", { mode: "LIBRARY", userContext: adminContext });
+    const resManual = await searchKnowledgeCore("메뉴얼", { mode: "LIBRARY", userContext: adminContext });
+
+    if (
+      resKo.items.length > 0 &&
+      resTypoKo.items.length > 0 &&
+      resTypoEn.items.length > 0 &&
+      resManual.items.length > 0
+    ) {
+      results.push({
+        scenario: "Scenario O",
+        name: "Shared Search Core KO / Alias / Typo Matching (인사이트, 인싸이트, insighp, 메뉴얼)",
+        status: "PASS",
+        details: `All Korean/Alias/Typo queries retrieved items successfully (insighp notice: '${resTypoEn.suggestionNotice}').`
+      });
+    } else {
+      results.push({
+        scenario: "Scenario O",
+        name: "Shared Search Core KO / Alias / Typo Matching (인사이트, 인싸이트, insighp, 메뉴얼)",
+        status: "FAIL",
+        details: "One or more Alias/Typo search queries failed to return items."
+      });
+    }
+
+    // ----------------------------------------------------
+    // Scenario P: Natural Language Intent Search in Guide & Library
+    // ----------------------------------------------------
+    const resIntent = await processGuideQuestion("오늘 글 안 나왔는데 문제야?", adminContext, "/admin/insights");
+    if (!resIntent.isUnknown && resIntent.directAnswer.includes("Automation")) {
+      results.push({
+        scenario: "Scenario P",
+        name: "Natural Language Semantic Intent Search",
+        status: "PASS",
+        details: "Natural language query '오늘 글 안 나왔는데 문제야?' matched Automation Run 0 Draft Day rule."
+      });
+    } else {
+      results.push({
+        scenario: "Scenario P",
+        name: "Natural Language Semantic Intent Search",
+        status: "FAIL",
+        details: "Natural language intent query failed to match expected rule."
       });
     }
 
