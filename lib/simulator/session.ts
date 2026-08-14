@@ -82,14 +82,18 @@ export async function persistSimulationSession(params: {
       }
 
       const revisions = (revisionsRaw || []).map((r: any) => {
-        const meta = r.result_snapshot?.session_meta || {};
+        let snapshot = r.result_snapshot;
+        if (typeof snapshot === "string") {
+          try { snapshot = JSON.parse(snapshot); } catch (e) {}
+        }
+        const meta = snapshot?.session_meta || {};
         const code = r.simulation_code || meta.simulation_code || "";
         const codeRevMatch = code.match(/-R(\d+)$/i);
         const codeRevNo = codeRevMatch ? parseInt(codeRevMatch[1], 10) : 0;
 
-        const effectiveRevNo = (r.revision_no && r.revision_no > 0)
+        const effectiveRevNo = (typeof r.revision_no === "number" && r.revision_no > 0)
           ? r.revision_no
-          : ((meta.revision_no && meta.revision_no > 0)
+          : ((typeof meta.revision_no === "number" && meta.revision_no > 0)
             ? meta.revision_no
             : codeRevNo);
 
@@ -101,12 +105,18 @@ export async function persistSimulationSession(params: {
         };
       });
 
-      const parentCodeMatch = (parentRecord.simulation_code || parentMeta.simulation_code || "").match(/-R(\d+)$/i);
+      let parentSnap = parentRecord.result_snapshot;
+      if (typeof parentSnap === "string") {
+        try { parentSnap = JSON.parse(parentSnap); } catch (e) {}
+      }
+      const parentMetaResolved = parentSnap?.session_meta || parentMeta || {};
+
+      const parentCodeMatch = (parentRecord.simulation_code || parentMetaResolved.simulation_code || "").match(/-R(\d+)$/i);
       const parentCodeRevNo = parentCodeMatch ? parseInt(parentCodeMatch[1], 10) : 0;
       const parentRevNo = (parentRecord.revision_no && parentRecord.revision_no > 0)
         ? parentRecord.revision_no
-        : ((parentMeta.revision_no && parentMeta.revision_no > 0)
-          ? parentMeta.revision_no
+        : ((parentMetaResolved.revision_no && parentMetaResolved.revision_no > 0)
+          ? parentMetaResolved.revision_no
           : parentCodeRevNo);
 
       const latestRev = revisions && revisions.length > 0 ? revisions[0] : parentRecord;
