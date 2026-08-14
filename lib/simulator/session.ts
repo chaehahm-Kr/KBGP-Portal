@@ -174,8 +174,7 @@ export async function persistSimulationSession(params: {
           .or(`id.eq.${baseId},base_simulation_id.eq.${baseId}`);
       } catch (e) {}
 
-      // Attach session metadata into result_snapshot for 100% persistence resilience
-      result.session_meta = {
+      const sessionMetaObj = {
         base_simulation_id: baseId,
         simulation_code: newRevCode,
         revision_no: nextRevNo,
@@ -185,7 +184,10 @@ export async function persistSimulationSession(params: {
       const insertPayload: Record<string, any> = {
         email: email || parentRecord.email || null,
         answers_snapshot: answers,
-        result_snapshot: result,
+        result_snapshot: {
+          ...result,
+          session_meta: sessionMetaObj
+        },
         questionnaire_id: result.versions?.questionnaire_id || null,
         calculation_trace: result.trace || null,
         questionnaire_version: result.versions?.questionnaire_version || null,
@@ -242,8 +244,7 @@ export async function persistSimulationSession(params: {
 
   // 2. New Base Simulation (Original / R0)
   const newBaseCode = generateSimulationCode();
-
-  result.session_meta = {
+  const baseMetaObj = {
     base_simulation_id: null, // Will set below or use self id
     simulation_code: newBaseCode,
     revision_no: 0,
@@ -253,7 +254,10 @@ export async function persistSimulationSession(params: {
   const baseInsertPayload: Record<string, any> = {
     email: email || null,
     answers_snapshot: answers,
-    result_snapshot: result,
+    result_snapshot: {
+      ...result,
+      session_meta: baseMetaObj
+    },
     questionnaire_id: result.versions?.questionnaire_id || null,
     calculation_trace: result.trace || null,
     questionnaire_version: result.versions?.questionnaire_version || null,
