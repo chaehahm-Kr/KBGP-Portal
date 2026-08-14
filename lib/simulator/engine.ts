@@ -65,25 +65,47 @@ async function getPublishedConfig(supabase: any) {
   const qnVersion = questionnaire?.version || 1;
 
   // 2. Fetch questions, answers, mappings, rules, and parameters in parallel
-  const [
-    { data: questions },
-    { data: answers },
-    { data: mappings },
-    { data: parameters },
-    { data: apMatchingTags },
-    { data: matchingTags },
-    { data: assortmentProfiles },
-    { data: conditionalRules }
-  ] = await Promise.all([
-    supabase.from('simulator_questions').select('*').eq('questionnaire_id', qnId),
-    supabase.from('simulator_answers').select('*'), // will map locally via questions
-    supabase.from('simulator_answer_mappings').select('*'),
-    supabase.from('simulator_parameters').select('*').eq('questionnaire_id', qnId),
-    supabase.from('ap_matching_tags').select('*'),
-    supabase.from('matching_tags').select('*').eq('is_active', true),
-    supabase.from('assortment_profiles').select('*'),
-    supabase.from('simulator_conditional_rules').select('*').eq('questionnaire_id', qnId)
-  ]);
+  let questions: any[] = [];
+  let answers: any[] = [];
+  let mappings: any[] = [];
+  let parameters: any[] = [];
+  let apMatchingTags: any[] = [];
+  let matchingTags: any[] = [];
+  let assortmentProfiles: any[] = [];
+  let conditionalRules: any[] = [];
+
+  try {
+    const [
+      resQ,
+      resA,
+      resM,
+      resP,
+      resAPTag,
+      resMTag,
+      resAssort,
+      resCond
+    ] = await Promise.all([
+      supabase.from('simulator_questions').select('*').eq('questionnaire_id', qnId),
+      supabase.from('simulator_answers').select('*'),
+      supabase.from('simulator_answer_mappings').select('*'),
+      supabase.from('simulator_parameters').select('*').eq('questionnaire_id', qnId),
+      supabase.from('ap_matching_tags').select('*'),
+      supabase.from('matching_tags').select('*').eq('is_active', true),
+      supabase.from('assortment_profiles').select('*'),
+      supabase.from('simulator_conditional_rules').select('*').eq('questionnaire_id', qnId)
+    ]);
+
+    questions = resQ.data || [];
+    answers = resA.data || [];
+    mappings = resM.data || [];
+    parameters = resP.data || [];
+    apMatchingTags = resAPTag.data || [];
+    matchingTags = resMTag.data || [];
+    assortmentProfiles = resAssort.data || [];
+    conditionalRules = resCond.data || [];
+  } catch (err: any) {
+    console.warn("⚠️ Supabase parallel query fetch error (resilient fallback active):", err?.message);
+  }
 
   // Build lookup maps
   const questionsUuidToIdMap: Record<string, string> = {};
