@@ -16,14 +16,53 @@ export interface SimulatorAuditLog {
 export async function getSimulatorOverviewStats() {
   const supabase = createAdminClient();
 
+  // Select safe core columns to avoid failing on missing DDL columns
   const { data: rows, error } = await supabase
     .from("simulation_results")
-    .select("id, created_at, result_snapshot, is_latest, revision_no");
+    .select("id, created_at, result_snapshot, email");
 
   if (error) {
     console.error("Error fetching overview stats:", error);
     return null;
   }
+
+  const results = rows || [];
+
+  // Group by session to determine true latest revision per session
+  const sessionMap = new Map<string, any>();
+
+  results.forEach((row) => {
+    let snap = row.result_snapshot;
+    if (typeof snap === "string") {
+      try { snap = JSON.parse(snap); } catch (e) {}
+    }
+    const meta = snap?.session_meta || {};
+    const baseId = (row as any).base_simulation_id || meta.base_simulation_id || row.id;
+
+    const numR = Number((row as any).revision_no);
+    const numMeta = Number(meta.revision_no);
+    const codeMatch = (meta.simulation_code || "").match(/-R(\d+)$/i);
+    const codeRevNo = codeMatch ? parseInt(codeMatch[1], 10) : 0;
+    const effectiveRevNo = (!isNaN(numR) && numR > 0) ? numR : ((!isNaN(numMeta) && numMeta > 0) ? numMeta : codeRevNo);
+
+    const isLatestFlag = (row as any).is_latest ?? meta.is_latest;
+
+    const existing = sessionMap.get(baseId);
+    if (!existing) {
+      sessionMap.set(baseId, { ...row, result_snapshot: snap, effectiveRevNo, isLatestFlag });
+    } else {
+      const shouldReplace =
+        isLatestFlag === true ||
+        (existing.isLatestFlag !== true && (
+          effectiveRevNo > existing.effectiveRevNo ||
+          new Date(row.created_at).getTime() > new Date(existing.created_at).getTime()
+        ));
+
+      if (shouldReplace) {
+        sessionMap.set(baseId, { ...row, result_snapshot: snap, effectiveRevNo, isLatestFlag });
+      }
+    }
+  });
 
   const now = new Date();
   const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
@@ -51,13 +90,8 @@ export async function getSimulatorOverviewStats() {
     "VERY LOW": 0,
   };
 
-  const results = rows || [];
-
-  results.forEach((row) => {
-    // Only count latest revision per Session for Overview stats
-    if (row.is_latest === false) return;
-
-    const res = (row.result_snapshot as any) || {};
+  sessionMap.forEach((row) => {
+    const res = row.result_snapshot || {};
     if (res.is_sandbox) {
       sandboxSimulations++;
       return; // Exclude sandbox from live business analytics
@@ -269,18 +303,55 @@ export async function getSimulationResultDetail(id: string) {
     });
   }
 
-  // Fetch Revision History for this Base Session
-  const baseId = row.base_simulation_id || row.id;
-  const { data: revisionHistory } = await supabase
+  // Fetch Revision History for this Base Session safely
+  const rowSnap = typeof row.result_snapshot === "string" ? JSON.parse(row.result_snapshot) : row.result_snapshot;
+  const rowMeta = rowSnap?.session_meta || {};
+  const baseId = row.base_simulation_id || rowMeta.base_simulation_id || row.id;
+
+  const { data: revRows } = await supabase
     .from("simulation_results")
-    .select("id, created_at, simulation_code, revision_no, is_latest, result_snapshot")
-    .or(`id.eq.${baseId},base_simulation_id.eq.${baseId}`)
-    .order("revision_no", { ascending: true });
+    .select("id, created_at, result_snapshot, email")
+    .order("created_at", { ascending: true });
+
+  const matchingRevs = (revRows || []).filter(r => {
+    let snap = r.result_snapshot;
+    if (typeof snap === "string") {
+      try { snap = JSON.parse(snap); } catch (e) {}
+    }
+    const meta = snap?.session_meta || {};
+    return r.id === baseId || r.base_simulation_id === baseId || meta.base_simulation_id === baseId || (row.email && r.email && r.email === row.email);
+  }).map(r => {
+    let snap = r.result_snapshot;
+    if (typeof snap === "string") {
+      try { snap = JSON.parse(snap); } catch (e) {}
+    }
+    const meta = snap?.session_meta || {};
+    const code = r.simulation_code || meta.simulation_code || `GS-${r.id.slice(0, 8)}`;
+    const codeMatch = code.match(/-R(\d+)$/i);
+    const codeRevNo = codeMatch ? parseInt(codeMatch[1], 10) : 0;
+    const numR = Number(r.revision_no);
+    const numMeta = Number(meta.revision_no);
+    const effectiveRevNo = (!isNaN(numR) && numR > 0) ? numR : ((!isNaN(numMeta) && numMeta > 0) ? numMeta : codeRevNo);
+
+    return {
+      ...r,
+      simulation_code: code,
+      revision_no: effectiveRevNo,
+      is_latest: r.is_latest ?? meta.is_latest ?? true,
+      result_snapshot: snap
+    };
+  });
+
+  matchingRevs.sort((a, b) => a.revision_no - b.revision_no);
 
   return {
-    row,
+    row: {
+      ...row,
+      simulation_code: row.simulation_code || rowMeta.simulation_code || `GS-${row.id.slice(0, 8)}`,
+      revision_no: row.revision_no ?? rowMeta.revision_no ?? 0
+    },
     labelMapping,
-    revision_history: revisionHistory || [row],
+    revision_history: matchingRevs.length > 0 ? matchingRevs : [row],
   };
 }
 

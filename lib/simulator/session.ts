@@ -174,13 +174,33 @@ export async function persistSimulationSession(params: {
       const nextRevNo = maxRevNo + 1;
       const newRevCode = `${baseCode}-R${nextRevNo}`;
 
-      // Mark previous revisions as is_latest = false
+      // Mark previous revisions as is_latest = false (both DDL and JSONB session_meta)
       try {
         await supabase
           .from("simulation_results")
           .update({ is_latest: false })
           .or(`id.eq.${baseId},base_simulation_id.eq.${baseId}`);
       } catch (e) {}
+
+      // Update JSONB snapshot session_meta.is_latest = false for previous revisions
+      for (const prev of revisionsRaw) {
+        try {
+          let snap = prev.result_snapshot;
+          if (typeof snap === "string") {
+            try { snap = JSON.parse(snap); } catch (e) {}
+          }
+          if (snap) {
+            snap.session_meta = {
+              ...(snap.session_meta || {}),
+              is_latest: false
+            };
+            await supabase
+              .from("simulation_results")
+              .update({ result_snapshot: snap })
+              .eq("id", prev.id);
+          }
+        } catch (e) {}
+      }
 
       const sessionMetaObj = {
         base_simulation_id: baseId,
