@@ -91,17 +91,20 @@ export async function persistSimulationSession(params: {
         const codeRevMatch = code.match(/-R(\d+)$/i);
         const codeRevNo = codeRevMatch ? parseInt(codeRevMatch[1], 10) : 0;
 
-        const effectiveRevNo = (typeof r.revision_no === "number" && r.revision_no > 0)
-          ? r.revision_no
-          : ((typeof meta.revision_no === "number" && meta.revision_no > 0)
-            ? meta.revision_no
+        const numR = Number(r.revision_no);
+        const numMeta = Number(meta.revision_no);
+
+        const effectiveRevNo = (!isNaN(numR) && numR > 0)
+          ? numR
+          : ((!isNaN(numMeta) && numMeta > 0)
+            ? numMeta
             : codeRevNo);
 
         return {
           ...r,
           revision_no: effectiveRevNo,
           base_simulation_id: r.base_simulation_id || meta.base_simulation_id || r.id,
-          simulation_code: code || `GS-REV-${r.id.slice(0, 4)}`
+          simulation_code: code || meta.simulation_code || `GS-REV-${r.id.slice(0, 4)}`
         };
       });
 
@@ -113,10 +116,13 @@ export async function persistSimulationSession(params: {
 
       const parentCodeMatch = (parentRecord.simulation_code || parentMetaResolved.simulation_code || "").match(/-R(\d+)$/i);
       const parentCodeRevNo = parentCodeMatch ? parseInt(parentCodeMatch[1], 10) : 0;
-      const parentRevNo = (parentRecord.revision_no && parentRecord.revision_no > 0)
-        ? parentRecord.revision_no
-        : ((parentMetaResolved.revision_no && parentMetaResolved.revision_no > 0)
-          ? parentMetaResolved.revision_no
+      const numPR = Number(parentRecord.revision_no);
+      const numPM = Number(parentMetaResolved.revision_no);
+
+      const parentRevNo = (!isNaN(numPR) && numPR > 0)
+        ? numPR
+        : ((!isNaN(numPM) && numPM > 0)
+          ? numPM
           : parentCodeRevNo);
 
       const latestRev = revisions && revisions.length > 0 ? revisions[0] : parentRecord;
