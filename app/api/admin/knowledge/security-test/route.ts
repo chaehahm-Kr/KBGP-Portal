@@ -4,6 +4,7 @@ import { getStoreKnowledgeItems, saveStoreKnowledgeItem } from "@/lib/knowledge/
 import { triggerSystemSettingChange } from "@/lib/knowledge/system-impact";
 import { createNewDraftVersion, publishDraftVersion } from "@/lib/knowledge/versioning";
 import { SecurityUserContext, KnowledgeItem } from "@/lib/knowledge/types";
+import { processGuideQuestion } from "@/lib/knowledge/guide/engine";
 
 export async function GET() {
   const results: { scenario: string; name: string; status: "PASS" | "FAIL"; details: string }[] = [];
@@ -274,6 +275,88 @@ export async function GET() {
         name: "Public Static File Exposure Removal Guard",
         status: "FAIL",
         details: "Internal PDF file still exposed in public static directory!"
+      });
+    }
+
+    // ----------------------------------------------------
+    // Scenario K: Guide V1 Natural Language Pilot Query Accuracy
+    // ----------------------------------------------------
+    const pilotAnswer = await processGuideQuestion("Topic Score 기준이 뭐야?", adminContext, "/admin/insights");
+    if (!pilotAnswer.isUnknown && pilotAnswer.directAnswer.includes("80점") && pilotAnswer.sources.length > 0) {
+      results.push({
+        scenario: "Scenario K",
+        name: "Guide V1 Natural Language Pilot Query Accuracy",
+        status: "PASS",
+        details: `Topic Score query returned correct ground truth ('80점') and cited ${pilotAnswer.sources.length} sources.`
+      });
+    } else {
+      results.push({
+        scenario: "Scenario K",
+        name: "Guide V1 Natural Language Pilot Query Accuracy",
+        status: "FAIL",
+        details: "Guide V1 failed to answer Topic Score query accurately."
+      });
+    }
+
+    // ----------------------------------------------------
+    // Scenario L: Guide Deny-Before-Generation Security for Brand Context
+    // ----------------------------------------------------
+    const brandGuideAnswer = await processGuideQuestion("INSIGHTS 운영 매뉴얼 보여줘", brandContext, "/admin");
+    const leakedInternalSource = brandGuideAnswer.sources.some(s => s.id === "kno-insights-manual-v10");
+    if (!leakedInternalSource) {
+      results.push({
+        scenario: "Scenario L",
+        name: "Guide Deny-Before-Generation Authorization Isolation",
+        status: "PASS",
+        details: "Brand context Guide search returned 0 internal manual citations (No internal knowledge leak)."
+      });
+    } else {
+      results.push({
+        scenario: "Scenario L",
+        name: "Guide Deny-Before-Generation Authorization Isolation",
+        status: "FAIL",
+        details: "Internal manual citation leaked into Brand Guide answer context!"
+      });
+    }
+
+    // ----------------------------------------------------
+    // Scenario M: Guide Read-Only Action Enforcement Guard
+    // ----------------------------------------------------
+    const writeAttemptAnswer = await processGuideQuestion("Topic Score 85로 변경해줘", adminContext, "/admin/insights/rules");
+    if (writeAttemptAnswer.isReadonlyActionAttempt && writeAttemptAnswer.actions.some(a => a.url === "/admin/insights/rules")) {
+      results.push({
+        scenario: "Scenario M",
+        name: "Guide Read-Only Action Execution Enforcement",
+        status: "PASS",
+        details: "Guide refused direct setting change execution and safely routed user to '/admin/insights/rules'."
+      });
+    } else {
+      results.push({
+        scenario: "Scenario M",
+        name: "Guide Read-Only Action Execution Enforcement",
+        status: "FAIL",
+        details: "Read-only enforcement flag was not set on write action attempt."
+      });
+    }
+
+    // ----------------------------------------------------
+    // Scenario N: Client-Side Role Spoofing Block
+    // ----------------------------------------------------
+    const anonContext: SecurityUserContext = { userId: "anon", role: "anonymous" };
+    const anonGuideAnswer = await processGuideQuestion("HIGH Risk는 뭘 확인해?", anonContext, "/admin");
+    if (anonGuideAnswer.sources.length === 0 || anonGuideAnswer.isUnknown) {
+      results.push({
+        scenario: "Scenario N",
+        name: "Client-Side Role Spoofing & Anonymous Denial Guard",
+        status: "PASS",
+        details: "Unauthenticated / Anonymous role context returned 0 internal sources (Role spoofing blocked)."
+      });
+    } else {
+      results.push({
+        scenario: "Scenario N",
+        name: "Client-Side Role Spoofing & Anonymous Denial Guard",
+        status: "FAIL",
+        details: "Anonymous context accessed internal knowledge items."
       });
     }
 

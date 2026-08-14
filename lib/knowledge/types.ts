@@ -150,3 +150,51 @@ export interface KnowledgeFilterOptions {
   search?: string;
   sortBy?: "latest" | "title" | "updated";
 }
+
+export type GuideActionType = "knowledge" | "manual" | "download" | "route" | "gap" | "library";
+
+export interface GuideActionLink {
+  label: string;
+  url: string;
+  type: GuideActionType;
+}
+
+export interface GuideSourceCitation {
+  id: string;
+  title: string;
+  type: KnowledgeType;
+  version: string;
+  status: KnowledgeStatus;
+  effectiveDate: string;
+  isLiveRule?: boolean;
+}
+
+export interface GuideAnswerResponse {
+  id: string;
+  question: string;
+  directAnswer: string;
+  currentRuleBullets?: string[];
+  liveRuleNote?: string | null;
+  sources: GuideSourceCitation[];
+  actions: GuideActionLink[];
+  isUnknown: boolean;
+  isReadonlyActionAttempt: boolean;
+  createdAt: string;
+}
+
+export interface KnowledgeGapRecord {
+  id: string;
+  question: string;
+  user_id: string;
+  user_name: string;
+  current_route: string;
+  created_at: string;
+}
+
+export interface GuideFeedbackRecord {
+  id: string;
+  question: string;
+  is_helpful: boolean;
+  reason?: string | null;
+  created_at: string;
+}

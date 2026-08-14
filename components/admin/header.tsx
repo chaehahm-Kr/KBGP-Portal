@@ -21,6 +21,7 @@ import {
   markAllNotificationsAsRead,
   type NotificationItem
 } from "@/lib/notification/actions";
+import GuideTriggerButton from "@/components/admin/knowledge-guide/guide-trigger-button";
 
 interface HeaderProps {
   isSidebarCollapsed: boolean;
@@ -331,7 +332,10 @@ export default function Header({ isSidebarCollapsed }: HeaderProps) {
       </nav>
 
       {/* Right side: Actions */}
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-3">
+        {/* K SELECT Guide Button */}
+        <GuideTriggerButton variant="header" />
+
         {/* Global Search Bar */}
         <div className="relative hidden max-w-xs md:block">
           <span className="absolute inset-y-0 left-0 flex items-center pl-3">
