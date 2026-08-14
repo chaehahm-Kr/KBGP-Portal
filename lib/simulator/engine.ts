@@ -445,29 +445,29 @@ export async function simulateGrowth(answers: Record<string, any>): Promise<Simu
     .eq("code", primaryApCode)
     .single();
 
-  // Product Eligibility Filter Helper
+  // Strict Allowlist Product Eligibility Filter Helper (Fail-Closed)
   function isEligibleProduct(prod: any): { eligible: boolean; reason?: string } {
     if (!prod) return { eligible: false, reason: "Product is null" };
 
-    // 1. 브랜드 활성화 상태 체크 (is_active !== false)
-    if (prod.brand && prod.brand.is_active === false) {
-      return { eligible: false, reason: "Brand is inactive" };
+    // 1. 브랜드 활성화 상태 체크 (명시적 true 요구 - Fail Closed)
+    if (!prod.brand || prod.brand.is_active !== true) {
+      return { eligible: false, reason: "Brand is not active (is_active !== true)" };
     }
 
-    // 2. 단종 및 판매 종료/중지 체크
-    if (prod.status === "discontinued") {
-      return { eligible: false, reason: "Status is discontinued" };
-    }
-    if (prod.sales_status === "ENDED" || prod.sales_status === "PAUSED") {
-      return { eligible: false, reason: `Sales status is ${prod.sales_status}` };
+    // 2. Product Master 상태값 Strict Allowlist 체크
+    if (prod.status !== "selling") {
+      return { eligible: false, reason: `Status '${prod.status}' is not 'selling'` };
     }
 
-    // 3. 미선정(NOT_SELECTED) 상품 제외
-    if (prod.selection_status === "NOT_SELECTED") {
-      return { eligible: false, reason: "Selection status is NOT_SELECTED" };
+    if (prod.sales_status !== "ON_SALE") {
+      return { eligible: false, reason: `Sales status '${prod.sales_status}' is not 'ON_SALE'` };
     }
 
-    // 4. 구조적 더미/테스트 상품 제외 (Brand: Test, Product: test, test123, 스크립트검증 등)
+    if (prod.selection_status !== "SELECTED") {
+      return { eligible: false, reason: `Selection status '${prod.selection_status}' is not 'SELECTED'` };
+    }
+
+    // 3. 보조 안전장치: 더미/테스트 상품 브랜드 및 상품명 패턴 제외
     const brandName = (prod.brand?.name || "").trim().toLowerCase();
     const prodName = (prod.name || "").trim().toLowerCase();
 
