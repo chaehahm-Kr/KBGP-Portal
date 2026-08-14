@@ -44,7 +44,7 @@ export async function POST(request: NextRequest) {
   
   try {
     const body = await request.json();
-    const { answers, email, simulation_id } = body;
+    const { answers, email, simulation_id, base_simulation_id } = body;
 
     // 만약 이메일 등록/업데이트 요청인 경우
     if (simulation_id && email && !answers) {
@@ -69,8 +69,6 @@ export async function POST(request: NextRequest) {
         { status: 200, headers: corsHeaders }
       );
     }
-
-    const { answers, email, base_simulation_id } = body;
 
     // 답변 파싱 검증 (최소 Q1-Q6 질문이 존재해야함)
     if (!answers || typeof answers !== "object") {
