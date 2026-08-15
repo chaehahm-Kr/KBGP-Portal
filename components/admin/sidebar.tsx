@@ -115,6 +115,7 @@ export default function Sidebar({ isCollapsed, toggleCollapse }: SidebarProps) {
       icon: ReportsIcon,
       subItems: [
         { name: "Supplier Invoices", href: "/admin/finance/invoices" },
+        { name: "Payments", href: "/admin/finance/payments" },
       ],
     },
     {

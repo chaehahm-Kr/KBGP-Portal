@@ -91,6 +91,16 @@ interface InvoiceDetailProps {
     rejecter: { full_name: string } | null;
     voider: { full_name: string } | null;
     adjustments: AdjustmentItem[];
+    payments: Array<{
+      id: string;
+      payment_number: string;
+      payment_date: string;
+      payment_amount: number;
+      currency: string;
+      payment_method: "WIRE" | "ACH" | "CHECK" | "OTHER";
+      status: "DRAFT" | "COMPLETED" | "VOID";
+      created_at: string;
+    }>;
   };
   po: {
     lines: Array<{
@@ -1052,12 +1062,85 @@ export function InvoiceDetail({ invoice, po, prevInvoicesTotal, poMerchandiseTot
 
             <div className="flex justify-between items-center text-[10px] text-zinc-400 font-bold border-t border-zinc-100 pt-3 dark:border-zinc-800">
               <div className="space-x-4">
-                <span>지급 완료액: {invoice.currency} {invoice.amount_paid.toLocaleString()}</span>
-                <span>지급 잔액 (Balance Due): {invoice.currency} {balanceDue.toLocaleString()}</span>
+                <span>지급 완료액: {invoice.currency} {invoice.amount_paid.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                <span>지급 잔액 (Balance Due): {invoice.currency} {balanceDue.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                {invoice.amount_paid > finalPayable && (
+                  <span className="text-rose-600 font-bold ml-2">
+                    과지급액 (Overpayment): {invoice.currency} {(invoice.amount_paid - finalPayable).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                  </span>
+                )}
               </div>
               <div>
                 <span>* 실제 대금 지급은 종결된 최종 미지급 채무(Final Payable) 기준으로 지급 기한에 진행됩니다.</span>
               </div>
+            </div>
+          </div>
+
+          {/* Payment History */}
+          <div className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 space-y-4">
+            <div className="flex justify-between items-center border-b border-zinc-100 pb-2 dark:border-zinc-800">
+              <h3 className="text-sm font-bold text-zinc-850 dark:text-white font-sans">
+                지급 거래 내역 (Payment History)
+              </h3>
+              {invoice.invoice_status === "APPROVED" && invoice.settlement_status === "SETTLED" && balanceDue > 0 && (
+                <Link
+                  href={`/admin/finance/payments/new?invoice_id=${invoice.id}`}
+                  className="px-2.5 py-1.5 bg-zinc-950 text-white dark:bg-white dark:text-zinc-950 hover:opacity-85 font-bold rounded-lg text-[10px] cursor-pointer"
+                >
+                  + 지급 등록 (Record Payment)
+                </Link>
+              )}
+            </div>
+
+            <div className="overflow-hidden rounded-lg border border-zinc-150 dark:border-zinc-800/80">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="bg-zinc-50/50 text-zinc-500 font-bold border-b border-zinc-150 dark:bg-zinc-900/50 dark:border-zinc-800 dark:text-zinc-350">
+                    <th className="px-3 py-2">지급 번호</th>
+                    <th className="px-3 py-2">지급 일자</th>
+                    <th className="px-3 py-2 text-right">지급 금액</th>
+                    <th className="px-3 py-2">지급 방식</th>
+                    <th className="px-3 py-2">상태</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
+                  {(!invoice.payments || invoice.payments.length === 0) ? (
+                    <tr>
+                      <td colSpan={5} className="px-3 py-6 text-center text-zinc-400 italic">
+                        기록된 지급 내역이 없습니다.
+                      </td>
+                    </tr>
+                  ) : (
+                    invoice.payments.map((p) => (
+                      <tr key={p.id} className="hover:bg-zinc-50/30 dark:hover:bg-zinc-850/5">
+                        <td className="px-3 py-2.5 font-mono font-bold text-indigo-650 hover:underline">
+                          <Link href={`/admin/finance/payments/${p.id}`}>
+                            {p.payment_number}
+                          </Link>
+                        </td>
+                        <td className="px-3 py-2.5 font-mono text-zinc-650">
+                          {p.payment_date}
+                        </td>
+                        <td className="px-3 py-2.5 text-right font-mono font-bold text-zinc-900 dark:text-white">
+                          {p.currency} {p.payment_amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                        </td>
+                        <td className="px-3 py-2.5 font-bold text-zinc-700 dark:text-zinc-300">
+                          {p.payment_method}
+                        </td>
+                        <td className="px-3 py-2.5">
+                          <span className={`inline-flex items-center rounded-md border px-2 py-0.5 text-[8px] font-bold ${
+                            p.status === "COMPLETED" ? "bg-emerald-50 text-emerald-700 border-emerald-250 dark:bg-emerald-950/20 dark:text-emerald-400 dark:border-emerald-900/50" :
+                            p.status === "VOID" ? "bg-zinc-200 text-zinc-500 border-zinc-300 dark:bg-zinc-900 dark:text-zinc-600 dark:border-zinc-800" :
+                            "bg-zinc-100 text-zinc-650 border-zinc-200"
+                          }`}>
+                            {p.status === "COMPLETED" ? "완료 (Completed)" : p.status === "VOID" ? "무효 (Void)" : "초안 (Draft)"}
+                          </span>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
             </div>
           </div>
 

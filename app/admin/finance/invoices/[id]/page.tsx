@@ -68,6 +68,10 @@ export default async function InvoiceDetailPage({ params }: DetailPageProps) {
       unit_amount: adj.unit_amount !== null ? Number(adj.unit_amount) : null,
       adjustment_amount: Number(adj.adjustment_amount),
     })),
+    payments: (invoice.payments ?? []).map((p: any) => ({
+      ...p,
+      payment_amount: Number(p.payment_amount),
+    })),
   };
 
   return (

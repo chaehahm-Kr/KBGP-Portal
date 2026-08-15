@@ -640,6 +640,16 @@ export async function getSupplierInvoiceById(id: string) {
         approver:profiles!approved_by (full_name),
         rejecter:profiles!rejected_by (full_name),
         voider:profiles!voided_by (full_name)
+      ),
+      payments:supplier_payments (
+        id,
+        payment_number,
+        payment_date,
+        payment_amount,
+        currency,
+        payment_method,
+        status,
+        created_at
       )
     `)
     .eq("id", id)
@@ -919,37 +929,7 @@ export async function closeSettlement(invoiceId: string) {
 export async function reopenSettlement(invoiceId: string) {
   const { userId } = await verifyAdminSession();
   const supabase = createAdminClient();
-  
-  // Verify super_admin or settlement_inquiry assignment to authorize reopening
-  const { data: userRoles } = await supabase
-    .from("staff_roles")
-    .select("role")
-    .eq("staff_id", userId);
-    
-  const isSuperAdmin = (userRoles ?? []).some((r: any) => r.role === "super_admin");
-
-  // Fetch supplier company ID from the invoice
-  const { data: invoice } = await supabase
-    .from("supplier_invoices")
-    .select("supplier_company_id")
-    .eq("id", invoiceId)
-    .single();
-
-  if (!invoice) throw new Error("Invoice not found.");
-
-  const { data: assignment } = await supabase
-    .from("company_task_assignments")
-    .select("id")
-    .eq("company_id", invoice.supplier_company_id)
-    .eq("staff_id", userId)
-    .eq("task_code", "settlement_inquiry")
-    .maybeSingle();
-
-  const isFinanceUser = !!assignment;
-
-  if (!isSuperAdmin && !isFinanceUser) {
-    throw new Error("정산 재개(Reopen Settlement) 작업을 수행할 수 있는 권한이 없습니다.");
-  }
+  await verifyApprovePermission(supabase, userId);
 
   const { error } = await supabase
     .from("supplier_invoices")
