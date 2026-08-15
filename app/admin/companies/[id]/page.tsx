@@ -321,9 +321,8 @@ export default async function AdminCompanyDetailPage({
     // Fetch warehouses of this company
     const { data: warehouses } = await admin
       .from("warehouses")
-      .select("id, name, code, address1, city, state, zip_code, country")
+      .select("id, name, code, address1, city, state, zip_code, country, status")
       .eq("company_id", id)
-      .eq("status", "active")
       .order("created_at", { ascending: true });
 
     return (

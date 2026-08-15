@@ -1761,11 +1761,17 @@ export function CompanyDetailManager({
                                 className="w-full rounded border border-zinc-200 p-1 text-xs outline-none bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
                               >
                                 <option value="">미지정 (Not Set)</option>
-                                {warehouses.map((wh: any) => (
-                                  <option key={wh.id} value={wh.id}>
-                                    [{wh.code}] {wh.name} ({wh.address1})
-                                  </option>
-                                ))}
+                                {warehouses.map((wh: any) => {
+                                  // Skip other inactive warehouses that are not currently selected
+                                  if (wh.status === "inactive" && wh.id !== supplierProfile?.default_ship_from_warehouse_id) {
+                                    return null;
+                                  }
+                                  return (
+                                    <option key={wh.id} value={wh.id}>
+                                      [{wh.code}] {wh.name} ({wh.address1}){wh.status === "inactive" ? " (비활성)" : ""}
+                                    </option>
+                                  );
+                                })}
                               </select>
                               <div className="text-[10px] text-zinc-400 dark:text-zinc-500 italic mt-0.5">
                                 참고용 본사 주소: {address || "등록 없음"}
@@ -1777,7 +1783,7 @@ export function CompanyDetailManager({
                                 {(() => {
                                   const selectedWh = warehouses.find(w => w.id === supplierProfile?.default_ship_from_warehouse_id);
                                   return selectedWh 
-                                    ? `[${selectedWh.code}] ${selectedWh.name} (${selectedWh.address1})`
+                                    ? `[${selectedWh.code}] ${selectedWh.name} (${selectedWh.address1})${selectedWh.status === "inactive" ? " (비활성)" : ""}`
                                     : "미지정 (Not Set)";
                                 })()}
                               </span>
