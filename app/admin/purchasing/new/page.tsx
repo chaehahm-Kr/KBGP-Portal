@@ -15,13 +15,13 @@ export default async function AdminNewPurchaseOrderPage() {
   // 1. Fetch active warehouses
   const { data: dbWarehouses } = await supabase
     .from("warehouses")
-    .select("id, name, code, status")
+    .select("id, name, code, status, is_default_receiving")
     .eq("status", "active")
     .order("name", { ascending: true });
   const warehouses = dbWarehouses ?? [];
 
-  // Find Letusto's NJ Main Warehouse as default
-  const defaultWarehouse = warehouses.find((w) => w.code === "NJ1") || warehouses[0] || null;
+  // Find the default receiving warehouse dynamically
+  const defaultWarehouse = warehouses.find((w: any) => w.is_default_receiving === true) || warehouses[0] || null;
 
   // 2. Fetch suppliers
   const suppliers = await getSuppliersForPo();

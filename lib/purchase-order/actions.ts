@@ -175,16 +175,28 @@ export async function getSuppliersForPo() {
 }
 
 /**
- * Fetch active trading products belonging to a supplier.
+ * Fetch active trading products mapped to a supplier.
  */
 export async function getProductsForSupplier(supplierId: string) {
   await verifyAdminSession();
   const supabase = createAdminClient();
 
+  // 1. Fetch mapped product IDs for this supplier
+  const { data: mappedProducts, error: mapErr } = await supabase
+    .from("product_suppliers")
+    .select("product_id")
+    .eq("supplier_id", supplierId);
+
+  if (mapErr) throw new Error(`공급사 매핑 제품 조회 실패: ${mapErr.message}`);
+  
+  const productIds = (mappedProducts ?? []).map((mp) => mp.product_id);
+  if (productIds.length === 0) return [];
+
+  // 2. Fetch active trading products for these IDs
   const { data: products, error } = await supabase
     .from("products")
     .select("id, name, name_en, manufacture_sku, letusto_sku, price_usd_fob, price_additional_info")
-    .eq("company_id", supplierId)
+    .in("id", productIds)
     .eq("trading_status", "active")
     .order("name", { ascending: true });
 
@@ -206,6 +218,39 @@ export async function getProductsForSupplier(supplierId: string) {
       price_usd_fob: effectiveFob,
     };
   });
+}
+
+/**
+ * Update the list of mapped suppliers for a product.
+ */
+export async function updateProductSuppliers(productId: string, supplierIds: string[]) {
+  await verifyAdminSession();
+  const supabase = createAdminClient();
+
+  // 1. Delete all existing supplier mapping rows for this product
+  const { error: delErr } = await supabase
+    .from("product_suppliers")
+    .delete()
+    .eq("product_id", productId);
+
+  if (delErr) throw new Error(`기존 공급처 매핑 삭제 실패: ${delErr.message}`);
+
+  // 2. Insert new mappings if any are selected
+  if (supplierIds.length > 0) {
+    const inserts = supplierIds.map((sId) => ({
+      product_id: productId,
+      supplier_id: sId,
+    }));
+
+    const { error: insErr } = await supabase
+      .from("product_suppliers")
+      .insert(inserts);
+
+    if (insErr) throw new Error(`신규 공급처 매핑 추가 실패: ${insErr.message}`);
+  }
+
+  revalidatePath(`/admin/products/${productId}`);
+  return { success: true };
 }
 
 /**

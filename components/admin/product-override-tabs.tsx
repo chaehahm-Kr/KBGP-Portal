@@ -26,6 +26,7 @@ import {
   adminUploadIngredientsFile,
   adminDeleteIngredientsFile
 } from "@/lib/product/admin-actions";
+import { updateProductSuppliers } from "@/lib/purchase-order/actions";
 import { CategoryAttributeForm } from "@/components/product/category-attribute-form";
 
 interface ProductOverrideTabsProps {
@@ -53,6 +54,8 @@ interface ProductOverrideTabsProps {
   apProfiles: { id: number; display_program: string; code: string; name: string; description: string | null; is_active: boolean }[];
   displayPrograms: { code: string; name: string; description: string | null; min_sku?: number; max_sku?: number; is_active: boolean }[];
   hasMissingRequiredAttributes?: boolean;
+  activeSuppliers?: { id: string; name: string }[];
+  mappedSupplierIds?: string[];
 }
 
 export function ProductOverrideTabs({
@@ -74,6 +77,8 @@ export function ProductOverrideTabs({
   apProfiles,
   displayPrograms,
   hasMissingRequiredAttributes = false,
+  activeSuppliers = [],
+  mappedSupplierIds = [],
 }: ProductOverrideTabsProps) {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -343,6 +348,7 @@ export function ProductOverrideTabs({
   const overrides = (product.price_additional_info as any)?.admin_overrides || {};
 
   // Form States for Overrides
+  const [selectedSupplierIds, setSelectedSupplierIds] = useState<string[]>(mappedSupplierIds);
   const [ovName, setOvName] = useState(overrides.name || "");
   const [ovNameEn, setOvNameEn] = useState(overrides.name_en || "");
   const [ovBrandId, setOvBrandId] = useState(product.brand_id);
@@ -734,6 +740,7 @@ export function ProductOverrideTabs({
         addNum("container_40fthc_cbm", ovC40Cbm);
 
         await adminUpdateProductOverrides(product.id, payload);
+        await updateProductSuppliers(product.id, selectedSupplierIds);
         await adminUpdateProductCuration(
           product.id,
           {
@@ -1007,7 +1014,7 @@ export function ProductOverrideTabs({
                   <select
                     value={tradingStatus}
                     onChange={(e) => setTradingStatus(e.target.value)}
-                    className="w-full rounded border border-zinc-200 p-2.5 text-xs text-zinc-900 bg-white dark:border-zinc-850 dark:bg-zinc-950 dark:text-white focus:border-zinc-950 outline-none font-bold"
+                    className="w-full rounded border border-zinc-200 p-2.5 text-xs text-zinc-900 bg-white dark:border-zinc-850 dark:bg-zinc-955 dark:text-white focus:border-zinc-950 outline-none font-bold"
                   >
                     <option value="inactive">비대상 (Inactive)</option>
                     <option value="active">운영 대상 (Active)</option>
@@ -1018,6 +1025,51 @@ export function ProductOverrideTabs({
                   </p>
                 </div>
               </div>
+            </div>
+
+            {/* 발주 대상 공급사 매핑 (Order Suppliers Mapping) */}
+            <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 space-y-4">
+              <h3 className="text-xs font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider border-b border-zinc-100 pb-2 dark:border-zinc-800">
+                발주 대상 공급사 매핑 (Order Suppliers Mapping)
+              </h3>
+              <p className="text-[10px] text-zinc-500 dark:text-zinc-400 mt-1">
+                이 상품을 발주할 수 있는 공급사(Supplier)들을 지정합니다. 체크된 공급사의 발주서(Purchase Order) 생성 시에만 본 제품이 노출됩니다.
+              </p>
+              {activeSuppliers.length === 0 ? (
+                <div className="text-xs text-zinc-400 dark:text-zinc-500 italic">
+                  등록된 활성 공급사(Supplier)가 없습니다. 공급사 프로필을 활성화해 주세요.
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 text-xs">
+                  {activeSuppliers.map((sup: any) => {
+                    const isChecked = selectedSupplierIds.includes(sup.id);
+                    return (
+                      <label
+                        key={sup.id}
+                        className={`flex items-center gap-2 p-2.5 rounded-lg border cursor-pointer transition-all ${
+                          isChecked
+                            ? "bg-zinc-950 text-white border-zinc-950 dark:bg-white dark:text-zinc-950 dark:border-white font-bold"
+                            : "bg-zinc-50 border-zinc-200 text-zinc-750 hover:bg-zinc-100 dark:bg-zinc-955 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-900"
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedSupplierIds([...selectedSupplierIds, sup.id]);
+                            } else {
+                              setSelectedSupplierIds(selectedSupplierIds.filter((id) => id !== sup.id));
+                            }
+                          }}
+                          className="accent-indigo-650 rounded border-zinc-300"
+                        />
+                        <span className="truncate">{sup.name}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
             </div>
 
             <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 space-y-4">

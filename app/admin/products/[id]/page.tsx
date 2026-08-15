@@ -199,6 +199,30 @@ export default async function AdminProductDetailPage({
 
   const { curation, matrix } = await adminGetProductCuration(product.id);
 
+  // Fetch product's mapped suppliers
+  const { data: mappedSupplierRows } = await adminSupabase
+    .from("product_suppliers")
+    .select("supplier_id")
+    .eq("product_id", id);
+  const mappedSupplierIds = (mappedSupplierRows ?? []).map((r) => r.supplier_id);
+
+  // Fetch all active suppliers to select from
+  const { data: roles } = await adminSupabase
+    .from("company_roles")
+    .select("company_id")
+    .eq("role", "Supplier");
+  const activeSupplierIds = (roles ?? []).map((r) => r.company_id);
+
+  let activeSuppliers: any[] = [];
+  if (activeSupplierIds.length > 0) {
+    const { data: dbActiveSuppliers } = await adminSupabase
+      .from("companies")
+      .select("id, name")
+      .in("id", activeSupplierIds)
+      .order("name", { ascending: true });
+    activeSuppliers = dbActiveSuppliers ?? [];
+  }
+
   // Fetch assortment profiles for matrix name mappings
   const { data: apProfiles } = await supabase
     .from("assortment_profiles")
@@ -231,6 +255,8 @@ export default async function AdminProductDetailPage({
       apProfiles={apProfiles ?? []}
       displayPrograms={displayPrograms ?? []}
       hasMissingRequiredAttributes={hasMissingRequiredAttributes}
+      activeSuppliers={activeSuppliers}
+      mappedSupplierIds={mappedSupplierIds}
     />
   );
 }
