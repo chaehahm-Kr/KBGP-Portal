@@ -83,6 +83,7 @@ interface CompanyDetailManagerProps {
   isFinanceUser: boolean;
   initialSupplierProfile: any | null;
   initialSupplierRemittance: any | null;
+  warehouses: any[];
 }
 
 export function CompanyDetailManager({
@@ -100,6 +101,7 @@ export function CompanyDetailManager({
   isFinanceUser,
   initialSupplierProfile,
   initialSupplierRemittance,
+  warehouses,
 }: CompanyDetailManagerProps) {
     const [companyCode, setCompanyCode] = useState(parsedMeta.companyCode || "");
   const [tempCompanyCode, setTempCompanyCode] = useState(companyCode);
@@ -127,11 +129,11 @@ export function CompanyDetailManager({
 
   // Supplier Profile States
   const [supStatus, setSupStatus] = useState(supplierProfile?.status || "active");
-  const [supCurrency, setSupCurrency] = useState(supplierProfile?.default_currency || "USD");
-  const [supPaymentTerms, setSupPaymentTerms] = useState(supplierProfile?.default_payment_terms || "Prepaid 100%");
+  const [supCurrency, setSupCurrency] = useState(supplierProfile?.default_currency || "");
+  const [supPaymentTerms, setSupPaymentTerms] = useState(supplierProfile?.default_payment_terms || "");
   const [supPaymentTermsCustom, setSupPaymentTermsCustom] = useState(supplierProfile?.default_payment_terms_custom || "");
-  const [supIncoterms, setSupIncoterms] = useState(supplierProfile?.default_incoterms || "EXW");
-  const [supShipFrom, setSupShipFrom] = useState(supplierProfile?.default_ship_from_address || "");
+  const [supIncoterms, setSupIncoterms] = useState(supplierProfile?.default_incoterms || "");
+  const [supShipFromWarehouseId, setSupShipFromWarehouseId] = useState(supplierProfile?.default_ship_from_warehouse_id || "");
   const [supPortOfLoading, setSupPortOfLoading] = useState(supplierProfile?.default_port_of_loading || "");
   const [supLeadTime, setSupLeadTime] = useState(supplierProfile?.default_production_lead_time || "");
   const [supMOQ, setSupMOQ] = useState<string>(supplierProfile?.default_moq !== null && supplierProfile?.default_moq !== undefined ? String(supplierProfile.default_moq) : "");
@@ -139,7 +141,7 @@ export function CompanyDetailManager({
   const [supInternalNote, setSupInternalNote] = useState(supplierProfile?.internal_note || "");
 
   // Supplier Remittance States
-  const [remMethod, setRemMethod] = useState(supplierRemittance?.payment_method || "Wire Transfer");
+  const [remMethod, setRemMethod] = useState(supplierRemittance?.payment_method || "");
   const [remBeneficiaryName, setRemBeneficiaryName] = useState(supplierRemittance?.beneficiary_name || "");
   const [remBeneficiaryAddress, setRemBeneficiaryAddress] = useState(supplierRemittance?.beneficiary_address || "");
   const [remBankName, setRemBankName] = useState(supplierRemittance?.bank_name || "");
@@ -170,7 +172,7 @@ export function CompanyDetailManager({
           default_payment_terms: supPaymentTerms,
           default_payment_terms_custom: supPaymentTerms === "Custom" ? supPaymentTermsCustom : "",
           default_incoterms: supIncoterms,
-          default_ship_from_address: supShipFrom,
+          default_ship_from_warehouse_id: supShipFromWarehouseId || null,
           default_port_of_loading: supPortOfLoading,
           default_production_lead_time: supLeadTime,
           default_moq: supMOQ.trim() ? parseInt(supMOQ) : null,
@@ -1590,11 +1592,11 @@ export function CompanyDetailManager({
                         type="button"
                         onClick={() => {
                           setSupStatus(supplierProfile?.status || "active");
-                          setSupCurrency(supplierProfile?.default_currency || "USD");
-                          setSupPaymentTerms(supplierProfile?.default_payment_terms || "Prepaid 100%");
+                          setSupCurrency(supplierProfile?.default_currency || "");
+                          setSupPaymentTerms(supplierProfile?.default_payment_terms || "");
                           setSupPaymentTermsCustom(supplierProfile?.default_payment_terms_custom || "");
-                          setSupIncoterms(supplierProfile?.default_incoterms || "EXW");
-                          setSupShipFrom(supplierProfile?.default_ship_from_address || "");
+                          setSupIncoterms(supplierProfile?.default_incoterms || "");
+                          setSupShipFromWarehouseId(supplierProfile?.default_ship_from_warehouse_id || "");
                           setSupPortOfLoading(supplierProfile?.default_port_of_loading || "");
                           setSupLeadTime(supplierProfile?.default_production_lead_time || "");
                           setSupMOQ(supplierProfile?.default_moq !== null && supplierProfile?.default_moq !== undefined ? String(supplierProfile.default_moq) : "");
@@ -1602,7 +1604,7 @@ export function CompanyDetailManager({
                           setSupInternalNote(supplierProfile?.internal_note || "");
                           
                           if (hasRemittanceAccess) {
-                            setRemMethod(supplierRemittance?.payment_method || "Wire Transfer");
+                            setRemMethod(supplierRemittance?.payment_method || "");
                             setRemBeneficiaryName(supplierRemittance?.beneficiary_name || "");
                             setRemBeneficiaryAddress(supplierRemittance?.beneficiary_address || "");
                             setRemBankName(supplierRemittance?.bank_name || "");
@@ -1681,13 +1683,14 @@ export function CompanyDetailManager({
                               onChange={(e) => setSupCurrency(e.target.value)}
                               className="w-full rounded border border-zinc-200 p-1 text-xs outline-none bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
                             >
+                              <option value="">미지정 (Not Set)</option>
                               <option value="USD">USD ($)</option>
                               <option value="KRW">KRW (₩)</option>
                               <option value="EUR">EUR (€)</option>
                               <option value="JPY">JPY (¥)</option>
                             </select>
                           ) : (
-                            <span className="font-semibold text-zinc-900 dark:text-white">{supplierProfile?.default_currency || "USD"}</span>
+                            <span className="font-semibold text-zinc-900 dark:text-white">{supplierProfile?.default_currency || "미지정"}</span>
                           )}
                         </div>
 
@@ -1700,6 +1703,7 @@ export function CompanyDetailManager({
                                 onChange={(e) => setSupPaymentTerms(e.target.value)}
                                 className="w-full rounded border border-zinc-200 p-1 text-xs outline-none bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
                               >
+                                <option value="">미지정 (Not Set)</option>
                                 <option value="Prepaid 100%">Prepaid 100%</option>
                                 <option value="30% Deposit / 70% Balance">30% Deposit / 70% Balance</option>
                                 <option value="50% Deposit / 50% Balance">50% Deposit / 50% Balance</option>
@@ -1722,7 +1726,7 @@ export function CompanyDetailManager({
                             <span className="font-semibold text-zinc-900 dark:text-white">
                               {supplierProfile?.default_payment_terms === "Custom"
                                 ? `Custom: ${supplierProfile?.default_payment_terms_custom || ""}`
-                                : supplierProfile?.default_payment_terms || "Prepaid 100%"}
+                                : supplierProfile?.default_payment_terms || "미지정"}
                             </span>
                           )}
                         </div>
@@ -1735,6 +1739,7 @@ export function CompanyDetailManager({
                               onChange={(e) => setSupIncoterms(e.target.value)}
                               className="w-full rounded border border-zinc-200 p-1 text-xs outline-none bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
                             >
+                              <option value="">미지정 (Not Set)</option>
                               <option value="EXW">EXW</option>
                               <option value="FOB">FOB</option>
                               <option value="CIF">CIF</option>
@@ -1742,22 +1747,34 @@ export function CompanyDetailManager({
                               <option value="DAP">DAP</option>
                             </select>
                           ) : (
-                            <span className="font-semibold text-zinc-900 dark:text-white">{supplierProfile?.default_incoterms || "EXW"}</span>
+                            <span className="font-semibold text-zinc-900 dark:text-white">{supplierProfile?.default_incoterms || "미지정"}</span>
                           )}
                         </div>
 
                         <div>
                           <label className="text-[10px] font-bold text-zinc-400 block mb-1">기본 출고지 주소 (Ship-from Address)</label>
                           {isEditingSupplier ? (
-                            <input
-                              type="text"
-                              value={supShipFrom}
-                              onChange={(e) => setSupShipFrom(e.target.value)}
-                              className="w-full rounded border border-zinc-200 p-1.5 text-xs outline-none bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
-                              placeholder="예: 경기도 화성시 양감면 초록로..."
-                            />
+                            <select
+                              value={supShipFromWarehouseId}
+                              onChange={(e) => setSupShipFromWarehouseId(e.target.value)}
+                              className="w-full rounded border border-zinc-200 p-1 text-xs outline-none bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+                            >
+                              <option value="">회사 기본 주소 사용 (미지정)</option>
+                              {warehouses.map((wh: any) => (
+                                <option key={wh.id} value={wh.id}>
+                                  [{wh.code}] {wh.name} ({wh.address1})
+                                </option>
+                              ))}
+                            </select>
                           ) : (
-                            <span className="font-semibold text-zinc-900 dark:text-white">{supplierProfile?.default_ship_from_address || "등록 없음"}</span>
+                            <span className="font-semibold text-zinc-900 dark:text-white">
+                              {(() => {
+                                const selectedWh = warehouses.find(w => w.id === supplierProfile?.default_ship_from_warehouse_id);
+                                return selectedWh 
+                                  ? `[${selectedWh.code}] ${selectedWh.name} (${selectedWh.address1})`
+                                  : "회사 기본 주소 사용 (미지정)";
+                              })()}
+                            </span>
                           )}
                         </div>
 

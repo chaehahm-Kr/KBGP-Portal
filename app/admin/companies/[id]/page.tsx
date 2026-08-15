@@ -26,7 +26,7 @@ export default async function AdminCompanyDetailPage({
     const { data: company } = await supabase
       .from("companies")
       .select(
-        "id, name, business_registration_number, country, contact_name, contact_phone, intro, status, created_at"
+        "id, name, business_registration_number, country, contact_name, contact_phone, intro, status, created_at, company_code, company_roles(role)"
       )
       .eq("id", id)
       .single();
@@ -262,37 +262,69 @@ export default async function AdminCompanyDetailPage({
       .eq("staff_id", session.userId);
     const isSuperAdmin = (userRoles ?? []).some((r) => r.role === "super_admin");
 
-    // Fetch staff member department to check for Finance department
-    const { data: staff } = await admin
-      .from("staff_members")
-      .select("department_id")
-      .eq("id", session.userId)
-      .single();
+    // Check if user is assigned settlement_inquiry for this company (Finance User check)
+    const { data: assignment } = await admin
+      .from("company_task_assignments")
+      .select("id")
+      .eq("company_id", id)
+      .eq("staff_id", session.userId)
+      .eq("task_code", "settlement_inquiry")
+      .maybeSingle();
     
-    let isFinanceUser = false;
-    if (staff?.department_id) {
-      const { data: dept } = await admin
-        .from("departments")
-        .select("name")
-        .eq("id", staff.department_id)
-        .single();
-      if (dept?.name === "Finance") {
-        isFinanceUser = true;
-      }
-    }
+    const isFinanceUser = !!assignment;
 
-    // Fetch Supplier Profile and Remittance details
+    // Fetch Supplier Profile
     const { data: supplierProfile } = await admin
       .from("supplier_profiles")
       .select("*")
       .eq("company_id", id)
       .maybeSingle();
 
-    const { data: supplierRemittance } = await admin
+    // Fetch Supplier Remittance and mask it if unauthorized
+    let supplierRemittance = null;
+    const { data: dbRemittance } = await admin
       .from("supplier_remittances")
       .select("*")
       .eq("company_id", id)
       .maybeSingle();
+
+    if (dbRemittance) {
+      if (isSuperAdmin || isFinanceUser) {
+        supplierRemittance = dbRemittance;
+      } else {
+        // General admin masking
+        const rawAcc = dbRemittance.account_number || "";
+        const maskedAcc = rawAcc.length > 4
+          ? "••••••••" + rawAcc.slice(-4)
+          : rawAcc ? "••••" : "";
+
+        supplierRemittance = {
+          company_id: dbRemittance.company_id,
+          bank_name: dbRemittance.bank_name || null,
+          account_number: maskedAcc || null,
+          payment_method: dbRemittance.payment_method || null,
+          beneficiary_name: null,
+          beneficiary_address: null,
+          bank_address: null,
+          bank_country: null,
+          swift_bic: null,
+          routing_number: null,
+          account_currency: dbRemittance.account_currency || "USD",
+          intermediary_bank_info: null,
+          remittance_note: null,
+          created_at: dbRemittance.created_at,
+          updated_at: dbRemittance.updated_at,
+        };
+      }
+    }
+
+    // Fetch warehouses of this company
+    const { data: warehouses } = await admin
+      .from("warehouses")
+      .select("id, name, code, address1, city, state, zip_code, country")
+      .eq("company_id", id)
+      .eq("status", "active")
+      .order("created_at", { ascending: true });
 
     return (
       <CompanyDetailManager
@@ -310,6 +342,7 @@ export default async function AdminCompanyDetailPage({
         isFinanceUser={isFinanceUser}
         initialSupplierProfile={supplierProfile || null}
         initialSupplierRemittance={supplierRemittance || null}
+        warehouses={warehouses || []}
       />
     );
   } catch (err: any) {

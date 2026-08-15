@@ -47,6 +47,10 @@ export async function parseCompanyMetadata(company: any): Promise<CompanyParsedM
   let types: string[] = ["Brand Owner"];
   let companyCode = company.company_code || "";
 
+  if (company.company_roles && Array.isArray(company.company_roles)) {
+    types = company.company_roles.map((r: any) => r.role);
+  }
+
   if (intro.startsWith("__COMPANY_METADATA__:")) {
     try {
       const jsonStr = intro.substring("__COMPANY_METADATA__:".length);
@@ -65,10 +69,13 @@ export async function parseCompanyMetadata(company: any): Promise<CompanyParsedM
       const logoPath = data.logo_path || null;
       const logoUrl = logoPath ? await getSignedFileUrl(logoPath) : null;
 
-      if (Array.isArray(data.types)) {
-        types = data.types;
-      } else if (typeof data.type === "string" && data.type) {
-        types = [data.type];
+      // If roles not already fetched from company_roles table, fallback to metadata types
+      if (!company.company_roles) {
+        if (Array.isArray(data.types)) {
+          types = data.types;
+        } else if (typeof data.type === "string" && data.type) {
+          types = [data.type];
+        }
       }
 
       return {
@@ -127,8 +134,8 @@ export async function parseCompanyMetadata(company: any): Promise<CompanyParsedM
     website: "",
     adminMemo: "",
     contacts: defaultContacts,
-    type: "Brand Owner",
-    types: ["Brand Owner"],
+    type: types[0] || "Brand Owner",
+    types: types,
     companyCode,
     status: company.status === "active" ? "Active" : "Inactive",
     logoPath: null,
@@ -267,10 +274,35 @@ export async function updateCompanyAdminMetadata(
     throw new Error(`회사 정보 수정 실패: ${error.message}`);
   }
 
-  // Clean up supplier tables if 'Supplier' role is deselected
+  // Sync normalized company_roles table
+  // Clear old roles
+  const { error: delRolesErr } = await supabase
+    .from("company_roles")
+    .delete()
+    .eq("company_id", companyId);
+
+  if (delRolesErr) {
+    throw new Error(`회사 역할 정보 초기화 실패: ${delRolesErr.message}`);
+  }
+
+  // Insert new roles
+  if (payload.types.length > 0) {
+    const roleInserts = payload.types.map(role => ({ company_id: companyId, role }));
+    const { error: insRolesErr } = await supabase
+      .from("company_roles")
+      .insert(roleInserts);
+
+    if (insRolesErr) {
+      throw new Error(`회사 역할 정보 저장 실패: ${insRolesErr.message}`);
+    }
+  }
+
+  // Inactivate supplier profile if 'Supplier' role is deselected (preserve data)
   if (!payload.types.includes("Supplier")) {
-    await supabase.from("supplier_profiles").delete().eq("company_id", companyId);
-    await supabase.from("supplier_remittances").delete().eq("company_id", companyId);
+    await supabase
+      .from("supplier_profiles")
+      .update({ status: "inactive" })
+      .eq("company_id", companyId);
   }
 
   revalidatePath(`/admin/companies/${companyId}`);
@@ -663,7 +695,7 @@ export async function adminSaveSupplierData(
     default_payment_terms: string;
     default_payment_terms_custom?: string;
     default_incoterms?: string;
-    default_ship_from_address?: string;
+    default_ship_from_warehouse_id?: string | null;
     default_port_of_loading?: string;
     default_production_lead_time?: string;
     default_moq?: number | null;
@@ -696,23 +728,16 @@ export async function adminSaveSupplierData(
       .eq("staff_id", userId);
     const isSuperAdmin = (userRoles ?? []).some((r) => r.role === "super_admin");
 
-    let isFinanceUser = false;
-    const { data: staff } = await supabase
-      .from("staff_members")
-      .select("department_id")
-      .eq("id", userId)
-      .single();
+    // Check if user is assigned settlement_inquiry for this company
+    const { data: assignment } = await supabase
+      .from("company_task_assignments")
+      .select("id")
+      .eq("company_id", companyId)
+      .eq("staff_id", userId)
+      .eq("task_code", "settlement_inquiry")
+      .maybeSingle();
 
-    if (staff?.department_id) {
-      const { data: dept } = await supabase
-        .from("departments")
-        .select("name")
-        .eq("id", staff.department_id)
-        .single();
-      if (dept?.name === "Finance") {
-        isFinanceUser = true;
-      }
-    }
+    const isFinanceUser = !!assignment;
 
     if (!isSuperAdmin && !isFinanceUser) {
       throw new Error("은행 송금 정보(Remittance)를 수정할 권한이 없습니다.");
@@ -725,11 +750,11 @@ export async function adminSaveSupplierData(
     .upsert({
       company_id: companyId,
       status: profile.status,
-      default_currency: profile.default_currency,
-      default_payment_terms: profile.default_payment_terms,
+      default_currency: profile.default_currency || null,
+      default_payment_terms: profile.default_payment_terms || null,
       default_payment_terms_custom: profile.default_payment_terms_custom || null,
       default_incoterms: profile.default_incoterms || null,
-      default_ship_from_address: profile.default_ship_from_address || null,
+      default_ship_from_warehouse_id: profile.default_ship_from_warehouse_id || null,
       default_port_of_loading: profile.default_port_of_loading || null,
       default_production_lead_time: profile.default_production_lead_time || null,
       default_moq: profile.default_moq !== undefined ? profile.default_moq : null,

@@ -81,7 +81,8 @@ export default function Sidebar({ isCollapsed, toggleCollapse }: SidebarProps) {
       name: "Products",
       icon: ProductsIcon,
       subItems: [
-        { name: "All Products", href: "/admin/products" },
+        { name: "Product Catalog", href: "/admin/products" },
+        { name: "Trading Products", href: "/admin/products/trading" },
         { name: "Compliance", href: "/admin/products?status=compliance" },
         { name: "Pricing & Profitability", href: "/admin/products/pricing-profitability" },
         { name: "Curation", href: "/admin/products/curation" },
@@ -264,7 +265,8 @@ export default function Sidebar({ isCollapsed, toggleCollapse }: SidebarProps) {
                   {item.subItems?.map((sub) => {
                     const isSubActive = pathname === sub.href ||
                       (sub.href === "/admin/insights" && pathname.startsWith("/admin/insights")) ||
-                      (sub.href === "/admin/knowledge" && pathname.startsWith("/admin/knowledge"));
+                      (sub.href === "/admin/knowledge" && pathname.startsWith("/admin/knowledge")) ||
+                      (sub.href === "/admin/products/trading" && pathname.startsWith("/admin/products/trading"));
 
                     return (
                       <Link
