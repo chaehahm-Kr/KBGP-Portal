@@ -71,6 +71,19 @@ export default async function AdminTradingProductsPage() {
     .select("id, product_id, storage_path, position")
     .order("position", { ascending: true });
 
+  // 6. Fetch all inventory balances to compute sum totals per product
+  const { data: allBalances } = await supabase
+    .from("inventory_balances")
+    .select("product_id, qty_on_hand, qty_hold");
+
+  const onHandByProduct = new Map<string, number>();
+  const holdByProduct = new Map<string, number>();
+
+  (allBalances ?? []).forEach((b) => {
+    onHandByProduct.set(b.product_id, (onHandByProduct.get(b.product_id) || 0) + b.qty_on_hand);
+    holdByProduct.set(b.product_id, (holdByProduct.get(b.product_id) || 0) + b.qty_hold);
+  });
+
   const resolvedProducts = await Promise.all(
     (products ?? []).map(async (p) => {
       // Find the first image for this product
@@ -88,6 +101,10 @@ export default async function AdminTradingProductsPage() {
       const effectiveBrandId = p.brand_id;
       const effectiveNameEn = adminOverrides.name_en !== undefined && adminOverrides.name_en !== "" ? adminOverrides.name_en : p.name_en;
       const effectiveManufactureSku = adminOverrides.manufacture_sku !== undefined && adminOverrides.manufacture_sku !== "" ? adminOverrides.manufacture_sku : p.manufacture_sku;
+
+      const totalOnHand = onHandByProduct.get(p.id) || 0;
+      const totalHold = holdByProduct.get(p.id) || 0;
+      const totalAvailable = totalOnHand - totalHold;
 
       return {
         id: p.id,
@@ -109,6 +126,8 @@ export default async function AdminTradingProductsPage() {
         trading_status: p.trading_status || "inactive",
         category_code: p.category_code || null,
         category_full_path: p.category_code ? getCategoryFullPath(p.category_code) : null,
+        qty_on_hand: totalOnHand,
+        qty_available: totalAvailable,
       };
     })
   );

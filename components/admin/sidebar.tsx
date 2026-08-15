@@ -40,6 +40,7 @@ export default function Sidebar({ isCollapsed, toggleCollapse }: SidebarProps) {
     Applications: false,
     "Companies & Brands": false,
     Products: false,
+    Inventory: false,
     "Retail Network": false,
     "Sales & Performance": false,
     "Growth Simulator": false,
@@ -56,6 +57,7 @@ export default function Sidebar({ isCollapsed, toggleCollapse }: SidebarProps) {
       Applications: pathname.startsWith("/admin/applications"),
       "Companies & Brands": pathname.startsWith("/admin/companies") || pathname.startsWith("/admin/brands"),
       Products: pathname.startsWith("/admin/products"),
+      Inventory: pathname.startsWith("/admin/inventory"),
       "Retail Network": pathname.startsWith("/admin/stores"),
       "Sales & Performance": pathname.startsWith("/admin/sales"),
       "Growth Simulator": pathname.startsWith("/admin/simulator"),
@@ -86,6 +88,13 @@ export default function Sidebar({ isCollapsed, toggleCollapse }: SidebarProps) {
         { name: "Compliance", href: "/admin/products?status=compliance" },
         { name: "Pricing & Profitability", href: "/admin/products/pricing-profitability" },
         { name: "Curation", href: "/admin/products/curation" },
+      ],
+    },
+    {
+      name: "Inventory",
+      icon: TasksIcon,
+      subItems: [
+        { name: "Inventory Overview", href: "/admin/inventory" },
       ],
     },
     {

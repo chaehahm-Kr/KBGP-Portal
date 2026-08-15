@@ -23,6 +23,8 @@ interface TradingProductItem {
   trading_status: string;
   category_code?: string | null;
   category_full_path?: string | null;
+  qty_on_hand: number;
+  qty_available: number;
 }
 
 interface TradingProductsListProps {
@@ -234,6 +236,8 @@ export function TradingProductsList({ initialProducts }: TradingProductsListProp
                 <th className="px-6 py-3.5 whitespace-nowrap">제품명</th>
                 <th className="px-6 py-3.5 whitespace-nowrap">회사명</th>
                 <th className="px-6 py-3.5 whitespace-nowrap">브랜드</th>
+                <th className="px-6 py-3.5 whitespace-nowrap text-right">실재고 (On Hand)</th>
+                <th className="px-6 py-3.5 whitespace-nowrap text-right">가용재고 (Available)</th>
                 <th className="px-6 py-3.5 whitespace-nowrap">판매 상태</th>
                 <th className="px-6 py-3.5 whitespace-nowrap">운영 상태</th>
                 <th className="px-6 py-3.5 whitespace-nowrap text-right">관리</th>
@@ -309,6 +313,16 @@ export function TradingProductsList({ initialProducts }: TradingProductsListProp
                       {product.brandName}
                     </td>
 
+                    {/* Qty On Hand */}
+                    <td className="px-6 py-4 align-middle text-right font-mono font-bold text-zinc-900 dark:text-white">
+                      {product.qty_on_hand}
+                    </td>
+
+                    {/* Qty Available */}
+                    <td className="px-6 py-4 align-middle text-right font-mono font-bold text-emerald-600 dark:text-emerald-450">
+                      {product.qty_available}
+                    </td>
+
                     {/* Sales Status */}
                     <td className="px-6 py-4 align-middle">
                       <span className={`inline-flex items-center rounded px-2.5 py-0.5 text-[10px] font-bold border ${SALES_COLORS[product.sales_status] || SALES_COLORS.PREPARING}`}>
@@ -337,7 +351,7 @@ export function TradingProductsList({ initialProducts }: TradingProductsListProp
               })}
               {filteredProducts.length === 0 && (
                 <tr>
-                  <td colSpan={9} className="py-12 text-center text-zinc-400 dark:text-zinc-500">
+                  <td colSpan={11} className="py-12 text-center text-zinc-400 dark:text-zinc-500">
                     거래 대상 제품이 존재하지 않습니다.
                   </td>
                 </tr>

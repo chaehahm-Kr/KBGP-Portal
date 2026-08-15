@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getSignedFileUrl } from "@/lib/files/storage";
 import { TradingProductDetail } from "@/components/admin/trading-product-detail";
+import { getProductInventory } from "@/lib/inventory/actions";
 
 export const metadata: Metadata = {
   title: "제품 운영 정보 (360° View) | K SELECT NETWORK 어드민",
@@ -110,9 +111,26 @@ export default async function AdminTradingProductDetailPage({
     price_usd_fob: adminOverrides.price_usd_fob !== undefined ? parseFloat(adminOverrides.price_usd_fob) : (product.price_usd_fob || 0),
   };
 
+  // Get detailed inventory breakdown and movement logs
+  const { balances, movements } = await getProductInventory(id);
+
+  // Fetch active warehouses for Opening Balance / Adjustment inputs
+  const { data: dbWarehouses } = await supabase
+    .from("warehouses")
+    .select("id, name, code, status")
+    .eq("status", "active")
+    .order("name", { ascending: true });
+
+  const warehouses = dbWarehouses ?? [];
+
   return (
     <div className="space-y-6">
-      <TradingProductDetail product={resolvedProduct} />
+      <TradingProductDetail
+        product={resolvedProduct}
+        initialBalances={balances}
+        initialMovements={movements}
+        warehouses={warehouses}
+      />
     </div>
   );
 }

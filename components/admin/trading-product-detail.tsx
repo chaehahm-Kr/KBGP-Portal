@@ -1,7 +1,10 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import Link from "next/link";
+import { recordOpeningBalance, recordManualAdjustment } from "@/lib/inventory/actions";
+import { useRouter } from "next/navigation";
+
 const ArrowLeftIcon = ({ className }: { className?: string }) => (
   <svg
     xmlns="http://www.w3.org/2000/svg"
@@ -42,8 +45,41 @@ interface ResolvedProduct {
   price_usd_fob: number;
 }
 
+interface InventoryBalanceItem {
+  id: string;
+  product_id: string;
+  warehouse_id: string;
+  qty_on_hand: number;
+  qty_hold: number;
+  available: number;
+  created_at: string;
+  updated_at: string;
+  warehouse_name: string;
+  warehouse_code: string;
+  warehouse_status: string;
+}
+
+interface InventoryMovementItem {
+  id: string;
+  product_id: string;
+  warehouse_id: string;
+  type: "OPENING_BALANCE" | "MANUAL_ADJUSTMENT" | "RECEIVING" | "SHIPMENT" | "TRANSFER";
+  qty_change: number;
+  qty_hold_change: number;
+  balance_on_hand_after: number;
+  balance_hold_after: number;
+  reason: string | null;
+  note: string | null;
+  created_by: string | null;
+  created_at: string;
+  creator_name?: string;
+}
+
 interface TradingProductDetailProps {
   product: ResolvedProduct;
+  initialBalances: InventoryBalanceItem[];
+  initialMovements: InventoryMovementItem[];
+  warehouses: any[]; // List of active warehouses
 }
 
 const SALES_COLORS: Record<string, string> = {
@@ -60,7 +96,121 @@ const SALES_LABELS: Record<string, string> = {
   ENDED: "판매 종료",
 };
 
-export function TradingProductDetail({ product }: TradingProductDetailProps) {
+const MOVEMENT_LABELS: Record<string, string> = {
+  OPENING_BALANCE: "기초 재고 등록",
+  MANUAL_ADJUSTMENT: "수동 조정",
+  RECEIVING: "입고 완료",
+  SHIPMENT: "출고 완료",
+  TRANSFER: "창고 이동",
+};
+
+export function TradingProductDetail({
+  product,
+  initialBalances,
+  initialMovements,
+  warehouses,
+}: TradingProductDetailProps) {
+  const router = useRouter();
+  
+  // Aggregate inventory totals
+  const totalOnHand = initialBalances.reduce((sum, b) => sum + b.qty_on_hand, 0);
+  const totalHold = initialBalances.reduce((sum, b) => sum + b.qty_hold, 0);
+  const totalAvailable = totalOnHand - totalHold;
+
+  // Modals state
+  const [isOpeningModalOpen, setIsOpeningModalOpen] = useState(false);
+  const [isAdjustmentModalOpen, setIsAdjustmentModalOpen] = useState(false);
+  
+  // Opening Balance Form
+  const [openWarehouseId, setOpenWarehouseId] = useState("");
+  const [openQty, setOpenQty] = useState("0");
+  const [openNote, setOpenNote] = useState("");
+  const [openError, setOpenError] = useState("");
+  const [isOpeningSubmitting, setIsOpeningSubmitting] = useState(false);
+
+  // Manual Adjustment Form
+  const [adjWarehouseId, setAdjWarehouseId] = useState("");
+  const [adjQtyChange, setAdjQtyChange] = useState("0");
+  const [adjQtyHoldChange, setAdjQtyHoldChange] = useState("0");
+  const [adjReason, setAdjReason] = useState("Physical Count Difference");
+  const [adjNote, setAdjNote] = useState("");
+  const [adjError, setAdjError] = useState("");
+  const [isAdjustmentSubmitting, setIsAdjustmentSubmitting] = useState(false);
+
+  // Submit Opening Balance
+  const handleOpenSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setOpenError("");
+    setIsOpeningSubmitting(true);
+
+    try {
+      if (!openWarehouseId) {
+        throw new Error("물류창고를 선택해 주세요.");
+      }
+      const qty = parseInt(openQty);
+      if (isNaN(qty) || qty < 0) {
+        throw new Error("올바른 수량을 입력해 주세요 (0 이상).");
+      }
+
+      await recordOpeningBalance(product.id, openWarehouseId, qty, openNote);
+      
+      // Reset & Close
+      setOpenWarehouseId("");
+      setOpenQty("0");
+      setOpenNote("");
+      setIsOpeningModalOpen(false);
+      router.refresh();
+    } catch (err: any) {
+      setOpenError(err.message || "기초 재고 입력 중 오류가 발생했습니다.");
+    } finally {
+      setIsOpeningSubmitting(false);
+    }
+  };
+
+  // Submit Manual Adjustment
+  const handleAdjSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAdjError("");
+    setIsAdjustmentSubmitting(true);
+
+    try {
+      if (!adjWarehouseId) {
+        throw new Error("물류창고를 선택해 주세요.");
+      }
+      const qtyChange = parseInt(adjQtyChange);
+      const qtyHoldChange = parseInt(adjQtyHoldChange);
+
+      if (isNaN(qtyChange) || isNaN(qtyHoldChange)) {
+        throw new Error("올바른 변동 수량을 입력해 주세요.");
+      }
+      if (qtyChange === 0 && qtyHoldChange === 0) {
+        throw new Error("변동 수량이 최소한 하나는 0이 아니어야 합니다.");
+      }
+
+      await recordManualAdjustment(
+        product.id,
+        adjWarehouseId,
+        qtyChange,
+        qtyHoldChange,
+        adjReason,
+        adjNote
+      );
+
+      // Reset & Close
+      setAdjWarehouseId("");
+      setAdjQtyChange("0");
+      setAdjQtyHoldChange("0");
+      setAdjReason("Physical Count Difference");
+      setAdjNote("");
+      setIsAdjustmentModalOpen(false);
+      router.refresh();
+    } catch (err: any) {
+      setAdjError(err.message || "재고 조정 중 오류가 발생했습니다.");
+    } finally {
+      setIsAdjustmentSubmitting(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Breadcrumb & Navigation */}
@@ -170,24 +320,157 @@ export function TradingProductDetail({ product }: TradingProductDetailProps) {
         {/* Right Side: Operational Information (Future Modules Placeholders) */}
         <div className="lg:col-span-2 space-y-6">
           
-          {/* Section: Inventory Summary */}
-          <div className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 space-y-3">
-            <h3 className="text-sm font-bold text-zinc-800 dark:text-white">물류창고 재고 현황 (Inventory Summary)</h3>
-            <div className="rounded-xl border border-dashed border-zinc-200 dark:border-zinc-800 p-6 flex flex-col items-center justify-center text-center bg-zinc-50/50 dark:bg-zinc-950/20">
-              <span className="text-zinc-400 dark:text-zinc-500 text-xs font-semibold">Inventory module is not connected yet.</span>
-              <p className="text-[10px] text-zinc-400 dark:text-zinc-650 mt-1 max-w-sm">
-                향후 Inventory 및 Warehouse 설정 기능이 활성화되면 각 물류창고별 실시간 가용 재고(On Hand, Available, Incoming) 수치가 이 영역에 집계됩니다.
-              </p>
+          {/* Section: Inventory Summary (Active Connected State) */}
+          <div className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 space-y-4">
+            <div className="flex justify-between items-center border-b border-zinc-100 pb-2 dark:border-zinc-800">
+              <h3 className="text-sm font-bold text-zinc-800 dark:text-white">물류창고 재고 현황 (Inventory Summary)</h3>
+              
+              {/* Actions trigger */}
+              <div className="flex items-center gap-2">
+                {/* Disable opening balance if already has warehouse records */}
+                <button
+                  onClick={() => setIsOpeningModalOpen(true)}
+                  className="px-2.5 py-1 text-[10px] font-bold bg-zinc-100 text-zinc-700 hover:bg-zinc-200 dark:bg-zinc-850 dark:text-zinc-300 dark:hover:bg-zinc-800 rounded transition-all cursor-pointer"
+                >
+                  + 기초 재고 등록
+                </button>
+                {initialBalances.length > 0 && (
+                  <button
+                    onClick={() => setIsAdjustmentModalOpen(true)}
+                    className="px-2.5 py-1 text-[10px] font-bold bg-zinc-950 text-white hover:bg-zinc-900 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-100 rounded transition-all cursor-pointer"
+                  >
+                    ± 수동 재고 조정
+                  </button>
+                )}
+              </div>
             </div>
+
+            {/* Total Balance Stats Card */}
+            <div className="grid grid-cols-3 gap-4 p-4 rounded-xl bg-zinc-50 dark:bg-zinc-950 border border-zinc-100 dark:border-zinc-900 text-center">
+              <div>
+                <span className="text-[10px] font-bold text-zinc-450 dark:text-zinc-500 uppercase block mb-1">Total On Hand (실재고)</span>
+                <span className="text-lg font-bold text-zinc-900 dark:text-white">{totalOnHand}</span>
+              </div>
+              <div>
+                <span className="text-[10px] font-bold text-zinc-450 dark:text-zinc-500 uppercase block mb-1">Available (가용재고)</span>
+                <span className="text-lg font-bold text-emerald-600 dark:text-emerald-400">{totalAvailable}</span>
+              </div>
+              <div>
+                <span className="text-[10px] font-bold text-zinc-450 dark:text-zinc-500 uppercase block mb-1">On Hold (보류재고)</span>
+                <span className="text-lg font-bold text-rose-500 dark:text-rose-400">{totalHold}</span>
+              </div>
+            </div>
+
+            {/* Warehouse Breakdowns */}
+            {initialBalances.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-zinc-200 dark:border-zinc-800 p-6 flex flex-col items-center justify-center text-center bg-zinc-50/20 dark:bg-zinc-950/5">
+                <span className="text-zinc-400 dark:text-zinc-500 text-xs font-semibold">등록된 물류창고 재고가 없습니다.</span>
+                <p className="text-[10px] text-zinc-400 dark:text-zinc-650 mt-1 max-w-sm">
+                  이 상품에 대해 최초 재고를 입력하려면 상단의 "+ 기초 재고 등록" 버튼을 클릭하여 시작해 주십시오.
+                </p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto rounded-lg border border-zinc-150 dark:border-zinc-800/80">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="bg-zinc-50/50 text-zinc-500 font-bold border-b border-zinc-150 dark:bg-zinc-900/50 dark:border-zinc-800 dark:text-zinc-350">
+                      <th className="px-4 py-2.5">창고 코드</th>
+                      <th className="px-4 py-2.5">물류창고명</th>
+                      <th className="px-4 py-2.5 text-right">실재고 (On Hand)</th>
+                      <th className="px-4 py-2.5 text-right">보류재고 (Hold)</th>
+                      <th className="px-4 py-2.5 text-right">가용재고 (Available)</th>
+                      <th className="px-4 py-2.5 text-right">최종 업데이트</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
+                    {initialBalances.map((b) => (
+                      <tr key={b.id} className="hover:bg-zinc-50/30 dark:hover:bg-zinc-850/5">
+                        <td className="px-4 py-3 font-mono font-bold text-zinc-900 dark:text-white">[{b.warehouse_code}]</td>
+                        <td className="px-4 py-3 font-medium text-zinc-800 dark:text-zinc-300">{b.warehouse_name}</td>
+                        <td className="px-4 py-3 text-right font-semibold text-zinc-900 dark:text-white">{b.qty_on_hand}</td>
+                        <td className="px-4 py-3 text-right font-semibold text-rose-500 dark:text-rose-455">{b.qty_hold}</td>
+                        <td className="px-4 py-3 text-right font-bold text-emerald-600 dark:text-emerald-400">{b.available}</td>
+                        <td className="px-4 py-3 text-right text-zinc-400 dark:text-zinc-600 font-mono text-[10px]">
+                          {new Date(b.updated_at).toLocaleString("ko-KR")}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
 
-          {/* Section: Purchase & Receiving History */}
+          {/* Section: Inventory Movement Logs (Audit Trail) */}
           <div className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 space-y-3">
-            <h3 className="text-sm font-bold text-zinc-800 dark:text-white">구매 및 입출고 내역 (Purchase / Receiving History)</h3>
+            <h3 className="text-sm font-bold text-zinc-800 dark:text-white">재고 변동 이력 (Inventory Movement History)</h3>
+            {initialMovements.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-zinc-200 dark:border-zinc-800 p-6 flex flex-col items-center justify-center text-center bg-zinc-50/20 dark:bg-zinc-950/5 text-zinc-400">
+                변동 이력이 아직 없습니다.
+              </div>
+            ) : (
+              <div className="overflow-x-auto rounded-lg border border-zinc-150 dark:border-zinc-800/80">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="bg-zinc-50/50 text-zinc-500 font-bold border-b border-zinc-150 dark:bg-zinc-900/50 dark:border-zinc-800 dark:text-zinc-350">
+                      <th className="px-4 py-2.5">처리 일시</th>
+                      <th className="px-4 py-2.5">변동 유형</th>
+                      <th className="px-4 py-2.5 text-right">실재고 변동</th>
+                      <th className="px-4 py-2.5 text-right">보류재고 변동</th>
+                      <th className="px-4 py-2.5 text-right">처리 후 실재고</th>
+                      <th className="px-4 py-2.5 text-right">처리 후 보류</th>
+                      <th className="px-4 py-2.5">사유 / 비고</th>
+                      <th className="px-4 py-2.5">작업자</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
+                    {initialMovements.map((m) => (
+                      <tr key={m.id} className="hover:bg-zinc-50/30 dark:hover:bg-zinc-850/5">
+                        <td className="px-4 py-3 font-mono text-[10px] text-zinc-450 dark:text-zinc-500 whitespace-nowrap">
+                          {new Date(m.created_at).toLocaleString("ko-KR")}
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          <span className="font-bold text-zinc-800 dark:text-zinc-350">{MOVEMENT_LABELS[m.type] || m.type}</span>
+                        </td>
+                        <td className="px-4 py-3 text-right font-mono font-bold whitespace-nowrap">
+                          {m.qty_change > 0 ? (
+                            <span className="text-emerald-600">+{m.qty_change}</span>
+                          ) : m.qty_change < 0 ? (
+                            <span className="text-rose-500">{m.qty_change}</span>
+                          ) : (
+                            <span className="text-zinc-400">0</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-right font-mono font-bold whitespace-nowrap">
+                          {m.qty_hold_change > 0 ? (
+                            <span className="text-rose-600">+{m.qty_hold_change}</span>
+                          ) : m.qty_hold_change < 0 ? (
+                            <span className="text-emerald-500">{m.qty_hold_change}</span>
+                          ) : (
+                            <span className="text-zinc-400">0</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-right font-mono text-zinc-600 dark:text-zinc-400 font-semibold">{m.balance_on_hand_after}</td>
+                        <td className="px-4 py-3 text-right font-mono text-rose-500 dark:text-rose-455 font-semibold">{m.balance_hold_after}</td>
+                        <td className="px-4 py-3 max-w-[150px] truncate text-zinc-600 dark:text-zinc-400" title={m.note || ""}>
+                          {m.reason ? `[${m.reason}] ` : ""}{m.note || "-"}
+                        </td>
+                        <td className="px-4 py-3 text-zinc-500 dark:text-zinc-400 whitespace-nowrap font-medium">{m.creator_name}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          {/* Section: Purchase & Receiving History (Locked/Disconnected) */}
+          <div className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 space-y-3">
+            <h3 className="text-sm font-bold text-zinc-800 dark:text-white">구매 및 입출고 거래 내역 (PO / Receiving History)</h3>
             <div className="rounded-xl border border-dashed border-zinc-200 dark:border-zinc-800 p-6 flex flex-col items-center justify-center text-center bg-zinc-50/50 dark:bg-zinc-950/20">
               <span className="text-zinc-400 dark:text-zinc-500 text-xs font-semibold">No purchasing or receiving data available yet.</span>
               <p className="text-[10px] text-zinc-400 dark:text-zinc-650 mt-1 max-w-sm">
-                실제 발주(Purchase Order) 및 입고 검수(Receiving) 기록이 발생하면 상세 타임라인이 여기에 누적되어 표시됩니다.
+                향후 PO 발주 및 Receiving 거래 전표 모듈이 연결되면, 해당 트랜잭션을 기반으로 발생한 입출고 내역이 여기에 별도로 통합 집계됩니다.
               </p>
             </div>
           </div>
@@ -218,6 +501,220 @@ export function TradingProductDetail({ product }: TradingProductDetailProps) {
 
         </div>
       </div>
+
+      {/* Modal 1: Opening Balance Form */}
+      {isOpeningModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/40 backdrop-blur-sm p-4">
+          <div className="w-full max-w-md rounded-xl border border-zinc-200 bg-white p-6 shadow-xl dark:border-zinc-800 dark:bg-zinc-900 space-y-4">
+            <div className="flex justify-between items-center border-b border-zinc-150 pb-2.5 dark:border-zinc-800">
+              <h4 className="text-sm font-bold text-zinc-800 dark:text-white">기초 재고 입력 (Opening Balance)</h4>
+              <button
+                onClick={() => {
+                  setIsOpeningModalOpen(false);
+                  setOpenError("");
+                }}
+                className="text-zinc-450 hover:text-zinc-800 dark:text-zinc-500 dark:hover:text-white text-sm"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleOpenSubmit} className="space-y-4 text-xs">
+              {openError && (
+                <div className="p-2.5 rounded bg-rose-50 border border-rose-200 text-rose-600 font-bold dark:bg-rose-950/10 dark:border-rose-900/50 dark:text-rose-400">
+                  {openError}
+                </div>
+              )}
+
+              {/* Warehouse selector */}
+              <div className="space-y-1.5">
+                <label className="font-bold text-zinc-500 dark:text-zinc-400">물류창고 선택</label>
+                <select
+                  value={openWarehouseId}
+                  onChange={(e) => setOpenWarehouseId(e.target.value)}
+                  className="w-full rounded border border-zinc-200 p-2.5 text-xs text-zinc-900 bg-zinc-50 dark:border-zinc-850 dark:bg-zinc-950 dark:text-white outline-none"
+                  required
+                >
+                  <option value="">-- 창고를 선택해 주세요 --</option>
+                  {warehouses.map((wh) => {
+                    // Check if already has balance in this warehouse
+                    const alreadyExists = initialBalances.some((b) => b.warehouse_id === wh.id);
+                    return (
+                      <option key={wh.id} value={wh.id} disabled={alreadyExists}>
+                        [{wh.code}] {wh.name} {alreadyExists ? "(이미 재고 있음)" : ""}
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
+
+              {/* Quantity */}
+              <div className="space-y-1.5">
+                <label className="font-bold text-zinc-500 dark:text-zinc-400">실재고 수량 (On Hand)</label>
+                <input
+                  type="number"
+                  min="0"
+                  value={openQty}
+                  onChange={(e) => setOpenQty(e.target.value)}
+                  className="w-full rounded border border-zinc-200 p-2 text-xs text-zinc-900 bg-zinc-50 dark:border-zinc-850 dark:bg-zinc-950 dark:text-white outline-none"
+                  required
+                />
+              </div>
+
+              {/* Note */}
+              <div className="space-y-1.5">
+                <label className="font-bold text-zinc-500 dark:text-zinc-400">사유 / 비고 (Reason / Note)</label>
+                <textarea
+                  placeholder="예: 실사 재고 반영, 신규 입고 등..."
+                  value={openNote}
+                  onChange={(e) => setOpenNote(e.target.value)}
+                  className="w-full rounded border border-zinc-200 p-2 text-xs text-zinc-900 bg-zinc-50 dark:border-zinc-850 dark:bg-zinc-950 dark:text-white outline-none min-h-[60px]"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsOpeningModalOpen(false);
+                    setOpenError("");
+                  }}
+                  className="px-4 py-2 bg-zinc-50 border border-zinc-200 text-zinc-650 hover:bg-zinc-100 dark:bg-zinc-850 dark:border-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-800 rounded-lg font-semibold"
+                >
+                  취소
+                </button>
+                <button
+                  type="submit"
+                  disabled={isOpeningSubmitting}
+                  className="px-4 py-2 bg-zinc-950 hover:bg-zinc-900 text-white dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-100 rounded-lg font-bold disabled:opacity-50"
+                >
+                  {isOpeningSubmitting ? "처리 중..." : "재고 등록"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal 2: Manual Adjustment Form */}
+      {isAdjustmentModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/40 backdrop-blur-sm p-4">
+          <div className="w-full max-w-md rounded-xl border border-zinc-200 bg-white p-6 shadow-xl dark:border-zinc-800 dark:bg-zinc-900 space-y-4">
+            <div className="flex justify-between items-center border-b border-zinc-150 pb-2.5 dark:border-zinc-800">
+              <h4 className="text-sm font-bold text-zinc-800 dark:text-white">수동 재고 조정 (Manual Adjustment)</h4>
+              <button
+                onClick={() => {
+                  setIsAdjustmentModalOpen(false);
+                  setAdjError("");
+                }}
+                className="text-zinc-450 hover:text-zinc-800 dark:text-zinc-500 dark:hover:text-white text-sm"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleAdjSubmit} className="space-y-4 text-xs">
+              {adjError && (
+                <div className="p-2.5 rounded bg-rose-50 border border-rose-200 text-rose-600 font-bold dark:bg-rose-950/10 dark:border-rose-900/50 dark:text-rose-400">
+                  {adjError}
+                </div>
+              )}
+
+              {/* Warehouse selector (restricted to existing warehouses in balances) */}
+              <div className="space-y-1.5">
+                <label className="font-bold text-zinc-500 dark:text-zinc-400">물류창고 선택</label>
+                <select
+                  value={adjWarehouseId}
+                  onChange={(e) => setAdjWarehouseId(e.target.value)}
+                  className="w-full rounded border border-zinc-200 p-2.5 text-xs text-zinc-900 bg-zinc-50 dark:border-zinc-850 dark:bg-zinc-950 dark:text-white outline-none"
+                  required
+                >
+                  <option value="">-- 창고를 선택해 주세요 --</option>
+                  {initialBalances.map((b) => (
+                    <option key={b.warehouse_id} value={b.warehouse_id}>
+                      [{b.warehouse_code}] {b.warehouse_name} (현재 On Hand: {b.qty_on_hand}, Hold: {b.qty_hold})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Qty Change */}
+              <div className="space-y-1.5">
+                <label className="font-bold text-zinc-500 dark:text-zinc-400">실재고 변동 수량 (Qty Change, 양수/음수 입력 가능)</label>
+                <input
+                  type="number"
+                  value={adjQtyChange}
+                  onChange={(e) => setAdjQtyChange(e.target.value)}
+                  placeholder="예: 증가 시 +10, 감소 시 -10"
+                  className="w-full rounded border border-zinc-200 p-2 text-xs text-zinc-900 bg-zinc-50 dark:border-zinc-850 dark:bg-zinc-950 dark:text-white outline-none"
+                  required
+                />
+              </div>
+
+              {/* Qty Hold Change */}
+              <div className="space-y-1.5">
+                <label className="font-bold text-zinc-500 dark:text-zinc-400">보류재고 변동 수량 (Qty Hold Change, 양수/음수 입력 가능)</label>
+                <input
+                  type="number"
+                  value={adjQtyHoldChange}
+                  onChange={(e) => setAdjQtyHoldChange(e.target.value)}
+                  placeholder="예: 보류 처리 시 +5, 보류 해제 시 -5"
+                  className="w-full rounded border border-zinc-200 p-2 text-xs text-zinc-900 bg-zinc-50 dark:border-zinc-850 dark:bg-zinc-950 dark:text-white outline-none"
+                  required
+                />
+              </div>
+
+              {/* Reason */}
+              <div className="space-y-1.5">
+                <label className="font-bold text-zinc-500 dark:text-zinc-400">조정 대분류 사유 (Reason Category)</label>
+                <select
+                  value={adjReason}
+                  onChange={(e) => setAdjReason(e.target.value)}
+                  className="w-full rounded border border-zinc-200 p-2.5 text-xs text-zinc-900 bg-zinc-50 dark:border-zinc-850 dark:bg-zinc-950 dark:text-white outline-none"
+                  required
+                >
+                  <option value="Physical Count Difference">재고 실사 차이 (Physical Count Difference)</option>
+                  <option value="Damage">손상 / 파손 (Damage)</option>
+                  <option value="Loss">분실 / 도난 (Loss)</option>
+                  <option value="Data Correction">오입력 정정 (Data Correction)</option>
+                  <option value="Other">기타 사유 (Other)</option>
+                </select>
+              </div>
+
+              {/* Note */}
+              <div className="space-y-1.5">
+                <label className="font-bold text-zinc-500 dark:text-zinc-400">비고 (Note)</label>
+                <textarea
+                  placeholder="세부 조정을 진행한 구체적 원인을 작성해 주세요..."
+                  value={adjNote}
+                  onChange={(e) => setAdjNote(e.target.value)}
+                  className="w-full rounded border border-zinc-200 p-2 text-xs text-zinc-900 bg-zinc-50 dark:border-zinc-850 dark:bg-zinc-950 dark:text-white outline-none min-h-[60px]"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsAdjustmentModalOpen(false);
+                    setAdjError("");
+                  }}
+                  className="px-4 py-2 bg-zinc-50 border border-zinc-200 text-zinc-650 hover:bg-zinc-100 dark:bg-zinc-850 dark:border-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-800 rounded-lg font-semibold"
+                >
+                  취소
+                </button>
+                <button
+                  type="submit"
+                  disabled={isAdjustmentSubmitting}
+                  className="px-4 py-2 bg-zinc-950 hover:bg-zinc-900 text-white dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-100 rounded-lg font-bold disabled:opacity-50"
+                >
+                  {isAdjustmentSubmitting ? "처리 중..." : "재고 조정 반영"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
