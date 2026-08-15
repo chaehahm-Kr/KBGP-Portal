@@ -12,6 +12,7 @@ import { isAuthorizedForAudience } from "./retrieval";
 // --------------------------------------------------
 export const ALIAS_DICTIONARY: Record<string, string[]> = {
   INSIGHTS: ["insights", "insight", "인사이트", "인싸이트", "인사이트기사", "인사이트뉴스", "insighp"],
+  SIMULATOR: ["simulator", "simul", "시뮬레이터", "시뮬레이션", "마진 시뮬레이션", "모형 설정", "profitability", "growth simulator"],
   MANUAL: ["manual", "manul", "매뉴얼", "메뉴얼", "사용법", "운영 가이드", "실무 가이드", "운영 매뉴얼"],
   APPROVE: ["approve", "approval", "승인", "게재 승인", "기사 승인", "go approve"],
   REVISION: ["revision", "수정", "수정 요청", "재검토", "fix revision", "리비전"],
@@ -60,6 +61,11 @@ const INTENT_PATTERNS: IntentPattern[] = [
     keywords: ["리비전", "수정 요청", "reject", "거절"],
     matchedIdsOrSlugs: ["kno-insights-sop-review-decision"],
     boostScore: 120
+  },
+  {
+    keywords: ["시뮬레이터 모형", "모형 설정", "마진 시뮬레이션", "시뮬레이터 설정", "profitability", "시뮬레이터"],
+    matchedIdsOrSlugs: ["kno-simulator-rule-config", "kno-simulator-guide-execution"],
+    boostScore: 150
   }
 ];
 

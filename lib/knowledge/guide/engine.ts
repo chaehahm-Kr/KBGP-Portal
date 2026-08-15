@@ -43,7 +43,13 @@ export async function processGuideQuestion(
     return buildReadonlyActionResponse(question, isWriteAttempt.actionType, matchedItems, now);
   }
 
-  const bestMatch = matchedItems.length > 0 ? matchedItems[0] : null;
+  let bestMatch = matchedItems.length > 0 ? matchedItems[0] : null;
+
+  // STRICT ZERO CROSS-MODULE FALLBACK:
+  // If an explicit selectedModule is specified, reject any candidate from another module.
+  if (selectedModule && bestMatch && bestMatch.category !== selectedModule) {
+    bestMatch = null;
+  }
 
   // 5. Handle Unknown / Insufficient Authorized Knowledge (Module-Scoped vs Global)
   if (!bestMatch) {

@@ -79,7 +79,7 @@ const SUGGESTION_MAP: Record<string, string[]> = {
   insight: ["INSIGHTS Topic Score 기준은?", "INSIGHTS High Risk 수칙"],
   insighp: ["INSIGHTS Topic Score 기준은?", "INSIGHTS High Risk 수칙"],
   시뮬: ["시뮬레이터 모형 설정 방법", "Profitability 시뮬레이션 실행"],
-  simul: ["Growth Simulator Configuration Guide", "Profitability Sandbox"],
+  simul: ["시뮬레이터 모형 설정 방법", "Profitability 시뮬레이션 실행"],
   메뉴얼: ["K SELECT INSIGHTS 실무자 운영 매뉴얼", "새 매뉴얼 등록 방법", "Manual Version 관리"],
   매뉴얼: ["K SELECT INSIGHTS 실무자 운영 매뉴얼", "새 매뉴얼 등록 방법", "Manual Version 관리"],
   manu: ["K SELECT INSIGHTS Operations Manual", "Manual Versioning Guide"],
@@ -93,6 +93,9 @@ const SUGGESTION_MAP: Record<string, string[]> = {
 
 // 3-State Model: OPEN | HIDDEN | CLOSED
 type DrawerState = "OPEN" | "HIDDEN" | "CLOSED";
+
+const STORAGE_KEY_STATE = "kselect_guide_state_v1";
+const STORAGE_KEY_ANSWER = "kselect_guide_current_answer_v1";
 
 export default function GuideDrawer({ isOpen, onClose }: GuideDrawerProps) {
   const pathname = usePathname();
@@ -108,33 +111,49 @@ export default function GuideDrawer({ isOpen, onClose }: GuideDrawerProps) {
   const [gapSubmitted, setGapSubmitted] = useState<Record<string, boolean>>({});
   const [activeModuleId, setActiveModuleId] = useState<string>("INSIGHTS");
 
-  // Sync prop isOpen with 3-State Model
+  // Restore persistent state from sessionStorage on mount / route change
   useEffect(() => {
-    if (isOpen) {
-      // If parent opens guide and it was CLOSED, set OPEN & sync route context
-      if (drawerState === "CLOSED") {
-        setDrawerState("OPEN");
-        syncRouteModuleContext();
-        setCurrentAnswer(null);
+    try {
+      const savedState = sessionStorage.getItem(STORAGE_KEY_STATE);
+      const savedAnswerJson = sessionStorage.getItem(STORAGE_KEY_ANSWER);
+
+      if (savedState === "HIDDEN") {
+        setDrawerState("HIDDEN");
+        if (savedAnswerJson) {
+          try { setCurrentAnswer(JSON.parse(savedAnswerJson)); } catch (e) {}
+        }
+      } else if (isOpen) {
+        if (drawerState === "CLOSED" && savedState !== "HIDDEN") {
+          setDrawerState("OPEN");
+          sessionStorage.setItem(STORAGE_KEY_STATE, "OPEN");
+        }
       }
-    } else {
-      setDrawerState("CLOSED");
-    }
-  }, [isOpen]);
+    } catch (e) {}
+  }, [isOpen, pathname]);
 
   // Sync route module context on route change
-  const syncRouteModuleContext = () => {
+  useEffect(() => {
     if (pathname.includes("/admin/insights")) setActiveModuleId("INSIGHTS");
     else if (pathname.includes("/admin/knowledge")) setActiveModuleId("KNOWLEDGE");
     else if (pathname.includes("/admin/simulator")) setActiveModuleId("SIMULATOR");
     else if (pathname.includes("/admin/products")) setActiveModuleId("PRODUCTS");
     else if (pathname.includes("/admin/applications")) setActiveModuleId("APPLICATIONS");
     else setActiveModuleId("INSIGHTS");
-  };
+  }, [pathname]);
 
   if (drawerState === "CLOSED" && !isOpen) return null;
 
   const activeModule = MODULE_DISCOVERY_LIST.find(m => m.id === activeModuleId) || MODULE_DISCOVERY_LIST[0];
+
+  const updateDrawerState = (newState: DrawerState) => {
+    setDrawerState(newState);
+    try {
+      sessionStorage.setItem(STORAGE_KEY_STATE, newState);
+      if (newState === "CLOSED") {
+        sessionStorage.removeItem(STORAGE_KEY_ANSWER);
+      }
+    } catch (e) {}
+  };
 
   const handleAsk = async (qText: string, overrideModule?: string) => {
     if (!qText.trim() || loading) return;
@@ -158,8 +177,11 @@ export default function GuideDrawer({ isOpen, onClose }: GuideDrawerProps) {
 
       const data: GuideAnswerResponse = await res.json();
 
-      // Current Primary View Philosophy: Latest Answer becomes current primary view
       setCurrentAnswer(data);
+      try {
+        sessionStorage.setItem(STORAGE_KEY_ANSWER, JSON.stringify(data));
+      } catch (e) {}
+
       setHistory(prev => [data, ...prev.filter(h => h.id !== data.id)]);
       setQuestionInput("");
     } catch (err) {
@@ -171,6 +193,9 @@ export default function GuideDrawer({ isOpen, onClose }: GuideDrawerProps) {
 
   const handleSelectHistoryItem = (item: GuideAnswerResponse) => {
     setCurrentAnswer(item);
+    try {
+      sessionStorage.setItem(STORAGE_KEY_ANSWER, JSON.stringify(item));
+    } catch (e) {}
     setShowHistoryModal(false);
   };
 
@@ -203,23 +228,31 @@ export default function GuideDrawer({ isOpen, onClose }: GuideDrawerProps) {
     if (actionType === "download" || actionType === "manual") {
       window.open(url, "_blank");
     } else {
-      router.push(url);
-      // AUTO-HIDE DRAWER: Keep session active in memory, minimize drawer so user sees full main page!
+      // Persist current answer and state as HIDDEN
+      try {
+        sessionStorage.setItem(STORAGE_KEY_STATE, "HIDDEN");
+        if (currentAnswer) {
+          sessionStorage.setItem(STORAGE_KEY_ANSWER, JSON.stringify(currentAnswer));
+        }
+      } catch (e) {}
+      
       setDrawerState("HIDDEN");
+      router.push(url);
     }
   };
 
   const handleCloseClick = () => {
-    setDrawerState("CLOSED");
+    updateDrawerState("CLOSED");
+    setCurrentAnswer(null);
     onClose();
   };
 
   const handleMinimizeClick = () => {
-    setDrawerState("HIDDEN");
+    updateDrawerState("HIDDEN");
   };
 
   const handleRestoreClick = () => {
-    setDrawerState("OPEN");
+    updateDrawerState("OPEN");
   };
 
   // Real-time suggestions
@@ -234,12 +267,12 @@ export default function GuideDrawer({ isOpen, onClose }: GuideDrawerProps) {
         <div className="fixed right-0 top-24 z-50">
           <button
             onClick={handleRestoreClick}
-            className="px-3.5 py-2 rounded-l-xl bg-zinc-900 text-white font-extrabold text-xs shadow-2xl border border-r-0 border-zinc-700 hover:bg-zinc-800 transition flex items-center gap-2 cursor-pointer group"
+            className="px-3.5 py-2.5 rounded-l-2xl bg-zinc-900 text-white font-extrabold text-xs shadow-2xl border border-r-0 border-zinc-700 hover:bg-zinc-800 transition flex items-center gap-2 cursor-pointer group"
             title="K SELECT Guide 복원하기"
           >
-            <div className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
-            <span>K SELECT Guide</span>
-            <span className="text-amber-400 font-black text-sm group-hover:translate-x-0.5 transition-transform">‹</span>
+            <div className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse" />
+            <span className="tracking-tight">K SELECT Guide</span>
+            <span className="text-amber-400 font-black text-sm group-hover:-translate-x-0.5 transition-transform">‹</span>
           </button>
         </div>
       )}
@@ -378,7 +411,10 @@ export default function GuideDrawer({ isOpen, onClose }: GuideDrawerProps) {
               {currentAnswer && (
                 <div className="flex items-center justify-between border-b border-zinc-200 dark:border-zinc-800 pb-2.5">
                   <button
-                    onClick={() => setCurrentAnswer(null)}
+                    onClick={() => {
+                      setCurrentAnswer(null);
+                      try { sessionStorage.removeItem(STORAGE_KEY_ANSWER); } catch (e) {}
+                    }}
                     className="px-3 py-1.5 rounded-lg bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-xs font-black text-zinc-900 dark:text-white transition flex items-center gap-1.5 border border-zinc-300 dark:border-zinc-700 shadow-2xs cursor-pointer"
                   >
                     <span className="text-base leading-none">←</span>
