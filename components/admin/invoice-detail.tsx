@@ -67,7 +67,12 @@ interface InvoiceDetailProps {
       id: string;
       qty: number; // Ordered Qty
       unit_cost: number; // PO Cost
-      resolved_qty: number; // Inventory Received Qty
+      resolved_qty: number; // Resolved Qty
+      inventory_received: number; // Good + Hold
+      good_qty: number;
+      hold_qty: number;
+      damaged_qty: number;
+      shortage_qty: number;
     }>;
   };
   prevInvoicesTotal: number;
@@ -209,14 +214,19 @@ export function InvoiceDetail({ invoice, po, prevInvoicesTotal, poMerchandiseTot
   return (
     <div className="space-y-6 text-xs">
       
-      {/* Navigation */}
-      <div className="flex items-center justify-between">
-        <Link
-          href="/admin/purchasing/invoices"
-          className="text-xs text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white transition-colors"
-        >
-          ← 인보이스 목록으로 돌아가기
-        </Link>
+      {/* Breadcrumb & Navigation */}
+      <div className="flex flex-col gap-2">
+        <div className="text-[10px] text-zinc-400 dark:text-zinc-500 font-bold uppercase tracking-wider">
+          Admin / Finance / Supplier Invoices
+        </div>
+        <div>
+          <Link
+            href="/admin/finance/invoices"
+            className="text-xs text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white transition-colors"
+          >
+            ← 공급사 인보이스 목록으로 돌아기
+          </Link>
+        </div>
       </div>
 
       {successMessage && (
@@ -253,7 +263,7 @@ export function InvoiceDetail({ invoice, po, prevInvoicesTotal, poMerchandiseTot
           {invoice.invoice_status === "DRAFT" && (
             <>
               <Link
-                href={`/admin/purchasing/invoices/${invoice.id}/edit`}
+                href={`/admin/finance/invoices/${invoice.id}/edit`}
                 className="px-3.5 py-2 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 dark:bg-zinc-800 dark:hover:bg-zinc-700 dark:text-zinc-300 font-bold rounded-xl cursor-pointer transition-colors"
               >
                 수정 (Edit)
@@ -314,7 +324,7 @@ export function InvoiceDetail({ invoice, po, prevInvoicesTotal, poMerchandiseTot
             <>
               <span className="text-[10px] text-rose-500 font-bold mr-2">반려 사유: {invoice.rejection_reason}</span>
               <Link
-                href={`/admin/purchasing/invoices/${invoice.id}/edit`}
+                href={`/admin/finance/invoices/${invoice.id}/edit`}
                 className="px-3.5 py-2 bg-zinc-950 hover:bg-zinc-900 text-white dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-100 font-bold rounded-xl cursor-pointer transition-colors"
               >
                 재작성 (Resubmit)
@@ -443,7 +453,7 @@ export function InvoiceDetail({ invoice, po, prevInvoicesTotal, poMerchandiseTot
                   {remittance.is_masked ? (
                     <span>⚠️ 일반 관리자 모드로 원감 보존을 위해 계좌 마스킹 처리되었습니다.</span>
                   ) : (
-                    <span className="text-emerald-600 font-bold">✓ Super Admin 보안 권한에 의해 전체 계좌 정보가 무설치 노출되었습니다.</span>
+                    <span className="text-emerald-650 font-bold">✓ 승인된 계정/보안 권한에 의해 전체 계좌 정보가 노출되었습니다.</span>
                   )}
                 </div>
               </div>
@@ -466,16 +476,18 @@ export function InvoiceDetail({ invoice, po, prevInvoicesTotal, poMerchandiseTot
               <table className="w-full text-left text-xs border-collapse">
                 <thead>
                   <tr className="bg-zinc-50/50 text-zinc-500 font-bold border-b border-zinc-150 dark:bg-zinc-900/50 dark:border-zinc-800 dark:text-zinc-350">
-                    <th className="px-3 py-2.5">SKU</th>
-                    <th className="px-3 py-2.5">제품명</th>
+                    <th className="px-3 py-2.5">SKU / 제품명</th>
                     <th className="px-3 py-2.5 text-right w-16">발주 (PO)</th>
-                    <th className="px-3 py-2.5 text-right w-16">재고 입고 (Recv)</th>
+                    <th className="px-3 py-2.5 text-right w-16">재고입고 (Recv)</th>
+                    <th className="px-3 py-2.5 text-right w-12">파손 (Dmg)</th>
+                    <th className="px-3 py-2.5 text-right w-12">부족 (Shtg)</th>
+                    <th className="px-3 py-2.5 text-right w-16">종결량 (Resolved)</th>
                     <th className="px-3 py-2.5 text-right w-16">청구 (Inv)</th>
-                    <th className="px-3 py-2.5 text-right w-16">발주단가</th>
-                    <th className="px-3 py-2.5 text-right w-16">청구단가</th>
-                    <th className="px-3 py-2.5 text-right w-16">수량차이</th>
-                    <th className="px-3 py-2.5 text-right w-16">단가차이</th>
-                    <th className="px-3 py-2.5 text-center w-16">일치 여부</th>
+                    <th className="px-3 py-2.5 text-right w-16">발주단가 (PO)</th>
+                    <th className="px-3 py-2.5 text-right w-16">청구단가 (Inv)</th>
+                    <th className="px-3 py-2.5 text-center w-16">수량 매칭</th>
+                    <th className="px-3 py-2.5 text-center w-16">단가 매칭</th>
+                    <th className="px-3 py-2.5 text-center w-16">최종 매치</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
@@ -483,43 +495,65 @@ export function InvoiceDetail({ invoice, po, prevInvoicesTotal, poMerchandiseTot
                     const poLine = poLinesMap.get(l.purchase_order_line_id);
                     const poQty = poLine?.qty || 0;
                     const poCost = poLine ? Number(poLine.unit_cost) : 0;
+                    
+                    const inventoryReceived = poLine?.inventory_received || 0;
+                    const damaged = poLine?.damaged_qty || 0;
+                    const shortage = poLine?.shortage_qty || 0;
                     const resolvedQty = poLine?.resolved_qty || 0;
 
-                    const qtyVariance = l.invoiced_qty - resolvedQty;
-                    const priceVariance = Number((l.unit_price - poCost).toFixed(4));
-                    
-                    const isMatch = qtyVariance === 0 && priceVariance === 0;
+                    const isQtyMatch = l.invoiced_qty === resolvedQty;
+                    const isPriceMatch = Number(l.unit_price) === poCost;
+                    const isMatch = isQtyMatch && isPriceMatch;
 
                     return (
                       <tr key={l.id} className="hover:bg-zinc-50/30 dark:hover:bg-zinc-850/5">
-                        <td className="px-3 py-3 font-mono font-bold text-zinc-900 dark:text-white">{l.sku_snapshot}</td>
-                        <td className="px-3 py-3 font-bold text-zinc-900 dark:text-white max-w-xs truncate" title={l.product_name_snapshot}>
-                          {l.product_name_snapshot}
+                        <td className="px-3 py-3">
+                          <span className="font-mono font-bold text-zinc-900 dark:text-white block">{l.sku_snapshot}</span>
+                          <span className="text-zinc-500 block max-w-[130px] truncate" title={l.product_name_snapshot}>{l.product_name_snapshot}</span>
                         </td>
                         <td className="px-3 py-3 text-right font-mono text-zinc-550">{poQty.toLocaleString()}</td>
+                        <td className="px-3 py-3 text-right font-mono text-zinc-650">{inventoryReceived.toLocaleString()}</td>
+                        <td className="px-3 py-3 text-right font-mono text-rose-500">{damaged.toLocaleString()}</td>
+                        <td className="px-3 py-3 text-right font-mono text-amber-600">{shortage.toLocaleString()}</td>
                         <td className="px-3 py-3 text-right font-mono font-bold text-zinc-700">{resolvedQty.toLocaleString()}</td>
                         <td className="px-3 py-3 text-right font-mono font-bold text-zinc-900 dark:text-white">{l.invoiced_qty.toLocaleString()}</td>
                         <td className="px-3 py-3 text-right font-mono text-zinc-450">{poCost.toLocaleString()}</td>
                         <td className="px-3 py-3 text-right font-mono font-bold text-zinc-900 dark:text-white">{l.unit_price.toLocaleString()}</td>
                         
-                        {/* Qty Variance */}
-                        <td className={`px-3 py-3 text-right font-mono font-bold ${qtyVariance !== 0 ? "text-rose-600" : "text-zinc-400"}`}>
-                          {qtyVariance > 0 ? `+${qtyVariance}` : qtyVariance < 0 ? `${qtyVariance}` : "0"}
-                        </td>
-
-                        {/* Price Variance */}
-                        <td className={`px-3 py-3 text-right font-mono font-bold ${priceVariance !== 0 ? "text-rose-600" : "text-zinc-400"}`}>
-                          {priceVariance > 0 ? `+${priceVariance}` : priceVariance < 0 ? `${priceVariance}` : "0"}
-                        </td>
-
-                        {/* Match Status */}
+                        {/* Qty Match */}
                         <td className="px-3 py-3 text-center">
-                          {isMatch ? (
-                            <span className="inline-flex items-center rounded-md bg-emerald-50 px-2 py-0.5 text-[9px] font-bold text-emerald-700 border border-emerald-200">
+                          {isQtyMatch ? (
+                            <span className="inline-flex items-center rounded-md bg-emerald-50 px-1.5 py-0.5 text-[8px] font-bold text-emerald-700 border border-emerald-100">
                               MATCH
                             </span>
                           ) : (
-                            <span className="inline-flex items-center rounded-md bg-rose-50 px-2 py-0.5 text-[9px] font-bold text-rose-700 border border-rose-250">
+                            <span className="inline-flex items-center rounded-md bg-rose-50 px-1.5 py-0.5 text-[8px] font-bold text-rose-700 border border-rose-150">
+                              VARIANCE
+                            </span>
+                          )}
+                        </td>
+
+                        {/* Price Match */}
+                        <td className="px-3 py-3 text-center">
+                          {isPriceMatch ? (
+                            <span className="inline-flex items-center rounded-md bg-emerald-50 px-1.5 py-0.5 text-[8px] font-bold text-emerald-700 border border-emerald-100">
+                              MATCH
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center rounded-md bg-rose-50 px-1.5 py-0.5 text-[8px] font-bold text-rose-700 border border-rose-150">
+                              VARIANCE
+                            </span>
+                          )}
+                        </td>
+
+                        {/* Final Result */}
+                        <td className="px-3 py-3 text-center">
+                          {isMatch ? (
+                            <span className="inline-flex items-center rounded-md bg-emerald-100 px-2 py-0.5 text-[9px] font-bold text-emerald-800 border border-emerald-200">
+                              MATCH
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center rounded-md bg-rose-100 px-2 py-0.5 text-[9px] font-bold text-rose-800 border border-rose-200">
                               VARIANCE
                             </span>
                           )}
@@ -622,7 +656,7 @@ export function InvoiceDetail({ invoice, po, prevInvoicesTotal, poMerchandiseTot
                 value={rejectReason}
                 onChange={(e) => setRejectReason(e.target.value)}
                 placeholder="단가 불일치, 첨부 누락 등 반려 사유를 상세하게 기입하세요..."
-                className="w-full border border-zinc-200 dark:border-zinc-800 rounded-lg p-2.5 text-xs bg-zinc-50 dark:bg-zinc-950 dark:text-white outline-none min-h-[90px]"
+                className="w-full border border-zinc-200 dark:border-zinc-800 rounded-lg p-2.5 text-xs bg-zinc-50 dark:bg-zinc-955 dark:text-white outline-none min-h-[90px]"
                 required
               />
             </div>

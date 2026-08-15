@@ -26,7 +26,7 @@ export default async function InvoiceEditPage({ params }: EditPageProps) {
 
   // Only allow editing DRAFT or REJECTED invoices
   if (invoice.invoice_status !== "DRAFT" && invoice.invoice_status !== "REJECTED") {
-    redirect(`/admin/purchasing/invoices/${invoice.id}`);
+    redirect(`/admin/finance/invoices/${invoice.id}`);
   }
 
   // 1. Fetch eligible POs

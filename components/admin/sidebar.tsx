@@ -41,6 +41,8 @@ export default function Sidebar({ isCollapsed, toggleCollapse }: SidebarProps) {
     "Companies & Brands": false,
     Products: false,
     Inventory: false,
+    Purchasing: false,
+    Finance: false,
     "Retail Network": false,
     "Sales & Performance": false,
     "Growth Simulator": false,
@@ -58,7 +60,8 @@ export default function Sidebar({ isCollapsed, toggleCollapse }: SidebarProps) {
       "Companies & Brands": pathname.startsWith("/admin/companies") || pathname.startsWith("/admin/brands"),
       Products: pathname.startsWith("/admin/products"),
       Inventory: pathname.startsWith("/admin/inventory"),
-      Purchasing: pathname.startsWith("/admin/purchasing"),
+      Purchasing: pathname.startsWith("/admin/purchasing") && !pathname.startsWith("/admin/purchasing/invoices"), // to avoid conflict
+      Finance: pathname.startsWith("/admin/finance"),
       "Retail Network": pathname.startsWith("/admin/stores"),
       "Sales & Performance": pathname.startsWith("/admin/sales"),
       "Growth Simulator": pathname.startsWith("/admin/simulator"),
@@ -105,7 +108,13 @@ export default function Sidebar({ isCollapsed, toggleCollapse }: SidebarProps) {
         { name: "Purchase Orders", href: "/admin/purchasing" },
         { name: "Inbound Shipments", href: "/admin/purchasing/shipments" },
         { name: "Receiving", href: "/admin/purchasing/receiving" },
-        { name: "Supplier Invoices", href: "/admin/purchasing/invoices" },
+      ],
+    },
+    {
+      name: "Finance",
+      icon: ReportsIcon,
+      subItems: [
+        { name: "Supplier Invoices", href: "/admin/finance/invoices" },
       ],
     },
     {

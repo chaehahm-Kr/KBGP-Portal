@@ -5,7 +5,7 @@ import { getSuppliersForPo } from "@/lib/purchase-order/actions";
 import { InvoiceForm } from "@/components/admin/invoice-form";
 
 export const metadata: Metadata = {
-  title: "신규 인보이스 등록 | K SELECT NETWORK 어드민",
+  title: "신규 공급사 인보이스 등록 | K SELECT NETWORK 어드민",
 };
 
 export default async function NewInvoicePage() {

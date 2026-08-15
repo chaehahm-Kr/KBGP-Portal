@@ -175,7 +175,7 @@ export function InvoicesList({ initialInvoices, suppliers }: InvoicesListProps) 
                   <tr key={inv.id} className="hover:bg-zinc-50/30 dark:hover:bg-zinc-850/5 transition-colors">
                     {/* AP Number */}
                     <td className="px-5 py-3.5 font-mono font-bold text-indigo-650 hover:underline">
-                      <Link href={`/admin/purchasing/invoices/${inv.id}`}>
+                      <Link href={`/admin/finance/invoices/${inv.id}`}>
                         {inv.internal_ap_number}
                       </Link>
                     </td>

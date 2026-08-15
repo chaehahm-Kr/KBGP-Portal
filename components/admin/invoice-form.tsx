@@ -216,10 +216,10 @@ export function InvoiceForm({ invoice, eligiblePos, suppliers }: InvoiceFormProp
     try {
       if (isEdit) {
         await updateInvoice(invoice.id, payload);
-        router.push(`/admin/purchasing/invoices/${invoice.id}`);
+        router.push(`/admin/finance/invoices/${invoice.id}`);
       } else {
         const created = await createInvoice(payload);
-        router.push(`/admin/purchasing/invoices/${created.id}`);
+        router.push(`/admin/finance/invoices/${created.id}`);
       }
       router.refresh();
     } catch (err: any) {
@@ -537,7 +537,7 @@ export function InvoiceForm({ invoice, eligiblePos, suppliers }: InvoiceFormProp
           {/* Actions */}
           <div className="flex justify-end gap-3">
             <Link
-              href={isEdit ? `/admin/purchasing/invoices/${invoice.id}` : "/admin/purchasing/invoices"}
+              href={isEdit ? `/admin/finance/invoices/${invoice.id}` : "/admin/finance/invoices"}
               className="px-4 py-2 border border-zinc-200 hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-350 text-xs font-bold rounded-xl cursor-pointer transition-colors"
             >
               취소

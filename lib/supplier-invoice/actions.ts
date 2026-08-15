@@ -122,9 +122,21 @@ export async function getPurchaseOrderForInvoice(poId: string) {
       receiving:receivings!receiving_id (id, status)
     `);
 
+  // Fetch inbound shipment lines to get total shipped quantities for finalized shipments
+  const { data: shipLines } = await supabase
+    .from("inbound_shipment_lines")
+    .select(`
+      purchase_order_line_id,
+      shipped_qty,
+      shipment:inbound_shipments!inbound_shipment_id (id, status)
+    `);
+
   const recSummary: Record<string, { received: number; hold: number; damaged: number }> = {};
+  const shipSummary: Record<string, number> = {};
+
   po.lines.forEach((l: any) => {
     recSummary[l.id] = { received: 0, hold: 0, damaged: 0 };
+    shipSummary[l.id] = 0;
   });
 
   if (recLines) {
@@ -137,14 +149,31 @@ export async function getPurchaseOrderForInvoice(poId: string) {
     });
   }
 
+  if (shipLines) {
+    shipLines.forEach((sl: any) => {
+      if (sl.shipment?.status === "RECEIVED" && shipSummary[sl.purchase_order_line_id] !== undefined) {
+        shipSummary[sl.purchase_order_line_id] += sl.shipped_qty || 0;
+      }
+    });
+  }
+
   const lines = po.lines.map((l: any) => {
     const summary = recSummary[l.id] || { received: 0, hold: 0, damaged: 0 };
+    const shipped = shipSummary[l.id] || 0;
+
+    const inventoryReceived = summary.received;
+    const damaged = summary.damaged;
+    const shortage = Math.max(shipped - (inventoryReceived + damaged), 0);
+    const resolved = inventoryReceived + damaged + shortage;
+
     return {
       ...l,
-      resolved_qty: summary.received, // Good + Hold
-      good_qty: summary.received - summary.hold,
+      inventory_received: inventoryReceived,
+      good_qty: inventoryReceived - summary.hold,
       hold_qty: summary.hold,
-      damaged_qty: summary.damaged,
+      damaged_qty: damaged,
+      shortage_qty: shortage,
+      resolved_qty: resolved,
     };
   });
 
@@ -241,7 +270,7 @@ export async function createInvoice(input: CreateInvoiceInput) {
     throw new Error(`인보이스 품목 등록 실패: ${linesErr.message}`);
   }
 
-  revalidatePath("/admin/purchasing/invoices");
+  revalidatePath("/admin/finance/invoices");
   return inv;
 }
 
@@ -338,8 +367,8 @@ export async function updateInvoice(id: string, input: Partial<CreateInvoiceInpu
 
   if (headerErr) throw new Error(`인보이스 헤더 수정 실패: ${headerErr.message}`);
 
-  revalidatePath("/admin/purchasing/invoices");
-  revalidatePath(`/admin/purchasing/invoices/${id}`);
+  revalidatePath("/admin/finance/invoices");
+  revalidatePath(`/admin/finance/invoices/${id}`);
   return { success: true };
 }
 
@@ -361,8 +390,8 @@ export async function submitInvoice(id: string) {
 
   if (error) throw new Error(`인보이스 제출 실패: ${error.message}`);
 
-  revalidatePath("/admin/purchasing/invoices");
-  revalidatePath(`/admin/purchasing/invoices/${id}`);
+  revalidatePath("/admin/finance/invoices");
+  revalidatePath(`/admin/finance/invoices/${id}`);
   return { success: true };
 }
 
@@ -384,8 +413,8 @@ export async function approveInvoice(id: string) {
 
   if (error) throw new Error(`인보이스 승인 실패: ${error.message}`);
 
-  revalidatePath("/admin/purchasing/invoices");
-  revalidatePath(`/admin/purchasing/invoices/${id}`);
+  revalidatePath("/admin/finance/invoices");
+  revalidatePath(`/admin/finance/invoices/${id}`);
   return { success: true };
 }
 
@@ -412,8 +441,8 @@ export async function rejectInvoice(id: string, reason: string) {
 
   if (error) throw new Error(`인보이스 반려 실패: ${error.message}`);
 
-  revalidatePath("/admin/purchasing/invoices");
-  revalidatePath(`/admin/purchasing/invoices/${id}`);
+  revalidatePath("/admin/finance/invoices");
+  revalidatePath(`/admin/finance/invoices/${id}`);
   return { success: true };
 }
 
@@ -435,8 +464,8 @@ export async function voidInvoice(id: string) {
 
   if (error) throw new Error(`인보이스 무효화 실패: ${error.message}`);
 
-  revalidatePath("/admin/purchasing/invoices");
-  revalidatePath(`/admin/purchasing/invoices/${id}`);
+  revalidatePath("/admin/finance/invoices");
+  revalidatePath(`/admin/finance/invoices/${id}`);
   return { success: true };
 }
 
@@ -452,6 +481,18 @@ export async function getSupplierRemittanceMasked(supplierId: string) {
     
   const isSuperAdmin = (userRoles ?? []).some((r: any) => r.role === "super_admin");
 
+  // Check if user is assigned settlement_inquiry for this company
+  const { data: assignment } = await supabase
+    .from("company_task_assignments")
+    .select("id")
+    .eq("company_id", supplierId)
+    .eq("staff_id", userId)
+    .eq("task_code", "settlement_inquiry")
+    .maybeSingle();
+
+  const isFinanceUser = !!assignment;
+  const isAuthorized = isSuperAdmin || isFinanceUser;
+
   const { data, error } = await supabase
     .from("supplier_remittances")
     .select("*")
@@ -460,7 +501,7 @@ export async function getSupplierRemittanceMasked(supplierId: string) {
 
   if (error || !data) return null;
 
-  if (isSuperAdmin) {
+  if (isAuthorized) {
     return {
       ...data,
       is_masked: false

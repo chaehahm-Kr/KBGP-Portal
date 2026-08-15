@@ -6,7 +6,7 @@ import { getSuppliersForPo } from "@/lib/purchase-order/actions";
 import { InvoicesList } from "@/components/admin/invoices-list";
 
 export const metadata: Metadata = {
-  title: "공급사 인보이스 및 AP 관리 | K SELECT NETWORK 어드민",
+  title: "공급사 인보이스 (Supplier Invoices) | K SELECT NETWORK 어드민",
 };
 
 export default async function AdminInvoicesPage() {
@@ -51,13 +51,13 @@ export default async function AdminInvoicesPage() {
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-xl font-bold text-zinc-955 dark:text-white">공급사 인보이스 및 외상매입금 (Supplier Invoices & AP)</h1>
+          <h1 className="text-xl font-bold text-zinc-955 dark:text-white">공급사 인보이스 (Supplier Invoices)</h1>
           <p className="text-xs text-zinc-550 dark:text-zinc-400">
-            공급업체(Supplier)가 청구한 인보이스와 내부 미지급금(Accounts Payable) 채무 한도 및 정합성 매핑을 관리합니다.
+            공급업체(Supplier)가 청구한 인보이스와 3-Way Match 실물 입고 정합성 매핑을 관리합니다.
           </p>
         </div>
         <Link
-          href="/admin/purchasing/invoices/new"
+          href="/admin/finance/invoices/new"
           className="inline-flex items-center px-4 py-2 bg-zinc-950 hover:bg-zinc-900 text-white dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-100 text-xs font-bold rounded-xl shadow-sm transition-all cursor-pointer"
         >
           + 신규 인보이스 등록 (New Invoice)
