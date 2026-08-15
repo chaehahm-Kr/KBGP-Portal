@@ -35,6 +35,8 @@ export interface CompanyParsedMetadata {
   adminMemo: string;
   contacts: CompanyContact[];
   type: string;
+  types: string[];
+  companyCode: string;
   status: string;
   logoPath?: string | null;
   logoUrl?: string | null;
@@ -42,6 +44,9 @@ export interface CompanyParsedMetadata {
 
 export async function parseCompanyMetadata(company: any): Promise<CompanyParsedMetadata> {
   const intro = company.intro || "";
+  let types: string[] = ["Brand Owner"];
+  let companyCode = company.company_code || "";
+
   if (intro.startsWith("__COMPANY_METADATA__:")) {
     try {
       const jsonStr = intro.substring("__COMPANY_METADATA__:".length);
@@ -53,13 +58,18 @@ export async function parseCompanyMetadata(company: any): Promise<CompanyParsedM
       const stateVal = data.state || "";
       const zipVal = data.zip_code || "";
       
-      // If address_1 exists, build full address for backward compatibility, otherwise fallback to data.address
       const fullAddress = addr1
         ? `${addr1}${addr2 ? " " + addr2 : ""}${cityVal ? ", " + cityVal : ""}${stateVal ? ", " + stateVal : ""}${zipVal ? " (" + zipVal + ")" : ""}`
         : (data.address || "");
 
       const logoPath = data.logo_path || null;
       const logoUrl = logoPath ? await getSignedFileUrl(logoPath) : null;
+
+      if (Array.isArray(data.types)) {
+        types = data.types;
+      } else if (typeof data.type === "string" && data.type) {
+        types = [data.type];
+      }
 
       return {
         description: data.description || "",
@@ -80,7 +90,9 @@ export async function parseCompanyMetadata(company: any): Promise<CompanyParsedM
           position: c.position || "",
           isPrimary: typeof c.isPrimary === "boolean" ? c.isPrimary : false,
         })),
-        type: data.type || "Brand Owner",
+        type: types[0] || "Brand Owner",
+        types: types,
+        companyCode,
         status: data.status || (company.status === "active" ? "Active" : "Inactive"),
         logoPath,
         logoUrl,
@@ -116,6 +128,8 @@ export async function parseCompanyMetadata(company: any): Promise<CompanyParsedM
     adminMemo: "",
     contacts: defaultContacts,
     type: "Brand Owner",
+    types: ["Brand Owner"],
+    companyCode,
     status: company.status === "active" ? "Active" : "Inactive",
     logoPath: null,
     logoUrl: null,
@@ -136,8 +150,9 @@ export async function updateCompanyAdminMetadata(
     website: string;
     adminMemo: string;
     contacts: CompanyContact[];
-    type: string;
+    types: string[];
     status: string;
+    companyCode?: string;
     businessRegistrationNumber?: string;
     createdAt?: string;
   }
@@ -145,10 +160,10 @@ export async function updateCompanyAdminMetadata(
   await verifyAdminSession();
   const supabase = createAdminClient(); // Bypasses RLS to allow admin updates
 
-  // Fetch current company record to preserve the original intro description and logo path
+  // Fetch current company record to preserve the original intro description, logo path, and company_code
   const { data: company } = await supabase
     .from("companies")
-    .select("intro")
+    .select("intro, company_code")
     .eq("id", companyId)
     .single();
 
@@ -178,8 +193,8 @@ export async function updateCompanyAdminMetadata(
     website: payload.website,
     admin_memo: payload.adminMemo,
     contacts: payload.contacts,
-    type: payload.type,
-    status: payload.status,
+    type: payload.types[0] || "",
+    types: payload.types,
     logo_path: baseLogoPath,
   };
 
@@ -207,6 +222,34 @@ export async function updateCompanyAdminMetadata(
     updatePayload.created_at = new Date(payload.createdAt).toISOString();
   }
 
+  // Handle company_code update if authorized
+  if (payload.companyCode && company) {
+    const { userId } = await verifyAdminSession();
+    const { data: userRoles } = await supabase
+      .from("staff_roles")
+      .select("role")
+      .eq("staff_id", userId);
+    const isSuperAdmin = (userRoles ?? []).some((r) => r.role === "super_admin");
+
+    if (isSuperAdmin && payload.companyCode !== company.company_code) {
+      const codeRegex = /^[A-Z]{3}-\d{3}$/;
+      if (!codeRegex.test(payload.companyCode)) {
+        throw new Error("올바른 형태의 Company Code가 아닙니다 (예: ABC-123)");
+      }
+      const { data: duplicate } = await supabase
+        .from("companies")
+        .select("id")
+        .eq("company_code", payload.companyCode)
+        .neq("id", companyId)
+        .maybeSingle();
+
+      if (duplicate) {
+        throw new Error("이미 존재하는 Company Code입니다.");
+      }
+      updatePayload.company_code = payload.companyCode;
+    }
+  }
+
   if (primaryContact) {
     updatePayload.contact_name = primaryContact.name || null;
     updatePayload.contact_phone = primaryContact.phone || null;
@@ -221,12 +264,16 @@ export async function updateCompanyAdminMetadata(
     .eq("id", companyId);
 
   if (error) {
-    console.error("Database update error:", error);
-    throw new Error(`회사 정보를 업데이트하지 못했습니다: ${error.message}`);
+    throw new Error(`회사 정보 수정 실패: ${error.message}`);
+  }
+
+  // Clean up supplier tables if 'Supplier' role is deselected
+  if (!payload.types.includes("Supplier")) {
+    await supabase.from("supplier_profiles").delete().eq("company_id", companyId);
+    await supabase.from("supplier_remittances").delete().eq("company_id", companyId);
   }
 
   revalidatePath(`/admin/companies/${companyId}`);
-  revalidatePath("/admin/companies");
 }
 
 export async function adminUploadCompanyLogo(companyId: string, formData: FormData) {
@@ -606,4 +653,121 @@ export async function adminCreateCompany(
 
   revalidatePath("/admin/companies");
   redirect(`/admin/companies/${newCompany.id}`);
+}
+
+export async function adminSaveSupplierData(
+  companyId: string,
+  profile: {
+    status: string;
+    default_currency: string;
+    default_payment_terms: string;
+    default_payment_terms_custom?: string;
+    default_incoterms?: string;
+    default_ship_from_address?: string;
+    default_port_of_loading?: string;
+    default_production_lead_time?: string;
+    default_moq?: number | null;
+    po_receiving_email?: string;
+    internal_note?: string;
+  },
+  remittance?: {
+    payment_method?: string;
+    beneficiary_name?: string;
+    beneficiary_address?: string;
+    bank_name?: string;
+    bank_address?: string;
+    bank_country?: string;
+    account_number?: string;
+    swift_bic?: string;
+    routing_number?: string;
+    account_currency?: string;
+    intermediary_bank_info?: string;
+    remittance_note?: string;
+  }
+) {
+  const { userId } = await verifyAdminSession();
+  const supabase = createAdminClient();
+
+  // 1. Verify access to remittance details if provided
+  if (remittance) {
+    const { data: userRoles } = await supabase
+      .from("staff_roles")
+      .select("role")
+      .eq("staff_id", userId);
+    const isSuperAdmin = (userRoles ?? []).some((r) => r.role === "super_admin");
+
+    let isFinanceUser = false;
+    const { data: staff } = await supabase
+      .from("staff_members")
+      .select("department_id")
+      .eq("id", userId)
+      .single();
+
+    if (staff?.department_id) {
+      const { data: dept } = await supabase
+        .from("departments")
+        .select("name")
+        .eq("id", staff.department_id)
+        .single();
+      if (dept?.name === "Finance") {
+        isFinanceUser = true;
+      }
+    }
+
+    if (!isSuperAdmin && !isFinanceUser) {
+      throw new Error("은행 송금 정보(Remittance)를 수정할 권한이 없습니다.");
+    }
+  }
+
+  // 2. Save Supplier Profile
+  const { error: profileErr } = await supabase
+    .from("supplier_profiles")
+    .upsert({
+      company_id: companyId,
+      status: profile.status,
+      default_currency: profile.default_currency,
+      default_payment_terms: profile.default_payment_terms,
+      default_payment_terms_custom: profile.default_payment_terms_custom || null,
+      default_incoterms: profile.default_incoterms || null,
+      default_ship_from_address: profile.default_ship_from_address || null,
+      default_port_of_loading: profile.default_port_of_loading || null,
+      default_production_lead_time: profile.default_production_lead_time || null,
+      default_moq: profile.default_moq !== undefined ? profile.default_moq : null,
+      po_receiving_email: profile.po_receiving_email || null,
+      internal_note: profile.internal_note || null,
+      updated_at: new Date().toISOString(),
+    });
+
+  if (profileErr) {
+    throw new Error(`Supplier Profile 저장 실패: ${profileErr.message}`);
+  }
+
+  // 3. Save Supplier Remittance if provided and authorized
+  if (remittance) {
+    const { error: remErr } = await supabase
+      .from("supplier_remittances")
+      .upsert({
+        company_id: companyId,
+        payment_method: remittance.payment_method || null,
+        beneficiary_name: remittance.beneficiary_name || null,
+        beneficiary_address: remittance.beneficiary_address || null,
+        bank_name: remittance.bank_name || null,
+        bank_address: remittance.bank_address || null,
+        bank_country: remittance.bank_country || null,
+        account_number: remittance.account_number || null,
+        swift_bic: remittance.swift_bic || null,
+        routing_number: remittance.routing_number || null,
+        account_currency: remittance.account_currency || null,
+        intermediary_bank_info: remittance.intermediary_bank_info || null,
+        remittance_note: remittance.remittance_note || null,
+        updated_at: new Date().toISOString(),
+      });
+
+    if (remErr) {
+      throw new Error(`Supplier Remittance 저장 실패: ${remErr.message}`);
+    }
+  }
+
+  revalidatePath(`/admin/companies/${companyId}`);
+  return { success: true };
 }

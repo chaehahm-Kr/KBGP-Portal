@@ -20,7 +20,7 @@ export default async function AdminCompanyDetailPage({
 }) {
   try {
     const { id } = await params;
-    await verifyAdminSession();
+    const session = await verifyAdminSession();
     const supabase = await createClient();
 
     const { data: company } = await supabase
@@ -255,6 +255,45 @@ export default async function AdminCompanyDetailPage({
     const { getCompanyTaskAssignments } = await import("@/lib/company/task-actions");
     const taskAssignments = await getCompanyTaskAssignments(id);
 
+    // Fetch user roles to check for super_admin
+    const { data: userRoles } = await admin
+      .from("staff_roles")
+      .select("role")
+      .eq("staff_id", session.userId);
+    const isSuperAdmin = (userRoles ?? []).some((r) => r.role === "super_admin");
+
+    // Fetch staff member department to check for Finance department
+    const { data: staff } = await admin
+      .from("staff_members")
+      .select("department_id")
+      .eq("id", session.userId)
+      .single();
+    
+    let isFinanceUser = false;
+    if (staff?.department_id) {
+      const { data: dept } = await admin
+        .from("departments")
+        .select("name")
+        .eq("id", staff.department_id)
+        .single();
+      if (dept?.name === "Finance") {
+        isFinanceUser = true;
+      }
+    }
+
+    // Fetch Supplier Profile and Remittance details
+    const { data: supplierProfile } = await admin
+      .from("supplier_profiles")
+      .select("*")
+      .eq("company_id", id)
+      .maybeSingle();
+
+    const { data: supplierRemittance } = await admin
+      .from("supplier_remittances")
+      .select("*")
+      .eq("company_id", id)
+      .maybeSingle();
+
     return (
       <CompanyDetailManager
         company={company}
@@ -267,6 +306,10 @@ export default async function AdminCompanyDetailPage({
         typeOptions={configs.company_types}
         statusOptions={configs.partner_statuses}
         taskAssignments={taskAssignments}
+        isSuperAdmin={isSuperAdmin}
+        isFinanceUser={isFinanceUser}
+        initialSupplierProfile={supplierProfile || null}
+        initialSupplierRemittance={supplierRemittance || null}
       />
     );
   } catch (err: any) {
