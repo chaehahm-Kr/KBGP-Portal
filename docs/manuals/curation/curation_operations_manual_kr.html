@@ -1,0 +1,815 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>K SELECT NETWORK — 큐레이션 운영 매뉴얼 (Curation Operations Manual)</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Pretendard:wght@300;400;500;600;700;800;900&family=Inter:wght@400;600;700;800;900&family=JetBrains+Mono:wght@400;600;700&display=swap');
+
+    @page {
+      size: A4;
+      margin: 20mm 15mm 20mm 15mm;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Pretendard', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      color: #0F172A;
+      background: #FFFFFF;
+      line-height: 1.6;
+      font-size: 9.5pt;
+      word-break: keep-all;
+      -webkit-print-color-adjust: exact;
+    }
+
+    .page-break {
+      page-break-before: always;
+    }
+
+    /* 표지 (Cover) */
+    .cover-container {
+      height: 245mm;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 40px 30px;
+      border: 1px solid #0F172A;
+      background: linear-gradient(135deg, #0F172A 0%, #1E293B 100%);
+      color: #FFFFFF;
+      border-radius: 12px;
+    }
+
+    .cover-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .brand-logo-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      background: #2563EB;
+      color: #FFFFFF;
+      padding: 8px 18px;
+      border-radius: 6px;
+      font-weight: 900;
+      font-size: 12pt;
+      letter-spacing: 1.5px;
+    }
+
+    .brand-symbol {
+      background: #FFFFFF;
+      color: #0F172A;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 9pt;
+      font-weight: 900;
+    }
+
+    .cover-title-box {
+      margin-top: 50px;
+    }
+
+    .cover-subtitle {
+      color: #60A5FA;
+      font-size: 13pt;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      margin-bottom: 12px;
+    }
+
+    .cover-title {
+      font-size: 32pt;
+      font-weight: 900;
+      line-height: 1.2;
+      letter-spacing: -0.5px;
+      color: #FFFFFF;
+      margin-bottom: 16px;
+    }
+
+    .cover-title-en {
+      font-size: 14pt;
+      color: #94A3B8;
+      font-weight: 600;
+      margin-bottom: 24px;
+    }
+
+    .cover-desc {
+      font-size: 10.5pt;
+      color: #CBD5E1;
+      max-width: 540px;
+      line-height: 1.7;
+    }
+
+    .cover-meta-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 20px;
+      padding-top: 24px;
+      border-top: 1px solid #334155;
+    }
+
+    .meta-item label {
+      display: block;
+      font-size: 8pt;
+      text-transform: uppercase;
+      color: #64748B;
+      font-weight: 800;
+      letter-spacing: 1px;
+      margin-bottom: 2px;
+    }
+
+    .meta-item span {
+      font-size: 10pt;
+      font-weight: 700;
+      color: #F8FAFC;
+    }
+
+    /* 본문 제목 (Section Titles) */
+    .section-title {
+      font-size: 17pt;
+      font-weight: 900;
+      color: #0F172A;
+      border-bottom: 2.5px solid #2563EB;
+      padding-bottom: 8px;
+      margin-top: 22px;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .sec-num {
+      background: #2563EB;
+      color: #FFFFFF;
+      font-size: 10pt;
+      font-weight: 900;
+      padding: 3px 10px;
+      border-radius: 4px;
+      letter-spacing: 0.5px;
+    }
+
+    .subsection-title {
+      font-size: 12pt;
+      font-weight: 800;
+      color: #1E293B;
+      margin-top: 16px;
+      margin-bottom: 10px;
+      border-left: 4px solid #2563EB;
+      padding-left: 10px;
+    }
+
+    p {
+      margin-bottom: 10px;
+      color: #334155;
+    }
+
+    /* 콜아웃 시스템 (Callouts) */
+    .callout {
+      padding: 12px 16px;
+      border-radius: 8px;
+      margin: 12px 0;
+      font-size: 9pt;
+      line-height: 1.6;
+    }
+
+    .callout-step {
+      background: #EFF6FF;
+      border-left: 4px solid #2563EB;
+      color: #1E40AF;
+    }
+    .callout-step .badge {
+      background: #2563EB;
+      color: #FFF;
+      padding: 2px 7px;
+      border-radius: 4px;
+      font-weight: 800;
+      margin-right: 6px;
+      font-size: 8pt;
+    }
+
+    .callout-tip {
+      background: #ECFDF5;
+      border-left: 4px solid #059669;
+      color: #065F46;
+    }
+    .callout-tip .badge {
+      background: #059669;
+      color: #FFF;
+      padding: 2px 7px;
+      border-radius: 4px;
+      font-weight: 800;
+      margin-right: 6px;
+      font-size: 8pt;
+    }
+
+    .callout-caution {
+      background: #FFF1F2;
+      border-left: 4px solid #E11D48;
+      color: #9F1239;
+    }
+    .callout-caution .badge {
+      background: #E11D48;
+      color: #FFF;
+      padding: 2px 7px;
+      border-radius: 4px;
+      font-weight: 800;
+      margin-right: 6px;
+      font-size: 8pt;
+    }
+
+    .callout-admin {
+      background: #F3E8FF;
+      border-left: 4px solid #7C3AED;
+      color: #5B21B6;
+    }
+    .callout-admin .badge {
+      background: #7C3AED;
+      color: #FFF;
+      padding: 2px 7px;
+      border-radius: 4px;
+      font-weight: 800;
+      margin-right: 6px;
+      font-size: 8pt;
+    }
+
+    /* 다이어그램 (Diagrams) */
+    .diagram-container {
+      background: #F8FAFC;
+      border: 1px solid #E2E8F0;
+      border-radius: 8px;
+      padding: 16px;
+      margin: 14px 0;
+      text-align: center;
+    }
+
+    .diagram-title {
+      font-size: 8.5pt;
+      font-weight: 800;
+      color: #64748B;
+      text-transform: uppercase;
+      margin-bottom: 12px;
+      letter-spacing: 1px;
+    }
+
+    .flow-steps {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+    }
+
+    .flow-box {
+      background: #FFFFFF;
+      border: 1.5px solid #CBD5E1;
+      padding: 10px 8px;
+      border-radius: 6px;
+      font-size: 8pt;
+      font-weight: 800;
+      color: #1E293B;
+      flex: 1;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+    }
+    .flow-box.active {
+      border-color: #2563EB;
+      background: #EFF6FF;
+      color: #1E40AF;
+    }
+    .flow-arrow {
+      color: #94A3B8;
+      font-weight: 900;
+      font-size: 10pt;
+    }
+
+    /* UI 화면 모의 컴포넌트 (UI Mockups) */
+    .ui-mockup {
+      border: 1px solid #CBD5E1;
+      border-radius: 8px;
+      overflow: hidden;
+      margin: 14px 0;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+      background: #FFFFFF;
+    }
+
+    .ui-header {
+      background: #0F172A;
+      color: #94A3B8;
+      padding: 8px 14px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 7.5pt;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .ui-body {
+      padding: 14px;
+      background: #F8FAFC;
+    }
+
+    /* 테이블 (Tables) */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 12px 0;
+      font-size: 8.5pt;
+    }
+
+    th, td {
+      border: 1px solid #E2E8F0;
+      padding: 8px 10px;
+      text-align: left;
+    }
+
+    th {
+      background: #F1F5F9;
+      color: #0F172A;
+      font-weight: 800;
+    }
+
+    tr:nth-child(even) {
+      background: #F8FAFC;
+    }
+
+    .num-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: #2563EB;
+      color: #FFF;
+      font-size: 7.5pt;
+      font-weight: 900;
+      margin-right: 6px;
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    .card-box {
+      background: #FFFFFF;
+      border: 1px solid #E2E8F0;
+      border-radius: 8px;
+      padding: 14px;
+    }
+
+    .code-span {
+      font-family: 'JetBrains Mono', monospace;
+      background: #F1F5F9;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 8pt;
+      color: #0F172A;
+      font-weight: 600;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- COVER PAGE -->
+  <div class="cover-container">
+    <div>
+      <div class="cover-header">
+        <div class="brand-logo-badge">
+          <span class="brand-symbol">KS</span>
+          <span>K SELECT NETWORK</span>
+        </div>
+        <span style="font-size: 9pt; color: #94A3B8; font-weight: 700;">내부 운영 및 교육용 공식 매뉴얼</span>
+      </div>
+
+      <div class="cover-title-box">
+        <div class="cover-subtitle">Product Assortment & Portfolio Management</div>
+        <h1 class="cover-title">큐레이션 운영 매뉴얼</h1>
+        <div class="cover-title-en">K SELECT NETWORK Curation Operations Manual</div>
+        <p class="cover-desc">
+          본 매뉴얼은 K SELECT NETWORK Admin의 큐레이션 컨트롤 센터, Assortment Profile(AP) 진열 세트 구성, 개별 상품 전략적 역할(Strategic Role) 부여, 어소트먼트 믹스 분석 및 성장 시뮬레이터(Growth Simulator) 연동 업무를 실무자가 별도 설명 없이 따라 할 수 있도록 제작된 한국어 공식 Visual SOP입니다.
+        </p>
+      </div>
+    </div>
+
+    <div class="cover-meta-grid">
+      <div class="meta-item">
+        <label>문서 번호 (DOCUMENT ID)</label>
+        <span>KSN-SOP-CUR-2026-KR1</span>
+      </div>
+      <div class="meta-item">
+        <label>적용 대상 (AUDIENCE)</label>
+        <span>큐레이터, 운영 스태프 및 관리자</span>
+      </div>
+      <div class="meta-item">
+        <label>최종 발행일 (EFFECTIVE DATE)</label>
+        <span>2026년 8월 15일</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="page-break"></div>
+
+  <!-- VERIFICATION NOTES -->
+  <div class="section-title"><span class="sec-num">검증</span> 시스템 정합성 검증 결과 (SYSTEM VERIFICATION NOTES)</div>
+  <p style="font-size: 8.5pt; color: #475569;">
+    본 매뉴얼은 실시간 Production DB 스키마(Migration <code>0039_product_curation_system.sql</code>), Server Action(<code>lib/product/admin-actions.ts</code>), Simulator Engine(<code>lib/simulator/engine.ts</code>) 및 실제 Admin UI를 전수 검증하여 확정된 실무 사실만을 기록하였습니다.
+  </p>
+
+  <table>
+    <thead>
+      <tr>
+        <th style="width: 24%;">검증 항목</th>
+        <th style="width: 36%;">Production 기능 및 DB 실제 검증 상태</th>
+        <th style="width: 40%;">실무 운영 가이드라인</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>1-1. Curation Selling</strong></td>
+        <td>독립된 "Curation Selling" 메뉴/DB는 존재하지 않음.</td>
+        <td>큐레이션은 백오피스 상품 진열 기획 도구이며, 실제 판매 연동은 <strong>Growth Simulator AP 추천</strong>을 통해 리테일러 주문 Assortment로 제공됩니다.</td>
+      </tr>
+      <tr>
+        <td><strong>1-2. Strategic Role</strong></td>
+        <td>DB Enum & Server Action 상 공식 Canonical Role은 <strong><code>TRAFFIC</code></strong>.</td>
+        <td>공식 7대 전략적 역할: <code>HERO</code>, <code>CORE</code>, <code>TRAFFIC</code>, <code>TREND</code>, <code>MARGIN</code>, <code>TRIAL</code>, <code>SUPPORT</code> (과거 <code>STRAP</code> 명칭은 사용 금지).</td>
+      </tr>
+      <tr>
+        <td><strong>1-3. Simulator 연동</strong></td>
+        <td>실시간 AP 추천 및 SKU 계산 알고리즘 100% 가동 중.</td>
+        <td>시뮬레이터가 최적 AP(AP-01 ~ AP-06) 및 추천 SKU를 자동 반환하며, 최종 주문서는 스태프 견적/발주 절차로 연결됩니다.</td>
+      </tr>
+      <tr>
+        <td><strong>1-4. Sales Status 감지</strong></td>
+        <td>Sales Status Mix 차트 및 테이블 내 <strong><code>DISCONTINUED</code></strong> 배지 표시.</td>
+        <td>상품 단종/보류 시 테이블에 경고 배지가 즉시 표출되며, 큐레이터가 <code>Replace</code> (1:1 교체) 버튼으로 활성 SKU로 수동 교체합니다.</td>
+      </tr>
+      <tr>
+        <td><strong>1-5. 시스템 권한</strong></td>
+        <td><code>verifyAdminSession()</code> 및 RLS 기반 권한 검증.</td>
+        <td>실제 사용 권한 명칭인 <strong><code>Admin</code></strong> (마스터 설정 및 승인 권한) 및 <strong><code>Staff</code></strong> (큐레이터/운영 스태프)만을 사용합니다.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <!-- CHAPTER 1 -->
+  <div class="section-title"><span class="sec-num">CH 1</span> 큐레이션 시스템 이해 & 아키텍처</div>
+  <p>
+    K SELECT NETWORK 큐레이션 시스템은 입점된 K-Beauty 상품들을 단순 나열하는 것이 아니라, 미국 리테일 매장의 디스플레이 규모(4FT, 8FT, 12FT 디스플레이 프로그램)와 매장 특성에 맞춰 최적의 **어소트먼트 프로필(Assortment Profile, AP)**로 구성하는 전략적 포트폴리오 기획 시스템입니다.
+  </p>
+
+  <div class="diagram-container">
+    <div class="diagram-title">K SELECT NETWORK 엔드투엔드 큐레이션 운영 워크플로우</div>
+    <div class="flow-steps">
+      <div class="flow-box">1. 입점 상품 검토<br><span style="font-weight:400; font-size:7pt;">selection_status = APPROVED</span></div>
+      <div class="flow-arrow">➔</div>
+      <div class="flow-box">2. 개별 상품 큐레이션<br><span style="font-weight:400; font-size:7pt;">Status, Curator, Strategic Role</span></div>
+      <div class="flow-arrow">➔</div>
+      <div class="flow-box active">3. AP 세트 구성<br><span style="font-weight:400; font-size:7pt;">AP-01 ~ AP-06 매트릭스 조립</span></div>
+      <div class="flow-arrow">➔</div>
+      <div class="flow-box">4. 밸런스 검토<br><span style="font-weight:400; font-size:7pt;">Category & Margin Mix 분석</span></div>
+      <div class="flow-arrow">➔</div>
+      <div class="flow-box">5. 리테일 추천 및 활용<br><span style="font-weight:400; font-size:7pt;">Simulator AP 추천 & 발주</span></div>
+    </div>
+  </div>
+
+  <!-- CHAPTER 2 -->
+  <div class="section-title"><span class="sec-num">CH 2</span> 핵심 용어와 역할 체계 (Role Systems)</div>
+  <p>
+    큐레이션 실무에서 가장 중요한 핵심 개념은 <strong>개별 상품의 전략적 역할(Strategic Role)</strong>과 <strong>AP 세트 내 진열 우선순위(AP Priority Role)</strong>를 명확히 구분하여 적용하는 것입니다.
+  </p>
+
+  <div class="grid-2">
+    <div class="card-box">
+      <h4 style="font-weight:800; color:#2563EB; margin-bottom:6px;">1. Strategic Role (개별 상품 전략적 역할 7종)</h4>
+      <p style="font-size:8pt; margin:0;">
+        상품 자체의 글로벌 카탈로그상 비즈니스 위상을 정의합니다. (개별 상품 단위 지정)
+      </p>
+      <ul style="font-size:7.5pt; margin-top:6px; padding-left:12px; color:#475569;">
+        <li><strong>HERO</strong>: 브랜드 대표 플래그십 간판 상품 (최고 인지도)</li>
+        <li><strong>CORE</strong>: 매출의 중심을 지지하는 베스트셀러 상품</li>
+        <li><strong>TRAFFIC</strong>: 고객 유입 및 모객을 유도하는 집객 상품</li>
+        <li><strong>TREND</strong>: SNS 이슈 및 시즌 트렌드 대응 상품</li>
+        <li><strong>MARGIN</strong>: 리테일 수익성을 극대화하는 고마진 상품</li>
+        <li><strong>TRIAL</strong>: 입문자용 미니/트라이얼 키트 상품</li>
+        <li><strong>SUPPORT</strong>: 라인업 완성도를 높이는 보조 상품</li>
+      </ul>
+    </div>
+
+    <div class="card-box">
+      <h4 style="font-weight:800; color:#059669; margin-bottom:6px;">2. AP Priority Role (AP 세트 내 진열 우선순위 5종)</h4>
+      <p style="font-size:8pt; margin:0;">
+        특정 AP 진열 세트(예: AP-01) 내에서 해당 상품의 포함 필수도를 정의합니다.
+      </p>
+      <ul style="font-size:7.5pt; margin-top:6px; padding-left:12px; color:#475569;">
+        <li><strong>REQUIRED</strong>: 해당 AP 선택 시 필수 포함 (제외 불가)</li>
+        <li><strong>CORE</strong>: 세트의 핵심 진열 구성 상품</li>
+        <li><strong>OPTIONAL</strong>: 매장 상황에 따른 선택적 포함 상품</li>
+        <li><strong>TEST</strong>: 신규 인큐베이팅 테스트 진열 상품</li>
+        <li><strong>EXCLUDE</strong>: 해당 AP 세트에서 명시적으로 제외</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="callout callout-tip">
+    <span class="badge">실무 구별 팁</span>
+    <strong>Strategic Role의 CORE</strong>는 "매출 효자 베스트셀러 상품"이라는 상품 자체의 특징이고, <strong>AP Priority Role의 CORE</strong>는 "특정 8FT AP-01 매대 세트에서 핵심 위치에 진열되는 상품"이라는 진열 세트 내 위치를 의미합니다. 둘은 완전히 별개의 개념입니다.
+  </div>
+
+  <div class="page-break"></div>
+
+  <!-- CHAPTER 3 -->
+  <div class="section-title"><span class="sec-num">CH 3</span> 큐레이션 컨트롤 센터 사용법</div>
+  <p><strong>메뉴 경로:</strong> <span class="code-span">Products ➔ Curation</span> (URL: <code>/admin/products/curation</code>)</p>
+  <p>
+    큐레이션 컨트롤 센터는 3개 디스플레이 프로그램(START, GROW, EXPAND)과 18개 AP 프로필의 전체 현황을 통합 모니터링하고 개별 세트 관리로 진입하는 대시보드입니다.
+  </p>
+
+  <div class="ui-mockup">
+    <div class="ui-header">
+      <span>ADMIN PORTAL ➔ PRODUCTS ➔ CURATION CONTROL CENTER</span>
+      <span>ENV: PRODUCTION</span>
+    </div>
+    <div class="ui-body">
+      <div style="display:flex; justify-content:space-between; margin-bottom:12px;">
+        <div style="font-weight:800; font-size:11pt;">Display Programs & Profile Directory</div>
+        <span style="background:#2563EB; color:#FFF; padding:3px 8px; border-radius:4px; font-size:7.5pt; font-weight:700;">Full Width Mode</span>
+      </div>
+
+      <div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:10px; margin-bottom:14px;">
+        <div style="background:#EFF6FF; border:1.5px solid #2563EB; padding:10px; border-radius:6px;">
+          <div style="font-size:7pt; color:#2563EB; font-weight:800;"><span class="num-badge">1</span> START · 4FT</div>
+          <div style="font-size:12pt; font-weight:900; margin-top:4px;">12 Active SKUs</div>
+          <div style="font-size:7.5pt; color:#64748B;">6 Profiles (AP-01 ~ AP-06)</div>
+        </div>
+        <div style="background:#FFF; border:1px solid #CBD5E1; padding:10px; border-radius:6px;">
+          <div style="font-size:7pt; color:#64748B; font-weight:800;">GROW · 8FT</div>
+          <div style="font-size:12pt; font-weight:900; margin-top:4px;">28 Active SKUs</div>
+          <div style="font-size:7.5pt; color:#64748B;">6 Profiles (AP-01 ~ AP-06)</div>
+        </div>
+        <div style="background:#FFF; border:1px solid #CBD5E1; padding:10px; border-radius:6px;">
+          <div style="font-size:7pt; color:#64748B; font-weight:800;">EXPAND · 12FT</div>
+          <div style="font-size:12pt; font-weight:900; margin-top:4px;">45 Active SKUs</div>
+          <div style="font-size:7.5pt; color:#64748B;">6 Profiles (AP-01 ~ AP-06)</div>
+        </div>
+      </div>
+
+      <table style="margin:0; background:#FFF;">
+        <thead>
+          <tr>
+            <th>Code</th>
+            <th>Profile Name & Description</th>
+            <th>Target SKU</th>
+            <th>Selected SKU</th>
+            <th>Supply / MSRP / Margin</th>
+            <th style="text-align:right;">Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td style="font-family:monospace; font-weight:800;">AP-01</td>
+            <td><strong>START 4FT - 기본 구성 01</strong><br><span style="font-size:7pt; color:#64748B;">소규모 스토어를 위한 표준형 Assortment</span></td>
+            <td>10</td>
+            <td><span style="color:#059669; font-weight:800;">10 (Match)</span></td>
+            <td>$142.50 / $310.00 / <strong>54.0%</strong></td>
+            <td style="text-align:right;"><span class="num-badge">2</span><span style="background:#2563EB; color:#FFF; padding:3px 8px; border-radius:4px; font-weight:700; font-size:7.5pt;">Manage Set ➔</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="callout callout-step">
+    <span class="badge">작업 단계</span>
+    <strong>STEP 1: Display Program 카드 선택</strong> (<span class="num-badge">1</span>) - START 4FT, GROW 8FT, EXPAND 12FT 중 하나를 클릭하여 해당 6개 AP 목록을 필터링합니다.<br>
+    <strong>STEP 2: AP 세트 관리 진입</strong> (<span class="num-badge">2</span>) - 대상 AP 행 우측의 <code>Manage Set</code> 버튼을 클릭하여 AP 세트 빌더 화면으로 진입합니다.
+  </div>
+
+  <!-- CHAPTER 4 -->
+  <div class="section-title"><span class="sec-num">CH 4</span> AP 진열 세트 구성 및 분석</div>
+  <p><strong>메뉴 경로:</strong> <span class="code-span">Products ➔ Curation ➔ [Program] ➔ [AP Code]</span></p>
+
+  <div class="ui-mockup">
+    <div class="ui-header">
+      <span>AP SET BUILDER ➔ START_4FT / AP-01 (기본 구성 01)</span>
+      <span>TARGET: 10 SKU | SELECTED: 10 SKU</span>
+    </div>
+    <div class="ui-body">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+        <div style="font-size:9pt; font-weight:800; color:#0F172A;">진열 구성 상품 목록 (10개 선택됨)</div>
+        <div style="display:flex; gap:6px;">
+          <span class="num-badge">1</span><button style="background:#2563EB; color:#FFF; border:none; padding:4px 10px; border-radius:4px; font-weight:700; font-size:7.5pt;">+ Add Product</button>
+        </div>
+      </div>
+
+      <table style="margin:0; background:#FFF;">
+        <thead>
+          <tr>
+            <th>Product Name & SKU</th>
+            <th>Brand</th>
+            <th>Category</th>
+            <th>AP Priority Role</th>
+            <th>Status</th>
+            <th style="text-align:right;">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>스네일 리페어 인텐시브 앰플</strong><br><span style="font-size:7pt; color:#64748B;">SKU: KSN-SN-001</span></td>
+            <td>K-Beauty Brand A</td>
+            <td>Skincare ➔ Ampoule</td>
+            <td><span class="num-badge">2</span><select style="font-size:7.5pt; font-weight:700; padding:2px;"><option>REQUIRED</option><option>CORE</option></select></td>
+            <td><span style="background:#DCFCE7; color:#166534; padding:2px 6px; border-radius:4px; font-weight:800; font-size:7pt;">ACTIVE</span></td>
+            <td style="text-align:right;">
+              <span class="num-badge">3</span><button style="background:#F1F5F9; border:none; padding:3px 6px; border-radius:4px; font-weight:700; font-size:7pt;">Replace</button>
+              <button style="background:#FFE4E6; color:#9F1239; border:none; padding:3px 6px; border-radius:4px; font-weight:700; font-size:7pt;">Remove</button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="grid-2">
+    <div class="callout callout-step" style="margin:0;">
+      <span class="badge">상품 관리 조작법</span>
+      <ol style="padding-left:14px; font-size:8pt; margin-top:4px;">
+        <li><strong>+ Add Product</strong> (<span class="num-badge">1</span>) 클릭 후 미포함 후보 상품을 검색하여 추가합니다.</li>
+        <li><strong>AP Priority Role</strong> (<span class="num-badge">2</span>) 드롭다운을 변경하여 REQUIRED, CORE 등으로 지정합니다.</li>
+        <li><strong>Replace</strong> (<span class="num-badge">3</span>) 버튼을 클릭하여 기존 상품을 1:1로 활성 대체 SKU와 교체합니다.</li>
+      </ol>
+    </div>
+
+    <div class="callout callout-caution" style="margin:0;">
+      <span class="badge">단종 상품 점검</span>
+      상품 상태가 <strong style="color:#E11D48;">DISCONTINUED</strong>로 변경된 상품은 테이블에 빨간색 경고 배지가 표출됩니다. 큐레이터는 즉시 <strong>Replace</strong> 버튼을 사용하여 동일 카테고리의 활성 상품으로 수동 교체해야 합니다.
+    </div>
+  </div>
+
+  <div class="page-break"></div>
+
+  <!-- CHAPTER 5 -->
+  <div class="section-title"><span class="sec-num">CH 5</span> 개별 상품 큐레이션 설정</div>
+  <p><strong>메뉴 경로:</strong> <span class="code-span">Products ➔ [Product ID] ➔ Curation 오버라이드 탭</span></p>
+
+  <div class="ui-mockup">
+    <div class="ui-header">
+      <span>PRODUCT DETAIL ➔ CURATION OVERRIDE TAB (SKU: KSN-SN-001)</span>
+      <span>PRODUCT: 스네일 리페어 앰플</span>
+    </div>
+    <div class="ui-body">
+      <div style="display:grid; grid-template-columns: repeat(4, 1fr); gap:10px; margin-bottom:12px; background:#FFF; padding:10px; border-radius:6px; border:1px solid #CBD5E1;">
+        <div>
+          <label style="font-size:7pt; color:#64748B; font-weight:700;">CURATION STATUS</label>
+          <select style="width:100%; font-size:8pt; font-weight:700; padding:3px; margin-top:2px;"><option>APPROVED</option></select>
+        </div>
+        <div>
+          <label style="font-size:7pt; color:#64748B; font-weight:700;">ASSIGNED CURATOR</label>
+          <select style="width:100%; font-size:8pt; font-weight:700; padding:3px; margin-top:2px;"><option>Sarah Chen (리드 큐레이터)</option></select>
+        </div>
+        <div>
+          <label style="font-size:7pt; color:#64748B; font-weight:700;">STRATEGIC ROLE</label>
+          <select style="width:100%; font-size:8pt; font-weight:700; padding:3px; margin-top:2px;"><option>HERO</option></select>
+        </div>
+        <div>
+          <label style="font-size:7pt; color:#64748B; font-weight:700;">NEXT REVIEW DATE</label>
+          <input type="date" value="2026-09-30" style="width:100%; font-size:8pt; padding:2px; margin-top:2px;" />
+        </div>
+      </div>
+
+      <div style="font-size:8.5pt; font-weight:800; margin-bottom:6px; color:#0F172A;">18개 AP 매트릭스 진열 포함 오버라이드 그리드</div>
+      <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:8px;">
+        <div style="background:#FFF; padding:8px; border:1px solid #CBD5E1; border-radius:4px; font-size:7.5pt;">
+          <strong>START_4FT · AP-01</strong>
+          <select style="width:100%; font-size:7pt; margin-top:4px;"><option>REQUIRED</option></select>
+        </div>
+        <div style="background:#FFF; padding:8px; border:1px solid #CBD5E1; border-radius:4px; font-size:7.5pt;">
+          <strong>GROW_8FT · AP-01</strong>
+          <select style="width:100%; font-size:7pt; margin-top:4px;"><option>CORE</option></select>
+        </div>
+        <div style="background:#FFF; padding:8px; border:1px solid #CBD5E1; border-radius:4px; font-size:7.5pt;">
+          <strong>EXPAND_12FT · AP-01</strong>
+          <select style="width:100%; font-size:7pt; margin-top:4px;"><option>OPTIONAL</option></select>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CHAPTER 6 -->
+  <div class="section-title"><span class="sec-num">CH 6</span> 큐레이션 마스터 설정 (관리자 전용)</div>
+  <p><strong>메뉴 경로:</strong> <span class="code-span">Settings ➔ Curation</span> (URL: <code>/admin/settings/curation</code>)</p>
+
+  <div class="callout callout-admin">
+    <span class="badge">관리자 전용</span>
+    Display Program 마스터 정보나 AP의 Target SKU 수량을 변경하는 작업은 전체 시뮬레이터 추천 알고리즘과 리테일러 발주 구성에 영향을 주므로 Admin 권한 보유자만 수행합니다.
+  </div>
+
+  <div class="grid-2">
+    <div class="card-box">
+      <h4 style="font-weight:800; color:#7C3AED; margin-bottom:6px;">1. Display Program 마스터 관리</h4>
+      <p style="font-size:8pt; margin:0;">
+        START_4FT, GROW_8FT, EXPAND_12FT 코드의 명칭, 설명, 최소/최대 SKU 규격 및 활성 상태를 수정합니다.
+      </p>
+    </div>
+    <div class="card-box">
+      <h4 style="font-weight:800; color:#7C3AED; margin-bottom:6px;">2. AP & Matching Tag 연관 관리</h4>
+      <p style="font-size:8pt; margin:0;">
+        AP별 Target SKU(10, 25, 45개) 수정 및 마케팅 매칭 태그(#Hydration, #GlassSkin) 검색, 신규 생성, 진열 순서를 변경합니다.
+      </p>
+    </div>
+  </div>
+
+  <!-- CHAPTER 7 -->
+  <div class="section-title"><span class="sec-num">CH 7</span> 문제 해결 및 FAQ (TROUBLESHOOTING)</div>
+
+  <table>
+    <thead>
+      <tr>
+        <th style="width: 28%;">발생 증상</th>
+        <th style="width: 36%;">원인 진단</th>
+        <th style="width: 36%;">조치 방법</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>추가 후보 목록에 상품이 나오지 않음</td>
+        <td><code>selection_status</code> 가 <code>APPROVED</code> 승인 상태가 아님.</td>
+        <td>Products 전체 목록에서 대상 상품의 입점 승인 상태를 먼저 확인 및 변경합니다.</td>
+      </tr>
+      <tr>
+        <td>Target SKU 배지가 주황색 Mismatch로 나옴</td>
+        <td>현재 구성된 Selected SKU 수가 AP 목표 수치와 다름.</td>
+        <td>AP 세트 빌더에서 상품을 추가하거나 제외하여 Target SKU 수치와 정확히 일치시킵니다.</td>
+      </tr>
+      <tr>
+        <td>단종 상품이 AP 세트에 계속 남아있음</td>
+        <td>상품 단종 전환 후 AP 세트에서 수동 교체가 진행되지 않음.</td>
+        <td>단종 상품 행의 <code>Replace</code> 버튼을 클릭하여 활성 대체 SKU로 1:1 교체합니다.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <!-- CHAPTER 8 -->
+  <div class="section-title"><span class="sec-num">CH 8</span> 큐레이션 용어 사전 (GLOSSARY)</div>
+  
+  <div class="grid-2">
+    <div style="font-size:8pt;">
+      <p><strong>Curation (큐레이션)</strong>: 상품을 전략적으로 선별, 분류, 평가하여 AP 세트로 조립하는 기획 프로세스.</p>
+      <p><strong>Display Program (디스플레이 프로그램)</strong>: 매장 진열 규격 (START 4FT, GROW 8FT, EXPAND 12FT).</p>
+      <p><strong>Assortment Profile (AP)</strong>: 사전 구성된 표준 SKU 진열 세트 (프로그램 당 6개, 총 18개 조합).</p>
+      <p><strong>Target SKU (목표 SKU)</strong>: 특정 AP 세트에 규정된 기준 목표 SKU 수량.</p>
+    </div>
+    <div style="font-size:8pt;">
+      <p><strong>HERO (히어로)</strong>: 브랜드와 매장을 대표하는 최상위 인지도 플래그십 상품.</p>
+      <p><strong>CORE (코어)</strong>: 안정적인 매장 매출 기반을 형성하는 핵심 베스트셀러 상품.</p>
+      <p><strong>TRAFFIC (트래픽)</strong>: 고객의 매장 방문과 유입을 촉진하는 모객 상품.</p>
+      <p><strong>REQUIRED (필수 진열)</strong>: 해당 AP 세트 선택 시 제외 불가능한 무조건 필수 상품.</p>
+    </div>
+  </div>
+
+  <div class="page-break"></div>
+
+  <!-- CHAPTER 9 -->
+  <div class="section-title"><span class="sec-num">CH 9</span> UX 및 운영 개선 제안 (IMPROVEMENT RECOMMENDATIONS)</div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>개선 대상 문제점</th>
+        <th>운영상 영향</th>
+        <th>개선 권고사항 (Recommendation)</th>
+        <th>우선순위</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Target SKU 수량 불일치 가시성 부족</td>
+        <td>큐레이터가 수량이 미달되거나 초과된 AP 세트를 인지하지 못하고 이탈할 수 있음.</td>
+        <td>Selected SKU !== Target SKU 시 상단에 눈에 띄는 주황색 경고 바 표시 기능 도입.</td>
+        <td><span style="background:#FFE4E6; color:#9F1239; font-weight:800; padding:2px 6px; border-radius:3px;">높음 (HIGH)</span></td>
+      </tr>
+      <tr>
+        <td>단종 상품 자동 알림 부재</td>
+        <td>단종 상품이 AP 세트에 방치되어 리테일러 주문 시 오류 발생 가능.</td>
+        <td>AP 세트에 포함된 상품이 단종 처리될 경우 담당 큐레이터에게 자동 메일 알림 발송.</td>
+        <td><span style="background:#FEF3C7; color:#92400E; font-weight:800; padding:2px 6px; border-radius:3px;">중간 (MEDIUM)</span></td>
+      </tr>
+      <tr>
+        <td>18개 AP 매트릭스 개별 지정 번거로움</td>
+        <td>신규 상품 등록 시 18개 AP 드롭다운을 일일이 선택해야 하여 클릭 수가 과다함.</td>
+        <td>"표준 템플릿 일괄 적용" 버튼을 추가하여 한 번의 클릭으로 18개 AP 상태 자동 세팅.</td>
+        <td><span style="background:#E0E7FF; color:#3730A3; font-weight:800; padding:2px 6px; border-radius:3px;">낮음 (LOW)</span></td>
+      </tr>
+    </tbody>
+  </table>
+
+</body>
+</html>

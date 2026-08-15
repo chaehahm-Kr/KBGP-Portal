@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>K SELECT NETWORK — 큐레이션 실무 퀵 가이드 (Curation Quick Reference Guide)</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Pretendard:wght@300;400;500;600;700;800;900&family=Inter:wght@400;600;700;800;900&family=JetBrains+Mono:wght@400;600;700&display=swap');
+
+    @page {
+      size: A4;
+      margin: 15mm 12mm 15mm 12mm;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Pretendard', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      color: #0F172A;
+      background: #FFFFFF;
+      line-height: 1.5;
+      font-size: 9pt;
+      word-break: keep-all;
+      -webkit-print-color-adjust: exact;
+    }
+
+    .page-break {
+      page-break-before: always;
+    }
+
+    /* 상단 헤더 바 */
+    .header-bar {
+      background: #0F172A;
+      color: #FFFFFF;
+      padding: 12px 18px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+    }
+
+    .brand-tag {
+      font-size: 8pt;
+      color: #94A3B8;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    .header-title {
+      font-size: 14pt;
+      font-weight: 900;
+      letter-spacing: -0.5px;
+      margin-top: 2px;
+    }
+
+    .quick-tag {
+      background: #2563EB;
+      color: #FFF;
+      padding: 5px 10px;
+      border-radius: 4px;
+      font-weight: 900;
+      font-size: 8pt;
+      text-transform: uppercase;
+    }
+
+    /* SOP 그리드 카드 */
+    .sop-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+
+    .sop-card {
+      border: 1px solid #CBD5E1;
+      border-radius: 8px;
+      padding: 12px;
+      background: #FFFFFF;
+    }
+
+    .sop-card-title {
+      font-size: 9.5pt;
+      font-weight: 800;
+      color: #1E293B;
+      border-bottom: 1.5px solid #2563EB;
+      padding-bottom: 4px;
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .sop-badge {
+      background: #EFF6FF;
+      color: #1E40AF;
+      font-size: 7pt;
+      font-weight: 800;
+      padding: 2px 6px;
+      border-radius: 3px;
+    }
+
+    ol, ul {
+      padding-left: 14px;
+      font-size: 8pt;
+      color: #334155;
+    }
+
+    li {
+      margin-bottom: 4px;
+    }
+
+    .code-box {
+      font-family: 'JetBrains Mono', monospace;
+      background: #F1F5F9;
+      padding: 2px 5px;
+      border-radius: 3px;
+      font-size: 7.5pt;
+      color: #0F172A;
+      font-weight: 600;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 8px 0;
+      font-size: 8pt;
+    }
+
+    th, td {
+      border: 1px solid #E2E8F0;
+      padding: 6px 8px;
+      text-align: left;
+    }
+
+    th {
+      background: #F1F5F9;
+      font-weight: 800;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- HEADER -->
+  <div class="header-bar">
+    <div>
+      <div class="brand-tag">K SELECT NETWORK OFFICIAL SOP</div>
+      <div class="header-title">큐레이션 실무 퀵 가이드 (Curation Quick Reference Guide)</div>
+    </div>
+    <div class="quick-tag">실무 퀵 참조표 · V1.0</div>
+  </div>
+
+  <div class="sop-grid">
+
+    <!-- SOP 1 -->
+    <div class="sop-card">
+      <div class="sop-card-title">
+        <span>SOP 1: 신규 상품 큐레이션 검토 & 담당 지정</span>
+        <span class="sop-badge">개별 상품 레벨</span>
+      </div>
+      <ol>
+        <li><span class="code-box">Products ➔ [Product ID] ➔ Curation 오버라이드 탭</span> 이동.</li>
+        <li><span class="code-box">selection_status === APPROVED</span> 입점 승인 상태 확인.</li>
+        <li>담당 큐레이터 드롭다운에서 <strong>리드 큐레이터 성명</strong> 선택.</li>
+        <li>Curation Status를 <span class="code-box">NOT_REVIEWED</span> ➔ <span class="code-box">APPROVED</span> 변경.</li>
+        <li>차기 검토일 지정 후 <strong>Save Curation Profile</strong> 클릭.</li>
+      </ol>
+    </div>
+
+    <!-- SOP 2 -->
+    <div class="sop-card">
+      <div class="sop-card-title">
+        <span>SOP 2: Strategic Role (전략적 역할) 7종</span>
+        <span class="sop-badge">전략 역할 판정</span>
+      </div>
+      <ul>
+        <li><strong>HERO</strong>: 브랜드 대표 간판 플래그십 상품 (최상위 인지도).</li>
+        <li><strong>CORE</strong>: 매출의 기반을 지원하는 매출 효자 베스트셀러.</li>
+        <li><strong>TRAFFIC</strong>: 고객 매장 유입을 촉진하는 모객 상품.</li>
+        <li><strong>TREND</strong>: SNS 이슈 및 시즌 트렌드 반응형 상품.</li>
+        <li><strong>MARGIN</strong>: 리테일러/K SELECT 수익성 극대화 고마진 상품.</li>
+        <li><strong>TRIAL / SUPPORT</strong>: 미니 트라이얼 키트 & 루틴 보조 상품.</li>
+      </ul>
+    </div>
+
+    <!-- SOP 3 -->
+    <div class="sop-card">
+      <div class="sop-card-title">
+        <span>SOP 3: AP 세트에 상품 추가 (Add Product)</span>
+        <span class="sop-badge">AP 세트 빌더</span>
+      </div>
+      <ol>
+        <li><span class="code-box">Products ➔ Curation ➔ [Program] ➔ [AP Code]</span> 이동.</li>
+        <li>우측 상단 <strong>+ Add Product</strong> 버튼 클릭.</li>
+        <li>팝업 검색창에서 상품명, 브랜드, Letusto SKU로 후보 검색.</li>
+        <li>AP Priority Role (<span class="code-box">REQUIRED / CORE / OPTIONAL</span>) 선택.</li>
+        <li><strong>Add to AP Set</strong> 클릭 후 테이블 반영 확인.</li>
+      </ol>
+    </div>
+
+    <!-- SOP 4 -->
+    <div class="sop-card">
+      <div class="sop-card-title">
+        <span>SOP 4: AP 상품 1:1 대체 교체 (Replace)</span>
+        <span class="sop-badge">1:1 상품 교체</span>
+      </div>
+      <ol>
+        <li>AP 세트 빌더 테이블에서 교체 대상 상품 행 이동.</li>
+        <li>Actions 열의 <strong>Replace</strong> 버튼 클릭.</li>
+        <li>팝업에서 동일 카테고리의 활성 대체 SKU 검색 및 선택.</li>
+        <li><strong>Confirm Replacement</strong> 클릭.</li>
+        <li>신규 상품이 기존 상품의 Priority Role을 그대로 승계.</li>
+      </ol>
+    </div>
+
+    <!-- SOP 5 -->
+    <div class="sop-card">
+      <div class="sop-card-title">
+        <span>SOP 5: Target SKU 수량 검증</span>
+        <span class="sop-badge">어소트먼트 점검</span>
+      </div>
+      <ul>
+        <li><strong>START_4FT</strong>: Target = 10개 SKU</li>
+        <li><strong>GROW_8FT</strong>: Target = 25개 SKU</li>
+        <li><strong>EXPAND_12FT</strong>: Target = 45개 SKU</li>
+        <li><span class="code-box">Selected SKU === Target SKU</span> (초록색 Match 배지) 확인.</li>
+        <li>수량 불일치(주황색) 시 상품을 추가/제외하여 수량 맞춤.</li>
+      </ul>
+    </div>
+
+    <!-- SOP 6 -->
+    <div class="sop-card">
+      <div class="sop-card-title">
+        <span>SOP 6: 단종(DISCONTINUED) 상품 안전 교체</span>
+        <span class="sop-badge">안전 관리</span>
+      </div>
+      <ol>
+        <li>테이블 내 빨간색 <span class="code-box" style="background:#FFE4E6; color:#9F1239;">DISCONTINUED</span> 배지 확인.</li>
+        <li>해당 행의 <strong>Replace</strong> 버튼 클릭.</li>
+        <li>동일 카테고리의 정상 판매 중인 대체 상품 선택.</li>
+        <li>Category & Brand Mix 차트의 정상 갱신 확인.</li>
+      </ol>
+    </div>
+
+  </div>
+
+  <div style="font-weight:800; font-size:10pt; margin-top:10px; margin-bottom:6px; color:#0F172A;">응급 문제 해결 퀵 참조표 (TROUBLESHOOTING CHEAT SHEET)</div>
+  <table>
+    <thead>
+      <tr>
+        <th style="width: 30%;">발생 증상</th>
+        <th style="width: 35%;">원인 진단</th>
+        <th style="width: 35%;">즉시 조치 방법</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>추가 팝업에 후보 상품이 검색되지 않음</td>
+        <td><code>selection_status</code> !== APPROVED</td>
+        <td>Products 목록에서 입점 승인(APPROVED) 처리 후 재검색.</td>
+      </tr>
+      <tr>
+        <td>Target SKU와 Selected SKU 수량이 안 맞음</td>
+        <td>목표 수량 대비 미달 또는 초과 상태</td>
+        <td>Selected === Target SKU 가 될 때까지 추가 또는 제외 조치.</td>
+      </tr>
+      <tr>
+        <td>Matching Tag 검색 결과가 안 나옴</td>
+        <td>마스터 테이블에 태그 미등록 상태</td>
+        <td><code>Settings ➔ Curation ➔ Tag Manager</code> 에서 태그 신규 생성.</td>
+      </tr>
+      <tr>
+        <td>시뮬레이터 추천 결과가 달라짐</td>
+        <td>AP 매트릭스 우선순위 최근 수정 영향</td>
+        <td>시뮬레이터 샌드박스 재계산을 통해 최신 AP 세트 검증.</td>
+      </tr>
+    </tbody>
+  </table>
+
+</body>
+</html>
