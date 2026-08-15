@@ -228,7 +228,6 @@ export default function GuideDrawer({ isOpen, onClose }: GuideDrawerProps) {
     if (actionType === "download" || actionType === "manual") {
       window.open(url, "_blank");
     } else {
-      // Persist current answer and state as HIDDEN
       try {
         sessionStorage.setItem(STORAGE_KEY_STATE, "HIDDEN");
         if (currentAnswer) {
@@ -268,11 +267,10 @@ export default function GuideDrawer({ isOpen, onClose }: GuideDrawerProps) {
           <button
             onClick={handleRestoreClick}
             className="px-3.5 py-2.5 rounded-l-2xl bg-zinc-900 text-white font-extrabold text-xs shadow-2xl border border-r-0 border-zinc-700 hover:bg-zinc-800 transition flex items-center gap-2 cursor-pointer group"
-            title="K SELECT Guide 복원하기"
+            title="가이드 다시 펼치기 (Restore)"
           >
             <div className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse" />
-            <span className="tracking-tight">K SELECT Guide</span>
-            <span className="text-amber-400 font-black text-sm group-hover:-translate-x-0.5 transition-transform">‹</span>
+            <span className="tracking-tight font-black text-amber-300">‹ K SELECT Guide</span>
           </button>
         </div>
       )}
@@ -280,9 +278,18 @@ export default function GuideDrawer({ isOpen, onClose }: GuideDrawerProps) {
       {/* STATE A: OPEN DRAWER (Non-modal overlay allowing background scroll/clicks) */}
       {drawerState === "OPEN" && (
         <div className="fixed inset-y-0 right-0 z-50 flex max-w-full pl-10 pointer-events-none">
-          <div className="w-screen max-w-lg transform bg-white dark:bg-zinc-900 shadow-2xl transition-transform duration-300 ease-in-out border-l border-zinc-200 dark:border-zinc-800 flex flex-col h-full pointer-events-auto">
+          <div className="relative w-screen max-w-lg transform bg-white dark:bg-zinc-900 shadow-2xl transition-transform duration-300 ease-in-out border-l border-zinc-200 dark:border-zinc-800 flex flex-col h-full pointer-events-auto">
 
-            {/* Drawer Top Header */}
+            {/* EDGE HANDLE HIDE BUTTON (Left Border Center) */}
+            <button
+              onClick={handleMinimizeClick}
+              className="absolute -left-5 top-1/2 -translate-y-1/2 z-50 w-5 h-12 rounded-l-xl bg-zinc-900 dark:bg-zinc-800 border border-r-0 border-zinc-700 text-amber-400 hover:text-amber-300 hover:w-6 transition-all flex items-center justify-center font-black text-sm shadow-xl cursor-pointer"
+              title="가이드 숨기기 (Hide)"
+            >
+              ›
+            </button>
+
+            {/* Drawer Top Header (Only History and Close X) */}
             <div className="flex items-center justify-between px-5 py-3.5 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-900 text-white shrink-0">
               <div className="flex items-center gap-3">
                 <div className="w-7 h-7 rounded-lg bg-zinc-800 border border-zinc-700 flex items-center justify-center font-black text-amber-400 text-xs">
@@ -299,7 +306,7 @@ export default function GuideDrawer({ isOpen, onClose }: GuideDrawerProps) {
                 </div>
               </div>
 
-              {/* Header Controls: History | Hide (-) | Close (X) */}
+              {/* Header Controls: History | Close (X) */}
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => setShowHistoryModal(!showHistoryModal)}
@@ -314,19 +321,10 @@ export default function GuideDrawer({ isOpen, onClose }: GuideDrawerProps) {
                   )}
                 </button>
 
-                {/* Hide / Minimize Button (-) */}
-                <button
-                  onClick={handleMinimizeClick}
-                  className="px-2 py-1 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition font-black text-sm cursor-pointer"
-                  title="가이드 숨기기 (Minimize)"
-                >
-                  －
-                </button>
-
                 {/* Close Button (X) */}
                 <button
                   onClick={handleCloseClick}
-                  className="px-2 py-1 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition font-black text-xs cursor-pointer"
+                  className="px-2 py-1 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition font-black text-xs cursor-pointer ml-1"
                   title="가이드 닫기 (Close)"
                 >
                   ✕
