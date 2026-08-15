@@ -577,6 +577,7 @@ export async function getSupplierInvoiceById(id: string) {
       balance_due,
       invoice_status,
       payment_status,
+      settlement_status,
       attachment_path,
       internal_note,
       rejection_reason,
@@ -609,7 +610,37 @@ export async function getSupplierInvoiceById(id: string) {
       submitter:profiles!submitted_by (full_name),
       approver:profiles!approved_by (full_name),
       rejecter:profiles!rejected_by (full_name),
-      voider:profiles!voided_by (full_name)
+      voider:profiles!voided_by (full_name),
+      adjustments:supplier_invoice_adjustments (
+        id,
+        supplier_invoice_id,
+        supplier_invoice_line_id,
+        adjustment_type,
+        adjustment_direction,
+        quantity,
+        unit_amount,
+        adjustment_amount,
+        currency,
+        reason,
+        reference_type,
+        reference_id,
+        supplier_credit_reference,
+        status,
+        internal_note,
+        created_at,
+        created_by,
+        approved_at,
+        approved_by,
+        rejected_at,
+        rejected_by,
+        rejection_reason,
+        voided_at,
+        voided_by,
+        creator:profiles!created_by (full_name),
+        approver:profiles!approved_by (full_name),
+        rejecter:profiles!rejected_by (full_name),
+        voider:profiles!voided_by (full_name)
+      )
     `)
     .eq("id", id)
     .single();
@@ -658,5 +689,283 @@ export async function getInvoiceAttachmentUrl(path: string) {
   const { getSignedFileUrl } = await import("@/lib/files/storage");
   return await getSignedFileUrl(path);
 }
+
+export interface CreateAdjustmentInput {
+  supplier_invoice_id: string;
+  supplier_invoice_line_id?: string | null;
+  adjustment_type: 'SHORTAGE' | 'DAMAGE' | 'PRICE_DIFFERENCE' | 'OTHER';
+  adjustment_direction: 'CREDIT' | 'CHARGE';
+  quantity?: number | null;
+  unit_amount?: number | null;
+  adjustment_amount: number;
+  currency: string;
+  reason: string;
+  reference_type?: 'SHIPMENT' | 'RECEIVING' | 'VARIANCE_CLOSE' | 'OTHER' | null;
+  reference_id?: string | null;
+  supplier_credit_reference?: string | null;
+  internal_note?: string | null;
+}
+
+export async function createAdjustment(input: CreateAdjustmentInput) {
+  const { userId } = await verifyAdminSession();
+  const supabase = createAdminClient();
+  await verifyWritePermission(supabase, userId);
+
+  // If settlement is already SETTLED, edit/addition is prohibited
+  const { data: inv } = await supabase
+    .from("supplier_invoices")
+    .select("settlement_status")
+    .eq("id", input.supplier_invoice_id)
+    .single();
+
+  if (inv?.settlement_status === "SETTLED") {
+    throw new Error("정산 종결(SETTLED) 상태인 인보이스에는 조정 항목을 추가할 수 없습니다.");
+  }
+
+  const { data, error } = await supabase
+    .from("supplier_invoice_adjustments")
+    .insert({
+      supplier_invoice_id: input.supplier_invoice_id,
+      supplier_invoice_line_id: input.supplier_invoice_line_id || null,
+      adjustment_type: input.adjustment_type,
+      adjustment_direction: input.adjustment_direction,
+      quantity: input.quantity || null,
+      unit_amount: input.unit_amount || null,
+      adjustment_amount: input.adjustment_amount,
+      currency: input.currency,
+      reason: input.reason,
+      reference_type: input.reference_type || null,
+      reference_id: input.reference_id || null,
+      supplier_credit_reference: input.supplier_credit_reference || null,
+      internal_note: input.internal_note || null,
+      status: "DRAFT",
+      created_by: userId,
+      updated_by: userId,
+    })
+    .select("id")
+    .single();
+
+  if (error) throw new Error(`조정 등록 실패: ${error.message}`);
+
+  revalidatePath("/admin/finance/invoices");
+  revalidatePath(`/admin/finance/invoices/${input.supplier_invoice_id}`);
+  return data;
+}
+
+export async function updateAdjustment(id: string, input: Partial<CreateAdjustmentInput>) {
+  const { userId } = await verifyAdminSession();
+  const supabase = createAdminClient();
+  await verifyWritePermission(supabase, userId);
+
+  const { data: adj } = await supabase
+    .from("supplier_invoice_adjustments")
+    .select("id, status, supplier_invoice_id")
+    .eq("id", id)
+    .single();
+
+  if (!adj) throw new Error("Adjustment not found.");
+  if (adj.status !== "DRAFT" && adj.status !== "REJECTED") {
+    throw new Error("초안(DRAFT) 또는 반려(REJECTED) 상태인 조정 항목만 수정할 수 있습니다.");
+  }
+
+  // Check invoice settlement status
+  const { data: inv } = await supabase
+    .from("supplier_invoices")
+    .select("settlement_status")
+    .eq("id", adj.supplier_invoice_id)
+    .single();
+
+  if (inv?.settlement_status === "SETTLED") {
+    throw new Error("정산 종결(SETTLED) 상태인 인보이스의 조정 항목은 수정할 수 없습니다.");
+  }
+
+  const { error } = await supabase
+    .from("supplier_invoice_adjustments")
+    .update({
+      supplier_invoice_line_id: input.supplier_invoice_line_id !== undefined ? input.supplier_invoice_line_id : undefined,
+      adjustment_type: input.adjustment_type,
+      adjustment_direction: input.adjustment_direction,
+      quantity: input.quantity !== undefined ? input.quantity : undefined,
+      unit_amount: input.unit_amount !== undefined ? input.unit_amount : undefined,
+      adjustment_amount: input.adjustment_amount,
+      currency: input.currency,
+      reason: input.reason,
+      reference_type: input.reference_type !== undefined ? input.reference_type : undefined,
+      reference_id: input.reference_id !== undefined ? input.reference_id : undefined,
+      supplier_credit_reference: input.supplier_credit_reference !== undefined ? input.supplier_credit_reference : undefined,
+      internal_note: input.internal_note,
+      updated_by: userId,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", id);
+
+  if (error) throw new Error(`조정 수정 실패: ${error.message}`);
+
+  revalidatePath("/admin/finance/invoices");
+  revalidatePath(`/admin/finance/invoices/${adj.supplier_invoice_id}`);
+  return { success: true };
+}
+
+export async function transitionAdjustmentStatus(id: string, newStatus: 'PENDING' | 'APPROVED' | 'REJECTED' | 'VOID', rejectionReason?: string) {
+  const { userId } = await verifyAdminSession();
+  const supabase = createAdminClient();
+
+  const { data: adj } = await supabase
+    .from("supplier_invoice_adjustments")
+    .select("id, status, supplier_invoice_id")
+    .eq("id", id)
+    .single();
+
+  if (!adj) throw new Error("Adjustment not found.");
+
+  // Check invoice settlement status
+  const { data: inv } = await supabase
+    .from("supplier_invoices")
+    .select("settlement_status")
+    .eq("id", adj.supplier_invoice_id)
+    .single();
+
+  if (inv?.settlement_status === "SETTLED") {
+    throw new Error("정산 종결(SETTLED) 상태인 인보이스의 조정 상태는 변경할 수 없습니다.");
+  }
+
+  const updateFields: any = {
+    status: newStatus,
+    updated_by: userId,
+    updated_at: new Date().toISOString(),
+  };
+
+  if (newStatus === "PENDING") {
+    await verifyWritePermission(supabase, userId);
+  } else if (newStatus === "APPROVED" || newStatus === "REJECTED") {
+    await verifyApprovePermission(supabase, userId);
+    if (newStatus === "APPROVED") {
+      updateFields.approved_at = new Date().toISOString();
+      updateFields.approved_by = userId;
+    } else {
+      updateFields.rejected_at = new Date().toISOString();
+      updateFields.rejected_by = userId;
+      updateFields.rejection_reason = rejectionReason || null;
+    }
+  } else if (newStatus === "VOID") {
+    await verifyWritePermission(supabase, userId);
+    updateFields.voided_at = new Date().toISOString();
+    updateFields.voided_by = userId;
+  }
+
+  const { error } = await supabase
+    .from("supplier_invoice_adjustments")
+    .update(updateFields)
+    .eq("id", id);
+
+  if (error) throw new Error(`조정 상태 변경 실패: ${error.message}`);
+
+  revalidatePath("/admin/finance/invoices");
+  revalidatePath(`/admin/finance/invoices/${adj.supplier_invoice_id}`);
+  return { success: true };
+}
+
+export async function closeSettlement(invoiceId: string) {
+  const { userId } = await verifyAdminSession();
+  const supabase = createAdminClient();
+  await verifyApprovePermission(supabase, userId);
+
+  // Fetch invoice details
+  const { data: invoice } = await supabase
+    .from("supplier_invoices")
+    .select("id, invoice_status, purchase_order_id")
+    .eq("id", invoiceId)
+    .single();
+
+  if (!invoice) throw new Error("Invoice not found.");
+  if (invoice.invoice_status !== "APPROVED") {
+    throw new Error("승인 완료(APPROVED) 상태인 인보이스만 정산을 종결할 수 있습니다.");
+  }
+
+  // Check unresolved adjustments (status = 'PENDING')
+  const { data: pendingAdjs } = await supabase
+    .from("supplier_invoice_adjustments")
+    .select("id")
+    .eq("supplier_invoice_id", invoiceId)
+    .eq("status", "PENDING");
+
+  if (pendingAdjs && pendingAdjs.length > 0) {
+    throw new Error("공급사 합의 대기 중(PENDING)인 조정 항목이 남아있어 정산을 종결할 수 없습니다.");
+  }
+
+  // Logistics unresolved check
+  const po = await getPurchaseOrderForInvoice(invoice.purchase_order_id);
+  const hasUnresolvedLogistics = po.lines.some((l: any) => l.qty > l.resolved_qty);
+  if (hasUnresolvedLogistics) {
+    throw new Error("미해결 선적/입고 항목이 존재하여 대금 정산을 종결할 수 없습니다. (Logistics Unresolved)");
+  }
+
+  const { error } = await supabase
+    .from("supplier_invoices")
+    .update({
+      settlement_status: "SETTLED",
+      updated_by: userId,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", invoiceId);
+
+  if (error) throw new Error(`정산 종결 실패: ${error.message}`);
+
+  revalidatePath("/admin/finance/invoices");
+  revalidatePath(`/admin/finance/invoices/${invoiceId}`);
+  return { success: true };
+}
+
+export async function reopenSettlement(invoiceId: string) {
+  const { userId } = await verifyAdminSession();
+  const supabase = createAdminClient();
+  
+  // Verify super_admin or settlement_inquiry assignment to authorize reopening
+  const { data: userRoles } = await supabase
+    .from("staff_roles")
+    .select("role")
+    .eq("staff_id", userId);
+    
+  const isSuperAdmin = (userRoles ?? []).some((r: any) => r.role === "super_admin");
+
+  // Fetch supplier company ID from the invoice
+  const { data: invoice } = await supabase
+    .from("supplier_invoices")
+    .select("supplier_company_id")
+    .eq("id", invoiceId)
+    .single();
+
+  if (!invoice) throw new Error("Invoice not found.");
+
+  const { data: assignment } = await supabase
+    .from("company_task_assignments")
+    .select("id")
+    .eq("company_id", invoice.supplier_company_id)
+    .eq("staff_id", userId)
+    .eq("task_code", "settlement_inquiry")
+    .maybeSingle();
+
+  const isFinanceUser = !!assignment;
+
+  if (!isSuperAdmin && !isFinanceUser) {
+    throw new Error("정산 재개(Reopen Settlement) 작업을 수행할 수 있는 권한이 없습니다.");
+  }
+
+  const { error } = await supabase
+    .from("supplier_invoices")
+    .update({
+      settlement_status: "OPEN",
+      updated_by: userId,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", invoiceId);
+
+  if (error) throw new Error(`정산 재개 실패: ${error.message}`);
+
+  revalidatePath("/admin/finance/invoices");
+  revalidatePath(`/admin/finance/invoices/${invoiceId}`);
+  return { success: true };
+}
+
 
 

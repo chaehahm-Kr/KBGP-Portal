@@ -9,7 +9,12 @@ import {
   rejectInvoice,
   voidInvoice,
   getSupplierRemittanceMasked,
-  getInvoiceAttachmentUrl
+  getInvoiceAttachmentUrl,
+  createAdjustment,
+  updateAdjustment,
+  transitionAdjustmentStatus,
+  closeSettlement,
+  reopenSettlement
 } from "@/lib/supplier-invoice/actions";
 
 interface InvoiceLine {
@@ -22,6 +27,29 @@ interface InvoiceLine {
   unit_price: number;
   line_amount: number;
   line_note: string | null;
+}
+
+interface AdjustmentItem {
+  id: string;
+  supplier_invoice_line_id: string | null;
+  adjustment_type: "SHORTAGE" | "DAMAGE" | "PRICE_DIFFERENCE" | "OTHER";
+  adjustment_direction: "CREDIT" | "CHARGE";
+  quantity: number | null;
+  unit_amount: number | null;
+  adjustment_amount: number;
+  currency: string;
+  reason: string;
+  reference_type: "SHIPMENT" | "RECEIVING" | "VARIANCE_CLOSE" | "OTHER" | null;
+  reference_id: string | null;
+  supplier_credit_reference: string | null;
+  status: "DRAFT" | "PENDING" | "APPROVED" | "REJECTED" | "VOID";
+  internal_note: string | null;
+  rejection_reason: string | null;
+  created_at: string;
+  creator: { full_name: string } | null;
+  approver: { full_name: string } | null;
+  rejecter: { full_name: string } | null;
+  voider: { full_name: string } | null;
 }
 
 interface InvoiceDetailProps {
@@ -45,6 +73,7 @@ interface InvoiceDetailProps {
     balance_due: number;
     invoice_status: "DRAFT" | "SUBMITTED" | "APPROVED" | "REJECTED" | "VOID";
     payment_status: "UNPAID" | "PARTIALLY_PAID" | "PAID";
+    settlement_status: "OPEN" | "PENDING_ADJUSTMENT" | "SETTLED";
     attachment_path: string | null;
     internal_note: string | null;
     rejection_reason: string | null;
@@ -61,6 +90,7 @@ interface InvoiceDetailProps {
     approver: { full_name: string } | null;
     rejecter: { full_name: string } | null;
     voider: { full_name: string } | null;
+    adjustments: AdjustmentItem[];
   };
   po: {
     lines: Array<{
@@ -107,6 +137,25 @@ const PAYMENT_STATUS_LABELS: Record<string, string> = {
   PAID: "지급 완료 (Paid)",
 };
 
+const SETTLEMENT_STATUS_COLORS: Record<string, string> = {
+  OPEN: "bg-zinc-100 text-zinc-650 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:border-zinc-700",
+  PENDING_ADJUSTMENT: "bg-amber-50 text-amber-700 border-amber-250 dark:bg-amber-950/20 dark:text-amber-400 dark:border-amber-900/50",
+  SETTLED: "bg-emerald-50 text-emerald-750 border-emerald-250 dark:bg-emerald-950/20 dark:text-emerald-400 dark:border-emerald-900/50",
+};
+
+const SETTLEMENT_STATUS_LABELS: Record<string, string> = {
+  OPEN: "정산 대기 (Open)",
+  PENDING_ADJUSTMENT: "분쟁/조정 중 (Pending Adjustment)",
+  SETTLED: "정산 종결 (Settled)",
+};
+
+const ADJ_TYPE_LABELS: Record<string, string> = {
+  SHORTAGE: "수량 부족 (Shortage)",
+  DAMAGE: "품목 파손 (Damage)",
+  PRICE_DIFFERENCE: "단가 불일치 (Price Diff)",
+  OTHER: "기타 (Other)",
+};
+
 export function InvoiceDetail({ invoice, po, prevInvoicesTotal, poMerchandiseTotal }: InvoiceDetailProps) {
   const router = useRouter();
   
@@ -115,8 +164,29 @@ export function InvoiceDetail({ invoice, po, prevInvoicesTotal, poMerchandiseTot
   const [successMessage, setSuccessMessage] = useState("");
   const [rejectReason, setRejectReason] = useState("");
   const [showRejectModal, setShowRejectModal] = useState(false);
+  
   const [remittance, setRemittance] = useState<any>(null);
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
+
+  // Adjustment Modal State
+  const [showAdjModal, setShowAdjModal] = useState(false);
+  const [editingAdj, setEditingAdj] = useState<AdjustmentItem | null>(null);
+  const [adjType, setAdjType] = useState<"SHORTAGE" | "DAMAGE" | "PRICE_DIFFERENCE" | "OTHER">("SHORTAGE");
+  const [adjDirection, setAdjDirection] = useState<"CREDIT" | "CHARGE">("CREDIT");
+  const [selectedLineId, setSelectedLineId] = useState<string>("");
+  const [adjQty, setAdjQty] = useState<number>(0);
+  const [adjUnitAmount, setAdjUnitAmount] = useState<number>(0);
+  const [adjAmount, setAdjAmount] = useState<number>(0);
+  const [adjReason, setAdjReason] = useState<string>("");
+  const [adjRefType, setAdjRefType] = useState<string>("");
+  const [adjRefId, setAdjRefId] = useState<string>("");
+  const [adjCreditRef, setAdjCreditRef] = useState<string>("");
+  const [adjNote, setAdjNote] = useState<string>("");
+
+  // Adjustment Rejection Modal
+  const [showAdjRejectModal, setShowAdjRejectModal] = useState(false);
+  const [rejectingAdjId, setRejectingAdjId] = useState<string | null>(null);
+  const [adjRejectReason, setAdjRejectReason] = useState<string>("");
 
   // Load bank info and attachment URL on client mount
   useEffect(() => {
@@ -140,7 +210,51 @@ export function InvoiceDetail({ invoice, po, prevInvoicesTotal, poMerchandiseTot
     fetchExtraData();
   }, [invoice]);
 
-  // Action Handlers
+  // Suggest values based on line/type in modal
+  useEffect(() => {
+    if (!selectedLineId) {
+      setAdjQty(0);
+      setAdjUnitAmount(0);
+      setAdjAmount(0);
+      return;
+    }
+
+    const line = invoice.lines.find(l => l.id === selectedLineId);
+    if (!line) return;
+
+    const poLine = po.lines.find(pl => pl.id === line.purchase_order_line_id);
+    if (!poLine) return;
+
+    if (adjType === "SHORTAGE") {
+      const suggestedQty = poLine.shortage_qty;
+      setAdjQty(suggestedQty);
+      setAdjUnitAmount(Number(poLine.unit_cost));
+      setAdjAmount(suggestedQty * Number(poLine.unit_cost));
+    } else if (adjType === "DAMAGE") {
+      const suggestedQty = poLine.damaged_qty;
+      setAdjQty(suggestedQty);
+      setAdjUnitAmount(Number(poLine.unit_cost));
+      setAdjAmount(suggestedQty * Number(poLine.unit_cost));
+    } else if (adjType === "PRICE_DIFFERENCE") {
+      const priceDiff = Math.abs(line.unit_price - Number(poLine.unit_cost));
+      setAdjQty(line.invoiced_qty);
+      setAdjUnitAmount(priceDiff);
+      setAdjAmount(line.invoiced_qty * priceDiff);
+    } else {
+      setAdjQty(0);
+      setAdjUnitAmount(0);
+      setAdjAmount(0);
+    }
+  }, [selectedLineId, adjType]);
+
+  // Adjust amount when qty or unit cost changes manually
+  const handleQtyUnitChange = (qty: number, unit: number) => {
+    setAdjQty(qty);
+    setAdjUnitAmount(unit);
+    setAdjAmount(Number((qty * unit).toFixed(2)));
+  };
+
+  // Action Handlers for Invoice
   const handleSubmit = async () => {
     if (!confirm("이 인보이스를 제출하시겠습니까? 제출 후에는 승인 검토 단계로 이관됩니다.")) return;
     setIsActionLoading(true);
@@ -205,11 +319,158 @@ export function InvoiceDetail({ invoice, po, prevInvoicesTotal, poMerchandiseTot
     }
   };
 
-  // Map PO lines for matching comparisons
+  // Settlement Close / Reopen Handlers
+  const handleCloseSettlement = async () => {
+    if (!confirm("정산을 최종 종결(Settlement Close)하시겠습니까? 종결 시 조정 항목 수정이 불가능하며 Final Payable이 최종 대금으로 확정됩니다.")) return;
+    setIsActionLoading(true);
+    setErrorMessage("");
+    try {
+      await closeSettlement(invoice.id);
+      setSuccessMessage("대금 정산이 성공적으로 종결 처리되었습니다.");
+      router.refresh();
+    } catch (err: any) {
+      setErrorMessage(err.message || "정산 종결 처리에 실패했습니다.");
+    } finally {
+      setIsActionLoading(false);
+    }
+  };
+
+  const handleReopenSettlement = async () => {
+    if (!confirm("정산을 다시 재개(Reopen Settlement)하시겠습니까?")) return;
+    setIsActionLoading(true);
+    setErrorMessage("");
+    try {
+      await reopenSettlement(invoice.id);
+      setSuccessMessage("대금 정산이 재개되었습니다.");
+      router.refresh();
+    } catch (err: any) {
+      setErrorMessage(err.message || "정산 재개 처리에 실패했습니다.");
+    } finally {
+      setIsActionLoading(false);
+    }
+  };
+
+  // Adjustment CRUD Handlers
+  const handleSaveAdjustment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!adjReason.trim() || adjAmount <= 0) {
+      alert("금액 및 사유를 입력해 주세요.");
+      return;
+    }
+
+    setIsActionLoading(true);
+    setErrorMessage("");
+
+    const payload = {
+      supplier_invoice_id: invoice.id,
+      supplier_invoice_line_id: selectedLineId || null,
+      adjustment_type: adjType,
+      adjustment_direction: adjDirection,
+      quantity: adjQty || null,
+      unit_amount: adjUnitAmount || null,
+      adjustment_amount: adjAmount,
+      currency: invoice.currency,
+      reason: adjReason,
+      reference_type: (adjRefType as any) || null,
+      reference_id: adjRefId || null,
+      supplier_credit_reference: adjCreditRef || null,
+      internal_note: adjNote || null,
+    };
+
+    try {
+      if (editingAdj) {
+        await updateAdjustment(editingAdj.id, payload);
+        setSuccessMessage("조정 항목이 수정되었습니다.");
+      } else {
+        await createAdjustment(payload);
+        setSuccessMessage("새로운 조정 항목이 추가되었습니다.");
+      }
+      setShowAdjModal(false);
+      setEditingAdj(null);
+      router.refresh();
+    } catch (err: any) {
+      setErrorMessage(err.message || "조정 저장 처리에 실패했습니다.");
+    } finally {
+      setIsActionLoading(false);
+    }
+  };
+
+  const handleEditAdjClick = (adj: AdjustmentItem) => {
+    setEditingAdj(adj);
+    setAdjType(adj.adjustment_type);
+    setAdjDirection(adj.adjustment_direction);
+    setSelectedLineId(adj.supplier_invoice_line_id || "");
+    setAdjQty(adj.quantity || 0);
+    setAdjUnitAmount(adj.unit_amount || 0);
+    setAdjAmount(adj.adjustment_amount);
+    setAdjReason(adj.reason);
+    setAdjRefType(adj.reference_type || "");
+    setAdjRefId(adj.reference_id || "");
+    setAdjCreditRef(adj.supplier_credit_reference || "");
+    setAdjNote(adj.internal_note || "");
+    setShowAdjModal(true);
+  };
+
+  const handleAdjStatusTransition = async (adjId: string, status: "PENDING" | "APPROVED" | "VOID") => {
+    let msg = "";
+    if (status === "PENDING") msg = "조정 항목을 제출하시겠습니까?";
+    else if (status === "APPROVED") msg = "조정 항목을 공급사 최종 합의로 승인(APPROVED)하시겠습니까?";
+    else if (status === "VOID") msg = "조정 항목을 무효(VOID) 처리하시겠습니까?";
+
+    if (!confirm(msg)) return;
+
+    setIsActionLoading(true);
+    setErrorMessage("");
+    try {
+      await transitionAdjustmentStatus(adjId, status);
+      setSuccessMessage("조정 상태가 변경되었습니다.");
+      router.refresh();
+    } catch (err: any) {
+      setErrorMessage(err.message || "조정 상태 변경에 실패했습니다.");
+    } finally {
+      setIsActionLoading(false);
+    }
+  };
+
+  const handleAdjRejectSubmit = async () => {
+    if (!rejectingAdjId || !adjRejectReason.trim()) {
+      alert("반려 사유를 입력해 주세요.");
+      return;
+    }
+
+    setIsActionLoading(true);
+    setErrorMessage("");
+    try {
+      await transitionAdjustmentStatus(rejectingAdjId, "REJECTED", adjRejectReason);
+      setSuccessMessage("조정 항목이 반려되었습니다.");
+      setShowAdjRejectModal(false);
+      setRejectingAdjId(null);
+      setAdjRejectReason("");
+      router.refresh();
+    } catch (err: any) {
+      setErrorMessage(err.message || "조정 반려 처리에 실패했습니다.");
+    } finally {
+      setIsActionLoading(false);
+    }
+  };
+
+  // Calculations for approved adjustments
+  const approvedAdjustments = invoice.adjustments.filter(a => a.status === "APPROVED");
+  const approvedCredits = approvedAdjustments
+    .filter(a => a.adjustment_direction === "CREDIT")
+    .reduce((sum, a) => sum + a.adjustment_amount, 0);
+  const approvedCharges = approvedAdjustments
+    .filter(a => a.adjustment_direction === "CHARGE")
+    .reduce((sum, a) => sum + a.adjustment_amount, 0);
+
+  const finalPayable = invoice.invoice_total + approvedCharges - approvedCredits;
+  const balanceDue = finalPayable - invoice.amount_paid;
+
+  // Logistics mapping for summaries
   const poLinesMap = new Map(po.lines.map(l => [l.id, l]));
 
-  // Variance calculations
-  const remainingUninvoiced = Math.max(poMerchandiseTotal - prevInvoicesTotal - invoice.invoice_total, 0);
+  // Logistics warning check (if unresolved items exist)
+  const hasUnresolvedLogistics = po.lines.some(l => l.qty > l.resolved_qty);
 
   return (
     <div className="space-y-6 text-xs">
@@ -224,7 +485,7 @@ export function InvoiceDetail({ invoice, po, prevInvoicesTotal, poMerchandiseTot
             href="/admin/finance/invoices"
             className="text-xs text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white transition-colors"
           >
-            ← 공급사 인보이스 목록으로 돌아기
+            ← 공급사 인보이스 목록으로 돌아가기
           </Link>
         </div>
       </div>
@@ -254,6 +515,12 @@ export function InvoiceDetail({ invoice, po, prevInvoicesTotal, poMerchandiseTot
             <span className="font-bold text-zinc-400">지급 상태</span>
             <span className={`inline-flex items-center rounded px-2.5 py-0.5 border ${PAYMENT_STATUS_COLORS[invoice.payment_status]}`}>
               {PAYMENT_STATUS_LABELS[invoice.payment_status]}
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="font-bold text-zinc-400">정산 상태</span>
+            <span className={`inline-flex items-center rounded px-2.5 py-0.5 border ${SETTLEMENT_STATUS_COLORS[invoice.settlement_status]}`}>
+              {SETTLEMENT_STATUS_LABELS[invoice.settlement_status]}
             </span>
           </div>
         </div>
@@ -308,7 +575,23 @@ export function InvoiceDetail({ invoice, po, prevInvoicesTotal, poMerchandiseTot
           {/* APPROVED */}
           {invoice.invoice_status === "APPROVED" && (
             <>
-              <span className="text-[10px] text-zinc-400 font-bold mr-2">✓ 승인 처리가 완료되어 채무가 확정되었습니다.</span>
+              {invoice.settlement_status !== "SETTLED" ? (
+                <button
+                  onClick={handleCloseSettlement}
+                  disabled={isActionLoading}
+                  className="px-4 py-2 bg-emerald-650 hover:bg-emerald-700 text-white font-bold rounded-xl cursor-pointer transition-colors disabled:opacity-50 shadow-sm"
+                >
+                  🔒 정산 종결 (Close Settlement)
+                </button>
+              ) : (
+                <button
+                  onClick={handleReopenSettlement}
+                  disabled={isActionLoading}
+                  className="px-4 py-2 bg-zinc-955 hover:bg-zinc-900 text-white dark:bg-white dark:text-zinc-950 text-xs font-bold rounded-xl cursor-pointer transition-colors disabled:opacity-50"
+                >
+                  🔓 정산 재개 (Reopen Settlement)
+                </button>
+              )}
               <button
                 onClick={handleVoid}
                 disabled={isActionLoading}
@@ -325,7 +608,7 @@ export function InvoiceDetail({ invoice, po, prevInvoicesTotal, poMerchandiseTot
               <span className="text-[10px] text-rose-500 font-bold mr-2">반려 사유: {invoice.rejection_reason}</span>
               <Link
                 href={`/admin/finance/invoices/${invoice.id}/edit`}
-                className="px-3.5 py-2 bg-zinc-950 hover:bg-zinc-900 text-white dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-100 font-bold rounded-xl cursor-pointer transition-colors"
+                className="px-3.5 py-2 bg-zinc-955 hover:bg-zinc-900 text-white dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-100 font-bold rounded-xl cursor-pointer transition-colors"
               >
                 재작성 (Resubmit)
               </Link>
@@ -333,6 +616,15 @@ export function InvoiceDetail({ invoice, po, prevInvoicesTotal, poMerchandiseTot
           )}
         </div>
       </div>
+
+      {/* Logistics unresolved Alert warning */}
+      {hasUnresolvedLogistics && (
+        <div className="p-3.5 rounded-lg bg-amber-50 border border-amber-250 text-amber-800 font-medium leading-relaxed dark:bg-amber-950/10 dark:border-amber-900/50 dark:text-amber-400">
+          ⚠️ <strong>물류 미결 경고 (Logistics Unresolved)</strong>:
+          해당 발주서(PO)의 일부 품목이 아직 예약 선적 또는 입고 검수가 최종 종결되지 않았습니다. 
+          물류 정보 확인 후 종결(RECEIVED) 처리가 완료될 때까지 재무 정산 종결(Close Settlement)이 차단됩니다.
+        </div>
+      )}
 
       {/* Main Grid Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -463,7 +755,7 @@ export function InvoiceDetail({ invoice, po, prevInvoicesTotal, poMerchandiseTot
           </div>
         </div>
 
-        {/* Right Column: Lines and 3-Way Match */}
+        {/* Right Column: Lines, 3-Way Match, Adjustments, and Summary */}
         <div className="lg:col-span-2 space-y-6">
           
           {/* Table comparison */}
@@ -564,32 +856,207 @@ export function InvoiceDetail({ invoice, po, prevInvoicesTotal, poMerchandiseTot
                 </tbody>
               </table>
             </div>
+          </div>
 
-            {/* Invoiced Summaries */}
-            <div className="flex justify-between items-start bg-zinc-50 dark:bg-zinc-950 p-4 border border-zinc-150 dark:border-zinc-850 rounded-xl">
+          {/* Adjustments & Credits Card */}
+          <div className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 space-y-4">
+            <div className="flex justify-between items-center border-b border-zinc-100 pb-2 dark:border-zinc-800">
+              <h3 className="text-sm font-bold text-zinc-850 dark:text-white font-sans">
+                대금 조정 내역 (Supplier Invoice Adjustments)
+              </h3>
+              {invoice.invoice_status === "APPROVED" && invoice.settlement_status !== "SETTLED" && (
+                <button
+                  onClick={() => {
+                    setEditingAdj(null);
+                    setAdjType("SHORTAGE");
+                    setAdjDirection("CREDIT");
+                    setSelectedLineId("");
+                    setAdjQty(0);
+                    setAdjUnitAmount(0);
+                    setAdjAmount(0);
+                    setAdjReason("");
+                    setAdjRefType("");
+                    setAdjRefId("");
+                    setAdjCreditRef("");
+                    setAdjNote("");
+                    setShowAdjModal(true);
+                  }}
+                  className="px-2.5 py-1.5 bg-zinc-950 text-white dark:bg-white dark:text-zinc-950 hover:opacity-85 font-bold rounded-lg text-[10px] cursor-pointer"
+                >
+                  + 조정 항목 추가 (Add Adjustment)
+                </button>
+              )}
+            </div>
+
+            <div className="overflow-hidden rounded-lg border border-zinc-150 dark:border-zinc-800/80">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="bg-zinc-50/50 text-zinc-500 font-bold border-b border-zinc-150 dark:bg-zinc-900/50 dark:border-zinc-800 dark:text-zinc-350">
+                    <th className="px-3 py-2">조정 유형</th>
+                    <th className="px-3 py-2">방향</th>
+                    <th className="px-3 py-2 text-right">수량</th>
+                    <th className="px-3 py-2 text-right">조정금액</th>
+                    <th className="px-3 py-2">사유 및 참조 정보</th>
+                    <th className="px-3 py-2">상태</th>
+                    {invoice.settlement_status !== "SETTLED" && <th className="px-3 py-2 text-right">조작</th>}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
+                  {invoice.adjustments.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="px-3 py-8 text-center text-zinc-400 italic">
+                        추가된 대금 조정 및 크레딧 명세가 없습니다.
+                      </td>
+                    </tr>
+                  ) : (
+                    invoice.adjustments.map((adj) => (
+                      <tr key={adj.id} className="hover:bg-zinc-50/30 dark:hover:bg-zinc-850/5">
+                        <td className="px-3 py-2.5 font-bold text-zinc-900 dark:text-white">
+                          {ADJ_TYPE_LABELS[adj.adjustment_type]}
+                        </td>
+                        <td className="px-3 py-2.5">
+                          <span className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[9px] font-bold border ${adj.adjustment_direction === "CREDIT" ? "bg-rose-50 text-rose-700 border-rose-100" : "bg-blue-50 text-blue-700 border-blue-100"}`}>
+                            {adj.adjustment_direction === "CREDIT" ? "차감 (Credit)" : "가산 (Charge)"}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2.5 text-right font-mono text-zinc-650">
+                          {adj.quantity ? adj.quantity.toLocaleString() : "-"}
+                        </td>
+                        <td className="px-3 py-2.5 text-right font-mono font-bold text-zinc-900 dark:text-white">
+                          {adj.currency} {adj.adjustment_amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                        </td>
+                        <td className="px-3 py-2.5 leading-normal max-w-xs">
+                          <p className="font-semibold text-zinc-700 dark:text-zinc-350">{adj.reason}</p>
+                          {adj.supplier_credit_reference && (
+                            <span className="text-[10px] text-zinc-400 block font-bold">Credit Memo: {adj.supplier_credit_reference}</span>
+                          )}
+                          {adj.reference_type && (
+                            <span className="text-[9px] text-zinc-400 font-mono block">Logistics Ref: [{adj.reference_type}] {adj.reference_id}</span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2.5">
+                          <span className={`inline-flex items-center rounded-md border px-2 py-0.5 text-[8px] font-bold ${STATUS_COLORS[adj.status]}`}>
+                            {STATUS_LABELS[adj.status]}
+                          </span>
+                          {adj.status === "REJECTED" && adj.rejection_reason && (
+                            <span className="text-[9px] text-rose-500 block leading-tight font-semibold mt-0.5">반려 사유: {adj.rejection_reason}</span>
+                          )}
+                        </td>
+                        {invoice.settlement_status !== "SETTLED" && (
+                          <td className="px-3 py-2.5 text-right space-x-1.5 whitespace-nowrap">
+                            {/* DRAFT */}
+                            {adj.status === "DRAFT" && (
+                              <>
+                                <button
+                                  onClick={() => handleEditAdjClick(adj)}
+                                  className="text-zinc-500 hover:text-zinc-800 font-bold"
+                                >
+                                  수정
+                                </button>
+                                <button
+                                  onClick={() => handleAdjStatusTransition(adj.id, "PENDING")}
+                                  className="text-blue-600 hover:text-blue-800 font-bold"
+                                >
+                                  제출
+                                </button>
+                                <button
+                                  onClick={() => handleAdjStatusTransition(adj.id, "VOID")}
+                                  className="text-rose-600 hover:text-rose-800 font-bold"
+                                >
+                                  무효
+                                </button>
+                              </>
+                            )}
+
+                            {/* PENDING */}
+                            {adj.status === "PENDING" && (
+                              <>
+                                <button
+                                  onClick={() => handleAdjStatusTransition(adj.id, "APPROVED")}
+                                  className="text-emerald-650 hover:text-emerald-800 font-bold"
+                                >
+                                  승인
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    setRejectingAdjId(adj.id);
+                                    setAdjRejectReason("");
+                                    setShowAdjRejectModal(true);
+                                  }}
+                                  className="text-rose-600 hover:text-rose-800 font-bold"
+                                >
+                                  반려
+                                </button>
+                              </>
+                            )}
+
+                            {/* REJECTED */}
+                            {adj.status === "REJECTED" && (
+                              <>
+                                <button
+                                  onClick={() => handleEditAdjClick(adj)}
+                                  className="text-zinc-500 hover:text-zinc-800 font-bold"
+                                >
+                                  재수정
+                                </button>
+                                <button
+                                  onClick={() => handleAdjStatusTransition(adj.id, "VOID")}
+                                  className="text-rose-600 hover:text-rose-800 font-bold"
+                                >
+                                  무효
+                                </button>
+                              </>
+                            )}
+                          </td>
+                        )}
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Settlement Summary Card */}
+          <div className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 space-y-4">
+            <h3 className="text-sm font-bold text-zinc-850 dark:text-white font-sans">
+              최종 정산 요약 (Settlement Summary)
+            </h3>
+
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 bg-zinc-50 dark:bg-zinc-950 p-4 border border-zinc-150 dark:border-zinc-850 rounded-xl">
               <div>
-                <span className="font-bold text-zinc-500 block mb-1">인보이스 승인 및 누적 결제 통계</span>
-                <p className="text-[10px] text-zinc-400 leading-relaxed max-w-sm">
-                  이 발주서(PO)에 대해 이미 결제 승인된 타 인보이스 금액과 이번 인보이스 금액을 합산하여 잔여 예산을 계산합니다.
-                </p>
+                <span className="text-[10px] text-zinc-400 block mb-0.5">인보이스 원 청구 총액</span>
+                <span className="text-sm font-mono font-bold text-zinc-900 dark:text-white">
+                  {invoice.currency} {invoice.invoice_total.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                </span>
               </div>
-              <div className="flex gap-6 font-mono font-bold text-right">
-                <div>
-                  <span className="text-[10px] font-sans text-zinc-400 block mb-0.5">PO 원 주문 총액</span>
-                  <span className="text-xs text-zinc-650">{invoice.currency} {poMerchandiseTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-                </div>
-                <div className="border-l border-zinc-200 pl-6 dark:border-zinc-850">
-                  <span className="text-[10px] font-sans text-zinc-400 block mb-0.5">기승인 완료액</span>
-                  <span className="text-xs text-zinc-650">{invoice.currency} {prevInvoicesTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-                </div>
-                <div className="border-l border-zinc-200 pl-6 dark:border-zinc-850">
-                  <span className="text-[10px] font-sans text-zinc-500 block mb-0.5">금회 청구 총액</span>
-                  <span className="text-xs text-indigo-650">{invoice.currency} {invoice.invoice_total.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-                </div>
-                <div className="border-l border-zinc-200 pl-6 dark:border-zinc-850">
-                  <span className="text-[10px] font-sans text-zinc-400 block mb-0.5">잔여 미청구액</span>
-                  <span className="text-xs text-zinc-600">{invoice.currency} {remainingUninvoiced.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-                </div>
+              <div className="border-l border-zinc-200 pl-4 dark:border-zinc-850">
+                <span className="text-[10px] text-rose-500 block mb-0.5">차감 합계 (Approved Credits)</span>
+                <span className="text-sm font-mono font-bold text-rose-600">
+                  -{invoice.currency} {approvedCredits.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                </span>
+              </div>
+              <div className="border-l border-zinc-200 pl-4 dark:border-zinc-850">
+                <span className="text-[10px] text-blue-500 block mb-0.5">가산 합계 (Approved Charges)</span>
+                <span className="text-sm font-mono font-bold text-blue-600">
+                  +{invoice.currency} {approvedCharges.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                </span>
+              </div>
+              <div className="border-l border-zinc-200 pl-4 dark:border-zinc-850">
+                <span className="text-[10px] text-emerald-650 block mb-0.5 font-bold">최종 미지급 채무 (Final Payable)</span>
+                <span className="text-sm font-mono font-bold text-emerald-700 dark:text-emerald-400">
+                  {invoice.currency} {finalPayable.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                </span>
+              </div>
+            </div>
+
+            <div className="flex justify-between items-center text-[10px] text-zinc-400 font-bold border-t border-zinc-100 pt-3 dark:border-zinc-800">
+              <div className="space-x-4">
+                <span>지급 완료액: {invoice.currency} {invoice.amount_paid.toLocaleString()}</span>
+                <span>지급 잔액 (Balance Due): {invoice.currency} {balanceDue.toLocaleString()}</span>
+              </div>
+              <div>
+                <span>* 실제 대금 지급은 종결된 최종 미지급 채무(Final Payable) 기준으로 지급 기한에 진행됩니다.</span>
               </div>
             </div>
           </div>
@@ -645,18 +1112,18 @@ export function InvoiceDetail({ invoice, po, prevInvoicesTotal, poMerchandiseTot
         </div>
       </div>
 
-      {/* Reject Modal */}
+      {/* Reject Invoice Modal */}
       {showRejectModal && (
         <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
           <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 w-full max-w-sm rounded-xl p-5 shadow-xl space-y-4">
-            <h4 className="text-sm font-bold text-zinc-850 dark:text-white">인보이스 반려 사유 작성</h4>
+            <h4 className="text-sm font-bold text-zinc-850 dark:text-white font-sans">인보이스 반려 사유 작성</h4>
             <div>
               <label className="block text-[10px] font-bold text-zinc-400 mb-1">반려 사유 (Required) *</label>
               <textarea
                 value={rejectReason}
                 onChange={(e) => setRejectReason(e.target.value)}
                 placeholder="단가 불일치, 첨부 누락 등 반려 사유를 상세하게 기입하세요..."
-                className="w-full border border-zinc-200 dark:border-zinc-800 rounded-lg p-2.5 text-xs bg-zinc-50 dark:bg-zinc-955 dark:text-white outline-none min-h-[90px]"
+                className="w-full border border-zinc-200 dark:border-zinc-800 rounded-lg p-2.5 text-xs bg-zinc-50 dark:bg-zinc-950 dark:text-white outline-none min-h-[90px]"
                 required
               />
             </div>
@@ -680,6 +1147,245 @@ export function InvoiceDetail({ invoice, po, prevInvoicesTotal, poMerchandiseTot
           </div>
         </div>
       )}
+
+      {/* Adjustment Rejection Modal */}
+      {showAdjRejectModal && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 w-full max-w-sm rounded-xl p-5 shadow-xl space-y-4">
+            <h4 className="text-sm font-bold text-zinc-850 dark:text-white font-sans">조정 항목 반려 사유</h4>
+            <div>
+              <label className="block text-[10px] font-bold text-zinc-400 mb-1">반려 사유 *</label>
+              <textarea
+                value={adjRejectReason}
+                onChange={(e) => setAdjRejectReason(e.target.value)}
+                placeholder="반려 사유(예: 공급사 미승인, 재입고 확인 등)를 기입하세요..."
+                className="w-full border border-zinc-200 dark:border-zinc-800 rounded-lg p-2.5 text-xs bg-zinc-50 dark:bg-zinc-955 dark:text-white outline-none min-h-[90px]"
+                required
+              />
+            </div>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowAdjRejectModal(false);
+                  setRejectingAdjId(null);
+                }}
+                className="px-3 py-1.5 border border-zinc-200 text-zinc-650 hover:bg-zinc-50 dark:border-zinc-850 dark:text-zinc-300 rounded-lg font-bold transition-colors cursor-pointer"
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                onClick={handleAdjRejectSubmit}
+                disabled={isActionLoading}
+                className="px-4 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg font-bold transition-colors cursor-pointer disabled:opacity-50"
+              >
+                반려 처리 (Reject)
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add/Edit Adjustment Modal */}
+      {showAdjModal && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4 overflow-y-auto">
+          <form onSubmit={handleSaveAdjustment} className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 w-full max-w-md rounded-xl p-5 shadow-xl space-y-4 my-8">
+            <h4 className="text-sm font-bold text-zinc-850 dark:text-white font-sans border-b border-zinc-100 pb-2 dark:border-zinc-800">
+              {editingAdj ? "대금 조정 항목 수정" : "대금 조정 항목 추가 (Add Adjustment)"}
+            </h4>
+
+            <div className="grid grid-cols-2 gap-4">
+              {/* Type */}
+              <div>
+                <label className="block text-[10px] font-bold text-zinc-400 mb-1">조정 유형 *</label>
+                <select
+                  value={adjType}
+                  onChange={(e) => setAdjType(e.target.value as any)}
+                  className="w-full h-8 rounded-lg border border-zinc-200 bg-white px-2 outline-none dark:border-zinc-800 dark:bg-zinc-950 dark:text-white font-bold"
+                  required
+                >
+                  <option value="SHORTAGE">수량 부족 (SHORTAGE)</option>
+                  <option value="DAMAGE">품목 파손 (DAMAGE)</option>
+                  <option value="PRICE_DIFFERENCE">단가 불일치 (PRICE_DIFFERENCE)</option>
+                  <option value="OTHER">기타 정산 (OTHER)</option>
+                </select>
+              </div>
+
+              {/* Direction */}
+              <div>
+                <label className="block text-[10px] font-bold text-zinc-400 mb-1">조정 방향 *</label>
+                <select
+                  value={adjDirection}
+                  onChange={(e) => setAdjDirection(e.target.value as any)}
+                  className="w-full h-8 rounded-lg border border-zinc-200 bg-white px-2 outline-none dark:border-zinc-800 dark:bg-zinc-950 dark:text-white font-bold"
+                  required
+                >
+                  <option value="CREDIT">차감 (CREDIT - 대금 감소)</option>
+                  <option value="CHARGE">가산 (CHARGE - 대금 증가)</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Line Item Link */}
+            <div>
+              <label className="block text-[10px] font-bold text-zinc-400 mb-1">매핑 품목 (optional)</label>
+              <select
+                value={selectedLineId}
+                onChange={(e) => setSelectedLineId(e.target.value)}
+                className="w-full h-8 rounded-lg border border-zinc-200 bg-white px-2 outline-none dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+              >
+                <option value="">품목 매핑 없음 (General)</option>
+                {invoice.lines.map(l => (
+                  <option key={l.id} value={l.id}>
+                    [{l.sku_snapshot}] {l.product_name_snapshot}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="grid grid-cols-3 gap-3">
+              {/* Qty */}
+              <div>
+                <label className="block text-[10px] font-bold text-zinc-400 mb-1">수량 (optional)</label>
+                <input
+                  type="number"
+                  min="0"
+                  value={adjQty || ""}
+                  onChange={(e) => handleQtyUnitChange(parseInt(e.target.value) || 0, adjUnitAmount)}
+                  className="w-full h-8 rounded-lg border border-zinc-200 bg-white px-2 outline-none dark:border-zinc-800 dark:bg-zinc-955 dark:text-white font-mono"
+                />
+              </div>
+
+              {/* Unit Amount */}
+              <div>
+                <label className="block text-[10px] font-bold text-zinc-400 mb-1">개별 단가 (optional)</label>
+                <input
+                  type="number"
+                  step="0.0001"
+                  min="0"
+                  value={adjUnitAmount || ""}
+                  onChange={(e) => handleQtyUnitChange(adjQty, parseFloat(e.target.value) || 0)}
+                  className="w-full h-8 rounded-lg border border-zinc-200 bg-white px-2 outline-none dark:border-zinc-800 dark:bg-zinc-955 dark:text-white font-mono"
+                />
+              </div>
+
+              {/* Final Amount */}
+              <div>
+                <label className="block text-[10px] font-bold text-zinc-400 mb-1">조정 총액 *</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={adjAmount || ""}
+                  onChange={(e) => setAdjAmount(parseFloat(e.target.value) || 0)}
+                  className="w-full h-8 rounded-lg border border-zinc-200 bg-white px-2 outline-none dark:border-zinc-800 dark:bg-zinc-955 dark:text-white font-mono font-bold"
+                  required
+                />
+              </div>
+            </div>
+
+            {selectedLineId && (
+              <div className="p-2.5 rounded-lg bg-zinc-50 border border-zinc-150 text-[10px] text-zinc-500 leading-normal">
+                💡 <strong>자동 제안(Suggested) 계산 내역:</strong><br />
+                - 수량 부족 시: shortage_qty × PO단가<br />
+                - 품목 파손 시: damaged_qty × PO단가<br />
+                - 단가 불일치 시: invoiced_qty × |청구단가 - PO단가|<br />
+                * 공급사와의 협상 또는 보장 한도에 따라 필요시 입력 값을 수동 수정할 수 있습니다.
+              </div>
+            )}
+
+            {/* Reason */}
+            <div>
+              <label className="block text-[10px] font-bold text-zinc-400 mb-1">조정 및 청구 사유 (Reason) *</label>
+              <input
+                type="text"
+                placeholder="예: 3차 선적 컨테이너 누수로 인한 2개 완손실 크레딧 합의"
+                value={adjReason}
+                onChange={(e) => setAdjReason(e.target.value)}
+                className="w-full h-8 rounded-lg border border-zinc-200 bg-white px-2 outline-none dark:border-zinc-800 dark:bg-zinc-955 dark:text-white"
+                required
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              {/* Reference Type */}
+              <div>
+                <label className="block text-[10px] font-bold text-zinc-400 mb-1">물류 근거 유형 (Evidence Type)</label>
+                <select
+                  value={adjRefType}
+                  onChange={(e) => setAdjRefType(e.target.value)}
+                  className="w-full h-8 rounded-lg border border-zinc-200 bg-white px-2 outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
+                >
+                  <option value="">참조 없음</option>
+                  <option value="SHIPMENT">Inbound Shipment</option>
+                  <option value="RECEIVING">Receiving Document</option>
+                  <option value="VARIANCE_CLOSE">Variance Close Details</option>
+                  <option value="OTHER">기타 증적</option>
+                </select>
+              </div>
+
+              {/* Reference ID/Name */}
+              <div>
+                <label className="block text-[10px] font-bold text-zinc-400 mb-1">물류 참조 ID / 문서번호</label>
+                <input
+                  type="text"
+                  placeholder="예: 선적 ID 또는 전표번호"
+                  value={adjRefId}
+                  onChange={(e) => setAdjRefId(e.target.value)}
+                  className="w-full h-8 rounded-lg border border-zinc-200 bg-white px-2 outline-none dark:border-zinc-800 dark:bg-zinc-955 dark:text-white font-mono"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4">
+              {/* Credit Memo Ref */}
+              <div>
+                <label className="block text-[10px] font-bold text-zinc-400 mb-1">공급사 Credit Memo 참조번호 (Supplier Credit Ref)</label>
+                <input
+                  type="text"
+                  placeholder="예: CM-2026-102"
+                  value={adjCreditRef}
+                  onChange={(e) => setAdjCreditRef(e.target.value)}
+                  className="w-full h-8 rounded-lg border border-zinc-200 bg-white px-2 outline-none dark:border-zinc-800 dark:bg-zinc-955 dark:text-white font-mono"
+                />
+              </div>
+            </div>
+
+            {/* Note */}
+            <div>
+              <label className="block text-[10px] font-bold text-zinc-400 mb-1">조정 상세 메모 (Note)</label>
+              <textarea
+                placeholder="정산 관련 세부 합의 조건이나 회계 담당자 특이사항을 적어두세요..."
+                value={adjNote}
+                onChange={(e) => setAdjNote(e.target.value)}
+                className="w-full border border-zinc-200 dark:border-zinc-800 rounded-lg p-2 text-xs bg-zinc-50 dark:bg-zinc-950 dark:text-white outline-none min-h-[50px]"
+              />
+            </div>
+
+            <div className="flex justify-end gap-2 border-t border-zinc-100 pt-3 dark:border-zinc-800">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowAdjModal(false);
+                  setEditingAdj(null);
+                }}
+                className="px-3.5 py-1.5 border border-zinc-200 text-zinc-650 hover:bg-zinc-50 dark:border-zinc-850 dark:text-zinc-300 rounded-lg font-bold cursor-pointer transition-colors"
+              >
+                취소
+              </button>
+              <button
+                type="submit"
+                disabled={isActionLoading}
+                className="px-4 py-1.5 bg-zinc-950 hover:bg-zinc-900 text-white dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-100 rounded-lg font-bold cursor-pointer transition-colors disabled:opacity-50"
+              >
+                {isActionLoading ? "저장 중..." : "항목 저장 (Save)"}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
     </div>
   );
 }
