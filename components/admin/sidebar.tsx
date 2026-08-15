@@ -153,6 +153,7 @@ export default function Sidebar({ isCollapsed, toggleCollapse }: SidebarProps) {
         { name: "Knowledge Center", href: "/admin/knowledge" },
         { name: "Email Templates", href: "/admin/settings/email-templates" },
         { name: "Company Configs", href: "/admin/settings/company-configs" },
+        { name: "Warehouses", href: "/admin/settings/warehouses" },
         { name: "Categories", href: "/admin/settings/categories" },
         { name: "Attribute Profiles", href: "/admin/settings/attribute-profiles" },
         { name: "Attributes & Options", href: "/admin/settings/attributes" },
