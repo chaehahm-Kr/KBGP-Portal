@@ -58,10 +58,11 @@ export async function getOpenPosForShipment() {
   const { data: pos, error } = await supabase
     .from("purchase_orders")
     .select(`
-      id, po_number, order_date, status, currency,
+      id, po_number, order_date, po_status, fulfillment_status, currency,
       companies:supplier_id (name)
     `)
-    .in("status", ["APPROVED", "SENT", "IN_PRODUCTION", "READY_TO_SHIP", "PARTIALLY_RECEIVED"])
+    .in("po_status", ["APPROVED", "SENT"])
+    .neq("fulfillment_status", "RECEIVED")
     .order("created_at", { ascending: false });
 
   if (error) throw new Error(`Failed to fetch open POs: ${error.message}`);
@@ -70,7 +71,7 @@ export async function getOpenPosForShipment() {
     id: po.id,
     po_number: po.po_number,
     supplier_name: po.companies?.name || "(미지정 공급사)",
-    status: po.status,
+    status: po.po_status,
     order_date: po.order_date,
   }));
 }
