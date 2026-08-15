@@ -283,7 +283,7 @@ export function ReceivingForm({
                   <th className="px-4 py-2.5">제품명</th>
                   <th className="px-4 py-2.5 text-right w-20">선적 수량</th>
                   <th className="px-4 py-2.5 text-right w-20">기입고 수량</th>
-                  <th className="px-4 py-2.5 text-right w-24">정상입고 (Good) *</th>
+                  <th className="px-4 py-2.5 text-right w-24">실물 입고 (Physical Received) *</th>
                   <th className="px-4 py-2.5 text-right w-24">파손 수량 (Damaged) *</th>
                   <th className="px-4 py-2.5 text-right w-24">보류 지정 (Hold) *</th>
                   <th className="px-4 py-2.5 text-right w-20">차이 (Variance)</th>

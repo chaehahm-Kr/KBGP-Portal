@@ -256,20 +256,22 @@ export function ReceivingDetail({ receiving }: ReceivingDetailProps) {
                     <th className="px-4 py-2.5">제조사 SKU</th>
                     <th className="px-4 py-2.5">제품명</th>
                     <th className="px-4 py-2.5 text-right w-20">선적 수량</th>
-                    <th className="px-4 py-2.5 text-right w-20">정상입고 (Good)</th>
-                    <th className="px-4 py-2.5 text-right w-20">파손 (Damaged)</th>
+                    <th className="px-4 py-2.5 text-right w-20">실물 입고 (Received)</th>
+                    <th className="px-4 py-2.5 text-right w-20">정상 가용 (Good)</th>
                     <th className="px-4 py-2.5 text-right w-20">보류 (Hold)</th>
-                    <th className="px-4 py-2.5 text-right w-20">차이 (Variance)</th>
+                    <th className="px-4 py-2.5 text-right w-20">파손 (Damaged)</th>
+                    <th className="px-4 py-2.5 text-right w-20">미도착 (Shortage)</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
                   {receiving.lines.map((l) => {
-                    const variance = l.received_qty - l.shipped_qty;
-                    const varianceColor =
-                      variance > 0
-                        ? "text-emerald-600 font-bold"
-                        : variance < 0
+                    const goodQty = l.received_qty - l.hold_qty;
+                    const shortage = l.shipped_qty - (l.received_qty + l.damaged_qty);
+                    const shortageColor =
+                      shortage > 0
                         ? "text-rose-600 font-bold"
+                        : shortage < 0
+                        ? "text-emerald-600 font-bold"
                         : "text-zinc-500 font-medium";
 
                     return (
@@ -285,11 +287,12 @@ export function ReceivingDetail({ receiving }: ReceivingDetailProps) {
                           </div>
                         </td>
                         <td className="px-4 py-3 text-right font-mono text-zinc-550">{l.shipped_qty.toLocaleString()}</td>
-                        <td className="px-4 py-3 text-right font-mono font-bold text-emerald-600">{l.received_qty.toLocaleString()}</td>
-                        <td className="px-4 py-3 text-right font-mono font-bold text-rose-500">{l.damaged_qty.toLocaleString()}</td>
+                        <td className="px-4 py-3 text-right font-mono font-bold text-zinc-650">{l.received_qty.toLocaleString()}</td>
+                        <td className="px-4 py-3 text-right font-mono font-bold text-emerald-600">{goodQty.toLocaleString()}</td>
                         <td className="px-4 py-3 text-right font-mono font-bold text-amber-500">{l.hold_qty.toLocaleString()}</td>
-                        <td className={`px-4 py-3 text-right font-mono ${varianceColor}`}>
-                          {variance > 0 ? `+${variance}` : variance}
+                        <td className="px-4 py-3 text-right font-mono font-bold text-rose-500">{l.damaged_qty.toLocaleString()}</td>
+                        <td className={`px-4 py-3 text-right font-mono ${shortageColor}`}>
+                          {shortage > 0 ? `-${shortage}` : shortage < 0 ? `+${Math.abs(shortage)}` : "0"}
                         </td>
                       </tr>
                     );
@@ -307,16 +310,20 @@ export function ReceivingDetail({ receiving }: ReceivingDetailProps) {
                   <span className="text-sm text-zinc-500">{totalShipped.toLocaleString()}</span>
                 </div>
                 <div className="text-right border-l border-zinc-250 pl-6 dark:border-zinc-800">
-                  <span className="text-[10px] font-sans text-emerald-650 block mb-0.5">총 정상 입고량</span>
-                  <span className="text-sm text-emerald-650">{totalReceived.toLocaleString()}</span>
+                  <span className="text-[10px] font-sans text-zinc-500 block mb-0.5">실물 입고 수량 (Physical Received)</span>
+                  <span className="text-sm text-zinc-700">{totalReceived.toLocaleString()}</span>
                 </div>
                 <div className="text-right border-l border-zinc-250 pl-6 dark:border-zinc-800">
-                  <span className="text-[10px] font-sans text-rose-500 block mb-0.5">총 파손 수량</span>
-                  <span className="text-sm text-rose-500">{totalDamaged.toLocaleString()}</span>
+                  <span className="text-[10px] font-sans text-emerald-650 block mb-0.5">정상 가용 수량 (Good)</span>
+                  <span className="text-sm text-emerald-650">{(totalReceived - totalHold).toLocaleString()}</span>
                 </div>
                 <div className="text-right border-l border-zinc-250 pl-6 dark:border-zinc-800">
-                  <span className="text-[10px] font-sans text-amber-500 block mb-0.5">총 보류 수량</span>
+                  <span className="text-[10px] font-sans text-amber-500 block mb-0.5">보류 수량 (Hold)</span>
                   <span className="text-sm text-amber-500">{totalHold.toLocaleString()}</span>
+                </div>
+                <div className="text-right border-l border-zinc-250 pl-6 dark:border-zinc-800">
+                  <span className="text-[10px] font-sans text-rose-500 block mb-0.5">파손/거절 수량 (Damaged)</span>
+                  <span className="text-sm text-rose-500">{totalDamaged.toLocaleString()}</span>
                 </div>
               </div>
             </div>
