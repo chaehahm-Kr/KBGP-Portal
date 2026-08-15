@@ -34,9 +34,15 @@ export default async function AdminPurchaseOrderDetailPage({
     notFound();
   }
 
+  // Fetch sibling invoices
+  const { data: invoices } = await supabase
+    .from("supplier_invoices")
+    .select("id, internal_ap_number, supplier_invoice_number, invoice_total, currency, invoice_status")
+    .eq("purchase_order_id", id);
+
   return (
     <div className="space-y-6">
-      <PurchaseOrderDetail po={po} isReadOnly={isReadOnly} />
+      <PurchaseOrderDetail po={po} isReadOnly={isReadOnly} invoices={invoices ?? []} />
     </div>
   );
 }

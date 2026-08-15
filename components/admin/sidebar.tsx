@@ -105,6 +105,7 @@ export default function Sidebar({ isCollapsed, toggleCollapse }: SidebarProps) {
         { name: "Purchase Orders", href: "/admin/purchasing" },
         { name: "Inbound Shipments", href: "/admin/purchasing/shipments" },
         { name: "Receiving", href: "/admin/purchasing/receiving" },
+        { name: "Supplier Invoices", href: "/admin/purchasing/invoices" },
       ],
     },
     {

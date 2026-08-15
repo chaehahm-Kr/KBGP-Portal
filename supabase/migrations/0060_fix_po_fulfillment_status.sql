@@ -1,5 +1,5 @@
 -- 0060_fix_po_fulfillment_status.sql — Fix PO fulfillment status transition
--- Redefine finalize_receiving_transaction function to check if all shipments are received.
+-- Redefine finalize_receiving_transaction function to check if all shipped quantities are resolved.
 
 CREATE OR REPLACE FUNCTION public.finalize_receiving_transaction(p_receiving_id UUID, p_user_id UUID)
 RETURNS JSONB AS $$
@@ -12,7 +12,6 @@ DECLARE
   v_shipment_status TEXT;
   v_po_status TEXT;
   v_po_all_received BOOLEAN;
-  v_all_shipments_received BOOLEAN;
 BEGIN
   -- 1. Lock the receiving row and verify status
   SELECT * INTO v_rec FROM public.receivings WHERE id = p_receiving_id FOR UPDATE;
@@ -95,33 +94,21 @@ BEGIN
       updated_at = now()
   WHERE id = v_rec.inbound_shipment_id;
 
-  -- 6. Calculate and update PO status
+  -- 6. Calculate and update PO fulfillment status
+  -- A PO line is considered fully resolved when the sum of shipped_qty across all RECEIVED shipments for this PO line meets or exceeds the ordered qty.
   SELECT NOT EXISTS (
     SELECT 1 
     FROM public.purchase_order_lines pol
     LEFT JOIN (
-      SELECT rl.purchase_order_line_id, sum(rl.received_qty) as total_rec
-      FROM public.receiving_lines rl
-      JOIN public.receivings r ON r.id = rl.receiving_id
-      WHERE r.status = 'FINALIZED' AND r.purchase_order_id = v_rec.purchase_order_id
-      GROUP BY rl.purchase_order_line_id
-    ) rec ON rec.purchase_order_line_id = pol.id
+      SELECT isl.purchase_order_line_id, sum(isl.shipped_qty) as total_resolved
+      FROM public.inbound_shipment_lines isl
+      JOIN public.inbound_shipments sh ON sh.id = isl.inbound_shipment_id
+      WHERE sh.status = 'RECEIVED'
+      GROUP BY isl.purchase_order_line_id
+    ) sh_res ON sh_res.purchase_order_line_id = pol.id
     WHERE pol.purchase_order_id = v_rec.purchase_order_id
-      AND (rec.total_rec IS NULL OR rec.total_rec < pol.qty)
+      AND (sh_res.total_resolved IS NULL OR sh_res.total_resolved < pol.qty)
   ) INTO v_po_all_received;
-
-  -- Check if all shipments for the PO are fully finalized or cancelled
-  SELECT NOT EXISTS (
-    SELECT 1 
-    FROM public.inbound_shipments
-    WHERE purchase_order_id = v_rec.purchase_order_id
-      AND status NOT IN ('RECEIVED', 'CANCELLED')
-  ) INTO v_all_shipments_received;
-
-  -- If all shipments are received/cancelled, we consider the PO logistics phase finished, so mark it RECEIVED
-  IF v_all_shipments_received THEN
-    v_po_all_received := TRUE;
-  END IF;
 
   UPDATE public.purchase_orders
   SET fulfillment_status = CASE 

@@ -256,7 +256,7 @@ export function ReceivingDetail({ receiving }: ReceivingDetailProps) {
                     <th className="px-4 py-2.5">제조사 SKU</th>
                     <th className="px-4 py-2.5">제품명</th>
                     <th className="px-4 py-2.5 text-right w-20">선적 수량</th>
-                    <th className="px-4 py-2.5 text-right w-20">실물 입고 (Received)</th>
+                    <th className="px-4 py-2.5 text-right w-20">재고 입고 (Inventory Received)</th>
                     <th className="px-4 py-2.5 text-right w-20">정상 가용 (Good)</th>
                     <th className="px-4 py-2.5 text-right w-20">보류 (Hold)</th>
                     <th className="px-4 py-2.5 text-right w-20">파손 (Damaged)</th>
@@ -266,12 +266,10 @@ export function ReceivingDetail({ receiving }: ReceivingDetailProps) {
                 <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
                   {receiving.lines.map((l) => {
                     const goodQty = l.received_qty - l.hold_qty;
-                    const shortage = l.shipped_qty - (l.received_qty + l.damaged_qty);
+                    const shortage = Math.max(l.shipped_qty - (l.received_qty + l.damaged_qty), 0);
                     const shortageColor =
                       shortage > 0
                         ? "text-rose-600 font-bold"
-                        : shortage < 0
-                        ? "text-emerald-600 font-bold"
                         : "text-zinc-500 font-medium";
 
                     return (
@@ -292,7 +290,7 @@ export function ReceivingDetail({ receiving }: ReceivingDetailProps) {
                         <td className="px-4 py-3 text-right font-mono font-bold text-amber-500">{l.hold_qty.toLocaleString()}</td>
                         <td className="px-4 py-3 text-right font-mono font-bold text-rose-500">{l.damaged_qty.toLocaleString()}</td>
                         <td className={`px-4 py-3 text-right font-mono ${shortageColor}`}>
-                          {shortage > 0 ? `-${shortage}` : shortage < 0 ? `+${Math.abs(shortage)}` : "0"}
+                          {shortage.toLocaleString()}
                         </td>
                       </tr>
                     );
@@ -306,11 +304,11 @@ export function ReceivingDetail({ receiving }: ReceivingDetailProps) {
               <span className="font-bold text-zinc-500">실물 입고 검수 요약</span>
               <div className="flex gap-6 font-mono font-bold">
                 <div className="text-right">
-                  <span className="text-[10px] font-sans text-zinc-400 block mb-0.5">총 선적 수량</span>
+                  <span className="text-[10px] font-sans text-zinc-400 block mb-0.5">총 선적 수량 (Shipped)</span>
                   <span className="text-sm text-zinc-500">{totalShipped.toLocaleString()}</span>
                 </div>
                 <div className="text-right border-l border-zinc-250 pl-6 dark:border-zinc-800">
-                  <span className="text-[10px] font-sans text-zinc-500 block mb-0.5">실물 입고 수량 (Physical Received)</span>
+                  <span className="text-[10px] font-sans text-zinc-500 block mb-0.5">재고 입고 수량 (Inventory Received)</span>
                   <span className="text-sm text-zinc-700">{totalReceived.toLocaleString()}</span>
                 </div>
                 <div className="text-right border-l border-zinc-250 pl-6 dark:border-zinc-800">
@@ -324,6 +322,10 @@ export function ReceivingDetail({ receiving }: ReceivingDetailProps) {
                 <div className="text-right border-l border-zinc-250 pl-6 dark:border-zinc-800">
                   <span className="text-[10px] font-sans text-rose-500 block mb-0.5">파손/거절 수량 (Damaged)</span>
                   <span className="text-sm text-rose-500">{totalDamaged.toLocaleString()}</span>
+                </div>
+                <div className="text-right border-l border-zinc-250 pl-6 dark:border-zinc-800">
+                  <span className="text-[10px] font-sans text-zinc-400 block mb-0.5">미도착 수량 (Shortage)</span>
+                  <span className="text-sm text-zinc-500">{Math.max(totalShipped - (totalReceived + totalDamaged), 0).toLocaleString()}</span>
                 </div>
               </div>
             </div>

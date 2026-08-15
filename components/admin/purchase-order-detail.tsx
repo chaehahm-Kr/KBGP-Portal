@@ -83,6 +83,14 @@ interface PurchaseOrderDetailProps {
     total_amount: number;
   };
   isReadOnly?: boolean;
+  invoices?: Array<{
+    id: string;
+    internal_ap_number: string;
+    supplier_invoice_number: string;
+    invoice_total: number;
+    currency: string;
+    invoice_status: string;
+  }>;
 }
 
 const PO_STATUS_COLORS: Record<string, string> = {
@@ -115,7 +123,7 @@ const FULFILLMENT_STATUS_LABELS: Record<string, string> = {
   RECEIVED: "입고완료 (Received)",
 };
 
-export function PurchaseOrderDetail({ po, isReadOnly = false }: PurchaseOrderDetailProps) {
+export function PurchaseOrderDetail({ po, isReadOnly = false, invoices = [] }: PurchaseOrderDetailProps) {
   const router = useRouter();
   const [isActionLoading, setIsActionLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
@@ -571,6 +579,36 @@ export function PurchaseOrderDetail({ po, isReadOnly = false }: PurchaseOrderDet
               )}
             </div>
           </div>
+
+          {/* Associated Supplier Invoices */}
+          {invoices && invoices.length > 0 && (
+            <div className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 space-y-4">
+              <h3 className="text-xs font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider border-b border-zinc-100 pb-2 dark:border-zinc-800">
+                연계 인보이스 내역 (Supplier Invoices)
+              </h3>
+              <div className="space-y-3 font-medium text-xs">
+                {invoices.map((inv) => (
+                  <div key={inv.id} className="flex justify-between items-center border-b border-zinc-50 pb-2 last:border-0 last:pb-0 dark:border-zinc-850">
+                    <div>
+                      <Link
+                        href={`/admin/purchasing/invoices/${inv.id}`}
+                        className="font-mono font-bold text-indigo-650 hover:underline block"
+                      >
+                        {inv.internal_ap_number}
+                      </Link>
+                      <span className="text-[10px] text-zinc-400">인보이스: {inv.supplier_invoice_number}</span>
+                    </div>
+                    <div className="text-right">
+                      <span className="font-mono font-bold text-zinc-900 dark:text-white">
+                        {inv.currency} {Number(inv.invoice_total).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                      </span>
+                      <span className="text-[10px] text-zinc-450 block font-bold">{inv.invoice_status}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
         </div>
 
