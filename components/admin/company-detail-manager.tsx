@@ -1754,27 +1754,37 @@ export function CompanyDetailManager({
                         <div>
                           <label className="text-[10px] font-bold text-zinc-400 block mb-1">기본 출고지 주소 (Ship-from Address)</label>
                           {isEditingSupplier ? (
-                            <select
-                              value={supShipFromWarehouseId}
-                              onChange={(e) => setSupShipFromWarehouseId(e.target.value)}
-                              className="w-full rounded border border-zinc-200 p-1 text-xs outline-none bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
-                            >
-                              <option value="">회사 기본 주소 사용 (미지정)</option>
-                              {warehouses.map((wh: any) => (
-                                <option key={wh.id} value={wh.id}>
-                                  [{wh.code}] {wh.name} ({wh.address1})
-                                </option>
-                              ))}
-                            </select>
+                            <div className="space-y-1">
+                              <select
+                                value={supShipFromWarehouseId}
+                                onChange={(e) => setSupShipFromWarehouseId(e.target.value)}
+                                className="w-full rounded border border-zinc-200 p-1 text-xs outline-none bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+                              >
+                                <option value="">미지정 (Not Set)</option>
+                                {warehouses.map((wh: any) => (
+                                  <option key={wh.id} value={wh.id}>
+                                    [{wh.code}] {wh.name} ({wh.address1})
+                                  </option>
+                                ))}
+                              </select>
+                              <div className="text-[10px] text-zinc-400 dark:text-zinc-500 italic mt-0.5">
+                                참고용 본사 주소: {address || "등록 없음"}
+                              </div>
+                            </div>
                           ) : (
-                            <span className="font-semibold text-zinc-900 dark:text-white">
-                              {(() => {
-                                const selectedWh = warehouses.find(w => w.id === supplierProfile?.default_ship_from_warehouse_id);
-                                return selectedWh 
-                                  ? `[${selectedWh.code}] ${selectedWh.name} (${selectedWh.address1})`
-                                  : "회사 기본 주소 사용 (미지정)";
-                              })()}
-                            </span>
+                            <div className="space-y-1">
+                              <span className="font-semibold text-zinc-900 dark:text-white block">
+                                {(() => {
+                                  const selectedWh = warehouses.find(w => w.id === supplierProfile?.default_ship_from_warehouse_id);
+                                  return selectedWh 
+                                    ? `[${selectedWh.code}] ${selectedWh.name} (${selectedWh.address1})`
+                                    : "미지정 (Not Set)";
+                                })()}
+                              </span>
+                              <div className="text-[10px] text-zinc-400 dark:text-zinc-500 italic">
+                                참고용 본사 주소: {address || "등록 없음"}
+                              </div>
+                            </div>
                           )}
                         </div>
 

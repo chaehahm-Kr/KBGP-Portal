@@ -240,10 +240,36 @@ DROP POLICY IF EXISTS "supplier_remittances_select" ON public.supplier_remittanc
 CREATE POLICY "supplier_remittances_select"
   ON public.supplier_remittances FOR SELECT
   TO authenticated
-  USING (public.auth_is_admin() OR public.auth_company_id() = company_id);
+  USING (
+    public.auth_is_super_admin()
+    OR EXISTS (
+      SELECT 1 FROM public.company_task_assignments
+      WHERE company_id = supplier_remittances.company_id
+        AND user_id = auth.uid()
+        AND task_code = 'settlement_inquiry'
+    )
+  );
 
 DROP POLICY IF EXISTS "supplier_remittances_write_admin" ON public.supplier_remittances;
-CREATE POLICY "supplier_remittances_write_admin"
+DROP POLICY IF EXISTS "supplier_remittances_write_policy" ON public.supplier_remittances;
+CREATE POLICY "supplier_remittances_write_policy"
   ON public.supplier_remittances FOR ALL
   TO authenticated
-  USING (public.auth_is_admin());
+  USING (
+    public.auth_is_super_admin()
+    OR EXISTS (
+      SELECT 1 FROM public.company_task_assignments
+      WHERE company_id = supplier_remittances.company_id
+        AND user_id = auth.uid()
+        AND task_code = 'settlement_inquiry'
+    )
+  )
+  WITH CHECK (
+    public.auth_is_super_admin()
+    OR EXISTS (
+      SELECT 1 FROM public.company_task_assignments
+      WHERE company_id = supplier_remittances.company_id
+        AND user_id = auth.uid()
+        AND task_code = 'settlement_inquiry'
+    )
+  );

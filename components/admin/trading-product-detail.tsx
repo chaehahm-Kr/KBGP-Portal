@@ -36,6 +36,7 @@ interface ResolvedProduct {
   photoUrl: string | null;
   selection_status: string;
   sales_status: string;
+  trading_status: string;
   category_code: string | null;
   category_full_path: string;
   price_usd_fob: number;
@@ -132,11 +133,17 @@ export function TradingProductDetail({ product }: TradingProductDetailProps) {
                 <span className="font-semibold text-zinc-650 dark:text-zinc-400">{product.category_full_path || "미지정"}</span>
               </div>
 
-              <div className="pt-3 flex items-center justify-between">
+              <div className="pt-3 grid grid-cols-3 gap-2">
                 <div>
                   <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 block mb-1">판매 상태</span>
                   <span className={`inline-flex items-center rounded px-2 py-0.5 text-[10px] font-bold border ${SALES_COLORS[product.sales_status] || SALES_COLORS.PREPARING}`}>
                     {SALES_LABELS[product.sales_status] || SALES_LABELS.PREPARING}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 block mb-1">운영 상태</span>
+                  <span className={`inline-flex items-center rounded px-2 py-0.5 text-[10px] font-bold border ${product.trading_status === "active" ? "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/20 dark:text-blue-400 dark:border-blue-900/50" : "bg-zinc-100 text-zinc-500 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:border-zinc-700"}`}>
+                    {product.trading_status === "active" ? "운영 대상" : "과거 이력"}
                   </span>
                 </div>
                 <div>

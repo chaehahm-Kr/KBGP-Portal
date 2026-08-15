@@ -20,6 +20,7 @@ interface TradingProductItem {
   photoUrl: string | null;
   selection_status: string;
   sales_status: string;
+  trading_status: string;
   category_code?: string | null;
   category_full_path?: string | null;
 }
@@ -29,7 +30,7 @@ interface TradingProductsListProps {
 }
 
 const SALES_COLORS: Record<string, string> = {
-  PREPARING: "bg-zinc-100 text-zinc-600 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:border-zinc-700",
+  PREPARING: "bg-zinc-100 text-zinc-650 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:border-zinc-700",
   ON_SALE: "bg-emerald-50 text-emerald-700 border-emerald-250 dark:bg-emerald-950/20 dark:text-emerald-400 dark:border-emerald-900/50",
   PAUSED: "bg-amber-50 text-amber-700 border-amber-250 dark:bg-amber-950/20 dark:text-amber-400 dark:border-amber-900/50",
   ENDED: "bg-zinc-250 text-zinc-650 border-zinc-300 dark:bg-zinc-950 dark:text-zinc-500 dark:border-zinc-850",
@@ -42,6 +43,16 @@ const SALES_LABELS: Record<string, string> = {
   ENDED: "판매 종료",
 };
 
+const TRADING_COLORS: Record<string, string> = {
+  active: "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/20 dark:text-blue-400 dark:border-blue-900/50",
+  historical: "bg-zinc-100 text-zinc-500 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:border-zinc-700",
+};
+
+const TRADING_LABELS: Record<string, string> = {
+  active: "운영 대상 (Active)",
+  historical: "과거 이력 (Historical)",
+};
+
 export function TradingProductsList({ initialProducts }: TradingProductsListProps) {
   const [products, setProducts] = useState<TradingProductItem[]>(initialProducts);
   const [searchTerm, setSearchTerm] = useState("");
@@ -49,6 +60,7 @@ export function TradingProductsList({ initialProducts }: TradingProductsListProp
   const [selectedCompanyId, setSelectedCompanyId] = useState("all");
   const [selectedBrandId, setSelectedBrandId] = useState("all");
   const [selectedSalesStatus, setSelectedSalesStatus] = useState("all");
+  const [selectedTradingStatus, setSelectedTradingStatus] = useState("all");
 
   useEffect(() => {
     setProducts(initialProducts);
@@ -81,17 +93,18 @@ export function TradingProductsList({ initialProducts }: TradingProductsListProp
     const matchesCompany = selectedCompanyId === "all" || p.company_id === selectedCompanyId;
     const matchesBrand = selectedBrandId === "all" || p.brand_id === selectedBrandId;
     const matchesSalesStatus = selectedSalesStatus === "all" || p.sales_status === selectedSalesStatus;
+    const matchesTradingStatus = selectedTradingStatus === "all" || p.trading_status === selectedTradingStatus;
 
-    return matchesSearch && matchesCategory && matchesCompany && matchesBrand && matchesSalesStatus;
+    return matchesSearch && matchesCategory && matchesCompany && matchesBrand && matchesSalesStatus && matchesTradingStatus;
   });
 
   return (
     <div className="space-y-4">
       {/* Search and Filters Panel */}
       <div className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 space-y-4">
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-6 gap-3">
           {/* Search Input */}
-          <div className="flex flex-col gap-1.5">
+          <div className="flex flex-col gap-1.5 col-span-1 sm:col-span-2 md:col-span-1">
             <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase">검색어</span>
             <input
               type="text"
@@ -161,8 +174,25 @@ export function TradingProductsList({ initialProducts }: TradingProductsListProp
               onChange={(e) => setSelectedSalesStatus(e.target.value)}
               className="w-full rounded-xl border border-zinc-200 bg-zinc-50 px-3.5 py-2 text-xs outline-none dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
             >
-              <option value="all">전체 상태</option>
+              <option value="all">전체 판매 상태</option>
               {Object.entries(SALES_LABELS).map(([code, label]) => (
+                <option key={code} value={code}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Trading Status Filter */}
+          <div className="flex flex-col gap-1.5">
+            <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase">운영 관리 상태</span>
+            <select
+              value={selectedTradingStatus}
+              onChange={(e) => setSelectedTradingStatus(e.target.value)}
+              className="w-full rounded-xl border border-zinc-200 bg-zinc-50 px-3.5 py-2 text-xs outline-none dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+            >
+              <option value="all">전체 운영 상태</option>
+              {Object.entries(TRADING_LABELS).map(([code, label]) => (
                 <option key={code} value={code}>
                   {label}
                 </option>
@@ -174,7 +204,7 @@ export function TradingProductsList({ initialProducts }: TradingProductsListProp
         {/* Results Info & Reset */}
         <div className="flex justify-between items-center text-[10px] text-zinc-450 dark:text-zinc-500 pt-1">
           <span>검색 결과: <strong className="text-zinc-900 dark:text-zinc-200 font-bold">{filteredProducts.length}</strong> 건</span>
-          {(searchTerm || selectedCategory !== "all" || selectedCompanyId !== "all" || selectedBrandId !== "all" || selectedSalesStatus !== "all") && (
+          {(searchTerm || selectedCategory !== "all" || selectedCompanyId !== "all" || selectedBrandId !== "all" || selectedSalesStatus !== "all" || selectedTradingStatus !== "all") && (
             <button
               onClick={() => {
                 setSearchTerm("");
@@ -182,6 +212,7 @@ export function TradingProductsList({ initialProducts }: TradingProductsListProp
                 setSelectedCompanyId("all");
                 setSelectedBrandId("all");
                 setSelectedSalesStatus("all");
+                setSelectedTradingStatus("all");
               }}
               className="text-zinc-900 hover:underline dark:text-zinc-250 font-semibold cursor-pointer"
             >
@@ -204,6 +235,7 @@ export function TradingProductsList({ initialProducts }: TradingProductsListProp
                 <th className="px-6 py-3.5 whitespace-nowrap">회사명</th>
                 <th className="px-6 py-3.5 whitespace-nowrap">브랜드</th>
                 <th className="px-6 py-3.5 whitespace-nowrap">판매 상태</th>
+                <th className="px-6 py-3.5 whitespace-nowrap">운영 상태</th>
                 <th className="px-6 py-3.5 whitespace-nowrap text-right">관리</th>
               </tr>
             </thead>
@@ -234,14 +266,14 @@ export function TradingProductsList({ initialProducts }: TradingProductsListProp
                     {/* Letusto SKU */}
                     <td className="px-6 py-4 align-middle font-mono font-bold text-zinc-955 dark:text-white whitespace-nowrap">
                       {product.letusto_sku || (
-                        <span className="text-zinc-350 dark:text-zinc-600 italic font-sans font-normal">지정 대기</span>
+                        <span className="text-zinc-350 dark:text-zinc-650 italic font-sans font-normal">지정 대기</span>
                       )}
                     </td>
 
                     {/* Manufacture SKU */}
-                    <td className="px-6 py-4 align-middle font-mono font-semibold text-zinc-800 dark:text-zinc-300 whitespace-nowrap">
+                    <td className="px-6 py-4 align-middle font-mono font-semibold text-zinc-800 dark:text-zinc-350 whitespace-nowrap">
                       {product.display_manufacture_sku || (
-                        <span className="text-zinc-350 dark:text-zinc-600 italic font-sans font-normal">미입력</span>
+                        <span className="text-zinc-350 dark:text-zinc-650 italic font-sans font-normal">미입력</span>
                       )}
                     </td>
 
@@ -263,7 +295,7 @@ export function TradingProductsList({ initialProducts }: TradingProductsListProp
                     </td>
 
                     {/* Company */}
-                    <td className="px-6 py-4 align-middle text-zinc-600 dark:text-zinc-350 font-medium whitespace-nowrap max-w-[120px] truncate">
+                    <td className="px-6 py-4 align-middle text-zinc-600 dark:text-zinc-355 font-medium whitespace-nowrap max-w-[120px] truncate">
                       <Link
                         href={`/admin/companies/${product.company_id}`}
                         className="hover:underline hover:text-zinc-950 dark:hover:text-white cursor-pointer transition-colors"
@@ -284,6 +316,13 @@ export function TradingProductsList({ initialProducts }: TradingProductsListProp
                       </span>
                     </td>
 
+                    {/* Trading Status */}
+                    <td className="px-6 py-4 align-middle">
+                      <span className={`inline-flex items-center rounded px-2.5 py-0.5 text-[10px] font-bold border ${TRADING_COLORS[product.trading_status] || TRADING_COLORS.active}`}>
+                        {TRADING_LABELS[product.trading_status] || TRADING_LABELS.active}
+                      </span>
+                    </td>
+
                     {/* Action */}
                     <td className="px-6 py-4 align-middle text-right">
                       <Link
@@ -298,7 +337,7 @@ export function TradingProductsList({ initialProducts }: TradingProductsListProp
               })}
               {filteredProducts.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="py-12 text-center text-zinc-400 dark:text-zinc-500">
+                  <td colSpan={9} className="py-12 text-center text-zinc-400 dark:text-zinc-500">
                     거래 대상 제품이 존재하지 않습니다.
                   </td>
                 </tr>

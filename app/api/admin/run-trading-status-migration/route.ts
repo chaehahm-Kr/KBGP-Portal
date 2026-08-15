@@ -18,7 +18,7 @@ export async function GET(request: Request) {
       );
     }
 
-    const sqlPath = path.resolve(process.cwd(), "supabase/migrations/0052_company_supplier_foundation_fixes.sql");
+    const sqlPath = path.resolve(process.cwd(), "supabase/migrations/0053_add_product_trading_status.sql");
     const sql = fs.readFileSync(sqlPath, "utf8");
 
     const logs: string[] = [];
@@ -26,9 +26,8 @@ export async function GET(request: Request) {
     // We try direct database connection hostname first, then pooler hosts
     const targets = [
       { host: "db.shzfrppdobpmrstcjfqu.supabase.co", port: 5432, user: "postgres" },
-      { host: "db.shzfrppdobpmrstcjfqu.supabase.co", port: 6543, user: "postgres" },
-      { host: "aws-0-us-west-2.pooler.supabase.com", port: 6543, user: "postgres.shzfrppdobpmrstcjfqu" },
-      { host: "aws-0-ap-northeast-2.pooler.supabase.com", port: 6543, user: "postgres.shzfrppdobpmrstcjfqu" }
+      { host: "aws-0-ap-northeast-2.pooler.supabase.com", port: 6543, user: "postgres.shzfrppdobpmrstcjfqu" },
+      { host: "aws-0-ap-northeast-2.pooler.supabase.com", port: 5432, user: "postgres.shzfrppdobpmrstcjfqu" }
     ];
 
     let applied = false;
@@ -36,11 +35,7 @@ export async function GET(request: Request) {
 
     for (const target of targets) {
       try {
-        const isPooler = target.user.includes(".");
-        const connStr = isPooler
-          ? `postgres://${target.user}:${encodeURIComponent(dbPass)}@${target.host}:${target.port}/postgres`
-          : `postgres://${target.user}:${encodeURIComponent(dbPass)}@${target.host}:${target.port}/postgres`;
-        
+        const connStr = `postgres://${target.user}:${encodeURIComponent(dbPass)}@${target.host}:${target.port}/postgres`;
         logs.push(`Trying: ${target.host}:${target.port} as ${target.user}...`);
         
         client = new pg.Client({
@@ -53,7 +48,7 @@ export async function GET(request: Request) {
         logs.push(`✅ Connected to database at ${target.host}!`);
         
         await client.query(sql);
-        logs.push("✅ Migration SQL 0052 executed successfully!");
+        logs.push("✅ Migration SQL 0053 executed successfully!");
 
         await client.end();
         applied = true;

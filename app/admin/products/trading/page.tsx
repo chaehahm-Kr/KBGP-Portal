@@ -12,12 +12,12 @@ export default async function AdminTradingProductsPage() {
   await verifyAdminSession();
   const supabase = await createClient();
 
-  // 1. Fetch products where selection_status is SELECTED
+  // 1. Fetch products where trading_status is active or historical
   let products: any[] | null = null;
   const { data: firstQueryProducts, error: queryError } = await supabase
     .from("products")
-    .select("id, name, name_en, category, brand_id, company_id, manufacture_sku, letusto_sku, parent_sku, child_sku, price_krw_retail, price_usd_fob, price_additional_info, origin, category_code, selection_status, sales_status")
-    .eq("selection_status", "SELECTED")
+    .select("id, name, name_en, category, brand_id, company_id, manufacture_sku, letusto_sku, parent_sku, child_sku, price_krw_retail, price_usd_fob, price_additional_info, origin, category_code, selection_status, sales_status, trading_status")
+    .in("trading_status", ["active", "historical"])
     .order("created_at", { ascending: false });
 
   if (queryError && (
@@ -28,8 +28,8 @@ export default async function AdminTradingProductsPage() {
   )) {
     const fallbackResult = await supabase
       .from("products")
-      .select("id, name, name_en, category, category_code, brand_id, company_id, manufacture_sku, letusto_sku, parent_sku, child_sku, price_krw_retail, price_usd_fob, price_additional_info, origin, selection_status, sales_status")
-      .eq("selection_status", "SELECTED")
+      .select("id, name, name_en, category, category_code, brand_id, company_id, manufacture_sku, letusto_sku, parent_sku, child_sku, price_krw_retail, price_usd_fob, price_additional_info, origin, selection_status, sales_status, trading_status")
+      .in("trading_status", ["active", "historical"])
       .order("created_at", { ascending: false });
     products = fallbackResult.data;
   } else {
@@ -106,6 +106,7 @@ export default async function AdminTradingProductsPage() {
         photoUrl,
         selection_status: p.selection_status || "UNREVIEWED",
         sales_status: p.sales_status || "PREPARING",
+        trading_status: p.trading_status || "inactive",
         category_code: p.category_code || null,
         category_full_path: p.category_code ? getCategoryFullPath(p.category_code) : null,
       };

@@ -108,6 +108,7 @@ export interface Product {
   sales_link_2?: string | null;
   selection_status?: string | null;
   sales_status?: string | null;
+  trading_status?: string | null;
 }
 
 export interface ProductVideo {

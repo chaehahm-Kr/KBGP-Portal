@@ -31,17 +31,19 @@ export async function adminUpdateProductOverrides(
   const currentMeta = (product.price_additional_info as Record<string, any>) || {};
   const currentOverrides = (currentMeta.admin_overrides as Record<string, any>) || {};
 
-  // Extract and clean letusto_sku, brand_id, selection_status, and sales_status from the overrides payload to save them to database columns directly
+  // Extract and clean letusto_sku, brand_id, selection_status, sales_status, and trading_status from the overrides payload to save them to database columns directly
   const cleanOverrides = { ...overrides };
   const letustoSku = cleanOverrides.letusto_sku;
   const brandId = cleanOverrides.brand_id;
   const selectionStatus = cleanOverrides.selection_status;
   const salesStatus = cleanOverrides.sales_status;
+  const tradingStatus = cleanOverrides.trading_status;
 
   delete cleanOverrides.letusto_sku;
   delete cleanOverrides.brand_id;
   delete cleanOverrides.selection_status;
   delete cleanOverrides.sales_status;
+  delete cleanOverrides.trading_status;
 
   if (currentOverrides.letusto_sku !== undefined) {
     delete currentOverrides.letusto_sku;
@@ -54,6 +56,9 @@ export async function adminUpdateProductOverrides(
   }
   if (currentOverrides.sales_status !== undefined) {
     delete currentOverrides.sales_status;
+  }
+  if (currentOverrides.trading_status !== undefined) {
+    delete currentOverrides.trading_status;
   }
 
   // Merge the new overrides into existing admin_overrides
@@ -81,6 +86,9 @@ export async function adminUpdateProductOverrides(
   if (salesStatus !== undefined) {
     updateData.sales_status = salesStatus;
   }
+  if (tradingStatus !== undefined) {
+    updateData.trading_status = tradingStatus;
+  }
 
   // 2. Update the product using createAdminClient to bypass UPDATE RLS restrictions (since admins do not have matching company_id)
   const adminSupabase = createAdminClient();
@@ -95,6 +103,8 @@ export async function adminUpdateProductOverrides(
 
   revalidatePath(`/admin/products/${productId}`);
   revalidatePath(`/admin/products`);
+  revalidatePath(`/admin/products/trading/${productId}`);
+  revalidatePath(`/admin/products/trading`);
   revalidatePath(`/portal/products/${productId}`);
   revalidatePath(`/portal/products`);
   return { success: true };
