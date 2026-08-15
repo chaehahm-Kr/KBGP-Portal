@@ -10,8 +10,16 @@ export const metadata: Metadata = {
 };
 
 export default async function AdminPurchasingPage() {
-  await verifyAdminSession();
+  const session = await verifyAdminSession();
   const supabase = createAdminClient();
+
+  // Load user roles
+  const { data: userRoles } = await supabase
+    .from("staff_roles")
+    .select("role")
+    .eq("staff_id", session.userId);
+  const roles = (userRoles ?? []).map((r) => r.role);
+  const isReadOnly = roles.length === 0 || (roles.length === 1 && roles[0] === "executive_viewer");
 
   // 1. Fetch all PO records
   const pos = await getPurchaseOrders();
@@ -37,12 +45,14 @@ export default async function AdminPurchasingPage() {
             Supplier를 대상으로 발행된 Inbound 발주서의 진행 현황을 파악하고 관리합니다.
           </p>
         </div>
-        <Link
-          href="/admin/purchasing/new"
-          className="inline-flex items-center px-4 py-2 bg-zinc-950 hover:bg-zinc-900 text-white dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-100 text-xs font-bold rounded-xl shadow-sm transition-all cursor-pointer"
-        >
-          + 신규 발주서 생성 (New PO)
-        </Link>
+        {!isReadOnly && (
+          <Link
+            href="/admin/purchasing/new"
+            className="inline-flex items-center px-4 py-2 bg-zinc-950 hover:bg-zinc-900 text-white dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-100 text-xs font-bold rounded-xl shadow-sm transition-all cursor-pointer"
+          >
+            + 신규 발주서 생성 (New PO)
+          </Link>
+        )}
       </div>
 
       <PurchaseOrdersList

@@ -123,6 +123,36 @@ export default async function AdminTradingProductDetailPage({
 
   const warehouses = dbWarehouses ?? [];
 
+  // Fetch PO history for this product
+  const { data: poHistory } = await supabase
+    .from("purchase_order_lines")
+    .select(`
+      id, qty, unit_cost, created_at,
+      purchase_orders!inner(id, po_number, order_date, po_status, supplier_id, companies:supplier_id(name))
+    `)
+    .eq("product_id", id)
+    .order("created_at", { ascending: false });
+
+  // Fetch Shipment history for this product
+  const { data: shipmentHistory } = await supabase
+    .from("inbound_shipment_lines")
+    .select(`
+      id, shipped_qty, created_at,
+      inbound_shipments!inner(id, shipment_number, status, shipping_method, etd, eta, destination_warehouse_id, warehouses:destination_warehouse_id(name, code))
+    `)
+    .eq("product_id", id)
+    .order("created_at", { ascending: false });
+
+  // Fetch Receiving history for this product
+  const { data: receivingHistory } = await supabase
+    .from("receiving_lines")
+    .select(`
+      id, received_qty, damaged_qty, hold_qty, created_at,
+      receivings!inner(id, receiving_number, status, received_date, warehouse_id, warehouses:warehouse_id(name, code))
+    `)
+    .eq("product_id", id)
+    .order("created_at", { ascending: false });
+
   return (
     <div className="space-y-6">
       <TradingProductDetail
@@ -130,6 +160,9 @@ export default async function AdminTradingProductDetailPage({
         initialBalances={balances}
         initialMovements={movements}
         warehouses={warehouses}
+        poHistory={poHistory || []}
+        shipmentHistory={shipmentHistory || []}
+        receivingHistory={receivingHistory || []}
       />
     </div>
   );

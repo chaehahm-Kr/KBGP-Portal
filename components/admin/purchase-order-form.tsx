@@ -12,6 +12,7 @@ interface WarehouseOption {
   id: string;
   name: string;
   code: string;
+  company_id: string;
 }
 
 interface SupplierOption {
@@ -24,6 +25,7 @@ interface SupplierOption {
   default_port_of_loading: string;
   default_production_lead_time: string;
   po_receiving_email: string;
+  default_ship_from_warehouse_id: string;
 }
 
 interface FormLine {
@@ -63,6 +65,7 @@ export function PurchaseOrderForm({
   const [portOfLoading, setPortOfLoading] = useState(initialPo?.port_of_loading || "");
   const [expectedReadyDate, setExpectedReadyDate] = useState(initialPo?.expected_ready_date || "");
   const [expectedShipDate, setExpectedShipDate] = useState(initialPo?.expected_ship_date || "");
+  const [shipFromWarehouseId, setShipFromWarehouseId] = useState(initialPo?.ship_from_warehouse_id || "");
   const [destinationWarehouseId, setDestinationWarehouseId] = useState(
     initialPo?.destination_warehouse_id || defaultWarehouseId
   );
@@ -93,6 +96,7 @@ export function PurchaseOrderForm({
       setIncoterms(supplier.default_incoterms || "");
       setPortOfLoading(supplier.default_port_of_loading || "");
       setPoReceivingEmail(supplier.po_receiving_email || "");
+      setShipFromWarehouseId(supplier.default_ship_from_warehouse_id || "");
       
       // Compute default expected ready date if production lead time is a number
       if (supplier.default_production_lead_time) {
@@ -194,6 +198,7 @@ export function PurchaseOrderForm({
         port_of_loading: portOfLoading,
         expected_ready_date: expectedReadyDate,
         expected_ship_date: expectedShipDate,
+        ship_from_warehouse_id: shipFromWarehouseId || null,
         destination_warehouse_id: destinationWarehouseId,
         po_receiving_email: poReceivingEmail,
         internal_note: internalNote,
@@ -291,6 +296,25 @@ export function PurchaseOrderForm({
                   [{wh.code}] {wh.name}
                 </option>
               ))}
+            </select>
+          </div>
+
+          {/* Ship From Warehouse */}
+          <div className="space-y-1.5">
+            <label className="font-bold text-zinc-600 dark:text-zinc-400">출고지 창고 (Ship From)</label>
+            <select
+              value={shipFromWarehouseId}
+              onChange={(e) => setShipFromWarehouseId(e.target.value)}
+              className="w-full rounded border border-zinc-200 p-2.5 bg-white text-zinc-900 dark:border-zinc-850 dark:bg-zinc-955 dark:text-white focus:border-zinc-950 outline-none"
+            >
+              <option value="">미지정 (Not Set)</option>
+              {warehouses
+                .filter((wh) => wh.company_id === supplierId)
+                .map((wh) => (
+                  <option key={wh.id} value={wh.id}>
+                    [{wh.code}] {wh.name}
+                  </option>
+                ))}
             </select>
           </div>
 

@@ -4,6 +4,19 @@ import { revalidatePath } from "next/cache";
 import { verifyAdminSession } from "@/lib/auth/dal";
 import { createAdminClient } from "@/lib/supabase/admin";
 
+async function verifyWritePermission(supabase: any, userId: string) {
+  const { data: userRoles } = await supabase
+    .from("staff_roles")
+    .select("role")
+    .eq("staff_id", userId);
+
+  const roles = (userRoles ?? []).map((r: any) => r.role);
+  const isReadOnly = roles.length === 0 || (roles.length === 1 && roles[0] === "executive_viewer");
+  if (isReadOnly) {
+    throw new Error("권한이 없습니다. 일반 조회(Executive Viewer) 계정은 이 작업을 수행할 수 없습니다.");
+  }
+}
+
 export interface CreatePoLineInput {
   product_id: string;
   qty: number;
@@ -20,6 +33,7 @@ export interface CreatePoInput {
   port_of_loading?: string;
   expected_ready_date?: string;
   expected_ship_date?: string;
+  ship_from_warehouse_id?: string | null;
   destination_warehouse_id: string;
   po_receiving_email?: string;
   internal_note?: string;
@@ -37,9 +51,10 @@ export async function getPurchaseOrders() {
   const { data: pos, error } = await supabase
     .from("purchase_orders")
     .select(`
-      id, po_number, order_date, status, currency, expected_ready_date, updated_at,
+      id, po_number, order_date, po_status, fulfillment_status, currency, expected_ready_date, updated_at,
       companies:supplier_id (name),
-      warehouses:destination_warehouse_id (name, code),
+      destination_warehouse:destination_warehouse_id (name, code),
+      ship_from_warehouse:ship_from_warehouse_id (name, code),
       purchase_order_lines (qty, unit_cost)
     `)
     .order("created_at", { ascending: false });
@@ -55,13 +70,17 @@ export async function getPurchaseOrders() {
       id: po.id,
       po_number: po.po_number,
       order_date: po.order_date,
-      status: po.status,
+      po_status: po.po_status,
+      fulfillment_status: po.fulfillment_status,
+      status: po.po_status, // backwards compatibility
       currency: po.currency,
       expected_ready_date: po.expected_ready_date,
       last_updated: po.updated_at,
       supplier_name: po.companies?.name || "(미지정 공급사)",
-      warehouse_name: po.warehouses?.name || "(미지정 창고)",
-      warehouse_code: po.warehouses?.code || "-",
+      warehouse_name: po.destination_warehouse?.name || "(미지정 창고)",
+      warehouse_code: po.destination_warehouse?.code || "-",
+      ship_from_name: po.ship_from_warehouse?.name || "-",
+      ship_from_code: po.ship_from_warehouse?.code || "-",
       total_qty: totalQty,
       total_amount: totalAmount,
     };
@@ -82,9 +101,10 @@ export async function getPurchaseOrderDetail(poId: string) {
       *,
       supplier:supplier_id (id, name, address, business_registration_number),
       warehouse:destination_warehouse_id (id, name, code, address1, city, state, zip_code, country),
-      creator:created_by (full_name),
-      approver:approved_by (full_name),
-      canceller:cancelled_by (full_name)
+      ship_from_warehouse:ship_from_warehouse_id (id, name, code, address1, city, state, zip_code, country),
+      creator:created_by (full_name:display_name),
+      approver:approved_by (full_name:display_name),
+      canceller:cancelled_by (full_name:display_name)
     `)
     .eq("id", poId)
     .maybeSingle();
@@ -104,27 +124,68 @@ export async function getPurchaseOrderDetail(poId: string) {
 
   if (lErr) throw new Error(`Failed to fetch purchase order lines: ${lErr.message}`);
 
-  const formattedLines = (lines ?? []).map((l: any) => ({
-    id: l.id,
-    product_id: l.product_id,
-    product_name: l.product_name_snapshot,
-    letusto_sku: l.letusto_sku_snapshot,
-    manufacture_sku: l.manufacture_sku_snapshot,
-    qty: l.qty,
-    unit_cost: Number(l.unit_cost),
-    line_total: l.qty * Number(l.unit_cost),
-    line_note: l.line_note,
-    brand_name: l.products?.brands?.name || "(미지정 브랜드)",
-  }));
+  // Fetch active shipped totals per PO line
+  const { data: shipData } = await supabase
+    .from("inbound_shipment_lines")
+    .select("purchase_order_line_id, shipped_qty, inbound_shipments!inner(status)")
+    .eq("inbound_shipments.purchase_order_id", poId)
+    .neq("inbound_shipments.status", "CANCELLED");
+
+  const shippedMap = new Map<string, number>();
+  (shipData ?? []).forEach((s) => {
+    const cur = shippedMap.get(s.purchase_order_line_id) || 0;
+    shippedMap.set(s.purchase_order_line_id, cur + s.shipped_qty);
+  });
+
+  // Fetch finalized received totals per PO line
+  const { data: recData } = await supabase
+    .from("receiving_lines")
+    .select("purchase_order_line_id, received_qty, receivings!inner(status)")
+    .eq("receivings.purchase_order_id", poId)
+    .eq("receivings.status", "FINALIZED");
+
+  const receivedMap = new Map<string, number>();
+  (recData ?? []).forEach((r) => {
+    const cur = receivedMap.get(r.purchase_order_line_id) || 0;
+    receivedMap.set(r.purchase_order_line_id, cur + r.received_qty);
+  });
+
+  const formattedLines = (lines ?? []).map((l: any) => {
+    const shipped = shippedMap.get(l.id) || 0;
+    const received = receivedMap.get(l.id) || 0;
+    const remainingToShip = Math.max(0, l.qty - shipped);
+    const remainingToReceive = Math.max(0, l.qty - received);
+
+    return {
+      id: l.id,
+      product_id: l.product_id,
+      product_name: l.product_name_snapshot,
+      letusto_sku: l.letusto_sku_snapshot,
+      manufacture_sku: l.manufacture_sku_snapshot,
+      qty: l.qty,
+      unit_cost: Number(l.unit_cost),
+      line_total: l.qty * Number(l.unit_cost),
+      line_note: l.line_note,
+      brand_name: l.products?.brands?.name || "(미지정 브랜드)",
+      shipped_qty: shipped,
+      received_qty: received,
+      remaining_to_ship: remainingToShip,
+      remaining_to_receive: remainingToReceive,
+    };
+  });
 
   const totalQty = formattedLines.reduce((sum, l) => sum + l.qty, 0);
   const totalAmount = formattedLines.reduce((sum, l) => sum + l.line_total, 0);
+  const totalShipped = formattedLines.reduce((sum, l) => sum + l.shipped_qty, 0);
+  const totalReceived = formattedLines.reduce((sum, l) => sum + l.received_qty, 0);
 
   return {
     ...po,
     lines: formattedLines,
     total_qty: totalQty,
     total_amount: totalAmount,
+    total_shipped: totalShipped,
+    total_received: totalReceived,
   };
 }
 
@@ -152,6 +213,7 @@ export async function getSuppliersForPo() {
     .select(`
       company_id, default_currency, default_payment_terms, default_payment_terms_custom,
       default_incoterms, default_port_of_loading, default_production_lead_time, po_receiving_email,
+      default_ship_from_warehouse_id,
       companies:company_id (name, address)
     `)
     .in("company_id", supplierIds)
@@ -171,6 +233,7 @@ export async function getSuppliersForPo() {
     default_port_of_loading: p.default_port_of_loading || "",
     default_production_lead_time: p.default_production_lead_time || "",
     po_receiving_email: p.po_receiving_email || "",
+    default_ship_from_warehouse_id: p.default_ship_from_warehouse_id || "",
   }));
 }
 
@@ -259,6 +322,7 @@ export async function updateProductSuppliers(productId: string, supplierIds: str
 export async function createPurchaseOrder(data: CreatePoInput) {
   const { userId } = await verifyAdminSession();
   const supabase = createAdminClient();
+  await verifyWritePermission(supabase, userId);
 
   // 1. Verify Destination Warehouse status
   const { data: warehouse } = await supabase
@@ -295,12 +359,14 @@ export async function createPurchaseOrder(data: CreatePoInput) {
       port_of_loading: data.port_of_loading || null,
       expected_ready_date: data.expected_ready_date || null,
       expected_ship_date: data.expected_ship_date || null,
+      ship_from_warehouse_id: data.ship_from_warehouse_id || null,
       destination_warehouse_id: data.destination_warehouse_id,
       po_receiving_email: data.po_receiving_email || null,
       internal_note: data.internal_note || null,
       supplier_facing_note: data.supplier_facing_note || null,
       created_by: userId,
-      status: "DRAFT",
+      po_status: "DRAFT",
+      fulfillment_status: "PENDING",
     })
     .select("id")
     .single();
@@ -358,16 +424,17 @@ export async function createPurchaseOrder(data: CreatePoInput) {
 export async function updatePurchaseOrder(poId: string, data: CreatePoInput) {
   const { userId } = await verifyAdminSession();
   const supabase = createAdminClient();
+  await verifyWritePermission(supabase, userId);
 
   // 1. Verify PO exists and is DRAFT
   const { data: po } = await supabase
     .from("purchase_orders")
-    .select("status")
+    .select("po_status")
     .eq("id", poId)
     .single();
 
   if (!po) throw new Error("Purchase order not found.");
-  if (po.status !== "DRAFT") {
+  if (po.po_status !== "DRAFT") {
     throw new Error("DRAFT(초안) 상태인 발주서만 수정할 수 있습니다.");
   }
 
@@ -405,6 +472,7 @@ export async function updatePurchaseOrder(poId: string, data: CreatePoInput) {
       port_of_loading: data.port_of_loading || null,
       expected_ready_date: data.expected_ready_date || null,
       expected_ship_date: data.expected_ship_date || null,
+      ship_from_warehouse_id: data.ship_from_warehouse_id || null,
       destination_warehouse_id: data.destination_warehouse_id,
       po_receiving_email: data.po_receiving_email || null,
       internal_note: data.internal_note || null,
@@ -466,10 +534,11 @@ export async function updatePurchaseOrder(poId: string, data: CreatePoInput) {
 export async function transitionPoStatus(poId: string, targetStatus: string) {
   const { userId } = await verifyAdminSession();
   const supabase = createAdminClient();
+  await verifyWritePermission(supabase, userId);
 
   const { data: po } = await supabase
     .from("purchase_orders")
-    .select("status")
+    .select("po_status, fulfillment_status")
     .eq("id", poId)
     .single();
 
@@ -477,55 +546,56 @@ export async function transitionPoStatus(poId: string, targetStatus: string) {
 
   // Transition validation
   if (targetStatus === "APPROVED") {
-    if (po.status !== "DRAFT") throw new Error("DRAFT 상태인 발주서만 승인할 수 있습니다.");
+    if (po.po_status !== "DRAFT") throw new Error("DRAFT 상태인 발주서만 승인할 수 있습니다.");
     
     await supabase
       .from("purchase_orders")
       .update({
-        status: "APPROVED",
+        po_status: "APPROVED",
         approved_by: userId,
         approved_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       })
       .eq("id", poId);
   } else if (targetStatus === "SENT") {
-    if (po.status !== "APPROVED") throw new Error("APPROVED 상태인 발주서만 발송 처리할 수 있습니다.");
+    if (po.po_status !== "APPROVED") throw new Error("APPROVED 상태인 발주서만 발송 처리할 수 있습니다.");
     
     await supabase
       .from("purchase_orders")
       .update({
-        status: "SENT",
+        po_status: "SENT",
+        fulfillment_status: "PENDING",
         sent_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       })
       .eq("id", poId);
   } else if (targetStatus === "IN_PRODUCTION") {
-    if (po.status !== "SENT") throw new Error("SENT 상태인 발주서만 생산 상태로 변경할 수 있습니다.");
+    if (po.po_status !== "SENT") throw new Error("SENT 상태인 발주서만 생산 상태로 변경할 수 있습니다.");
     
     await supabase
       .from("purchase_orders")
       .update({
-        status: "IN_PRODUCTION",
+        fulfillment_status: "IN_PRODUCTION",
         updated_at: new Date().toISOString(),
       })
       .eq("id", poId);
   } else if (targetStatus === "READY_TO_SHIP") {
-    if (po.status !== "IN_PRODUCTION") throw new Error("IN_PRODUCTION 상태인 발주서만 선적대기 상태로 변경할 수 있습니다.");
+    if (po.po_status !== "SENT") throw new Error("SENT 상태인 발주서만 선적대기 상태로 변경할 수 있습니다.");
     
     await supabase
       .from("purchase_orders")
       .update({
-        status: "READY_TO_SHIP",
+        fulfillment_status: "READY_TO_SHIP",
         updated_at: new Date().toISOString(),
       })
       .eq("id", poId);
   } else if (targetStatus === "CANCELLED") {
-    if (po.status === "CANCELLED") throw new Error("이미 취소된 발주서입니다.");
+    if (po.po_status === "CANCELLED") throw new Error("이미 취소된 발주서입니다.");
     
     await supabase
       .from("purchase_orders")
       .update({
-        status: "CANCELLED",
+        po_status: "CANCELLED",
         cancelled_by: userId,
         cancelled_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
@@ -544,17 +614,18 @@ export async function transitionPoStatus(poId: string, targetStatus: string) {
  * Permanently delete a DRAFT purchase order (header & lines).
  */
 export async function deleteDraftPo(poId: string) {
-  await verifyAdminSession();
+  const { userId } = await verifyAdminSession();
   const supabase = createAdminClient();
+  await verifyWritePermission(supabase, userId);
 
   const { data: po } = await supabase
     .from("purchase_orders")
-    .select("status")
+    .select("po_status")
     .eq("id", poId)
     .single();
 
   if (!po) throw new Error("Purchase order not found.");
-  if (po.status !== "DRAFT") {
+  if (po.po_status !== "DRAFT") {
     throw new Error("DRAFT(초안) 상태의 발주서만 영구 삭제가 가능합니다.");
   }
 

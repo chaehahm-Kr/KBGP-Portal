@@ -58,6 +58,7 @@ export default function Sidebar({ isCollapsed, toggleCollapse }: SidebarProps) {
       "Companies & Brands": pathname.startsWith("/admin/companies") || pathname.startsWith("/admin/brands"),
       Products: pathname.startsWith("/admin/products"),
       Inventory: pathname.startsWith("/admin/inventory"),
+      Purchasing: pathname.startsWith("/admin/purchasing"),
       "Retail Network": pathname.startsWith("/admin/stores"),
       "Sales & Performance": pathname.startsWith("/admin/sales"),
       "Growth Simulator": pathname.startsWith("/admin/simulator"),
@@ -95,6 +96,15 @@ export default function Sidebar({ isCollapsed, toggleCollapse }: SidebarProps) {
       icon: TasksIcon,
       subItems: [
         { name: "Inventory Overview", href: "/admin/inventory" },
+      ],
+    },
+    {
+      name: "Purchasing",
+      icon: RetailIcon,
+      subItems: [
+        { name: "Purchase Orders", href: "/admin/purchasing" },
+        { name: "Inbound Shipments", href: "/admin/purchasing/shipments" },
+        { name: "Receiving", href: "/admin/purchasing/receiving" },
       ],
     },
     {

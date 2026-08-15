@@ -114,6 +114,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS trigger_sync_inventory_balance ON public.inventory_movements;
 CREATE TRIGGER trigger_sync_inventory_balance
   BEFORE INSERT ON public.inventory_movements
   FOR EACH ROW

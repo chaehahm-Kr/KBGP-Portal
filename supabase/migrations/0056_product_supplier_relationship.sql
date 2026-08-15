@@ -16,7 +16,7 @@ COMMENT ON TABLE public.product_suppliers IS '상품과 발주 공급사(Supplie
 ALTER TABLE public.product_suppliers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.product_suppliers FORCE ROW LEVEL SECURITY;
 
--- Select/All operations policy for admin
+DROP POLICY IF EXISTS "product_suppliers_admin_all" ON public.product_suppliers;
 CREATE POLICY "product_suppliers_admin_all"
   ON public.product_suppliers
   FOR ALL

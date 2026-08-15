@@ -70,6 +70,8 @@ interface InventoryMovementItem {
   balance_hold_after: number;
   reason: string | null;
   note: string | null;
+  reference_type?: string | null;
+  reference_id?: string | null;
   created_by: string | null;
   created_at: string;
   creator_name?: string;
@@ -80,6 +82,9 @@ interface TradingProductDetailProps {
   initialBalances: InventoryBalanceItem[];
   initialMovements: InventoryMovementItem[];
   warehouses: any[]; // List of active warehouses
+  poHistory?: any[];
+  shipmentHistory?: any[];
+  receivingHistory?: any[];
 }
 
 const SALES_COLORS: Record<string, string> = {
@@ -109,6 +114,9 @@ export function TradingProductDetail({
   initialBalances,
   initialMovements,
   warehouses,
+  poHistory = [],
+  shipmentHistory = [],
+  receivingHistory = [],
 }: TradingProductDetailProps) {
   const router = useRouter();
   
@@ -452,8 +460,15 @@ export function TradingProductDetail({
                         </td>
                         <td className="px-4 py-3 text-right font-mono text-zinc-600 dark:text-zinc-400 font-semibold">{m.balance_on_hand_after}</td>
                         <td className="px-4 py-3 text-right font-mono text-rose-500 dark:text-rose-455 font-semibold">{m.balance_hold_after}</td>
-                        <td className="px-4 py-3 max-w-[150px] truncate text-zinc-600 dark:text-zinc-400" title={m.note || ""}>
-                          {m.reason ? `[${m.reason}] ` : ""}{m.note || "-"}
+                        <td className="px-4 py-3 max-w-[150px] truncate text-zinc-650 dark:text-zinc-400" title={m.note || ""}>
+                          {m.reason ? `[${m.reason}] ` : ""}
+                          {m.reference_type === "RECEIVING" && m.reference_id ? (
+                            <Link href={`/admin/purchasing/receiving/${m.reference_id}`} className="text-indigo-650 hover:underline font-bold">
+                              {m.note || "-"}
+                            </Link>
+                          ) : (
+                            m.note || "-"
+                          )}
                         </td>
                         <td className="px-4 py-3 text-zinc-500 dark:text-zinc-400 whitespace-nowrap font-medium">{m.creator_name}</td>
                       </tr>
@@ -464,14 +479,112 @@ export function TradingProductDetail({
             )}
           </div>
 
-          {/* Section: Purchase & Receiving History (Locked/Disconnected) */}
-          <div className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 space-y-3">
+          {/* Section: Purchase & Receiving History */}
+          <div className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 space-y-6">
             <h3 className="text-sm font-bold text-zinc-800 dark:text-white">구매 및 입출고 거래 내역 (PO / Receiving History)</h3>
-            <div className="rounded-xl border border-dashed border-zinc-200 dark:border-zinc-800 p-6 flex flex-col items-center justify-center text-center bg-zinc-50/50 dark:bg-zinc-950/20">
-              <span className="text-zinc-400 dark:text-zinc-500 text-xs font-semibold">No purchasing or receiving data available yet.</span>
-              <p className="text-[10px] text-zinc-400 dark:text-zinc-650 mt-1 max-w-sm">
-                향후 PO 발주 및 Receiving 거래 전표 모듈이 연결되면, 해당 트랜잭션을 기반으로 발생한 입출고 내역이 여기에 별도로 통합 집계됩니다.
-              </p>
+            
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* PO History */}
+              <div className="space-y-2.5">
+                <h4 className="text-[11px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wide">1. 발주 이력 (PO Lines)</h4>
+                {poHistory.length === 0 ? (
+                  <p className="text-[10px] text-zinc-400 italic">발주 이력이 없습니다.</p>
+                ) : (
+                  <div className="overflow-hidden rounded border border-zinc-150 dark:border-zinc-850 text-[10px]">
+                    <table className="w-full text-left">
+                      <thead>
+                        <tr className="bg-zinc-50 dark:bg-zinc-950 font-bold border-b border-zinc-150 dark:border-zinc-850">
+                          <th className="p-2">PO 번호</th>
+                          <th className="p-2 text-right">발주수량</th>
+                          <th className="p-2 text-right">FOB 단가</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-zinc-100 dark:divide-zinc-850">
+                        {poHistory.map((po: any) => (
+                          <tr key={po.id} className="hover:bg-zinc-50/20">
+                            <td className="p-2 font-mono">
+                              <Link href={`/admin/purchasing/${po.purchase_orders?.id}`} className="hover:underline font-bold text-indigo-650">
+                                {po.purchase_orders?.po_number}
+                              </Link>
+                              <span className="block text-[8px] text-zinc-400">{po.purchase_orders?.companies?.name}</span>
+                            </td>
+                            <td className="p-2 text-right font-mono font-semibold">{po.qty?.toLocaleString()}</td>
+                            <td className="p-2 text-right font-mono">${po.unit_cost?.toFixed(2)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+
+              {/* Shipment History */}
+              <div className="space-y-2.5">
+                <h4 className="text-[11px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wide">2. 선적 이력 (Shipment Lines)</h4>
+                {shipmentHistory.length === 0 ? (
+                  <p className="text-[10px] text-zinc-400 italic">선적 운송 이력이 없습니다.</p>
+                ) : (
+                  <div className="overflow-hidden rounded border border-zinc-150 dark:border-zinc-850 text-[10px]">
+                    <table className="w-full text-left">
+                      <thead>
+                        <tr className="bg-zinc-50 dark:bg-zinc-950 font-bold border-b border-zinc-150 dark:border-zinc-850">
+                          <th className="p-2">선적 번호</th>
+                          <th className="p-2 text-right">선적수량</th>
+                          <th className="p-2">목적지</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-zinc-100 dark:divide-zinc-850">
+                        {shipmentHistory.map((s: any) => (
+                          <tr key={s.id} className="hover:bg-zinc-50/20">
+                            <td className="p-2 font-mono">
+                              <Link href={`/admin/purchasing/shipments/${s.inbound_shipments?.id}`} className="hover:underline font-bold text-indigo-650">
+                                {s.inbound_shipments?.shipment_number}
+                              </Link>
+                              <span className="block text-[8px] text-zinc-400">ETA: {s.inbound_shipments?.eta || "-"}</span>
+                            </td>
+                            <td className="p-2 text-right font-mono font-semibold">{s.shipped_qty?.toLocaleString()}</td>
+                            <td className="p-2 font-semibold">[{s.inbound_shipments?.warehouses?.code}]</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+
+              {/* Receiving History */}
+              <div className="space-y-2.5">
+                <h4 className="text-[11px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wide">3. 입고 이력 (Receivings)</h4>
+                {receivingHistory.length === 0 ? (
+                  <p className="text-[10px] text-zinc-400 italic">최종 입고 검수 이력이 없습니다.</p>
+                ) : (
+                  <div className="overflow-hidden rounded border border-zinc-150 dark:border-zinc-850 text-[10px]">
+                    <table className="w-full text-left">
+                      <thead>
+                        <tr className="bg-zinc-50 dark:bg-zinc-950 font-bold border-b border-zinc-150 dark:border-zinc-850">
+                          <th className="p-2">입고 번호</th>
+                          <th className="p-2 text-right">실물입고</th>
+                          <th className="p-2 text-right">파손/보류</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-zinc-100 dark:divide-zinc-850">
+                        {receivingHistory.map((r: any) => (
+                          <tr key={r.id} className="hover:bg-zinc-50/20">
+                            <td className="p-2 font-mono">
+                              <Link href={`/admin/purchasing/receiving/${r.receivings?.id}`} className="hover:underline font-bold text-emerald-650">
+                                {r.receivings?.receiving_number}
+                              </Link>
+                              <span className="block text-[8px] text-zinc-400">{r.receivings?.received_date}</span>
+                            </td>
+                            <td className="p-2 text-right font-mono font-bold text-emerald-600">{r.received_qty?.toLocaleString()}</td>
+                            <td className="p-2 text-right font-mono text-rose-500">{r.damaged_qty || r.hold_qty ? `${r.damaged_qty}/${r.hold_qty}` : "-"}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 

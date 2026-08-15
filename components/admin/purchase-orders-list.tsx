@@ -7,13 +7,16 @@ interface PurchaseOrderItem {
   id: string;
   po_number: string;
   order_date: string;
-  status: "DRAFT" | "APPROVED" | "SENT" | "IN_PRODUCTION" | "READY_TO_SHIP" | "CANCELLED";
+  po_status: "DRAFT" | "APPROVED" | "SENT" | "CANCELLED";
+  fulfillment_status: "PENDING" | "IN_PRODUCTION" | "READY_TO_SHIP" | "SHIPPED" | "RECEIVED";
   currency: string;
   expected_ready_date: string | null;
   last_updated: string;
   supplier_name: string;
   warehouse_name: string;
   warehouse_code: string;
+  ship_from_name: string;
+  ship_from_code: string;
   total_qty: number;
   total_amount: number;
 }
@@ -35,22 +38,34 @@ interface PurchaseOrdersListProps {
   suppliers: SupplierOption[];
 }
 
-const STATUS_COLORS: Record<string, string> = {
-  DRAFT: "bg-zinc-100 text-zinc-650 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:border-zinc-700",
+const PO_STATUS_COLORS: Record<string, string> = {
+  DRAFT: "bg-zinc-150 text-zinc-700 border-zinc-250 dark:bg-zinc-800 dark:text-zinc-400 dark:border-zinc-700",
   APPROVED: "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/20 dark:text-blue-400 dark:border-blue-900/50",
   SENT: "bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-950/20 dark:text-indigo-400 dark:border-indigo-900/50",
-  IN_PRODUCTION: "bg-amber-50 text-amber-700 border-amber-250 dark:bg-amber-950/20 dark:text-amber-400 dark:border-amber-900/50",
-  READY_TO_SHIP: "bg-emerald-50 text-emerald-700 border-emerald-250 dark:bg-emerald-950/20 dark:text-emerald-400 dark:border-emerald-900/50",
   CANCELLED: "bg-rose-50 text-rose-700 border-rose-250 dark:bg-rose-950/20 dark:text-rose-400 dark:border-rose-900/50",
 };
 
-const STATUS_LABELS: Record<string, string> = {
+const PO_STATUS_LABELS: Record<string, string> = {
   DRAFT: "초안 (Draft)",
   APPROVED: "승인됨 (Approved)",
   SENT: "발송완료 (Sent)",
+  CANCELLED: "취소됨 (Cancelled)",
+};
+
+const FULFILLMENT_STATUS_COLORS: Record<string, string> = {
+  PENDING: "bg-zinc-50 text-zinc-500 border-zinc-200 dark:bg-zinc-900 dark:text-zinc-500",
+  IN_PRODUCTION: "bg-amber-50 text-amber-700 border-amber-250 dark:bg-amber-950/20 dark:text-amber-400 dark:border-amber-900/50",
+  READY_TO_SHIP: "bg-emerald-50 text-emerald-700 border-emerald-250 dark:bg-emerald-950/20 dark:text-emerald-400 dark:border-emerald-900/50",
+  SHIPPED: "bg-teal-50 text-teal-700 border-teal-250 dark:bg-teal-950/20 dark:text-teal-400 dark:border-teal-900/50",
+  RECEIVED: "bg-sky-50 text-sky-700 border-sky-250 dark:bg-sky-950/20 dark:text-sky-400 dark:border-sky-900/50",
+};
+
+const FULFILLMENT_STATUS_LABELS: Record<string, string> = {
+  PENDING: "대기 (Pending)",
   IN_PRODUCTION: "생산중 (In Production)",
   READY_TO_SHIP: "선적대기 (Ready to Ship)",
-  CANCELLED: "취소됨 (Cancelled)",
+  SHIPPED: "선적완료 (Shipped)",
+  RECEIVED: "입고완료 (Received)",
 };
 
 export function PurchaseOrdersList({
@@ -60,7 +75,8 @@ export function PurchaseOrdersList({
 }: PurchaseOrdersListProps) {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedSupplierId, setSelectedSupplierId] = useState("all");
-  const [selectedStatus, setSelectedStatus] = useState("all");
+  const [selectedPoStatus, setSelectedPoStatus] = useState("all");
+  const [selectedFulfillmentStatus, setSelectedFulfillmentStatus] = useState("all");
   const [selectedWarehouseId, setSelectedWarehouseId] = useState("all");
 
   // Filtering Logic
@@ -76,21 +92,23 @@ export function PurchaseOrdersList({
     const matchesSupplier =
       selectedSupplierId === "all" || po.supplier_name === supplierOption?.name;
 
-    const matchesStatus = selectedStatus === "all" || po.status === selectedStatus;
+    const matchesPoStatus = selectedPoStatus === "all" || po.po_status === selectedPoStatus;
+    const matchesFulfillment = selectedFulfillmentStatus === "all" || po.fulfillment_status === selectedFulfillmentStatus;
+    
     const matchesWarehouse =
       selectedWarehouseId === "all" ||
       warehouses.find((w) => w.id === selectedWarehouseId)?.code === po.warehouse_code;
 
-    return matchesSearch && matchesSupplier && matchesStatus && matchesWarehouse;
+    return matchesSearch && matchesSupplier && matchesPoStatus && matchesFulfillment && matchesWarehouse;
   });
 
   return (
     <div className="space-y-4">
       {/* Search and Filters panel */}
       <div className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 space-y-4">
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3">
           {/* Search Input */}
-          <div className="flex flex-col gap-1.5 col-span-1 sm:col-span-2 md:col-span-1">
+          <div className="flex flex-col gap-1.5">
             <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase">검색어</span>
             <input
               type="text"
@@ -107,7 +125,7 @@ export function PurchaseOrdersList({
             <select
               value={selectedSupplierId}
               onChange={(e) => setSelectedSupplierId(e.target.value)}
-              className="w-full rounded-xl border border-zinc-200 bg-zinc-50 px-3.5 py-2 text-xs outline-none dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+              className="w-full rounded-xl border border-zinc-200 bg-zinc-50 px-3.5 py-2 text-xs outline-none dark:border-zinc-800 dark:bg-zinc-955 dark:text-white"
             >
               <option value="all">전체 공급사</option>
               {suppliers.map((s) => (
@@ -118,16 +136,33 @@ export function PurchaseOrdersList({
             </select>
           </div>
 
-          {/* Status filter */}
+          {/* Document Status filter */}
           <div className="flex flex-col gap-1.5">
-            <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase">진행 상태</span>
+            <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase">문서 진행 상태</span>
             <select
-              value={selectedStatus}
-              onChange={(e) => setSelectedStatus(e.target.value)}
-              className="w-full rounded-xl border border-zinc-200 bg-zinc-50 px-3.5 py-2 text-xs outline-none dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+              value={selectedPoStatus}
+              onChange={(e) => setSelectedPoStatus(e.target.value)}
+              className="w-full rounded-xl border border-zinc-200 bg-zinc-50 px-3.5 py-2 text-xs outline-none dark:border-zinc-800 dark:bg-zinc-955 dark:text-white"
             >
-              <option value="all">전체 상태</option>
-              {Object.entries(STATUS_LABELS).map(([code, label]) => (
+              <option value="all">전체 문서 상태</option>
+              {Object.entries(PO_STATUS_LABELS).map(([code, label]) => (
+                <option key={code} value={code}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Fulfillment Status filter */}
+          <div className="flex flex-col gap-1.5">
+            <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase">물류 이행 상태</span>
+            <select
+              value={selectedFulfillmentStatus}
+              onChange={(e) => setSelectedFulfillmentStatus(e.target.value)}
+              className="w-full rounded-xl border border-zinc-200 bg-zinc-50 px-3.5 py-2 text-xs outline-none dark:border-zinc-800 dark:bg-zinc-955 dark:text-white"
+            >
+              <option value="all">전체 이행 상태</option>
+              {Object.entries(FULFILLMENT_STATUS_LABELS).map(([code, label]) => (
                 <option key={code} value={code}>
                   {label}
                 </option>
@@ -141,7 +176,7 @@ export function PurchaseOrdersList({
             <select
               value={selectedWarehouseId}
               onChange={(e) => setSelectedWarehouseId(e.target.value)}
-              className="w-full rounded-xl border border-zinc-200 bg-zinc-50 px-3.5 py-2 text-xs outline-none dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+              className="w-full rounded-xl border border-zinc-200 bg-zinc-50 px-3.5 py-2 text-xs outline-none dark:border-zinc-800 dark:bg-zinc-955 dark:text-white"
             >
               <option value="all">전체 물류창고</option>
               {warehouses.map((w) => (
@@ -156,12 +191,13 @@ export function PurchaseOrdersList({
         {/* Results Info & Reset */}
         <div className="flex justify-between items-center text-[10px] text-zinc-450 dark:text-zinc-500 pt-1">
           <span>검색 결과: <strong className="text-zinc-900 dark:text-zinc-200 font-bold">{filteredPos.length}</strong> 건</span>
-          {(searchTerm || selectedSupplierId !== "all" || selectedStatus !== "all" || selectedWarehouseId !== "all") && (
+          {(searchTerm || selectedSupplierId !== "all" || selectedPoStatus !== "all" || selectedFulfillmentStatus !== "all" || selectedWarehouseId !== "all") && (
             <button
               onClick={() => {
                 setSearchTerm("");
                 setSelectedSupplierId("all");
-                setSelectedStatus("all");
+                setSelectedPoStatus("all");
+                setSelectedFulfillmentStatus("all");
                 setSelectedWarehouseId("all");
               }}
               className="text-zinc-900 hover:underline dark:text-zinc-250 font-semibold cursor-pointer"
@@ -182,10 +218,11 @@ export function PurchaseOrdersList({
                 <th className="px-6 py-3.5 whitespace-nowrap">공급사 (Supplier)</th>
                 <th className="px-6 py-3.5 whitespace-nowrap">발주 일자</th>
                 <th className="px-6 py-3.5 whitespace-nowrap">진행 상태</th>
-                <th className="px-6 py-3.5 whitespace-nowrap">입고 목적지</th>
-                <th className="px-6 py-3.5 whitespace-nowrap text-right">총 발주 수량</th>
-                <th className="px-6 py-3.5 whitespace-nowrap text-right">총 발주 금액</th>
-                <th className="px-6 py-3.5 whitespace-nowrap">출하예정일 (Ready)</th>
+                <th className="px-6 py-3.5 whitespace-nowrap">출고지 (Ship From)</th>
+                <th className="px-6 py-3.5 whitespace-nowrap">입고지 (Ship To)</th>
+                <th className="px-6 py-3.5 whitespace-nowrap text-right">총 수량</th>
+                <th className="px-6 py-3.5 whitespace-nowrap text-right">총 금액</th>
+                <th className="px-6 py-3.5 whitespace-nowrap">출하예정일</th>
                 <th className="px-6 py-3.5 whitespace-nowrap">최종 변경</th>
                 <th className="px-6 py-3.5 whitespace-nowrap text-right">관리</th>
               </tr>
@@ -207,7 +244,7 @@ export function PurchaseOrdersList({
                   </td>
 
                   {/* Supplier */}
-                  <td className="px-6 py-4 align-middle font-bold text-zinc-900 dark:text-white max-w-[150px] truncate">
+                  <td className="px-6 py-4 align-middle font-bold text-zinc-900 dark:text-white max-w-[120px] truncate">
                     {po.supplier_name}
                   </td>
 
@@ -216,11 +253,27 @@ export function PurchaseOrdersList({
                     {po.order_date}
                   </td>
 
-                  {/* Status */}
-                  <td className="px-6 py-4 align-middle whitespace-nowrap">
-                    <span className={`inline-flex items-center rounded px-2.5 py-0.5 text-[10px] font-bold border ${STATUS_COLORS[po.status] || STATUS_COLORS.DRAFT}`}>
-                      {STATUS_LABELS[po.status] || po.status}
+                  {/* Status Badges */}
+                  <td className="px-6 py-4 align-middle whitespace-nowrap space-x-1 flex items-center h-full pt-5">
+                    <span className={`inline-flex items-center rounded px-2 py-0.5 text-[10px] font-bold border ${PO_STATUS_COLORS[po.po_status] || PO_STATUS_COLORS.DRAFT}`}>
+                      {PO_STATUS_LABELS[po.po_status] || po.po_status}
                     </span>
+                    {po.po_status === "SENT" && (
+                      <span className={`inline-flex items-center rounded px-2 py-0.5 text-[10px] font-bold border ${FULFILLMENT_STATUS_COLORS[po.fulfillment_status] || FULFILLMENT_STATUS_COLORS.PENDING}`}>
+                        {FULFILLMENT_STATUS_LABELS[po.fulfillment_status] || po.fulfillment_status}
+                      </span>
+                    )}
+                  </td>
+
+                  {/* Ship From */}
+                  <td className="px-6 py-4 align-middle font-medium text-zinc-650 dark:text-zinc-400 whitespace-nowrap">
+                    {po.ship_from_code !== "-" ? (
+                      <>
+                        <span className="font-mono text-zinc-400">[{po.ship_from_code}]</span> {po.ship_from_name}
+                      </>
+                    ) : (
+                      <span className="text-zinc-350 italic">미지정</span>
+                    )}
                   </td>
 
                   {/* Destination Warehouse */}
@@ -261,7 +314,7 @@ export function PurchaseOrdersList({
               ))}
               {filteredPos.length === 0 && (
                 <tr>
-                  <td colSpan={10} className="py-12 text-center text-zinc-400 dark:text-zinc-500">
+                  <td colSpan={11} className="py-12 text-center text-zinc-400 dark:text-zinc-500">
                     발주 서류가 존재하지 않습니다.
                   </td>
                 </tr>

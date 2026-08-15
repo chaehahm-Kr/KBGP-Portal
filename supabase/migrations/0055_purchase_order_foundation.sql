@@ -10,13 +10,15 @@ CREATE TABLE IF NOT EXISTS public.purchase_orders (
   po_number TEXT NOT NULL UNIQUE,
   supplier_id UUID NOT NULL REFERENCES public.companies (id) ON DELETE RESTRICT,
   order_date DATE NOT NULL DEFAULT CURRENT_DATE,
-  status TEXT NOT NULL DEFAULT 'DRAFT' CHECK (status IN ('DRAFT', 'APPROVED', 'SENT', 'IN_PRODUCTION', 'READY_TO_SHIP', 'CANCELLED')),
+  po_status TEXT NOT NULL DEFAULT 'DRAFT' CHECK (po_status IN ('DRAFT', 'APPROVED', 'SENT', 'CANCELLED')),
+  fulfillment_status TEXT NOT NULL DEFAULT 'PENDING' CHECK (fulfillment_status IN ('PENDING', 'IN_PRODUCTION', 'READY_TO_SHIP', 'SHIPPED', 'RECEIVED')),
   currency TEXT NOT NULL DEFAULT 'USD',
   payment_terms TEXT,
   incoterms TEXT,
   port_of_loading TEXT,
   expected_ready_date DATE,
   expected_ship_date DATE,
+  ship_from_warehouse_id UUID REFERENCES public.warehouses (id) ON DELETE RESTRICT,
   destination_warehouse_id UUID NOT NULL REFERENCES public.warehouses (id) ON DELETE RESTRICT,
   po_receiving_email TEXT,
   internal_note TEXT,
@@ -33,12 +35,15 @@ CREATE TABLE IF NOT EXISTS public.purchase_orders (
 
 COMMENT ON TABLE public.purchase_orders IS '발주(Purchase Order) 헤더 정보';
 COMMENT ON COLUMN public.purchase_orders.po_number IS '사람이 식별 가능한 고유 발주 번호 (예: PO-2026-0001)';
-COMMENT ON COLUMN public.purchase_orders.status IS '발주 진행 상태 (DRAFT: 초안, APPROVED: 승인됨, SENT: 전송됨, IN_PRODUCTION: 생산중, READY_TO_SHIP: 출하준비완료, CANCELLED: 취소됨)';
+COMMENT ON COLUMN public.purchase_orders.po_status IS '발주서 상태 (DRAFT: 초안, APPROVED: 승인됨, SENT: 전송됨, CANCELLED: 취소됨)';
+COMMENT ON COLUMN public.purchase_orders.fulfillment_status IS '공급사 이행/물류 상태 (PENDING: 대기, IN_PRODUCTION: 생산중, READY_TO_SHIP: 선적대기, SHIPPED: 선적완료, RECEIVED: 입고완료)';
+COMMENT ON COLUMN public.purchase_orders.ship_from_warehouse_id IS '공급사의 실제 물류 출고지 창고 ID';
 
 -- Enable RLS
 ALTER TABLE public.purchase_orders ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.purchase_orders FORCE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "purchase_orders_admin_all" ON public.purchase_orders;
 CREATE POLICY "purchase_orders_admin_all"
   ON public.purchase_orders
   FOR ALL
@@ -68,6 +73,7 @@ COMMENT ON TABLE public.purchase_order_lines IS '발주 상세 품목 라인 정
 ALTER TABLE public.purchase_order_lines ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.purchase_order_lines FORCE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "purchase_order_lines_admin_all" ON public.purchase_order_lines;
 CREATE POLICY "purchase_order_lines_admin_all"
   ON public.purchase_order_lines
   FOR ALL
@@ -87,6 +93,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS trigger_set_purchase_order_number ON public.purchase_orders;
 CREATE TRIGGER trigger_set_purchase_order_number
   BEFORE INSERT ON public.purchase_orders
   FOR EACH ROW

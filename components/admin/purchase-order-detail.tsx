@@ -16,6 +16,10 @@ interface LineItem {
   line_total: number;
   line_note: string | null;
   brand_name: string;
+  shipped_qty?: number;
+  received_qty?: number;
+  remaining_to_ship?: number;
+  remaining_to_receive?: number;
 }
 
 interface PurchaseOrderDetailProps {
@@ -24,7 +28,8 @@ interface PurchaseOrderDetailProps {
     po_number: string;
     supplier_id: string;
     order_date: string;
-    status: "DRAFT" | "APPROVED" | "SENT" | "IN_PRODUCTION" | "READY_TO_SHIP" | "CANCELLED";
+    po_status: "DRAFT" | "APPROVED" | "SENT" | "CANCELLED";
+    fulfillment_status: "PENDING" | "IN_PRODUCTION" | "READY_TO_SHIP" | "SHIPPED" | "RECEIVED";
     currency: string;
     payment_terms: string | null;
     incoterms: string | null;
@@ -32,6 +37,7 @@ interface PurchaseOrderDetailProps {
     expected_ready_date: string | null;
     expected_ship_date: string | null;
     destination_warehouse_id: string;
+    ship_from_warehouse_id: string | null;
     po_receiving_email: string | null;
     internal_note: string | null;
     supplier_facing_note: string | null;
@@ -59,6 +65,16 @@ interface PurchaseOrderDetailProps {
       zip_code: string;
       country: string;
     };
+    ship_from_warehouse: {
+      id: string;
+      name: string;
+      code: string;
+      address1: string;
+      city: string;
+      state: string;
+      zip_code: string;
+      country: string;
+    } | null;
     creator: { full_name: string } | null;
     approver: { full_name: string } | null;
     canceller: { full_name: string } | null;
@@ -66,27 +82,40 @@ interface PurchaseOrderDetailProps {
     total_qty: number;
     total_amount: number;
   };
+  isReadOnly?: boolean;
 }
 
-const STATUS_COLORS: Record<string, string> = {
-  DRAFT: "bg-zinc-100 text-zinc-650 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:border-zinc-700",
+const PO_STATUS_COLORS: Record<string, string> = {
+  DRAFT: "bg-zinc-150 text-zinc-700 border-zinc-250 dark:bg-zinc-800 dark:text-zinc-400 dark:border-zinc-700",
   APPROVED: "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/20 dark:text-blue-400 dark:border-blue-900/50",
   SENT: "bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-950/20 dark:text-indigo-400 dark:border-indigo-900/50",
-  IN_PRODUCTION: "bg-amber-50 text-amber-700 border-amber-250 dark:bg-amber-950/20 dark:text-amber-400 dark:border-amber-900/50",
-  READY_TO_SHIP: "bg-emerald-50 text-emerald-700 border-emerald-250 dark:bg-emerald-950/20 dark:text-emerald-400 dark:border-emerald-900/50",
   CANCELLED: "bg-rose-50 text-rose-700 border-rose-250 dark:bg-rose-950/20 dark:text-rose-400 dark:border-rose-900/50",
 };
 
-const STATUS_LABELS: Record<string, string> = {
+const PO_STATUS_LABELS: Record<string, string> = {
   DRAFT: "초안 (Draft)",
   APPROVED: "승인됨 (Approved)",
   SENT: "발송완료 (Sent)",
-  IN_PRODUCTION: "생산중 (In Production)",
-  READY_TO_SHIP: "선적대기 (Ready to Ship)",
   CANCELLED: "취소됨 (Cancelled)",
 };
 
-export function PurchaseOrderDetail({ po }: PurchaseOrderDetailProps) {
+const FULFILLMENT_STATUS_COLORS: Record<string, string> = {
+  PENDING: "bg-zinc-50 text-zinc-500 border-zinc-200 dark:bg-zinc-900 dark:text-zinc-500",
+  IN_PRODUCTION: "bg-amber-50 text-amber-700 border-amber-250 dark:bg-amber-950/20 dark:text-amber-400 dark:border-amber-900/50",
+  READY_TO_SHIP: "bg-emerald-50 text-emerald-700 border-emerald-250 dark:bg-emerald-950/20 dark:text-emerald-400 dark:border-emerald-900/50",
+  SHIPPED: "bg-teal-50 text-teal-700 border-teal-250 dark:bg-teal-950/20 dark:text-teal-400 dark:border-teal-900/50",
+  RECEIVED: "bg-sky-50 text-sky-700 border-sky-250 dark:bg-sky-950/20 dark:text-sky-400 dark:border-sky-900/50",
+};
+
+const FULFILLMENT_STATUS_LABELS: Record<string, string> = {
+  PENDING: "대기 (Pending)",
+  IN_PRODUCTION: "생산중 (In Production)",
+  READY_TO_SHIP: "선적대기 (Ready to Ship)",
+  SHIPPED: "선적완료 (Shipped)",
+  RECEIVED: "입고완료 (Received)",
+};
+
+export function PurchaseOrderDetail({ po, isReadOnly = false }: PurchaseOrderDetailProps) {
   const router = useRouter();
   const [isActionLoading, setIsActionLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
@@ -100,7 +129,6 @@ export function PurchaseOrderDetail({ po }: PurchaseOrderDetailProps) {
   useEffect(() => {
     if (isPrinting) {
       window.print();
-      // Reset back to screen display layout shortly after print dialog closes
       const timer = setTimeout(() => {
         setIsPrinting(false);
       }, 500);
@@ -110,7 +138,8 @@ export function PurchaseOrderDetail({ po }: PurchaseOrderDetailProps) {
 
   // Handle transitions
   const handleTransition = async (targetStatus: string) => {
-    const message = `발주서 상태를 "${STATUS_LABELS[targetStatus]}" 상태로 변경하시겠습니까?`;
+    const label = PO_STATUS_LABELS[targetStatus] || FULFILLMENT_STATUS_LABELS[targetStatus] || targetStatus;
+    const message = `발주서 상태를 "${label}" 상태로 변경하시겠습니까?`;
     if (!confirm(message)) return;
 
     setErrorMessage("");
@@ -148,7 +177,7 @@ export function PurchaseOrderDetail({ po }: PurchaseOrderDetailProps) {
   // Print Mode Rendering
   if (isPrinting) {
     return (
-      <div className="bg-white text-zinc-950 p-8 min-h-screen text-xs space-y-6 max-w-4xl mx-auto leading-relaxed">
+      <div className="bg-white text-zinc-955 p-8 min-h-screen text-xs space-y-6 max-w-4xl mx-auto leading-relaxed">
         {/* Print controls (Hidden when printing) */}
         <div className="print:hidden flex justify-between items-center bg-zinc-50 p-4 border border-zinc-200 rounded-xl mb-6">
           <span className="font-bold text-zinc-700">인쇄 미리보기 모드 활성화됨</span>
@@ -163,12 +192,12 @@ export function PurchaseOrderDetail({ po }: PurchaseOrderDetailProps) {
         {/* PO Header Layout */}
         <div className="flex justify-between items-start border-b-2 border-zinc-950 pb-6">
           <div>
-            <h1 className="text-2xl font-black uppercase tracking-wide text-zinc-950">Purchase Order</h1>
+            <h1 className="text-2xl font-black uppercase tracking-wide text-zinc-955">Purchase Order</h1>
             <p className="font-mono text-sm mt-1 font-bold">PO No: {po.po_number}</p>
             <p className="text-zinc-650 mt-0.5">Date: {po.order_date}</p>
           </div>
           <div className="text-right text-[10px] text-zinc-700">
-            <h2 className="font-bold text-xs text-zinc-950 uppercase tracking-wider">Letusto Inc.</h2>
+            <h2 className="font-bold text-xs text-zinc-955 uppercase tracking-wider">Letusto Inc.</h2>
             <p>23B Roland Avenue</p>
             <p>Mount Laurel, NJ 08054</p>
             <p>United States</p>
@@ -176,8 +205,8 @@ export function PurchaseOrderDetail({ po }: PurchaseOrderDetailProps) {
           </div>
         </div>
 
-        {/* Commercial addresses */}
-        <div className="grid grid-cols-2 gap-8 text-[11px]">
+        {/* Supplier / Ship From / Ship To - Three Column Separation */}
+        <div className="grid grid-cols-3 gap-6 text-[11px]">
           {/* Supplier */}
           <div className="p-4 rounded-lg bg-zinc-50 border border-zinc-150 space-y-1">
             <h3 className="font-black text-zinc-950 uppercase border-b border-zinc-300 pb-1 mb-1">Supplier (공급사)</h3>
@@ -189,10 +218,25 @@ export function PurchaseOrderDetail({ po }: PurchaseOrderDetailProps) {
             {po.po_receiving_email && <p>PO Email: {po.po_receiving_email}</p>}
           </div>
 
+          {/* Ship From */}
+          <div className="p-4 rounded-lg bg-zinc-50 border border-zinc-150 space-y-1">
+            <h3 className="font-black text-zinc-955 uppercase border-b border-zinc-300 pb-1 mb-1">Ship From (출고지)</h3>
+            {po.ship_from_warehouse ? (
+              <>
+                <p className="font-bold text-zinc-955">{po.ship_from_warehouse.name} [{po.ship_from_warehouse.code}]</p>
+                <p>{po.ship_from_warehouse.address1}</p>
+                <p>{po.ship_from_warehouse.city}, {po.ship_from_warehouse.state} {po.ship_from_warehouse.zip_code}</p>
+                <p>{po.ship_from_warehouse.country}</p>
+              </>
+            ) : (
+              <p className="text-zinc-400 italic">출고지 정보 미지정</p>
+            )}
+          </div>
+
           {/* Destination */}
           <div className="p-4 rounded-lg bg-zinc-50 border border-zinc-150 space-y-1">
-            <h3 className="font-black text-zinc-950 uppercase border-b border-zinc-300 pb-1 mb-1">Ship To (입고 배송지)</h3>
-            <p className="font-bold text-zinc-950">{po.warehouse.name} [{po.warehouse.code}]</p>
+            <h3 className="font-black text-zinc-955 uppercase border-b border-zinc-300 pb-1 mb-1">Ship To (입고지)</h3>
+            <p className="font-bold text-zinc-955">{po.warehouse.name} [{po.warehouse.code}]</p>
             <p>{po.warehouse.address1}</p>
             <p>{po.warehouse.city}, {po.warehouse.state} {po.warehouse.zip_code}</p>
             <p>{po.warehouse.country}</p>
@@ -201,30 +245,30 @@ export function PurchaseOrderDetail({ po }: PurchaseOrderDetailProps) {
 
         {/* Commercial Conditions */}
         <div className="p-4 border border-zinc-200 rounded-lg text-[10px]">
-          <h3 className="font-black text-zinc-950 uppercase mb-2 border-b border-zinc-150 pb-0.5">Commercial Conditions (거래 조건)</h3>
+          <h3 className="font-black text-zinc-955 uppercase mb-2 border-b border-zinc-150 pb-0.5">Commercial Conditions (거래 조건)</h3>
           <div className="grid grid-cols-4 gap-4 font-semibold text-zinc-800">
             <div>
               <span className="text-[9px] text-zinc-400 block uppercase">Incoterms</span>
-              <span className="text-zinc-950">{po.incoterms || "-"}</span>
+              <span className="text-zinc-955">{po.incoterms || "-"}</span>
             </div>
             <div>
               <span className="text-[9px] text-zinc-400 block uppercase">Payment Terms</span>
-              <span className="text-zinc-950">{po.payment_terms || "-"}</span>
+              <span className="text-zinc-955">{po.payment_terms || "-"}</span>
             </div>
             <div>
               <span className="text-[9px] text-zinc-400 block uppercase">Port of Loading</span>
-              <span className="text-zinc-950">{po.port_of_loading || "-"}</span>
+              <span className="text-zinc-955">{po.port_of_loading || "-"}</span>
             </div>
             <div>
               <span className="text-[9px] text-zinc-400 block uppercase">Expected Ready Date</span>
-              <span className="text-zinc-950 font-mono">{po.expected_ready_date || "-"}</span>
+              <span className="text-zinc-955 font-mono">{po.expected_ready_date || "-"}</span>
             </div>
           </div>
         </div>
 
         {/* Lines Table */}
         <div className="space-y-1.5">
-          <h3 className="font-black text-zinc-950 uppercase border-b border-zinc-900 pb-1">Order Line Items (주문 품목)</h3>
+          <h3 className="font-black text-zinc-955 uppercase border-b border-zinc-900 pb-1">Order Line Items (주문 품목)</h3>
           <table className="w-full text-left text-[11px] border-collapse">
             <thead>
               <tr className="border-b border-zinc-950 font-bold text-zinc-900 bg-zinc-50">
@@ -244,7 +288,7 @@ export function PurchaseOrderDetail({ po }: PurchaseOrderDetailProps) {
                   <td className="py-2 px-2 font-mono font-bold">{l.letusto_sku || "-"}</td>
                   <td className="py-2 px-2 font-mono text-zinc-650">{l.manufacture_sku || "-"}</td>
                   <td className="py-2 px-2">
-                    <p className="font-bold text-zinc-950">{l.product_name}</p>
+                    <p className="font-bold text-zinc-955">{l.product_name}</p>
                     {l.line_note && <p className="text-[9px] text-zinc-500 italic mt-0.5">Note: {l.line_note}</p>}
                   </td>
                   <td className="py-2 px-2 text-right font-mono font-bold">{l.qty.toLocaleString()}</td>
@@ -261,9 +305,9 @@ export function PurchaseOrderDetail({ po }: PurchaseOrderDetailProps) {
           <div className="w-64 border-t-2 border-zinc-950 p-2 space-y-1.5 font-bold text-right text-xs">
             <div className="flex justify-between text-zinc-500 text-[10px]">
               <span>Total Quantity:</span>
-              <span className="font-mono text-zinc-950">{po.total_qty.toLocaleString()}</span>
+              <span className="font-mono text-zinc-955">{po.total_qty.toLocaleString()}</span>
             </div>
-            <div className="flex justify-between border-t border-zinc-200 pt-1 text-sm text-zinc-950">
+            <div className="flex justify-between border-t border-zinc-200 pt-1 text-sm text-zinc-955">
               <span>Total Amount ({po.currency}):</span>
               <span className="font-mono">{po.currency} {po.total_amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
             </div>
@@ -302,14 +346,14 @@ export function PurchaseOrderDetail({ po }: PurchaseOrderDetailProps) {
         {/* Print PDF Trigger */}
         <button
           onClick={handlePrint}
-          className="px-3.5 py-1.5 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 text-xs font-bold rounded-lg cursor-pointer transition-colors"
+          className="px-3.5 py-1.5 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 text-xs font-bold rounded-lg transition-colors"
         >
           🖨️ PDF / 인쇄 화면 출력 (Print PO)
         </button>
       </div>
 
       {errorMessage && (
-        <div className="p-3.5 rounded-lg bg-rose-50 border border-rose-200 text-rose-600 font-bold dark:bg-rose-950/10 dark:border-rose-900/50 dark:text-rose-400 text-xs">
+        <div className="p-3.5 rounded-lg bg-rose-50 border border-rose-200 text-rose-600 font-bold dark:bg-rose-955/10 dark:border-rose-900/50 dark:text-rose-400 text-xs">
           ⚠️ {errorMessage}
         </div>
       )}
@@ -318,78 +362,85 @@ export function PurchaseOrderDetail({ po }: PurchaseOrderDetailProps) {
       <div className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div className="flex items-center gap-3">
           <span className="text-xs font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wide">진행 상태</span>
-          <span className={`inline-flex items-center rounded px-3 py-1 text-xs font-bold border ${STATUS_COLORS[po.status] || STATUS_COLORS.DRAFT}`}>
-            {STATUS_LABELS[po.status] || po.status}
+          <span className={`inline-flex items-center rounded px-3 py-1 text-xs font-bold border ${PO_STATUS_COLORS[po.po_status] || PO_STATUS_COLORS.DRAFT}`}>
+            {PO_STATUS_LABELS[po.po_status] || po.po_status}
           </span>
+          {po.po_status === "SENT" && (
+            <span className={`inline-flex items-center rounded px-3 py-1 text-xs font-bold border ${FULFILLMENT_STATUS_COLORS[po.fulfillment_status] || FULFILLMENT_STATUS_COLORS.PENDING}`}>
+              {FULFILLMENT_STATUS_LABELS[po.fulfillment_status] || po.fulfillment_status}
+            </span>
+          )}
         </div>
 
         {/* Operational buttons */}
-        <div className="flex items-center gap-2 flex-wrap">
-          {po.status === "DRAFT" && (
-            <>
-              <Link
-                href={`/admin/purchasing/${po.id}/edit`}
-                className="px-3.5 py-2 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 dark:bg-zinc-800 dark:hover:bg-zinc-700 dark:text-zinc-300 text-xs font-bold rounded-xl cursor-pointer transition-colors"
-              >
-                발주 초안 수정 (Edit)
-              </Link>
+        {!isReadOnly && (
+          <div className="flex items-center gap-2 flex-wrap">
+            {po.po_status === "DRAFT" && (
+              <>
+                <Link
+                  href={`/admin/purchasing/${po.id}/edit`}
+                  className="px-3.5 py-2 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 dark:bg-zinc-800 dark:hover:bg-zinc-700 dark:text-zinc-300 text-xs font-bold rounded-xl cursor-pointer transition-colors"
+                >
+                  발주 초안 수정 (Edit)
+                </Link>
+                <button
+                  onClick={() => handleTransition("APPROVED")}
+                  disabled={isActionLoading}
+                  className="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl cursor-pointer transition-colors disabled:opacity-50"
+                >
+                  발주서 내부 승인 (Approve)
+                </button>
+                <button
+                  onClick={handleDelete}
+                  disabled={isActionLoading}
+                  className="px-3.5 py-2 bg-zinc-900 hover:bg-zinc-950 text-white dark:bg-zinc-800 dark:hover:bg-zinc-750 text-xs font-bold rounded-xl cursor-pointer transition-colors disabled:opacity-50"
+                >
+                  초안 삭제 (Delete)
+                </button>
+              </>
+            )}
+
+            {po.po_status === "APPROVED" && (
               <button
-                onClick={() => handleTransition("APPROVED")}
+                onClick={() => handleTransition("SENT")}
                 disabled={isActionLoading}
-                className="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl cursor-pointer transition-colors disabled:opacity-50"
+                className="px-3.5 py-2 bg-indigo-650 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl cursor-pointer transition-colors disabled:opacity-50"
               >
-                발주서 내부 승인 (Approve)
+                Supplier에게 전송 처리 (Mark Sent)
               </button>
+            )}
+
+            {po.po_status === "SENT" && po.fulfillment_status === "PENDING" && (
               <button
-                onClick={handleDelete}
+                onClick={() => handleTransition("IN_PRODUCTION")}
                 disabled={isActionLoading}
-                className="px-3.5 py-2 bg-zinc-900 hover:bg-zinc-950 text-white dark:bg-zinc-800 dark:hover:bg-zinc-750 text-xs font-bold rounded-xl cursor-pointer transition-colors disabled:opacity-50"
+                className="px-3.5 py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-xl cursor-pointer transition-colors disabled:opacity-50"
               >
-                초안 삭제 (Delete)
+                생산 개시 처리 (In Production)
               </button>
-            </>
-          )}
+            )}
 
-          {po.status === "APPROVED" && (
-            <button
-              onClick={() => handleTransition("SENT")}
-              disabled={isActionLoading}
-              className="px-3.5 py-2 bg-indigo-650 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl cursor-pointer transition-colors disabled:opacity-50"
-            >
-              Supplier에게 전송 처리 (Mark Sent)
-            </button>
-          )}
+            {po.po_status === "SENT" && po.fulfillment_status === "IN_PRODUCTION" && (
+              <button
+                onClick={() => handleTransition("READY_TO_SHIP")}
+                disabled={isActionLoading}
+                className="px-3.5 py-2 bg-emerald-650 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl cursor-pointer transition-colors disabled:opacity-50"
+              >
+                생산 완료 / 선적대기 (Ready to Ship)
+              </button>
+            )}
 
-          {po.status === "SENT" && (
-            <button
-              onClick={() => handleTransition("IN_PRODUCTION")}
-              disabled={isActionLoading}
-              className="px-3.5 py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-xl cursor-pointer transition-colors disabled:opacity-50"
-            >
-              생산 개시 처리 (In Production)
-            </button>
-          )}
-
-          {po.status === "IN_PRODUCTION" && (
-            <button
-              onClick={() => handleTransition("READY_TO_SHIP")}
-              disabled={isActionLoading}
-              className="px-3.5 py-2 bg-emerald-650 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl cursor-pointer transition-colors disabled:opacity-50"
-            >
-              생산 완료 / 선적대기 (Ready to Ship)
-            </button>
-          )}
-
-          {po.status !== "CANCELLED" && (
-            <button
-              onClick={() => handleTransition("CANCELLED")}
-              disabled={isActionLoading}
-              className="px-3.5 py-2 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-250 text-xs font-bold rounded-xl cursor-pointer transition-colors disabled:opacity-50"
-            >
-              발주 취소 (Cancel PO)
-            </button>
-          )}
-        </div>
+            {po.po_status !== "CANCELLED" && (
+              <button
+                onClick={() => handleTransition("CANCELLED")}
+                disabled={isActionLoading}
+                className="px-3.5 py-2 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-250 text-xs font-bold rounded-xl cursor-pointer transition-colors disabled:opacity-50"
+              >
+                발주 취소 (Cancel PO)
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Main PO detail layout */}
@@ -415,15 +466,30 @@ export function PurchaseOrderDetail({ po }: PurchaseOrderDetailProps) {
                 {po.supplier.address && <span className="text-[10px] text-zinc-450 mt-1 block">{po.supplier.address}</span>}
               </div>
               <div>
-                <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 block mb-1">발주 요청 일자 (Order Date)</span>
-                <span className="font-medium text-zinc-850 dark:text-zinc-200">{po.order_date}</span>
+                <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 block mb-1">출고지 창고 (Ship From)</span>
+                {po.ship_from_warehouse ? (
+                  <>
+                    <span className="font-semibold text-zinc-900 dark:text-white block">
+                      [{po.ship_from_warehouse.code}] {po.ship_from_warehouse.name}
+                    </span>
+                    <span className="text-[10px] text-zinc-450 block mt-0.5">
+                      {po.ship_from_warehouse.address1}, {po.ship_from_warehouse.city}, {po.ship_from_warehouse.state}
+                    </span>
+                  </>
+                ) : (
+                  <span className="text-zinc-400 italic">미지정 (Not Set)</span>
+                )}
               </div>
               <div>
-                <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 block mb-1">입고 목적 물류창고 (Destination)</span>
+                <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 block mb-1">입고 목적 물류창고 (Destination / Ship To)</span>
                 <span className="font-semibold text-zinc-900 dark:text-white block">
                   [{po.warehouse.code}] {po.warehouse.name}
                 </span>
                 <span className="text-[10px] text-zinc-450 block mt-0.5">{po.warehouse.address1}, {po.warehouse.city}, {po.warehouse.state}</span>
+              </div>
+              <div>
+                <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 block mb-1">발주 요청 일자 (Order Date)</span>
+                <span className="font-medium text-zinc-850 dark:text-zinc-200">{po.order_date}</span>
               </div>
             </div>
           </div>
@@ -520,12 +586,13 @@ export function PurchaseOrderDetail({ po }: PurchaseOrderDetailProps) {
                 <thead>
                   <tr className="bg-zinc-50/50 text-zinc-500 font-bold border-b border-zinc-150 dark:bg-zinc-900/50 dark:border-zinc-800 dark:text-zinc-350">
                     <th className="px-4 py-2.5">Brand</th>
-                    <th className="px-4 py-2.5">Letusto SKU</th>
-                    <th className="px-4 py-2.5">Mfg SKU</th>
+                    <th className="px-4 py-2.5">SKU</th>
                     <th className="px-4 py-2.5">제품명</th>
-                    <th className="px-4 py-2.5 text-right w-20">수량</th>
-                    <th className="px-4 py-2.5 text-right w-24">구매 단가</th>
-                    <th className="px-4 py-2.5 text-right w-28">합계 금액</th>
+                    <th className="px-4 py-2.5 text-right w-16">발주량</th>
+                    <th className="px-4 py-2.5 text-right w-16">선적량</th>
+                    <th className="px-4 py-2.5 text-right w-16">입고량</th>
+                    <th className="px-4 py-2.5 text-right w-20">구매 단가</th>
+                    <th className="px-4 py-2.5 text-right w-24">합계 금액</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
@@ -533,10 +600,10 @@ export function PurchaseOrderDetail({ po }: PurchaseOrderDetailProps) {
                     <tr key={l.id} className="hover:bg-zinc-50/30 dark:hover:bg-zinc-850/5">
                       <td className="px-4 py-3 font-medium text-zinc-650 dark:text-zinc-400">{l.brand_name}</td>
                       <td className="px-4 py-3 font-mono font-bold text-zinc-900 dark:text-white">
-                        {l.letusto_sku || <span className="text-zinc-350 italic font-sans font-normal">-</span>}
-                      </td>
-                      <td className="px-4 py-3 font-mono text-zinc-700 dark:text-zinc-400">
-                        {l.manufacture_sku || <span className="text-zinc-350 italic font-sans font-normal">-</span>}
+                        <div>
+                          <span className="block text-[10px]">{l.letusto_sku || "-"}</span>
+                          <span className="block text-[9px] text-zinc-400 font-normal">Mfg: {l.manufacture_sku || "-"}</span>
+                        </div>
                       </td>
                       <td className="px-4 py-3 font-bold text-zinc-900 dark:text-white max-w-xs truncate" title={l.product_name}>
                         <div>
@@ -547,6 +614,8 @@ export function PurchaseOrderDetail({ po }: PurchaseOrderDetailProps) {
                         </div>
                       </td>
                       <td className="px-4 py-3 text-right font-mono font-bold">{l.qty.toLocaleString()}</td>
+                      <td className="px-4 py-3 text-right font-mono font-semibold text-indigo-650 dark:text-indigo-400">{l.shipped_qty?.toLocaleString() || "0"}</td>
+                      <td className="px-4 py-3 text-right font-mono font-bold text-emerald-650 dark:text-emerald-400">{l.received_qty?.toLocaleString() || "0"}</td>
                       <td className="px-4 py-3 text-right font-mono">{po.currency} {l.unit_cost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                       <td className="px-4 py-3 text-right font-mono font-bold text-zinc-900 dark:text-white">
                         {po.currency} {l.line_total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
@@ -559,15 +628,23 @@ export function PurchaseOrderDetail({ po }: PurchaseOrderDetailProps) {
 
             {/* Total aggregation banner */}
             <div className="flex justify-between items-center bg-zinc-50 dark:bg-zinc-950 p-4 border border-zinc-150 dark:border-zinc-850 rounded-xl">
-              <span className="font-bold text-zinc-500">주문 집계 요약</span>
+              <span className="font-bold text-zinc-500">주문 및 물류 집계 요약</span>
               <div className="flex gap-6">
                 <div className="text-right">
-                  <span className="text-[10px] text-zinc-400 uppercase block mb-0.5">총 주문 수량</span>
-                  <span className="text-base font-bold font-mono text-zinc-900 dark:text-white">{po.total_qty.toLocaleString()}</span>
+                  <span className="text-[10px] text-zinc-400 uppercase block mb-0.5">총 발주 수량</span>
+                  <span className="text-sm font-bold font-mono text-zinc-900 dark:text-white">{po.total_qty.toLocaleString()}</span>
                 </div>
-                <div className="text-right">
+                <div className="text-right border-l border-zinc-200 pl-6 dark:border-zinc-800">
+                  <span className="text-[10px] text-zinc-400 uppercase block mb-0.5">총 선적 수량</span>
+                  <span className="text-sm font-bold font-mono text-indigo-650 dark:text-indigo-400">{(po as any).total_shipped?.toLocaleString() || "0"}</span>
+                </div>
+                <div className="text-right border-l border-zinc-200 pl-6 dark:border-zinc-800">
+                  <span className="text-[10px] text-zinc-400 uppercase block mb-0.5">총 입고 수량</span>
+                  <span className="text-sm font-bold font-mono text-emerald-650 dark:text-emerald-400">{(po as any).total_received?.toLocaleString() || "0"}</span>
+                </div>
+                <div className="text-right border-l border-zinc-200 pl-6 dark:border-zinc-800">
                   <span className="text-[10px] text-zinc-400 uppercase block mb-0.5">총 주문 대금</span>
-                  <span className="text-base font-bold font-mono text-zinc-900 dark:text-white">
+                  <span className="text-sm font-bold font-mono text-zinc-900 dark:text-white">
                     {po.currency} {po.total_amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </span>
                 </div>

@@ -195,15 +195,15 @@ export async function getProductInventory(productId: string) {
     .from("inventory_movements")
     .select(`
       id, product_id, warehouse_id, type, qty_change, qty_hold_change, 
-      balance_on_hand_after, balance_hold_after, reason, note, created_by, created_at,
-      profiles:created_by (full_name)
+      balance_on_hand_after, balance_hold_after, reason, note, reference_type, reference_id, created_by, created_at,
+      profiles:created_by (full_name:display_name)
     `)
     .eq("product_id", productId)
     .order("created_at", { ascending: false });
 
   if (mErr) throw new Error(`Failed to fetch inventory movements: ${mErr.message}`);
 
-  const formattedMovements: InventoryMovementItem[] = (movements ?? []).map((m: any) => ({
+  const formattedMovements: any[] = (movements ?? []).map((m: any) => ({
     id: m.id,
     product_id: m.product_id,
     warehouse_id: m.warehouse_id,
@@ -214,6 +214,8 @@ export async function getProductInventory(productId: string) {
     balance_hold_after: m.balance_hold_after,
     reason: m.reason,
     note: m.note,
+    reference_type: m.reference_type,
+    reference_id: m.reference_id,
     created_by: m.created_by,
     created_at: m.created_at,
     creator_name: m.profiles?.full_name || "System/Admin",

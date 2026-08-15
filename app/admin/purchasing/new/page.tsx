@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 import { verifyAdminSession } from "@/lib/auth/dal";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getSuppliersForPo } from "@/lib/purchase-order/actions";
@@ -9,13 +10,24 @@ export const metadata: Metadata = {
 };
 
 export default async function AdminNewPurchaseOrderPage() {
-  await verifyAdminSession();
+  const session = await verifyAdminSession();
   const supabase = createAdminClient();
+
+  // Load user roles
+  const { data: userRoles } = await supabase
+    .from("staff_roles")
+    .select("role")
+    .eq("staff_id", session.userId);
+  const roles = (userRoles ?? []).map((r) => r.role);
+  const isReadOnly = roles.length === 0 || (roles.length === 1 && roles[0] === "executive_viewer");
+  if (isReadOnly) {
+    redirect("/admin/purchasing");
+  }
 
   // 1. Fetch active warehouses
   const { data: dbWarehouses } = await supabase
     .from("warehouses")
-    .select("id, name, code, status, is_default_receiving")
+    .select("id, name, code, status, is_default_receiving, company_id")
     .eq("status", "active")
     .order("name", { ascending: true });
   const warehouses = dbWarehouses ?? [];

@@ -15,8 +15,19 @@ export default async function AdminEditPurchaseOrderPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  await verifyAdminSession();
+  const session = await verifyAdminSession();
   const supabase = createAdminClient();
+
+  // Load user roles
+  const { data: userRoles } = await supabase
+    .from("staff_roles")
+    .select("role")
+    .eq("staff_id", session.userId);
+  const roles = (userRoles ?? []).map((r) => r.role);
+  const isReadOnly = roles.length === 0 || (roles.length === 1 && roles[0] === "executive_viewer");
+  if (isReadOnly) {
+    redirect(`/admin/purchasing/${id}`);
+  }
 
   // 1. Fetch PO details
   let po;
@@ -27,14 +38,14 @@ export default async function AdminEditPurchaseOrderPage({
   }
 
   // Double check if in DRAFT status
-  if (po.status !== "DRAFT") {
+  if (po.po_status !== "DRAFT") {
     redirect(`/admin/purchasing/${id}`);
   }
 
   // 2. Fetch active warehouses
   const { data: dbWarehouses } = await supabase
     .from("warehouses")
-    .select("id, name, code, status")
+    .select("id, name, code, status, company_id")
     .eq("status", "active")
     .order("name", { ascending: true });
   const warehouses = dbWarehouses ?? [];
