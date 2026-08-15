@@ -85,6 +85,7 @@ interface TradingProductDetailProps {
   poHistory?: any[];
   shipmentHistory?: any[];
   receivingHistory?: any[];
+  costSummary?: any;
 }
 
 const SALES_COLORS: Record<string, string> = {
@@ -117,6 +118,7 @@ export function TradingProductDetail({
   poHistory = [],
   shipmentHistory = [],
   receivingHistory = [],
+  costSummary = null,
 }: TradingProductDetailProps) {
   const router = useRouter();
   
@@ -588,19 +590,113 @@ export function TradingProductDetail({
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="space-y-6">
             {/* Section: Landed Cost Summary */}
-            <div className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 space-y-3">
-              <h3 className="text-sm font-bold text-zinc-800 dark:text-white">원가 구조 정보 (Cost Summary)</h3>
-              <div className="rounded-xl border border-dashed border-zinc-200 dark:border-zinc-800 p-6 flex flex-col items-center justify-center text-center bg-zinc-50/50 dark:bg-zinc-950/20 min-h-[140px]">
-                <span className="text-zinc-400 dark:text-zinc-500 text-xs font-semibold">Actual cost will be available later.</span>
-                <p className="text-[10px] text-zinc-400 dark:text-zinc-650 mt-1">
-                  입고 시점의 부대 비용 배분(Landed Cost) 및 평균 재고 원가 모델이 적용될 예정입니다.
-                </p>
-              </div>
+            <div className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 space-y-4">
+              <h3 className="text-sm font-bold text-zinc-800 dark:text-white">재고 및 원가 정보 (Cost & Costing Layer Summary)</h3>
+              
+              {!costSummary ? (
+                <div className="rounded-xl border border-dashed border-zinc-200 dark:border-zinc-800 p-6 flex flex-col items-center justify-center text-center bg-zinc-50/50 dark:bg-zinc-950/20 min-h-[140px]">
+                  <span className="text-zinc-400 dark:text-zinc-500 text-xs font-semibold">원가 정보 로드 중...</span>
+                </div>
+              ) : (
+                <div className="space-y-5">
+                  {/* Three costing dimensions */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="p-3.5 bg-zinc-50 dark:bg-zinc-955 border border-zinc-150 dark:border-zinc-850 rounded-xl space-y-1">
+                      <span className="text-[10px] text-zinc-400 dark:text-zinc-500 block font-bold uppercase">FIFO 선입선출 원가 (Current FIFO Cost)</span>
+                      <span className="text-base font-bold text-indigo-650 font-mono block">
+                        USD {Number(costSummary.currentFifoCost).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}
+                      </span>
+                      <span className="text-[9px] text-zinc-400 block font-medium">다음 출고/판매 시 적용될 선두 재고 원가</span>
+                    </div>
+
+                    <div className="p-3.5 bg-zinc-50 dark:bg-zinc-955 border border-zinc-150 dark:border-zinc-850 rounded-xl space-y-1">
+                      <span className="text-[10px] text-zinc-400 dark:text-zinc-500 block font-bold uppercase">가중 평균 원가 (Weighted Average Cost)</span>
+                      <span className="text-base font-bold text-zinc-800 dark:text-zinc-200 font-mono block">
+                        USD {Number(costSummary.weightedAverage).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}
+                      </span>
+                      <span className="text-[9px] text-zinc-400 block font-medium">현재 보유 재고의 평균 가액 (평가용)</span>
+                    </div>
+
+                    <div className="p-3.5 bg-zinc-50 dark:bg-zinc-955 border border-zinc-150 dark:border-zinc-850 rounded-xl space-y-1">
+                      <span className="text-[10px] text-zinc-400 dark:text-zinc-500 block font-bold uppercase">최근 확정 단가 (Latest Landed Cost)</span>
+                      <div className="flex items-baseline gap-1.5">
+                        <span className="text-base font-bold text-emerald-700 dark:text-emerald-400 font-mono">
+                          USD {Number(costSummary.latestLandedCost).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}
+                        </span>
+                        {costSummary.costChangePercent !== 0 && (
+                          <span className={`text-[10px] font-bold font-mono ${
+                            costSummary.costChangePercent > 0 ? "text-rose-500" : "text-emerald-500"
+                          }`}>
+                            {costSummary.costChangePercent > 0 ? "↑" : "↓"} {Math.abs(costSummary.costChangePercent)}%
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-[9px] text-zinc-400 block font-medium">가장 최근 확정/입고된 배치(Batch) 단가</span>
+                    </div>
+                  </div>
+
+                  {/* Costing history table */}
+                  <div className="space-y-2">
+                    <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 block uppercase tracking-wider">
+                      배치별 최종 원가 이력 (Landed Cost Run History)
+                    </span>
+                    <div className="overflow-hidden rounded-lg border border-zinc-150 dark:border-zinc-800/80">
+                      <table className="w-full text-left text-xs border-collapse">
+                        <thead>
+                          <tr className="bg-zinc-50 border-b border-zinc-150 dark:bg-zinc-900/50 dark:border-zinc-800 text-zinc-500 font-bold dark:text-zinc-350">
+                            <th className="px-3 py-2">입고일자</th>
+                            <th className="px-3 py-2 w-32">정산 케이스</th>
+                            <th className="px-3 py-2 text-right">입고 수량</th>
+                            <th className="px-3 py-2 text-right">매입가 (Acq)</th>
+                            <th className="px-3 py-2 text-right">제비용 (Ancillary)</th>
+                            <th className="px-3 py-2 text-right font-bold">Landed Cost / unit</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
+                          {costSummary.history.length === 0 ? (
+                            <tr>
+                              <td colSpan={6} className="px-3 py-6 text-center text-zinc-400 italic">
+                                확정된 Landed Cost 정산 이력이 없습니다.
+                              </td>
+                            </tr>
+                          ) : (
+                            costSummary.history.map((h: any) => (
+                              <tr key={h.id} className="hover:bg-zinc-50/20 dark:hover:bg-zinc-850/5">
+                                <td className="px-3 py-2.5 font-mono text-zinc-650">
+                                  {h.received_date}
+                                </td>
+                                <td className="px-3 py-2.5 font-mono font-bold text-indigo-650 hover:underline">
+                                  <Link href={`/admin/finance/landed-cost/${h.landed_cost_case_id}`}>
+                                    {h.case?.landed_cost_number}
+                                  </Link>
+                                </td>
+                                <td className="px-3 py-2.5 text-right font-mono">
+                                  {Number(h.inventory_received_qty).toLocaleString()}
+                                </td>
+                                <td className="px-3 py-2.5 text-right font-mono text-zinc-600 dark:text-zinc-400">
+                                  USD {Number(h.supplier_acquisition_cost / h.inventory_received_qty).toFixed(2)}
+                                </td>
+                                <td className="px-3 py-2.5 text-right font-mono text-zinc-600 dark:text-zinc-400">
+                                  +USD {Number(h.total_ancillary_cost / h.inventory_received_qty).toFixed(2)}
+                                </td>
+                                <td className="px-3 py-2.5 text-right font-mono font-bold text-emerald-700 dark:text-emerald-400">
+                                  USD {Number(h.unit_landed_cost).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}
+                                </td>
+                              </tr>
+                            ))
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                </div>
+              )}
             </div>
 
-            {/* Section: Sales Summary */}
+            {/* Section: Sales Summary Placeholder */}
             <div className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 space-y-3">
               <h3 className="text-sm font-bold text-zinc-800 dark:text-white">판매 실적 요약 (Sales Summary)</h3>
               <div className="rounded-xl border border-dashed border-zinc-200 dark:border-zinc-800 p-6 flex flex-col items-center justify-center text-center bg-zinc-50/50 dark:bg-zinc-950/20 min-h-[140px]">

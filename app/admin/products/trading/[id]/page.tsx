@@ -6,6 +6,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getSignedFileUrl } from "@/lib/files/storage";
 import { TradingProductDetail } from "@/components/admin/trading-product-detail";
 import { getProductInventory } from "@/lib/inventory/actions";
+import { getProductCostSummary } from "@/lib/landed-cost/actions";
 
 export const metadata: Metadata = {
   title: "제품 운영 정보 (360° View) | K SELECT NETWORK 어드민",
@@ -153,6 +154,8 @@ export default async function AdminTradingProductDetailPage({
     .eq("product_id", id)
     .order("created_at", { ascending: false });
 
+  const costSummary = await getProductCostSummary(id);
+
   return (
     <div className="space-y-6">
       <TradingProductDetail
@@ -163,6 +166,7 @@ export default async function AdminTradingProductDetailPage({
         poHistory={poHistory || []}
         shipmentHistory={shipmentHistory || []}
         receivingHistory={receivingHistory || []}
+        costSummary={costSummary}
       />
     </div>
   );

@@ -116,6 +116,7 @@ export default function Sidebar({ isCollapsed, toggleCollapse }: SidebarProps) {
       subItems: [
         { name: "Supplier Invoices", href: "/admin/finance/invoices" },
         { name: "Payments", href: "/admin/finance/payments" },
+        { name: "Landed Cost", href: "/admin/finance/landed-cost" },
       ],
     },
     {
