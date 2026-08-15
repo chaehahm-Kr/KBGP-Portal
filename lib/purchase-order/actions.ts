@@ -99,7 +99,7 @@ export async function getPurchaseOrderDetail(poId: string) {
     .from("purchase_orders")
     .select(`
       *,
-      supplier:supplier_id (id, name, address, business_registration_number),
+      supplier:supplier_id (id, name, business_registration_number),
       warehouse:destination_warehouse_id (id, name, code, address1, city, state, zip_code, country),
       ship_from_warehouse:ship_from_warehouse_id (id, name, code, address1, city, state, zip_code, country),
       creator:created_by (full_name:display_name),
@@ -214,7 +214,7 @@ export async function getSuppliersForPo() {
       company_id, default_currency, default_payment_terms, default_payment_terms_custom,
       default_incoterms, default_port_of_loading, default_production_lead_time, po_receiving_email,
       default_ship_from_warehouse_id,
-      companies:company_id (name, address)
+      companies:company_id (name)
     `)
     .in("company_id", supplierIds)
     .eq("status", "active")
