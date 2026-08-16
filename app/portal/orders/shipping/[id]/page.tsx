@@ -18,11 +18,17 @@ export default async function PortalReadinessDetailPage({
 
   // Generate signed URLs for private attachments
   const packingListUrl = readiness.packingListPath
-    ? await getShippingAttachmentUrl(readiness.packingListPath)
+    ? await getShippingAttachmentUrl(readiness.packingListPath).catch(err => {
+        console.error("Failed to generate signed URL for packing list:", err);
+        return null;
+      })
     : null;
 
   const invoiceUrl = readiness.commercialInvoicePath
-    ? await getShippingAttachmentUrl(readiness.commercialInvoicePath)
+    ? await getShippingAttachmentUrl(readiness.commercialInvoicePath).catch(err => {
+        console.error("Failed to generate signed URL for commercial invoice:", err);
+        return null;
+      })
     : null;
 
   return (
