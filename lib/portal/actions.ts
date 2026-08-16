@@ -11,7 +11,7 @@ export async function getPortalPurchaseOrders() {
   const supabase = await createClient();
 
   const { data, error } = await supabase
-    .from("purchase_orders")
+    .from("portal_purchase_orders")
     .select(`
       id,
       po_number,
@@ -19,7 +19,6 @@ export async function getPortalPurchaseOrders() {
       fulfillment_status,
       order_date,
       currency,
-      internal_note,
       created_at
     `)
     .eq("supplier_id", companyId)
@@ -41,7 +40,7 @@ export async function getPortalPurchaseOrderById(id: string) {
   const supabase = await createClient();
 
   const { data, error } = await supabase
-    .from("purchase_orders")
+    .from("portal_purchase_orders")
     .select(`
       id,
       po_number,
@@ -49,7 +48,6 @@ export async function getPortalPurchaseOrderById(id: string) {
       fulfillment_status,
       order_date,
       currency,
-      internal_note,
       created_at,
       lines:purchase_order_lines(
         id,
@@ -89,7 +87,7 @@ export async function getPortalShipments() {
   const supabase = await createClient();
 
   const { data, error } = await supabase
-    .from("inbound_shipments")
+    .from("portal_inbound_shipments")
     .select(`
       id,
       shipment_number,
@@ -141,7 +139,7 @@ export async function getPortalShipmentById(id: string) {
   const supabase = await createClient();
 
   const { data, error } = await supabase
-    .from("inbound_shipments")
+    .from("portal_inbound_shipments")
     .select(`
       id,
       shipment_number,
@@ -205,7 +203,7 @@ export async function getPortalReceivings() {
   const supabase = await createClient();
 
   const { data, error } = await supabase
-    .from("receivings")
+    .from("portal_receivings")
     .select(`
       id,
       receiving_number,
@@ -240,7 +238,7 @@ export async function getPortalReceivingById(id: string) {
   const supabase = await createClient();
 
   const { data, error } = await supabase
-    .from("receivings")
+    .from("portal_receivings")
     .select(`
       id,
       receiving_number,
