@@ -17,6 +17,9 @@ interface LineItem {
   letusto_sku: string;
   manufacture_sku: string;
   po_qty: number;
+  cartons?: number | null;
+  gross_weight?: number | null;
+  cbm?: number | null;
 }
 
 interface ShipmentDetailProps {
@@ -26,6 +29,8 @@ interface ShipmentDetailProps {
     purchase_order_id: string;
     status: "DRAFT" | "BOOKED" | "IN_TRANSIT" | "ARRIVED" | "PARTIALLY_RECEIVED" | "RECEIVED" | "CANCELLED";
     shipping_method: "Ocean" | "Air" | "Ground" | "Courier" | "Other";
+    shipping_responsibility?: string;
+    carrier?: string | null;
     origin_port: string | null;
     destination_warehouse_id: string;
     etd: string | null;
@@ -261,6 +266,15 @@ export function ShipmentDetail({ shipment }: ShipmentDetailProps) {
                 <span className="font-bold text-zinc-800 dark:text-zinc-300">{METHOD_LABELS[shipment.shipping_method] || shipment.shipping_method}</span>
               </div>
               <div>
+                <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 block mb-1">운송 책임 (Responsibility)</span>
+                <span className="font-bold text-indigo-600 block">
+                  {shipment.shipping_responsibility === "SUPPLIER_ARRANGED" ? "공급사 배송 (Supplier Arranged)" : "Letusto 배송 (Letusto Arranged)"}
+                </span>
+                {shipment.carrier && (
+                  <span className="text-[10px] text-zinc-500 mt-1 block">Carrier: {shipment.carrier}</span>
+                )}
+              </div>
+              <div>
                 <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 block mb-1">입고 목적 물류창고</span>
                 <span className="font-semibold text-zinc-900 dark:text-white block">
                   [{shipment.warehouse.code}] {shipment.warehouse.name}
@@ -342,14 +356,17 @@ export function ShipmentDetail({ shipment }: ShipmentDetailProps) {
             <div className="overflow-x-auto rounded-lg border border-zinc-150 dark:border-zinc-800/80">
               <table className="w-full text-left text-xs border-collapse">
                 <thead>
-                  <tr className="bg-zinc-50/50 text-zinc-500 font-bold border-b border-zinc-150 dark:bg-zinc-900/50 dark:border-zinc-800 dark:text-zinc-350">
+                  <tr className="bg-zinc-50/50 text-zinc-500 font-bold border-b border-zinc-150 dark:bg-zinc-900/50 dark:border-zinc-800 dark:text-zinc-355">
                     <th className="px-4 py-2.5">Letusto SKU</th>
                     <th className="px-4 py-2.5">제조사 SKU</th>
                     <th className="px-4 py-2.5">제품명</th>
-                    <th className="px-4 py-2.5 text-right w-20">PO 발주량</th>
-                    <th className="px-4 py-2.5 text-right w-20">총 선적량</th>
-                    <th className="px-4 py-2.5 text-right w-20">입고 완료량</th>
-                    <th className="px-4 py-2.5 text-right w-20">미입고 잔량</th>
+                    <th className="px-4 py-2.5 text-right w-16">PO 발주</th>
+                    <th className="px-4 py-2.5 text-right w-16">선적량</th>
+                    <th className="px-4 py-2.5 text-right w-16">입고량</th>
+                    <th className="px-4 py-2.5 text-right w-16">잔량</th>
+                    <th className="px-4 py-2.5 text-right w-12">Box</th>
+                    <th className="px-4 py-2.5 text-right w-12">kg</th>
+                    <th className="px-4 py-2.5 text-right w-12">CBM</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
@@ -369,6 +386,9 @@ export function ShipmentDetail({ shipment }: ShipmentDetailProps) {
                       <td className="px-4 py-3 text-right font-mono font-bold text-zinc-900 dark:text-white">{l.shipped_qty.toLocaleString()}</td>
                       <td className="px-4 py-3 text-right font-mono font-bold text-emerald-650 dark:text-emerald-400">{l.received_qty.toLocaleString()}</td>
                       <td className="px-4 py-3 text-right font-mono font-bold text-indigo-650 dark:text-indigo-400">{l.remaining_to_receive.toLocaleString()}</td>
+                      <td className="px-4 py-3 text-right font-mono text-zinc-500">{l.cartons !== null && l.cartons !== undefined ? l.cartons : "-"}</td>
+                      <td className="px-4 py-3 text-right font-mono text-zinc-500">{l.gross_weight !== null && l.gross_weight !== undefined ? l.gross_weight : "-"}</td>
+                      <td className="px-4 py-3 text-right font-mono text-zinc-500">{l.cbm !== null && l.cbm !== undefined ? l.cbm : "-"}</td>
                     </tr>
                   ))}
                 </tbody>

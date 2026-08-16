@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { transitionPoStatus, deleteDraftPo } from "@/lib/purchase-order/actions";
+import { transitionPoStatus, deleteDraftPo, reviewSupplierPoChangeRequest } from "@/lib/purchase-order/actions";
 
 interface LineItem {
   id: string;
@@ -12,6 +12,7 @@ interface LineItem {
   letusto_sku: string | null;
   manufacture_sku: string | null;
   qty: number;
+  confirmed_qty: number | null;
   unit_cost: number;
   line_total: number;
   line_note: string | null;
@@ -30,6 +31,7 @@ interface PurchaseOrderDetailProps {
     order_date: string;
     po_status: "DRAFT" | "APPROVED" | "SENT" | "CANCELLED";
     fulfillment_status: "PENDING" | "IN_PRODUCTION" | "READY_TO_SHIP" | "SHIPPED" | "RECEIVED";
+    supplier_confirmation_status?: string | null;
     currency: string;
     payment_terms: string | null;
     incoterms: string | null;
@@ -91,6 +93,20 @@ interface PurchaseOrderDetailProps {
     currency: string;
     invoice_status: string;
   }>;
+  changeRequests?: Array<{
+    id: string;
+    purchaseOrderLineId: string;
+    requestType: string;
+    originalQty: number;
+    proposedQty: number;
+    reason: string;
+    status: "PENDING" | "APPROVED" | "REJECTED" | "WITHDRAWN";
+    reviewNote: string | null;
+    createdAt: string;
+    updatedAt: string;
+    requestedByName: string;
+    companyName: string;
+  }>;
 }
 
 const PO_STATUS_COLORS: Record<string, string> = {
@@ -123,7 +139,7 @@ const FULFILLMENT_STATUS_LABELS: Record<string, string> = {
   RECEIVED: "입고완료 (Received)",
 };
 
-export function PurchaseOrderDetail({ po, isReadOnly = false, invoices = [] }: PurchaseOrderDetailProps) {
+export function PurchaseOrderDetail({ po, isReadOnly = false, invoices = [], changeRequests = [] }: PurchaseOrderDetailProps) {
   const router = useRouter();
   const [isActionLoading, setIsActionLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
@@ -179,6 +195,26 @@ export function PurchaseOrderDetail({ po, isReadOnly = false, invoices = [] }: P
     } catch (err: any) {
       setErrorMessage(err.message || "발주서 삭제 중 오류가 발생했습니다.");
       setIsActionLoading(false);
+    }
+  };
+
+  const [reviewLoading, setReviewLoading] = useState<string | null>(null);
+  const [reviewNotes, setReviewNotes] = useState<Record<string, string>>({});
+
+  const handleReviewRequest = async (requestId: string, action: "APPROVE" | "REJECT") => {
+    const note = reviewNotes[requestId]?.trim() || "";
+    if (action === "APPROVE" && !confirm("이 수량 변경 제안을 승인하고 발주서의 Confirmed Qty를 업데이트하시겠습니까?")) return;
+    if (action === "REJECT" && !confirm("이 변경 제안을 거절하시겠습니까?")) return;
+
+    setReviewLoading(requestId);
+    setErrorMessage("");
+    try {
+      await reviewSupplierPoChangeRequest(po.id, requestId, action, note);
+      router.refresh();
+    } catch (err: any) {
+      setErrorMessage(err.message || "심사 처리 실패");
+    } finally {
+      setReviewLoading(null);
     }
   };
 
@@ -499,6 +535,21 @@ export function PurchaseOrderDetail({ po, isReadOnly = false, invoices = [] }: P
                 <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 block mb-1">발주 요청 일자 (Order Date)</span>
                 <span className="font-medium text-zinc-850 dark:text-zinc-200">{po.order_date}</span>
               </div>
+              <div>
+                <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 block mb-1">공급사 확인 상태 (Confirmation)</span>
+                {po.supplier_confirmation_status === "CONFIRMED" && (
+                  <span className="inline-flex items-center rounded-md bg-green-50 px-2 py-1 text-xs font-bold text-green-700 ring-1 ring-inset ring-green-600/20">확인 완료 (Confirmed)</span>
+                )}
+                {po.supplier_confirmation_status === "CHANGE_REQUESTED" && (
+                  <span className="inline-flex items-center rounded-md bg-indigo-50 px-2 py-1 text-xs font-bold text-indigo-700 ring-1 ring-inset ring-indigo-700/10">변경 요청됨 (Change Requested)</span>
+                )}
+                {po.supplier_confirmation_status === "PENDING" && (
+                  <span className="inline-flex items-center rounded-md bg-amber-50 px-2 py-1 text-xs font-bold text-amber-800 ring-1 ring-inset ring-amber-650/10">대기 중 (Pending)</span>
+                )}
+                {!po.supplier_confirmation_status && (
+                  <span className="text-zinc-400 italic">미결정 (Pending)</span>
+                )}
+              </div>
             </div>
           </div>
 
@@ -627,6 +678,7 @@ export function PurchaseOrderDetail({ po, isReadOnly = false, invoices = [] }: P
                     <th className="px-4 py-2.5">SKU</th>
                     <th className="px-4 py-2.5">제품명</th>
                     <th className="px-4 py-2.5 text-right w-16">발주량</th>
+                    <th className="px-4 py-2.5 text-right w-16">확정량</th>
                     <th className="px-4 py-2.5 text-right w-16">선적량</th>
                     <th className="px-4 py-2.5 text-right w-16">입고량</th>
                     <th className="px-4 py-2.5 text-right w-20">구매 단가</th>
@@ -652,6 +704,15 @@ export function PurchaseOrderDetail({ po, isReadOnly = false, invoices = [] }: P
                         </div>
                       </td>
                       <td className="px-4 py-3 text-right font-mono font-bold">{l.qty.toLocaleString()}</td>
+                      <td className="px-4 py-3 text-right font-mono font-bold">
+                        {l.confirmed_qty !== null ? (
+                          <span className={l.confirmed_qty !== l.qty ? "text-indigo-650 dark:text-indigo-400" : "text-zinc-900 dark:text-white"}>
+                            {l.confirmed_qty.toLocaleString()}
+                          </span>
+                        ) : (
+                          <span className="text-zinc-400 dark:text-zinc-500 font-normal">대기</span>
+                        )}
+                      </td>
                       <td className="px-4 py-3 text-right font-mono font-semibold text-indigo-650 dark:text-indigo-400">{l.shipped_qty?.toLocaleString() || "0"}</td>
                       <td className="px-4 py-3 text-right font-mono font-bold text-emerald-650 dark:text-emerald-400">{l.received_qty?.toLocaleString() || "0"}</td>
                       <td className="px-4 py-3 text-right font-mono">{po.currency} {l.unit_cost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
@@ -671,6 +732,15 @@ export function PurchaseOrderDetail({ po, isReadOnly = false, invoices = [] }: P
                 <div className="text-right">
                   <span className="text-[10px] text-zinc-400 uppercase block mb-0.5">총 발주 수량</span>
                   <span className="text-sm font-bold font-mono text-zinc-900 dark:text-white">{po.total_qty.toLocaleString()}</span>
+                </div>
+                <div className="text-right border-l border-zinc-200 pl-6 dark:border-zinc-800">
+                  <span className="text-[10px] text-zinc-400 uppercase block mb-0.5">총 확정 수량</span>
+                  <span className="text-sm font-bold font-mono text-zinc-900 dark:text-white">
+                    {po.lines.every(l => l.confirmed_qty !== null)
+                      ? po.lines.reduce((sum, l) => sum + (l.confirmed_qty || 0), 0).toLocaleString()
+                      : "-"
+                    }
+                  </span>
                 </div>
                 <div className="text-right border-l border-zinc-200 pl-6 dark:border-zinc-800">
                   <span className="text-[10px] text-zinc-400 uppercase block mb-0.5">총 선적 수량</span>
@@ -704,6 +774,121 @@ export function PurchaseOrderDetail({ po, isReadOnly = false, invoices = [] }: P
               <p className="text-zinc-700 dark:text-zinc-300 leading-relaxed font-medium">
                 {po.supplier_facing_note || <span className="text-zinc-350 italic font-normal">등록된 전달 메모가 없습니다.</span>}
               </p>
+            </div>
+          </div>
+
+          {/* Supplier Collaboration Change Requests Section */}
+          <div className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 space-y-4">
+            <h3 className="text-sm font-bold text-zinc-800 dark:text-white">파트너 협업 및 수량 변경 제안 (Partner Collaboration)</h3>
+            
+            <div className="divide-y divide-zinc-150 dark:divide-zinc-800">
+              {changeRequests.length === 0 ? (
+                <div className="py-6 text-center text-zinc-500">
+                  제출된 파트너 변경 제안이 없습니다.
+                </div>
+              ) : (
+                changeRequests.map((req) => {
+                  const matchedLine = po.lines.find(l => l.id === req.purchaseOrderLineId);
+                  return (
+                    <div key={req.id} className="py-4 space-y-3 last:pb-0">
+                      <div className="flex justify-between items-center">
+                        <div>
+                          <span className="font-bold text-zinc-900 dark:text-white">
+                            {matchedLine?.product_name || "Unknown Item"}
+                          </span>
+                          <span className="ml-2 font-mono text-[10px] text-zinc-405">
+                            (Mfg SKU: {matchedLine?.manufacture_sku || "-"})
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] text-zinc-400">
+                            요청: {req.requestedByName} ({req.companyName}) | {new Date(req.createdAt).toLocaleString()}
+                          </span>
+                          {req.status === "PENDING" && (
+                            <span className="px-1.5 py-0.5 bg-amber-50 text-amber-700 border border-amber-200 rounded text-[10px] font-bold">Pending</span>
+                          )}
+                          {req.status === "APPROVED" && (
+                            <span className="px-1.5 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-250 rounded text-[10px] font-bold">Approved</span>
+                          )}
+                          {req.status === "REJECTED" && (
+                            <span className="px-1.5 py-0.5 bg-rose-50 text-rose-700 border border-rose-250 rounded text-[10px] font-bold">Rejected</span>
+                          )}
+                          {req.status === "WITHDRAWN" && (
+                            <span className="px-1.5 py-0.5 bg-zinc-100 text-zinc-650 border border-zinc-250 rounded text-[10px] font-bold">Withdrawn</span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Detail Metrics */}
+                      <div className="grid grid-cols-4 gap-4 text-center bg-zinc-50 dark:bg-zinc-950 p-3 rounded-lg border border-zinc-150 dark:border-zinc-850">
+                        <div>
+                          <div className="text-[10px] text-zinc-400">원래 수량 (Ordered)</div>
+                          <div className="font-bold font-mono text-sm text-zinc-700 dark:text-zinc-300">{req.originalQty}</div>
+                        </div>
+                        <div>
+                          <div className="text-[10px] text-zinc-400">제안 수량 (Proposed)</div>
+                          <div className="font-bold font-mono text-sm text-zinc-900 dark:text-white">{req.proposedQty}</div>
+                        </div>
+                        <div>
+                          <div className="text-[10px] text-zinc-400">수량 차이 (Diff)</div>
+                          <div className="font-bold font-mono text-sm text-indigo-600 dark:text-indigo-400">
+                            {req.proposedQty - req.originalQty}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-[10px] text-zinc-400">제안 유형</div>
+                          <div className="font-bold text-sm text-zinc-700 dark:text-zinc-300">{req.requestType}</div>
+                        </div>
+                      </div>
+
+                      {/* Partner Reason */}
+                      <div className="space-y-1">
+                        <div className="font-bold text-zinc-500 uppercase tracking-wide text-[10px]">파트너 변경 사유 (Reason)</div>
+                        <div className="p-2.5 border-l-2 border-zinc-300 bg-zinc-50/50 text-zinc-700 dark:bg-zinc-900/50 dark:text-zinc-300">
+                          {req.reason || "(사유 기재 없음)"}
+                        </div>
+                      </div>
+
+                      {/* Admin Decision Actions */}
+                      {req.status === "PENDING" && !isReadOnly && (
+                        <div className="space-y-2 pt-2">
+                          <label className="block text-[10px] font-bold text-zinc-405 uppercase">검토 메모 / 거절 사유 (Review Note)</label>
+                          <textarea
+                            rows={2}
+                            placeholder="변경 제안 승인/반려에 대한 메모를 입력하세요."
+                            value={reviewNotes[req.id] || ""}
+                            onChange={(e) => setReviewNotes({ ...reviewNotes, [req.id]: e.target.value })}
+                            className="w-full rounded-md border-zinc-350 bg-white text-xs text-zinc-900 shadow-sm focus:border-zinc-500 focus:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-white"
+                          />
+                          <div className="flex justify-end gap-2">
+                            <button
+                              onClick={() => handleReviewRequest(req.id, "REJECT")}
+                              disabled={reviewLoading === req.id}
+                              className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-250 text-xs font-bold rounded-lg cursor-pointer disabled:opacity-50"
+                            >
+                              {reviewLoading === req.id ? "심사중..." : "반려 (Reject)"}
+                            </button>
+                            <button
+                              onClick={() => handleReviewRequest(req.id, "APPROVE")}
+                              disabled={reviewLoading === req.id}
+                              className="px-3 py-1.5 bg-zinc-950 hover:bg-zinc-900 text-white dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-200 text-xs font-bold rounded-lg cursor-pointer disabled:opacity-50"
+                            >
+                              {reviewLoading === req.id ? "심사중..." : "승인 (Approve)"}
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {req.reviewNote && (
+                        <div className="p-3 bg-amber-50/20 border border-amber-100 rounded-lg text-zinc-700 dark:bg-amber-950/10 dark:border-amber-900/30 dark:text-zinc-300 space-y-1">
+                          <div className="font-bold text-amber-800 dark:text-amber-400 text-[10px]">어드민 검토 의견:</div>
+                          <div>{req.reviewNote}</div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
+              )}
             </div>
           </div>
 

@@ -51,7 +51,7 @@ export async function getPurchaseOrders() {
   const { data: pos, error } = await supabase
     .from("purchase_orders")
     .select(`
-      id, po_number, order_date, po_status, fulfillment_status, currency, expected_ready_date, updated_at,
+      id, po_number, order_date, po_status, fulfillment_status, supplier_confirmation_status, currency, expected_ready_date, updated_at,
       companies:supplier_id (name),
       destination_warehouse:destination_warehouse_id (name, code),
       ship_from_warehouse:ship_from_warehouse_id (name, code),
@@ -72,6 +72,7 @@ export async function getPurchaseOrders() {
       order_date: po.order_date,
       po_status: po.po_status,
       fulfillment_status: po.fulfillment_status,
+      supplier_confirmation_status: po.supplier_confirmation_status,
       status: po.po_status, // backwards compatibility
       currency: po.currency,
       expected_ready_date: po.expected_ready_date,
@@ -117,7 +118,7 @@ export async function getPurchaseOrderDetail(poId: string) {
     .from("purchase_order_lines")
     .select(`
       id, product_id, product_name_snapshot, letusto_sku_snapshot, manufacture_sku_snapshot,
-      qty, unit_cost, line_note,
+      qty, confirmed_qty, unit_cost, line_note,
       products:product_id (brand_id, brands (name))
     `)
     .eq("purchase_order_id", poId);
@@ -163,6 +164,7 @@ export async function getPurchaseOrderDetail(poId: string) {
       letusto_sku: l.letusto_sku_snapshot,
       manufacture_sku: l.manufacture_sku_snapshot,
       qty: l.qty,
+      confirmed_qty: l.confirmed_qty !== null ? Number(l.confirmed_qty) : null,
       unit_cost: Number(l.unit_cost),
       line_total: l.qty * Number(l.unit_cost),
       line_note: l.line_note,
@@ -637,5 +639,152 @@ export async function deleteDraftPo(poId: string) {
   if (error) throw new Error(`발주서 삭제 실패: ${error.message}`);
 
   revalidatePath("/admin/purchasing");
+  return { success: true };
+}
+
+/**
+ * Fetch all supplier change requests for a given PO on the admin side.
+ */
+export async function getSupplierPoChangeRequests(poId: string) {
+  await verifyAdminSession();
+  const supabase = createAdminClient();
+
+  const { data, error } = await supabase
+    .from("purchase_order_change_requests")
+    .select(`
+      id,
+      purchase_order_line_id,
+      request_type,
+      original_qty,
+      proposed_qty,
+      reason,
+      status,
+      review_note,
+      created_at,
+      updated_at,
+      requested_by_user:profiles!requested_by(display_name),
+      requested_by_company:companies!requested_by_company_id(name)
+    `)
+    .eq("purchase_order_id", poId)
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    throw new Error(`Failed to fetch supplier change requests: ${error.message}`);
+  }
+
+  return (data ?? []).map((r: any) => ({
+    id: r.id,
+    purchaseOrderLineId: r.purchase_order_line_id,
+    requestType: r.request_type,
+    originalQty: r.original_qty,
+    proposedQty: r.proposed_qty,
+    reason: r.reason,
+    status: r.status,
+    reviewNote: r.review_note,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+    requestedByName: r.requested_by_user?.display_name || "Unknown Partner",
+    companyName: r.requested_by_company?.name || "Unknown Company"
+  }));
+}
+
+/**
+ * Review a supplier change request (APPROVE or REJECT).
+ */
+export async function reviewSupplierPoChangeRequest(
+  poId: string,
+  requestId: string,
+  action: "APPROVE" | "REJECT",
+  note: string
+) {
+  const { userId } = await verifyAdminSession();
+  const supabase = createAdminClient();
+  await verifyWritePermission(supabase, userId);
+
+  // 1. Fetch the request to verify status and details (with concurrency check)
+  const { data: req, error: reqErr } = await supabase
+    .from("purchase_order_change_requests")
+    .select("id, status, proposed_qty, purchase_order_line_id")
+    .eq("id", requestId)
+    .eq("purchase_order_id", poId)
+    .maybeSingle();
+
+  if (reqErr || !req) {
+    throw new Error("변경 요청 정보를 찾을 수 없습니다.");
+  }
+
+  if (req.status !== "PENDING") {
+    throw new Error("이미 심사 완료된(APPROVED/REJECTED/WITHDRAWN) 요청은 다시 처리할 수 없습니다.");
+  }
+
+  const timestamp = new Date().toISOString();
+  const finalStatus = action === "APPROVE" ? "APPROVED" : "REJECTED";
+
+  // 2. Perform Atomic status update first (filters on status = 'PENDING')
+  const { data: updatedReq, error: updateErr } = await supabase
+    .from("purchase_order_change_requests")
+    .update({
+      status: finalStatus,
+      reviewed_by: userId,
+      reviewed_at: timestamp,
+      review_note: note,
+      updated_at: timestamp
+    })
+    .eq("id", requestId)
+    .eq("status", "PENDING")
+    .select("id")
+    .maybeSingle();
+
+  if (updateErr) throw new Error(`변경 제안 상태 업데이트 실패: ${updateErr.message}`);
+
+  if (!updatedReq) {
+    throw new Error("이미 다른 어드민이 처리 완료했거나 취소된 요청입니다.");
+  }
+
+  // 3. Apply confirmed_qty on the target line if approved
+  if (action === "APPROVE") {
+    const { error: lineErr } = await supabase
+      .from("purchase_order_lines")
+      .update({ confirmed_qty: req.proposed_qty })
+      .eq("id", req.purchase_order_line_id);
+
+    if (lineErr) throw new Error(`발주 품목 확정 수량 업데이트 실패: ${lineErr.message}`);
+  }
+
+  // 3. Evaluate PO-level supplier_confirmation_status
+  // Check if any other PENDING requests remain
+  const { data: pendingReqs } = await supabase
+    .from("purchase_order_change_requests")
+    .select("id")
+    .eq("purchase_order_id", poId)
+    .eq("status", "PENDING");
+
+  if (!pendingReqs || pendingReqs.length === 0) {
+    // Check if ALL lines of the PO now have confirmed_qty populated
+    const { data: lines } = await supabase
+      .from("purchase_order_lines")
+      .select("id, confirmed_qty")
+      .eq("purchase_order_id", poId);
+
+    const allLinesConfirmed = lines && lines.length > 0 && lines.every(l => l.confirmed_qty !== null);
+
+    if (allLinesConfirmed) {
+      await supabase
+        .from("purchase_orders")
+        .update({ supplier_confirmation_status: "CONFIRMED" })
+        .eq("id", poId);
+    } else {
+      // Revert status to PENDING so supplier can take action
+      await supabase
+        .from("purchase_orders")
+        .update({ supplier_confirmation_status: "PENDING" })
+        .eq("id", poId);
+    }
+  }
+
+  revalidatePath("/admin/purchasing");
+  revalidatePath(`/admin/purchasing/${poId}`);
+  revalidatePath(`/portal/orders/purchase-orders/${poId}`);
+
   return { success: true };
 }

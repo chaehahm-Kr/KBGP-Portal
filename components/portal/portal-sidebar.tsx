@@ -10,7 +10,8 @@ import {
   ProductsIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
-  SupportIcon
+  SupportIcon,
+  SalesIcon
 } from "../admin/icons";
 
 interface PortalSidebarProps {
@@ -41,6 +42,8 @@ export default function PortalSidebar({
     { name: "입점 신청서", icon: ApplicationsIcon, href: "/portal/applications" },
     { name: "브랜드 관리", icon: CompaniesIcon, href: "/portal/brands" },
     { name: "제품 관리", icon: ProductsIcon, href: "/portal/products" },
+    { name: "발주 관리", icon: SalesIcon, href: "/portal/orders/purchase-orders" },
+    { name: "선적 & 출고 관리", icon: DashboardIcon, href: "/portal/orders/shipping" },
     { name: "1:1 문의", icon: SupportIcon, href: "/portal/support" },
   ];
 

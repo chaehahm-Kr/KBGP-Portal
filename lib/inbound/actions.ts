@@ -218,7 +218,8 @@ export async function getInboundShipmentDetail(shipmentId: string) {
     .from("inbound_shipment_lines")
     .select(`
       id, purchase_order_line_id, product_id, shipped_qty, line_note,
-      po_line:purchase_order_line_id (qty, product_name_snapshot, letusto_sku_snapshot, manufacture_sku_snapshot)
+      po_line:purchase_order_line_id (qty, product_name_snapshot, letusto_sku_snapshot, manufacture_sku_snapshot),
+      goods_readiness_line:goods_readiness_line_id (cartons, gross_weight, cbm)
     `)
     .eq("inbound_shipment_id", shipmentId);
 
@@ -255,6 +256,9 @@ export async function getInboundShipmentDetail(shipmentId: string) {
       letusto_sku: l.po_line?.letusto_sku_snapshot || "-",
       manufacture_sku: l.po_line?.manufacture_sku_snapshot || "-",
       po_qty: l.po_line?.qty || 0,
+      cartons: l.goods_readiness_line?.cartons || null,
+      gross_weight: l.goods_readiness_line?.gross_weight || null,
+      cbm: l.goods_readiness_line?.cbm || null,
     };
   });
 

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { verifyAdminSession } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
-import { getPurchaseOrderDetail } from "@/lib/purchase-order/actions";
+import { getPurchaseOrderDetail, getSupplierPoChangeRequests } from "@/lib/purchase-order/actions";
 import { PurchaseOrderDetail } from "@/components/admin/purchase-order-detail";
 
 export const metadata: Metadata = {
@@ -27,8 +27,10 @@ export default async function AdminPurchaseOrderDetailPage({
   const isReadOnly = roles.length === 0 || (roles.length === 1 && roles[0] === "executive_viewer");
 
   let po;
+  let changeRequests: any[] = [];
   try {
     po = await getPurchaseOrderDetail(id);
+    changeRequests = await getSupplierPoChangeRequests(id);
   } catch (err) {
     console.error("Failed to load PO detail", err);
     notFound();
@@ -42,7 +44,12 @@ export default async function AdminPurchaseOrderDetailPage({
 
   return (
     <div className="space-y-6">
-      <PurchaseOrderDetail po={po} isReadOnly={isReadOnly} invoices={invoices ?? []} />
+      <PurchaseOrderDetail 
+        po={po} 
+        isReadOnly={isReadOnly} 
+        invoices={invoices ?? []} 
+        changeRequests={changeRequests} 
+      />
     </div>
   );
 }
