@@ -7,9 +7,11 @@ import { DetailClient } from "./detail-client";
 export default async function PortalReadinessDetailPage({
   params
 }: {
-  params: { id: string }
+  params: Promise<{ id: string }> | { id: string };
 }) {
-  const readiness = await getPortalReadinessById(params.id);
+  const resolvedParams = await params;
+  const { id } = resolvedParams;
+  const readiness = await getPortalReadinessById(id);
   if (!readiness) {
     notFound();
   }
