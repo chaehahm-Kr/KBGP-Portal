@@ -4,7 +4,8 @@
 DROP VIEW IF EXISTS public.portal_purchase_orders CASCADE;
 DROP VIEW IF EXISTS public.portal_inbound_shipments CASCADE;
 
--- 1. Grant SELECT on missing columns on inbound_shipments to authenticated
+-- 1. Grant SELECT on missing columns on purchase_orders and inbound_shipments to authenticated
+GRANT SELECT (shipping_responsibility) ON public.purchase_orders TO authenticated;
 GRANT SELECT (shipping_responsibility, carrier) ON public.inbound_shipments TO authenticated;
 
 -- 2. Re-create portal_purchase_orders view with all required fields
