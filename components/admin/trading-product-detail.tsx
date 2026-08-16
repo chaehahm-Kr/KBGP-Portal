@@ -667,10 +667,16 @@ export function TradingProductDetail({
                                 <td className="px-3 py-2.5 font-mono text-zinc-650">
                                   {h.received_date}
                                 </td>
-                                <td className="px-3 py-2.5 font-mono font-bold text-indigo-650 hover:underline">
-                                  <Link href={`/admin/finance/landed-cost/${h.landed_cost_case_id}`}>
-                                    {h.case?.landed_cost_number}
-                                  </Link>
+                                <td className="px-3 py-2.5 font-mono font-bold text-indigo-650">
+                                  {h.landed_cost_case_id ? (
+                                    <Link href={`/admin/finance/landed-cost/${h.landed_cost_case_id}`} className="hover:underline">
+                                      {h.case?.landed_cost_number}
+                                    </Link>
+                                  ) : (
+                                    <span className="text-zinc-500 dark:text-zinc-400 font-medium">
+                                      {h.case?.landed_cost_number || "LEGACY_OPENING"}
+                                    </span>
+                                  )}
                                 </td>
                                 <td className="px-3 py-2.5 text-right font-mono">
                                   {Number(h.inventory_received_qty).toLocaleString()}

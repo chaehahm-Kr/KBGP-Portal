@@ -905,7 +905,7 @@ export async function getProductCostSummary(productId: string) {
   }
 
   // 6. Fetch historical landed cost entries for the table
-  const { data: history } = await supabase
+  const { data: historyResults } = await supabase
     .from("landed_cost_results")
     .select(`
       id,
@@ -923,6 +923,36 @@ export async function getProductCostSummary(productId: string) {
     .eq("cost_status", "FINAL")
     .order("received_date", { ascending: false });
 
+  // 7. Fetch legacy opening cost layers that don't have landed_cost_result_id
+  const { data: legacyLayers } = await supabase
+    .from("inventory_cost_layers")
+    .select("id, received_date, original_qty, original_total_cost, unit_landed_cost")
+    .eq("product_id", productId)
+    .is("landed_cost_result_id", null);
+
+  const combinedHistory = [
+    ...(historyResults ?? []).map((h: any) => ({
+      id: h.id,
+      received_date: h.received_date,
+      inventory_received_qty: h.inventory_received_qty,
+      supplier_acquisition_cost: Number(h.supplier_acquisition_cost),
+      total_ancillary_cost: Number(h.total_ancillary_cost),
+      unit_landed_cost: Number(h.unit_landed_cost),
+      landed_cost_case_id: h.landed_cost_case_id,
+      case: h.case
+    })),
+    ...(legacyLayers ?? []).map((l: any) => ({
+      id: l.id,
+      received_date: l.received_date,
+      inventory_received_qty: l.original_qty,
+      supplier_acquisition_cost: Number(l.original_total_cost),
+      total_ancillary_cost: 0.00,
+      unit_landed_cost: Number(l.unit_landed_cost),
+      landed_cost_case_id: null,
+      case: { landed_cost_number: "LEGACY_OPENING (PO_COST)" }
+    }))
+  ].sort((a, b) => new Date(b.received_date).getTime() - new Date(a.received_date).getTime());
+
   return {
     currentInventory,
     latestLandedCost,
@@ -931,7 +961,7 @@ export async function getProductCostSummary(productId: string) {
     currentInventoryCostValue: totalValue > 0 ? totalValue : (currentInventory * latestLandedCost),
     previousLandedCost,
     costChangePercent,
-    history: history ?? []
+    history: combinedHistory
   };
 }
 

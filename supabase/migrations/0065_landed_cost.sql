@@ -220,12 +220,14 @@ BEGIN
 
     -- Fallback: If still has qty to deplete (e.g. no layers exist or inventory exceeds layers)
     IF v_qty_to_deplete > 0 THEN
-      -- Get fallback unit cost (FOB or most recent layer or 0)
       SELECT COALESCE(
         (SELECT unit_landed_cost FROM public.inventory_cost_layers WHERE product_id = NEW.product_id ORDER BY received_date DESC, created_at DESC LIMIT 1),
-        (SELECT price_usd_fob FROM public.products WHERE id = NEW.product_id),
-        0.0000
+        (SELECT price_usd_fob FROM public.products WHERE id = NEW.product_id)
       ) INTO v_fallback_cost;
+
+      IF v_fallback_cost IS NULL OR v_fallback_cost <= 0 THEN
+        RAISE EXCEPTION 'COST BASIS MISSING: Product % in warehouse % has no valid cost layers or FOB price.', NEW.product_id, NEW.warehouse_id;
+      END IF;
 
       -- Create a default active or fallback layer representing opening/adjustment stock
       INSERT INTO public.inventory_cost_layers (
