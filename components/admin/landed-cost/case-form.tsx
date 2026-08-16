@@ -73,8 +73,9 @@ export function CaseForm({ eligibleShipments }: CaseFormProps) {
         <div>
           <label className="block text-[10px] font-bold text-zinc-400 mb-2">정산 대상 선적 선택 (Shipment Consolidation List) *</label>
           {eligibleShipments.length === 0 ? (
-            <div className="p-8 border border-dashed border-zinc-200 dark:border-zinc-800 rounded-xl text-center text-zinc-400 italic">
-              정산 가능한 (창고 도착 및 입고 완료되었으나 아직 Landed Cost 케이스에 할당되지 않은) 선적 건이 없습니다.
+            <div className="p-6 border border-dashed border-zinc-200 dark:border-zinc-800 rounded-xl text-center text-zinc-450 dark:text-zinc-500 font-medium leading-relaxed">
+              현재 Landed Cost 정산 대상 선적(Shipment) 건이 없습니다.<br />
+              실물 입고 완료(<code className="font-mono text-indigo-650 bg-indigo-50 dark:bg-indigo-950/50 px-1 py-0.5 rounded">FINALIZED</code>) 및 공급업체 인보이스 정산(<code className="font-mono text-indigo-650 bg-indigo-50 dark:bg-indigo-950/50 px-1 py-0.5 rounded">Settlement Complete</code>)이 모두 완료되고, 아직 Landed Cost Case에 등록되지 않은 선적 건만 표시됩니다.
             </div>
           ) : (
             <div className="border border-zinc-250 dark:border-zinc-800 rounded-xl max-h-56 overflow-y-auto divide-y divide-zinc-100 dark:divide-zinc-800">

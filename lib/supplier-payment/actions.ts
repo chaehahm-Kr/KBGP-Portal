@@ -163,9 +163,9 @@ export async function getSupplierPaymentById(id: string) {
           status
         )
       ),
-      creator:profiles!created_by (full_name),
-      completer:profiles!completed_by (full_name),
-      voider:profiles!voided_by (full_name)
+      creator:profiles!created_by (full_name:display_name),
+      completer:profiles!completed_by (full_name:display_name),
+      voider:profiles!voided_by (full_name:display_name)
     `)
     .eq("id", id)
     .single();

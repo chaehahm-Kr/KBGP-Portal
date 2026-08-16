@@ -606,11 +606,11 @@ export async function getSupplierInvoiceById(id: string) {
         line_amount,
         line_note
       ),
-      creator:profiles!created_by (full_name),
-      submitter:profiles!submitted_by (full_name),
-      approver:profiles!approved_by (full_name),
-      rejecter:profiles!rejected_by (full_name),
-      voider:profiles!voided_by (full_name),
+      creator:profiles!created_by (full_name:display_name),
+      submitter:profiles!submitted_by (full_name:display_name),
+      approver:profiles!approved_by (full_name:display_name),
+      rejecter:profiles!rejected_by (full_name:display_name),
+      voider:profiles!voided_by (full_name:display_name),
       adjustments:supplier_invoice_adjustments (
         id,
         supplier_invoice_id,
@@ -636,10 +636,10 @@ export async function getSupplierInvoiceById(id: string) {
         rejection_reason,
         voided_at,
         voided_by,
-        creator:profiles!created_by (full_name),
-        approver:profiles!approved_by (full_name),
-        rejecter:profiles!rejected_by (full_name),
-        voider:profiles!voided_by (full_name)
+        creator:profiles!created_by (full_name:display_name),
+        approver:profiles!approved_by (full_name:display_name),
+        rejecter:profiles!rejected_by (full_name:display_name),
+        voider:profiles!voided_by (full_name:display_name)
       ),
       payments:supplier_payments (
         id,

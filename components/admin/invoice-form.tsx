@@ -237,6 +237,13 @@ export function InvoiceForm({ invoice, eligiblePos, suppliers }: InvoiceFormProp
         </div>
       )}
 
+      {!isEdit && eligiblePos.length === 0 && (
+        <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-250 text-amber-800 dark:bg-amber-950/10 dark:border-amber-900/50 dark:text-amber-400 leading-relaxed font-semibold">
+          💡 현재 인보이스를 등록할 수 있는 발주서(PO)가 시스템에 존재하지 않습니다.<br />
+          공급업체에 발송 완료 상태(<code className="font-mono text-amber-900 bg-amber-100 dark:bg-amber-900/80 px-1 py-0.5 rounded">SENT</code>)인 발주서만 인보이스 신규 등록이 가능합니다.
+        </div>
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         
         {/* Left Side: General metadata */}
@@ -271,18 +278,31 @@ export function InvoiceForm({ invoice, eligiblePos, suppliers }: InvoiceFormProp
               {/* PO Selection */}
               <div>
                 <label className="block text-[10px] font-bold text-zinc-400 dark:text-zinc-500 mb-1">발주서 (Purchase Order) *</label>
-                <select
-                  disabled={isEdit || !supplierId}
-                  value={poId}
-                  onChange={(e) => setPoId(e.target.value)}
-                  className="w-full h-9 rounded-xl border border-zinc-200 bg-white px-3 outline-none dark:border-zinc-850 dark:bg-zinc-955 dark:text-white"
-                  required
-                >
-                  <option value="">발주서를 선택하세요</option>
-                  {supplierPos.map(po => (
-                    <option key={po.id} value={po.id}>{po.po_number}</option>
-                  ))}
-                </select>
+                {isEdit ? (
+                  <div className="h-9 border border-zinc-200 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 flex items-center px-3 rounded-xl font-mono font-bold dark:text-white">
+                    {invoice.po?.po_number}
+                  </div>
+                ) : !supplierId ? (
+                  <div className="p-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-zinc-450 dark:bg-zinc-950/20 dark:border-zinc-800 font-medium">
+                    공급사(Supplier)를 먼저 선택하시면 인보이스 등록이 가능한 발주서(PO) 목록이 표시됩니다.
+                  </div>
+                ) : supplierPos.length === 0 ? (
+                  <div className="p-2.5 bg-rose-50 border border-rose-150 rounded-xl text-rose-600 dark:bg-rose-950/10 dark:border-rose-900/50 dark:text-rose-400 font-medium leading-relaxed">
+                    해당 공급사의 발송 완료 상태(<code className="font-mono text-rose-900 bg-rose-100 dark:bg-rose-900/50 px-1 py-0.5 rounded">SENT</code>)인 발주서가 존재하지 않습니다.
+                  </div>
+                ) : (
+                  <select
+                    value={poId}
+                    onChange={(e) => setPoId(e.target.value)}
+                    className="w-full h-9 rounded-xl border border-zinc-200 bg-white px-3 outline-none dark:border-zinc-850 dark:bg-zinc-955 dark:text-white"
+                    required
+                  >
+                    <option value="">발주서를 선택하세요</option>
+                    {supplierPos.map(po => (
+                      <option key={po.id} value={po.id}>{po.po_number}</option>
+                    ))}
+                  </select>
+                )}
               </div>
 
               {/* Invoice Number */}

@@ -85,9 +85,9 @@ export async function getLandedCostCaseById(id: string) {
     .from("landed_cost_cases")
     .select(`
       *,
-      creator:profiles!created_by (full_name),
-      finalizer:profiles!finalized_by (full_name),
-      reopener:profiles!reopened_by (full_name),
+      creator:profiles!created_by (full_name:display_name),
+      finalizer:profiles!finalized_by (full_name:display_name),
+      reopener:profiles!reopened_by (full_name:display_name),
       shipments:landed_cost_case_shipments (
         inbound_shipment_id,
         shipment:inbound_shipments (

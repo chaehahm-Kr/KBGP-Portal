@@ -154,6 +154,11 @@ export function PaymentForm({ isEdit = false, payment, eligibleInvoices, presele
             <div className="h-9 border border-zinc-200 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 flex items-center px-3 rounded-xl font-mono font-bold dark:text-white">
               {payment.invoice?.internal_ap_number} (Invoice: {payment.invoice?.supplier_invoice_number}) - {payment.invoice?.supplier?.name}
             </div>
+          ) : eligibleInvoices.length === 0 ? (
+            <div className="p-3.5 rounded-xl bg-zinc-50 border border-zinc-200 text-zinc-500 dark:bg-zinc-950/20 dark:border-zinc-800 dark:text-zinc-400 leading-relaxed font-medium">
+              지급 가능한 Supplier Invoice가 없습니다.<br />
+              인보이스 상태가 승인(<code className="font-mono text-indigo-650 bg-indigo-50 dark:bg-indigo-950/50 px-1 py-0.5 rounded">APPROVED</code>) 및 정산(<code className="font-mono text-indigo-650 bg-indigo-50 dark:bg-indigo-950/50 px-1 py-0.5 rounded">SETTLED</code>) 완료되고, 미지급 잔액(<code className="font-mono text-emerald-700 bg-emerald-50 dark:bg-emerald-950/50 px-1 py-0.5 rounded">Balance Due &gt; 0</code>)이 있는 인보이스만 지급 등록이 가능합니다.
+            </div>
           ) : (
             <select
               value={selectedInvoiceId}
