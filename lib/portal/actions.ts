@@ -1066,3 +1066,849 @@ export async function getPortalReadinessById(id: string) {
     lines: formattedLines
   };
 }
+
+// ==========================================
+// PHASE 4: SUPPLIER FINANCE PORTAL ACTIONS
+// ==========================================
+
+export async function getPortalInvoices() {
+  const { companyId } = await requireCompanyMembership();
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from("supplier_invoices")
+    .select(`
+      id,
+      internal_ap_number,
+      supplier_invoice_number,
+      invoice_date,
+      received_date,
+      due_date,
+      currency,
+      subtotal,
+      tax_amount,
+      other_charges,
+      invoice_total,
+      amount_paid,
+      balance_due,
+      invoice_status,
+      payment_status,
+      settlement_status,
+      created_at,
+      purchase_orders(po_number)
+    `)
+    .eq("supplier_company_id", companyId)
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    console.error("Failed to fetch portal invoices:", error);
+    throw new Error("인보이스 목록을 불러오지 못했습니다.");
+  }
+
+  return (data ?? []).map((inv: any) => ({
+    id: inv.id,
+    internalApNumber: inv.internal_ap_number,
+    supplierInvoiceNumber: inv.supplier_invoice_number,
+    invoiceDate: inv.invoice_date,
+    receivedDate: inv.received_date,
+    dueDate: inv.due_date,
+    currency: inv.currency,
+    subtotal: Number(inv.subtotal),
+    taxAmount: Number(inv.tax_amount),
+    otherCharges: Number(inv.other_charges),
+    invoiceTotal: Number(inv.invoice_total),
+    amountPaid: Number(inv.amount_paid),
+    balanceDue: Number(inv.balance_due),
+    invoiceStatus: inv.invoice_status,
+    paymentStatus: inv.payment_status,
+    settlementStatus: inv.settlement_status,
+    createdAt: inv.created_at,
+    poNumber: ((Array.isArray(inv.purchase_orders) ? inv.purchase_orders[0] : inv.purchase_orders) as any)?.po_number || "-"
+  }));
+}
+
+export async function getPortalInvoiceDetail(id: string) {
+  const { companyId } = await requireCompanyMembership();
+  const supabase = await createClient();
+
+  // 1. Fetch invoice header and verify ownership
+  const { data: inv, error: invErr } = await supabase
+    .from("supplier_invoices")
+    .select(`
+      id,
+      supplier_company_id,
+      purchase_order_id,
+      internal_ap_number,
+      supplier_invoice_number,
+      invoice_date,
+      received_date,
+      due_date,
+      currency,
+      payment_terms_snapshot,
+      incoterms_snapshot,
+      subtotal,
+      tax_amount,
+      other_charges,
+      invoice_total,
+      amount_paid,
+      balance_due,
+      invoice_status,
+      payment_status,
+      settlement_status,
+      attachment_path,
+      rejection_reason,
+      submitted_at,
+      created_at,
+      purchase_orders(po_number)
+    `)
+    .eq("id", id)
+    .eq("supplier_company_id", companyId)
+    .maybeSingle();
+
+  if (invErr || !inv) {
+    console.error("Failed to fetch portal invoice detail:", invErr);
+    throw new Error("인보이스 상세 정보를 찾을 수 없습니다.");
+  }
+
+  // 2. Fetch invoice lines
+  const { data: lines, error: linesErr } = await supabase
+    .from("supplier_invoice_lines")
+    .select(`
+      id,
+      purchase_order_line_id,
+      product_id,
+      sku_snapshot,
+      product_name_snapshot,
+      invoiced_qty,
+      unit_price,
+      line_amount,
+      line_note
+    `)
+    .eq("supplier_invoice_id", id);
+
+  if (linesErr) {
+    console.error("Failed to fetch invoice lines:", linesErr);
+    throw new Error("인보이스 상세 내역을 불러오지 못했습니다.");
+  }
+
+  // 3. Fetch adjustments (restricted select columns exclude internal_note)
+  const { data: adjustments, error: adjErr } = await supabase
+    .from("supplier_invoice_adjustments")
+    .select(`
+      id,
+      supplier_invoice_line_id,
+      adjustment_type,
+      adjustment_direction,
+      quantity,
+      unit_amount,
+      adjustment_amount,
+      currency,
+      reason,
+      reference_type,
+      reference_id,
+      supplier_credit_reference,
+      status,
+      created_at,
+      approved_at,
+      rejected_at,
+      rejection_reason
+    `)
+    .eq("supplier_invoice_id", id);
+
+  if (adjErr) {
+    console.error("Failed to fetch invoice adjustments:", adjErr);
+    throw new Error("정산 조정 내역을 불러오지 못했습니다.");
+  }
+
+  // 4. Fetch payments (restricted select columns exclude internal_note)
+  const { data: payments, error: pmtErr } = await supabase
+    .from("supplier_payments")
+    .select(`
+      id,
+      payment_number,
+      payment_date,
+      payment_amount,
+      currency,
+      payment_method,
+      bank_reference,
+      remittance_reference,
+      attachment_path,
+      status,
+      remittance_bank_name,
+      remittance_beneficiary_name,
+      remittance_account_last4,
+      remittance_swift_bic_masked,
+      created_at,
+      completed_at
+    `)
+    .eq("supplier_invoice_id", id);
+
+  if (pmtErr) {
+    console.error("Failed to fetch invoice payments:", pmtErr);
+    throw new Error("지급 내역을 불러오지 못했습니다.");
+  }
+
+  // 5. Gather PO lines to calculate Qty facts per line
+  const { data: poLines } = await supabase
+    .from("purchase_order_lines")
+    .select("id, qty, confirmed_qty")
+    .eq("purchase_order_id", inv.purchase_order_id);
+
+  const poLineMap = new Map();
+  if (poLines) {
+    for (const pol of poLines) {
+      // Shipped Qty
+      const { data: shipData } = await supabase
+        .from("inbound_shipment_lines")
+        .select("shipped_qty, inbound_shipments!inner(status)")
+        .eq("purchase_order_line_id", pol.id)
+        .neq("inbound_shipments.status", "CANCELLED");
+      const shippedQty = (shipData ?? []).reduce((sum, s: any) => sum + s.shipped_qty, 0);
+
+      // Received Qty
+      const { data: recData } = await supabase
+        .from("receiving_lines")
+        .select("received_qty, receivings!inner(status)")
+        .eq("purchase_order_line_id", pol.id)
+        .eq("receivings.status", "FINALIZED");
+      const receivedQty = (recData ?? []).reduce((sum, r: any) => sum + r.received_qty, 0);
+
+      // Ready Qty
+      const { data: grData } = await supabase
+        .from("goods_readiness_lines")
+        .select("ready_qty, goods_readiness!inner(handover_status)")
+        .eq("purchase_order_line_id", pol.id)
+        .in("goods_readiness.handover_status", ["READY_SUBMITTED", "HANDOVER_PENDING", "HANDED_OVER"]);
+      const readyQty = (grData ?? []).reduce((sum, g: any) => sum + g.ready_qty, 0);
+
+      poLineMap.set(pol.id, {
+        orderedQty: pol.qty,
+        confirmedQty: pol.confirmed_qty !== null ? pol.confirmed_qty : pol.qty,
+        readyQty,
+        shippedQty,
+        receivedQty
+      });
+    }
+  }
+
+  // Merge context into invoice lines
+  const formattedLines = (lines ?? []).map((l: any) => {
+    const context = poLineMap.get(l.purchase_order_line_id) || {
+      orderedQty: 0,
+      confirmedQty: 0,
+      readyQty: 0,
+      shippedQty: 0,
+      receivedQty: 0
+    };
+    return {
+      id: l.id,
+      purchaseOrderLineId: l.purchase_order_line_id,
+      productId: l.product_id,
+      sku: l.sku_snapshot,
+      productName: l.product_name_snapshot,
+      invoicedQty: l.invoiced_qty,
+      unitPrice: Number(l.unit_price),
+      lineAmount: Number(l.line_amount),
+      lineNote: l.line_note,
+      ...context
+    };
+  });
+
+  return {
+    id: inv.id,
+    purchaseOrderId: inv.purchase_order_id,
+    poNumber: ((Array.isArray(inv.purchase_orders) ? inv.purchase_orders[0] : inv.purchase_orders) as any)?.po_number || "-",
+    internalApNumber: inv.internal_ap_number,
+    supplierInvoiceNumber: inv.supplier_invoice_number,
+    invoiceDate: inv.invoice_date,
+    receivedDate: inv.received_date,
+    dueDate: inv.due_date,
+    currency: inv.currency,
+    paymentTerms: inv.payment_terms_snapshot,
+    incoterms: inv.incoterms_snapshot,
+    subtotal: Number(inv.subtotal),
+    taxAmount: Number(inv.tax_amount),
+    otherCharges: Number(inv.other_charges),
+    invoiceTotal: Number(inv.invoice_total),
+    amountPaid: Number(inv.amount_paid),
+    balanceDue: Number(inv.balance_due),
+    invoiceStatus: inv.invoice_status,
+    paymentStatus: inv.payment_status,
+    settlementStatus: inv.settlement_status,
+    attachmentPath: inv.attachment_path,
+    rejectionReason: inv.rejection_reason,
+    submittedAt: inv.submitted_at,
+    createdAt: inv.created_at,
+    lines: formattedLines,
+    adjustments: (adjustments ?? []).map((adj: any) => ({
+      id: adj.id,
+      type: adj.adjustment_type,
+      direction: adj.adjustment_direction,
+      qty: adj.quantity,
+      unitAmount: Number(adj.unit_amount || 0),
+      amount: Number(adj.adjustment_amount),
+      reason: adj.reason,
+      status: adj.status
+    })),
+    payments: (payments ?? []).map((p: any) => ({
+      id: p.id,
+      paymentNumber: p.payment_number,
+      paymentDate: p.payment_date,
+      amount: Number(p.payment_amount),
+      currency: p.currency,
+      method: p.payment_method,
+      bankReference: p.bank_reference,
+      remittanceReference: p.remittance_reference,
+      attachmentPath: p.attachment_path,
+      status: p.status,
+      bankName: p.remittance_bank_name,
+      beneficiaryName: p.remittance_beneficiary_name,
+      accountLast4: p.remittance_account_last4,
+      swiftBicMasked: p.remittance_swift_bic_masked,
+      completedAt: p.completed_at
+    }))
+  };
+}
+
+export async function getEligiblePosForInvoice() {
+  const { companyId } = await requireCompanyMembership();
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from("purchase_orders")
+    .select("id, po_number, order_date, currency")
+    .eq("supplier_id", companyId)
+    .in("po_status", ["APPROVED", "SENT"])
+    .eq("supplier_confirmation_status", "CONFIRMED")
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    console.error("Failed to fetch eligible POs for invoice:", error);
+    throw new Error("인보이스 발행 가능한 발주 목록을 불러오지 못했습니다.");
+  }
+
+  return data ?? [];
+}
+
+export async function getPoLinesForInvoice(poId: string) {
+  const { companyId } = await requireCompanyMembership();
+  const supabase = await createClient();
+
+  // Verify ownership
+  const { data: po } = await supabase
+    .from("purchase_orders")
+    .select("id, po_number, currency, payment_terms, incoterms")
+    .eq("id", poId)
+    .eq("supplier_id", companyId)
+    .maybeSingle();
+
+  if (!po) {
+    throw new Error("해당 발주서 권한이 없거나 존재하지 않습니다.");
+  }
+
+  const { data: lines, error } = await supabase
+    .from("purchase_order_lines")
+    .select(`
+      id,
+      product_id,
+      product_name_snapshot,
+      letusto_sku_snapshot,
+      qty,
+      confirmed_qty,
+      unit_cost
+    `)
+    .eq("purchase_order_id", poId);
+
+  if (error) {
+    console.error("Failed to fetch PO lines for invoice:", error);
+    throw new Error("발주 품목 라인을 불러오지 못했습니다.");
+  }
+
+  const formattedLines = [];
+  for (const line of lines) {
+    // Shipped Qty
+    const { data: shipData } = await supabase
+      .from("inbound_shipment_lines")
+      .select("shipped_qty, inbound_shipments!inner(status)")
+      .eq("purchase_order_line_id", line.id)
+      .neq("inbound_shipments.status", "CANCELLED");
+    const shippedQty = (shipData ?? []).reduce((sum, s: any) => sum + s.shipped_qty, 0);
+
+    // Received Qty
+    const { data: recData } = await supabase
+      .from("receiving_lines")
+      .select("received_qty, receivings!inner(status)")
+      .eq("purchase_order_line_id", line.id)
+      .eq("receivings.status", "FINALIZED");
+    const receivedQty = (recData ?? []).reduce((sum, r: any) => sum + r.received_qty, 0);
+
+    // Ready Qty
+    const { data: grData } = await supabase
+      .from("goods_readiness_lines")
+      .select("ready_qty, goods_readiness!inner(handover_status)")
+      .eq("purchase_order_line_id", line.id)
+      .in("goods_readiness.handover_status", ["READY_SUBMITTED", "HANDOVER_PENDING", "HANDED_OVER"]);
+    const readyQty = (grData ?? []).reduce((sum, g: any) => sum + g.ready_qty, 0);
+
+    // Already Invoiced Qty
+    const { data: invLines } = await supabase
+      .from("supplier_invoice_lines")
+      .select("invoiced_qty, supplier_invoices!inner(invoice_status)")
+      .eq("purchase_order_line_id", line.id)
+      .neq("supplier_invoices.invoice_status", "VOID");
+    const alreadyInvoicedQty = (invLines ?? []).reduce((sum, inv: any) => sum + inv.invoiced_qty, 0);
+
+    formattedLines.push({
+      purchaseOrderLineId: line.id,
+      productId: line.product_id,
+      productName: line.product_name_snapshot,
+      sku: line.letusto_sku_snapshot,
+      orderedQty: line.qty,
+      confirmedQty: line.confirmed_qty !== null ? line.confirmed_qty : line.qty,
+      readyQty,
+      shippedQty,
+      receivedQty,
+      alreadyInvoicedQty,
+      unitCost: Number(line.unit_cost)
+    });
+  }
+
+  return {
+    poNumber: po.po_number,
+    currency: po.currency,
+    paymentTerms: po.payment_terms,
+    incoterms: po.incoterms,
+    lines: formattedLines
+  };
+}
+
+export async function createPortalInvoiceDraft(input: {
+  purchaseOrderId: string;
+  supplierInvoiceNumber: string;
+  invoiceDate: string;
+  dueDate: string;
+  attachmentPath: string | null;
+  lines: Array<{
+    purchaseOrderLineId: string;
+    productId: string;
+    invoicedQty: number;
+    unitPrice: number;
+    lineNote?: string;
+  }>;
+}) {
+  const { companyId } = await requireCompanyMembership();
+  const supabase = await createClient();
+
+  // Validate PO belongs to company
+  const { data: po } = await supabase
+    .from("purchase_orders")
+    .select("id, payment_terms, incoterms, currency")
+    .eq("id", input.purchaseOrderId)
+    .eq("supplier_id", companyId)
+    .maybeSingle();
+
+  if (!po) {
+    throw new Error("발주서(PO) 권한이 없거나 찾을 수 없습니다.");
+  }
+
+  // Pre-calculate line amounts and totals
+  let subtotal = 0;
+  const insertLines = input.lines.map(line => {
+    const amt = Number((line.invoicedQty * line.unitPrice).toFixed(2));
+    subtotal += amt;
+    return {
+      purchase_order_line_id: line.purchaseOrderLineId,
+      product_id: line.productId,
+      sku_snapshot: "", // filled in loop below
+      product_name_snapshot: "", // filled in loop below
+      invoiced_qty: line.invoicedQty,
+      unit_price: line.unitPrice,
+      line_amount: amt,
+      line_note: line.lineNote || null
+    };
+  });
+
+  const invoiceTotal = subtotal;
+
+  // Insert invoice header
+  const { data: inv, error: invErr } = await supabase
+    .from("supplier_invoices")
+    .insert({
+      supplier_company_id: companyId,
+      purchase_order_id: input.purchaseOrderId,
+      supplier_invoice_number: input.supplierInvoiceNumber,
+      invoice_date: input.invoiceDate,
+      due_date: input.dueDate,
+      currency: po.currency,
+      payment_terms_snapshot: po.payment_terms,
+      incoterms_snapshot: po.incoterms,
+      subtotal,
+      invoice_total: invoiceTotal,
+      balance_due: invoiceTotal,
+      invoice_status: "DRAFT",
+      payment_status: "UNPAID",
+      settlement_status: "OPEN",
+      attachment_path: input.attachmentPath
+    })
+    .select("id")
+    .single();
+
+  if (invErr || !inv) {
+    console.error("Failed to insert supplier invoice:", invErr);
+    if (invErr?.code === '23505') {
+      throw new Error("이미 동일한 인보이스 번호가 등록되어 있습니다.");
+    }
+    throw new Error("인보이스 임시저장을 처리하지 못했습니다.");
+  }
+
+  // Fetch product snapshots and insert lines
+  for (const line of insertLines) {
+    const { data: pol } = await supabase
+      .from("purchase_order_lines")
+      .select("product_name_snapshot, letusto_sku_snapshot")
+      .eq("id", line.purchase_order_line_id)
+      .single();
+
+    line.sku_snapshot = pol?.letusto_sku_snapshot || "";
+    line.product_name_snapshot = pol?.product_name_snapshot || "";
+
+    const { error: lineErr } = await supabase
+      .from("supplier_invoice_lines")
+      .insert({
+        supplier_invoice_id: inv.id,
+        purchase_order_line_id: line.purchase_order_line_id,
+        product_id: line.product_id,
+        sku_snapshot: line.sku_snapshot,
+        product_name_snapshot: line.product_name_snapshot,
+        invoiced_qty: line.invoiced_qty,
+        unit_price: line.unit_price,
+        line_amount: line.line_amount,
+        line_note: line.line_note
+      });
+
+    if (lineErr) {
+      console.error("Failed to insert invoice line:", lineErr);
+      throw new Error("인보이스 품목 등록에 실패했습니다.");
+    }
+  }
+
+  revalidatePath("/portal/finance");
+  return { success: true, id: inv.id };
+}
+
+export async function updatePortalInvoiceDraft(input: {
+  id: string;
+  supplierInvoiceNumber: string;
+  invoiceDate: string;
+  dueDate: string;
+  attachmentPath: string | null;
+  lines: Array<{
+    purchaseOrderLineId: string;
+    productId: string;
+    invoicedQty: number;
+    unitPrice: number;
+    lineNote?: string;
+  }>;
+}) {
+  const { companyId } = await requireCompanyMembership();
+  const supabase = await createClient();
+
+  // Fetch existing draft to verify owner & status
+  const { data: existing, error: existErr } = await supabase
+    .from("supplier_invoices")
+    .select("id, invoice_status, purchase_order_id")
+    .eq("id", input.id)
+    .eq("supplier_company_id", companyId)
+    .maybeSingle();
+
+  if (existErr || !existing) {
+    throw new Error("인보이스를 찾을 수 없거나 수정 권한이 없습니다.");
+  }
+  if (existing.invoice_status !== "DRAFT") {
+    throw new Error("임시저장(DRAFT) 상태인 인보이스만 수정할 수 있습니다.");
+  }
+
+  // Pre-calculate line amounts and totals
+  let subtotal = 0;
+  const updateLines = input.lines.map(line => {
+    const amt = Number((line.invoicedQty * line.unitPrice).toFixed(2));
+    subtotal += amt;
+    return {
+      purchase_order_line_id: line.purchaseOrderLineId,
+      product_id: line.productId,
+      sku_snapshot: "",
+      product_name_snapshot: "",
+      invoiced_qty: line.invoicedQty,
+      unit_price: line.unitPrice,
+      line_amount: amt,
+      line_note: line.lineNote || null
+    };
+  });
+
+  const invoiceTotal = subtotal;
+
+  // Update header
+  const { error: updateErr } = await supabase
+    .from("supplier_invoices")
+    .update({
+      supplier_invoice_number: input.supplierInvoiceNumber,
+      invoice_date: input.invoiceDate,
+      due_date: input.dueDate,
+      subtotal,
+      invoice_total: invoiceTotal,
+      balance_due: invoiceTotal,
+      attachment_path: input.attachmentPath
+    })
+    .eq("id", input.id);
+
+  if (updateErr) {
+    console.error("Failed to update invoice:", updateErr);
+    if (updateErr.code === '23505') {
+      throw new Error("이미 동일한 인보이스 번호가 등록되어 있습니다.");
+    }
+    throw new Error("인보이스 수정을 처리하지 못했습니다.");
+  }
+
+  // Clean old lines and recreate
+  await supabase
+    .from("supplier_invoice_lines")
+    .delete()
+    .eq("supplier_invoice_id", input.id);
+
+  for (const line of updateLines) {
+    const { data: pol } = await supabase
+      .from("purchase_order_lines")
+      .select("product_name_snapshot, letusto_sku_snapshot")
+      .eq("id", line.purchase_order_line_id)
+      .single();
+
+    line.sku_snapshot = pol?.letusto_sku_snapshot || "";
+    line.product_name_snapshot = pol?.product_name_snapshot || "";
+
+    const { error: lineErr } = await supabase
+      .from("supplier_invoice_lines")
+      .insert({
+        supplier_invoice_id: input.id,
+        purchase_order_line_id: line.purchase_order_line_id,
+        product_id: line.product_id,
+        sku_snapshot: line.sku_snapshot,
+        product_name_snapshot: line.product_name_snapshot,
+        invoiced_qty: line.invoiced_qty,
+        unit_price: line.unit_price,
+        line_amount: line.line_amount,
+        line_note: line.line_note
+      });
+
+    if (lineErr) {
+      console.error("Failed to insert invoice line:", lineErr);
+      throw new Error("인보이스 품목 등록에 실패했습니다.");
+    }
+  }
+
+  revalidatePath("/portal/finance");
+  revalidatePath(`/portal/finance/${input.id}`);
+  return { success: true };
+}
+
+export async function submitPortalInvoice(invoiceId: string) {
+  const { companyId } = await requireCompanyMembership();
+  const supabase = await createClient();
+
+  // Fetch to check
+  const { data: existing } = await supabase
+    .from("supplier_invoices")
+    .select("id, invoice_status")
+    .eq("id", invoiceId)
+    .eq("supplier_company_id", companyId)
+    .maybeSingle();
+
+  if (!existing) {
+    throw new Error("인보이스를 찾을 수 없거나 권한이 없습니다.");
+  }
+  if (existing.invoice_status !== "DRAFT") {
+    throw new Error("임시저장(DRAFT) 상태인 인보이스만 제출할 수 있습니다.");
+  }
+
+  const { error } = await supabase
+    .from("supplier_invoices")
+    .update({
+      invoice_status: "SUBMITTED",
+      submitted_at: new Date().toISOString()
+    })
+    .eq("id", invoiceId);
+
+  if (error) {
+    console.error("Failed to submit invoice:", error);
+    throw new Error("인보이스 제출을 처리하지 못했습니다.");
+  }
+
+  revalidatePath("/portal/finance");
+  revalidatePath(`/portal/finance/${invoiceId}`);
+  return { success: true };
+}
+
+export async function deletePortalInvoiceDraft(invoiceId: string) {
+  const { companyId } = await requireCompanyMembership();
+  const supabase = await createClient();
+
+  const { data: existing } = await supabase
+    .from("supplier_invoices")
+    .select("id, invoice_status")
+    .eq("id", invoiceId)
+    .eq("supplier_company_id", companyId)
+    .maybeSingle();
+
+  if (!existing) {
+    throw new Error("인보이스를 찾을 수 없거나 권한이 없습니다.");
+  }
+  if (existing.invoice_status !== "DRAFT") {
+    throw new Error("임시저장(DRAFT) 상태인 인보이스만 삭제할 수 있습니다.");
+  }
+
+  const { error } = await supabase
+    .from("supplier_invoices")
+    .delete()
+    .eq("id", invoiceId);
+
+  if (error) {
+    console.error("Failed to delete invoice draft:", error);
+    throw new Error("인보이스 삭제에 실패했습니다.");
+  }
+
+  revalidatePath("/portal/finance");
+  return { success: true };
+}
+
+export async function uploadPortalInvoiceAttachment(formData: FormData) {
+  const { companyId } = await requireCompanyMembership();
+  const supabase = await createClient();
+
+  const file = formData.get("file");
+  if (!(file instanceof File) || file.size === 0) {
+    return { error: "업로드할 파일을 찾을 수 없습니다." };
+  }
+
+  const { validateUploadedFile } = await import("@/lib/files/validate");
+  const validation = await validateUploadedFile(file, ["document"]);
+  if (!validation.ok) {
+    throw new Error(`파일 검증 실패: ${validation.error}`);
+  }
+
+  const path = `${companyId}/invoice/${globalThis.crypto.randomUUID()}.pdf`;
+
+  const { error } = await supabase.storage
+    .from("company-uploads")
+    .upload(path, file, { contentType: "application/pdf", upsert: false });
+
+  if (error) {
+    throw new Error(`파일 업로드 실패: ${error.message}`);
+  }
+
+  return { path, filename: file.name };
+}
+
+export async function getPortalInvoiceAttachmentUrl(path: string) {
+  const { companyId } = await requireCompanyMembership();
+  
+  // Enforce companyId folder scoping
+  const pathParts = path.split('/');
+  const pathCompanyId = pathParts[0];
+  if (pathCompanyId !== companyId) {
+    throw new Error("Access denied: You do not own this attachment.");
+  }
+
+  const { getSignedFileUrl } = await import("@/lib/files/storage");
+  return await getSignedFileUrl(path);
+}
+
+export async function getPortalAdjustments() {
+  const { companyId } = await requireCompanyMembership();
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from("supplier_invoice_adjustments")
+    .select(`
+      id,
+      supplier_invoice_id,
+      adjustment_type,
+      adjustment_direction,
+      quantity,
+      unit_amount,
+      adjustment_amount,
+      currency,
+      reason,
+      status,
+      created_at,
+      supplier_invoices!inner(supplier_company_id, supplier_invoice_number)
+    `)
+    .eq("supplier_invoices.supplier_company_id", companyId)
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    console.error("Failed to fetch adjustments:", error);
+    throw new Error("정산 조정 내역을 불러오지 못했습니다.");
+  }
+
+  return (data ?? []).map((adj: any) => ({
+    id: adj.id,
+    invoiceId: adj.supplier_invoice_id,
+    invoiceNumber: adj.supplier_invoices?.supplier_invoice_number || "-",
+    type: adj.adjustment_type,
+    direction: adj.adjustment_direction,
+    qty: adj.quantity,
+    unitAmount: Number(adj.unit_amount || 0),
+    amount: Number(adj.adjustment_amount),
+    currency: adj.currency,
+    reason: adj.reason,
+    status: adj.status,
+    createdAt: adj.created_at
+  }));
+}
+
+export async function getPortalPayments() {
+  const { companyId } = await requireCompanyMembership();
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from("supplier_payments")
+    .select(`
+      id,
+      payment_number,
+      supplier_invoice_id,
+      payment_date,
+      payment_amount,
+      currency,
+      payment_method,
+      bank_reference,
+      remittance_reference,
+      status,
+      remittance_bank_name,
+      remittance_account_last4,
+      created_at,
+      supplier_invoices!inner(supplier_company_id, supplier_invoice_number)
+    `)
+    .eq("supplier_invoices.supplier_company_id", companyId)
+    .order("payment_date", { ascending: false });
+
+  if (error) {
+    console.error("Failed to fetch payments:", error);
+    throw new Error("지급 내역을 불러오지 못했습니다.");
+  }
+
+  return (data ?? []).map((p: any) => ({
+    id: p.id,
+    paymentNumber: p.payment_number,
+    invoiceId: p.supplier_invoice_id,
+    invoiceNumber: p.supplier_invoices?.supplier_invoice_number || "-",
+    paymentDate: p.payment_date,
+    amount: Number(p.payment_amount),
+    currency: p.currency,
+    method: p.payment_method,
+    bankReference: p.bank_reference,
+    remittanceReference: p.remittance_reference,
+    status: p.status,
+    bankName: p.remittance_bank_name,
+    accountLast4: p.remittance_account_last4,
+    createdAt: p.created_at
+  }));
+}
