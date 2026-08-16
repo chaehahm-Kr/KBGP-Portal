@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { type CompanyContact } from "./admin-actions";
 import { validateUploadedFile } from "@/lib/files/validate";
+import { logRemittanceChanges } from "@/lib/company/remittance-log";
 
 export async function updateCompanyPortalMetadata(
   companyId: string,
@@ -198,13 +199,13 @@ export async function portalUpdateSupplierProfile(
   const { data: existing } = await adminDb
     .from("supplier_profiles")
     .select("internal_note")
-    .eq("company_id", companyId)
+    .eq("company_id", membership.companyId)
     .maybeSingle();
 
   const { error } = await adminDb
     .from("supplier_profiles")
     .upsert({
-      company_id: companyId,
+      company_id: membership.companyId,
       status: profile.status,
       default_currency: profile.default_currency || null,
       default_payment_terms: profile.default_payment_terms || null,
@@ -254,10 +255,33 @@ export async function portalUpdateSupplierRemittance(
 
   const adminDb = createAdminClient();
 
+  const { data: oldRemittance } = await adminDb
+    .from("supplier_remittances")
+    .select("*")
+    .eq("company_id", membership.companyId)
+    .maybeSingle();
+
+  const { data: user } = await adminDb
+    .from("company_users")
+    .select("name")
+    .eq("id", membership.userId)
+    .maybeSingle();
+  const changedByName = user?.name ? `${user.name} (Portal)` : "Portal User";
+
+  await logRemittanceChanges(
+    adminDb,
+    membership.companyId,
+    membership.userId,
+    changedByName,
+    "portal_admin",
+    oldRemittance,
+    remittance
+  );
+
   const { error } = await adminDb
     .from("supplier_remittances")
     .upsert({
-      company_id: companyId,
+      company_id: membership.companyId,
       payment_method: remittance.payment_method || null,
       beneficiary_name: remittance.beneficiary_name || null,
       beneficiary_address: remittance.beneficiary_address || null,

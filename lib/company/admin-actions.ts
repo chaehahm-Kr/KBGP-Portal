@@ -12,6 +12,7 @@ import { getSignedFileUrl } from "@/lib/files/storage";
 import { validateUploadedFile } from "@/lib/files/validate";
 import { publicEnv } from "@/lib/env/public";
 import { sendTemplatedEmail } from "@/lib/notifications/templates";
+import { logRemittanceChanges } from "@/lib/company/remittance-log";
 
 export interface CompanyContact {
   id: string;
@@ -761,6 +762,29 @@ export async function adminSaveSupplierData(
 
   // 3. Save Supplier Remittance if provided and authorized
   if (remittance) {
+    const { data: oldRemittance } = await supabase
+      .from("supplier_remittances")
+      .select("*")
+      .eq("company_id", companyId)
+      .maybeSingle();
+
+    const { data: staff } = await supabase
+      .from("staff")
+      .select("name")
+      .eq("id", userId)
+      .maybeSingle();
+    const changedByName = staff?.name ? `${staff.name} (Letusto Admin)` : "Letusto Admin";
+
+    await logRemittanceChanges(
+      supabase,
+      companyId,
+      userId,
+      changedByName,
+      "letusto_admin",
+      oldRemittance,
+      remittance
+    );
+
     const { error: remErr } = await supabase
       .from("supplier_remittances")
       .upsert({
