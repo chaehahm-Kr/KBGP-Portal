@@ -939,7 +939,16 @@ export async function getEligibleShipmentsForLandedCost() {
   await verifyAdminSession();
   const supabase = createAdminClient();
 
-  const { data, error } = await supabase
+  // 1. Fetch shipments already assigned to any case
+  const { data: assigned, error: assignErr } = await supabase
+    .from("landed_cost_case_shipments")
+    .select("inbound_shipment_id");
+
+  if (assignErr) throw assignErr;
+  const assignedIds = (assigned ?? []).map(a => a.inbound_shipment_id).filter(Boolean);
+
+  // 2. Query eligible shipments
+  let query = supabase
     .from("inbound_shipments")
     .select(`
       id,
@@ -951,12 +960,13 @@ export async function getEligibleShipmentsForLandedCost() {
         supplier:companies!supplier_id (name)
       )
     `)
-    .in("status", ["ARRIVED", "PARTIALLY_RECEIVED", "RECEIVED"])
-    .not("id", "in", (
-      supabase
-        .from("landed_cost_case_shipments")
-        .select("inbound_shipment_id")
-    ));
+    .in("status", ["ARRIVED", "PARTIALLY_RECEIVED", "RECEIVED"]);
+
+  if (assignedIds.length > 0) {
+    query = query.not("id", "in", `(${assignedIds.join(",")})`);
+  }
+
+  const { data, error } = await query;
 
   if (error) throw error;
   return (data ?? []).map((s: any) => ({
