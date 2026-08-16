@@ -22,7 +22,7 @@ export default async function EditPortalInvoicePage({
   }
 
   return (
-    <div className="p-6 max-w-5xl mx-auto space-y-6">
+    <div className="w-full max-w-7xl space-y-6">
       <div>
         <h1 className="text-xl font-bold text-zinc-900 dark:text-white">인보이스 수정</h1>
         <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">

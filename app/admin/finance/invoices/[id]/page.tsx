@@ -25,22 +25,43 @@ export default async function InvoiceDetailPage({ params }: DetailPageProps) {
   }
 
   // Load PO details (including receiving summary resolved quantities)
-  const po = await getPurchaseOrderForInvoice(invoice.purchase_order_id);
+  const poId = invoice.purchase_order_id || invoice.po?.id || null;
+  let po: any = null;
+  if (poId) {
+    try {
+      po = await getPurchaseOrderForInvoice(poId);
+    } catch (err) {
+      console.error("Failed to load PO for invoice detail:", err);
+    }
+  }
+
+  const defaultPo = {
+    id: "",
+    po_number: invoice.po?.po_number || "-",
+    currency: invoice.currency || "USD",
+    payment_terms: invoice.payment_terms_snapshot || "-",
+    incoterms: invoice.incoterms_snapshot || "-",
+    lines: [],
+  };
+
+  const effectivePo = po || defaultPo;
 
   // Compute PO Merchandise Total
-  const poMerchandiseTotal = po.lines.reduce(
+  const poMerchandiseTotal = effectivePo.lines.reduce(
     (sum: number, l: any) => sum + l.qty * Number(l.unit_cost),
     0
   );
 
   // Fetch sibling approved invoices for the same PO
   const supabase = createAdminClient();
-  const { data: siblingInvoices } = await supabase
-    .from("supplier_invoices")
-    .select("invoice_total")
-    .eq("purchase_order_id", invoice.purchase_order_id)
-    .eq("invoice_status", "APPROVED")
-    .neq("id", id);
+  const { data: siblingInvoices } = poId
+    ? await supabase
+        .from("supplier_invoices")
+        .select("invoice_total")
+        .eq("purchase_order_id", poId)
+        .eq("invoice_status", "APPROVED")
+        .neq("id", id)
+    : { data: null };
 
   const prevInvoicesTotal = (siblingInvoices ?? []).reduce(
     (sum: number, item: any) => sum + Number(item.invoice_total),
@@ -56,7 +77,7 @@ export default async function InvoiceDetailPage({ params }: DetailPageProps) {
     invoice_total: Number(invoice.invoice_total),
     amount_paid: Number(invoice.amount_paid),
     balance_due: Number(invoice.balance_due),
-    lines: invoice.lines.map((l: any) => ({
+    lines: (invoice.lines ?? []).map((l: any) => ({
       ...l,
       invoiced_qty: Number(l.invoiced_qty),
       unit_price: Number(l.unit_price),
@@ -74,6 +95,8 @@ export default async function InvoiceDetailPage({ params }: DetailPageProps) {
     })),
   };
 
+  const poRelationBroken = !!poId && !po;
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -86,9 +109,10 @@ export default async function InvoiceDetailPage({ params }: DetailPageProps) {
 
       <InvoiceDetail
         invoice={formattedInvoice}
-        po={po}
+        po={effectivePo}
         prevInvoicesTotal={prevInvoicesTotal}
         poMerchandiseTotal={poMerchandiseTotal}
+        poRelationBroken={poRelationBroken}
       />
     </div>
   );

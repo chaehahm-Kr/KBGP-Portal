@@ -53,7 +53,7 @@ export default async function EditBrandPage({
   const usTrademarkUrl = parsedTrademarks.us_trademark_path ? await getSignedFileUrl(parsedTrademarks.us_trademark_path) : undefined;
 
   return (
-    <div className="space-y-6 max-w-4xl mx-auto">
+    <div className="w-full max-w-7xl space-y-6">
       <div>
         <h1 className="text-xl font-bold text-zinc-900 dark:text-white">브랜드 수정</h1>
         <p className="text-xs text-zinc-500 dark:text-zinc-400">등록된 브랜드 정보를 업데이트합니다.</p>

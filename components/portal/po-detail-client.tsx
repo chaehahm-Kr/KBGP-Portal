@@ -169,7 +169,7 @@ export default function PoDetailClient({ po, changeRequests }: PoDetailClientPro
   };
 
   return (
-    <div className="flex-1 p-6 md:p-8 space-y-6">
+    <div className="w-full max-w-7xl space-y-6">
       {/* Back button */}
       <div>
         <button

@@ -50,7 +50,7 @@ export default async function PortalPurchaseOrdersPage() {
   };
 
   return (
-    <div className="flex-1 p-6 md:p-8 space-y-6">
+    <div className="w-full max-w-7xl space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-zinc-900 dark:text-white">발주 관리</h1>

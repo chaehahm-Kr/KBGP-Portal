@@ -25,7 +25,7 @@ export default async function NewProductPage() {
   }
 
   return (
-    <div className="space-y-6 max-w-4xl mx-auto">
+    <div className="w-full max-w-7xl space-y-6">
       <div>
         <h1 className="text-xl font-bold text-zinc-900 dark:text-white">새 제품 등록</h1>
         <p className="text-xs text-zinc-500 dark:text-zinc-400">포털 및 신청서에 추가할 뷰티 제품 사양을 등록합니다.</p>

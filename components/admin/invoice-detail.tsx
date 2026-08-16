@@ -83,7 +83,7 @@ interface InvoiceDetailProps {
     voided_at: string | null;
     created_at: string;
     supplier: { id: string; name: string };
-    po: { id: string; po_number: string };
+    po: { id: string; po_number: string } | null;
     lines: InvoiceLine[];
     creator: { full_name: string } | null;
     submitter: { full_name: string } | null;
@@ -117,6 +117,7 @@ interface InvoiceDetailProps {
   };
   prevInvoicesTotal: number;
   poMerchandiseTotal: number;
+  poRelationBroken?: boolean;
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -166,7 +167,7 @@ const ADJ_TYPE_LABELS: Record<string, string> = {
   OTHER: "기타 (Other)",
 };
 
-export function InvoiceDetail({ invoice, po, prevInvoicesTotal, poMerchandiseTotal }: InvoiceDetailProps) {
+export function InvoiceDetail({ invoice, po, prevInvoicesTotal, poMerchandiseTotal, poRelationBroken }: InvoiceDetailProps) {
   const router = useRouter();
   
   const [isActionLoading, setIsActionLoading] = useState(false);
@@ -512,6 +513,12 @@ export function InvoiceDetail({ invoice, po, prevInvoicesTotal, poMerchandiseTot
         </div>
       )}
 
+      {poRelationBroken && (
+        <div className="p-3.5 rounded-lg bg-rose-55 border border-rose-250 text-rose-600 font-bold dark:bg-rose-950/10 dark:border-rose-900/50 dark:text-rose-400">
+          ⚠️ 데이터 정합성 주의: 이 인보이스는 발주서 ID ({invoice.purchase_order_id})를 참조하고 있으나, 연결된 발주서 데이터가 누락되었거나 조회가 불가능합니다.
+        </div>
+      )}
+
       {/* Top Operations Panel */}
       <div className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div className="flex flex-wrap items-center gap-4">
@@ -665,9 +672,19 @@ export function InvoiceDetail({ invoice, po, prevInvoicesTotal, poMerchandiseTot
               </div>
               <div>
                 <span className="text-[10px] font-bold text-zinc-400 block mb-0.5">연계 발주서 (PO No.)</span>
-                <Link href={`/admin/purchasing/${invoice.purchase_order_id}`} className="font-mono font-bold text-indigo-650 hover:underline">
-                  {invoice.po.po_number}
-                </Link>
+                {invoice.purchase_order_id ? (
+                  invoice.po ? (
+                    <Link href={`/admin/purchasing/${invoice.purchase_order_id}`} className="font-mono font-bold text-indigo-650 hover:underline">
+                      {invoice.po.po_number}
+                    </Link>
+                  ) : (
+                    <span className="text-rose-600 font-bold flex items-center gap-1 text-[11px]">
+                      ⚠️ PO 연결 오류 (ID: {invoice.purchase_order_id})
+                    </span>
+                  )
+                ) : (
+                  <span className="text-zinc-400 italic">연결된 PO 없음</span>
+                )}
               </div>
               <div className="grid grid-cols-2 gap-4 border-t border-zinc-100 pt-3 dark:border-zinc-800">
                 <div>

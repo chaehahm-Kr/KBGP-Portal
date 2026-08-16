@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -12,7 +12,9 @@ import {
   ChevronRightIcon,
   SupportIcon,
   SalesIcon,
-  ReportsIcon
+  ReportsIcon,
+  SettingsIcon,
+  UsersIcon
 } from "../admin/icons";
 
 interface PortalSidebarProps {
@@ -41,12 +43,21 @@ export default function PortalSidebar({
   const menuItems: MenuItem[] = [
     { name: "대시보드", icon: DashboardIcon, href: "/portal" },
     { name: "입점 신청서", icon: ApplicationsIcon, href: "/portal/applications" },
-    { name: "브랜드 관리", icon: CompaniesIcon, href: "/portal/brands" },
     { name: "제품 관리", icon: ProductsIcon, href: "/portal/products" },
     { name: "발주 관리", icon: SalesIcon, href: "/portal/orders/purchase-orders" },
     { name: "선적 & 출고 관리", icon: DashboardIcon, href: "/portal/orders/shipping" },
     { name: "정산 관리", icon: ReportsIcon, href: "/portal/finance" },
     { name: "1:1 문의", icon: SupportIcon, href: "/portal/support" },
+  ];
+
+  const [isSettingsOpen, setIsSettingsOpen] = useState(() => {
+    return pathname.startsWith("/portal/company/") || pathname.startsWith("/portal/brands");
+  });
+
+  const settingsPages = [
+    { name: "회사 정보", href: "/portal/company/info" },
+    { name: "브랜드 관리", href: "/portal/brands" },
+    ...(isCompanyAdmin ? [{ name: "사용자 관리", href: "/portal/company/users" }] : []),
   ];
 
   return (
@@ -96,6 +107,62 @@ export default function PortalSidebar({
           );
         })}
       </nav>
+
+      {/* 설정 (Settings) Section */}
+      <div className="border-t border-zinc-200 p-3 dark:border-zinc-800 space-y-1">
+        {isCollapsed ? (
+          <Link
+            href="/portal/company/info"
+            className={`flex h-10 w-full items-center justify-center rounded-md text-sm font-medium transition-colors ${
+              pathname.startsWith("/portal/company/") || pathname.startsWith("/portal/brands")
+                ? "bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-white"
+                : "text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-900 dark:hover:text-white"
+            }`}
+            title="설정"
+          >
+            <SettingsIcon className="h-5 w-5 shrink-0" />
+          </Link>
+        ) : (
+          <div className="space-y-1">
+            <button
+              onClick={() => setIsSettingsOpen(!isSettingsOpen)}
+              className={`flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-semibold transition-colors cursor-pointer ${
+                pathname.startsWith("/portal/company/") || pathname.startsWith("/portal/brands")
+                  ? "text-zinc-900 dark:text-white"
+                  : "text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-900 dark:hover:text-white"
+              }`}
+            >
+              <SettingsIcon className="h-5 w-5 shrink-0 text-zinc-500" />
+              <span className="flex-1 text-left font-semibold">설정</span>
+              <span className="text-[10px] text-zinc-400">
+                {isSettingsOpen ? "▼" : "▲"}
+              </span>
+            </button>
+
+            {isSettingsOpen && (
+              <div className="pl-4 space-y-1 border-l border-zinc-150 dark:border-zinc-800 ml-5">
+                {settingsPages.map((sub) => {
+                  const isSubActive = pathname === sub.href || pathname.startsWith(sub.href + "/");
+                  return (
+                    <Link
+                      key={sub.name}
+                      href={sub.href}
+                      className={`flex items-center gap-2 rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
+                        isSubActive
+                          ? "bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-white"
+                          : "text-zinc-500 hover:bg-zinc-50 hover:text-zinc-950 dark:text-zinc-450 dark:hover:bg-zinc-900 dark:hover:text-white"
+                      }`}
+                    >
+                      <span className="text-zinc-400">•</span>
+                      <span>{sub.name}</span>
+                    </Link>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
 
       {/* Footer / Collapse Button */}
       <div className="border-t border-zinc-200 p-3 dark:border-zinc-800">

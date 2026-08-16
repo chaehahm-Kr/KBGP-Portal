@@ -113,7 +113,7 @@ export default async function ApplicationDetailPage({
     }));
 
     return (
-      <div className="space-y-6 max-w-4xl mx-auto">
+      <div className="w-full max-w-7xl space-y-6">
         <div>
           <h1 className="text-xl font-bold text-zinc-900 dark:text-white">신청서 작성 (임시저장)</h1>
           <p className="text-xs text-zinc-500 dark:text-zinc-400">필요한 제품과 정보를 기입하신 후 제출해 주세요.</p>
@@ -221,7 +221,7 @@ export default async function ApplicationDetailPage({
   };
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto">
+    <div className="w-full max-w-7xl space-y-6">
       {/* Top Header Card */}
       <div className="rounded-lg border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-900 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>

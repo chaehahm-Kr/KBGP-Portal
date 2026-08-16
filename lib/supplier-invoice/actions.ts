@@ -561,6 +561,7 @@ export async function getSupplierInvoiceById(id: string) {
     .from("supplier_invoices")
     .select(`
       id,
+      purchase_order_id,
       internal_ap_number,
       supplier_invoice_number,
       invoice_date,
