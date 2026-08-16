@@ -297,14 +297,6 @@ export async function updateCompanyAdminMetadata(
     }
   }
 
-  // Inactivate supplier profile if 'Supplier' role is deselected (preserve data)
-  if (!payload.types.includes("Supplier")) {
-    await supabase
-      .from("supplier_profiles")
-      .update({ status: "inactive" })
-      .eq("company_id", companyId);
-  }
-
   revalidatePath(`/admin/companies/${companyId}`);
 }
 

@@ -213,16 +213,9 @@ export function CompanyDetailManager({
     });
   };
 
-  const showSupplierTab = types.includes("Supplier");
+  const showSupplierTab = true;
 
   const [activeTab, setActiveTab] = useState<"staff" | "tasks" | "brands" | "products" | "applications" | "supplier">("staff");
-  
-  // React to supplier tab visibility removal
-  React.useEffect(() => {
-    if (activeTab === "supplier" && !showSupplierTab) {
-      setActiveTab("staff");
-    }
-  }, [showSupplierTab, activeTab]);
   const [isPending, startTransition] = useTransition();
 
   // Company general metadata states
@@ -1132,7 +1125,7 @@ export function CompanyDetailManager({
                   "brands",
                   "products",
                   "applications",
-                  ...(showSupplierTab ? ["supplier"] : []),
+                  "supplier",
                 ] as const).map((tab) => (
                   <button
                     key={tab}
@@ -1153,7 +1146,7 @@ export function CompanyDetailManager({
                       ? "등록 제품"
                       : tab === "applications"
                       ? "입점 신청서"
-                      : "Supplier (공급사 정보)"}
+                      : "거래 정보 (Supplier / Trading)"}
                   </button>
                 ))}
               </nav>
@@ -1586,7 +1579,7 @@ export function CompanyDetailManager({
               {activeTab === "supplier" && showSupplierTab && (
                 <div className="space-y-6">
                   <div className="flex items-center justify-between pb-2 border-b border-zinc-100 dark:border-zinc-800">
-                    <h3 className="text-xs font-bold text-zinc-950 dark:text-white uppercase tracking-wider">공급사 상세 정보 (Supplier Info)</h3>
+                    <h3 className="text-xs font-bold text-zinc-950 dark:text-white uppercase tracking-wider">거래 정보 (Supplier / Trading Info)</h3>
                     {!isEditingSupplier ? (
                       <button
                         type="button"

@@ -362,6 +362,7 @@ export function InvoiceForm({ eligiblePos, initialInvoice }: InvoiceFormProps) {
                           type="number"
                           value={input.invoicedQty}
                           min={0}
+                          id={`qty-${line.sku}`}
                           onChange={(e) => handleLineFieldChange(line.purchaseOrderLineId, "invoicedQty", parseInt(e.target.value) || 0)}
                           className="w-16 px-1.5 py-1 border border-zinc-200 dark:border-zinc-800 rounded text-right font-mono text-xs"
                           required
@@ -373,6 +374,7 @@ export function InvoiceForm({ eligiblePos, initialInvoice }: InvoiceFormProps) {
                           value={input.unitPrice}
                           min={0}
                           step={0.01}
+                          id={`price-${line.sku}`}
                           onChange={(e) => handleLineFieldChange(line.purchaseOrderLineId, "unitPrice", parseFloat(e.target.value) || 0)}
                           className="w-16 px-1.5 py-1 border border-zinc-200 dark:border-zinc-800 rounded text-right font-mono text-xs"
                           required
