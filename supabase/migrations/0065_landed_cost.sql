@@ -173,8 +173,8 @@ DECLARE
   v_consume_qty INTEGER;
   v_fallback_cost NUMERIC(12, 4);
 BEGIN
-  -- We only run for depletions (qty_change < 0)
-  IF NEW.qty_change < 0 THEN
+  -- We only run for depletions (qty_change < 0) and whitelisted types ('SHIPMENT', 'MANUAL_ADJUSTMENT')
+  IF NEW.qty_change < 0 AND NEW.type IN ('SHIPMENT', 'MANUAL_ADJUSTMENT') THEN
     v_qty_to_deplete := abs(NEW.qty_change);
 
     -- Loop through active layers in the same warehouse ordered by date (FIFO)

@@ -620,7 +620,7 @@ export function TradingProductDetail({
                     </div>
 
                     <div className="p-3.5 bg-zinc-50 dark:bg-zinc-955 border border-zinc-150 dark:border-zinc-850 rounded-xl space-y-1">
-                      <span className="text-[10px] text-zinc-400 dark:text-zinc-500 block font-bold uppercase">최근 확정 단가 (Latest Landed Cost)</span>
+                      <span className="text-[10px] text-zinc-400 dark:text-zinc-500 block font-bold uppercase">최근 확정 단가 (Latest Final Landed Cost)</span>
                       <div className="flex items-baseline gap-1.5">
                         <span className="text-base font-bold text-emerald-700 dark:text-emerald-400 font-mono">
                           USD {Number(costSummary.latestLandedCost).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}
