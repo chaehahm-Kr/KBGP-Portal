@@ -39,7 +39,12 @@ export async function GET(request: NextRequest) {
   const corsHeaders = getCorsHeaders(request);
   const searchParams = request.nextUrl.searchParams;
   const slug = searchParams.get("slug");
-  const channel = searchParams.get("channel") || "K_SELECT_NETWORK";
+  
+  // Resolve channel parameter & channel variants (handles NETWORK, HUB, K_SELECT_NETWORK, K_SELECT_HUB)
+  const rawChannel = (searchParams.get("channel") || "NETWORK").toUpperCase();
+  const channelVariants = rawChannel.includes("HUB")
+    ? ["HUB", "K_SELECT_HUB"]
+    : ["NETWORK", "K_SELECT_NETWORK"];
 
   const supabase = createAdminClient();
 
@@ -62,12 +67,11 @@ export async function GET(request: NextRequest) {
     }
 
     // Get previous and next article slugs/titles for navigation
-    // Note: ordered by publish_date
     const { data: allArticles } = await supabase
       .from("insights_articles")
       .select("slug, title, publish_date")
       .eq("status", "PUBLISHED")
-      .contains("publish_channels", [channel])
+      .overlaps("publish_channels", channelVariants)
       .order("publish_date", { ascending: true });
 
     let prevArticle = null;
@@ -90,19 +94,21 @@ export async function GET(request: NextRequest) {
   }
 
   // Fetch list of published articles for this channel
-  let query = supabase
+  const { data: articles, error } = await supabase
     .from("insights_articles")
-    .select("id, title, slug, subtitle, category, content_type, hero_image, excerpt, author, publish_date, featured, trending")
+    .select("id, title, slug, subtitle, category, content_type, hero_image, excerpt, author, publish_date, featured, trending, audience, publish_channels, title_ko, title_en, summary_ko, summary_en")
     .eq("status", "PUBLISHED")
-    .contains("publish_channels", [channel])
+    .overlaps("publish_channels", channelVariants)
     .order("publish_date", { ascending: false });
-
-  const { data: articles, error } = await query;
 
   if (error) {
     console.error("Error fetching articles:", error);
     return NextResponse.json({ error: error.message }, { status: 500, headers: corsHeaders });
   }
 
-  return NextResponse.json({ articles }, { status: 200, headers: corsHeaders });
+  return NextResponse.json({ 
+    articles,
+    dbUrl: process.env.NEXT_PUBLIC_SUPABASE_URL,
+    secretKeyLength: process.env.SUPABASE_SECRET_KEY ? process.env.SUPABASE_SECRET_KEY.length : 0
+  }, { status: 200, headers: corsHeaders });
 }
