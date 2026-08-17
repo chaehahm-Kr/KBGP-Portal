@@ -1,8 +1,13 @@
 "use client";
 
-import React, { useState } from "react";
-import type { PartnerInquiryItem, CaseStatus, InquiryMessageItem } from "@/lib/inquiry/types";
-import { CASE_STATUS_LABEL, CASE_STATUS_COLOR } from "@/lib/inquiry/types";
+import React, { useState, useMemo } from "react";
+import type { PartnerInquiryItem, CaseStatus, InquiryMessageItem, OfficialCaseStatus } from "@/lib/inquiry/types";
+import {
+  getNormalizedStatus,
+  OFFICIAL_STATUS_LABEL,
+  OFFICIAL_STATUS_COLOR,
+  OFFICIAL_STATUS_EMOJI,
+} from "@/lib/inquiry/types";
 import {
   resolvePartnerInquiryAction,
   replyToPartnerInquiry,
@@ -24,19 +29,6 @@ const CATEGORY_LABELS: Record<string, string> = {
   general:     "기타 일반 문의"
 };
 
-const STATUS_EMOJI: Record<CaseStatus, string> = {
-  open:            "🟡",
-  in_review:       "🔵",
-  awaiting_reply:  "🟠",
-  action_required: "🔴",
-  action_resolved: "🟣",
-  resolved:        "🟢",
-  closed:          "⚫",
-  reopened:        "🔶",
-  pending:         "🟡",
-  replied:         "🔵"
-};
-
 const MSG_TYPE_META: Record<string, { icon: string; style: string }> = {
   action_required: { icon: "⚠️", style: "bg-rose-50 text-rose-700 dark:bg-rose-950/20 dark:text-rose-300" },
   action_resolved: { icon: "✅", style: "bg-purple-50 text-purple-700 dark:bg-purple-950/20 dark:text-purple-300" },
@@ -50,6 +42,10 @@ export function PortalSupportView({ initialInquiries, createAction }: PortalSupp
   const [inquiries, setInquiries] = useState<PartnerInquiryItem[]>(initialInquiries);
   const [isWriteOpen, setIsWriteOpen] = useState(false);
   const [selectedInquiry, setSelectedInquiry] = useState<PartnerInquiryItem | null>(null);
+
+  // Search & Filter states
+  const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"ALL" | OfficialCaseStatus>("ALL");
 
   // New case form
   const [category, setCategory] = useState("general");
@@ -88,6 +84,35 @@ export function PortalSupportView({ initialInquiries, createAction }: PortalSupp
     const d = new Date(dateStr);
     return `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, "0")}.${String(d.getDate()).padStart(2, "0")} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
   };
+
+  const formatEnDate = (dateStr: string) => {
+    const d = new Date(dateStr);
+    return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) + " " + d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+  };
+
+  const isClosed = selectedInquiry ? getNormalizedStatus(selectedInquiry.status) === "CLOSED" : false;
+
+  // Filter & Search inquiries
+  const filteredInquiries = useMemo(() => {
+    return inquiries.filter((item) => {
+      const normalized = getNormalizedStatus(item.status);
+      if (statusFilter !== "ALL" && normalized !== statusFilter) {
+        return false;
+      }
+      if (searchQuery.trim()) {
+        const q = searchQuery.trim().toLowerCase();
+        const matchTitle = item.title.toLowerCase().includes(q);
+        const matchContent = item.content.toLowerCase().includes(q);
+        const matchCaseNumber = item.case_number?.toLowerCase().includes(q);
+        const matchCategory = (CATEGORY_LABELS[item.category] || item.category).toLowerCase().includes(q);
+
+        if (!matchTitle && !matchContent && !matchCaseNumber && !matchCategory) {
+          return false;
+        }
+      }
+      return true;
+    });
+  }, [inquiries, statusFilter, searchQuery]);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -175,71 +200,140 @@ export function PortalSupportView({ initialInquiries, createAction }: PortalSupp
     finally { setIsReopening(false); }
   };
 
-  const isClosed = selectedInquiry ? selectedInquiry.status === "closed" : false;
-
   return (
     <div className="space-y-5">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-lg font-bold text-zinc-900 dark:text-white">케이스 지원</h2>
-          <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5">문의 및 지원 케이스 관리</p>
+      {/* Breadcrumb & Header */}
+      <div className="space-y-1">
+        <div className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">
+          Portal / Support
         </div>
-        <button
-          onClick={() => { setIsWriteOpen(!isWriteOpen); setSelectedInquiry(null); }}
-          className="rounded-lg bg-zinc-950 px-4 py-2.5 text-xs font-bold text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-100 transition-colors cursor-pointer"
-        >
-          + 새 케이스 등록
-        </button>
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-lg font-bold text-zinc-900 dark:text-white">케이스 지원 (Support)</h2>
+            <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5">K SELECT NETWORK 전용 1:1 케이스 및 온라인 문의 관리</p>
+          </div>
+          <button
+            onClick={() => { setIsWriteOpen(!isWriteOpen); setSelectedInquiry(null); }}
+            className="rounded-lg bg-zinc-950 px-4 py-2.5 text-xs font-bold text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-100 transition-colors cursor-pointer"
+          >
+            + 새 케이스 등록
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-5">
-        {/* Left: Case List */}
+        {/* Left: Case List & Search/Filter */}
         <div className="lg:col-span-2 space-y-3">
+          {/* Search Input */}
+          <div className="relative">
+            <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-zinc-400 text-xs">
+              🔍
+            </span>
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="케이스 검색 (번호, 제목, 내용)... / Search cases..."
+              className="w-full rounded-xl border border-zinc-200 bg-white py-2 pl-9 pr-3 text-xs outline-none focus:border-zinc-400 dark:border-zinc-800 dark:bg-zinc-900 dark:text-white dark:focus:border-zinc-700 shadow-2xs"
+            />
+          </div>
+
+          {/* Official 4 Status Filter Tabs */}
+          <div className="flex items-center gap-1 overflow-x-auto pb-1 text-[11px] scrollbar-none">
+            {[
+              { key: "ALL", label: "전체" },
+              { key: "RECEIVED", label: "접수됨" },
+              { key: "UNDER_REVIEW", label: "검토중" },
+              { key: "ACTION_REQUIRED", label: "조치필요" },
+              { key: "CLOSED", label: "종료됨" },
+            ].map((tab) => {
+              const isSelected = statusFilter === tab.key;
+              const count = tab.key === "ALL"
+                ? inquiries.length
+                : inquiries.filter((i) => getNormalizedStatus(i.status) === tab.key).length;
+
+              return (
+                <button
+                  key={tab.key}
+                  type="button"
+                  onClick={() => setStatusFilter(tab.key as any)}
+                  className={`rounded-lg px-2.5 py-1.5 font-bold transition-all shrink-0 cursor-pointer ${
+                    isSelected
+                      ? "bg-zinc-900 text-white dark:bg-white dark:text-zinc-955 shadow-xs"
+                      : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-800/80 dark:text-zinc-400 dark:hover:bg-zinc-800"
+                  }`}
+                >
+                  <span>{tab.label}</span>
+                  <span className="ml-1 opacity-70">({count})</span>
+                </button>
+              );
+            })}
+          </div>
+
           <div className="rounded-xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900 overflow-hidden">
             <div className="px-4 py-3 border-b border-zinc-100 dark:border-zinc-800 flex items-center justify-between">
-              <span className="text-xs font-bold text-zinc-700 dark:text-zinc-300">케이스 목록 ({inquiries.length})</span>
+              <span className="text-xs font-bold text-zinc-700 dark:text-zinc-300">
+                케이스 목록 ({filteredInquiries.length})
+              </span>
               <span className="text-[10px] text-zinc-400">
-                {inquiries.filter(i => i.status === "action_required").length > 0 && (
-                  <span className="text-rose-500 font-bold">🔴 조치 {inquiries.filter(i => i.status === "action_required").length}건</span>
+                {inquiries.filter((i) => getNormalizedStatus(i.status) === "ACTION_REQUIRED").length > 0 && (
+                  <span className="text-rose-500 font-bold">
+                    🔴 조치 {inquiries.filter((i) => getNormalizedStatus(i.status) === "ACTION_REQUIRED").length}건
+                  </span>
                 )}
               </span>
             </div>
             <div className="divide-y divide-zinc-100 dark:divide-zinc-800">
-              {inquiries.length > 0 ? inquiries.map((item) => (
-                <div
-                  key={item.id}
-                  onClick={() => {
-                    setSelectedInquiry(item);
-                    setIsWriteOpen(false);
-                    setReplyText(""); setReplyFile(null);
-                    setReplyError(""); setShowCloseModal(false);
-                  }}
-                  className={`p-4 cursor-pointer hover:bg-zinc-50/50 dark:hover:bg-zinc-950/20 transition-all ${
-                    selectedInquiry?.id === item.id ? "bg-zinc-50/80 dark:bg-zinc-950/30 border-l-2 border-zinc-950 dark:border-white pl-3.5" : ""
-                  }`}
-                >
-                  <div className="flex items-center justify-between gap-2 mb-1">
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-[10px]">{STATUS_EMOJI[item.status]}</span>
-                      <span className={`rounded px-1.5 py-0.5 text-[9px] font-bold ${CASE_STATUS_COLOR[item.status]}`}>
-                        {CASE_STATUS_LABEL[item.status]}
-                      </span>
+              {filteredInquiries.length > 0 ? (
+                filteredInquiries.map((item) => {
+                  const normStatus = getNormalizedStatus(item.status);
+                  const isItemClosed = normStatus === "CLOSED";
+
+                  return (
+                    <div
+                      key={item.id}
+                      onClick={() => {
+                        setSelectedInquiry(item);
+                        setIsWriteOpen(false);
+                        setReplyText("");
+                        setReplyFile(null);
+                        setReplyError("");
+                        setShowCloseModal(false);
+                      }}
+                      className={`p-4 cursor-pointer hover:bg-zinc-50/50 dark:hover:bg-zinc-950/20 transition-all ${
+                        selectedInquiry?.id === item.id
+                          ? "bg-zinc-50/80 dark:bg-zinc-950/30 border-l-2 border-zinc-950 dark:border-white pl-3.5"
+                          : ""
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-2 mb-1">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[10px]">{OFFICIAL_STATUS_EMOJI[normStatus]}</span>
+                          <span className={`rounded px-1.5 py-0.5 text-[9px] font-bold border ${OFFICIAL_STATUS_COLOR[normStatus]}`}>
+                            {OFFICIAL_STATUS_LABEL[normStatus].ko}
+                          </span>
+                        </div>
+                        <span className="text-[9px] text-zinc-400 dark:text-zinc-500">{formatDate(item.created_at)}</span>
+                      </div>
+                      {item.case_number && (
+                        <p className="text-[9px] font-mono text-zinc-400 dark:text-zinc-500 mb-0.5">{item.case_number}</p>
+                      )}
+                      <p className="text-xs font-bold text-zinc-900 dark:text-white truncate">{item.title}</p>
+                      <p className="text-[10px] text-zinc-400 dark:text-zinc-500 mt-0.5 truncate">{item.content}</p>
+                      {normStatus === "ACTION_REQUIRED" && (
+                        <p className="text-[9px] font-bold text-rose-600 dark:text-rose-400 mt-1">⚠️ 조치 요청 수신 — 확인 필요</p>
+                      )}
+                      {isItemClosed && (
+                        <p className="text-[9px] text-zinc-400 dark:text-zinc-500 mt-1">🔒 종료된 케이스 (Read Only)</p>
+                      )}
                     </div>
-                    <span className="text-[9px] text-zinc-400 dark:text-zinc-500">{formatDate(item.created_at)}</span>
-                  </div>
-                  {item.case_number && (
-                    <p className="text-[9px] font-mono text-zinc-400 dark:text-zinc-500 mb-0.5">{item.case_number}</p>
-                  )}
-                  <p className="text-xs font-bold text-zinc-900 dark:text-white truncate">{item.title}</p>
-                  <p className="text-[10px] text-zinc-400 dark:text-zinc-500 mt-0.5 truncate">{item.content}</p>
-                  {item.status === "action_required" && (
-                    <p className="text-[9px] font-bold text-rose-600 dark:text-rose-400 mt-1">⚠️ 조치 요청 수신 — 확인 필요</p>
-                  )}
-                </div>
-              )) : (
+                  );
+                })
+              ) : (
                 <div className="p-6 text-center text-xs text-zinc-400 dark:text-zinc-500">
-                  등록된 케이스가 없습니다.
+                  {searchQuery.trim() || statusFilter !== "ALL"
+                    ? "검색/필터 조건과 일치하는 케이스가 없습니다."
+                    : "등록된 케이스가 없습니다."}
                 </div>
               )}
             </div>
@@ -356,8 +450,8 @@ export function PortalSupportView({ initialInquiries, createAction }: PortalSupp
                       {selectedInquiry.case_number && (
                         <span className="text-[9px] font-mono text-zinc-400 dark:text-zinc-500">{selectedInquiry.case_number}</span>
                       )}
-                      <span className={`rounded px-2 py-0.5 text-[9px] font-bold ${CASE_STATUS_COLOR[selectedInquiry.status]}`}>
-                        {STATUS_EMOJI[selectedInquiry.status]} {CASE_STATUS_LABEL[selectedInquiry.status]}
+                      <span className={`rounded px-2 py-0.5 text-[9px] font-bold border ${OFFICIAL_STATUS_COLOR[getNormalizedStatus(selectedInquiry.status)]}`}>
+                        {OFFICIAL_STATUS_EMOJI[getNormalizedStatus(selectedInquiry.status)]} {OFFICIAL_STATUS_LABEL[getNormalizedStatus(selectedInquiry.status)].ko}
                       </span>
                       <span className="rounded bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 text-[9px] font-semibold text-zinc-600 dark:text-zinc-400">
                         {CATEGORY_LABELS[selectedInquiry.category] || selectedInquiry.category}
@@ -366,6 +460,7 @@ export function PortalSupportView({ initialInquiries, createAction }: PortalSupp
                     <h3 className="text-sm font-bold text-zinc-900 dark:text-white leading-snug">{selectedInquiry.title}</h3>
                     <p className="text-[9px] text-zinc-400 dark:text-zinc-500">
                       접수: {formatDate(selectedInquiry.created_at)}
+                      {selectedInquiry.closed_at ? ` · 종료: ${formatDate(selectedInquiry.closed_at)}` : ""}
                       {selectedInquiry.reopen_count ? ` · 재오픈 ${selectedInquiry.reopen_count}회` : ""}
                     </p>
                   </div>
@@ -530,19 +625,30 @@ export function PortalSupportView({ initialInquiries, createAction }: PortalSupp
                 </div>
               )}
 
-              {/* Reopened case footer */}
+              {/* Closed Case Read-Only Footer */}
               {isClosed && (
-                <div className="p-5 border-t border-zinc-100 dark:border-zinc-800 flex items-center justify-between">
-                  <p className="text-[10px] text-zinc-400 dark:text-zinc-500">이 케이스는 종료되었습니다.</p>
-                  <button
-                    onClick={() => {
-                      setReopenMessage("");
-                      setShowReopenModal(true);
-                    }}
-                    className="rounded-lg border border-amber-300 dark:border-amber-700 px-3 py-1.5 text-[10px] font-bold text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/20 transition-colors cursor-pointer"
-                  >
-                    🔓 케이스 재오픈
-                  </button>
+                <div className="p-5 border-t border-zinc-100 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-950/40 space-y-3">
+                  <div className="rounded-xl border border-zinc-200 bg-white p-3.5 shadow-2xs dark:border-zinc-800 dark:bg-zinc-900 space-y-1.5">
+                    <p className="text-xs font-bold text-zinc-800 dark:text-zinc-200 flex items-center gap-1.5">
+                      <span>🔒</span>
+                      <span>케이스가 종료되었습니다. / This case has been closed.</span>
+                    </p>
+                    <p className="text-[10px] text-zinc-500 dark:text-zinc-400 font-mono">
+                      종료: {selectedInquiry.closed_at ? formatDate(selectedInquiry.closed_at) : formatDate(selectedInquiry.updated_at)}
+                      <span className="opacity-60 ml-2">({selectedInquiry.closed_at ? formatEnDate(selectedInquiry.closed_at) : formatEnDate(selectedInquiry.updated_at)})</span>
+                    </p>
+                  </div>
+                  <div className="flex justify-end">
+                    <button
+                      onClick={() => {
+                        setReopenMessage("");
+                        setShowReopenModal(true);
+                      }}
+                      className="rounded-lg border border-amber-300 dark:border-amber-700 px-3 py-1.5 text-[10px] font-bold text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/20 transition-colors cursor-pointer"
+                    >
+                      🔓 케이스 재오픈
+                    </button>
+                  </div>
                 </div>
               )}
             </div>

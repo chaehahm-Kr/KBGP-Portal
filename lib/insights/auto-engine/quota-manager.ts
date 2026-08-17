@@ -10,17 +10,17 @@ export interface QuotaAllocationResult {
 }
 
 /**
- * Enforces Daily Quota Limits & Shared Core Counting Logic.
- * NETWORK Max: 3 Drafts / Day
- * HUB Max: 3 Drafts / Day
- * Shared Core (Both NETWORK & HUB) counts as 1 Unique Core while consuming 1 NETWORK quota and 1 HUB quota.
+ * Enforces Daily Quota Limits & Shared Topic Allocation Logic.
+ * Rule: NETWORK Target = 3 Drafts / Day, HUB Target = 3 Drafts / Day.
+ * Shared topics (useful to both Brands & Retailers) are allocated to both channels
+ * without artificial caps or truncation.
  */
 export function applyDailyQuota(
   evaluatedTopics: EvaluatedTopic[],
   networkMax: number = 3,
   hubMax: number = 3
 ): QuotaAllocationResult {
-  // Filter only topics that passed score threshold (>=80) and critical conditions
+  // Filter topics passing score threshold (>=80) and critical conditions
   const qualified = evaluatedTopics.filter((t) => t.passedThreshold);
 
   if (qualified.length === 0) {
@@ -43,18 +43,51 @@ export function applyDailyQuota(
   let sharedCount = 0;
 
   for (const topic of qualified) {
-    const needsNetwork = topic.networkEnabled;
-    const needsHub = topic.hubEnabled;
+    // If both quotas are filled, stop selecting further topics
+    if (networkUsed >= networkMax && hubUsed >= hubMax) {
+      break;
+    }
 
-    const canFitNetwork = needsNetwork ? networkUsed < networkMax : true;
-    const canFitHub = needsHub ? hubUsed < hubMax : true;
+    const isUsefulForNetwork = topic.candidate.targetAudience === "BOTH" || 
+      topic.candidate.targetAudience === "NETWORK" || 
+      (topic.candidate.networkRelevanceScore || 0) >= 70;
 
-    if (canFitNetwork && canFitHub) {
-      if (needsNetwork) networkUsed++;
-      if (needsHub) hubUsed++;
-      if (needsNetwork && needsHub) sharedCount++;
-      
-      selectedTopics.push(topic);
+    const isUsefulForHub = topic.candidate.targetAudience === "BOTH" || 
+      topic.candidate.targetAudience === "HUB" || 
+      (topic.candidate.hubRelevanceScore || 0) >= 70;
+
+    let allocateNetwork = false;
+    let allocateHub = false;
+
+    if (networkUsed < networkMax && isUsefulForNetwork) {
+      allocateNetwork = true;
+    }
+
+    if (hubUsed < hubMax && isUsefulForHub) {
+      allocateHub = true;
+    }
+
+    // Fallback: If a channel still needs allocation and candidate was not strictly tagged, allocate to fulfill target
+    if (!allocateNetwork && networkUsed < networkMax && !isUsefulForHub) {
+      allocateNetwork = true;
+    }
+    if (!allocateHub && hubUsed < hubMax && !isUsefulForNetwork) {
+      allocateHub = true;
+    }
+
+    if (allocateNetwork || allocateHub) {
+      // Clone topic to assign active channel flags for this run
+      const allocatedTopic: EvaluatedTopic = {
+        ...topic,
+        networkEnabled: allocateNetwork,
+        hubEnabled: allocateHub,
+      };
+
+      if (allocateNetwork) networkUsed++;
+      if (allocateHub) hubUsed++;
+      if (allocateNetwork && allocateHub) sharedCount++;
+
+      selectedTopics.push(allocatedTopic);
     }
   }
 
@@ -66,6 +99,6 @@ export function applyDailyQuota(
     hubDraftsCount: hubUsed,
     sharedCoreCount: sharedCount,
     uniqueCoreCount,
-    quotaReason: `Allocated ${uniqueCoreCount} Unique Core Insights (NETWORK Quota: ${networkUsed}/${networkMax}, HUB Quota: ${hubUsed}/${hubMax}, Shared Cores: ${sharedCount}).`,
+    quotaReason: `Allocated Daily Content Goals: NETWORK ${networkUsed}/${networkMax} Drafts, HUB ${hubUsed}/${hubMax} Drafts (Unique Core Topics: ${uniqueCoreCount}, Shared Topics: ${sharedCount}).`,
   };
 }

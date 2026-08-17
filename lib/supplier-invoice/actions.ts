@@ -19,6 +19,90 @@ async function verifyWritePermission(supabase: any, userId: string) {
   return roles;
 }
 
+export async function getInvoiceQuantitiesForPoLines(
+  supabase: any,
+  poLineIds: string[],
+  excludeInvoiceId?: string
+) {
+  if (poLineIds.length === 0) return {};
+
+  // 1. Shipped Qty: inbound_shipment_lines status in IN_TRANSIT, PARTIALLY_RECEIVED, RECEIVED
+  const { data: shipData } = await supabase
+    .from("inbound_shipment_lines")
+    .select("purchase_order_line_id, shipped_qty, inbound_shipments!inner(status)")
+    .in("purchase_order_line_id", poLineIds)
+    .in("inbound_shipments.status", ["IN_TRANSIT", "PARTIALLY_RECEIVED", "RECEIVED"]);
+
+  // 2. Received Qty: receiving_lines status = FINALIZED
+  const { data: recData } = await supabase
+    .from("receiving_lines")
+    .select("purchase_order_line_id, received_qty, hold_qty, damaged_qty, receivings!inner(status)")
+    .in("purchase_order_line_id", poLineIds)
+    .eq("receivings.status", "FINALIZED");
+
+  // 3. Ready Qty: goods_readiness_lines status in READY_SUBMITTED, HANDOVER_PENDING, HANDED_OVER
+  const { data: grData } = await supabase
+    .from("goods_readiness_lines")
+    .select("purchase_order_line_id, ready_qty, goods_readiness!inner(handover_status)")
+    .in("purchase_order_line_id", poLineIds)
+    .in("goods_readiness.handover_status", ["READY_SUBMITTED", "HANDOVER_PENDING", "HANDED_OVER"]);
+
+  // 4. Already Invoiced Qty: parent invoice status in SUBMITTED, APPROVED
+  let query = supabase
+    .from("supplier_invoice_lines")
+    .select("purchase_order_line_id, invoiced_qty, line_amount, supplier_invoices!inner(id, invoice_status)")
+    .in("purchase_order_line_id", poLineIds)
+    .in("supplier_invoices.invoice_status", ["SUBMITTED", "APPROVED"]);
+
+  if (excludeInvoiceId) {
+    query = query.neq("supplier_invoices.id", excludeInvoiceId);
+  }
+  const { data: invLines } = await query;
+
+  // Aggregate
+  const result: Record<string, { shipped: number; received: number; ready: number; invoiced: number; hold: number; damaged: number; invoiced_amount: number }> = {};
+  for (const id of poLineIds) {
+    result[id] = { shipped: 0, received: 0, ready: 0, invoiced: 0, hold: 0, damaged: 0, invoiced_amount: 0 };
+  }
+
+  if (shipData) {
+    for (const s of shipData) {
+      if (result[s.purchase_order_line_id]) {
+        result[s.purchase_order_line_id].shipped += s.shipped_qty || 0;
+      }
+    }
+  }
+
+  if (recData) {
+    for (const r of recData) {
+      if (result[r.purchase_order_line_id]) {
+        result[r.purchase_order_line_id].received += r.received_qty || 0;
+        result[r.purchase_order_line_id].hold += r.hold_qty || 0;
+        result[r.purchase_order_line_id].damaged += r.damaged_qty || 0;
+      }
+    }
+  }
+
+  if (grData) {
+    for (const g of grData) {
+      if (result[g.purchase_order_line_id]) {
+        result[g.purchase_order_line_id].ready += g.ready_qty || 0;
+      }
+    }
+  }
+
+  if (invLines) {
+    for (const inv of invLines) {
+      if (result[inv.purchase_order_line_id]) {
+        result[inv.purchase_order_line_id].invoiced += inv.invoiced_qty || 0;
+        result[inv.purchase_order_line_id].invoiced_amount += Number(inv.line_amount) || 0;
+      }
+    }
+  }
+
+  return result;
+}
+
 // Role-based approve permission validator
 async function verifyApprovePermission(supabase: any, userId: string) {
   const { data: userRoles } = await supabase
@@ -102,6 +186,7 @@ export async function getPurchaseOrderForInvoice(poId: string) {
         product_id,
         product_name_snapshot,
         qty,
+        confirmed_qty,
         unit_cost,
         product:products!product_id (letusto_sku, manufacture_sku)
       )
@@ -111,66 +196,21 @@ export async function getPurchaseOrderForInvoice(poId: string) {
 
   if (poErr || !po) throw new Error("Purchase Order not found.");
 
-  // Fetch receiving lines to summarize received quantities
-  const { data: recLines } = await supabase
-    .from("receiving_lines")
-    .select(`
-      purchase_order_line_id,
-      received_qty,
-      hold_qty,
-      damaged_qty,
-      receiving:receivings!receiving_id (id, status)
-    `);
-
-  // Fetch inbound shipment lines to get total shipped quantities for finalized shipments
-  const { data: shipLines } = await supabase
-    .from("inbound_shipment_lines")
-    .select(`
-      purchase_order_line_id,
-      shipped_qty,
-      shipment:inbound_shipments!inbound_shipment_id (id, status)
-    `);
-
-  const recSummary: Record<string, { received: number; hold: number; damaged: number }> = {};
-  const shipSummary: Record<string, number> = {};
-
-  po.lines.forEach((l: any) => {
-    recSummary[l.id] = { received: 0, hold: 0, damaged: 0 };
-    shipSummary[l.id] = 0;
-  });
-
-  if (recLines) {
-    recLines.forEach((rl: any) => {
-      if (rl.receiving?.status === "FINALIZED" && recSummary[rl.purchase_order_line_id]) {
-        recSummary[rl.purchase_order_line_id].received += rl.received_qty || 0;
-        recSummary[rl.purchase_order_line_id].hold += rl.hold_qty || 0;
-        recSummary[rl.purchase_order_line_id].damaged += rl.damaged_qty || 0;
-      }
-    });
-  }
-
-  if (shipLines) {
-    shipLines.forEach((sl: any) => {
-      if (sl.shipment?.status === "RECEIVED" && shipSummary[sl.purchase_order_line_id] !== undefined) {
-        shipSummary[sl.purchase_order_line_id] += sl.shipped_qty || 0;
-      }
-    });
-  }
+  const poLineIds = po.lines.map((l: any) => l.id);
+  const qtyMap = await getInvoiceQuantitiesForPoLines(supabase, poLineIds);
 
   const lines = po.lines.map((l: any) => {
-    const summary = recSummary[l.id] || { received: 0, hold: 0, damaged: 0 };
-    const shipped = shipSummary[l.id] || 0;
-
-    const inventoryReceived = summary.received;
-    const damaged = summary.damaged;
-    const shortage = Math.max(shipped - (inventoryReceived + damaged), 0);
+    const q = qtyMap[l.id] || { shipped: 0, received: 0, ready: 0, invoiced: 0, hold: 0, damaged: 0 };
+    const inventoryReceived = q.received;
+    const damaged = q.damaged;
+    const shortage = Math.max(q.shipped - (inventoryReceived + damaged), 0);
     const resolved = inventoryReceived + damaged + shortage;
 
     return {
       ...l,
       inventory_received: inventoryReceived,
-      good_qty: inventoryReceived - summary.hold,
-      hold_qty: summary.hold,
+      good_qty: inventoryReceived - q.hold,
+      hold_qty: q.hold,
       damaged_qty: damaged,
       shortage_qty: shortage,
       resolved_qty: resolved,

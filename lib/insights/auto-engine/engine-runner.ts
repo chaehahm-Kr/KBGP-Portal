@@ -1,5 +1,5 @@
 import { EngineRunResult, GeneratedArticlePayload } from "./types";
-import { performDailyMarketResearch } from "./market-researcher";
+import { performDailyMarketResearch, performAdditionalMarketResearch } from "./market-researcher";
 import { evaluateCandidate } from "./topic-evaluator";
 import { applyDailyQuota } from "./quota-manager";
 import { generateDraftPayload } from "./draft-generator";
@@ -108,8 +108,36 @@ export async function runAutoInsightEngine(options: RunOptions): Promise<EngineR
       }
     }
 
-    // 4. Enforce Channel Daily Quotas & Shared Core Logic
-    const quotaResult = applyDailyQuota(evaluatedList);
+    // 4. Enforce Channel Daily Quotas & Shared Core Logic (1st Pass)
+    let quotaResult = applyDailyQuota(evaluatedList);
+    
+    // 4b. ADM-INS-002-R1: 2nd-Pass Additional Research if NETWORK < 3 or HUB < 3
+    const neededChannels: ("NETWORK" | "HUB")[] = [];
+    if (quotaResult.networkDraftsCount < 3) neededChannels.push("NETWORK");
+    if (quotaResult.hubDraftsCount < 3) neededChannels.push("HUB");
+
+    if (neededChannels.length > 0) {
+      console.log(`[Engine] Triggering 2nd-Pass Additional Research for channels: ${neededChannels.join(", ")}...`);
+      try {
+        const addCandidates = await performAdditionalMarketResearch(neededChannels);
+        for (const cand of addCandidates) {
+          candidatesGenerated++;
+          candidatesScored++;
+          const evalRes = await evaluateCandidate(cand, rulesWeights, minScoreThreshold);
+          if (evalRes.criticalConditions.all_passed && evalRes.passedThreshold) {
+            candidatesGte80++;
+            evaluatedList.push(evalRes);
+          } else {
+            criticalRejects++;
+          }
+        }
+        // Re-apply quota allocation with additional evaluated candidates
+        quotaResult = applyDailyQuota(evaluatedList);
+      } catch (addErr) {
+        console.warn("[Engine] Additional research warning:", addErr);
+      }
+    }
+
     const selectedTopics = quotaResult.selectedTopics;
 
     networkDraftsCount = quotaResult.networkDraftsCount;
@@ -117,11 +145,10 @@ export async function runAutoInsightEngine(options: RunOptions): Promise<EngineR
     sharedCoreDraftsCount = quotaResult.sharedCoreCount;
     uniqueCoreDraftsCount = quotaResult.uniqueCoreCount;
 
-    if (selectedTopics.length === 0) {
-      noDraftReason = candidatesGte80 === 0
-        ? "0 candidates scored >= 80 points today. System accepted 0-draft day according to editorial quality rules."
-        : "Daily channel quotas already filled or candidates skipped by duplicate guard.";
-    }
+    // Construct explicit run reason per ADM-INS-002-R1 requirement
+    const netReason = networkDraftsCount >= 3 ? "NETWORK 3/3 — COMPLETE" : `NETWORK ${networkDraftsCount}/3 — No additional NETWORK candidates met score >=80 and critical conditions.`;
+    const hubReason = hubDraftsCount >= 3 ? "HUB 3/3 — COMPLETE" : `HUB ${hubDraftsCount}/3 — No additional HUB candidates met score >=80 and critical conditions.`;
+    noDraftReason = `${netReason} | ${hubReason}`;
 
     // 5. Generate Draft Payloads & Audit Claims (Strict Human Gate: status = 'AI_DRAFT')
     const draftPayloads: GeneratedArticlePayload[] = [];

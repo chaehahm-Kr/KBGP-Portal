@@ -66,28 +66,67 @@ export interface PartnerInquiryItem {
   messages?: InquiryMessageItem[];
 }
 
+export type OfficialCaseStatus = "RECEIVED" | "UNDER_REVIEW" | "ACTION_REQUIRED" | "CLOSED";
+
+/**
+ * Normalizes any legacy or DB status value to one of the 4 official case statuses:
+ * 1. RECEIVED (접수됨)
+ * 2. UNDER_REVIEW (검토중)
+ * 3. ACTION_REQUIRED (조치필요)
+ * 4. CLOSED (종료됨)
+ */
+export function getNormalizedStatus(rawStatus?: string | null): OfficialCaseStatus {
+  if (!rawStatus) return "RECEIVED";
+  const s = rawStatus.toLowerCase().trim();
+  if (["closed", "resolved", "action_resolved"].includes(s)) return "CLOSED";
+  if (["action_required", "awaiting_reply", "reopened"].includes(s)) return "ACTION_REQUIRED";
+  if (["in_review", "replied", "processing", "under_review"].includes(s)) return "UNDER_REVIEW";
+  return "RECEIVED";
+}
+
+export const OFFICIAL_STATUS_LABEL: Record<OfficialCaseStatus, { ko: string; en: string }> = {
+  RECEIVED:        { ko: "접수됨", en: "Received" },
+  UNDER_REVIEW:    { ko: "검토중", en: "Under Review" },
+  ACTION_REQUIRED: { ko: "조치필요", en: "Action Required" },
+  CLOSED:          { ko: "종료됨", en: "Closed" },
+};
+
+export const OFFICIAL_STATUS_COLOR: Record<OfficialCaseStatus, string> = {
+  RECEIVED:        "bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-900",
+  UNDER_REVIEW:    "bg-blue-50 text-blue-800 border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-900",
+  ACTION_REQUIRED: "bg-rose-50 text-rose-800 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-900",
+  CLOSED:          "bg-zinc-100 text-zinc-600 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:border-zinc-700",
+};
+
+export const OFFICIAL_STATUS_EMOJI: Record<OfficialCaseStatus, string> = {
+  RECEIVED:        "🟡",
+  UNDER_REVIEW:    "🔵",
+  ACTION_REQUIRED: "🔴",
+  CLOSED:          "⚫",
+};
+
 export const CASE_STATUS_LABEL: Record<CaseStatus, string> = {
   open:            "접수됨",
   in_review:       "검토중",
-  awaiting_reply:  "답변대기",
+  awaiting_reply:  "조치필요",
   action_required: "조치필요",
-  action_resolved: "조치완료",
-  resolved:        "해결됨",
+  action_resolved: "종료됨",
+  resolved:        "종료됨",
   closed:          "종료됨",
-  reopened:        "재오픈",
+  reopened:        "조치필요",
   pending:         "접수됨",
   replied:         "검토중",
 };
 
 export const CASE_STATUS_COLOR: Record<CaseStatus, string> = {
-  open:            "bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300",
-  in_review:       "bg-blue-100 text-blue-800 dark:bg-blue-950/40 dark:text-blue-300",
-  awaiting_reply:  "bg-orange-100 text-orange-800 dark:bg-orange-950/40 dark:text-orange-300",
-  action_required: "bg-rose-100 text-rose-800 dark:bg-rose-950/40 dark:text-rose-300",
-  action_resolved: "bg-purple-100 text-purple-800 dark:bg-purple-950/40 dark:text-purple-300",
-  resolved:        "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300",
-  closed:          "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400",
-  reopened:        "bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300",
-  pending:         "bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300",
-  replied:         "bg-blue-100 text-blue-800 dark:bg-blue-950/40 dark:text-blue-300",
+  open:            "bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-900",
+  in_review:       "bg-blue-50 text-blue-800 border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-900",
+  awaiting_reply:  "bg-rose-50 text-rose-800 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-900",
+  action_required: "bg-rose-50 text-rose-800 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-900",
+  action_resolved: "bg-zinc-100 text-zinc-600 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:border-zinc-700",
+  resolved:        "bg-zinc-100 text-zinc-600 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:border-zinc-700",
+  closed:          "bg-zinc-100 text-zinc-600 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:border-zinc-700",
+  reopened:        "bg-rose-50 text-rose-800 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-900",
+  pending:         "bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-900",
+  replied:         "bg-blue-50 text-blue-800 border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-900",
 };

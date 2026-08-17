@@ -74,7 +74,7 @@ export function InvoiceForm({ eligiblePos, initialInvoice }: InvoiceFormProps) {
       setLoadingLines(true);
       setErrorMessage("");
       try {
-        const res = await getPoLinesForInvoice(selectedPoId);
+        const res = await getPoLinesForInvoice(selectedPoId, initialInvoice?.id);
         setCurrency(res.currency);
         setLines(res.lines);
 
@@ -206,6 +206,11 @@ export function InvoiceForm({ eligiblePos, initialInvoice }: InvoiceFormProps) {
     return sum + (item.invoicedQty * item.unitPrice);
   }, 0);
 
+  const poConfirmedValue = lines.reduce((sum, l) => sum + ((l.confirmedQty || 0) * (l.unitCost || 0)), 0);
+  const previouslyInvoicedAmount = lines.reduce((sum, l) => sum + (l.alreadyInvoicedAmount || 0), 0);
+  const currentInvoiceAmount = subtotal;
+  const cumulativeInvoicedAmount = previouslyInvoicedAmount + currentInvoiceAmount;
+
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       {errorMessage && (
@@ -327,15 +332,17 @@ export function InvoiceForm({ eligiblePos, initialInvoice }: InvoiceFormProps) {
         ) : lines.length === 0 ? (
           <p className="text-xs text-zinc-400 italic">발주서를 선택하면 청구 가능한 라인이 표시됩니다.</p>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto space-y-4">
             <table className="w-full text-left text-xs border-collapse">
               <thead>
                 <tr className="bg-zinc-50/50 text-zinc-500 font-bold border-b border-zinc-200 dark:bg-zinc-900/50 dark:border-zinc-800">
                   <th className="px-3 py-2">상품 정보 / SKU</th>
                   <th className="px-3 py-2 text-right">발주 (Ordered)</th>
-                  <th className="px-3 py-2 text-right">준비 완료 (Ready)</th>
-                  <th className="px-3 py-2 text-right">입고 완료 (Received)</th>
+                  <th className="px-3 py-2 text-right">확정 (Confirmed)</th>
+                  <th className="px-3 py-2 text-right">선적 (Shipped)</th>
+                  <th className="px-3 py-2 text-right">입고 (Received)</th>
                   <th className="px-3 py-2 text-right">기 청구 (Invoiced)</th>
+                  <th className="px-3 py-2 text-right">청구 가능 (Available)</th>
                   <th className="px-3 py-2 text-right">청구 수량 (Invoice Qty)</th>
                   <th className="px-3 py-2 text-right">FOB 단가</th>
                   <th className="px-3 py-2 text-right">청구 금액</th>
@@ -346,6 +353,10 @@ export function InvoiceForm({ eligiblePos, initialInvoice }: InvoiceFormProps) {
                 {lines.map((line) => {
                   const input = lineInputs[line.purchaseOrderLineId] || { invoicedQty: 0, unitPrice: 0, lineNote: "" };
                   const lineTotal = input.invoicedQty * input.unitPrice;
+                  
+                  const availableQty = Math.max(0, line.shippedQty - line.alreadyInvoicedQty);
+                  const isQtyOverShip = input.invoicedQty > line.shippedQty;
+                  const isQtyOverConfirm = (line.alreadyInvoicedQty + input.invoicedQty) > line.confirmedQty;
 
                   return (
                     <tr key={line.purchaseOrderLineId}>
@@ -353,20 +364,32 @@ export function InvoiceForm({ eligiblePos, initialInvoice }: InvoiceFormProps) {
                         <div className="font-bold text-zinc-900 dark:text-white">{line.productName}</div>
                         <div className="text-[10px] font-mono text-zinc-400 mt-0.5">{line.sku}</div>
                       </td>
-                      <td className="px-3 py-2.5 text-right font-mono text-zinc-700">{line.orderedQty}</td>
-                      <td className="px-3 py-2.5 text-right font-mono text-zinc-700">{line.readyQty}</td>
+                      <td className="px-3 py-2.5 text-right font-mono text-zinc-500">{line.orderedQty}</td>
+                      <td className="px-3 py-2.5 text-right font-mono text-zinc-650">{line.confirmedQty}</td>
+                      <td className="px-3 py-2.5 text-right font-mono text-zinc-700">{line.shippedQty}</td>
                       <td className="px-3 py-2.5 text-right font-mono font-bold text-emerald-600">{line.receivedQty}</td>
                       <td className="px-3 py-2.5 text-right font-mono text-zinc-400">{line.alreadyInvoicedQty}</td>
+                      <td className="px-3 py-2.5 text-right font-mono font-semibold text-blue-600">{availableQty}</td>
                       <td className="px-3 py-2.5 text-right">
-                        <input
-                          type="number"
-                          value={input.invoicedQty}
-                          min={0}
-                          id={`qty-${line.sku}`}
-                          onChange={(e) => handleLineFieldChange(line.purchaseOrderLineId, "invoicedQty", parseInt(e.target.value) || 0)}
-                          className="w-16 px-1.5 py-1 border border-zinc-200 dark:border-zinc-800 rounded text-right font-mono text-xs"
-                          required
-                        />
+                        <div className="flex flex-col items-end">
+                          <input
+                            type="number"
+                            value={input.invoicedQty}
+                            min={0}
+                            id={`qty-${line.sku}`}
+                            onChange={(e) => handleLineFieldChange(line.purchaseOrderLineId, "invoicedQty", parseInt(e.target.value) || 0)}
+                            className={`w-16 px-1.5 py-1 border rounded text-right font-mono text-xs ${
+                              isQtyOverConfirm ? "border-rose-500 bg-rose-50/50" : isQtyOverShip ? "border-amber-500 bg-amber-50/50" : "border-zinc-200 dark:border-zinc-800"
+                            }`}
+                            required
+                          />
+                          {isQtyOverConfirm && (
+                            <span className="text-[9px] text-rose-600 mt-1 font-semibold whitespace-nowrap">Confirmed 초과</span>
+                          )}
+                          {!isQtyOverConfirm && isQtyOverShip && (
+                            <span className="text-[9px] text-amber-600 mt-1 font-semibold whitespace-nowrap">Shipped 초과</span>
+                          )}
+                        </div>
                       </td>
                       <td className="px-3 py-2.5 text-right">
                         <input
@@ -397,6 +420,34 @@ export function InvoiceForm({ eligiblePos, initialInvoice }: InvoiceFormProps) {
                 })}
               </tbody>
             </table>
+
+            {/* Invoiced Summary Grid */}
+            <div className="bg-zinc-50 dark:bg-zinc-950 p-4 rounded-xl border border-zinc-200 dark:border-zinc-800 grid grid-cols-2 md:grid-cols-4 gap-4 text-xs mt-4">
+              <div>
+                <span className="text-zinc-400 block font-semibold mb-1">PO 확정 금액 (PO Confirmed Value)</span>
+                <span className="text-sm font-bold text-zinc-900 dark:text-white">
+                  {new Intl.NumberFormat("en-US", { style: "currency", currency }).format(poConfirmedValue)}
+                </span>
+              </div>
+              <div>
+                <span className="text-zinc-400 block font-semibold mb-1">기 청구 금액 (Previously Invoiced)</span>
+                <span className="text-sm font-bold text-zinc-900 dark:text-white">
+                  {new Intl.NumberFormat("en-US", { style: "currency", currency }).format(previouslyInvoicedAmount)}
+                </span>
+              </div>
+              <div>
+                <span className="text-zinc-400 block font-semibold mb-1">금회 청구 금액 (Current Invoice)</span>
+                <span className="text-sm font-bold text-emerald-600">
+                  {new Intl.NumberFormat("en-US", { style: "currency", currency }).format(currentInvoiceAmount)}
+                </span>
+              </div>
+              <div>
+                <span className="text-zinc-400 block font-semibold mb-1">누적 청구 금액 (Cumulative Invoiced)</span>
+                <span className={`text-sm font-bold ${cumulativeInvoicedAmount > poConfirmedValue ? "text-rose-600" : "text-zinc-900 dark:text-white"}`}>
+                  {new Intl.NumberFormat("en-US", { style: "currency", currency }).format(cumulativeInvoicedAmount)}
+                </span>
+              </div>
+            </div>
           </div>
         )}
 

@@ -207,6 +207,7 @@ export default function AllInsightsPage() {
                   <th className="px-4 py-3.5">Category</th>
                   <th className="px-3 py-3.5">Status</th>
                   <th className="px-3 py-3.5">Topic Score</th>
+                  <th className="px-4 py-3.5">Reader Feedback</th>
                   <th className="px-4 py-3.5">Publish Channels</th>
                   <th className="px-4 py-3.5">Author</th>
                   <th className="px-4 py-3.5">Publish / Gen Date</th>
@@ -248,6 +249,22 @@ export default function AllInsightsPage() {
                     {/* Topic Score */}
                     <td className="px-3 py-4 font-extrabold text-blue-600 dark:text-blue-400">
                       {art.topic_score || 85}
+                    </td>
+
+                    {/* Reader Feedback */}
+                    <td className="px-4 py-4 whitespace-nowrap">
+                      {art.feedback_stats && art.feedback_stats.total > 0 ? (
+                        <div className="flex items-center gap-1.5 text-[11px] font-bold">
+                          <span className="text-emerald-600 dark:text-emerald-400">👍 {art.feedback_stats.helpful}</span>
+                          <span className="text-zinc-400">/</span>
+                          <span className="text-rose-500">👎 {art.feedback_stats.not_helpful}</span>
+                          <span className="ml-1 rounded bg-zinc-100 dark:bg-zinc-800 px-1.5 py-0.5 text-[10px] text-zinc-700 dark:text-zinc-300 font-extrabold">
+                            {art.feedback_stats.helpful_rate}%
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="text-[10px] text-zinc-400 font-mono">No feedback</span>
+                      )}
                     </td>
 
                     {/* Publish Channels */}

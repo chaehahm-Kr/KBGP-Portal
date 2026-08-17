@@ -3,6 +3,7 @@
 import { requireCompanyMembership } from "@/lib/company/dal";
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
+import { getInvoiceQuantitiesForPoLines } from "@/lib/supplier-invoice/actions";
 
 /**
  * Fetch all purchase orders belonging to the logged-in supplier company.
@@ -1255,38 +1256,18 @@ export async function getPortalInvoiceDetail(id: string) {
     .eq("purchase_order_id", inv.purchase_order_id);
 
   const poLineMap = new Map();
-  if (poLines) {
+  if (poLines && poLines.length > 0) {
+    const poLineIds = poLines.map((pol: any) => pol.id);
+    const qtyMap = await getInvoiceQuantitiesForPoLines(supabase, poLineIds);
+
     for (const pol of poLines) {
-      // Shipped Qty
-      const { data: shipData } = await supabase
-        .from("inbound_shipment_lines")
-        .select("shipped_qty, inbound_shipments!inner(status)")
-        .eq("purchase_order_line_id", pol.id)
-        .neq("inbound_shipments.status", "CANCELLED");
-      const shippedQty = (shipData ?? []).reduce((sum, s: any) => sum + s.shipped_qty, 0);
-
-      // Received Qty
-      const { data: recData } = await supabase
-        .from("receiving_lines")
-        .select("received_qty, receivings!inner(status)")
-        .eq("purchase_order_line_id", pol.id)
-        .eq("receivings.status", "FINALIZED");
-      const receivedQty = (recData ?? []).reduce((sum, r: any) => sum + r.received_qty, 0);
-
-      // Ready Qty
-      const { data: grData } = await supabase
-        .from("goods_readiness_lines")
-        .select("ready_qty, goods_readiness!inner(handover_status)")
-        .eq("purchase_order_line_id", pol.id)
-        .in("goods_readiness.handover_status", ["READY_SUBMITTED", "HANDOVER_PENDING", "HANDED_OVER"]);
-      const readyQty = (grData ?? []).reduce((sum, g: any) => sum + g.ready_qty, 0);
-
+      const q = qtyMap[pol.id] || { shipped: 0, received: 0, ready: 0, invoiced: 0, hold: 0, damaged: 0 };
       poLineMap.set(pol.id, {
         orderedQty: pol.qty,
         confirmedQty: pol.confirmed_qty !== null ? pol.confirmed_qty : pol.qty,
-        readyQty,
-        shippedQty,
-        receivedQty
+        readyQty: q.ready,
+        shippedQty: q.shipped,
+        receivedQty: q.received
       });
     }
   }
@@ -1390,7 +1371,7 @@ export async function getEligiblePosForInvoice() {
   return data ?? [];
 }
 
-export async function getPoLinesForInvoice(poId: string) {
+export async function getPoLinesForInvoice(poId: string, excludeInvoiceId?: string) {
   const { companyId } = await requireCompanyMembership();
   const supabase = await createClient();
 
@@ -1424,54 +1405,26 @@ export async function getPoLinesForInvoice(poId: string) {
     throw new Error("발주 품목 라인을 불러오지 못했습니다.");
   }
 
-  const formattedLines = [];
-  for (const line of lines) {
-    // Shipped Qty
-    const { data: shipData } = await supabase
-      .from("inbound_shipment_lines")
-      .select("shipped_qty, inbound_shipments!inner(status)")
-      .eq("purchase_order_line_id", line.id)
-      .neq("inbound_shipments.status", "CANCELLED");
-    const shippedQty = (shipData ?? []).reduce((sum, s: any) => sum + s.shipped_qty, 0);
+  const poLineIds = lines.map((l: any) => l.id);
+  const qtyMap = await getInvoiceQuantitiesForPoLines(supabase, poLineIds, excludeInvoiceId);
 
-    // Received Qty
-    const { data: recData } = await supabase
-      .from("receiving_lines")
-      .select("received_qty, receivings!inner(status)")
-      .eq("purchase_order_line_id", line.id)
-      .eq("receivings.status", "FINALIZED");
-    const receivedQty = (recData ?? []).reduce((sum, r: any) => sum + r.received_qty, 0);
-
-    // Ready Qty
-    const { data: grData } = await supabase
-      .from("goods_readiness_lines")
-      .select("ready_qty, goods_readiness!inner(handover_status)")
-      .eq("purchase_order_line_id", line.id)
-      .in("goods_readiness.handover_status", ["READY_SUBMITTED", "HANDOVER_PENDING", "HANDED_OVER"]);
-    const readyQty = (grData ?? []).reduce((sum, g: any) => sum + g.ready_qty, 0);
-
-    // Already Invoiced Qty
-    const { data: invLines } = await supabase
-      .from("supplier_invoice_lines")
-      .select("invoiced_qty, supplier_invoices!inner(invoice_status)")
-      .eq("purchase_order_line_id", line.id)
-      .neq("supplier_invoices.invoice_status", "VOID");
-    const alreadyInvoicedQty = (invLines ?? []).reduce((sum, inv: any) => sum + inv.invoiced_qty, 0);
-
-    formattedLines.push({
+  const formattedLines = lines.map((line: any) => {
+    const q = qtyMap[line.id] || { shipped: 0, received: 0, ready: 0, invoiced: 0, hold: 0, damaged: 0, invoiced_amount: 0 };
+    return {
       purchaseOrderLineId: line.id,
       productId: line.product_id,
       productName: line.product_name_snapshot,
       sku: line.letusto_sku_snapshot,
       orderedQty: line.qty,
       confirmedQty: line.confirmed_qty !== null ? line.confirmed_qty : line.qty,
-      readyQty,
-      shippedQty,
-      receivedQty,
-      alreadyInvoicedQty,
+      readyQty: q.ready,
+      shippedQty: q.shipped,
+      receivedQty: q.received,
+      alreadyInvoicedQty: q.invoiced,
+      alreadyInvoicedAmount: q.invoiced_amount,
       unitCost: Number(line.unit_cost)
-    });
-  }
+    };
+  });
 
   return {
     poNumber: po.po_number,

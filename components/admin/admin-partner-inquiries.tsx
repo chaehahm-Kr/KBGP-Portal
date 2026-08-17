@@ -1,8 +1,13 @@
 "use client";
 
 import React, { useState } from "react";
-import type { PartnerInquiryItem, CaseStatus, InquiryMessageItem } from "@/lib/inquiry/types";
-import { CASE_STATUS_LABEL, CASE_STATUS_COLOR } from "@/lib/inquiry/types";
+import type { PartnerInquiryItem, CaseStatus, InquiryMessageItem, OfficialCaseStatus } from "@/lib/inquiry/types";
+import {
+  getNormalizedStatus,
+  OFFICIAL_STATUS_LABEL,
+  OFFICIAL_STATUS_COLOR,
+  OFFICIAL_STATUS_EMOJI,
+} from "@/lib/inquiry/types";
 import { updateCaseStatus, closeCaseAdmin, reopenCase } from "@/lib/inquiry/actions";
 
 interface AdminPartnerInquiriesProps {
@@ -19,19 +24,6 @@ const CATEGORY_LABELS: Record<string, string> = {
   general:     "기타 일반 문의"
 };
 
-const STATUS_EMOJI: Record<CaseStatus, string> = {
-  open:            "🟡",
-  in_review:       "🔵",
-  awaiting_reply:  "🟠",
-  action_required: "🔴",
-  action_resolved: "🟣",
-  resolved:        "🟢",
-  closed:          "⚫",
-  reopened:        "🔶",
-  pending:         "🟡",
-  replied:         "🔵"
-};
-
 const MSG_TYPE_LABEL: Record<string, { icon: string; label: string; style: string }> = {
   action_required: { icon: "⚠️", label: "조치요청", style: "bg-rose-50 text-rose-700 dark:bg-rose-950/20 dark:text-rose-300" },
   action_resolved: { icon: "✅", label: "조치완료", style: "bg-purple-50 text-purple-700 dark:bg-purple-950/20 dark:text-purple-300" },
@@ -44,7 +36,7 @@ const MSG_TYPE_LABEL: Record<string, { icon: string; label: string; style: strin
 export function AdminPartnerInquiries({ initialInquiries, answerAction }: AdminPartnerInquiriesProps) {
   const [inquiries, setInquiries] = useState<PartnerInquiryItem[]>(initialInquiries);
   const [selectedInquiry, setSelectedInquiry] = useState<PartnerInquiryItem | null>(null);
-  const [statusFilter, setStatusFilter] = useState<string>("active");
+  const [statusFilter, setStatusFilter] = useState<"ALL" | OfficialCaseStatus>("ALL");
   const [searchTerm, setSearchTerm] = useState("");
 
   // Reply states
@@ -131,10 +123,8 @@ export function AdminPartnerInquiries({ initialInquiries, answerAction }: AdminP
   };
 
   const filteredInquiries = inquiries.filter((item) => {
-    const isActive = !["closed"].includes(item.status);
-    if (statusFilter === "active" && !isActive) return false;
-    if (statusFilter === "closed" && item.status !== "closed") return false;
-    if (statusFilter !== "active" && statusFilter !== "closed" && statusFilter !== "all" && item.status !== statusFilter) return false;
+    const norm = getNormalizedStatus(item.status);
+    if (statusFilter !== "ALL" && norm !== statusFilter) return false;
 
     const cleanSearch = searchTerm.toLowerCase().trim();
     return !cleanSearch ||
@@ -144,7 +134,7 @@ export function AdminPartnerInquiries({ initialInquiries, answerAction }: AdminP
       item.case_number?.toLowerCase().includes(cleanSearch);
   });
 
-  const isClosed = selectedInquiry ? ["closed"].includes(selectedInquiry.status) : false;
+  const isClosed = selectedInquiry ? getNormalizedStatus(selectedInquiry.status) === "CLOSED" : false;
 
   return (
     <div className="space-y-6">
@@ -182,27 +172,34 @@ export function AdminPartnerInquiries({ initialInquiries, answerAction }: AdminP
               placeholder="케이스 검색 (번호, 제목, 회사명)"
               className="w-full rounded-lg border border-zinc-200 bg-zinc-50/50 px-3 py-2 text-xs outline-none dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:border-zinc-950 dark:focus:border-white transition-colors"
             />
-            <div className="flex flex-wrap gap-1.5">
+            <div className="flex flex-wrap gap-1">
               {[
-                { key: "active", label: "처리중" },
-                { key: "all", label: "전체" },
-                { key: "open", label: "접수됨" },
-                { key: "in_review", label: "검토중" },
-                { key: "action_required", label: "조치필요" },
-                { key: "closed", label: "종료됨" }
-              ].map(({ key, label }) => (
-                <button
-                  key={key}
-                  onClick={() => setStatusFilter(key)}
-                  className={`rounded-full px-2.5 py-0.5 text-[9px] font-bold transition-colors cursor-pointer ${
-                    statusFilter === key
-                      ? "bg-zinc-950 text-white dark:bg-white dark:text-zinc-950"
-                      : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-700"
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
+                { key: "ALL", label: "전체" },
+                { key: "RECEIVED", label: "접수됨" },
+                { key: "UNDER_REVIEW", label: "검토중" },
+                { key: "ACTION_REQUIRED", label: "조치필요" },
+                { key: "CLOSED", label: "종료됨" },
+              ].map(({ key, label }) => {
+                const count = key === "ALL"
+                  ? inquiries.length
+                  : inquiries.filter((i) => getNormalizedStatus(i.status) === key).length;
+
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => setStatusFilter(key as any)}
+                    className={`rounded-full px-2.5 py-0.5 text-[9px] font-bold transition-all cursor-pointer ${
+                      statusFilter === key
+                        ? "bg-zinc-950 text-white dark:bg-white dark:text-zinc-950 shadow-2xs"
+                        : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-700"
+                    }`}
+                  >
+                    <span>{label}</span>
+                    <span className="ml-1 opacity-70">({count})</span>
+                  </button>
+                );
+              })}
             </div>
           </div>
 
@@ -210,43 +207,46 @@ export function AdminPartnerInquiries({ initialInquiries, answerAction }: AdminP
           <div className="rounded-xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900 overflow-hidden">
             <div className="divide-y divide-zinc-100 dark:divide-zinc-800">
               {filteredInquiries.length > 0 ? (
-                filteredInquiries.map((item) => (
-                  <div
-                    key={item.id}
-                    onClick={() => {
-                      setSelectedInquiry(item);
-                      setReplyText("");
-                      setIsActionRequired(false);
-                      setSubmitError("");
-                    }}
-                    className={`p-4 hover:bg-zinc-50/50 dark:hover:bg-zinc-950/20 cursor-pointer transition-all ${
-                      selectedInquiry?.id === item.id ? "bg-zinc-50/80 dark:bg-zinc-950/30 border-l-2 border-zinc-950 dark:border-white pl-3.5" : ""
-                    }`}
-                  >
-                    <div className="flex justify-between items-start gap-2 mb-1.5">
-                      <div className="flex items-center gap-1.5 min-w-0">
-                        <span className="text-[10px]">{STATUS_EMOJI[item.status]}</span>
-                        <span className={`rounded px-1.5 py-0.5 text-[9px] font-bold ${CASE_STATUS_COLOR[item.status]}`}>
-                          {CASE_STATUS_LABEL[item.status]}
-                        </span>
-                        {item.case_number && (
-                          <span className="text-[9px] font-mono text-zinc-400 dark:text-zinc-500">
-                            {item.case_number}
+                filteredInquiries.map((item) => {
+                  const norm = getNormalizedStatus(item.status);
+                  return (
+                    <div
+                      key={item.id}
+                      onClick={() => {
+                        setSelectedInquiry(item);
+                        setReplyText("");
+                        setIsActionRequired(false);
+                        setSubmitError("");
+                      }}
+                      className={`p-4 hover:bg-zinc-50/50 dark:hover:bg-zinc-950/20 cursor-pointer transition-all ${
+                        selectedInquiry?.id === item.id ? "bg-zinc-50/80 dark:bg-zinc-950/30 border-l-2 border-zinc-950 dark:border-white pl-3.5" : ""
+                      }`}
+                    >
+                      <div className="flex justify-between items-start gap-2 mb-1.5">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <span className="text-[10px]">{OFFICIAL_STATUS_EMOJI[norm]}</span>
+                          <span className={`rounded px-1.5 py-0.5 text-[9px] font-bold border ${OFFICIAL_STATUS_COLOR[norm]}`}>
+                            {OFFICIAL_STATUS_LABEL[norm].ko}
                           </span>
-                        )}
+                          {item.case_number && (
+                            <span className="text-[9px] font-mono text-zinc-400 dark:text-zinc-500">
+                              {item.case_number}
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-[9px] text-zinc-400 dark:text-zinc-500 shrink-0">{formatDate(item.created_at)}</span>
                       </div>
-                      <span className="text-[9px] text-zinc-400 dark:text-zinc-500 shrink-0">{formatDate(item.created_at)}</span>
+                      <p className="text-xs font-bold text-zinc-900 dark:text-white leading-snug truncate">{item.title}</p>
+                      <p className="text-[10px] text-zinc-500 dark:text-zinc-400 mt-0.5 font-semibold">{item.companyName}</p>
+                      <p className="text-[10px] text-zinc-400 dark:text-zinc-500 mt-0.5 truncate">{item.content}</p>
+                      {norm === "ACTION_REQUIRED" && (
+                        <div className="mt-1.5 flex items-center gap-1 text-[9px] font-bold text-rose-600 dark:text-rose-400">
+                          <span>⚠️</span><span>조치 요청 중</span>
+                        </div>
+                      )}
                     </div>
-                    <p className="text-xs font-bold text-zinc-900 dark:text-white leading-snug truncate">{item.title}</p>
-                    <p className="text-[10px] text-zinc-500 dark:text-zinc-400 mt-0.5 font-semibold">{item.companyName}</p>
-                    <p className="text-[10px] text-zinc-400 dark:text-zinc-500 mt-0.5 truncate">{item.content}</p>
-                    {item.is_action_required && (
-                      <div className="mt-1.5 flex items-center gap-1 text-[9px] font-bold text-rose-600 dark:text-rose-400">
-                        <span>⚠️</span><span>조치 요청 중</span>
-                      </div>
-                    )}
-                  </div>
-                ))
+                  );
+                })
               ) : (
                 <div className="p-6 text-center text-xs text-zinc-400 dark:text-zinc-500">
                   해당 조건의 케이스가 없습니다.
@@ -270,8 +270,8 @@ export function AdminPartnerInquiries({ initialInquiries, answerAction }: AdminP
                           #{selectedInquiry.case_number}
                         </span>
                       )}
-                      <span className={`rounded px-2 py-0.5 text-[9px] font-bold ${CASE_STATUS_COLOR[selectedInquiry.status]}`}>
-                        {STATUS_EMOJI[selectedInquiry.status]} {CASE_STATUS_LABEL[selectedInquiry.status]}
+                      <span className={`rounded px-2 py-0.5 text-[9px] font-bold border ${OFFICIAL_STATUS_COLOR[getNormalizedStatus(selectedInquiry.status)]}`}>
+                        {OFFICIAL_STATUS_EMOJI[getNormalizedStatus(selectedInquiry.status)]} {OFFICIAL_STATUS_LABEL[getNormalizedStatus(selectedInquiry.status)].ko}
                       </span>
                       <span className="rounded bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 text-[9px] font-semibold text-zinc-600 dark:text-zinc-400">
                         {CATEGORY_LABELS[selectedInquiry.category] || selectedInquiry.category}
@@ -280,6 +280,7 @@ export function AdminPartnerInquiries({ initialInquiries, answerAction }: AdminP
                     <h3 className="text-sm font-bold text-zinc-900 dark:text-white leading-snug">{selectedInquiry.title}</h3>
                     <p className="text-[10px] text-zinc-500 dark:text-zinc-400">
                       {selectedInquiry.companyName} · {formatDate(selectedInquiry.created_at)}
+                      {selectedInquiry.closed_at ? ` · 종료: ${formatDate(selectedInquiry.closed_at)}` : ""}
                       {selectedInquiry.reopen_count ? ` · 재오픈 ${selectedInquiry.reopen_count}회` : ""}
                     </p>
                   </div>
@@ -295,18 +296,21 @@ export function AdminPartnerInquiries({ initialInquiries, answerAction }: AdminP
                 {!isClosed && (
                   <div className="flex flex-wrap items-center gap-1.5 pt-2 border-t border-zinc-50 dark:border-zinc-800/60">
                     <span className="text-[9px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">상태 변경:</span>
-                    {(["in_review", "awaiting_reply"] as CaseStatus[]).map(s => (
+                    {([
+                      { status: "in_review", label: "검토중" },
+                      { status: "action_required", label: "조치필요" },
+                    ] as { status: CaseStatus; label: string }[]).map(({ status: s, label }) => (
                       <button
                         key={s}
                         onClick={() => handleStatusChange(s)}
                         disabled={isUpdatingStatus || selectedInquiry.status === s}
-                        className={`rounded px-2 py-0.5 text-[9px] font-bold transition-all cursor-pointer disabled:opacity-40 ${
+                        className={`rounded px-2 py-0.5 text-[9px] font-bold transition-all disabled:opacity-40 cursor-pointer ${
                           selectedInquiry.status === s
-                            ? CASE_STATUS_COLOR[s]
-                            : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-700"
+                            ? "bg-zinc-900 text-white dark:bg-white dark:text-zinc-950"
+                            : "bg-zinc-100 text-zinc-700 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-300"
                         }`}
                       >
-                        {STATUS_EMOJI[s]} {CASE_STATUS_LABEL[s]}
+                        {label}
                       </button>
                     ))}
                     <div className="flex-1" />
