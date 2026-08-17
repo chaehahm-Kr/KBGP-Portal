@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import type { PartnerInquiryItem, CaseStatus, InquiryMessageItem, OfficialCaseStatus } from "@/lib/inquiry/types";
 import {
   getNormalizedStatus,
@@ -8,7 +8,7 @@ import {
   OFFICIAL_STATUS_COLOR,
   OFFICIAL_STATUS_EMOJI,
 } from "@/lib/inquiry/types";
-import { updateCaseStatus, closeCaseAdmin, reopenCase } from "@/lib/inquiry/actions";
+import { updateCaseStatus, closeCaseAdmin, reopenCase, answerAndClosePartnerInquiry } from "@/lib/inquiry/actions";
 
 interface AdminPartnerInquiriesProps {
   initialInquiries: PartnerInquiryItem[];
@@ -36,14 +36,21 @@ const MSG_TYPE_LABEL: Record<string, { icon: string; label: string; style: strin
 export function AdminPartnerInquiries({ initialInquiries, answerAction }: AdminPartnerInquiriesProps) {
   const [inquiries, setInquiries] = useState<PartnerInquiryItem[]>(initialInquiries);
   const [selectedInquiry, setSelectedInquiry] = useState<PartnerInquiryItem | null>(null);
-  const [statusFilter, setStatusFilter] = useState<"ALL" | OfficialCaseStatus>("ALL");
+
+  // Default Multi-Select Statuses: Active 3 Statuses (RECEIVED, UNDER_REVIEW, ACTION_REQUIRED)
+  const [selectedStatuses, setSelectedStatuses] = useState<OfficialCaseStatus[]>([
+    "RECEIVED",
+    "UNDER_REVIEW",
+    "ACTION_REQUIRED"
+  ]);
   const [searchTerm, setSearchTerm] = useState("");
 
-  // Reply states
+  // Reply & Reply+Close states
   const [replyText, setReplyText] = useState("");
   const [isActionRequired, setIsActionRequired] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
+  const [showCloseConfirmModal, setShowCloseConfirmModal] = useState(false);
 
   // Status update states
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
@@ -122,17 +129,64 @@ export function AdminPartnerInquiries({ initialInquiries, answerAction }: AdminP
     }
   };
 
-  const filteredInquiries = inquiries.filter((item) => {
-    const norm = getNormalizedStatus(item.status);
-    if (statusFilter !== "ALL" && norm !== statusFilter) return false;
+  const handleAnswerAndCloseSubmit = async () => {
+    if (!selectedInquiry) return;
+    setSubmitError("");
 
-    const cleanSearch = searchTerm.toLowerCase().trim();
-    return !cleanSearch ||
-      item.title.toLowerCase().includes(cleanSearch) ||
-      item.content.toLowerCase().includes(cleanSearch) ||
-      item.companyName?.toLowerCase().includes(cleanSearch) ||
-      item.case_number?.toLowerCase().includes(cleanSearch);
-  });
+    if (!replyText.trim()) {
+      setSubmitError("답변 내용을 입력해 주세요.");
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const res = await answerAndClosePartnerInquiry(selectedInquiry.id, replyText.trim());
+      if (res.success) {
+        setReplyText("");
+        setIsActionRequired(false);
+        setShowCloseConfirmModal(false);
+        window.location.reload();
+      } else {
+        setSubmitError(res.error || "답변 등록 및 케이스 종료에 실패했습니다.");
+      }
+    } catch {
+      setSubmitError("서버 오류가 발생했습니다.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const toggleStatusFilter = (statusKey: OfficialCaseStatus) => {
+    setSelectedStatuses((prev) => {
+      if (prev.includes(statusKey)) {
+        if (prev.length === 1) return prev; // Keep at least one selected
+        return prev.filter((s) => s !== statusKey);
+      } else {
+        return [...prev, statusKey];
+      }
+    });
+  };
+
+  const filteredInquiries = useMemo(() => {
+    const q = searchTerm.toLowerCase().trim();
+
+    return inquiries.filter((item) => {
+      // Rule 8: When Keyword Search is Present -> Search ALL statuses (override status filter)
+      if (q) {
+        const matchTitle = item.title.toLowerCase().includes(q);
+        const matchContent = item.content.toLowerCase().includes(q);
+        const matchCompany = item.companyName?.toLowerCase().includes(q);
+        const matchCaseNumber = item.case_number?.toLowerCase().includes(q);
+        const matchMessages = item.messages?.some((m) => m.content.toLowerCase().includes(q));
+
+        return matchTitle || matchContent || matchCompany || matchCaseNumber || matchMessages;
+      }
+
+      // When NO keyword search -> apply Multi-Select Status Filter
+      const norm = getNormalizedStatus(item.status);
+      return selectedStatuses.includes(norm);
+    });
+  }, [inquiries, selectedStatuses, searchTerm]);
 
   const isClosed = selectedInquiry ? getNormalizedStatus(selectedInquiry.status) === "CLOSED" : false;
 
@@ -149,11 +203,9 @@ export function AdminPartnerInquiries({ initialInquiries, answerAction }: AdminP
           </div>
           <div className="flex items-center gap-2">
             <span className="text-[10px] font-semibold text-zinc-400">전체 {inquiries.length}건</span>
-            {(["open", "in_review", "awaiting_reply", "action_required", "action_resolved", "reopened"] as CaseStatus[]).some(
-              s => inquiries.some(i => i.status === s)
-            ) && (
+            {inquiries.filter((i) => getNormalizedStatus(i.status) !== "CLOSED").length > 0 && (
               <span className="text-[10px] font-bold text-rose-600 dark:text-rose-400">
-                🔴 처리필요 {inquiries.filter(i => !["closed", "resolved"].includes(i.status)).length}건
+                🔴 처리필요 {inquiries.filter((i) => getNormalizedStatus(i.status) !== "CLOSED").length}건
               </span>
             )}
           </div>
@@ -163,44 +215,65 @@ export function AdminPartnerInquiries({ initialInquiries, answerAction }: AdminP
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-5">
         {/* Left: Case List */}
         <div className="lg:col-span-2 space-y-3">
-          {/* Search & Filter */}
+          {/* Search & Multi-Select Status Filter */}
           <div className="space-y-2">
-            <input
-              type="text"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="케이스 검색 (번호, 제목, 회사명)"
-              className="w-full rounded-lg border border-zinc-200 bg-zinc-50/50 px-3 py-2 text-xs outline-none dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:border-zinc-950 dark:focus:border-white transition-colors"
-            />
-            <div className="flex flex-wrap gap-1">
-              {[
-                { key: "ALL", label: "전체" },
-                { key: "RECEIVED", label: "접수됨" },
-                { key: "UNDER_REVIEW", label: "검토중" },
-                { key: "ACTION_REQUIRED", label: "조치필요" },
-                { key: "CLOSED", label: "종료됨" },
-              ].map(({ key, label }) => {
-                const count = key === "ALL"
-                  ? inquiries.length
-                  : inquiries.filter((i) => getNormalizedStatus(i.status) === key).length;
-
-                return (
-                  <button
-                    key={key}
-                    type="button"
-                    onClick={() => setStatusFilter(key as any)}
-                    className={`rounded-full px-2.5 py-0.5 text-[9px] font-bold transition-all cursor-pointer ${
-                      statusFilter === key
-                        ? "bg-zinc-950 text-white dark:bg-white dark:text-zinc-950 shadow-2xs"
-                        : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-700"
-                    }`}
-                  >
-                    <span>{label}</span>
-                    <span className="ml-1 opacity-70">({count})</span>
-                  </button>
-                );
-              })}
+            <div className="relative">
+              <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-zinc-400 text-xs">🔍</span>
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="케이스 검색 (번호, 제목, 내용, 회사명, 대화)..."
+                className="w-full rounded-xl border border-zinc-200 bg-white py-2 pl-9 pr-3 text-xs outline-none focus:border-zinc-400 dark:border-zinc-800 dark:bg-zinc-900 dark:text-white dark:focus:border-zinc-700 shadow-2xs"
+              />
+              {searchTerm.trim() && (
+                <button
+                  type="button"
+                  onClick={() => setSearchTerm("")}
+                  className="absolute inset-y-0 right-0 flex items-center pr-3 text-[10px] font-bold text-zinc-400 hover:text-zinc-700 dark:hover:text-white"
+                >
+                  [초기화]
+                </button>
+              )}
             </div>
+
+            {/* Keyword Search Active Banner */}
+            {searchTerm.trim() ? (
+              <div className="text-[10px] font-bold text-blue-600 dark:text-blue-400 px-1 flex items-center justify-between">
+                <span>🔍 검색 중 (종료 포함 모든 상태 검색)</span>
+                <span className="opacity-75">{filteredInquiries.length}건 검색됨</span>
+              </div>
+            ) : (
+              /* Multi-Select Status Checkbox Tabs */
+              <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                {[
+                  { key: "RECEIVED", label: "접수됨" },
+                  { key: "UNDER_REVIEW", label: "검토중" },
+                  { key: "ACTION_REQUIRED", label: "조치필요" },
+                  { key: "CLOSED", label: "종료됨" },
+                ].map(({ key, label }) => {
+                  const isChecked = selectedStatuses.includes(key as OfficialCaseStatus);
+                  const count = inquiries.filter((i) => getNormalizedStatus(i.status) === key).length;
+
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => toggleStatusFilter(key as OfficialCaseStatus)}
+                      className={`flex items-center gap-1 rounded-lg px-2.5 py-1 text-[10px] font-bold transition-all cursor-pointer border ${
+                        isChecked
+                          ? "bg-zinc-900 text-white border-zinc-950 dark:bg-white dark:text-zinc-950 dark:border-white shadow-2xs"
+                          : "bg-zinc-100 text-zinc-500 border-zinc-200 hover:bg-zinc-200 dark:bg-zinc-800/80 dark:text-zinc-400 dark:border-zinc-700"
+                      }`}
+                    >
+                      <span className="text-[9px]">{isChecked ? "☑" : "☐"}</span>
+                      <span>{label}</span>
+                      <span className="opacity-70 font-mono">({count})</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
           {/* Case List */}
@@ -242,6 +315,17 @@ export function AdminPartnerInquiries({ initialInquiries, answerAction }: AdminP
                       {norm === "ACTION_REQUIRED" && (
                         <div className="mt-1.5 flex items-center gap-1 text-[9px] font-bold text-rose-600 dark:text-rose-400">
                           <span>⚠️</span><span>조치 요청 중</span>
+                        </div>
+                      )}
+                      {norm === "CLOSED" && (
+                        <div className="mt-1.5 flex items-center gap-1 text-[9px]">
+                          {item.satisfaction_score ? (
+                            <span className="font-bold text-amber-500">
+                              {"★".repeat(item.satisfaction_score)}{"☆".repeat(5 - item.satisfaction_score)} ({item.satisfaction_score}점)
+                            </span>
+                          ) : (
+                            <span className="text-zinc-400 dark:text-zinc-500 font-semibold">미평가 (Not rated)</span>
+                          )}
                         </div>
                       )}
                     </div>
@@ -436,13 +520,21 @@ export function AdminPartnerInquiries({ initialInquiries, answerAction }: AdminP
                       </label>
                     </div>
 
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 flex-wrap">
                       <button
                         type="submit"
                         disabled={isSubmitting || !replyText.trim()}
-                        className="flex-1 rounded-lg bg-zinc-950 py-2.5 text-xs font-bold text-white hover:bg-zinc-800 disabled:opacity-40 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-100 transition-colors cursor-pointer"
+                        className="flex-1 min-w-[120px] rounded-lg bg-zinc-950 py-2.5 text-xs font-bold text-white hover:bg-zinc-800 disabled:opacity-40 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-100 transition-colors cursor-pointer"
                       >
                         {isSubmitting ? "등록 중..." : isActionRequired ? "⚠️ 조치 요청 발송" : "답변 등록"}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={isSubmitting || !replyText.trim()}
+                        onClick={() => setShowCloseConfirmModal(true)}
+                        className="flex-1 min-w-[150px] rounded-lg bg-rose-700 py-2.5 text-xs font-bold text-white hover:bg-rose-800 disabled:opacity-40 transition-colors cursor-pointer"
+                      >
+                        {isSubmitting ? "처리 중..." : "🔒 답변 등록 후 케이스 종료"}
                       </button>
                       {replyText && (
                         <button
@@ -459,17 +551,31 @@ export function AdminPartnerInquiries({ initialInquiries, answerAction }: AdminP
               )}
 
               {/* Satisfaction Score (if closed) */}
-              {isClosed && selectedInquiry.satisfaction_score && (
-                <div className="p-5 border-t border-zinc-100 dark:border-zinc-800">
-                  <p className="text-[9px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider mb-1">만족도 평가</p>
-                  <div className="flex items-center gap-2">
-                    <span className="text-lg">{"★".repeat(selectedInquiry.satisfaction_score)}{"☆".repeat(5 - selectedInquiry.satisfaction_score)}</span>
-                    <span className="text-xs text-zinc-600 dark:text-zinc-400">{selectedInquiry.satisfaction_score}/5</span>
-                  </div>
-                  {selectedInquiry.satisfaction_comment && (
-                    <p className="mt-1.5 text-xs text-zinc-600 dark:text-zinc-400 bg-zinc-50 dark:bg-zinc-950/20 p-2.5 rounded-lg">
-                      {selectedInquiry.satisfaction_comment}
-                    </p>
+              {isClosed && (
+                <div className="p-5 border-t border-zinc-100 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-950/20">
+                  <p className="text-[9px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider mb-1">
+                    파트너 만족도 (Partner Satisfaction)
+                  </p>
+                  {selectedInquiry.satisfaction_score ? (
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-lg text-amber-500">
+                          {"★".repeat(selectedInquiry.satisfaction_score)}{"☆".repeat(5 - selectedInquiry.satisfaction_score)}
+                        </span>
+                        <span className="text-xs font-bold text-zinc-700 dark:text-zinc-300">
+                          {selectedInquiry.satisfaction_score} / 5 점
+                        </span>
+                      </div>
+                      {selectedInquiry.satisfaction_comment && (
+                        <p className="mt-1.5 text-xs text-zinc-700 dark:text-zinc-300 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-2.5 rounded-lg leading-relaxed">
+                          💬 "{selectedInquiry.satisfaction_comment}"
+                        </p>
+                      )}
+                    </div>
+                  ) : (
+                    <span className="inline-block rounded bg-zinc-100 dark:bg-zinc-800 px-2.5 py-1 text-[10px] font-semibold text-zinc-500 dark:text-zinc-400">
+                      미평가 (Not rated)
+                    </span>
                   )}
                 </div>
               )}
@@ -485,6 +591,43 @@ export function AdminPartnerInquiries({ initialInquiries, answerAction }: AdminP
           )}
         </div>
       </div>
+
+      {/* Reply & Close Confirm Modal */}
+      {showCloseConfirmModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-2xl border border-zinc-200 bg-white p-6 shadow-2xl dark:border-zinc-800 dark:bg-zinc-900 space-y-4">
+            <div>
+              <h3 className="text-sm font-bold text-zinc-900 dark:text-white">답변 등록 및 케이스 종료</h3>
+              <p className="text-[11px] text-zinc-600 dark:text-zinc-400 mt-1 leading-relaxed">
+                답변을 등록하고 이 케이스를 종료하시겠습니까?<br />
+                <span className="text-[10px] text-zinc-400">Send this reply and close the case?</span>
+              </p>
+            </div>
+
+            <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-3 text-xs dark:border-zinc-800 dark:bg-zinc-950/60 max-h-32 overflow-y-auto whitespace-pre-wrap leading-relaxed text-zinc-800 dark:text-zinc-200 font-mono text-[11px]">
+              {replyText}
+            </div>
+
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setShowCloseConfirmModal(false)}
+                className="flex-1 rounded-lg border border-zinc-200 py-2.5 text-xs font-semibold text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+              >
+                취소 (Cancel)
+              </button>
+              <button
+                type="button"
+                onClick={handleAnswerAndCloseSubmit}
+                disabled={isSubmitting}
+                className="flex-1 rounded-lg bg-rose-700 py-2.5 text-xs font-bold text-white hover:bg-rose-800 disabled:opacity-50 transition-colors cursor-pointer"
+              >
+                {isSubmitting ? "처리 중..." : "🔒 답변 등록 후 종료"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -105,8 +105,9 @@ export function PortalSupportView({ initialInquiries, createAction }: PortalSupp
         const matchContent = item.content.toLowerCase().includes(q);
         const matchCaseNumber = item.case_number?.toLowerCase().includes(q);
         const matchCategory = (CATEGORY_LABELS[item.category] || item.category).toLowerCase().includes(q);
+        const matchMessages = item.messages?.some((m) => m.content.toLowerCase().includes(q));
 
-        if (!matchTitle && !matchContent && !matchCaseNumber && !matchCategory) {
+        if (!matchTitle && !matchContent && !matchCaseNumber && !matchCategory && !matchMessages) {
           return false;
         }
       }

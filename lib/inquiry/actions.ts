@@ -262,7 +262,7 @@ export async function getPartnerInquiries(): Promise<PartnerInquiryItem[]> {
       .from("partner_inquiries")
       .select("*")
       .eq("company_id", companyId)
-      .order("created_at", { ascending: false });
+      .order("updated_at", { ascending: false });
 
     if (error) {
       if (error.code === "PGRST205" || error.message?.includes("Could not find the table")) {
@@ -328,7 +328,7 @@ export async function getAdminPartnerInquiries(): Promise<PartnerInquiryItem[]> 
         companies ( name ),
         staff_members:replied_by ( name )
       `)
-      .order("created_at", { ascending: false });
+      .order("updated_at", { ascending: false });
 
     if (error) {
       console.error("Failed to fetch admin partner inquiries:", error);
@@ -472,6 +472,95 @@ export async function answerPartnerInquiry(
   } catch (e) {
     console.error("Failed to answer partner inquiry:", e);
     return { success: false, error: e instanceof Error ? e.message : "답변 등록 실패" };
+  }
+}
+
+/**
+ * 어드민에서 답변 작성과 동시에 케이스를 종료(CLOSED)합니다.
+ */
+export async function answerAndClosePartnerInquiry(
+  inquiryId: string,
+  replyContent: string
+) {
+  try {
+    const session = await verifyAdminSession();
+    const adminSupabase = createAdminClient();
+
+    const { data: originalInquiry, error: fetchError } = await adminSupabase
+      .from("partner_inquiries")
+      .select("created_by, title, case_number")
+      .eq("id", inquiryId)
+      .single();
+
+    if (fetchError || !originalInquiry) {
+      console.error("Failed to fetch original inquiry:", fetchError);
+      return { success: false, error: "케이스를 찾을 수 없습니다." };
+    }
+
+    const now = new Date().toISOString();
+
+    const { error: updateError } = await adminSupabase
+      .from("partner_inquiries")
+      .update({
+        status: "closed",
+        reply_content: replyContent,
+        replied_by: session.userId,
+        replied_at: now,
+        closed_at: now,
+        closed_by: session.userId,
+        is_action_required: false,
+        updated_at: now
+      })
+      .eq("id", inquiryId);
+
+    if (updateError) {
+      console.error("Failed to save answer and close case:", updateError);
+      return { success: false, error: "답변 등록 및 케이스 종료에 실패했습니다." };
+    }
+
+    // Insert admin answer and system close message into thread
+    await adminSupabase
+      .from("partner_inquiry_messages")
+      .insert([
+        {
+          inquiry_id: inquiryId,
+          sender_type: "admin",
+          sender_id: session.userId,
+          sender_name: "어드민 담당자",
+          content: replyContent,
+          message_type: "message",
+          is_action_flag: false
+        },
+        {
+          inquiry_id: inquiryId,
+          sender_type: "admin",
+          sender_id: session.userId,
+          sender_name: "시스템",
+          content: "어드민 담당자가 답변 등록 후 케이스를 종료했습니다.",
+          message_type: "case_closed",
+          is_action_flag: false
+        }
+      ]);
+
+    // Notify portal user
+    const caseLabel = originalInquiry.case_number
+      ? `케이스 ${originalInquiry.case_number}`
+      : `문의 '${originalInquiry.title}'`;
+
+    await createNotification(
+      originalInquiry.created_by,
+      session.userId,
+      "케이스 답변 완료 및 종료",
+      `${caseLabel}에 대한 답변이 등록되었으며 케이스가 종료되었습니다.`,
+      "/portal/support"
+    );
+
+    revalidatePath("/admin/partner-inquiries");
+    revalidatePath("/portal/support");
+    return { success: true };
+  } catch (e) {
+    console.error("Failed to answer and close partner inquiry:", e);
+    return { success: false, error: e instanceof Error ? e.message : "답변 등록 및 케이스 종료 실패" };
   }
 }
 
@@ -978,7 +1067,7 @@ export async function getPendingPartnerInquiriesCount(): Promise<number> {
     const { count, error } = await supabase
       .from("partner_inquiries")
       .select("*", { count: "exact", head: true })
-      .or("status.in.(open,pending,reopened),is_action_required.eq.true");
+      .or("status.in.(open,pending,in_review,replied,action_required,reopened),is_action_required.eq.true");
 
     if (error) {
       console.warn("⚠️ getPendingPartnerInquiriesCount error:", error);
