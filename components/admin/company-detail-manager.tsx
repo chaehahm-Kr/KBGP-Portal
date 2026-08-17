@@ -21,6 +21,7 @@ import {
   type TaskAssignmentItem 
 } from "@/lib/company/task-actions";
 import { TASK_DEFINITIONS } from "@/lib/company/task-constants";
+import { InternationalPhoneInput } from "@/components/shared/international-phone-input";
 
 const STATUS_LABEL: Record<string, string> = {
   invited: "초대됨",
@@ -2237,13 +2238,11 @@ export function CompanyDetailManager({
               </div>
 
               <div>
-                <label className="text-[10px] font-bold text-zinc-455 block">연락처</label>
-                <input
-                  type="text"
+                <label className="text-[10px] font-bold text-zinc-455 block mb-1">연락처 (Phone Number)</label>
+                <InternationalPhoneInput
                   value={addPhone}
-                  onChange={(e) => setAddPhone(e.target.value)}
-                  placeholder="010-1234-5678"
-                  className="w-full rounded border border-zinc-200 p-2 text-xs outline-none bg-white focus:border-zinc-400 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+                  onChange={(val) => setAddPhone(val)}
+                  placeholder="856 555 1234, 10 1234 5678"
                 />
               </div>
 
@@ -2327,13 +2326,11 @@ export function CompanyDetailManager({
                   />
                 </div>
                 <div>
-                  <label className="text-[10px] font-bold text-zinc-400 block mb-1">연락처</label>
-                  <input
-                    type="text"
+                  <label className="text-[10px] font-bold text-zinc-400 block mb-1">연락처 (Phone Number)</label>
+                  <InternationalPhoneInput
                     value={editPhone}
-                    onChange={(e) => setEditPhone(e.target.value)}
-                    placeholder="010-1234-5678"
-                    className="w-full rounded border border-zinc-200 p-2 text-xs outline-none bg-white focus:border-zinc-400 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+                    onChange={(val) => setEditPhone(val)}
+                    placeholder="856 555 1234, 10 1234 5678"
                   />
                 </div>
               </div>

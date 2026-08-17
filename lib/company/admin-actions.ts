@@ -13,6 +13,8 @@ import { validateUploadedFile } from "@/lib/files/validate";
 import { publicEnv } from "@/lib/env/public";
 import { sendTemplatedEmail } from "@/lib/notifications/templates";
 import { logRemittanceChanges } from "@/lib/company/remittance-log";
+import { normalizeEmail, checkUserEmailDuplicate } from "@/lib/user/validation";
+import { getBilingualError } from "@/lib/errors/bilingual-messages";
 
 export interface CompanyContact {
   id: string;
@@ -384,26 +386,29 @@ export async function adminInviteCompanyUser(
   await verifyAdminSession();
   const admin = createAdminClient();
 
-  // 1. Check if email already registered
-  const { data: existing } = await admin
-    .from("company_users")
-    .select("id")
-    .eq("email", payload.email)
-    .maybeSingle();
+  const normalizedEmail = normalizeEmail(payload.email);
+  if (!normalizedEmail) {
+    throw new Error(getBilingualError("INVALID_EMAIL"));
+  }
 
-  if (existing) {
-    throw new Error("이미 이메일로 등록된 담당자가 존재합니다.");
+  // 1. System-wide Email Duplicate Validation (One Email = One User = One Company)
+  const dupCheck = await checkUserEmailDuplicate(normalizedEmail, companyId);
+  if (dupCheck.status !== "AVAILABLE") {
+    throw new Error(dupCheck.message);
   }
 
   // 2. Invite Auth User
   const { data: invited, error: inviteError } =
-    await admin.auth.admin.inviteUserByEmail(payload.email, {
+    await admin.auth.admin.inviteUserByEmail(normalizedEmail, {
       data: { role: "portal", display_name: payload.name },
       redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3010'}/portal/invite/accept`,
     });
 
   if (inviteError || !invited.user) {
-    throw new Error(`사용자 초대 실패: ${inviteError?.message || "알 수 없는 에러"}`);
+    if (inviteError?.message?.includes("already been registered")) {
+      throw new Error(getBilingualError("EMAIL_ALREADY_IN_OTHER_COMPANY"));
+    }
+    throw new Error(getBilingualError("USER_CREATE_FAILED"));
   }
 
   // 3. Handle isPrimary
@@ -419,7 +424,7 @@ export async function adminInviteCompanyUser(
     id: invited.user.id,
     company_id: companyId,
     name: payload.name,
-    email: payload.email,
+    email: normalizedEmail,
     company_role: payload.companyRole,
     status: "invited",
     title: payload.title,
@@ -432,7 +437,13 @@ export async function adminInviteCompanyUser(
 
   if (insertError) {
     console.error("Insert error:", insertError);
-    throw new Error(`담당자 정보 저장 실패: ${insertError.message}`);
+    // Rollback invited auth user to prevent Orphan records
+    try {
+      await admin.auth.admin.deleteUser(invited.user.id);
+    } catch (rbErr) {
+      console.error("Auth rollback error:", rbErr);
+    }
+    throw new Error(getBilingualError("SAVE_FAILED"));
   }
 
   revalidatePath(`/admin/companies/${companyId}`);

@@ -8,6 +8,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { deactivateUserSessions } from "@/lib/auth/admin-actions";
 import { publicEnv } from "@/lib/env/public";
 import { requireCompanyAdmin } from "@/lib/company/dal";
+import { normalizeEmail, checkUserEmailDuplicate } from "@/lib/user/validation";
+import { getBilingualError } from "@/lib/errors/bilingual-messages";
 
 export type InviteFormState = { error: string } | undefined;
 
@@ -36,14 +38,22 @@ export async function inviteCompanyUser(
   });
 
   if (!parsed.success) {
-    return { error: parsed.error.issues[0]?.message ?? "입력값을 확인해주세요." };
+    return { error: parsed.error.issues[0]?.message ?? getBilingualError("REQUIRED_FIELD") };
   }
 
   const { name, email, companyRole } = parsed.data;
+  const normalizedEmail = normalizeEmail(email);
+
+  // 1. System-wide Email Duplicate Validation (One Email = One User = One Company)
+  const dupCheck = await checkUserEmailDuplicate(normalizedEmail, companyId);
+  if (dupCheck.status !== "AVAILABLE") {
+    return { error: dupCheck.message };
+  }
+
   const admin = createAdminClient();
 
   const { data: invited, error: inviteError } =
-    await admin.auth.admin.inviteUserByEmail(email, {
+    await admin.auth.admin.inviteUserByEmail(normalizedEmail, {
       data: { role: "portal", display_name: name },
       redirectTo: `${publicEnv.NEXT_PUBLIC_SITE_URL}/portal/invite/accept`,
     });
@@ -52,18 +62,20 @@ export async function inviteCompanyUser(
     if (inviteError?.code === "over_email_send_rate_limit") {
       return {
         error:
-          "이메일 발송 한도를 초과했습니다. 잠시 후 다시 시도해주세요. (Supabase 기본 메일 발송은 시간당 발송 건수 제한이 있습니다 — README의 커스텀 SMTP 설정 안내를 참고하세요.)",
+          "이메일 발송 한도를 초과했습니다. 잠시 후 다시 시도해주세요.\nRate limit exceeded. Please try again later.",
       };
     }
-    // 08_주요화면과AC.md 예외: "이미 다른 회사 계정으로 가입된 이메일입니다"
-    return { error: "이미 다른 회사 계정으로 가입된 이메일입니다." };
+    if (inviteError?.message?.includes("already been registered")) {
+      return { error: getBilingualError("EMAIL_ALREADY_IN_OTHER_COMPANY") };
+    }
+    return { error: getBilingualError("INVITATION_FAILED") };
   }
 
   const { error: companyUserError } = await admin.from("company_users").insert({
     id: invited.user.id,
     company_id: companyId,
     name,
-    email,
+    email: normalizedEmail,
     company_role: companyRole,
     status: "invited",
     invited_by: userId,
@@ -71,7 +83,13 @@ export async function inviteCompanyUser(
   });
 
   if (companyUserError) {
-    return { error: "초대 정보를 저장하지 못했습니다. 잠시 후 다시 시도해주세요." };
+    // Rollback auth user to prevent Orphan records
+    try {
+      await admin.auth.admin.deleteUser(invited.user.id);
+    } catch (rbErr) {
+      console.error("Auth rollback error:", rbErr);
+    }
+    return { error: getBilingualError("SAVE_FAILED") };
   }
 
   revalidatePath("/portal/company/users");

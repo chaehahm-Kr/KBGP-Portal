@@ -49,7 +49,7 @@ export function InviteUserForm() {
         {pending ? "초대 중..." : "초대하기"}
       </button>
       {state?.error && (
-        <p className="text-xs font-semibold text-rose-600 dark:text-rose-450 sm:basis-full" role="alert">
+        <p className="text-xs font-semibold text-rose-600 dark:text-rose-450 whitespace-pre-line sm:basis-full" role="alert">
           {state.error}
         </p>
       )}

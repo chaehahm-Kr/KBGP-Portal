@@ -5,6 +5,7 @@ import { updateCompanyUser, reinviteCompanyUser } from "@/lib/company/invite-act
 import { isInviteExpired } from "@/lib/company/types";
 import { updateUserTaskAssignments } from "@/lib/company/task-actions";
 import { TASK_DEFINITIONS } from "@/lib/company/task-constants";
+import { InternationalPhoneInput } from "@/components/shared/international-phone-input";
 
 interface CompanyUsersManagerProps {
   initialUsers: any[];
@@ -385,13 +386,11 @@ export function CompanyUsersManager({ initialUsers, currentUserId }: CompanyUser
                   />
                 </div>
                 <div>
-                  <label className="text-[10px] font-bold text-zinc-400 block">연락처</label>
-                  <input
-                    type="text"
+                  <label className="text-[10px] font-bold text-zinc-400 block mb-1">연락처 (Phone Number)</label>
+                  <InternationalPhoneInput
                     value={formPhone}
-                    onChange={(e) => setFormPhone(e.target.value)}
-                    placeholder="010-1234-5678"
-                    className={inputClass}
+                    onChange={(val) => setFormPhone(val)}
+                    placeholder="856 555 1234, 10 1234 5678"
                   />
                 </div>
               </div>
