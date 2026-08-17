@@ -1,13 +1,18 @@
 import { type SupabaseClient } from "@supabase/supabase-js";
 
-const SENSITIVE_FIELDS = [
+const TRACKED_FIELDS = [
+  "payment_method",
+  "account_currency",
   "beneficiary_name",
+  "beneficiary_address",
   "bank_name",
+  "bank_address",
+  "bank_country",
   "account_number",
   "swift_bic",
   "routing_number",
-  "bank_country",
-  "beneficiary_address",
+  "intermediary_bank_info",
+  "remittance_note",
 ];
 
 export async function logRemittanceChanges(
@@ -22,7 +27,7 @@ export async function logRemittanceChanges(
   const oldValObj = oldRem || {};
   const newValObj = newRem || {};
 
-  for (const field of SENSITIVE_FIELDS) {
+  for (const field of TRACKED_FIELDS) {
     const rawOld = oldValObj[field];
     const rawNew = newValObj[field];
 
@@ -33,9 +38,18 @@ export async function logRemittanceChanges(
       let finalOld = oldStr;
       let finalNew = newStr;
 
-      if (field === "account_number") {
+      if (field === "account_number" || field === "routing_number" || field === "intermediary_bank_info") {
         finalOld = oldStr.length > 4 ? "••••••••" + oldStr.slice(-4) : oldStr ? "••••" : "";
         finalNew = newStr.length > 4 ? "••••••••" + newStr.slice(-4) : newStr ? "••••" : "";
+      } else if (field === "swift_bic") {
+        finalOld = oldStr.length > 4 ? oldStr.slice(0, 4) + "••••" : oldStr ? "••••" : "";
+        finalNew = newStr.length > 4 ? newStr.slice(0, 4) + "••••" : newStr ? "••••" : "";
+      } else if (field === "beneficiary_address" || field === "bank_address") {
+        finalOld = oldStr ? "[Address Detail Masked]" : "";
+        finalNew = newStr ? "[Address Detail Masked]" : "";
+      } else if (field === "remittance_note") {
+        finalOld = oldStr ? "[Note Detail Masked]" : "";
+        finalNew = newStr ? "[Note Detail Masked]" : "";
       }
 
       const { error } = await adminDb.from("supplier_remittance_logs").insert({
