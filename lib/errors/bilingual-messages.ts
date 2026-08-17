@@ -19,13 +19,13 @@ export interface BilingualMessage {
 export const BILINGUAL_ERRORS: Record<ErrorCode, BilingualMessage> = {
   USER_ALREADY_IN_COMPANY: {
     code: "USER_ALREADY_IN_COMPANY",
-    ko: "이미 이 회사에 등록된 사용자입니다.",
-    en: "This user is already registered with this company.",
+    ko: "이미 등록된 사용자입니다.",
+    en: "This user is already registered.",
   },
   EMAIL_ALREADY_IN_OTHER_COMPANY: {
     code: "EMAIL_ALREADY_IN_OTHER_COMPANY",
-    ko: "이 이메일은 이미 다른 회사에 등록되어 있습니다.",
-    en: "This email is already registered with another company.",
+    ko: "이미 등록된 사용자입니다.",
+    en: "This user is already registered.",
   },
   INVALID_EMAIL: {
     code: "INVALID_EMAIL",

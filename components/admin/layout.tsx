@@ -7,9 +7,10 @@ import Header from "./header";
 
 interface AdminLayoutProps {
   children: React.ReactNode;
+  pendingInquiriesCount?: number;
 }
 
-export default function AdminLayout({ children }: AdminLayoutProps) {
+export default function AdminLayout({ children, pendingInquiriesCount = 0 }: AdminLayoutProps) {
   const pathname = usePathname();
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
@@ -26,7 +27,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
     <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950">
 
       {/* Sidebar Navigation */}
-      <Sidebar isCollapsed={isSidebarCollapsed} toggleCollapse={toggleSidebar} />
+      <Sidebar isCollapsed={isSidebarCollapsed} toggleCollapse={toggleSidebar} pendingInquiriesCount={pendingInquiriesCount} />
 
       {/* Main Content Area */}
       <div

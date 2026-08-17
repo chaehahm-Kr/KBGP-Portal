@@ -178,6 +178,14 @@ export default async function AdminApplicationsPage({
             전체 파트너 회사가 제출한 입점 신청서 내역을 조회하고 배정 및 심사를 처리합니다.
           </p>
         </div>
+        <div className="shrink-0">
+          <Link
+            href="/admin/applications/new"
+            className="inline-flex items-center gap-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-850 dark:bg-zinc-100 dark:hover:bg-zinc-200 text-white dark:text-zinc-955 px-4 py-2.5 text-xs font-bold transition-all shadow-sm cursor-pointer"
+          >
+            <span className="text-sm font-bold">+</span> New Application
+          </Link>
+        </div>
       </div>
 
       {/* Filter panel */}

@@ -11,6 +11,8 @@ import {
   mockSalesData
 } from "@/lib/data/mockData";
 
+import { getPendingPartnerInquiriesCount } from "@/lib/inquiry/actions";
+
 export const metadata: Metadata = {
   title: "대시보드 | K SELECT NETWORK 어드민",
 };
@@ -18,6 +20,7 @@ export const metadata: Metadata = {
 export default async function AdminHomePage() {
   const session = await verifyAdminSession();
   const supabase = await createClient();
+  const pendingInquiriesCount = await getPendingPartnerInquiriesCount();
 
   // DB 실시간 데이터 가져오기
   const { data: dbApps } = await supabase
@@ -45,13 +48,30 @@ export default async function AdminHomePage() {
 
   return (
     <div className="space-y-6">
-      {/* Page Header */}
-      <div>
-        <h1 className="text-xl font-bold text-zinc-950 dark:text-white">대시보드</h1>
-        <p className="text-xs text-zinc-500 dark:text-zinc-400">
-          K SELECT NETWORK 비즈니스 및 파트너 현황 분석 대시보드입니다.
-        </p>
-      </div>
+      {/* Pending Partner Inquiries Action Card */}
+      {pendingInquiriesCount > 0 && (
+        <div className="flex items-center justify-between rounded-xl border border-amber-200 bg-amber-50/70 p-4 dark:border-amber-900/50 dark:bg-amber-950/20 text-amber-900 dark:text-amber-300 shadow-xs">
+          <div className="flex items-center gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-amber-500 text-white font-extrabold text-sm shadow-xs">
+              {pendingInquiriesCount}
+            </div>
+            <div>
+              <h3 className="text-xs font-bold text-amber-950 dark:text-amber-200">
+                처리 대기 Partner 문의 {pendingInquiriesCount}건
+              </h3>
+              <p className="text-[11px] text-amber-800 dark:text-amber-400 mt-0.5">
+                Partner inquiries awaiting review: {pendingInquiriesCount}. 파트너사의 신규 문의 및 답변 요청을 확인해주세요.
+              </p>
+            </div>
+          </div>
+          <Link
+            href="/admin/partner-inquiries"
+            className="rounded-lg bg-amber-600 hover:bg-amber-700 dark:bg-amber-500 dark:hover:bg-amber-600 text-white px-3.5 py-2 text-xs font-bold transition-all shrink-0 cursor-pointer shadow-2xs"
+          >
+            Partner Inquiries 바로가기 →
+          </Link>
+        </div>
+      )}
 
       {/* KPI Cards Grid */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">

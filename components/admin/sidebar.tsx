@@ -32,6 +32,7 @@ import {
 interface SidebarProps {
   isCollapsed: boolean;
   toggleCollapse: () => void;
+  pendingInquiriesCount?: number;
 }
 
 interface SubItem {
@@ -48,7 +49,11 @@ interface MenuItem {
   subItems?: SubItem[];
 }
 
-export default function Sidebar({ isCollapsed, toggleCollapse }: SidebarProps) {
+export default function Sidebar({
+  isCollapsed,
+  toggleCollapse,
+  pendingInquiriesCount = 0,
+}: SidebarProps) {
   const pathname = usePathname();
 
   // Depth 1 expand state
@@ -318,6 +323,11 @@ export default function Sidebar({ isCollapsed, toggleCollapse }: SidebarProps) {
                 >
                   <item.icon className="h-5 w-5 shrink-0" />
                   {!isCollapsed && <span className="flex-1 text-left">{item.name}</span>}
+                  {!isCollapsed && item.name === "Tasks & Communication" && pendingInquiriesCount > 0 && (
+                    <span className="mr-1 inline-flex items-center justify-center rounded-full bg-amber-500 text-white text-[10px] font-extrabold px-1.5 py-0.2">
+                      {pendingInquiriesCount}
+                    </span>
+                  )}
                   {!isCollapsed &&
                     (isExpanded ? (
                       <ChevronDownIcon size={16} className="text-zinc-400" />
@@ -411,7 +421,12 @@ export default function Sidebar({ isCollapsed, toggleCollapse }: SidebarProps) {
                         }`}
                       >
                         {sub.icon && <sub.icon size={14} className="text-zinc-400 dark:text-zinc-500 shrink-0" />}
-                        <span>{sub.name}</span>
+                        <span className="flex-1">{sub.name}</span>
+                        {sub.name === "Partner Inquiries" && pendingInquiriesCount > 0 && (
+                          <span className="rounded-full bg-amber-500 text-white px-2 py-0.2 text-[10px] font-extrabold shadow-xs">
+                            {pendingInquiriesCount}
+                          </span>
+                        )}
                       </Link>
                     );
                   })}

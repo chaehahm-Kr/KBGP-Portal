@@ -968,3 +968,25 @@ export async function reopenCase(
     return { success: false, error: e instanceof Error ? e.message : "케이스 재오픈 실패" };
   }
 }
+
+/**
+ * Fetch total count of pending/unread partner inquiries for Admin notification badges
+ */
+export async function getPendingPartnerInquiriesCount(): Promise<number> {
+  try {
+    const supabase = await createClient();
+    const { count, error } = await supabase
+      .from("partner_inquiries")
+      .select("*", { count: "exact", head: true })
+      .or("status.in.(open,pending,reopened),is_action_required.eq.true");
+
+    if (error) {
+      console.warn("⚠️ getPendingPartnerInquiriesCount error:", error);
+      return 0;
+    }
+    return count ?? 0;
+  } catch (err) {
+    console.warn("⚠️ getPendingPartnerInquiriesCount error:", err);
+    return 0;
+  }
+}

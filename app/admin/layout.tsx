@@ -1,6 +1,7 @@
 import React from "react";
 import type { Metadata } from "next";
 import AdminLayout from "@/components/admin/layout";
+import { getPendingPartnerInquiriesCount } from "@/lib/inquiry/actions";
 
 export const dynamic = "force-dynamic";
 
@@ -21,10 +22,11 @@ export const metadata: Metadata = {
   },
 };
 
-export default function AdminPageLayout({
+export default async function AdminPageLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  return <AdminLayout>{children}</AdminLayout>;
+  const pendingInquiriesCount = await getPendingPartnerInquiriesCount();
+  return <AdminLayout pendingInquiriesCount={pendingInquiriesCount}>{children}</AdminLayout>;
 }

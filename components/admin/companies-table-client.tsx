@@ -36,9 +36,14 @@ interface CompaniesTableClientProps {
 
 export function CompaniesTableClient({ companies, partnerStatuses }: CompaniesTableClientProps) {
   const [search, setSearch] = useState("");
-  const [typeFilter, setTypeFilter] = useState("ALL");
-  const [countryFilter, setCountryFilter] = useState("ALL");
-  const [statusFilter, setStatusFilter] = useState("ALL");
+  const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
+  const [selectedCountries, setSelectedCountries] = useState<string[]>([]);
+  const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
+
+  // Popover Open states
+  const [openTypeFilter, setOpenTypeFilter] = useState(false);
+  const [openCountryFilter, setOpenCountryFilter] = useState(false);
+  const [openStatusFilter, setOpenStatusFilter] = useState(false);
 
   // Extract unique types, countries, and statuses for dropdown filters
   const uniqueTypes = useMemo(() => {
@@ -65,7 +70,7 @@ export function CompaniesTableClient({ companies, partnerStatuses }: CompaniesTa
     return Array.from(set).sort();
   }, [companies]);
 
-  // Combined Search & Filter Logic
+  // Combined Search & Multi-Filter Logic
   const filteredCompanies = useMemo(() => {
     return companies.filter((company) => {
       // 1. Search Query (Partial Match across Company Name, Company Email, Contact Name, User Names, User Emails)
@@ -85,32 +90,54 @@ export function CompaniesTableClient({ companies, partnerStatuses }: CompaniesTa
         }
       }
 
-      // 2. Type Filter
-      if (typeFilter !== "ALL" && company.type !== typeFilter) {
+      // 2. Type Multi-Filter (OR within group)
+      if (selectedTypes.length > 0 && !selectedTypes.includes(company.type)) {
         return false;
       }
 
-      // 3. Country Filter
-      if (countryFilter !== "ALL" && company.country !== countryFilter) {
+      // 3. Country Multi-Filter (OR within group)
+      if (selectedCountries.length > 0 && !selectedCountries.includes(company.country)) {
         return false;
       }
 
-      // 4. Partner Status Filter
-      if (statusFilter !== "ALL" && company.partnerStatus !== statusFilter) {
+      // 4. Partner Status Multi-Filter (OR within group)
+      if (selectedStatuses.length > 0 && !selectedStatuses.includes(company.partnerStatus)) {
         return false;
       }
 
       return true;
     });
-  }, [companies, search, typeFilter, countryFilter, statusFilter]);
+  }, [companies, search, selectedTypes, selectedCountries, selectedStatuses]);
 
-  const isFiltered = search.trim() !== "" || typeFilter !== "ALL" || countryFilter !== "ALL" || statusFilter !== "ALL";
+  const isFiltered =
+    search.trim() !== "" ||
+    selectedTypes.length > 0 ||
+    selectedCountries.length > 0 ||
+    selectedStatuses.length > 0;
 
   const handleReset = () => {
     setSearch("");
-    setTypeFilter("ALL");
-    setCountryFilter("ALL");
-    setStatusFilter("ALL");
+    setSelectedTypes([]);
+    setSelectedCountries([]);
+    setSelectedStatuses([]);
+  };
+
+  const toggleType = (type: string) => {
+    setSelectedTypes((prev) =>
+      prev.includes(type) ? prev.filter((t) => t !== type) : [...prev, type]
+    );
+  };
+
+  const toggleCountry = (country: string) => {
+    setSelectedCountries((prev) =>
+      prev.includes(country) ? prev.filter((c) => c !== country) : [...prev, country]
+    );
+  };
+
+  const toggleStatus = (status: string) => {
+    setSelectedStatuses((prev) =>
+      prev.includes(status) ? prev.filter((s) => s !== status) : [...prev, status]
+    );
   };
 
   return (
@@ -132,56 +159,200 @@ export function CompaniesTableClient({ companies, partnerStatuses }: CompaniesTa
             />
           </div>
 
-          {/* Filters Group */}
-          <div className="flex flex-wrap items-center gap-2">
-            {/* Type Filter */}
-            <select
-              value={typeFilter}
-              onChange={(e) => setTypeFilter(e.target.value)}
-              className="rounded-lg border border-zinc-200 bg-zinc-50 px-2.5 py-1.5 text-xs font-semibold text-zinc-700 outline-none dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-300"
-            >
-              <option value="ALL">모든 유형 (All Types)</option>
-              {uniqueTypes.map((t) => (
-                <option key={t} value={t}>
-                  {t}
-                </option>
-              ))}
-            </select>
+          {/* Multi-Filter Dropdowns Group */}
+          <div className="flex flex-wrap items-center gap-2 relative">
+            {/* Type Multi-Filter Dropdown */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => {
+                  setOpenTypeFilter(!openTypeFilter);
+                  setOpenCountryFilter(false);
+                  setOpenStatusFilter(false);
+                }}
+                className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold cursor-pointer transition-all ${
+                  selectedTypes.length > 0
+                    ? "border-zinc-900 bg-zinc-900 text-white dark:border-zinc-100 dark:bg-zinc-100 dark:text-zinc-955 font-bold"
+                    : "border-zinc-200 bg-zinc-50 text-zinc-700 hover:bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-300"
+                }`}
+              >
+                <span>유형</span>
+                {selectedTypes.length > 0 && (
+                  <span className="rounded-full bg-emerald-500 text-white px-1.5 py-0.2 text-[9px] font-extrabold">
+                    {selectedTypes.length}
+                  </span>
+                )}
+                <span className="text-[9px]">▼</span>
+              </button>
 
-            {/* Country Filter */}
-            <select
-              value={countryFilter}
-              onChange={(e) => setCountryFilter(e.target.value)}
-              className="rounded-lg border border-zinc-200 bg-zinc-50 px-2.5 py-1.5 text-xs font-semibold text-zinc-700 outline-none dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-300"
-            >
-              <option value="ALL">모든 국가 (All Countries)</option>
-              {uniqueCountries.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-            </select>
+              {openTypeFilter && (
+                <div className="absolute left-0 top-full mt-1 z-30 w-52 rounded-xl border border-zinc-200 bg-white p-3 shadow-xl dark:border-zinc-800 dark:bg-zinc-950 space-y-1.5 animate-in fade-in zoom-in-95 duration-100">
+                  <div className="flex justify-between items-center pb-1 border-b border-zinc-100 dark:border-zinc-800">
+                    <span className="text-[10px] font-bold text-zinc-400 uppercase">회사 유형 선택</span>
+                    {selectedTypes.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setSelectedTypes([])}
+                        className="text-[10px] text-rose-500 hover:underline font-bold"
+                      >
+                        초기화
+                      </button>
+                    )}
+                  </div>
+                  <div className="max-h-48 overflow-y-auto space-y-1 pt-1">
+                    {uniqueTypes.map((t) => {
+                      const isChecked = selectedTypes.includes(t);
+                      return (
+                        <label
+                          key={t}
+                          className="flex items-center gap-2 px-2 py-1 rounded hover:bg-zinc-50 dark:hover:bg-zinc-900 text-xs font-medium text-zinc-800 dark:text-zinc-200 cursor-pointer select-none"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={() => toggleType(t)}
+                            className="rounded border-zinc-300 text-zinc-900 focus:ring-zinc-950 dark:border-zinc-700"
+                          />
+                          <span>{t}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
 
-            {/* Status Filter */}
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="rounded-lg border border-zinc-200 bg-zinc-50 px-2.5 py-1.5 text-xs font-semibold text-zinc-700 outline-none dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-300"
-            >
-              <option value="ALL">모든 상태 (All Statuses)</option>
-              {uniqueStatuses.map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
-            </select>
+            {/* Country Multi-Filter Dropdown */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => {
+                  setOpenCountryFilter(!openCountryFilter);
+                  setOpenTypeFilter(false);
+                  setOpenStatusFilter(false);
+                }}
+                className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold cursor-pointer transition-all ${
+                  selectedCountries.length > 0
+                    ? "border-zinc-900 bg-zinc-900 text-white dark:border-zinc-100 dark:bg-zinc-100 dark:text-zinc-955 font-bold"
+                    : "border-zinc-200 bg-zinc-50 text-zinc-700 hover:bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-300"
+                }`}
+              >
+                <span>국가</span>
+                {selectedCountries.length > 0 && (
+                  <span className="rounded-full bg-emerald-500 text-white px-1.5 py-0.2 text-[9px] font-extrabold">
+                    {selectedCountries.length}
+                  </span>
+                )}
+                <span className="text-[9px]">▼</span>
+              </button>
+
+              {openCountryFilter && (
+                <div className="absolute left-0 top-full mt-1 z-30 w-52 rounded-xl border border-zinc-200 bg-white p-3 shadow-xl dark:border-zinc-800 dark:bg-zinc-950 space-y-1.5 animate-in fade-in zoom-in-95 duration-100">
+                  <div className="flex justify-between items-center pb-1 border-b border-zinc-100 dark:border-zinc-800">
+                    <span className="text-[10px] font-bold text-zinc-400 uppercase">국가 선택</span>
+                    {selectedCountries.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setSelectedCountries([])}
+                        className="text-[10px] text-rose-500 hover:underline font-bold"
+                      >
+                        초기화
+                      </button>
+                    )}
+                  </div>
+                  <div className="max-h-48 overflow-y-auto space-y-1 pt-1">
+                    {uniqueCountries.map((c) => {
+                      const isChecked = selectedCountries.includes(c);
+                      return (
+                        <label
+                          key={c}
+                          className="flex items-center gap-2 px-2 py-1 rounded hover:bg-zinc-50 dark:hover:bg-zinc-900 text-xs font-medium text-zinc-800 dark:text-zinc-200 cursor-pointer select-none"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={() => toggleCountry(c)}
+                            className="rounded border-zinc-300 text-zinc-900 focus:ring-zinc-950 dark:border-zinc-700"
+                          />
+                          <span>{c}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Status Multi-Filter Dropdown */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => {
+                  setOpenStatusFilter(!openStatusFilter);
+                  setOpenTypeFilter(false);
+                  setOpenCountryFilter(false);
+                }}
+                className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold cursor-pointer transition-all ${
+                  selectedStatuses.length > 0
+                    ? "border-zinc-900 bg-zinc-900 text-white dark:border-zinc-100 dark:bg-zinc-100 dark:text-zinc-955 font-bold"
+                    : "border-zinc-200 bg-zinc-50 text-zinc-700 hover:bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-300"
+                }`}
+              >
+                <span>파트너 상태</span>
+                {selectedStatuses.length > 0 && (
+                  <span className="rounded-full bg-emerald-500 text-white px-1.5 py-0.2 text-[9px] font-extrabold">
+                    {selectedStatuses.length}
+                  </span>
+                )}
+                <span className="text-[9px]">▼</span>
+              </button>
+
+              {openStatusFilter && (
+                <div className="absolute left-0 top-full mt-1 z-30 w-52 rounded-xl border border-zinc-200 bg-white p-3 shadow-xl dark:border-zinc-800 dark:bg-zinc-950 space-y-1.5 animate-in fade-in zoom-in-95 duration-100">
+                  <div className="flex justify-between items-center pb-1 border-b border-zinc-100 dark:border-zinc-800">
+                    <span className="text-[10px] font-bold text-zinc-400 uppercase">상태 선택</span>
+                    {selectedStatuses.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setSelectedStatuses([])}
+                        className="text-[10px] text-rose-500 hover:underline font-bold"
+                      >
+                        초기화
+                      </button>
+                    )}
+                  </div>
+                  <div className="max-h-48 overflow-y-auto space-y-1 pt-1">
+                    {uniqueStatuses.map((s) => {
+                      const isChecked = selectedStatuses.includes(s);
+                      const statusConfig = partnerStatuses.find(
+                        (p) => p.id.toLowerCase() === s.toLowerCase()
+                      );
+                      return (
+                        <label
+                          key={s}
+                          className="flex items-center gap-2 px-2 py-1 rounded hover:bg-zinc-50 dark:hover:bg-zinc-900 text-xs font-medium text-zinc-800 dark:text-zinc-200 cursor-pointer select-none"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={() => toggleStatus(s)}
+                            className="rounded border-zinc-300 text-zinc-900 focus:ring-zinc-950 dark:border-zinc-700"
+                          />
+                          <span>{statusConfig?.label || s}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
 
             {/* Clear / Reset Filter Button */}
             {isFiltered && (
               <button
                 type="button"
                 onClick={handleReset}
-                className="rounded-lg border border-zinc-200 bg-zinc-100 px-3 py-1.5 text-xs font-bold text-zinc-700 hover:bg-zinc-200 dark:border-zinc-800 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700 transition"
+                className="rounded-lg border border-zinc-200 bg-zinc-100 px-3 py-1.5 text-xs font-bold text-zinc-700 hover:bg-zinc-200 dark:border-zinc-800 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700 transition cursor-pointer"
               >
                 필터 초기화 (Reset)
               </button>
@@ -210,6 +381,7 @@ export function CompaniesTableClient({ companies, partnerStatuses }: CompaniesTa
                 <th className="px-6 py-3.5 font-semibold text-center">등록 제품 수</th>
                 <th className="px-6 py-3.5 font-semibold">파트너 상태</th>
                 <th className="px-6 py-3.5 font-semibold">주 컨택 담당자</th>
+                <th className="px-6 py-3.5 font-semibold text-center">등록 인원</th>
                 <th className="px-6 py-3.5 font-semibold">최근 연락</th>
                 <th className="px-6 py-3.5 font-semibold text-right">관리</th>
               </tr>
@@ -290,6 +462,15 @@ export function CompaniesTableClient({ companies, partnerStatuses }: CompaniesTa
                       </div>
                     </td>
                     
+                    {/* Registered Users Count Column (Admin + Staff) */}
+                    <td className="px-6 py-3.5 text-center">
+                      <span className="inline-flex items-center justify-center rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white px-2.5 py-0.5 font-bold font-mono text-xs border border-zinc-200 dark:border-zinc-700">
+                        {company.users && company.users.length > 0
+                          ? company.users.filter((u) => u.name || u.email).length
+                          : (company.contactName && company.contactName !== "담당자 정보 없음" ? 1 : 0)}
+                      </span>
+                    </td>
+
                     <td className="px-6 py-3.5 text-zinc-400">
                       {company.lastContact}
                     </td>
@@ -307,7 +488,7 @@ export function CompaniesTableClient({ companies, partnerStatuses }: CompaniesTa
 
               {filteredCompanies.length === 0 && (
                 <tr>
-                  <td colSpan={9} className="px-6 py-12 text-center text-zinc-400 dark:text-zinc-500">
+                  <td colSpan={10} className="px-6 py-12 text-center text-zinc-400 dark:text-zinc-500">
                     검색 조건과 일치하는 회사가 없습니다.
                   </td>
                 </tr>
