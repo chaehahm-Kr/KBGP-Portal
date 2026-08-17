@@ -106,9 +106,5 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500, headers: corsHeaders });
   }
 
-  return NextResponse.json({ 
-    articles,
-    dbUrl: process.env.NEXT_PUBLIC_SUPABASE_URL,
-    secretKeyLength: process.env.SUPABASE_SECRET_KEY ? process.env.SUPABASE_SECRET_KEY.length : 0
-  }, { status: 200, headers: corsHeaders });
+  return NextResponse.json({ articles }, { status: 200, headers: corsHeaders });
 }
