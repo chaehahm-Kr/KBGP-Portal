@@ -215,7 +215,9 @@ export function CompanyDetailManager({
 
   const showSupplierTab = true;
 
-  const [activeTab, setActiveTab] = useState<"staff" | "tasks" | "brands" | "products" | "applications" | "supplier">("staff");
+  const [activeTab, setActiveTab] = useState<
+    "staff" | "tasks" | "brands" | "products" | "applications" | "supplier" | "remittance"
+  >("staff");
   const [isPending, startTransition] = useTransition();
 
   // Company general metadata states
@@ -1125,7 +1127,7 @@ export function CompanyDetailManager({
                   "brands",
                   "products",
                   "applications",
-                  "supplier",
+                  ...(showSupplierTab ? ["supplier" as const, "remittance" as const] : []),
                 ] as const).map((tab) => (
                   <button
                     key={tab}
@@ -1146,7 +1148,9 @@ export function CompanyDetailManager({
                       ? "등록 제품"
                       : tab === "applications"
                       ? "입점 신청서"
-                      : "거래 정보 (Supplier / Trading)"}
+                      : tab === "supplier"
+                      ? "거래 정보"
+                      : "은행 정보"}
                   </button>
                 ))}
               </nav>
@@ -1579,7 +1583,7 @@ export function CompanyDetailManager({
               {activeTab === "supplier" && showSupplierTab && (
                 <div className="space-y-6">
                   <div className="flex items-center justify-between pb-2 border-b border-zinc-100 dark:border-zinc-800">
-                    <h3 className="text-xs font-bold text-zinc-950 dark:text-white uppercase tracking-wider">거래 정보 (Supplier / Trading Info)</h3>
+                    <h3 className="text-xs font-bold text-zinc-950 dark:text-white uppercase tracking-wider">거래 정보 (Supplier Trading Info)</h3>
                     {!isEditingSupplier ? (
                       <button
                         type="button"
@@ -1595,7 +1599,301 @@ export function CompanyDetailManager({
                           setSupMOQ(supplierProfile?.default_moq !== null && supplierProfile?.default_moq !== undefined ? String(supplierProfile.default_moq) : "");
                           setSupReceivingEmail(supplierProfile?.po_receiving_email || "");
                           setSupInternalNote(supplierProfile?.internal_note || "");
-                          
+                          setIsEditingSupplier(true);
+                        }}
+                        className="px-2.5 py-1 text-[10px] font-bold rounded border bg-zinc-50 border-zinc-200 text-zinc-700 hover:bg-zinc-100 cursor-pointer dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-750"
+                      >
+                        정보 수정
+                      </button>
+                    ) : (
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setIsEditingSupplier(false)}
+                          className="px-2.5 py-1 text-[10px] font-bold rounded border bg-white border-zinc-200 text-zinc-500 hover:bg-zinc-50 cursor-pointer dark:bg-zinc-900 dark:border-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-850"
+                        >
+                          취소
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleSaveSupplier}
+                          disabled={supplierPending}
+                          className="px-3 py-1 text-[10px] font-bold rounded bg-zinc-950 text-white hover:opacity-90 disabled:opacity-50 cursor-pointer dark:bg-zinc-100 dark:text-zinc-950"
+                        >
+                          {supplierPending ? "저장 중..." : "저장"}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Supplier Profile Details */}
+                  <div className="space-y-4 max-w-3xl">
+                    <div className="space-y-3">
+                      <div>
+                        <label className="text-[10px] font-bold text-zinc-400 block mb-1">거래 상태 (Status)</label>
+                        {isEditingSupplier ? (
+                          <select
+                            value={supStatus}
+                            onChange={(e) => setSupStatus(e.target.value)}
+                            className="w-full rounded border border-zinc-200 p-1 text-xs outline-none bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+                          >
+                            <option value="active">Active</option>
+                            <option value="on_hold">On Hold</option>
+                            <option value="inactive">Inactive</option>
+                          </select>
+                        ) : (
+                          <span className={`inline-block px-2 py-0.5 text-[10px] font-bold rounded border ${
+                            (supplierProfile?.status || 'active') === 'active' ? 'bg-emerald-50 text-emerald-700 border-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-900' :
+                            (supplierProfile?.status || 'active') === 'on_hold' ? 'bg-amber-50 text-amber-700 border-amber-100 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-900' :
+                            'bg-rose-50 text-rose-700 border-rose-100 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-900'
+                          }`}>
+                            {(supplierProfile?.status || 'active').toUpperCase()}
+                          </span>
+                        )}
+                      </div>
+
+                      <div>
+                        <label className="text-[10px] font-bold text-zinc-400 block mb-1">기본 결제 통화 (Default Currency)</label>
+                        {isEditingSupplier ? (
+                          <select
+                            value={supCurrency}
+                            onChange={(e) => setSupCurrency(e.target.value)}
+                            className="w-full rounded border border-zinc-200 p-1 text-xs outline-none bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+                          >
+                            <option value="">미지정 (Not Set)</option>
+                            <option value="USD">USD ($)</option>
+                            <option value="KRW">KRW (₩)</option>
+                            <option value="EUR">EUR (€)</option>
+                            <option value="JPY">JPY (¥)</option>
+                          </select>
+                        ) : (
+                          <span className="font-semibold text-zinc-900 dark:text-white">{supplierProfile?.default_currency || "미지정"}</span>
+                        )}
+                      </div>
+
+                      <div>
+                        <label className="text-[10px] font-bold text-zinc-400 block mb-1">기본 결제 조건 (Default Payment Terms)</label>
+                        {isEditingSupplier ? (
+                          <div className="space-y-1.5">
+                            <select
+                              value={supPaymentTerms}
+                              onChange={(e) => setSupPaymentTerms(e.target.value)}
+                              className="w-full rounded border border-zinc-200 p-1 text-xs outline-none bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+                            >
+                              <option value="">미지정 (Not Set)</option>
+                              <option value="Prepaid 100%">Prepaid 100%</option>
+                              <option value="30% Deposit / 70% Balance">30% Deposit / 70% Balance</option>
+                              <option value="50% Deposit / 50% Balance">50% Deposit / 50% Balance</option>
+                              <option value="Net 15">Net 15</option>
+                              <option value="Net 30">Net 30</option>
+                              <option value="Net 60">Net 60</option>
+                              <option value="Custom">Custom (직접 입력)</option>
+                            </select>
+                            {supPaymentTerms === "Custom" && (
+                              <input
+                                type="text"
+                                placeholder="결제 조건을 직접 입력하세요..."
+                                value={supPaymentTermsCustom}
+                                onChange={(e) => setSupPaymentTermsCustom(e.target.value)}
+                                className="w-full rounded border border-zinc-200 p-1.5 text-xs outline-none bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+                              />
+                            )}
+                          </div>
+                        ) : (
+                          <span className="font-semibold text-zinc-900 dark:text-white">
+                            {supplierProfile?.default_payment_terms === "Custom"
+                              ? `Custom: ${supplierProfile?.default_payment_terms_custom || ""}`
+                              : supplierProfile?.default_payment_terms || "미지정"}
+                          </span>
+                        )}
+                      </div>
+
+                      <div>
+                        <label className="text-[10px] font-bold text-zinc-400 block mb-1">인코텀즈 조건 (Default Incoterms)</label>
+                        {isEditingSupplier ? (
+                          <select
+                            value={supIncoterms}
+                            onChange={(e) => setSupIncoterms(e.target.value)}
+                            className="w-full rounded border border-zinc-200 p-1 text-xs outline-none bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+                          >
+                            <option value="">미지정 (Not Set)</option>
+                            <option value="EXW">EXW</option>
+                            <option value="FOB">FOB</option>
+                            <option value="CIF">CIF</option>
+                            <option value="DDP">DDP</option>
+                            <option value="DAP">DAP</option>
+                          </select>
+                        ) : (
+                          <span className="font-semibold text-zinc-900 dark:text-white">{supplierProfile?.default_incoterms || "미지정"}</span>
+                        )}
+                      </div>
+
+                      <div>
+                        <label className="text-[10px] font-bold text-zinc-400 block mb-1">기본 출고지 주소 (Ship-from Address)</label>
+                        {isEditingSupplier ? (
+                          <div className="space-y-1">
+                            <select
+                              value={supShipFromWarehouseId}
+                              onChange={(e) => setSupShipFromWarehouseId(e.target.value)}
+                              className="w-full rounded border border-zinc-200 p-1 text-xs outline-none bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+                            >
+                              <option value="">미지정 (Not Set)</option>
+                              {warehouses.map((wh: any) => {
+                                if (wh.status === "inactive" && wh.id !== supplierProfile?.default_ship_from_warehouse_id) {
+                                  return null;
+                                }
+                                return (
+                                  <option key={wh.id} value={wh.id}>
+                                    [{wh.code}] {wh.name} ({wh.address1}){wh.status === "inactive" ? " (비활성)" : ""}
+                                  </option>
+                                );
+                              })}
+                            </select>
+                            <div className="text-[10px] text-zinc-400 dark:text-zinc-500 italic mt-0.5">
+                              참고용 본사 주소: {address || "등록 없음"}
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="space-y-1">
+                            <span className="font-semibold text-zinc-900 dark:text-white block">
+                              {(() => {
+                                const selectedWh = warehouses.find(w => w.id === supplierProfile?.default_ship_from_warehouse_id);
+                                return selectedWh 
+                                  ? `[${selectedWh.code}] ${selectedWh.name} (${selectedWh.address1})${selectedWh.status === "inactive" ? " (비활성)" : ""}`
+                                  : "미지정 (Not Set)";
+                              })()}
+                            </span>
+                            <div className="text-[10px] text-zinc-400 dark:text-zinc-500 italic">
+                              참고용 본사 주소: {address || "등록 없음"}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="text-[10px] font-bold text-zinc-400 block mb-1">선적항 (Port of Loading)</label>
+                          {isEditingSupplier ? (
+                            <input
+                              type="text"
+                              value={supPortOfLoading}
+                              onChange={(e) => setSupPortOfLoading(e.target.value)}
+                              className="w-full rounded border border-zinc-200 p-1.5 text-xs outline-none bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+                              placeholder="Busan, Incheon..."
+                            />
+                          ) : (
+                            <span className="font-semibold text-zinc-900 dark:text-white">{supplierProfile?.default_port_of_loading || "Busan"}</span>
+                          )}
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-bold text-zinc-400 block mb-1">평균 리드타임 (Lead Time)</label>
+                          {isEditingSupplier ? (
+                            <input
+                              type="text"
+                              value={supLeadTime}
+                              onChange={(e) => setSupLeadTime(e.target.value)}
+                              className="w-full rounded border border-zinc-200 p-1.5 text-xs outline-none bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+                              placeholder="30 days, 6 weeks..."
+                            />
+                          ) : (
+                            <span className="font-semibold text-zinc-900 dark:text-white">{supplierProfile?.default_production_lead_time || "등록 없음"}</span>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="text-[10px] font-bold text-zinc-400 block mb-1">기본 MOQ</label>
+                          {isEditingSupplier ? (
+                            <input
+                              type="number"
+                              value={supMOQ}
+                              onChange={(e) => setSupMOQ(e.target.value)}
+                              className="w-full rounded border border-zinc-200 p-1.5 text-xs outline-none bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+                              placeholder="최소 구매 수량"
+                              min="0"
+                            />
+                          ) : (
+                            <span className="font-semibold text-zinc-900 dark:text-white">
+                              {supplierProfile?.default_moq !== null && supplierProfile?.default_moq !== undefined ? `${supplierProfile.default_moq.toLocaleString()} pcs` : "제한 없음"}
+                            </span>
+                          )}
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-bold text-zinc-400 block mb-1">PO 수신 공식 이메일</label>
+                          {isEditingSupplier ? (
+                            <input
+                              type="email"
+                              value={supReceivingEmail}
+                              onChange={(e) => setSupReceivingEmail(e.target.value)}
+                              className="w-full rounded border border-zinc-200 p-1.5 text-xs outline-none bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+                              placeholder="orders@supplier.com"
+                            />
+                          ) : (
+                            <span className="font-semibold text-zinc-900 dark:text-white font-mono">{supplierProfile?.po_receiving_email || "등록 없음"}</span>
+                          )}
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="text-[10px] font-bold text-zinc-400 block mb-1">기본 담당 업무 배정인 (현황)</label>
+                        <div className="bg-zinc-50 p-2 rounded border border-zinc-150 space-y-1 dark:bg-zinc-950/20 dark:border-zinc-800">
+                          <div className="flex justify-between items-center text-[10px]">
+                            <span className="text-zinc-500 font-bold">견적·단가 담당:</span>
+                            <span className="font-medium text-zinc-700 dark:text-zinc-350">{getEmailRecipientsForTask("pricing_quote") || "(없음)"}</span>
+                          </div>
+                          <div className="flex justify-between items-center text-[10px]">
+                            <span className="text-zinc-500 font-bold">발주·물류·재고 담당:</span>
+                            <span className="font-medium text-zinc-700 dark:text-zinc-350">{getEmailRecipientsForTask("logistics_inventory") || "(없음)"}</span>
+                          </div>
+                          <div className="flex justify-between items-center text-[10px]">
+                            <span className="text-zinc-500 font-bold">정산·송금 담당:</span>
+                            <span className="font-medium text-zinc-700 dark:text-zinc-350">{getEmailRecipientsForTask("settlement_inquiry") || "(없음)"}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="text-[10px] font-bold text-zinc-400 block mb-1">내부 관리용 메모 (Internal Note)</label>
+                        {isEditingSupplier ? (
+                          <textarea
+                            value={supInternalNote}
+                            onChange={(e) => setSupInternalNote(e.target.value)}
+                            className="w-full rounded border border-zinc-200 p-1.5 text-xs outline-none bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white resize-none h-16"
+                            placeholder="K SELECT 어드민 직원만 볼 수 있는 메모입니다..."
+                          />
+                        ) : (
+                          <div className="bg-zinc-50 p-2 border border-zinc-150 rounded text-zinc-650 dark:bg-zinc-950/20 dark:border-zinc-800 dark:text-zinc-400 min-h-[40px] whitespace-pre-wrap">
+                            {supplierProfile?.internal_note || "작성된 메모가 없습니다."}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* 7. Bank & Remittance Information Tab */}
+              {activeTab === "remittance" && showSupplierTab && (
+                <div className="space-y-6">
+                  <div className="flex items-center justify-between pb-2 border-b border-zinc-100 dark:border-zinc-800">
+                    <h3 className="text-xs font-bold text-zinc-950 dark:text-white uppercase tracking-wider">은행 정보 (Payment & Remittance Info)</h3>
+                    {!isEditingSupplier ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSupStatus(supplierProfile?.status || "active");
+                          setSupCurrency(supplierProfile?.default_currency || "");
+                          setSupPaymentTerms(supplierProfile?.default_payment_terms || "");
+                          setSupPaymentTermsCustom(supplierProfile?.default_payment_terms_custom || "");
+                          setSupIncoterms(supplierProfile?.default_incoterms || "");
+                          setSupShipFromWarehouseId(supplierProfile?.default_ship_from_warehouse_id || "");
+                          setSupPortOfLoading(supplierProfile?.default_port_of_loading || "");
+                          setSupLeadTime(supplierProfile?.default_production_lead_time || "");
+                          setSupMOQ(supplierProfile?.default_moq !== null && supplierProfile?.default_moq !== undefined ? String(supplierProfile.default_moq) : "");
+                          setSupReceivingEmail(supplierProfile?.po_receiving_email || "");
+                          setSupInternalNote(supplierProfile?.internal_note || "");
+
                           if (hasRemittanceAccess) {
                             setRemMethod(supplierRemittance?.payment_method || "");
                             setRemBeneficiaryName(supplierRemittance?.beneficiary_name || "");
@@ -1637,489 +1935,233 @@ export function CompanyDetailManager({
                     )}
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {/* Section 1: Supplier Profile */}
-                    <div className="space-y-4">
-                      <h4 className="text-[11px] font-bold text-zinc-700 dark:text-zinc-350 border-b pb-1 dark:border-zinc-800">
-                        Supplier Profile (기본 거래조건)
-                      </h4>
-                      
-                      <div className="space-y-3">
+                  {/* Payment & Remittance Details */}
+                  <div className="space-y-4 max-w-3xl">
+                    {!hasRemittanceAccess && (
+                      <div className="bg-amber-50/50 border border-amber-100 rounded p-2.5 text-[10px] text-amber-800 leading-relaxed dark:bg-amber-950/20 dark:border-amber-900/50 dark:text-amber-300">
+                        🔒 <strong>조회 권한 제한:</strong> 송금 정보(은행 정보)의 원본 및 수정 권한은 Super Admin과 Finance 부서 담당자에게만 제한되어 있습니다.
+                      </div>
+                    )}
+
+                    <div className="space-y-3">
+                      <div className="grid grid-cols-2 gap-4">
                         <div>
-                          <label className="text-[10px] font-bold text-zinc-400 block mb-1">거래 상태 (Status)</label>
-                          {isEditingSupplier ? (
+                          <label className="text-[10px] font-bold text-zinc-400 block mb-1">지불 방법 (Method)</label>
+                          {isEditingSupplier && hasRemittanceAccess ? (
                             <select
-                              value={supStatus}
-                              onChange={(e) => setSupStatus(e.target.value)}
+                              value={remMethod}
+                              onChange={(e) => setRemMethod(e.target.value)}
                               className="w-full rounded border border-zinc-200 p-1 text-xs outline-none bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
                             >
-                              <option value="active">Active</option>
-                              <option value="on_hold">On Hold</option>
-                              <option value="inactive">Inactive</option>
+                              <option value="Wire Transfer">Wire Transfer (T/T)</option>
+                              <option value="L/C">Letter of Credit (L/C)</option>
+                              <option value="PayPal">PayPal</option>
+                              <option value="Other">Other</option>
                             </select>
                           ) : (
-                            <span className={`inline-block px-2 py-0.5 text-[10px] font-bold rounded border ${
-                              (supplierProfile?.status || 'active') === 'active' ? 'bg-emerald-50 text-emerald-700 border-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-900' :
-                              (supplierProfile?.status || 'active') === 'on_hold' ? 'bg-amber-50 text-amber-700 border-amber-100 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-900' :
-                              'bg-rose-50 text-rose-700 border-rose-100 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-900'
-                            }`}>
-                              {(supplierProfile?.status || 'active').toUpperCase()}
-                            </span>
+                            <span className="font-semibold text-zinc-900 dark:text-white">{supplierRemittance?.payment_method || "Wire Transfer"}</span>
                           )}
                         </div>
-
                         <div>
-                          <label className="text-[10px] font-bold text-zinc-400 block mb-1">기본 결제 통화 (Default Currency)</label>
-                          {isEditingSupplier ? (
+                          <label className="text-[10px] font-bold text-zinc-400 block mb-1">수취 계좌 통화</label>
+                          {isEditingSupplier && hasRemittanceAccess ? (
                             <select
-                              value={supCurrency}
-                              onChange={(e) => setSupCurrency(e.target.value)}
+                              value={remAccountCurrency}
+                              onChange={(e) => setRemAccountCurrency(e.target.value)}
                               className="w-full rounded border border-zinc-200 p-1 text-xs outline-none bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
                             >
-                              <option value="">미지정 (Not Set)</option>
                               <option value="USD">USD ($)</option>
                               <option value="KRW">KRW (₩)</option>
                               <option value="EUR">EUR (€)</option>
-                              <option value="JPY">JPY (¥)</option>
+                              <option value="CNY">CNY (¥)</option>
                             </select>
                           ) : (
-                            <span className="font-semibold text-zinc-900 dark:text-white">{supplierProfile?.default_currency || "미지정"}</span>
-                          )}
-                        </div>
-
-                        <div>
-                          <label className="text-[10px] font-bold text-zinc-400 block mb-1">기본 결제 조건 (Default Payment Terms)</label>
-                          {isEditingSupplier ? (
-                            <div className="space-y-1.5">
-                              <select
-                                value={supPaymentTerms}
-                                onChange={(e) => setSupPaymentTerms(e.target.value)}
-                                className="w-full rounded border border-zinc-200 p-1 text-xs outline-none bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
-                              >
-                                <option value="">미지정 (Not Set)</option>
-                                <option value="Prepaid 100%">Prepaid 100%</option>
-                                <option value="30% Deposit / 70% Balance">30% Deposit / 70% Balance</option>
-                                <option value="50% Deposit / 50% Balance">50% Deposit / 50% Balance</option>
-                                <option value="Net 15">Net 15</option>
-                                <option value="Net 30">Net 30</option>
-                                <option value="Net 60">Net 60</option>
-                                <option value="Custom">Custom (직접 입력)</option>
-                              </select>
-                              {supPaymentTerms === "Custom" && (
-                                <input
-                                  type="text"
-                                  placeholder="결제 조건을 직접 입력하세요..."
-                                  value={supPaymentTermsCustom}
-                                  onChange={(e) => setSupPaymentTermsCustom(e.target.value)}
-                                  className="w-full rounded border border-zinc-200 p-1.5 text-xs outline-none bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
-                                />
-                              )}
-                            </div>
-                          ) : (
-                            <span className="font-semibold text-zinc-900 dark:text-white">
-                              {supplierProfile?.default_payment_terms === "Custom"
-                                ? `Custom: ${supplierProfile?.default_payment_terms_custom || ""}`
-                                : supplierProfile?.default_payment_terms || "미지정"}
-                            </span>
-                          )}
-                        </div>
-
-                        <div>
-                          <label className="text-[10px] font-bold text-zinc-400 block mb-1">인코텀즈 조건 (Default Incoterms)</label>
-                          {isEditingSupplier ? (
-                            <select
-                              value={supIncoterms}
-                              onChange={(e) => setSupIncoterms(e.target.value)}
-                              className="w-full rounded border border-zinc-200 p-1 text-xs outline-none bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
-                            >
-                              <option value="">미지정 (Not Set)</option>
-                              <option value="EXW">EXW</option>
-                              <option value="FOB">FOB</option>
-                              <option value="CIF">CIF</option>
-                              <option value="DDP">DDP</option>
-                              <option value="DAP">DAP</option>
-                            </select>
-                          ) : (
-                            <span className="font-semibold text-zinc-900 dark:text-white">{supplierProfile?.default_incoterms || "미지정"}</span>
-                          )}
-                        </div>
-
-                        <div>
-                          <label className="text-[10px] font-bold text-zinc-400 block mb-1">기본 출고지 주소 (Ship-from Address)</label>
-                          {isEditingSupplier ? (
-                            <div className="space-y-1">
-                              <select
-                                value={supShipFromWarehouseId}
-                                onChange={(e) => setSupShipFromWarehouseId(e.target.value)}
-                                className="w-full rounded border border-zinc-200 p-1 text-xs outline-none bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
-                              >
-                                <option value="">미지정 (Not Set)</option>
-                                {warehouses.map((wh: any) => {
-                                  // Skip other inactive warehouses that are not currently selected
-                                  if (wh.status === "inactive" && wh.id !== supplierProfile?.default_ship_from_warehouse_id) {
-                                    return null;
-                                  }
-                                  return (
-                                    <option key={wh.id} value={wh.id}>
-                                      [{wh.code}] {wh.name} ({wh.address1}){wh.status === "inactive" ? " (비활성)" : ""}
-                                    </option>
-                                  );
-                                })}
-                              </select>
-                              <div className="text-[10px] text-zinc-400 dark:text-zinc-500 italic mt-0.5">
-                                참고용 본사 주소: {address || "등록 없음"}
-                              </div>
-                            </div>
-                          ) : (
-                            <div className="space-y-1">
-                              <span className="font-semibold text-zinc-900 dark:text-white block">
-                                {(() => {
-                                  const selectedWh = warehouses.find(w => w.id === supplierProfile?.default_ship_from_warehouse_id);
-                                  return selectedWh 
-                                    ? `[${selectedWh.code}] ${selectedWh.name} (${selectedWh.address1})${selectedWh.status === "inactive" ? " (비활성)" : ""}`
-                                    : "미지정 (Not Set)";
-                                })()}
-                              </span>
-                              <div className="text-[10px] text-zinc-400 dark:text-zinc-500 italic">
-                                참고용 본사 주소: {address || "등록 없음"}
-                              </div>
-                            </div>
-                          )}
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-4">
-                          <div>
-                            <label className="text-[10px] font-bold text-zinc-400 block mb-1">선적항 (Port of Loading)</label>
-                            {isEditingSupplier ? (
-                              <input
-                                type="text"
-                                value={supPortOfLoading}
-                                onChange={(e) => setSupPortOfLoading(e.target.value)}
-                                className="w-full rounded border border-zinc-200 p-1.5 text-xs outline-none bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
-                                placeholder="Busan, Incheon..."
-                              />
-                            ) : (
-                              <span className="font-semibold text-zinc-900 dark:text-white">{supplierProfile?.default_port_of_loading || "Busan"}</span>
-                            )}
-                          </div>
-                          <div>
-                            <label className="text-[10px] font-bold text-zinc-400 block mb-1">평균 리드타임 (Lead Time)</label>
-                            {isEditingSupplier ? (
-                              <input
-                                type="text"
-                                value={supLeadTime}
-                                onChange={(e) => setSupLeadTime(e.target.value)}
-                                className="w-full rounded border border-zinc-200 p-1.5 text-xs outline-none bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
-                                placeholder="30 days, 6 weeks..."
-                              />
-                            ) : (
-                              <span className="font-semibold text-zinc-900 dark:text-white">{supplierProfile?.default_production_lead_time || "등록 없음"}</span>
-                            )}
-                          </div>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-4">
-                          <div>
-                            <label className="text-[10px] font-bold text-zinc-400 block mb-1">기본 MOQ</label>
-                            {isEditingSupplier ? (
-                              <input
-                                type="number"
-                                value={supMOQ}
-                                onChange={(e) => setSupMOQ(e.target.value)}
-                                className="w-full rounded border border-zinc-200 p-1.5 text-xs outline-none bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
-                                placeholder="최소 구매 수량"
-                                min="0"
-                              />
-                            ) : (
-                              <span className="font-semibold text-zinc-900 dark:text-white">
-                                {supplierProfile?.default_moq !== null && supplierProfile?.default_moq !== undefined ? `${supplierProfile.default_moq.toLocaleString()} pcs` : "제한 없음"}
-                              </span>
-                            )}
-                          </div>
-                          <div>
-                            <label className="text-[10px] font-bold text-zinc-400 block mb-1">PO 수신 공식 이메일</label>
-                            {isEditingSupplier ? (
-                              <input
-                                type="email"
-                                value={supReceivingEmail}
-                                onChange={(e) => setSupReceivingEmail(e.target.value)}
-                                className="w-full rounded border border-zinc-200 p-1.5 text-xs outline-none bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
-                                placeholder="orders@supplier.com"
-                              />
-                            ) : (
-                              <span className="font-semibold text-zinc-900 dark:text-white font-mono">{supplierProfile?.po_receiving_email || "등록 없음"}</span>
-                            )}
-                          </div>
-                        </div>
-
-                        <div>
-                          <label className="text-[10px] font-bold text-zinc-400 block mb-1">기본 담당 업무 배정인 (현황)</label>
-                          <div className="bg-zinc-50 p-2 rounded border border-zinc-150 space-y-1 dark:bg-zinc-950/20 dark:border-zinc-800">
-                            <div className="flex justify-between items-center text-[10px]">
-                              <span className="text-zinc-500 font-bold">견적·단가 담당:</span>
-                              <span className="font-medium text-zinc-700 dark:text-zinc-350">{getEmailRecipientsForTask("pricing_quote") || "(없음)"}</span>
-                            </div>
-                            <div className="flex justify-between items-center text-[10px]">
-                              <span className="text-zinc-500 font-bold">발주·물류·재고 담당:</span>
-                              <span className="font-medium text-zinc-700 dark:text-zinc-350">{getEmailRecipientsForTask("logistics_inventory") || "(없음)"}</span>
-                            </div>
-                            <div className="flex justify-between items-center text-[10px]">
-                              <span className="text-zinc-500 font-bold">정산·송금 담당:</span>
-                              <span className="font-medium text-zinc-700 dark:text-zinc-350">{getEmailRecipientsForTask("settlement_inquiry") || "(없음)"}</span>
-                            </div>
-                          </div>
-                        </div>
-
-                        <div>
-                          <label className="text-[10px] font-bold text-zinc-400 block mb-1">내부 관리용 메모 (Internal Note)</label>
-                          {isEditingSupplier ? (
-                            <textarea
-                              value={supInternalNote}
-                              onChange={(e) => setSupInternalNote(e.target.value)}
-                              className="w-full rounded border border-zinc-200 p-1.5 text-xs outline-none bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white resize-none h-16"
-                              placeholder="K SELECT 어드민 직원만 볼 수 있는 메모입니다..."
-                            />
-                          ) : (
-                            <div className="bg-zinc-50 p-2 border border-zinc-150 rounded text-zinc-650 dark:bg-zinc-950/20 dark:border-zinc-800 dark:text-zinc-400 min-h-[40px] whitespace-pre-wrap">
-                              {supplierProfile?.internal_note || "작성된 메모가 없습니다."}
-                            </div>
+                            <span className="font-semibold text-zinc-900 dark:text-white">{supplierRemittance?.account_currency || "USD"}</span>
                           )}
                         </div>
                       </div>
-                    </div>
 
-                    {/* Section 2: Payment & Remittance */}
-                    <div className="space-y-4">
-                      <h4 className="text-[11px] font-bold text-zinc-700 dark:text-zinc-350 border-b pb-1 dark:border-zinc-800">
-                        Payment & Remittance (은행 송금 정보)
-                      </h4>
+                      <div>
+                        <label className="text-[10px] font-bold text-zinc-400 block mb-1">예금주명 (Beneficiary Name)</label>
+                        {isEditingSupplier && hasRemittanceAccess ? (
+                          <input
+                            type="text"
+                            value={remBeneficiaryName}
+                            onChange={(e) => setRemBeneficiaryName(e.target.value)}
+                            className="w-full rounded border border-zinc-200 p-1.5 text-xs outline-none bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+                            placeholder="수취인 실명"
+                          />
+                        ) : (
+                          <span className="font-semibold text-zinc-900 dark:text-white">
+                            {hasRemittanceAccess 
+                              ? (supplierRemittance?.beneficiary_name || "등록 없음")
+                              : (supplierRemittance?.beneficiary_name ? "••••••••" : "등록 없음")}
+                          </span>
+                        )}
+                      </div>
 
-                      {!hasRemittanceAccess && (
-                        <div className="bg-amber-50/50 border border-amber-100 rounded p-2.5 text-[10px] text-amber-800 mb-2 leading-relaxed dark:bg-amber-950/20 dark:border-amber-900/50 dark:text-amber-300">
-                          🔒 <strong>조회 권한 제한:</strong> 송금 정보(은행 정보)의 원본 및 수정 권한은 Super Admin과 Finance 부서 담당자에게만 제한되어 있습니다.
-                        </div>
-                      )}
+                      <div>
+                        <label className="text-[10px] font-bold text-zinc-400 block mb-1">수취인 주소 (Beneficiary Address)</label>
+                        {isEditingSupplier && hasRemittanceAccess ? (
+                          <input
+                            type="text"
+                            value={remBeneficiaryAddress}
+                            onChange={(e) => setRemBeneficiaryAddress(e.target.value)}
+                            className="w-full rounded border border-zinc-200 p-1.5 text-xs outline-none bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+                            placeholder="송금 수취인 영문 주소"
+                          />
+                        ) : (
+                          <span className="font-semibold text-zinc-900 dark:text-white">
+                            {hasRemittanceAccess 
+                              ? (supplierRemittance?.beneficiary_address || "등록 없음")
+                              : (supplierRemittance?.beneficiary_address ? "••••••••" : "등록 없음")}
+                          </span>
+                        )}
+                      </div>
 
-                      <div className="space-y-3">
-                        <div className="grid grid-cols-2 gap-4">
-                          <div>
-                            <label className="text-[10px] font-bold text-zinc-400 block mb-1">지불 방법 (Method)</label>
-                            {isEditingSupplier && hasRemittanceAccess ? (
-                              <select
-                                value={remMethod}
-                                onChange={(e) => setRemMethod(e.target.value)}
-                                className="w-full rounded border border-zinc-200 p-1 text-xs outline-none bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
-                              >
-                                <option value="Wire Transfer">Wire Transfer (T/T)</option>
-                                <option value="L/C">Letter of Credit (L/C)</option>
-                                <option value="PayPal">PayPal</option>
-                                <option value="Other">Other</option>
-                              </select>
-                            ) : (
-                              <span className="font-semibold text-zinc-900 dark:text-white">{supplierRemittance?.payment_method || "Wire Transfer"}</span>
-                            )}
-                          </div>
-                          <div>
-                            <label className="text-[10px] font-bold text-zinc-400 block mb-1">수취 계좌 통화</label>
-                            {isEditingSupplier && hasRemittanceAccess ? (
-                              <select
-                                value={remAccountCurrency}
-                                onChange={(e) => setRemAccountCurrency(e.target.value)}
-                                className="w-full rounded border border-zinc-200 p-1 text-xs outline-none bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
-                              >
-                                <option value="USD">USD ($)</option>
-                                <option value="KRW">KRW (₩)</option>
-                                <option value="EUR">EUR (€)</option>
-                                <option value="CNY">CNY (¥)</option>
-                              </select>
-                            ) : (
-                              <span className="font-semibold text-zinc-900 dark:text-white">{supplierRemittance?.account_currency || "USD"}</span>
-                            )}
-                          </div>
-                        </div>
-
+                      <div className="grid grid-cols-2 gap-4">
                         <div>
-                          <label className="text-[10px] font-bold text-zinc-400 block mb-1">예금주명 (Beneficiary Name)</label>
+                          <label className="text-[10px] font-bold text-zinc-400 block mb-1">은행명 (Bank Name)</label>
                           {isEditingSupplier && hasRemittanceAccess ? (
                             <input
                               type="text"
-                              value={remBeneficiaryName}
-                              onChange={(e) => setRemBeneficiaryName(e.target.value)}
+                              value={remBankName}
+                              onChange={(e) => setRemBankName(e.target.value)}
                               className="w-full rounded border border-zinc-200 p-1.5 text-xs outline-none bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
-                              placeholder="수취인 실명"
+                              placeholder="KEB Hana Bank..."
                             />
                           ) : (
-                            <span className="font-semibold text-zinc-900 dark:text-white">
-                              {hasRemittanceAccess 
-                                ? (supplierRemittance?.beneficiary_name || "등록 없음")
-                                : (supplierRemittance?.beneficiary_name ? "••••••••" : "등록 없음")}
-                            </span>
+                            <span className="font-semibold text-zinc-900 dark:text-white">{supplierRemittance?.bank_name || "등록 없음"}</span>
                           )}
                         </div>
-
                         <div>
-                          <label className="text-[10px] font-bold text-zinc-400 block mb-1">수취인 주소 (Beneficiary Address)</label>
+                          <label className="text-[10px] font-bold text-zinc-400 block mb-1">은행 소재국</label>
                           {isEditingSupplier && hasRemittanceAccess ? (
                             <input
                               type="text"
-                              value={remBeneficiaryAddress}
-                              onChange={(e) => setRemBeneficiaryAddress(e.target.value)}
+                              value={remBankCountry}
+                              onChange={(e) => setRemBankCountry(e.target.value)}
                               className="w-full rounded border border-zinc-200 p-1.5 text-xs outline-none bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
-                              placeholder="송금 수취인 영문 주소"
+                              placeholder="South Korea, USA..."
                             />
                           ) : (
-                            <span className="font-semibold text-zinc-900 dark:text-white">
-                              {hasRemittanceAccess 
-                                ? (supplierRemittance?.beneficiary_address || "등록 없음")
-                                : (supplierRemittance?.beneficiary_address ? "••••••••" : "등록 없음")}
-                            </span>
+                            <span className="font-semibold text-zinc-900 dark:text-white">{supplierRemittance?.bank_country || "등록 없음"}</span>
                           )}
                         </div>
+                      </div>
 
-                        <div className="grid grid-cols-2 gap-4">
-                          <div>
-                            <label className="text-[10px] font-bold text-zinc-400 block mb-1">은행명 (Bank Name)</label>
-                            {isEditingSupplier && hasRemittanceAccess ? (
-                              <input
-                                type="text"
-                                value={remBankName}
-                                onChange={(e) => setRemBankName(e.target.value)}
-                                className="w-full rounded border border-zinc-200 p-1.5 text-xs outline-none bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
-                                placeholder="KEB Hana Bank..."
-                              />
-                            ) : (
-                              <span className="font-semibold text-zinc-900 dark:text-white">{supplierRemittance?.bank_name || "등록 없음"}</span>
-                            )}
-                          </div>
-                          <div>
-                            <label className="text-[10px] font-bold text-zinc-400 block mb-1">은행 소재국</label>
-                            {isEditingSupplier && hasRemittanceAccess ? (
-                              <input
-                                type="text"
-                                value={remBankCountry}
-                                onChange={(e) => setRemBankCountry(e.target.value)}
-                                className="w-full rounded border border-zinc-200 p-1.5 text-xs outline-none bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
-                                placeholder="South Korea, USA..."
-                              />
-                            ) : (
-                              <span className="font-semibold text-zinc-900 dark:text-white">{supplierRemittance?.bank_country || "등록 없음"}</span>
-                            )}
-                          </div>
-                        </div>
+                      <div>
+                        <label className="text-[10px] font-bold text-zinc-400 block mb-1">은행 주소 (Bank Address)</label>
+                        {isEditingSupplier && hasRemittanceAccess ? (
+                          <input
+                            type="text"
+                            value={remBankAddress}
+                            onChange={(e) => setRemBankAddress(e.target.value)}
+                            className="w-full rounded border border-zinc-200 p-1.5 text-xs outline-none bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+                            placeholder="송금 수취 은행 영문 지점 주소"
+                          />
+                        ) : (
+                          <span className="font-semibold text-zinc-900 dark:text-white">
+                            {hasRemittanceAccess 
+                              ? (supplierRemittance?.bank_address || "등록 없음")
+                              : (supplierRemittance?.bank_address ? "••••••••" : "등록 없음")}
+                          </span>
+                        )}
+                      </div>
 
+                      <div>
+                        <label className="text-[10px] font-bold text-zinc-400 block mb-1">계좌번호 (Account Number)</label>
+                        {isEditingSupplier && hasRemittanceAccess ? (
+                          <input
+                            type="text"
+                            value={remAccountNumber}
+                            onChange={(e) => setRemAccountNumber(e.target.value)}
+                            className="w-full rounded border border-zinc-200 p-1.5 text-xs outline-none bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white font-mono"
+                            placeholder="계좌번호 입력"
+                          />
+                        ) : (
+                          <span className="font-semibold font-mono text-zinc-900 dark:text-white">
+                            {hasRemittanceAccess 
+                              ? (supplierRemittance?.account_number || "등록 없음")
+                              : (supplierRemittance?.account_number 
+                                  ? `••••••••${supplierRemittance.account_number.slice(-4)}`
+                                  : "등록 없음")}
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4">
                         <div>
-                          <label className="text-[10px] font-bold text-zinc-400 block mb-1">은행 주소 (Bank Address)</label>
+                          <label className="text-[10px] font-bold text-zinc-400 block mb-1">SWIFT / BIC Code</label>
                           {isEditingSupplier && hasRemittanceAccess ? (
                             <input
                               type="text"
-                              value={remBankAddress}
-                              onChange={(e) => setRemBankAddress(e.target.value)}
-                              className="w-full rounded border border-zinc-200 p-1.5 text-xs outline-none bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
-                              placeholder="송금 수취 은행 영문 지점 주소"
-                            />
-                          ) : (
-                            <span className="font-semibold text-zinc-900 dark:text-white">
-                              {hasRemittanceAccess 
-                                ? (supplierRemittance?.bank_address || "등록 없음")
-                                : (supplierRemittance?.bank_address ? "••••••••" : "등록 없음")}
-                            </span>
-                          )}
-                        </div>
-
-                        <div>
-                          <label className="text-[10px] font-bold text-zinc-400 block mb-1">계좌번호 (Account Number)</label>
-                          {isEditingSupplier && hasRemittanceAccess ? (
-                            <input
-                              type="text"
-                              value={remAccountNumber}
-                              onChange={(e) => setRemAccountNumber(e.target.value)}
+                              value={remSwiftBic}
+                              onChange={(e) => setRemSwiftBic(e.target.value.toUpperCase())}
                               className="w-full rounded border border-zinc-200 p-1.5 text-xs outline-none bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white font-mono"
-                              placeholder="계좌번호 입력"
+                              placeholder="SWIFT 코드"
                             />
                           ) : (
                             <span className="font-semibold font-mono text-zinc-900 dark:text-white">
                               {hasRemittanceAccess 
-                                ? (supplierRemittance?.account_number || "등록 없음")
-                                : (supplierRemittance?.account_number 
-                                    ? `••••••••${supplierRemittance.account_number.slice(-4)}`
-                                    : "등록 없음")}
+                                ? (supplierRemittance?.swift_bic || "등록 없음")
+                                : (supplierRemittance?.swift_bic ? "••••••••" : "등록 없음")}
                             </span>
                           )}
                         </div>
-
-                        <div className="grid grid-cols-2 gap-4">
-                          <div>
-                            <label className="text-[10px] font-bold text-zinc-400 block mb-1">SWIFT / BIC Code</label>
-                            {isEditingSupplier && hasRemittanceAccess ? (
-                              <input
-                                type="text"
-                                value={remSwiftBic}
-                                onChange={(e) => setRemSwiftBic(e.target.value.toUpperCase())}
-                                className="w-full rounded border border-zinc-200 p-1.5 text-xs outline-none bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white font-mono"
-                                placeholder="SWIFT 코드"
-                              />
-                            ) : (
-                              <span className="font-semibold font-mono text-zinc-900 dark:text-white">
-                                {hasRemittanceAccess 
-                                  ? (supplierRemittance?.swift_bic || "등록 없음")
-                                  : (supplierRemittance?.swift_bic ? "••••••••" : "등록 없음")}
-                              </span>
-                            )}
-                          </div>
-                          <div>
-                            <label className="text-[10px] font-bold text-zinc-400 block mb-1">Routing Number</label>
-                            {isEditingSupplier && hasRemittanceAccess ? (
-                              <input
-                                type="text"
-                                value={remRoutingNumber}
-                                onChange={(e) => setRemRoutingNumber(e.target.value)}
-                                className="w-full rounded border border-zinc-200 p-1.5 text-xs outline-none bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white font-mono"
-                                placeholder="ABA, Routing No..."
-                              />
-                            ) : (
-                              <span className="font-semibold font-mono text-zinc-900 dark:text-white">
-                                {hasRemittanceAccess 
-                                  ? (supplierRemittance?.routing_number || "등록 없음")
-                                  : (supplierRemittance?.routing_number ? "••••••••" : "등록 없음")}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-
                         <div>
-                          <label className="text-[10px] font-bold text-zinc-400 block mb-1">중개 은행 정보 (Intermediary Bank)</label>
+                          <label className="text-[10px] font-bold text-zinc-400 block mb-1">Routing Number</label>
                           {isEditingSupplier && hasRemittanceAccess ? (
                             <input
                               type="text"
-                              value={remIntermediaryBank}
-                              onChange={(e) => setRemIntermediaryBank(e.target.value)}
-                              className="w-full rounded border border-zinc-200 p-1.5 text-xs outline-none bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
-                              placeholder="중개 은행 명칭 및 지점 정보 (필요시)"
+                              value={remRoutingNumber}
+                              onChange={(e) => setRemRoutingNumber(e.target.value)}
+                              className="w-full rounded border border-zinc-200 p-1.5 text-xs outline-none bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white font-mono"
+                              placeholder="ABA, Routing No..."
                             />
                           ) : (
-                            <span className="font-semibold text-zinc-900 dark:text-white">
+                            <span className="font-semibold font-mono text-zinc-900 dark:text-white">
                               {hasRemittanceAccess 
-                                ? (supplierRemittance?.intermediary_bank_info || "등록 없음")
-                                : (supplierRemittance?.intermediary_bank_info ? "••••••••" : "등록 없음")}
+                                ? (supplierRemittance?.routing_number || "등록 없음")
+                                : (supplierRemittance?.routing_number ? "••••••••" : "등록 없음")}
                             </span>
                           )}
                         </div>
+                      </div>
 
-                        <div>
-                          <label className="text-[10px] font-bold text-zinc-400 block mb-1">송금 비고 (Remittance Note)</label>
-                          {isEditingSupplier && hasRemittanceAccess ? (
-                            <textarea
-                              value={remNote}
-                              onChange={(e) => setRemNote(e.target.value)}
-                              className="w-full rounded border border-zinc-200 p-1.5 text-xs outline-none bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white resize-none h-12"
-                              placeholder="해외 송금 시 수취인 지시 사항 등..."
-                            />
-                          ) : (
-                            <div className="bg-zinc-50 p-2 border border-zinc-150 rounded text-zinc-650 dark:bg-zinc-950/20 dark:border-zinc-800 dark:text-zinc-400 min-h-[30px] whitespace-pre-wrap">
-                              {supplierRemittance?.remittance_note || "등록 없음"}
-                            </div>
-                          )}
-                        </div>
+                      <div>
+                        <label className="text-[10px] font-bold text-zinc-400 block mb-1">중개 은행 정보 (Intermediary Bank)</label>
+                        {isEditingSupplier && hasRemittanceAccess ? (
+                          <input
+                            type="text"
+                            value={remIntermediaryBank}
+                            onChange={(e) => setRemIntermediaryBank(e.target.value)}
+                            className="w-full rounded border border-zinc-200 p-1.5 text-xs outline-none bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+                            placeholder="중개 은행 명칭 및 지점 정보 (필요시)"
+                          />
+                        ) : (
+                          <span className="font-semibold text-zinc-900 dark:text-white">
+                            {hasRemittanceAccess 
+                              ? (supplierRemittance?.intermediary_bank_info || "등록 없음")
+                              : (supplierRemittance?.intermediary_bank_info ? "••••••••" : "등록 없음")}
+                          </span>
+                        )}
+                      </div>
+
+                      <div>
+                        <label className="text-[10px] font-bold text-zinc-400 block mb-1">송금 비고 (Remittance Note)</label>
+                        {isEditingSupplier && hasRemittanceAccess ? (
+                          <textarea
+                            value={remNote}
+                            onChange={(e) => setRemNote(e.target.value)}
+                            className="w-full rounded border border-zinc-200 p-1.5 text-xs outline-none bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white resize-none h-12"
+                            placeholder="해외 송금 시 수취인 지시 사항 등..."
+                          />
+                        ) : (
+                          <div className="bg-zinc-50 p-2 border border-zinc-150 rounded text-zinc-650 dark:bg-zinc-950/20 dark:border-zinc-800 dark:text-zinc-400 min-h-[30px] whitespace-pre-wrap">
+                            {supplierRemittance?.remittance_note || "등록 없음"}
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
