@@ -92,6 +92,8 @@ export function CompanyProfileManager({
   const [remNote, setRemNote] = useState(initialSupplierRemittance?.remittance_note || "");
   const [tempZipCode, setTempZipCode] = useState(zipCode);
   const [tempWebsite, setTempWebsite] = useState(website);
+  // Right column tab state: 'members' | 'tasks' | 'trading' | 'remittance'
+  const [activeTab, setActiveTab] = useState<"members" | "tasks" | "trading" | "remittance">("members");
 
   // [신규 기능]: 담당 업무 상태 로컬 관리
   const [tasks, setTasks] = useState<TaskAssignmentItem[]>(taskAssignments);
@@ -511,10 +513,58 @@ export function CompanyProfileManager({
           </div>
         </div>
 
-        {/* Right Column: Contacts & Task Assignments */}
-        <div className="md:col-span-2 space-y-6">
+        {/* Right Column: 4-Tab Structure (소속 담당자 목록 | 담당 업무 및 주 담당자 | 거래 정보 | 송금 계좌 정보) */}
+        <div className="md:col-span-2 space-y-4">
+          {/* Tab Navigation Header */}
+          <div className="flex border-b border-zinc-200 dark:border-zinc-800 gap-1 overflow-x-auto pb-px">
+            <button
+              type="button"
+              onClick={() => setActiveTab("members")}
+              className={`px-4 py-2.5 text-xs font-bold transition-all border-b-2 whitespace-nowrap cursor-pointer ${
+                activeTab === "members"
+                  ? "border-zinc-950 text-zinc-950 dark:border-white dark:text-white"
+                  : "border-transparent text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white"
+              }`}
+            >
+              소속 담당자 목록
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab("tasks")}
+              className={`px-4 py-2.5 text-xs font-bold transition-all border-b-2 whitespace-nowrap cursor-pointer ${
+                activeTab === "tasks"
+                  ? "border-zinc-950 text-zinc-950 dark:border-white dark:text-white"
+                  : "border-transparent text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white"
+              }`}
+            >
+              담당 업무 및 주 담당자
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab("trading")}
+              className={`px-4 py-2.5 text-xs font-bold transition-all border-b-2 whitespace-nowrap cursor-pointer ${
+                activeTab === "trading"
+                  ? "border-zinc-950 text-zinc-950 dark:border-white dark:text-white"
+                  : "border-transparent text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white"
+              }`}
+            >
+              거래 정보
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab("remittance")}
+              className={`px-4 py-2.5 text-xs font-bold transition-all border-b-2 whitespace-nowrap cursor-pointer ${
+                activeTab === "remittance"
+                  ? "border-zinc-950 text-zinc-950 dark:border-white dark:text-white"
+                  : "border-transparent text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white"
+              }`}
+            >
+              송금 계좌 정보
+            </button>
+          </div>
           {/* 거래 정보 (Supplier / Trading Info) Card */}
-          <div className="rounded-lg border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 relative">
+          {activeTab === "trading" && (
+            <div className="rounded-lg border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 relative">
             <div className="flex items-center justify-between mb-4 pb-2 border-b border-zinc-100 dark:border-zinc-800">
               <h3 className="text-sm font-bold text-zinc-950 dark:text-white">거래 정보 (Supplier / Trading Info)</h3>
               {isCompanyAdmin && (
@@ -770,9 +820,11 @@ export function CompanyProfileManager({
               </div>
             </div>
           </div>
+          )}
 
           {/* Payment & Remittance Card */}
-          <div className="rounded-lg border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 relative">
+          {activeTab === "remittance" && (
+            <div className="rounded-lg border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 relative">
             <div className="flex items-center justify-between mb-4 pb-2 border-b border-zinc-100 dark:border-zinc-800">
               <h3 className="text-sm font-bold text-zinc-950 dark:text-white">송금 계좌 정보 (Payment & Remittance)</h3>
               {isCompanyAdmin && (
@@ -1007,9 +1059,11 @@ export function CompanyProfileManager({
               </div>
             </div>
           </div>
+          )}
 
           {/* Contacts List Card */}
-          <div className="rounded-lg border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+          {activeTab === "members" && (
+            <div className="rounded-lg border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
             <div className="flex items-center justify-between mb-4 pb-2 border-b border-zinc-100 dark:border-zinc-800">
               <h3 className="text-sm font-bold text-zinc-950 dark:text-white">소속 담당자 목록 ({contacts.length})</h3>
             </div>
@@ -1064,9 +1118,11 @@ export function CompanyProfileManager({
               </div>
             )}
           </div>
+          )}
 
           {/* [신규 기능]: 담당 업무 및 주 담당자 관리 테이블 카드 */}
-          <div className="rounded-lg border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+          {activeTab === "tasks" && (
+            <div className="rounded-lg border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
             <div className="flex items-center justify-between mb-4 pb-2 border-b border-zinc-100 dark:border-zinc-800">
               <h3 className="text-sm font-bold text-zinc-950 dark:text-white">담당 업무 및 주 담당자</h3>
             </div>
@@ -1170,6 +1226,7 @@ export function CompanyProfileManager({
               </table>
             </div>
           </div>
+          )}
         </div>
       </div>
     </div>

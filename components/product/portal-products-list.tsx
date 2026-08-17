@@ -228,14 +228,14 @@ export function PortalProductsList({ initialProducts, hasBrand }: PortalProducts
                   </td>
 
                   {/* Letusto SKU */}
-                  <td className="px-6 py-4 font-mono font-bold text-zinc-950 dark:text-white">
+                  <td className="px-6 py-4 font-mono font-bold text-zinc-950 dark:text-white whitespace-nowrap">
                     {product.letusto_sku || (
                       <span className="text-zinc-350 dark:text-zinc-600 italic font-sans font-normal">지정 대기 중</span>
                     )}
                   </td>
 
                   {/* Manufacture SKU */}
-                  <td className="px-6 py-4 text-zinc-700 dark:text-zinc-300 font-mono font-semibold">
+                  <td className="px-6 py-4 text-zinc-700 dark:text-zinc-300 font-mono font-semibold whitespace-nowrap">
                     {product.manufacture_sku || (
                       <span className="text-zinc-350 dark:text-zinc-500 italic">미입력</span>
                     )}
@@ -296,22 +296,24 @@ export function PortalProductsList({ initialProducts, hasBrand }: PortalProducts
                   </td>
 
                   {/* Actions */}
-                  <td className="px-6 py-4 text-right flex justify-end items-center gap-2">
-                    <Link
-                      href={`/portal/products/${product.id}`}
-                      className="rounded bg-zinc-100 dark:bg-zinc-800 px-2.5 py-1.5 font-bold text-zinc-700 hover:bg-zinc-200 dark:text-zinc-300 dark:hover:bg-zinc-700 hover:underline transition-all"
-                    >
-                      수정 및 세부 정보
-                    </Link>
-                    {!product.deleted_at && (
-                      <button
-                        type="button"
-                        onClick={() => handleDelete(product.id)}
-                        className="rounded bg-rose-50 text-rose-700 hover:bg-rose-100 dark:bg-rose-950/20 dark:text-rose-455 dark:hover:bg-rose-900/30 px-2.5 py-1.5 font-bold transition-all cursor-pointer border border-rose-100 dark:border-rose-900/50"
+                  <td className="px-6 py-4 text-right whitespace-nowrap">
+                    <div className="flex justify-end items-center gap-2">
+                      <Link
+                        href={`/portal/products/${product.id}`}
+                        className="rounded bg-zinc-100 dark:bg-zinc-800 px-3 py-1.5 font-bold text-zinc-700 hover:bg-zinc-200 dark:text-zinc-300 dark:hover:bg-zinc-700 hover:underline transition-all whitespace-nowrap shrink-0 inline-flex items-center"
                       >
-                        삭제
-                      </button>
-                    )}
+                        수정 및 세부 정보
+                      </Link>
+                      {!product.deleted_at && (
+                        <button
+                          type="button"
+                          onClick={() => handleDelete(product.id)}
+                          className="rounded bg-rose-50 text-rose-700 hover:bg-rose-100 dark:bg-rose-950/20 dark:text-rose-455 dark:hover:bg-rose-900/30 px-3 py-1.5 font-bold transition-all cursor-pointer border border-rose-100 dark:border-rose-900/50 whitespace-nowrap shrink-0 inline-flex items-center"
+                        >
+                          삭제
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}

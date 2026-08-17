@@ -1836,23 +1836,7 @@ export function CompanyDetailManager({
                         </div>
                       </div>
 
-                      <div>
-                        <label className="text-[10px] font-bold text-zinc-400 block mb-1">기본 담당 업무 배정인 (현황)</label>
-                        <div className="bg-zinc-50 p-2 rounded border border-zinc-150 space-y-1 dark:bg-zinc-950/20 dark:border-zinc-800">
-                          <div className="flex justify-between items-center text-[10px]">
-                            <span className="text-zinc-500 font-bold">견적·단가 담당:</span>
-                            <span className="font-medium text-zinc-700 dark:text-zinc-350">{getEmailRecipientsForTask("pricing_quote") || "(없음)"}</span>
-                          </div>
-                          <div className="flex justify-between items-center text-[10px]">
-                            <span className="text-zinc-500 font-bold">발주·물류·재고 담당:</span>
-                            <span className="font-medium text-zinc-700 dark:text-zinc-350">{getEmailRecipientsForTask("logistics_inventory") || "(없음)"}</span>
-                          </div>
-                          <div className="flex justify-between items-center text-[10px]">
-                            <span className="text-zinc-500 font-bold">정산·송금 담당:</span>
-                            <span className="font-medium text-zinc-700 dark:text-zinc-350">{getEmailRecipientsForTask("settlement_inquiry") || "(없음)"}</span>
-                          </div>
-                        </div>
-                      </div>
+
 
                       <div>
                         <label className="text-[10px] font-bold text-zinc-400 block mb-1">내부 관리용 메모 (Internal Note)</label>

@@ -19,7 +19,7 @@ export default function GuideTriggerButton({ variant = "header" }: GuideTriggerB
           title="Open K SELECT Guide (Read-Only Internal Knowledge Assistant)"
         >
           <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
-          <span>Ask K SELECT Guide</span>
+          <span>Ask K SELECT</span>
           <span className="px-1.5 py-0.2 text-[9px] font-black rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
             READ ONLY
           </span>
@@ -31,7 +31,7 @@ export default function GuideTriggerButton({ variant = "header" }: GuideTriggerB
           title="Ask K SELECT Guide"
         >
           <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse" />
-          <span>Ask K SELECT Guide</span>
+          <span>Ask K SELECT</span>
           <span className="px-1.5 py-0.5 text-[9px] font-black rounded bg-amber-500/20 text-amber-300">
             READ ONLY
           </span>

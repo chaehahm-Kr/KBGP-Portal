@@ -248,13 +248,11 @@ export default function Header({ isSidebarCollapsed }: HeaderProps) {
     }
   };
 
-  // Initialize theme from localStorage or system preference
+  // Initialize theme from localStorage or default to dark
   useEffect(() => {
     const root = window.document.documentElement;
-    const initialDark =
-      localStorage.getItem("theme") === "dark" ||
-      (!("theme" in localStorage) &&
-        window.matchMedia("(prefers-color-scheme: dark)").matches);
+    const savedTheme = localStorage.getItem("theme");
+    const initialDark = savedTheme ? savedTheme === "dark" : true;
     setIsDarkMode(initialDark);
     if (initialDark) {
       root.classList.add("dark");
@@ -347,15 +345,6 @@ export default function Header({ isSidebarCollapsed }: HeaderProps) {
             className="w-64 rounded-md border border-zinc-200 bg-zinc-50 py-1.5 pl-9 pr-4 text-xs font-medium text-zinc-900 outline-none transition-all focus:border-zinc-400 focus:bg-white dark:border-zinc-800 dark:bg-zinc-900 dark:text-white dark:focus:border-zinc-700"
           />
         </div>
-
-        {/* Quick Add Button */}
-        <Link
-          href="/admin/applications"
-          className="flex h-8 items-center gap-1.5 rounded-md bg-zinc-900 px-3 text-xs font-medium text-white transition-colors hover:bg-zinc-800 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-100"
-        >
-          <PlusIcon size={14} />
-          <span className="hidden sm:inline">New Application</span>
-        </Link>
 
         {/* Theme Toggle Button */}
         <button

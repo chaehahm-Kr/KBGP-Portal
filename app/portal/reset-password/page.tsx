@@ -27,9 +27,9 @@ export default function ResetPasswordRequestPage() {
           <div>
             <label
               htmlFor="email"
-              className="block text-sm font-medium text-zinc-350 dark:text-zinc-300"
+              className="block text-sm font-semibold text-white mb-1.5"
             >
-              이메일
+              이메일 (Email)
             </label>
             <input
               id="email"
@@ -37,7 +37,8 @@ export default function ResetPasswordRequestPage() {
               type="email"
               autoComplete="email"
               required
-              className="mt-1 block w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 outline-none transition-all focus:border-zinc-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white dark:focus:border-zinc-700"
+              placeholder="example@company.com"
+              className="mt-1 block w-full rounded-md border border-zinc-700 bg-zinc-950 px-3.5 py-2.5 text-sm text-white placeholder:text-zinc-500 outline-none transition-all focus:border-zinc-400 focus:ring-1 focus:ring-zinc-400"
             />
           </div>
 

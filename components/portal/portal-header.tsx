@@ -86,10 +86,8 @@ export default function PortalHeader({
   // Initialize theme
   useEffect(() => {
     const root = window.document.documentElement;
-    const initialDark =
-      localStorage.getItem("theme") === "dark" ||
-      (!("theme" in localStorage) &&
-        window.matchMedia("(prefers-color-scheme: dark)").matches);
+    const savedTheme = localStorage.getItem("theme");
+    const initialDark = savedTheme ? savedTheme === "dark" : true;
     setIsDarkMode(initialDark);
     if (initialDark) {
       root.classList.add("dark");
