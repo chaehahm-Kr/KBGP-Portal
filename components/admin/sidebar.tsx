@@ -8,18 +8,25 @@ import {
   ApplicationsIcon,
   CompaniesIcon,
   ProductsIcon,
-  SamplesIcon,
   RetailIcon,
+  PurchasingIcon,
   SalesIcon,
   AmazonIcon,
   TasksIcon,
   ReportsIcon,
   UsersIcon,
   SettingsIcon,
-  InsightsIcon,
-  KnowledgeIcon,
+  IntelligenceIcon,
   ChevronDownIcon,
-  ChevronRightIcon
+  ChevronRightIcon,
+  KnowledgeSubIcon,
+  EmailTemplatesIcon,
+  CompanyConfigsIcon,
+  WarehousesIcon,
+  CategoriesSubIcon,
+  AttributeProfilesIcon,
+  AttributesOptionsIcon,
+  CurationSettingsIcon,
 } from "./icons";
 
 interface SidebarProps {
@@ -27,15 +34,24 @@ interface SidebarProps {
   toggleCollapse: () => void;
 }
 
+interface SubItem {
+  name: string;
+  href?: string;
+  icon?: React.ComponentType<any>;
+  subItems?: { name: string; href: string }[];
+}
+
 interface MenuItem {
   name: string;
   icon: React.ComponentType<any>;
   href?: string;
-  subItems?: { name: string; href: string }[];
+  subItems?: SubItem[];
 }
 
 export default function Sidebar({ isCollapsed, toggleCollapse }: SidebarProps) {
   const pathname = usePathname();
+
+  // Depth 1 expand state
   const [expandedMenus, setExpandedMenus] = useState<Record<string, boolean>>({
     Applications: false,
     "Companies & Brands": false,
@@ -45,31 +61,52 @@ export default function Sidebar({ isCollapsed, toggleCollapse }: SidebarProps) {
     Finance: false,
     "Retail Network": false,
     "Sales & Performance": false,
-    "Growth Simulator": false,
-    INSIGHTS: false,
+    Intelligence: false,
     Amazon: false,
     "Tasks & Communication": false,
     Settings: false,
   });
 
-  // Auto-expand parent menu matching current pathname
+  // Depth 2 expand state (for 3-depth items like Intelligence -> Growth Simulator)
+  const [expandedSubMenus, setExpandedSubMenus] = useState<Record<string, boolean>>({
+    "Intelligence->Growth Simulator": true,
+    "Intelligence->Insights": true,
+  });
+
+  // Auto-expand parent and nested submenus matching current pathname
   useEffect(() => {
     if (!pathname) return;
-    setExpandedMenus({
+
+    const isSimulator = pathname.startsWith("/admin/simulator");
+    const isInsights = pathname.startsWith("/admin/insights");
+    const isIntelligence = isSimulator || isInsights;
+
+    setExpandedMenus((prev) => ({
+      ...prev,
       Applications: pathname.startsWith("/admin/applications"),
       "Companies & Brands": pathname.startsWith("/admin/companies") || pathname.startsWith("/admin/brands"),
       Products: pathname.startsWith("/admin/products"),
       Inventory: pathname.startsWith("/admin/inventory"),
-      Purchasing: pathname.startsWith("/admin/purchasing") && !pathname.startsWith("/admin/purchasing/invoices"), // to avoid conflict
+      Purchasing: pathname.startsWith("/admin/purchasing") && !pathname.startsWith("/admin/purchasing/invoices"),
       Finance: pathname.startsWith("/admin/finance"),
       "Retail Network": pathname.startsWith("/admin/stores"),
       "Sales & Performance": pathname.startsWith("/admin/sales"),
-      "Growth Simulator": pathname.startsWith("/admin/simulator"),
-      INSIGHTS: pathname.startsWith("/admin/insights"),
+      Intelligence: isIntelligence,
       Amazon: pathname.startsWith("/admin/amazon"),
-      "Tasks & Communication": pathname.startsWith("/admin/tasks") || pathname.startsWith("/admin/partner-inquiries") || pathname.startsWith("/admin/inquiries"),
+      "Tasks & Communication":
+        pathname.startsWith("/admin/tasks") ||
+        pathname.startsWith("/admin/partner-inquiries") ||
+        pathname.startsWith("/admin/inquiries"),
       Settings: pathname.startsWith("/admin/settings") || pathname.startsWith("/admin/knowledge"),
-    });
+    }));
+
+    if (isIntelligence) {
+      setExpandedSubMenus((prev) => ({
+        ...prev,
+        "Intelligence->Growth Simulator": isSimulator || prev["Intelligence->Growth Simulator"],
+        "Intelligence->Insights": isInsights || prev["Intelligence->Insights"],
+      }));
+    }
   }, [pathname]);
 
   const menuItems: MenuItem[] = [
@@ -97,13 +134,11 @@ export default function Sidebar({ isCollapsed, toggleCollapse }: SidebarProps) {
     {
       name: "Inventory",
       icon: TasksIcon,
-      subItems: [
-        { name: "Inventory Overview", href: "/admin/inventory" },
-      ],
+      subItems: [{ name: "Inventory Overview", href: "/admin/inventory" }],
     },
     {
       name: "Purchasing",
-      icon: RetailIcon,
+      icon: PurchasingIcon,
       subItems: [
         { name: "Purchase Orders", href: "/admin/purchasing" },
         { name: "Inbound Shipments", href: "/admin/purchasing/shipments" },
@@ -136,26 +171,30 @@ export default function Sidebar({ isCollapsed, toggleCollapse }: SidebarProps) {
       ],
     },
     {
-      name: "Growth Simulator",
-      icon: SamplesIcon,
+      name: "Intelligence",
+      icon: IntelligenceIcon,
       subItems: [
-        { name: "Overview", href: "/admin/simulator" },
-        { name: "Simulation Results", href: "/admin/simulator/results" },
-        { name: "Configuration", href: "/admin/simulator/configuration" },
-        { name: "Test Sandbox", href: "/admin/simulator/sandbox" },
-      ],
-    },
-    {
-      name: "INSIGHTS",
-      icon: InsightsIcon,
-      subItems: [
-        { name: "Overview", href: "/admin/insights" },
-        { name: "Review Queue", href: "/admin/insights/queue" },
-        { name: "All Insights", href: "/admin/insights/all" },
-        { name: "Categories", href: "/admin/insights/categories" },
-        { name: "Authors", href: "/admin/insights/authors" },
-        { name: "Editorial Rules", href: "/admin/insights/rules" },
-        { name: "Automation Runs", href: "/admin/insights/automation-runs" },
+        {
+          name: "Growth Simulator",
+          subItems: [
+            { name: "Overview", href: "/admin/simulator" },
+            { name: "Simulation Results", href: "/admin/simulator/results" },
+            { name: "Configuration", href: "/admin/simulator/configuration" },
+            { name: "Test Sandbox", href: "/admin/simulator/sandbox" },
+          ],
+        },
+        {
+          name: "Insights",
+          subItems: [
+            { name: "Overview", href: "/admin/insights" },
+            { name: "Review Queue", href: "/admin/insights/queue" },
+            { name: "All Insights", href: "/admin/insights/all" },
+            { name: "Categories", href: "/admin/insights/categories" },
+            { name: "Authors", href: "/admin/insights/authors" },
+            { name: "Editorial Rules", href: "/admin/insights/rules" },
+            { name: "Automation Runs", href: "/admin/insights/automation-runs" },
+          ],
+        },
       ],
     },
     {
@@ -182,14 +221,14 @@ export default function Sidebar({ isCollapsed, toggleCollapse }: SidebarProps) {
       name: "Settings",
       icon: SettingsIcon,
       subItems: [
-        { name: "Knowledge Center", href: "/admin/knowledge" },
-        { name: "Email Templates", href: "/admin/settings/email-templates" },
-        { name: "Company Configs", href: "/admin/settings/company-configs" },
-        { name: "Warehouses", href: "/admin/settings/warehouses" },
-        { name: "Categories", href: "/admin/settings/categories" },
-        { name: "Attribute Profiles", href: "/admin/settings/attribute-profiles" },
-        { name: "Attributes & Options", href: "/admin/settings/attributes" },
-        { name: "Curation Settings", href: "/admin/settings/curation" },
+        { name: "Knowledge Center", href: "/admin/knowledge", icon: KnowledgeSubIcon },
+        { name: "Email Templates", href: "/admin/settings/email-templates", icon: EmailTemplatesIcon },
+        { name: "Company Configs", href: "/admin/settings/company-configs", icon: CompanyConfigsIcon },
+        { name: "Warehouses", href: "/admin/settings/warehouses", icon: WarehousesIcon },
+        { name: "Categories", href: "/admin/settings/categories", icon: CategoriesSubIcon },
+        { name: "Attribute Profiles", href: "/admin/settings/attribute-profiles", icon: AttributeProfilesIcon },
+        { name: "Attributes & Options", href: "/admin/settings/attributes", icon: AttributesOptionsIcon },
+        { name: "Curation Settings", href: "/admin/settings/curation", icon: CurationSettingsIcon },
       ],
     },
   ];
@@ -201,22 +240,35 @@ export default function Sidebar({ isCollapsed, toggleCollapse }: SidebarProps) {
     setExpandedMenus((prev) => ({ ...prev, [name]: !prev[name] }));
   };
 
+  const handleToggleSubExpand = (key: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setExpandedSubMenus((prev) => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  const isSubItemActive = (sub: SubItem): boolean => {
+    if (sub.href) {
+      if (pathname === sub.href) return true;
+      if (sub.href === "/admin/insights" && pathname.startsWith("/admin/insights")) return true;
+      if (sub.href === "/admin/knowledge" && pathname.startsWith("/admin/knowledge")) return true;
+      if (sub.href !== "/admin/insights" && sub.href !== "/admin/knowledge" && pathname.startsWith(sub.href + "/")) {
+        return true;
+      }
+    }
+    if (sub.subItems) {
+      return sub.subItems.some(
+        (child) =>
+          pathname === child.href ||
+          (child.href === "/admin/insights" && pathname.startsWith("/admin/insights")) ||
+          (child.href !== "/admin/insights" && pathname.startsWith(child.href + "/"))
+      );
+    }
+    return false;
+  };
+
   const isMenuItemActive = (item: MenuItem): boolean => {
     if (item.href === pathname) return true;
     if (item.subItems) {
-      return item.subItems.some((sub) => {
-        if (sub.href === pathname) return true;
-        if (sub.href === "/admin/insights" && (pathname === "/admin/insights" || pathname.startsWith("/admin/insights/"))) {
-          return true;
-        }
-        if (sub.href === "/admin/knowledge" && (pathname === "/admin/knowledge" || pathname.startsWith("/admin/knowledge/"))) {
-          return true;
-        }
-        if (sub.href !== "/admin/insights" && sub.href !== "/admin/knowledge" && pathname.startsWith(sub.href + "/")) {
-          return true;
-        }
-        return false;
-      });
+      return item.subItems.some((sub) => isSubItemActive(sub));
     }
     return false;
   };
@@ -265,16 +317,13 @@ export default function Sidebar({ isCollapsed, toggleCollapse }: SidebarProps) {
                   }`}
                 >
                   <item.icon className="h-5 w-5 shrink-0" />
-                  {!isCollapsed && (
-                    <span className="flex-1 text-left">{item.name}</span>
-                  )}
-                  {!isCollapsed && (
-                    isExpanded ? (
+                  {!isCollapsed && <span className="flex-1 text-left">{item.name}</span>}
+                  {!isCollapsed &&
+                    (isExpanded ? (
                       <ChevronDownIcon size={16} className="text-zinc-400" />
                     ) : (
                       <ChevronRightIcon size={16} className="text-zinc-400" />
-                    )
-                  )}
+                    ))}
                 </button>
               ) : (
                 <Link
@@ -290,26 +339,79 @@ export default function Sidebar({ isCollapsed, toggleCollapse }: SidebarProps) {
                 </Link>
               )}
 
-              {/* Submenus */}
+              {/* Depth 2 & Depth 3 Submenus */}
               {hasSubItems && isExpanded && (
-                <div className="pl-9 space-y-1">
+                <div className="pl-6 space-y-1">
                   {item.subItems?.map((sub) => {
-                    const isSubActive = pathname === sub.href ||
-                      (sub.href === "/admin/insights" && pathname.startsWith("/admin/insights")) ||
-                      (sub.href === "/admin/knowledge" && pathname.startsWith("/admin/knowledge")) ||
-                      (sub.href === "/admin/products/trading" && pathname.startsWith("/admin/products/trading"));
+                    const hasNested = !!sub.subItems;
+                    const subKey = `${item.name}->${sub.name}`;
+                    const isSubExpanded = expandedSubMenus[subKey] !== false;
+                    const isSubActive = isSubItemActive(sub);
 
+                    if (hasNested) {
+                      return (
+                        <div key={sub.name} className="space-y-1">
+                          <button
+                            onClick={(e) => handleToggleSubExpand(subKey, e)}
+                            className={`flex w-full items-center justify-between rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
+                              isSubActive
+                                ? "text-zinc-900 dark:text-white font-bold"
+                                : "text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white"
+                            }`}
+                          >
+                            <span className="flex items-center gap-2">
+                              {sub.icon && <sub.icon size={14} className="text-zinc-400 dark:text-zinc-500 shrink-0" />}
+                              <span>{sub.name}</span>
+                            </span>
+                            {isSubExpanded ? (
+                              <ChevronDownIcon size={14} className="text-zinc-400" />
+                            ) : (
+                              <ChevronRightIcon size={14} className="text-zinc-400" />
+                            )}
+                          </button>
+
+                          {/* Depth 3 Links */}
+                          {isSubExpanded && (
+                            <div className="pl-4 space-y-1 border-l border-zinc-200 dark:border-zinc-800 ml-3">
+                              {sub.subItems?.map((child) => {
+                                const isChildActive =
+                                  pathname === child.href ||
+                                  (child.href === "/admin/insights" && pathname === "/admin/insights") ||
+                                  (child.href === "/admin/simulator" && pathname === "/admin/simulator");
+
+                                return (
+                                  <Link
+                                    key={child.name}
+                                    href={child.href}
+                                    className={`block rounded-md px-3 py-1 text-xs transition-colors ${
+                                      isChildActive
+                                        ? "text-zinc-900 dark:text-white font-bold bg-zinc-100/70 dark:bg-zinc-800/70"
+                                        : "text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white"
+                                    }`}
+                                  >
+                                    {child.name}
+                                  </Link>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    }
+
+                    // 2-Depth item with optional subitem icon (e.g. Settings items)
                     return (
                       <Link
                         key={sub.name}
-                        href={sub.href}
-                        className={`block rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                        href={sub.href || "#"}
+                        className={`flex items-center gap-2 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
                           isSubActive
                             ? "text-zinc-900 dark:text-white font-bold bg-zinc-100/70 dark:bg-zinc-800/70"
                             : "text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white"
                         }`}
                       >
-                        {sub.name}
+                        {sub.icon && <sub.icon size={14} className="text-zinc-400 dark:text-zinc-500 shrink-0" />}
+                        <span>{sub.name}</span>
                       </Link>
                     );
                   })}
