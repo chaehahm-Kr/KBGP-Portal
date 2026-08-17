@@ -119,11 +119,11 @@ export default async function PortalCompanyInfoPage() {
     }
   }
 
-  // Fetch warehouses of this company
+  // Fetch warehouses of this company or system default warehouses
   const { data: warehouses } = await adminDb
     .from("warehouses")
     .select("id, name, code, address1, status")
-    .eq("company_id", membership.companyId)
+    .or(`company_id.eq.${membership.companyId},company_id.is.null`)
     .order("created_at", { ascending: true });
 
   return (

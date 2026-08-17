@@ -172,8 +172,8 @@ export async function createPartnerInquiry(formData: FormData) {
     let attachmentFilename = null;
 
     if (file instanceof File && file.size > 0) {
-      if (file.size > 10 * 1024 * 1024) {
-        return { success: false, error: "첨부파일은 최대 10MB를 초과할 수 없습니다." };
+      if (file.size > 20 * 1024 * 1024) {
+        return { success: false, error: "첨부파일은 최대 20MB까지 업로드할 수 있습니다.\nAttachment files must be 20MB or smaller." };
       }
 
       const validation = await validateUploadedFile(file, ["image", "document"]);
@@ -650,8 +650,8 @@ export async function replyToPartnerInquiry(
     let attachmentFilename = null;
 
     if (attachmentFile && attachmentFile.size > 0) {
-      if (attachmentFile.size > 10 * 1024 * 1024) {
-        return { success: false, error: "첨부파일은 최대 10MB를 초과할 수 없습니다." };
+      if (attachmentFile.size > 20 * 1024 * 1024) {
+        return { success: false, error: "첨부파일은 최대 20MB까지 업로드할 수 있습니다.\nAttachment files must be 20MB or smaller." };
       }
 
       const validation = await validateUploadedFile(attachmentFile, ["image", "document"]);

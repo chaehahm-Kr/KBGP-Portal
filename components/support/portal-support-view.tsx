@@ -55,8 +55,14 @@ export function PortalSupportView({ initialInquiries, createAction }: PortalSupp
   const [category, setCategory] = useState("general");
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
+  const [newCaseFile, setNewCaseFile] = useState<File | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
+
+  const formatFileSize = (bytes: number) => {
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
+  };
 
   // Action resolution
   const [isResolving, setIsResolving] = useState(false);
@@ -291,13 +297,42 @@ export function PortalSupportView({ initialInquiries, createAction }: PortalSupp
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold text-zinc-700 dark:text-zinc-300">첨부파일 (최대 10MB)</label>
-                  <input
-                    name="file"
-                    type="file"
-                    accept="image/*,application/pdf"
-                    className="block w-full text-[10px] text-zinc-500 file:mr-3 file:py-1 file:px-2 file:rounded file:border-0 file:text-[10px] file:font-semibold file:bg-zinc-100 file:text-zinc-700 dark:file:bg-zinc-800 dark:file:text-zinc-300 hover:file:bg-zinc-200 dark:hover:file:bg-zinc-700 cursor-pointer"
-                  />
+                  <label className="text-[10px] font-bold text-zinc-700 dark:text-zinc-300">첨부파일 (최대 20MB)</label>
+                  {!newCaseFile ? (
+                    <input
+                      name="file"
+                      type="file"
+                      accept="image/*,application/pdf"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          if (file.size > 20 * 1024 * 1024) {
+                            alert("첨부파일은 최대 20MB까지 업로드할 수 있습니다.\nAttachment files must be 20MB or smaller.");
+                            e.target.value = "";
+                            setNewCaseFile(null);
+                            return;
+                          }
+                          setNewCaseFile(file);
+                        }
+                      }}
+                      className="block w-full text-[10px] text-zinc-500 file:mr-3 file:py-1 file:px-2 file:rounded file:border-0 file:text-[10px] file:font-semibold file:bg-zinc-100 file:text-zinc-700 dark:file:bg-zinc-800 dark:file:text-zinc-300 hover:file:bg-zinc-200 dark:hover:file:bg-zinc-700 cursor-pointer"
+                    />
+                  ) : (
+                    <div className="flex items-center justify-between rounded-lg border border-zinc-200 bg-zinc-50 p-2.5 dark:border-zinc-800 dark:bg-zinc-950 text-xs">
+                      <div className="flex items-center gap-2 truncate">
+                        <span>📎</span>
+                        <span className="font-semibold text-zinc-800 dark:text-zinc-200 truncate">{newCaseFile.name}</span>
+                        <span className="text-[10px] text-zinc-400 font-mono">({formatFileSize(newCaseFile.size)})</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setNewCaseFile(null)}
+                        className="rounded px-2 py-1 text-[10px] font-bold text-rose-600 hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-950/20 cursor-pointer shrink-0"
+                      >
+                        [삭제]
+                      </button>
+                    </div>
+                  )}
                 </div>
                 <button
                   type="submit"
@@ -439,13 +474,41 @@ export function PortalSupportView({ initialInquiries, createAction }: PortalSupp
                       className="w-full rounded-lg border border-zinc-200 p-2.5 outline-none bg-zinc-50/50 dark:border-zinc-800 dark:bg-zinc-950 text-zinc-900 dark:text-white focus:border-zinc-950 dark:focus:border-white focus:bg-zinc-50 dark:focus:bg-zinc-900 transition-colors leading-relaxed resize-none"
                     />
                     <div className="space-y-1.5">
-                      <label className="font-bold text-zinc-600 dark:text-zinc-400 block text-[10px]">첨부파일 (최대 10MB)</label>
-                      <input
-                        type="file"
-                        accept="image/*,application/pdf"
-                        onChange={(e) => setReplyFile(e.target.files?.[0] || null)}
-                        className="block w-full text-[10px] text-zinc-500 file:mr-3 file:py-1 file:px-2 file:rounded file:border-0 file:text-[10px] file:font-semibold file:bg-zinc-100 file:text-zinc-700 dark:file:bg-zinc-800 dark:file:text-zinc-300 hover:file:bg-zinc-200 dark:hover:file:bg-zinc-700 cursor-pointer"
-                      />
+                      <label className="font-bold text-zinc-600 dark:text-zinc-400 block text-[10px]">첨부파일 (최대 20MB)</label>
+                      {!replyFile ? (
+                        <input
+                          type="file"
+                          accept="image/*,application/pdf"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              if (file.size > 20 * 1024 * 1024) {
+                                alert("첨부파일은 최대 20MB까지 업로드할 수 있습니다.\nAttachment files must be 20MB or smaller.");
+                                e.target.value = "";
+                                setReplyFile(null);
+                                return;
+                              }
+                              setReplyFile(file);
+                            }
+                          }}
+                          className="block w-full text-[10px] text-zinc-500 file:mr-3 file:py-1 file:px-2 file:rounded file:border-0 file:text-[10px] file:font-semibold file:bg-zinc-100 file:text-zinc-700 dark:file:bg-zinc-800 dark:file:text-zinc-300 hover:file:bg-zinc-200 dark:hover:file:bg-zinc-700 cursor-pointer"
+                        />
+                      ) : (
+                        <div className="flex items-center justify-between rounded-lg border border-zinc-200 bg-zinc-50 p-2 dark:border-zinc-800 dark:bg-zinc-950 text-xs">
+                          <div className="flex items-center gap-2 truncate">
+                            <span>📎</span>
+                            <span className="font-semibold text-zinc-800 dark:text-zinc-200 truncate">{replyFile.name}</span>
+                            <span className="text-[10px] text-zinc-400 font-mono">({formatFileSize(replyFile.size)})</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setReplyFile(null)}
+                            className="rounded px-2 py-1 text-[10px] font-bold text-rose-600 hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-950/20 cursor-pointer shrink-0"
+                          >
+                            [삭제]
+                          </button>
+                        </div>
+                      )}
                     </div>
                     <div className="flex gap-2">
                       <button

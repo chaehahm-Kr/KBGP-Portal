@@ -2,7 +2,7 @@
 
 import { useActionState } from "react";
 import type { ApplicationFormState } from "@/lib/application/actions";
-import { SELF_CHECK_ITEMS } from "@/lib/application/types";
+import { OFFICIAL_READINESS_ITEMS, type ReadinessResponseItem } from "@/lib/application/types";
 
 type ProductOption = {
   id: string;
@@ -17,14 +17,15 @@ type ApplicationDraftFormProps = {
   ) => Promise<ApplicationFormState>;
   products: ProductOption[];
   selectedProductIds: string[];
-  selfCheckAnswers: boolean[];
+  selfCheckAnswers?: boolean[];
+  eligibilityResponses?: ReadinessResponseItem[];
 };
 
 export function ApplicationDraftForm({
   action,
   products,
   selectedProductIds,
-  selfCheckAnswers,
+  eligibilityResponses = [],
 }: ApplicationDraftFormProps) {
   const [state, formAction, pending] = useActionState<
     ApplicationFormState,
@@ -82,27 +83,57 @@ export function ApplicationDraftForm({
 
 
 
-      <section className="space-y-3">
+      <section className="space-y-4">
         <div>
           <h2 className="text-sm font-semibold text-zinc-900 dark:text-white">
-            참여 조건 자가진단 재확인
+            프로그램 참여 준비 사항 (Readiness)
           </h2>
           <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-            모든 조건을 충족하지 않아도 제출은 가능합니다. 현재 상황을 있는 그대로
-            체크해주세요.
+            K SELECT NETWORK 파트너십 추진을 위한 6개 관련 준비 사항에 응답해주세요. (진행 가능 또는 협의 필요 중 하나를 선택해 주세요)
           </p>
         </div>
-        <div className="space-y-2 rounded-lg border border-zinc-105 p-3 dark:border-zinc-800 bg-zinc-50/20 dark:bg-zinc-900/5">
-          {SELF_CHECK_ITEMS.map((item, index) => (
-            <label key={item} className="flex items-start gap-2.5 text-xs font-medium text-zinc-700 dark:text-zinc-350 cursor-pointer select-none">
-              <input
-                type="checkbox"
-                name={`selfCheck_${index}`}
-                defaultChecked={selfCheckAnswers[index] ?? false}
-                className="mt-0.5 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-950 dark:border-zinc-800 dark:bg-zinc-950"
-              />
-              <span className="leading-tight">{item}</span>
-            </label>
+        <div className="space-y-4">
+          {OFFICIAL_READINESS_ITEMS.map((item) => (
+            <div
+              key={item.key}
+              className="rounded-xl border border-zinc-200 bg-white p-4 shadow-2xs dark:border-zinc-800 dark:bg-zinc-900/60 space-y-2.5"
+            >
+              <div>
+                <h3 className="text-xs font-bold text-zinc-950 dark:text-white flex items-center gap-1.5">
+                  <span>{item.title}</span>
+                </h3>
+                <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-1 leading-relaxed">
+                  {item.desc}
+                </p>
+              </div>
+
+              <div className="flex gap-2 pt-1">
+                <label className="flex-1 flex items-center justify-center gap-1.5 rounded-lg border border-zinc-200 p-2 text-xs font-bold cursor-pointer transition-all has-[:checked]:border-emerald-500 has-[:checked]:bg-emerald-50/50 has-[:checked]:text-emerald-800 dark:has-[:checked]:border-emerald-600 dark:has-[:checked]:bg-emerald-950/20 dark:has-[:checked]:text-emerald-300 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400">
+                  <input
+                    type="radio"
+                    name={`readiness_${item.key}`}
+                    value="available"
+                    defaultChecked={
+                      (eligibilityResponses.find((r) => r.itemKey === item.key)?.response ?? "available") === "available"
+                    }
+                    className="accent-emerald-600 cursor-pointer"
+                  />
+                  <span>🟢 진행 가능</span>
+                </label>
+                <label className="flex-1 flex items-center justify-center gap-1.5 rounded-lg border border-zinc-200 p-2 text-xs font-bold cursor-pointer transition-all has-[:checked]:border-amber-500 has-[:checked]:bg-amber-50/50 has-[:checked]:text-amber-800 dark:has-[:checked]:border-amber-600 dark:has-[:checked]:bg-amber-950/20 dark:has-[:checked]:text-amber-300 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400">
+                  <input
+                    type="radio"
+                    name={`readiness_${item.key}`}
+                    value="discussion_required"
+                    defaultChecked={
+                      eligibilityResponses.find((r) => r.itemKey === item.key)?.response === "discussion_required"
+                    }
+                    className="accent-amber-600 cursor-pointer"
+                  />
+                  <span>🟡 협의 필요</span>
+                </label>
+              </div>
+            </div>
           ))}
         </div>
       </section>

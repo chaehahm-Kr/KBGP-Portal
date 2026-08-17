@@ -123,6 +123,48 @@ export async function reinviteCompanyUser(targetUserId: string) {
   revalidatePath("/portal/company/users");
 }
 
+/** 초청 대기중(invited) 상태인 사용자의 초청을 취소한다. */
+export async function cancelCompanyUserInvite(targetUserId: string) {
+  const { companyId } = await requireCompanyAdmin();
+  const admin = createAdminClient();
+
+  const { data: target } = await admin
+    .from("company_users")
+    .select("id, email, company_id, status")
+    .eq("id", targetUserId)
+    .single();
+
+  if (!target || target.company_id !== companyId) {
+    return { error: getBilingualError("PERMISSION_DENIED") };
+  }
+
+  // 가입 완료된 활성 사용자는 초청 취소 대상이 아님
+  if (target.status !== "invited") {
+    return { error: "아직 가입 대기 중인 초청 사용자만 초청을 취소할 수 있습니다.\nOnly pending invited users can have their invitation cancelled." };
+  }
+
+  // 1. Delete company_users record
+  const { error: deleteErr } = await admin
+    .from("company_users")
+    .delete()
+    .eq("id", targetUserId);
+
+  if (deleteErr) {
+    console.error("Cancel invite error:", deleteErr);
+    return { error: getBilingualError("SAVE_FAILED") };
+  }
+
+  // 2. Delete pending Auth User
+  try {
+    await admin.auth.admin.deleteUser(targetUserId);
+  } catch (authErr) {
+    console.error("Auth user delete error during invite cancel:", authErr);
+  }
+
+  revalidatePath("/portal/company/users");
+  return { success: true };
+}
+
 /**
  * 08_주요화면과AC.md 예외: "Company Admin이 자기 자신의 Admin 권한을 스스로
  * 회수하려 할 때, 회사에 남은 Admin이 자신뿐이면 차단(회사가 관리자 없는 상태가

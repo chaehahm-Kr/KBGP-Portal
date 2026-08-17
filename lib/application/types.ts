@@ -56,3 +56,47 @@ export const SELF_CHECK_ITEMS = [
   "목표 달성 시 마케팅 비용의 일부를 분담할 의지가 있습니다",
   "제품 이미지 · 사용법 · 루틴 등 판매용 콘텐츠를 제공할 수 있습니다",
 ] as const;
+
+export interface ReadinessResponseItem {
+  itemKey: string;
+  response: "available" | "discussion_required";
+}
+
+export const OFFICIAL_READINESS_ITEMS = [
+  {
+    key: "stable_supply",
+    title: "01 안정적인 생산 및 공급망 확보",
+    label: "안정적인 생산 및 공급망 확보",
+    desc: "현재 판매 중이거나 출시를 준비 중인 제품으로, 테스트 이후에도 안정적인 생산과 지속적인 공급이 가능합니다.",
+  },
+  {
+    key: "us_regulatory_compliance",
+    title: "02 미국 화장품 규제(MoCRA) 준수 및 FDA 등록 준비",
+    label: "미국 화장품 규제(MoCRA) 준수 및 FDA 등록 준비",
+    desc: "미국 진출에 필요한 성분, 인증, 등록, 라벨링 및 통관 요건을 확인하고 필요한 보완 절차에 협력할 수 있습니다.",
+  },
+  {
+    key: "initial_test_quantity",
+    title: "03 초기 파트너십 테스트 물량 공급 의향",
+    label: "초기 파트너십 테스트 물량 공급 의향",
+    desc: "초기 시장 테스트를 위한 일정 수준의 테스트 물량 공급에 협력할 수 있습니다.",
+  },
+  {
+    key: "north_america_distribution",
+    title: "04 북미 온/오프라인 유통 및 가격 정책 동의",
+    label: "북미 온/오프라인 유통 및 가격 정책 동의",
+    desc: "기존 유통 가격 및 판매 채널과 충돌 여부를 확인하고 북미 판매 정책에 협력할 수 있습니다.",
+  },
+  {
+    key: "joint_marketing",
+    title: "05 북미 현지 공동 마케팅 협력 의향",
+    label: "북미 현지 공동 마케팅 협력 의향",
+    desc: "시장 테스트 이후 본격적인 판매 확대를 위해 상호 협의 기간과 범위 내에서 공동 마케팅 활동에 참여할 의향이 있습니다.",
+  },
+  {
+    key: "sales_content_support",
+    title: "06 상세 페이지 및 현지화 마케팅 콘텐츠 지원",
+    label: "상세 페이지 및 현지화 마케팅 콘텐츠 지원",
+    desc: "제품 이미지, 영상, 사용 방법, 상세 정보 등 판매에 필요한 콘텐츠를 제공하거나 제작에 협력할 수 있습니다.",
+  },
+] as const;

@@ -7,7 +7,12 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendTemplatedEmail } from "@/lib/notifications/templates";
 import { publicEnv } from "@/lib/env/public";
-import { SELF_CHECK_ITEMS } from "@/lib/application/types";
+import {
+  APPLICATION_STATUS_LABEL,
+  SELF_CHECK_ITEMS,
+  OFFICIAL_READINESS_ITEMS,
+  type ApplicationStatus,
+} from "./types";
 import { createNotification } from "@/lib/notification/actions";
 
 export type ApplicationFormState = { error: string } | undefined;
@@ -59,13 +64,22 @@ export async function saveDraftApplication(
   const supabase = await createClient();
 
   const productIds = formData.getAll("productIds").map(String);
-  const selfCheckAnswers = SELF_CHECK_ITEMS.map(
-    (_, index) => formData.get(`selfCheck_${index}`) === "on"
-  );
+  
+  // Parse official readiness 6 items from formData
+  const eligibilityResponses = OFFICIAL_READINESS_ITEMS.map((item) => {
+    const val = formData.get(`readiness_${item.key}`);
+    return {
+      itemKey: item.key,
+      response: val === "discussion_required" ? "discussion_required" : "available",
+    };
+  });
+
+  const selfCheckAnswers = eligibilityResponses.map((r) => r.response === "available");
 
   const { error: updateError } = await supabase
     .from("applications")
     .update({
+      eligibility_responses: eligibilityResponses,
       self_check_answers: selfCheckAnswers,
       updated_at: new Date().toISOString(),
     })

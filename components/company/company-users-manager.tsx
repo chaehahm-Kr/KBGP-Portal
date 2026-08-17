@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useTransition } from "react";
-import { updateCompanyUser, reinviteCompanyUser } from "@/lib/company/invite-actions";
+import { updateCompanyUser, reinviteCompanyUser, cancelCompanyUserInvite } from "@/lib/company/invite-actions";
 import { isInviteExpired } from "@/lib/company/types";
 import { updateUserTaskAssignments } from "@/lib/company/task-actions";
 import { TASK_DEFINITIONS } from "@/lib/company/task-constants";
@@ -35,6 +35,7 @@ const permissionOptions = [
 export function CompanyUsersManager({ initialUsers, currentUserId }: CompanyUsersManagerProps) {
   const [users, setUsers] = useState<any[]>(initialUsers);
   const [editingUser, setEditingUser] = useState<any | null>(null);
+  const [cancelConfirmUser, setCancelConfirmUser] = useState<any | null>(null);
   
   // Edit Form Temp States
   const [formName, setFormName] = useState("");
@@ -215,6 +216,25 @@ export function CompanyUsersManager({ initialUsers, currentUserId }: CompanyUser
     });
   };
 
+  const handleCancelInviteSubmit = async () => {
+    if (!cancelConfirmUser) return;
+    startTransition(async () => {
+      try {
+        const res = await cancelCompanyUserInvite(cancelConfirmUser.id);
+        if (res?.error) {
+          alert(res.error);
+        } else {
+          setUsers((prev) => prev.filter((u) => u.id !== cancelConfirmUser.id));
+          alert("초청이 취소되었습니다.");
+        }
+      } catch (err) {
+        alert(err instanceof Error ? err.message : "초청 취소에 실패했습니다.");
+      } finally {
+        setCancelConfirmUser(null);
+      }
+    });
+  };
+
   return (
     <div className="space-y-6">
       {/* Users Table Card */}
@@ -297,15 +317,26 @@ export function CompanyUsersManager({ initialUsers, currentUserId }: CompanyUser
                         {usageStatusText}
                       </span>
                     </td>
-                    <td className="px-6 py-4 text-right space-x-2">
+                    <td className="px-6 py-4 text-right space-x-2 whitespace-nowrap">
                       {row.status === "invited" && (
-                        <button
-                          type="button"
-                          onClick={() => handleReinvite(row.id)}
-                          className="font-semibold text-zinc-550 hover:underline dark:text-zinc-400 cursor-pointer"
-                        >
-                          재초대
-                        </button>
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => handleReinvite(row.id)}
+                            className="font-semibold text-zinc-550 hover:underline dark:text-zinc-400 cursor-pointer"
+                          >
+                            재초대
+                          </button>
+                          <span className="text-zinc-300 dark:text-zinc-700">|</span>
+                          <button
+                            type="button"
+                            onClick={() => setCancelConfirmUser(row)}
+                            className="font-semibold text-rose-600 hover:underline dark:text-rose-400 cursor-pointer"
+                          >
+                            초청 취소
+                          </button>
+                          <span className="text-zinc-300 dark:text-zinc-700">|</span>
+                        </>
                       )}
                       <button
                         type="button"
