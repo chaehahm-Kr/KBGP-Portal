@@ -44,6 +44,24 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
+    // Fetch reader feedback metrics
+    let feedbackMap: Record<string, { helpful: number; not_helpful: number; total: number; helpful_rate: number }> = {};
+    try {
+      const { data: fbData } = await supabase.from("insights_reader_feedback").select("article_id, feedback");
+      if (fbData) {
+        fbData.forEach(r => {
+          if (!feedbackMap[r.article_id]) feedbackMap[r.article_id] = { helpful: 0, not_helpful: 0, total: 0, helpful_rate: 0 };
+          if (r.feedback === "HELPFUL") feedbackMap[r.article_id].helpful++;
+          else if (r.feedback === "NOT_HELPFUL") feedbackMap[r.article_id].not_helpful++;
+          feedbackMap[r.article_id].total++;
+        });
+        Object.keys(feedbackMap).forEach(id => {
+          const s = feedbackMap[id];
+          s.helpful_rate = s.total > 0 ? Math.round((s.helpful / s.total) * 1000) / 10 : 0;
+        });
+      }
+    } catch (e) {}
+
     const articles = (rawArticles || []).map(a => ({
       ...a,
       primary_language: a.primary_language || "KO",
@@ -55,6 +73,7 @@ export async function GET(request: NextRequest) {
       critical_conditions: a.critical_conditions || {
         evidence_quality: "PASS", duplicate_check: "PASS", claim_validation: "PASS", audience_relevance: "PASS"
       },
+      feedback_stats: feedbackMap[a.id] || feedbackMap[a.slug] || { helpful: 0, not_helpful: 0, total: 0, helpful_rate: 0 },
       title_ko: a.title_ko || a.title,
       title_en: a.title_en || a.title,
       subtitle_ko: a.subtitle_ko || a.subtitle,
