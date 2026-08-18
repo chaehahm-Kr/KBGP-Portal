@@ -41,9 +41,11 @@ function extensionFor(mime: string) {
 
 /** Normalize legacy status strings to new CaseStatus */
 function normalizeStatus(raw: string): CaseStatus {
-  if (raw === "pending") return "open";
-  if (raw === "replied") return "in_review";
-  return raw as CaseStatus;
+  if (!raw) return "open";
+  const s = raw.toLowerCase().trim();
+  if (s === "pending") return "open";
+  if (s === "replied" || s === "action_resolved") return "in_review";
+  return s as CaseStatus;
 }
 
 /** Fetch threaded messages for an inquiry, with fallback for missing table */
@@ -678,8 +680,11 @@ export async function resolvePartnerInquiryAction(
       return { success: false, error: "해당 케이스를 찾을 수 없습니다." };
     }
 
+    const adminSupabase = createAdminClient();
+
     // Action resolution transitions status to 'in_review' (UNDER_REVIEW), NEVER CLOSED
-    const { error: updateError } = await supabase
+    // Use adminSupabase to guarantee DB update succeeds bypassing client RLS policies
+    const { error: updateError } = await adminSupabase
       .from("partner_inquiries")
       .update({
         is_action_required: false,
@@ -692,8 +697,6 @@ export async function resolvePartnerInquiryAction(
       console.error("Failed to update inquiry action resolution:", updateError);
       return { success: false, error: "조치 완료 상태 변경에 실패했습니다." };
     }
-
-    const adminSupabase = createAdminClient();
     const { data: company } = await adminSupabase
       .from("companies")
       .select("name")
@@ -772,6 +775,8 @@ export async function resolvePartnerInquiryAction(
 
     revalidatePath("/portal/support");
     revalidatePath("/admin/partner-inquiries");
+    revalidatePath("/portal", "layout");
+    revalidatePath("/admin", "layout");
     return { success: true };
   } catch (e) {
     console.error("Failed to resolve partner inquiry action:", e);
