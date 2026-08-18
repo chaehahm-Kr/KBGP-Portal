@@ -220,12 +220,25 @@ export async function createPartnerInquiry(formData: FormData) {
       .single();
 
     if (error) {
-      if (error.code === "PGRST205" || error.message?.includes("Could not find the table")) {
-        console.warn("⚠️ [주의] partner_inquiries 테이블이 데이터베이스에 존재하지 않습니다. supabase/migrations/0021_partner_inquiries.sql 마이그레이션 SQL을 Supabase SQL Editor에서 실행해 주세요.");
-        return { success: false, error: "1:1 문의 테이블이 존재하지 않습니다. Supabase SQL Editor에서 마이그레이션을 먼저 실행해주세요." };
-      }
       console.error("Failed to create partner inquiry:", error);
-      return { success: false, error: error.message };
+      if (error.code === "PGRST205" || error.message?.includes("Could not find the table")) {
+        return { success: false, error: "문의 지원 서비스를 준비 중입니다. 관리자에게 문의해 주세요." };
+      }
+      if (error.message?.includes("previous_case_id") || error.code === "42703") {
+        // Fallback retry without previous_case_id if column is temporary unreachable
+        const fallbackPayload = { ...insertPayload };
+        delete fallbackPayload.previous_case_id;
+        const { data: fallbackInquiry, error: fallbackErr } = await supabase
+          .from("partner_inquiries")
+          .insert(fallbackPayload)
+          .select()
+          .single();
+        if (!fallbackErr && fallbackInquiry) {
+          revalidatePath("/portal/support");
+          return { success: true, data: fallbackInquiry };
+        }
+      }
+      return { success: false, error: "문의를 등록하지 못했습니다. 다시 시도해 주세요." };
     }
 
     // Notify all active admin staff
@@ -460,7 +473,7 @@ export async function answerPartnerInquiry(
       return { success: false, error: updateError.message };
     }
 
-    // Log message into thread
+    // 1. Human Communication Message (Always renders in Conversation Thread)
     await adminSupabase
       .from("partner_inquiry_messages")
       .insert({
@@ -469,9 +482,24 @@ export async function answerPartnerInquiry(
         sender_id: session.userId,
         sender_name: "어드민 담당자",
         content: replyContent,
-        message_type: isActionRequired ? "action_required" : "message",
+        message_type: "message",
         is_action_flag: isActionRequired
       });
+
+    // 2. Secondary Audit Event for Case Log if Action Required
+    if (isActionRequired) {
+      await adminSupabase
+        .from("partner_inquiry_messages")
+        .insert({
+          inquiry_id: inquiryId,
+          sender_type: "admin",
+          sender_id: session.userId,
+          sender_name: "어드민 담당자",
+          content: "어드민 조치 요청 (상태 전이: 조치필요)",
+          message_type: "action_required",
+          is_action_flag: true
+        });
+    }
 
     // Notify portal user
     const caseLabel = originalInquiry.case_number
@@ -630,7 +658,11 @@ export async function updateCaseStatus(inquiryId: string, newStatus: CaseStatus)
 /**
  * 브랜드사 포털에서 조치 완료 버튼을 눌러 action_resolved 상태로 변경합니다.
  */
-export async function resolvePartnerInquiryAction(inquiryId: string) {
+export async function resolvePartnerInquiryAction(
+  inquiryId: string,
+  resolveContent?: string | null,
+  resolveFile?: File | null
+) {
   try {
     const { companyId, userId } = await requireCompanyMembership();
     const supabase = await createClient();
@@ -646,21 +678,21 @@ export async function resolvePartnerInquiryAction(inquiryId: string) {
       return { success: false, error: "해당 케이스를 찾을 수 없습니다." };
     }
 
+    // Action resolution transitions status to 'in_review' (UNDER_REVIEW), NEVER CLOSED
     const { error: updateError } = await supabase
       .from("partner_inquiries")
       .update({
         is_action_required: false,
-        status: "action_resolved",
+        status: "in_review",
         updated_at: new Date().toISOString()
       })
       .eq("id", inquiryId);
 
     if (updateError) {
       console.error("Failed to update inquiry action resolution:", updateError);
-      return { success: false, error: updateError.message };
+      return { success: false, error: "조치 완료 상태 변경에 실패했습니다." };
     }
 
-    // Log action_resolved in thread
     const adminSupabase = createAdminClient();
     const { data: company } = await adminSupabase
       .from("companies")
@@ -668,14 +700,55 @@ export async function resolvePartnerInquiryAction(inquiryId: string) {
       .eq("id", companyId)
       .maybeSingle();
 
+    const senderName = company?.name || "파트너사";
+
+    // Handle Optional Attachment Upload
+    let attachmentPath = null;
+    let attachmentFilename = null;
+    if (resolveFile && resolveFile.size > 0) {
+      if (resolveFile.size > 20 * 1024 * 1024) {
+        return { success: false, error: "첨부파일은 최대 20MB까지 업로드할 수 있습니다." };
+      }
+      const validation = await validateUploadedFile(resolveFile, ["image", "document"]);
+      if (!validation.ok) {
+        return { success: false, error: validation.error };
+      }
+      const path = `${companyId}/inquiries/${crypto.randomUUID()}.${extensionFor(validation.detectedMime)}`;
+      const { error: uploadError } = await supabase.storage
+        .from("company-uploads")
+        .upload(path, resolveFile, { contentType: validation.detectedMime });
+
+      if (!uploadError) {
+        attachmentPath = path;
+        attachmentFilename = resolveFile.name;
+      }
+    }
+
+    // 1. Human Communication Message (Conversation Thread)
+    const textMsg = resolveContent?.trim() || "조치 요청 사항을 확인하고 완료 처리하였습니다.";
     await supabase
       .from("partner_inquiry_messages")
       .insert({
         inquiry_id: inquiryId,
         sender_type: "partner",
         sender_id: userId,
-        sender_name: company?.name || "파트너사",
-        content: "조치 요청 사항을 완료했습니다.",
+        sender_name: senderName,
+        content: textMsg,
+        message_type: "message",
+        attachment_path: attachmentPath,
+        attachment_filename: attachmentFilename,
+        is_action_flag: false
+      });
+
+    // 2. Audit Trail Log Event (Case Log Thread)
+    await supabase
+      .from("partner_inquiry_messages")
+      .insert({
+        inquiry_id: inquiryId,
+        sender_type: "partner",
+        sender_id: userId,
+        sender_name: senderName,
+        content: "파트너 조치 완료 (상태 전이: 조치필요 → 검토중)",
         message_type: "action_resolved",
         is_action_flag: false
       });
@@ -691,8 +764,8 @@ export async function resolvePartnerInquiryAction(inquiryId: string) {
       await createNotification(
         staff.id,
         userId,
-        "조치 완료 접수",
-        `[${company?.name || "회사"}]에서 ${caseLabel} 조치를 완료했습니다.`,
+        "조치 완료 접수 (검토중)",
+        `[${senderName}]에서 ${caseLabel} 조치를 완료했습니다. 검토가 필요합니다.`,
         "/admin/partner-inquiries"
       );
     }
@@ -702,7 +775,7 @@ export async function resolvePartnerInquiryAction(inquiryId: string) {
     return { success: true };
   } catch (e) {
     console.error("Failed to resolve partner inquiry action:", e);
-    return { success: false, error: e instanceof Error ? e.message : "조치 완료 제출 실패" };
+    return { success: false, error: "조치 완료 제출 중 오류가 발생했습니다." };
   }
 }
 

@@ -82,9 +82,9 @@ export type OfficialCaseStatus = "RECEIVED" | "UNDER_REVIEW" | "ACTION_REQUIRED"
 export function getNormalizedStatus(rawStatus?: string | null): OfficialCaseStatus {
   if (!rawStatus) return "RECEIVED";
   const s = rawStatus.toLowerCase().trim();
-  if (["closed", "resolved", "action_resolved"].includes(s)) return "CLOSED";
-  if (["action_required", "awaiting_reply", "reopened"].includes(s)) return "ACTION_REQUIRED";
-  if (["in_review", "replied", "processing", "under_review"].includes(s)) return "UNDER_REVIEW";
+  if (["closed", "resolved"].includes(s)) return "CLOSED";
+  if (["action_required"].includes(s)) return "ACTION_REQUIRED";
+  if (["in_review", "replied", "processing", "under_review", "action_resolved", "awaiting_reply", "reopened"].includes(s)) return "UNDER_REVIEW";
   return "RECEIVED";
 }
 

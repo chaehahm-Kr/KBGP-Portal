@@ -63,7 +63,10 @@ export function PortalSupportView({ initialInquiries, createAction }: PortalSupp
     return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
   };
 
-  // Action resolution
+  // Action resolution modal & input states
+  const [showResolveModal, setShowResolveModal] = useState(false);
+  const [resolveText, setResolveText] = useState("");
+  const [resolveFile, setResolveFile] = useState<File | null>(null);
   const [isResolving, setIsResolving] = useState(false);
 
   // Thread reply
@@ -79,7 +82,6 @@ export function PortalSupportView({ initialInquiries, createAction }: PortalSupp
   const [satisfactionComment, setSatisfactionComment] = useState("");
   const [isClosing, setIsClosing] = useState(false);
   const [isRatingSubmitting, setIsRatingSubmitting] = useState(false);
-  const [isReopening, setIsReopening] = useState(false);
 
   const formatDate = (dateStr: string) => {
     const d = new Date(dateStr);
@@ -191,14 +193,26 @@ export function PortalSupportView({ initialInquiries, createAction }: PortalSupp
     }
   };
 
-  const handleResolveAction = async () => {
+  const handleResolveActionSubmit = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     if (!selectedInquiry) return;
     setIsResolving(true);
     try {
-      const res = await resolvePartnerInquiryAction(selectedInquiry.id);
-      if (res.success) window.location.reload();
-    } catch {}
-    finally { setIsResolving(false); }
+      const res = await resolvePartnerInquiryAction(selectedInquiry.id, resolveText, resolveFile);
+      if (res.success) {
+        setShowResolveModal(false);
+        setResolveText("");
+        setResolveFile(null);
+        setSelectedInquiry((prev) => (prev ? { ...prev, status: "in_review", is_action_required: false } : null));
+        window.location.reload();
+      } else {
+        alert(res.error || "조치 완료 제출 실패");
+      }
+    } catch {
+      alert("서버 오류가 발생했습니다.");
+    } finally {
+      setIsResolving(false);
+    }
   };
 
   const handleCloseCase = async () => {
@@ -210,10 +224,17 @@ export function PortalSupportView({ initialInquiries, createAction }: PortalSupp
       const res = await closeCase(selectedInquiry.id, score, comment);
       if (res.success) {
         setShowCloseModal(false);
+        setSelectedInquiry((prev) => (prev ? { ...prev, status: "closed", closed_at: new Date().toISOString() } : null));
+        setIsWriteOpen(false);
         window.location.reload();
+      } else {
+        alert(res.error || "케이스 종료 실패");
       }
-    } catch {}
-    finally { setIsClosing(false); }
+    } catch {
+      alert("서버 오류가 발생했습니다.");
+    } finally {
+      setIsClosing(false);
+    }
   };
 
   return (
@@ -499,11 +520,11 @@ export function PortalSupportView({ initialInquiries, createAction }: PortalSupp
                       대화 기록을 확인하신 후 필요한 조치를 완료해 주세요. 완료 후 아래 버튼을 눌러 주세요.
                     </p>
                     <button
-                      onClick={handleResolveAction}
+                      onClick={() => setShowResolveModal(true)}
                       disabled={isResolving}
                       className="w-full rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-bold py-2 text-[10px] tracking-wide transition-all disabled:opacity-50 cursor-pointer"
                     >
-                      {isResolving ? "제출 중..." : "✅ 조치 완료 표시하기"}
+                      {isResolving ? "제출 중..." : "✅ 조치 완료 작성 및 검토 요청"}
                     </button>
                   </div>
                 )}
@@ -539,9 +560,9 @@ export function PortalSupportView({ initialInquiries, createAction }: PortalSupp
               {activeTab === "conversation" && (
                 <div className="p-5 space-y-3">
                   <div className="space-y-3 max-h-[360px] overflow-y-auto pr-1">
-                    {(selectedInquiry.messages ?? []).filter((m) => m.messageType === "message").length > 0 ? (
+                    {(selectedInquiry.messages ?? []).filter((m) => (m.messageType === "message" || m.messageType === "action_required" || m.messageType === "action_resolved") && m.content?.trim()).length > 0 ? (
                       (selectedInquiry.messages ?? [])
-                        .filter((m) => m.messageType === "message")
+                        .filter((m) => (m.messageType === "message" || m.messageType === "action_required" || m.messageType === "action_resolved") && m.content?.trim())
                         .map((msg) => {
                           const isAdmin = msg.senderType === "admin";
                           return (
@@ -889,6 +910,80 @@ export function PortalSupportView({ initialInquiries, createAction }: PortalSupp
                 {isRatingSubmitting ? "제출 중..." : "⭐ 만족도 제출"}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+      {/* Action Resolution Modal (UNDER_REVIEW transition) */}
+      {showResolveModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-2xl border border-zinc-200 bg-white p-6 shadow-2xl dark:border-zinc-800 dark:bg-zinc-900 space-y-4">
+            <div>
+              <h3 className="text-sm font-bold text-zinc-900 dark:text-white">조치 완료 작성 및 검토 요청</h3>
+              <p className="text-[11px] text-zinc-600 dark:text-zinc-400 mt-1 leading-relaxed">
+                어드민 요청 조치를 완료하셨습니까? 조치 내용 또는 파일을 첨부하시면 케이스가 <strong className="text-blue-600 dark:text-blue-400">'검토중'</strong>으로 전이되어 어드민이 재검토합니다.<br />
+                <span className="text-[10px] text-zinc-400">(This will transition status from Action Required to Under Review)</span>
+              </p>
+            </div>
+
+            <form onSubmit={handleResolveActionSubmit} className="space-y-3">
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-bold text-zinc-700 dark:text-zinc-300">조치 내용 및 답변</label>
+                <textarea
+                  rows={3}
+                  value={resolveText}
+                  onChange={(e) => setResolveText(e.target.value)}
+                  placeholder="어드민의 요청에 따라 완료한 조치 내용이나 설명을 작성해주세요."
+                  className="w-full rounded-lg border border-zinc-200 bg-zinc-50/50 p-2.5 text-xs outline-none dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:border-zinc-950 dark:focus:border-white transition-colors leading-relaxed resize-none"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-bold text-zinc-700 dark:text-zinc-300">증빙 파일 / 캡처 첨부 (선택, 최대 20MB)</label>
+                {!resolveFile ? (
+                  <input
+                    type="file"
+                    accept="image/*,application/pdf"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        if (file.size > 20 * 1024 * 1024) {
+                          alert("첨부파일은 최대 20MB까지 가능합니다.");
+                          e.target.value = "";
+                          setResolveFile(null);
+                          return;
+                        }
+                        setResolveFile(file);
+                      }
+                    }}
+                    className="block w-full text-[10px] text-zinc-500 file:mr-3 file:py-1 file:px-2 file:rounded file:border-0 file:text-[10px] file:font-semibold file:bg-zinc-100 file:text-zinc-700 dark:file:bg-zinc-800 dark:file:text-zinc-300 cursor-pointer"
+                  />
+                ) : (
+                  <div className="flex items-center justify-between rounded-lg border border-zinc-200 bg-zinc-50 p-2 dark:border-zinc-800 dark:bg-zinc-950 text-xs">
+                    <span className="font-semibold text-zinc-800 dark:text-zinc-200 truncate">{resolveFile.name}</span>
+                    <button type="button" onClick={() => setResolveFile(null)} className="text-[10px] font-bold text-rose-600 cursor-pointer">
+                      [삭제]
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowResolveModal(false)}
+                  className="flex-1 rounded-lg border border-zinc-200 py-2.5 text-xs font-semibold text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+                >
+                  취소 (Cancel)
+                </button>
+                <button
+                  type="submit"
+                  disabled={isResolving}
+                  className="flex-1 rounded-lg bg-blue-600 hover:bg-blue-700 py-2.5 text-xs font-bold text-white disabled:opacity-50 transition-colors cursor-pointer"
+                >
+                  {isResolving ? "제출 중..." : "✅ 조치 완료 (검토 요청)"}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

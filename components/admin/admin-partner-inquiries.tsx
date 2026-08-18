@@ -454,9 +454,9 @@ export function AdminPartnerInquiries({ initialInquiries, answerAction }: AdminP
               {activeTab === "conversation" && (
                 <div className="p-5 space-y-3">
                   <div className="space-y-3 max-h-[380px] overflow-y-auto pr-1">
-                    {(selectedInquiry.messages ?? []).filter((m) => m.messageType === "message").length > 0 ? (
+                    {(selectedInquiry.messages ?? []).filter((m) => (m.messageType === "message" || m.messageType === "action_required" || m.messageType === "action_resolved") && m.content?.trim()).length > 0 ? (
                       (selectedInquiry.messages ?? [])
-                        .filter((m) => m.messageType === "message")
+                        .filter((m) => (m.messageType === "message" || m.messageType === "action_required" || m.messageType === "action_resolved") && m.content?.trim())
                         .map((msg) => {
                           const isAdmin = msg.senderType === "admin";
                           return (
