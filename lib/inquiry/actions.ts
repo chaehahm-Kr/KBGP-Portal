@@ -978,43 +978,51 @@ export async function closeCase(
       updatePayload.satisfaction_at = now;
     }
 
-    let { error: updateError } = await supabase
+    const adminSupabase = createAdminClient();
+
+    let { data: updatedCase, error: updateError } = await adminSupabase
       .from("partner_inquiries")
       .update(updatePayload)
-      .eq("id", inquiryId);
+      .eq("id", inquiryId)
+      .eq("company_id", companyId)
+      .select("id, status")
+      .maybeSingle();
 
     // Fallback if closed_by_side column is temporarily missing or cached
     if (updateError && (updateError.message?.includes("closed_by_side") || updateError.code === "42703")) {
       delete updatePayload.closed_by_side;
-      const fallbackRes = await supabase
+      const fallbackRes = await adminSupabase
         .from("partner_inquiries")
         .update(updatePayload)
-        .eq("id", inquiryId);
+        .eq("id", inquiryId)
+        .eq("company_id", companyId)
+        .select("id, status")
+        .maybeSingle();
+      updatedCase = fallbackRes.data;
       updateError = fallbackRes.error;
     }
 
-    if (updateError) {
-      console.error("Failed to close case in portal:", updateError);
+    if (updateError || !updatedCase || updatedCase.status !== "closed") {
+      console.error("Failed to close case in portal (DB status update unverified):", updateError);
       return {
         success: false,
-        error: "케이스를 종료하지 못했습니다. 잠시 후 다시 시도해주세요.\nUnable to close the case. Please try again."
+        error: "문의 종료를 완료하지 못했습니다. 잠시 후 다시 시도해주세요.\nUnable to close the inquiry. Please try again."
       };
     }
 
-    const adminSupabase = createAdminClient();
     const { data: company } = await adminSupabase
       .from("companies")
       .select("name")
       .eq("id", companyId)
       .maybeSingle();
 
-    // Log event only if not previously closed (Idempotent protection)
+    // Log event ONLY if not previously closed (Strict Idempotent protection)
     if (!isAlreadyClosed) {
       const closedMsg = satisfactionScore != null
         ? `케이스가 파트너사에 의해 종료되었습니다. (만족도: ${"★".repeat(satisfactionScore)}${"☆".repeat(5 - satisfactionScore)})`
         : "케이스가 파트너사에 의해 종료되었습니다.";
 
-      await supabase.from("partner_inquiry_messages").insert({
+      await adminSupabase.from("partner_inquiry_messages").insert({
         inquiry_id: inquiryId,
         sender_type: "partner",
         sender_id: userId,
@@ -1023,8 +1031,9 @@ export async function closeCase(
         message_type: "case_closed",
         is_action_flag: false
       });
+    }
 
-      // Notify admin staff
+    // Notify admin staff
       const { data: staffMembers } = await adminSupabase
         .from("staff_members")
         .select("id")
@@ -1040,14 +1049,18 @@ export async function closeCase(
           "/admin/partner-inquiries"
         );
       }
-    }
 
     revalidatePath("/portal/support");
     revalidatePath("/admin/partner-inquiries");
+    revalidatePath("/portal", "layout");
+    revalidatePath("/admin", "layout");
     return { success: true };
   } catch (e) {
-    console.error("Failed to close case:", e);
-    return { success: false, error: e instanceof Error ? e.message : "케이스 종료 실패" };
+    console.error("Failed to close case in portal:", e);
+    return {
+      success: false,
+      error: "문의 종료를 완료하지 못했습니다. 잠시 후 다시 시도해주세요.\nUnable to close the inquiry. Please try again."
+    };
   }
 }
 
