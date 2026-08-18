@@ -47,7 +47,7 @@ export default function PortalSidebar({
     { name: "발주 관리", icon: SalesIcon, href: "/portal/orders/purchase-orders" },
     { name: "선적 & 출고 관리", icon: DashboardIcon, href: "/portal/orders/shipping" },
     { name: "정산 관리", icon: ReportsIcon, href: "/portal/finance" },
-    { name: "Support", icon: SupportIcon, href: "/portal/support" },
+    { name: "문의 지원", icon: SupportIcon, href: "/portal/support" },
   ];
 
   const [isSettingsOpen, setIsSettingsOpen] = useState(() => {

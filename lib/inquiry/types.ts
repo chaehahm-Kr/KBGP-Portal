@@ -56,6 +56,10 @@ export interface PartnerInquiryItem {
   is_action_required: boolean;
   closed_at?: string | null;
   closed_by?: string | null;
+  closed_by_side?: "admin" | "portal" | null;
+  previous_case_id?: string | null;
+  previous_case_number?: string | null;
+  previous_case_title?: string | null;
   reopen_count?: number;
   satisfaction_score?: number | null;
   satisfaction_comment?: string | null;

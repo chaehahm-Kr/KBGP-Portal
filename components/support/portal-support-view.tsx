@@ -12,7 +12,7 @@ import {
   resolvePartnerInquiryAction,
   replyToPartnerInquiry,
   closeCase,
-  reopenCase
+  submitSatisfactionRating
 } from "@/lib/inquiry/actions";
 
 interface PortalSupportViewProps {
@@ -34,7 +34,6 @@ const MSG_TYPE_META: Record<string, { icon: string; style: string }> = {
   action_resolved: { icon: "✅", style: "bg-purple-50 text-purple-700 dark:bg-purple-950/20 dark:text-purple-300" },
   status_change:   { icon: "🔄", style: "bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400" },
   case_closed:     { icon: "🔒", style: "bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400" },
-  case_reopened:   { icon: "🔓", style: "bg-amber-50 text-amber-700 dark:bg-amber-950/20 dark:text-amber-300" },
   satisfaction:    { icon: "⭐", style: "bg-yellow-50 text-yellow-700 dark:bg-yellow-950/20 dark:text-yellow-300" }
 };
 
@@ -43,14 +42,18 @@ export function PortalSupportView({ initialInquiries, createAction }: PortalSupp
   const [isWriteOpen, setIsWriteOpen] = useState(false);
   const [selectedInquiry, setSelectedInquiry] = useState<PartnerInquiryItem | null>(null);
 
+  // Detail View Tab: 'conversation' vs 'caselog'
+  const [activeTab, setActiveTab] = useState<"conversation" | "caselog">("conversation");
+
   // Search & Filter states
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"ALL" | OfficialCaseStatus>("ALL");
 
-  // New case form
+  // New case form & Follow-up
   const [category, setCategory] = useState("general");
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
+  const [previousCaseId, setPreviousCaseId] = useState<string | null>(null);
   const [newCaseFile, setNewCaseFile] = useState<File | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
@@ -69,15 +72,13 @@ export function PortalSupportView({ initialInquiries, createAction }: PortalSupp
   const [isReplying, setIsReplying] = useState(false);
   const [replyError, setReplyError] = useState("");
 
-  // Case close modal
+  // Case close & Rating modal
   const [showCloseModal, setShowCloseModal] = useState(false);
-  const [satisfaction, setSatisfaction] = useState<number>(0);
+  const [showRatingModal, setShowRatingModal] = useState(false);
+  const [satisfaction, setSatisfaction] = useState<number>(5);
   const [satisfactionComment, setSatisfactionComment] = useState("");
   const [isClosing, setIsClosing] = useState(false);
-
-  // Reopen
-  const [showReopenModal, setShowReopenModal] = useState(false);
-  const [reopenMessage, setReopenMessage] = useState("");
+  const [isRatingSubmitting, setIsRatingSubmitting] = useState(false);
   const [isReopening, setIsReopening] = useState(false);
 
   const formatDate = (dateStr: string) => {
@@ -124,11 +125,14 @@ export function PortalSupportView({ initialInquiries, createAction }: PortalSupp
 
     setIsSubmitting(true);
     const fd = new FormData(e.currentTarget);
+    if (previousCaseId) {
+      fd.append("previous_case_id", previousCaseId);
+    }
     try {
       const res = await createAction(fd);
       if (res.success) {
         setIsWriteOpen(false);
-        setTitle(""); setContent(""); setCategory("general");
+        setTitle(""); setContent(""); setCategory("general"); setPreviousCaseId(null);
         window.location.reload();
       } else {
         setSubmitError(res.error || "등록에 실패했습니다.");
@@ -137,6 +141,32 @@ export function PortalSupportView({ initialInquiries, createAction }: PortalSupp
       setSubmitError("서버 오류가 발생했습니다.");
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleFollowUpInquiry = (prevInquiry: PartnerInquiryItem) => {
+    setPreviousCaseId(prevInquiry.id);
+    setCategory(prevInquiry.category || "general");
+    setTitle(prevInquiry.title.startsWith("Re:") ? prevInquiry.title : `Re: ${prevInquiry.title}`);
+    setContent("");
+    setSubmitError("");
+    setIsWriteOpen(true);
+  };
+
+  const handleRatingSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedInquiry) return;
+    setIsRatingSubmitting(true);
+    try {
+      const res = await submitSatisfactionRating(selectedInquiry.id, satisfaction, satisfactionComment.trim() || null);
+      if (res.success) {
+        setShowRatingModal(false);
+        window.location.reload();
+      }
+    } catch {
+      // error handled
+    } finally {
+      setIsRatingSubmitting(false);
     }
   };
 
@@ -186,38 +216,23 @@ export function PortalSupportView({ initialInquiries, createAction }: PortalSupp
     finally { setIsClosing(false); }
   };
 
-  const handleReopenCase = async () => {
-    if (!selectedInquiry) return;
-    if (!reopenMessage.trim()) return;
-    setIsReopening(true);
-    try {
-      const res = await reopenCase(selectedInquiry.id, "portal", reopenMessage.trim());
-      if (res.success) {
-        setShowReopenModal(false);
-        setReopenMessage("");
-        window.location.reload();
-      }
-    } catch {}
-    finally { setIsReopening(false); }
-  };
-
   return (
     <div className="space-y-5">
       {/* Breadcrumb & Header */}
       <div className="space-y-1">
         <div className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">
-          Portal / Support
+          Portal / 문의 지원
         </div>
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-lg font-bold text-zinc-900 dark:text-white">케이스 지원 (Support)</h2>
-            <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5">K SELECT NETWORK 전용 1:1 케이스 및 온라인 문의 관리</p>
+            <h2 className="text-lg font-bold text-zinc-900 dark:text-white">문의 지원</h2>
+            <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5">K SELECT NETWORK 전용 1:1 케이스 및 온라인 문의 지원 현황입니다.</p>
           </div>
           <button
-            onClick={() => { setIsWriteOpen(!isWriteOpen); setSelectedInquiry(null); }}
+            onClick={() => { setPreviousCaseId(null); setTitle(""); setContent(""); setSubmitError(""); setIsWriteOpen(!isWriteOpen); setSelectedInquiry(null); }}
             className="rounded-lg bg-zinc-950 px-4 py-2.5 text-xs font-bold text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-100 transition-colors cursor-pointer"
           >
-            + 새 케이스 등록
+            + 새 문의 작성
           </button>
         </div>
       </div>
@@ -444,12 +459,12 @@ export function PortalSupportView({ initialInquiries, createAction }: PortalSupp
           {selectedInquiry && (
             <div className="rounded-xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900 overflow-hidden">
               {/* Case Header */}
-              <div className="p-5 border-b border-zinc-100 dark:border-zinc-800 space-y-2">
+              <div className="p-5 border-b border-zinc-100 dark:border-zinc-800 space-y-2.5">
                 <div className="flex justify-between items-start">
                   <div className="space-y-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       {selectedInquiry.case_number && (
-                        <span className="text-[9px] font-mono text-zinc-400 dark:text-zinc-500">{selectedInquiry.case_number}</span>
+                        <span className="text-[9px] font-mono font-bold text-zinc-400 dark:text-zinc-500">#{selectedInquiry.case_number}</span>
                       )}
                       <span className={`rounded px-2 py-0.5 text-[9px] font-bold border ${OFFICIAL_STATUS_COLOR[getNormalizedStatus(selectedInquiry.status)]}`}>
                         {OFFICIAL_STATUS_EMOJI[getNormalizedStatus(selectedInquiry.status)]} {OFFICIAL_STATUS_LABEL[getNormalizedStatus(selectedInquiry.status)].ko}
@@ -462,11 +477,17 @@ export function PortalSupportView({ initialInquiries, createAction }: PortalSupp
                     <p className="text-[9px] text-zinc-400 dark:text-zinc-500">
                       접수: {formatDate(selectedInquiry.created_at)}
                       {selectedInquiry.closed_at ? ` · 종료: ${formatDate(selectedInquiry.closed_at)}` : ""}
-                      {selectedInquiry.reopen_count ? ` · 재오픈 ${selectedInquiry.reopen_count}회` : ""}
                     </p>
                   </div>
                   <button onClick={() => setSelectedInquiry(null)} className="text-[10px] text-zinc-400 hover:text-zinc-700 dark:hover:text-white cursor-pointer shrink-0">닫기</button>
                 </div>
+
+                {/* Follow-up Indicator Banner */}
+                {selectedInquiry.previous_case_id && (
+                  <div className="rounded-lg border border-blue-200 bg-blue-50/70 p-2.5 dark:border-blue-900/40 dark:bg-blue-950/20 text-[10px] font-medium text-blue-800 dark:text-blue-300 flex items-center justify-between">
+                    <span>💡 이 문의는 이전 문의의 후속 문의입니다. {selectedInquiry.previous_case_number ? `(이전 문의: #${selectedInquiry.previous_case_number})` : ""}</span>
+                  </div>
+                )}
 
                 {/* Action Required Banner */}
                 {selectedInquiry.status === "action_required" && (
@@ -487,73 +508,128 @@ export function PortalSupportView({ initialInquiries, createAction }: PortalSupp
                   </div>
                 )}
 
-                {/* Satisfaction if closed */}
-                {isClosed && selectedInquiry.satisfaction_score && (
-                  <div className="text-[10px] text-zinc-500 dark:text-zinc-400 flex items-center gap-1.5">
-                    <span>만족도:</span>
-                    <span>{"★".repeat(selectedInquiry.satisfaction_score)}{"☆".repeat(5 - selectedInquiry.satisfaction_score)}</span>
-                  </div>
-                )}
-              </div>
-
-              {/* Thread */}
-              <div className="p-5 space-y-3">
-                <h4 className="text-[9px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">대화 기록</h4>
-                <div className="space-y-3 max-h-[360px] overflow-y-auto pr-1">
-                  {(selectedInquiry.messages ?? []).map((msg) => {
-                    const isSystemMsg = msg.messageType !== "message";
-                    const isAdmin = msg.senderType === "admin";
-
-                    if (isSystemMsg) {
-                      const meta = MSG_TYPE_META[msg.messageType] || { icon: "ℹ️", style: "bg-zinc-100 text-zinc-500" };
-                      return (
-                        <div key={msg.id} className="flex items-center justify-center gap-2 py-1">
-                          <div className="flex-1 h-px bg-zinc-100 dark:bg-zinc-800" />
-                          <div className={`flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[9px] font-bold ${meta.style}`}>
-                            <span>{meta.icon}</span>
-                            <span>{msg.content}</span>
-                          </div>
-                          <div className="flex-1 h-px bg-zinc-100 dark:bg-zinc-800" />
-                        </div>
-                      );
-                    }
-
-                    return (
-                      <div key={msg.id} className={`flex flex-col gap-1 ${isAdmin ? "items-start" : "items-end"}`}>
-                        <div className="flex items-center gap-1.5 text-[9px] text-zinc-400 dark:text-zinc-500">
-                          {isAdmin && <span className="font-bold text-zinc-600 dark:text-zinc-300">{msg.senderName} (어드민)</span>}
-                          <span>{formatDate(msg.createdAt)}</span>
-                          {!isAdmin && <span className="font-bold text-zinc-600 dark:text-zinc-300">나</span>}
-                        </div>
-                        <div
-                          className={`max-w-[85%] p-3 rounded-xl text-xs leading-relaxed whitespace-pre-wrap ${
-                            isAdmin
-                              ? "bg-zinc-100 text-zinc-800 dark:bg-zinc-800 dark:text-zinc-200 rounded-tl-sm"
-                              : "bg-zinc-900 text-white dark:bg-white dark:text-zinc-900 rounded-tr-sm"
-                          } ${msg.isActionFlag ? "border-2 border-rose-400 dark:border-rose-600" : ""}`}
-                        >
-                          {msg.isActionFlag && (
-                            <div className="text-[9px] font-bold text-rose-400 mb-1.5 flex items-center gap-1">
-                              ⚠️ 조치 요청 포함 메시지
-                            </div>
-                          )}
-                          {msg.content}
-                          {msg.attachmentUrl && (
-                            <div className="mt-2 flex items-center gap-1 text-[9px] font-bold opacity-75">
-                              <span>📎</span>
-                              <a href={msg.attachmentUrl} target="_blank" rel="noopener noreferrer" className="hover:underline">
-                                {msg.attachmentFilename || "첨부파일"}
-                              </a>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
+                {/* Tab Switcher: Conversation vs Case Log */}
+                <div className="flex border-b border-zinc-200 dark:border-zinc-800 pt-2 gap-4 text-xs font-bold">
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab("conversation")}
+                    className={`pb-2 border-b-2 transition-colors cursor-pointer ${
+                      activeTab === "conversation"
+                        ? "border-zinc-950 text-zinc-950 dark:border-white dark:text-white"
+                        : "border-transparent text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"
+                    }`}
+                  >
+                    💬 대화 내용 (Conversation)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab("caselog")}
+                    className={`pb-2 border-b-2 transition-colors cursor-pointer ${
+                      activeTab === "caselog"
+                        ? "border-zinc-950 text-zinc-950 dark:border-white dark:text-white"
+                        : "border-transparent text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"
+                    }`}
+                  >
+                    📋 처리 기록 (Case Log)
+                  </button>
                 </div>
               </div>
 
-              {/* Reply + Close section */}
+              {/* Tab 1: Conversation (Human Messages Only) */}
+              {activeTab === "conversation" && (
+                <div className="p-5 space-y-3">
+                  <div className="space-y-3 max-h-[360px] overflow-y-auto pr-1">
+                    {(selectedInquiry.messages ?? []).filter((m) => m.messageType === "message").length > 0 ? (
+                      (selectedInquiry.messages ?? [])
+                        .filter((m) => m.messageType === "message")
+                        .map((msg) => {
+                          const isAdmin = msg.senderType === "admin";
+                          return (
+                            <div key={msg.id} className={`flex flex-col gap-1 ${isAdmin ? "items-start" : "items-end"}`}>
+                              <div className="flex items-center gap-1.5 text-[9px] text-zinc-400 dark:text-zinc-500">
+                                {isAdmin && <span className="font-bold text-zinc-600 dark:text-zinc-300">{msg.senderName} (어드민)</span>}
+                                <span>{formatDate(msg.createdAt)}</span>
+                                {!isAdmin && <span className="font-bold text-zinc-600 dark:text-zinc-300">나</span>}
+                              </div>
+                              <div
+                                className={`max-w-[85%] p-3 rounded-xl text-xs leading-relaxed whitespace-pre-wrap ${
+                                  isAdmin
+                                    ? "bg-zinc-100 text-zinc-800 dark:bg-zinc-800 dark:text-zinc-200 rounded-tl-sm"
+                                    : "bg-zinc-900 text-white dark:bg-white dark:text-zinc-900 rounded-tr-sm"
+                                } ${msg.isActionFlag ? "border-2 border-rose-400 dark:border-rose-600" : ""}`}
+                              >
+                                {msg.isActionFlag && (
+                                  <div className="text-[9px] font-bold text-rose-400 mb-1.5 flex items-center gap-1">
+                                    ⚠️ 조치 요청 포함 메시지
+                                  </div>
+                                )}
+                                {msg.content}
+                                {msg.attachmentUrl && (
+                                  <div className="mt-2 flex items-center gap-1 text-[9px] font-bold opacity-75">
+                                    <span>📎</span>
+                                    <a href={msg.attachmentUrl} target="_blank" rel="noopener noreferrer" className="hover:underline">
+                                      {msg.attachmentFilename || "첨부파일"}
+                                    </a>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })
+                    ) : (
+                      <p className="text-[11px] text-zinc-400 text-center py-4">등록된 메시지가 없습니다.</p>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Tab 2: Case Log (Timeline Events) */}
+              {activeTab === "caselog" && (
+                <div className="p-5 space-y-3">
+                  <div className="space-y-2 max-h-[360px] overflow-y-auto pr-1">
+                    {/* Log Event 1: Initial Creation */}
+                    <div className="flex items-start gap-2.5 text-xs text-zinc-600 dark:text-zinc-300">
+                      <span className="text-xs">📥</span>
+                      <div className="space-y-0.5">
+                        <p className="font-bold text-zinc-900 dark:text-white">문의 접수</p>
+                        <p className="text-[10px] text-zinc-400">{formatDate(selectedInquiry.created_at)} · 파트너사 문의 등록 완료</p>
+                      </div>
+                    </div>
+
+                    {/* Thread Events */}
+                    {(selectedInquiry.messages ?? [])
+                      .filter((m) => m.messageType !== "message")
+                      .map((msg) => {
+                        const meta = MSG_TYPE_META[msg.messageType] || { icon: "ℹ️", style: "bg-zinc-100 text-zinc-500" };
+                        return (
+                          <div key={msg.id} className="flex items-start gap-2.5 text-xs text-zinc-600 dark:text-zinc-300">
+                            <span className="text-xs">{meta.icon}</span>
+                            <div className="space-y-0.5">
+                              <p className="font-bold text-zinc-900 dark:text-white">{msg.senderName}</p>
+                              <p className="text-[10px] text-zinc-400">{formatDate(msg.createdAt)} · {msg.content}</p>
+                            </div>
+                          </div>
+                        );
+                      })}
+
+                    {/* Log Event: Closed */}
+                    {isClosed && (
+                      <div className="flex items-start gap-2.5 text-xs text-zinc-600 dark:text-zinc-300">
+                        <span className="text-xs">🔒</span>
+                        <div className="space-y-0.5">
+                          <p className="font-bold text-zinc-900 dark:text-white">문의 종료됨 (Closed)</p>
+                          <p className="text-[10px] text-zinc-400">
+                            {selectedInquiry.closed_at ? formatDate(selectedInquiry.closed_at) : formatDate(selectedInquiry.updated_at)}
+                            {selectedInquiry.closed_by_side ? ` · ${selectedInquiry.closed_by_side === "admin" ? "어드민 담당자" : "파트너사"} 종료` : ""}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Reply Section (Active Case Only) */}
               {!isClosed && (
                 <div className="p-5 border-t border-zinc-100 dark:border-zinc-800 space-y-4">
                   <form onSubmit={handleReplySubmit} className="space-y-3 text-xs">
@@ -619,35 +695,58 @@ export function PortalSupportView({ initialInquiries, createAction }: PortalSupp
                         onClick={() => setShowCloseModal(true)}
                         className="rounded-lg border border-zinc-200 px-3 py-2.5 text-xs font-semibold text-zinc-600 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-400 dark:hover:bg-zinc-900 transition-colors cursor-pointer"
                       >
-                        케이스 종료
+                        문의 종료
                       </button>
                     </div>
                   </form>
                 </div>
               )}
 
-              {/* Closed Case Read-Only Footer */}
+              {/* Closed Case Actions & Rating Section */}
               {isClosed && (
-                <div className="p-5 border-t border-zinc-100 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-950/40 space-y-3">
-                  <div className="rounded-xl border border-zinc-200 bg-white p-3.5 shadow-2xs dark:border-zinc-800 dark:bg-zinc-900 space-y-1.5">
-                    <p className="text-xs font-bold text-zinc-800 dark:text-zinc-200 flex items-center gap-1.5">
-                      <span>🔒</span>
-                      <span>케이스가 종료되었습니다. / This case has been closed.</span>
-                    </p>
-                    <p className="text-[10px] text-zinc-500 dark:text-zinc-400 font-mono">
-                      종료: {selectedInquiry.closed_at ? formatDate(selectedInquiry.closed_at) : formatDate(selectedInquiry.updated_at)}
-                      <span className="opacity-60 ml-2">({selectedInquiry.closed_at ? formatEnDate(selectedInquiry.closed_at) : formatEnDate(selectedInquiry.updated_at)})</span>
-                    </p>
+                <div className="p-5 border-t border-zinc-100 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-950/40 space-y-4">
+                  <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-2xs dark:border-zinc-800 dark:bg-zinc-900 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs font-bold text-zinc-800 dark:text-zinc-200 flex items-center gap-1.5">
+                        <span>🔒</span>
+                        <span>이 문의는 종료되었습니다. / This inquiry has been closed.</span>
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSatisfaction(selectedInquiry.satisfaction_score || 5);
+                          setSatisfactionComment(selectedInquiry.satisfaction_comment || "");
+                          setShowRatingModal(true);
+                        }}
+                        className="text-[10px] font-bold text-amber-600 hover:underline dark:text-amber-400 cursor-pointer"
+                      >
+                        {selectedInquiry.satisfaction_score ? "★ 만족도 수정하기" : "⭐ 만족도 평가하기"}
+                      </button>
+                    </div>
+
+                    {selectedInquiry.satisfaction_score ? (
+                      <div className="text-[11px] font-medium text-zinc-700 dark:text-zinc-300 bg-amber-50/60 dark:bg-amber-950/20 p-2.5 rounded-lg border border-amber-200/60 dark:border-amber-900/40">
+                        <span className="text-amber-500 font-bold">
+                          {"★".repeat(selectedInquiry.satisfaction_score)}{"☆".repeat(5 - selectedInquiry.satisfaction_score)} ({selectedInquiry.satisfaction_score}점)
+                        </span>
+                        {selectedInquiry.satisfaction_comment && (
+                          <p className="mt-1 text-[11px] text-zinc-600 dark:text-zinc-400">"{selectedInquiry.satisfaction_comment}"</p>
+                        )}
+                      </div>
+                    ) : (
+                      <p className="text-[10px] text-zinc-400">아직 만족도 평가가 작성되지 않았습니다. 지원 경험을 평가해주세요.</p>
+                    )}
                   </div>
-                  <div className="flex justify-end">
+
+                  {/* Follow-up CTA */}
+                  <div className="flex justify-end pt-1">
                     <button
-                      onClick={() => {
-                        setReopenMessage("");
-                        setShowReopenModal(true);
-                      }}
-                      className="rounded-lg border border-amber-300 dark:border-amber-700 px-3 py-1.5 text-[10px] font-bold text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/20 transition-colors cursor-pointer"
+                      type="button"
+                      onClick={() => handleFollowUpInquiry(selectedInquiry)}
+                      className="rounded-xl bg-zinc-950 dark:bg-white px-4 py-2.5 text-xs font-bold text-white dark:text-zinc-950 hover:bg-zinc-800 dark:hover:bg-zinc-100 transition-colors shadow-sm cursor-pointer flex items-center gap-1.5"
                     >
-                      🔓 케이스 재오픈
+                      <span>🔄 후속 문의하기</span>
+                      <span className="text-[10px] opacity-75 font-normal">(Start a Follow-up)</span>
                     </button>
                   </div>
                 </div>
@@ -659,23 +758,24 @@ export function PortalSupportView({ initialInquiries, createAction }: PortalSupp
           {!isWriteOpen && !selectedInquiry && (
             <div className="rounded-xl border border-zinc-200 border-dashed bg-zinc-50/20 p-10 shadow-sm dark:border-zinc-800 text-center space-y-2.5">
               <span className="text-3xl">💬</span>
-              <h3 className="text-xs font-bold text-zinc-700 dark:text-zinc-300">케이스를 선택하세요</h3>
+              <h3 className="text-xs font-bold text-zinc-700 dark:text-zinc-300">문의를 선택하세요</h3>
               <p className="text-[10px] text-zinc-400 dark:text-zinc-500 max-w-[200px] mx-auto leading-normal">
-                좌측 목록에서 케이스를 클릭하거나, 새 케이스를 등록해 주세요.
+                좌측 목록에서 문의를 클릭하거나, 새 문의를 작성해 주세요.
               </p>
             </div>
           )}
         </div>
       </div>
 
-      {/* Close Modal */}
+      {/* Close Case Modal */}
       {showCloseModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
           <div className="w-full max-w-md rounded-2xl border border-zinc-200 bg-white p-6 shadow-2xl dark:border-zinc-800 dark:bg-zinc-900 space-y-4">
             <div>
-              <h3 className="text-sm font-bold text-zinc-900 dark:text-white">케이스 종료</h3>
-              <p className="text-[10px] text-zinc-500 dark:text-zinc-400 mt-1">
-                이 케이스에 대한 지원이 완료되었나요? 종료 후 재오픈할 수 있습니다.
+              <h3 className="text-sm font-bold text-zinc-900 dark:text-white">문의 종료</h3>
+              <p className="text-[11px] text-zinc-600 dark:text-zinc-400 mt-1">
+                문의가 해결되었나요? 이 케이스를 종료하시겠습니까?<br />
+                <span className="text-[10px] text-zinc-400">Has your issue been resolved? Would you like to close this case?</span>
               </p>
             </div>
 
@@ -685,22 +785,18 @@ export function PortalSupportView({ initialInquiries, createAction }: PortalSupp
                 {[1, 2, 3, 4, 5].map((score) => (
                   <button
                     key={score}
+                    type="button"
                     onClick={() => setSatisfaction(satisfaction === score ? 0 : score)}
                     className={`flex-1 py-2 rounded-lg border text-lg transition-all cursor-pointer ${
                       satisfaction >= score
-                        ? "bg-yellow-400 border-yellow-500 dark:bg-yellow-500 dark:border-yellow-600"
-                        : "border-zinc-200 hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-800"
+                        ? "bg-yellow-400 border-yellow-500 dark:bg-yellow-500 dark:border-yellow-600 text-white"
+                        : "border-zinc-200 hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-800 text-zinc-400"
                     }`}
                   >
                     ★
                   </button>
                 ))}
               </div>
-              {satisfaction > 0 && (
-                <p className="text-[10px] text-center text-zinc-500 dark:text-zinc-400">
-                  {["매우 불만", "불만", "보통", "만족", "매우 만족"][satisfaction - 1]} ({satisfaction}/5)
-                </p>
-              )}
             </div>
 
             <div className="space-y-1.5">
@@ -716,61 +812,81 @@ export function PortalSupportView({ initialInquiries, createAction }: PortalSupp
 
             <div className="flex gap-2">
               <button
+                type="button"
                 onClick={() => setShowCloseModal(false)}
                 className="flex-1 rounded-lg border border-zinc-200 py-2.5 text-xs font-semibold text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
               >
-                취소
+                취소 (Cancel)
               </button>
               <button
+                type="button"
                 onClick={handleCloseCase}
                 disabled={isClosing}
                 className="flex-1 rounded-lg bg-zinc-950 py-2.5 text-xs font-bold text-white hover:bg-zinc-800 disabled:opacity-50 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-100 transition-colors cursor-pointer"
               >
-                {isClosing ? "종료 중..." : "케이스 종료하기"}
+                {isClosing ? "종료 중..." : "🔒 케이스 종료하기"}
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Reopen Modal */}
-      {showReopenModal && (
+      {/* Satisfaction Rating Modal */}
+      {showRatingModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
           <div className="w-full max-w-md rounded-2xl border border-zinc-200 bg-white p-6 shadow-2xl dark:border-zinc-800 dark:bg-zinc-900 space-y-4">
             <div>
-              <h3 className="text-sm font-bold text-zinc-900 dark:text-white">케이스 재오픈</h3>
-              <p className="text-[10px] text-zinc-500 dark:text-zinc-400 mt-1">
-                이 케이스를 다시 열고 추가 문의를 전송합니다. 재오픈 사유나 추가 질문을 적어주세요.
+              <h3 className="text-sm font-bold text-zinc-900 dark:text-white">파트너 만족도 평가</h3>
+              <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-1">
+                종료된 문의 서비스에 대해 만족도를 평가해주세요.
               </p>
             </div>
 
+            <div className="space-y-2">
+              <div className="flex gap-2">
+                {[1, 2, 3, 4, 5].map((score) => (
+                  <button
+                    key={score}
+                    type="button"
+                    onClick={() => setSatisfaction(score)}
+                    className={`flex-1 py-2 rounded-lg border text-lg transition-all cursor-pointer ${
+                      satisfaction >= score
+                        ? "bg-yellow-400 border-yellow-500 text-white dark:bg-yellow-500 dark:border-yellow-600"
+                        : "border-zinc-200 text-zinc-400 hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-800"
+                    }`}
+                  >
+                    ★
+                  </button>
+                ))}
+              </div>
+            </div>
+
             <div className="space-y-1.5">
-              <label className="text-[10px] font-bold text-zinc-700 dark:text-zinc-300">재오픈 메시지 <span className="text-rose-500">*</span></label>
+              <label className="text-[10px] font-bold text-zinc-700 dark:text-zinc-300">추가 코멘트 (선택)</label>
               <textarea
-                rows={4}
-                value={reopenMessage}
-                onChange={(e) => setReopenMessage(e.target.value)}
-                placeholder="추가 질문 사항이나 재오픈 사유를 상세히 입력해 주세요."
+                rows={3}
+                value={satisfactionComment}
+                onChange={(e) => setSatisfactionComment(e.target.value)}
+                placeholder="지원 경험에 대해 남겨주실 의견이 있다면 작성해주세요."
                 className="w-full rounded-lg border border-zinc-200 bg-zinc-50/50 p-2.5 text-xs outline-none dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:border-zinc-950 dark:focus:border-white transition-colors leading-relaxed resize-none"
               />
             </div>
 
             <div className="flex gap-2">
               <button
-                onClick={() => {
-                  setShowReopenModal(false);
-                  setReopenMessage("");
-                }}
+                type="button"
+                onClick={() => setShowRatingModal(false)}
                 className="flex-1 rounded-lg border border-zinc-200 py-2.5 text-xs font-semibold text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
               >
-                취소
+                취소 (Cancel)
               </button>
               <button
-                onClick={handleReopenCase}
-                disabled={isReopening || !reopenMessage.trim()}
+                type="button"
+                onClick={handleRatingSubmit}
+                disabled={isRatingSubmitting}
                 className="flex-1 rounded-lg bg-zinc-950 py-2.5 text-xs font-bold text-white hover:bg-zinc-800 disabled:opacity-50 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-100 transition-colors cursor-pointer"
               >
-                {isReopening ? "재오픈 중..." : "🔓 케이스 재오픈하기"}
+                {isRatingSubmitting ? "제출 중..." : "⭐ 만족도 제출"}
               </button>
             </div>
           </div>

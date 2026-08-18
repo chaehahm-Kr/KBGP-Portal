@@ -195,19 +195,27 @@ export async function createPartnerInquiry(formData: FormData) {
       attachmentFilename = file.name;
     }
 
+    const previousCaseId = (formData.get("previous_case_id") as string) || null;
+
+    const insertPayload: any = {
+      company_id: companyId,
+      created_by: userId,
+      category,
+      title,
+      content,
+      attachment_path: attachmentPath,
+      attachment_filename: attachmentFilename,
+      status: "open",
+      is_action_required: false
+    };
+
+    if (previousCaseId) {
+      insertPayload.previous_case_id = previousCaseId;
+    }
+
     const { data: newInquiry, error } = await supabase
       .from("partner_inquiries")
-      .insert({
-        company_id: companyId,
-        created_by: userId,
-        category,
-        title,
-        content,
-        attachment_path: attachmentPath,
-        attachment_filename: attachmentFilename,
-        status: "open",
-        is_action_required: false
-      })
+      .insert(insertPayload)
       .select()
       .single();
 
@@ -277,6 +285,9 @@ export async function getPartnerInquiries(): Promise<PartnerInquiryItem[]> {
     const { data: staffList } = await adminSupabase.from("staff_members").select("id, name");
     const staffNameById = new Map((staffList ?? []).map((s) => [s.id, s.name || "관리자"]));
 
+    // Map of inquiryId -> { case_number, title } for quick previous_case lookup
+    const inquiryMap = new Map((data || []).map((i: any) => [i.id, { case_number: i.case_number, title: i.title }]));
+
     const items = await Promise.all(
       (data || []).map(async (item) => {
         let attachmentUrl = null;
@@ -292,11 +303,17 @@ export async function getPartnerInquiries(): Promise<PartnerInquiryItem[]> {
           repliedStaffName
         );
 
+        const prevInfo = item.previous_case_id ? inquiryMap.get(item.previous_case_id) : null;
+
         return {
           ...item,
           status: normalizeStatus(item.status) as CaseStatus,
           attachment_url: attachmentUrl,
           repliedStaffName,
+          previous_case_id: item.previous_case_id || null,
+          previous_case_number: item.previous_case_number || prevInfo?.case_number || null,
+          previous_case_title: item.previous_case_title || prevInfo?.title || null,
+          closed_by_side: item.closed_by_side || null,
           messages
         } as PartnerInquiryItem;
       })
@@ -335,6 +352,8 @@ export async function getAdminPartnerInquiries(): Promise<PartnerInquiryItem[]> 
       return [];
     }
 
+    const inquiryMap = new Map((inquiries || []).map((i: any) => [i.id, { case_number: i.case_number, title: i.title }]));
+
     const items = await Promise.all(
       (inquiries ?? []).map(async (item: any) => {
         let attachmentUrl = null;
@@ -349,6 +368,8 @@ export async function getAdminPartnerInquiries(): Promise<PartnerInquiryItem[]> 
           "파트너사",
           repliedStaffName
         );
+
+        const prevInfo = item.previous_case_id ? inquiryMap.get(item.previous_case_id) : null;
 
         return {
           id: item.id,
@@ -368,6 +389,10 @@ export async function getAdminPartnerInquiries(): Promise<PartnerInquiryItem[]> 
           is_action_required: item.is_action_required,
           closed_at: item.closed_at,
           closed_by: item.closed_by,
+          closed_by_side: item.closed_by_side || null,
+          previous_case_id: item.previous_case_id || null,
+          previous_case_number: item.previous_case_number || prevInfo?.case_number || null,
+          previous_case_title: item.previous_case_title || prevInfo?.title || null,
           reopen_count: item.reopen_count ?? 0,
           satisfaction_score: item.satisfaction_score,
           satisfaction_comment: item.satisfaction_comment,
@@ -497,50 +522,20 @@ export async function answerAndClosePartnerInquiry(
       return { success: false, error: "케이스를 찾을 수 없습니다." };
     }
 
-    const now = new Date().toISOString();
+    const { error: rpcError } = await adminSupabase.rpc(
+      "answer_and_close_partner_inquiry",
+      {
+        p_inquiry_id: inquiryId,
+        p_reply_content: replyContent,
+        p_replied_by: session.userId,
+        p_admin_name: "어드민 담당자"
+      }
+    );
 
-    const { error: updateError } = await adminSupabase
-      .from("partner_inquiries")
-      .update({
-        status: "closed",
-        reply_content: replyContent,
-        replied_by: session.userId,
-        replied_at: now,
-        closed_at: now,
-        closed_by: session.userId,
-        is_action_required: false,
-        updated_at: now
-      })
-      .eq("id", inquiryId);
-
-    if (updateError) {
-      console.error("Failed to save answer and close case:", updateError);
+    if (rpcError) {
+      console.error("Failed to save answer and close case via RPC:", rpcError);
       return { success: false, error: "답변 등록 및 케이스 종료에 실패했습니다." };
     }
-
-    // Insert admin answer and system close message into thread
-    await adminSupabase
-      .from("partner_inquiry_messages")
-      .insert([
-        {
-          inquiry_id: inquiryId,
-          sender_type: "admin",
-          sender_id: session.userId,
-          sender_name: "어드민 담당자",
-          content: replyContent,
-          message_type: "message",
-          is_action_flag: false
-        },
-        {
-          inquiry_id: inquiryId,
-          sender_type: "admin",
-          sender_id: session.userId,
-          sender_name: "시스템",
-          content: "어드민 담당자가 답변 등록 후 케이스를 종료했습니다.",
-          message_type: "case_closed",
-          is_action_flag: false
-        }
-      ]);
 
     // Notify portal user
     const caseLabel = originalInquiry.case_number
@@ -810,7 +805,7 @@ export async function replyToPartnerInquiry(
 // ────────────────────────────────────────────────────────────────────────────
 
 /**
- * 케이스를 종료합니다. 포털 측에서 호출 시 만족도 평가를 포함할 수 있습니다.
+ * 케이스를 포털 측에서 종료합니다. 만족도 평가를 포함할 수 있습니다.
  */
 export async function closeCase(
   inquiryId: string,
@@ -823,7 +818,7 @@ export async function closeCase(
 
     const { data: inquiry, error: fetchError } = await supabase
       .from("partner_inquiries")
-      .select("id, title, case_number")
+      .select("id, title, case_number, status")
       .eq("id", inquiryId)
       .eq("company_id", companyId)
       .single();
@@ -833,10 +828,13 @@ export async function closeCase(
     }
 
     const now = new Date().toISOString();
+    const isAlreadyClosed = normalizeStatus(inquiry.status) === "closed";
+
     const updatePayload: any = {
       status: "closed",
       closed_at: now,
       closed_by: userId,
+      closed_by_side: "portal",
       is_action_required: false,
       updated_at: now
     };
@@ -856,7 +854,6 @@ export async function closeCase(
       return { success: false, error: updateError.message };
     }
 
-    // Log case_closed in thread
     const adminSupabase = createAdminClient();
     const { data: company } = await adminSupabase
       .from("companies")
@@ -864,35 +861,38 @@ export async function closeCase(
       .eq("id", companyId)
       .maybeSingle();
 
-    const closedMsg = satisfactionScore != null
-      ? `케이스가 종료되었습니다. (만족도: ${"★".repeat(satisfactionScore)}${"☆".repeat(5 - satisfactionScore)})`
-      : "케이스가 종료되었습니다.";
+    // Log event only if not previously closed (Idempotent protection)
+    if (!isAlreadyClosed) {
+      const closedMsg = satisfactionScore != null
+        ? `케이스가 파트너사에 의해 종료되었습니다. (만족도: ${"★".repeat(satisfactionScore)}${"☆".repeat(5 - satisfactionScore)})`
+        : "케이스가 파트너사에 의해 종료되었습니다.";
 
-    await supabase.from("partner_inquiry_messages").insert({
-      inquiry_id: inquiryId,
-      sender_type: "partner",
-      sender_id: userId,
-      sender_name: company?.name || "파트너사",
-      content: closedMsg,
-      message_type: "case_closed",
-      is_action_flag: false
-    });
+      await supabase.from("partner_inquiry_messages").insert({
+        inquiry_id: inquiryId,
+        sender_type: "partner",
+        sender_id: userId,
+        sender_name: company?.name || "파트너사",
+        content: closedMsg,
+        message_type: "case_closed",
+        is_action_flag: false
+      });
 
-    // Notify admin staff
-    const { data: staffMembers } = await adminSupabase
-      .from("staff_members")
-      .select("id")
-      .eq("status", "active");
+      // Notify admin staff
+      const { data: staffMembers } = await adminSupabase
+        .from("staff_members")
+        .select("id")
+        .eq("status", "active");
 
-    const caseLabel = inquiry.case_number ? `케이스 ${inquiry.case_number}` : `'${inquiry.title}'`;
-    for (const staff of staffMembers ?? []) {
-      await createNotification(
-        staff.id,
-        userId,
-        "케이스 종료",
-        `[${company?.name || "회사"}]에서 ${caseLabel}를 종료했습니다.${satisfactionScore != null ? ` (만족도: ${satisfactionScore}/5)` : ""}`,
-        "/admin/partner-inquiries"
-      );
+      const caseLabel = inquiry.case_number ? `케이스 ${inquiry.case_number}` : `'${inquiry.title}'`;
+      for (const staff of staffMembers ?? []) {
+        await createNotification(
+          staff.id,
+          userId,
+          "케이스 종료",
+          `[${company?.name || "회사"}]에서 ${caseLabel}를 종료했습니다.${satisfactionScore != null ? ` (만족도: ${satisfactionScore}/5)` : ""}`,
+          "/admin/partner-inquiries"
+        );
+      }
     }
 
     revalidatePath("/portal/support");
@@ -904,25 +904,93 @@ export async function closeCase(
   }
 }
 
+/**
+ * 포털 파트너사 사용자가 종료된 케이스의 만족도를 평가하거나 수정합니다.
+ */
+export async function submitSatisfactionRating(
+  inquiryId: string,
+  satisfactionScore: number,
+  satisfactionComment?: string | null
+) {
+  try {
+    const { companyId, userId } = await requireCompanyMembership();
+    const supabase = await createClient();
+
+    const now = new Date().toISOString();
+    const { error: updateError } = await supabase
+      .from("partner_inquiries")
+      .update({
+        satisfaction_score: satisfactionScore,
+        satisfaction_comment: satisfactionComment ?? null,
+        satisfaction_at: now,
+        updated_at: now
+      })
+      .eq("id", inquiryId)
+      .eq("company_id", companyId);
+
+    if (updateError) {
+      return { success: false, error: updateError.message };
+    }
+
+    // Log rating event into thread for Case Log (1 record per rating)
+    const adminSupabase = createAdminClient();
+    const { data: company } = await adminSupabase
+      .from("companies")
+      .select("name")
+      .eq("id", companyId)
+      .maybeSingle();
+
+    await supabase.from("partner_inquiry_messages").insert({
+      inquiry_id: inquiryId,
+      sender_type: "partner",
+      sender_id: userId,
+      sender_name: company?.name || "파트너사",
+      content: `파트너 만족도 평가 작성: ${"★".repeat(satisfactionScore)}${"☆".repeat(5 - satisfactionScore)} (${satisfactionScore}점)${satisfactionComment ? ` "${satisfactionComment}"` : ""}`,
+      message_type: "satisfaction",
+      is_action_flag: false
+    });
+
+    revalidatePath("/portal/support");
+    revalidatePath("/admin/partner-inquiries");
+    return { success: true };
+  } catch (e) {
+    console.error("Failed to submit satisfaction rating:", e);
+    return { success: false, error: e instanceof Error ? e.message : "만족도 등록 실패" };
+  }
+}
+
 // ────────────────────────────────────────────────────────────────────────────
 // closeCaseAdmin (admin → 케이스 종료)
 // ────────────────────────────────────────────────────────────────────────────
 
 /**
- * 어드민에서 케이스를 강제 종료합니다.
+ * 어드민에서 답변 없이 케이스를 종료합니다.
  */
 export async function closeCaseAdmin(inquiryId: string) {
   try {
     const session = await verifyAdminSession();
     const adminSupabase = createAdminClient();
 
+    const { data: inquiry, error: fetchError } = await adminSupabase
+      .from("partner_inquiries")
+      .select("status")
+      .eq("id", inquiryId)
+      .single();
+
+    if (fetchError || !inquiry) {
+      return { success: false, error: "해당 케이스를 찾을 수 없습니다." };
+    }
+
+    const isAlreadyClosed = normalizeStatus(inquiry.status) === "closed";
     const now = new Date().toISOString();
+
     const { error: updateError } = await adminSupabase
       .from("partner_inquiries")
       .update({
         status: "closed",
         closed_at: now,
         closed_by: session.userId,
+        closed_by_side: "admin",
         is_action_required: false,
         updated_at: now
       })
@@ -932,15 +1000,17 @@ export async function closeCaseAdmin(inquiryId: string) {
       return { success: false, error: updateError.message };
     }
 
-    await adminSupabase.from("partner_inquiry_messages").insert({
-      inquiry_id: inquiryId,
-      sender_type: "admin",
-      sender_id: session.userId,
-      sender_name: "어드민 담당자",
-      content: "어드민에 의해 케이스가 종료되었습니다.",
-      message_type: "case_closed",
-      is_action_flag: false
-    });
+    if (!isAlreadyClosed) {
+      await adminSupabase.from("partner_inquiry_messages").insert({
+        inquiry_id: inquiryId,
+        sender_type: "admin",
+        sender_id: session.userId,
+        sender_name: "어드민 담당자",
+        content: "어드민 담당자가 답변 없이 케이스를 종료했습니다.",
+        message_type: "case_closed",
+        is_action_flag: false
+      });
+    }
 
     revalidatePath("/admin/partner-inquiries");
     revalidatePath("/portal/support");

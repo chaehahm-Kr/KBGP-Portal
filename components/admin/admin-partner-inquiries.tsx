@@ -8,7 +8,7 @@ import {
   OFFICIAL_STATUS_COLOR,
   OFFICIAL_STATUS_EMOJI,
 } from "@/lib/inquiry/types";
-import { updateCaseStatus, closeCaseAdmin, reopenCase, answerAndClosePartnerInquiry } from "@/lib/inquiry/actions";
+import { updateCaseStatus, closeCaseAdmin, answerAndClosePartnerInquiry } from "@/lib/inquiry/actions";
 
 interface AdminPartnerInquiriesProps {
   initialInquiries: PartnerInquiryItem[];
@@ -29,13 +29,15 @@ const MSG_TYPE_LABEL: Record<string, { icon: string; label: string; style: strin
   action_resolved: { icon: "✅", label: "조치완료", style: "bg-purple-50 text-purple-700 dark:bg-purple-950/20 dark:text-purple-300" },
   status_change:   { icon: "🔄", label: "상태변경", style: "bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400" },
   case_closed:     { icon: "🔒", label: "케이스종료", style: "bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400" },
-  case_reopened:   { icon: "🔓", label: "재오픈", style: "bg-amber-50 text-amber-700 dark:bg-amber-950/20 dark:text-amber-300" },
   satisfaction:    { icon: "⭐", label: "만족도", style: "bg-yellow-50 text-yellow-700 dark:bg-yellow-950/20 dark:text-yellow-300" }
 };
 
 export function AdminPartnerInquiries({ initialInquiries, answerAction }: AdminPartnerInquiriesProps) {
   const [inquiries, setInquiries] = useState<PartnerInquiryItem[]>(initialInquiries);
   const [selectedInquiry, setSelectedInquiry] = useState<PartnerInquiryItem | null>(null);
+
+  // Detail View Tab: 'conversation' vs 'caselog'
+  const [activeTab, setActiveTab] = useState<"conversation" | "caselog">("conversation");
 
   // Default Multi-Select Statuses: Active 3 Statuses (RECEIVED, UNDER_REVIEW, ACTION_REQUIRED)
   const [selectedStatuses, setSelectedStatuses] = useState<OfficialCaseStatus[]>([
@@ -51,11 +53,11 @@ export function AdminPartnerInquiries({ initialInquiries, answerAction }: AdminP
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
   const [showCloseConfirmModal, setShowCloseConfirmModal] = useState(false);
+  const [showDirectCloseConfirmModal, setShowDirectCloseConfirmModal] = useState(false);
 
   // Status update states
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
   const [isClosing, setIsClosing] = useState(false);
-  const [isReopening, setIsReopening] = useState(false);
 
   const formatDate = (dateStr: string) => {
     const d = new Date(dateStr);
@@ -102,30 +104,17 @@ export function AdminPartnerInquiries({ initialInquiries, answerAction }: AdminP
     }
   };
 
-  const handleCloseCase = async () => {
+  const handleDirectCloseSubmit = async () => {
     if (!selectedInquiry) return;
-    if (!confirm("이 케이스를 종료하시겠습니까?")) return;
     setIsClosing(true);
     try {
       await closeCaseAdmin(selectedInquiry.id);
+      setShowDirectCloseConfirmModal(false);
       window.location.reload();
     } catch {
       setSubmitError("케이스 종료에 실패했습니다.");
     } finally {
       setIsClosing(false);
-    }
-  };
-
-  const handleReopenCase = async () => {
-    if (!selectedInquiry) return;
-    setIsReopening(true);
-    try {
-      await reopenCase(selectedInquiry.id, "admin");
-      window.location.reload();
-    } catch {
-      setSubmitError("케이스 재오픈에 실패했습니다.");
-    } finally {
-      setIsReopening(false);
     }
   };
 
@@ -376,6 +365,24 @@ export function AdminPartnerInquiries({ initialInquiries, answerAction }: AdminP
                   </button>
                 </div>
 
+                {/* Previous Case Banner if Follow-up */}
+                {selectedInquiry.previous_case_id && (
+                  <div className="rounded-lg border border-blue-200 bg-blue-50/70 p-2.5 dark:border-blue-900/40 dark:bg-blue-950/20 text-[10px] font-medium text-blue-800 dark:text-blue-300 flex items-center justify-between">
+                    <span>
+                      💡 <strong>이전 문의 연결:</strong> {selectedInquiry.previous_case_number ? `#${selectedInquiry.previous_case_number}` : "이전 케이스"} · {selectedInquiry.previous_case_title || "이전 문의"}
+                    </span>
+                    {inquiries.find((i) => i.id === selectedInquiry.previous_case_id) && (
+                      <button
+                        type="button"
+                        onClick={() => setSelectedInquiry(inquiries.find((i) => i.id === selectedInquiry.previous_case_id) || null)}
+                        className="font-bold underline hover:text-blue-950 dark:hover:text-white cursor-pointer"
+                      >
+                        [이전 문의 보기]
+                      </button>
+                    )}
+                  </div>
+                )}
+
                 {/* Status Toolbar */}
                 {!isClosed && (
                   <div className="flex flex-wrap items-center gap-1.5 pt-2 border-t border-zinc-50 dark:border-zinc-800/60">
@@ -399,92 +406,140 @@ export function AdminPartnerInquiries({ initialInquiries, answerAction }: AdminP
                     ))}
                     <div className="flex-1" />
                     <button
-                      onClick={handleCloseCase}
+                      type="button"
+                      onClick={() => setShowDirectCloseConfirmModal(true)}
                       disabled={isClosing}
-                      className="rounded px-2.5 py-0.5 text-[9px] font-bold bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-700 transition-all cursor-pointer disabled:opacity-50"
+                      className="rounded px-2.5 py-0.5 text-[9px] font-bold bg-rose-50 text-rose-700 hover:bg-rose-100 dark:bg-rose-950/30 dark:text-rose-400 border border-rose-200 dark:border-rose-900/40 transition-all cursor-pointer disabled:opacity-50"
                     >
-                      {isClosing ? "종료 중..." : "🔒 케이스 종료"}
+                      {isClosing ? "종료 중..." : "🔒 케이스 종료 (답변 없이)"}
                     </button>
                   </div>
                 )}
                 {isClosed && (
                   <div className="flex items-center gap-2 pt-2 border-t border-zinc-50 dark:border-zinc-800/60">
-                    <span className="text-[10px] text-zinc-400 dark:text-zinc-500">이 케이스는 종료되었습니다.</span>
-                    <button
-                      onClick={handleReopenCase}
-                      disabled={isReopening}
-                      className="rounded px-2.5 py-0.5 text-[9px] font-bold bg-amber-100 text-amber-700 hover:bg-amber-200 dark:bg-amber-950/30 dark:text-amber-400 transition-all cursor-pointer disabled:opacity-50"
-                    >
-                      {isReopening ? "재오픈 중..." : "🔓 재오픈"}
-                    </button>
+                    <span className="text-[10px] text-zinc-400 dark:text-zinc-500">
+                      이 케이스는 종료되었습니다. (종료시각: {selectedInquiry.closed_at ? formatDate(selectedInquiry.closed_at) : formatDate(selectedInquiry.updated_at)})
+                    </span>
                   </div>
                 )}
-              </div>
 
-              {/* Conversation Thread */}
-              <div className="p-5 space-y-3">
-                <h4 className="text-[9px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">
-                  대화 기록
-                </h4>
-
-                <div className="space-y-3 max-h-[380px] overflow-y-auto pr-1">
-                  {(selectedInquiry.messages ?? []).map((msg) => {
-                    const isSystem = msg.messageType !== "message";
-                    const isAdmin = msg.senderType === "admin";
-
-                    if (isSystem && msg.messageType !== "message") {
-                      const meta = MSG_TYPE_LABEL[msg.messageType] || { icon: "ℹ️", label: msg.messageType, style: "bg-zinc-100 text-zinc-500" };
-                      return (
-                        <div key={msg.id} className="flex items-center justify-center gap-2 py-1">
-                          <div className="flex-1 h-px bg-zinc-100 dark:bg-zinc-800" />
-                          <div className={`flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[9px] font-bold ${meta.style}`}>
-                            <span>{meta.icon}</span>
-                            <span>{msg.senderName}</span>
-                            <span>·</span>
-                            <span>{msg.content}</span>
-                          </div>
-                          <div className="flex-1 h-px bg-zinc-100 dark:bg-zinc-800" />
-                        </div>
-                      );
-                    }
-
-                    return (
-                      <div
-                        key={msg.id}
-                        className={`flex flex-col gap-1 ${isAdmin ? "items-end" : "items-start"}`}
-                      >
-                        <div className="flex items-center gap-1.5 text-[9px] text-zinc-400 dark:text-zinc-500">
-                          {!isAdmin && <span className="font-bold text-zinc-600 dark:text-zinc-300">{msg.senderName}</span>}
-                          <span>{formatDate(msg.createdAt)}</span>
-                          {isAdmin && <span className="font-bold text-zinc-600 dark:text-zinc-300">{msg.senderName}</span>}
-                        </div>
-                        <div
-                          className={`max-w-[85%] p-3 rounded-xl text-xs leading-relaxed whitespace-pre-wrap ${
-                            isAdmin
-                              ? "bg-zinc-900 text-white dark:bg-white dark:text-zinc-900 rounded-tr-sm"
-                              : "bg-zinc-100 text-zinc-800 dark:bg-zinc-800 dark:text-zinc-200 rounded-tl-sm"
-                          } ${msg.isActionFlag ? "border-2 border-rose-400 dark:border-rose-600" : ""}`}
-                        >
-                          {msg.isActionFlag && (
-                            <div className="text-[9px] font-bold text-rose-400 dark:text-rose-300 mb-1.5 flex items-center gap-1">
-                              ⚠️ 조치 요청 포함
-                            </div>
-                          )}
-                          {msg.content}
-                          {msg.attachmentUrl && (
-                            <div className="mt-2 flex items-center gap-1 text-[9px] font-bold opacity-75">
-                              <span>📎</span>
-                              <a href={msg.attachmentUrl} target="_blank" rel="noopener noreferrer" className="hover:underline">
-                                {msg.attachmentFilename || "첨부파일"}
-                              </a>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
+                {/* Tab Switcher: Conversation vs Case Log */}
+                <div className="flex border-b border-zinc-200 dark:border-zinc-800 pt-2 gap-4 text-xs font-bold">
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab("conversation")}
+                    className={`pb-2 border-b-2 transition-colors cursor-pointer ${
+                      activeTab === "conversation"
+                        ? "border-zinc-950 text-zinc-950 dark:border-white dark:text-white"
+                        : "border-transparent text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"
+                    }`}
+                  >
+                    💬 대화 내용 (Conversation)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab("caselog")}
+                    className={`pb-2 border-b-2 transition-colors cursor-pointer ${
+                      activeTab === "caselog"
+                        ? "border-zinc-950 text-zinc-950 dark:border-white dark:text-white"
+                        : "border-transparent text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"
+                    }`}
+                  >
+                    📋 Case Log (처리 기록)
+                  </button>
                 </div>
               </div>
+
+              {/* Tab 1: Conversation (Human Messages Only) */}
+              {activeTab === "conversation" && (
+                <div className="p-5 space-y-3">
+                  <div className="space-y-3 max-h-[380px] overflow-y-auto pr-1">
+                    {(selectedInquiry.messages ?? []).filter((m) => m.messageType === "message").length > 0 ? (
+                      (selectedInquiry.messages ?? [])
+                        .filter((m) => m.messageType === "message")
+                        .map((msg) => {
+                          const isAdmin = msg.senderType === "admin";
+                          return (
+                            <div key={msg.id} className={`flex flex-col gap-1 ${isAdmin ? "items-end" : "items-start"}`}>
+                              <div className="flex items-center gap-1.5 text-[9px] text-zinc-400 dark:text-zinc-500">
+                                {!isAdmin && <span className="font-bold text-zinc-600 dark:text-zinc-300">{msg.senderName} (파트너)</span>}
+                                <span>{formatDate(msg.createdAt)}</span>
+                                {isAdmin && <span className="font-bold text-zinc-600 dark:text-zinc-300">{msg.senderName} (어드민)</span>}
+                              </div>
+                              <div
+                                className={`max-w-[85%] p-3 rounded-xl text-xs leading-relaxed whitespace-pre-wrap ${
+                                  isAdmin
+                                    ? "bg-zinc-900 text-white dark:bg-white dark:text-zinc-900 rounded-tr-sm"
+                                    : "bg-zinc-100 text-zinc-800 dark:bg-zinc-800 dark:text-zinc-200 rounded-tl-sm"
+                                } ${msg.isActionFlag ? "border-2 border-rose-400 dark:border-rose-600" : ""}`}
+                              >
+                                {msg.isActionFlag && (
+                                  <div className="text-[9px] font-bold text-rose-400 dark:text-rose-300 mb-1.5 flex items-center gap-1">
+                                    ⚠️ 조치 요청 포함
+                                  </div>
+                                )}
+                                {msg.content}
+                                {msg.attachmentUrl && (
+                                  <div className="mt-2 flex items-center gap-1 text-[9px] font-bold opacity-75">
+                                    <span>📎</span>
+                                    <a href={msg.attachmentUrl} target="_blank" rel="noopener noreferrer" className="hover:underline">
+                                      {msg.attachmentFilename || "첨부파일"}
+                                    </a>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })
+                    ) : (
+                      <p className="text-[11px] text-zinc-400 text-center py-4">등록된 메시지가 없습니다.</p>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Tab 2: Case Log (Audit & System Events) */}
+              {activeTab === "caselog" && (
+                <div className="p-5 space-y-3">
+                  <div className="space-y-2 max-h-[380px] overflow-y-auto pr-1">
+                    <div className="flex items-start gap-2.5 text-xs text-zinc-600 dark:text-zinc-300">
+                      <span className="text-xs">📥</span>
+                      <div className="space-y-0.5">
+                        <p className="font-bold text-zinc-900 dark:text-white">케이스 접수</p>
+                        <p className="text-[10px] text-zinc-400">{formatDate(selectedInquiry.created_at)} · {selectedInquiry.companyName}</p>
+                      </div>
+                    </div>
+
+                    {(selectedInquiry.messages ?? [])
+                      .filter((m) => m.messageType !== "message")
+                      .map((msg) => {
+                        const meta = MSG_TYPE_LABEL[msg.messageType] || { icon: "ℹ️", label: msg.messageType, style: "bg-zinc-100 text-zinc-500" };
+                        return (
+                          <div key={msg.id} className="flex items-start gap-2.5 text-xs text-zinc-600 dark:text-zinc-300">
+                            <span className="text-xs">{meta.icon}</span>
+                            <div className="space-y-0.5">
+                              <p className="font-bold text-zinc-900 dark:text-white">{msg.senderName}</p>
+                              <p className="text-[10px] text-zinc-400">{formatDate(msg.createdAt)} · {msg.content}</p>
+                            </div>
+                          </div>
+                        );
+                      })}
+
+                    {isClosed && (
+                      <div className="flex items-start gap-2.5 text-xs text-zinc-600 dark:text-zinc-300">
+                        <span className="text-xs">🔒</span>
+                        <div className="space-y-0.5">
+                          <p className="font-bold text-zinc-900 dark:text-white">케이스 종료 (Closed)</p>
+                          <p className="text-[10px] text-zinc-400">
+                            {selectedInquiry.closed_at ? formatDate(selectedInquiry.closed_at) : formatDate(selectedInquiry.updated_at)}
+                            {selectedInquiry.closed_by_side ? ` · ${selectedInquiry.closed_by_side === "admin" ? "어드민 담당자" : "파트너사"} 종료` : ""}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
 
               {/* Reply Form */}
               {!isClosed && (
@@ -623,6 +678,39 @@ export function AdminPartnerInquiries({ initialInquiries, answerAction }: AdminP
                 className="flex-1 rounded-lg bg-rose-700 py-2.5 text-xs font-bold text-white hover:bg-rose-800 disabled:opacity-50 transition-colors cursor-pointer"
               >
                 {isSubmitting ? "처리 중..." : "🔒 답변 등록 후 종료"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Direct Close Confirm Modal (No Reply) */}
+      {showDirectCloseConfirmModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-2xl border border-zinc-200 bg-white p-6 shadow-2xl dark:border-zinc-800 dark:bg-zinc-900 space-y-4">
+            <div>
+              <h3 className="text-sm font-bold text-zinc-900 dark:text-white">케이스 종료</h3>
+              <p className="text-[11px] text-zinc-600 dark:text-zinc-400 mt-1 leading-relaxed">
+                이 케이스를 종료하시겠습니까?<br />
+                <span className="text-[10px] text-zinc-400">Are you sure you want to close this case?</span>
+              </p>
+            </div>
+
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setShowDirectCloseConfirmModal(false)}
+                className="flex-1 rounded-lg border border-zinc-200 py-2.5 text-xs font-semibold text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+              >
+                취소 (Cancel)
+              </button>
+              <button
+                type="button"
+                onClick={handleDirectCloseSubmit}
+                disabled={isClosing}
+                className="flex-1 rounded-lg bg-zinc-950 dark:bg-white py-2.5 text-xs font-bold text-white dark:text-zinc-950 hover:bg-zinc-800 dark:hover:bg-zinc-100 disabled:opacity-50 transition-colors cursor-pointer"
+              >
+                {isClosing ? "처리 중..." : "🔒 케이스 종료하기"}
               </button>
             </div>
           </div>
