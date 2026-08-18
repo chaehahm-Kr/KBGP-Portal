@@ -543,29 +543,79 @@ export async function answerAndClosePartnerInquiry(
 
     const { data: originalInquiry, error: fetchError } = await adminSupabase
       .from("partner_inquiries")
-      .select("created_by, title, case_number")
+      .select("created_by, title, case_number, status")
       .eq("id", inquiryId)
       .single();
 
     if (fetchError || !originalInquiry) {
       console.error("Failed to fetch original inquiry:", fetchError);
-      return { success: false, error: "케이스를 찾을 수 없습니다." };
+      return {
+        success: false,
+        error: "케이스를 찾을 수 없습니다.\nCase not found."
+      };
     }
 
-    const { error: rpcError } = await adminSupabase.rpc(
-      "answer_and_close_partner_inquiry",
-      {
-        p_inquiry_id: inquiryId,
-        p_reply_content: replyContent,
-        p_replied_by: session.userId,
-        p_admin_name: "어드민 담당자"
-      }
-    );
+    const now = new Date().toISOString();
+    const updatePayload: any = {
+      status: "closed",
+      reply_content: replyContent,
+      replied_by: session.userId,
+      replied_at: now,
+      closed_at: now,
+      closed_by: session.userId,
+      closed_by_side: "admin",
+      is_action_required: false,
+      updated_at: now
+    };
 
-    if (rpcError) {
-      console.error("Failed to save answer and close case via RPC:", rpcError);
-      return { success: false, error: "답변 등록 및 케이스 종료에 실패했습니다." };
+    // Update main inquiry row
+    let updateRes = await adminSupabase
+      .from("partner_inquiries")
+      .update(updatePayload)
+      .eq("id", inquiryId);
+
+    // Fallback if closed_by_side column is temporarily missing
+    if (updateRes.error && (updateRes.error.message?.includes("closed_by_side") || updateRes.error.code === "42703")) {
+      delete updatePayload.closed_by_side;
+      updateRes = await adminSupabase
+        .from("partner_inquiries")
+        .update(updatePayload)
+        .eq("id", inquiryId);
     }
+
+    if (updateRes.error) {
+      console.error("Failed to save answer and close case:", updateRes.error);
+      return {
+        success: false,
+        error: "답변 등록 및 케이스 종료를 완료하지 못했습니다. 다시 시도해주세요.\nUnable to send the reply and close the case. Please try again."
+      };
+    }
+
+    // Insert Human Communication Message into thread
+    await adminSupabase
+      .from("partner_inquiry_messages")
+      .insert({
+        inquiry_id: inquiryId,
+        sender_type: "admin",
+        sender_id: session.userId,
+        sender_name: "어드민 담당자",
+        content: replyContent,
+        message_type: "message",
+        is_action_flag: false
+      });
+
+    // Insert Audit Trail Log Event for Case Close
+    await adminSupabase
+      .from("partner_inquiry_messages")
+      .insert({
+        inquiry_id: inquiryId,
+        sender_type: "admin",
+        sender_id: session.userId,
+        sender_name: "어드민 담당자",
+        content: "어드민 담당자가 답변 등록 후 케이스를 종료했습니다.",
+        message_type: "case_closed",
+        is_action_flag: false
+      });
 
     // Notify portal user
     const caseLabel = originalInquiry.case_number
@@ -582,10 +632,15 @@ export async function answerAndClosePartnerInquiry(
 
     revalidatePath("/admin/partner-inquiries");
     revalidatePath("/portal/support");
+    revalidatePath("/admin", "layout");
+    revalidatePath("/portal", "layout");
     return { success: true };
   } catch (e) {
     console.error("Failed to answer and close partner inquiry:", e);
-    return { success: false, error: e instanceof Error ? e.message : "답변 등록 및 케이스 종료 실패" };
+    return {
+      success: false,
+      error: "답변 등록 및 케이스 종료를 완료하지 못했습니다. 다시 시도해주세요.\nUnable to send the reply and close the case. Please try again."
+    };
   }
 }
 
@@ -923,13 +978,27 @@ export async function closeCase(
       updatePayload.satisfaction_at = now;
     }
 
-    const { error: updateError } = await supabase
+    let { error: updateError } = await supabase
       .from("partner_inquiries")
       .update(updatePayload)
       .eq("id", inquiryId);
 
+    // Fallback if closed_by_side column is temporarily missing or cached
+    if (updateError && (updateError.message?.includes("closed_by_side") || updateError.code === "42703")) {
+      delete updatePayload.closed_by_side;
+      const fallbackRes = await supabase
+        .from("partner_inquiries")
+        .update(updatePayload)
+        .eq("id", inquiryId);
+      updateError = fallbackRes.error;
+    }
+
     if (updateError) {
-      return { success: false, error: updateError.message };
+      console.error("Failed to close case in portal:", updateError);
+      return {
+        success: false,
+        error: "케이스를 종료하지 못했습니다. 잠시 후 다시 시도해주세요.\nUnable to close the case. Please try again."
+      };
     }
 
     const adminSupabase = createAdminClient();
@@ -1062,20 +1131,35 @@ export async function closeCaseAdmin(inquiryId: string) {
     const isAlreadyClosed = normalizeStatus(inquiry.status) === "closed";
     const now = new Date().toISOString();
 
-    const { error: updateError } = await adminSupabase
+    const updatePayload: any = {
+      status: "closed",
+      closed_at: now,
+      closed_by: session.userId,
+      closed_by_side: "admin",
+      is_action_required: false,
+      updated_at: now
+    };
+
+    let { error: updateError } = await adminSupabase
       .from("partner_inquiries")
-      .update({
-        status: "closed",
-        closed_at: now,
-        closed_by: session.userId,
-        closed_by_side: "admin",
-        is_action_required: false,
-        updated_at: now
-      })
+      .update(updatePayload)
       .eq("id", inquiryId);
 
+    if (updateError && (updateError.message?.includes("closed_by_side") || updateError.code === "42703")) {
+      delete updatePayload.closed_by_side;
+      const fallbackRes = await adminSupabase
+        .from("partner_inquiries")
+        .update(updatePayload)
+        .eq("id", inquiryId);
+      updateError = fallbackRes.error;
+    }
+
     if (updateError) {
-      return { success: false, error: updateError.message };
+      console.error("Failed to close case in admin:", updateError);
+      return {
+        success: false,
+        error: "케이스를 종료하지 못했습니다. 잠시 후 다시 시도해주세요.\nUnable to close the case. Please try again."
+      };
     }
 
     if (!isAlreadyClosed) {

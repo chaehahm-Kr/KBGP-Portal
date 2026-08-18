@@ -404,15 +404,6 @@ export function AdminPartnerInquiries({ initialInquiries, answerAction }: AdminP
                         {label}
                       </button>
                     ))}
-                    <div className="flex-1" />
-                    <button
-                      type="button"
-                      onClick={() => setShowDirectCloseConfirmModal(true)}
-                      disabled={isClosing}
-                      className="rounded px-2.5 py-0.5 text-[9px] font-bold bg-rose-50 text-rose-700 hover:bg-rose-100 dark:bg-rose-950/30 dark:text-rose-400 border border-rose-200 dark:border-rose-900/40 transition-all cursor-pointer disabled:opacity-50"
-                    >
-                      {isClosing ? "종료 중..." : "🔒 케이스 종료 (답변 없이)"}
-                    </button>
                   </div>
                 )}
                 {isClosed && (
@@ -575,31 +566,45 @@ export function AdminPartnerInquiries({ initialInquiries, answerAction }: AdminP
                       </label>
                     </div>
 
-                    <div className="flex gap-2 flex-wrap">
-                      <button
-                        type="submit"
-                        disabled={isSubmitting || !replyText.trim()}
-                        className="flex-1 min-w-[120px] rounded-lg bg-zinc-950 py-2.5 text-xs font-bold text-white hover:bg-zinc-800 disabled:opacity-40 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-100 transition-colors cursor-pointer"
-                      >
-                        {isSubmitting ? "등록 중..." : isActionRequired ? "⚠️ 조치 요청 발송" : "답변 등록"}
-                      </button>
-                      <button
-                        type="button"
-                        disabled={isSubmitting || !replyText.trim()}
-                        onClick={() => setShowCloseConfirmModal(true)}
-                        className="flex-1 min-w-[150px] rounded-lg bg-rose-700 py-2.5 text-xs font-bold text-white hover:bg-rose-800 disabled:opacity-40 transition-colors cursor-pointer"
-                      >
-                        {isSubmitting ? "처리 중..." : "🔒 답변 등록 후 케이스 종료"}
-                      </button>
-                      {replyText && (
+                    {/* Integrated 3-Action Group */}
+                    <div className="space-y-2 pt-1">
+                      <div className="flex gap-2 flex-wrap">
+                        <button
+                          type="submit"
+                          disabled={isSubmitting || !replyText.trim()}
+                          className="flex-1 min-w-[120px] rounded-lg bg-zinc-950 py-2.5 text-xs font-bold text-white hover:bg-zinc-800 disabled:opacity-40 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-100 transition-colors cursor-pointer"
+                        >
+                          {isSubmitting ? "등록 중..." : isActionRequired ? "⚠️ 조치 요청 발송" : "답변 등록"}
+                        </button>
                         <button
                           type="button"
-                          onClick={() => { setReplyText(""); setIsActionRequired(false); }}
-                          className="rounded-lg border border-zinc-200 px-3 py-2.5 text-xs font-semibold hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-950 cursor-pointer"
+                          disabled={isSubmitting || !replyText.trim()}
+                          onClick={() => setShowCloseConfirmModal(true)}
+                          className="flex-1 min-w-[170px] rounded-lg bg-rose-700 py-2.5 text-xs font-bold text-white hover:bg-rose-800 disabled:opacity-40 transition-colors cursor-pointer"
                         >
-                          취소
+                          {isSubmitting ? "처리 중..." : "🔒 답변 등록 후 케이스 종료"}
                         </button>
-                      )}
+                      </div>
+
+                      <div className="flex justify-between items-center pt-1">
+                        {replyText ? (
+                          <button
+                            type="button"
+                            onClick={() => { setReplyText(""); setIsActionRequired(false); }}
+                            className="text-[10px] font-bold text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300 cursor-pointer"
+                          >
+                            [작성 취소]
+                          </button>
+                        ) : <div />}
+                        <button
+                          type="button"
+                          onClick={() => setShowDirectCloseConfirmModal(true)}
+                          disabled={isClosing}
+                          className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-1.5 text-[10px] font-bold text-zinc-600 hover:bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400 transition-all cursor-pointer disabled:opacity-50"
+                        >
+                          {isClosing ? "종료 중..." : "🔒 케이스 종료 (답변 없이)"}
+                        </button>
+                      </div>
                     </div>
                   </form>
                 </div>
