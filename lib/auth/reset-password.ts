@@ -94,3 +94,100 @@ export async function completePasswordResetActivation() {
       .eq("status", "invited");
   }
 }
+
+/**
+ * Admin Forgot Password Request Server Action.
+ * Verifies email exists in staff_members and sends the recovery link via Resend.
+ */
+export async function requestAdminPasswordReset(
+  _prevState: ResetRequestState,
+  formData: FormData
+): Promise<ResetRequestState> {
+  const email = formData.get("email");
+
+  if (typeof email === "string" && email) {
+    const emailStr = email.trim();
+    const adminClient = createAdminClient();
+
+    // 1. Verify if the email belongs to a valid registered staff member
+    const { data: staffMember, error: staffError } = await adminClient
+      .from("staff_members")
+      .select("id, status")
+      .eq("email", emailStr)
+      .maybeSingle();
+
+    if (!staffError && staffMember && ["active", "invited", "setting_up", "pending"].includes(staffMember.status)) {
+      // Get current site URL dynamically from headers to prevent localhost redirection bugs
+      const headersList = await headers();
+      const host = headersList.get("host") || "admin.kselectnetwork.com";
+      const protocol = host.includes("localhost") || host.includes("127.0.0.1") ? "http" : "https";
+      const siteUrl = `${protocol}://${host}`;
+
+      // 2. Generate recovery link pointing to admin reset page
+      const { data, error } = await adminClient.auth.admin.generateLink({
+        type: "recovery",
+        email: emailStr,
+        options: {
+          redirectTo: `${siteUrl}/admin/reset-password`,
+        },
+      });
+
+      if (!error && data?.properties?.action_link) {
+        const actionLink = data.properties.action_link;
+
+        // Render branded email HTML
+        const subjectTemplate = "[K SELECT NETWORK] 관리자 비밀번호 재설정 안내";
+        const bodyTemplate = `비밀번호를 재설정해 주세요.
+안녕하세요. K SELECT NETWORK 관리자 콘솔 비밀번호 재설정 요청이 접수되었습니다.
+아래 버튼을 클릭하여 새로운 비밀번호 설정을 완료해 주세요.
+본 비밀번호 재설정 링크는 30분 동안 유효합니다.
+
+{{ctaButton}}`;
+
+        const { subject, text, html } = renderEmailHtml(subjectTemplate, bodyTemplate, {
+          link: actionLink,
+          key: "password_reset",
+        });
+
+        // Send the email via Resend
+        await sendEmail({
+          to: emailStr,
+          subject,
+          text,
+          html,
+        });
+      } else {
+        console.error("[requestAdminPasswordReset] Failed to generate recovery link:", error?.message);
+      }
+    } else {
+      console.warn(`[requestAdminPasswordReset] Ignored request for unregistered or inactive staff email: ${emailStr}`);
+    }
+  }
+
+  // Security: Always return the same success message to prevent user enumeration
+  return {
+    message:
+      "입력하신 이메일로 가입된 계정이 있다면, 비밀번호 재설정 링크를 보내드렸습니다.",
+  };
+}
+
+/**
+ * Marks staff member's password configuration setup as completed.
+ */
+export async function completeAdminPasswordResetActivation() {
+  const { createClient } = await import("@/lib/supabase/server");
+  const { createAdminClient } = await import("@/lib/supabase/admin");
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (user) {
+    const admin = createAdminClient();
+    await admin
+      .from("staff_members")
+      .update({ must_change_password: false })
+      .eq("id", user.id);
+  }
+}

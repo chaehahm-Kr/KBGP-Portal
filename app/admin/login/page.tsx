@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { LoginForm } from "@/components/auth/login-form";
 import { loginAdmin } from "@/lib/auth/actions";
 
@@ -26,6 +27,12 @@ export default function AdminLoginPage() {
         <LoginForm
           action={loginAdmin}
         />
+      </div>
+
+      <div className="flex w-full max-w-sm justify-center text-xs text-zinc-400 border-t border-zinc-800 pt-4 mx-auto">
+        <Link href="/admin/forgot-password" className="hover:text-white transition-colors">
+          비밀번호를 잊으셨나요?
+        </Link>
       </div>
     </div>
   );
