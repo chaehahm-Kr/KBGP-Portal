@@ -83,9 +83,23 @@ export function PurchaseOrderForm({
   const [submitError, setSubmitError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Modal State
+  const [isModalOpen, setIsModalOpen] = useState(false);
+
   // Load supplier defaults when supplier changes
   const handleSupplierChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const sId = e.target.value;
+
+    if (lines.length > 0) {
+      const confirmChange = window.confirm(
+        "공급사를 변경하면 현재 선택된 발주 상품이 제거됩니다. 계속하시겠습니까?"
+      );
+      if (!confirmChange) {
+        // Prevent changing state so select dropdown value reverts
+        return;
+      }
+    }
+
     setSupplierId(sId);
     setLines([]); // Clear added lines when supplier changes to prevent mismatched product associations
 
@@ -155,6 +169,26 @@ export function PurchaseOrderForm({
 
     setLines([...lines, newLine]);
     setSearchProductTerm(""); // Clear search
+  };
+
+  // Add multiple products from modal to lines
+  const handleAddSelectedProducts = (selectedProducts: any[]) => {
+    const newLines = [...lines];
+    selectedProducts.forEach((prod) => {
+      if (!newLines.some((l) => l.product_id === prod.id)) {
+        newLines.push({
+          product_id: prod.id,
+          name: prod.display_name || prod.name,
+          letusto_sku: prod.letusto_sku,
+          manufacture_sku: prod.manufacture_sku,
+          qty: 1,
+          unit_cost: prod.price_usd_fob || 0,
+          line_note: "",
+        });
+      }
+    });
+    setLines(newLines);
+    setIsModalOpen(false);
   };
 
   // Modify line property
@@ -403,28 +437,31 @@ export function PurchaseOrderForm({
             />
           </div>
         </div>
-      </div>
-
-      {/* Line Items Panel */}
-      <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 space-y-4">
-        <h3 className="text-xs font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider border-b border-zinc-100 pb-2 dark:border-zinc-800">
-          발주 품목 설정 (Line Items)
-        </h3>
-
-        {/* Product Selector to add lines */}
-        {supplierId ? (
-          <div className="space-y-2 text-xs">
-            <label className="font-bold text-zinc-700 dark:text-zinc-300">상품 추가하기</label>
-            <div className="relative max-w-lg">
+              {/* Product Selector to add lines */}
+        <div className="space-y-2 text-xs">
+          <label className="font-bold text-zinc-700 dark:text-zinc-300">상품 추가하기</label>
+          <div className="flex gap-2 items-center max-w-xl">
+            <div className="relative flex-1">
               <input
                 type="text"
-                placeholder="추가할 제품명, Letusto SKU, 제조사 SKU 검색..."
+                placeholder={
+                  supplierId
+                    ? "추가할 제품명, Letusto SKU, 제조사 SKU 검색..."
+                    : "공급사를 먼저 선택해 주세요..."
+                }
                 value={searchProductTerm}
-                onChange={(e) => setSearchProductTerm(e.target.value)}
-                className="w-full rounded border border-zinc-200 p-2 bg-zinc-50 text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white outline-none focus:border-zinc-950"
+                onChange={(e) => {
+                  if (!supplierId) {
+                    alert("먼저 공급사를 선택해주세요. 공급사를 선택하면 해당 공급사가 등록한 상품만 조회됩니다.");
+                    return;
+                  }
+                  setSearchProductTerm(e.target.value);
+                }}
+                disabled={!supplierId}
+                className="w-full rounded border border-zinc-200 p-2 bg-zinc-50 text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white outline-none focus:border-zinc-950 text-xs disabled:opacity-50"
               />
 
-              {searchProductTerm && (
+              {supplierId && searchProductTerm && (
                 <div className="absolute left-0 right-0 mt-1 max-h-48 overflow-y-auto bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded shadow-lg z-10 text-xs font-semibold">
                   {isLoadingProducts ? (
                     <div className="p-3 text-zinc-400">제품 로딩 중...</div>
@@ -436,7 +473,7 @@ export function PurchaseOrderForm({
                         key={p.id}
                         type="button"
                         onClick={() => handleAddProduct(p.id)}
-                        className="w-full text-left p-2.5 hover:bg-zinc-50 dark:hover:bg-zinc-900 border-b border-zinc-100 dark:border-zinc-850 flex justify-between items-center"
+                        className="w-full text-left p-2.5 hover:bg-zinc-50 dark:hover:bg-zinc-900 border-b border-zinc-100 dark:border-zinc-850 flex justify-between items-center cursor-pointer"
                       >
                         <div>
                           <span className="text-zinc-900 dark:text-white block font-bold">{p.display_name}</span>
@@ -453,12 +490,27 @@ export function PurchaseOrderForm({
                 </div>
               )}
             </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                if (!supplierId) {
+                  alert("먼저 공급사를 선택해주세요. 공급사를 선택하면 해당 공급사가 등록한 상품만 조회됩니다.");
+                  return;
+                }
+                setIsModalOpen(true);
+              }}
+              className="px-4 py-2 bg-zinc-100 hover:bg-zinc-200 text-zinc-800 dark:bg-zinc-800 dark:hover:bg-zinc-700 dark:text-white rounded border border-zinc-300 dark:border-zinc-750 text-xs font-bold transition-all cursor-pointer whitespace-nowrap"
+            >
+              상품 찾아보기
+            </button>
           </div>
-        ) : (
-          <div className="p-4 rounded border border-dashed border-zinc-200 dark:border-zinc-850 text-center text-zinc-400 text-xs font-semibold">
-            상품을 선택하려면 상단에서 먼저 공급사를 지정해 주세요.
-          </div>
-        )}
+          {!supplierId && (
+            <p className="text-[10px] text-zinc-500 font-medium">
+              ※ 상품을 선택하려면 상단에서 먼저 공급사를 지정해 주세요.
+            </p>
+          )}
+        </div>
 
         {/* Lines table */}
         {lines.length > 0 && (
@@ -607,10 +659,452 @@ export function PurchaseOrderForm({
           {isSubmitting ? "저장 중..." : isEdit ? "발주서 수정" : "초안(Draft) 임시저장"}
         </button>
       </div>
+
+      {isModalOpen && (
+        <ProductBrowseModal
+          isOpen={isModalOpen}
+          onClose={() => setIsModalOpen(false)}
+          supplierName={suppliers.find((s) => s.id === supplierId)?.name || ""}
+          products={supplierProducts}
+          onAddProducts={handleAddSelectedProducts}
+          addedProductIds={new Set(lines.map((l) => l.product_id))}
+          currency={currency}
+        />
+      )}
     </form>
   );
 
   function setOriginalNote(e: React.ChangeEvent<HTMLTextAreaElement>, setter: (val: string) => void) {
     setter(e.target.value);
   }
+}
+
+interface ProductBrowseModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  supplierName: string;
+  products: any[];
+  onAddProducts: (selectedProducts: any[]) => void;
+  addedProductIds: Set<string>;
+  currency: string;
+}
+
+function ProductBrowseModal({
+  isOpen,
+  onClose,
+  supplierName,
+  products,
+  onAddProducts,
+  addedProductIds,
+  currency,
+}: ProductBrowseModalProps) {
+  const [searchTerm, setSearchTerm] = useState("");
+  const [selectedBrand, setSelectedBrand] = useState("all");
+  const [selectedCategory, setSelectedCategory] = useState("all");
+  const [selectedProductIds, setSelectedProductIds] = useState<Set<string>>(new Set());
+  const [expandedParents, setExpandedParents] = useState<Set<string>>(new Set());
+
+  // Extract unique brands and categories
+  const uniqueBrands = Array.from(new Set(products.map((p) => p.brand_name).filter(Boolean))) as string[];
+  const uniqueCategories = Array.from(new Set(products.map((p) => p.category_label).filter(Boolean))) as string[];
+
+  // Filter products based on search term, category, and brand
+  const filteredProducts = products.filter((p) => {
+    const term = searchTerm.trim().toLowerCase();
+    const matchesSearch = !term || [
+      p.display_name,
+      p.brand_name,
+      p.letusto_sku,
+      p.manufacture_sku,
+      p.upc
+    ].some(field => (field || "").toLowerCase().includes(term));
+
+    const matchesBrand = selectedBrand === "all" || p.brand_name === selectedBrand;
+    const matchesCategory = selectedCategory === "all" || p.category_label === selectedCategory;
+
+    return matchesSearch && matchesBrand && matchesCategory;
+  });
+
+  // Grouping logic for Parent/Variant structures
+  const parentSkus = new Set<string>();
+  filteredProducts.forEach((p) => {
+    if (p.parent_sku) {
+      parentSkus.add(p.parent_sku);
+    }
+  });
+
+  const parents: any[] = [];
+  const childrenMap = new Map<string, any[]>();
+  const standalones: any[] = [];
+
+  filteredProducts.forEach((p) => {
+    if (p.parent_sku) {
+      const list = childrenMap.get(p.parent_sku) || [];
+      list.push(p);
+      childrenMap.set(p.parent_sku, list);
+    } else if (p.letusto_sku && parentSkus.has(p.letusto_sku)) {
+      parents.push(p);
+    } else {
+      standalones.push(p);
+    }
+  });
+
+  // Handle virtual parents where parent record is missing from catalog
+  for (const parentSku of parentSkus) {
+    const hasParent = parents.some((p) => p.letusto_sku === parentSku);
+    if (!hasParent) {
+      const children = childrenMap.get(parentSku) || [];
+      if (children.length > 0) {
+        parents.push({
+          id: `virtual-${parentSku}`,
+          display_name: children[0].display_name.replace(/\s*[-–].*$/, "") || `Product (${parentSku})`,
+          brand_name: children[0].brand_name,
+          category_label: children[0].category_label,
+          letusto_sku: parentSku,
+          photo_url: children[0].photo_url,
+          is_virtual: true,
+        });
+      }
+    }
+  }
+
+  // Toggle expand
+  const toggleParentExpand = (parentSku: string) => {
+    const next = new Set(expandedParents);
+    if (next.has(parentSku)) {
+      next.delete(parentSku);
+    } else {
+      next.add(parentSku);
+    }
+    setExpandedParents(next);
+  };
+
+  const handleSelectProduct = (id: string, checked: boolean) => {
+    const next = new Set(selectedProductIds);
+    if (checked) {
+      next.add(id);
+    } else {
+      next.delete(id);
+    }
+    setSelectedProductIds(next);
+  };
+
+  const handleSelectParentAll = (parentSku: string, checked: boolean) => {
+    const next = new Set(selectedProductIds);
+    const children = childrenMap.get(parentSku) || [];
+    children.forEach((c) => {
+      if (!addedProductIds.has(c.id)) {
+        if (checked) {
+          next.add(c.id);
+        } else {
+          next.delete(c.id);
+        }
+      }
+    });
+    setSelectedProductIds(next);
+  };
+
+  const handleSelectAllVisible = (checked: boolean) => {
+    const next = new Set(selectedProductIds);
+    filteredProducts.forEach((p) => {
+      const hasChildren = parentSkus.has(p.letusto_sku || "");
+      const isCheckable = !p.parent_sku ? !hasChildren : true;
+      if (isCheckable && !addedProductIds.has(p.id)) {
+        if (checked) {
+          next.add(p.id);
+        } else {
+          next.delete(p.id);
+        }
+      }
+    });
+    for (const parentSku of parentSkus) {
+      const children = childrenMap.get(parentSku) || [];
+      children.forEach((c) => {
+        if (!addedProductIds.has(c.id)) {
+          if (checked) {
+            next.add(c.id);
+          } else {
+            next.delete(c.id);
+          }
+        }
+      });
+    }
+    setSelectedProductIds(next);
+  };
+
+  // Determine if header checkbox should be checked/indeterminate
+  const checkableProducts = filteredProducts.filter((p) => {
+    const hasChildren = parentSkus.has(p.letusto_sku || "");
+    const isCheckable = !p.parent_sku ? !hasChildren : true;
+    return isCheckable && !addedProductIds.has(p.id);
+  });
+  const allChecked = checkableProducts.length > 0 && checkableProducts.every((p) => selectedProductIds.has(p.id));
+
+  const handleAddClick = () => {
+    const selected = products.filter((p) => selectedProductIds.has(p.id));
+    onAddProducts(selected);
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div className="w-full max-w-5xl rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-2xl flex flex-col max-h-[85vh] text-xs">
+        {/* Header */}
+        <div className="flex justify-between items-center px-6 py-4 border-b border-zinc-150 dark:border-zinc-800">
+          <h2 className="text-sm font-bold text-zinc-900 dark:text-white">
+            상품 선택 — <span className="text-zinc-655 dark:text-zinc-350">{supplierName}</span>
+          </h2>
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors text-base font-bold cursor-pointer"
+          >
+            &times;
+          </button>
+        </div>
+
+        {/* Filter bar */}
+        <div className="px-6 py-4 bg-zinc-50/50 dark:bg-zinc-955/20 border-b border-zinc-150 dark:border-zinc-800 flex flex-col md:flex-row gap-4">
+          <div className="flex-1">
+            <input
+              type="text"
+              placeholder="제품명 / Brand / Letusto SKU / Supplier SKU / UPC 검색..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full rounded border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 px-3 py-2 text-zinc-900 dark:text-white outline-none focus:border-zinc-400 dark:focus:border-zinc-700"
+            />
+          </div>
+          <div className="w-full md:w-48">
+            <select
+              value={selectedBrand}
+              onChange={(e) => setSelectedBrand(e.target.value)}
+              className="w-full rounded border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-2 text-zinc-900 dark:text-white outline-none"
+            >
+              <option value="all">All Brands</option>
+              {uniqueBrands.map((b) => (
+                <option key={b} value={b}>{b}</option>
+              ))}
+            </select>
+          </div>
+          <div className="w-full md:w-48">
+            <select
+              value={selectedCategory}
+              onChange={(e) => setSelectedCategory(e.target.value)}
+              className="w-full rounded border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-2 text-zinc-900 dark:text-white outline-none"
+            >
+              <option value="all">All Categories</option>
+              {uniqueCategories.map((c) => (
+                <option key={c} value={c}>{c}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {/* Table Content */}
+        <div className="flex-1 overflow-y-auto px-6 py-4">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="bg-zinc-50/50 dark:bg-zinc-950/20 text-zinc-550 dark:text-zinc-400 font-bold border-b border-zinc-150 dark:border-zinc-800">
+                <th className="px-4 py-3 w-10 text-center">
+                  <input
+                    type="checkbox"
+                    checked={allChecked}
+                    onChange={(e) => handleSelectAllVisible(e.target.checked)}
+                    className="rounded border-zinc-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                  />
+                </th>
+                <th className="px-4 py-3 w-16">이미지</th>
+                <th className="px-4 py-3">제품명 / 상세 정보</th>
+                <th className="px-4 py-3 w-28">브랜드</th>
+                <th className="px-4 py-3 w-28">카테고리</th>
+                <th className="px-4 py-3 w-28">제조사 SKU</th>
+                <th className="px-4 py-3 w-28">Letusto SKU</th>
+                <th className="px-4 py-3 w-32">UPC / EAN</th>
+                <th className="px-4 py-3 w-28 text-right">FOB 단가 ({currency})</th>
+                <th className="px-4 py-3 w-16 text-center">상세</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
+              {/* Standalones */}
+              {standalones.map((p) => {
+                const isAdded = addedProductIds.has(p.id);
+                return (
+                  <tr key={p.id} className="hover:bg-zinc-50/30 dark:hover:bg-zinc-850/5">
+                    <td className="px-4 py-3 text-center">
+                      <input
+                        type="checkbox"
+                        disabled={isAdded}
+                        checked={isAdded || selectedProductIds.has(p.id)}
+                        onChange={(e) => handleSelectProduct(p.id, e.target.checked)}
+                        className="rounded border-zinc-300 text-blue-600 focus:ring-blue-500 cursor-pointer disabled:opacity-50"
+                      />
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="w-10 h-10 rounded border border-zinc-200 dark:border-zinc-800 bg-zinc-50 overflow-hidden flex items-center justify-center">
+                        {p.photo_url ? (
+                          <img src={p.photo_url} alt={p.display_name} className="w-full h-full object-cover" />
+                        ) : (
+                          <span className="text-[9px] text-zinc-400">No Image</span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="font-bold text-zinc-900 dark:text-white block">{p.display_name}</span>
+                      {isAdded && (
+                        <span className="inline-block mt-0.5 px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-500 font-bold text-[9px]">
+                          이미 발주에 추가됨
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-zinc-700 dark:text-zinc-400">{p.brand_name}</td>
+                    <td className="px-4 py-3 text-zinc-500">{p.category_label}</td>
+                    <td className="px-4 py-3 font-mono text-zinc-750 dark:text-zinc-450">{p.manufacture_sku || "-"}</td>
+                    <td className="px-4 py-3 font-mono font-bold text-zinc-900 dark:text-white">{p.letusto_sku || "-"}</td>
+                    <td className="px-4 py-3 font-mono text-zinc-500">{p.upc || "-"}</td>
+                    <td className="px-4 py-3 text-right font-mono font-bold text-zinc-900 dark:text-white">
+                      {(p.price_usd_fob || 0).toFixed(2)}
+                    </td>
+                    <td className="px-4 py-3 text-center">-</td>
+                  </tr>
+                );
+              })}
+
+              {/* Parents with child variants */}
+              {parents.map((parent) => {
+                const children = childrenMap.get(parent.letusto_sku) || [];
+                const isExpanded = expandedParents.has(parent.letusto_sku);
+                const checkableChildren = children.filter((c) => !addedProductIds.has(c.id));
+                const allChildrenSelected = checkableChildren.length > 0 && checkableChildren.every((c) => selectedProductIds.has(c.id));
+
+                return (
+                  <React.Fragment key={parent.id}>
+                    {/* Parent Row */}
+                    <tr className="bg-zinc-50/20 dark:bg-zinc-900/10 font-bold border-b border-zinc-100 dark:border-zinc-800">
+                      <td className="px-4 py-3 text-center">
+                        <input
+                          type="checkbox"
+                          disabled={checkableChildren.length === 0}
+                          checked={allChildrenSelected}
+                          onChange={(e) => handleSelectParentAll(parent.letusto_sku, e.target.checked)}
+                          className="rounded border-zinc-300 text-blue-600 focus:ring-blue-500 cursor-pointer disabled:opacity-50"
+                        />
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="w-10 h-10 rounded border border-zinc-200 dark:border-zinc-800 bg-zinc-50 overflow-hidden flex items-center justify-center">
+                          {parent.photo_url ? (
+                            <img src={parent.photo_url} alt={parent.display_name} className="w-full h-full object-cover" />
+                          ) : (
+                            <span className="text-[9px] text-zinc-400">No Image</span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="text-zinc-900 dark:text-white text-xs">{parent.display_name}</span>
+                        <span className="inline-block mt-0.5 px-1.5 py-0.5 rounded bg-blue-50 dark:bg-blue-950/10 text-blue-600 dark:text-blue-400 text-[9px] ml-1.5">
+                          {children.length} Variants
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-zinc-700 dark:text-zinc-400">{parent.brand_name}</td>
+                      <td className="px-4 py-3 text-zinc-500">{parent.category_label || "-"}</td>
+                      <td className="px-4 py-3 font-mono text-zinc-400">-</td>
+                      <td className="px-4 py-3 font-mono text-zinc-500">{parent.letusto_sku}</td>
+                      <td className="px-4 py-3 font-mono text-zinc-400">-</td>
+                      <td className="px-4 py-3 text-right font-mono text-zinc-400">Variant 단위 선택</td>
+                      <td className="px-4 py-3 text-center">
+                        <button
+                          type="button"
+                          onClick={() => toggleParentExpand(parent.letusto_sku)}
+                          className="w-6 h-6 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-500 flex items-center justify-center font-mono text-sm cursor-pointer"
+                        >
+                          {isExpanded ? "▼" : "▶"}
+                        </button>
+                      </td>
+                    </tr>
+
+                    {/* Children Rows */}
+                    {isExpanded &&
+                      children.map((child) => {
+                        const isAdded = addedProductIds.has(child.id);
+                        return (
+                          <tr key={child.id} className="bg-zinc-50/10 dark:bg-zinc-900/5 hover:bg-zinc-50/30 dark:hover:bg-zinc-850/5">
+                            <td className="px-4 py-3 text-center pl-8">
+                              <input
+                                type="checkbox"
+                                disabled={isAdded}
+                                checked={isAdded || selectedProductIds.has(child.id)}
+                                onChange={(e) => handleSelectProduct(child.id, e.target.checked)}
+                                className="rounded border-zinc-300 text-blue-600 focus:ring-blue-500 cursor-pointer disabled:opacity-50"
+                              />
+                            </td>
+                            <td className="px-4 py-3 pl-8">
+                              <div className="w-8 h-8 rounded border border-zinc-200 dark:border-zinc-800 bg-zinc-50 overflow-hidden flex items-center justify-center">
+                                {child.photo_url ? (
+                                  <img src={child.photo_url} alt={child.display_name} className="w-full h-full object-cover" />
+                                ) : (
+                                  <span className="text-[8px] text-zinc-400">No Image</span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="px-4 py-3 pl-6">
+                              <span className="text-zinc-700 dark:text-zinc-300 font-bold block">{child.display_name}</span>
+                              {isAdded && (
+                                <span className="inline-block mt-0.5 px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-500 font-bold text-[9px]">
+                                  이미 발주에 추가됨
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3 text-zinc-400">{child.brand_name}</td>
+                            <td className="px-4 py-3 text-zinc-400">{child.category_label}</td>
+                            <td className="px-4 py-3 font-mono text-zinc-700 dark:text-zinc-400">{child.manufacture_sku || "-"}</td>
+                            <td className="px-4 py-3 font-mono font-bold text-zinc-900 dark:text-white">{child.letusto_sku || "-"}</td>
+                            <td className="px-4 py-3 font-mono text-zinc-550">{child.upc || "-"}</td>
+                            <td className="px-4 py-3 text-right font-mono font-bold text-zinc-900 dark:text-white">
+                              {(child.price_usd_fob || 0).toFixed(2)}
+                            </td>
+                            <td className="px-4 py-3 text-center">-</td>
+                          </tr>
+                        );
+                      })}
+                  </React.Fragment>
+                );
+              })}
+
+              {filteredProducts.length === 0 && (
+                <tr>
+                  <td colSpan={10} className="text-center p-8 text-zinc-400 font-semibold">
+                    조회된 상품이 없습니다.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Footer Actions */}
+        <div className="flex justify-between items-center px-6 py-4 border-t border-zinc-150 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-950/20">
+          <div className="font-bold text-zinc-500">
+            {selectedProductIds.size}개 상품 선택됨
+          </div>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 border border-zinc-200 dark:border-zinc-800 rounded bg-white dark:bg-zinc-950 hover:bg-zinc-100 dark:hover:bg-zinc-900 text-zinc-750 dark:text-zinc-300 font-bold transition-all cursor-pointer"
+            >
+              닫기
+            </button>
+            <button
+              type="button"
+              onClick={handleAddClick}
+              disabled={selectedProductIds.size === 0}
+              className="px-4 py-2 rounded bg-zinc-950 text-white hover:bg-zinc-900 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-100 font-bold disabled:opacity-50 transition-all cursor-pointer"
+            >
+              선택한 {selectedProductIds.size}개 상품 추가
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }

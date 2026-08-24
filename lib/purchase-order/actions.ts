@@ -260,12 +260,40 @@ export async function getProductsForSupplier(supplierId: string) {
   // 2. Fetch active trading products for these IDs
   const { data: products, error } = await supabase
     .from("products")
-    .select("id, name, name_en, manufacture_sku, letusto_sku, price_usd_fob, price_additional_info")
+    .select("id, name, name_en, manufacture_sku, letusto_sku, parent_sku, child_sku, price_usd_fob, price_additional_info, category, brand_id, brands (name), upc, ean")
     .in("id", productIds)
     .eq("trading_status", "active")
     .order("name", { ascending: true });
 
   if (error) throw new Error(`Failed to fetch products: ${error.message}`);
+
+  // 3. Fetch first images (lowest position) for these products
+  const { data: productImages } = await supabase
+    .from("product_images")
+    .select("product_id, storage_path")
+    .in("product_id", productIds)
+    .order("position", { ascending: true });
+
+  const { getSignedFileUrl } = await import("@/lib/files/storage");
+  const imageMap = new Map<string, string>();
+  if (productImages && productImages.length > 0) {
+    const processed = new Set<string>();
+    for (const img of productImages) {
+      if (!processed.has(img.product_id)) {
+        processed.add(img.product_id);
+        if (img.storage_path) {
+          try {
+            const url = await getSignedFileUrl(img.storage_path);
+            if (url) imageMap.set(img.product_id, url);
+          } catch {
+            // Ignore
+          }
+        }
+      }
+    }
+  }
+
+  const { PRODUCT_CATEGORY_LABEL } = await import("@/lib/product/types");
 
   return (products ?? []).map((p: any) => {
     const adminOverrides = p.price_additional_info?.admin_overrides || {};
@@ -273,6 +301,13 @@ export async function getProductsForSupplier(supplierId: string) {
     const effectiveLetustoSku = adminOverrides.letusto_sku !== undefined ? adminOverrides.letusto_sku : p.letusto_sku;
     const effectiveManufactureSku = adminOverrides.manufacture_sku !== undefined ? adminOverrides.manufacture_sku : p.manufacture_sku;
     const effectiveFob = adminOverrides.price_usd_fob !== undefined ? parseFloat(adminOverrides.price_usd_fob) : (p.price_usd_fob || 0);
+    const effectiveUpc = adminOverrides.upc !== undefined ? adminOverrides.upc : p.upc;
+    const effectiveEan = adminOverrides.ean !== undefined ? adminOverrides.ean : p.ean;
+    const effectiveParentSku = adminOverrides.parent_sku !== undefined ? adminOverrides.parent_sku : p.parent_sku;
+    const effectiveChildSku = adminOverrides.child_sku !== undefined ? adminOverrides.child_sku : p.child_sku;
+
+    const catValue = p.category || "";
+    const catLabel = (PRODUCT_CATEGORY_LABEL as any)[catValue] || catValue || "기타";
 
     return {
       id: p.id,
@@ -281,6 +316,12 @@ export async function getProductsForSupplier(supplierId: string) {
       letusto_sku: effectiveLetustoSku,
       manufacture_sku: effectiveManufactureSku,
       price_usd_fob: effectiveFob,
+      upc: effectiveUpc || effectiveEan || "",
+      parent_sku: effectiveParentSku || null,
+      child_sku: effectiveChildSku || null,
+      brand_name: p.brands?.name || "(미지정 브랜드)",
+      category_label: catLabel,
+      photo_url: imageMap.get(p.id) || null,
     };
   });
 }
