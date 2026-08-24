@@ -23,7 +23,12 @@ const AREAS: { prefix: string; login: string; publicPaths: string[] }[] = [
     // /portal 쪽과 같은 이유(위 주석 참고) — 직원 초대 이메일 링크도 URL
     // 프래그먼트의 토큰을 브라우저에서 세션으로 바꾸는 처리가 페이지 로드 후에
     // 일어나므로, 최초 요청 시점에는 통과시켜야 한다.
-    publicPaths: ["/admin/login", "/admin/invite/accept"],
+    publicPaths: [
+      "/admin/login",
+      "/admin/invite/accept",
+      "/admin/forgot-password",
+      "/admin/reset-password"
+    ],
   },
 ];
 
