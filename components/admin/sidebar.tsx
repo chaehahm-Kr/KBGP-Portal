@@ -146,8 +146,6 @@ export default function Sidebar({
       icon: PurchasingIcon,
       subItems: [
         { name: "Purchase Orders", href: "/admin/purchasing" },
-        { name: "Inbound Shipments", href: "/admin/purchasing/shipments" },
-        { name: "Receiving", href: "/admin/purchasing/receiving" },
       ],
     },
     {

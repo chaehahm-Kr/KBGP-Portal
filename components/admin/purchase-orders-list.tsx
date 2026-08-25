@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import Link from "next/link";
+import { OVERALL_STATUS_LABELS, OVERALL_STATUS_COLORS } from "@/lib/purchase-order/status-helper";
 
 interface PurchaseOrderItem {
   id: string;
@@ -19,6 +20,11 @@ interface PurchaseOrderItem {
   ship_from_code: string;
   total_qty: number;
   total_amount: number;
+  overall_status?: string;
+  shipment_status?: string;
+  receiving_status?: string;
+  final_qty?: number;
+  eta?: string | null;
 }
 
 interface WarehouseOption {
@@ -217,13 +223,12 @@ export function PurchaseOrdersList({
                 <th className="px-6 py-3.5 whitespace-nowrap">발주 번호</th>
                 <th className="px-6 py-3.5 whitespace-nowrap">공급사 (Supplier)</th>
                 <th className="px-6 py-3.5 whitespace-nowrap">발주 일자</th>
-                <th className="px-6 py-3.5 whitespace-nowrap">진행 상태</th>
-                <th className="px-6 py-3.5 whitespace-nowrap">출고지 (Ship From)</th>
-                <th className="px-6 py-3.5 whitespace-nowrap">입고지 (Ship To)</th>
-                <th className="px-6 py-3.5 whitespace-nowrap text-right">총 수량</th>
-                <th className="px-6 py-3.5 whitespace-nowrap text-right">총 금액</th>
-                <th className="px-6 py-3.5 whitespace-nowrap">출하예정일</th>
-                <th className="px-6 py-3.5 whitespace-nowrap">최종 변경</th>
+                <th className="px-6 py-3.5 whitespace-nowrap text-right">발주 수량</th>
+                <th className="px-6 py-3.5 whitespace-nowrap">선적 상태</th>
+                <th className="px-6 py-3.5 whitespace-nowrap">입고 상태</th>
+                <th className="px-6 py-3.5 whitespace-nowrap text-right">최종 수량</th>
+                <th className="px-6 py-3.5 whitespace-nowrap">종합 상태</th>
+                <th className="px-6 py-3.5 whitespace-nowrap">ETA / 입고예정일</th>
                 <th className="px-6 py-3.5 whitespace-nowrap text-right">관리</th>
               </tr>
             </thead>
@@ -253,52 +258,44 @@ export function PurchaseOrdersList({
                     {po.order_date}
                   </td>
 
-                  {/* Status Badges */}
-                  <td className="px-6 py-4 align-middle whitespace-nowrap space-x-1 flex items-center h-full pt-5">
-                    <span className={`inline-flex items-center rounded px-2 py-0.5 text-[10px] font-bold border ${PO_STATUS_COLORS[po.po_status] || PO_STATUS_COLORS.DRAFT}`}>
-                      {PO_STATUS_LABELS[po.po_status] || po.po_status}
-                    </span>
-                    {po.po_status === "SENT" && (
-                      <span className={`inline-flex items-center rounded px-2 py-0.5 text-[10px] font-bold border ${FULFILLMENT_STATUS_COLORS[po.fulfillment_status] || FULFILLMENT_STATUS_COLORS.PENDING}`}>
-                        {FULFILLMENT_STATUS_LABELS[po.fulfillment_status] || po.fulfillment_status}
-                      </span>
-                    )}
-                  </td>
-
-                  {/* Ship From */}
-                  <td className="px-6 py-4 align-middle font-medium text-zinc-650 dark:text-zinc-400 whitespace-nowrap">
-                    {po.ship_from_code !== "-" ? (
-                      <>
-                        <span className="font-mono text-zinc-400">[{po.ship_from_code}]</span> {po.ship_from_name}
-                      </>
-                    ) : (
-                      <span className="text-zinc-350 italic">미지정</span>
-                    )}
-                  </td>
-
-                  {/* Destination Warehouse */}
-                  <td className="px-6 py-4 align-middle font-semibold text-zinc-800 dark:text-zinc-300 whitespace-nowrap">
-                    <span className="font-mono text-zinc-550">[{po.warehouse_code}]</span> {po.warehouse_name}
-                  </td>
-
-                  {/* Total Qty */}
+                  {/* Ordered Qty */}
                   <td className="px-6 py-4 align-middle text-right font-mono font-bold text-zinc-900 dark:text-white whitespace-nowrap">
                     {po.total_qty.toLocaleString()}
                   </td>
 
-                  {/* Total Amount */}
+                  {/* Shipment Status */}
+                  <td className="px-6 py-4 align-middle whitespace-nowrap">
+                    {po.po_status === "DRAFT" || po.po_status === "APPROVED" ? (
+                      <span className="text-zinc-450 italic">대기 (Pending)</span>
+                    ) : (
+                      <span className={`inline-flex items-center rounded px-2 py-0.5 text-[10px] font-bold border ${po.shipment_status === "ARRIVED" ? "bg-cyan-50 text-cyan-700 border-cyan-200 dark:bg-cyan-950/20 dark:text-cyan-400 dark:border-cyan-900/50" : po.shipment_status === "SHIPPED" || po.shipment_status === "IN_TRANSIT" || po.shipment_status === "BOOKED" ? "bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-950/20 dark:text-sky-400 dark:border-sky-900/50" : "bg-zinc-50 text-zinc-500 border-zinc-200 dark:bg-zinc-900/40 dark:text-zinc-550"}`}>
+                        {po.shipment_status === "ARRIVED" ? "도착 (Arrived)" : po.shipment_status === "IN_TRANSIT" || po.shipment_status === "SHIPPED" || po.shipment_status === "BOOKED" ? "선적완료" : "대기 (Pending)"}
+                      </span>
+                    )}
+                  </td>
+
+                  {/* Receiving Status */}
+                  <td className="px-6 py-4 align-middle whitespace-nowrap">
+                    <span className={`inline-flex items-center rounded px-2 py-0.5 text-[10px] font-bold border ${po.receiving_status === "RECEIVED" ? "bg-emerald-50 text-emerald-700 border-emerald-250 dark:bg-emerald-950/20 dark:text-emerald-450 dark:border-emerald-900/50" : po.receiving_status === "RECEIVING" ? "bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/20 dark:text-purple-400 dark:border-purple-900/50" : "bg-zinc-50 text-zinc-500 border-zinc-200 dark:bg-zinc-900/40 dark:text-zinc-550"}`}>
+                      {po.receiving_status === "RECEIVED" ? "입고완료" : po.receiving_status === "RECEIVING" ? "검수중" : "대기"}
+                    </span>
+                  </td>
+
+                  {/* Final Qty */}
                   <td className="px-6 py-4 align-middle text-right font-mono font-bold text-zinc-900 dark:text-white whitespace-nowrap">
-                    {po.currency} {po.total_amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    {po.receiving_status === "RECEIVED" ? (po.final_qty ?? 0).toLocaleString() : "-"}
                   </td>
 
-                  {/* Expected Ready Date */}
+                  {/* Overall Status */}
+                  <td className="px-6 py-4 align-middle whitespace-nowrap">
+                    <span className={`inline-flex items-center rounded px-2 py-0.5 text-[10px] font-bold border ${OVERALL_STATUS_COLORS[po.overall_status || "Draft"]}`}>
+                      {OVERALL_STATUS_LABELS[po.overall_status || "Draft"] || po.overall_status}
+                    </span>
+                  </td>
+
+                  {/* ETA */}
                   <td className="px-6 py-4 align-middle text-zinc-650 dark:text-zinc-350 font-medium whitespace-nowrap">
-                    {po.expected_ready_date || <span className="text-zinc-350 dark:text-zinc-600 italic font-sans font-normal">-</span>}
-                  </td>
-
-                  {/* Last Updated */}
-                  <td className="px-6 py-4 align-middle font-mono text-[10px] text-zinc-450 dark:text-zinc-500 whitespace-nowrap">
-                    {new Date(po.last_updated).toLocaleString("ko-KR")}
+                    {po.eta ? po.eta : <span className="text-zinc-350 dark:text-zinc-600 italic font-sans font-normal">-</span>}
                   </td>
 
                   {/* Action */}

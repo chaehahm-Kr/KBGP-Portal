@@ -42,6 +42,55 @@ export default async function AdminPurchaseOrderDetailPage({
     .select("id, internal_ap_number, supplier_invoice_number, invoice_total, currency, invoice_status")
     .eq("purchase_order_id", id);
 
+  // Fetch shipments
+  const { data: dbShipments } = await supabase
+    .from("inbound_shipments")
+    .select(`
+      *,
+      warehouse:destination_warehouse_id (id, name, code),
+      lines:inbound_shipment_lines (
+        id, purchase_order_line_id, product_id, shipped_qty, line_note
+      )
+    `)
+    .eq("purchase_order_id", id)
+    .order("created_at", { ascending: false });
+  const shipments = dbShipments ?? [];
+
+  // Fetch receivings
+  const { data: dbReceivings } = await supabase
+    .from("receivings")
+    .select(`
+      *,
+      warehouse:warehouse_id (id, name, code),
+      lines:receiving_lines (
+        id, inbound_shipment_line_id, purchase_order_line_id, product_id, received_qty, damaged_qty, hold_qty, line_note
+      )
+    `)
+    .eq("purchase_order_id", id)
+    .order("created_at", { ascending: false });
+  const receivings = dbReceivings ?? [];
+
+  // Fetch goods readiness
+  const { data: dbGoodsReadiness } = await supabase
+    .from("goods_readiness")
+    .select(`
+      *,
+      lines:goods_readiness_lines (
+        id, purchase_order_line_id, product_id, ready_qty, cartons, gross_weight, cbm
+      )
+    `)
+    .eq("purchase_order_id", id)
+    .order("created_at", { ascending: false });
+  const goodsReadiness = dbGoodsReadiness ?? [];
+
+  // Fetch active warehouses
+  const { data: dbAllWarehouses } = await supabase
+    .from("warehouses")
+    .select("id, name, code")
+    .eq("status", "active")
+    .order("name", { ascending: true });
+  const warehouses = dbAllWarehouses ?? [];
+
   return (
     <div className="space-y-6">
       <PurchaseOrderDetail 
@@ -49,6 +98,10 @@ export default async function AdminPurchaseOrderDetailPage({
         isReadOnly={isReadOnly} 
         invoices={invoices ?? []} 
         changeRequests={changeRequests} 
+        shipments={shipments}
+        receivings={receivings}
+        goodsReadiness={goodsReadiness}
+        warehouses={warehouses}
       />
     </div>
   );

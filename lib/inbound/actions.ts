@@ -14,6 +14,7 @@ export interface CreateShipmentLineInput {
 export interface CreateShipmentInput {
   purchase_order_id: string;
   shipping_method: "Ocean" | "Air" | "Ground" | "Courier" | "Other";
+  carrier?: string;
   origin_port?: string;
   destination_warehouse_id: string;
   etd?: string;
@@ -322,6 +323,10 @@ export async function createInboundShipment(data: CreateShipmentInput) {
 
   if (rpcErr) {
     throw new Error(`선적 생성 및 검증 실패: ${rpcErr.message}`);
+  }
+
+  if (data.carrier) {
+    await supabase.from("inbound_shipments").update({ carrier: data.carrier }).eq("id", shpId);
   }
 
   revalidatePath("/admin/purchasing/shipments");

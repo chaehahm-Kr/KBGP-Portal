@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { verifyAdminSession } from "@/lib/auth/dal";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { getOverallStatus } from "./status-helper";
 
 async function verifyWritePermission(supabase: any, userId: string) {
   const { data: userRoles } = await supabase
@@ -61,10 +62,48 @@ export async function getPurchaseOrders() {
 
   if (error) throw new Error(`Failed to fetch purchase orders: ${error.message}`);
 
+  // Fetch all shipments and receivings in batch for mapping
+  const { data: allShipments } = await supabase
+    .from("inbound_shipments")
+    .select("purchase_order_id, status, eta");
+
+  const { data: allReceivings } = await supabase
+    .from("receivings")
+    .select("purchase_order_id, status, receiving_lines(received_qty, damaged_qty, hold_qty)");
+
   return (pos ?? []).map((po: any) => {
     const lines = po.purchase_order_lines || [];
     const totalQty = lines.reduce((sum: number, l: any) => sum + l.qty, 0);
     const totalAmount = lines.reduce((sum: number, l: any) => sum + (l.qty * Number(l.unit_cost)), 0);
+
+    const shipments = (allShipments ?? []).filter((s) => s.purchase_order_id === po.id);
+    const receivings = (allReceivings ?? []).filter((r) => r.purchase_order_id === po.id);
+
+    const overallStatus = getOverallStatus(po, shipments, receivings);
+
+    const activeShipments = shipments.filter((s) => s.status !== "CANCELLED");
+    const shipmentStatus = activeShipments.length > 0 ? activeShipments[0].status : "PENDING";
+
+    const activeReceivings = receivings.filter((r) => r.status === "DRAFT");
+    const finalizedReceivings = receivings.filter((r) => r.status === "FINALIZED");
+    const receivingStatus =
+      po.fulfillment_status === "RECEIVED" || po.fulfillment_status === "COMPLETED" || finalizedReceivings.length > 0
+        ? "RECEIVED"
+        : activeReceivings.length > 0
+        ? "RECEIVING"
+        : "PENDING";
+
+    const finalQty = receivings.reduce(
+      (sum, r) =>
+        sum +
+        (r.receiving_lines ?? []).reduce(
+          (lSum: number, rl: any) => lSum + rl.received_qty - rl.damaged_qty - rl.hold_qty,
+          0
+        ),
+      0
+    );
+
+    const eta = activeShipments.length > 0 && activeShipments[0].eta ? activeShipments[0].eta : po.expected_ready_date;
 
     return {
       id: po.id,
@@ -84,6 +123,11 @@ export async function getPurchaseOrders() {
       ship_from_code: po.ship_from_warehouse?.code || "-",
       total_qty: totalQty,
       total_amount: totalAmount,
+      overall_status: overallStatus,
+      shipment_status: shipmentStatus,
+      receiving_status: receivingStatus,
+      final_qty: finalQty,
+      eta: eta,
     };
   });
 }

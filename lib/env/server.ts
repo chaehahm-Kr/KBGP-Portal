@@ -38,7 +38,7 @@ if (!parsed.success) {
     .join("\n");
   const errorMessage = `서버 전용 환경변수 설정이 올바르지 않습니다:\n${details}\n\n이 값들은 절대 NEXT_PUBLIC_ 접두사를 붙이거나 클라이언트 코드에 노출하지 마세요.`;
   
-  if (process.env.NODE_ENV === "production" && !process.env.SUPABASE_SECRET_KEY) {
+  if (process.env.NODE_ENV === "production" || process.env.NEXT_PHASE === "phase-production-build" || !process.env.SUPABASE_SECRET_KEY) {
     console.warn("⚠️ [WARN] 빌드 컴파일 단계 서버 환경변수 누락 우회:", errorMessage);
   } else {
     throw new Error(errorMessage);
