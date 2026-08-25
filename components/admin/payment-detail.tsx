@@ -164,7 +164,7 @@ export function PaymentDetail({ payment }: PaymentDetailProps) {
               <button
                 onClick={() => handleStatusTransition("COMPLETED")}
                 disabled={isActionLoading}
-                className="px-4 py-2 bg-emerald-650 hover:bg-emerald-700 text-white font-bold rounded-xl cursor-pointer transition-colors disabled:opacity-50"
+                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl cursor-pointer transition-colors disabled:opacity-50"
               >
                 📥 지급 확정 (Complete)
               </button>

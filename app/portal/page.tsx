@@ -269,7 +269,7 @@ export default async function PortalHomePage() {
                   {!step.isComplete && (
                     <Link
                       href={step.href}
-                      className="inline-flex items-center rounded-md bg-[#131E2E] dark:bg-indigo-650 hover:bg-[#8C1C2B] dark:hover:bg-indigo-700 px-2.5 py-1.5 text-[10px] font-bold text-white transition-all"
+                      className="inline-flex items-center rounded-md bg-[#131E2E] dark:bg-indigo-600 hover:bg-[#8C1C2B] dark:hover:bg-indigo-700 px-2.5 py-1.5 text-[10px] font-bold text-white transition-all"
                     >
                       {step.actionText}
                     </Link>

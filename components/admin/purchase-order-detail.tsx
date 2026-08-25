@@ -448,7 +448,7 @@ export function PurchaseOrderDetail({ po, isReadOnly = false, invoices = [], cha
               <button
                 onClick={() => handleTransition("SENT")}
                 disabled={isActionLoading}
-                className="px-3.5 py-2 bg-indigo-650 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl cursor-pointer transition-colors disabled:opacity-50"
+                className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl cursor-pointer transition-colors disabled:opacity-50"
               >
                 Supplier에게 전송 처리 (Mark Sent)
               </button>
@@ -468,7 +468,7 @@ export function PurchaseOrderDetail({ po, isReadOnly = false, invoices = [], cha
               <button
                 onClick={() => handleTransition("READY_TO_SHIP")}
                 disabled={isActionLoading}
-                className="px-3.5 py-2 bg-emerald-650 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl cursor-pointer transition-colors disabled:opacity-50"
+                className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl cursor-pointer transition-colors disabled:opacity-50"
               >
                 생산 완료 / 선적대기 (Ready to Ship)
               </button>

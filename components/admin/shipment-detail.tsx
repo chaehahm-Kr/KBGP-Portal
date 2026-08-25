@@ -208,7 +208,7 @@ export function ShipmentDetail({ shipment }: ShipmentDetailProps) {
             <>
               <Link
                 href={`/admin/purchasing/receiving/new?shipmentId=${shipment.id}`}
-                className="px-3.5 py-2 bg-emerald-650 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl cursor-pointer transition-colors"
+                className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl cursor-pointer transition-colors"
               >
                 📥 실물 입고 검수 등록 (Create Receiving)
               </Link>
