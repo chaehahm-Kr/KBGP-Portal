@@ -78,7 +78,7 @@ export async function getPortalPurchaseOrderById(id: string) {
     throw new Error("발주서 상세 정보를 불러오지 못했습니다.");
   }
 
-  if (!data) {
+  if (!data || data.po_status === "DRAFT") {
     throw new Error("발주서가 존재하지 않거나 접근 권한이 없습니다.");
   }
 
@@ -658,9 +658,10 @@ export async function submitPortalGoodsReady(input: {
   // 1. Verify PO ownership
   const { data: po, error: poErr } = await supabase
     .from("purchase_orders")
-    .select("id, shipping_responsibility")
+    .select("id, shipping_responsibility, po_status")
     .eq("id", input.purchaseOrderId)
     .eq("supplier_id", companyId)
+    .neq("po_status", "DRAFT")
     .maybeSingle();
 
   if (poErr || !po) {
@@ -1375,12 +1376,13 @@ export async function getPoLinesForInvoice(poId: string, excludeInvoiceId?: stri
   const { companyId } = await requireCompanyMembership();
   const supabase = await createClient();
 
-  // Verify ownership
+  // Verify ownership and non-draft status
   const { data: po } = await supabase
     .from("purchase_orders")
-    .select("id, po_number, currency, payment_terms, incoterms")
+    .select("id, po_number, currency, payment_terms, incoterms, po_status")
     .eq("id", poId)
     .eq("supplier_id", companyId)
+    .neq("po_status", "DRAFT")
     .maybeSingle();
 
   if (!po) {
@@ -1452,12 +1454,13 @@ export async function createPortalInvoiceDraft(input: {
   const { companyId } = await requireCompanyMembership();
   const supabase = await createClient();
 
-  // Validate PO belongs to company
+  // Validate PO belongs to company and is not DRAFT
   const { data: po } = await supabase
     .from("purchase_orders")
-    .select("id, payment_terms, incoterms, currency")
+    .select("id, payment_terms, incoterms, currency, po_status")
     .eq("id", input.purchaseOrderId)
     .eq("supplier_id", companyId)
+    .neq("po_status", "DRAFT")
     .maybeSingle();
 
   if (!po) {

@@ -11,12 +11,13 @@ export async function GET(
     const { companyId } = await requireCompanyMembership();
     const supabase = createAdminClient();
 
-    // Verify PO belongs to company
+    // Verify PO belongs to company and is NOT in DRAFT status
     const { data: po, error: poErr } = await supabase
       .from("purchase_orders")
-      .select("id, po_number")
+      .select("id, po_number, po_status")
       .eq("id", id)
       .eq("supplier_id", companyId)
+      .neq("po_status", "DRAFT")
       .maybeSingle();
 
     if (poErr || !po) {
