@@ -6,7 +6,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getSignedFileUrl } from "@/lib/files/storage";
 import { ProductOverrideTabs } from "@/components/admin/product-override-tabs";
 import type { Product, ProductVideo } from "@/lib/product/types";
-import { adminGetProductCuration } from "@/lib/product/admin-actions";
+import { adminGetProductCuration, getProductChangeHistory } from "@/lib/product/admin-actions";
 
 export const metadata: Metadata = {
   title: "제품 오버라이드 관리 | K SELECT NETWORK 어드민",
@@ -34,7 +34,7 @@ export default async function AdminProductDetailPage({
       palette_carton_qty, palette_width, palette_depth, palette_height, palette_weight,
       container_20ft_qty, container_20ft_weight, container_20ft_cbm,
       container_40fthc_qty, container_40fthc_weight, container_40fthc_cbm,
-      selection_status, sales_status, category_code
+      selection_status, sales_status, category_code, deleted_at, is_draft
     `)
     .eq("id", id)
     .maybeSingle();
@@ -235,6 +235,9 @@ export default async function AdminProductDetailPage({
     .select("code, name, description, min_sku, max_sku, is_active")
     .eq("is_active", true);
 
+  // Fetch change history audit logs
+  const changeLogs = await getProductChangeHistory(id);
+
   return (
     <ProductOverrideTabs
       product={product as unknown as Product}
@@ -257,6 +260,7 @@ export default async function AdminProductDetailPage({
       hasMissingRequiredAttributes={hasMissingRequiredAttributes}
       activeSuppliers={activeSuppliers}
       mappedSupplierIds={mappedSupplierIds}
+      changeLogs={changeLogs}
     />
   );
 }

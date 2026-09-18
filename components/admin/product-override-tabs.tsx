@@ -24,10 +24,14 @@ import {
   adminRemoveProductVideo,
   adminAddProductCertificate,
   adminUploadIngredientsFile,
-  adminDeleteIngredientsFile
+  adminDeleteIngredientsFile,
+  adminSoftDeleteProduct,
+  adminRestoreProduct
 } from "@/lib/product/admin-actions";
 import { updateProductSuppliers } from "@/lib/purchase-order/actions";
 import { CategoryAttributeForm } from "@/components/product/category-attribute-form";
+import { ProductChangeHistoryTab } from "@/components/product/product-change-history-tab";
+import type { ProductChangeLogItem } from "@/lib/product/audit";
 
 interface ProductOverrideTabsProps {
   product: Product;
@@ -56,6 +60,7 @@ interface ProductOverrideTabsProps {
   hasMissingRequiredAttributes?: boolean;
   activeSuppliers?: { id: string; name: string }[];
   mappedSupplierIds?: string[];
+  changeLogs?: ProductChangeLogItem[];
 }
 
 export function ProductOverrideTabs({
@@ -79,15 +84,51 @@ export function ProductOverrideTabs({
   hasMissingRequiredAttributes = false,
   activeSuppliers = [],
   mappedSupplierIds = [],
+  changeLogs = [],
 }: ProductOverrideTabsProps) {
   const searchParams = useSearchParams();
   const router = useRouter();
   const initialTab = searchParams.get("tab") === "category" ? "category_attributes" : "basic";
-  const [activeTab, setActiveTab] = useState<"basic" | "category_attributes" | "price" | "logistics" | "media" | "certs" | "curation">(initialTab as any);
+  const [activeTab, setActiveTab] = useState<"basic" | "category_attributes" | "price" | "logistics" | "media" | "certs" | "curation" | "history">(initialTab as any);
+
+  // Soft Delete / Restore State
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [deletePending, setDeletePending] = useState(false);
+  const [restorePending, setRestorePending] = useState(false);
 
   // Local state for media / cert updates loading
   const [mediaPending, setMediaPending] = useState(false);
   const [mediaError, setMediaError] = useState<string | null>(null);
+
+  // Soft Delete Handler
+  const handleDeleteProduct = async () => {
+    setDeletePending(true);
+    try {
+      await adminSoftDeleteProduct(product.id);
+      setIsDeleteModalOpen(false);
+      setStatusMessage({ type: "success", text: "상품이 성공적으로 삭제되었습니다 (Soft Deleted)." });
+      router.refresh();
+    } catch (err: any) {
+      alert(err.message || "상품 삭제 중 오류가 발생했습니다.");
+    } finally {
+      setDeletePending(false);
+    }
+  };
+
+  // Restore Handler
+  const handleRestoreProduct = async () => {
+    if (!confirm("삭제된 상품을 정상 상태로 복구하시겠습니까?")) return;
+    setRestorePending(true);
+    try {
+      await adminRestoreProduct(product.id);
+      setStatusMessage({ type: "success", text: "상품이 정상 복구되었습니다." });
+      router.refresh();
+    } catch (err: any) {
+      alert(err.message || "상품 복구 중 오류가 발생했습니다.");
+    } finally {
+      setRestorePending(false);
+    }
+  };
 
   // Product Images Drag & Drop Ordering State
   const [localImages, setLocalImages] = useState(() => {
@@ -773,7 +814,27 @@ export function ProductOverrideTabs({
         >
           ← 전체 제품 목록으로 돌아가기
         </Link>
-        <div className="flex gap-2">
+        <div className="flex gap-2 items-center">
+          {/* ADM-PROD-001: Soft Delete & Restore Buttons */}
+          {product.deleted_at ? (
+            <button
+              type="button"
+              onClick={handleRestoreProduct}
+              disabled={restorePending}
+              className="rounded bg-emerald-600 hover:bg-emerald-700 px-3.5 py-2 text-xs font-bold text-white disabled:opacity-50 transition-colors shadow-sm cursor-pointer"
+            >
+              {restorePending ? "복구 중..." : "🔄 상품 복구 (Restore)"}
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setIsDeleteModalOpen(true)}
+              className="rounded bg-rose-600 hover:bg-rose-700 px-3.5 py-2 text-xs font-bold text-white transition-colors shadow-sm cursor-pointer"
+            >
+              🗑️ 상품 삭제
+            </button>
+          )}
+
           <button
             onClick={handleSave}
             disabled={isPending}
@@ -954,6 +1015,23 @@ export function ProductOverrideTabs({
           }`}
         >
           큐레이션 (Curation)
+        </button>
+        <button
+          onClick={() => setActiveTab("history")}
+          className={`px-4 py-2.5 text-xs font-bold transition-all border-b-2 -mb-[2px] ${
+            activeTab === "history"
+              ? "border-zinc-950 text-zinc-955 dark:border-white dark:text-white"
+              : "border-transparent text-zinc-400 hover:text-zinc-650"
+          }`}
+        >
+          <span className="flex items-center gap-1.5">
+            📜 변경 이력
+            {changeLogs.length > 0 && (
+              <span className="rounded-full bg-zinc-200 dark:bg-zinc-800 px-1.5 py-0.2 text-[10px] font-bold text-zinc-700 dark:text-zinc-300">
+                {changeLogs.length}
+              </span>
+            )}
+          </span>
         </button>
       </div>
 
@@ -2856,6 +2934,13 @@ export function ProductOverrideTabs({
             </div>
           </div>
         )}
+
+        {/* History / Audit Log Tab */}
+        {activeTab === "history" && (
+          <div className="space-y-6">
+            <ProductChangeHistoryTab logs={changeLogs} />
+          </div>
+        )}
       </div>
 
       {/* Bottom Save Button Row */}
@@ -2868,6 +2953,62 @@ export function ProductOverrideTabs({
           {isPending ? "저장 중..." : "변경 사항 저장"}
         </button>
       </div>
+
+      {/* ADM-PROD-001: Delete Product Confirmation Modal */}
+      {isDeleteModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm animate-fadeIn">
+          <div className="w-full max-w-md rounded-2xl border border-zinc-200 bg-white p-6 shadow-2xl dark:border-zinc-800 dark:bg-zinc-900 space-y-5">
+            <div className="flex items-center gap-3 text-rose-600 dark:text-rose-400">
+              <span className="flex h-10 w-10 items-center justify-center rounded-full bg-rose-100 dark:bg-rose-950/50 text-xl">
+                ⚠️
+              </span>
+              <div>
+                <h3 className="text-base font-bold text-zinc-900 dark:text-white">
+                  이 상품을 삭제하시겠습니까?
+                </h3>
+                <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                  Soft Delete 확인 안내
+                </p>
+              </div>
+            </div>
+
+            {/* Product Detail Card */}
+            <div className="rounded-xl border border-zinc-150 bg-zinc-50/80 p-3.5 text-xs space-y-1.5 dark:border-zinc-800 dark:bg-zinc-950/50">
+              <p className="font-bold text-zinc-900 dark:text-white">
+                {product.name || product.name_en || "(상품명 없음)"}
+              </p>
+              <div className="flex flex-wrap gap-2 text-zinc-500 dark:text-zinc-400 font-mono text-[11px]">
+                <span>Letusto SKU: <strong className="text-zinc-800 dark:text-zinc-200">{product.letusto_sku || "N/A"}</strong></span>
+                <span>•</span>
+                <span>제조사 SKU: <strong className="text-zinc-800 dark:text-zinc-200">{product.manufacture_sku || "N/A"}</strong></span>
+              </div>
+            </div>
+
+            <p className="text-xs text-zinc-600 dark:text-zinc-400 leading-relaxed">
+              삭제된 상품은 일반 상품 목록과 신규 발주/큐레이션 대상에서 제외되지만, 기존 주문(PO), 재고, 입고 및 거래 이력은 안전하게 유지됩니다.
+            </p>
+
+            <div className="flex justify-end gap-2.5 pt-2 border-t border-zinc-150 dark:border-zinc-800">
+              <button
+                type="button"
+                onClick={() => setIsDeleteModalOpen(false)}
+                disabled={deletePending}
+                className="rounded-xl border border-zinc-200 bg-white px-4 py-2 text-xs font-semibold text-zinc-700 hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+              >
+                취소 (Cancel)
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteProduct}
+                disabled={deletePending}
+                className="rounded-xl bg-rose-600 px-4 py-2 text-xs font-bold text-white hover:bg-rose-700 disabled:opacity-50 transition-colors shadow-sm cursor-pointer"
+              >
+                {deletePending ? "삭제 중..." : "상품 삭제 (Delete Product)"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

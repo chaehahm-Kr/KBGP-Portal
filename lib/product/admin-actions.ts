@@ -4,17 +4,20 @@ import { verifyAdminSession } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { validateUploadedFile } from "@/lib/files/validate";
 import crypto from "crypto";
 import { z } from "zod";
-import { redirect } from "next/navigation";
-import type { ProductCategory } from "@/lib/product/types";
+import { type ProductCategory } from "@/lib/product/types";
+import { recordProductChangeLog, getProductChangeHistory, type AuditActionType } from "@/lib/product/audit";
+
+export { getProductChangeHistory };
 
 export async function adminUpdateProductOverrides(
   productId: string,
   overrides: Record<string, any>
 ) {
-  await verifyAdminSession();
+  const session = await verifyAdminSession();
   const supabase = await createClient();
 
   // 1. Fetch current price_additional_info
@@ -98,8 +101,36 @@ export async function adminUpdateProductOverrides(
     .eq("id", productId);
 
   if (updateError) {
-    throw new Error(updateError.message);
+    throw new Error(updateError.message || "제품 정보 업데이트에 실패했습니다.");
   }
+
+  // Record Audit Log
+  const changedKeys = Object.keys(overrides);
+  const summary = changedKeys.length > 0
+    ? `관리자 수정: ${changedKeys.slice(0, 3).join(", ")}${changedKeys.length > 3 ? ` 외 ${changedKeys.length - 3}건` : ""}`
+    : "관리자 제품 정보 수정";
+
+  // Fetch admin user name
+  let adminName = "Admin";
+  try {
+    const { data: profile } = await adminSupabase
+      .from("profiles")
+      .select("display_name")
+      .eq("id", session.userId)
+      .maybeSingle();
+    if (profile?.display_name) adminName = profile.display_name;
+  } catch (e) {}
+
+  await recordProductChangeLog({
+    productId,
+    userId: session.userId,
+    userName: `${adminName} (Admin)`,
+    source: "ADMIN",
+    section: "관리자 오버라이드 / 기본 정보",
+    actionType: "UPDATE",
+    summary,
+    changes: overrides as any,
+  });
 
   revalidatePath(`/admin/products/${productId}`);
   revalidatePath(`/admin/products`);
@@ -1296,4 +1327,201 @@ export async function adminCreateProduct(
 
   revalidatePath("/admin/products");
   redirect(`/admin/products/${product.id}`);
+}
+
+/**
+ * ADM-PROD-001: Soft delete a single product
+ */
+export async function adminSoftDeleteProduct(productId: string): Promise<{ success: boolean; error?: string }> {
+  const session = await verifyAdminSession();
+  const adminSupabase = createAdminClient();
+
+  const now = new Date().toISOString();
+
+  // Fetch product for audit log
+  const { data: product } = await adminSupabase
+    .from("products")
+    .select("id, name, letusto_sku, manufacture_sku, is_draft, selection_status, sales_status")
+    .eq("id", productId)
+    .single();
+
+  const { error } = await adminSupabase
+    .from("products")
+    .update({
+      deleted_at: now,
+      selection_status: "NOT_SELECTED",
+      sales_status: "ENDED",
+    })
+    .eq("id", productId);
+
+  if (error) {
+    return { success: false, error: error.message || "상품 삭제 처리에 실패했습니다." };
+  }
+
+  // Fetch admin name
+  let adminName = "Admin";
+  try {
+    const { data: profile } = await adminSupabase
+      .from("profiles")
+      .select("display_name")
+      .eq("id", session.userId)
+      .maybeSingle();
+    if (profile?.display_name) adminName = profile.display_name;
+  } catch (e) {}
+
+  await recordProductChangeLog({
+    productId,
+    userId: session.userId,
+    userName: `${adminName} (Admin)`,
+    source: "ADMIN",
+    section: "삭제/복구",
+    actionType: "DELETE",
+    summary: `상품 삭제 처리 (Soft Delete) - SKU: ${product?.letusto_sku || product?.manufacture_sku || "N/A"}`,
+    changes: {
+      deleted_at: {
+        label: "삭제 일시",
+        before: null,
+        after: now,
+      },
+      selection_status: {
+        label: "선정 상태",
+        before: "이전 상태",
+        after: "NOT_SELECTED",
+      },
+      sales_status: {
+        label: "판매 상태",
+        before: "이전 상태",
+        after: "ENDED",
+      },
+    },
+  });
+
+  revalidatePath("/admin/products");
+  revalidatePath(`/admin/products/${productId}`);
+  return { success: true };
+}
+
+/**
+ * ADM-PROD-001: Bulk soft delete multiple products
+ */
+export async function adminBulkSoftDeleteProducts(productIds: string[]): Promise<{ success: boolean; count?: number; error?: string }> {
+  const session = await verifyAdminSession();
+  if (!productIds || productIds.length === 0) {
+    return { success: true, count: 0 };
+  }
+
+  const adminSupabase = createAdminClient();
+  const now = new Date().toISOString();
+
+  const { error } = await adminSupabase
+    .from("products")
+    .update({
+      deleted_at: now,
+      selection_status: "NOT_SELECTED",
+      sales_status: "ENDED",
+    })
+    .in("id", productIds);
+
+  if (error) {
+    return { success: false, error: error.message || "일괄 상품 삭제 처리에 실패했습니다." };
+  }
+
+  // Fetch admin name
+  let adminName = "Admin";
+  try {
+    const { data: profile } = await adminSupabase
+      .from("profiles")
+      .select("display_name")
+      .eq("id", session.userId)
+      .maybeSingle();
+    if (profile?.display_name) adminName = profile.display_name;
+  } catch (e) {}
+
+  // Record audit logs for each product
+  for (const id of productIds) {
+    await recordProductChangeLog({
+      productId: id,
+      userId: session.userId,
+      userName: `${adminName} (Admin)`,
+      source: "ADMIN",
+      section: "삭제/복구",
+      actionType: "DELETE",
+      summary: `일괄 상품 삭제 처리 (Bulk Soft Delete) - 총 ${productIds.length}개 상품 중 1건`,
+      changes: {
+        deleted_at: { label: "삭제 일시", before: null, after: now },
+      },
+    });
+  }
+
+  revalidatePath("/admin/products");
+  return { success: true, count: productIds.length };
+}
+
+/**
+ * ADM-PROD-001: Restore a soft-deleted product
+ */
+export async function adminRestoreProduct(productId: string): Promise<{ success: boolean; error?: string }> {
+  const session = await verifyAdminSession();
+  const adminSupabase = createAdminClient();
+
+  const { data: product } = await adminSupabase
+    .from("products")
+    .select("id, name, letusto_sku, manufacture_sku, is_draft")
+    .eq("id", productId)
+    .single();
+
+  const { error } = await adminSupabase
+    .from("products")
+    .update({
+      deleted_at: null,
+      selection_status: "UNREVIEWED",
+      sales_status: "PREPARING",
+    })
+    .eq("id", productId);
+
+  if (error) {
+    return { success: false, error: error.message || "상품 복구 처리에 실패했습니다." };
+  }
+
+  // Fetch admin name
+  let adminName = "Admin";
+  try {
+    const { data: profile } = await adminSupabase
+      .from("profiles")
+      .select("display_name")
+      .eq("id", session.userId)
+      .maybeSingle();
+    if (profile?.display_name) adminName = profile.display_name;
+  } catch (e) {}
+
+  await recordProductChangeLog({
+    productId,
+    userId: session.userId,
+    userName: `${adminName} (Admin)`,
+    source: "ADMIN",
+    section: "삭제/복구",
+    actionType: "RESTORE",
+    summary: `상품 복구 처리 (Restored) - SKU: ${product?.letusto_sku || product?.manufacture_sku || "N/A"}`,
+    changes: {
+      deleted_at: {
+        label: "삭제 일시",
+        before: "삭제됨",
+        after: null,
+      },
+      selection_status: {
+        label: "선정 상태",
+        before: "NOT_SELECTED",
+        after: "UNREVIEWED",
+      },
+      sales_status: {
+        label: "판매 상태",
+        before: "ENDED",
+        after: "PREPARING",
+      },
+    },
+  });
+
+  revalidatePath("/admin/products");
+  revalidatePath(`/admin/products/${productId}`);
+  return { success: true };
 }

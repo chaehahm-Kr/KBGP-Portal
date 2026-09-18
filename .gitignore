@@ -47,3 +47,5 @@ scratch/
 
 .vercel
 .mcp.json*
+Manual/
+public/manuals/

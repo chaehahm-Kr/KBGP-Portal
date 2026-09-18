@@ -301,12 +301,13 @@ export async function getProductsForSupplier(supplierId: string) {
   const productIds = (mappedProducts ?? []).map((mp) => mp.product_id);
   if (productIds.length === 0) return [];
 
-  // 2. Fetch active trading products for these IDs
+  // 2. Fetch active trading products for these IDs (excluding soft-deleted products)
   const { data: products, error } = await supabase
     .from("products")
     .select("id, name, name_en, manufacture_sku, letusto_sku, parent_sku, child_sku, price_usd_fob, price_additional_info, category, brand_id, brands (name), upc, ean")
     .in("id", productIds)
     .eq("trading_status", "active")
+    .is("deleted_at", null)
     .order("name", { ascending: true });
 
   if (error) throw new Error(`Failed to fetch products: ${error.message}`);

@@ -4,7 +4,7 @@ import React, { useState, useEffect, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { PRODUCT_CATEGORY_LABEL, type ProductCategory } from "@/lib/product/types";
-import { adminUpdateProductOverrides } from "@/lib/product/admin-actions";
+import { adminUpdateProductOverrides, adminBulkSoftDeleteProducts, adminRestoreProduct } from "@/lib/product/admin-actions";
 
 interface AdminProductItem {
   id: string;
@@ -28,6 +28,9 @@ interface AdminProductItem {
   category_code?: string | null;
   category_full_path?: string | null;
   completeness_rate?: number;
+  updated_at?: string | null;
+  last_updated_by_name?: string | null;
+  last_updated_source?: string | null;
 }
 
 interface AdminProductsListProps {
@@ -72,6 +75,12 @@ export function AdminProductsList({ initialProducts }: AdminProductsListProps) {
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [isPending, startTransition] = useTransition();
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
+
+  // Multi-selection & Bulk action states
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [isBulkDeleteModalOpen, setIsBulkDeleteModalOpen] = useState(false);
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
+  const [restoringId, setRestoringId] = useState<string | null>(null);
 
   // Sync initialProducts props from server to local state
   useEffect(() => {
@@ -157,6 +166,52 @@ export function AdminProductsList({ initialProducts }: AdminProductsListProps) {
     });
   };
 
+  // 단일 상품 복구 핸들러
+  const handleRestore = async (productId: string) => {
+    if (!confirm("해당 상품을 복구하시겠습니까? 다시 정상 카탈로그 및 발주 품목에 포함됩니다.")) return;
+    setRestoringId(productId);
+    try {
+      const res = await adminRestoreProduct(productId);
+      if (!res.success) {
+        alert(res.error || "상품 복구 실패");
+      } else {
+        setProducts((prev) =>
+          prev.map((p) => (p.id === productId ? { ...p, deleted_at: null } : p))
+        );
+        router.refresh();
+      }
+    } catch (err: any) {
+      alert(err.message || "상품 복구 중 오류가 발생했습니다.");
+    } finally {
+      setRestoringId(null);
+    }
+  };
+
+  // 일괄 삭제 핸들러
+  const handleBulkDelete = async () => {
+    if (selectedIds.size === 0) return;
+    setIsBulkDeleting(true);
+    try {
+      const ids = Array.from(selectedIds);
+      const res = await adminBulkSoftDeleteProducts(ids);
+      if (!res.success) {
+        alert(res.error || "일괄 삭제 실패");
+      } else {
+        const now = new Date().toISOString();
+        setProducts((prev) =>
+          prev.map((p) => (ids.includes(p.id) ? { ...p, deleted_at: now } : p))
+        );
+        setSelectedIds(new Set());
+        setIsBulkDeleteModalOpen(false);
+        router.refresh();
+      }
+    } catch (err: any) {
+      alert(err.message || "일괄 삭제 중 오류가 발생했습니다.");
+    } finally {
+      setIsBulkDeleting(false);
+    }
+  };
+
   const filteredProducts = products.filter((product) => {
     // 1. Search filter
     const searchLower = searchTerm.toLowerCase();
@@ -191,6 +246,67 @@ export function AdminProductsList({ initialProducts }: AdminProductsListProps) {
 
     return matchesSearch && matchesCategory && matchesRegStatus && matchesSelectionStatus && matchesSalesStatus;
   });
+
+  const allFilteredIds = filteredProducts.map((p) => p.id);
+  const isAllSelected = allFilteredIds.length > 0 && allFilteredIds.every((id) => selectedIds.has(id));
+  const isSomeSelected = allFilteredIds.some((id) => selectedIds.has(id)) && !isAllSelected;
+
+  const handleToggleSelectAll = () => {
+    if (isAllSelected) {
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        allFilteredIds.forEach((id) => next.delete(id));
+        return next;
+      });
+    } else {
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        allFilteredIds.forEach((id) => next.add(id));
+        return next;
+      });
+    }
+  };
+
+  const handleToggleSelectRow = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const formatLastUpdated = (product: AdminProductItem) => {
+    if (!product.updated_at && !product.last_updated_by_name) {
+      return <span className="text-zinc-400 dark:text-zinc-600">-</span>;
+    }
+    const dateStr = product.updated_at ? new Date(product.updated_at).toISOString().split("T")[0] : "";
+    const userName = product.last_updated_by_name || "";
+    const sourceLabel =
+      product.last_updated_source === "ADMIN"
+        ? "어드민"
+        : product.last_updated_source === "BRAND_PORTAL"
+        ? "브랜드사"
+        : product.last_updated_source === "SYSTEM"
+        ? "시스템"
+        : "";
+
+    return (
+      <div className="flex flex-col text-[11px] leading-tight">
+        <span className="font-mono text-zinc-700 dark:text-zinc-300 font-medium">
+          {dateStr || "-"}
+        </span>
+        {(userName || sourceLabel) && (
+          <span className="text-[10px] text-zinc-450 dark:text-zinc-500 truncate max-w-[130px] pt-0.5">
+            {userName} {sourceLabel ? <span className="text-zinc-400">({sourceLabel})</span> : ""}
+          </span>
+        )}
+      </div>
+    );
+  };
 
   return (
     <div className="space-y-6 w-full text-zinc-900 dark:text-zinc-100">
@@ -384,33 +500,87 @@ export function AdminProductsList({ initialProducts }: AdminProductsListProps) {
           )}
         </div>
       </div>
+
+      {/* Floating / Sticky Bulk Action Bar */}
+      {selectedIds.size > 0 && (
+        <div className="flex items-center justify-between bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-950 px-5 py-3 rounded-xl shadow-lg border border-zinc-800 dark:border-zinc-200 animate-in fade-in slide-in-from-top-2 duration-150">
+          <div className="flex items-center gap-3">
+            <span className="text-xs font-bold">
+              총 <span className="underline font-black text-amber-400 dark:text-amber-600">{selectedIds.size}개</span> 상품 선택됨
+            </span>
+            <button
+              type="button"
+              onClick={() => setSelectedIds(new Set())}
+              className="text-[11px] text-zinc-300 dark:text-zinc-600 hover:text-white dark:hover:text-zinc-900 underline cursor-pointer"
+            >
+              선택 해제
+            </button>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setIsBulkDeleteModalOpen(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition shadow-sm cursor-pointer"
+            >
+              🗑️ 선택 삭제 (Soft Delete)
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Products Table Card */}
       <div className="rounded-xl border border-zinc-200 bg-white overflow-hidden shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse text-xs">
             <thead>
               <tr className="border-b border-zinc-200 bg-zinc-50/50 text-zinc-500 font-bold dark:border-zinc-800 dark:bg-zinc-900/50">
-                <th className="px-6 py-3.5 whitespace-nowrap">사진</th>
-                <th className="px-6 py-3.5 whitespace-nowrap">Letusto SKU</th>
-                <th className="px-6 py-3.5 whitespace-nowrap">제조사 SKU</th>
-                <th className="px-6 py-3.5 whitespace-nowrap">제품명</th>
-                <th className="px-6 py-3.5 whitespace-nowrap">회사명</th>
-                <th className="px-6 py-3.5 whitespace-nowrap">브랜드</th>
-                <th className="px-6 py-3.5 whitespace-nowrap">등록 상태</th>
-                <th className="px-6 py-3.5 whitespace-nowrap">선정 상태</th>
-                <th className="px-6 py-3.5 whitespace-nowrap">판매 상태</th>
-                <th className="px-6 py-3.5 whitespace-nowrap text-right">관리</th>
+                <th className="w-10 px-4 py-3.5 text-center">
+                  <input
+                    type="checkbox"
+                    checked={isAllSelected}
+                    ref={(input) => {
+                      if (input) input.indeterminate = isSomeSelected;
+                    }}
+                    onChange={handleToggleSelectAll}
+                    className="h-4 w-4 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-950 cursor-pointer"
+                  />
+                </th>
+                <th className="px-5 py-3.5 whitespace-nowrap">사진</th>
+                <th className="px-5 py-3.5 whitespace-nowrap">Letusto SKU</th>
+                <th className="px-5 py-3.5 whitespace-nowrap">제조사 SKU</th>
+                <th className="px-5 py-3.5 whitespace-nowrap">제품명</th>
+                <th className="px-5 py-3.5 whitespace-nowrap">회사명</th>
+                <th className="px-5 py-3.5 whitespace-nowrap">브랜드</th>
+                <th className="px-5 py-3.5 whitespace-nowrap">등록 상태</th>
+                <th className="px-5 py-3.5 whitespace-nowrap">선정 상태</th>
+                <th className="px-5 py-3.5 whitespace-nowrap">판매 상태</th>
+                <th className="px-5 py-3.5 whitespace-nowrap">최종 수정</th>
+                <th className="px-5 py-3.5 whitespace-nowrap text-right">관리</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-150 dark:divide-zinc-800/80">
               {filteredProducts.map((product) => {
                 const isSelected = product.selection_status === "SELECTED";
+                const isChecked = selectedIds.has(product.id);
                 return (
                   <tr
                     key={product.id}
-                    className="hover:bg-zinc-50/50 dark:hover:bg-zinc-850/20 transition-colors"
+                    className={`hover:bg-zinc-50/50 dark:hover:bg-zinc-850/20 transition-colors ${
+                      isChecked ? "bg-blue-50/30 dark:bg-blue-950/10" : ""
+                    }`}
                   >
+                    {/* Checkbox Column */}
+                    <td className="w-10 px-4 py-4 text-center align-middle">
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
+                        onChange={() => handleToggleSelectRow(product.id)}
+                        className="h-4 w-4 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-950 cursor-pointer"
+                      />
+                    </td>
+
                     {/* Photo Column */}
-                    <td className="px-6 py-4 align-middle">
+                    <td className="px-5 py-4 align-middle">
                       {product.photoUrl ? (
                         <div className="h-12 w-12 rounded-md bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 flex items-center justify-center p-1 shadow-sm overflow-hidden">
                           <img
@@ -427,21 +597,21 @@ export function AdminProductsList({ initialProducts }: AdminProductsListProps) {
                     </td>
 
                     {/* Letusto SKU */}
-                    <td className="px-6 py-4 align-middle font-mono font-bold text-zinc-955 dark:text-white whitespace-nowrap">
+                    <td className="px-5 py-4 align-middle font-mono font-bold text-zinc-955 dark:text-white whitespace-nowrap">
                       {product.letusto_sku || (
                         <span className="text-zinc-350 dark:text-zinc-650 italic font-sans font-normal">지정 대기 중</span>
                       )}
                     </td>
 
                     {/* Manufacture SKU */}
-                    <td className="px-6 py-4 align-middle font-mono font-semibold text-zinc-900 dark:text-white whitespace-nowrap">
+                    <td className="px-5 py-4 align-middle font-mono font-semibold text-zinc-900 dark:text-white whitespace-nowrap">
                       {product.display_manufacture_sku || (
                         <span className="text-zinc-350 dark:text-zinc-650 italic">미입력</span>
                       )}
                     </td>
 
                     {/* Product Name */}
-                    <td className="px-6 py-4 align-middle font-bold text-zinc-900 dark:text-white min-w-[200px]">
+                    <td className="px-5 py-4 align-middle font-bold text-zinc-900 dark:text-white min-w-[200px]">
                       <div className="flex flex-col gap-1">
                         <Link
                           href={`/admin/products/${product.id}`}
@@ -465,7 +635,7 @@ export function AdminProductsList({ initialProducts }: AdminProductsListProps) {
                     </td>
 
                     {/* Company Name */}
-                    <td className="px-6 py-4 align-middle text-zinc-600 dark:text-zinc-355 font-medium whitespace-nowrap max-w-[120px] truncate">
+                    <td className="px-5 py-4 align-middle text-zinc-600 dark:text-zinc-355 font-medium whitespace-nowrap max-w-[120px] truncate">
                       <Link
                         href={`/admin/companies/${product.company_id}`}
                         className="hover:underline hover:text-zinc-950 dark:hover:text-white cursor-pointer transition-colors"
@@ -475,7 +645,7 @@ export function AdminProductsList({ initialProducts }: AdminProductsListProps) {
                     </td>
 
                     {/* Brand Name */}
-                    <td className="px-6 py-4 align-middle text-zinc-600 dark:text-zinc-300 font-medium whitespace-nowrap max-w-[120px] truncate">
+                    <td className="px-5 py-4 align-middle text-zinc-600 dark:text-zinc-300 font-medium whitespace-nowrap max-w-[120px] truncate">
                       <Link
                         href={`/admin/brands?search=${encodeURIComponent(product.brandName)}`}
                         className="hover:underline hover:text-zinc-950 dark:hover:text-white cursor-pointer transition-colors"
@@ -484,10 +654,8 @@ export function AdminProductsList({ initialProducts }: AdminProductsListProps) {
                       </Link>
                     </td>
 
-
-
                     {/* ① 제품 등록 상태 배지 */}
-                    <td className="px-6 py-4 align-middle">
+                    <td className="px-5 py-4 align-middle">
                       {product.deleted_at ? (
                         <span className="inline-flex items-center rounded bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400 px-2 py-0.5 text-[10px] font-bold border border-zinc-200 dark:border-zinc-700 whitespace-nowrap">
                           Deleted (삭제됨)
@@ -504,7 +672,7 @@ export function AdminProductsList({ initialProducts }: AdminProductsListProps) {
                     </td>
 
                     {/* ② 제품 선정 상태 인라인 셀렉터 */}
-                    <td className="px-6 py-4 align-middle">
+                    <td className="px-5 py-4 align-middle">
                       <select
                         value={product.selection_status}
                         onChange={(e) => handleInlineStatusChange(product.id, "selection_status", e.target.value)}
@@ -522,7 +690,7 @@ export function AdminProductsList({ initialProducts }: AdminProductsListProps) {
                     </td>
 
                     {/* ③ 제품 판매 상태 인라인 셀렉터 */}
-                    <td className="px-6 py-4 align-middle" title={!isSelected ? "선정된 제품만 판매 상태를 변경할 수 있습니다." : undefined}>
+                    <td className="px-5 py-4 align-middle" title={!isSelected ? "선정된 제품만 판매 상태를 변경할 수 있습니다." : undefined}>
                       <select
                         value={product.sales_status}
                         onChange={(e) => handleInlineStatusChange(product.id, "sales_status", e.target.value)}
@@ -541,14 +709,31 @@ export function AdminProductsList({ initialProducts }: AdminProductsListProps) {
                       </select>
                     </td>
 
-                    {/* Actions (Prevent line wrapping) */}
-                    <td className="px-6 py-4 align-middle text-right whitespace-nowrap">
-                      <Link
-                        href={`/admin/products/${product.id}`}
-                        className="rounded bg-zinc-900 hover:bg-zinc-850 dark:bg-zinc-100 dark:hover:bg-zinc-200 text-white dark:text-zinc-950 border border-zinc-900 dark:border-zinc-100 px-3 py-2 font-bold text-xs transition-all"
-                      >
-                        상세/수정
-                      </Link>
+                    {/* ④ 최종 수정 정보 */}
+                    <td className="px-5 py-4 align-middle whitespace-nowrap">
+                      {formatLastUpdated(product)}
+                    </td>
+
+                    {/* Actions */}
+                    <td className="px-5 py-4 align-middle text-right whitespace-nowrap">
+                      <div className="flex items-center justify-end gap-1.5">
+                        {product.deleted_at ? (
+                          <button
+                            type="button"
+                            disabled={restoringId === product.id}
+                            onClick={() => handleRestore(product.id)}
+                            className="rounded bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 py-1.5 font-bold text-xs transition-all shadow-sm cursor-pointer disabled:opacity-50"
+                          >
+                            {restoringId === product.id ? "복구 중..." : "🔄 복구"}
+                          </button>
+                        ) : null}
+                        <Link
+                          href={`/admin/products/${product.id}`}
+                          className="rounded bg-zinc-900 hover:bg-zinc-850 dark:bg-zinc-100 dark:hover:bg-zinc-200 text-white dark:text-zinc-950 border border-zinc-900 dark:border-zinc-100 px-3 py-1.5 font-bold text-xs transition-all"
+                        >
+                          상세/수정
+                        </Link>
+                      </div>
                     </td>
                   </tr>
                 );
@@ -557,7 +742,7 @@ export function AdminProductsList({ initialProducts }: AdminProductsListProps) {
               {filteredProducts.length === 0 && (
                 <tr>
                   <td
-                    colSpan={11}
+                    colSpan={12}
                     className="px-6 py-12 text-center text-zinc-400 dark:text-zinc-500"
                   >
                     일치하는 등록 제품이 존재하지 않습니다.
@@ -568,6 +753,60 @@ export function AdminProductsList({ initialProducts }: AdminProductsListProps) {
           </table>
         </div>
       </div>
+
+      {/* 일괄 삭제 모달 */}
+      {isBulkDeleteModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-2xl border border-zinc-200 bg-white shadow-2xl dark:border-zinc-800 dark:bg-zinc-900 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between border-b border-zinc-100 bg-zinc-50/50 px-5 py-4 dark:border-zinc-800 dark:bg-zinc-950/20">
+              <h3 className="text-sm font-bold text-rose-600 dark:text-rose-400 flex items-center gap-2">
+                <span>⚠️</span> 상품 일괄 삭제 (Soft Delete)
+              </h3>
+              <button
+                type="button"
+                onClick={() => !isBulkDeleting && setIsBulkDeleteModalOpen(false)}
+                className="rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-150 cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4 text-xs">
+              <p className="text-zinc-700 dark:text-zinc-300 font-medium">
+                선택한 <span className="font-bold text-rose-600 dark:text-rose-400 text-sm">{selectedIds.size}개</span>의 상품을 삭제(비활성화)하시겠습니까?
+              </p>
+
+              <div className="rounded-xl bg-amber-50 p-3.5 text-amber-850 dark:bg-amber-950/30 dark:text-amber-300 border border-amber-200 dark:border-amber-900/50 space-y-1.5 text-[11px] leading-relaxed">
+                <p className="font-bold">💡 삭제 시 유의사항:</p>
+                <ul className="list-disc pl-4 space-y-1">
+                  <li>과거 발주(PO), 출고, 정산 등 모든 거래 내역 데이터는 영구 보존됩니다.</li>
+                  <li>일반 카탈로그 목록 및 신규 발주 생성 품목에서 즉시 제외됩니다.</li>
+                  <li>언제든지 제품 목록 상단의 <span className="font-bold">Deleted 필터</span>를 통해 개별 복구할 수 있습니다.</li>
+                </ul>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-zinc-100 dark:border-zinc-800">
+                <button
+                  type="button"
+                  disabled={isBulkDeleting}
+                  onClick={() => setIsBulkDeleteModalOpen(false)}
+                  className="rounded-xl border border-zinc-300 bg-white px-4 py-2 font-bold text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 text-xs transition cursor-pointer"
+                >
+                  취소
+                </button>
+                <button
+                  type="button"
+                  disabled={isBulkDeleting}
+                  onClick={handleBulkDelete}
+                  className="rounded-xl bg-rose-600 px-4 py-2 font-bold text-white hover:bg-rose-700 disabled:opacity-50 text-xs transition flex items-center gap-1.5 shadow-sm cursor-pointer"
+                >
+                  {isBulkDeleting ? "삭제 처리 중..." : `선택한 ${selectedIds.size}개 상품 삭제`}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 회사 및 브랜드 등록 사전 질문 모달 */}
       {isConfirmModalOpen && (

@@ -18,7 +18,7 @@ export default async function AdminProductsPage() {
   let products: any[] | null = null;
   const { data: firstQueryProducts, error: queryError } = await supabase
     .from("products")
-    .select("id, name, name_en, category, brand_id, company_id, manufacture_sku, letusto_sku, parent_sku, child_sku, price_krw_retail, price_usd_fob, package_width, package_depth, package_height, package_weight, price_additional_info, origin, upc, ean, selling_online, selling_offline, sales_link_1, sales_link_2, category_code, selection_status, sales_status")
+    .select("id, name, name_en, category, brand_id, company_id, manufacture_sku, letusto_sku, parent_sku, child_sku, price_krw_retail, price_usd_fob, package_width, package_depth, package_height, package_weight, price_additional_info, origin, upc, ean, selling_online, selling_offline, sales_link_1, sales_link_2, category_code, selection_status, sales_status, deleted_at, updated_at, last_updated_by_name, last_updated_source")
     .order("created_at", { ascending: false });
 
   if (queryError && (
@@ -29,7 +29,7 @@ export default async function AdminProductsPage() {
   )) {
     const fallbackResult = await supabase
       .from("products")
-      .select("id, name, name_en, category, category_code, brand_id, company_id, manufacture_sku, letusto_sku, parent_sku, child_sku, price_krw_retail, price_usd_fob, package_width, package_depth, package_height, package_weight, price_additional_info, origin, upc, ean, selling_online, selling_offline, sales_link_1, sales_link_2, selection_status, sales_status")
+      .select("id, name, name_en, category, category_code, brand_id, company_id, manufacture_sku, letusto_sku, parent_sku, child_sku, price_krw_retail, price_usd_fob, package_width, package_depth, package_height, package_weight, price_additional_info, origin, upc, ean, selling_online, selling_offline, sales_link_1, sales_link_2, selection_status, sales_status, deleted_at, updated_at")
       .order("created_at", { ascending: false });
     products = fallbackResult.data;
   } else {
@@ -255,6 +255,9 @@ export default async function AdminProductsPage() {
         is_draft: isDraft,
         missing_fields: missingFields,
         deleted_at: (p as any).deleted_at || null,
+        updated_at: (p as any).updated_at || null,
+        last_updated_by_name: (p as any).last_updated_by_name || null,
+        last_updated_source: (p as any).last_updated_source || null,
         selection_status: p.selection_status || "UNREVIEWED",
         sales_status: p.sales_status || "PREPARING",
         category_code: p.category_code || null,

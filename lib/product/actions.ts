@@ -8,6 +8,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { validateUploadedFile } from "@/lib/files/validate";
 import type { CertificateType, ProductCategory } from "@/lib/product/types";
+import { recordProductChangeLog } from "@/lib/product/audit";
 
 export type ProductFormState = { error: string } | undefined;
 
@@ -535,7 +536,46 @@ export async function updateProduct(
     return { error: "제품 정보 수정에 실패했습니다. 잠시 후 다시 시도해주세요." };
   }
 
+  // Fetch portal user display name and company name
+  let userName = "Brand User";
+  let companyName = "Brand Portal";
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("display_name")
+        .eq("id", user.id)
+        .maybeSingle();
+      if (profile?.display_name) userName = profile.display_name;
+
+      const { data: company } = await supabase
+        .from("companies")
+        .select("name")
+        .eq("id", companyId)
+        .maybeSingle();
+      if (company?.name) companyName = company.name;
+
+      await recordProductChangeLog({
+        productId,
+        userId: user.id,
+        userName,
+        userEmail: user.email,
+        source: "BRAND_PORTAL",
+        companyName,
+        section: "기본 정보 / 스펙",
+        actionType: "UPDATE",
+        summary: `브랜드사(${companyName}) 상품 정보 수정: ${parsed.data.name || parsed.data.nameEn || "상품"}`,
+        changes: rawData as any,
+      });
+    }
+  } catch (logErr) {
+    console.warn("⚠️ Portal audit log error:", logErr);
+  }
+
   revalidatePath(`/portal/products/${productId}`);
+  revalidatePath(`/admin/products/${productId}`);
+  revalidatePath("/admin/products");
 }
 
 export async function addProductVideoUrl(productId: string, videoUrl: string) {
