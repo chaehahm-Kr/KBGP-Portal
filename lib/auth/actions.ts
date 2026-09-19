@@ -53,13 +53,22 @@ async function login(
   });
 
   if (error) {
-    if (error.code === "email_not_confirmed") {
+    if (error.code === "email_not_confirmed" || error.message?.includes("Email not confirmed")) {
       return {
         error:
           "이메일 인증이 아직 완료되지 않았습니다. 가입 시 받으신 이메일의 링크를 먼저 확인해주세요.",
       };
     }
-    // Record failure for invalid credentials
+    
+    // Server / Network / 5xx system failure
+    if ((error.status && error.status >= 500) || error.message?.includes("fetch failed")) {
+      console.error("[login] System auth error:", error);
+      return {
+        error: "로그인 처리 중 문제가 발생했습니다. 잠시 후 다시 시도해주세요.",
+      };
+    }
+
+    // Record failure only for actual invalid credentials
     await recordLoginAttempt(normalizedEmail, false);
     return { error: "이메일 또는 비밀번호가 올바르지 않습니다." };
   }

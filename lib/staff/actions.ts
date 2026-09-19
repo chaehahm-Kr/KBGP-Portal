@@ -9,6 +9,7 @@ import { createClient } from "@/lib/supabase/server";
 import { DEFAULT_ROLE_PERMISSIONS, type StaffRole, type StaffStatus, type StaffMenuPermissions } from "./types";
 import { renderEmailHtml } from "@/lib/notifications/templates";
 import { sendEmail } from "@/lib/notifications/email";
+import { assertNotProtectedProductionAccount } from "@/lib/auth/guard";
 
 // Helper: Log staff change histories
 async function logAudit({
@@ -508,6 +509,8 @@ export async function resetStaffPasswordAction(targetId: string, reason: string)
     throw new Error("직원 정보를 찾을 수 없습니다.");
   }
 
+  await assertNotProtectedProductionAccount(staff.email, "resetStaffPasswordAction");
+
   // 1. Generate temp password
   const tempPassword = "Reset" + Math.random().toString(36).substring(2, 10) + "!";
 
@@ -581,6 +584,8 @@ export async function reinviteStaffAction(targetId: string) {
   if (!staff) {
     throw new Error("직원을 찾을 수 없습니다.");
   }
+
+  await assertNotProtectedProductionAccount(staff.email, "reinviteStaffAction");
 
   const tempPassword = "Temp" + Math.random().toString(36).substring(2, 10) + "!";
 
