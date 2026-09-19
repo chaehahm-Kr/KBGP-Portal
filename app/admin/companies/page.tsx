@@ -1,10 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { verifyAdminSession } from "@/lib/auth/dal";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { parseCompanyMetadata } from "@/lib/company/admin-actions";
 import { getSystemCompanyConfigs } from "@/lib/settings/actions";
-import { mockCompanies } from "@/lib/data/mockData";
 import { CompaniesTableClient } from "@/components/admin/companies-table-client";
 
 export const metadata: Metadata = {
@@ -13,7 +12,7 @@ export const metadata: Metadata = {
 
 export default async function AdminCompaniesPage() {
   await verifyAdminSession();
-  const supabase = await createClient();
+  const supabase = createAdminClient();
 
   const { data: dbCompanies } = await supabase
     .from("companies")
@@ -66,19 +65,6 @@ export default async function AdminCompaniesPage() {
     })
   );
 
-  // DB 데이터와 모의 데이터 병합
-  const unifiedCompanies = [
-    ...resolvedDbCompanies,
-    ...mockCompanies.filter((mc) => !(dbCompanies ?? []).some((dc) => dc.name === mc.name)).map(mc => ({
-      ...mc,
-      contactName: mc.contactName || "담당자 정보 없음",
-      contactPhone: mc.phone || "-",
-      contactEmail: mc.email || "-",
-      contactTitle: "팀장",
-      contactPosition: "해외영업",
-    })),
-  ];
-
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -100,7 +86,7 @@ export default async function AdminCompaniesPage() {
       </div>
       {/* Integrated Search & Filter Companies Table */}
       <CompaniesTableClient
-        companies={unifiedCompanies.map((c) => ({
+        companies={resolvedDbCompanies.map((c) => ({
           ...c,
           users: (companyUsers ?? [])
             .filter((u) => u.company_id === c.id)

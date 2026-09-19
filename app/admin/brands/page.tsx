@@ -1,10 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { verifyAdminSession } from "@/lib/auth/dal";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { parseBrandTrademarks } from "@/lib/brand/actions";
 import { getSignedFileUrl } from "@/lib/files/storage";
-import { mockBrands, mockCompanies } from "@/lib/data/mockData";
 
 export const metadata: Metadata = {
   title: "브랜드 관리 | K SELECT NETWORK 어드민",
@@ -12,7 +11,7 @@ export const metadata: Metadata = {
 
 export default async function AdminBrandsPage() {
   await verifyAdminSession();
-  const supabase = await createClient();
+  const supabase = createAdminClient();
 
   // Safely fetch brands with trademark columns
   let brandsData: any[] = [];
@@ -60,26 +59,6 @@ export default async function AdminBrandsPage() {
     })
   );
 
-  // DB 데이터와 모의 데이터 병합
-  const unifiedBrands = [
-    ...resolvedBrands,
-    ...mockBrands
-      .filter((mb) => !brandsData.some((dbB) => dbB.name === mb.name))
-      .map((mb) => {
-        const company = mockCompanies.find((mc) => mc.id === mb.companyId);
-        return {
-          id: mb.id,
-          name: mb.name,
-          logoUrl: null,
-          companyName: company ? company.name : "모의 회사",
-          companyId: mb.companyId,
-          hasKr: mb.id === "b-1" || mb.id === "b-2" || mb.id === "b-3", // Give some mock values
-          hasUs: mb.id === "b-1" || mb.id === "b-3",
-          lastUpdated: "2026-07-31",
-        };
-      }),
-  ];
-
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -106,7 +85,7 @@ export default async function AdminBrandsPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
-              {unifiedBrands.map((brand) => (
+              {resolvedBrands.map((brand) => (
                 <tr key={brand.id} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-900/50">
                   <td className="px-6 py-3">
                     {brand.logoUrl ? (
@@ -173,7 +152,7 @@ export default async function AdminBrandsPage() {
                   </td>
                 </tr>
               ))}
-              {unifiedBrands.length === 0 && (
+              {resolvedBrands.length === 0 && (
                 <tr>
                   <td colSpan={7} className="py-12 text-center text-sm text-zinc-400">
                     등록된 브랜드 정보가 존재하지 않습니다.

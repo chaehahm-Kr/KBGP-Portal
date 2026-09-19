@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { verifyAdminSession } from "@/lib/auth/dal";
-import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getSignedFileUrl } from "@/lib/files/storage";
 import { AdminProductsList } from "@/components/admin/admin-products-list";
@@ -11,45 +10,28 @@ export const metadata: Metadata = {
 
 export default async function AdminProductsPage() {
   await verifyAdminSession();
-  const supabase = await createClient();
   const admin = createAdminClient();
 
   // 1. Fetch all products from all companies
-  let products: any[] | null = null;
-  const { data: firstQueryProducts, error: queryError } = await supabase
+  const { data: products } = await admin
     .from("products")
-    .select("id, name, name_en, category, brand_id, company_id, manufacture_sku, letusto_sku, parent_sku, child_sku, price_krw_retail, price_usd_fob, package_width, package_depth, package_height, package_weight, price_additional_info, origin, upc, ean, selling_online, selling_offline, sales_link_1, sales_link_2, category_code, selection_status, sales_status, deleted_at, updated_at, last_updated_by_name, last_updated_source")
+    .select("*")
     .order("created_at", { ascending: false });
 
-  if (queryError && (
-    queryError.message?.includes("deleted_at") || 
-    queryError.message?.includes("category_code") || 
-    queryError.code === "PGRST100" || 
-    queryError.message?.includes("column")
-  )) {
-    const fallbackResult = await supabase
-      .from("products")
-      .select("id, name, name_en, category, category_code, brand_id, company_id, manufacture_sku, letusto_sku, parent_sku, child_sku, price_krw_retail, price_usd_fob, package_width, package_depth, package_height, package_weight, price_additional_info, origin, upc, ean, selling_online, selling_offline, sales_link_1, sales_link_2, selection_status, sales_status, deleted_at, updated_at")
-      .order("created_at", { ascending: false });
-    products = fallbackResult.data;
-  } else {
-    products = firstQueryProducts;
-  }
-
   // 2. Fetch all companies for name mapping
-  const { data: companies } = await supabase
+  const { data: companies } = await admin
     .from("companies")
     .select("id, name");
   const companyNameById = new Map((companies ?? []).map((c) => [c.id, c.name]));
 
   // 3. Fetch all brands for name mapping
-  const { data: brands } = await supabase
+  const { data: brands } = await admin
     .from("brands")
     .select("id, name");
   const brandNameById = new Map((brands ?? []).map((b) => [b.id, b.name]));
 
   // 4. Fetch all categories to build full path mappings
-  const { data: dbCategories } = await supabase
+  const { data: dbCategories } = await admin
     .from("categories")
     .select("code, name_ko, parent_code, depth");
   const categoryMap = new Map((dbCategories ?? []).map((c) => [c.code, c]));
@@ -178,7 +160,7 @@ export default async function AdminProductsPage() {
   };
 
   // 5. Fetch first images (lowest position) for products to display thumbnail
-  const { data: productImages } = await supabase
+  const { data: productImages } = await admin
     .from("product_images")
     .select("id, product_id, storage_path, position")
     .order("position", { ascending: true });
