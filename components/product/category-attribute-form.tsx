@@ -265,8 +265,8 @@ export function CategoryAttributeForm({
         // Fallback defaults
         if (attr.inputType === "MULTI_SELECT") {
           initialVals[attr.code] = [];
-        } else if (attr.inputType === "YES_NO_NA") {
-          initialVals[attr.code] = "NA";
+        } else if (attr.inputType === "NUMBER_RANGE_UNIT" || attr.inputType === "NUMBER_RANGE") {
+          initialVals[attr.code] = ["", ""];
         } else {
           initialVals[attr.code] = "";
         }
@@ -348,9 +348,28 @@ export function CategoryAttributeForm({
     setFormTextValues(prev => ({ ...prev, [code]: text }));
   };
 
+  // 속성값이 입력되었는지(완료되었는지) 판별하는 공통 헬퍼
+  const isAttributeValueFilled = (attr: AttributeMasterItem, val: any): boolean => {
+    if (val === "NA" || val === "UNKNOWN") return true;
+    if (attr.inputType === "MULTI_SELECT") {
+      return Array.isArray(val) ? val.length > 0 : false;
+    }
+    if (attr.inputType === "NUMBER_RANGE_UNIT" || attr.inputType === "NUMBER_RANGE") {
+      if (Array.isArray(val)) {
+        return (
+          (val[0] !== "" && val[0] !== null && val[0] !== undefined) ||
+          (val[1] !== "" && val[1] !== null && val[1] !== undefined)
+        );
+      }
+      return val !== "" && val !== null && val !== undefined;
+    }
+    return val !== null && val !== undefined && String(val).trim() !== "";
+  };
+
   // 저장 처리
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async (e?: React.FormEvent | React.MouseEvent) => {
+    if (e?.preventDefault) e.preventDefault();
+    if (e?.stopPropagation) e.stopPropagation();
     setFeedback(null);
 
     const categoryCode = finalCat ? finalCat.code : null;
@@ -366,12 +385,8 @@ export function CategoryAttributeForm({
       if (!isEditable) return;
 
       if (isAttrRequired) {
-        if (attr.inputType === "MULTI_SELECT") {
-          if (!val || val.length === 0) missingRequired.push(attr.nameKo);
-        } else {
-          if (val === null || val === undefined || String(val).trim() === "") {
-            missingRequired.push(attr.nameKo);
-          }
+        if (!isAttributeValueFilled(attr, val)) {
+          missingRequired.push(attr.nameKo);
         }
       }
     });
@@ -410,10 +425,8 @@ export function CategoryAttributeForm({
     let filled = 0;
     attributes.forEach((attr) => {
       const val = formValues[attr.code];
-      if (attr.inputType === "MULTI_SELECT") {
-        if (val && val.length > 0) filled++;
-      } else {
-        if (val !== null && val !== undefined && String(val).trim() !== "") filled++;
+      if (isAttributeValueFilled(attr, val)) {
+        filled++;
       }
     });
     return Math.round((filled / attributes.length) * 100);
@@ -424,13 +437,7 @@ export function CategoryAttributeForm({
     const unfilled: string[] = [];
     attributes.forEach((attr) => {
       const val = formValues[attr.code];
-      let isFilled = false;
-      if (attr.inputType === "MULTI_SELECT") {
-        if (val && val.length > 0) isFilled = true;
-      } else {
-        if (val !== null && val !== undefined && String(val).trim() !== "") isFilled = true;
-      }
-      if (!isFilled) {
+      if (!isAttributeValueFilled(attr, val)) {
         unfilled.push(attr.nameKo);
       }
     });
@@ -452,7 +459,7 @@ export function CategoryAttributeForm({
   const completeness = calculateCompleteness();
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-8 text-zinc-800 dark:text-zinc-200">
+    <div className="flex flex-col gap-8 text-zinc-800 dark:text-zinc-200">
       
       {/* 1. 3Depth 카테고리 지정 카드 */}
       <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 shadow-sm">
@@ -667,7 +674,8 @@ export function CategoryAttributeForm({
         <div className="flex justify-end pt-4 border-t border-zinc-150 dark:border-zinc-800">
           <button
             id="save-attributes-btn"
-            type="submit"
+            type="button"
+            onClick={handleSubmit}
             disabled={saving || isPending}
             className={`
               flex items-center gap-2 px-8 py-4 rounded-xl font-bold text-sm shadow-md transition-all duration-300 cursor-pointer
@@ -697,7 +705,7 @@ export function CategoryAttributeForm({
         </div>
       )}
 
-    </form>
+    </div>
   );
 
   // 개별 필드 렌더러 함수
@@ -826,14 +834,24 @@ export function CategoryAttributeForm({
           </div>
         )}
 
-        {/* 3.3 YES_NO_NA 토글 그룹 */}
-        {attr.inputType === "YES_NO_NA" && (
+        {/* 3.3 YES_NO_NA 및 YES_NO_UNKNOWN 토글 버튼 그룹 */}
+        {(attr.inputType === "YES_NO_NA" || attr.inputType === "YES_NO_UNKNOWN") && (
           <div className="flex items-center gap-2 bg-zinc-100 dark:bg-zinc-950/50 p-1 rounded-xl border border-zinc-200 dark:border-zinc-800 w-fit">
-            {[
-              { key: "YES", label: "예" },
-              { key: "NO", label: "아니오" },
-              { key: "NA", label: "해당없음" }
-            ].map((item) => (
+            {(attr.options && attr.options.length > 0
+              ? attr.options.map((o) => ({ key: o.optionCode, label: o.optionKo }))
+              : (attr.inputType === "YES_NO_UNKNOWN"
+                  ? [
+                      { key: "YES", label: "예" },
+                      { key: "NO", label: "아니오" },
+                      { key: "UNKNOWN", label: "미확인" }
+                    ]
+                  : [
+                      { key: "YES", label: "예" },
+                      { key: "NO", label: "아니오" },
+                      { key: "NA", label: "해당없음" }
+                    ]
+                )
+            ).map((item) => (
               <button
                 id={`attr-btn-${attr.code}-${item.key}`}
                 key={item.key}
@@ -861,8 +879,9 @@ export function CategoryAttributeForm({
             <input
               id={`attr-number-input-${attr.code}`}
               type="number"
+              step="any"
               placeholder="숫자 입력"
-              value={val === "NA" ? "" : val || ""}
+              value={val === "NA" ? "" : (val ?? "")}
               disabled={!isEditable || saving || val === "NA"}
               onChange={(e) => updateValue(attr.code, e.target.value === "" ? "" : Number(e.target.value))}
               className="bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 text-zinc-900 dark:text-zinc-100 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:bg-white dark:focus:bg-zinc-950 focus:border-zinc-900 dark:focus:border-zinc-100 disabled:opacity-60 w-32"
@@ -889,18 +908,20 @@ export function CategoryAttributeForm({
           </div>
         )}
 
-        {/* 3.5 NUMBER_RANGE_UNIT (최소~최대 범위) */}
-        {attr.inputType === "NUMBER_RANGE_UNIT" && (
+        {/* 3.5 NUMBER_RANGE_UNIT (최소~최대 범위 + 단위) 또는 NUMBER_RANGE (순수 숫자 범위) */}
+        {(attr.inputType === "NUMBER_RANGE_UNIT" || attr.inputType === "NUMBER_RANGE") && (
           <div className="flex items-center gap-2">
             <input
               id={`attr-range-min-${attr.code}`}
               type="number"
+              step="any"
               placeholder="최소"
-              value={val === "NA" ? "" : (Array.isArray(val) ? val[0] || "" : "")}
+              value={val === "NA" ? "" : (Array.isArray(val) ? (val[0] ?? "") : (typeof val === "number" ? val : ""))}
               disabled={!isEditable || saving || val === "NA"}
               onChange={(e) => {
-                const max = Array.isArray(val) ? val[1] || "" : "";
-                updateValue(attr.code, [e.target.value === "" ? "" : Number(e.target.value), max]);
+                const minVal = e.target.value === "" ? "" : (isNaN(Number(e.target.value)) ? e.target.value : Number(e.target.value));
+                const maxVal = Array.isArray(val) ? (val[1] ?? "") : "";
+                updateValue(attr.code, [minVal, maxVal]);
               }}
               className="bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 text-zinc-900 dark:text-zinc-100 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:bg-white dark:focus:bg-zinc-950 focus:border-zinc-900 dark:focus:border-zinc-100 disabled:opacity-60 w-24"
             />
@@ -908,12 +929,14 @@ export function CategoryAttributeForm({
             <input
               id={`attr-range-max-${attr.code}`}
               type="number"
+              step="any"
               placeholder="최대"
-              value={val === "NA" ? "" : (Array.isArray(val) ? val[1] || "" : "")}
+              value={val === "NA" ? "" : (Array.isArray(val) ? (val[1] ?? "") : "")}
               disabled={!isEditable || saving || val === "NA"}
               onChange={(e) => {
-                const min = Array.isArray(val) ? val[0] || "" : "";
-                updateValue(attr.code, [min, e.target.value === "" ? "" : Number(e.target.value)]);
+                const maxVal = e.target.value === "" ? "" : (isNaN(Number(e.target.value)) ? e.target.value : Number(e.target.value));
+                const minVal = Array.isArray(val) ? (val[0] ?? "") : (typeof val === "number" ? val : "");
+                updateValue(attr.code, [minVal, maxVal]);
               }}
               className="bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 text-zinc-900 dark:text-zinc-100 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:bg-white dark:focus:bg-zinc-950 focus:border-zinc-900 dark:focus:border-zinc-100 disabled:opacity-60 w-24"
             />

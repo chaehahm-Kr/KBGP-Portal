@@ -317,8 +317,8 @@ export async function saveProductAttributeValues(
       isEmpty = true;
     } else if (typeof val === "string" && val.trim() === "") {
       isEmpty = true;
-    } else if (Array.isArray(val) && val.length === 0) {
-      isEmpty = true;
+    } else if (Array.isArray(val)) {
+      isEmpty = val.length === 0 || val.every(v => v === "" || v === null || v === undefined);
     }
 
     if (isEmpty) {

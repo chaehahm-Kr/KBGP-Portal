@@ -541,8 +541,11 @@ export function AttributeList({ initialAttributes }: { initialAttributes: Attrib
                     <option value="SINGLE_SELECT">객관식 단일 선택 (SINGLE_SELECT)</option>
                     <option value="MULTI_SELECT">객관식 다중 선택 (MULTI_SELECT)</option>
                     <option value="YES_NO_NA">Yes / No / N.A 선택 (YES_NO_NA)</option>
+                    <option value="YES_NO_UNKNOWN">Yes / No / 미확인 (YES_NO_UNKNOWN)</option>
                     <option value="NUMBER_UNIT">숫자 + 단위 입력 (NUMBER_UNIT)</option>
                     <option value="NUMBER">순수 숫자 입력 (NUMBER)</option>
+                    <option value="NUMBER_RANGE">숫자 범위 입력 (NUMBER_RANGE)</option>
+                    <option value="NUMBER_RANGE_UNIT">숫자 범위 + 단위 (NUMBER_RANGE_UNIT)</option>
                     <option value="TEXT">단행 텍스트 입력 (TEXT)</option>
                     <option value="LONG_TEXT">다행 텍스트 입력 (LONG_TEXT)</option>
                   </select>
