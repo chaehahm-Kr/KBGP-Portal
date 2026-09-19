@@ -71,10 +71,10 @@ export function ProductDetailTabs({
       const tabParam = searchParams.get("tab");
       const hash = window.location.hash;
 
-      if (tabParam && ["basic", "category_attributes", "price", "logistics", "media", "certs"].includes(tabParam)) {
-        setActiveTab(tabParam as any);
-      } else if (hash.startsWith("#attr-") || hash === "#category_attributes") {
+      if (hash.startsWith("#attr-") || hash === "#category_attributes") {
         setActiveTab("category_attributes");
+      } else if (tabParam && ["basic", "category_attributes", "price", "logistics", "media", "certs"].includes(tabParam)) {
+        setActiveTab(tabParam as any);
       }
     };
 
