@@ -227,7 +227,7 @@ export async function adminUpdateProductCuration(
   },
   matrixPayload: Record<string, string>
 ) {
-  await verifyAdminSession();
+  const session = await verifyAdminSession();
   const supabase = createAdminClient();
 
   // 1. Fetch current DB product_curations & matrix for delta-check
