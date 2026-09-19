@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import { usePathname } from "next/navigation";
 import PortalSidebar from "./portal-sidebar";
 import PortalHeader from "./portal-header";
+import { PortalIdleManager } from "./portal-idle-manager";
 
 interface PortalLayoutProps {
   children: React.ReactNode;
@@ -39,7 +40,7 @@ export default function PortalLayout({
     (path) => pathname === path || pathname.startsWith(path + "/")
   );
 
-  if (shouldBypass) {
+  if (shouldBypass || !userEmail) {
     return (
       <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
         {children}
@@ -49,6 +50,9 @@ export default function PortalLayout({
 
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950">
+      {/* 30-Minute Idle Manager & Activity Sync */}
+      <PortalIdleManager />
+
       {/* Sidebar Navigation */}
       <PortalSidebar
         isCollapsed={isSidebarCollapsed}

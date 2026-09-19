@@ -30,7 +30,7 @@ interface PortalHeaderProps {
 
 export default function PortalHeader({
   isSidebarCollapsed,
-  userEmail = "partner@kselectnetwork.com",
+  userEmail = "",
   userDisplayName = "",
   companyRole = "member"
 }: PortalHeaderProps) {

@@ -33,42 +33,46 @@ export default async function PartnerPortalLayout({
   // Try to get user session safely without redirecting
   const { data: { user } } = await supabase.auth.getUser();
   
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
+        {children}
+      </div>
+    );
+  }
+
   let companyName = "Partner Company";
   let companyRole = "member";
-  let userEmail = "";
+  const userEmail = user.email || "";
   let displayName = "";
 
-  if (user) {
-    userEmail = user.email || "";
+  // Fetch profile display_name
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("display_name")
+    .eq("id", user.id)
+    .maybeSingle();
     
-    // Fetch profile display_name
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("display_name")
-      .eq("id", user.id)
-      .maybeSingle();
-      
-    if (profile) {
-      displayName = profile.display_name || "";
-    }
-    
-    const { data: companyUser } = await supabase
-      .from("company_users")
-      .select("company_id, company_role")
-      .eq("id", user.id)
-      .maybeSingle();
+  if (profile) {
+    displayName = profile.display_name || "";
+  }
+  
+  const { data: companyUser } = await supabase
+    .from("company_users")
+    .select("company_id, company_role")
+    .eq("id", user.id)
+    .maybeSingle();
 
-    if (companyUser) {
-      companyRole = companyUser.company_role;
-      const { data: company } = await supabase
-        .from("companies")
-        .select("name")
-        .eq("id", companyUser.company_id)
-        .maybeSingle();
-      
-      if (company) {
-        companyName = company.name;
-      }
+  if (companyUser) {
+    companyRole = companyUser.company_role;
+    const { data: company } = await supabase
+      .from("companies")
+      .select("name")
+      .eq("id", companyUser.company_id)
+      .maybeSingle();
+    
+    if (company) {
+      companyName = company.name;
     }
   }
 

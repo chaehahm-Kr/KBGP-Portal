@@ -50,28 +50,36 @@ export async function updateSession(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
   const host = request.headers.get("host") || "";
 
+  function createRedirectWithCookies(redirectUrl: URL) {
+    const redirectResponse = NextResponse.redirect(redirectUrl);
+    supabaseResponse.cookies.getAll().forEach((cookie) => {
+      redirectResponse.cookies.set(cookie);
+    });
+    return redirectResponse;
+  }
+
   // 1. 도메인별 접속 경로 자동 분기 및 보안 영역 제한
   if (host.includes("admin.kselectnetwork.com")) {
     if (pathname.startsWith("/portal")) {
       const url = request.nextUrl.clone();
       url.pathname = "/admin/login";
-      return NextResponse.redirect(url);
+      return createRedirectWithCookies(url);
     }
     if (pathname === "/") {
       const url = request.nextUrl.clone();
       url.pathname = "/admin/login";
-      return NextResponse.redirect(url);
+      return createRedirectWithCookies(url);
     }
   } else if (host.includes("portal.kselectnetwork.com")) {
     if (pathname.startsWith("/admin")) {
       const url = request.nextUrl.clone();
       url.pathname = "/portal/login";
-      return NextResponse.redirect(url);
+      return createRedirectWithCookies(url);
     }
     if (pathname === "/") {
       const url = request.nextUrl.clone();
       url.pathname = "/portal/login";
-      return NextResponse.redirect(url);
+      return createRedirectWithCookies(url);
     }
   }
 
@@ -161,7 +169,7 @@ export async function updateSession(request: NextRequest) {
   if (area && !isAuthenticated && !isPublicPath) {
     const url = request.nextUrl.clone();
     url.pathname = area.login;
-    return NextResponse.redirect(url);
+    return createRedirectWithCookies(url);
   }
 
   // supabaseResponse를 그대로 반환한다 — 새 응답 객체를 만들어야 한다면 쿠키를

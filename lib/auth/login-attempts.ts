@@ -53,3 +53,11 @@ export async function recordLoginAttempt(email: string, succeeded: boolean) {
     succeeded,
   });
 }
+
+export async function resetLoginAttempts(email: string) {
+  const supabase = createAdminClient();
+  await supabase
+    .from("login_attempts")
+    .delete()
+    .eq("email", email.trim().toLowerCase());
+}

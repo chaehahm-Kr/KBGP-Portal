@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import type { AppRole } from "@/lib/auth/dal";
-import { checkLoginLockout, recordLoginAttempt } from "@/lib/auth/login-attempts";
+import { checkLoginLockout, recordLoginAttempt, resetLoginAttempts } from "@/lib/auth/login-attempts";
 
 export type LoginFormState = { error: string } | undefined;
 
@@ -52,26 +52,33 @@ async function login(
     password,
   });
 
-  await recordLoginAttempt(normalizedEmail, !error && Boolean(data.user));
-
-  if (error?.code === "email_not_confirmed") {
-    return {
-      error:
-        "이메일 인증이 아직 완료되지 않았습니다. 가입 시 받으신 이메일의 링크를 먼저 확인해주세요.",
-    };
-  }
-
-  if (error || !data.user) {
+  if (error) {
+    if (error.code === "email_not_confirmed") {
+      return {
+        error:
+          "이메일 인증이 아직 완료되지 않았습니다. 가입 시 받으신 이메일의 링크를 먼저 확인해주세요.",
+      };
+    }
+    // Record failure for invalid credentials
+    await recordLoginAttempt(normalizedEmail, false);
     return { error: "이메일 또는 비밀번호가 올바르지 않습니다." };
   }
 
-  const { data: profile } = await supabase
+  if (!data.user) {
+    await recordLoginAttempt(normalizedEmail, false);
+    return { error: "이메일 또는 비밀번호가 올바르지 않습니다." };
+  }
+
+  // Clear failure counter immediately upon successful credential authentication
+  await resetLoginAttempts(normalizedEmail);
+
+  const { data: profile, error: profileError } = await supabase
     .from("profiles")
     .select("role")
     .eq("id", data.user.id)
     .single();
 
-  if (!profile || profile.role !== area) {
+  if (profileError || !profile || profile.role !== area) {
     // 다른 area의 계정으로 로그인 시도 — 즉시 세션을 정리하고 area 전용 오류만 안내한다.
     await supabase.auth.signOut();
     return {
@@ -90,16 +97,28 @@ async function login(
       .eq("id", data.user.id)
       .maybeSingle();
 
-    if (companyUser && companyUser.status === "invited") {
+    if (!companyUser) {
+      await supabase.auth.signOut();
+      return {
+        error: "소속 회사 정보가 조회되지 않는 계정입니다. 관리자에게 문의해주세요.",
+      };
+    }
+    if (companyUser.status === "invited") {
       await supabase.auth.signOut();
       return {
         error: "초대 수락 및 비밀번호 설정이 완료되지 않았습니다. 수신하신 초대 이메일의 링크를 통해 가입을 완료해주세요.",
       };
     }
-    if (companyUser && companyUser.status === "suspended") {
+    if (companyUser.status === "suspended") {
       await supabase.auth.signOut();
       return {
         error: "이용이 정지된 계정입니다. 회사 관리자에게 문의해주세요.",
+      };
+    }
+    if (companyUser.status === "removed") {
+      await supabase.auth.signOut();
+      return {
+        error: "소속 멤버에서 제외된 계정입니다. 회사 관리자에게 문의해주세요.",
       };
     }
   } else if (area === "admin") {
