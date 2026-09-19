@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useTransition, useMemo } from "react";
+import React, { forwardRef, useImperativeHandle, useState, useEffect, useTransition, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { 
   getCategoriesTree, 
@@ -94,7 +94,17 @@ export interface CategoryCompletionStatus {
   missingRequiredAttributes: { code: string; nameKo: string }[];
 }
 
-interface CategoryAttributeFormProps {
+export interface CategoryAttributeFormHandle {
+  save: () => Promise<{ success: boolean; error?: string; missingRequired?: string[] }>;
+  validate: () => { isValid: boolean; missingRequired: string[] };
+  getCurrentState: () => {
+    categoryCode: string | null;
+    formValues: Record<string, any>;
+    formTextValues: Record<string, string>;
+  };
+}
+
+export interface CategoryAttributeFormProps {
   productId: string;
   initialCategoryCode: string | null;
   brandName: string;
@@ -110,21 +120,25 @@ interface CategoryAttributeFormProps {
   onCompletionChange?: (status: CategoryCompletionStatus) => void;
 }
 
-export function CategoryAttributeForm({
-  productId,
-  initialCategoryCode,
-  brandName,
-  companyName = "(미확인 제조사)",
-  productName,
-  productNameEn,
-  manufactureSku,
-  letustoSku,
-  origin,
-  volume,
-  colorMap,
-  isAdmin,
-  onCompletionChange,
-}: CategoryAttributeFormProps) {
+export const CategoryAttributeForm = forwardRef<CategoryAttributeFormHandle, CategoryAttributeFormProps>(
+  function CategoryAttributeForm(
+    {
+      productId,
+      initialCategoryCode,
+      brandName,
+      companyName = "(미확인 제조사)",
+      productName,
+      productNameEn,
+      manufactureSku,
+      letustoSku,
+      origin,
+      volume,
+      colorMap,
+      isAdmin,
+      onCompletionChange,
+    },
+    ref
+  ) {
   const router = useRouter();
   const [categoriesTree, setCategoriesTree] = useState<CategoryNode[]>([]);
   const [selectedCat1, setSelectedCat1] = useState<string>("");
@@ -434,53 +448,93 @@ export function CategoryAttributeForm({
     });
   }, [isFinalCategorySelected, attributes, formValues, isAdmin, onCompletionChange]);
 
-  // 저장 처리
+  // 내부 공통 유효성 검사
+  const validateInternal = () => {
+    const missingRequired: string[] = [];
+    if (isFinalCategorySelected) {
+      attributes.forEach((attr) => {
+        const val = formValues[attr.code];
+        const isAttrRequired = attr.isRequired;
+
+        // 수정 불가능한 필드는 검증에서 예외 처리
+        const isEditable = isAdmin ? true : (attr.brandEditable && !attr.adminOnly);
+        if (!isEditable) return;
+
+        if (isAttrRequired) {
+          if (!isAttributeValueFilled(attr, val)) {
+            missingRequired.push(attr.nameKo);
+          }
+        }
+      });
+    }
+    return {
+      isValid: missingRequired.length === 0,
+      missingRequired,
+    };
+  };
+
+  // 공통 저장 실행 로직 (Global Save 및 개별 저장 버튼에서 공통 재사용)
+  const performSave = async (): Promise<{ success: boolean; error?: string; missingRequired?: string[] }> => {
+    const categoryCode = finalCat ? finalCat.code : null;
+    const validation = validateInternal();
+
+    if (!validation.isValid) {
+      const errorMsg = `카테고리 필수 입력 속성이 누락되었습니다: ${validation.missingRequired.join(", ")}`;
+      setFeedback({
+        type: "error",
+        text: errorMsg,
+      });
+      return { success: false, error: errorMsg, missingRequired: validation.missingRequired };
+    }
+
+    try {
+      await saveProductAttributeValues(productId, categoryCode, formValues, formTextValues);
+      setFeedback({
+        type: "success",
+        text: "카테고리 및 동적 속성 정보가 데이터베이스에 안전하게 저장되었습니다.",
+      });
+      return { success: true };
+    } catch (err: any) {
+      const errorMsg = err.message || "속성값 저장 중 오류가 발생했습니다.";
+      setFeedback({
+        type: "error",
+        text: errorMsg,
+      });
+      return { success: false, error: errorMsg };
+    }
+  };
+
+  // 부모 컴포넌트(ProductDetailTabs 등)에서 Global Save를 트리거할 수 있도록 핸들 노출
+  useImperativeHandle(ref, () => ({
+    save: async () => {
+      return await performSave();
+    },
+    validate: () => {
+      return validateInternal();
+    },
+    getCurrentState: () => {
+      const categoryCode = finalCat ? finalCat.code : null;
+      return {
+        categoryCode,
+        formValues,
+        formTextValues,
+      };
+    },
+  }));
+
+  // 개별 섹션 저장 처리
   const handleSubmit = async (e?: React.FormEvent | React.MouseEvent) => {
     if (e?.preventDefault) e.preventDefault();
     if (e?.stopPropagation) e.stopPropagation();
     setFeedback(null);
 
-    const categoryCode = finalCat ? finalCat.code : null;
-
-    // 최종 카테고리가 필수는 아니나, 지정된 경우 필수 속성들의 유효성 검사 수행
-    const missingRequired: string[] = [];
-    attributes.forEach((attr) => {
-      const val = formValues[attr.code];
-      const isAttrRequired = attr.isRequired;
-
-      // 수정 불가능한 필드는 검증에서 예외 처리
-      const isEditable = isAdmin ? true : (attr.brandEditable && !attr.adminOnly);
-      if (!isEditable) return;
-
-      if (isAttrRequired) {
-        if (!isAttributeValueFilled(attr, val)) {
-          missingRequired.push(attr.nameKo);
-        }
-      }
-    });
-
-    if (missingRequired.length > 0) {
-      setFeedback({
-        type: "error",
-        text: `필수 입력 속성이 누락되었습니다: ${missingRequired.join(", ")}`,
-      });
-      return;
-    }
-
     setSaving(true);
     startTransition(async () => {
       try {
-        await saveProductAttributeValues(productId, categoryCode, formValues, formTextValues);
-        router.refresh();
-        setFeedback({
-          type: "success",
-          text: "카테고리 및 동적 속성 정보가 데이터베이스에 안전하게 저장되었습니다.",
-        });
-      } catch (err: any) {
-        setFeedback({
-          type: "error",
-          text: err.message || "속성값 저장 중 오류가 발생했습니다.",
-        });
+        const res = await performSave();
+        if (res.success) {
+          router.refresh();
+        }
       } finally {
         setSaving(false);
       }
@@ -1119,4 +1173,6 @@ export function CategoryAttributeForm({
       </div>
     );
   }
-}
+});
+
+

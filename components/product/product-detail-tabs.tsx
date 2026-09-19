@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 
 const NEW_BRAND_ACTION = "__NEW_BRAND_SHORTCUT__";
-import { CategoryAttributeForm } from "@/components/product/category-attribute-form";
+import { CategoryAttributeForm, type CategoryAttributeFormHandle } from "@/components/product/category-attribute-form";
 import { 
   type Product, 
   type ProductVideo, 
@@ -71,6 +71,7 @@ export function ProductDetailTabs({
     requiredAttributesComplete: boolean;
     missingRequiredAttributes: { code: string; nameKo: string }[];
   } | null>(initialCategoryCompletion || null);
+  const categoryAttrRef = React.useRef<CategoryAttributeFormHandle>(null);
 
   // Sync activeTab from URL search params (?tab=...) or hash (#attr-...)
   useEffect(() => {
@@ -615,6 +616,20 @@ export function ProductDetailTabs({
       window.scrollTo({ top: 0, behavior: "smooth" });
       return;
     }
+
+    // 2. Validate category & dynamic attributes if category form ref is present
+    if (categoryAttrRef.current) {
+      const catValidation = categoryAttrRef.current.validate();
+      if (!catValidation.isValid) {
+        setActiveTab("category_attributes");
+        setStatusMessage({
+          type: "error",
+          text: `카테고리 필수 입력 속성이 누락되었습니다: ${catValidation.missingRequired.join(", ")}`,
+        });
+        window.scrollTo({ top: 0, behavior: "smooth" });
+        return;
+      }
+    }
     
     const formData = new FormData(e.currentTarget);
 
@@ -654,11 +669,37 @@ export function ProductDetailTabs({
     formData.append("priceTiers", JSON.stringify(priceTiers));
 
     startTransition(async () => {
-      const res = await updateProduct(product.id, undefined, formData);
-      if (res?.error) {
-        setStatusMessage({ type: "error", text: res.error });
-      } else {
-        setStatusMessage({ type: "success", text: "제품 정보가 성공적으로 업데이트되었습니다." });
+      try {
+        // 3. Save category & dynamic attributes
+        if (categoryAttrRef.current) {
+          const catRes = await categoryAttrRef.current.save();
+          if (!catRes.success) {
+            setStatusMessage({
+              type: "error",
+              text: catRes.error || "카테고리 및 속성 저장 중 오류가 발생했습니다.",
+            });
+            window.scrollTo({ top: 0, behavior: "smooth" });
+            return;
+          }
+        }
+
+        // 4. Save main product info
+        const res = await updateProduct(product.id, undefined, formData);
+        if (res?.error) {
+          setStatusMessage({ type: "error", text: res.error });
+          window.scrollTo({ top: 0, behavior: "smooth" });
+          return;
+        }
+
+        // 5. Success
+        setStatusMessage({ type: "success", text: "전체 변경사항이 성공적으로 저장되었습니다." });
+        router.refresh();
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      } catch (err: any) {
+        setStatusMessage({
+          type: "error",
+          text: err.message || "저장 중 예상치 못한 오류가 발생했습니다.",
+        });
         window.scrollTo({ top: 0, behavior: "smooth" });
       }
     });
@@ -1592,6 +1633,7 @@ export function ProductDetailTabs({
         {/* Tab Panel: 카테고리 & 속성 */}
         <div className={activeTab === "category_attributes" ? "space-y-6" : "hidden"}>
           <CategoryAttributeForm
+            ref={categoryAttrRef}
             productId={product.id}
             initialCategoryCode={(product as any).category_code || null}
             brandName={brandName}
