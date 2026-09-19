@@ -731,7 +731,7 @@ export function ProductDetailTabs({
   };
 
   return (
-    <div className="space-y-6 w-full max-w-7xl">
+    <div data-active-tab={activeTab} className="space-y-6 w-full max-w-7xl">
       {/* Dynamic Status Banner */}
       {statusMessage && (
         <div 
@@ -770,6 +770,7 @@ export function ProductDetailTabs({
                     <button 
                       key={idx} 
                       type="button"
+                      data-banner-jump={item.tab}
                       onClick={() => {
                         setActiveTab(item.tab as any);
                         setTimeout(() => {
@@ -855,7 +856,7 @@ export function ProductDetailTabs({
         </div>
 
         {/* Elegant Glassmorphic Tab Navigation */}
-        <div className="flex border-b border-zinc-200 dark:border-zinc-800 overflow-x-auto no-scrollbar scroll-smooth gap-1">
+        <div data-tab-nav="true" className="flex border-b border-zinc-200 dark:border-zinc-800 overflow-x-auto no-scrollbar scroll-smooth gap-1">
           {[
             { id: "basic", label: "기본 정보" },
             { id: "category_attributes", label: "카테고리 & 속성" },
@@ -869,6 +870,7 @@ export function ProductDetailTabs({
             return (
               <button
                 key={tab.id}
+                data-tab-id={tab.id}
                 type="button"
                 onClick={() => setActiveTab(tab.id as any)}
                 className={`px-5 py-3 text-xs font-bold whitespace-nowrap border-b-2 transition-all cursor-pointer flex items-center gap-1.5 ${

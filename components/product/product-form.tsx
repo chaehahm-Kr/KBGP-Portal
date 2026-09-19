@@ -188,31 +188,21 @@ export function ProductForm({ action, brands }: ProductFormProps) {
     salesLink2.trim() !== "";
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-
     if (!upc.trim() && !ean.trim()) {
+      e.preventDefault();
       alert("UPC 또는 EAN 번호 중 최소 하나는 반드시 입력해야 합니다.");
       return;
     }
     if (upc.trim() && ean.trim()) {
+      e.preventDefault();
       alert("UPC와 EAN 번호는 동시에 입력할 수 없습니다. 둘 중 하나만 입력해 주세요.");
       return;
     }
     if (sellingOnline && !salesLink1.trim()) {
+      e.preventDefault();
       alert("온라인 판매 중인 경우, 최소 한 개 이상의 온라인 판매 링크(링크 1)를 입력해 주세요.");
       return;
     }
-
-    const form = e.currentTarget;
-    const formData = new FormData(form);
-    // Append boolean values explicitly as string/flag
-    formData.set("sellingOnline", sellingOnline ? "true" : "false");
-    formData.set("sellingOffline", sellingOffline ? "true" : "false");
-    formData.set("manufactureSku", trimSkuSeparators(manufactureSku));
-
-    startTransition(() => {
-      formAction(formData);
-    });
   };
 
   const handleBrandChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -267,7 +257,13 @@ export function ProductForm({ action, brands }: ProductFormProps) {
         </svg>
       </button>
 
-      <form ref={formRef} onSubmit={handleSubmit} className="space-y-6 max-w-xl">
+      {state?.error && (
+        <div className="mb-4 rounded-lg bg-rose-50 p-3 text-xs font-semibold text-rose-700 border border-rose-200 dark:bg-rose-950/30 dark:border-rose-900/40 dark:text-rose-400">
+          {state.error}
+        </div>
+      )}
+
+      <form ref={formRef} action={formAction} onSubmit={handleSubmit} className="space-y-6 max-w-xl">
         {/* Hidden inputs to pass action state */}
         <input type="hidden" name="submitAction" value={submitActionVal} />
 
