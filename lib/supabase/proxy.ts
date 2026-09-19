@@ -153,8 +153,8 @@ export async function updateSession(request: NextRequest) {
     data: { user },
     error: userError,
   } = await supabase.auth.getUser();
-  if (userError) {
-    console.error("proxy.ts updateSession getUser error:", userError);
+  if (userError && !userError.message.includes("Auth session missing!")) {
+    console.warn(`[Auth Security Audit] [${new Date().toISOString()}] proxy updateSession getUser warning for ${pathname}:`, userError.message);
   }
   const isAuthenticated = Boolean(user);
 
@@ -167,6 +167,7 @@ export async function updateSession(request: NextRequest) {
   );
 
   if (area && !isAuthenticated && !isPublicPath) {
+    console.warn(`[Auth Security Audit] [${new Date().toISOString()}] Proxy updateSession redirected unauthenticated request from ${pathname} to ${area.login}`);
     const url = request.nextUrl.clone();
     url.pathname = area.login;
     return createRedirectWithCookies(url);

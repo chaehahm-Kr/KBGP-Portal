@@ -50,12 +50,9 @@ async function verifySession(area: AppRole): Promise<VerifiedSession> {
   } = await supabase.auth.getUser();
 
   if (userError || !user) {
-    if (userError) {
-      console.error(`verifySession [${area}] error calling getUser:`, userError);
-    } else {
-      console.warn(`verifySession [${area}] no user found`);
-    }
-    redirect(LOGIN_PATH[area]);
+    const reasonCode = userError ? "AUTH_GET_USER_ERROR" : "AUTH_USER_NOT_FOUND";
+    console.warn(`[Auth Security Audit] [${new Date().toISOString()}] DAL verifySession [${area}] rejected. Reason: ${reasonCode}`, userError?.message || "");
+    redirect(`${LOGIN_PATH[area]}?reason=session_expired`);
   }
 
   const { data: profile, error: profileError } = await supabase
@@ -65,7 +62,8 @@ async function verifySession(area: AppRole): Promise<VerifiedSession> {
     .single();
 
   if (profileError || !profile || profile.role !== area) {
-    redirect(LOGIN_PATH[area]);
+    console.warn(`[Auth Security Audit] [${new Date().toISOString()}] DAL verifySession [${area}] role mismatch for user ${user.id}. Expected: ${area}, Found: ${profile?.role || "none"}`);
+    redirect(`${LOGIN_PATH[area]}?reason=role_mismatch`);
   }
 
   if (area === "admin") {
@@ -77,7 +75,8 @@ async function verifySession(area: AppRole): Promise<VerifiedSession> {
 
     // Allow invited, setting_up, and active to pass verifySession (so they can reach setup-profile page)
     if (!staffMember || !["active", "invited", "setting_up"].includes(staffMember.status)) {
-      redirect(LOGIN_PATH[area]);
+      console.warn(`[Auth Security Audit] [${new Date().toISOString()}] DAL verifySession [${area}] staff status rejected for user ${user.id}. Status: ${staffMember?.status || "missing"}`);
+      redirect(`${LOGIN_PATH[area]}?reason=account_inactive`);
     }
   } else {
     const { data: companyUser } = await supabase
@@ -87,7 +86,8 @@ async function verifySession(area: AppRole): Promise<VerifiedSession> {
       .maybeSingle();
 
     if (!companyUser || companyUser.status !== "active") {
-      redirect(LOGIN_PATH[area]);
+      console.warn(`[Auth Security Audit] [${new Date().toISOString()}] DAL verifySession [${area}] company_user status rejected for user ${user.id}. Status: ${companyUser?.status || "missing"}`);
+      redirect(`${LOGIN_PATH[area]}?reason=membership_inactive`);
     }
   }
 
