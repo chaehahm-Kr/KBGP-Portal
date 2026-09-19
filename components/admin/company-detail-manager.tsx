@@ -2282,153 +2282,178 @@ export function CompanyDetailManager({
       {/* Edit User Modal */}
       {isEditUserOpen && selectedUser && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-lg rounded-xl border border-zinc-200 bg-white shadow-2xl dark:border-zinc-800 dark:bg-zinc-900 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
-            <div className="flex items-center justify-between border-b border-zinc-100 bg-zinc-50/50 px-5 py-4 dark:border-zinc-800 dark:bg-zinc-950/20">
+          <div className="w-full max-w-[760px] rounded-xl border border-zinc-200 bg-white shadow-2xl dark:border-zinc-800 dark:bg-zinc-900 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between border-b border-zinc-100 bg-zinc-50/50 px-6 py-4 dark:border-zinc-800 dark:bg-zinc-950/20">
               <div>
                 <h3 className="text-sm font-bold text-zinc-900 dark:text-white">담당자 세부 설정 및 권한</h3>
-                <p className="text-[10px] text-zinc-450 font-mono mt-0.5">{selectedUser.email}</p>
               </div>
               <button
                 type="button"
                 onClick={() => setIsEditUserOpen(false)}
-                className="rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-150"
+                className="rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800"
               >
                 ✕
               </button>
             </div>
 
-            <form onSubmit={handleUpdateUserSubmit} className="p-5 space-y-4 max-h-[70vh] overflow-y-auto">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-[10px] font-bold text-zinc-400 block mb-1">이름 *</label>
-                  <input
-                    type="text"
-                    required
-                    value={editName}
-                    onChange={(e) => setEditName(e.target.value)}
-                    className="w-full rounded border border-zinc-200 p-2 text-xs outline-none bg-white focus:border-zinc-400 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
-                  />
+            <form onSubmit={handleUpdateUserSubmit} className="p-6 space-y-6 max-h-[80vh] overflow-y-auto">
+              {/* Section 1: 담당자 기본 정보 */}
+              <div className="space-y-4">
+                <h4 className="font-bold text-xs text-zinc-900 dark:text-zinc-100 flex items-center gap-1.5">
+                  <span>👤</span> 담당자 기본 정보
+                </h4>
+
+                {/* Row 1: 이름 & 이메일 */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-[11px] font-bold text-zinc-600 dark:text-zinc-400 block mb-1.5">이름 *</label>
+                    <input
+                      type="text"
+                      required
+                      value={editName}
+                      onChange={(e) => setEditName(e.target.value)}
+                      placeholder="홍길동"
+                      className="w-full rounded-md border border-zinc-200 p-2.5 text-xs outline-none bg-white focus:border-zinc-400 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[11px] font-bold text-zinc-600 dark:text-zinc-400 block mb-1.5">이메일 (계정 ID)</label>
+                    <input
+                      type="email"
+                      disabled
+                      readOnly
+                      value={selectedUser.email}
+                      className="w-full rounded-md border border-zinc-200 p-2.5 text-xs outline-none bg-zinc-100 text-zinc-500 cursor-not-allowed dark:border-zinc-800 dark:bg-zinc-800/50 dark:text-zinc-400 font-mono"
+                    />
+                  </div>
                 </div>
+
+                {/* Row 2: 연락처 */}
                 <div>
-                  <label className="text-[10px] font-bold text-zinc-400 block mb-1">연락처 (Phone Number)</label>
+                  <label className="text-[11px] font-bold text-zinc-600 dark:text-zinc-400 block mb-1.5">연락처 (Phone Number)</label>
                   <InternationalPhoneInput
                     value={editPhone}
                     onChange={(val) => setEditPhone(val)}
                     placeholder="856 555 1234, 10 1234 5678"
                   />
                 </div>
-              </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-[10px] font-bold text-zinc-400 block mb-1">직함</label>
-                  <input
-                    type="text"
-                    value={editTitle}
-                    onChange={(e) => setEditTitle(e.target.value)}
-                    placeholder="과장, 차장 등"
-                    className="w-full rounded border border-zinc-200 p-2 text-xs outline-none bg-white focus:border-zinc-400 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
-                  />
-                </div>
-                <div>
-                  <label className="text-[10px] font-bold text-zinc-400 block mb-1">포지션/부서</label>
-                  <input
-                    type="text"
-                    value={editPosition}
-                    onChange={(e) => setEditPosition(e.target.value)}
-                    placeholder="해외영업부, 마케팅 등"
-                    className="w-full rounded border border-zinc-200 p-2 text-xs outline-none bg-white focus:border-zinc-400 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-3 gap-3 pb-2 border-b border-zinc-100 dark:border-zinc-805">
-                <div>
-                  <label className="text-[10px] font-bold text-zinc-400 block mb-1">회사 내 역할 (Role)</label>
-                  <select
-                    value={editRole}
-                    onChange={(e) => setEditRole(e.target.value as any)}
-                    className="w-full rounded border border-zinc-200 p-2 text-xs outline-none bg-white dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
-                  >
-                    <option value="company_staff">담당자 (Staff)</option>
-                    <option value="company_admin">관리자 (Admin)</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="text-[10px] font-bold text-zinc-400 block mb-1">이용 상태 (Status)</label>
-                  <select
-                    value={editStatus}
-                    disabled={selectedUser.status === "invited"}
-                    onChange={(e) => setEditStatus(e.target.value as any)}
-                    className="w-full rounded border border-zinc-200 p-2 text-xs outline-none bg-white dark:border-zinc-800 dark:bg-zinc-950 dark:text-white disabled:bg-zinc-50/50 disabled:text-zinc-400"
-                  >
-                    <option value="active">정상 이용 (Active)</option>
-                    <option value="suspended">이용 정지 (Suspended)</option>
-                    <option value="invited">초대 대기중 (Invited)</option>
-                  </select>
-                </div>
-                <div className="flex items-end pb-2">
-                  <div className="flex items-center gap-2">
+                {/* Row 3: 직함 & 부서 */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-[11px] font-bold text-zinc-600 dark:text-zinc-400 block mb-1.5">직함</label>
                     <input
-                      type="checkbox"
-                      id="edit-primary"
-                      checked={editIsPrimary}
-                      onChange={(e) => setEditIsPrimary(e.target.checked)}
-                      className="rounded border-zinc-300 text-indigo-650 focus:ring-indigo-500 h-4 w-4"
+                      type="text"
+                      value={editTitle}
+                      onChange={(e) => setEditTitle(e.target.value)}
+                      placeholder="과장, 차장 등"
+                      className="w-full rounded-md border border-zinc-200 p-2.5 text-xs outline-none bg-white focus:border-zinc-400 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
                     />
-                    <label htmlFor="edit-primary" className="text-[11px] font-bold text-zinc-700 dark:text-zinc-300">
-                      주 컨택 지정
+                  </div>
+                  <div>
+                    <label className="text-[11px] font-bold text-zinc-600 dark:text-zinc-400 block mb-1.5">포지션/부서</label>
+                    <input
+                      type="text"
+                      value={editPosition}
+                      onChange={(e) => setEditPosition(e.target.value)}
+                      placeholder="해외영업부, 마케팅 등"
+                      className="w-full rounded-md border border-zinc-200 p-2.5 text-xs outline-none bg-white focus:border-zinc-400 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+                    />
+                  </div>
+                </div>
+
+                {/* Row 4: 역할, 상태, 주 컨택 지정 */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-1">
+                  <div>
+                    <label className="text-[11px] font-bold text-zinc-600 dark:text-zinc-400 block mb-1.5">회사 내 역할 (Role)</label>
+                    <select
+                      value={editRole}
+                      onChange={(e) => setEditRole(e.target.value as any)}
+                      className="w-full rounded-md border border-zinc-200 p-2.5 text-xs outline-none bg-white dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+                    >
+                      <option value="company_staff">담당자 (Staff)</option>
+                      <option value="company_admin">관리자 (Admin)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-[11px] font-bold text-zinc-600 dark:text-zinc-400 block mb-1.5">이용 상태 (Status)</label>
+                    <select
+                      value={editStatus}
+                      disabled={selectedUser.status === "invited"}
+                      onChange={(e) => setEditStatus(e.target.value as any)}
+                      className="w-full rounded-md border border-zinc-200 p-2.5 text-xs outline-none bg-white dark:border-zinc-800 dark:bg-zinc-950 dark:text-white disabled:bg-zinc-50/50 disabled:text-zinc-400"
+                    >
+                      <option value="active">정상 이용 (Active)</option>
+                      <option value="suspended">이용 정지 (Suspended)</option>
+                      <option value="invited">초대 대기중 (Invited)</option>
+                    </select>
+                  </div>
+                  <div className="flex items-end pb-2.5">
+                    <label className="flex items-center gap-2 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        id="edit-primary"
+                        checked={editIsPrimary}
+                        onChange={(e) => setEditIsPrimary(e.target.checked)}
+                        className="rounded border-zinc-300 text-indigo-650 focus:ring-indigo-500 h-4 w-4"
+                      />
+                      <span className="text-xs font-bold text-zinc-700 dark:text-zinc-300">
+                        주 컨택 지정
+                      </span>
                     </label>
                   </div>
                 </div>
               </div>
 
-              {/* Permissions matrix */}
-              <div className="rounded-lg border border-zinc-150 bg-zinc-50/50 p-4 dark:border-zinc-800 dark:bg-zinc-950/20 space-y-3">
-                <h4 className="font-bold text-[11px] text-zinc-450 dark:text-zinc-550 uppercase tracking-wider">메뉴별 상세 권한 설정</h4>
-                <div className="grid grid-cols-2 gap-3 text-[11px]">
-                  <div className="flex flex-col gap-1">
+              {/* Section 2: 메뉴별 상세 권한 설정 */}
+              <div className="rounded-xl border border-zinc-200 bg-zinc-50/50 p-4.5 dark:border-zinc-800 dark:bg-zinc-950/30 space-y-3">
+                <div className="flex items-center justify-between">
+                  <h4 className="font-bold text-xs text-zinc-900 dark:text-zinc-100">메뉴별 상세 권한 설정</h4>
+                  <span className="text-[10px] text-zinc-400">포털 내 메뉴 접근 권한 제어</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                  <div className="flex flex-col gap-1.5 bg-white dark:bg-zinc-900 p-3 rounded-lg border border-zinc-150 dark:border-zinc-800">
                     <span className="font-semibold text-zinc-700 dark:text-zinc-300">입점 신청서</span>
                     <select
                       value={editPermissions.application || "none"}
                       onChange={(e) => setEditPermissions({ ...editPermissions, application: e.target.value })}
-                      className="rounded border border-zinc-200 bg-white p-1 text-[11px] text-zinc-900 outline-none dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+                      className="rounded border border-zinc-200 bg-zinc-50/50 p-2 text-xs text-zinc-900 outline-none dark:border-zinc-700 dark:bg-zinc-950 dark:text-white"
                     >
                       <option value="none">권한 없음</option>
                       <option value="read_only">읽기 전용</option>
                       <option value="read_write">읽기 및 쓰기</option>
                     </select>
                   </div>
-                  <div className="flex flex-col gap-1">
+                  <div className="flex flex-col gap-1.5 bg-white dark:bg-zinc-900 p-3 rounded-lg border border-zinc-150 dark:border-zinc-800">
                     <span className="font-semibold text-zinc-700 dark:text-zinc-300">브랜드 관리</span>
                     <select
                       value={editPermissions.brands || "none"}
                       onChange={(e) => setEditPermissions({ ...editPermissions, brands: e.target.value })}
-                      className="rounded border border-zinc-200 bg-white p-1 text-[11px] text-zinc-900 outline-none dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+                      className="rounded border border-zinc-200 bg-zinc-50/50 p-2 text-xs text-zinc-900 outline-none dark:border-zinc-700 dark:bg-zinc-950 dark:text-white"
                     >
                       <option value="none">권한 없음</option>
                       <option value="read_only">읽기 전용</option>
                       <option value="read_write">읽기 및 쓰기</option>
                     </select>
                   </div>
-                  <div className="flex flex-col gap-1">
+                  <div className="flex flex-col gap-1.5 bg-white dark:bg-zinc-900 p-3 rounded-lg border border-zinc-150 dark:border-zinc-800">
                     <span className="font-semibold text-zinc-700 dark:text-zinc-300">제품 관리</span>
                     <select
                       value={editPermissions.products || "none"}
                       onChange={(e) => setEditPermissions({ ...editPermissions, products: e.target.value })}
-                      className="rounded border border-zinc-200 bg-white p-1 text-[11px] text-zinc-900 outline-none dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+                      className="rounded border border-zinc-200 bg-zinc-50/50 p-2 text-xs text-zinc-900 outline-none dark:border-zinc-700 dark:bg-zinc-950 dark:text-white"
                     >
                       <option value="none">권한 없음</option>
                       <option value="read_only">읽기 전용</option>
                       <option value="read_write">읽기 및 쓰기</option>
                     </select>
                   </div>
-                  <div className="flex flex-col gap-1">
+                  <div className="flex flex-col gap-1.5 bg-white dark:bg-zinc-900 p-3 rounded-lg border border-zinc-150 dark:border-zinc-800">
                     <span className="font-semibold text-zinc-700 dark:text-zinc-300">회사 정보</span>
                     <select
                       value={editPermissions.company_info || "none"}
                       onChange={(e) => setEditPermissions({ ...editPermissions, company_info: e.target.value })}
-                      className="rounded border border-zinc-200 bg-white p-1 text-[11px] text-zinc-900 outline-none dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+                      className="rounded border border-zinc-200 bg-zinc-50/50 p-2 text-xs text-zinc-900 outline-none dark:border-zinc-700 dark:bg-zinc-950 dark:text-white"
                     >
                       <option value="none">권한 없음</option>
                       <option value="read_only">읽기 전용</option>
@@ -2438,46 +2463,46 @@ export function CompanyDetailManager({
                 </div>
               </div>
 
-              {/* [신규 기능]: 어드민 수정 모달 내 담당 업무 설정 */}
-              <div className="space-y-2.5 pt-2 border-t border-zinc-100 dark:border-zinc-800">
+              {/* Section 3: 담당 업무 설정 */}
+              <div className="space-y-3 pt-2">
                 <div>
                   <h4 className="text-xs font-bold text-zinc-900 dark:text-white">담당 업무 설정</h4>
-                  <p className="text-[10px] text-zinc-550 mt-1 leading-relaxed">
+                  <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5 leading-relaxed">
                     업무별 주 담당자와 이메일 알림 수신 여부를 설정합니다.
                   </p>
                 </div>
 
                 <div className="rounded-lg border border-zinc-200 overflow-hidden dark:border-zinc-800">
-                  <table className="w-full text-left border-collapse text-[11px]">
+                  <table className="w-full text-left border-collapse text-xs">
                     <thead>
-                      <tr className="bg-zinc-50 text-[10px] font-bold text-zinc-500 border-b border-zinc-200 dark:bg-zinc-950/20 dark:border-zinc-800">
-                        <th className="p-2">업무명</th>
-                        <th className="p-2 text-center w-20">주 담당자</th>
-                        <th className="p-2 text-center w-24">이메일 알림</th>
+                      <tr className="bg-zinc-50 text-[11px] font-bold text-zinc-500 border-b border-zinc-200 dark:bg-zinc-950/20 dark:border-zinc-800">
+                        <th className="px-3 py-2.5">업무명</th>
+                        <th className="px-3 py-2.5 text-center w-24">주 담당자</th>
+                        <th className="px-3 py-2.5 text-center w-28">이메일 알림</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/80">
                       {TASK_DEFINITIONS.map(def => {
                         const state = editTaskAssignments[def.code] || { is_primary: false, email_notify: false };
                         return (
-                          <tr key={def.code} className="hover:bg-zinc-50/20">
-                            <td className="p-2">
-                              <span className="font-bold text-zinc-800 dark:text-zinc-200 block">{def.label}</span>
+                          <tr key={def.code} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-800/30">
+                            <td className="px-3 py-2.5">
+                              <span className="font-medium text-zinc-800 dark:text-zinc-200 block">{def.label}</span>
                             </td>
-                            <td className="p-2 text-center">
+                            <td className="px-3 py-2.5 text-center">
                               <input
                                 type="checkbox"
                                 checked={state.is_primary}
                                 onChange={(e) => handleEditTaskCheckboxChange(def.code, "is_primary", e.target.checked)}
-                                className="rounded border-zinc-300 text-indigo-650 focus:ring-indigo-500 h-3.5 w-3.5"
+                                className="rounded border-zinc-300 text-indigo-650 focus:ring-indigo-500 h-4 w-4"
                               />
                             </td>
-                            <td className="p-2 text-center">
+                            <td className="px-3 py-2.5 text-center">
                               <input
                                 type="checkbox"
                                 checked={state.email_notify}
                                 onChange={(e) => handleEditTaskCheckboxChange(def.code, "email_notify", e.target.checked)}
-                                className="rounded border-zinc-300 text-indigo-650 focus:ring-indigo-500 h-3.5 w-3.5"
+                                className="rounded border-zinc-300 text-indigo-650 focus:ring-indigo-500 h-4 w-4"
                               />
                             </td>
                           </tr>
@@ -2488,27 +2513,28 @@ export function CompanyDetailManager({
                 </div>
               </div>
 
-              <div className="flex justify-between items-center pt-3 border-t border-zinc-100 dark:border-zinc-800">
+              {/* Section 4: Actions */}
+              <div className="flex justify-between items-center pt-4 border-t border-zinc-100 dark:border-zinc-800">
                 <button
                   type="button"
                   onClick={handleDeleteUser}
                   disabled={isPending}
-                  className="rounded border border-red-200 bg-rose-50 px-4 py-2 font-bold text-red-650 hover:bg-rose-100 disabled:opacity-50 text-[11px]"
+                  className="rounded-md border border-red-200 bg-rose-50 px-4 py-2 font-bold text-red-650 hover:bg-rose-100 disabled:opacity-50 text-xs transition-colors"
                 >
                   담당자 삭제
                 </button>
-                <div className="flex gap-2">
+                <div className="flex gap-2.5">
                   <button
                     type="button"
                     onClick={() => setIsEditUserOpen(false)}
-                    className="rounded border border-zinc-200 px-4 py-2 font-bold text-zinc-500 hover:bg-zinc-50 dark:border-zinc-850 dark:hover:bg-zinc-950 text-[11px]"
+                    className="rounded-md border border-zinc-200 px-4 py-2 font-bold text-zinc-600 hover:bg-zinc-50 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-800 text-xs transition-colors"
                   >
                     취소
                   </button>
                   <button
                     type="submit"
                     disabled={isPending}
-                    className="rounded bg-zinc-950 px-4 py-2 font-bold text-white hover:bg-zinc-850 disabled:opacity-50 dark:bg-white dark:text-zinc-955 dark:hover:bg-zinc-100 text-[11px]"
+                    className="rounded-md bg-zinc-900 px-5 py-2 font-bold text-white hover:bg-zinc-800 disabled:opacity-50 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-100 text-xs transition-colors shadow-sm"
                   >
                     {isPending ? "저장중..." : "변경 사항 저장"}
                   </button>
