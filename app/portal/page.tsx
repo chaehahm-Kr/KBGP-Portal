@@ -4,6 +4,8 @@ import { verifyPortalSession } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { APPLICATION_STATUS_LABEL, type ApplicationStatus } from "@/lib/application/types";
 
+export const dynamic = "force-dynamic";
+
 export const metadata: Metadata = {
   title: "대시보드 | 파트너 포털",
 };

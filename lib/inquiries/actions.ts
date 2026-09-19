@@ -10,7 +10,7 @@ import { publicEnv } from "@/lib/env/public";
 export type InquiryFormState = { error: string } | undefined;
 
 const convertSchema = z.object({
-  country: z.string().trim().min(1, "국가를 입력해주세요."),
+  country: z.string().trim().optional().default(""),
 });
 
 /**

@@ -1,13 +1,15 @@
 "use client";
 
-import { useActionState } from "react";
+import { useState, useActionState } from "react";
 import type { InquiryFormState } from "@/lib/inquiries/actions";
+import { CountrySelect } from "@/components/shared/country-select";
 
 export function ConvertInquiryForm({
   action,
 }: {
   action: (state: InquiryFormState, formData: FormData) => Promise<InquiryFormState>;
 }) {
+  const [country, setCountry] = useState("");
   const [state, formAction, pending] = useActionState<InquiryFormState, FormData>(
     action,
     undefined
@@ -16,11 +18,13 @@ export function ConvertInquiryForm({
   return (
     <form action={formAction} className="flex flex-wrap items-end gap-3">
       <div>
-        <label className="block text-sm font-medium text-zinc-700">국가</label>
-        <input
+        <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">국가</label>
+        <CountrySelect
           name="country"
-          defaultValue="대한민국"
-          className="mt-1 rounded-md border border-zinc-300 px-3 py-1.5 text-sm"
+          value={country}
+          onChange={setCountry}
+          className="mt-1 rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-sm dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+          placeholder="설립 국가 선택 (선택)"
         />
       </div>
       <button

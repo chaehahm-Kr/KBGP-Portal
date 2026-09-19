@@ -86,7 +86,7 @@ export async function updateCompanyPortalMetadata(
   if (payload.name !== undefined && payload.name.trim()) {
     updatePayload.name = payload.name.trim();
   }
-  if (payload.country !== undefined && payload.country.trim()) {
+  if (payload.country !== undefined) {
     updatePayload.country = payload.country.trim();
   }
   if (payload.contact_phone !== undefined) {

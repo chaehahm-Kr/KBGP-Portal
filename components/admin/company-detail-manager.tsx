@@ -22,6 +22,7 @@ import {
 } from "@/lib/company/task-actions";
 import { TASK_DEFINITIONS } from "@/lib/company/task-constants";
 import { InternationalPhoneInput } from "@/components/shared/international-phone-input";
+import { CountrySelect } from "@/components/shared/country-select";
 
 const STATUS_LABEL: Record<string, string> = {
   invited: "초대됨",
@@ -979,14 +980,17 @@ export function CompanyDetailManager({
               <div>
                 <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase block">국가</span>
                 {isEditingMeta ? (
-                  <input
-                    type="text"
+                  <CountrySelect
                     value={tempCountry}
-                    onChange={(e) => setTempCountry(e.target.value)}
-                    className="mt-1 w-full rounded border border-zinc-200 p-1.5 text-xs outline-none bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+                    onChange={setTempCountry}
+                    placeholder="설립 국가 선택"
                   />
                 ) : (
-                  <span className="font-semibold text-zinc-900 dark:text-white mt-0.5 block">{country}</span>
+                  country?.trim() ? (
+                    <span className="font-semibold text-zinc-900 dark:text-white mt-0.5 block">{country}</span>
+                  ) : (
+                    <span className="font-semibold text-zinc-400 dark:text-zinc-500 mt-0.5 block">미등록</span>
+                  )
                 )}
               </div>
               

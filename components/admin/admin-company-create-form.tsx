@@ -4,6 +4,7 @@ import React, { useState, useTransition, useActionState, startTransition } from 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { adminCreateCompany, type AdminCompanyFormState } from "@/lib/company/admin-actions";
+import { CountrySelect } from "@/components/shared/country-select";
 
 const inputClass =
   "mt-1 block w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 outline-none transition-all focus:border-indigo-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white dark:focus:border-indigo-500";
@@ -25,7 +26,7 @@ export function AdminCompanyCreateForm() {
 
   const [name, setName] = useState("");
   const [businessNumber, setBusinessNumber] = useState("");
-  const [country, setCountry] = useState("대한민국");
+  const [country, setCountry] = useState("");
   const [type, setType] = useState("Brand Owner");
   const [status, setStatus] = useState("Active");
 
@@ -118,15 +119,14 @@ export function AdminCompanyCreateForm() {
             <label htmlFor="country" className={labelClass}>
               국가 *
             </label>
-            <input
+            <CountrySelect
               id="country"
               name="country"
-              type="text"
               required
-              placeholder="예: 대한민국"
               value={country}
-              onChange={(e) => setCountry(e.target.value)}
+              onChange={setCountry}
               className={inputClass}
+              placeholder="설립 국가 선택"
             />
           </div>
 

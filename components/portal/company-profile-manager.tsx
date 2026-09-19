@@ -6,6 +6,7 @@ import { updateCompanyPortalMetadata, portalUploadCompanyLogo, portalUpdateSuppl
 import { type CompanyContact, type CompanyParsedMetadata } from "@/lib/company/admin-actions";
 import { assignTaskPrimaryUser, type TaskAssignmentItem, toggleTaskEmailNotification } from "@/lib/company/task-actions";
 import { InternationalPhoneInput } from "@/components/shared/international-phone-input";
+import { CountrySelect } from "@/components/shared/country-select";
 
 interface CompanyProfileManagerProps {
   company: {
@@ -432,18 +433,21 @@ export function CompanyProfileManager({
                   설립 국가
                 </span>
                 {isEditingMeta ? (
-                  <input
-                    type="text"
+                  <CountrySelect
                     value={tempCountry}
-                    onChange={(e) => setTempCountry(e.target.value)}
-                    placeholder="예: 대한민국 / South Korea / United States"
-                    required
-                    className="mt-1 w-full rounded border border-zinc-200 p-1.5 text-xs outline-none bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+                    onChange={setTempCountry}
+                    placeholder="설립 국가 선택"
                   />
                 ) : (
-                  <span className="font-semibold text-zinc-900 dark:text-white mt-0.5 block">
-                    {country || "미설정"}
-                  </span>
+                  country?.trim() ? (
+                    <span className="font-semibold text-zinc-900 dark:text-white mt-0.5 block">
+                      {country}
+                    </span>
+                  ) : (
+                    <span className="font-semibold text-zinc-400 dark:text-zinc-500 mt-0.5 block">
+                      미등록
+                    </span>
+                  )
                 )}
               </div>
 

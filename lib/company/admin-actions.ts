@@ -224,8 +224,8 @@ export async function updateCompanyAdminMetadata(
   if (payload.name) {
     updatePayload.name = payload.name;
   }
-  if (payload.country) {
-    updatePayload.country = payload.country;
+  if (payload.country !== undefined) {
+    updatePayload.country = payload.country.trim();
   }
   if (payload.businessRegistrationNumber) {
     updatePayload.business_registration_number = payload.businessRegistrationNumber;

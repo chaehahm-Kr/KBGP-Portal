@@ -192,7 +192,7 @@ export async function POST(request: Request) {
     .insert({
       name: input.companyName,
       business_registration_number: input.businessNumber,
-      country: "대한민국",
+      country: (input as any).country?.trim() || "",
       contact_name: input.contactName,
       contact_phone: input.phone,
       intro: `__COMPANY_METADATA__:${JSON.stringify({

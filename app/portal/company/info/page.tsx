@@ -6,6 +6,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { parseCompanyMetadata } from "@/lib/company/admin-actions";
 import { CompanyProfileManager } from "@/components/portal/company-profile-manager";
 
+export const dynamic = "force-dynamic";
+
 export const metadata: Metadata = {
   title: "회사 정보 관리 | K SELECT NETWORK 파트너 포털",
 };
