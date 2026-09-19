@@ -35,6 +35,7 @@ export interface Product {
   name: string;
   name_en?: string | null;
   category: string; // can be ProductCategory or string
+  category_code?: string | null;
   volume?: string | null;
   estimated_retail_price?: number | null;
   ingredients_text?: string | null;
