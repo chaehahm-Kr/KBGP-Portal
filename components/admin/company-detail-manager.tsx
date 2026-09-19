@@ -43,6 +43,7 @@ interface CompanyDetailManagerProps {
     country: string;
     status: string;
     created_at: string;
+    contact_phone?: string | null;
   };
   parsedMeta: CompanyParsedMetadata;
   companyUsers: any[];
@@ -225,6 +226,7 @@ export function CompanyDetailManager({
   // Company general metadata states
   const [name, setName] = useState(company.name);
   const [country, setCountry] = useState(company.country);
+  const [contactPhone, setContactPhone] = useState(company.contact_phone || "");
   const [address, setAddress] = useState(parsedMeta.address);
   const [address1, setAddress1] = useState(parsedMeta.address_1 || "");
   const [address2, setAddress2] = useState(parsedMeta.address_2 || "");
@@ -246,6 +248,7 @@ export function CompanyDetailManager({
   // Temporary edit states
   const [tempName, setTempName] = useState(name);
   const [tempCountry, setTempCountry] = useState(country);
+  const [tempContactPhone, setTempContactPhone] = useState(contactPhone);
   const [tempAddress, setTempAddress] = useState(address);
   const [tempAddress1, setTempAddress1] = useState(address1);
   const [tempAddress2, setTempAddress2] = useState(address2);
@@ -774,9 +777,11 @@ export function CompanyDetailManager({
           companyCode: tempCompanyCode,
           businessRegistrationNumber: tempBusinessRegNum,
           createdAt: tempCreatedAt,
+          contact_phone: tempContactPhone.trim(),
         });
         setName(tempName);
         setCountry(tempCountry);
+        setContactPhone(tempContactPhone.trim());
         setAddress(mergedAddress);
         setAddress1(tempAddress1);
         setAddress2(tempAddress2);
@@ -830,6 +835,7 @@ export function CompanyDetailManager({
                   onClick={() => {
                     setTempName(name);
                     setTempCountry(country);
+                    setTempContactPhone(contactPhone);
                     setTempAddress(address);
                     setTempAddress1(address1);
                     setTempAddress2(address2);
@@ -1070,6 +1076,31 @@ export function CompanyDetailManager({
                   <span className="font-semibold text-zinc-750 dark:text-zinc-300 mt-0.5 block whitespace-pre-wrap">
                     {address || "주소 미등록"}
                   </span>
+                )}
+              </div>
+
+              <div>
+                <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase block">
+                  회사 대표 전화번호
+                </span>
+                {isEditingMeta ? (
+                  <div className="mt-1">
+                    <InternationalPhoneInput
+                      value={tempContactPhone}
+                      onChange={(val) => setTempContactPhone(val)}
+                      placeholder="대표 전화번호 입력"
+                    />
+                  </div>
+                ) : (
+                  contactPhone?.trim() ? (
+                    <span className="font-semibold text-zinc-900 dark:text-white mt-0.5 block font-mono">
+                      {contactPhone}
+                    </span>
+                  ) : (
+                    <span className="font-semibold text-zinc-400 dark:text-zinc-500 mt-0.5 block">
+                      대표 전화번호 미등록
+                    </span>
+                  )
                 )}
               </div>
 

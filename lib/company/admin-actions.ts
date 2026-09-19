@@ -310,6 +310,9 @@ export async function updateCompanyAdminMetadata(
   }
 
   revalidatePath(`/admin/companies/${companyId}`);
+  revalidatePath("/admin/companies");
+  revalidatePath("/portal");
+  revalidatePath("/portal/company/info");
 }
 
 export async function adminUploadCompanyLogo(companyId: string, formData: FormData) {
