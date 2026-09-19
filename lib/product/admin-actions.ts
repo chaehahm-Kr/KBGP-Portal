@@ -18,10 +18,10 @@ export async function adminUpdateProductOverrides(
   overrides: Record<string, any>
 ) {
   const session = await verifyAdminSession();
-  const supabase = await createClient();
+  const adminSupabase = createAdminClient();
 
   // 1. Fetch current price_additional_info
-  const { data: product, error: fetchError } = await supabase
+  const { data: product, error: fetchError } = await adminSupabase
     .from("products")
     .select("price_additional_info")
     .eq("id", productId)
@@ -94,7 +94,6 @@ export async function adminUpdateProductOverrides(
   }
 
   // 2. Update the product using createAdminClient to bypass UPDATE RLS restrictions (since admins do not have matching company_id)
-  const adminSupabase = createAdminClient();
   const { error: updateError } = await adminSupabase
     .from("products")
     .update(updateData)

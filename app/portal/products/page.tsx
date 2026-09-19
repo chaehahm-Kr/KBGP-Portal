@@ -3,6 +3,7 @@ import { requireCompanyMembership } from "@/lib/company/dal";
 import { createClient } from "@/lib/supabase/server";
 import { getSignedFileUrl } from "@/lib/files/storage";
 import { PortalProductsList } from "@/components/product/portal-products-list";
+import { getBatchProductCategoryCompletions } from "@/lib/product/attribute-completion";
 
 export const metadata: Metadata = {
   title: "제품 관리 | 파트너 포털",
@@ -48,6 +49,14 @@ export default async function ProductsPage() {
     .select("id, product_id, storage_path, position")
     .eq("company_id", companyId)
     .order("position", { ascending: true });
+
+  // Fetch category & attribute completion status for all products
+  const categoryCompletions = await getBatchProductCategoryCompletions(
+    (products ?? []).map((p) => ({
+      id: p.id,
+      category_code: p.category_code || null,
+    }))
+  );
 
   const resolvedProducts = await Promise.all(
     (products ?? []).map(async (p) => {
@@ -97,6 +106,7 @@ export default async function ProductsPage() {
       }
 
       const isDraft = missingFields.length > 0;
+      const catCompletion = categoryCompletions.get(p.id);
 
       return {
         id: p.id,
@@ -112,6 +122,7 @@ export default async function ProductsPage() {
         missing_fields: missingFields,
         deleted_at: p.deleted_at,
         category_code: p.category_code || null,
+        category_completion: catCompletion || null,
       };
     })
   );

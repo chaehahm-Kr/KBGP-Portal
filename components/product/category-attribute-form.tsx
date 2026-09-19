@@ -170,6 +170,41 @@ export function CategoryAttributeForm({
   const [saving, setSaving] = useState(false);
   const [isPending, startTransition] = useTransition();
   const [feedback, setFeedback] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [highlightedAttrCode, setHighlightedAttrCode] = useState<string | null>(null);
+
+  // Jump to specific attribute field with smooth scroll and highlight effect
+  const handleJumpToAttribute = (code: string) => {
+    const element = document.getElementById(`attr-field-${code}`);
+    if (element) {
+      element.scrollIntoView({ behavior: "smooth", block: "center" });
+      setHighlightedAttrCode(code);
+      const input = element.querySelector<HTMLElement>("input, select, textarea, button");
+      if (input && typeof input.focus === "function") {
+        setTimeout(() => input.focus(), 350);
+      }
+      setTimeout(() => {
+        setHighlightedAttrCode((prev) => (prev === code ? null : prev));
+      }, 2000);
+    }
+  };
+
+  // Jump to target attribute if URL contains #attr-{code}
+  useEffect(() => {
+    if (loading || attributes.length === 0) return;
+    const checkHashAndJump = () => {
+      const hash = window.location.hash;
+      if (hash && hash.startsWith("#attr-")) {
+        const code = hash.replace("#attr-", "");
+        setTimeout(() => {
+          handleJumpToAttribute(code);
+        }, 300);
+      }
+    };
+
+    checkHashAndJump();
+    window.addEventListener("hashchange", checkHashAndJump);
+    return () => window.removeEventListener("hashchange", checkHashAndJump);
+  }, [loading, attributes]);
 
   // 1. 카테고리 트리 및 기존 저장값 초기 로드
   useEffect(() => {
@@ -432,13 +467,17 @@ export function CategoryAttributeForm({
     return Math.round((filled / attributes.length) * 100);
   };
 
-  // 미진행 속성 목록 반환 (실무자가 어떤 항목이 누락되었는지 인지하도록 지원)
+  // 미진행 속성 목록 반환 (실무자가 어떤 항목이 누락되었는지 인지하고 바로 이동하도록 지원)
   const getUnfilledAttributes = () => {
-    const unfilled: string[] = [];
+    const unfilled: { code: string; nameKo: string; isRequired: boolean }[] = [];
     attributes.forEach((attr) => {
       const val = formValues[attr.code];
       if (!isAttributeValueFilled(attr, val)) {
-        unfilled.push(attr.nameKo);
+        unfilled.push({
+          code: attr.code,
+          nameKo: attr.nameKo,
+          isRequired: Boolean(attr.isRequired),
+        });
       }
     });
     return unfilled;
@@ -597,16 +636,32 @@ export function CategoryAttributeForm({
 
         {/* 미완료(미입력) 속성 목록 표출 가이드 */}
         {attributes.length > 0 && completeness < 100 && (
-          <div className="mt-4 p-4 bg-zinc-50 dark:bg-zinc-950/20 border border-zinc-200 dark:border-zinc-800/80 rounded-xl text-xs space-y-2">
-            <div className="font-bold text-zinc-700 dark:text-zinc-300 flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-amber-500" />
-              <span>미입력 속성 항목 ({getUnfilledAttributes().length}개)</span>
+          <div className="mt-4 p-4 bg-zinc-50 dark:bg-zinc-950/20 border border-zinc-200 dark:border-zinc-800/80 rounded-xl text-xs space-y-2.5">
+            <div className="font-bold text-zinc-700 dark:text-zinc-300 flex items-center justify-between">
+              <div className="flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+                <span>미입력 속성 항목 ({getUnfilledAttributes().length}개)</span>
+              </div>
+              <span className="text-[11px] font-normal text-zinc-500 dark:text-zinc-400">
+                배지를 클릭하면 해당 입력 항목으로 즉시 이동합니다
+              </span>
             </div>
             <div className="flex flex-wrap gap-1.5">
-              {getUnfilledAttributes().map((name, idx) => (
-                <span key={idx} className="bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/20 px-2 py-0.5 rounded text-[10px] font-semibold">
-                  {name}
-                </span>
+              {getUnfilledAttributes().map((item) => (
+                <button
+                  key={item.code}
+                  type="button"
+                  onClick={() => handleJumpToAttribute(item.code)}
+                  className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all duration-200 cursor-pointer flex items-center gap-1 hover:scale-105 active:scale-95 ${
+                    item.isRequired
+                      ? "bg-amber-500/15 hover:bg-amber-500/25 text-amber-800 dark:text-amber-300 border border-amber-500/30 shadow-xs"
+                      : "bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700"
+                  }`}
+                  title={`${item.nameKo} 입력 위치로 이동`}
+                >
+                  <span>{item.nameKo}</span>
+                  {item.isRequired && <span className="text-rose-500 font-bold">*</span>}
+                </button>
               ))}
             </div>
           </div>
@@ -713,9 +768,18 @@ export function CategoryAttributeForm({
     const isEditable = isAdmin ? true : (attr.brandEditable && !attr.adminOnly);
     const val = formValues[attr.code];
     const textVal = formTextValues[attr.code] || "";
+    const isHighlighted = highlightedAttrCode === attr.code;
 
     return (
-      <div key={attr.code} className="flex flex-col gap-2">
+      <div 
+        id={`attr-field-${attr.code}`}
+        key={attr.code} 
+        className={`flex flex-col gap-2 p-3.5 rounded-xl border transition-all duration-500 ${
+          isHighlighted
+            ? "ring-2 ring-indigo-500 border-indigo-500 bg-indigo-50/70 dark:bg-indigo-950/40 shadow-lg scale-[1.01]"
+            : "border-transparent bg-transparent"
+        }`}
+      >
         <div className="flex items-center justify-between">
           <label className="text-sm font-bold text-zinc-800 dark:text-zinc-200 flex items-center gap-1">
             {attr.nameKo}

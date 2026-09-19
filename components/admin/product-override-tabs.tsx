@@ -88,8 +88,24 @@ export function ProductOverrideTabs({
 }: ProductOverrideTabsProps) {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const initialTab = searchParams.get("tab") === "category" ? "category_attributes" : "basic";
+  const tabQuery = searchParams.get("tab");
+  const initialTab = (tabQuery === "category" || tabQuery === "category_attributes") 
+    ? "category_attributes" 
+    : (tabQuery && ["basic", "price", "logistics", "media", "certs", "curation", "history"].includes(tabQuery) ? tabQuery : "basic");
   const [activeTab, setActiveTab] = useState<"basic" | "category_attributes" | "price" | "logistics" | "media" | "certs" | "curation" | "history">(initialTab as any);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const syncTabFromUrl = () => {
+      const hash = window.location.hash;
+      if (hash.startsWith("#attr-") || hash === "#category_attributes") {
+        setActiveTab("category_attributes");
+      }
+    };
+    syncTabFromUrl();
+    window.addEventListener("hashchange", syncTabFromUrl);
+    return () => window.removeEventListener("hashchange", syncTabFromUrl);
+  }, []);
 
   // Soft Delete / Restore State
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);

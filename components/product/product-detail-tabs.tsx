@@ -63,6 +63,26 @@ export function ProductDetailTabs({
   const [isPending, startTransition] = useTransition();
   const [statusMessage, setStatusMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
+  // Sync activeTab from URL search params (?tab=...) or hash (#attr-...)
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const syncTabFromUrl = () => {
+      const searchParams = new URLSearchParams(window.location.search);
+      const tabParam = searchParams.get("tab");
+      const hash = window.location.hash;
+
+      if (tabParam && ["basic", "category_attributes", "price", "logistics", "media", "certs"].includes(tabParam)) {
+        setActiveTab(tabParam as any);
+      } else if (hash.startsWith("#attr-") || hash === "#category_attributes") {
+        setActiveTab("category_attributes");
+      }
+    };
+
+    syncTabFromUrl();
+    window.addEventListener("hashchange", syncTabFromUrl);
+    return () => window.removeEventListener("hashchange", syncTabFromUrl);
+  }, []);
+
   const handleBrandSelectChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const selected = e.target.value;
     if (selected === NEW_BRAND_ACTION) {

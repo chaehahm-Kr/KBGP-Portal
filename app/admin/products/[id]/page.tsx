@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { verifyAdminSession } from "@/lib/auth/dal";
-import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getSignedFileUrl } from "@/lib/files/storage";
 import { ProductOverrideTabs } from "@/components/admin/product-override-tabs";
@@ -19,9 +18,9 @@ export default async function AdminProductDetailPage({
 }) {
   const { id } = await params;
   await verifyAdminSession();
-  const supabase = await createClient();
+  const adminSupabase = createAdminClient();
 
-  const { data: product } = await supabase
+  const { data: product } = await adminSupabase
     .from("products")
     .select(`
       id, name, name_en, category, volume, estimated_retail_price, ingredients_text, ingredients_file_path, ingredients_file_path_en, brand_id, company_id,
@@ -34,7 +33,7 @@ export default async function AdminProductDetailPage({
       palette_carton_qty, palette_width, palette_depth, palette_height, palette_weight,
       container_20ft_qty, container_20ft_weight, container_20ft_cbm,
       container_40fthc_qty, container_40fthc_weight, container_40fthc_cbm,
-      selection_status, sales_status, category_code, deleted_at, is_draft
+      selection_status, sales_status, category_code, status, created_at, updated_at
     `)
     .eq("id", id)
     .maybeSingle();
@@ -43,32 +42,30 @@ export default async function AdminProductDetailPage({
     notFound();
   }
 
-  const { data: brand } = await supabase
+  const { data: brand } = await adminSupabase
     .from("brands")
     .select("name")
     .eq("id", product.brand_id)
     .maybeSingle();
 
-  const { data: brands } = await supabase
+  const { data: brands } = await adminSupabase
     .from("brands")
     .select("id, name")
     .eq("company_id", product.company_id)
     .order("name", { ascending: true });
 
-  const { data: company } = await supabase
+  const { data: company } = await adminSupabase
     .from("companies")
     .select("name")
     .eq("id", product.company_id)
     .maybeSingle();
 
   // Fetch active curators (staff members)
-  const { data: curators } = await supabase
+  const { data: curators } = await adminSupabase
     .from("staff_members")
     .select("id, name, email")
     .eq("status", "active")
     .order("name", { ascending: true });
-
-  const adminSupabase = createAdminClient();
 
   const { data: images } = await adminSupabase
     .from("product_images")
@@ -224,13 +221,13 @@ export default async function AdminProductDetailPage({
   }
 
   // Fetch assortment profiles for matrix name mappings
-  const { data: apProfiles } = await supabase
+  const { data: apProfiles } = await adminSupabase
     .from("assortment_profiles")
     .select("id, display_program, code, name, description, is_active")
     .order("code", { ascending: true });
 
   // Fetch active display programs for matrix columns
-  const { data: displayPrograms } = await supabase
+  const { data: displayPrograms } = await adminSupabase
     .from("display_programs")
     .select("code, name, description, min_sku, max_sku, is_active")
     .eq("is_active", true);

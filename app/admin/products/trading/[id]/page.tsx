@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { verifyAdminSession } from "@/lib/auth/dal";
-import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getSignedFileUrl } from "@/lib/files/storage";
 import { TradingProductDetail } from "@/components/admin/trading-product-detail";
@@ -19,9 +18,9 @@ export default async function AdminTradingProductDetailPage({
 }) {
   const { id } = await params;
   await verifyAdminSession();
-  const supabase = await createClient();
+  const adminSupabase = createAdminClient();
 
-  const { data: product } = await supabase
+  const { data: product } = await adminSupabase
     .from("products")
     .select(`
       id, name, name_en, category, volume, estimated_retail_price, brand_id, company_id,
@@ -40,20 +39,20 @@ export default async function AdminTradingProductDetailPage({
     notFound();
   }
 
-  const { data: brand } = await supabase
+  const { data: brand } = await adminSupabase
     .from("brands")
     .select("name")
     .eq("id", product.brand_id)
     .maybeSingle();
 
-  const { data: company } = await supabase
+  const { data: company } = await adminSupabase
     .from("companies")
     .select("name")
     .eq("id", product.company_id)
     .maybeSingle();
 
   // Fetch all categories to build full path mappings
-  const { data: dbCategories } = await supabase
+  const { data: dbCategories } = await adminSupabase
     .from("categories")
     .select("code, name_ko, parent_code, depth");
   const categoryMap = new Map((dbCategories ?? []).map((c) => [c.code, c]));
@@ -72,7 +71,6 @@ export default async function AdminTradingProductDetailPage({
   const categoryFullPath = product.category_code ? getCategoryFullPath(product.category_code) : "";
 
   // Get primary image
-  const adminSupabase = createAdminClient();
   const { data: images } = await adminSupabase
     .from("product_images")
     .select("storage_path")
@@ -116,7 +114,7 @@ export default async function AdminTradingProductDetailPage({
   const { balances, movements } = await getProductInventory(id);
 
   // Fetch active warehouses for Opening Balance / Adjustment inputs
-  const { data: dbWarehouses } = await supabase
+  const { data: dbWarehouses } = await adminSupabase
     .from("warehouses")
     .select("id, name, code, status")
     .eq("status", "active")
@@ -125,7 +123,7 @@ export default async function AdminTradingProductDetailPage({
   const warehouses = dbWarehouses ?? [];
 
   // Fetch PO history for this product
-  const { data: poHistory } = await supabase
+  const { data: poHistory } = await adminSupabase
     .from("purchase_order_lines")
     .select(`
       id, qty, unit_cost, created_at,
@@ -135,7 +133,7 @@ export default async function AdminTradingProductDetailPage({
     .order("created_at", { ascending: false });
 
   // Fetch Shipment history for this product
-  const { data: shipmentHistory } = await supabase
+  const { data: shipmentHistory } = await adminSupabase
     .from("inbound_shipment_lines")
     .select(`
       id, shipped_qty, created_at,
@@ -145,7 +143,7 @@ export default async function AdminTradingProductDetailPage({
     .order("created_at", { ascending: false });
 
   // Fetch Receiving history for this product
-  const { data: receivingHistory } = await supabase
+  const { data: receivingHistory } = await adminSupabase
     .from("receiving_lines")
     .select(`
       id, received_qty, damaged_qty, hold_qty, created_at,

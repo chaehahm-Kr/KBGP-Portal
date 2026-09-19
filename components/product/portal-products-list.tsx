@@ -19,6 +19,15 @@ interface PortalProductItem {
   missing_fields?: string[];
   deleted_at: string | null;
   category_code?: string | null;
+  category_completion?: {
+    categoryComplete: boolean;
+    requiredAttributesComplete: boolean;
+    missingRequiredAttributes?: { code: string; nameKo: string }[];
+    missingCount?: number;
+    status: string;
+    warningLabel: string | null;
+    warningType: string;
+  } | null;
 }
 
 interface PortalProductsListProps {
@@ -250,11 +259,25 @@ export function PortalProductsList({ initialProducts, hasBrand }: PortalProducts
                       >
                         {product.display_name}
                       </Link>
-                      {!product.category_code && (
-                        <span className="inline-flex items-center w-fit rounded-md bg-amber-500/10 dark:bg-amber-950/30 px-2 py-0.5 text-[9px] font-bold text-amber-600 dark:text-amber-400 border border-amber-500/20 animate-pulse">
-                          ⚠️ 카테고리 재분류 필요
-                        </span>
-                      )}
+                      {product.category_completion?.warningLabel ? (
+                        <Link
+                          href={`/portal/products/${product.id}?tab=category_attributes${
+                            product.category_completion.missingRequiredAttributes?.[0]?.code
+                              ? `#attr-${product.category_completion.missingRequiredAttributes[0].code}`
+                              : ""
+                          }`}
+                          className="inline-flex items-center w-fit rounded-md bg-amber-500/10 hover:bg-amber-500/20 dark:bg-amber-950/30 dark:hover:bg-amber-950/50 px-2 py-0.5 text-[9px] font-bold text-amber-600 dark:text-amber-400 border border-amber-500/20 transition-all cursor-pointer shadow-2xs"
+                        >
+                          ⚠️ {product.category_completion.warningLabel}
+                        </Link>
+                      ) : !product.category_code ? (
+                        <Link
+                          href={`/portal/products/${product.id}?tab=category_attributes`}
+                          className="inline-flex items-center w-fit rounded-md bg-amber-500/10 hover:bg-amber-500/20 dark:bg-amber-950/30 dark:hover:bg-amber-950/50 px-2 py-0.5 text-[9px] font-bold text-amber-600 dark:text-amber-400 border border-amber-500/20 transition-all cursor-pointer shadow-2xs"
+                        >
+                          ⚠️ 카테고리 설정 필요
+                        </Link>
+                      ) : null}
                     </div>
                   </td>
 
