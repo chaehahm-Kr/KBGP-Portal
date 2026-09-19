@@ -1,9 +1,11 @@
 "use client";
 
 import React, { useState, useTransition } from "react";
+import Link from "next/link";
 import { updateCompanyPortalMetadata, portalUploadCompanyLogo, portalUpdateSupplierProfile, portalUpdateSupplierRemittance } from "@/lib/company/portal-actions";
 import { type CompanyContact, type CompanyParsedMetadata } from "@/lib/company/admin-actions";
 import { assignTaskPrimaryUser, type TaskAssignmentItem, toggleTaskEmailNotification } from "@/lib/company/task-actions";
+import { InternationalPhoneInput } from "@/components/shared/international-phone-input";
 
 interface CompanyProfileManagerProps {
   company: {
@@ -11,6 +13,7 @@ interface CompanyProfileManagerProps {
     name: string;
     business_registration_number: string;
     country: string;
+    contact_phone?: string | null;
     status: string;
     created_at: string;
   };
@@ -35,6 +38,14 @@ export function CompanyProfileManager({
 }: CompanyProfileManagerProps) {
   const isCompanyAdmin = companyRole === "company_admin";
   const [isPending, startTransition] = useTransition();
+
+  const [name, setName] = useState(company.name || "");
+  const [country, setCountry] = useState(company.country || "");
+  const [contactPhone, setContactPhone] = useState(company.contact_phone || "");
+
+  const [tempName, setTempName] = useState(company.name || "");
+  const [tempCountry, setTempCountry] = useState(company.country || "");
+  const [tempContactPhone, setTempContactPhone] = useState(company.contact_phone || "");
 
   const [address, setAddress] = useState(parsedMeta.address);
   const [address1, setAddress1] = useState(parsedMeta.address_1 || "");
@@ -193,8 +204,16 @@ export function CompanyProfileManager({
   };
 
   const handleSaveMeta = async () => {
-    if (!tempAddress1.trim() || !tempCity.trim() || !tempStateProv.trim() || !tempZipCode.trim()) {
-      alert("회사 주소 중 기본 주소, 시, 도, 우편번호는 필수 기입 항목입니다.");
+    if (!tempName.trim()) {
+      alert("공식 법인명을 입력해 주세요.");
+      return;
+    }
+    if (!tempCountry.trim()) {
+      alert("설립 국가를 입력해 주세요.");
+      return;
+    }
+    if (tempAddress1.trim() && (!tempCity.trim() || !tempStateProv.trim() || !tempZipCode.trim())) {
+      alert("회사 주소 입력 시 시(City), 도(State), 우편번호(Zip Code)를 모두 입력해 주세요.");
       return;
     }
 
@@ -206,9 +225,14 @@ export function CompanyProfileManager({
           await portalUploadCompanyLogo(company.id, formData);
         }
 
-        const fullAddress = `${tempAddress1.trim()}${tempAddress2.trim() ? " " + tempAddress2.trim() : ""}${tempCity.trim() ? ", " + tempCity.trim() : ""}${tempStateProv.trim() ? ", " + tempStateProv.trim() : ""}${tempZipCode.trim() ? " (" + tempZipCode.trim() + ")" : ""}`;
+        const fullAddress = tempAddress1.trim()
+          ? `${tempAddress1.trim()}${tempAddress2.trim() ? " " + tempAddress2.trim() : ""}${tempCity.trim() ? ", " + tempCity.trim() : ""}${tempStateProv.trim() ? ", " + tempStateProv.trim() : ""}${tempZipCode.trim() ? " (" + tempZipCode.trim() + ")" : ""}`
+          : "";
 
         await updateCompanyPortalMetadata(company.id, {
+          name: tempName.trim(),
+          country: tempCountry.trim(),
+          contact_phone: tempContactPhone.trim(),
           address: fullAddress,
           address_1: tempAddress1.trim(),
           address_2: tempAddress2.trim(),
@@ -218,6 +242,9 @@ export function CompanyProfileManager({
           website: tempWebsite,
           contacts, 
         });
+        setName(tempName.trim());
+        setCountry(tempCountry.trim());
+        setContactPhone(tempContactPhone.trim());
         setAddress1(tempAddress1.trim());
         setAddress2(tempAddress2.trim());
         setCity(tempCity.trim());
@@ -227,8 +254,10 @@ export function CompanyProfileManager({
         setWebsite(tempWebsite);
         setTempLogoFile(null);
         setIsEditingMeta(false);
-        alert("회사 정보가 성공적으로 저장되었습니다. 로고 이미지 반영을 위해 화면이 리로드됩니다.");
-        window.location.reload();
+        alert("회사 정보가 성공적으로 저장되었습니다.");
+        if (tempLogoFile) {
+          window.location.reload();
+        }
       } catch (err) {
         alert(err instanceof Error ? err.message : "회사 정보 저장 실패");
       }
@@ -323,6 +352,9 @@ export function CompanyProfileManager({
                 !isEditingMeta ? (
                   <button
                     onClick={() => {
+                      setTempName(name);
+                      setTempCountry(country);
+                      setTempContactPhone(contactPhone);
                       setTempAddress1(address1);
                       setTempAddress2(address2);
                       setTempCity(city);
@@ -356,7 +388,7 @@ export function CompanyProfileManager({
             </div>
 
             <div className="space-y-4 text-xs">
-              <div className="flex flex-col items-center gap-2 p-3 bg-zinc-50 dark:bg-zinc-950/40 rounded-lg border border-zinc-150 dark:border-zinc-850">
+              <div className="flex flex-col items-center gap-2 p-3 bg-zinc-50 dark:bg-zinc-950/40 rounded-lg border border-zinc-150 dark:border-zinc-855">
                 {logoUrl ? (
                   <img
                     src={logoUrl}
@@ -396,24 +428,81 @@ export function CompanyProfileManager({
               </div>
 
               <div>
-                <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase flex items-center gap-1">
-                  설립 국가 🔒
+                <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase block">
+                  설립 국가
                 </span>
-                <span className="font-semibold text-zinc-500 dark:text-zinc-400 mt-0.5 block bg-zinc-50/50 p-1.5 rounded dark:bg-zinc-950/20">{company.country}</span>
+                {isEditingMeta ? (
+                  <input
+                    type="text"
+                    value={tempCountry}
+                    onChange={(e) => setTempCountry(e.target.value)}
+                    placeholder="예: 대한민국 / South Korea / United States"
+                    required
+                    className="mt-1 w-full rounded border border-zinc-200 p-1.5 text-xs outline-none bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+                  />
+                ) : (
+                  <span className="font-semibold text-zinc-900 dark:text-white mt-0.5 block">
+                    {country || "미설정"}
+                  </span>
+                )}
               </div>
 
               <div>
                 <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase flex items-center gap-1">
                   사업자등록번호 🔒
                 </span>
-                <span className="font-semibold text-zinc-500 dark:text-zinc-400 mt-0.5 block bg-zinc-50/50 p-1.5 rounded dark:bg-zinc-950/20">{company.business_registration_number}</span>
+                <span className="font-semibold text-zinc-600 dark:text-zinc-350 mt-0.5 block bg-zinc-50/70 p-1.5 rounded dark:bg-zinc-950/40 font-mono">
+                  {company.business_registration_number}
+                </span>
+                <p className="text-[10px] text-zinc-400 dark:text-zinc-500 mt-1 leading-normal">
+                  사업자등록번호 변경이 필요한 경우{" "}
+                  <Link
+                    href="/portal/support"
+                    className="text-emerald-600 dark:text-emerald-400 underline font-medium hover:text-emerald-700"
+                  >
+                    문의 지원
+                  </Link>
+                  을 통해 요청해 주세요.
+                </p>
               </div>
 
               <div>
-                <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase flex items-center gap-1">
-                  공식 법인명 🔒
+                <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase block">
+                  공식 법인명
                 </span>
-                <span className="font-semibold text-zinc-500 dark:text-zinc-400 mt-0.5 block bg-zinc-50/50 p-1.5 rounded dark:bg-zinc-950/20">{company.name}</span>
+                {isEditingMeta ? (
+                  <input
+                    type="text"
+                    value={tempName}
+                    onChange={(e) => setTempName(e.target.value)}
+                    placeholder="공식 법인명 입력"
+                    required
+                    className="mt-1 w-full rounded border border-zinc-200 p-1.5 text-xs outline-none bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+                  />
+                ) : (
+                  <span className="font-semibold text-zinc-900 dark:text-white mt-0.5 block">
+                    {name}
+                  </span>
+                )}
+              </div>
+
+              <div>
+                <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase block">
+                  회사 대표 전화번호
+                </span>
+                {isEditingMeta ? (
+                  <div className="mt-1">
+                    <InternationalPhoneInput
+                      value={tempContactPhone}
+                      onChange={(val) => setTempContactPhone(val)}
+                      placeholder="대표 전화번호 입력"
+                    />
+                  </div>
+                ) : (
+                  <span className="font-semibold text-zinc-900 dark:text-white mt-0.5 block">
+                    {contactPhone || "대표 전화번호 미등록"}
+                  </span>
+                )}
               </div>
 
               <div className="space-y-2">

@@ -11,6 +11,9 @@ import { logRemittanceChanges } from "@/lib/company/remittance-log";
 export async function updateCompanyPortalMetadata(
   companyId: string,
   payload: {
+    name?: string;
+    country?: string;
+    contact_phone?: string;
     address: string;
     address_1?: string;
     address_2?: string;
@@ -80,12 +83,24 @@ export async function updateCompanyPortalMetadata(
     updated_at: new Date().toISOString(),
   };
 
-  if (primaryContact) {
-    updatePayload.contact_name = primaryContact.name || null;
+  if (payload.name !== undefined && payload.name.trim()) {
+    updatePayload.name = payload.name.trim();
+  }
+  if (payload.country !== undefined && payload.country.trim()) {
+    updatePayload.country = payload.country.trim();
+  }
+  if (payload.contact_phone !== undefined) {
+    updatePayload.contact_phone = payload.contact_phone.trim() || null;
+  } else if (primaryContact) {
     updatePayload.contact_phone = primaryContact.phone || null;
   } else {
-    updatePayload.contact_name = null;
     updatePayload.contact_phone = null;
+  }
+
+  if (primaryContact) {
+    updatePayload.contact_name = primaryContact.name || null;
+  } else {
+    updatePayload.contact_name = null;
   }
 
   const { error } = await supabase
@@ -98,6 +113,7 @@ export async function updateCompanyPortalMetadata(
     throw new Error(`회사 정보를 업데이트하지 못했습니다: ${error.message}`);
   }
 
+  revalidatePath(`/portal`);
   revalidatePath(`/portal/company/info`);
   revalidatePath(`/admin/companies/${companyId}`);
   revalidatePath("/admin/companies");

@@ -21,7 +21,7 @@ export default async function PortalHomePage() {
   const { data: company } = companyUser
     ? await supabase
         .from("companies")
-        .select("name, intro")
+        .select("name, intro, country, contact_phone")
         .eq("id", companyUser.company_id)
         .single()
     : { data: null };
@@ -146,10 +146,15 @@ export default async function PortalHomePage() {
     ? await getCompanyTaskSetupStatus(companyUser.company_id)
     : { completedCount: 6, totalCount: 6, percent: 100 };
 
-  // 4. Parse company address status
+  // 4. Parse company required info status
   const { parseCompanyMetadata } = await import("@/lib/company/admin-actions");
   const parsedMeta = company ? await parseCompanyMetadata(company) : null;
-  const hasAddress = !!parsedMeta?.address_1;
+  const hasRequiredCompanyInfo = Boolean(
+    company?.name?.trim() &&
+    company?.country?.trim() &&
+    (company?.contact_phone?.trim() || parsedMeta?.contacts?.some(c => c.phone?.trim())) &&
+    (parsedMeta?.address_1?.trim() || parsedMeta?.address?.trim())
+  );
 
   // Onboarding checklist steps
   const onboardingSteps = [
@@ -172,13 +177,13 @@ export default async function PortalHomePage() {
       actionText: "담당자 설정하기",
     },
     {
-      id: "fill_address",
-      label: "회사 주소 필수 입력",
-      desc: "세분화된 주소(기본 주소, 시, 도, 우편번호)를 모두 기입하세요.",
-      isComplete: hasAddress,
-      progressText: hasAddress ? "등록 완료" : "미등록",
+      id: "fill_company_info",
+      label: "필수 회사 정보 입력",
+      desc: "기본 회사 정보와 주소, 대표 연락처 등 필수 정보를 입력해 주세요.",
+      isComplete: hasRequiredCompanyInfo,
+      progressText: hasRequiredCompanyInfo ? "입력 완료" : "미완료",
       href: "/portal/company/info",
-      actionText: "주소 입력하기",
+      actionText: "정보 입력하기",
     },
     {
       id: "register_product",

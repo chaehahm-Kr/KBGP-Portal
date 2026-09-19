@@ -165,6 +165,8 @@ export async function updateCompanyAdminMetadata(
     companyCode?: string;
     businessRegistrationNumber?: string;
     createdAt?: string;
+    contactPhone?: string;
+    contact_phone?: string;
   }
 ) {
   await verifyAdminSession();
@@ -260,12 +262,19 @@ export async function updateCompanyAdminMetadata(
     }
   }
 
-  if (primaryContact) {
-    updatePayload.contact_name = primaryContact.name || null;
+  const phoneToSet = payload.contactPhone ?? payload.contact_phone;
+  if (phoneToSet !== undefined) {
+    updatePayload.contact_phone = phoneToSet?.trim() || null;
+  } else if (primaryContact) {
     updatePayload.contact_phone = primaryContact.phone || null;
   } else {
-    updatePayload.contact_name = null;
     updatePayload.contact_phone = null;
+  }
+
+  if (primaryContact) {
+    updatePayload.contact_name = primaryContact.name || null;
+  } else {
+    updatePayload.contact_name = null;
   }
 
   const { error } = await supabase
