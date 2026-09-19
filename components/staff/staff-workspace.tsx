@@ -107,9 +107,21 @@ export function StaffWorkspace({
   const [activeTab, setActiveTab] = useState<"list" | "invite" | "dept_title" | "audit">("list");
   
   // Staff Selection States
+  // Staff Selection States
   const [staffList, setStaffList] = useState<StaffMember[]>(initialStaff);
   const [selectedStaffId, setSelectedStaffId] = useState<string>(initialStaff[0]?.id || "");
-  const activeStaff = staffList.find((s) => s.id === selectedStaffId) || staffList[0];
+  const activeStaff = staffList.find((s) => s.id === selectedStaffId) || (staffList.length > 0 ? staffList[0] : null);
+
+  // Sync staffList and selectedStaffId whenever initialStaff updates (e.g. after server revalidation)
+  useEffect(() => {
+    setStaffList(initialStaff);
+    setSelectedStaffId((prevId) => {
+      if (prevId && initialStaff.some((s) => s.id === prevId)) {
+        return prevId;
+      }
+      return initialStaff[0]?.id || "";
+    });
+  }, [initialStaff]);
 
   // Filters State
   const [searchQuery, setSearchQuery] = useState("");
@@ -123,8 +135,8 @@ export function StaffWorkspace({
   const [nickname, setNickname] = useState("");
   const [phone, setPhone] = useState("");
   const [region, setRegion] = useState("");
-  const [timezone, setTimezone] = useState("");
-  const [language, setLanguage] = useState("");
+  const [timezone, setTimezone] = useState("Asia/Seoul");
+  const [language, setLanguage] = useState("ko");
   const [birthday, setBirthday] = useState("");
 
   const [departmentId, setDepartmentId] = useState("");
@@ -205,13 +217,26 @@ export function StaffWorkspace({
 
       setBaseRole(activeStaff.base_role);
       // Fallback if null
-      setPermissions(activeStaff.menu_permissions || DEFAULT_ROLE_PERMISSIONS[activeStaff.base_role]);
-      
-      setErrorMsg("");
-      setSuccessMsg("");
-      setActionReason("");
+      setPermissions(activeStaff.menu_permissions || (activeStaff.base_role ? DEFAULT_ROLE_PERMISSIONS[activeStaff.base_role] : null));
+    } else {
+      setName("");
+      setEnglishName("");
+      setNickname("");
+      setPhone("");
+      setRegion("");
+      setTimezone("Asia/Seoul");
+      setLanguage("ko");
+      setBirthday("");
+      setDepartmentId("");
+      setJobTitleId("");
+      setManagerId("");
+      setHireDate("");
+      setPermissions(null);
     }
-  }, [selectedStaffId, staffList]);
+    setErrorMsg("");
+    setSuccessMsg("");
+    setActionReason("");
+  }, [selectedStaffId, staffList, activeStaff]);
 
   // Handle Base Role changes (auto-populate defaults)
   const handleBaseRoleChange = (role: StaffRole) => {
@@ -235,13 +260,15 @@ export function StaffWorkspace({
   // Submit profile basic info
   const handleBasicInfoSave = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!activeStaff) return;
+    const targetId = activeStaff.id;
     if (!name.trim()) return setErrorMsg("이름을 입력해 주세요.");
     setErrorMsg("");
     setSuccessMsg("");
 
     startAction(async () => {
       try {
-        await updateBasicInfo(activeStaff.id, {
+        await updateBasicInfo(targetId, {
           name,
           englishName,
           nickname,
@@ -254,7 +281,7 @@ export function StaffWorkspace({
 
         // Sync local state
         setStaffList(prev =>
-          prev.map(s => s.id === activeStaff.id ? { 
+          prev.map(s => s.id === targetId ? { 
             ...s, 
             name, english_name: englishName, nickname, phone, region, timezone, language, birthday: birthday || null 
           } : s)
@@ -270,12 +297,14 @@ export function StaffWorkspace({
   // Submit Organization info
   const handleOrgInfoSave = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!activeStaff) return;
+    const targetId = activeStaff.id;
     setErrorMsg("");
     setSuccessMsg("");
 
     startAction(async () => {
       try {
-        await updateOrgInfo(activeStaff.id, {
+        await updateOrgInfo(targetId, {
           departmentId: departmentId || null,
           jobTitleId: jobTitleId || null,
           managerId: managerId || null,
@@ -283,7 +312,7 @@ export function StaffWorkspace({
         }, actionReason || "직원 조직 배정 변경");
 
         setStaffList(prev =>
-          prev.map(s => s.id === activeStaff.id ? { 
+          prev.map(s => s.id === targetId ? { 
             ...s, 
             department_id: departmentId || null, 
             job_title_id: jobTitleId || null,
@@ -301,15 +330,16 @@ export function StaffWorkspace({
 
   // Save Role and custom overrides
   const handlePermissionsSave = async () => {
-    if (!permissions) return;
+    if (!activeStaff || !permissions) return;
+    const targetId = activeStaff.id;
     setErrorMsg("");
     setSuccessMsg("");
 
     startAction(async () => {
       try {
-        await updatePermissions(activeStaff.id, baseRole, permissions, actionReason || "직원 역할 및 세부 권한 재설정");
+        await updatePermissions(targetId, baseRole, permissions, actionReason || "직원 역할 및 세부 권한 재설정");
         setStaffList(prev =>
-          prev.map(s => s.id === activeStaff.id ? { 
+          prev.map(s => s.id === targetId ? { 
             ...s, 
             base_role: baseRole, 
             menu_permissions: permissions 
@@ -325,6 +355,8 @@ export function StaffWorkspace({
 
   // Toggle Account status
   const handleStatusToggle = async (status: StaffStatus) => {
+    if (!activeStaff) return;
+    const targetId = activeStaff.id;
     setErrorMsg("");
     setSuccessMsg("");
 
@@ -333,9 +365,9 @@ export function StaffWorkspace({
 
     startAction(async () => {
       try {
-        await updateStatus(activeStaff.id, status, reasonPrompt);
+        await updateStatus(targetId, status, reasonPrompt);
         setStaffList(prev =>
-          prev.map(s => s.id === activeStaff.id ? { ...s, status } : s)
+          prev.map(s => s.id === targetId ? { ...s, status } : s)
         );
         setSuccessMsg(`계정 상태를 [${STAFF_STATUS_LABEL[status]}]로 성공적으로 변경했습니다.`);
         setActionReason("");
@@ -347,13 +379,15 @@ export function StaffWorkspace({
 
   // Reset password action
   const handlePasswordReset = async () => {
+    if (!activeStaff) return;
+    const targetId = activeStaff.id;
     setErrorMsg("");
     setSuccessMsg("");
     if (!confirm("정말 이 직원의 비밀번호를 강제 초기화하고 임시 비밀번호를 발송하겠습니까?")) return;
 
     startAction(async () => {
       try {
-        const tempPw = await resetPassword(activeStaff.id, actionReason || "관리자 요청 비밀번호 강제 초기화");
+        const tempPw = await resetPassword(targetId, actionReason || "관리자 요청 비밀번호 강제 초기화");
         setSuccessMsg(`성공! 새 임시 비밀번호가 메일로 발송되었습니다.\n임시 비밀번호: ${tempPw}`);
         setActionReason("");
       } catch (err: any) {
@@ -364,11 +398,13 @@ export function StaffWorkspace({
 
   // Reinvite Staff Action
   const handleReinvite = async () => {
+    if (!activeStaff) return;
+    const targetId = activeStaff.id;
     setErrorMsg("");
     setSuccessMsg("");
     startAction(async () => {
       try {
-        await reinviteStaff(activeStaff.id);
+        await reinviteStaff(targetId);
         setSuccessMsg("초대 이메일이 재발송되었습니다.");
       } catch (err: any) {
         setErrorMsg(err.message || "재발송 실패.");
@@ -378,27 +414,35 @@ export function StaffWorkspace({
 
   // Delete Staff Action
   const handleDeleteStaff = async () => {
-    setErrorMsg("");
-    setSuccessMsg("");
     if (!activeStaff) return;
-    
+    const targetId = activeStaff.id;
+    const targetName = activeStaff.name || activeStaff.email;
+
     const doubleConfirm = confirm(
-      `⚠️ [경고] 정말로 직원 '${activeStaff.name || activeStaff.email}' 계정을 완전히 영구 삭제하시겠습니까?\n이 작업은 되돌릴 수 없으며 Supabase Auth 계정과 DB 프로필 정보가 모두 영구 삭제됩니다.`
+      `⚠️ [경고] 정말로 직원 '${targetName}' 계정을 완전히 영구 삭제하시겠습니까?\n이 작업은 되돌릴 수 없으며 Supabase Auth 계정과 DB 프로필 정보가 모두 영구 삭제됩니다.`
     );
     if (!doubleConfirm) return;
 
+    setErrorMsg("");
+    setSuccessMsg("");
+
     startAction(async () => {
       try {
-        await deleteStaff(activeStaff.id);
+        await deleteStaff(targetId);
         
-        // Remove from local state staff list
-        setStaffList((prev) => prev.filter((s) => s.id !== activeStaff.id));
+        // Immediately remove from local state staff list & select next valid staff or empty
+        setStaffList((prev) => {
+          const remaining = prev.filter((s) => s.id !== targetId);
+          setSelectedStaffId((currentSelected) => {
+            if (currentSelected === targetId) {
+              return remaining[0]?.id || "";
+            }
+            return currentSelected;
+          });
+          return remaining;
+        });
         
-        // Deselect or select first staff member
-        const remaining = staffList.filter((s) => s.id !== activeStaff.id);
-        setSelectedStaffId(remaining[0]?.id || "");
-        
-        setSuccessMsg("직원 계정이 성공적으로 영구 삭제되었습니다.");
+        setSuccessMsg("직원이 삭제되었습니다.");
       } catch (err: any) {
         setErrorMsg(err.message || "계정 삭제에 실패했습니다.");
       }
@@ -1096,8 +1140,10 @@ export function StaffWorkspace({
             </div>
           </>
         ) : (
-          <div className="h-full flex items-center justify-center p-6 text-center text-zinc-400 select-none">
-            직원을 선택해 주세요.
+          <div className="h-full flex flex-col items-center justify-center p-8 text-center text-zinc-400 select-none space-y-2">
+            <span className="text-3xl">👥</span>
+            <p className="font-bold text-sm text-zinc-700 dark:text-zinc-200">선택된 직원이 없습니다.</p>
+            <p className="text-xs text-zinc-400 max-w-xs leading-relaxed">좌측 목록에서 직원을 선택하여 상세 정보 및 인사 조직을 조회하거나 신규 직원을 초대해 주세요.</p>
           </div>
         )}
       </div>
@@ -1205,8 +1251,10 @@ export function StaffWorkspace({
             </div>
           </>
         ) : (
-          <div className="h-full flex items-center justify-center p-6 text-center text-zinc-400 select-none">
-            직원을 선택해 주세요.
+          <div className="h-full flex flex-col items-center justify-center p-8 text-center text-zinc-400 select-none space-y-2">
+            <span className="text-3xl">🔒</span>
+            <p className="font-bold text-sm text-zinc-700 dark:text-zinc-200">권한을 설정할 직원을 선택해 주세요.</p>
+            <p className="text-xs text-zinc-400 max-w-xs leading-relaxed">직원을 선택하면 메뉴별 CRUD 및 승인 권한 매트릭스를 설정할 수 있습니다.</p>
           </div>
         )}
       </div>

@@ -13,32 +13,36 @@ import { sendEmail } from "@/lib/notifications/email";
 // Helper: Log staff change histories
 async function logAudit({
   actorId,
-  targetId,
+  targetId = null,
   actionType,
   oldValues = null,
   newValues = null,
   reason = "",
 }: {
   actorId: string;
-  targetId: string;
+  targetId?: string | null;
   actionType: string;
   oldValues?: any;
   newValues?: any;
   reason?: string;
 }) {
-  const admin = createAdminClient();
-  const headerList = await headers();
-  const ipAddress = headerList.get("x-forwarded-for")?.split(",")[0] || headerList.get("x-real-ip") || "127.0.0.1";
+  try {
+    const admin = createAdminClient();
+    const headerList = await headers();
+    const ipAddress = headerList.get("x-forwarded-for")?.split(",")[0] || headerList.get("x-real-ip") || "127.0.0.1";
 
-  await admin.from("staff_audit_logs").insert({
-    actor_id: actorId,
-    target_id: targetId,
-    action_type: actionType,
-    old_values: oldValues,
-    new_values: newValues,
-    ip_address: ipAddress,
-    reason,
-  });
+    await admin.from("staff_audit_logs").insert({
+      actor_id: actorId,
+      target_id: targetId,
+      action_type: actionType,
+      old_values: oldValues,
+      new_values: newValues,
+      ip_address: ipAddress,
+      reason,
+    });
+  } catch (err) {
+    console.error("Non-fatal staff audit log insert error:", err);
+  }
 }
 
 // Zod schemas for validation
@@ -280,7 +284,11 @@ export async function updateStaffPermissionsAction(
     .from("staff_members")
     .select("base_role, menu_permissions")
     .eq("id", targetId)
-    .single();
+    .maybeSingle();
+
+  if (!oldData) {
+    throw new Error("직원 정보를 찾을 수 없습니다.");
+  }
 
   // Save new values
   const { error } = await admin
@@ -332,7 +340,11 @@ export async function updateStaffOrgInfoAction(
     .from("staff_members")
     .select("department_id, job_title_id, manager_id, hire_date")
     .eq("id", targetId)
-    .single();
+    .maybeSingle();
+
+  if (!oldData) {
+    throw new Error("직원 정보를 찾을 수 없습니다.");
+  }
 
   const { error } = await admin
     .from("staff_members")
@@ -384,7 +396,11 @@ export async function updateStaffBasicInfoAction(
     .from("staff_members")
     .select("name, english_name, nickname, phone, region, timezone, language, birthday")
     .eq("id", targetId)
-    .single();
+    .maybeSingle();
+
+  if (!oldData) {
+    throw new Error("직원 정보를 찾을 수 없습니다.");
+  }
 
   const { error } = await admin
     .from("staff_members")
@@ -440,7 +456,11 @@ export async function updateStaffStatusAction(
     .from("staff_members")
     .select("status")
     .eq("id", targetId)
-    .single();
+    .maybeSingle();
+
+  if (!oldData) {
+    throw new Error("직원 정보를 찾을 수 없습니다.");
+  }
 
   const { error } = await admin
     .from("staff_members")
@@ -482,7 +502,7 @@ export async function resetStaffPasswordAction(targetId: string, reason: string)
     .from("staff_members")
     .select("name, email")
     .eq("id", targetId)
-    .single();
+    .maybeSingle();
 
   if (!staff) {
     throw new Error("직원 정보를 찾을 수 없습니다.");
@@ -556,7 +576,7 @@ export async function reinviteStaffAction(targetId: string) {
     .from("staff_members")
     .select("name, email, base_role")
     .eq("id", targetId)
-    .single();
+    .maybeSingle();
 
   if (!staff) {
     throw new Error("직원을 찾을 수 없습니다.");
@@ -832,46 +852,86 @@ export async function deleteStaffAction(targetId: string) {
 
   const admin = createAdminClient();
 
-  // 1. Fetch current staff name/email for logging
+  // 1. Check if this is the last Super Admin
+  const { data: superAdmins } = await admin
+    .from("staff_roles")
+    .select("staff_id")
+    .eq("role", "super_admin");
+  
+  if (superAdmins && superAdmins.length <= 1 && superAdmins.some(sa => sa.staff_id === targetId)) {
+    throw new Error("마지막 Super Admin 계정은 삭제할 수 없습니다.");
+  }
+
+  // 2. Fetch current staff name/email for logging (safe fallback if already missing)
   const { data: staff } = await admin
     .from("staff_members")
     .select("name, email")
     .eq("id", targetId)
-    .single();
+    .maybeSingle();
 
   const staffName = staff?.name || staff?.email || "알수없음";
+  const staffEmail = staff?.email || "";
 
-  // 2. Delete from public.staff_members
+  // 3. Clean up relations that reference staff_members to avoid FK constraint violations
+  try {
+    // a. Clear manager references to this staff member
+    await admin.from("staff_members").update({ manager_id: null }).eq("manager_id", targetId);
+    
+    // b. Delete staff roles
+    await admin.from("staff_roles").delete().eq("staff_id", targetId);
+    
+    // c. Clear inquiries & partner inquiries references
+    await admin.from("inquiries").update({ reviewed_by: null }).eq("reviewed_by", targetId);
+    await admin.from("partner_inquiries").update({ replied_by: null }).eq("replied_by", targetId);
+    
+    // d. Clear knowledge center references
+    await admin.from("knowledge_items").update({ owner_id: null }).eq("owner_id", targetId);
+    await admin.from("knowledge_items").update({ external_reviewer_id: null }).eq("external_reviewer_id", targetId);
+
+    // e. Clear assignments and review notes
+    await admin.from("assignments").delete().eq("staff_id", targetId);
+    await admin.from("assignments").delete().eq("assigned_by", targetId);
+    await admin.from("review_notes").delete().eq("author_id", targetId);
+    await admin.from("activity_logs").delete().eq("changed_by", targetId);
+  } catch (cleanupErr) {
+    console.warn("Non-fatal relation cleanup warning before staff delete:", cleanupErr);
+  }
+
+  // 4. Log audit BEFORE deleting so target information is recorded cleanly
+  await logAudit({
+    actorId: session.userId,
+    targetId: null, // target profile will be deleted; use null to prevent FK constraint errors
+    actionType: "delete_staff",
+    oldValues: { id: targetId, name: staffName, email: staffEmail },
+    reason: `직원 계정 완전 삭제 (이름: ${staffName}, 이메일: ${staffEmail})`,
+  });
+
+  // 5. Delete from public.staff_members
   const { error: dbError1 } = await admin
     .from("staff_members")
     .delete()
     .eq("id", targetId);
 
   if (dbError1) {
+    console.error("DB staff_members delete error:", dbError1);
     throw new Error("DB staff_members 삭제 실패: " + dbError1.message);
   }
 
-  // 3. Delete from public.profiles
+  // 6. Delete from public.profiles
   await admin
     .from("profiles")
     .delete()
     .eq("id", targetId);
 
-  // 4. Delete from Supabase Auth
-  const { error: authError } = await admin.auth.admin.deleteUser(targetId);
-  if (authError) {
-    console.error("Auth user delete failed:", authError);
-    throw new Error("Supabase Auth 계정 삭제 실패: " + authError.message);
+  // 7. Delete from Supabase Auth
+  try {
+    const { error: authError } = await admin.auth.admin.deleteUser(targetId);
+    if (authError && !authError.message.includes("User not found")) {
+      console.warn("Supabase Auth user delete warning:", authError.message);
+    }
+  } catch (authErr) {
+    console.warn("Supabase Auth admin deleteUser caught error:", authErr);
   }
-
-  // 5. Log audit
-  await logAudit({
-    actorId: session.userId,
-    targetId: targetId,
-    actionType: "delete_staff",
-    oldValues: { id: targetId, name: staffName, email: staff?.email },
-    reason: `직원 계정 완전 삭제 (이름: ${staffName})`,
-  });
 
   revalidatePath("/admin/staff");
 }

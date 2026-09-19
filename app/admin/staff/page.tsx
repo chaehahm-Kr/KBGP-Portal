@@ -85,17 +85,24 @@ export default async function StaffManagementPage() {
   const { data: profiles } = await admin.from("profiles").select("id, display_name");
   const nameMap = new Map((profiles ?? []).map(p => [p.id, p.display_name || "알수없음"]));
 
-  const auditLogs = (rawLogs ?? []).map(log => ({
-    id: log.id,
-    actor_name: nameMap.get(log.actor_id ?? "") || "시스템",
-    target_name: nameMap.get(log.target_id ?? "") || "전체",
-    action_type: log.action_type,
-    old_values: log.old_values,
-    new_values: log.new_values,
-    ip_address: log.ip_address || "127.0.0.1",
-    reason: log.reason || "",
-    created_at: log.created_at,
-  }));
+  const auditLogs = (rawLogs ?? []).map(log => {
+    const targetNameFromLog = (log.old_values as any)?.name || (log.new_values as any)?.name;
+    const resolvedTargetName = log.target_id
+      ? (nameMap.get(log.target_id) || targetNameFromLog || "삭제된 계정")
+      : (targetNameFromLog || "전체/시스템");
+
+    return {
+      id: log.id,
+      actor_name: nameMap.get(log.actor_id ?? "") || "시스템",
+      target_name: resolvedTargetName,
+      action_type: log.action_type,
+      old_values: log.old_values,
+      new_values: log.new_values,
+      ip_address: log.ip_address || "127.0.0.1",
+      reason: log.reason || "",
+      created_at: log.created_at,
+    };
+  });
 
   return (
     <div className="space-y-6 flex flex-col h-[calc(100vh-8.5rem)] overflow-hidden">
