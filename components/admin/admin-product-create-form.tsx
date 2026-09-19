@@ -38,7 +38,7 @@ export function AdminProductCreateForm({ companies, brands }: AdminProductCreate
   const [filteredBrands, setFilteredBrands] = useState<BrandItem[]>([]);
   const [brandId, setBrandId] = useState("");
 
-  const [category, setCategory] = useState("skincare");
+  const [category, setCategory] = useState("");
   const [manufactureSku, setManufactureSku] = useState("");
   const [nameEn, setNameEn] = useState("");
   const [upc, setUpc] = useState("");
@@ -300,6 +300,7 @@ export function AdminProductCreateForm({ companies, brands }: AdminProductCreate
               onChange={(e) => setCategory(e.target.value)}
               className={inputClass}
             >
+              <option value="">카테고리 선택</option>
               {(Object.keys(PRODUCT_CATEGORY_LABEL) as ProductCategory[]).map((value) => (
                 <option key={value} value={value}>
                   {PRODUCT_CATEGORY_LABEL[value]}

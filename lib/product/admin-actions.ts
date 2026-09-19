@@ -9,7 +9,7 @@ import { validateUploadedFile } from "@/lib/files/validate";
 import crypto from "crypto";
 import { z } from "zod";
 import { type ProductCategory } from "@/lib/product/types";
-import { recordProductChangeLog, getProductChangeHistory, type AuditActionType } from "@/lib/product/audit";
+import { recordProductChangeLog, getProductChangeHistory, computeProductFieldDiffs, type AuditActionType } from "@/lib/product/audit";
 
 export { getProductChangeHistory };
 
@@ -20,10 +20,10 @@ export async function adminUpdateProductOverrides(
   const session = await verifyAdminSession();
   const adminSupabase = createAdminClient();
 
-  // 1. Fetch current price_additional_info
+  // 1. Fetch current full product
   const { data: product, error: fetchError } = await adminSupabase
     .from("products")
-    .select("price_additional_info")
+    .select("*")
     .eq("id", productId)
     .single();
 
@@ -75,6 +75,7 @@ export async function adminUpdateProductOverrides(
 
   const updateData: Record<string, any> = {
     price_additional_info: updatedMeta,
+    updated_at: new Date().toISOString(),
   };
 
   if (letustoSku !== undefined) {
@@ -93,6 +94,24 @@ export async function adminUpdateProductOverrides(
     updateData.trading_status = tradingStatus;
   }
 
+  // Calculate field-level diffs comparing merged before and after states
+  const beforeMerged: Record<string, any> = {
+    ...product,
+    ...currentOverrides,
+  };
+  const afterMerged: Record<string, any> = {
+    ...product,
+    ...currentOverrides,
+    ...overrides,
+  };
+  if (letustoSku !== undefined) afterMerged.letusto_sku = updateData.letusto_sku;
+  if (brandId !== undefined) afterMerged.brand_id = updateData.brand_id;
+  if (selectionStatus !== undefined) afterMerged.selection_status = updateData.selection_status;
+  if (salesStatus !== undefined) afterMerged.sales_status = updateData.sales_status;
+  if (tradingStatus !== undefined) afterMerged.trading_status = updateData.trading_status;
+
+  const { diffs, sectionNames } = computeProductFieldDiffs(beforeMerged, afterMerged);
+
   // 2. Update the product using createAdminClient to bypass UPDATE RLS restrictions (since admins do not have matching company_id)
   const { error: updateError } = await adminSupabase
     .from("products")
@@ -103,33 +122,35 @@ export async function adminUpdateProductOverrides(
     throw new Error(updateError.message || "제품 정보 업데이트에 실패했습니다.");
   }
 
-  // Record Audit Log
-  const changedKeys = Object.keys(overrides);
-  const summary = changedKeys.length > 0
-    ? `관리자 수정: ${changedKeys.slice(0, 3).join(", ")}${changedKeys.length > 3 ? ` 외 ${changedKeys.length - 3}건` : ""}`
-    : "관리자 제품 정보 수정";
+  // 3. Record Audit Log ONLY IF actual diffs exist (Requirement TEST F)
+  if (Object.keys(diffs).length > 0) {
+    let adminName = "Admin";
+    try {
+      const { data: profile } = await adminSupabase
+        .from("profiles")
+        .select("display_name")
+        .eq("id", session.userId)
+        .maybeSingle();
+      if (profile?.display_name) adminName = profile.display_name;
+    } catch (e) {}
 
-  // Fetch admin user name
-  let adminName = "Admin";
-  try {
-    const { data: profile } = await adminSupabase
-      .from("profiles")
-      .select("display_name")
-      .eq("id", session.userId)
-      .maybeSingle();
-    if (profile?.display_name) adminName = profile.display_name;
-  } catch (e) {}
+    const changedFieldLabels = Object.values(diffs).map((d) => d.label);
+    const summary = `관리자 상품 정보 수정 (${changedFieldLabels.slice(0, 3).join(", ")}${
+      changedFieldLabels.length > 3 ? ` 외 ${changedFieldLabels.length - 3}개` : ""
+    })`;
 
-  await recordProductChangeLog({
-    productId,
-    userId: session.userId,
-    userName: `${adminName} (Admin)`,
-    source: "ADMIN",
-    section: "관리자 오버라이드 / 기본 정보",
-    actionType: "UPDATE",
-    summary,
-    changes: overrides as any,
-  });
+    await recordProductChangeLog({
+      productId,
+      userId: session.userId,
+      userName: adminName,
+      source: "ADMIN",
+      companyName: "Letusto Admin",
+      section: Array.from(sectionNames).join(", ") || "기본 정보",
+      actionType: "UPDATE",
+      summary,
+      changes: diffs,
+    });
+  }
 
   revalidatePath(`/admin/products/${productId}`);
   revalidatePath(`/admin/products`);
@@ -395,6 +416,68 @@ export async function adminUpdateProductCuration(
     if (deleteError) {
       throw new Error(`매트릭스 제외 처리 실패: ${deleteError.message}`);
     }
+  }
+
+  // Record audit log if curation was changed
+  if (isCurationChanged) {
+    try {
+      let adminName = "Admin";
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("display_name")
+        .eq("id", session.userId)
+        .maybeSingle();
+      if (profile?.display_name) adminName = profile.display_name;
+
+      const curationDiffs: Record<string, any> = {};
+      if (dbCuration?.status !== curationPayload.status) {
+        curationDiffs.status = {
+          label: "큐레이션 검토 상태",
+          before: dbCuration?.status || "(미검토)",
+          after: curationPayload.status,
+        };
+      }
+      if (dbCuration?.role !== curationPayload.role) {
+        curationDiffs.role = {
+          label: "큐레이션 역할",
+          before: dbCuration?.role || "(미지정)",
+          after: curationPayload.role,
+        };
+      }
+      if (Number(dbCuration?.landed_cost || 0) !== Number(curationPayload.landed_cost || 0)) {
+        curationDiffs.landed_cost = {
+          label: "Landed Cost ($)",
+          before: dbCuration?.landed_cost ? `$${dbCuration.landed_cost}` : "(미입력)",
+          after: curationPayload.landed_cost ? `$${curationPayload.landed_cost}` : "(미입력)",
+        };
+      }
+      if (Number(dbCuration?.wholesale_price || 0) !== Number(curationPayload.wholesale_price || 0)) {
+        curationDiffs.wholesale_price = {
+          label: "도매/공급가 ($)",
+          before: dbCuration?.wholesale_price ? `$${dbCuration.wholesale_price}` : "(미입력)",
+          after: curationPayload.wholesale_price ? `$${curationPayload.wholesale_price}` : "(미입력)",
+        };
+      }
+      if (Number(dbCuration?.suggest_retail_price || 0) !== Number(curationPayload.suggest_retail_price || 0)) {
+        curationDiffs.suggest_retail_price = {
+          label: "권장 소비자가 ($)",
+          before: dbCuration?.suggest_retail_price ? `$${dbCuration.suggest_retail_price}` : "(미입력)",
+          after: curationPayload.suggest_retail_price ? `$${curationPayload.suggest_retail_price}` : "(미입력)",
+        };
+      }
+
+      await recordProductChangeLog({
+        productId,
+        userId: session.userId,
+        userName: adminName,
+        source: "ADMIN",
+        companyName: "Letusto Admin",
+        section: "큐레이션",
+        actionType: "UPDATE",
+        summary: `큐레이션 및 가격/매트릭스 설정 수정 (상태: ${curationPayload.status}, 역할: ${curationPayload.role})`,
+        changes: Object.keys(curationDiffs).length > 0 ? curationDiffs : null,
+      });
+    } catch (e) {}
   }
 
   revalidatePath(`/admin/products/${productId}`);
@@ -913,6 +996,7 @@ export async function adminAddProductImages(productId: string, formData: FormDat
     .select("id", { count: "exact", head: true })
     .eq("product_id", productId);
 
+  let uploadedCount = 0;
   for (const [i, image] of images.entries()) {
     const validation = await validateUploadedFile(image, ["image"]);
     if (!validation.ok) continue;
@@ -929,14 +1013,39 @@ export async function adminAddProductImages(productId: string, formData: FormDat
         storage_path: path,
         position: (count ?? 0) + i,
       });
+      uploadedCount++;
     }
+  }
+
+  if (uploadedCount > 0) {
+    try {
+      const session = await verifyAdminSession();
+      let adminName = "Admin";
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("display_name")
+        .eq("id", session.userId)
+        .maybeSingle();
+      if (profile?.display_name) adminName = profile.display_name;
+
+      await recordProductChangeLog({
+        productId,
+        userId: session.userId,
+        userName: adminName,
+        source: "ADMIN",
+        companyName: "Letusto Admin",
+        section: "미디어",
+        actionType: "CREATE",
+        summary: `관리자 제품 이미지 ${uploadedCount}장 추가`,
+      });
+    } catch (e) {}
   }
 
   revalidatePath(`/admin/products/${productId}`);
 }
 
 export async function adminRemoveProductImage(productId: string, imageId: string) {
-  await verifyAdminSession();
+  const session = await verifyAdminSession();
   const supabase = createAdminClient();
 
   const { data: img } = await supabase
@@ -950,11 +1059,33 @@ export async function adminRemoveProductImage(productId: string, imageId: string
   }
 
   await supabase.from("product_images").delete().eq("id", imageId);
+
+  try {
+    let adminName = "Admin";
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("display_name")
+      .eq("id", session.userId)
+      .maybeSingle();
+    if (profile?.display_name) adminName = profile.display_name;
+
+    await recordProductChangeLog({
+      productId,
+      userId: session.userId,
+      userName: adminName,
+      source: "ADMIN",
+      companyName: "Letusto Admin",
+      section: "미디어",
+      actionType: "DELETE",
+      summary: "관리자 제품 이미지 삭제",
+    });
+  } catch (e) {}
+
   revalidatePath(`/admin/products/${productId}`);
 }
 
 export async function adminUpdateProductImagesOrder(productId: string, imageIdsInOrder: string[]) {
-  await verifyAdminSession();
+  const session = await verifyAdminSession();
   const supabase = createAdminClient();
 
   const { data: currentImages } = await supabase
@@ -981,11 +1112,32 @@ export async function adminUpdateProductImagesOrder(productId: string, imageIdsI
     }
   }
 
+  try {
+    let adminName = "Admin";
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("display_name")
+      .eq("id", session.userId)
+      .maybeSingle();
+    if (profile?.display_name) adminName = profile.display_name;
+
+    await recordProductChangeLog({
+      productId,
+      userId: session.userId,
+      userName: adminName,
+      source: "ADMIN",
+      companyName: "Letusto Admin",
+      section: "미디어",
+      actionType: "UPDATE",
+      summary: "관리자 제품 이미지 순서 변경",
+    });
+  } catch (e) {}
+
   revalidatePath(`/admin/products/${productId}`);
 }
 
 export async function adminAddProductVideoUrl(productId: string, videoUrl: string) {
-  await verifyAdminSession();
+  const session = await verifyAdminSession();
   const supabase = createAdminClient();
 
   const { data: prod } = await supabase
@@ -1002,11 +1154,32 @@ export async function adminAddProductVideoUrl(productId: string, videoUrl: strin
     video_url: videoUrl,
   });
 
+  try {
+    let adminName = "Admin";
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("display_name")
+      .eq("id", session.userId)
+      .maybeSingle();
+    if (profile?.display_name) adminName = profile.display_name;
+
+    await recordProductChangeLog({
+      productId,
+      userId: session.userId,
+      userName: adminName,
+      source: "ADMIN",
+      companyName: "Letusto Admin",
+      section: "미디어",
+      actionType: "CREATE",
+      summary: `관리자 제품 동영상 링크 등록 (${videoUrl.trim()})`,
+    });
+  } catch (e) {}
+
   revalidatePath(`/admin/products/${productId}`);
 }
 
 export async function adminAddProductVideoFile(productId: string, formData: FormData) {
-  await verifyAdminSession();
+  const session = await verifyAdminSession();
   const supabase = createAdminClient();
 
   const { data: prod } = await supabase
@@ -1037,11 +1210,32 @@ export async function adminAddProductVideoFile(productId: string, formData: Form
     storage_path: path,
   });
 
+  try {
+    let adminName = "Admin";
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("display_name")
+      .eq("id", session.userId)
+      .maybeSingle();
+    if (profile?.display_name) adminName = profile.display_name;
+
+    await recordProductChangeLog({
+      productId,
+      userId: session.userId,
+      userName: adminName,
+      source: "ADMIN",
+      companyName: "Letusto Admin",
+      section: "미디어",
+      actionType: "CREATE",
+      summary: `관리자 제품 동영상 파일 업로드 (${file.name})`,
+    });
+  } catch (e) {}
+
   revalidatePath(`/admin/products/${productId}`);
 }
 
 export async function adminRemoveProductVideo(productId: string, videoId: string) {
-  await verifyAdminSession();
+  const session = await verifyAdminSession();
   const supabase = createAdminClient();
 
   const { data: video } = await supabase
@@ -1055,6 +1249,28 @@ export async function adminRemoveProductVideo(productId: string, videoId: string
   }
 
   await supabase.from("product_videos").delete().eq("id", videoId);
+
+  try {
+    let adminName = "Admin";
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("display_name")
+      .eq("id", session.userId)
+      .maybeSingle();
+    if (profile?.display_name) adminName = profile.display_name;
+
+    await recordProductChangeLog({
+      productId,
+      userId: session.userId,
+      userName: adminName,
+      source: "ADMIN",
+      companyName: "Letusto Admin",
+      section: "미디어",
+      actionType: "DELETE",
+      summary: "관리자 제품 동영상 삭제",
+    });
+  } catch (e) {}
+
   revalidatePath(`/admin/products/${productId}`);
 }
 
@@ -1064,7 +1280,7 @@ export async function adminAddProductCertificate(
   originalFilename: string,
   formData: FormData
 ) {
-  await verifyAdminSession();
+  const session = await verifyAdminSession();
   const supabase = createAdminClient();
 
   const { data: prod } = await supabase
@@ -1126,6 +1342,32 @@ export async function adminAddProductCertificate(
     is_current: true,
   });
 
+  try {
+    let adminName = "Admin";
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("display_name")
+      .eq("id", session.userId)
+      .maybeSingle();
+    if (profile?.display_name) adminName = profile.display_name;
+
+    await recordProductChangeLog({
+      productId,
+      userId: session.userId,
+      userName: adminName,
+      source: "ADMIN",
+      companyName: "Letusto Admin",
+      section: "인허가 & 보증서",
+      actionType: "CREATE",
+      summary: `관리자 인허가/보증서 (${type}) 업로드 (v${nextVersion})`,
+      changes: {
+        certificate_type: { label: "인증서 종류", before: null, after: type },
+        version: { label: "버전", before: null, after: `v${nextVersion}` },
+        filename: { label: "파일명", before: null, after: originalFilename },
+      },
+    });
+  } catch (e) {}
+
   revalidatePath(`/admin/products/${productId}`);
 }
 
@@ -1134,7 +1376,7 @@ export async function adminUploadIngredientsFile(
   language: "ko" | "en",
   formData: FormData
 ) {
-  await verifyAdminSession();
+  const session = await verifyAdminSession();
   const supabase = createAdminClient();
 
   const { data: prod } = await supabase
@@ -1175,6 +1417,7 @@ export async function adminUploadIngredientsFile(
   }
 
   const updateData: Record<string, any> = {};
+  const columnName = language === "ko" ? "ingredients_file_path" : "ingredients_file_path_en";
   if (language === "ko") {
     updateData.ingredients_file_path = path;
   } else {
@@ -1182,11 +1425,40 @@ export async function adminUploadIngredientsFile(
   }
 
   await supabase.from("products").update(updateData).eq("id", productId);
+
+  try {
+    let adminName = "Admin";
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("display_name")
+      .eq("id", session.userId)
+      .maybeSingle();
+    if (profile?.display_name) adminName = profile.display_name;
+
+    await recordProductChangeLog({
+      productId,
+      userId: session.userId,
+      userName: adminName,
+      source: "ADMIN",
+      companyName: "Letusto Admin",
+      section: "인허가 & 보증서",
+      actionType: "CREATE",
+      summary: `관리자 ${language === "ko" ? "국문" : "영문"} 전성분표 파일 업로드 (${file.name})`,
+      changes: {
+        [columnName]: {
+          label: language === "ko" ? "국문 전성분표 파일" : "영문 전성분표 파일",
+          before: existingPath ? "이전 파일" : null,
+          after: file.name,
+        },
+      },
+    });
+  } catch (e) {}
+
   revalidatePath(`/admin/products/${productId}`);
 }
 
 export async function adminDeleteIngredientsFile(productId: string, language: "ko" | "en") {
-  await verifyAdminSession();
+  const session = await verifyAdminSession();
   const supabase = createAdminClient();
 
   const { data: prod } = await supabase
@@ -1201,6 +1473,7 @@ export async function adminDeleteIngredientsFile(productId: string, language: "k
   }
 
   const updateData: Record<string, any> = {};
+  const columnName = language === "ko" ? "ingredients_file_path" : "ingredients_file_path_en";
   if (language === "ko") {
     updateData.ingredients_file_path = null;
   } else {
@@ -1208,6 +1481,35 @@ export async function adminDeleteIngredientsFile(productId: string, language: "k
   }
 
   await supabase.from("products").update(updateData).eq("id", productId);
+
+  try {
+    let adminName = "Admin";
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("display_name")
+      .eq("id", session.userId)
+      .maybeSingle();
+    if (profile?.display_name) adminName = profile.display_name;
+
+    await recordProductChangeLog({
+      productId,
+      userId: session.userId,
+      userName: adminName,
+      source: "ADMIN",
+      companyName: "Letusto Admin",
+      section: "인허가 & 보증서",
+      actionType: "DELETE",
+      summary: `관리자 ${language === "ko" ? "국문" : "영문"} 전성분표 파일 삭제`,
+      changes: {
+        [columnName]: {
+          label: language === "ko" ? "국문 전성분표 파일" : "영문 전성분표 파일",
+          before: "기존 파일",
+          after: null,
+        },
+      },
+    });
+  } catch (e) {}
+
   revalidatePath(`/admin/products/${productId}`);
 }
 

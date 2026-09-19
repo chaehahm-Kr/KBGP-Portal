@@ -31,6 +31,8 @@ import {
 import { ConfirmForm } from "@/components/common/confirm-form";
 import { AddCertificateForm } from "@/components/product/add-certificate-form";
 
+import { type CategoryCompletionResult } from "@/lib/product/attribute-completion";
+
 interface ProductDetailTabsProps {
   product: Product;
   brandName: string;
@@ -43,6 +45,7 @@ interface ProductDetailTabsProps {
   certificateUrls: (string | null)[];
   ingredientsFileUrl: string | null;
   ingredientsFileUrlEn: string | null;
+  initialCategoryCompletion?: CategoryCompletionResult | null;
 }
 
 export function ProductDetailTabs({
@@ -57,11 +60,17 @@ export function ProductDetailTabs({
   certificateUrls,
   ingredientsFileUrl,
   ingredientsFileUrlEn,
+  initialCategoryCompletion,
 }: ProductDetailTabsProps) {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<"basic" | "category_attributes" | "price" | "logistics" | "media" | "certs">("basic");
   const [isPending, startTransition] = useTransition();
   const [statusMessage, setStatusMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [categoryCompletion, setCategoryCompletion] = useState<{
+    categoryComplete: boolean;
+    requiredAttributesComplete: boolean;
+    missingRequiredAttributes: { code: string; nameKo: string }[];
+  } | null>(initialCategoryCompletion || null);
 
   // Sync activeTab from URL search params (?tab=...) or hash (#attr-...)
   useEffect(() => {
@@ -381,6 +390,23 @@ export function ProductDetailTabs({
     
     if (sellingOnline && !salesLink1.trim()) {
       missing.push({ tab: "basic", field: "온라인 판매 링크 1", inputName: "salesLink1" });
+    }
+
+    // Category & Dynamic Attributes tab
+    if (categoryCompletion) {
+      if (!categoryCompletion.categoryComplete) {
+        missing.push({ tab: "category_attributes", field: "카테고리 미선택 (3Depth 최종 카테고리 지정 필수)", inputName: "categorySelect" });
+      } else if (!categoryCompletion.requiredAttributesComplete) {
+        if (categoryCompletion.missingRequiredAttributes && categoryCompletion.missingRequiredAttributes.length > 0) {
+          categoryCompletion.missingRequiredAttributes.forEach(attr => {
+            missing.push({ tab: "category_attributes", field: `${attr.nameKo} (필수 속성)`, inputName: `attr-field-${attr.code}` });
+          });
+        } else {
+          missing.push({ tab: "category_attributes", field: "카테고리 필수 속성 미입력", inputName: "categoryAttributes" });
+        }
+      }
+    } else if (!product.category_code && !category) {
+      missing.push({ tab: "category_attributes", field: "카테고리 및 속성 미선택", inputName: "categorySelect" });
     }
     
     // Price Info tab
@@ -731,25 +757,42 @@ export function ProductDetailTabs({
                 본 제품은 필수 정보가 누락되어 있습니다. 다음 탭으로 이동하여 해당 항목들을 모두 입력하고 전체 변경사항을 저장해 주세요:
               </p>
               <div className="flex flex-wrap gap-2 mt-2">
-                {getMissingFieldsList().map((item, idx) => (
-                  <button 
-                    key={idx} 
-                    type="button"
-                    onClick={() => {
-                      setActiveTab(item.tab as any);
-                      setTimeout(() => {
-                        const inputElement = document.getElementsByName(item.inputName)[0] as HTMLInputElement | undefined;
-                        if (inputElement) {
-                          inputElement.focus();
-                          if (inputElement.select) inputElement.select();
-                        }
-                      }, 80);
-                    }}
-                    className="inline-flex items-center rounded-md bg-rose-100/70 hover:bg-rose-150 px-2.5 py-1 text-[10px] font-semibold text-rose-800 dark:bg-rose-900/30 dark:text-rose-300 border border-rose-200/50 dark:border-rose-800/40 transition-colors cursor-pointer"
-                  >
-                    [{item.tab === "basic" ? "기본 정보" : item.tab === "price" ? "가격 정보" : "로지스틱스"}] {item.field}
-                  </button>
-                ))}
+                {getMissingFieldsList().map((item, idx) => {
+                  const tabLabels: Record<string, string> = {
+                    basic: "기본 정보",
+                    category_attributes: "카테고리 & 속성",
+                    price: "가격 정보",
+                    logistics: "로지스틱스",
+                    media: "미디어",
+                    certs: "인허가 & 보증서",
+                  };
+                  return (
+                    <button 
+                      key={idx} 
+                      type="button"
+                      onClick={() => {
+                        setActiveTab(item.tab as any);
+                        setTimeout(() => {
+                          if (item.tab === "category_attributes" && item.inputName.startsWith("attr-field-")) {
+                            const el = document.getElementById(item.inputName);
+                            if (el) {
+                              el.scrollIntoView({ behavior: "smooth", block: "center" });
+                              return;
+                            }
+                          }
+                          const inputElement = document.getElementsByName(item.inputName)[0] as HTMLInputElement | undefined;
+                          if (inputElement) {
+                            inputElement.focus();
+                            if (inputElement.select) inputElement.select();
+                          }
+                        }, 80);
+                      }}
+                      className="inline-flex items-center rounded-md bg-rose-100/70 hover:bg-rose-150 px-2.5 py-1 text-[10px] font-semibold text-rose-800 dark:bg-rose-900/30 dark:text-rose-300 border border-rose-200/50 dark:border-rose-800/40 transition-colors cursor-pointer"
+                    >
+                      [{tabLabels[item.tab] || item.tab}] {item.field}
+                    </button>
+                  );
+                })}
               </div>
             </div>
           </div>
@@ -937,6 +980,7 @@ export function ProductDetailTabs({
                   value={category} onChange={(e) => setCategory(e.target.value)}
                   className={`block w-full rounded-lg border px-3.5 py-2 text-xs text-zinc-900 dark:bg-zinc-950 dark:text-white focus:outline-none ${!category ? "border-rose-350 dark:border-rose-900/60 focus:border-rose-500" : "border-zinc-300 dark:border-zinc-800 focus:border-zinc-900 dark:focus:border-white"}`}
                 >
+                  <option value="">카테고리 선택</option>
                   {Object.entries(PRODUCT_CATEGORY_LABEL).map(([val, label]) => (
                     <option key={val} value={val}>{label}</option>
                   ))}
@@ -1558,6 +1602,7 @@ export function ProductDetailTabs({
             volume={product.volume || null}
             colorMap={product.color_map || null}
             isAdmin={false}
+            onCompletionChange={setCategoryCompletion}
           />
         </div>
 

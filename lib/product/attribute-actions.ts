@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { verifyAdminSession } from "@/lib/auth/dal";
+import { recordProductChangeLog, formatAuditValue } from "@/lib/product/audit";
 
 export interface CategoryNode {
   code: string;
@@ -294,8 +295,20 @@ export async function saveProductAttributeValues(
   values: Record<string, any>,
   textValues: Record<string, string>
 ) {
-  const supabase = await createClient();
   const admin = createAdminClient();
+  const supabase = await createClient();
+
+  // 4.0 Pre-fetch existing state for audit diff calculation
+  const { data: currentProd } = await admin
+    .from("products")
+    .select("category_code, company_id")
+    .eq("id", productId)
+    .single();
+
+  const { data: currentAttrs } = await admin
+    .from("product_attribute_values")
+    .select("attribute_code, value_json, text_value")
+    .eq("product_id", productId);
 
   // 4.1 products 테이블의 category_code 필드 우선 업데이트 (RLS 우회)
   const { error: productError } = await admin
@@ -356,6 +369,115 @@ export async function saveProductAttributeValues(
     if (upsertError) {
       throw new Error(`동적 속성 저장 실패: ${upsertError.message}`);
     }
+  }
+
+  // 4.5 Compute diffs and record audit log
+  try {
+    const diffs: Record<string, any> = {};
+
+    // Check category code change
+    if ((currentProd?.category_code || null) !== (categoryCode || null)) {
+      diffs.category_code = {
+        label: "표준 카테고리 (3Depth)",
+        before: currentProd?.category_code || "(미지정)",
+        after: categoryCode || "(미지정)",
+      };
+    }
+
+    // Check attribute changes
+    const prevAttrMap = new Map<string, any>();
+    (currentAttrs || []).forEach((row) => {
+      prevAttrMap.set(row.attribute_code, row.value_json);
+    });
+
+    // Check upserted
+    upsertRows.forEach((row) => {
+      const prev = prevAttrMap.get(row.attribute_code);
+      const prevNorm = prev !== undefined ? prev : null;
+      const newNorm = row.value_json !== undefined ? row.value_json : null;
+      if (JSON.stringify(prevNorm) !== JSON.stringify(newNorm)) {
+        diffs[`attr_${row.attribute_code}`] = {
+          label: `속성 [${row.attribute_code}]`,
+          before: formatAuditValue(prevNorm),
+          after: formatAuditValue(newNorm),
+        };
+      }
+    });
+
+    // Check deleted
+    deleteCodes.forEach((code) => {
+      if (prevAttrMap.has(code)) {
+        const prev = prevAttrMap.get(code);
+        if (prev !== null && prev !== undefined && prev !== "") {
+          diffs[`attr_${code}`] = {
+            label: `속성 [${code}]`,
+            before: formatAuditValue(prev),
+            after: "(삭제됨/미입력)",
+          };
+        }
+      }
+    });
+
+    if (Object.keys(diffs).length > 0) {
+      // Determine actor (Admin or Portal)
+      let isAdmin = false;
+      let actorUserId: string | null = null;
+      let actorName = "사용자";
+      let actorEmail: string | null = null;
+      let companyName: string | null = null;
+
+      try {
+        const adminSession = await verifyAdminSession();
+        if (adminSession?.userId) {
+          isAdmin = true;
+          actorUserId = adminSession.userId;
+          companyName = "Letusto Admin";
+          const { data: profile } = await admin
+            .from("profiles")
+            .select("display_name")
+            .eq("id", adminSession.userId)
+            .maybeSingle();
+          if (profile?.display_name) actorName = profile.display_name;
+        }
+      } catch {
+        // Not admin session, check portal user
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          actorUserId = user.id;
+          actorEmail = user.email || null;
+          const { data: profile } = await supabase
+            .from("profiles")
+            .select("display_name")
+            .eq("id", user.id)
+            .maybeSingle();
+          if (profile?.display_name) actorName = profile.display_name;
+
+          if (currentProd?.company_id) {
+            const { data: comp } = await supabase
+              .from("companies")
+              .select("name")
+              .eq("id", currentProd.company_id)
+              .maybeSingle();
+            if (comp?.name) companyName = comp.name;
+          }
+        }
+      }
+
+      await recordProductChangeLog({
+        productId,
+        userId: actorUserId,
+        userName: actorName,
+        userEmail: actorEmail,
+        source: isAdmin ? "ADMIN" : "BRAND_PORTAL",
+        companyName: companyName || (isAdmin ? "Letusto Admin" : "Brand Portal"),
+        section: "카테고리 & 속성",
+        actionType: "UPDATE",
+        summary: `표준 카테고리 및 동적 속성값 수정 (${Object.keys(diffs).length}개 항목)`,
+        changes: diffs,
+      });
+    }
+  } catch (auditErr) {
+    console.warn("⚠️ Attribute audit log error:", auditErr);
   }
 
   revalidatePath(`/admin/products/${productId}`);

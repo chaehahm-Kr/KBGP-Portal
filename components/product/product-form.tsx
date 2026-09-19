@@ -27,7 +27,7 @@ export function ProductForm({ action, brands }: ProductFormProps) {
   const [brandId, setBrandId] = useState(brands[0]?.id || "");
   const [manufactureSku, setManufactureSku] = useState("");
   const [nameEn, setNameEn] = useState("");
-  const [category, setCategory] = useState("skincare");
+  const [category, setCategory] = useState("");
   const [priceKrwRetail, setPriceKrwRetail] = useState("");
   const [priceUsdFob, setPriceUsdFob] = useState("");
   
@@ -314,6 +314,7 @@ export function ProductForm({ action, brands }: ProductFormProps) {
                 onChange={(e) => setCategory(e.target.value)}
                 className={inputClass}
               >
+                <option value="">카테고리 선택</option>
                 {(Object.keys(PRODUCT_CATEGORY_LABEL) as ProductCategory[]).map((value) => (
                   <option key={value} value={value}>
                     {PRODUCT_CATEGORY_LABEL[value]}
@@ -520,7 +521,7 @@ export function ProductForm({ action, brands }: ProductFormProps) {
           <div className="grid gap-4 sm:grid-cols-2">
             {/* Width */}
             <div className="space-y-1.5 p-3 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50/20">
-              <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300">가로 (Width, cm/inch) *</label>
+              <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300">가로 (Width, cm/inch)</label>
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <span className="text-[9px] text-zinc-400 font-semibold block">cm</span>
@@ -528,7 +529,6 @@ export function ProductForm({ action, brands }: ProductFormProps) {
                     name="packageWidth"
                     type="number"
                     step="0.1"
-                    required
                     placeholder="0.0"
                     value={packageWidth}
                     onChange={(e) => handleWidthCmChange(e.target.value)}
@@ -551,7 +551,7 @@ export function ProductForm({ action, brands }: ProductFormProps) {
 
             {/* Depth */}
             <div className="space-y-1.5 p-3 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50/20">
-              <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300">세로 (Depth, cm/inch) *</label>
+              <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300">세로 (Depth, cm/inch)</label>
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <span className="text-[9px] text-zinc-400 font-semibold block">cm</span>
@@ -559,7 +559,6 @@ export function ProductForm({ action, brands }: ProductFormProps) {
                     name="packageDepth"
                     type="number"
                     step="0.1"
-                    required
                     placeholder="0.0"
                     value={packageDepth}
                     onChange={(e) => handleDepthCmChange(e.target.value)}
@@ -582,7 +581,7 @@ export function ProductForm({ action, brands }: ProductFormProps) {
 
             {/* Height */}
             <div className="space-y-1.5 p-3 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50/20">
-              <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300">높이 (Height, cm/inch) *</label>
+              <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300">높이 (Height, cm/inch)</label>
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <span className="text-[9px] text-zinc-400 font-semibold block">cm</span>
@@ -590,7 +589,6 @@ export function ProductForm({ action, brands }: ProductFormProps) {
                     name="packageHeight"
                     type="number"
                     step="0.1"
-                    required
                     placeholder="0.0"
                     value={packageHeight}
                     onChange={(e) => handleHeightCmChange(e.target.value)}
@@ -613,7 +611,7 @@ export function ProductForm({ action, brands }: ProductFormProps) {
 
             {/* Weight */}
             <div className="space-y-1.5 p-3 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50/20">
-              <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300">무게 (Weight, g/lb/oz) *</label>
+              <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300">무게 (Weight, g/lb/oz)</label>
               <div className="grid grid-cols-3 gap-1.5">
                 <div>
                   <span className="text-[9px] text-zinc-400 font-semibold block">g</span>
@@ -621,7 +619,6 @@ export function ProductForm({ action, brands }: ProductFormProps) {
                     name="packageWeight"
                     type="number"
                     step="0.1"
-                    required
                     placeholder="0.0"
                     value={packageWeight}
                     onChange={(e) => handleWeightGChange(e.target.value)}

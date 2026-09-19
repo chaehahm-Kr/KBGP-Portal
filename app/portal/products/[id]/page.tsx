@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getSignedFileUrl } from "@/lib/files/storage";
 import { ProductDetailTabs } from "@/components/product/product-detail-tabs";
 import type { Product, ProductVideo } from "@/lib/product/types";
+import { getProductCategoryCompletion } from "@/lib/product/attribute-completion";
 
 export const metadata: Metadata = {
   title: "제품 상세 | 파트너 포털",
@@ -41,6 +42,9 @@ export default async function ProductDetailPage({
   if (!product) {
     notFound();
   }
+
+  // Calculate category and attribute completion
+  const initialCategoryCompletion = await getProductCategoryCompletion(product.id, product.category_code || null);
 
   const { data: brand } = await supabase
     .from("brands")
@@ -129,6 +133,7 @@ export default async function ProductDetailPage({
       certificateUrls={certificateUrls}
       ingredientsFileUrl={ingredientsFileUrl}
       ingredientsFileUrlEn={ingredientsFileUrlEn}
+      initialCategoryCompletion={initialCategoryCompletion}
     />
   );
 }

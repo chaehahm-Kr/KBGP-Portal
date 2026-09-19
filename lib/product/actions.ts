@@ -5,10 +5,9 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { requireCompanyMembership } from "@/lib/company/dal";
 import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
 import { validateUploadedFile } from "@/lib/files/validate";
 import type { CertificateType, ProductCategory } from "@/lib/product/types";
-import { recordProductChangeLog } from "@/lib/product/audit";
+import { recordProductChangeLog, computeProductFieldDiffs } from "@/lib/product/audit";
 
 export type ProductFormState = { error: string } | undefined;
 
@@ -18,13 +17,16 @@ const productSchema = z.object({
   brandId: z.string().uuid("브랜드를 선택해주세요."),
   manufactureSku: z.string().trim().min(1, "제조사 SKU를 입력해주세요."),
   nameEn: z.string().trim().min(1, "영문 제품명을 입력해주세요."),
-  category: z.enum([
-    "skincare",
-    "hair_scalp",
-    "beauty_tools",
-    "daily_care",
-    "wellness_patch",
-  ] as const satisfies readonly ProductCategory[]),
+  category: z.preprocess(
+    (val) => (val === "" || val === null || val === undefined ? null : val),
+    z.enum([
+      "skincare",
+      "hair_scalp",
+      "beauty_tools",
+      "daily_care",
+      "wellness_patch",
+    ] as const satisfies readonly ProductCategory[]).nullable().optional()
+  ),
   priceKrwRetail: z.preprocess((val) => (val === "" || val === null ? undefined : val), z.coerce.number().min(0).optional()),
   priceUsdFob: z.preprocess((val) => (val === "" || val === null ? undefined : val), z.coerce.number().min(0).optional()),
   packageWidth: z.preprocess((val) => (val === "" || val === null ? undefined : val), z.coerce.number().min(0).optional()),
@@ -114,7 +116,7 @@ export async function createProduct(
       company_id: companyId,
       name: parsed.data.nameEn,
       name_en: parsed.data.nameEn,
-      category: parsed.data.category,
+      category: parsed.data.category || null,
       manufacture_sku: parsed.data.manufactureSku,
       price_krw_retail: parsed.data.priceKrwRetail ?? null,
       price_usd_fob: parsed.data.priceUsdFob ?? null,
@@ -164,6 +166,7 @@ export async function addProductImages(productId: string, formData: FormData) {
     throw new Error(`제품 이미지는 최대 ${MAX_IMAGES}장까지 첨부할 수 있습니다.`);
   }
 
+  let uploadedCount = 0;
   for (const [i, image] of images.entries()) {
     const validation = await validateUploadedFile(image, ["image"]);
     if (!validation.ok) continue;
@@ -180,7 +183,27 @@ export async function addProductImages(productId: string, formData: FormData) {
         storage_path: path,
         position: (count ?? 0) + i,
       });
+      uploadedCount++;
     }
+  }
+
+  if (uploadedCount > 0) {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      const { data: profile } = user ? await supabase.from("profiles").select("display_name").eq("id", user.id).maybeSingle() : { data: null };
+      const { data: company } = await supabase.from("companies").select("name").eq("id", companyId).maybeSingle();
+      await recordProductChangeLog({
+        productId,
+        userId: user?.id,
+        userName: profile?.display_name || user?.email || "Brand User",
+        userEmail: user?.email,
+        source: "BRAND_PORTAL",
+        companyName: company?.name || "Brand Portal",
+        section: "미디어",
+        actionType: "CREATE",
+        summary: `제품 이미지 ${uploadedCount}장 추가`,
+      });
+    } catch (e) {}
   }
 
   revalidatePath(`/portal/products/${productId}`);
@@ -190,14 +213,29 @@ export async function removeProductImage(productId: string, imageId: string) {
   const { companyId } = await requireCompanyMembership();
   const supabase = await createClient();
 
-
-
   await supabase
     .from("product_images")
     .delete()
     .eq("id", imageId)
     .eq("product_id", productId)
     .eq("company_id", companyId);
+
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    const { data: profile } = user ? await supabase.from("profiles").select("display_name").eq("id", user.id).maybeSingle() : { data: null };
+    const { data: company } = await supabase.from("companies").select("name").eq("id", companyId).maybeSingle();
+    await recordProductChangeLog({
+      productId,
+      userId: user?.id,
+      userName: profile?.display_name || user?.email || "Brand User",
+      userEmail: user?.email,
+      source: "BRAND_PORTAL",
+      companyName: company?.name || "Brand Portal",
+      section: "미디어",
+      actionType: "DELETE",
+      summary: "제품 이미지 삭제",
+    });
+  } catch (e) {}
 
   revalidatePath(`/portal/products/${productId}`);
 }
@@ -279,19 +317,44 @@ export async function addProductCertificate(
     is_current: true,
   });
 
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    const { data: profile } = user ? await supabase.from("profiles").select("display_name").eq("id", user.id).maybeSingle() : { data: null };
+    const { data: company } = await supabase.from("companies").select("name").eq("id", companyId).maybeSingle();
+    await recordProductChangeLog({
+      productId,
+      userId: user?.id,
+      userName: profile?.display_name || user?.email || "Brand User",
+      userEmail: user?.email,
+      source: "BRAND_PORTAL",
+      companyName: company?.name || "Brand Portal",
+      section: "인허가 & 보증서",
+      actionType: "CREATE",
+      summary: `인허가/보증서 (${certificateType}) 업로드 (v${nextVersion})`,
+      changes: {
+        certificate_type: { label: "인증서 종류", before: null, after: certificateType },
+        version: { label: "버전", before: null, after: `v${nextVersion}` },
+        filename: { label: "파일명", before: null, after: file.name },
+      },
+    });
+  } catch (e) {}
+
   revalidatePath(`/portal/products/${productId}`);
 }
 
 const productUpdateSchema = z.object({
   name: z.string().trim().min(1, "제품명을 입력해주세요."),
   nameEn: z.string().trim().nullable().optional(),
-  category: z.enum([
-    "skincare",
-    "hair_scalp",
-    "beauty_tools",
-    "daily_care",
-    "wellness_patch",
-  ] as const satisfies readonly ProductCategory[]),
+  category: z.preprocess(
+    (val) => (val === "" || val === null || val === undefined ? null : val),
+    z.enum([
+      "skincare",
+      "hair_scalp",
+      "beauty_tools",
+      "daily_care",
+      "wellness_patch",
+    ] as const satisfies readonly ProductCategory[]).nullable().optional()
+  ),
   volume: z.string().trim().nullable().optional(),
   estimatedRetailPrice: z
     .string()
@@ -464,6 +527,14 @@ export async function updateProduct(
     return { error: "온라인 판매 중인 경우, 최소 한 개 이상의 온라인 판매 링크(링크 1)를 입력해 주세요." };
   }
 
+  // 1. Fetch current product state before updating for audit diff calculation
+  const { data: beforeProduct } = await supabase
+    .from("products")
+    .select("*")
+    .eq("id", productId)
+    .eq("company_id", companyId)
+    .single();
+
   const { error: updateError } = await supabase
     .from("products")
     .update({
@@ -536,41 +607,60 @@ export async function updateProduct(
     return { error: "제품 정보 수정에 실패했습니다. 잠시 후 다시 시도해주세요." };
   }
 
-  // Fetch portal user display name and company name
-  let userName = "Brand User";
-  let companyName = "Brand Portal";
-  try {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (user) {
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("display_name")
-        .eq("id", user.id)
-        .maybeSingle();
-      if (profile?.display_name) userName = profile.display_name;
+  // 2. Calculate field diffs
+  if (beforeProduct) {
+    const afterObj: Record<string, any> = {
+      ...rawData,
+      bullet_points: bulletPoints,
+      upc,
+      ean,
+    };
+    const { diffs, sectionNames } = computeProductFieldDiffs(beforeProduct, afterObj);
 
-      const { data: company } = await supabase
-        .from("companies")
-        .select("name")
-        .eq("id", companyId)
-        .maybeSingle();
-      if (company?.name) companyName = company.name;
+    // Only record change log if there are actual diffs (Requirement TEST F)
+    if (Object.keys(diffs).length > 0) {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        let userName = "Brand User";
+        let companyName = "Brand Portal";
 
-      await recordProductChangeLog({
-        productId,
-        userId: user.id,
-        userName,
-        userEmail: user.email,
-        source: "BRAND_PORTAL",
-        companyName,
-        section: "기본 정보 / 스펙",
-        actionType: "UPDATE",
-        summary: `브랜드사(${companyName}) 상품 정보 수정: ${parsed.data.name || parsed.data.nameEn || "상품"}`,
-        changes: rawData as any,
-      });
+        if (user) {
+          const { data: profile } = await supabase
+            .from("profiles")
+            .select("display_name")
+            .eq("id", user.id)
+            .maybeSingle();
+          if (profile?.display_name) userName = profile.display_name;
+
+          const { data: company } = await supabase
+            .from("companies")
+            .select("name")
+            .eq("id", companyId)
+            .maybeSingle();
+          if (company?.name) companyName = company.name;
+
+          const changedFieldLabels = Object.values(diffs).map((d) => d.label);
+          const summary = `포털 상품 정보 수정 (${changedFieldLabels.slice(0, 3).join(", ")}${
+            changedFieldLabels.length > 3 ? ` 외 ${changedFieldLabels.length - 3}개` : ""
+          })`;
+
+          await recordProductChangeLog({
+            productId,
+            userId: user.id,
+            userName,
+            userEmail: user.email,
+            source: "BRAND_PORTAL",
+            companyName,
+            section: Array.from(sectionNames).join(", ") || "기본 정보",
+            actionType: "UPDATE",
+            summary,
+            changes: diffs,
+          });
+        }
+      } catch (logErr) {
+        console.warn("⚠️ Portal audit log error:", logErr);
+      }
     }
-  } catch (logErr) {
-    console.warn("⚠️ Portal audit log error:", logErr);
   }
 
   revalidatePath(`/portal/products/${productId}`);
@@ -591,6 +681,23 @@ export async function addProductVideoUrl(productId: string, videoUrl: string) {
     company_id: companyId,
     video_url: videoUrl.trim(),
   });
+
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    const { data: profile } = user ? await supabase.from("profiles").select("display_name").eq("id", user.id).maybeSingle() : { data: null };
+    const { data: company } = await supabase.from("companies").select("name").eq("id", companyId).maybeSingle();
+    await recordProductChangeLog({
+      productId,
+      userId: user?.id,
+      userName: profile?.display_name || user?.email || "Brand User",
+      userEmail: user?.email,
+      source: "BRAND_PORTAL",
+      companyName: company?.name || "Brand Portal",
+      section: "미디어",
+      actionType: "CREATE",
+      summary: `제품 동영상 링크 등록 (${videoUrl.trim()})`,
+    });
+  } catch (e) {}
 
   revalidatePath(`/portal/products/${productId}`);
 }
@@ -627,6 +734,23 @@ export async function addProductVideoFile(productId: string, formData: FormData)
     storage_path: path,
   });
 
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    const { data: profile } = user ? await supabase.from("profiles").select("display_name").eq("id", user.id).maybeSingle() : { data: null };
+    const { data: company } = await supabase.from("companies").select("name").eq("id", companyId).maybeSingle();
+    await recordProductChangeLog({
+      productId,
+      userId: user?.id,
+      userName: profile?.display_name || user?.email || "Brand User",
+      userEmail: user?.email,
+      source: "BRAND_PORTAL",
+      companyName: company?.name || "Brand Portal",
+      section: "미디어",
+      actionType: "CREATE",
+      summary: `제품 동영상 파일 업로드 (${file.name})`,
+    });
+  } catch (e) {}
+
   revalidatePath(`/portal/products/${productId}`);
 }
 
@@ -652,6 +776,23 @@ export async function removeProductVideo(productId: string, videoId: string) {
     .eq("id", videoId)
     .eq("product_id", productId)
     .eq("company_id", companyId);
+
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    const { data: profile } = user ? await supabase.from("profiles").select("display_name").eq("id", user.id).maybeSingle() : { data: null };
+    const { data: company } = await supabase.from("companies").select("name").eq("id", companyId).maybeSingle();
+    await recordProductChangeLog({
+      productId,
+      userId: user?.id,
+      userName: profile?.display_name || user?.email || "Brand User",
+      userEmail: user?.email,
+      source: "BRAND_PORTAL",
+      companyName: company?.name || "Brand Portal",
+      section: "미디어",
+      actionType: "DELETE",
+      summary: "제품 동영상 삭제",
+    });
+  } catch (e) {}
 
   revalidatePath(`/portal/products/${productId}`);
 }
@@ -740,6 +881,30 @@ export async function uploadIngredientsFile(productId: string, language: "ko" | 
     });
   }
 
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    const { data: profile } = user ? await supabase.from("profiles").select("display_name").eq("id", user.id).maybeSingle() : { data: null };
+    const { data: company } = await supabase.from("companies").select("name").eq("id", companyId).maybeSingle();
+    await recordProductChangeLog({
+      productId,
+      userId: user?.id,
+      userName: profile?.display_name || user?.email || "Brand User",
+      userEmail: user?.email,
+      source: "BRAND_PORTAL",
+      companyName: company?.name || "Brand Portal",
+      section: "인허가 & 보증서",
+      actionType: "CREATE",
+      summary: `${language === "ko" ? "국문" : "영문"} 전성분표 파일 업로드 (${file.name})`,
+      changes: {
+        [columnName]: {
+          label: language === "ko" ? "국문 전성분표 파일" : "영문 전성분표 파일",
+          before: oldPath ? "이전 파일" : null,
+          after: file.name,
+        },
+      },
+    });
+  } catch (e) {}
+
   revalidatePath(`/portal/products/${productId}`);
 }
 
@@ -782,6 +947,30 @@ export async function deleteIngredientsFile(productId: string, language: "ko" | 
       .eq("is_current", true);
   }
 
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    const { data: profile } = user ? await supabase.from("profiles").select("display_name").eq("id", user.id).maybeSingle() : { data: null };
+    const { data: company } = await supabase.from("companies").select("name").eq("id", companyId).maybeSingle();
+    await recordProductChangeLog({
+      productId,
+      userId: user?.id,
+      userName: profile?.display_name || user?.email || "Brand User",
+      userEmail: user?.email,
+      source: "BRAND_PORTAL",
+      companyName: company?.name || "Brand Portal",
+      section: "인허가 & 보증서",
+      actionType: "DELETE",
+      summary: `${language === "ko" ? "국문" : "영문"} 전성분표 파일 삭제`,
+      changes: {
+        [columnName]: {
+          label: language === "ko" ? "국문 전성분표 파일" : "영문 전성분표 파일",
+          before: "기존 파일",
+          after: null,
+        },
+      },
+    });
+  } catch (e) {}
+
   revalidatePath(`/portal/products/${productId}`);
 }
 
@@ -800,10 +989,9 @@ export async function updateProductImagesOrder(productId: string, imageIdsInOrde
     throw new Error("올바르지 않은 이미지 목록입니다.");
   }
 
-  const adminSupabase = createAdminClient();
   for (let index = 0; index < imageIdsInOrder.length; index++) {
     const id = imageIdsInOrder[index];
-    const { error } = await adminSupabase
+    const { error } = await supabase
       .from("product_images")
       .update({ position: index })
       .eq("id", id)
@@ -815,6 +1003,23 @@ export async function updateProductImagesOrder(productId: string, imageIdsInOrde
       throw new Error(`이미지 순서 저장 실패: ${error.message}`);
     }
   }
+
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    const { data: profile } = user ? await supabase.from("profiles").select("display_name").eq("id", user.id).maybeSingle() : { data: null };
+    const { data: company } = await supabase.from("companies").select("name").eq("id", companyId).maybeSingle();
+    await recordProductChangeLog({
+      productId,
+      userId: user?.id,
+      userName: profile?.display_name || user?.email || "Brand User",
+      userEmail: user?.email,
+      source: "BRAND_PORTAL",
+      companyName: company?.name || "Brand Portal",
+      section: "미디어",
+      actionType: "UPDATE",
+      summary: "제품 이미지 노출 순서 변경",
+    });
+  } catch (e) {}
 
   revalidatePath(`/portal/products/${productId}`);
 }
@@ -830,7 +1035,7 @@ export async function deleteProduct(productId: string): Promise<{ success: boole
     // 제품이 해당 회사 소유인지 확인
     const { data: product } = await supabase
       .from("products")
-      .select("id")
+      .select("id, name, name_en, manufacture_sku, letusto_sku")
       .eq("id", productId)
       .eq("company_id", companyId)
       .single();
@@ -839,9 +1044,10 @@ export async function deleteProduct(productId: string): Promise<{ success: boole
       return { success: false, error: "제품을 찾을 수 없거나 삭제 권한이 없습니다." };
     }
 
+    const now = new Date().toISOString();
     const { error: deleteError } = await supabase
       .from("products")
-      .update({ deleted_at: new Date().toISOString() })
+      .update({ deleted_at: now })
       .eq("id", productId)
       .eq("company_id", companyId);
 
@@ -849,6 +1055,30 @@ export async function deleteProduct(productId: string): Promise<{ success: boole
       console.error("Delete product error:", deleteError);
       return { success: false, error: "제품 삭제 중 오류가 발생했습니다." };
     }
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      const { data: profile } = user ? await supabase.from("profiles").select("display_name").eq("id", user.id).maybeSingle() : { data: null };
+      const { data: company } = await supabase.from("companies").select("name").eq("id", companyId).maybeSingle();
+      await recordProductChangeLog({
+        productId,
+        userId: user?.id,
+        userName: profile?.display_name || user?.email || "Brand User",
+        userEmail: user?.email,
+        source: "BRAND_PORTAL",
+        companyName: company?.name || "Brand Portal",
+        section: "삭제/복구",
+        actionType: "DELETE",
+        summary: `브랜드사 상품 삭제 (Soft Delete) - SKU: ${product.letusto_sku || product.manufacture_sku || "N/A"}`,
+        changes: {
+          deleted_at: {
+            label: "삭제 일시",
+            before: null,
+            after: now,
+          },
+        },
+      });
+    } catch (e) {}
 
     revalidatePath("/portal/products");
     revalidatePath(`/portal/products/${productId}`);

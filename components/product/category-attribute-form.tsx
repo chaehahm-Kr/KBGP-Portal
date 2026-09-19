@@ -88,6 +88,12 @@ function getFlatFinalCategories(nodes: CategoryNode[], currentPath: string[] = [
   return results;
 }
 
+export interface CategoryCompletionStatus {
+  categoryComplete: boolean;
+  requiredAttributesComplete: boolean;
+  missingRequiredAttributes: { code: string; nameKo: string }[];
+}
+
 interface CategoryAttributeFormProps {
   productId: string;
   initialCategoryCode: string | null;
@@ -101,6 +107,7 @@ interface CategoryAttributeFormProps {
   volume: string | null;
   colorMap?: string | null;
   isAdmin: boolean;
+  onCompletionChange?: (status: CategoryCompletionStatus) => void;
 }
 
 export function CategoryAttributeForm({
@@ -116,6 +123,7 @@ export function CategoryAttributeForm({
   volume,
   colorMap,
   isAdmin,
+  onCompletionChange,
 }: CategoryAttributeFormProps) {
   const router = useRouter();
   const [categoriesTree, setCategoriesTree] = useState<CategoryNode[]>([]);
@@ -400,6 +408,31 @@ export function CategoryAttributeForm({
     }
     return val !== null && val !== undefined && String(val).trim() !== "";
   };
+
+  // Sync completion state to parent component (e.g. ProductDetailTabs tab indicator & missing warning)
+  useEffect(() => {
+    if (!onCompletionChange) return;
+    const isCategoryComplete = Boolean(isFinalCategorySelected);
+    const missing: { code: string; nameKo: string }[] = [];
+    if (isCategoryComplete) {
+      attributes.forEach((attr) => {
+        const isEditable = isAdmin ? true : (attr.brandEditable && !attr.adminOnly);
+        if (!isEditable) return;
+        if (attr.isRequired) {
+          const val = formValues[attr.code];
+          if (!isAttributeValueFilled(attr, val)) {
+            missing.push({ code: attr.code, nameKo: attr.nameKo });
+          }
+        }
+      });
+    }
+    const isReqComplete = isCategoryComplete && missing.length === 0;
+    onCompletionChange({
+      categoryComplete: isCategoryComplete,
+      requiredAttributesComplete: isReqComplete,
+      missingRequiredAttributes: missing,
+    });
+  }, [isFinalCategorySelected, attributes, formValues, isAdmin, onCompletionChange]);
 
   // 저장 처리
   const handleSubmit = async (e?: React.FormEvent | React.MouseEvent) => {
