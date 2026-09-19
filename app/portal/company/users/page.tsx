@@ -16,7 +16,7 @@ export default async function CompanyUsersPage() {
   let { data: users, error } = await supabase
     .from("company_users")
     .select(
-      "id, company_id, name, email, company_role, status, invited_at, joined_at, created_at, title, position, phone, is_primary, permissions"
+      "id, company_id, name, email, company_role, status, invited_by, invited_at, joined_at, created_at, title, position, phone, is_primary, permissions"
     )
     .eq("company_id", companyId)
     .order("created_at", { ascending: true });
@@ -25,7 +25,7 @@ export default async function CompanyUsersPage() {
   if (error && (error.code === "42703" || error.message.includes("column"))) {
     const { data: fallbackUsers } = await supabase
       .from("company_users")
-      .select("id, company_id, name, email, company_role, status, invited_at, joined_at, created_at")
+      .select("id, company_id, name, email, company_role, status, invited_by, invited_at, joined_at, created_at")
       .eq("company_id", companyId)
       .order("created_at", { ascending: true });
 

@@ -166,6 +166,83 @@ export async function cancelCompanyUserInvite(targetUserId: string) {
 }
 
 /**
+ * 회사의 멤버를 제거한다 (Company Membership Removal).
+ * - auth.users 계정을 hard delete하지 않고, 회사의 소속 멤버십(company_users) 및 배정 업무를 삭제한다.
+ * - 최초 가입 관리자(Initial Owner), 마지막 남은 관리자, 본인 계정은 삭제할 수 없다.
+ */
+export async function removeCompanyMember(targetUserId: string) {
+  const { companyId, userId } = await requireCompanyAdmin();
+  const admin = createAdminClient();
+
+  // 1. Target user verification within same company
+  const { data: target } = await admin
+    .from("company_users")
+    .select("id, name, email, company_id, company_role, status, invited_by, created_at")
+    .eq("id", targetUserId)
+    .single();
+
+  if (!target || target.company_id !== companyId) {
+    throw new Error("해당 사용자를 찾을 수 없거나 접근 권한이 없습니다.");
+  }
+
+  // 2. Self-removal protection
+  if (targetUserId === userId) {
+    throw new Error("본인 계정은 직접 제거할 수 없습니다.");
+  }
+
+  // 3. Initial Owner / Primary Admin protection
+  const { data: allAdmins } = await admin
+    .from("company_users")
+    .select("id, invited_by, created_at, status")
+    .eq("company_id", companyId)
+    .eq("company_role", "company_admin")
+    .order("created_at", { ascending: true });
+
+  const earliestAdminId = allAdmins?.[0]?.id;
+  const isInitialOwner = !target.invited_by || target.id === earliestAdminId;
+  if (isInitialOwner) {
+    throw new Error("최초 관리자(Owner) 계정은 회사에서 제거할 수 없습니다.");
+  }
+
+  // 4. Last Admin protection
+  if (target.company_role === "company_admin") {
+    const activeAdmins = allAdmins?.filter((a) => a.status === "active") || [];
+    if (activeAdmins.length <= 1) {
+      throw new Error("회사에는 최소 1명의 관리자가 필요합니다.");
+    }
+  }
+
+  // 5. Delete task assignments for this company
+  try {
+    await admin
+      .from("company_task_assignments")
+      .delete()
+      .eq("user_id", targetUserId)
+      .eq("company_id", companyId);
+  } catch (taskErr) {
+    console.warn("Could not delete company_task_assignments for removed user:", taskErr);
+  }
+
+  // 6. Delete company membership (company_users row)
+  const { error: deleteErr } = await admin
+    .from("company_users")
+    .delete()
+    .eq("id", targetUserId)
+    .eq("company_id", companyId);
+
+  if (deleteErr) {
+    throw new Error(`멤버 제거 실패: ${deleteErr.message}`);
+  }
+
+  // 7. Invalidate sessions
+  await deactivateUserSessions(targetUserId);
+
+  revalidatePath("/portal/company/users");
+  revalidatePath("/portal/company/info");
+  return { success: true };
+}
+
+/**
  * 08_주요화면과AC.md 예외: "Company Admin이 자기 자신의 Admin 권한을 스스로
  * 회수하려 할 때, 회사에 남은 Admin이 자신뿐이면 차단(회사가 관리자 없는 상태가
  * 되는 것을 방지)". 제거도 사실상 같은 위험이 있으므로 동일하게 막는다.
@@ -173,54 +250,17 @@ export async function cancelCompanyUserInvite(targetUserId: string) {
  * 즉시 세션 무효화(10_보안과권한요구사항.md 3번)는 lib/auth/admin-actions.ts를 그대로 재사용한다.
  */
 export async function removeCompanyUser(targetUserId: string) {
-  const { companyId, userId } = await requireCompanyAdmin();
-  const admin = createAdminClient();
-
-  const { data: target } = await admin
-    .from("company_users")
-    .select("company_id, company_role, status")
-    .eq("id", targetUserId)
-    .single();
-
-  if (!target || target.company_id !== companyId) {
-    return;
-  }
-
-  if (target.company_role === "company_admin") {
-    const { count } = await admin
-      .from("company_users")
-      .select("id", { count: "exact", head: true })
-      .eq("company_id", companyId)
-      .eq("company_role", "company_admin")
-      .eq("status", "active");
-
-    if ((count ?? 0) <= 1) {
-      throw new Error(
-        "회사에 남은 관리자가 자신뿐이라 제거할 수 없습니다. 다른 사람을 관리자로 지정한 뒤 다시 시도해주세요."
-      );
-    }
-  }
-
-  await admin
-    .from("company_users")
-    .update({ status: "suspended" })
-    .eq("id", targetUserId);
-
-  if (targetUserId !== userId) {
-    await deactivateUserSessions(targetUserId);
-  }
-
-  revalidatePath("/portal/company/users");
-  revalidatePath("/portal/company/info");
+  return removeCompanyMember(targetUserId);
 }
 
 /**
- * 소속 사용자 정보, 역할, 활성 상태, 주 컨택 여부 및 메뉴별 ACL 권한 수정
+ * 소속 사용자 정보(이름, 이메일, 직함, 연락처 등), 역할, 활성 상태, 주 컨택 여부 및 메뉴별 ACL 권한 수정
  */
 export async function updateCompanyUser(
   targetUserId: string,
   payload: {
     name: string;
+    email: string;
     title: string;
     position: string;
     phone: string;
@@ -236,12 +276,17 @@ export async function updateCompanyUser(
   // 1. 대상 사용자 조회 및 유효성 검증
   const { data: target } = await admin
     .from("company_users")
-    .select("company_id, company_role, status")
+    .select("id, email, name, company_id, company_role, status, invited_by, created_at")
     .eq("id", targetUserId)
     .single();
 
   if (!target || target.company_id !== companyId) {
     throw new Error("해당 사용자를 찾을 수 없거나 권한이 없습니다.");
+  }
+
+  const normalizedEmail = normalizeEmail(payload.email);
+  if (!normalizedEmail) {
+    throw new Error("올바른 이메일 주소를 입력해 주세요.");
   }
 
   // 2. 마지막 관리자 셀프 다운그레이드/비활성화 방지
@@ -250,22 +295,49 @@ export async function updateCompanyUser(
     (payload.companyRole === "company_staff" && target.company_role === "company_admin") ||
     (payload.status === "suspended" && target.status === "active");
 
-  if (targetIsSelf && isDowngradingOrDeactivating) {
-    const { count } = await admin
+  if (isDowngradingOrDeactivating) {
+    const { data: activeAdmins } = await admin
       .from("company_users")
-      .select("id", { count: "exact", head: true })
+      .select("id")
       .eq("company_id", companyId)
       .eq("company_role", "company_admin")
       .eq("status", "active");
 
-    if ((count ?? 0) <= 1) {
+    if ((activeAdmins?.length ?? 0) <= 1) {
       throw new Error(
-        "회사에 남은 관리자가 자신뿐이라 권한을 내리거나 비활성화할 수 없습니다. 다른 사람을 관리자로 지정한 뒤 다시 시도해주세요."
+        "회사에는 최소 1명의 관리자가 필요합니다. 다른 멤버를 관리자로 지정한 뒤 다시 시도해주세요."
       );
     }
   }
 
-  // 3. 주 컨택(대표 담당자) 설정 처리 (true인 경우 해당 회사의 다른 사용자의 is_primary를 해제)
+  // 3. 이메일 변경 처리 (Auth Users 및 중복 체크)
+  const isEmailChanged = normalizedEmail !== normalizeEmail(target.email);
+  if (isEmailChanged) {
+    const dupCheck = await checkUserEmailDuplicate(normalizedEmail, companyId);
+    if (dupCheck.status !== "AVAILABLE") {
+      throw new Error(dupCheck.message);
+    }
+
+    // Update email in Supabase Auth Provider
+    const { error: authEmailError } = await admin.auth.admin.updateUserById(targetUserId, {
+      email: normalizedEmail,
+      email_confirm: true,
+      user_metadata: { display_name: payload.name.trim() },
+    });
+
+    if (authEmailError) {
+      throw new Error(`Auth 이메일 변경 실패: ${authEmailError.message}`);
+    }
+  } else {
+    // Update display name in Auth metadata if name changed
+    if (payload.name.trim() !== target.name) {
+      await admin.auth.admin.updateUserById(targetUserId, {
+        user_metadata: { display_name: payload.name.trim() },
+      });
+    }
+  }
+
+  // 4. 주 컨택(대표 담당자) 설정 처리 (true인 경우 해당 회사의 다른 사용자의 is_primary를 해제)
   if (payload.isPrimary) {
     await admin
       .from("company_users")
@@ -273,11 +345,12 @@ export async function updateCompanyUser(
       .eq("company_id", companyId);
   }
 
-  // 4. 레코드 업데이트
+  // 5. 레코드 업데이트
   const { error: updateError } = await admin
     .from("company_users")
     .update({
       name: payload.name.trim(),
+      email: normalizedEmail,
       title: payload.title.trim() || null,
       position: payload.position.trim() || null,
       phone: payload.phone.trim() || null,
@@ -286,7 +359,8 @@ export async function updateCompanyUser(
       is_primary: payload.isPrimary,
       permissions: payload.permissions,
     })
-    .eq("id", targetUserId);
+    .eq("id", targetUserId)
+    .eq("company_id", companyId);
 
   if (updateError) {
     if (updateError.message.includes("column") || updateError.code === "P0002") {
@@ -295,7 +369,7 @@ export async function updateCompanyUser(
     throw new Error(`사용자 정보 업데이트 실패: ${updateError.message}`);
   }
 
-  // 5. 비활성화 또는 역할 변경 시 세션 무효화
+  // 6. 비활성화 또는 역할 변경 시 세션 무효화
   const roleChanged = target.company_role !== payload.companyRole;
   const deactivated = payload.status === "suspended" && target.status !== "suspended";
   if (!targetIsSelf && (deactivated || roleChanged)) {
@@ -308,6 +382,7 @@ export async function updateCompanyUser(
 
   revalidatePath("/portal/company/users");
   revalidatePath("/portal/company/info");
+  return { success: true };
 }
 
 /**
