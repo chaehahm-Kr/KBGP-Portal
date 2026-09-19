@@ -22,26 +22,32 @@ export async function requestPasswordReset(
   const email = formData.get("email");
 
   if (typeof email === "string" && email) {
-    const emailStr = email.trim();
+    const emailStr = email.trim().toLowerCase();
     const adminClient = createAdminClient();
     
-    // Get current site URL dynamically from headers to prevent localhost redirection bugs
+    // Get canonical site URL dynamically from headers
     const headersList = await headers();
     const host = headersList.get("host") || "portal.kselectnetwork.com";
-    const protocol = host.includes("localhost") || host.includes("127.0.0.1") ? "http" : "https";
-    const siteUrl = `${protocol}://${host}`;
+    const isLocal = host.includes("localhost") || host.includes("127.0.0.1");
+    const siteUrl = isLocal ? `http://${host}` : "https://portal.kselectnetwork.com";
+    const targetRedirect = `${siteUrl}/portal/reset-password/confirm`;
 
     // Generate the recovery link
     const { data, error } = await adminClient.auth.admin.generateLink({
       type: "recovery",
       email: emailStr,
       options: {
-        redirectTo: `${siteUrl}/portal/reset-password/confirm`,
+        redirectTo: targetRedirect,
       },
     });
 
     if (!error && data?.properties?.action_link) {
-      const actionLink = data.properties.action_link;
+      let actionLink = data.properties.action_link;
+      try {
+        const parsedUrl = new URL(actionLink);
+        parsedUrl.searchParams.set("redirect_to", targetRedirect);
+        actionLink = parsedUrl.toString();
+      } catch {}
 
       // Render branded email HTML
       const subjectTemplate = "[K SELECT NETWORK] 비밀번호 재설정 안내";
@@ -117,23 +123,29 @@ export async function requestAdminPasswordReset(
       .maybeSingle();
 
     if (!staffError && staffMember && ["active", "invited", "setting_up", "pending"].includes(staffMember.status)) {
-      // Get current site URL dynamically from headers to prevent localhost redirection bugs
+      // Get canonical site URL dynamically from headers
       const headersList = await headers();
       const host = headersList.get("host") || "admin.kselectnetwork.com";
-      const protocol = host.includes("localhost") || host.includes("127.0.0.1") ? "http" : "https";
-      const siteUrl = `${protocol}://${host}`;
+      const isLocal = host.includes("localhost") || host.includes("127.0.0.1");
+      const siteUrl = isLocal ? `http://${host}` : "https://admin.kselectnetwork.com";
+      const targetRedirect = `${siteUrl}/admin/reset-password`;
 
       // 2. Generate recovery link pointing to admin reset page
       const { data, error } = await adminClient.auth.admin.generateLink({
         type: "recovery",
         email: emailStr,
         options: {
-          redirectTo: `${siteUrl}/admin/reset-password`,
+          redirectTo: targetRedirect,
         },
       });
 
       if (!error && data?.properties?.action_link) {
-        const actionLink = data.properties.action_link;
+        let actionLink = data.properties.action_link;
+        try {
+          const parsedUrl = new URL(actionLink);
+          parsedUrl.searchParams.set("redirect_to", targetRedirect);
+          actionLink = parsedUrl.toString();
+        } catch {}
 
         // Render branded email HTML
         const subjectTemplate = "[K SELECT NETWORK] 관리자 비밀번호 재설정 안내";

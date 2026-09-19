@@ -249,10 +249,15 @@ export default function PortalHeader({
                 <p className="text-sm font-bold text-zinc-950 dark:text-white truncate">
                   {userDisplayName || "파트너 사용자"}
                 </p>
-                <p className="text-xs text-zinc-500 truncate mt-0.5">{userEmail}</p>
-                <span className="inline-block mt-1.5 rounded bg-zinc-100 dark:bg-zinc-800 px-1.5 py-0.5 text-[10px] font-medium text-zinc-600 dark:text-zinc-400 uppercase">
-                  {companyRole === "company_admin" ? "관리자" : "멤버"}
-                </span>
+                {companyRole === "company_admin" ? (
+                  <span className="inline-block mt-1.5 rounded bg-indigo-50 border border-indigo-200 dark:bg-indigo-950/70 dark:border-indigo-700/60 px-1.5 py-0.5 text-[10px] font-bold text-indigo-700 dark:text-indigo-200 uppercase">
+                    관리자
+                  </span>
+                ) : (
+                  <span className="inline-block mt-1.5 rounded bg-zinc-100 border border-zinc-200 dark:bg-zinc-800 dark:border-zinc-700 px-1.5 py-0.5 text-[10px] font-medium text-zinc-700 dark:text-zinc-300 uppercase">
+                    멤버
+                  </span>
+                )}
               </div>
               
               <div className="p-1 border-b border-zinc-100 dark:border-zinc-900 space-y-0.5">

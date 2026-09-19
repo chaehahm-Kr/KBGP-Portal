@@ -1,7 +1,10 @@
 "use client";
 
 import React, { useState, useEffect, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
+
+const NEW_BRAND_ACTION = "__NEW_BRAND_SHORTCUT__";
 import { CategoryAttributeForm } from "@/components/product/category-attribute-form";
 import { 
   type Product, 
@@ -55,9 +58,24 @@ export function ProductDetailTabs({
   ingredientsFileUrl,
   ingredientsFileUrlEn,
 }: ProductDetailTabsProps) {
+  const router = useRouter();
   const [activeTab, setActiveTab] = useState<"basic" | "category_attributes" | "price" | "logistics" | "media" | "certs">("basic");
   const [isPending, startTransition] = useTransition();
   const [statusMessage, setStatusMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
+  const handleBrandSelectChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const selected = e.target.value;
+    if (selected === NEW_BRAND_ACTION) {
+      const ok = window.confirm(
+        "브랜드 관리 페이지로 이동하시겠습니까?\n현재 입력 중인 저장되지 않은 내용은 사라질 수 있습니다."
+      );
+      if (ok) {
+        router.push("/portal/brands");
+      }
+      return;
+    }
+    setBrandId(selected);
+  };
 
   // Read admin overrides (specifically for Letusto SKU)
   const adminOverrides = (product.price_additional_info as any)?.admin_overrides || {};
@@ -872,7 +890,8 @@ export function ProductDetailTabs({
                 <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1.5">브랜드 <span className="text-rose-600 dark:text-rose-400 font-bold ml-0.5">*</span></label>
                 <select
                   name="brandId"
-                  value={brandId} onChange={(e) => setBrandId(e.target.value)}
+                  value={brandId}
+                  onChange={handleBrandSelectChange}
                   className={`block w-full rounded-lg border px-3.5 py-2 text-xs text-zinc-900 dark:bg-zinc-950 dark:text-white focus:outline-none ${!brandId ? "border-rose-350 dark:border-rose-900/60 focus:border-rose-500" : "border-zinc-300 dark:border-zinc-800 focus:border-zinc-900 dark:focus:border-white"}`}
                 >
                   {(() => {
@@ -884,6 +903,10 @@ export function ProductDetailTabs({
                       <option key={b.id} value={b.id}>{b.name}</option>
                     ));
                   })()}
+                  <option disabled value="">────────────</option>
+                  <option value={NEW_BRAND_ACTION} className="font-semibold text-emerald-600 dark:text-emerald-400">
+                    + 브랜드 추가
+                  </option>
                 </select>
               </div>
 

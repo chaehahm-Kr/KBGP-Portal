@@ -7,16 +7,11 @@ import { createClient } from "@/lib/supabase/client";
 import { passwordSchema, PASSWORD_RULE_DESCRIPTION } from "@/lib/auth/password";
 import { completePasswordResetActivation } from "@/lib/auth/reset-password";
 
-/**
- * 비밀번호 재설정 이메일 링크를 클릭하면 이 페이지로 온다. Supabase의 브라우저
- * 클라이언트가 URL에 담긴 복구 토큰을 자동으로 읽어 세션을 만들어주므로(서버가 아니라
- * 브라우저에서만 가능 — 토큰이 URL 프래그먼트에 실려 오기 때문), 이 페이지는
- * 클라이언트 컴포넌트로 만들고 onAuthStateChange로 세션 생성을 기다린다.
- */
 export default function ResetPasswordConfirmPage() {
   const router = useRouter();
-  const [status, setStatus] = useState<"checking" | "ready" | "invalid">(
-    "checking"
+  const [status, setStatus] = useState<"checking" | "ready" | "invalid" | "success">("checking");
+  const [invalidMessage, setInvalidMessage] = useState<string>(
+    "비밀번호 재설정 링크가 만료되었거나 이미 사용되었습니다.\n보안을 위해 새로운 비밀번호 재설정 이메일을 요청해 주세요."
   );
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -27,57 +22,120 @@ export default function ResetPasswordConfirmPage() {
 
   useEffect(() => {
     const supabase = createClient();
+    let isMounted = true;
 
-    const handleHashAuth = async () => {
+    const parseAuthParameters = async () => {
       try {
+        // 1. Check Query String (Search Params)
+        const search = window.location.search;
+        if (search) {
+          const searchParams = new URLSearchParams(search.substring(1));
+          const queryError = searchParams.get("error");
+          const queryErrorCode = searchParams.get("error_code");
+          const queryErrorDesc = searchParams.get("error_description");
+          const code = searchParams.get("code");
+
+          if (queryErrorCode === "otp_expired" || queryError === "access_denied" || queryError) {
+            if (isMounted) {
+              setInvalidMessage(
+                "비밀번호 재설정 링크가 만료되었거나 이미 사용되었습니다.\n보안을 위해 새로운 비밀번호 재설정 이메일을 요청해 주세요."
+              );
+              setStatus("invalid");
+            }
+            return;
+          }
+
+          if (code) {
+            const { data, error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+            if (data.session && isMounted) {
+              setStatus("ready");
+              return;
+            }
+            if (exchangeError && isMounted) {
+              console.error("[ResetConfirm] exchangeCodeForSession error:", exchangeError);
+              setInvalidMessage(
+                "인증 코드가 만료되었거나 올바르지 않습니다.\n새로운 비밀번호 재설정 링크를 요청해 주세요."
+              );
+              setStatus("invalid");
+              return;
+            }
+          }
+        }
+
+        // 2. Check Hash Parameters
         const hash = window.location.hash;
         if (hash) {
-          const params = new URLSearchParams(hash.substring(1));
-          const accessToken = params.get("access_token");
-          const refreshToken = params.get("refresh_token");
+          const hashParams = new URLSearchParams(hash.substring(1));
+          const hashError = hashParams.get("error");
+          const hashErrorCode = hashParams.get("error_code");
+          const hashErrorDesc = hashParams.get("error_description");
+          const accessToken = hashParams.get("access_token");
+          const refreshToken = hashParams.get("refresh_token");
+
+          if (hashErrorCode === "otp_expired" || hashError === "access_denied" || hashError) {
+            if (isMounted) {
+              setInvalidMessage(
+                "비밀번호 재설정 링크가 만료되었거나 이미 사용되었습니다.\n보안을 위해 새로운 비밀번호 재설정 이메일을 요청해 주세요."
+              );
+              setStatus("invalid");
+            }
+            return;
+          }
 
           if (accessToken && refreshToken) {
-            const { data, error } = await supabase.auth.setSession({
+            const { data, error: sessionError } = await supabase.auth.setSession({
               access_token: accessToken,
               refresh_token: refreshToken,
             });
 
-            if (data.session) {
+            if (data.session && isMounted) {
               setStatus("ready");
               return;
             }
-            if (error) {
-              console.error("Error setting session from URL hash:", error);
+            if (sessionError && isMounted) {
+              console.error("[ResetConfirm] setSession error:", sessionError);
+              setInvalidMessage(
+                "인증 세션을 생성하지 못했습니다. 링크가 만료되었을 수 있습니다."
+              );
+              setStatus("invalid");
+              return;
             }
           }
         }
+
+        // 3. Check Existing Active Session
+        const { data } = await supabase.auth.getSession();
+        if (data.session && isMounted) {
+          setStatus("ready");
+          return;
+        }
       } catch (err) {
-        console.error("Error parsing URL hash:", err);
+        console.error("[ResetConfirm] Error parsing auth tokens:", err);
       }
 
-      const { data } = await supabase.auth.getSession();
-      if (data.session) {
-        setStatus("ready");
-      }
+      // If no valid tokens found after initial check, give a short grace period then invalidate
+      const timer = setTimeout(() => {
+        if (isMounted) {
+          setStatus((prev) => (prev === "checking" ? "invalid" : prev));
+        }
+      }, 4000);
+
+      return () => clearTimeout(timer);
     };
 
     const { data: subscription } = supabase.auth.onAuthStateChange(
       (event, session) => {
-        if (session || event === "PASSWORD_RECOVERY") {
+        if ((session || event === "PASSWORD_RECOVERY") && isMounted) {
           setStatus("ready");
         }
       }
     );
 
-    handleHashAuth();
-
-    const timeout = setTimeout(() => {
-      setStatus((current) => (current === "checking" ? "invalid" : current));
-    }, 6000);
+    parseAuthParameters();
 
     return () => {
+      isMounted = false;
       subscription.subscription.unsubscribe();
-      clearTimeout(timeout);
     };
   }, []);
 
@@ -124,42 +182,101 @@ export default function ResetPasswordConfirmPage() {
     }
 
     setPending(false);
-    router.push("/portal");
+    setStatus("success");
   }
 
-  if (status !== "ready") {
+  // 1. Checking State
+  if (status === "checking") {
     return (
-      <div className="w-full max-w-md rounded-xl border border-zinc-800 bg-zinc-900 p-8 shadow-2xl space-y-6 text-center">
-        <p className="text-sm text-zinc-400">
-          {status === "checking"
-            ? "링크를 확인하는 중입니다..."
-            : "링크가 만료되었거나 이미 사용되었습니다."}
-        </p>
-        {status === "invalid" && (
-          <div className="border-t border-zinc-800 pt-4">
-            <Link
-              href="/portal/reset-password"
-              className="text-xs font-semibold text-white hover:underline"
-            >
-              재설정 링크 다시 요청하기
-            </Link>
-          </div>
-        )}
+      <div className="w-full max-w-md rounded-xl border border-zinc-800 bg-zinc-900/90 p-8 shadow-2xl space-y-6 text-center backdrop-blur-sm">
+        <div className="flex flex-col items-center justify-center space-y-4">
+          <div className="h-8 w-8 animate-spin rounded-full border-2 border-zinc-500 border-t-white" />
+          <h2 className="text-base font-bold text-white">재설정 링크를 확인하는 중입니다...</h2>
+          <p className="text-xs text-zinc-400">잠시만 기다려 주세요.</p>
+        </div>
       </div>
     );
   }
 
+  // 2. Expired / Invalid Link State
+  if (status === "invalid") {
+    return (
+      <div className="w-full max-w-md rounded-xl border border-zinc-800 bg-zinc-900/90 p-8 shadow-2xl space-y-6 text-center backdrop-blur-sm">
+        <div className="flex flex-col items-center justify-center space-y-3">
+          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-rose-500/10 text-rose-400 border border-rose-500/20">
+            <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+          </div>
+          <h2 className="text-lg font-bold text-white">비밀번호 재설정 링크 만료</h2>
+          <p className="text-xs text-zinc-300 whitespace-pre-line leading-relaxed">
+            {invalidMessage}
+          </p>
+        </div>
+
+        <div className="space-y-3 pt-2">
+          <Link
+            href="/portal/reset-password"
+            className="block w-full rounded-md bg-white px-4 py-2.5 text-center text-sm font-bold text-zinc-950 transition-colors hover:bg-zinc-100"
+          >
+            새 재설정 이메일 요청
+          </Link>
+          <Link
+            href="/portal/login"
+            className="block text-center text-xs font-semibold text-zinc-400 hover:text-white transition-colors"
+          >
+            로그인으로 돌아가기
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  // 3. Success State
+  if (status === "success") {
+    return (
+      <div className="w-full max-w-md rounded-xl border border-zinc-800 bg-zinc-900/90 p-8 shadow-2xl space-y-6 text-center backdrop-blur-sm">
+        <div className="flex flex-col items-center justify-center space-y-3">
+          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+            <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            </svg>
+          </div>
+          <h2 className="text-lg font-bold text-white">비밀번호 변경 완료</h2>
+          <p className="text-xs text-zinc-300 leading-relaxed">
+            비밀번호가 성공적으로 변경되었습니다.<br />새로운 비밀번호로 포털을 이용하실 수 있습니다.
+          </p>
+        </div>
+
+        <div className="pt-2">
+          <Link
+            href="/portal"
+            className="block w-full rounded-md bg-white px-4 py-2.5 text-center text-sm font-bold text-zinc-950 transition-colors hover:bg-zinc-100"
+          >
+            포털 시작하기
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  // 4. Form State (status === "ready")
   return (
-    <div className="w-full max-w-md rounded-xl border border-zinc-800 bg-zinc-900 p-8 shadow-2xl space-y-6">
+    <div className="w-full max-w-md rounded-xl border border-zinc-800 bg-zinc-900/90 p-8 shadow-2xl space-y-6 backdrop-blur-sm">
       <form onSubmit={handleSubmit} className="space-y-4">
-        <h1 className="text-xl font-semibold text-white">
-          새 비밀번호 설정
-        </h1>
+        <div>
+          <h1 className="text-xl font-bold text-white">
+            새 비밀번호 설정
+          </h1>
+          <p className="mt-1 text-xs text-zinc-400">
+            새로운 비밀번호를 입력해 주세요.
+          </p>
+        </div>
 
         <div>
           <label
             htmlFor="password"
-            className="block text-sm font-medium text-zinc-300"
+            className="block text-sm font-medium text-zinc-200"
           >
             새 비밀번호
           </label>
@@ -171,12 +288,13 @@ export default function ResetPasswordConfirmPage() {
               required
               value={password}
               onChange={(event) => setPassword(event.target.value)}
-              className="block w-full rounded-md border border-zinc-300 bg-white pl-3 pr-10 py-2 text-sm text-zinc-900 outline-none transition-all focus:border-zinc-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white dark:focus:border-zinc-700"
+              placeholder="••••••••"
+              className="block w-full rounded-md border border-zinc-700 bg-zinc-950 pl-3 pr-10 py-2 text-sm text-white placeholder:text-zinc-600 outline-none transition-all focus:border-zinc-500 focus:ring-1 focus:ring-zinc-500"
             />
             <button
               type="button"
               onClick={() => setShowPassword(!showPassword)}
-              className="absolute inset-y-0 right-0 pr-3 flex items-center text-zinc-400 hover:text-zinc-300 cursor-pointer"
+              className="absolute inset-y-0 right-0 pr-3 flex items-center text-zinc-400 hover:text-zinc-200 cursor-pointer"
             >
               {showPassword ? (
                 <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -190,7 +308,7 @@ export default function ResetPasswordConfirmPage() {
               )}
             </button>
           </div>
-          <p className="mt-1.5 text-xs text-zinc-400">
+          <p className="mt-1.5 text-[11px] text-zinc-400 leading-normal">
             {PASSWORD_RULE_DESCRIPTION}
           </p>
         </div>
@@ -198,7 +316,7 @@ export default function ResetPasswordConfirmPage() {
         <div>
           <label
             htmlFor="confirmPassword"
-            className="block text-sm font-medium text-zinc-300"
+            className="block text-sm font-medium text-zinc-200"
           >
             새 비밀번호 확인
           </label>
@@ -210,12 +328,13 @@ export default function ResetPasswordConfirmPage() {
               required
               value={confirmPassword}
               onChange={(event) => setConfirmPassword(event.target.value)}
-              className="block w-full rounded-md border border-zinc-300 bg-white pl-3 pr-10 py-2 text-sm text-zinc-900 outline-none transition-all focus:border-zinc-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white dark:focus:border-zinc-700"
+              placeholder="••••••••"
+              className="block w-full rounded-md border border-zinc-700 bg-zinc-950 pl-3 pr-10 py-2 text-sm text-white placeholder:text-zinc-600 outline-none transition-all focus:border-zinc-500 focus:ring-1 focus:ring-zinc-500"
             />
             <button
               type="button"
               onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-              className="absolute inset-y-0 right-0 pr-3 flex items-center text-zinc-400 hover:text-zinc-300 cursor-pointer"
+              className="absolute inset-y-0 right-0 pr-3 flex items-center text-zinc-400 hover:text-zinc-200 cursor-pointer"
             >
               {showConfirmPassword ? (
                 <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -232,17 +351,17 @@ export default function ResetPasswordConfirmPage() {
         </div>
 
         {error && (
-          <p className="text-sm text-red-600 dark:text-red-400 font-medium" role="alert">
+          <div className="rounded-md bg-rose-500/10 border border-rose-500/20 p-2.5 text-xs text-rose-400 font-medium" role="alert">
             {error}
-          </p>
+          </div>
         )}
 
         <button
           type="submit"
           disabled={pending}
-          className="w-full rounded-md bg-zinc-900 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-zinc-800 disabled:opacity-50 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-100"
+          className="w-full rounded-md bg-white px-4 py-2.5 text-sm font-bold text-zinc-950 transition-colors hover:bg-zinc-100 disabled:opacity-50 cursor-pointer"
         >
-          {pending ? "변경 중..." : "비밀번호 변경"}
+          {pending ? "변경 중..." : "비밀번호 변경 완료"}
         </button>
       </form>
     </div>

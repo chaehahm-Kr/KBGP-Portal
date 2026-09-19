@@ -107,30 +107,30 @@ export function FinanceClient({
                     </td>
                     <td className="px-4 py-3.5 text-center">
                       {inv.invoiceStatus === "DRAFT" && (
-                        <span className="px-1.5 py-0.5 bg-zinc-100 text-zinc-700 rounded font-bold text-[10px]">임시저장</span>
+                        <span className="px-2 py-0.5 bg-zinc-100 text-zinc-700 border border-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:border-zinc-700 rounded-md font-bold text-[10px]">임시저장</span>
                       )}
                       {inv.invoiceStatus === "SUBMITTED" && (
-                        <span className="px-1.5 py-0.5 bg-blue-50 text-blue-700 rounded font-bold text-[10px]">제출됨</span>
+                        <span className="px-2 py-0.5 bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-950/60 dark:text-blue-300 dark:border-blue-800 rounded-md font-bold text-[10px]">제출됨</span>
                       )}
                       {inv.invoiceStatus === "APPROVED" && (
-                        <span className="px-1.5 py-0.5 bg-green-50 text-green-700 rounded font-bold text-[10px]">승인됨</span>
+                        <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800 rounded-md font-bold text-[10px]">승인됨</span>
                       )}
                       {inv.invoiceStatus === "REJECTED" && (
-                        <span className="px-1.5 py-0.5 bg-rose-50 text-rose-700 rounded font-bold text-[10px]">반려됨</span>
+                        <span className="px-2 py-0.5 bg-rose-50 text-rose-700 border border-rose-200 dark:bg-rose-950/60 dark:text-rose-300 dark:border-rose-800 rounded-md font-bold text-[10px]">반려됨</span>
                       )}
                       {inv.invoiceStatus === "VOID" && (
-                        <span className="px-1.5 py-0.5 bg-zinc-200 text-zinc-500 rounded font-bold text-[10px]">무효</span>
+                        <span className="px-2 py-0.5 bg-zinc-200 text-zinc-600 border border-zinc-300 dark:bg-zinc-800/80 dark:text-zinc-400 dark:border-zinc-700 rounded-md font-bold text-[10px]">무효</span>
                       )}
                     </td>
                     <td className="px-4 py-3.5 text-center">
                       {inv.settlementStatus === "OPEN" && (
-                        <span className="px-1.5 py-0.5 bg-zinc-100 text-zinc-700 rounded font-bold text-[10px]">미정산</span>
+                        <span className="px-2 py-0.5 bg-zinc-100 text-zinc-700 border border-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:border-zinc-700 rounded-md font-bold text-[10px]">미정산</span>
                       )}
                       {inv.settlementStatus === "PENDING_ADJUSTMENT" && (
-                        <span className="px-1.5 py-0.5 bg-amber-50 text-amber-700 rounded font-bold text-[10px]">조정 진행중</span>
+                        <span className="px-2 py-0.5 bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800 rounded-md font-bold text-[10px]">조정 진행중</span>
                       )}
                       {inv.settlementStatus === "SETTLED" && (
-                        <span className="px-1.5 py-0.5 bg-green-50 text-green-700 rounded font-bold text-[10px]">정산 완료</span>
+                        <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800 rounded-md font-bold text-[10px]">정산 완료</span>
                       )}
                     </td>
                     <td className="px-4 py-3.5 text-right text-zinc-700 dark:text-zinc-350">
@@ -205,11 +205,11 @@ export function FinanceClient({
                     </td>
                     <td className="px-4 py-3.5 text-zinc-750 dark:text-zinc-300">{adj.reason}</td>
                     <td className="px-4 py-3.5 text-center">
-                      <span className="px-1.5 py-0.5 border rounded text-[10px] font-bold bg-zinc-100 text-zinc-650">
+                      <span className="px-2 py-0.5 border border-zinc-200 dark:border-zinc-700 rounded-md text-[10px] font-bold bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
                         {adj.status}
                       </span>
                     </td>
-                    <td className="px-4 py-3.5 text-zinc-500 font-mono">
+                    <td className="px-4 py-3.5 text-zinc-500 dark:text-zinc-400 font-mono">
                       {new Date(adj.createdAt).toLocaleDateString()}
                     </td>
                   </tr>
@@ -239,7 +239,7 @@ export function FinanceClient({
             <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
               {initialPayments.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-4 py-8 text-center text-zinc-400">
+                  <td colSpan={8} className="px-4 py-8 text-center text-zinc-400 dark:text-zinc-500">
                     지급 내역이 존재하지 않습니다.
                   </td>
                 </tr>
@@ -258,17 +258,17 @@ export function FinanceClient({
                     <td className="px-4 py-3.5 text-right font-bold text-zinc-900 dark:text-white">
                       {formatCurrency(pmt.amount, pmt.currency)}
                     </td>
-                    <td className="px-4 py-3.5 text-zinc-650 dark:text-zinc-450 font-bold">
+                    <td className="px-4 py-3.5 text-zinc-700 dark:text-zinc-300 font-bold">
                       {pmt.method}
                     </td>
-                    <td className="px-4 py-3.5 text-zinc-650 dark:text-zinc-450">
+                    <td className="px-4 py-3.5 text-zinc-700 dark:text-zinc-300">
                       {pmt.bankName || "-"}
                     </td>
-                    <td className="px-4 py-3.5 text-zinc-500 font-mono">
+                    <td className="px-4 py-3.5 text-zinc-500 dark:text-zinc-400 font-mono">
                       {pmt.accountLast4 ? `**** ${pmt.accountLast4}` : "-"}
                     </td>
                     <td className="px-4 py-3.5 text-center">
-                      <span className="px-1.5 py-0.5 border rounded text-[10px] font-bold bg-green-50 text-green-700">
+                      <span className="px-2 py-0.5 border border-emerald-200 dark:border-emerald-800 rounded-md text-[10px] font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300">
                         {pmt.status}
                       </span>
                     </td>

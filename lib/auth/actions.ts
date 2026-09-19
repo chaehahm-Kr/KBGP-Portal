@@ -36,7 +36,9 @@ async function login(
     return { error: "이메일과 비밀번호를 입력해주세요." };
   }
 
-  const lockout = await checkLoginLockout(email);
+  const normalizedEmail = email.trim().toLowerCase();
+
+  const lockout = await checkLoginLockout(normalizedEmail);
   if (lockout.locked) {
     return {
       error: `로그인 시도가 너무 많습니다. ${lockout.retryAfterMinutes}분 후 다시 시도해주세요.`,
@@ -46,11 +48,11 @@ async function login(
   const supabase = await createClient();
 
   const { data, error } = await supabase.auth.signInWithPassword({
-    email,
+    email: normalizedEmail,
     password,
   });
 
-  await recordLoginAttempt(email, !error && Boolean(data.user));
+  await recordLoginAttempt(normalizedEmail, !error && Boolean(data.user));
 
   if (error?.code === "email_not_confirmed") {
     return {
@@ -78,6 +80,41 @@ async function login(
           ? "이 계정은 파트너 포털 계정이 아닙니다."
           : "이 계정은 관리자 계정이 아닙니다.",
     };
+  }
+
+  // 계정 상태 사전 검증
+  if (area === "portal") {
+    const { data: companyUser } = await supabase
+      .from("company_users")
+      .select("status")
+      .eq("id", data.user.id)
+      .maybeSingle();
+
+    if (companyUser && companyUser.status === "invited") {
+      await supabase.auth.signOut();
+      return {
+        error: "초대 수락 및 비밀번호 설정이 완료되지 않았습니다. 수신하신 초대 이메일의 링크를 통해 가입을 완료해주세요.",
+      };
+    }
+    if (companyUser && companyUser.status === "suspended") {
+      await supabase.auth.signOut();
+      return {
+        error: "이용이 정지된 계정입니다. 회사 관리자에게 문의해주세요.",
+      };
+    }
+  } else if (area === "admin") {
+    const { data: staffMember } = await supabase
+      .from("staff_members")
+      .select("status")
+      .eq("id", data.user.id)
+      .maybeSingle();
+
+    if (staffMember && staffMember.status === "suspended") {
+      await supabase.auth.signOut();
+      return {
+        error: "이용이 정지된 관리자 계정입니다.",
+      };
+    }
   }
 
   redirect(HOME_PATH[area]);

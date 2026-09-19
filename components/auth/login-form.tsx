@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useState, useEffect } from "react";
 import type { LoginFormState } from "@/lib/auth/actions";
 
 type LoginFormProps = {
@@ -18,6 +18,27 @@ export function LoginForm({ action, heading, description }: LoginFormProps) {
     LoginFormState,
     FormData
   >(action, undefined);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const hash = window.location.hash;
+    const search = window.location.search;
+    const pathname = window.location.pathname;
+
+    const isRecovery =
+      hash.includes("type=recovery") ||
+      search.includes("type=recovery") ||
+      hash.includes("error_code=otp_expired") ||
+      search.includes("error_code=otp_expired") ||
+      (hash.includes("access_token=") && hash.includes("refresh_token="));
+
+    if (isRecovery) {
+      const targetPath = pathname.startsWith("/admin")
+        ? "/admin/reset-password"
+        : "/portal/reset-password/confirm";
+      window.location.replace(`${targetPath}${search}${hash}`);
+    }
+  }, []);
 
   return (
     <div className="w-full max-w-sm">

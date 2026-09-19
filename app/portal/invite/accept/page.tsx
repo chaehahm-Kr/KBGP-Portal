@@ -24,57 +24,101 @@ export default function InviteAcceptPage() {
 
   useEffect(() => {
     const supabase = createClient();
+    let isMounted = true;
 
-    const handleHashAuth = async () => {
+    const handleAuth = async () => {
       try {
+        // 1. Check Query String
+        const search = window.location.search;
+        if (search) {
+          const searchParams = new URLSearchParams(search.substring(1));
+          const queryError = searchParams.get("error");
+          const queryErrorCode = searchParams.get("error_code");
+          const code = searchParams.get("code");
+
+          if (queryErrorCode === "otp_expired" || queryError === "access_denied" || queryError) {
+            if (isMounted) setStatus("invalid");
+            return;
+          }
+
+          if (code) {
+            const { data, error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+            if (data.session && isMounted) {
+              setStatus("ready");
+              return;
+            }
+            if (exchangeError && isMounted) {
+              console.error("[InviteAccept] exchangeCodeForSession error:", exchangeError);
+              setStatus("invalid");
+              return;
+            }
+          }
+        }
+
+        // 2. Check Hash Parameters
         const hash = window.location.hash;
         if (hash) {
-          const params = new URLSearchParams(hash.substring(1));
-          const accessToken = params.get("access_token");
-          const refreshToken = params.get("refresh_token");
+          const hashParams = new URLSearchParams(hash.substring(1));
+          const hashError = hashParams.get("error");
+          const hashErrorCode = hashParams.get("error_code");
+          const accessToken = hashParams.get("access_token");
+          const refreshToken = hashParams.get("refresh_token");
+
+          if (hashErrorCode === "otp_expired" || hashError === "access_denied" || hashError) {
+            if (isMounted) setStatus("invalid");
+            return;
+          }
 
           if (accessToken && refreshToken) {
-            const { data, error } = await supabase.auth.setSession({
+            const { data, error: sessionError } = await supabase.auth.setSession({
               access_token: accessToken,
               refresh_token: refreshToken,
             });
 
-            if (data.session) {
+            if (data.session && isMounted) {
               setStatus("ready");
               return;
             }
-            if (error) {
-              console.error("Error setting session from URL hash:", error);
+            if (sessionError && isMounted) {
+              console.error("[InviteAccept] setSession error:", sessionError);
+              setStatus("invalid");
+              return;
             }
           }
         }
+
+        // 3. Check Existing Active Session
+        const { data } = await supabase.auth.getSession();
+        if (data.session && isMounted) {
+          setStatus("ready");
+          return;
+        }
       } catch (err) {
-        console.error("Error parsing URL hash:", err);
+        console.error("[InviteAccept] Error parsing tokens:", err);
       }
 
-      const { data } = await supabase.auth.getSession();
-      if (data.session) {
-        setStatus("ready");
-      }
+      const timeout = setTimeout(() => {
+        if (isMounted) {
+          setStatus((prev) => (prev === "checking" ? "invalid" : prev));
+        }
+      }, 4000);
+
+      return () => clearTimeout(timeout);
     };
 
     const { data: subscription } = supabase.auth.onAuthStateChange(
       (event, session) => {
-        if (session || event === "PASSWORD_RECOVERY") {
+        if ((session || event === "PASSWORD_RECOVERY") && isMounted) {
           setStatus("ready");
         }
       }
     );
 
-    handleHashAuth();
-
-    const timeout = setTimeout(() => {
-      setStatus((current) => (current === "checking" ? "invalid" : current));
-    }, 6000);
+    handleAuth();
 
     return () => {
+      isMounted = false;
       subscription.subscription.unsubscribe();
-      clearTimeout(timeout);
     };
   }, []);
 

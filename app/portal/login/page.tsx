@@ -30,7 +30,7 @@ export default function PortalLoginPage() {
       </div>
       <div className="flex w-full max-w-sm justify-between text-xs text-zinc-400 border-t border-zinc-800 pt-4 mx-auto">
         <Link href="/portal/signup" className="hover:text-white transition-colors">
-          신규 파트너 회원가입
+          신규 파트너 가입 / 신청 확인
         </Link>
         <Link href="/portal/reset-password" className="hover:text-white transition-colors">
           비밀번호 재설정

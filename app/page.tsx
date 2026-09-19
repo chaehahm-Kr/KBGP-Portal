@@ -1,8 +1,10 @@
 import Link from "next/link";
+import { RecoveryHashRouter } from "@/components/auth/recovery-hash-router";
 
 export default function EntryPage() {
   return (
     <div className="flex min-h-screen flex-1 flex-col items-center justify-center gap-10 bg-zinc-50 px-4 text-center">
+      <RecoveryHashRouter />
       <div>
         <h1 className="text-lg font-semibold text-zinc-900">
           K Select Network 파트너 포털

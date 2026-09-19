@@ -110,7 +110,7 @@ export default async function BrandsPage() {
                     {brand.hasKr ? (
                       <span className="text-[#131E2E] dark:text-[#a8c5eb] bg-[#F2F1EE] dark:bg-zinc-800/80 px-2 py-0.5 rounded text-[10px] font-extrabold border border-zinc-200/60 dark:border-zinc-700">보유</span>
                     ) : (
-                      <span className="text-zinc-400 dark:text-zinc-650 font-medium px-2 py-0.5 rounded text-[10px] border border-transparent">미보유</span>
+                      <span className="text-zinc-400 dark:text-zinc-400 font-medium px-2 py-0.5 rounded text-[10px] border border-transparent">미보유</span>
                     )}
                   </div>
                   <div className="flex items-center justify-between">
@@ -118,7 +118,7 @@ export default async function BrandsPage() {
                     {brand.hasUs ? (
                       <span className="text-[#131E2E] dark:text-[#a8c5eb] bg-[#F2F1EE] dark:bg-zinc-800/80 px-2 py-0.5 rounded text-[10px] font-extrabold border border-zinc-200/60 dark:border-zinc-700">보유</span>
                     ) : (
-                      <span className="text-zinc-400 dark:text-zinc-650 font-medium px-2 py-0.5 rounded text-[10px] border border-transparent">미보유</span>
+                      <span className="text-zinc-400 dark:text-zinc-400 font-medium px-2 py-0.5 rounded text-[10px] border border-transparent">미보유</span>
                     )}
                   </div>
                 </div>

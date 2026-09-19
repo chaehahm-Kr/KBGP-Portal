@@ -10,8 +10,8 @@ import {
 import { PASSWORD_RULE_DESCRIPTION } from "@/lib/auth/password";
 
 const inputClass =
-  "mt-1 block w-full rounded-md border border-zinc-350 bg-white px-3 py-2 text-sm text-zinc-900 outline-none transition-all focus:border-zinc-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white dark:focus:border-zinc-700";
-const labelClass = "block text-sm font-medium text-zinc-700 dark:text-zinc-300";
+  "mt-1 block w-full rounded-md border border-zinc-700 bg-zinc-950 px-3.5 py-2.5 text-sm text-white placeholder:text-zinc-500 outline-none transition-all focus:border-zinc-400 focus:ring-1 focus:ring-zinc-400";
+const labelClass = "block text-xs font-semibold text-zinc-300 mb-1";
 
 export function PortalVerificationSignup() {
   const router = useRouter();
@@ -105,67 +105,114 @@ export function PortalVerificationSignup() {
     }
   }
 
-  // 1. 조회 단계 폼
+  // 1. 조회 단계 폼 (2-Path Onboarding UI)
   if (step === "verify") {
     return (
       <div className="space-y-6">
-        <div className="space-y-1">
-          <h1 className="text-xl font-semibold text-zinc-900 dark:text-white">
+        {/* Page Header */}
+        <div className="space-y-1.5 text-center sm:text-left">
+          <h1 className="text-xl font-bold text-white">
             파트너십 가입 내역 확인
           </h1>
-          <p className="text-xs text-zinc-500 dark:text-zinc-400">
-            kselectnetwork.com에서 파트너십을 신청한 담당자 정보로 가입이 진행됩니다.
+          <p className="text-xs text-zinc-400 leading-relaxed">
+            K SELECT NETWORK 파트너십 신청 여부에 따라 아래에서 해당하는 절차를 선택해 주세요.
           </p>
         </div>
 
-        <form onSubmit={handleVerify} className="space-y-4">
-          <div>
-            <label htmlFor="brn" className={labelClass}>
-              사업자등록번호
-            </label>
-            <input
-              id="brn"
-              type="text"
-              placeholder="사업자등록번호 (대시 없이 입력)"
-              required
-              value={brn}
-              onChange={(e) => setBrn(e.target.value)}
-              className={inputClass}
-            />
-            <p className="mt-1.5 text-[11px] text-zinc-500 dark:text-zinc-400">
-              * 사업자등록번호는 대시(-) 없이 입력해 주세요.
-            </p>
+        {/* SECTION 1: 이미 파트너십을 신청했습니다 */}
+        <div className="rounded-xl border border-zinc-800 bg-zinc-950/70 p-5 space-y-4 shadow-sm">
+          <div className="flex items-start gap-3">
+            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-white text-[11px] font-extrabold text-zinc-950">
+              1
+            </span>
+            <div className="space-y-1">
+              <h2 className="text-sm font-bold text-white">
+                이미 파트너십을 신청하셨나요?
+              </h2>
+              <p className="text-xs text-zinc-400 leading-relaxed">
+                kselectnetwork.com에서 이미 파트너십 신청서를 제출하셨다면, 사업자등록번호와 신청 당시 이메일 주소를 입력하여 신청 내역을 확인해 주세요.
+              </p>
+            </div>
           </div>
 
-          <div>
-            <label htmlFor="email" className={labelClass}>
-              이메일 주소
-            </label>
-            <input
-              id="email"
-              type="email"
-              placeholder="example@kselectnetwork.com"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className={inputClass}
-            />
+          <form onSubmit={handleVerify} className="space-y-3.5 pt-1">
+            <div>
+              <label htmlFor="brn" className={labelClass}>
+                사업자등록번호
+              </label>
+              <input
+                id="brn"
+                type="text"
+                placeholder="사업자등록번호 (대시 없이 숫자만 입력)"
+                required
+                value={brn}
+                onChange={(e) => setBrn(e.target.value)}
+                className={inputClass}
+              />
+              <p className="mt-1 text-[11px] text-zinc-400">
+                * 사업자등록번호는 대시(-) 없이 입력해 주세요.
+              </p>
+            </div>
+
+            <div>
+              <label htmlFor="email" className={labelClass}>
+                이메일 주소
+              </label>
+              <input
+                id="email"
+                type="email"
+                placeholder="신청 시 입력한 이메일 (example@company.com)"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className={inputClass}
+              />
+            </div>
+
+            {error && (
+              <div className="rounded-md bg-rose-500/10 border border-rose-500/20 p-2.5 text-xs text-rose-400 font-medium" role="alert">
+                {error}
+              </div>
+            )}
+
+            <button
+              type="submit"
+              disabled={pending}
+              className="w-full rounded-md bg-white px-4 py-2.5 text-sm font-bold text-zinc-950 transition-colors hover:bg-zinc-200 disabled:opacity-50 cursor-pointer h-10 shadow-sm"
+            >
+              {pending ? "조회 중..." : "신청 내역 확인"}
+            </button>
+          </form>
+        </div>
+
+        {/* SECTION 2: 아직 파트너십을 신청하지 않았습니다 */}
+        <div className="rounded-xl border border-zinc-800 bg-zinc-950/70 p-5 space-y-4 shadow-sm">
+          <div className="flex items-start gap-3">
+            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-zinc-800 text-[11px] font-extrabold text-zinc-300 border border-zinc-700">
+              2
+            </span>
+            <div className="space-y-1">
+              <h2 className="text-sm font-bold text-white">
+                아직 파트너십을 신청하지 않으셨나요?
+              </h2>
+              <p className="text-xs text-zinc-400 leading-relaxed">
+                K SELECT NETWORK 파트너가 되시려면 먼저 파트너십 신청 및 자격 확인 절차를 진행해 주세요.
+              </p>
+            </div>
           </div>
 
-          {error && (
-            <p className="text-sm text-red-600 dark:text-red-400 font-medium" role="alert">
-              {error}
-            </p>
-          )}
-
-          <button
-            type="submit"
-            disabled={pending}
-            className="w-full rounded-md bg-zinc-900 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-zinc-800 disabled:opacity-50 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-100 cursor-pointer h-10"
-          >
-            {pending ? "조회 중..." : "신청 내역 확인"}
-          </button>
-        </form>
+          <div className="pt-1">
+            <a
+              href="https://www.kselectnetwork.com/#eligibility"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex w-full items-center justify-center gap-1.5 rounded-md border border-zinc-700 bg-zinc-900 px-4 py-2.5 text-sm font-bold text-white hover:bg-zinc-800 hover:border-zinc-500 transition-colors cursor-pointer shadow-sm"
+            >
+              <span>파트너십 신청하기</span>
+              <span className="text-xs font-bold">→</span>
+            </a>
+          </div>
+        </div>
       </div>
     );
   }
@@ -203,12 +250,12 @@ export function PortalVerificationSignup() {
 
         <div className="space-y-3 pt-2">
           <a
-            href="https://kselectnetwork.com"
+            href="https://www.kselectnetwork.com/#eligibility"
             target="_blank"
             rel="noopener noreferrer"
-            className="block w-full text-center rounded-md bg-zinc-900 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-zinc-800 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-100"
+            className="block w-full text-center rounded-md bg-zinc-900 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-zinc-800 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-100 shadow-sm"
           >
-            kselectnetwork.com에서 신청하기
+            kselectnetwork.com에서 파트너십 신청하기 →
           </a>
           <button
             onClick={() => setStep("verify")}

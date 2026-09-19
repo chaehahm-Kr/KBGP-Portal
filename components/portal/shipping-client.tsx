@@ -320,29 +320,29 @@ export function ShippingClient({
                         </td>
                         <td className="px-4 py-3.5">
                           {gr.handoverStatus === "DRAFT" && (
-                            <span className="px-1.5 py-0.5 bg-zinc-100 text-zinc-700 rounded font-bold">임시저장 (Draft)</span>
+                            <span className="px-2 py-0.5 bg-zinc-100 text-zinc-700 border border-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:border-zinc-700 rounded-md font-bold text-[10px]">임시저장 (Draft)</span>
                           )}
                           {gr.handoverStatus === "READY_SUBMITTED" && (
-                            <span className="px-1.5 py-0.5 bg-blue-50 text-blue-700 rounded font-bold">출고준비 완료</span>
+                            <span className="px-2 py-0.5 bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-950/60 dark:text-blue-300 dark:border-blue-800 rounded-md font-bold text-[10px]">출고준비 완료</span>
                           )}
                           {gr.handoverStatus === "HANDOVER_PENDING" && (
-                            <span className="px-1.5 py-0.5 bg-amber-50 text-amber-700 rounded font-bold">인계 대기</span>
+                            <span className="px-2 py-0.5 bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800 rounded-md font-bold text-[10px]">인계 대기</span>
                           )}
                           {gr.handoverStatus === "HANDED_OVER" && (
-                            <span className="px-1.5 py-0.5 bg-green-50 text-green-700 rounded font-bold">물품 인계 완료</span>
+                            <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800 rounded-md font-bold text-[10px]">물품 인계 완료</span>
                           )}
                         </td>
                         <td className="px-4 py-3.5">
                           {gr.overageReviewRequired ? (
-                            <span className="text-rose-600 font-bold">⚠️ 초과 선적 경고</span>
+                            <span className="text-rose-600 dark:text-rose-400 font-bold">⚠️ 초과 선적 경고</span>
                           ) : (
-                            <span className="text-zinc-400">-</span>
+                            <span className="text-zinc-400 dark:text-zinc-500">-</span>
                           )}
                         </td>
                         <td className="px-4 py-3.5 text-right">
                           <Link
                             href={`/portal/orders/shipping/${gr.id}`}
-                            className="text-indigo-600 font-bold hover:underline"
+                            className="text-indigo-600 dark:text-indigo-400 font-bold hover:underline"
                           >
                             상세 정보 →
                           </Link>
@@ -372,7 +372,7 @@ export function ShippingClient({
                 <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
                   {initialShipments.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="px-4 py-8 text-center text-zinc-400">
+                      <td colSpan={6} className="px-4 py-8 text-center text-zinc-400 dark:text-zinc-500">
                         관련 선적 내역이 없습니다.
                       </td>
                     </tr>
@@ -395,7 +395,7 @@ export function ShippingClient({
                           {shp.eta || "-"}
                         </td>
                         <td className="px-4 py-3.5">
-                          <span className="px-1.5 py-0.5 border rounded text-[10px] font-bold bg-zinc-100 text-zinc-650">
+                          <span className="px-2 py-0.5 border border-zinc-200 dark:border-zinc-700 rounded-md text-[10px] font-bold bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
                             {shp.status}
                           </span>
                         </td>

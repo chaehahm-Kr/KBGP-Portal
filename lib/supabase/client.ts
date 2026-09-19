@@ -24,8 +24,8 @@ export function createClient() {
         set(name, value, options) {
           if (typeof document === "undefined") return;
           const mappedName = prefix && name.startsWith("sb-") ? `${prefix}${name}` : name;
-          let cookieStr = `${mappedName}=${value}`;
-          if (options?.path) cookieStr += `; path=${options.path}`;
+          const path = options?.path || "/";
+          let cookieStr = `${mappedName}=${value}; path=${path}`;
           if (options?.domain) cookieStr += `; domain=${options.domain}`;
           if (options?.maxAge) cookieStr += `; max-age=${options.maxAge}`;
           if (options?.secure) cookieStr += "; secure";
@@ -35,8 +35,8 @@ export function createClient() {
         remove(name, options) {
           if (typeof document === "undefined") return;
           const mappedName = prefix && name.startsWith("sb-") ? `${prefix}${name}` : name;
-          let cookieStr = `${mappedName}=; max-age=0`;
-          if (options?.path) cookieStr += `; path=${options.path}`;
+          const path = options?.path || "/";
+          let cookieStr = `${mappedName}=; max-age=0; path=${path}`;
           if (options?.domain) cookieStr += `; domain=${options.domain}`;
           document.cookie = cookieStr;
         },

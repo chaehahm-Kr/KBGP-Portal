@@ -75,7 +75,15 @@ export async function updateSession(request: NextRequest) {
     }
   }
 
-  const prefix = pathname.startsWith("/admin") ? "admin-" : pathname.startsWith("/portal") ? "portal-" : "";
+  let prefix = pathname.startsWith("/admin") ? "admin-" : pathname.startsWith("/portal") ? "portal-" : "";
+  if (!prefix) {
+    const allCookies = request.cookies.getAll();
+    if (allCookies.some((c) => c.name.startsWith("portal-sb-"))) {
+      prefix = "portal-";
+    } else if (allCookies.some((c) => c.name.startsWith("admin-sb-"))) {
+      prefix = "admin-";
+    }
+  }
 
   request.headers.set("x-url", pathname);
   let supabaseResponse = NextResponse.next({
@@ -121,7 +129,10 @@ export async function updateSession(request: NextRequest) {
           });
           cookiesToSet.forEach(({ name, value, options }) => {
             const mappedName = prefix && name.startsWith("sb-") ? `${prefix}${name}` : name;
-            supabaseResponse.cookies.set(mappedName, value, options);
+            supabaseResponse.cookies.set(mappedName, value, {
+              ...options,
+              path: options?.path || "/",
+            });
           });
         },
       },

@@ -16,7 +16,17 @@ export async function createClient() {
   const cookieStore = await cookies();
   const reqHeaders = await headers();
   const url = reqHeaders.get("x-url") || reqHeaders.get("referer") || "";
-  const prefix = url.includes("/admin") ? "admin-" : url.includes("/portal") ? "portal-" : "";
+  let prefix = url.includes("/admin") ? "admin-" : url.includes("/portal") ? "portal-" : "";
+
+  // Fallback: If URL/referer does not specify prefix, inspect existing cookies
+  if (!prefix) {
+    const allCookies = cookieStore.getAll();
+    if (allCookies.some((c) => c.name.startsWith("portal-sb-"))) {
+      prefix = "portal-";
+    } else if (allCookies.some((c) => c.name.startsWith("admin-sb-"))) {
+      prefix = "admin-";
+    }
+  }
 
   return createServerClient(
     publicEnv.NEXT_PUBLIC_SUPABASE_URL,
@@ -47,7 +57,10 @@ export async function createClient() {
           try {
             cookiesToSet.forEach(({ name, value, options }) => {
               const mappedName = prefix && name.startsWith("sb-") ? `${prefix}${name}` : name;
-              cookieStore.set(mappedName, value, options);
+              cookieStore.set(mappedName, value, {
+                ...options,
+                path: options?.path || "/",
+              });
             });
           } catch {
             // Server Component에서 호출되면 쿠키를 쓸 수 없다 — proxy.ts가 세션 갱신을

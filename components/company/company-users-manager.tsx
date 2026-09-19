@@ -24,7 +24,7 @@ const ROLE_LABEL: Record<string, string> = {
 };
 
 const inputClass =
-  "mt-1 block w-full rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-xs text-zinc-900 outline-none transition-all focus:border-zinc-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white dark:focus:border-zinc-700";
+  "mt-1 block w-full rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-xs text-zinc-900 placeholder:text-zinc-400 outline-none transition-all focus:border-zinc-500 focus:ring-1 focus:ring-zinc-400 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:placeholder:text-zinc-500 dark:focus:border-zinc-500 dark:focus:ring-zinc-600";
 
 const permissionOptions = [
   { value: "none", label: "접근불가" },
@@ -242,7 +242,7 @@ export function CompanyUsersManager({ initialUsers, currentUserId }: CompanyUser
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
-              <tr className="border-b border-zinc-200 bg-zinc-50/50 text-xs font-bold text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900/50">
+              <tr className="border-b border-zinc-200 bg-zinc-50/80 text-xs font-bold text-zinc-600 dark:border-zinc-800 dark:bg-zinc-950/60 dark:text-zinc-400">
                 <th className="px-6 py-3.5">이름</th>
                 <th className="px-6 py-3.5">이메일 / 연락처</th>
                 <th className="px-6 py-3.5">직함 / 부서</th>
@@ -252,37 +252,37 @@ export function CompanyUsersManager({ initialUsers, currentUserId }: CompanyUser
                 <th className="px-6 py-3.5 text-right">설정</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-zinc-200 text-xs dark:divide-zinc-800/60">
+            <tbody className="divide-y divide-zinc-200 text-xs dark:divide-zinc-800/80">
               {users.map((row) => {
                 const expired = isInviteExpired(row);
                 
                 let joinStatusText = "가입완료";
-                let joinStatusClass = "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/20";
+                let joinStatusClass = "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800";
                 if (expired) {
                   joinStatusText = "초대만료";
-                  joinStatusClass = "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-500/10 dark:text-rose-400 dark:border-rose-500/20";
+                  joinStatusClass = "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/60 dark:text-rose-300 dark:border-rose-800";
                 } else if (row.status === "invited") {
                   joinStatusText = "초대됨";
-                  joinStatusClass = "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-500/10 dark:text-amber-400 dark:border-amber-500/20";
+                  joinStatusClass = "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800";
                 }
 
                 let usageStatusText = "정상이용";
-                let usageStatusClass = "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/20";
+                let usageStatusClass = "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800";
                 if (row.status === "invited" || expired) {
                   usageStatusText = "대기중";
-                  usageStatusClass = "bg-zinc-50 text-zinc-650 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-450 dark:border-zinc-750";
+                  usageStatusClass = "bg-zinc-100 text-zinc-650 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:border-zinc-700";
                 } else if (row.status === "suspended") {
                   usageStatusText = "이용정지";
-                  usageStatusClass = "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-500/10 dark:text-rose-400 dark:border-rose-500/20";
+                  usageStatusClass = "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/60 dark:text-rose-300 dark:border-rose-800";
                 }
 
                 return (
-                  <tr key={row.id} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-850/10 transition-colors">
+                  <tr key={row.id} className="hover:bg-zinc-50/70 dark:hover:bg-zinc-800/30 transition-colors">
                     <td className="px-6 py-4">
-                      <div className="font-semibold text-zinc-900 dark:text-white flex items-center gap-1.5">
+                      <div className="font-semibold text-zinc-900 dark:text-zinc-100 flex items-center gap-1.5">
                         {row.name || "(이름 미입력)"}
                         {row.is_primary && (
-                          <span className="inline-block rounded bg-emerald-50 text-emerald-700 px-1.5 py-0.5 text-[8px] font-bold border border-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-900">
+                          <span className="inline-block rounded bg-emerald-50 text-emerald-700 px-1.5 py-0.5 text-[9px] font-bold border border-emerald-200 dark:bg-emerald-950/70 dark:text-emerald-300 dark:border-emerald-800">
                             주 컨택
                           </span>
                         )}
@@ -290,30 +290,36 @@ export function CompanyUsersManager({ initialUsers, currentUserId }: CompanyUser
                     </td>
                     <td className="px-6 py-4 space-y-0.5">
                       <p className="text-zinc-650 dark:text-zinc-300 font-mono text-[11px]">{row.email}</p>
-                      {row.phone && <p className="text-[10px] text-zinc-400">📞 {row.phone}</p>}
+                      {row.phone && <p className="text-[10px] text-zinc-500 dark:text-zinc-400">📞 {row.phone}</p>}
                     </td>
                     <td className="px-6 py-4 space-y-0.5">
                       {row.title || row.position ? (
                         <>
-                          {row.title && <span className="text-[11px] font-medium text-zinc-850 dark:text-zinc-200">{row.title}</span>}
-                          {row.position && <span className="text-[10px] text-zinc-400 block">{row.position}</span>}
+                          {row.title && <span className="text-[11px] font-medium text-zinc-800 dark:text-zinc-200">{row.title}</span>}
+                          {row.position && <span className="text-[10px] text-zinc-500 dark:text-zinc-400 block">{row.position}</span>}
                         </>
                       ) : (
-                        <span className="text-[10px] text-zinc-400 italic">등록 없음</span>
+                        <span className="text-[10px] text-zinc-400 dark:text-zinc-500 italic">등록 없음</span>
                       )}
                     </td>
                     <td className="px-6 py-4">
-                      <span className="inline-flex items-center rounded bg-zinc-100 border border-zinc-200 dark:bg-zinc-850 dark:border-zinc-800 px-2 py-0.5 text-[10px] font-medium text-zinc-800 dark:text-zinc-300">
-                        {ROLE_LABEL[row.company_role]}
-                      </span>
+                      {row.company_role === "company_admin" ? (
+                        <span className="inline-flex items-center rounded-md bg-indigo-50 border border-indigo-200 dark:bg-indigo-950/70 dark:border-indigo-700/70 px-2.5 py-0.5 text-[11px] font-bold text-indigo-700 dark:text-indigo-200 shadow-2xs">
+                          {ROLE_LABEL[row.company_role] || "관리자(Admin)"}
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center rounded-md bg-zinc-100 border border-zinc-200 dark:bg-zinc-800 dark:border-zinc-700 px-2.5 py-0.5 text-[11px] font-medium text-zinc-800 dark:text-zinc-200">
+                          {ROLE_LABEL[row.company_role] || "담당자(Staff)"}
+                        </span>
+                      )}
                     </td>
                     <td className="px-6 py-4">
-                      <span className={`inline-flex items-center rounded border px-2 py-0.5 text-[10px] font-semibold ${joinStatusClass}`}>
+                      <span className={`inline-flex items-center rounded-md border px-2.5 py-0.5 text-[11px] font-semibold ${joinStatusClass}`}>
                         {joinStatusText}
                       </span>
                     </td>
                     <td className="px-6 py-4">
-                      <span className={`inline-flex items-center rounded border px-2 py-0.5 text-[10px] font-semibold ${usageStatusClass}`}>
+                      <span className={`inline-flex items-center rounded-md border px-2.5 py-0.5 text-[11px] font-semibold ${usageStatusClass}`}>
                         {usageStatusText}
                       </span>
                     </td>
@@ -323,7 +329,7 @@ export function CompanyUsersManager({ initialUsers, currentUserId }: CompanyUser
                           <button
                             type="button"
                             onClick={() => handleReinvite(row.id)}
-                            className="font-semibold text-zinc-550 hover:underline dark:text-zinc-400 cursor-pointer"
+                            className="font-semibold text-zinc-600 hover:text-zinc-900 hover:underline dark:text-zinc-300 dark:hover:text-white cursor-pointer"
                           >
                             재초대
                           </button>
@@ -331,7 +337,7 @@ export function CompanyUsersManager({ initialUsers, currentUserId }: CompanyUser
                           <button
                             type="button"
                             onClick={() => setCancelConfirmUser(row)}
-                            className="font-semibold text-rose-600 hover:underline dark:text-rose-400 cursor-pointer"
+                            className="font-semibold text-rose-600 hover:text-rose-700 hover:underline dark:text-rose-400 dark:hover:text-rose-300 cursor-pointer"
                           >
                             초청 취소
                           </button>
@@ -341,7 +347,7 @@ export function CompanyUsersManager({ initialUsers, currentUserId }: CompanyUser
                       <button
                         type="button"
                         onClick={() => handleOpenEdit(row.id === editingUser?.id ? editingUser : row)}
-                        className="font-semibold text-emerald-600 hover:underline dark:text-emerald-450 cursor-pointer"
+                        className="font-semibold text-emerald-600 hover:text-emerald-700 hover:underline dark:text-emerald-400 dark:hover:text-emerald-300 cursor-pointer"
                       >
                         수정
                       </button>
@@ -384,7 +390,7 @@ export function CompanyUsersManager({ initialUsers, currentUserId }: CompanyUser
               {/* Profile fields */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-[10px] font-bold text-zinc-400 block">이름 *</label>
+                  <label className="text-[11px] font-bold text-zinc-600 dark:text-zinc-300 block mb-1">이름 *</label>
                   <input
                     type="text"
                     required
@@ -394,7 +400,7 @@ export function CompanyUsersManager({ initialUsers, currentUserId }: CompanyUser
                   />
                 </div>
                 <div>
-                  <label className="text-[10px] font-bold text-zinc-400 block">직함</label>
+                  <label className="text-[11px] font-bold text-zinc-600 dark:text-zinc-300 block mb-1">직함</label>
                   <input
                     type="text"
                     value={formTitle}
@@ -407,7 +413,7 @@ export function CompanyUsersManager({ initialUsers, currentUserId }: CompanyUser
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-[10px] font-bold text-zinc-400 block">포지션 / 부서</label>
+                  <label className="text-[11px] font-bold text-zinc-600 dark:text-zinc-300 block mb-1">포지션 / 부서</label>
                   <input
                     type="text"
                     value={formPosition}
@@ -417,7 +423,7 @@ export function CompanyUsersManager({ initialUsers, currentUserId }: CompanyUser
                   />
                 </div>
                 <div>
-                  <label className="text-[10px] font-bold text-zinc-400 block mb-1">연락처 (Phone Number)</label>
+                  <label className="text-[11px] font-bold text-zinc-600 dark:text-zinc-300 block mb-1">연락처 (Phone Number)</label>
                   <InternationalPhoneInput
                     value={formPhone}
                     onChange={(val) => setFormPhone(val)}
@@ -426,20 +432,20 @@ export function CompanyUsersManager({ initialUsers, currentUserId }: CompanyUser
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3 pb-3 border-b border-zinc-100 dark:border-zinc-800/80">
+              <div className="grid grid-cols-2 gap-3 pb-3 border-b border-zinc-100 dark:border-zinc-800">
                 <div>
-                  <label className="text-[10px] font-bold text-zinc-400 block">회사 내 역할</label>
+                  <label className="text-[11px] font-bold text-zinc-600 dark:text-zinc-300 block mb-1">회사 내 역할</label>
                   <select
                     value={formRole}
                     onChange={(e) => setFormRole(e.target.value as any)}
                     className={inputClass}
                   >
-                    <option value="company_staff">담당자 (Staff)</option>
-                    <option value="company_admin">관리자 (Admin)</option>
+                    <option value="company_staff" className="bg-white text-zinc-900 dark:bg-zinc-900 dark:text-zinc-100">담당자 (Staff)</option>
+                    <option value="company_admin" className="bg-white text-zinc-900 dark:bg-zinc-900 dark:text-zinc-100">관리자 (Admin)</option>
                   </select>
                 </div>
                 <div>
-                  <label className="text-[10px] font-bold text-zinc-400 block">이용 제한 상태</label>
+                  <label className="text-[11px] font-bold text-zinc-600 dark:text-zinc-300 block mb-1">이용 제한 상태</label>
                   <select
                     value={formStatus}
                     onChange={(e) => setFormStatus(e.target.value as any)}
@@ -447,24 +453,24 @@ export function CompanyUsersManager({ initialUsers, currentUserId }: CompanyUser
                     disabled={editingUser.status === "invited"}
                   >
                     {editingUser.status === "invited" && (
-                      <option value="invited">초대 대기중</option>
+                      <option value="invited" className="bg-white text-zinc-900 dark:bg-zinc-900 dark:text-zinc-100">초대 대기중</option>
                     )}
-                    <option value="active">Active (정상 이용)</option>
-                    <option value="suspended">Deactive (이용 일시정지)</option>
+                    <option value="active" className="bg-white text-zinc-900 dark:bg-zinc-900 dark:text-zinc-100">Active (정상 이용)</option>
+                    <option value="suspended" className="bg-white text-zinc-900 dark:bg-zinc-900 dark:text-zinc-100">Deactive (이용 일시정지)</option>
                   </select>
                 </div>
               </div>
 
               {/* Primary selector */}
-              <div className="flex items-center gap-2 py-1 bg-zinc-50/50 p-2.5 rounded border border-zinc-100 dark:bg-zinc-950/20 dark:border-zinc-800">
+              <div className="flex items-center gap-2 py-1 bg-zinc-50/80 p-2.5 rounded-lg border border-zinc-200 dark:bg-zinc-950/40 dark:border-zinc-800">
                 <input
                   type="checkbox"
                   id="primary-checkbox"
                   checked={formIsPrimary}
                   onChange={(e) => setFormIsPrimary(e.target.checked)}
-                  className="rounded border-zinc-300 text-emerald-600 focus:ring-emerald-500 h-3.5 w-3.5"
+                  className="rounded border-zinc-300 text-emerald-600 focus:ring-emerald-500 h-3.5 w-3.5 dark:border-zinc-700 dark:bg-zinc-900"
                 />
-                <label htmlFor="primary-checkbox" className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 select-none cursor-pointer">
+                <label htmlFor="primary-checkbox" className="text-xs font-semibold text-zinc-800 dark:text-zinc-200 select-none cursor-pointer">
                   대표 담당자(주 컨택 지정)
                 </label>
               </div>
@@ -474,14 +480,14 @@ export function CompanyUsersManager({ initialUsers, currentUserId }: CompanyUser
                 <div className="flex items-center justify-between">
                   <h4 className="text-xs font-bold text-zinc-900 dark:text-white">포털 메뉴별 세부 권한 설정</h4>
                   {formRole === "company_admin" && (
-                    <span className="text-[9px] font-bold text-emerald-650 bg-emerald-50 border border-emerald-100 px-1.5 py-0.5 rounded dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-900">
+                    <span className="text-[9px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded dark:bg-emerald-950/70 dark:text-emerald-300 dark:border-emerald-800">
                       관리자는 항상 모든 권한 소유
                     </span>
                   )}
                 </div>
 
                 <div className="rounded-lg border border-zinc-200 overflow-hidden dark:border-zinc-800">
-                  <div className="grid grid-cols-2 bg-zinc-50/50 text-[10px] font-bold text-zinc-450 border-b border-zinc-200 dark:bg-zinc-950/20 dark:border-zinc-800 p-2">
+                  <div className="grid grid-cols-2 bg-zinc-50/80 text-[10px] font-bold text-zinc-500 border-b border-zinc-200 dark:bg-zinc-950/60 dark:border-zinc-800 p-2">
                     <div>메뉴 카테고리</div>
                     <div className="text-right">권한 수준</div>
                   </div>
@@ -495,10 +501,10 @@ export function CompanyUsersManager({ initialUsers, currentUserId }: CompanyUser
                           value={formPermissions.application || "none"}
                           disabled={formRole === "company_admin"}
                           onChange={(e) => setFormPermissions({ ...formPermissions, application: e.target.value })}
-                          className="rounded border border-zinc-200 bg-white p-1 text-[11px] text-zinc-900 outline-none dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+                          className="rounded border border-zinc-300 bg-white p-1 text-[11px] text-zinc-900 outline-none dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
                         >
                           {permissionOptions.map(opt => (
-                            <option key={opt.value} value={opt.value} className="bg-white text-zinc-900 dark:bg-zinc-950 dark:text-white">
+                            <option key={opt.value} value={opt.value} className="bg-white text-zinc-900 dark:bg-zinc-900 dark:text-zinc-100">
                               {opt.label}
                             </option>
                           ))}
@@ -514,10 +520,10 @@ export function CompanyUsersManager({ initialUsers, currentUserId }: CompanyUser
                           value={formPermissions.brands || "none"}
                           disabled={formRole === "company_admin"}
                           onChange={(e) => setFormPermissions({ ...formPermissions, brands: e.target.value })}
-                          className="rounded border border-zinc-200 bg-white p-1 text-[11px] text-zinc-900 outline-none dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+                          className="rounded border border-zinc-300 bg-white p-1 text-[11px] text-zinc-900 outline-none dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
                         >
                           {permissionOptions.map(opt => (
-                            <option key={opt.value} value={opt.value} className="bg-white text-zinc-900 dark:bg-zinc-950 dark:text-white">
+                            <option key={opt.value} value={opt.value} className="bg-white text-zinc-900 dark:bg-zinc-900 dark:text-zinc-100">
                               {opt.label}
                             </option>
                           ))}
@@ -533,10 +539,10 @@ export function CompanyUsersManager({ initialUsers, currentUserId }: CompanyUser
                           value={formPermissions.products || "none"}
                           disabled={formRole === "company_admin"}
                           onChange={(e) => setFormPermissions({ ...formPermissions, products: e.target.value })}
-                          className="rounded border border-zinc-200 bg-white p-1 text-[11px] text-zinc-900 outline-none dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+                          className="rounded border border-zinc-300 bg-white p-1 text-[11px] text-zinc-900 outline-none dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
                         >
                           {permissionOptions.map(opt => (
-                            <option key={opt.value} value={opt.value} className="bg-white text-zinc-900 dark:bg-zinc-950 dark:text-white">
+                            <option key={opt.value} value={opt.value} className="bg-white text-zinc-900 dark:bg-zinc-900 dark:text-zinc-100">
                               {opt.label}
                             </option>
                           ))}
@@ -552,10 +558,10 @@ export function CompanyUsersManager({ initialUsers, currentUserId }: CompanyUser
                           value={formPermissions.company_info || "none"}
                           disabled={formRole === "company_admin"}
                           onChange={(e) => setFormPermissions({ ...formPermissions, company_info: e.target.value })}
-                          className="rounded border border-zinc-200 bg-white p-1 text-[11px] text-zinc-900 outline-none dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+                          className="rounded border border-zinc-300 bg-white p-1 text-[11px] text-zinc-900 outline-none dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
                         >
                           {permissionOptions.map(opt => (
-                            <option key={opt.value} value={opt.value} className="bg-white text-zinc-900 dark:bg-zinc-950 dark:text-white">
+                            <option key={opt.value} value={opt.value} className="bg-white text-zinc-900 dark:bg-zinc-900 dark:text-zinc-100">
                               {opt.label}
                             </option>
                           ))}
@@ -570,7 +576,7 @@ export function CompanyUsersManager({ initialUsers, currentUserId }: CompanyUser
               <div className="space-y-2.5 pt-2 border-t border-zinc-100 dark:border-zinc-800">
                 <div>
                   <h4 className="text-xs font-bold text-zinc-900 dark:text-white">담당 업무</h4>
-                  <p className="text-[10px] text-zinc-500 mt-1 leading-relaxed">
+                  <p className="text-[10px] text-zinc-500 dark:text-zinc-400 mt-1 leading-relaxed">
                     업무별 주 담당자와 이메일 알림 수신 여부를 설정합니다. 해당 업무에서 요청, 승인, 보완 또는 이슈가 발생하면 설정된 담당자에게 알림이 전달됩니다.
                   </p>
                 </div>
@@ -578,7 +584,7 @@ export function CompanyUsersManager({ initialUsers, currentUserId }: CompanyUser
                 <div className="rounded-lg border border-zinc-200 overflow-hidden dark:border-zinc-800">
                   <table className="w-full text-left border-collapse text-[11px]">
                     <thead>
-                      <tr className="bg-zinc-50 text-[10px] font-bold text-zinc-500 border-b border-zinc-200 dark:bg-zinc-950/20 dark:border-zinc-800">
+                      <tr className="bg-zinc-50 text-[10px] font-bold text-zinc-500 border-b border-zinc-200 dark:bg-zinc-950/60 dark:border-zinc-800">
                         <th className="p-2">업무명 및 설명</th>
                         <th className="p-2 text-center w-20">주 담당자</th>
                         <th className="p-2 text-center w-24">이메일 알림</th>
@@ -588,17 +594,17 @@ export function CompanyUsersManager({ initialUsers, currentUserId }: CompanyUser
                       {TASK_DEFINITIONS.map(def => {
                         const state = formTaskAssignments[def.code] || { is_primary: false, email_notify: false };
                         return (
-                          <tr key={def.code} className="hover:bg-zinc-50/20">
+                          <tr key={def.code} className="hover:bg-zinc-50/20 dark:hover:bg-zinc-800/30">
                             <td className="p-2">
                               <span className="font-bold text-zinc-800 dark:text-zinc-200 block">{def.label}</span>
-                              <span className="text-[9px] text-zinc-400 block mt-0.5">{def.desc}</span>
+                              <span className="text-[9px] text-zinc-500 dark:text-zinc-400 block mt-0.5">{def.desc}</span>
                             </td>
                             <td className="p-2 text-center">
                               <input
                                 type="checkbox"
                                 checked={state.is_primary}
                                 onChange={(e) => handleTaskCheckboxChange(def.code, "is_primary", e.target.checked)}
-                                className="rounded border-zinc-300 text-indigo-600 focus:ring-indigo-500 h-3.5 w-3.5"
+                                className="rounded border-zinc-300 text-indigo-600 focus:ring-indigo-500 h-3.5 w-3.5 dark:border-zinc-700 dark:bg-zinc-900"
                               />
                             </td>
                             <td className="p-2 text-center">
@@ -606,7 +612,7 @@ export function CompanyUsersManager({ initialUsers, currentUserId }: CompanyUser
                                 type="checkbox"
                                 checked={state.email_notify}
                                 onChange={(e) => handleTaskCheckboxChange(def.code, "email_notify", e.target.checked)}
-                                className="rounded border-zinc-300 text-indigo-600 focus:ring-indigo-500 h-3.5 w-3.5"
+                                className="rounded border-zinc-300 text-indigo-600 focus:ring-indigo-500 h-3.5 w-3.5 dark:border-zinc-700 dark:bg-zinc-900"
                               />
                             </td>
                           </tr>
@@ -622,7 +628,7 @@ export function CompanyUsersManager({ initialUsers, currentUserId }: CompanyUser
               <button
                 type="button"
                 onClick={() => setEditingUser(null)}
-                className="rounded-lg border border-zinc-200 bg-white px-4 py-2 text-xs font-semibold text-zinc-700 hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-850"
+                className="rounded-lg border border-zinc-200 bg-white px-4 py-2 text-xs font-semibold text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700"
               >
                 취소
               </button>

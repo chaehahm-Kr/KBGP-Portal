@@ -1,8 +1,11 @@
 "use client";
 
 import React, { useState, useRef, useTransition, useActionState, startTransition } from "react";
+import { useRouter } from "next/navigation";
 import type { ProductFormState } from "@/lib/product/actions";
 import { PRODUCT_CATEGORY_LABEL, type ProductCategory, sanitizeSku, trimSkuSeparators } from "@/lib/product/types";
+
+const NEW_BRAND_ACTION = "__NEW_BRAND_SHORTCUT__";
 
 const inputClass =
   "mt-1 block w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 outline-none transition-all focus:border-zinc-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white dark:focus:border-zinc-700";
@@ -14,6 +17,7 @@ type ProductFormProps = {
 };
 
 export function ProductForm({ action, brands }: ProductFormProps) {
+  const router = useRouter();
   const [state, formAction, pending] = useActionState<
     ProductFormState,
     FormData
@@ -211,6 +215,24 @@ export function ProductForm({ action, brands }: ProductFormProps) {
     });
   };
 
+  const handleBrandChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const selected = e.target.value;
+    if (selected === NEW_BRAND_ACTION) {
+      if (isDirty) {
+        const ok = window.confirm(
+          "브랜드 관리 페이지로 이동하시겠습니까?\n현재 입력 중인 저장되지 않은 내용은 사라질 수 있습니다."
+        );
+        if (ok) {
+          router.push("/portal/brands");
+        }
+      } else {
+        router.push("/portal/brands");
+      }
+      return;
+    }
+    setBrandId(selected);
+  };
+
   const handleExitClick = () => {
     if (isDirty) {
       setShowExitConfirm(true);
@@ -265,7 +287,7 @@ export function ProductForm({ action, brands }: ProductFormProps) {
                 name="brandId"
                 required
                 value={brandId}
-                onChange={(e) => setBrandId(e.target.value)}
+                onChange={handleBrandChange}
                 className={inputClass}
               >
                 {brands.map((brand) => (
@@ -273,6 +295,10 @@ export function ProductForm({ action, brands }: ProductFormProps) {
                     {brand.name}
                   </option>
                 ))}
+                <option disabled value="">────────────</option>
+                <option value={NEW_BRAND_ACTION} className="font-semibold text-emerald-600 dark:text-emerald-400">
+                  + 브랜드 추가
+                </option>
               </select>
             </div>
 

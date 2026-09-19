@@ -149,7 +149,7 @@ export default function PortalSidebar({
                       className={`flex items-center gap-2 rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
                         isSubActive
                           ? "bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-white"
-                          : "text-zinc-500 hover:bg-zinc-50 hover:text-zinc-950 dark:text-zinc-450 dark:hover:bg-zinc-900 dark:hover:text-white"
+                          : "text-zinc-600 hover:bg-zinc-50 hover:text-zinc-950 dark:text-zinc-400 dark:hover:bg-zinc-900 dark:hover:text-white"
                       }`}
                     >
                       <span className="text-zinc-400">•</span>

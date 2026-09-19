@@ -5,8 +5,8 @@ import type { BrandFormState } from "@/lib/brand/actions";
 import { compressImageIfNeeded } from "@/lib/files/client-compress";
 
 const inputClass =
-  "mt-1 block w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 outline-none transition-all focus:border-[#131E2E] dark:border-zinc-800 dark:bg-zinc-950 dark:text-white dark:focus:border-zinc-700";
-const labelClass = "block text-sm font-medium text-zinc-700 dark:text-zinc-300";
+  "mt-1 block w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 outline-none transition-all focus:border-zinc-500 focus:ring-1 focus:ring-zinc-400 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:placeholder:text-zinc-500 dark:focus:border-zinc-500 dark:focus:ring-zinc-600";
+const labelClass = "block text-sm font-semibold text-zinc-700 dark:text-zinc-300";
 
 type BrandFormProps = {
   action: (state: BrandFormState, formData: FormData) => Promise<BrandFormState>;
@@ -183,7 +183,7 @@ export function BrandForm({
           </label>
           {defaultLogoUrl && (
             <div className="mt-2 mb-3 space-y-1">
-              <p className="text-[10px] font-bold text-zinc-450 dark:text-zinc-500 uppercase tracking-wider">현재 로고 이미지</p>
+              <p className="text-[10px] font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">현재 로고 이미지</p>
               <div className="relative h-20 w-20 rounded-md border border-zinc-200 dark:border-zinc-800 overflow-hidden bg-zinc-50 dark:bg-zinc-950 flex items-center justify-center">
                 <img src={defaultLogoUrl} alt="현재 브랜드 로고" className="max-h-full max-w-full object-contain" />
               </div>
@@ -194,7 +194,7 @@ export function BrandForm({
             name="logo"
             type="file"
             accept="image/jpeg,image/png,image/webp"
-            className="mt-1.5 block text-xs text-zinc-500 dark:text-zinc-400 file:mr-4 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-zinc-100 file:text-zinc-700 dark:file:bg-zinc-850 dark:file:text-zinc-300 hover:file:bg-zinc-200 dark:hover:file:bg-zinc-800"
+            className="mt-1.5 block text-xs text-zinc-500 dark:text-zinc-400 file:mr-4 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-zinc-100 file:text-zinc-700 dark:file:bg-zinc-800 dark:file:text-zinc-200 hover:file:bg-zinc-200 dark:hover:file:bg-zinc-700"
           />
         </div>
       </div>
@@ -212,14 +212,14 @@ export function BrandForm({
             type="checkbox"
             checked={hasKrTrademark}
             onChange={(e) => setHasKrTrademark(e.target.checked)}
-            className="h-4 w-4 rounded border-zinc-300 text-[#131E2E] focus:ring-[#131E2E] dark:border-zinc-850"
+            className="h-4 w-4 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-900"
           />
         </div>
 
         {hasKrTrademark && (
           <div className="space-y-3.5 pt-1.5 border-t border-zinc-200/60 dark:border-zinc-800/60 animate-fadeIn">
             <div>
-              <label htmlFor="krTrademarkNumber" className="text-xs font-semibold text-zinc-550 dark:text-zinc-450 block mb-1">
+              <label htmlFor="krTrademarkNumber" className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 block mb-1">
                 상표권 등록 번호
               </label>
               <input
@@ -234,7 +234,7 @@ export function BrandForm({
             </div>
 
             <div>
-              <label htmlFor="krTrademarkFile" className="text-xs font-semibold text-zinc-550 dark:text-zinc-450 block mb-1">
+              <label htmlFor="krTrademarkFile" className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 block mb-1">
                 상표권 증빙서류 첨부 (선택, 이미지/PDF, 10MB 이하)
               </label>
               {defaultKrTrademarkFileUrl && !deleteKrFile && (
@@ -243,14 +243,14 @@ export function BrandForm({
                     href={defaultKrTrademarkFileUrl}
                     target="_blank"
                     rel="noreferrer"
-                    className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 underline underline-offset-2 truncate hover:text-zinc-900"
+                    className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 underline underline-offset-2 truncate hover:text-zinc-900 dark:hover:text-white"
                   >
                     등록된 증빙 문서 보기
                   </a>
                   <button
                     type="button"
                     onClick={() => setDeleteKrFile(true)}
-                    className="text-[10px] font-bold text-rose-600 dark:text-rose-450 hover:underline shrink-0"
+                    className="text-[10px] font-bold text-rose-600 dark:text-rose-400 hover:underline shrink-0"
                   >
                     파일 제거
                   </button>
@@ -262,7 +262,7 @@ export function BrandForm({
                   name="krTrademarkFile"
                   type="file"
                   accept="image/jpeg,image/png,image/webp,application/pdf"
-                  className="mt-1 block text-xs text-zinc-500 dark:text-zinc-400 file:mr-4 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-zinc-100 file:text-zinc-700 dark:file:bg-zinc-850 dark:file:text-zinc-300 hover:file:bg-zinc-200 dark:hover:file:bg-zinc-800"
+                  className="mt-1 block text-xs text-zinc-500 dark:text-zinc-400 file:mr-4 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-zinc-100 file:text-zinc-700 dark:file:bg-zinc-800 dark:file:text-zinc-200 hover:file:bg-zinc-200 dark:hover:file:bg-zinc-700"
                 />
               )}
             </div>
@@ -281,14 +281,14 @@ export function BrandForm({
             type="checkbox"
             checked={hasUsTrademark}
             onChange={(e) => setHasUsTrademark(e.target.checked)}
-            className="h-4 w-4 rounded border-zinc-300 text-[#131E2E] focus:ring-[#131E2E] dark:border-zinc-850"
+            className="h-4 w-4 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-900"
           />
         </div>
 
         {hasUsTrademark && (
           <div className="space-y-3.5 pt-1.5 border-t border-zinc-200/60 dark:border-zinc-800/60 animate-fadeIn">
             <div>
-              <label htmlFor="usTrademarkNumber" className="text-xs font-semibold text-zinc-550 dark:text-zinc-450 block mb-1">
+              <label htmlFor="usTrademarkNumber" className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 block mb-1">
                 상표권 등록 번호
               </label>
               <input
@@ -303,7 +303,7 @@ export function BrandForm({
             </div>
 
             <div>
-              <label htmlFor="usTrademarkFile" className="text-xs font-semibold text-zinc-550 dark:text-zinc-450 block mb-1">
+              <label htmlFor="usTrademarkFile" className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 block mb-1">
                 상표권 증빙서류 첨부 (선택, 이미지/PDF, 10MB 이하)
               </label>
               {defaultUsTrademarkFileUrl && !deleteUsFile && (
@@ -312,14 +312,14 @@ export function BrandForm({
                     href={defaultUsTrademarkFileUrl}
                     target="_blank"
                     rel="noreferrer"
-                    className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 underline underline-offset-2 truncate hover:text-zinc-900"
+                    className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 underline underline-offset-2 truncate hover:text-zinc-900 dark:hover:text-white"
                   >
                     등록된 증빙 문서 보기
                   </a>
                   <button
                     type="button"
                     onClick={() => setDeleteUsFile(true)}
-                    className="text-[10px] font-bold text-rose-600 dark:text-rose-450 hover:underline shrink-0"
+                    className="text-[10px] font-bold text-rose-600 dark:text-rose-400 hover:underline shrink-0"
                   >
                     파일 제거
                   </button>
@@ -331,7 +331,7 @@ export function BrandForm({
                   name="usTrademarkFile"
                   type="file"
                   accept="image/jpeg,image/png,image/webp,application/pdf"
-                  className="mt-1 block text-xs text-zinc-500 dark:text-zinc-400 file:mr-4 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-zinc-100 file:text-zinc-700 dark:file:bg-zinc-850 dark:file:text-zinc-300 hover:file:bg-zinc-200 dark:hover:file:bg-zinc-800"
+                  className="mt-1 block text-xs text-zinc-500 dark:text-zinc-400 file:mr-4 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-zinc-100 file:text-zinc-700 dark:file:bg-zinc-800 dark:file:text-zinc-200 hover:file:bg-zinc-200 dark:hover:file:bg-zinc-700"
                 />
               )}
             </div>
@@ -340,7 +340,7 @@ export function BrandForm({
       </div>
 
       {(clientError || state?.error) && (
-        <p className="text-xs font-semibold text-rose-600 dark:text-rose-450" role="alert">
+        <p className="text-xs font-semibold text-rose-600 dark:text-rose-400" role="alert">
           {clientError || state?.error}
         </p>
       )}
