@@ -258,11 +258,19 @@ export function CompanyUsersManager({ initialUsers, currentUserId }: CompanyUser
 
   const handleRemoveMemberSubmit = async () => {
     if (!removeConfirmUser) return;
+    const targetId = removeConfirmUser.id;
     startTransition(async () => {
       try {
-        await removeCompanyMember(removeConfirmUser.id);
-        setUsers((prev) => prev.filter((u) => u.id !== removeConfirmUser.id));
-        alert("멤버가 회사에서 정상적으로 제거되었습니다.");
+        const res = await removeCompanyMember(targetId);
+        if (res && !res.success) {
+          alert(res.error || "멤버 제거에 실패했습니다.");
+        } else {
+          setUsers((prev) => prev.filter((u) => u.id !== targetId));
+          if (editingUser?.id === targetId) {
+            setEditingUser(null);
+          }
+          alert("멤버가 회사에서 정상적으로 제거되었습니다.");
+        }
       } catch (err) {
         alert(err instanceof Error ? err.message : "멤버 제거에 실패했습니다.");
       } finally {

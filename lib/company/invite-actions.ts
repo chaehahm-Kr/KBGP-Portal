@@ -169,85 +169,110 @@ export async function cancelCompanyUserInvite(targetUserId: string) {
  * 회사의 멤버를 제거한다 (Company Membership Removal).
  * - auth.users 계정을 hard delete하지 않고, 회사의 소속 멤버십(company_users) 및 배정 업무를 삭제한다.
  * - 최초 가입 관리자(Initial Owner), 마지막 남은 관리자, 본인 계정은 삭제할 수 없다.
+ * - Server Action crash 방지를 위해 { success: boolean, error?: string } 구조화된 응답을 반환한다.
  */
-export async function removeCompanyMember(targetUserId: string) {
-  const { companyId, userId } = await requireCompanyAdmin();
-  const admin = createAdminClient();
-
-  // 1. Target user verification within same company
-  const { data: target } = await admin
-    .from("company_users")
-    .select("id, name, email, company_id, company_role, status, invited_by, created_at")
-    .eq("id", targetUserId)
-    .single();
-
-  if (!target || target.company_id !== companyId) {
-    throw new Error("해당 사용자를 찾을 수 없거나 접근 권한이 없습니다.");
-  }
-
-  // 2. Self-removal protection
-  if (targetUserId === userId) {
-    throw new Error("본인 계정은 직접 제거할 수 없습니다.");
-  }
-
-  // 3. Initial Owner / Primary Admin protection
-  const { data: allAdmins } = await admin
-    .from("company_users")
-    .select("id, invited_by, created_at, status")
-    .eq("company_id", companyId)
-    .eq("company_role", "company_admin")
-    .order("created_at", { ascending: true });
-
-  const earliestAdminId = allAdmins?.[0]?.id;
-  const isInitialOwner = !target.invited_by || target.id === earliestAdminId;
-  if (isInitialOwner) {
-    throw new Error("최초 관리자(Owner) 계정은 회사에서 제거할 수 없습니다.");
-  }
-
-  // 4. Last Admin protection
-  if (target.company_role === "company_admin") {
-    const activeAdmins = allAdmins?.filter((a) => a.status === "active") || [];
-    if (activeAdmins.length <= 1) {
-      throw new Error("회사에는 최소 1명의 관리자가 필요합니다.");
-    }
-  }
-
-  // 5. Delete task assignments for this company
+export async function removeCompanyMember(targetUserId: string): Promise<{ success: boolean; error?: string }> {
   try {
-    await admin
-      .from("company_task_assignments")
+    const { companyId, userId } = await requireCompanyAdmin();
+    const admin = createAdminClient();
+
+    // 1. Target user verification within same company
+    const { data: target, error: targetError } = await admin
+      .from("company_users")
+      .select("id, name, email, company_id, company_role, status, invited_by, created_at")
+      .eq("id", targetUserId)
+      .maybeSingle();
+
+    if (targetError || !target || target.company_id !== companyId) {
+      console.warn(`[Member Removal] Target user ${targetUserId} not found in company ${companyId}`);
+      return {
+        success: false,
+        error: "해당 사용자를 찾을 수 없거나 접근 권한이 없습니다.\nUser not found or permission denied.",
+      };
+    }
+
+    // 2. Self-removal protection
+    if (targetUserId === userId) {
+      return {
+        success: false,
+        error: "본인 계정은 직접 제거할 수 없습니다.\nYou cannot remove your own account.",
+      };
+    }
+
+    // 3. Initial Owner / Primary Admin protection
+    const { data: allAdmins } = await admin
+      .from("company_users")
+      .select("id, invited_by, created_at, status")
+      .eq("company_id", companyId)
+      .eq("company_role", "company_admin")
+      .order("created_at", { ascending: true });
+
+    const earliestAdminId = allAdmins?.[0]?.id;
+    const isInitialOwner = !target.invited_by || target.id === earliestAdminId;
+    if (isInitialOwner) {
+      return {
+        success: false,
+        error: "최초 관리자(Owner) 계정은 회사에서 제거할 수 없습니다.\nInitial Owner account cannot be removed from company.",
+      };
+    }
+
+    // 4. Last Admin protection
+    if (target.company_role === "company_admin") {
+      const activeAdmins = allAdmins?.filter((a) => a.status === "active") || [];
+      if (activeAdmins.length <= 1) {
+        return {
+          success: false,
+          error: "회사에는 최소 1명의 관리자가 필요합니다.\nAt least one active admin is required for the company.",
+        };
+      }
+    }
+
+    // 5. Delete related task assignments for this company
+    try {
+      await admin
+        .from("company_task_assignments")
+        .delete()
+        .eq("user_id", targetUserId)
+        .eq("company_id", companyId);
+    } catch (taskErr) {
+      console.warn("Could not delete company_task_assignments for removed user:", taskErr);
+    }
+
+    // 6. Delete company membership (company_users row)
+    const { error: deleteErr } = await admin
+      .from("company_users")
       .delete()
-      .eq("user_id", targetUserId)
+      .eq("id", targetUserId)
       .eq("company_id", companyId);
-  } catch (taskErr) {
-    console.warn("Could not delete company_task_assignments for removed user:", taskErr);
+
+    if (deleteErr) {
+      console.error("[Member Removal] Delete company_users failed:", deleteErr);
+      return {
+        success: false,
+        error: `멤버 제거 처리에 실패했습니다: ${deleteErr.message}`,
+      };
+    }
+
+    // 7. Session access invalidation:
+    // DAL verifySession on every request checks company_users status directly.
+    // Auth identity in auth.users is intentionally preserved and NOT banned globally.
+
+    revalidatePath("/portal/company/users");
+    revalidatePath("/portal/company/info");
+    return { success: true };
+  } catch (err) {
+    console.error("[Member Removal] Unexpected error in removeCompanyMember:", err);
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "멤버 제거 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.",
+    };
   }
-
-  // 6. Delete company membership (company_users row)
-  const { error: deleteErr } = await admin
-    .from("company_users")
-    .delete()
-    .eq("id", targetUserId)
-    .eq("company_id", companyId);
-
-  if (deleteErr) {
-    throw new Error(`멤버 제거 실패: ${deleteErr.message}`);
-  }
-
-  // 7. Invalidate sessions
-  await deactivateUserSessions(targetUserId);
-
-  revalidatePath("/portal/company/users");
-  revalidatePath("/portal/company/info");
-  return { success: true };
 }
 
 /**
  * 08_주요화면과AC.md 예외: "Company Admin이 자기 자신의 Admin 권한을 스스로
  * 회수하려 할 때, 회사에 남은 Admin이 자신뿐이면 차단(회사가 관리자 없는 상태가
  * 되는 것을 방지)". 제거도 사실상 같은 위험이 있으므로 동일하게 막는다.
- *
- * 즉시 세션 무효화(10_보안과권한요구사항.md 3번)는 lib/auth/admin-actions.ts를 그대로 재사용한다.
  */
 export async function removeCompanyUser(targetUserId: string) {
   return removeCompanyMember(targetUserId);
