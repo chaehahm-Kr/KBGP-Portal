@@ -56,6 +56,7 @@ interface PurchaseOrderDetailProps {
     port_of_loading: string | null;
     expected_ready_date: string | null;
     expected_ship_date: string | null;
+    eta?: string | null;
     destination_warehouse_id: string;
     ship_from_warehouse_id: string | null;
     po_receiving_email: string | null;
@@ -828,6 +829,22 @@ export function PurchaseOrderDetail({
                     <span className="font-semibold text-zinc-800 dark:text-zinc-250">
                       [{po.warehouse.code}] {po.warehouse.name}
                     </span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-zinc-400 block mb-0.5">선적항 (Port of Loading)</span>
+                    <span className="font-semibold text-zinc-800 dark:text-zinc-250">{po.port_of_loading || "-"}</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-zinc-400 block mb-0.5">생산완료예정일 (Ready Date)</span>
+                    <span className="font-semibold text-zinc-800 dark:text-zinc-250">{po.expected_ready_date || "-"}</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-zinc-400 block mb-0.5">ETD (예상 출발일)</span>
+                    <span className="font-semibold text-zinc-800 dark:text-zinc-250">{po.expected_ship_date || "-"}</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-zinc-400 block mb-0.5">ETA (예상 도착일)</span>
+                    <span className="font-semibold text-zinc-800 dark:text-zinc-250 font-mono">{po.eta || "-"}</span>
                   </div>
                 </div>
               </div>

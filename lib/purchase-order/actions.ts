@@ -35,6 +35,7 @@ export interface CreatePoInput {
   port_of_loading?: string;
   expected_ready_date?: string;
   expected_ship_date?: string;
+  eta?: string;
   ship_from_warehouse_id?: string | null;
   destination_warehouse_id: string;
   po_receiving_email?: string;
@@ -386,6 +387,90 @@ export async function getSuppliersForPo() {
 }
 
 /**
+ * Fetch company shipping origins and registered contacts with task assignment recommendations.
+ */
+export async function getCompanyOriginsAndContacts(companyId: string) {
+  await verifyAdminSession();
+  const supabase = createAdminClient();
+
+  // 1. Fetch Shipping Origins for this company
+  const { getCompanyShippingOrigins } = await import("@/lib/company/shipping-origin-actions");
+  const origins = await getCompanyShippingOrigins(companyId);
+
+  // Identify default origin
+  const defaultOrigin = origins.find((o) => o.is_default) || origins[0] || null;
+
+  // 2. Fetch active Company Users
+  const { data: users, error: uErr } = await supabase
+    .from("company_users")
+    .select("id, name, email, title, position, is_primary, company_role, status")
+    .eq("company_id", companyId)
+    .eq("status", "active")
+    .order("is_primary", { ascending: false })
+    .order("name", { ascending: true });
+
+  const activeUsers = users ?? [];
+
+  // 3. Fetch Task Assignments for 'logistics_inventory'
+  let taskAssignUserIds: string[] = [];
+  try {
+    const { data: taskData } = await supabase
+      .from("company_task_assignments")
+      .select("user_id, is_primary, email_notify")
+      .eq("company_id", companyId)
+      .eq("task_code", "logistics_inventory");
+
+    if (taskData && taskData.length > 0) {
+      const primary = taskData.filter((t) => t.is_primary).map((t) => t.user_id);
+      const notify = taskData.filter((t) => t.email_notify).map((t) => t.user_id);
+      taskAssignUserIds = Array.from(new Set([...primary, ...notify]));
+    }
+  } catch {
+    // If table not queried, fallback
+  }
+
+  // If no task assignments, fallback to is_primary user or first active user
+  let defaultCheckedUserIds: string[] = [];
+  if (taskAssignUserIds.length > 0) {
+    defaultCheckedUserIds = taskAssignUserIds.filter((id) => activeUsers.some((u) => u.id === id));
+  }
+  if (defaultCheckedUserIds.length === 0) {
+    const primaryUser = activeUsers.find((u) => u.is_primary);
+    if (primaryUser) {
+      defaultCheckedUserIds = [primaryUser.id];
+    } else if (activeUsers.length > 0) {
+      defaultCheckedUserIds = [activeUsers[0].id];
+    }
+  }
+
+  return {
+    origins: origins.map((o) => ({
+      id: o.warehouse_id || o.id,
+      origin_id: o.id,
+      name: o.name,
+      is_default: o.is_default,
+      country: o.country,
+      city: o.city,
+      address_line1: o.address_line1,
+      postal_code: o.postal_code,
+      contact_name: o.contact_name,
+      phone: o.phone,
+    })),
+    defaultOriginId: defaultOrigin ? (defaultOrigin.warehouse_id || defaultOrigin.id) : "",
+    contacts: activeUsers.map((u) => ({
+      id: u.id,
+      name: u.name || "(이름 없음)",
+      email: u.email || "",
+      title: u.title || "",
+      position: u.position || "",
+      is_primary: u.is_primary || false,
+      is_logistics_assigned: taskAssignUserIds.includes(u.id),
+    })),
+    defaultContactIds: defaultCheckedUserIds,
+  };
+}
+
+/**
  * Fetch active products associated with a supplier company (via company_id, brand ownership, or product_suppliers).
  */
 export async function getProductsForSupplier(supplierId: string) {
@@ -424,6 +509,7 @@ export async function getProductsForSupplier(supplierId: string) {
     .from("products")
     .select(`
       id, name, name_en, manufacture_sku, letusto_sku, parent_sku, child_sku, price_usd_fob, price_additional_info, category, brand_id, company_id,
+      carton_pack_qty, carton_width, carton_depth, carton_height, carton_weight, carton_cbm,
       brands (name), upc, ean, status, trading_status
     `)
     .or(orFilters.join(","))
@@ -476,6 +562,25 @@ export async function getProductsForSupplier(supplierId: string) {
     const catValue = p.category || "";
     const catLabel = (PRODUCT_CATEGORY_LABEL as any)[catValue] || catValue || "기타";
 
+    // Pricing tiers extraction
+    const rawTiers = adminOverrides.price_tiers || p.price_additional_info?.price_tiers || [];
+    const priceTiers = Array.isArray(rawTiers)
+      ? rawTiers
+          .filter((t: any) => t && Number(t.qty) > 0 && Number(t.price) > 0)
+          .map((t: any) => ({ qty: Number(t.qty), price: Number(t.price) }))
+          .sort((a: any, b: any) => a.qty - b.qty)
+      : [];
+
+    // Carton specs extraction
+    const cartonPackQty = adminOverrides.carton_pack_qty !== undefined && adminOverrides.carton_pack_qty !== null
+      ? Number(adminOverrides.carton_pack_qty)
+      : (p.carton_pack_qty || 1);
+    const cartonWidth = adminOverrides.carton_width !== undefined ? adminOverrides.carton_width : p.carton_width;
+    const cartonDepth = adminOverrides.carton_depth !== undefined ? adminOverrides.carton_depth : p.carton_depth;
+    const cartonHeight = adminOverrides.carton_height !== undefined ? adminOverrides.carton_height : p.carton_height;
+    const cartonWeight = adminOverrides.carton_weight !== undefined ? adminOverrides.carton_weight : p.carton_weight;
+    const cartonCbm = adminOverrides.carton_cbm !== undefined ? adminOverrides.carton_cbm : p.carton_cbm;
+
     return {
       id: p.id,
       name: p.name,
@@ -483,6 +588,13 @@ export async function getProductsForSupplier(supplierId: string) {
       letusto_sku: effectiveLetustoSku,
       manufacture_sku: effectiveManufactureSku,
       price_usd_fob: effectiveFob,
+      price_tiers: priceTiers,
+      carton_pack_qty: cartonPackQty,
+      carton_width: cartonWidth,
+      carton_depth: cartonDepth,
+      carton_height: cartonHeight,
+      carton_weight: cartonWeight,
+      carton_cbm: cartonCbm,
       upc: effectiveUpc || effectiveEan || "",
       parent_sku: effectiveParentSku || null,
       child_sku: effectiveChildSku || null,
@@ -558,30 +670,44 @@ export async function createPurchaseOrder(data: CreatePoInput) {
   });
 
   // 3. Create PO Header
-  const { data: newPo, error: poErr } = await supabase
+  const insertPayload: any = {
+    supplier_id: data.supplier_id,
+    order_date: data.order_date,
+    currency: data.currency,
+    payment_terms: data.payment_terms || null,
+    incoterms: data.incoterms || null,
+    port_of_loading: data.port_of_loading || null,
+    expected_ready_date: data.expected_ready_date || null,
+    expected_ship_date: data.expected_ship_date || null,
+    eta: data.eta || null,
+    ship_from_warehouse_id: data.ship_from_warehouse_id || null,
+    destination_warehouse_id: data.destination_warehouse_id,
+    po_receiving_email: data.po_receiving_email || null,
+    internal_note: data.internal_note || null,
+    supplier_facing_note: data.supplier_facing_note || null,
+    created_by: userId,
+    po_status: "DRAFT",
+    fulfillment_status: "PENDING",
+  };
+
+  let { data: newPo, error: poErr } = await supabase
     .from("purchase_orders")
-    .insert({
-      supplier_id: data.supplier_id,
-      order_date: data.order_date,
-      currency: data.currency,
-      payment_terms: data.payment_terms || null,
-      incoterms: data.incoterms || null,
-      port_of_loading: data.port_of_loading || null,
-      expected_ready_date: data.expected_ready_date || null,
-      expected_ship_date: data.expected_ship_date || null,
-      ship_from_warehouse_id: data.ship_from_warehouse_id || null,
-      destination_warehouse_id: data.destination_warehouse_id,
-      po_receiving_email: data.po_receiving_email || null,
-      internal_note: data.internal_note || null,
-      supplier_facing_note: data.supplier_facing_note || null,
-      created_by: userId,
-      po_status: "DRAFT",
-      fulfillment_status: "PENDING",
-    })
+    .insert(insertPayload)
     .select("id")
     .single();
 
-  if (poErr) throw new Error(`발주서 헤더 생성 실패: ${poErr.message}`);
+  if (poErr && (poErr.message?.includes("eta") || poErr.code === "42703")) {
+    delete insertPayload.eta;
+    const retryRes = await supabase
+      .from("purchase_orders")
+      .insert(insertPayload)
+      .select("id")
+      .single();
+    newPo = retryRes.data;
+    poErr = retryRes.error;
+  }
+
+  if (poErr || !newPo) throw new Error(`발주서 헤더 생성 실패: ${poErr?.message || "알 수 없는 오류"}`);
   const poId = newPo.id;
 
   // 4. Create PO Lines (taking snapshotted details from product master)
@@ -671,25 +797,37 @@ export async function updatePurchaseOrder(poId: string, data: CreatePoInput) {
   });
 
   // 4. Update Header
-  const { error: poErr } = await supabase
+  const updatePayload: any = {
+    supplier_id: data.supplier_id,
+    order_date: data.order_date,
+    currency: data.currency,
+    payment_terms: data.payment_terms || null,
+    incoterms: data.incoterms || null,
+    port_of_loading: data.port_of_loading || null,
+    expected_ready_date: data.expected_ready_date || null,
+    expected_ship_date: data.expected_ship_date || null,
+    eta: data.eta || null,
+    ship_from_warehouse_id: data.ship_from_warehouse_id || null,
+    destination_warehouse_id: data.destination_warehouse_id,
+    po_receiving_email: data.po_receiving_email || null,
+    internal_note: data.internal_note || null,
+    supplier_facing_note: data.supplier_facing_note || null,
+    updated_at: new Date().toISOString(),
+  };
+
+  let { error: poErr } = await supabase
     .from("purchase_orders")
-    .update({
-      supplier_id: data.supplier_id,
-      order_date: data.order_date,
-      currency: data.currency,
-      payment_terms: data.payment_terms || null,
-      incoterms: data.incoterms || null,
-      port_of_loading: data.port_of_loading || null,
-      expected_ready_date: data.expected_ready_date || null,
-      expected_ship_date: data.expected_ship_date || null,
-      ship_from_warehouse_id: data.ship_from_warehouse_id || null,
-      destination_warehouse_id: data.destination_warehouse_id,
-      po_receiving_email: data.po_receiving_email || null,
-      internal_note: data.internal_note || null,
-      supplier_facing_note: data.supplier_facing_note || null,
-      updated_at: new Date().toISOString(),
-    })
+    .update(updatePayload)
     .eq("id", poId);
+
+  if (poErr && (poErr.message?.includes("eta") || poErr.code === "42703")) {
+    delete updatePayload.eta;
+    const retryRes = await supabase
+      .from("purchase_orders")
+      .update(updatePayload)
+      .eq("id", poId);
+    poErr = retryRes.error;
+  }
 
   if (poErr) throw new Error(`발주서 헤더 수정 실패: ${poErr.message}`);
 
