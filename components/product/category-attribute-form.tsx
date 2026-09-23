@@ -1,6 +1,6 @@
 "use client";
 
-import React, { forwardRef, useImperativeHandle, useState, useEffect, useTransition, useMemo } from "react";
+import React, { forwardRef, useImperativeHandle, useState, useEffect, useTransition, useMemo, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { 
   getCategoriesTree, 
@@ -97,6 +97,7 @@ export interface CategoryCompletionStatus {
 export interface CategoryAttributeFormHandle {
   save: () => Promise<{ success: boolean; error?: string; missingRequired?: string[] }>;
   validate: () => { isValid: boolean; missingRequired: string[] };
+  isDirty: () => boolean;
   getCurrentState: () => {
     categoryCode: string | null;
     formValues: Record<string, any>;
@@ -118,6 +119,7 @@ export interface CategoryAttributeFormProps {
   colorMap?: string | null;
   isAdmin: boolean;
   onCompletionChange?: (status: CategoryCompletionStatus) => void;
+  onDirtyChange?: (isDirty: boolean) => void;
 }
 
 export const CategoryAttributeForm = forwardRef<CategoryAttributeFormHandle, CategoryAttributeFormProps>(
@@ -136,6 +138,7 @@ export const CategoryAttributeForm = forwardRef<CategoryAttributeFormHandle, Cat
       colorMap,
       isAdmin,
       onCompletionChange,
+      onDirtyChange,
     },
     ref
   ) {
@@ -187,6 +190,12 @@ export const CategoryAttributeForm = forwardRef<CategoryAttributeFormHandle, Cat
 
   const [formValues, setFormValues] = useState<Record<string, any>>({});
   const [formTextValues, setFormTextValues] = useState<Record<string, string>>({});
+
+  const initialSnapshotRef = useRef<{
+    categoryCode: string | null;
+    formValues: Record<string, any>;
+    formTextValues: Record<string, string>;
+  } | null>(null);
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -242,10 +251,10 @@ export const CategoryAttributeForm = forwardRef<CategoryAttributeFormHandle, Cat
         // 기존 category_code 가 있으면 트리 경로를 역추적하여 콤보박스 세팅
         if (initialCategoryCode) {
           setupCategorySelectors(tree, initialCategoryCode);
-          await loadAttributes(initialCategoryCode, values);
+          await loadAttributes(initialCategoryCode, values, true);
         } else {
           // 카테고리 미정 시 공통 속성만 로드
-          await loadAttributes(null, values);
+          await loadAttributes(null, values, true);
         }
         setHasInitialized(true);
       } catch (err) {
@@ -297,7 +306,8 @@ export const CategoryAttributeForm = forwardRef<CategoryAttributeFormHandle, Cat
   // 속성 양식 로드 및 폼 상태 바인딩
   const loadAttributes = async (
     categoryCode: string | null,
-    valMap: Record<string, { value: any; text: string | null }>
+    valMap: Record<string, { value: any; text: string | null }>,
+    isInitial: boolean = false
   ) => {
     const res = await getCategoryAttributes(categoryCode);
     setProfileName(res.profileName);
@@ -333,6 +343,14 @@ export const CategoryAttributeForm = forwardRef<CategoryAttributeFormHandle, Cat
 
     setFormValues(initialVals);
     setFormTextValues(initialTexts);
+
+    if (isInitial || !initialSnapshotRef.current) {
+      initialSnapshotRef.current = {
+        categoryCode: initialCategoryCode,
+        formValues: { ...initialVals },
+        formTextValues: { ...initialTexts },
+      };
+    }
   };
 
   // 1Depth 변경
@@ -369,20 +387,58 @@ export const CategoryAttributeForm = forwardRef<CategoryAttributeFormHandle, Cat
     return parent?.children || [];
   };
 
-  const getSelectedFinalCategory = (): CategoryNode | null => {
+  // 최종 카테고리 노드 및 코드 판별
+  const getFinalCategoryNode = (): CategoryNode | null => {
     if (selectedCat3) {
-      const c3s = getActiveCat3Options();
-      return c3s.find(c => c.code === selectedCat3) || null;
+      const cat3s = getActiveCat3Options();
+      const node = cat3s.find(c => c.code === selectedCat3);
+      if (node) return node;
     }
     if (selectedCat2) {
-      const c2s = getActiveCat2Options();
-      return c2s.find(c => c.code === selectedCat2) || null;
+      const cat2s = getActiveCat2Options();
+      const node = cat2s.find(c => c.code === selectedCat2);
+      if (node && (node.isFinal || (!node.children || node.children.length === 0))) return node;
     }
     if (selectedCat1) {
-      return categoriesTree.find(c => c.code === selectedCat1) || null;
+      const node = categoriesTree.find(c => c.code === selectedCat1);
+      if (node && (node.isFinal || (!node.children || node.children.length === 0))) return node;
     }
     return null;
   };
+
+  const finalCat = getFinalCategoryNode();
+
+  // Dirty state checker comparing current values against initial snapshot
+  const checkIsDirty = useCallback((): boolean => {
+    if (!initialSnapshotRef.current) return false;
+    const currentCatCode = finalCat ? finalCat.code : null;
+    if (currentCatCode !== initialSnapshotRef.current.categoryCode) {
+      return true;
+    }
+
+    const initVals = initialSnapshotRef.current.formValues;
+    const initTexts = initialSnapshotRef.current.formTextValues;
+
+    for (const attr of attributes) {
+      const initV = initVals[attr.code];
+      const currV = formValues[attr.code];
+      if (JSON.stringify(initV ?? null) !== JSON.stringify(currV ?? null)) {
+        return true;
+      }
+      const initT = (initTexts[attr.code] || "").trim();
+      const currT = (formTextValues[attr.code] || "").trim();
+      if (initT !== currT) {
+        return true;
+      }
+    }
+    return false;
+  }, [finalCat, attributes, formValues, formTextValues]);
+
+  useEffect(() => {
+    if (onDirtyChange && hasInitialized) {
+      onDirtyChange(checkIsDirty());
+    }
+  }, [checkIsDirty, onDirtyChange, hasInitialized]);
 
   const formatUnit = (unit: string | null) => {
     if (!unit) return "";
@@ -393,7 +449,6 @@ export const CategoryAttributeForm = forwardRef<CategoryAttributeFormHandle, Cat
     return unit;
   };
 
-  const finalCat = getSelectedFinalCategory();
   const isFinalCategorySelected = finalCat ? finalCat.isFinal : false;
 
   // 폼 입력값 수정
@@ -489,6 +544,17 @@ export const CategoryAttributeForm = forwardRef<CategoryAttributeFormHandle, Cat
 
     try {
       await saveProductAttributeValues(productId, categoryCode, formValues, formTextValues);
+      
+      // Reset initial snapshot to current values so isDirty becomes false
+      initialSnapshotRef.current = {
+        categoryCode,
+        formValues: { ...formValues },
+        formTextValues: { ...formTextValues },
+      };
+      if (onDirtyChange) {
+        onDirtyChange(false);
+      }
+
       setFeedback({
         type: "success",
         text: "카테고리 및 동적 속성 정보가 데이터베이스에 안전하게 저장되었습니다.",
@@ -511,6 +577,9 @@ export const CategoryAttributeForm = forwardRef<CategoryAttributeFormHandle, Cat
     },
     validate: () => {
       return validateInternal();
+    },
+    isDirty: () => {
+      return checkIsDirty();
     },
     getCurrentState: () => {
       const categoryCode = finalCat ? finalCat.code : null;
@@ -840,7 +909,7 @@ export const CategoryAttributeForm = forwardRef<CategoryAttributeFormHandle, Cat
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
                 </svg>
-                카테고리 & 속성 정보 저장
+                변경사항 저장
               </>
             )}
           </button>

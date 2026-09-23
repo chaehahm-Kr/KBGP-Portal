@@ -32,6 +32,7 @@ import { ConfirmForm } from "@/components/common/confirm-form";
 import { AddCertificateForm } from "@/components/product/add-certificate-form";
 
 import { type CategoryCompletionResult } from "@/lib/product/attribute-completion";
+import { useUnsavedChangesGuard } from "@/hooks/use-unsaved-changes-guard";
 
 interface ProductDetailTabsProps {
   product: Product;
@@ -363,13 +364,77 @@ export function ProductDetailTabs({
 
   // Required Fields States for reactive validation
   const [nameEn, setNameEn] = useState(product.name_en || "");
+  const [name, setName] = useState(product.name || "");
   const [manufactureSku, setManufactureSku] = useState(effectiveManufactureSku || "");
   const [brandId, setBrandId] = useState(product.brand_id || "");
   const [category, setCategory] = useState(product.category || "");
+  const [volume, setVolume] = useState(product.volume || "");
   const [origin, setOrigin] = useState(product.origin || "");
+  const [leadTimeValue, setLeadTimeValue] = useState(parsedLeadTime.value || "");
+  const [leadTimeUnit, setLeadTimeUnit] = useState(parsedLeadTime.unit || "주");
+  const [color, setColor] = useState(product.color || "");
+  const [colorMap, setColorMap] = useState(product.color_map || "");
+  const [description, setDescription] = useState(product.description || "");
   const [priceKrwRetail, setPriceKrwRetail] = useState(product.price_krw_retail?.toString() || "");
+  const [priceKrwWholesale, setPriceKrwWholesale] = useState(product.price_krw_wholesale?.toString() || "");
+  const [estimatedRetailPrice, setEstimatedRetailPrice] = useState(product.estimated_retail_price?.toString() || "");
   const [upc, setUpc] = useState(product.upc || "");
   const [ean, setEan] = useState(product.ean || "");
+  const [isCatAttrDirty, setIsCatAttrDirty] = useState(false);
+
+  const initialSnapshotRef = React.useRef({
+    nameEn: product.name_en || "",
+    name: product.name || "",
+    manufactureSku: effectiveManufactureSku || "",
+    brandId: product.brand_id || "",
+    category: product.category || "",
+    volume: product.volume || "",
+    origin: product.origin || "",
+    leadTimeValue: parsedLeadTime.value || "",
+    leadTimeUnit: parsedLeadTime.unit || "주",
+    color: product.color || "",
+    colorMap: product.color_map || "",
+    description: product.description || "",
+    ingredientsText: product.ingredients_text || "",
+    isParentSku: getInitialParentState(),
+    isChildSku: getInitialChildState(),
+    upc: product.upc || "",
+    ean: product.ean || "",
+    sellingOnline: !!product.selling_online,
+    sellingOffline: !!product.selling_offline,
+    salesLink1: product.sales_link_1 || "",
+    salesLink2: product.sales_link_2 || "",
+    bullets: JSON.stringify(product.bullet_points && product.bullet_points.length > 0 ? product.bullet_points : ["", "", "", "", ""]),
+    priceKrwRetail: product.price_krw_retail?.toString() || "",
+    priceKrwWholesale: product.price_krw_wholesale?.toString() || "",
+    estimatedRetailPrice: product.estimated_retail_price?.toString() || "",
+    priceUsdFobState: product.price_usd_fob || 0,
+    priceTiers: JSON.stringify((product.price_additional_info as any)?.price_tiers || []),
+    itemWidth: product.item_width?.toString() || "",
+    itemDepth: product.item_depth?.toString() || "",
+    itemHeight: product.item_height?.toString() || "",
+    itemWeight: product.item_weight?.toString() || "",
+    packageWidth: product.package_width?.toString() || "",
+    packageDepth: product.package_depth?.toString() || "",
+    packageHeight: product.package_height?.toString() || "",
+    packageWeight: product.package_weight?.toString() || "",
+    cartonPackQty: product.carton_pack_qty?.toString() || "1",
+    cartonWidth: product.carton_width?.toString() || "",
+    cartonDepth: product.carton_depth?.toString() || "",
+    cartonHeight: product.carton_height?.toString() || "",
+    cartonWeight: product.carton_weight?.toString() || "",
+    paletteCartonQty: product.palette_carton_qty?.toString() || "",
+    paletteWidth: product.palette_width?.toString() || "",
+    paletteDepth: product.palette_depth?.toString() || "",
+    paletteHeight: product.palette_height?.toString() || "",
+    paletteWeight: product.palette_weight?.toString() || "",
+    c20Qty: product.container_20ft_qty?.toString() || "",
+    c20Weight: product.container_20ft_weight?.toString() || "",
+    c20Cbm: product.container_20ft_cbm?.toString() || "",
+    c40Qty: product.container_40fthc_qty?.toString() || "",
+    c40Weight: product.container_40fthc_weight?.toString() || "",
+    c40Cbm: product.container_40fthc_cbm?.toString() || ""
+  });
 
   const getMissingFieldsList = () => {
     const missing = [];
@@ -592,8 +657,71 @@ export function ProductDetailTabs({
     setPriceTiers(updated);
   };
 
-  const handleMainFormSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
+  const isBasicDirty = (
+    nameEn !== initialSnapshotRef.current.nameEn ||
+    name !== initialSnapshotRef.current.name ||
+    manufactureSku !== initialSnapshotRef.current.manufactureSku ||
+    brandId !== initialSnapshotRef.current.brandId ||
+    category !== initialSnapshotRef.current.category ||
+    volume !== initialSnapshotRef.current.volume ||
+    origin !== initialSnapshotRef.current.origin ||
+    leadTimeValue !== initialSnapshotRef.current.leadTimeValue ||
+    leadTimeUnit !== initialSnapshotRef.current.leadTimeUnit ||
+    color !== initialSnapshotRef.current.color ||
+    colorMap !== initialSnapshotRef.current.colorMap ||
+    description !== initialSnapshotRef.current.description ||
+    ingredientsText !== initialSnapshotRef.current.ingredientsText ||
+    isParentSku !== initialSnapshotRef.current.isParentSku ||
+    isChildSku !== initialSnapshotRef.current.isChildSku ||
+    upc !== initialSnapshotRef.current.upc ||
+    ean !== initialSnapshotRef.current.ean ||
+    sellingOnline !== initialSnapshotRef.current.sellingOnline ||
+    sellingOffline !== initialSnapshotRef.current.sellingOffline ||
+    salesLink1 !== initialSnapshotRef.current.salesLink1 ||
+    salesLink2 !== initialSnapshotRef.current.salesLink2 ||
+    JSON.stringify(bullets) !== initialSnapshotRef.current.bullets
+  );
+
+  const isCategoryDirty = isCatAttrDirty;
+
+  const isPriceDirty = (
+    priceKrwRetail !== initialSnapshotRef.current.priceKrwRetail ||
+    priceKrwWholesale !== initialSnapshotRef.current.priceKrwWholesale ||
+    estimatedRetailPrice !== initialSnapshotRef.current.estimatedRetailPrice ||
+    priceUsdFobState !== initialSnapshotRef.current.priceUsdFobState ||
+    JSON.stringify(priceTiers) !== initialSnapshotRef.current.priceTiers
+  );
+
+  const isLogisticsDirty = (
+    itemWidth !== initialSnapshotRef.current.itemWidth ||
+    itemDepth !== initialSnapshotRef.current.itemDepth ||
+    itemHeight !== initialSnapshotRef.current.itemHeight ||
+    itemWeight !== initialSnapshotRef.current.itemWeight ||
+    packageWidth !== initialSnapshotRef.current.packageWidth ||
+    packageDepth !== initialSnapshotRef.current.packageDepth ||
+    packageHeight !== initialSnapshotRef.current.packageHeight ||
+    packageWeight !== initialSnapshotRef.current.packageWeight ||
+    cartonPackQty !== initialSnapshotRef.current.cartonPackQty ||
+    cartonWidth !== initialSnapshotRef.current.cartonWidth ||
+    cartonDepth !== initialSnapshotRef.current.cartonDepth ||
+    cartonHeight !== initialSnapshotRef.current.cartonHeight ||
+    cartonWeight !== initialSnapshotRef.current.cartonWeight ||
+    paletteCartonQty !== initialSnapshotRef.current.paletteCartonQty ||
+    paletteWidth !== initialSnapshotRef.current.paletteWidth ||
+    paletteDepth !== initialSnapshotRef.current.paletteDepth ||
+    paletteHeight !== initialSnapshotRef.current.paletteHeight ||
+    paletteWeight !== initialSnapshotRef.current.paletteWeight ||
+    c20Qty !== initialSnapshotRef.current.c20Qty ||
+    c20Weight !== initialSnapshotRef.current.c20Weight ||
+    c20Cbm !== initialSnapshotRef.current.c20Cbm ||
+    c40Qty !== initialSnapshotRef.current.c40Qty ||
+    c40Weight !== initialSnapshotRef.current.c40Weight ||
+    c40Cbm !== initialSnapshotRef.current.c40Cbm
+  );
+
+  const isAnyDirty = isBasicDirty || isCategoryDirty || isPriceDirty || isLogisticsDirty;
+
+  const saveAllData = async (): Promise<{ success: boolean; error?: string }> => {
     setStatusMessage(null);
 
     const criticalErrors = getCriticalErrors();
@@ -609,12 +737,13 @@ export function ProductDetailTabs({
         }
       }, 80);
 
+      const errorMsg = firstError.message;
       setStatusMessage({ 
         type: "error", 
-        text: firstError.message
+        text: errorMsg
       });
       window.scrollTo({ top: 0, behavior: "smooth" });
-      return;
+      return { success: false, error: errorMsg };
     }
 
     // 2. Validate category & dynamic attributes if category form ref is present
@@ -622,86 +751,201 @@ export function ProductDetailTabs({
       const catValidation = categoryAttrRef.current.validate();
       if (!catValidation.isValid) {
         setActiveTab("category_attributes");
+        const errText = `카테고리 필수 입력 속성이 누락되었습니다: ${catValidation.missingRequired.join(", ")}`;
         setStatusMessage({
           type: "error",
-          text: `카테고리 필수 입력 속성이 누락되었습니다: ${catValidation.missingRequired.join(", ")}`,
+          text: errText,
         });
         window.scrollTo({ top: 0, behavior: "smooth" });
-        return;
+        return { success: false, error: errText };
       }
     }
-    
-    const formData = new FormData(e.currentTarget);
 
-    // Set checkboxes explicitly as strings for action validation
+    const formData = new FormData();
     formData.set("sellingOnline", sellingOnline ? "true" : "false");
     formData.set("sellingOffline", sellingOffline ? "true" : "false");
     formData.set("salesLink1", salesLink1.trim());
     formData.set("salesLink2", salesLink2.trim());
-    
-    // Explicitly set bound values in formData to ensure they are captured correctly
     formData.set("nameEn", nameEn.trim());
+    formData.set("name", name.trim());
     formData.set("manufactureSku", trimSkuSeparators(manufactureSku));
     formData.set("brandId", brandId);
     formData.set("category", category);
+    formData.set("volume", volume.trim());
     formData.set("origin", origin);
+    formData.set("color", color.trim());
+    formData.set("colorMap", colorMap);
+    formData.set("description", description.trim());
+    formData.set("ingredientsText", ingredientsText.trim());
+    formData.set("parentSku", isParentSku ? "Y" : "");
+    formData.set("childSku", isChildSku ? "Y" : "");
     formData.set("upc", upc.trim());
     formData.set("ean", ean.trim());
     formData.set("priceKrwRetail", priceKrwRetail.trim());
+    formData.set("priceKrwWholesale", priceKrwWholesale.trim());
+    formData.set("estimatedRetailPrice", estimatedRetailPrice.trim());
     formData.set("priceUsdFob", priceUsdFobState ? priceUsdFobState.toString() : "");
 
-    // Combine leadTimeValue and leadTimeUnit into leadTime
-    const leadTimeVal = formData.get("leadTimeValue") || "";
-    const leadTimeUnit = formData.get("leadTimeUnit") || "";
-    if (leadTimeVal) {
-      formData.set("leadTime", `${String(leadTimeVal).trim()} ${leadTimeUnit}`);
+    // Logistics fields
+    formData.set("itemWidth", itemWidth);
+    formData.set("itemDepth", itemDepth);
+    formData.set("itemHeight", itemHeight);
+    formData.set("itemWeight", itemWeight);
+    formData.set("packageWidth", packageWidth);
+    formData.set("packageDepth", packageDepth);
+    formData.set("packageHeight", packageHeight);
+    formData.set("packageWeight", packageWeight);
+    formData.set("cartonPackQty", cartonPackQty);
+    formData.set("cartonWidth", cartonWidth);
+    formData.set("cartonDepth", cartonDepth);
+    formData.set("cartonHeight", cartonHeight);
+    formData.set("cartonWeight", cartonWeight);
+    formData.set("cartonCbm", cartonCbm);
+    formData.set("paletteCartonQty", paletteCartonQty);
+    formData.set("paletteWidth", paletteWidth);
+    formData.set("paletteDepth", paletteDepth);
+    formData.set("paletteHeight", paletteHeight);
+    formData.set("paletteWeight", paletteWeight);
+    formData.set("container20ftQty", c20Qty);
+    formData.set("container20ftWeight", c20Weight);
+    formData.set("container20ftCbm", c20Cbm);
+    formData.set("container40fthcQty", c40Qty);
+    formData.set("container40fthcWeight", c40Weight);
+    formData.set("container40fthcCbm", c40Cbm);
+
+    if (leadTimeValue.trim()) {
+      formData.set("leadTime", `${leadTimeValue.trim()} ${leadTimeUnit}`);
     } else {
       formData.set("leadTime", "");
     }
-    // Append bullet points
+    formData.set("leadTimeValue", leadTimeValue.trim());
+    formData.set("leadTimeUnit", leadTimeUnit);
+
     bullets.forEach((b) => {
       if (b.trim()) {
         formData.append("bulletPoints", b.trim());
       }
     });
 
-    // Append price tiers JSON string
     formData.append("priceTiers", JSON.stringify(priceTiers));
 
-    startTransition(async () => {
-      try {
-        // 3. Save category & dynamic attributes
-        if (categoryAttrRef.current) {
-          const catRes = await categoryAttrRef.current.save();
-          if (!catRes.success) {
-            setStatusMessage({
-              type: "error",
-              text: catRes.error || "카테고리 및 속성 저장 중 오류가 발생했습니다.",
-            });
-            window.scrollTo({ top: 0, behavior: "smooth" });
-            return;
-          }
-        }
-
-        // 4. Save main product info
-        const res = await updateProduct(product.id, undefined, formData);
-        if (res?.error) {
-          setStatusMessage({ type: "error", text: res.error });
+    try {
+      if (categoryAttrRef.current) {
+        const catRes = await categoryAttrRef.current.save();
+        if (!catRes.success) {
+          const catErr = catRes.error || "카테고리 및 속성 저장 중 오류가 발생했습니다.";
+          setStatusMessage({
+            type: "error",
+            text: catErr,
+          });
           window.scrollTo({ top: 0, behavior: "smooth" });
-          return;
+          return { success: false, error: catErr };
         }
-
-        // 5. Success
-        setStatusMessage({ type: "success", text: "전체 변경사항이 성공적으로 저장되었습니다." });
-        router.refresh();
-        window.scrollTo({ top: 0, behavior: "smooth" });
-      } catch (err: any) {
-        setStatusMessage({
-          type: "error",
-          text: err.message || "저장 중 예상치 못한 오류가 발생했습니다.",
-        });
-        window.scrollTo({ top: 0, behavior: "smooth" });
       }
+
+      const res = await updateProduct(product.id, undefined, formData);
+      if (res?.error) {
+        setStatusMessage({ type: "error", text: res.error });
+        window.scrollTo({ top: 0, behavior: "smooth" });
+        return { success: false, error: res.error };
+      }
+
+      // Update initial baseline snapshots
+      initialSnapshotRef.current = {
+        nameEn,
+        name,
+        manufactureSku,
+        brandId,
+        category,
+        volume,
+        origin,
+        leadTimeValue,
+        leadTimeUnit,
+        color,
+        colorMap,
+        description,
+        ingredientsText,
+        isParentSku,
+        isChildSku,
+        upc,
+        ean,
+        sellingOnline,
+        sellingOffline,
+        salesLink1,
+        salesLink2,
+        bullets: JSON.stringify(bullets),
+        priceKrwRetail,
+        priceKrwWholesale,
+        estimatedRetailPrice,
+        priceUsdFobState,
+        priceTiers: JSON.stringify(priceTiers),
+        itemWidth,
+        itemDepth,
+        itemHeight,
+        itemWeight,
+        packageWidth,
+        packageDepth,
+        packageHeight,
+        packageWeight,
+        cartonPackQty,
+        cartonWidth,
+        cartonDepth,
+        cartonHeight,
+        cartonWeight,
+        paletteCartonQty,
+        paletteWidth,
+        paletteDepth,
+        paletteHeight,
+        paletteWeight,
+        c20Qty,
+        c20Weight,
+        c20Cbm,
+        c40Qty,
+        c40Weight,
+        c40Cbm
+      };
+      setIsCatAttrDirty(false);
+
+      setStatusMessage({ type: "success", text: "변경사항이 성공적으로 저장되었습니다." });
+      router.refresh();
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return { success: true };
+    } catch (err: any) {
+      const errMsg = err.message || "저장 중 예상치 못한 오류가 발생했습니다.";
+      setStatusMessage({
+        type: "error",
+        text: errMsg,
+      });
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return { success: false, error: errMsg };
+    }
+  };
+
+  const { guardModalNode } = useUnsavedChangesGuard({
+    isDirty: isAnyDirty,
+    onSave: async () => {
+      let res: { success: boolean; error?: string } = { success: false };
+      await new Promise<void>((resolve) => {
+        startTransition(async () => {
+          res = await saveAllData();
+          resolve();
+        });
+      });
+      return res;
+    },
+  });
+
+  const handleSaveClick = (e?: React.MouseEvent) => {
+    if (e) e.preventDefault();
+    startTransition(async () => {
+      await saveAllData();
+    });
+  };
+
+  const handleMainFormSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    startTransition(async () => {
+      await saveAllData();
     });
   };
 
@@ -773,6 +1017,8 @@ export function ProductDetailTabs({
 
   return (
     <div data-active-tab={activeTab} className="space-y-6 w-full max-w-7xl">
+      {guardModalNode}
+
       {/* Dynamic Status Banner */}
       {statusMessage && (
         <div 
@@ -879,7 +1125,13 @@ export function ProductDetailTabs({
             </div>
           </div>
           
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
+            {isAnyDirty && (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400 border border-amber-200 dark:border-amber-800/80">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                <span>저장되지 않은 변경사항이 있습니다.</span>
+              </span>
+            )}
             <Link
               href="/portal/products"
               className="w-full sm:w-auto text-center rounded-lg border border-zinc-300 bg-white hover:bg-zinc-50 px-5 py-2.5 text-xs font-bold text-zinc-700 transition-all dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-300 dark:hover:bg-zinc-900 cursor-pointer"
@@ -887,11 +1139,12 @@ export function ProductDetailTabs({
               목록으로 돌아가기
             </Link>
             <button
-              type="submit"
+              type="button"
+              onClick={handleSaveClick}
               disabled={isPending}
               className="w-full sm:w-auto text-center rounded-lg bg-zinc-900 hover:bg-zinc-850 px-5 py-2.5 text-xs font-bold text-white transition-all shadow dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-100 cursor-pointer disabled:opacity-50"
             >
-              {isPending ? "저장 중..." : "전체 변경사항 저장"}
+              {isPending ? "저장 중..." : "변경사항 저장"}
             </button>
           </div>
         </div>
@@ -899,12 +1152,12 @@ export function ProductDetailTabs({
         {/* Elegant Glassmorphic Tab Navigation */}
         <div data-tab-nav="true" className="flex border-b border-zinc-200 dark:border-zinc-800 overflow-x-auto no-scrollbar scroll-smooth gap-1">
           {[
-            { id: "basic", label: "기본 정보" },
-            { id: "category_attributes", label: "카테고리 & 속성" },
-            { id: "price", label: "가격 정보" },
-            { id: "logistics", label: "로지스틱스" },
-            { id: "media", label: "미디어 (이미지/비디오)" },
-            { id: "certs", label: "인허가 & 보증서" }
+            { id: "basic", label: "기본 정보", isDirty: isBasicDirty },
+            { id: "category_attributes", label: "카테고리 & 속성", isDirty: isCategoryDirty },
+            { id: "price", label: "가격 정보", isDirty: isPriceDirty },
+            { id: "logistics", label: "로지스틱스", isDirty: isLogisticsDirty },
+            { id: "media", label: "미디어 (이미지/비디오)", isDirty: false },
+            { id: "certs", label: "인허가 & 보증서", isDirty: false }
           ].map((tab) => {
             const missingList = getMissingFieldsList();
             const hasError = missingList.some((item) => item.tab === tab.id);
@@ -921,6 +1174,9 @@ export function ProductDetailTabs({
                 }`}
               >
                 <span>{tab.label}</span>
+                {tab.isDirty && (
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shadow-sm" title="저장되지 않은 변경사항" />
+                )}
                 {hasError && (
                   <span 
                     className="h-2 w-2 rounded-full bg-rose-600 animate-pulse" 
@@ -986,7 +1242,8 @@ export function ProductDetailTabs({
                 <input
                   name="name"
                   type="text"
-                  defaultValue={product.name || ""}
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
                   placeholder="한글 제품명"
                   className="block w-full rounded-lg border border-zinc-300 px-3.5 py-2 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-zinc-900 dark:focus:border-white"
                 />
@@ -1035,7 +1292,8 @@ export function ProductDetailTabs({
                 <input
                   name="volume"
                   type="text"
-                  defaultValue={product.volume || ""}
+                  value={volume}
+                  onChange={(e) => setVolume(e.target.value)}
                   placeholder="예: 50ml, 120g"
                   className="block w-full rounded-lg border border-zinc-300 px-3.5 py-2 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-zinc-900 dark:focus:border-white"
                 />
@@ -1079,13 +1337,15 @@ export function ProductDetailTabs({
                   <input
                     name="leadTimeValue"
                     type="number"
-                    defaultValue={parsedLeadTime.value}
+                    value={leadTimeValue}
+                    onChange={(e) => setLeadTimeValue(e.target.value)}
                     placeholder="숫자 입력"
                     className="block w-2/3 rounded-lg border border-zinc-300 px-3.5 py-2 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-zinc-900 dark:focus:border-white"
                   />
                   <select
                     name="leadTimeUnit"
-                    defaultValue={parsedLeadTime.unit}
+                    value={leadTimeUnit}
+                    onChange={(e) => setLeadTimeUnit(e.target.value)}
                     className="block w-1/3 rounded-lg border border-zinc-300 px-3.5 py-2 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-zinc-900 dark:focus:border-white"
                   >
                     <option value="일">일 (Days)</option>
@@ -1100,7 +1360,8 @@ export function ProductDetailTabs({
                 <input
                   name="color"
                   type="text"
-                  defaultValue={product.color || ""}
+                  value={color}
+                  onChange={(e) => setColor(e.target.value)}
                   placeholder="예: Coral Pink"
                   className="block w-full rounded-lg border border-zinc-300 px-3.5 py-2 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-zinc-900 dark:focus:border-white"
                 />
@@ -1110,7 +1371,8 @@ export function ProductDetailTabs({
                 <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1.5">컬러 맵 (Color Map)</label>
                 <select
                   name="colorMap"
-                  defaultValue={product.color_map || ""}
+                  value={colorMap}
+                  onChange={(e) => setColorMap(e.target.value)}
                   className="block w-full rounded-lg border border-zinc-300 px-3.5 py-2 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-zinc-900 dark:focus:border-white"
                 >
                   <option value="">선택 안 함 (None)</option>
@@ -1129,7 +1391,8 @@ export function ProductDetailTabs({
               <textarea
                 name="description"
                 rows={4}
-                defaultValue={product.description || ""}
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
                 placeholder="제품 마케팅 소구점 및 상세 설명을 적어주세요."
                 className="block w-full rounded-lg border border-zinc-300 px-3.5 py-2 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-zinc-900 dark:focus:border-white resize-y"
               />
@@ -1500,7 +1763,8 @@ export function ProductDetailTabs({
                   <input
                     name="priceKrwWholesale"
                     type="number"
-                    defaultValue={product.price_krw_wholesale || ""}
+                    value={priceKrwWholesale}
+                    onChange={(e) => setPriceKrwWholesale(e.target.value)}
                     placeholder="0"
                     className="block w-full rounded-lg border border-zinc-300 pl-8 pr-3.5 py-2 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-zinc-900 dark:focus:border-white"
                   />
@@ -1515,7 +1779,8 @@ export function ProductDetailTabs({
                     name="estimatedRetailPrice"
                     type="number"
                     step="0.01"
-                    defaultValue={product.estimated_retail_price || ""}
+                    value={estimatedRetailPrice}
+                    onChange={(e) => setEstimatedRetailPrice(e.target.value)}
                     placeholder="0.00"
                     className="block w-full rounded-lg border border-zinc-300 pl-8 pr-3.5 py-2 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-zinc-900 dark:focus:border-white"
                   />
@@ -1647,6 +1912,7 @@ export function ProductDetailTabs({
             colorMap={product.color_map || null}
             isAdmin={false}
             onCompletionChange={setCategoryCompletion}
+            onDirtyChange={setIsCatAttrDirty}
           />
         </div>
 
@@ -2459,6 +2725,26 @@ export function ProductDetailTabs({
             <AddCertificateForm action={addProductCertificate.bind(null, product.id)} />
           </div>
         </div>
+      </div>
+
+      {/* Bottom Save Button Row */}
+      <div className="flex items-center justify-between pt-4 border-t border-zinc-200 dark:border-zinc-800">
+        <div>
+          {isAnyDirty && (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400 border border-amber-200 dark:border-amber-800/80">
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+              <span>저장되지 않은 변경사항이 있습니다.</span>
+            </span>
+          )}
+        </div>
+        <button
+          type="button"
+          onClick={handleSaveClick}
+          disabled={isPending}
+          className="rounded bg-zinc-950 px-6 py-2.5 text-xs font-bold text-white hover:bg-zinc-800 disabled:opacity-50 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-100 transition-colors shadow-md cursor-pointer flex items-center gap-1.5"
+        >
+          {isPending ? "저장 중..." : "변경사항 저장"}
+        </button>
       </div>
     </div>
   );

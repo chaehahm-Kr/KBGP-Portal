@@ -23,6 +23,8 @@ import {
 import { TASK_DEFINITIONS } from "@/lib/company/task-constants";
 import { InternationalPhoneInput } from "@/components/shared/international-phone-input";
 import { CountrySelect } from "@/components/shared/country-select";
+import { CompanyShippingOriginsTab } from "@/components/company/company-shipping-origins-tab";
+import { type CompanyShippingOrigin } from "@/lib/company/shipping-origin-actions";
 
 const STATUS_LABEL: Record<string, string> = {
   invited: "초대됨",
@@ -87,6 +89,7 @@ interface CompanyDetailManagerProps {
   initialSupplierProfile: any | null;
   initialSupplierRemittance: any | null;
   warehouses: any[];
+  initialShippingOrigins?: CompanyShippingOrigin[];
 }
 
 export function CompanyDetailManager({
@@ -105,6 +108,7 @@ export function CompanyDetailManager({
   initialSupplierProfile,
   initialSupplierRemittance,
   warehouses,
+  initialShippingOrigins = [],
 }: CompanyDetailManagerProps) {
     const [companyCode, setCompanyCode] = useState(parsedMeta.companyCode || "");
   const [tempCompanyCode, setTempCompanyCode] = useState(companyCode);
@@ -219,7 +223,7 @@ export function CompanyDetailManager({
   const showSupplierTab = true;
 
   const [activeTab, setActiveTab] = useState<
-    "staff" | "tasks" | "brands" | "products" | "applications" | "supplier" | "remittance"
+    "staff" | "tasks" | "brands" | "products" | "applications" | "supplier" | "shipping-origin" | "remittance"
   >("staff");
   const [isPending, startTransition] = useTransition();
 
@@ -1163,7 +1167,13 @@ export function CompanyDetailManager({
                   "brands",
                   "products",
                   "applications",
-                  ...(showSupplierTab ? ["supplier" as const, "remittance" as const] : []),
+                  ...(showSupplierTab
+                    ? [
+                        "supplier" as const,
+                        "shipping-origin" as const,
+                        "remittance" as const,
+                      ]
+                    : []),
                 ] as const).map((tab) => (
                   <button
                     key={tab}
@@ -1186,6 +1196,8 @@ export function CompanyDetailManager({
                       ? "입점 신청서"
                       : tab === "supplier"
                       ? "거래 정보"
+                      : tab === "shipping-origin"
+                      ? "출고지 정보"
                       : "은행 정보"}
                   </button>
                 ))}
@@ -1893,7 +1905,17 @@ export function CompanyDetailManager({
                 </div>
               )}
 
-              {/* 7. Bank & Remittance Information Tab */}
+              {/* 7. Shipping Origin Information Tab */}
+              {activeTab === "shipping-origin" && showSupplierTab && (
+                <CompanyShippingOriginsTab
+                  companyId={company.id}
+                  initialOrigins={initialShippingOrigins}
+                  mode="admin"
+                  canEdit={true}
+                />
+              )}
+
+              {/* 8. Bank & Remittance Information Tab */}
               {activeTab === "remittance" && showSupplierTab && (
                 <div className="space-y-6">
                   <div className="flex items-center justify-between pb-2 border-b border-zinc-100 dark:border-zinc-800">

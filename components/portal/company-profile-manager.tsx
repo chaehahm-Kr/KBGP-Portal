@@ -7,6 +7,8 @@ import { type CompanyContact, type CompanyParsedMetadata } from "@/lib/company/a
 import { assignTaskPrimaryUser, type TaskAssignmentItem, toggleTaskEmailNotification } from "@/lib/company/task-actions";
 import { InternationalPhoneInput } from "@/components/shared/international-phone-input";
 import { CountrySelect } from "@/components/shared/country-select";
+import { CompanyShippingOriginsTab } from "@/components/company/company-shipping-origins-tab";
+import { type CompanyShippingOrigin } from "@/lib/company/shipping-origin-actions";
 
 interface CompanyProfileManagerProps {
   company: {
@@ -25,6 +27,8 @@ interface CompanyProfileManagerProps {
   initialSupplierProfile: any;
   initialSupplierRemittance: any;
   warehouses: any[];
+  initialShippingOrigins?: CompanyShippingOrigin[];
+  canEditCompanyInfo?: boolean;
 }
 
 export function CompanyProfileManager({
@@ -36,8 +40,11 @@ export function CompanyProfileManager({
   initialSupplierProfile,
   initialSupplierRemittance,
   warehouses,
+  initialShippingOrigins = [],
+  canEditCompanyInfo = true,
 }: CompanyProfileManagerProps) {
   const isCompanyAdmin = companyRole === "company_admin";
+  const canEdit = isCompanyAdmin || canEditCompanyInfo;
   const [isPending, startTransition] = useTransition();
 
   const [name, setName] = useState(company.name || "");
@@ -104,8 +111,8 @@ export function CompanyProfileManager({
   const [remNote, setRemNote] = useState(initialSupplierRemittance?.remittance_note || "");
   const [tempZipCode, setTempZipCode] = useState(zipCode);
   const [tempWebsite, setTempWebsite] = useState(website);
-  // Right column tab state: 'members' | 'tasks' | 'trading' | 'remittance'
-  const [activeTab, setActiveTab] = useState<"members" | "tasks" | "trading" | "remittance">("members");
+  // Right column tab state: 'members' | 'tasks' | 'trading' | 'shipping-origin' | 'remittance'
+  const [activeTab, setActiveTab] = useState<"members" | "tasks" | "trading" | "shipping-origin" | "remittance">("members");
 
   // [신규 기능]: 담당 업무 상태 로컬 관리
   const [tasks, setTasks] = useState<TaskAssignmentItem[]>(taskAssignments);
@@ -645,6 +652,17 @@ export function CompanyProfileManager({
             </button>
             <button
               type="button"
+              onClick={() => setActiveTab("shipping-origin")}
+              className={`px-4 py-2.5 text-xs font-bold transition-all border-b-2 whitespace-nowrap cursor-pointer ${
+                activeTab === "shipping-origin"
+                  ? "border-zinc-950 text-zinc-950 dark:border-white dark:text-white"
+                  : "border-transparent text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white"
+              }`}
+            >
+              출고지 정보
+            </button>
+            <button
+              type="button"
               onClick={() => setActiveTab("remittance")}
               className={`px-4 py-2.5 text-xs font-bold transition-all border-b-2 whitespace-nowrap cursor-pointer ${
                 activeTab === "remittance"
@@ -913,6 +931,18 @@ export function CompanyProfileManager({
               </div>
             </div>
           </div>
+          )}
+
+          {/* Shipping Origin Information Card */}
+          {activeTab === "shipping-origin" && (
+            <div className="rounded-lg border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 relative">
+              <CompanyShippingOriginsTab
+                companyId={company.id}
+                initialOrigins={initialShippingOrigins}
+                mode="portal"
+                canEdit={canEdit}
+              />
+            </div>
           )}
 
           {/* Payment & Remittance Card */}

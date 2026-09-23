@@ -4,6 +4,8 @@ import { requireCompanyMembership } from "@/lib/company/dal";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { parseCompanyMetadata } from "@/lib/company/admin-actions";
+import { getCompanyShippingOrigins } from "@/lib/company/shipping-origin-actions";
+import { hasMenuPermission } from "@/lib/company/permissions";
 import { CompanyProfileManager } from "@/components/portal/company-profile-manager";
 
 export const dynamic = "force-dynamic";
@@ -128,6 +130,10 @@ export default async function PortalCompanyInfoPage() {
     .or(`company_id.eq.${membership.companyId},company_id.is.null`)
     .order("created_at", { ascending: true });
 
+  // Fetch shipping origins
+  const shippingOrigins = await getCompanyShippingOrigins(membership.companyId);
+  const canEditCompanyInfo = isCompanyAdmin || (await hasMenuPermission("company_info", "write"));
+
   return (
     <CompanyProfileManager
       company={company}
@@ -138,6 +144,8 @@ export default async function PortalCompanyInfoPage() {
       initialSupplierProfile={supplierProfile || null}
       initialSupplierRemittance={supplierRemittance || null}
       warehouses={warehouses || []}
+      initialShippingOrigins={shippingOrigins}
+      canEditCompanyInfo={canEditCompanyInfo}
     />
   );
 }

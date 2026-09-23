@@ -7,6 +7,7 @@ import { parseBrandTrademarks } from "@/lib/brand/actions";
 import { getSignedFileUrl } from "@/lib/files/storage";
 import { parseCompanyMetadata } from "@/lib/company/admin-actions";
 import { getSystemCompanyConfigs } from "@/lib/settings/actions";
+import { getCompanyShippingOrigins } from "@/lib/company/shipping-origin-actions";
 import { CompanyDetailManager } from "@/components/admin/company-detail-manager";
 
 export const metadata: Metadata = {
@@ -325,6 +326,9 @@ export default async function AdminCompanyDetailPage({
       .eq("company_id", id)
       .order("created_at", { ascending: true });
 
+    // Fetch shipping origins
+    const shippingOrigins = await getCompanyShippingOrigins(id);
+
     return (
       <CompanyDetailManager
         company={company}
@@ -342,6 +346,7 @@ export default async function AdminCompanyDetailPage({
         initialSupplierProfile={supplierProfile || null}
         initialSupplierRemittance={supplierRemittance || null}
         warehouses={warehouses || []}
+        initialShippingOrigins={shippingOrigins}
       />
     );
   } catch (err: any) {

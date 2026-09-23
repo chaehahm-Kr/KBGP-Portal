@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useTransition, useEffect, useRef } from "react";
+import React, { useState, useTransition, useEffect, useRef, useMemo, useCallback } from "react";
 import Link from "next/link";
 import { useSearchParams, useRouter } from "next/navigation";
 import { 
@@ -29,9 +29,10 @@ import {
   adminRestoreProduct
 } from "@/lib/product/admin-actions";
 import { updateProductSuppliers } from "@/lib/purchase-order/actions";
-import { CategoryAttributeForm } from "@/components/product/category-attribute-form";
+import { CategoryAttributeForm, type CategoryAttributeFormHandle } from "@/components/product/category-attribute-form";
 import { ProductChangeHistoryTab } from "@/components/product/product-change-history-tab";
 import type { ProductChangeLogItem } from "@/lib/product/audit";
+import { useUnsavedChangesGuard } from "@/hooks/use-unsaved-changes-guard";
 
 interface ProductOverrideTabsProps {
   product: Product;
@@ -702,134 +703,334 @@ export function ProductOverrideTabs({
   const isLogisticsTabMissing = pkgWidth <= 0 || pkgDepth <= 0 || pkgHeight <= 0 || pkgWeight <= 0;
   const isMediaTabMissing = !hasImages;
 
-  const handleSave = () => {
+  const categoryAttrRef = useRef<CategoryAttributeFormHandle>(null);
+  const [isCatAttrDirty, setIsCatAttrDirty] = useState(false);
+
+  // Baseline initial state snapshots for dirty comparison
+  const initialBullets = useMemo(() => {
+    return overrides.bullet_points && overrides.bullet_points.length > 0
+      ? overrides.bullet_points
+      : ["", "", "", "", ""];
+  }, [overrides.bullet_points]);
+
+  const initialSuppliersStr = useMemo(() => {
+    return JSON.stringify([...mappedSupplierIds].sort());
+  }, [mappedSupplierIds]);
+
+  const initialMatrixStr = useMemo(() => {
+    return JSON.stringify(matrix || {});
+  }, [matrix]);
+
+  // Tab dirty checks
+  const isBasicDirty = useMemo(() => {
+    if (selectionStatus !== (product.selection_status || "UNREVIEWED")) return true;
+    if (salesStatus !== (product.sales_status || "PREPARING")) return true;
+    if (tradingStatus !== (product.trading_status || "inactive")) return true;
+    if (JSON.stringify([...selectedSupplierIds].sort()) !== initialSuppliersStr) return true;
+    if (ovName !== (overrides.name || "")) return true;
+    if (ovNameEn !== (overrides.name_en || "")) return true;
+    if (ovBrandId !== product.brand_id) return true;
+    if (ovCategory !== (overrides.category || "")) return true;
+    if (ovVolume !== (overrides.volume || "")) return true;
+    if (ovOrigin !== (overrides.origin || "")) return true;
+    if (ovLeadTimeValue !== parsedOverrideLeadTime.value) return true;
+    if (ovLeadTimeUnit !== parsedOverrideLeadTime.unit) return true;
+    if (ovColor !== (overrides.color || "")) return true;
+    if (ovColorMap !== (overrides.color_map || "")) return true;
+    if (ovDescription !== (overrides.description || "")) return true;
+    if (JSON.stringify(ovBullets) !== JSON.stringify(initialBullets)) return true;
+    if (ovManufactureSku !== (overrides.manufacture_sku || "")) return true;
+    if (ovLetustoSku !== (product.letusto_sku || "")) return true;
+    if (ovParentSku !== (overrides.parent_sku || "")) return true;
+    if (ovChildSku !== (overrides.child_sku || "")) return true;
+    if (skuTypeOverride !== getInitialSkuTypeOverride()) return true;
+    if (ovUpc !== (overrides.upc || "")) return true;
+    if (ovEan !== (overrides.ean || "")) return true;
+    return false;
+  }, [
+    selectionStatus, product.selection_status,
+    salesStatus, product.sales_status,
+    tradingStatus, product.trading_status,
+    selectedSupplierIds, initialSuppliersStr,
+    ovName, overrides.name,
+    ovNameEn, overrides.name_en,
+    ovBrandId, product.brand_id,
+    ovCategory, overrides.category,
+    ovVolume, overrides.volume,
+    ovOrigin, overrides.origin,
+    ovLeadTimeValue, parsedOverrideLeadTime.value,
+    ovLeadTimeUnit, parsedOverrideLeadTime.unit,
+    ovColor, overrides.color,
+    ovColorMap, overrides.color_map,
+    ovDescription, overrides.description,
+    ovBullets, initialBullets,
+    ovManufactureSku, overrides.manufacture_sku,
+    ovLetustoSku, product.letusto_sku,
+    ovParentSku, overrides.parent_sku,
+    ovChildSku, overrides.child_sku,
+    skuTypeOverride,
+    ovUpc, overrides.upc,
+    ovEan, overrides.ean,
+  ]);
+
+  const isCategoryDirty = isCatAttrDirty;
+
+  const isPriceDirty = useMemo(() => {
+    if (ovPriceKrwRetail !== (overrides.price_krw_retail?.toString() || "")) return true;
+    if (ovPriceKrwWholesale !== (overrides.price_krw_wholesale?.toString() || "")) return true;
+    if (ovPriceUsdFob !== (overrides.price_usd_fob?.toString() || "")) return true;
+    if (ovEstimatedRetailPrice !== (overrides.estimated_retail_price?.toString() || "")) return true;
+    return false;
+  }, [
+    ovPriceKrwRetail, overrides.price_krw_retail,
+    ovPriceKrwWholesale, overrides.price_krw_wholesale,
+    ovPriceUsdFob, overrides.price_usd_fob,
+    ovEstimatedRetailPrice, overrides.estimated_retail_price,
+  ]);
+
+  const isLogisticsDirty = useMemo(() => {
+    if (ovItemWidth !== (overrides.item_width?.toString() || "")) return true;
+    if (ovItemDepth !== (overrides.item_depth?.toString() || "")) return true;
+    if (ovItemHeight !== (overrides.item_height?.toString() || "")) return true;
+    if (ovItemWeight !== (overrides.item_weight?.toString() || "")) return true;
+    if (ovPackageWidth !== (overrides.package_width?.toString() || "")) return true;
+    if (ovPackageDepth !== (overrides.package_depth?.toString() || "")) return true;
+    if (ovPackageHeight !== (overrides.package_height?.toString() || "")) return true;
+    if (ovPackageWeight !== (overrides.package_weight?.toString() || "")) return true;
+    if (ovCartonPackQty !== (overrides.carton_pack_qty?.toString() || "")) return true;
+    if (ovCartonWidth !== (overrides.carton_width?.toString() || "")) return true;
+    if (ovCartonDepth !== (overrides.carton_depth?.toString() || "")) return true;
+    if (ovCartonHeight !== (overrides.carton_height?.toString() || "")) return true;
+    if (ovCartonWeight !== (overrides.carton_weight?.toString() || "")) return true;
+    if (ovCartonCbm !== (overrides.carton_cbm?.toString() || "")) return true;
+    if (ovPaletteCartonQty !== (overrides.palette_carton_qty?.toString() || "")) return true;
+    if (ovPaletteWidth !== (overrides.palette_width?.toString() || "")) return true;
+    if (ovPaletteDepth !== (overrides.palette_depth?.toString() || "")) return true;
+    if (ovPaletteHeight !== (overrides.palette_height?.toString() || "")) return true;
+    if (ovPaletteWeight !== (overrides.palette_weight?.toString() || "")) return true;
+    if (ovC20Qty !== (overrides.container_20ft_qty?.toString() || "")) return true;
+    if (ovC20Weight !== (overrides.container_20ft_weight?.toString() || "")) return true;
+    if (ovC20Cbm !== (overrides.container_20ft_cbm?.toString() || "")) return true;
+    if (ovC40Qty !== (overrides.container_40fthc_qty?.toString() || "")) return true;
+    if (ovC40Weight !== (overrides.container_40fthc_weight?.toString() || "")) return true;
+    if (ovC40Cbm !== (overrides.container_40fthc_cbm?.toString() || "")) return true;
+    return false;
+  }, [
+    ovItemWidth, overrides.item_width,
+    ovItemDepth, overrides.item_depth,
+    ovItemHeight, overrides.item_height,
+    ovItemWeight, overrides.item_weight,
+    ovPackageWidth, overrides.package_width,
+    ovPackageDepth, overrides.package_depth,
+    ovPackageHeight, overrides.package_height,
+    ovPackageWeight, overrides.package_weight,
+    ovCartonPackQty, overrides.carton_pack_qty,
+    ovCartonWidth, overrides.carton_width,
+    ovCartonDepth, overrides.carton_depth,
+    ovCartonHeight, overrides.carton_height,
+    ovCartonWeight, overrides.carton_weight,
+    ovCartonCbm, overrides.carton_cbm,
+    ovPaletteCartonQty, overrides.palette_carton_qty,
+    ovPaletteWidth, overrides.palette_width,
+    ovPaletteDepth, overrides.palette_depth,
+    ovPaletteHeight, overrides.palette_height,
+    ovPaletteWeight, overrides.palette_weight,
+    ovC20Qty, overrides.container_20ft_qty,
+    ovC20Weight, overrides.container_20ft_weight,
+    ovC20Cbm, overrides.container_20ft_cbm,
+    ovC40Qty, overrides.container_40fthc_qty,
+    ovC40Weight, overrides.container_40fthc_weight,
+    ovC40Cbm, overrides.container_40fthc_cbm,
+  ]);
+
+  const isCurationDirty = useMemo(() => {
+    if (curationStatus !== (curation.status || "NOT_REVIEWED")) return true;
+    if (ovCurator !== (curation.curator || "")) return true;
+    if (ovNextReviewDate !== (curation.next_review_date || get90DaysLater(curation.last_review_date || new Date().toISOString().split("T")[0]))) return true;
+    if (curationRole !== (curation.role || "SUPPORT")) return true;
+    if (ovLandedCost !== ((curation as any).landed_cost?.toString() || "")) return true;
+    if (ovWholesalePrice !== ((curation as any).wholesale_price?.toString() || "")) return true;
+    if (ovSuggestRetailPrice !== ((curation as any).suggest_retail_price?.toString() || "")) return true;
+    if (ovMapPrice !== ((curation as any).map_price?.toString() || "")) return true;
+    if (JSON.stringify(ovMatrix) !== initialMatrixStr) return true;
+    return false;
+  }, [
+    curationStatus, curation.status,
+    ovCurator, curation.curator,
+    ovNextReviewDate, curation.next_review_date, curation.last_review_date,
+    curationRole, curation.role,
+    ovLandedCost, (curation as any).landed_cost,
+    ovWholesalePrice, (curation as any).wholesale_price,
+    ovSuggestRetailPrice, (curation as any).suggest_retail_price,
+    ovMapPrice, (curation as any).map_price,
+    ovMatrix, initialMatrixStr,
+  ]);
+
+  const isAnyDirty = isBasicDirty || isCategoryDirty || isPriceDirty || isLogisticsDirty || isCurationDirty;
+
+  const handleSave = async (): Promise<{ success: boolean; error?: string }> => {
     setStatusMessage(null);
-    startTransition(async () => {
-      try {
-        // Auto-upload pending images if any
-        const imageFileInput = document.querySelector('input[type="file"][accept*="image"]') as HTMLInputElement;
-        if (imageFileInput && imageFileInput.files && imageFileInput.files.length > 0) {
-          const formData = new FormData();
-          for (const file of Array.from(imageFileInput.files)) {
-            formData.append("images", file);
-          }
-          await adminAddProductImages(product.id, formData);
-          imageFileInput.value = "";
+    try {
+      // 1. Auto-upload pending images if any
+      const imageFileInput = document.querySelector('input[type="file"][accept*="image"]') as HTMLInputElement;
+      if (imageFileInput && imageFileInput.files && imageFileInput.files.length > 0) {
+        const formData = new FormData();
+        for (const file of Array.from(imageFileInput.files)) {
+          formData.append("images", file);
         }
-
-        const payload: Record<string, any> = {};
-
-        // Parse helper
-        const addString = (key: string, val: string) => {
-          if (val.trim() !== "") payload[key] = val.trim();
-          else payload[key] = null; // Clear override
-        };
-        const addNum = (key: string, val: string) => {
-          if (val.trim() !== "") payload[key] = parseFloat(val);
-          else payload[key] = null; // Clear override
-        };
-
-        payload.selection_status = selectionStatus;
-        payload.sales_status = salesStatus;
-        payload.trading_status = tradingStatus;
-
-        addString("name", ovName);
-        addString("name_en", ovNameEn);
-        payload.brand_id = ovBrandId;
-        addString("category", ovCategory);
-        addString("volume", ovVolume);
-        addString("origin", ovOrigin);
-        if (ovLeadTimeValue.trim() !== "") {
-          payload["lead_time"] = `${ovLeadTimeValue.trim()} ${ovLeadTimeUnit}`;
-        } else {
-          payload["lead_time"] = null;
-        }
-        addString("color", ovColor);
-        addString("color_map", ovColorMap);
-        addString("description", ovDescription);
-
-        // Filter and clean bullet points
-        const cleanedBullets = ovBullets.map((b) => b.trim()).filter((b) => b !== "");
-        if (cleanedBullets.length > 0) payload["bullet_points"] = cleanedBullets;
-        else payload["bullet_points"] = null;
-
-        addString("manufacture_sku", trimSkuSeparators(ovManufactureSku));
-        addString("letusto_sku", trimSkuSeparators(ovLetustoSku));
-        addString("parent_sku", ovParentSku);
-        addString("child_sku", ovChildSku);
-        addString("upc", ovUpc);
-        addString("ean", ovEan);
-
-        addNum("price_krw_retail", ovPriceKrwRetail);
-        addNum("price_krw_wholesale", ovPriceKrwWholesale);
-        addNum("price_usd_fob", ovPriceUsdFob);
-        addNum("estimated_retail_price", ovEstimatedRetailPrice);
-
-        addNum("item_width", ovItemWidth);
-        addNum("item_depth", ovItemDepth);
-        addNum("item_height", ovItemHeight);
-        addNum("item_weight", ovItemWeight);
-
-        addNum("package_width", ovPackageWidth);
-        addNum("package_depth", ovPackageDepth);
-        addNum("package_height", ovPackageHeight);
-        addNum("package_weight", ovPackageWeight);
-
-        addNum("carton_pack_qty", ovCartonPackQty);
-        addNum("carton_width", ovCartonWidth);
-        addNum("carton_depth", ovCartonDepth);
-        addNum("carton_height", ovCartonHeight);
-        addNum("carton_weight", ovCartonWeight);
-        addNum("carton_cbm", ovCartonCbm);
-
-        addNum("palette_carton_qty", ovPaletteCartonQty);
-        addNum("palette_width", ovPaletteWidth);
-        addNum("palette_depth", ovPaletteDepth);
-        addNum("palette_height", ovPaletteHeight);
-        addNum("palette_weight", ovPaletteWeight);
-
-        addNum("container_20ft_qty", ovC20Qty);
-        addNum("container_20ft_weight", ovC20Weight);
-        addNum("container_20ft_cbm", ovC20Cbm);
-
-        addNum("container_40fthc_qty", ovC40Qty);
-        addNum("container_40fthc_weight", ovC40Weight);
-        addNum("container_40fthc_cbm", ovC40Cbm);
-
-        await adminUpdateProductOverrides(product.id, payload);
-        await updateProductSuppliers(product.id, selectedSupplierIds);
-        await adminUpdateProductCuration(
-          product.id,
-          {
-            status: curationStatus,
-            curator: ovCurator,
-            last_review_date: ovLastReviewDate || null,
-            next_review_date: ovNextReviewDate || null,
-            role: curationRole,
-            landed_cost: ovLandedCost.trim() !== "" ? parseFloat(ovLandedCost) : null,
-            wholesale_price: ovWholesalePrice.trim() !== "" ? parseFloat(ovWholesalePrice) : null,
-            suggest_retail_price: ovSuggestRetailPrice.trim() !== "" ? parseFloat(ovSuggestRetailPrice) : null,
-            map_price: ovMapPrice.trim() !== "" ? parseFloat(ovMapPrice) : null,
-          },
-          ovMatrix
-        );
-        setStatusMessage({ type: "success", text: "어드민 오버라이드 및 큐레이션 설정이 성공적으로 저장되었습니다." });
-      } catch (err: any) {
-        setStatusMessage({ type: "error", text: err.message || "저장 실패" });
+        await adminAddProductImages(product.id, formData);
+        imageFileInput.value = "";
       }
+
+      // 2. Save Category & Attributes if mounted
+      if (categoryAttrRef.current) {
+        const catRes = await categoryAttrRef.current.save();
+        if (!catRes.success) {
+          setStatusMessage({
+            type: "error",
+            text: catRes.error || "카테고리 및 속성 저장 중 오류가 발생했습니다.",
+          });
+          return { success: false, error: catRes.error };
+        }
+      }
+
+      const payload: Record<string, any> = {};
+
+      // Parse helper
+      const addString = (key: string, val: string) => {
+        if (val.trim() !== "") payload[key] = val.trim();
+        else payload[key] = null; // Clear override
+      };
+      const addNum = (key: string, val: string) => {
+        if (val.trim() !== "") payload[key] = parseFloat(val);
+        else payload[key] = null; // Clear override
+      };
+
+      payload.selection_status = selectionStatus;
+      payload.sales_status = salesStatus;
+      payload.trading_status = tradingStatus;
+
+      addString("name", ovName);
+      addString("name_en", ovNameEn);
+      payload.brand_id = ovBrandId;
+      addString("category", ovCategory);
+      addString("volume", ovVolume);
+      addString("origin", ovOrigin);
+      if (ovLeadTimeValue.trim() !== "") {
+        payload["lead_time"] = `${ovLeadTimeValue.trim()} ${ovLeadTimeUnit}`;
+      } else {
+        payload["lead_time"] = null;
+      }
+      addString("color", ovColor);
+      addString("color_map", ovColorMap);
+      addString("description", ovDescription);
+
+      // Filter and clean bullet points
+      const cleanedBullets = ovBullets.map((b) => b.trim()).filter((b) => b !== "");
+      if (cleanedBullets.length > 0) payload["bullet_points"] = cleanedBullets;
+      else payload["bullet_points"] = null;
+
+      addString("manufacture_sku", trimSkuSeparators(ovManufactureSku));
+      addString("letusto_sku", trimSkuSeparators(ovLetustoSku));
+      addString("parent_sku", ovParentSku);
+      addString("child_sku", ovChildSku);
+      addString("upc", ovUpc);
+      addString("ean", ovEan);
+
+      addNum("price_krw_retail", ovPriceKrwRetail);
+      addNum("price_krw_wholesale", ovPriceKrwWholesale);
+      addNum("price_usd_fob", ovPriceUsdFob);
+      addNum("estimated_retail_price", ovEstimatedRetailPrice);
+
+      addNum("item_width", ovItemWidth);
+      addNum("item_depth", ovItemDepth);
+      addNum("item_height", ovItemHeight);
+      addNum("item_weight", ovItemWeight);
+
+      addNum("package_width", ovPackageWidth);
+      addNum("package_depth", ovPackageDepth);
+      addNum("package_height", ovPackageHeight);
+      addNum("package_weight", ovPackageWeight);
+
+      addNum("carton_pack_qty", ovCartonPackQty);
+      addNum("carton_width", ovCartonWidth);
+      addNum("carton_depth", ovCartonDepth);
+      addNum("carton_height", ovCartonHeight);
+      addNum("carton_weight", ovCartonWeight);
+      addNum("carton_cbm", ovCartonCbm);
+
+      addNum("palette_carton_qty", ovPaletteCartonQty);
+      addNum("palette_width", ovPaletteWidth);
+      addNum("palette_depth", ovPaletteDepth);
+      addNum("palette_height", ovPaletteHeight);
+      addNum("palette_weight", ovPaletteWeight);
+
+      addNum("container_20ft_qty", ovC20Qty);
+      addNum("container_20ft_weight", ovC20Weight);
+      addNum("container_20ft_cbm", ovC20Cbm);
+
+      addNum("container_40fthc_qty", ovC40Qty);
+      addNum("container_40fthc_weight", ovC40Weight);
+      addNum("container_40fthc_cbm", ovC40Cbm);
+
+      await adminUpdateProductOverrides(product.id, payload);
+      await updateProductSuppliers(product.id, selectedSupplierIds);
+      await adminUpdateProductCuration(
+        product.id,
+        {
+          status: curationStatus,
+          curator: ovCurator,
+          last_review_date: ovLastReviewDate || null,
+          next_review_date: ovNextReviewDate || null,
+          role: curationRole,
+          landed_cost: ovLandedCost.trim() !== "" ? parseFloat(ovLandedCost) : null,
+          wholesale_price: ovWholesalePrice.trim() !== "" ? parseFloat(ovWholesalePrice) : null,
+          suggest_retail_price: ovSuggestRetailPrice.trim() !== "" ? parseFloat(ovSuggestRetailPrice) : null,
+          map_price: ovMapPrice.trim() !== "" ? parseFloat(ovMapPrice) : null,
+        },
+        ovMatrix
+      );
+      setStatusMessage({ type: "success", text: "어드민 변경사항이 성공적으로 저장되었습니다." });
+      router.refresh();
+      return { success: true };
+    } catch (err: any) {
+      const msg = err.message || "저장 실패";
+      setStatusMessage({ type: "error", text: msg });
+      return { success: false, error: msg };
+    }
+  };
+
+  const handleSaveClick = () => {
+    startTransition(async () => {
+      await handleSave();
     });
   };
 
+  const { guardModalNode } = useUnsavedChangesGuard({
+    isDirty: isAnyDirty,
+    onSave: handleSave,
+  });
+
   return (
     <div className="space-y-6 w-full max-w-7xl pb-12">
+      {guardModalNode}
+
       {/* Back button and breadcrumb (Sticky float header) */}
       <div className="sticky top-0 z-30 bg-zinc-50/90 dark:bg-zinc-950/90 backdrop-blur-md py-4 border-b border-zinc-200/50 dark:border-zinc-800/50 flex items-center justify-between transition-colors mb-2">
-        <Link
-          href="/admin/products"
-          className="text-xs font-bold text-zinc-550 hover:underline flex items-center gap-1 dark:text-zinc-400"
-        >
-          ← 전체 제품 목록으로 돌아가기
-        </Link>
+        <div className="flex items-center gap-3">
+          <Link
+            href="/admin/products"
+            className="text-xs font-bold text-zinc-550 hover:underline flex items-center gap-1 dark:text-zinc-400"
+          >
+            ← 전체 제품 목록으로 돌아가기
+          </Link>
+          {isAnyDirty && (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400 border border-amber-200 dark:border-amber-800/80">
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+              <span>저장되지 않은 변경사항이 있습니다.</span>
+            </span>
+          )}
+        </div>
         <div className="flex gap-2 items-center">
           {/* ADM-PROD-001: Soft Delete & Restore Buttons */}
           {product.deleted_at ? (
@@ -852,11 +1053,11 @@ export function ProductOverrideTabs({
           )}
 
           <button
-            onClick={handleSave}
+            onClick={handleSaveClick}
             disabled={isPending}
             className="rounded bg-zinc-950 px-4 py-2 text-xs font-bold text-white hover:bg-zinc-800 disabled:opacity-50 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-100 transition-colors shadow-md cursor-pointer"
           >
-            {isPending ? "저장 중..." : "변경 사항 저장"}
+            {isPending ? "저장 중..." : "변경사항 저장"}
           </button>
         </div>
       </div>
@@ -939,7 +1140,7 @@ export function ProductOverrideTabs({
       <div className="flex border-b border-zinc-200 dark:border-zinc-800">
         <button
           onClick={() => setActiveTab("basic")}
-          className={`px-4 py-2.5 text-xs font-bold transition-all border-b-2 -mb-[2px] ${
+          className={`px-4 py-2.5 text-xs font-bold transition-all border-b-2 -mb-[2px] cursor-pointer ${
             activeTab === "basic"
               ? "border-zinc-950 text-zinc-955 dark:border-white dark:text-white"
               : "border-transparent text-zinc-400 hover:text-zinc-650"
@@ -947,6 +1148,9 @@ export function ProductOverrideTabs({
         >
           <span className="flex items-center gap-1.5">
             기본 정보
+            {isBasicDirty && (
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shadow-sm" title="저장되지 않은 변경사항" />
+            )}
             {isBasicTabMissing && (
               <span className="w-2 h-2 rounded-full bg-rose-500 dark:bg-rose-400 animate-pulse shadow-sm border border-rose-300 dark:border-rose-600" title="필수 항목 누락" />
             )}
@@ -954,7 +1158,7 @@ export function ProductOverrideTabs({
         </button>
         <button
           onClick={() => setActiveTab("category_attributes")}
-          className={`px-4 py-2.5 text-xs font-bold transition-all border-b-2 -mb-[2px] ${
+          className={`px-4 py-2.5 text-xs font-bold transition-all border-b-2 -mb-[2px] cursor-pointer ${
             activeTab === "category_attributes"
               ? "border-zinc-950 text-zinc-955 dark:border-white dark:text-white"
               : "border-transparent text-zinc-400 hover:text-zinc-650"
@@ -962,6 +1166,9 @@ export function ProductOverrideTabs({
         >
           <span className="flex items-center gap-1.5">
             카테고리 & 속성
+            {isCategoryDirty && (
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shadow-sm" title="저장되지 않은 변경사항" />
+            )}
             {isCategoryTabMissing && (
               <span className="w-2 h-2 rounded-full bg-rose-500 dark:bg-rose-400 animate-pulse shadow-sm border border-rose-300 dark:border-rose-600" title="필수 항목 누락" />
             )}
@@ -969,7 +1176,7 @@ export function ProductOverrideTabs({
         </button>
         <button
           onClick={() => setActiveTab("price")}
-          className={`px-4 py-2.5 text-xs font-bold transition-all border-b-2 -mb-[2px] ${
+          className={`px-4 py-2.5 text-xs font-bold transition-all border-b-2 -mb-[2px] cursor-pointer ${
             activeTab === "price"
               ? "border-zinc-950 text-zinc-955 dark:border-white dark:text-white"
               : "border-transparent text-zinc-400 hover:text-zinc-650"
@@ -977,6 +1184,9 @@ export function ProductOverrideTabs({
         >
           <span className="flex items-center gap-1.5">
             가격 정보
+            {isPriceDirty && (
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shadow-sm" title="저장되지 않은 변경사항" />
+            )}
             {isPriceTabMissing && (
               <span className="w-2 h-2 rounded-full bg-rose-500 dark:bg-rose-400 animate-pulse shadow-sm border border-rose-300 dark:border-rose-600" title="필수 항목 누락" />
             )}
@@ -984,7 +1194,7 @@ export function ProductOverrideTabs({
         </button>
         <button
           onClick={() => setActiveTab("logistics")}
-          className={`px-4 py-2.5 text-xs font-bold transition-all border-b-2 -mb-[2px] ${
+          className={`px-4 py-2.5 text-xs font-bold transition-all border-b-2 -mb-[2px] cursor-pointer ${
             activeTab === "logistics"
               ? "border-zinc-950 text-zinc-955 dark:border-white dark:text-white"
               : "border-transparent text-zinc-400 hover:text-zinc-650"
@@ -992,6 +1202,9 @@ export function ProductOverrideTabs({
         >
           <span className="flex items-center gap-1.5">
             로지스틱스
+            {isLogisticsDirty && (
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shadow-sm" title="저장되지 않은 변경사항" />
+            )}
             {isLogisticsTabMissing && (
               <span className="w-2 h-2 rounded-full bg-rose-500 dark:bg-rose-400 animate-pulse shadow-sm border border-rose-300 dark:border-rose-600" title="필수 항목 누락" />
             )}
@@ -999,7 +1212,7 @@ export function ProductOverrideTabs({
         </button>
         <button
           onClick={() => setActiveTab("media")}
-          className={`px-4 py-2.5 text-xs font-bold transition-all border-b-2 -mb-[2px] ${
+          className={`px-4 py-2.5 text-xs font-bold transition-all border-b-2 -mb-[2px] cursor-pointer ${
             activeTab === "media"
               ? "border-zinc-950 text-zinc-955 dark:border-white dark:text-white"
               : "border-transparent text-zinc-400 hover:text-zinc-650"
@@ -1014,7 +1227,7 @@ export function ProductOverrideTabs({
         </button>
         <button
           onClick={() => setActiveTab("certs")}
-          className={`px-4 py-2.5 text-xs font-bold transition-all border-b-2 -mb-[2px] ${
+          className={`px-4 py-2.5 text-xs font-bold transition-all border-b-2 -mb-[2px] cursor-pointer ${
             activeTab === "certs"
               ? "border-zinc-950 text-zinc-955 dark:border-white dark:text-white"
               : "border-transparent text-zinc-400 hover:text-zinc-650"
@@ -1024,17 +1237,22 @@ export function ProductOverrideTabs({
         </button>
         <button
           onClick={() => setActiveTab("curation")}
-          className={`px-4 py-2.5 text-xs font-bold transition-all border-b-2 -mb-[2px] ${
+          className={`px-4 py-2.5 text-xs font-bold transition-all border-b-2 -mb-[2px] cursor-pointer ${
             activeTab === "curation"
               ? "border-zinc-950 text-zinc-955 dark:border-white dark:text-white"
               : "border-transparent text-zinc-400 hover:text-zinc-650"
           }`}
         >
-          큐레이션 (Curation)
+          <span className="flex items-center gap-1.5">
+            큐레이션 (Curation)
+            {isCurationDirty && (
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shadow-sm" title="저장되지 않은 변경사항" />
+            )}
+          </span>
         </button>
         <button
           onClick={() => setActiveTab("history")}
-          className={`px-4 py-2.5 text-xs font-bold transition-all border-b-2 -mb-[2px] ${
+          className={`px-4 py-2.5 text-xs font-bold transition-all border-b-2 -mb-[2px] cursor-pointer ${
             activeTab === "history"
               ? "border-zinc-950 text-zinc-955 dark:border-white dark:text-white"
               : "border-transparent text-zinc-400 hover:text-zinc-650"
@@ -1815,6 +2033,7 @@ export function ProductOverrideTabs({
         {activeTab === "category_attributes" && (
           <div className="bg-slate-900/10 p-2 rounded-2xl">
             <CategoryAttributeForm
+              ref={categoryAttrRef}
               productId={product.id}
               initialCategoryCode={(product as any).category_code || null}
               brandName={brandName}
@@ -1827,6 +2046,7 @@ export function ProductOverrideTabs({
               volume={product.volume || null}
               colorMap={product.color_map || null}
               isAdmin={true}
+              onDirtyChange={setIsCatAttrDirty}
             />
           </div>
         )}
@@ -2960,13 +3180,21 @@ export function ProductOverrideTabs({
       </div>
 
       {/* Bottom Save Button Row */}
-      <div className="flex justify-end pt-4 border-t border-zinc-200 dark:border-zinc-800">
+      <div className="flex items-center justify-between pt-4 border-t border-zinc-200 dark:border-zinc-800">
+        <div>
+          {isAnyDirty && (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400 border border-amber-200 dark:border-amber-800/80">
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+              <span>저장되지 않은 변경사항이 있습니다.</span>
+            </span>
+          )}
+        </div>
         <button
-          onClick={handleSave}
+          onClick={handleSaveClick}
           disabled={isPending}
           className="rounded bg-zinc-950 px-6 py-2.5 text-xs font-bold text-white hover:bg-zinc-800 disabled:opacity-50 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-100 transition-colors shadow-md cursor-pointer flex items-center gap-1.5"
         >
-          {isPending ? "저장 중..." : "변경 사항 저장"}
+          {isPending ? "저장 중..." : "변경사항 저장"}
         </button>
       </div>
 
