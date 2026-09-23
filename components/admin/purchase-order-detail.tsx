@@ -23,6 +23,11 @@ import {
 } from "@/lib/inbound/actions";
 import { getEasternTodayString } from "@/lib/utils/timezone";
 
+function formatEasternDate(dStr: string | null | undefined): string {
+  if (!dStr) return "-";
+  return dStr.includes("T") ? dStr.split("T")[0] : dStr;
+}
+
 interface LineItem {
   id: string;
   product_id: string;
@@ -73,7 +78,17 @@ interface PurchaseOrderDetailProps {
     supplier: {
       id: string;
       name: string;
+      official_name?: string | null;
       address: string | null;
+      address_line1?: string | null;
+      address_line2?: string | null;
+      city_state_zip?: string | null;
+      country?: string | null;
+      phone?: string | null;
+      contact_name?: string | null;
+      contact_title?: string | null;
+      contact_email?: string | null;
+      additional_emails?: string | null;
       business_registration_number: string | null;
     };
     warehouse: {
@@ -528,52 +543,127 @@ export function PurchaseOrderDetail({
 
   // If in Print Mode, render standard Invoice/PO PDF printable layout
   if (isPrinting) {
+    const s = po.supplier || {};
     return (
-      <div className="p-8 space-y-8 bg-white text-zinc-900 border-2 border-zinc-950 max-w-4xl mx-auto font-sans">
+      <div className="p-8 space-y-6 bg-white text-zinc-900 border-2 border-zinc-950 max-w-4xl mx-auto font-sans print:p-0 print:border-none">
+        {/* Document Header */}
         <div className="flex justify-between items-start border-b-2 border-zinc-950 pb-4">
           <div>
-            <h1 className="text-3xl font-black tracking-tight text-zinc-950">LETUSTO CO.</h1>
-            <p className="text-xs text-zinc-500 font-medium">B2B Global Select Network Brand Sourcing Platform</p>
+            <h1 className="text-3xl font-black tracking-tight text-zinc-950">LETUSTO INC.</h1>
+            <p className="text-xs text-zinc-600 font-medium">B2B Global Select Network Brand Sourcing Platform</p>
           </div>
           <div className="text-right">
-            <h2 className="text-xl font-bold tracking-tight text-zinc-900">PURCHASE ORDER</h2>
+            <h2 className="text-xl font-black tracking-tight text-zinc-900">PURCHASE ORDER</h2>
             <p className="text-xs font-mono font-bold text-zinc-800">PO Number: {po.po_number}</p>
+            <p className="text-[11px] text-zinc-600">Date: {formatEasternDate(po.order_date)}</p>
           </div>
         </div>
 
+        {/* Issued By & Issued To */}
         <div className="grid grid-cols-2 gap-8 text-xs border-b border-zinc-300 pb-4">
-          <div className="space-y-1">
-            <span className="text-[9px] text-zinc-400 block uppercase font-bold">ISSUED BY (Buyer)</span>
-            <p className="font-bold text-zinc-900">K SELECT NETWORK (LETUSTO INC.)</p>
-            <p className="text-zinc-500">120, Neungan-ro, Danwon-gu, Ansan-si, Gyeonggi-do, Korea</p>
+          <div className="space-y-1 bg-zinc-50/60 p-3 rounded-lg border border-zinc-200">
+            <span className="text-[9px] text-zinc-400 block uppercase font-bold tracking-wider">ISSUED BY (Buyer)</span>
+            <p className="font-bold text-zinc-950 text-sm">Letusto Inc.</p>
+            <p className="text-zinc-700">23B Roland Ave.</p>
+            <p className="text-zinc-700">Mount Laurel, NJ 08054</p>
+            <p className="text-zinc-700 font-medium">United States</p>
+            <div className="pt-2 text-[11px] text-zinc-700 space-y-0.5 border-t border-zinc-200 mt-2">
+              <p><span className="text-zinc-500 font-medium">Phone:</span> 856-383-8288</p>
+              <p><span className="text-zinc-500 font-medium">Email:</span> Contact@letusto.com</p>
+            </div>
           </div>
-          <div className="space-y-1">
-            <span className="text-[9px] text-zinc-400 block uppercase font-bold">ISSUED TO (Supplier)</span>
-            <p className="font-bold text-zinc-900">{po.supplier.name}</p>
-            <p className="text-zinc-500">{po.supplier.address || "Contact info pending"}</p>
+
+          <div className="space-y-1 bg-zinc-50/60 p-3 rounded-lg border border-zinc-200">
+            <span className="text-[9px] text-zinc-400 block uppercase font-bold tracking-wider">ISSUED TO (Supplier)</span>
+            <p className="font-bold text-zinc-950 text-sm">{s.official_name || s.name || "Supplier Company"}</p>
+            {s.address_line1 && <p className="text-zinc-700">{s.address_line1}</p>}
+            {s.address_line2 && <p className="text-zinc-700">{s.address_line2}</p>}
+            {s.city_state_zip && <p className="text-zinc-700">{s.city_state_zip}</p>}
+            {s.country && <p className="text-zinc-700 font-medium">{s.country}</p>}
+            <div className="pt-2 text-[11px] text-zinc-700 space-y-0.5 border-t border-zinc-200 mt-2">
+              {s.phone && <p><span className="text-zinc-500 font-medium">Phone:</span> {s.phone}</p>}
+              {s.contact_name && (
+                <p><span className="text-zinc-500 font-medium">Contact:</span> {s.contact_name} {s.contact_title ? `(${s.contact_title})` : ""}</p>
+              )}
+              {s.contact_email && <p><span className="text-zinc-500 font-medium">Email:</span> {s.contact_email}</p>}
+              {s.additional_emails && (
+                <p className="text-[10px] text-zinc-500"><span className="font-medium">Additional Recipient:</span> {s.additional_emails}</p>
+              )}
+            </div>
           </div>
         </div>
 
-        <div className="space-y-4">
-          <h3 className="font-black text-zinc-955 uppercase border-b border-zinc-900 pb-1">Order Line Items</h3>
+        {/* PO Terms & Commercial Conditions */}
+        <div className="border border-zinc-200 rounded-lg p-3 bg-zinc-50/70 text-xs">
+          <span className="text-[9px] text-zinc-400 block uppercase font-bold tracking-wider mb-2">Order Terms & Logistics Conditions</span>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-y-2.5 gap-x-4">
+            <div>
+              <span className="text-[10px] text-zinc-400 block">Payment Terms</span>
+              <span className="font-bold text-zinc-900">{po.payment_terms || "-"}</span>
+            </div>
+            <div>
+              <span className="text-[10px] text-zinc-400 block">Incoterms</span>
+              <span className="font-bold text-zinc-900">{po.incoterms || "-"}</span>
+            </div>
+            <div>
+              <span className="text-[10px] text-zinc-400 block">Port of Loading</span>
+              <span className="font-medium text-zinc-900">{po.port_of_loading || "-"}</span>
+            </div>
+            <div>
+              <span className="text-[10px] text-zinc-400 block">Currency</span>
+              <span className="font-mono font-bold text-zinc-900">{po.currency || "USD"}</span>
+            </div>
+            <div>
+              <span className="text-[10px] text-zinc-400 block">Ship From</span>
+              <span className="font-medium text-zinc-900">
+                {po.ship_from_warehouse?.name || s.address_line1 || "-"}
+              </span>
+            </div>
+            <div>
+              <span className="text-[10px] text-zinc-400 block">Destination (Ship To)</span>
+              <span className="font-medium text-zinc-900">
+                {po.warehouse ? `${po.warehouse.name} [${po.warehouse.code}]` : "-"}
+              </span>
+            </div>
+            <div>
+              <span className="text-[10px] text-zinc-400 block">Ready Date (생산완료)</span>
+              <span className="font-medium text-zinc-900">{po.expected_ready_date ? formatEasternDate(po.expected_ready_date) : "-"}</span>
+            </div>
+            <div>
+              <span className="text-[10px] text-zinc-400 block">ETD / ETA</span>
+              <span className="font-medium text-zinc-900">
+                {po.expected_ship_date ? formatEasternDate(po.expected_ship_date) : "-"} → {po.eta ? formatEasternDate(po.eta) : "-"}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Order Line Items */}
+        <div className="space-y-3">
+          <h3 className="font-black text-zinc-950 uppercase border-b border-zinc-900 pb-1 text-xs tracking-wider">Order Line Items</h3>
           <table className="w-full text-left text-[11px] border-collapse">
             <thead>
-              <tr className="border-b border-zinc-950 font-bold text-zinc-900 bg-zinc-50">
+              <tr className="border-b border-zinc-950 font-bold text-zinc-900 bg-zinc-100">
                 <th className="py-2 px-2">Brand</th>
-                <th className="py-2 px-2">Letusto SKU</th>
+                <th className="py-2 px-2">SKU Details</th>
                 <th className="py-2 px-2">Product Description</th>
                 <th className="py-2 px-2 text-right">Quantity</th>
                 <th className="py-2 px-2 text-right">Unit Price</th>
                 <th className="py-2 px-2 text-right">Amount</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-zinc-250">
-              {po.lines.map((l) => (
+            <tbody className="divide-y divide-zinc-200">
+              {po.lines.map((l: any) => (
                 <tr key={l.id} className="align-top">
                   <td className="py-2 px-2 font-medium text-zinc-700">{l.brand_name}</td>
-                  <td className="py-2 px-2 font-mono font-bold">{l.letusto_sku || "-"}</td>
+                  <td className="py-2 px-2 font-mono text-[10px]">
+                    {l.letusto_sku && <div><span className="text-zinc-400">Letusto:</span> <span className="font-bold">{l.letusto_sku}</span></div>}
+                    {l.manufacture_sku && <div><span className="text-zinc-400">Mfr:</span> {l.manufacture_sku}</div>}
+                    {!l.letusto_sku && !l.manufacture_sku && <span>-</span>}
+                  </td>
                   <td className="py-2 px-2">
-                    <p className="font-bold text-zinc-955">{l.product_name}</p>
+                    <p className="font-bold text-zinc-950">{l.product_name}</p>
+                    {l.line_note && <p className="text-[10px] text-zinc-500 mt-0.5">Note: {l.line_note}</p>}
                   </td>
                   <td className="py-2 px-2 text-right font-mono font-bold">{l.qty.toLocaleString()}</td>
                   <td className="py-2 px-2 text-right font-mono">
@@ -588,20 +678,29 @@ export function PurchaseOrderDetail({
           </table>
         </div>
 
-        <div className="flex justify-end pt-4">
-          <div className="w-64 border-t-2 border-zinc-950 p-2 space-y-1.5 font-bold text-right text-xs">
-            <div className="flex justify-between text-zinc-500 text-[10px]">
+        {/* Totals Calculation */}
+        <div className="flex justify-end pt-2">
+          <div className="w-72 border-t-2 border-zinc-950 p-3 space-y-1.5 font-bold text-right text-xs bg-zinc-50/50 rounded-b-lg">
+            <div className="flex justify-between text-zinc-600 text-[11px]">
               <span>Total Quantity:</span>
-              <span className="font-mono text-zinc-955">{po.total_qty.toLocaleString()}</span>
+              <span className="font-mono text-zinc-950 font-bold">{po.total_qty.toLocaleString()} PCS</span>
             </div>
-            <div className="flex justify-between border-t border-zinc-200 pt-1 text-sm text-zinc-955">
+            <div className="flex justify-between border-t border-zinc-300 pt-1.5 text-sm text-zinc-950">
               <span>Total Amount ({po.currency}):</span>
-              <span className="font-mono">
+              <span className="font-mono font-black">
                 {po.currency} {po.total_amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
               </span>
             </div>
           </div>
         </div>
+
+        {/* Supplier Note (Supplier-facing only) */}
+        {po.supplier_facing_note && (
+          <div className="border border-zinc-300 rounded-lg p-3 bg-zinc-50/70 space-y-1 text-xs">
+            <span className="text-[10px] text-zinc-500 block uppercase font-bold tracking-wider">SUPPLIER NOTE / 공급사 전달 메모</span>
+            <p className="text-zinc-800 whitespace-pre-wrap">{po.supplier_facing_note}</p>
+          </div>
+        )}
       </div>
     );
   }
@@ -1015,7 +1114,8 @@ export function PurchaseOrderDetail({
                       type="date"
                       value={etd}
                       onChange={(e) => setEtd(e.target.value)}
-                      className="w-full rounded-lg border-zinc-300 text-xs py-1.5 focus:ring-indigo-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+                      onClick={(e) => (e.target as any).showPicker?.()}
+                      className="w-full rounded-lg border-zinc-300 text-xs py-1.5 focus:ring-indigo-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white cursor-pointer"
                     />
                   </div>
                   <div>
@@ -1024,7 +1124,8 @@ export function PurchaseOrderDetail({
                       type="date"
                       value={eta}
                       onChange={(e) => setEta(e.target.value)}
-                      className="w-full rounded-lg border-zinc-300 text-xs py-1.5 focus:ring-indigo-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+                      onClick={(e) => (e.target as any).showPicker?.()}
+                      className="w-full rounded-lg border-zinc-300 text-xs py-1.5 focus:ring-indigo-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white cursor-pointer"
                     />
                   </div>
                   <div>
@@ -1254,7 +1355,8 @@ export function PurchaseOrderDetail({
                       type="date"
                       value={receivedDate}
                       onChange={(e) => setReceivedDate(e.target.value)}
-                      className="w-full rounded-lg border-zinc-300 text-xs py-1.5 focus:ring-indigo-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+                      onClick={(e) => (e.target as any).showPicker?.()}
+                      className="w-full rounded-lg border-zinc-300 text-xs py-1.5 focus:ring-indigo-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white cursor-pointer"
                     />
                   </div>
                   <div>

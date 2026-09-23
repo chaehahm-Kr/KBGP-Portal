@@ -635,14 +635,16 @@ export function PurchaseOrderForm({
 
           {/* Order Date */}
           <div className="space-y-1.5">
-            <label className="font-bold text-zinc-700 dark:text-zinc-300">
-              발주 일자 (Order Date) <span className="text-rose-500">*</span>
+            <label className="font-bold text-zinc-700 dark:text-zinc-300 flex items-center justify-between">
+              <span>발주 일자 (Order Date) <span className="text-rose-500">*</span></span>
+              <span className="text-[10px] text-zinc-400 font-normal">📅 달력 클릭</span>
             </label>
             <input
               type="date"
               value={orderDate}
               onChange={(e) => setOrderDate(e.target.value)}
-              className="w-full rounded-lg border border-zinc-200 p-2.5 bg-white text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:border-zinc-950 outline-none font-medium"
+              onClick={(e) => (e.target as any).showPicker?.()}
+              className="w-full rounded-lg border border-zinc-200 p-2.5 bg-white text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:border-zinc-950 outline-none font-medium cursor-pointer"
               required
             />
           </div>
@@ -725,38 +727,46 @@ export function PurchaseOrderForm({
 
           {/* Expected Ready Date */}
           <div className="space-y-1.5">
-            <label className="font-bold text-zinc-700 dark:text-zinc-300">생산완료예정일 (Ready Date)</label>
+            <label className="font-bold text-zinc-700 dark:text-zinc-300 flex items-center justify-between">
+              <span>생산완료일 (Ready Date)</span>
+              <span className="text-[10px] text-zinc-400 font-normal">📅 달력</span>
+            </label>
             <input
               type="date"
               value={expectedReadyDate}
               onChange={(e) => setExpectedReadyDate(e.target.value)}
-              className="w-full rounded-lg border border-zinc-200 p-2.5 bg-white text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:border-zinc-950 outline-none"
+              onClick={(e) => (e.target as any).showPicker?.()}
+              className="w-full rounded-lg border border-zinc-200 p-2.5 bg-white text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:border-zinc-950 outline-none cursor-pointer font-medium"
             />
           </div>
 
           {/* ETD (Estimated Ship Date) */}
           <div className="space-y-1.5">
-            <label className="font-bold text-zinc-700 dark:text-zinc-300">
-              ETD (예상 출발일 / Departure)
+            <label className="font-bold text-zinc-700 dark:text-zinc-300 flex items-center justify-between">
+              <span>ETD (예상 출발일)</span>
+              <span className="text-[10px] text-zinc-400 font-normal">📅 달력</span>
             </label>
             <input
               type="date"
               value={expectedShipDate}
               onChange={(e) => setExpectedShipDate(e.target.value)}
-              className="w-full rounded-lg border border-zinc-200 p-2.5 bg-white text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:border-zinc-950 outline-none"
+              onClick={(e) => (e.target as any).showPicker?.()}
+              className="w-full rounded-lg border border-zinc-200 p-2.5 bg-white text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:border-zinc-950 outline-none cursor-pointer font-medium"
             />
           </div>
 
           {/* ETA (Estimated Arrival Date) */}
           <div className="space-y-1.5">
-            <label className="font-bold text-zinc-700 dark:text-zinc-300">
-              ETA (예상 도착일 / Arrival)
+            <label className="font-bold text-zinc-700 dark:text-zinc-300 flex items-center justify-between">
+              <span>ETA (예상 도착일)</span>
+              <span className="text-[10px] text-zinc-400 font-normal">📅 달력</span>
             </label>
             <input
               type="date"
               value={eta}
               onChange={(e) => setEta(e.target.value)}
-              className="w-full rounded-lg border border-zinc-200 p-2.5 bg-white text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:border-zinc-950 outline-none"
+              onClick={(e) => (e.target as any).showPicker?.()}
+              className="w-full rounded-lg border border-zinc-200 p-2.5 bg-white text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:border-zinc-950 outline-none cursor-pointer font-medium"
             />
           </div>
 

@@ -374,7 +374,8 @@ export function PoRequestForm({
               type="date"
               value={requestedReadyDate}
               onChange={(e) => setRequestedReadyDate(e.target.value)}
-              className="w-full rounded-lg border border-zinc-200 p-2.5 bg-white text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white outline-none focus:border-zinc-950 font-medium"
+              onClick={(e) => (e.target as any).showPicker?.()}
+              className="w-full rounded-lg border border-zinc-200 p-2.5 bg-white text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white outline-none focus:border-zinc-950 font-medium cursor-pointer"
             />
             <p className="text-[10px] text-zinc-400">공장에서 출고 준비가 완료되길 희망하는 일자입니다.</p>
           </div>

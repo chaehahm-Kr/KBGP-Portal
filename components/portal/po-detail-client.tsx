@@ -577,7 +577,8 @@ export default function PoDetailClient({
                       required
                       value={goodsReadyDate}
                       onChange={(e) => setGoodsReadyDate(e.target.value)}
-                      className="w-full rounded-lg border-zinc-300 text-xs py-1.5 focus:ring-indigo-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+                      onClick={(e) => (e.target as any).showPicker?.()}
+                      className="w-full rounded-lg border-zinc-300 text-xs py-1.5 focus:ring-indigo-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white cursor-pointer"
                     />
                   </div>
                   <div>
@@ -791,7 +792,8 @@ export default function PoDetailClient({
                           required
                           value={etd}
                           onChange={(e) => setEtd(e.target.value)}
-                          className="w-full rounded-md border-zinc-300 text-xs py-1 px-2 dark:border-zinc-800 dark:bg-zinc-900"
+                          onClick={(e) => (e.target as any).showPicker?.()}
+                          className="w-full rounded-md border-zinc-300 text-xs py-1 px-2 dark:border-zinc-800 dark:bg-zinc-900 cursor-pointer"
                         />
                       </div>
                       <div>
@@ -801,7 +803,8 @@ export default function PoDetailClient({
                           required
                           value={eta}
                           onChange={(e) => setEta(e.target.value)}
-                          className="w-full rounded-md border-zinc-300 text-xs py-1 px-2 dark:border-zinc-800 dark:bg-zinc-900"
+                          onClick={(e) => (e.target as any).showPicker?.()}
+                          className="w-full rounded-md border-zinc-300 text-xs py-1 px-2 dark:border-zinc-800 dark:bg-zinc-900 cursor-pointer"
                         />
                       </div>
                     </div>

@@ -246,7 +246,7 @@ export async function getPurchaseOrderDetail(poId: string) {
     .from("purchase_orders")
     .select(`
       *,
-      supplier:supplier_id (id, name, business_registration_number),
+      supplier:supplier_id (*),
       warehouse:destination_warehouse_id (id, name, code, address1, city, state, zip_code, country),
       ship_from_warehouse:ship_from_warehouse_id (id, name, code, address1, city, state, zip_code, country),
       creator:created_by (full_name:display_name),
@@ -258,6 +258,50 @@ export async function getPurchaseOrderDetail(poId: string) {
 
   if (poErr) throw new Error(`Failed to fetch purchase order header: ${poErr.message}`);
   if (!po) throw new Error("Purchase order not found.");
+
+  // Parse supplier company metadata if present
+  let supplierMetadata: any = {};
+  if (po.supplier?.intro && po.supplier.intro.startsWith("__COMPANY_METADATA__:")) {
+    try {
+      supplierMetadata = JSON.parse(po.supplier.intro.substring("__COMPANY_METADATA__:".length));
+    } catch {}
+  }
+
+  // Fetch company users to match contact names
+  const { data: compUsers } = await supabase
+    .from("company_users")
+    .select("id, name, email, title, position, is_primary")
+    .eq("company_id", po.supplier_id)
+    .eq("status", "active");
+
+  const contactsList = [
+    ...(compUsers || []),
+    ...(supplierMetadata.contacts || [])
+  ];
+
+  const receivingEmails = (po.po_receiving_email || "")
+    .split(",")
+    .map((e: string) => e.trim())
+    .filter(Boolean);
+
+  const primaryEmail = receivingEmails[0] || supplierMetadata.contacts?.[0]?.email || "";
+  const matchedContact = contactsList.find((c: any) => c.email && c.email.toLowerCase() === primaryEmail.toLowerCase());
+  const primaryContactName = matchedContact?.name || supplierMetadata.contacts?.[0]?.name || po.supplier?.contact_name || "";
+  const primaryContactTitle = matchedContact?.title || matchedContact?.position || supplierMetadata.contacts?.[0]?.title || "";
+
+  const enrichedSupplier = {
+    ...po.supplier,
+    official_name: po.supplier?.name || "Supplier Company",
+    address_line1: supplierMetadata.address_1 || supplierMetadata.address || po.supplier?.country || "",
+    address_line2: supplierMetadata.address_2 || "",
+    city_state_zip: [supplierMetadata.city, supplierMetadata.state, supplierMetadata.zip_code].filter(Boolean).join(", "),
+    country: po.supplier?.country || supplierMetadata.country || "",
+    phone: supplierMetadata.phone || po.supplier?.contact_phone || supplierMetadata.contacts?.[0]?.phone || "",
+    contact_name: primaryContactName,
+    contact_title: primaryContactTitle,
+    contact_email: primaryEmail,
+    additional_emails: receivingEmails.slice(1).join(", "),
+  };
 
   // 2. Fetch PO Lines
   const { data: lines, error: lErr } = await supabase
@@ -329,6 +373,7 @@ export async function getPurchaseOrderDetail(poId: string) {
 
   return {
     ...po,
+    supplier: enrichedSupplier,
     lines: formattedLines,
     total_qty: totalQty,
     total_amount: totalAmount,
@@ -553,11 +598,29 @@ export async function getProductsForSupplier(supplierId: string) {
     const displayName = adminOverrides.name_en || p.name_en || adminOverrides.name || p.name;
     const effectiveLetustoSku = resolveEffectiveSku(adminOverrides.letusto_sku, p.letusto_sku);
     const effectiveManufactureSku = resolveEffectiveSku(adminOverrides.manufacture_sku, p.manufacture_sku);
-    const effectiveFob = adminOverrides.price_usd_fob !== undefined ? parseFloat(adminOverrides.price_usd_fob) : (p.price_usd_fob || 0);
-    const effectiveUpc = adminOverrides.upc !== undefined ? adminOverrides.upc : p.upc;
-    const effectiveEan = adminOverrides.ean !== undefined ? adminOverrides.ean : p.ean;
-    const effectiveParentSku = adminOverrides.parent_sku !== undefined ? adminOverrides.parent_sku : p.parent_sku;
-    const effectiveChildSku = adminOverrides.child_sku !== undefined ? adminOverrides.child_sku : p.child_sku;
+
+    // Priority:
+    // 1. Admin FOB Override (if present, non-null, > 0)
+    // 2. Base FOB from product catalog (p.price_usd_fob >= 0)
+    // 3. Fallback to 0
+    let effectiveFob = 0;
+    const overrideFob = adminOverrides.price_usd_fob;
+    if (overrideFob !== undefined && overrideFob !== null && overrideFob !== "") {
+      const parsed = typeof overrideFob === "number" ? overrideFob : parseFloat(overrideFob);
+      if (!isNaN(parsed) && parsed > 0) {
+        effectiveFob = parsed;
+      }
+    }
+    if (effectiveFob === 0 && p.price_usd_fob !== undefined && p.price_usd_fob !== null && p.price_usd_fob !== "") {
+      const parsed = typeof p.price_usd_fob === "number" ? p.price_usd_fob : parseFloat(p.price_usd_fob);
+      if (!isNaN(parsed) && parsed >= 0) {
+        effectiveFob = parsed;
+      }
+    }
+
+    const effectiveUpc = adminOverrides.upc || p.upc || adminOverrides.ean || p.ean || "";
+    const effectiveParentSku = adminOverrides.parent_sku || p.parent_sku || null;
+    const effectiveChildSku = adminOverrides.child_sku || p.child_sku || null;
 
     const catValue = p.category || "";
     const catLabel = (PRODUCT_CATEGORY_LABEL as any)[catValue] || catValue || "기타";
@@ -572,14 +635,24 @@ export async function getProductsForSupplier(supplierId: string) {
       : [];
 
     // Carton specs extraction
-    const cartonPackQty = adminOverrides.carton_pack_qty !== undefined && adminOverrides.carton_pack_qty !== null
+    const cartonPackQty = adminOverrides.carton_pack_qty !== undefined && adminOverrides.carton_pack_qty !== null && adminOverrides.carton_pack_qty !== ""
       ? Number(adminOverrides.carton_pack_qty)
       : (p.carton_pack_qty || 1);
-    const cartonWidth = adminOverrides.carton_width !== undefined ? adminOverrides.carton_width : p.carton_width;
-    const cartonDepth = adminOverrides.carton_depth !== undefined ? adminOverrides.carton_depth : p.carton_depth;
-    const cartonHeight = adminOverrides.carton_height !== undefined ? adminOverrides.carton_height : p.carton_height;
-    const cartonWeight = adminOverrides.carton_weight !== undefined ? adminOverrides.carton_weight : p.carton_weight;
-    const cartonCbm = adminOverrides.carton_cbm !== undefined ? adminOverrides.carton_cbm : p.carton_cbm;
+    const cartonWidth = adminOverrides.carton_width !== undefined && adminOverrides.carton_width !== null && adminOverrides.carton_width !== ""
+      ? Number(adminOverrides.carton_width)
+      : p.carton_width;
+    const cartonDepth = adminOverrides.carton_depth !== undefined && adminOverrides.carton_depth !== null && adminOverrides.carton_depth !== ""
+      ? Number(adminOverrides.carton_depth)
+      : p.carton_depth;
+    const cartonHeight = adminOverrides.carton_height !== undefined && adminOverrides.carton_height !== null && adminOverrides.carton_height !== ""
+      ? Number(adminOverrides.carton_height)
+      : p.carton_height;
+    const cartonWeight = adminOverrides.carton_weight !== undefined && adminOverrides.carton_weight !== null && adminOverrides.carton_weight !== ""
+      ? Number(adminOverrides.carton_weight)
+      : p.carton_weight;
+    const cartonCbm = adminOverrides.carton_cbm !== undefined && adminOverrides.carton_cbm !== null && adminOverrides.carton_cbm !== ""
+      ? Number(adminOverrides.carton_cbm)
+      : p.carton_cbm;
 
     return {
       id: p.id,
@@ -595,7 +668,7 @@ export async function getProductsForSupplier(supplierId: string) {
       carton_height: cartonHeight,
       carton_weight: cartonWeight,
       carton_cbm: cartonCbm,
-      upc: effectiveUpc || effectiveEan || "",
+      upc: effectiveUpc || "",
       parent_sku: effectiveParentSku || null,
       child_sku: effectiveChildSku || null,
       brand_name: p.brands?.name || "(미지정 브랜드)",
