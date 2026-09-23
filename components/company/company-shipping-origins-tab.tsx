@@ -751,7 +751,7 @@ export function CompanyShippingOriginsTab({
                   출고지 담당자 정보 (선택)
                 </span>
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="block text-[10px] font-bold text-zinc-700 dark:text-zinc-300 mb-1">
                       담당자명
@@ -767,17 +767,6 @@ export function CompanyShippingOriginsTab({
 
                   <div>
                     <label className="block text-[10px] font-bold text-zinc-700 dark:text-zinc-300 mb-1">
-                      담당자 전화번호
-                    </label>
-                    <InternationalPhoneInput
-                      value={formPhone}
-                      onChange={(val) => setFormPhone(val)}
-                      placeholder="전화번호 입력"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-[10px] font-bold text-zinc-700 dark:text-zinc-300 mb-1">
                       담당자 이메일
                     </label>
                     <input
@@ -786,6 +775,17 @@ export function CompanyShippingOriginsTab({
                       onChange={(e) => setFormEmail(e.target.value)}
                       placeholder="shipping@company.com"
                       className="w-full rounded border border-zinc-200 p-2 text-xs outline-none bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white font-mono"
+                    />
+                  </div>
+
+                  <div className="sm:col-span-2">
+                    <label className="block text-[10px] font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                      담당자 전화번호
+                    </label>
+                    <InternationalPhoneInput
+                      value={formPhone}
+                      onChange={(val) => setFormPhone(val)}
+                      placeholder="전화번호 입력"
                     />
                   </div>
                 </div>

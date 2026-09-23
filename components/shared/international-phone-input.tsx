@@ -49,13 +49,13 @@ export function InternationalPhoneInput({
   };
 
   return (
-    <div className={`flex items-center gap-2 w-full ${className}`}>
+    <div className={`flex flex-wrap sm:flex-nowrap items-center gap-2 w-full ${className}`}>
       {/* Country Calling Code Dropdown */}
       <select
         value={selectedCallingCode}
         onChange={handleCountryChange}
         disabled={disabled}
-        className="w-40 sm:w-48 shrink-0 rounded border border-zinc-200 p-2 text-xs outline-none bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white font-medium cursor-pointer disabled:opacity-50"
+        className="w-full sm:w-36 shrink-0 rounded border border-zinc-200 p-2 text-xs outline-none bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white font-medium cursor-pointer disabled:opacity-50 text-ellipsis overflow-hidden"
       >
         <optgroup label="Primary Countries">
           {TOP_COUNTRIES.map((c) => (
@@ -84,7 +84,7 @@ export function InternationalPhoneInput({
         disabled={disabled}
         required={required}
         placeholder={placeholder}
-        className="flex-1 min-w-0 w-full rounded border border-zinc-200 p-2 text-xs outline-none bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white font-mono placeholder:font-sans disabled:opacity-50 focus:border-zinc-400 dark:focus:border-zinc-700"
+        className="flex-1 min-w-[120px] w-full rounded border border-zinc-200 p-2 text-xs outline-none bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white font-mono placeholder:font-sans disabled:opacity-50 focus:border-zinc-400 dark:focus:border-zinc-700"
       />
     </div>
   );

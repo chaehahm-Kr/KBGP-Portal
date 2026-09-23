@@ -37,8 +37,8 @@ export default async function AdminEditPurchaseOrderPage({
     notFound();
   }
 
-  // Double check if in DRAFT status
-  if (po.po_status !== "DRAFT") {
+  // Cancelled PO cannot be edited
+  if (po.po_status === "CANCELLED") {
     redirect(`/admin/purchasing/${id}`);
   }
 
@@ -53,13 +53,23 @@ export default async function AdminEditPurchaseOrderPage({
   // 3. Fetch suppliers
   const suppliers = await getSuppliersForPo();
 
+  const isSent = po.po_status === "SENT";
+
   return (
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-xl font-bold text-zinc-955 dark:text-white">발주서 수정 (Edit Purchase Order)</h1>
-        <p className="text-xs text-zinc-550 dark:text-zinc-400">
-          초안(Draft) 상태인 발주서 번호 {po.po_number}의 세부 거래 조건 및 라인 품목을 변경합니다.
+        <div className="flex items-center gap-2">
+          <h1 className="text-xl font-bold text-zinc-950 dark:text-white">발주서 수정 (Edit Purchase Order)</h1>
+          {isSent && (
+            <span className="inline-flex items-center rounded-md bg-indigo-50 dark:bg-indigo-950/40 px-2 py-0.5 text-xs font-bold text-indigo-700 dark:text-indigo-400 ring-1 ring-inset ring-indigo-700/20">
+              Revision {(po.revision_no || 1) + 1} 생성 예정
+            </span>
+          )}
+        </div>
+        <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
+          발주서 번호 {po.po_number} (현재 Revision {po.revision_no || 1})의 세부 거래 조건 및 품목을 변경합니다.
+          {isSent && " 발송 완료(Sent) 상태에서 수정 시 Revision 번호가 증가하고 공급사 확인이 초기화됩니다."}
         </p>
       </div>
 
