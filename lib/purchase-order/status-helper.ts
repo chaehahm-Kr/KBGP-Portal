@@ -97,6 +97,54 @@ export const OVERALL_STATUS_COLORS: Record<string, string> = {
   Cancelled: "bg-zinc-100 text-zinc-500 border-zinc-200 dark:bg-zinc-800/80 dark:text-zinc-400 dark:border-zinc-700",
 };
 
+export interface PoProgressStep {
+  stepNumber: number;
+  key: string;
+  label: string;
+  subLabel: string;
+  description: string;
+}
+
+export const PO_6_STEPS: PoProgressStep[] = [
+  { stepNumber: 1, key: "PO_SENT", label: "PO Sent / Received", subLabel: "발주 발송 / 접수", description: "발주서 전달 및 공급사 접수" },
+  { stepNumber: 2, key: "SUPPLIER_CONFIRMED", label: "Supplier Confirmed", subLabel: "공급사 수락 / 확인", description: "수량 및 공급 조건 확정" },
+  { stepNumber: 3, key: "READY_TO_SHIP", label: "Ready to Ship", subLabel: "선적 / 출고 준비", description: "생산 완료 및 패킹/서류 등록" },
+  { stepNumber: 4, key: "SHIPPED", label: "Shipped", subLabel: "선적 / 출고 완료", description: "화물 출항 및 운송 중" },
+  { stepNumber: 5, key: "RECEIVING", label: "Receiving / Inspection", subLabel: "입고 / 검수", description: "창고 도착 및 실물 검수" },
+  { stepNumber: 6, key: "COMPLETED", label: "Completed", subLabel: "입고 종결", description: "재고 반영 및 발주 완료" },
+];
+
+/**
+ * Returns the current step index (1-6) for the unified 6-step progress bar.
+ * Returns 0 for Draft (pre-sent) and -1 for Cancelled.
+ */
+export function getPoProgressStepIndex(overallStatus: string): number {
+  switch (overallStatus) {
+    case "Draft":
+      return 0;
+    case "Approved":
+    case "Sent to Supplier":
+    case "Change Requested":
+      return 1;
+    case "Supplier Confirmed":
+    case "In Production":
+      return 2;
+    case "Ready to Ship":
+      return 3;
+    case "Shipped":
+      return 4;
+    case "Arrived":
+    case "Receiving":
+      return 5;
+    case "Completed":
+      return 6;
+    case "Cancelled":
+      return -1;
+    default:
+      return 1;
+  }
+}
+
 export function getNextAction(overallStatus: string, isReadOnly: boolean = false) {
   if (isReadOnly) return null;
   switch (overallStatus) {
@@ -126,3 +174,4 @@ export function getNextAction(overallStatus: string, isReadOnly: boolean = false
       return null;
   }
 }
+

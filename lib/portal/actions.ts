@@ -236,6 +236,9 @@ export async function getPortalPurchaseOrderById(id: string) {
     };
   });
 
+  const totalQty = formattedLines.reduce((sum: number, l: any) => sum + (Number(l.qty) || 0), 0);
+  const totalAmount = formattedLines.reduce((sum: number, l: any) => sum + ((Number(l.qty) || 0) * (Number(l.unit_cost) || 0)), 0);
+
   return {
     id: data.id,
     po_number: data.po_number,
@@ -274,6 +277,8 @@ export async function getPortalPurchaseOrderById(id: string) {
     linkedCases,
     linked_cases: linkedCases,
     created_at: data.created_at,
+    total_qty: totalQty,
+    total_amount: totalAmount,
     lines: formattedLines
   };
 }
@@ -493,10 +498,13 @@ export async function getPortalReceivingById(id: string) {
 // ────────────────────────────────────────────────────────────────────────────
 
 /**
- * Supplier confirms a PO directly (confirmed_qty = qty for all lines).
+ * Supplier confirms a PO directly (confirmed_qty per line, defaulting to qty).
  * Records confirmed_by, confirmed_at, and appends to activity_logs.
  */
-export async function confirmPortalPurchaseOrder(poId: string) {
+export async function confirmPortalPurchaseOrder(
+  poId: string,
+  confirmedLines?: Array<{ lineId: string; confirmedQty: number }>
+) {
   const { companyId, userId } = await requireCompanyMembership();
   const supabase = await createClient();
 
@@ -530,11 +538,13 @@ export async function confirmPortalPurchaseOrder(poId: string) {
     throw new Error("발주 품목 상세 조회를 실패했습니다.");
   }
 
-  // 3. Set confirmed_qty = qty
+  // 3. Set confirmed_qty (use per-line confirmedQty if provided, else default to line.qty)
+  const confirmedMap = new Map((confirmedLines || []).map((cl) => [cl.lineId, cl.confirmedQty]));
   for (const line of lines) {
+    const val = confirmedMap.has(line.id) ? Number(confirmedMap.get(line.id)) : line.qty;
     const { error: updateLineErr } = await supabase
       .from("purchase_order_lines")
-      .update({ confirmed_qty: line.qty })
+      .update({ confirmed_qty: val })
       .eq("id", line.id);
 
     if (updateLineErr) throw updateLineErr;

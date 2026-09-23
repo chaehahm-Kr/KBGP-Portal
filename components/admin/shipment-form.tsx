@@ -35,6 +35,8 @@ interface LineState {
   letusto_sku: string | null;
   manufacture_sku: string | null;
   ordered_qty: number;
+  confirmed_qty: number | null;
+  target_qty: number;
   remaining_to_ship: number;
   shipped_qty: number;
   selected: boolean;
@@ -99,6 +101,8 @@ export function ShipmentForm({
           // If editing, adjust remaining_to_ship to include the quantity currently shipped in this shipment
           const adjustedRemaining = pol.remaining_to_ship + (existingLine ? existingLine.shipped_qty : 0);
 
+          const targetQty = pol.target_qty ?? (pol.confirmed_qty !== null && pol.confirmed_qty !== undefined ? pol.confirmed_qty : pol.ordered_qty);
+
           return {
             purchase_order_line_id: pol.id,
             product_id: pol.product_id,
@@ -106,6 +110,8 @@ export function ShipmentForm({
             letusto_sku: pol.letusto_sku,
             manufacture_sku: pol.manufacture_sku,
             ordered_qty: pol.ordered_qty,
+            confirmed_qty: pol.confirmed_qty,
+            target_qty: targetQty,
             remaining_to_ship: adjustedRemaining,
             shipped_qty: existingLine ? existingLine.shipped_qty : adjustedRemaining,
             selected: !!existingLine || adjustedRemaining > 0,
@@ -392,7 +398,8 @@ export function ShipmentForm({
                   <th className="px-4 py-2.5">Letusto SKU</th>
                   <th className="px-4 py-2.5">제조사 SKU</th>
                   <th className="px-4 py-2.5">제품명</th>
-                  <th className="px-4 py-2.5 text-right w-24">발주량</th>
+                  <th className="px-4 py-2.5 text-right w-24">주문량 (PO)</th>
+                  <th className="px-4 py-2.5 text-right w-28">확정량 (Target)</th>
                   <th className="px-4 py-2.5 text-right w-28">미출하 잔량</th>
                   <th className="px-4 py-2.5 text-right w-28">이번 선적량 *</th>
                   <th className="px-4 py-2.5">품목별 메모</th>
@@ -431,6 +438,17 @@ export function ShipmentForm({
                     {/* Ordered Qty */}
                     <td className="px-4 py-3 text-right font-mono text-zinc-650 dark:text-zinc-450">
                       {line.ordered_qty.toLocaleString()}
+                    </td>
+
+                    {/* Confirmed / Target Qty */}
+                    <td className="px-4 py-3 text-right font-mono font-semibold">
+                      {line.confirmed_qty !== null && line.confirmed_qty !== undefined ? (
+                        <span className={line.confirmed_qty !== line.ordered_qty ? "text-amber-600 dark:text-amber-400 font-bold" : "text-emerald-600 dark:text-emerald-400"}>
+                          {line.confirmed_qty.toLocaleString()}
+                        </span>
+                      ) : (
+                        <span className="text-zinc-400 italic">미확정 ({line.ordered_qty.toLocaleString()})</span>
+                      )}
                     </td>
 
                     {/* Remaining to Ship */}

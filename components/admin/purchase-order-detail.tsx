@@ -22,6 +22,7 @@ import {
   transitionShipmentStatus,
   closeShipmentWithVariance,
 } from "@/lib/inbound/actions";
+import { PoUnifiedStepper } from "@/components/shared/po-unified-stepper";
 import { getEasternTodayString } from "@/lib/utils/timezone";
 
 function formatEasternDate(dStr: string | null | undefined): string {
@@ -287,7 +288,8 @@ export function PurchaseOrderDetail({
 
     const items = po.lines.map((l) => {
       const shipped = shippedCountMap.get(l.id) || 0;
-      const remaining = Math.max(0, l.qty - shipped);
+      const targetQty = l.confirmed_qty !== null && l.confirmed_qty !== undefined ? Number(l.confirmed_qty) : Number(l.qty);
+      const remaining = Math.max(0, targetQty - shipped);
       return {
         purchase_order_line_id: l.id,
         product_id: l.product_id,
@@ -760,29 +762,6 @@ export function PurchaseOrderDetail({
     );
   }
 
-  // Define steps for PO status transitions bar at top
-  const stages = ["Approved", "Supplier Confirmed", "Shipped", "Arrived", "Receiving", "Completed"];
-  const getStageIndex = (status: string) => {
-    switch (status) {
-      case "Approved":
-        return 0;
-      case "Supplier Confirmed":
-      case "Change Requested":
-        return 1;
-      case "Shipped":
-        return 2;
-      case "Arrived":
-        return 3;
-      case "Receiving":
-        return 4;
-      case "Completed":
-        return 5;
-      default:
-        return -1;
-    }
-  };
-  const currentStageIndex = getStageIndex(overallStatus);
-
   return (
     <div className="space-y-6">
       {/* Breadcrumb / Actions header */}
@@ -898,141 +877,45 @@ export function PurchaseOrderDetail({
         </div>
       )}
 
-      {/* Cancellation Status Banners */}
-      {po.cancellation_status === "CANCELLATION_REQUESTED" && (
-        <div className="p-4 rounded-xl bg-amber-50 border border-amber-300 text-amber-800 dark:bg-amber-950/20 dark:border-amber-900 dark:text-amber-300 text-xs space-y-1">
-          <div className="font-bold flex items-center gap-2">
-            ⏳ [공급사 동의 대기] 발주 취소 동의 요청이 전송되었습니다.
-          </div>
-          <div className="text-[11px]">
-            요청 사유: {po.cancellation_reason || "-"} (요청일시: {formatEasternDate(po.cancellation_requested_at)})
-          </div>
-          <div className="text-[10px] text-amber-700 dark:text-amber-400">
-            공급사가 포털에서 취소 동의를 수락하면 발주가 취소되며, 거절할 경우 유효 상태로 유지됩니다.
-          </div>
-        </div>
-      )}
-
-      {po.cancellation_status === "REJECTED" && (
-        <div className="p-4 rounded-xl bg-rose-50 border border-rose-300 text-rose-800 dark:bg-rose-950/20 dark:border-rose-900 dark:text-rose-300 text-xs space-y-1">
-          <div className="font-bold flex items-center gap-2">
-            ⚠️ [취소 요청 거절됨] 공급사가 발주 취소 요청을 거절하였습니다.
-          </div>
-          <div className="text-[11px]">
-            거절 사유: {po.cancellation_reject_reason || "(사유 미기재)"} (처리일시: {formatEasternDate(po.cancellation_rejected_at)})
-          </div>
-          <div className="text-[10px] text-rose-700 dark:text-rose-400">
-            발주서는 현재 유효한 상태로 진행 중입니다.
-          </div>
-        </div>
-      )}
-
-      {/* Messages */}
-      {errorMessage && (
-        <div className="p-3.5 rounded-lg bg-rose-50 border border-rose-200 text-rose-600 font-bold dark:bg-rose-955/10 dark:border-rose-900/50 dark:text-rose-400 text-xs">
-          ⚠️ {errorMessage}
-        </div>
-      )}
-      {successMessage && (
-        <div className="p-3.5 rounded-lg bg-emerald-50 border border-emerald-250 text-emerald-700 font-bold dark:bg-emerald-950/10 dark:border-emerald-900/50 dark:text-emerald-400 text-xs">
-          ✓ {successMessage}
-        </div>
-      )}
-
-      {/* Progress Lifecycle Bar */}
-      <div className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 space-y-4">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center border-b border-zinc-150 pb-4 dark:border-zinc-850 gap-4">
-          <div className="flex items-center flex-wrap gap-2">
-            <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wide">종합 진행 단계</span>
-            <span className={`inline-flex items-center rounded px-2.5 py-0.5 text-xs font-bold border ${OVERALL_STATUS_COLORS[overallStatus || "Draft"]}`}>
-              {OVERALL_STATUS_LABELS[overallStatus || "Draft"] || overallStatus}
-            </span>
-            {(po.revision_no ?? 0) > 0 && (
-              <span className="inline-flex items-center rounded px-2 py-0.5 text-xs font-bold bg-purple-50 border border-purple-200 text-purple-700 dark:bg-purple-950/40 dark:border-purple-900 dark:text-purple-300">
-                Rev {po.revision_no}
-              </span>
-            )}
-            {po.po_status === "SENT" && (
-              po.supplier_confirmation_status === "CONFIRMED" ? (
-                <span className="inline-flex items-center rounded px-2 py-0.5 text-xs font-bold bg-emerald-50 border border-emerald-200 text-emerald-700 dark:bg-emerald-950/40 dark:border-emerald-900 dark:text-emerald-300">
-                  ✓ 공급사 확인 완료 ({po.confirmed_by_name || "공급사"} {formatEasternDate(po.confirmed_at)})
-                </span>
-              ) : po.supplier_confirmation_status === "CHANGE_REQUESTED" ? (
-                <span className="inline-flex items-center rounded px-2 py-0.5 text-xs font-bold bg-amber-50 border border-amber-200 text-amber-700 dark:bg-amber-950/40 dark:border-amber-900 dark:text-amber-300">
-                  📝 공급사 변경 요청 접수
-                </span>
-              ) : (
-                <span className="inline-flex items-center rounded px-2 py-0.5 text-xs font-bold bg-zinc-100 border border-zinc-300 text-zinc-600 dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-300">
-                  ⏳ 공급사 확인 대기
-                </span>
-              )
-            )}
-          </div>
-          {nextAction && !nextAction.disabled && (
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] font-medium text-zinc-455">권장 다음 작업:</span>
-              <button
-                onClick={() => {
-                  if (nextAction.action === "approve") handleTransition("APPROVED");
-                  else if (nextAction.action === "send") handleTransition("SENT");
-                  else if (nextAction.action === "ready_to_ship") handleTransition("READY_TO_SHIP");
-                  else if (nextAction.action === "create_shipment") initShipmentForm();
-                  else if (nextAction.action === "create_receiving") {
-                    const activeShipments = shipments.filter(
-                      (s) => s.status === "ARRIVED" || s.status === "PARTIALLY_RECEIVED"
-                    );
-                    if (activeShipments.length > 0) initReceivingForm(activeShipments[0].id);
-                    else alert("도착 처리된 선적이 존재하지 않습니다. 먼저 선적을 Arrived 상태로 변경해주십시오.");
-                  } else if (nextAction.action === "finalize") {
-                    const drafts = receivings.filter((r) => r.status === "DRAFT");
-                    if (drafts.length > 0) handleFinalizeReceiving(drafts[0].id);
-                  }
-                }}
-                className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg cursor-pointer transition-all"
-              >
-                {nextAction.label}
-              </button>
-            </div>
-          )}
-        </div>
-
-        {/* Dynamic Progress indicator */}
-        <div className="relative pt-2">
-          <div className="hidden md:flex justify-between items-center w-full">
-            {stages.map((stg, idx) => (
-              <div key={stg} className="flex flex-col items-center flex-1 relative z-10">
-                <div
-                  className={`w-6 h-6 rounded-full flex items-center justify-center font-bold text-xs border-2 ${
-                    idx <= currentStageIndex
-                      ? "bg-indigo-600 border-indigo-600 text-white"
-                      : "bg-white border-zinc-300 text-zinc-400 dark:bg-zinc-900 dark:border-zinc-700"
-                  }`}
-                >
-                  {idx + 1}
-                </div>
-                <span
-                  className={`mt-2 text-[10px] font-bold ${
-                    idx <= currentStageIndex ? "text-indigo-600" : "text-zinc-400 dark:text-zinc-500"
-                  }`}
-                >
-                  {OVERALL_STATUS_LABELS[stg]}
-                </span>
-              </div>
-            ))}
-          </div>
-          {/* Progress bar background line */}
-          <div className="hidden md:block absolute top-[18px] left-[8%] right-[8%] h-0.5 bg-zinc-200 dark:bg-zinc-800 -z-0">
-            <div
-              className="h-full bg-indigo-600 transition-all duration-500"
-              style={{
-                width: `${
-                  currentStageIndex >= 0 ? (currentStageIndex / (stages.length - 1)) * 100 : 0
-                }%`,
+      {/* Unified 6-Step PO Progress Stepper & Alerts */}
+      <PoUnifiedStepper
+        overallStatus={overallStatus}
+        revisionNo={po.revision_no}
+        supplierConfirmationStatus={po.supplier_confirmation_status}
+        confirmedByName={po.confirmed_by_name}
+        confirmedAt={po.confirmed_at}
+        cancellationStatus={po.cancellation_status}
+        cancellationReason={po.cancellation_reason}
+        cancellationRequestedAt={po.cancellation_requested_at}
+        cancellationRejectReason={po.cancellation_reject_reason}
+        cancellationRejectedAt={po.cancellation_rejected_at}
+        nextActionSlot={
+          nextAction && !nextAction.disabled ? (
+            <button
+              onClick={() => {
+                if (nextAction.action === "approve") handleTransition("APPROVED");
+                else if (nextAction.action === "send") handleTransition("SENT");
+                else if (nextAction.action === "ready_to_ship") handleTransition("READY_TO_SHIP");
+                else if (nextAction.action === "create_shipment") initShipmentForm();
+                else if (nextAction.action === "create_receiving") {
+                  const activeShipments = shipments.filter(
+                    (s) => s.status === "ARRIVED" || s.status === "PARTIALLY_RECEIVED"
+                  );
+                  if (activeShipments.length > 0) initReceivingForm(activeShipments[0].id);
+                  else alert("도착 처리된 선적이 존재하지 않습니다. 먼저 선적을 Arrived 상태로 변경해주십시오.");
+                } else if (nextAction.action === "finalize") {
+                  const drafts = receivings.filter((r) => r.status === "DRAFT");
+                  if (drafts.length > 0) handleFinalizeReceiving(drafts[0].id);
+                }
               }}
-            />
-          </div>
-        </div>
-      </div>
+              className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg cursor-pointer transition-all shadow-sm flex items-center gap-1.5"
+            >
+              <span>{nextAction.label}</span>
+              <span>→</span>
+            </button>
+          ) : null
+        }
+      />
 
       {/* Overview stats strip */}
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-4">
@@ -1259,41 +1142,56 @@ export function PurchaseOrderDetail({
                     <th className="px-4 py-3.5">브랜드</th>
                     <th className="px-4 py-3.5 font-mono">Letusto SKU</th>
                     <th className="px-4 py-3.5">제품 설명</th>
-                    <th className="px-4 py-3.5 text-right">주문 수량</th>
+                    <th className="px-4 py-3.5 text-right">주문 수량 (PO)</th>
                     <th className="px-4 py-3.5 text-right">공급사 확정</th>
                     <th className="px-4 py-3.5 text-right">출고 수량</th>
+                    <th className="px-4 py-3.5 text-right">미선적 잔량</th>
                     <th className="px-4 py-3.5 text-right">입고 완료</th>
-                    <th className="px-4 py-3.5 text-right">최종 승인</th>
                     <th className="px-4 py-3.5 text-right">단가</th>
                     <th className="px-4 py-3.5 text-right">합계</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-150 dark:divide-zinc-800/80">
-                  {po.lines.map((l) => (
-                    <tr key={l.id} className="hover:bg-zinc-50/30 dark:hover:bg-zinc-850/10">
-                      <td className="px-4 py-3 font-semibold text-zinc-650 dark:text-zinc-400">{l.brand_name}</td>
-                      <td className="px-4 py-3 font-mono font-bold">{l.letusto_sku || "-"}</td>
-                      <td className="px-4 py-3">
-                        <span className="font-bold text-zinc-900 dark:text-white block">{l.product_name}</span>
-                        {l.line_note && <span className="text-[10px] text-zinc-450 italic mt-0.5 block">{l.line_note}</span>}
-                      </td>
-                      <td className="px-4 py-3 text-right font-mono font-semibold">{l.qty.toLocaleString()}</td>
-                      <td className="px-4 py-3 text-right font-mono font-semibold">
-                        {l.confirmed_qty !== null ? l.confirmed_qty.toLocaleString() : <span className="text-zinc-400 italic">미확정</span>}
-                      </td>
-                      <td className="px-4 py-3 text-right font-mono font-semibold">{l.shipped_qty?.toLocaleString() || "0"}</td>
-                      <td className="px-4 py-3 text-right font-mono font-semibold">{l.received_qty?.toLocaleString() || "0"}</td>
-                      <td className="px-4 py-3 text-right font-mono font-bold text-emerald-600">
-                        {l.received_qty !== undefined ? l.received_qty.toLocaleString() : "0"}
-                      </td>
-                      <td className="px-4 py-3 text-right font-mono">
-                        {po.currency} {l.unit_cost.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                      </td>
-                      <td className="px-4 py-3 text-right font-mono font-bold">
-                        {po.currency} {l.line_total.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                      </td>
-                    </tr>
-                  ))}
+                  {po.lines.map((l) => {
+                    const targetQty = (l.confirmed_qty !== null && l.confirmed_qty !== undefined) ? Number(l.confirmed_qty) : Number(l.qty);
+                    const shippedQty = Number(l.shipped_qty || 0);
+                    const remainingToShip = Math.max(0, targetQty - shippedQty);
+                    return (
+                      <tr key={l.id} className="hover:bg-zinc-50/30 dark:hover:bg-zinc-850/10">
+                        <td className="px-4 py-3 font-semibold text-zinc-650 dark:text-zinc-400">{l.brand_name}</td>
+                        <td className="px-4 py-3 font-mono font-bold">{l.letusto_sku || "-"}</td>
+                        <td className="px-4 py-3">
+                          <span className="font-bold text-zinc-900 dark:text-white block">{l.product_name}</span>
+                          {l.line_note && <span className="text-[10px] text-zinc-450 italic mt-0.5 block">{l.line_note}</span>}
+                        </td>
+                        <td className="px-4 py-3 text-right font-mono font-semibold">{l.qty.toLocaleString()}</td>
+                        <td className="px-4 py-3 text-right font-mono font-semibold">
+                          {l.confirmed_qty !== null && l.confirmed_qty !== undefined ? (
+                            <span className={l.confirmed_qty !== l.qty ? "text-amber-600 dark:text-amber-400 font-bold" : "text-emerald-600 dark:text-emerald-400"}>
+                              {l.confirmed_qty.toLocaleString()}
+                            </span>
+                          ) : (
+                            <span className="text-zinc-400 italic">미확정 ({l.qty.toLocaleString()})</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-right font-mono font-semibold">{shippedQty.toLocaleString()}</td>
+                        <td className="px-4 py-3 text-right font-mono font-semibold">
+                          <span className={remainingToShip > 0 ? "text-indigo-600 dark:text-indigo-400" : "text-zinc-400"}>
+                            {remainingToShip.toLocaleString()}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-right font-mono font-semibold text-emerald-600 dark:text-emerald-400">
+                          {l.received_qty?.toLocaleString() || "0"}
+                        </td>
+                        <td className="px-4 py-3 text-right font-mono">
+                          {po.currency} {l.unit_cost.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                        </td>
+                        <td className="px-4 py-3 text-right font-mono font-bold">
+                          {po.currency} {l.line_total.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

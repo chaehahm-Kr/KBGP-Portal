@@ -17,6 +17,7 @@ import {
   OVERALL_STATUS_LABELS,
   OVERALL_STATUS_COLORS,
 } from "@/lib/purchase-order/status-helper";
+import { PoUnifiedStepper } from "@/components/shared/po-unified-stepper";
 
 interface PoLine {
   id: string;
@@ -138,6 +139,48 @@ export default function PoDetailClient({
   const [isSubmittingCase, setIsSubmittingCase] = useState(false);
   const [isRespondingCancel, setIsRespondingCancel] = useState(false);
 
+  // Confirm Modal state & per-line confirmed qty
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [confirmLines, setConfirmLines] = useState<Record<string, number>>(() => {
+    const init: Record<string, number> = {};
+    po.lines.forEach((l) => {
+      init[l.id] = l.confirmed_qty ?? l.qty;
+    });
+    return init;
+  });
+
+  // Line quantities aggregation for 5-stage qty flow
+  const lineQuantities = useMemo(() => {
+    const map: Record<string, { readyQty: number; shippedQty: number; receivedQty: number }> = {};
+    
+    (goodsReadiness || []).forEach((gr) => {
+      (gr.items || []).forEach((item: any) => {
+        const lineId = item.purchase_order_line_id;
+        if (!map[lineId]) map[lineId] = { readyQty: 0, shippedQty: 0, receivedQty: 0 };
+        map[lineId].readyQty += Number(item.ready_qty || 0);
+      });
+    });
+
+    (shipments || []).forEach((shp) => {
+      if (shp.status === "CANCELLED") return;
+      (shp.lines || []).forEach((sl: any) => {
+        const lineId = sl.purchase_order_line_id;
+        if (!map[lineId]) map[lineId] = { readyQty: 0, shippedQty: 0, receivedQty: 0 };
+        map[lineId].shippedQty += Number(sl.shipped_qty || 0);
+      });
+    });
+
+    (receivings || []).forEach((rcv) => {
+      (rcv.lines || []).forEach((rl: any) => {
+        const lineId = rl.purchase_order_line_id;
+        if (!map[lineId]) map[lineId] = { readyQty: 0, shippedQty: 0, receivedQty: 0 };
+        map[lineId].receivedQty += Number(rl.received_qty || 0);
+      });
+    });
+
+    return map;
+  }, [goodsReadiness, shipments, receivings]);
+
   // Goods Readiness Form State
   const [showGoodsReadyForm, setShowGoodsReadyForm] = useState(false);
   const [goodsReadyDate, setGoodsReadyDate] = useState("");
@@ -216,7 +259,7 @@ export default function PoDetailClient({
       product_name: l.product.name,
       letusto_sku: l.product.letusto_sku,
       qty: l.qty,
-      ready_qty: l.qty,
+      ready_qty: l.confirmed_qty ?? l.qty,
       cartons: 1,
       gross_weight: 0,
       cbm: 0,
@@ -225,14 +268,18 @@ export default function PoDetailClient({
     setShowGoodsReadyForm(true);
   };
 
-  // Confirm PO
-  const handleConfirm = async () => {
-    if (!window.confirm("발주 항목 수량을 그대로 수락하고 확인하시겠습니까?")) return;
+  // Confirm PO with per-line Confirmed Quantities
+  const handleConfirmSubmit = async () => {
     setIsConfirming(true);
     setGeneralError(null);
     setGeneralSuccess(null);
     try {
-      await confirmPortalPurchaseOrder(po.id);
+      const payloadLines = po.lines.map((l) => ({
+        lineId: l.id,
+        confirmedQty: Number(confirmLines[l.id] ?? l.qty),
+      }));
+      await confirmPortalPurchaseOrder(po.id, payloadLines);
+      setShowConfirmModal(false);
       setGeneralSuccess("발주 확인 처리가 성공적으로 완료되었습니다.");
       router.refresh();
     } catch (err: any) {
@@ -575,62 +622,167 @@ export default function PoDetailClient({
         </div>
       )}
 
-      {/* Top Banner mapping Overall Status */}
-      <div className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div className="flex items-center flex-wrap gap-2">
-          <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wide">주문 진행 상태</span>
-          <span className={`inline-flex items-center rounded px-3 py-1 text-xs font-bold border ${OVERALL_STATUS_COLORS[overallStatus || "Draft"]}`}>
-            {OVERALL_STATUS_LABELS[overallStatus || "Draft"] || overallStatus}
-          </span>
-          {(po.revision_no ?? 0) > 0 && (
-            <span className="inline-flex items-center rounded px-2.5 py-1 text-xs font-bold bg-purple-50 border border-purple-200 text-purple-700 dark:bg-purple-950/40 dark:border-purple-900 dark:text-purple-300">
-              Rev {po.revision_no}
-            </span>
-          )}
-          {po.po_status === "SENT" && (
-            po.supplier_confirmation_status === "CONFIRMED" ? (
-              <span className="inline-flex items-center rounded px-2.5 py-1 text-xs font-bold bg-emerald-50 border border-emerald-200 text-emerald-700 dark:bg-emerald-950/40 dark:border-emerald-900 dark:text-emerald-300">
-                ✓ 확인 완료 ({po.confirmed_by_name || "담당자"} {po.confirmed_at ? po.confirmed_at.split("T")[0] : ""})
-              </span>
-            ) : po.supplier_confirmation_status === "CHANGE_REQUESTED" ? (
-              <span className="inline-flex items-center rounded px-2.5 py-1 text-xs font-bold bg-amber-50 border border-amber-200 text-amber-700 dark:bg-amber-950/40 dark:border-amber-900 dark:text-amber-300">
-                📝 변경 요청 접수됨
-              </span>
-            ) : (
-              <span className="inline-flex items-center rounded px-2.5 py-1 text-xs font-bold bg-zinc-100 border border-zinc-300 text-zinc-600 dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-300">
-                ⏳ 확인 대기
-              </span>
-            )
-          )}
-        </div>
+      {/* Confirm PO Modal with per-line Confirmed Qty */}
+      {showConfirmModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-2xl rounded-2xl border border-zinc-200 bg-white p-6 shadow-2xl dark:border-zinc-800 dark:bg-zinc-900 space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center border-b border-zinc-150 pb-3 dark:border-zinc-800">
+              <div>
+                <h3 className="text-base font-bold text-zinc-900 dark:text-white">✓ 발주서 확인 및 수량 확정</h3>
+                <p className="text-xs text-zinc-500 mt-0.5 font-mono">PO: {po.po_number}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowConfirmModal(false)}
+                className="text-zinc-400 hover:text-zinc-650 cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
 
-        {/* Primary Action Button based on Lifecycle */}
-        {po.po_status === "SENT" && po.supplier_confirmation_status === "PENDING" && (
-          <div className="flex items-center flex-wrap gap-2">
-            <button
-              onClick={() => setShowCaseModal(true)}
-              disabled={isConfirming}
-              className="px-3.5 py-2 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 font-bold text-xs rounded-lg transition-colors cursor-pointer"
-            >
-              📝 PO 변경 요청 (문의)
-            </button>
-            <button
-              onClick={() => setIsChangeFormOpen(true)}
-              disabled={isConfirming}
-              className="px-3.5 py-2 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 font-bold text-xs rounded-lg transition-colors cursor-pointer"
-            >
-              수량 직접 조율 제안
-            </button>
-            <button
-              onClick={handleConfirm}
-              disabled={isConfirming}
-              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-lg transition-colors cursor-pointer shadow-sm"
-            >
-              ✓ 발주 확인 (Confirm PO)
-            </button>
+            <p className="text-xs text-zinc-600 dark:text-zinc-400 leading-relaxed">
+              각 품목별 납품 가능 확정 수량을 확인해 주세요. 수량 변동이 없는 경우 발주 수량 그대로 확정됩니다.
+            </p>
+
+            <div className="overflow-x-auto rounded-lg border border-zinc-200 dark:border-zinc-800">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="bg-zinc-50 dark:bg-zinc-850/50 text-zinc-500 font-bold border-b border-zinc-200 dark:border-zinc-800">
+                    <th className="p-3">품목명 / SKU</th>
+                    <th className="p-3 text-right">발주 수량</th>
+                    <th className="p-3 text-right w-36">확정 납품 수량</th>
+                    <th className="p-3 text-right">단가</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-150 dark:divide-zinc-800">
+                  {po.lines.map((l) => (
+                    <tr key={l.id}>
+                      <td className="p-3">
+                        <span className="font-bold text-zinc-900 dark:text-white block">{l.product.name}</span>
+                        <span className="font-mono text-[10px] text-zinc-450 block">{l.product.letusto_sku}</span>
+                      </td>
+                      <td className="p-3 text-right font-mono font-semibold">{l.qty.toLocaleString()} PCS</td>
+                      <td className="p-3 text-right">
+                        <input
+                          type="number"
+                          min="0"
+                          value={confirmLines[l.id] ?? l.qty}
+                          onChange={(e) => {
+                            const val = parseInt(e.target.value) || 0;
+                            setConfirmLines((prev) => ({ ...prev, [l.id]: val }));
+                          }}
+                          className="w-full text-right font-mono font-bold rounded-lg border border-zinc-300 p-1.5 dark:border-zinc-700 dark:bg-zinc-800 dark:text-white"
+                        />
+                      </td>
+                      <td className="p-3 text-right font-mono">
+                        {po.currency} {l.unit_cost.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="flex justify-between items-center pt-3 border-t border-zinc-150 dark:border-zinc-800">
+              <button
+                type="button"
+                onClick={() => {
+                  const reset: Record<string, number> = {};
+                  po.lines.forEach((l) => { reset[l.id] = l.qty; });
+                  setConfirmLines(reset);
+                }}
+                className="text-xs text-indigo-600 hover:underline cursor-pointer"
+              >
+                전체 수량 발주량으로 초기화
+              </button>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmModal(false)}
+                  className="px-4 py-2 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 text-xs font-bold rounded-lg transition-colors cursor-pointer"
+                >
+                  취소
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmSubmit}
+                  disabled={isConfirming}
+                  className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg transition-colors cursor-pointer disabled:opacity-50 shadow-sm"
+                >
+                  {isConfirming ? "확정 처리 중..." : "✓ 발주 확정 제출 (Confirm)"}
+                </button>
+              </div>
+            </div>
           </div>
-        )}
-      </div>
+        </div>
+      )}
+
+      {/* Unified 6-Step Stepper Component */}
+      <PoUnifiedStepper
+        overallStatus={overallStatus || "Draft"}
+        revisionNo={po.revision_no ?? 1}
+        supplierConfirmationStatus={po.supplier_confirmation_status}
+        confirmedByName={po.confirmed_by_name}
+        confirmedAt={po.confirmed_at}
+        cancellationStatus={po.cancellation_status}
+        cancellationReason={po.cancellation_reason}
+        cancellationRequestedAt={po.cancellation_requested_at}
+        cancellationRejectReason={po.cancellation_reject_reason}
+        cancellationRejectedAt={po.cancellation_rejected_at}
+        nextActionSlot={
+          <div className="flex items-center flex-wrap gap-2">
+            {po.cancellation_status === "CANCELLATION_REQUESTED" && (
+              <>
+                <button
+                  type="button"
+                  onClick={handleApproveCancellation}
+                  disabled={isRespondingCancel}
+                  className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-lg transition-colors cursor-pointer shadow-sm disabled:opacity-50"
+                >
+                  ✓ 취소 요청 동의 (Approve)
+                </button>
+                <button
+                  type="button"
+                  onClick={handleRejectCancellation}
+                  disabled={isRespondingCancel}
+                  className="px-3 py-1.5 bg-zinc-200 hover:bg-zinc-300 text-zinc-800 font-bold text-xs rounded-lg transition-colors cursor-pointer disabled:opacity-50"
+                >
+                  ✕ 취소 거절 (Reject)
+                </button>
+              </>
+            )}
+
+            {po.po_status === "SENT" && po.supplier_confirmation_status === "PENDING" && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setShowCaseModal(true)}
+                  disabled={isConfirming}
+                  className="px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 font-bold text-xs rounded-lg transition-colors cursor-pointer"
+                >
+                  📝 PO 변경 요청 (문의)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsChangeFormOpen(true)}
+                  disabled={isConfirming}
+                  className="px-3 py-1.5 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 font-bold text-xs rounded-lg transition-colors cursor-pointer"
+                >
+                  수량 직접 조율 제안
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmModal(true)}
+                  disabled={isConfirming}
+                  className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-lg transition-colors cursor-pointer shadow-sm"
+                >
+                  ✓ 발주 확인 (Confirm PO)
+                </button>
+              </>
+            )}
+          </div>
+        }
+      />
 
       {/* Tabs */}
       <div className="border-b border-zinc-200 dark:border-zinc-850">
@@ -854,37 +1006,61 @@ export default function PoDetailClient({
         {/* Tab 2: Products */}
         {activeTab === "products" && (
           <div className="rounded-xl border border-zinc-200 bg-white overflow-hidden shadow-sm dark:border-zinc-800 dark:bg-zinc-900 text-xs">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="border-b border-zinc-200 bg-zinc-50/50 text-zinc-550 font-bold dark:border-zinc-850 dark:bg-zinc-900/50 dark:text-white">
-                  <th className="px-4 py-3.5">제품명 / Letusto SKU</th>
-                  <th className="px-4 py-3.5 text-right">발주 수량</th>
-                  <th className="px-4 py-3.5 text-right">최종 확정 수량</th>
-                  <th className="px-4 py-3.5 text-right">단가</th>
-                  <th className="px-4 py-3.5 text-right">합계</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-zinc-150 dark:divide-zinc-800/80">
-                {po.lines.map((l) => (
-                  <tr key={l.id} className="hover:bg-zinc-50/30 dark:hover:bg-zinc-850/10">
-                    <td className="px-4 py-3">
-                      <span className="font-bold text-zinc-900 dark:text-white block">{l.product.name}</span>
-                      <span className="font-mono text-[10px] text-zinc-450 mt-0.5 block">{l.product.letusto_sku}</span>
-                    </td>
-                    <td className="px-4 py-3 text-right font-mono font-semibold">{l.qty.toLocaleString()}개</td>
-                    <td className="px-4 py-3 text-right font-mono font-semibold">
-                      {l.confirmed_qty !== null ? `${l.confirmed_qty.toLocaleString()}개` : <span className="text-zinc-400 italic">미확정</span>}
-                    </td>
-                    <td className="px-4 py-3 text-right font-mono">
-                      {po.currency} {l.unit_cost.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                    </td>
-                    <td className="px-4 py-3 text-right font-mono font-bold">
-                      {po.currency} {(l.qty * l.unit_cost).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                    </td>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="border-b border-zinc-200 bg-zinc-50/50 text-zinc-550 font-bold dark:border-zinc-850 dark:bg-zinc-900/50 dark:text-white">
+                    <th className="px-4 py-3.5">제품명 / Letusto SKU</th>
+                    <th className="px-4 py-3.5 text-right">발주 수량 (PO)</th>
+                    <th className="px-4 py-3.5 text-right">공급사 확정 (Confirmed)</th>
+                    <th className="px-4 py-3.5 text-right">출고 준비 (Ready)</th>
+                    <th className="px-4 py-3.5 text-right">출고/선적 (Shipped)</th>
+                    <th className="px-4 py-3.5 text-right">창고 입고 (Received)</th>
+                    <th className="px-4 py-3.5 text-right">단가</th>
+                    <th className="px-4 py-3.5 text-right">합계</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-zinc-150 dark:divide-zinc-800/80">
+                  {po.lines.map((l) => {
+                    const q = lineQuantities[l.id] || { readyQty: 0, shippedQty: 0, receivedQty: 0 };
+                    const targetQty = (l.confirmed_qty !== null && l.confirmed_qty !== undefined) ? Number(l.confirmed_qty) : Number(l.qty);
+                    return (
+                      <tr key={l.id} className="hover:bg-zinc-50/30 dark:hover:bg-zinc-850/10">
+                        <td className="px-4 py-3">
+                          <span className="font-bold text-zinc-900 dark:text-white block">{l.product.name}</span>
+                          <span className="font-mono text-[10px] text-zinc-450 mt-0.5 block">{l.product.letusto_sku}</span>
+                        </td>
+                        <td className="px-4 py-3 text-right font-mono font-semibold">{l.qty.toLocaleString()}</td>
+                        <td className="px-4 py-3 text-right font-mono font-semibold">
+                          {l.confirmed_qty !== null && l.confirmed_qty !== undefined ? (
+                            <span className={l.confirmed_qty !== l.qty ? "text-amber-600 dark:text-amber-400 font-bold" : "text-emerald-600 dark:text-emerald-400"}>
+                              {l.confirmed_qty.toLocaleString()}
+                            </span>
+                          ) : (
+                            <span className="text-zinc-400 italic">미확정 ({l.qty.toLocaleString()})</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-right font-mono font-semibold text-indigo-600 dark:text-indigo-400">
+                          {q.readyQty.toLocaleString()}
+                        </td>
+                        <td className="px-4 py-3 text-right font-mono font-semibold">
+                          {q.shippedQty.toLocaleString()}
+                        </td>
+                        <td className="px-4 py-3 text-right font-mono font-semibold text-emerald-600 dark:text-emerald-400">
+                          {q.receivedQty.toLocaleString()}
+                        </td>
+                        <td className="px-4 py-3 text-right font-mono">
+                          {po.currency} {l.unit_cost.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                        </td>
+                        <td className="px-4 py-3 text-right font-mono font-bold">
+                          {po.currency} {(targetQty * l.unit_cost).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
 

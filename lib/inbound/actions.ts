@@ -88,7 +88,7 @@ export async function getPoLinesForShipment(poId: string) {
   const { data: poLines, error: poErr } = await supabase
     .from("purchase_order_lines")
     .select(`
-      id, product_id, qty, unit_cost, product_name_snapshot, letusto_sku_snapshot, manufacture_sku_snapshot
+      id, product_id, qty, confirmed_qty, unit_cost, product_name_snapshot, letusto_sku_snapshot, manufacture_sku_snapshot
     `)
     .eq("purchase_order_id", poId);
 
@@ -115,7 +115,10 @@ export async function getPoLinesForShipment(poId: string) {
 
   return (poLines ?? []).map((line: any) => {
     const totalShipped = shippedQtyMap.get(line.id) || 0;
-    const remainingToShip = Math.max(0, line.qty - totalShipped);
+    const targetQty = (line.confirmed_qty !== null && line.confirmed_qty !== undefined) 
+      ? Number(line.confirmed_qty) 
+      : Number(line.qty);
+    const remainingToShip = Math.max(0, targetQty - totalShipped);
 
     return {
       id: line.id,
@@ -123,7 +126,10 @@ export async function getPoLinesForShipment(poId: string) {
       product_name: line.product_name_snapshot,
       letusto_sku: line.letusto_sku_snapshot,
       manufacture_sku: line.manufacture_sku_snapshot,
-      ordered_qty: line.qty,
+      po_qty: line.qty,
+      confirmed_qty: line.confirmed_qty !== null && line.confirmed_qty !== undefined ? Number(line.confirmed_qty) : null,
+      target_qty: targetQty,
+      ordered_qty: targetQty, // backwards compatibility
       total_shipped: totalShipped,
       remaining_to_ship: remainingToShip,
     };
@@ -379,7 +385,7 @@ export async function updateInboundShipment(shipmentId: string, data: CreateShip
 
   const { data: poLines } = await supabase
     .from("purchase_order_lines")
-    .select("id, qty, product_name_snapshot")
+    .select("id, qty, confirmed_qty, product_name_snapshot")
     .eq("purchase_order_id", data.purchase_order_id);
 
   const linesMap = new Map(data.lines.map((l) => [l.purchase_order_line_id, l.shipped_qty]));
@@ -387,11 +393,14 @@ export async function updateInboundShipment(shipmentId: string, data: CreateShip
   (poLines ?? []).forEach((pol) => {
     const proposed = linesMap.get(pol.id) || 0;
     const totalOtherShipped = shippedQtyMap.get(pol.id) || 0;
-    const remainingToShip = Math.max(0, pol.qty - totalOtherShipped);
+    const targetQty = (pol.confirmed_qty !== null && pol.confirmed_qty !== undefined)
+      ? Number(pol.confirmed_qty)
+      : Number(pol.qty);
+    const remainingToShip = Math.max(0, targetQty - totalOtherShipped);
 
     if (proposed > remainingToShip) {
       throw new Error(
-        `제품 [${pol.product_name_snapshot}]의 선적 수량(${proposed}개)이 PO 미선적 잔량(${remainingToShip}개)을 초과할 수 없습니다.`
+        `제품 [${pol.product_name_snapshot}]의 선적 수량(${proposed}개)이 미선적 잔량(${remainingToShip}개)을 초과할 수 없습니다.`
       );
     }
   });
