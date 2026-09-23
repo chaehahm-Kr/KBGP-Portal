@@ -715,86 +715,86 @@ export function CalculatorTab({ activeSubTab, presets, scenarios, settings: init
           {/* [개선 완료]: 7대 주요 수치 요약 대형 카드 노출 (Charm Retail MSRP 신규 추가) */}
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
             
-            <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 text-center">
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">FOB Cost</span>
-              <strong className="text-xl text-slate-800 font-extrabold">${brandCostUSD.toFixed(2)}</strong>
-              <span className="text-[9px] text-slate-400 block mt-1">FOB Supplier Price</span>
+            <div className="bg-white dark:bg-zinc-900 p-4 rounded-xl border border-zinc-200 dark:border-zinc-800 text-center shadow-xs">
+              <span className="text-[10px] font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider block mb-1">FOB Cost</span>
+              <strong className="text-xl text-zinc-900 dark:text-zinc-100 font-extrabold">${brandCostUSD.toFixed(2)}</strong>
+              <span className="text-[9px] text-zinc-400 dark:text-zinc-500 block mt-1">FOB Supplier Price</span>
             </div>
 
-            <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 text-center">
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Import & Shipping</span>
-              <strong className="text-xl text-slate-800 font-extrabold">${(calculatedShippingCostPerUnitUSD + calculatedTaxCostPerUnitUSD).toFixed(2)}</strong>
-              <span className="text-[9px] text-slate-400 block mt-1">Shipping + Taxes</span>
+            <div className="bg-white dark:bg-zinc-900 p-4 rounded-xl border border-zinc-200 dark:border-zinc-800 text-center shadow-xs">
+              <span className="text-[10px] font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider block mb-1">Import & Shipping</span>
+              <strong className="text-xl text-zinc-900 dark:text-zinc-100 font-extrabold">${(calculatedShippingCostPerUnitUSD + calculatedTaxCostPerUnitUSD).toFixed(2)}</strong>
+              <span className="text-[9px] text-zinc-400 dark:text-zinc-500 block mt-1">Shipping + Taxes</span>
             </div>
 
             {/* Landed Cost - 보라색 음영 강조 */}
-            <div className="bg-indigo-50 border-2 border-indigo-500 p-4 rounded-xl text-center shadow-xs">
-              <span className="text-[10px] font-bold text-indigo-600 uppercase tracking-wider block mb-1">Landed Cost</span>
-              <strong className="text-2xl text-indigo-900 font-black">${calculatedLandedCostPerUnit.toFixed(2)}</strong>
-              <span className="text-[9px] text-indigo-500 block mt-1 font-semibold">Total Delivered Cost</span>
+            <div className="bg-indigo-50/70 dark:bg-indigo-950/40 border-2 border-indigo-500 p-4 rounded-xl text-center shadow-xs">
+              <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider block mb-1">Landed Cost</span>
+              <strong className="text-2xl text-indigo-950 dark:text-indigo-200 font-black">${calculatedLandedCostPerUnit.toFixed(2)}</strong>
+              <span className="text-[9px] text-indigo-500 dark:text-indigo-400 block mt-1 font-semibold">Total Delivered Cost</span>
             </div>
 
-            <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 text-center">
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Wholesale Price</span>
-              <strong className="text-xl text-slate-800 font-extrabold">${displayWholesale.toFixed(2)}</strong>
-              <span className="text-[9px] text-slate-400 block mt-1">B2B Supply Price</span>
+            <div className="bg-white dark:bg-zinc-900 p-4 rounded-xl border border-zinc-200 dark:border-zinc-800 text-center shadow-xs">
+              <span className="text-[10px] font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider block mb-1">Wholesale Price</span>
+              <strong className="text-xl text-zinc-900 dark:text-zinc-100 font-extrabold">${displayWholesale.toFixed(2)}</strong>
+              <span className="text-[9px] text-zinc-400 dark:text-zinc-500 block mt-1">B2B Supply Price</span>
             </div>
 
-            <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 text-center">
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Estimated MSRP</span>
-              <strong className="text-xl text-slate-700 font-extrabold">
+            <div className="bg-white dark:bg-zinc-900 p-4 rounded-xl border border-zinc-200 dark:border-zinc-800 text-center shadow-xs">
+              <span className="text-[10px] font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider block mb-1">Estimated MSRP</span>
+              <strong className="text-xl text-zinc-800 dark:text-zinc-200 font-extrabold">
                 ${rawMSRPVal.toFixed(2)}
               </strong>
-              <span className="text-[9px] text-slate-400 block mt-1">Calculated Retail MSRP</span>
+              <span className="text-[9px] text-zinc-400 dark:text-zinc-500 block mt-1">Calculated Retail MSRP</span>
             </div>
 
             {/* [개선 완료] Charm Retail MSRP (올림 -0.05 보정가) */}
-            <div className="bg-amber-50 border border-amber-300 p-4 rounded-xl text-center shadow-2xs">
-              <span className="text-[10px] font-bold text-amber-700 uppercase tracking-wider block mb-1">Charm MSRP</span>
-              <strong className="text-xl text-amber-800 font-extrabold">
+            <div className="bg-amber-50/70 dark:bg-amber-950/30 border border-amber-300/80 dark:border-amber-700/60 p-4 rounded-xl text-center shadow-xs">
+              <span className="text-[10px] font-bold text-amber-700 dark:text-amber-400 uppercase tracking-wider block mb-1">Charm MSRP</span>
+              <strong className="text-xl text-amber-900 dark:text-amber-300 font-extrabold">
                 ${charmMSRPVal.toFixed(2)}
               </strong>
-              <span className="text-[9px] text-amber-600 block mt-1 font-semibold">Charm Store Price (.95)</span>
+              <span className="text-[9px] text-amber-600 dark:text-amber-400 block mt-1 font-semibold">Charm Store Price (.95)</span>
             </div>
 
             {/* Net Profit */}
-            <div className="bg-emerald-50 border border-emerald-300 p-4 rounded-xl text-center">
-              <span className="text-[10px] font-bold text-emerald-700 uppercase tracking-wider block mb-1">Net Profit</span>
-              <strong className="text-xl text-emerald-800 font-extrabold">
+            <div className="bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-300/80 dark:border-emerald-700/60 p-4 rounded-xl text-center shadow-xs">
+              <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400 uppercase tracking-wider block mb-1">Net Profit</span>
+              <strong className="text-xl text-emerald-900 dark:text-emerald-300 font-extrabold">
                 ${displayNetProfit.toFixed(2)} <span className="text-xs">({displayNetMargin.toFixed(1)}%)</span>
               </strong>
-              <span className="text-[9px] text-emerald-600 block mt-1">Letusto Gain</span>
+              <span className="text-[9px] text-emerald-600 dark:text-emerald-400 block mt-1">Letusto Gain</span>
             </div>
 
           </div>
 
           {/* 시뮬레이션 환경 설정 컨트롤 보드 */}
-          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-6">
-            <div className="flex justify-between items-center border-b border-slate-100 pb-2">
-              <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+          <div className="bg-white dark:bg-zinc-900 p-6 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-sm space-y-6">
+            <div className="flex justify-between items-center border-b border-zinc-100 dark:border-zinc-800 pb-2">
+              <h3 className="text-xs font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">
                 Simulation Setup
               </h3>
-              <span className="text-xs text-slate-400">Step 1 ~ 5</span>
+              <span className="text-xs text-zinc-400 dark:text-zinc-500">Step 1 ~ 5</span>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6 items-end">
               
               {/* Step 1. 분석 모드 */}
               <div>
-                <label className="block text-xs font-bold text-slate-500 mb-2">Step 1. 분석 모드</label>
-                <div className="grid grid-cols-2 gap-2 bg-slate-100 p-1 rounded-lg">
+                <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-2">Step 1. 분석 모드</label>
+                <div className="grid grid-cols-2 gap-2 bg-zinc-100 dark:bg-zinc-800/80 p-1 rounded-lg">
                   <button
                     onClick={() => setMode("analyze_profitability")}
-                    className={`py-1.5 text-xs font-medium rounded-md transition-all ${
-                      mode === "analyze_profitability" ? "bg-white text-slate-900 shadow-xs" : "text-slate-500 hover:text-slate-700"
+                    className={`py-1.5 text-xs font-medium rounded-md transition-all cursor-pointer ${
+                      mode === "analyze_profitability" ? "bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 shadow-xs" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200"
                     }`}
                   >
                     수익성 분석
                   </button>
                   <button
                     onClick={() => setMode("calculate_pricing")}
-                    className={`py-1.5 text-xs font-medium rounded-md transition-all ${
-                      mode === "calculate_pricing" ? "bg-white text-slate-900 shadow-xs" : "text-slate-500 hover:text-slate-700"
+                    className={`py-1.5 text-xs font-medium rounded-md transition-all cursor-pointer ${
+                      mode === "calculate_pricing" ? "bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 shadow-xs" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200"
                     }`}
                   >
                     목표가 역산
@@ -804,11 +804,11 @@ export function CalculatorTab({ activeSubTab, presets, scenarios, settings: init
 
               {/* Step 2. 판매 채널 */}
               <div>
-                <label className="block text-xs font-bold text-slate-500 mb-2">Step 2. 판매 채널</label>
+                <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-2">Step 2. 판매 채널</label>
                 <select
                   value={channel}
                   onChange={(e) => setChannel(e.target.value as any)}
-                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:outline-none focus:border-slate-800"
+                  className="w-full px-3 py-2 text-xs border border-zinc-300 dark:border-zinc-700 rounded-lg bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:border-zinc-500 dark:focus:border-zinc-400"
                 >
                   <option value="both">Both (Offline B2B + Amazon)</option>
                   <option value="b2b">Offline B2B 전용</option>
@@ -818,10 +818,10 @@ export function CalculatorTab({ activeSubTab, presets, scenarios, settings: init
 
               {/* [개선 완료] Step 3. 공급가 병렬 동시 입력란 (환율 기반 양방향 실시간 동기화) */}
               <div className="md:col-span-2 space-y-2">
-                <span className="block text-xs font-bold text-slate-500">Step 3. 브랜드 공급가 (FOB Cost)</span>
+                <span className="block text-xs font-bold text-zinc-700 dark:text-zinc-300">Step 3. 브랜드 공급가 (FOB Cost)</span>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-[10px] text-slate-400 mb-0.5">FOB Price in USD ($)</label>
+                    <label className="block text-[10px] text-zinc-400 dark:text-zinc-500 mb-0.5">FOB Price in USD ($)</label>
                     <input
                       type="number"
                       min="0.01"
@@ -829,11 +829,11 @@ export function CalculatorTab({ activeSubTab, presets, scenarios, settings: init
                       placeholder="$"
                       value={supplierPriceUSDStr}
                       onChange={(e) => handleSupplierPriceUSDChange(e.target.value)}
-                      className="w-full px-3 py-1.5 text-xs border border-slate-300 rounded-lg focus:outline-none focus:border-slate-800 font-bold text-right"
+                      className="w-full px-3 py-1.5 text-xs border border-zinc-300 dark:border-zinc-700 rounded-lg bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:border-zinc-500 dark:focus:border-zinc-400 font-bold text-right"
                     />
                   </div>
                   <div>
-                    <label className="block text-[10px] text-slate-400 mb-0.5">FOB Price in KRW (₩)</label>
+                    <label className="block text-[10px] text-zinc-400 dark:text-zinc-500 mb-0.5">FOB Price in KRW (₩)</label>
                     <input
                       type="number"
                       min="1"
@@ -841,7 +841,7 @@ export function CalculatorTab({ activeSubTab, presets, scenarios, settings: init
                       placeholder="₩"
                       value={supplierPriceKRWStr}
                       onChange={(e) => handleSupplierPriceKRWChange(e.target.value)}
-                      className="w-full px-3 py-1.5 text-xs border border-slate-300 rounded-lg focus:outline-none focus:border-slate-800 font-bold text-right"
+                      className="w-full px-3 py-1.5 text-xs border border-zinc-300 dark:border-zinc-700 rounded-lg bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:border-zinc-500 dark:focus:border-zinc-400 font-bold text-right"
                     />
                   </div>
                 </div>
@@ -851,7 +851,7 @@ export function CalculatorTab({ activeSubTab, presets, scenarios, settings: init
 
             {/* [개선 완료] Step 4. 비즈니스 프리셋 요율 타일형 디자인 목록 */}
             <div className="space-y-2.5 pt-2">
-              <span className="block text-xs font-bold text-slate-500">Step 4. 비즈니스 요율 프리셋 (타일형 카드 중 선택)</span>
+              <span className="block text-xs font-bold text-zinc-700 dark:text-zinc-300">Step 4. 비즈니스 요율 프리셋 (타일형 카드 중 선택)</span>
               <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
                 {presets.map((p) => {
                   const isSelected = selectedPresetId === p.id;
@@ -861,14 +861,14 @@ export function CalculatorTab({ activeSubTab, presets, scenarios, settings: init
                       onClick={() => setSelectedPresetId(p.id)}
                       className={`p-3 rounded-xl border-2 transition-all cursor-pointer flex flex-col justify-between text-left h-24 ${
                         isSelected 
-                          ? "border-indigo-600 bg-indigo-50/20 shadow-xs ring-1 ring-indigo-500/25" 
-                          : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50/50"
+                          ? "border-indigo-600 bg-indigo-50/40 dark:bg-indigo-950/40 shadow-xs ring-1 ring-indigo-500/25" 
+                          : "border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 hover:border-zinc-300 dark:hover:border-zinc-700 hover:bg-zinc-50/50 dark:hover:bg-zinc-900/50"
                       }`}
                     >
-                      <span className="text-[11px] font-bold text-slate-800 leading-tight truncate block" title={p.name}>
+                      <span className="text-[11px] font-bold text-zinc-900 dark:text-zinc-100 leading-tight truncate block" title={p.name}>
                         {p.name}
                       </span>
-                      <span className="text-[9px] text-slate-400 line-clamp-3 leading-relaxed mt-1 block">
+                      <span className="text-[9px] text-zinc-500 dark:text-zinc-400 line-clamp-3 leading-relaxed mt-1 block">
                         {p.description || "설정 없음"}
                       </span>
                     </div>
@@ -878,18 +878,18 @@ export function CalculatorTab({ activeSubTab, presets, scenarios, settings: init
             </div>
 
             {/* Step 5. 세부 목표 가격 시뮬레이션 설정 */}
-            <div className="bg-slate-50/60 p-4 rounded-xl border border-slate-200 mt-4">
-              <label className="block text-xs font-bold text-slate-700 mb-3">Step 5. 세부 목표 및 가격 시뮬레이션 설정</label>
+            <div className="bg-zinc-50/80 dark:bg-zinc-950/50 p-4 rounded-xl border border-zinc-200 dark:border-zinc-800 mt-4">
+              <label className="block text-xs font-bold text-zinc-800 dark:text-zinc-200 mb-3">Step 5. 세부 목표 및 가격 시뮬레이션 설정</label>
               
               {mode === "analyze_profitability" ? (
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                   <div className="space-y-2">
                     <div className="flex justify-between items-center">
-                      <span className="text-xs font-bold text-slate-500">B2B 도매 가격 결정 방식</span>
+                      <span className="text-xs font-bold text-zinc-600 dark:text-zinc-400">B2B 도매 가격 결정 방식</span>
                       <select
                         value={b2bPriceMode}
                         onChange={(e) => setB2bPriceMode(e.target.value as any)}
-                        className="text-[10px] border border-slate-300 rounded px-1.5 py-0.5"
+                        className="text-[10px] border border-zinc-300 dark:border-zinc-700 rounded px-1.5 py-0.5 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100"
                       >
                         <option value="retail_based">MSRP 기반 역산</option>
                         <option value="wholesale_based">Wholesale 기반 연산</option>
@@ -898,73 +898,73 @@ export function CalculatorTab({ activeSubTab, presets, scenarios, settings: init
                     
                     {b2bPriceMode === "retail_based" ? (
                       <div>
-                        <label className="block text-[11px] text-slate-400 mb-1">MSRP ($)</label>
+                        <label className="block text-[11px] text-zinc-500 dark:text-zinc-400 mb-1">MSRP ($)</label>
                         <input
                           type="number"
                           step="0.01"
                           value={proposedMSRP}
                           onChange={(e) => setProposedMSRP(parseFloat(e.target.value) || 0)}
-                          className="w-full px-3 py-1.5 text-xs border border-slate-300 rounded-lg"
+                          className="w-full px-3 py-1.5 text-xs border border-zinc-300 dark:border-zinc-700 rounded-lg bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100"
                         />
                       </div>
                     ) : (
                       <div>
-                        <label className="block text-[11px] text-slate-400 mb-1">Wholesale Price ($)</label>
+                        <label className="block text-[11px] text-zinc-500 dark:text-zinc-400 mb-1">Wholesale Price ($)</label>
                         <input
                           type="number"
                           step="0.01"
                           value={wholesalePrice}
                           onChange={(e) => setWholesalePrice(parseFloat(e.target.value) || 0)}
-                          className="w-full px-3 py-1.5 text-xs border border-slate-300 rounded-lg"
+                          className="w-full px-3 py-1.5 text-xs border border-zinc-300 dark:border-zinc-700 rounded-lg bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100"
                         />
                       </div>
                     )}
                   </div>
 
                   <div>
-                    <label className="block text-[11px] text-slate-400 mb-2">B2B 소매 마진 (Retailer Margin, %)</label>
+                    <label className="block text-[11px] text-zinc-500 dark:text-zinc-400 mb-2">B2B 소매 마진 (Retailer Margin, %)</label>
                     <input
                       type="number"
                       value={retailerTargetMargin}
                       onChange={(e) => setRetailerTargetMargin(parseFloat(e.target.value) || 0)}
-                      className="w-full px-3 py-1.5 text-xs border border-slate-300 rounded-lg"
+                      className="w-full px-3 py-1.5 text-xs border border-zinc-300 dark:border-zinc-700 rounded-lg bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-[11px] text-slate-400 mb-2">Amazon 판매가 (Selling Price, $)</label>
+                    <label className="block text-[11px] text-zinc-500 dark:text-zinc-400 mb-2">Amazon 판매가 (Selling Price, $)</label>
                     <input
                       type="number"
                       step="0.01"
                       value={amazonListPrice}
                       onChange={(e) => setAmazonListPrice(parseFloat(e.target.value) || 0)}
-                      className="w-full px-3 py-1.5 text-xs border border-slate-300 rounded-lg"
+                      className="w-full px-3 py-1.5 text-xs border border-zinc-300 dark:border-zinc-700 rounded-lg bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100"
                     />
                   </div>
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                   <div>
-                    <label className="block text-[11px] text-slate-400 mb-2">Letusto 목표 순이익률 (Target Net Margin, %)</label>
+                    <label className="block text-[11px] text-zinc-500 dark:text-zinc-400 mb-2">Letusto 목표 순이익률 (Target Net Margin, %)</label>
                     <input
                       type="number"
                       value={targetValue}
                       onChange={(e) => setTargetValue(parseFloat(e.target.value) || 0)}
-                      className="w-full px-3 py-1.5 text-xs border border-indigo-600 rounded-lg bg-indigo-50/20 font-bold"
+                      className="w-full px-3 py-1.5 text-xs border border-indigo-600 rounded-lg bg-indigo-50/40 dark:bg-indigo-950/40 font-bold text-zinc-900 dark:text-zinc-100"
                     />
                   </div>
                   
                   <div>
-                    <label className="block text-[11px] text-slate-400 mb-2">B2B 소매점 타겟 마진 (Retailer Margin, %)</label>
+                    <label className="block text-[11px] text-zinc-500 dark:text-zinc-400 mb-2">B2B 소매점 타겟 마진 (Retailer Margin, %)</label>
                     <input
                       type="number"
                       value={retailerTargetMargin}
                       onChange={(e) => setRetailerTargetMargin(parseFloat(e.target.value) || 0)}
-                      className="w-full px-3 py-1.5 text-xs border border-slate-300 rounded-lg"
+                      className="w-full px-3 py-1.5 text-xs border border-zinc-300 dark:border-zinc-700 rounded-lg bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100"
                     />
                   </div>
 
-                  <div className="flex items-end pb-1 text-[11px] text-slate-400 italic leading-relaxed">
+                  <div className="flex items-end pb-1 text-[11px] text-zinc-400 dark:text-zinc-500 italic leading-relaxed">
                     설정된 목표 Net Margin을 충족하기 위해 B2B 도매 공급가 및 MSRP를 역산합니다.
                   </div>
                 </div>
@@ -976,7 +976,7 @@ export function CalculatorTab({ activeSubTab, presets, scenarios, settings: init
           {presetCalcResult && (
             <div className="space-y-6">
               <div className="flex justify-between items-center">
-                <h2 className="text-base font-bold text-slate-900 flex items-center">
+                <h2 className="text-base font-bold text-zinc-900 dark:text-white flex items-center">
                   <span className="w-2 h-4 bg-indigo-600 rounded-full mr-2"></span>
                   Scenario Comparison
                 </h2>
@@ -985,7 +985,7 @@ export function CalculatorTab({ activeSubTab, presets, scenarios, settings: init
                     setCalcName(`${presets.find(p => p.id === selectedPresetId)?.name || "Preset"} 시뮬레이션 - ${new Date().toLocaleDateString()}`);
                     setShowSaveModal(true);
                   }}
-                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold shadow-xs transition"
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold shadow-xs transition cursor-pointer"
                 >
                   계산 스냅샷 저장
                 </button>
@@ -1028,41 +1028,41 @@ export function CalculatorTab({ activeSubTab, presets, scenarios, settings: init
               </div>
 
               {/* Waterfall & Donut Chart 분해 분석 탭 */}
-              <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-6">
-                <div className="flex justify-between items-center border-b border-slate-100 pb-3">
+              <div className="bg-white dark:bg-zinc-900 p-6 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-sm space-y-6">
+                <div className="flex justify-between items-center border-b border-zinc-100 dark:border-zinc-800 pb-3">
                   <div>
-                    <h3 className="text-sm font-bold text-slate-800 uppercase">
+                    <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100 uppercase">
                       {detailedViewScenario.toUpperCase()} Scenario Profit Waterfall & Donut
                     </h3>
                   </div>
                   <button
                     onClick={() => setShowOverridesAccordion(!showOverridesAccordion)}
-                    className="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-100 transition"
+                    className="px-3 py-1.5 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg text-xs font-semibold text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700 transition cursor-pointer"
                   >
                     {showOverridesAccordion ? "임시 비용 조율 닫기" : "임시 비용 조율 (Overrides)"}
                   </button>
                 </div>
 
                 {showOverridesAccordion && (
-                  <div className="p-4 bg-slate-50 rounded-xl border border-slate-200/80 grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                  <div className="p-4 bg-zinc-50 dark:bg-zinc-950 rounded-xl border border-zinc-200/80 dark:border-zinc-800 grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
                     <div>
-                      <label className="block text-[10px] text-slate-400">포장 및 부자재 가산 ($)</label>
+                      <label className="block text-[10px] text-zinc-500 dark:text-zinc-400">포장 및 부자재 가산 ($)</label>
                       <input
                         type="number"
                         step="0.01"
                         value={overrides.product_packaging_cost ?? 0}
                         onChange={(e) => setOverrides({ ...overrides, product_packaging_cost: parseFloat(e.target.value) || 0 })}
-                        className="w-full px-2 py-1.5 border border-slate-300 rounded bg-white"
+                        className="w-full px-2 py-1.5 border border-zinc-300 dark:border-zinc-700 rounded bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100"
                       />
                     </div>
                     <div>
-                      <label className="block text-[10px] text-slate-400">FBA 입고준비(Prep) 가산 ($)</label>
+                      <label className="block text-[10px] text-zinc-500 dark:text-zinc-400">FBA 입고준비(Prep) 가산 ($)</label>
                       <input
                         type="number"
                         step="0.01"
                         value={overrides.product_prep_cost ?? 0}
                         onChange={(e) => setOverrides({ ...overrides, product_prep_cost: parseFloat(e.target.value) || 0 })}
-                        className="w-full px-2 py-1.5 border border-slate-300 rounded bg-white"
+                        className="w-full px-2 py-1.5 border border-zinc-300 dark:border-zinc-700 rounded bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100"
                       />
                     </div>
                   </div>
@@ -1072,7 +1072,7 @@ export function CalculatorTab({ activeSubTab, presets, scenarios, settings: init
                   {/* B2B 원형 분석 */}
                   {channel !== "amazon" && presetCalcResult[detailedViewScenario].b2b && (
                     <div className="space-y-4">
-                      <span className="text-xs font-bold text-slate-700 bg-slate-100 px-3 py-1.5 rounded-lg block">Offline B2B Share</span>
+                      <span className="text-xs font-bold text-zinc-800 dark:text-zinc-200 bg-zinc-100 dark:bg-zinc-800 px-3 py-1.5 rounded-lg block">Offline B2B Share</span>
                       <DonutPieChart 
                         viewResult={presetCalcResult[detailedViewScenario].b2b!} 
                         hoveredCategory={hoveredCostCategory} 
@@ -1088,7 +1088,7 @@ export function CalculatorTab({ activeSubTab, presets, scenarios, settings: init
                   {/* Amazon B2C 원형 분석 */}
                   {channel !== "b2b" && presetCalcResult[detailedViewScenario].amazon && (
                     <div className="space-y-4">
-                      <span className="text-xs font-bold text-slate-700 bg-slate-100 px-3 py-1.5 rounded-lg block">Amazon B2C Share</span>
+                      <span className="text-xs font-bold text-zinc-800 dark:text-zinc-200 bg-zinc-100 dark:bg-zinc-800 px-3 py-1.5 rounded-lg block">Amazon B2C Share</span>
                       <DonutPieChart 
                         viewResult={presetCalcResult[detailedViewScenario].amazon!} 
                         hoveredCategory={hoveredCostCategory} 
@@ -1117,9 +1117,9 @@ export function CalculatorTab({ activeSubTab, presets, scenarios, settings: init
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             
             {/* A. Package Information */}
-            <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
-              <div className="flex justify-between items-center border-b border-slate-100 pb-2">
-                <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center">
+            <div className="bg-white dark:bg-zinc-900 p-6 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-sm space-y-4">
+              <div className="flex justify-between items-center border-b border-zinc-100 dark:border-zinc-800 pb-2">
+                <h3 className="text-xs font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider flex items-center">
                   <span className="w-1.5 h-3.5 bg-indigo-500 rounded-full mr-2"></span>
                   Product Package Dimensions
                 </h3>
@@ -1128,10 +1128,10 @@ export function CalculatorTab({ activeSubTab, presets, scenarios, settings: init
               {landedCostOutput && (
                 <div className={`p-2.5 rounded-lg border text-xs leading-relaxed ${
                   landedCostOutput.packageDataSource === "default" 
-                    ? "bg-amber-50/70 border-amber-200 text-amber-800" 
+                    ? "bg-amber-50/70 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300" 
                     : landedCostOutput.packageDataSource === "partial_default"
-                      ? "bg-amber-50/30 border-amber-100 text-amber-700"
-                      : "bg-emerald-50/40 border-emerald-200 text-emerald-800"
+                      ? "bg-amber-50/30 dark:bg-amber-950/20 border-amber-100 dark:border-amber-900 text-amber-700 dark:text-amber-400"
+                      : "bg-emerald-50/40 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300"
                 }`}>
                   {landedCostOutput.packageDataSource === "default" && (
                     <p>⚠️ <strong>기본값 계산 상태</strong>: 실제 패키지 정보가 입력되지 않아 6 × 4 × 15cm 및 100g의 기본값으로 계산되었습니다. 정확한 배송비와 Landed Cost 계산을 위해 실제 패키지 정보를 입력해 주세요.</p>
@@ -1149,17 +1149,17 @@ export function CalculatorTab({ activeSubTab, presets, scenarios, settings: init
                 {/* 크기 입력 (cm & inch 양방향) */}
                 <div className="space-y-3">
                   <div className="flex justify-between items-center">
-                    <span className="text-xs font-bold text-slate-600">Length</span>
+                    <span className="text-xs font-bold text-zinc-700 dark:text-zinc-300">Length</span>
                     <div className="flex space-x-1">
                       <button 
                         onClick={() => setPreferredDimUnit("cm")}
-                        className={`px-1.5 py-0.5 text-[9px] rounded ${preferredDimUnit === "cm" ? "bg-slate-800 text-white font-bold" : "bg-slate-100 text-slate-500"}`}
+                        className={`px-1.5 py-0.5 text-[9px] rounded cursor-pointer ${preferredDimUnit === "cm" ? "bg-zinc-800 dark:bg-zinc-200 text-white dark:text-zinc-900 font-bold" : "bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400"}`}
                       >
                         cm
                       </button>
                       <button 
                         onClick={() => setPreferredDimUnit("in")}
-                        className={`px-1.5 py-0.5 text-[9px] rounded ${preferredDimUnit === "in" ? "bg-slate-800 text-white font-bold" : "bg-slate-100 text-slate-500"}`}
+                        className={`px-1.5 py-0.5 text-[9px] rounded cursor-pointer ${preferredDimUnit === "in" ? "bg-zinc-800 dark:bg-zinc-200 text-white dark:text-zinc-900 font-bold" : "bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400"}`}
                       >
                         in
                       </button>
@@ -1173,7 +1173,7 @@ export function CalculatorTab({ activeSubTab, presets, scenarios, settings: init
                       placeholder="cm"
                       value={lengthCmStr}
                       onChange={(e) => handleLengthChange(e.target.value, "cm")}
-                      className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:outline-none focus:border-slate-800 text-right"
+                      className="w-full px-3 py-2 text-xs border border-zinc-300 dark:border-zinc-700 rounded-lg bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:border-zinc-500 dark:focus:border-zinc-400 text-right"
                     />
                     <input
                       type="number"
@@ -1182,11 +1182,11 @@ export function CalculatorTab({ activeSubTab, presets, scenarios, settings: init
                       placeholder="inch"
                       value={lengthInStr}
                       onChange={(e) => handleLengthChange(e.target.value, "in")}
-                      className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:outline-none focus:border-slate-800 text-right bg-slate-50/50"
+                      className="w-full px-3 py-2 text-xs border border-zinc-300 dark:border-zinc-700 rounded-lg bg-zinc-50/50 dark:bg-zinc-900/50 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:border-zinc-500 dark:focus:border-zinc-400 text-right"
                     />
                   </div>
 
-                  <span className="text-xs font-bold text-slate-600 block">Width</span>
+                  <span className="text-xs font-bold text-zinc-700 dark:text-zinc-300 block">Width</span>
                   <div className="grid grid-cols-2 gap-2">
                     <input
                       type="number"
@@ -1195,7 +1195,7 @@ export function CalculatorTab({ activeSubTab, presets, scenarios, settings: init
                       placeholder="cm"
                       value={widthCmStr}
                       onChange={(e) => handleWidthChange(e.target.value, "cm")}
-                      className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:outline-none focus:border-slate-800 text-right"
+                      className="w-full px-3 py-2 text-xs border border-zinc-300 dark:border-zinc-700 rounded-lg bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:border-zinc-500 dark:focus:border-zinc-400 text-right"
                     />
                     <input
                       type="number"
@@ -1204,11 +1204,11 @@ export function CalculatorTab({ activeSubTab, presets, scenarios, settings: init
                       placeholder="inch"
                       value={widthInStr}
                       onChange={(e) => handleWidthChange(e.target.value, "in")}
-                      className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:outline-none focus:border-slate-800 text-right bg-slate-50/50"
+                      className="w-full px-3 py-2 text-xs border border-zinc-300 dark:border-zinc-700 rounded-lg bg-zinc-50/50 dark:bg-zinc-900/50 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:border-zinc-500 dark:focus:border-zinc-400 text-right"
                     />
                   </div>
 
-                  <span className="text-xs font-bold text-slate-600 block">Height</span>
+                  <span className="text-xs font-bold text-zinc-700 dark:text-zinc-300 block">Height</span>
                   <div className="grid grid-cols-2 gap-2">
                     <input
                       type="number"
@@ -1217,7 +1217,7 @@ export function CalculatorTab({ activeSubTab, presets, scenarios, settings: init
                       placeholder="cm"
                       value={heightCmStr}
                       onChange={(e) => handleHeightChange(e.target.value, "cm")}
-                      className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:outline-none focus:border-slate-800 text-right"
+                      className="w-full px-3 py-2 text-xs border border-zinc-300 dark:border-zinc-700 rounded-lg bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:border-zinc-500 dark:focus:border-zinc-400 text-right"
                     />
                     <input
                       type="number"
@@ -1226,21 +1226,21 @@ export function CalculatorTab({ activeSubTab, presets, scenarios, settings: init
                       placeholder="inch"
                       value={heightInStr}
                       onChange={(e) => handleHeightChange(e.target.value, "in")}
-                      className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:outline-none focus:border-slate-800 text-right bg-slate-50/50"
+                      className="w-full px-3 py-2 text-xs border border-zinc-300 dark:border-zinc-700 rounded-lg bg-zinc-50/50 dark:bg-zinc-900/50 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:border-zinc-500 dark:focus:border-zinc-400 text-right"
                     />
                   </div>
                 </div>
 
                 {/* 무게 입력 */}
-                <div className="space-y-3 border-l border-slate-100 pl-4">
+                <div className="space-y-3 border-l border-zinc-100 dark:border-zinc-800 pl-4">
                   <div className="flex justify-between items-center">
-                    <span className="text-xs font-bold text-slate-600">Weight</span>
+                    <span className="text-xs font-bold text-zinc-700 dark:text-zinc-300">Weight</span>
                     <div className="flex space-x-1">
                       {(["g", "kg", "lb"] as const).map((u) => (
                         <button 
                           key={u}
                           onClick={() => setPreferredWeightUnit(u)}
-                          className={`px-1.5 py-0.5 text-[9px] rounded ${preferredWeightUnit === u ? "bg-slate-800 text-white font-bold" : "bg-slate-100 text-slate-500"}`}
+                          className={`px-1.5 py-0.5 text-[9px] rounded cursor-pointer ${preferredWeightUnit === u ? "bg-zinc-800 dark:bg-zinc-200 text-white dark:text-zinc-900 font-bold" : "bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400"}`}
                         >
                           {u}
                         </button>
@@ -1249,7 +1249,7 @@ export function CalculatorTab({ activeSubTab, presets, scenarios, settings: init
                   </div>
                   <div className="space-y-2">
                     <div>
-                      <label className="block text-[10px] text-slate-400 mb-0.5">g 단위</label>
+                      <label className="block text-[10px] text-zinc-400 dark:text-zinc-500 mb-0.5">g 단위</label>
                       <input
                         type="number"
                         min="0.01"
@@ -1257,11 +1257,11 @@ export function CalculatorTab({ activeSubTab, presets, scenarios, settings: init
                         placeholder="g"
                         value={weightGStr}
                         onChange={(e) => handleWeightChange(e.target.value, "g")}
-                        className="w-full px-3 py-1.5 text-xs border border-slate-300 rounded-lg focus:outline-none focus:border-slate-800 text-right font-bold"
+                        className="w-full px-3 py-1.5 text-xs border border-zinc-300 dark:border-zinc-700 rounded-lg bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:border-zinc-500 dark:focus:border-zinc-400 text-right font-bold"
                       />
                     </div>
                     <div>
-                      <label className="block text-[10px] text-slate-400 mb-0.5">kg 단위</label>
+                      <label className="block text-[10px] text-zinc-400 dark:text-zinc-500 mb-0.5">kg 단위</label>
                       <input
                         type="number"
                         min="0.001"
@@ -1269,11 +1269,11 @@ export function CalculatorTab({ activeSubTab, presets, scenarios, settings: init
                         placeholder="kg"
                         value={weightKgStr}
                         onChange={(e) => handleWeightChange(e.target.value, "kg")}
-                        className="w-full px-3 py-1.5 text-xs border border-slate-300 rounded-lg focus:outline-none focus:border-slate-800 text-right bg-slate-50/50"
+                        className="w-full px-3 py-1.5 text-xs border border-zinc-300 dark:border-zinc-700 rounded-lg bg-zinc-50/50 dark:bg-zinc-900/50 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:border-zinc-500 dark:focus:border-zinc-400 text-right"
                       />
                     </div>
                     <div>
-                      <label className="block text-[10px] text-slate-400 mb-0.5">lb 단위 (FBA)</label>
+                      <label className="block text-[10px] text-zinc-400 dark:text-zinc-500 mb-0.5">lb 단위 (FBA)</label>
                       <input
                         type="number"
                         min="0.001"
@@ -1281,7 +1281,7 @@ export function CalculatorTab({ activeSubTab, presets, scenarios, settings: init
                         placeholder="lb"
                         value={weightLbStr}
                         onChange={(e) => handleWeightChange(e.target.value, "lb")}
-                        className="w-full px-3 py-1.5 text-xs border border-slate-300 rounded-lg focus:outline-none focus:border-slate-800 text-right bg-slate-50/50"
+                        className="w-full px-3 py-1.5 text-xs border border-zinc-300 dark:border-zinc-700 rounded-lg bg-zinc-50/50 dark:bg-zinc-900/50 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:border-zinc-500 dark:focus:border-zinc-400 text-right"
                       />
                     </div>
                   </div>
@@ -1291,63 +1291,63 @@ export function CalculatorTab({ activeSubTab, presets, scenarios, settings: init
             </div>
 
             {/* B. Import Assumptions */}
-            <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
-              <div className="flex justify-between items-center border-b border-slate-100 pb-2">
-                <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center">
+            <div className="bg-white dark:bg-zinc-900 p-6 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-sm space-y-4">
+              <div className="flex justify-between items-center border-b border-zinc-100 dark:border-zinc-800 pb-2">
+                <h3 className="text-xs font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider flex items-center">
                   <span className="w-1.5 h-3.5 bg-indigo-500 rounded-full mr-2"></span>
                   Import Premises & Assumptions
                 </h3>
-                <span className="text-[10px] text-indigo-600 font-bold bg-indigo-50 px-2 py-0.5 rounded">USA ZIP 08054</span>
+                <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-bold bg-indigo-50 dark:bg-indigo-950/60 px-2 py-0.5 rounded">USA ZIP 08054</span>
               </div>
 
               <div className="grid grid-cols-2 gap-4 text-xs">
                 <div>
-                  <label className="block text-slate-500 mb-1">Import Quantity (units)</label>
+                  <label className="block text-zinc-600 dark:text-zinc-400 mb-1">Import Quantity (units)</label>
                   <input
                     type="number"
                     min="1"
                     value={importQuantity}
                     onChange={(e) => setImportQuantity(Math.max(1, parseInt(e.target.value) || 1))}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none font-bold"
+                    className="w-full px-3 py-2 border border-zinc-300 dark:border-zinc-700 rounded-lg bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 focus:outline-none font-bold"
                   />
                 </div>
                 
                 <div>
-                  <label className="block text-slate-500 mb-1">Max Gross Weight limit (kg)</label>
+                  <label className="block text-zinc-600 dark:text-zinc-400 mb-1">Max Gross Weight limit (kg)</label>
                   <input
                     type="number"
                     disabled
                     value={maxCartonWeight}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-slate-50 text-slate-400 font-bold text-right"
+                    className="w-full px-3 py-2 border border-zinc-200 dark:border-zinc-800 rounded-lg bg-zinc-50 dark:bg-zinc-800 text-zinc-400 dark:text-zinc-500 font-bold text-right"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-slate-500 mb-1">Empty Box + Material Weight (kg)</label>
+                  <label className="block text-zinc-600 dark:text-zinc-400 mb-1">Empty Box + Material Weight (kg)</label>
                   <input
                     type="number"
                     min="0.1"
                     step="0.1"
                     value={emptyCartonWeight}
                     onChange={(e) => setEmptyCartonWeight(Math.max(0.1, parseFloat(e.target.value) || 1.0))}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none"
+                    className="w-full px-3 py-2 border border-zinc-300 dark:border-zinc-700 rounded-lg bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 focus:outline-none"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-slate-500 mb-1">Outer Box Thickness allowance (cm)</label>
+                  <label className="block text-zinc-600 dark:text-zinc-400 mb-1">Outer Box Thickness allowance (cm)</label>
                   <input
                     type="number"
                     min="0"
                     step="0.1"
                     value={cartonAllowance}
                     onChange={(e) => setCartonAllowance(Math.max(0, parseFloat(e.target.value) || 0))}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none"
+                    className="w-full px-3 py-2 border border-zinc-300 dark:border-zinc-700 rounded-lg bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 focus:outline-none"
                   />
                 </div>
 
                 <div className="col-span-2">
-                  <label className="block text-slate-500 mb-1">Import Duty & Cost Allowance (%)</label>
+                  <label className="block text-zinc-600 dark:text-zinc-400 mb-1">Import Duty & Cost Allowance (%)</label>
                   <div className="flex rounded-lg shadow-2xs">
                     <input
                       type="number"
@@ -1356,9 +1356,9 @@ export function CalculatorTab({ activeSubTab, presets, scenarios, settings: init
                       step="0.5"
                       value={importTaxAllowanceRate}
                       onChange={(e) => setImportTaxAllowanceRate(Math.max(0, parseFloat(e.target.value) || 0))}
-                      className="flex-1 min-w-0 px-3 py-2 border border-slate-300 rounded-l-lg focus:outline-none text-right font-bold"
+                      className="flex-1 min-w-0 px-3 py-2 border border-zinc-300 dark:border-zinc-700 rounded-l-lg bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 focus:outline-none text-right font-bold"
                     />
-                    <span className="px-3 py-2 border-y border-r border-slate-300 rounded-r-lg bg-slate-50 text-slate-500 font-bold">%</span>
+                    <span className="px-3 py-2 border-y border-r border-zinc-300 dark:border-zinc-700 rounded-r-lg bg-zinc-50 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 font-bold">%</span>
                   </div>
                 </div>
               </div>
@@ -1368,9 +1368,9 @@ export function CalculatorTab({ activeSubTab, presets, scenarios, settings: init
 
           {/* 통합 Cargo 포장 테이블 */}
           {landedCostOutput && (
-            <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
-              <div className="flex justify-between items-center border-b border-slate-100 pb-2">
-                <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center">
+            <div className="bg-white dark:bg-zinc-900 p-6 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-sm space-y-4">
+              <div className="flex justify-between items-center border-b border-zinc-100 dark:border-zinc-800 pb-2">
+                <h3 className="text-xs font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider flex items-center">
                   <span className="w-1.5 h-3.5 bg-indigo-500 rounded-full mr-2"></span>
                   Cargo Packing & Volumetric Shipping Analysis
                 </h3>
@@ -1378,7 +1378,7 @@ export function CalculatorTab({ activeSubTab, presets, scenarios, settings: init
                   <select
                     value={shippingCostEntryType}
                     onChange={(e) => setShippingCostEntryType(e.target.value as any)}
-                    className="text-xs border border-slate-300 rounded-md px-2 py-0.5"
+                    className="text-xs border border-zinc-300 dark:border-zinc-700 rounded-md px-2 py-0.5 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100"
                   >
                     <option value="automatic">TwoDay 자동 API 조회</option>
                     <option value="manual">KRW 배송비 수동 직접 입력</option>
@@ -1387,7 +1387,7 @@ export function CalculatorTab({ activeSubTab, presets, scenarios, settings: init
                     <button
                       onClick={handleForceRecalculateShipping}
                       disabled={twodayStatus === "pending"}
-                      className="px-2 py-0.5 bg-slate-800 text-white rounded text-[11px] font-semibold hover:bg-slate-700 disabled:opacity-50"
+                      className="px-2 py-0.5 bg-zinc-800 dark:bg-zinc-100 text-white dark:text-zinc-950 rounded text-[11px] font-semibold hover:bg-zinc-700 dark:hover:bg-zinc-200 disabled:opacity-50 cursor-pointer"
                     >
                       {twodayStatus === "pending" ? "조회 중..." : "Recalculate"}
                     </button>
@@ -1396,47 +1396,47 @@ export function CalculatorTab({ activeSubTab, presets, scenarios, settings: init
               </div>
 
               <div className="overflow-x-auto">
-                <table className="w-full text-xs text-left border-collapse border border-slate-200">
+                <table className="w-full text-xs text-left border-collapse border border-zinc-200 dark:border-zinc-800">
                   <thead>
-                    <tr className="bg-slate-100 text-slate-700">
-                      <th className="p-3 border border-slate-200">Box Type</th>
-                      <th className="p-3 border border-slate-200">Box Qty</th>
-                      <th className="p-3 border border-slate-200">Units / Box</th>
-                      <th className="p-3 border border-slate-200">Outer Box (cm)</th>
-                      <th className="p-3 border border-slate-200">Gross Weight</th>
-                      <th className="p-3 border border-slate-200">Volumetric Weight</th>
-                      <th className="p-3 border border-slate-200">Billable Weight</th>
-                      <th className="p-3 border border-slate-200">Unit Shipping Cost (KRW)</th>
+                    <tr className="bg-zinc-100 dark:bg-zinc-800/80 text-zinc-700 dark:text-zinc-300">
+                      <th className="p-3 border border-zinc-200 dark:border-zinc-800">Box Type</th>
+                      <th className="p-3 border border-zinc-200 dark:border-zinc-800">Box Qty</th>
+                      <th className="p-3 border border-zinc-200 dark:border-zinc-800">Units / Box</th>
+                      <th className="p-3 border border-zinc-200 dark:border-zinc-800">Outer Box (cm)</th>
+                      <th className="p-3 border border-zinc-200 dark:border-zinc-800">Gross Weight</th>
+                      <th className="p-3 border border-zinc-200 dark:border-zinc-800">Volumetric Weight</th>
+                      <th className="p-3 border border-zinc-200 dark:border-zinc-800">Billable Weight</th>
+                      <th className="p-3 border border-zinc-200 dark:border-zinc-800">Unit Shipping Cost (KRW)</th>
                     </tr>
                   </thead>
                   <tbody>
                     {landedCostOutput.fullCartonLayout && (
-                      <tr className="hover:bg-slate-50/50">
-                        <td className="p-3 border border-slate-200 font-bold text-slate-800">Full Box</td>
-                        <td className="p-3 border border-slate-200 font-semibold">{landedCostOutput.fullCartons} Box</td>
-                        <td className="p-3 border border-slate-200">{landedCostOutput.unitsPerCarton} 개</td>
-                        <td className="p-3 border border-slate-200 font-mono">
+                      <tr className="hover:bg-zinc-50/50 dark:hover:bg-zinc-800/40">
+                        <td className="p-3 border border-zinc-200 dark:border-zinc-800 font-bold text-zinc-900 dark:text-zinc-100">Full Box</td>
+                        <td className="p-3 border border-zinc-200 dark:border-zinc-800 font-semibold">{landedCostOutput.fullCartons} Box</td>
+                        <td className="p-3 border border-zinc-200 dark:border-zinc-800">{landedCostOutput.unitsPerCarton} 개</td>
+                        <td className="p-3 border border-zinc-200 dark:border-zinc-800 font-mono">
                           {landedCostOutput.fullCartonLayout.externalDimensions.length} x {landedCostOutput.fullCartonLayout.externalDimensions.width} x {landedCostOutput.fullCartonLayout.externalDimensions.height} cm
-                          <span className="text-[10px] text-slate-400 block">
+                          <span className="text-[10px] text-zinc-400 dark:text-zinc-500 block">
                             ({(landedCostOutput.fullCartonLayout.externalDimensions.length / 2.54).toFixed(1)} x {(landedCostOutput.fullCartonLayout.externalDimensions.width / 2.54).toFixed(1)} x {(landedCostOutput.fullCartonLayout.externalDimensions.height / 2.54).toFixed(1)} in)
                           </span>
                         </td>
-                        <td className="p-3 border border-slate-200">
+                        <td className="p-3 border border-zinc-200 dark:border-zinc-800">
                           {landedCostOutput.fullCartonLayout.grossActualWeightKg} kg
-                          <span className="text-[10px] text-slate-400 block">({(landedCostOutput.fullCartonLayout.grossActualWeightKg / 0.45359237).toFixed(1)} lb)</span>
+                          <span className="text-[10px] text-zinc-400 dark:text-zinc-500 block">({(landedCostOutput.fullCartonLayout.grossActualWeightKg / 0.45359237).toFixed(1)} lb)</span>
                         </td>
-                        <td className="p-3 border border-slate-200">{landedCostOutput.fullCartonLayout.volumetricWeightKg} kg</td>
-                        <td className="p-3 border border-slate-200 font-bold text-indigo-600">{landedCostOutput.fullCartonLayout.billableWeightKg} kg</td>
-                        <td className="p-3 border border-slate-200 text-right">
+                        <td className="p-3 border border-zinc-200 dark:border-zinc-800">{landedCostOutput.fullCartonLayout.volumetricWeightKg} kg</td>
+                        <td className="p-3 border border-zinc-200 dark:border-zinc-800 font-bold text-indigo-600 dark:text-indigo-400">{landedCostOutput.fullCartonLayout.billableWeightKg} kg</td>
+                        <td className="p-3 border border-zinc-200 dark:border-zinc-800 text-right">
                           {shippingCostEntryType === "manual" ? (
                             <input
                               type="number"
                               value={manualFullCartonCostKRW}
                               onChange={(e) => setManualFullCartonCostKRW(parseFloat(e.target.value) || 0)}
-                              className="w-24 px-1 py-0.5 border border-indigo-200 rounded text-right font-bold"
+                              className="w-24 px-1 py-0.5 border border-indigo-300 dark:border-indigo-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 rounded text-right font-bold"
                             />
                           ) : (
-                            <span className="font-bold text-slate-900">
+                            <span className="font-bold text-zinc-900 dark:text-zinc-100">
                               {twodayStatus === "pending" ? "조회 중..." : `₩${fullCartonShippingCostKRW.toLocaleString()}`}
                             </span>
                           )}
@@ -1445,26 +1445,26 @@ export function CalculatorTab({ activeSubTab, presets, scenarios, settings: init
                     )}
 
                     {landedCostOutput.partialCartonLayout && landedCostOutput.remainingUnits > 0 && (
-                      <tr className="hover:bg-slate-50/50 bg-amber-50/10">
-                        <td className="p-3 border border-slate-200 font-bold text-amber-800">Partial Box</td>
-                        <td className="p-3 border border-slate-200 font-semibold">1 Box</td>
-                        <td className="p-3 border border-slate-200 text-amber-700">{landedCostOutput.remainingUnits} 개</td>
-                        <td className="p-3 border border-slate-200 font-mono">
+                      <tr className="hover:bg-zinc-50/50 dark:hover:bg-zinc-800/40 bg-amber-50/10 dark:bg-amber-950/10">
+                        <td className="p-3 border border-zinc-200 dark:border-zinc-800 font-bold text-amber-800 dark:text-amber-300">Partial Box</td>
+                        <td className="p-3 border border-zinc-200 dark:border-zinc-800 font-semibold">1 Box</td>
+                        <td className="p-3 border border-zinc-200 dark:border-zinc-800 text-amber-700 dark:text-amber-400">{landedCostOutput.remainingUnits} 개</td>
+                        <td className="p-3 border border-zinc-200 dark:border-zinc-800 font-mono">
                           {landedCostOutput.partialCartonLayout.externalDimensions.length} x {landedCostOutput.partialCartonLayout.externalDimensions.width} x {landedCostOutput.partialCartonLayout.externalDimensions.height} cm
                         </td>
-                        <td className="p-3 border border-slate-200">{landedCostOutput.partialCartonLayout.grossActualWeightKg} kg</td>
-                        <td className="p-3 border border-slate-200">{landedCostOutput.partialCartonLayout.volumetricWeightKg} kg</td>
-                        <td className="p-3 border border-slate-200 font-bold text-indigo-600">{landedCostOutput.partialCartonLayout.billableWeightKg} kg</td>
-                        <td className="p-3 border border-slate-200 text-right">
+                        <td className="p-3 border border-zinc-200 dark:border-zinc-800">{landedCostOutput.partialCartonLayout.grossActualWeightKg} kg</td>
+                        <td className="p-3 border border-zinc-200 dark:border-zinc-800">{landedCostOutput.partialCartonLayout.volumetricWeightKg} kg</td>
+                        <td className="p-3 border border-zinc-200 dark:border-zinc-800 font-bold text-indigo-600 dark:text-indigo-400">{landedCostOutput.partialCartonLayout.billableWeightKg} kg</td>
+                        <td className="p-3 border border-zinc-200 dark:border-zinc-800 text-right">
                           {shippingCostEntryType === "manual" ? (
                             <input
                               type="number"
                               value={manualPartialCartonCostKRW}
                               onChange={(e) => setManualPartialCartonCostKRW(parseFloat(e.target.value) || 0)}
-                              className="w-24 px-1 py-0.5 border border-indigo-200 rounded text-right font-bold"
+                              className="w-24 px-1 py-0.5 border border-indigo-300 dark:border-indigo-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 rounded text-right font-bold"
                             />
                           ) : (
-                            <span className="font-bold text-slate-900">
+                            <span className="font-bold text-zinc-900 dark:text-zinc-100">
                               {twodayStatus === "pending" ? "조회 중..." : `₩${partialCartonShippingCostKRW.toLocaleString()}`}
                             </span>
                           )}
@@ -1475,11 +1475,11 @@ export function CalculatorTab({ activeSubTab, presets, scenarios, settings: init
                 </table>
               </div>
 
-              <div className="bg-slate-50 p-4 rounded-xl border border-slate-200/80 flex flex-col md:flex-row justify-between text-xs gap-4 mt-2">
+              <div className="bg-zinc-50 dark:bg-zinc-950 p-4 rounded-xl border border-zinc-200/80 dark:border-zinc-800 flex flex-col md:flex-row justify-between text-xs gap-4 mt-2">
                 <div className="space-y-1">
-                  <div>• 총 수량: <strong className="text-slate-800">{importQuantity} units</strong></div>
-                  <div>• 총 수입 체적: <strong className="text-slate-800">{landedCostOutput.totalCbm.toFixed(4)} CBM</strong></div>
-                  <div>• 총 청구중량: <strong className="text-slate-800">{landedCostOutput.totalBillableWeightKg} kg</strong></div>
+                  <div>• 총 수량: <strong className="text-zinc-900 dark:text-zinc-100">{importQuantity} units</strong></div>
+                  <div>• 총 수입 체적: <strong className="text-zinc-900 dark:text-zinc-100">{landedCostOutput.totalCbm.toFixed(4)} CBM</strong></div>
+                  <div>• 총 청구중량: <strong className="text-zinc-900 dark:text-zinc-100">{landedCostOutput.totalBillableWeightKg} kg</strong></div>
                 </div>
 
                 <div className="text-right space-y-1">
@@ -1490,11 +1490,11 @@ export function CalculatorTab({ activeSubTab, presets, scenarios, settings: init
 
                     return (
                       <>
-                        <div>총 배송 운임 (KRW): <strong className="text-sm text-slate-900">₩{totalKRW.toLocaleString()}</strong></div>
-                        <div className="text-indigo-600 font-bold text-sm">
+                        <div>총 배송 운임 (KRW): <strong className="text-sm text-zinc-900 dark:text-zinc-100">₩{totalKRW.toLocaleString()}</strong></div>
+                        <div className="text-indigo-600 dark:text-indigo-400 font-bold text-sm">
                           USD 환산 총 배송비: ${totalUSDShippingCost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </div>
-                        <div className="text-[10px] text-slate-400">
+                        <div className="text-[10px] text-zinc-400 dark:text-zinc-500">
                           개당 배송비: ${calculatedShippingCostPerUnitUSD.toFixed(3)} / unit (환율 ₩{appliedExchangeRate.toFixed(2)})
                         </div>
                       </>
@@ -1507,8 +1507,8 @@ export function CalculatorTab({ activeSubTab, presets, scenarios, settings: init
 
           {/* F & G. 최종 Landed Cost 요약 카드 */}
           {landedCostOutput && (
-            <div className="bg-slate-900 text-slate-200 p-6 rounded-2xl border border-slate-800 shadow-lg space-y-4">
-              <div className="flex justify-between items-center border-b border-slate-800 pb-2">
+            <div className="bg-zinc-900 dark:bg-zinc-950 text-zinc-200 p-6 rounded-2xl border border-zinc-800 shadow-lg space-y-4">
+              <div className="flex justify-between items-center border-b border-zinc-800 pb-2">
                 <h3 className="text-xs font-bold text-white uppercase tracking-wider flex items-center">
                   <span className="w-1.5 h-3.5 bg-indigo-500 rounded-full mr-2"></span>
                   Landed Cost Summary Card
@@ -1516,11 +1516,11 @@ export function CalculatorTab({ activeSubTab, presets, scenarios, settings: init
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-xs">
-                <div className="bg-slate-800/40 p-4 rounded-xl border border-slate-800 space-y-1.5">
-                  <span className="font-bold text-slate-400 block text-[10px] uppercase">Landed Cost Breakdown (USD)</span>
+                <div className="bg-zinc-800/60 dark:bg-zinc-900/60 p-4 rounded-xl border border-zinc-750 dark:border-zinc-800 space-y-1.5">
+                  <span className="font-bold text-zinc-400 block text-[10px] uppercase">Landed Cost Breakdown (USD)</span>
                   <div className="flex justify-between"><span>FOB Price:</span><span>${totalUSDProductCost.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span></div>
                   <div className="flex justify-between"><span>Shipping Fee (USD):</span><span>${totalUSDShippingCost.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span></div>
-                  <div className="flex justify-between border-t border-slate-700 pt-1 mt-1 font-semibold">
+                  <div className="flex justify-between border-t border-zinc-700 pt-1 mt-1 font-semibold">
                     <span>Tax Base (FOB + Ship):</span>
                     <span>${(totalUSDProductCost + totalUSDShippingCost).toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
                   </div>
@@ -1535,22 +1535,22 @@ export function CalculatorTab({ activeSubTab, presets, scenarios, settings: init
                     <span className="font-bold text-indigo-300 block text-[10px] uppercase">Landed Cost per Unit</span>
                     <div className="text-3xl font-black text-white mt-2">
                       ${calculatedLandedCostPerUnit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      <span className="text-xs text-slate-400 font-normal ml-2">/ Unit</span>
+                      <span className="text-xs text-zinc-400 font-normal ml-2">/ Unit</span>
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-3 gap-2 border-t border-slate-800 pt-3 mt-4 text-[11px] text-slate-400">
+                  <div className="grid grid-cols-3 gap-2 border-t border-zinc-800 pt-3 mt-4 text-[11px] text-zinc-400">
                     <div>
-                      <span className="block text-[9px] text-slate-500">Unit FOB Cost</span>
-                      <strong className="text-slate-200">${brandCostUSD.toFixed(2)}</strong>
+                      <span className="block text-[9px] text-zinc-500">Unit FOB Cost</span>
+                      <strong className="text-zinc-200">${brandCostUSD.toFixed(2)}</strong>
                     </div>
                     <div>
-                      <span className="block text-[9px] text-slate-500">Unit Shipping</span>
-                      <strong className="text-slate-200">${calculatedShippingCostPerUnitUSD.toFixed(3)}</strong>
+                      <span className="block text-[9px] text-zinc-500">Unit Shipping</span>
+                      <strong className="text-zinc-200">${calculatedShippingCostPerUnitUSD.toFixed(3)}</strong>
                     </div>
                     <div>
-                      <span className="block text-[9px] text-slate-500">Unit Tax & Duty</span>
-                      <strong className="text-slate-200">${calculatedTaxCostPerUnitUSD.toFixed(3)}</strong>
+                      <span className="block text-[9px] text-zinc-500">Unit Tax & Duty</span>
+                      <strong className="text-zinc-200">${calculatedTaxCostPerUnitUSD.toFixed(3)}</strong>
                     </div>
                   </div>
                 </div>
@@ -1563,32 +1563,32 @@ export function CalculatorTab({ activeSubTab, presets, scenarios, settings: init
 
       {/* 계산 스냅샷 저장 모달 레이어 */}
       {showSaveModal && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-xl border border-slate-200 max-w-md w-full p-6 space-y-4">
-            <h3 className="text-sm font-bold text-slate-900">계산 시뮬레이션 결과 저장</h3>
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-zinc-900 rounded-2xl shadow-xl border border-zinc-200 dark:border-zinc-800 max-w-md w-full p-6 space-y-4">
+            <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">계산 시뮬레이션 결과 저장</h3>
             <div className="space-y-3">
               <div>
-                <label className="block text-xs font-medium text-slate-500 mb-1">스냅샷 이름 *</label>
+                <label className="block text-xs font-medium text-zinc-700 dark:text-zinc-300 mb-1">스냅샷 이름 *</label>
                 <input
                   type="text"
                   required
                   placeholder="계산기 기록 식별용 명칭"
                   value={calcName}
                   onChange={(e) => setCalcName(e.target.value)}
-                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:outline-none focus:border-slate-800"
+                  className="w-full px-3 py-2 text-xs border border-zinc-300 dark:border-zinc-700 rounded-lg bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:border-zinc-500 dark:focus:border-zinc-400"
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-slate-500 mb-1">메모 (선택)</label>
+                <label className="block text-xs font-medium text-zinc-700 dark:text-zinc-300 mb-1">메모 (선택)</label>
                 <textarea
                   placeholder="계산에 특이사항이나 오버라이드 조건 등에 대해 기재해 주세요."
                   value={calcNotes}
                   onChange={(e) => setCalcNotes(e.target.value)}
-                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg h-20 focus:outline-none"
+                  className="w-full px-3 py-2 text-xs border border-zinc-300 dark:border-zinc-700 rounded-lg bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 h-20 focus:outline-none focus:border-zinc-500 dark:focus:border-zinc-400"
                 />
               </div>
               {saveError && (
-                <div className="text-xs text-red-600 font-medium bg-red-50 p-2.5 rounded-lg border border-red-100">
+                <div className="text-xs text-red-600 dark:text-red-400 font-medium bg-red-50 dark:bg-red-950/40 p-2.5 rounded-lg border border-red-200 dark:border-red-900">
                   {saveError}
                 </div>
               )}
@@ -1596,7 +1596,7 @@ export function CalculatorTab({ activeSubTab, presets, scenarios, settings: init
                 <button
                   type="button"
                   onClick={() => setShowSaveModal(false)}
-                  className="px-4 py-2 border border-slate-200 text-slate-600 rounded-lg text-xs hover:bg-slate-50"
+                  className="px-4 py-2 border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 rounded-lg text-xs hover:bg-zinc-50 dark:hover:bg-zinc-800 cursor-pointer"
                 >
                   취소
                 </button>
@@ -1604,7 +1604,7 @@ export function CalculatorTab({ activeSubTab, presets, scenarios, settings: init
                   type="button"
                   onClick={handleSaveSnapshot}
                   disabled={saving}
-                  className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-xs font-semibold hover:bg-indigo-700 disabled:opacity-50"
+                  className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-xs font-semibold hover:bg-indigo-700 disabled:opacity-50 cursor-pointer"
                 >
                   {saving ? "저장 중..." : "확인"}
                 </button>
@@ -1651,14 +1651,14 @@ function DonutPieChart({
   }).join(", ");
 
   return (
-    <div className="bg-slate-50 p-4 rounded-xl border border-slate-200/50 flex flex-col md:flex-row items-center gap-6 justify-center">
+    <div className="bg-zinc-50 dark:bg-zinc-950 p-4 rounded-xl border border-zinc-200/50 dark:border-zinc-800 flex flex-col md:flex-row items-center gap-6 justify-center">
       <div 
         className="w-28 h-28 rounded-full flex items-center justify-center relative shadow-xs transition-all duration-300"
         style={{
           background: `conic-gradient(${gradientString})`
         }}
       >
-        <div className="w-16 h-16 rounded-full bg-slate-50 flex items-center justify-center text-[10px] font-bold text-slate-800 text-center leading-tight">
+        <div className="w-16 h-16 rounded-full bg-zinc-50 dark:bg-zinc-950 flex items-center justify-center text-[10px] font-bold text-zinc-900 dark:text-zinc-100 text-center leading-tight">
           Net Sales<br/>100%
         </div>
       </div>
@@ -1670,7 +1670,7 @@ function DonutPieChart({
             <div 
               key={idx} 
               className={`flex items-center space-x-2 transition-all duration-150 ${
-                isHovered ? "scale-105 font-black text-slate-900 bg-slate-100 p-1 rounded border border-slate-200/60 shadow-2xs" : "text-slate-600"
+                isHovered ? "scale-105 font-black text-zinc-950 dark:text-white bg-zinc-200/80 dark:bg-zinc-800 p-1 rounded border border-zinc-300 dark:border-zinc-700 shadow-2xs" : "text-zinc-600 dark:text-zinc-400"
               }`}
             >
               <span className="w-2.5 h-2.5 rounded-full block" style={{ backgroundColor: seg.color }}></span>
@@ -1703,10 +1703,10 @@ interface CardProps {
 
 function ScenarioResultCard({ title, type, res, channel, mode, isActive, onSelect, highlighted = false, retailerTargetMargin }: CardProps) {
   const statusColors = {
-    approved: "text-emerald-700 bg-emerald-50 border-emerald-200 font-bold",
-    conditional: "text-amber-700 bg-amber-50 border-amber-200 font-bold",
-    review_required: "text-indigo-700 bg-indigo-50 border-indigo-200 font-bold",
-    not_viable: "text-red-700 bg-red-50 border-red-200 font-bold",
+    approved: "text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800 font-bold",
+    conditional: "text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-800 font-bold",
+    review_required: "text-indigo-700 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/40 border-indigo-200 dark:border-indigo-800 font-bold",
+    not_viable: "text-red-700 dark:text-red-400 bg-red-50 dark:bg-red-950/40 border-red-200 dark:border-red-800 font-bold",
   };
 
   return (
@@ -1714,14 +1714,14 @@ function ScenarioResultCard({ title, type, res, channel, mode, isActive, onSelec
       onClick={onSelect}
       className={`rounded-2xl border p-5 transition-all cursor-pointer flex flex-col justify-between ${
         highlighted 
-          ? "border-indigo-600 bg-indigo-50/20 shadow-md ring-2 ring-indigo-600/30 scale-[1.01]" 
-          : "border-slate-200 bg-white hover:border-slate-300 hover:shadow-xs"
-      } ${isActive ? "ring-2 ring-offset-2 ring-slate-800" : ""}`}
+          ? "border-indigo-600 bg-indigo-50/20 dark:bg-indigo-950/30 shadow-md ring-2 ring-indigo-600/30 scale-[1.01]" 
+          : "border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 hover:border-zinc-300 dark:hover:border-zinc-700 hover:shadow-xs"
+      } ${isActive ? "ring-2 ring-offset-2 ring-zinc-800 dark:ring-zinc-200 dark:ring-offset-zinc-950" : ""}`}
     >
       <div className="space-y-4">
         {/* Header */}
         <div className="flex justify-between items-center">
-          <h4 className="text-xs font-bold text-slate-900 tracking-wide uppercase">{title}</h4>
+          <h4 className="text-xs font-bold text-zinc-900 dark:text-zinc-100 tracking-wide uppercase">{title}</h4>
           <span className={`text-[10px] px-2 py-0.5 rounded-full border ${statusColors[res.status]}`}>
             {res.status.toUpperCase()}
           </span>
@@ -1729,80 +1729,80 @@ function ScenarioResultCard({ title, type, res, channel, mode, isActive, onSelec
 
         {/* B2B 결과 분석 */}
         {channel !== "amazon" && res.b2b && (
-          <div className="space-y-2 border-t border-slate-100/80 pt-3">
-            <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Offline B2B</div>
+          <div className="space-y-2 border-t border-zinc-100 dark:border-zinc-800 pt-3">
+            <div className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">Offline B2B</div>
             <div className="grid grid-cols-2 gap-2 text-xs">
               <div>
-                <div className="text-slate-400 text-[10px] font-bold">Landed Cost</div>
-                <div className="font-extrabold text-slate-800 text-sm">${res.b2b.landedCost.toFixed(2)}</div>
+                <div className="text-zinc-400 dark:text-zinc-500 text-[10px] font-bold">Landed Cost</div>
+                <div className="font-extrabold text-zinc-900 dark:text-zinc-100 text-sm">${res.b2b.landedCost.toFixed(2)}</div>
               </div>
               <div>
-                <div className="text-slate-400 text-[10px] font-bold">
+                <div className="text-zinc-400 dark:text-zinc-500 text-[10px] font-bold">
                   {mode === "calculate_pricing" ? "Recommended Wholesale" : "Wholesale Price"}
                 </div>
-                <div className="font-black text-indigo-600 text-sm">${res.b2b.grossSales.toFixed(2)}</div>
+                <div className="font-black text-indigo-600 dark:text-indigo-400 text-sm">${res.b2b.grossSales.toFixed(2)}</div>
               </div>
               <div>
-                <div className="text-slate-400 text-[10px] font-bold">Estimated Retail MSRP</div>
-                <div className="font-extrabold text-emerald-600 text-sm">
+                <div className="text-zinc-400 dark:text-zinc-500 text-[10px] font-bold">Estimated Retail MSRP</div>
+                <div className="font-extrabold text-emerald-600 dark:text-emerald-400 text-sm">
                   ${(res.b2b.grossSales / (1 - retailerTargetMargin / 100 || 1)).toFixed(2)}
                 </div>
               </div>
               <div>
-                <div className="text-slate-400 text-[10px] font-bold">Net Margin (Letusto)</div>
-                <div className="font-black text-slate-900 text-sm">{res.b2b.netMargin.toFixed(1)}%</div>
+                <div className="text-zinc-400 dark:text-zinc-500 text-[10px] font-bold">Net Margin (Letusto)</div>
+                <div className="font-black text-zinc-900 dark:text-zinc-100 text-sm">{res.b2b.netMargin.toFixed(1)}%</div>
               </div>
             </div>
             {/* 한계 공급가 */}
-            <div className="bg-slate-100 p-2 rounded-lg text-[10px] text-slate-600 mt-2 flex justify-between">
+            <div className="bg-zinc-100 dark:bg-zinc-800 p-2 rounded-lg text-[10px] text-zinc-700 dark:text-zinc-300 mt-2 flex justify-between">
               <span>한계 공급가 (MAsP)</span>
-              <span className="font-bold text-slate-800">${res.b2b.maxAcceptableSupplierPrice.toFixed(2)}</span>
+              <span className="font-bold text-zinc-900 dark:text-zinc-100">${res.b2b.maxAcceptableSupplierPrice.toFixed(2)}</span>
             </div>
           </div>
         )}
 
         {/* Amazon B2C 결과 분석 */}
         {channel !== "b2b" && res.amazon && (
-          <div className="space-y-2 border-t border-slate-100/80 pt-3">
-            <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Amazon B2C</div>
+          <div className="space-y-2 border-t border-zinc-100 dark:border-zinc-800 pt-3">
+            <div className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">Amazon B2C</div>
             <div className="grid grid-cols-2 gap-2 text-xs">
               <div>
-                <div className="text-slate-400 text-[10px] font-bold">Landed Cost</div>
-                <div className="font-extrabold text-slate-800 text-sm">${res.amazon.landedCost.toFixed(2)}</div>
+                <div className="text-zinc-400 dark:text-zinc-500 text-[10px] font-bold">Landed Cost</div>
+                <div className="font-extrabold text-zinc-900 dark:text-zinc-100 text-sm">${res.amazon.landedCost.toFixed(2)}</div>
               </div>
               <div>
-                <div className="text-slate-400 text-[10px] font-bold">
+                <div className="text-zinc-400 dark:text-zinc-500 text-[10px] font-bold">
                   {mode === "calculate_pricing" ? "Recommended MSRP" : "Amazon MSRP"}
                 </div>
-                <div className="font-black text-indigo-600 text-sm">${res.amazon.grossSales.toFixed(2)}</div>
+                <div className="font-black text-indigo-600 dark:text-indigo-400 text-sm">${res.amazon.grossSales.toFixed(2)}</div>
               </div>
               <div>
-                <div className="text-slate-400 text-[10px] font-bold">Contribution Margin</div>
-                <div className="font-semibold text-slate-700 text-sm">{res.amazon.contributionMargin.toFixed(1)}%</div>
+                <div className="text-zinc-400 dark:text-zinc-500 text-[10px] font-bold">Contribution Margin</div>
+                <div className="font-semibold text-zinc-700 dark:text-zinc-300 text-sm">{res.amazon.contributionMargin.toFixed(1)}%</div>
               </div>
               <div>
-                <div className="text-slate-400 text-[10px] font-bold">Net Margin</div>
-                <div className="font-black text-slate-900 text-sm">{res.amazon.netMargin.toFixed(1)}%</div>
+                <div className="text-zinc-400 dark:text-zinc-500 text-[10px] font-bold">Net Margin</div>
+                <div className="font-black text-zinc-900 dark:text-zinc-100 text-sm">{res.amazon.netMargin.toFixed(1)}%</div>
               </div>
             </div>
             {/* 한계 공급가 */}
-            <div className="bg-slate-100 p-2 rounded-lg text-[10px] text-slate-600 mt-2 flex justify-between">
+            <div className="bg-zinc-100 dark:bg-zinc-800 p-2 rounded-lg text-[10px] text-zinc-700 dark:text-zinc-300 mt-2 flex justify-between">
               <span>한계 공급가 (MAsP)</span>
-              <span className="font-bold text-slate-800">${res.amazon.maxAcceptableSupplierPrice.toFixed(2)}</span>
+              <span className="font-bold text-zinc-900 dark:text-zinc-100">${res.amazon.maxAcceptableSupplierPrice.toFixed(2)}</span>
             </div>
           </div>
         )}
 
       </div>
 
-      <div className="pt-4 mt-4 border-t border-slate-100 text-center">
+      <div className="pt-4 mt-4 border-t border-zinc-100 dark:border-zinc-800 text-center">
         <button
           onClick={(e) => {
             e.stopPropagation();
             onSelect();
           }}
-          className={`text-xs font-bold transition ${
-            isActive ? "text-indigo-600 hover:text-indigo-800" : "text-slate-400 hover:text-slate-600"
+          className={`text-xs font-bold transition cursor-pointer ${
+            isActive ? "text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300" : "text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300"
           }`}
         >
           {isActive ? "✓ 상세 및 Waterfall 노출 중" : "상세보기 및 Waterfall 분석"}
@@ -1839,8 +1839,8 @@ function WaterfallChart({ viewResult, hoveredCategory, setHoveredCategory }: Wat
   };
 
   return (
-    <div className="space-y-2 mt-4 bg-slate-50 p-4 rounded-xl border border-slate-200/40">
-      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-2">상세 비용 차감 명세 (Waterfall)</span>
+    <div className="space-y-2 mt-4 bg-zinc-50 dark:bg-zinc-950 p-4 rounded-xl border border-zinc-200/40 dark:border-zinc-800">
+      <span className="text-[10px] font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider block mb-2">상세 비용 차감 명세 (Waterfall)</span>
       {viewResult.waterfall.map((step, idx) => {
         const isNegative = step.amount < 0;
         const isTotal = step.label.includes("Profit") || step.label === "Net Sales" || step.label === "Gross Sales" || step.label.includes("Net Profit");
@@ -1857,12 +1857,12 @@ function WaterfallChart({ viewResult, hoveredCategory, setHoveredCategory }: Wat
             onMouseEnter={() => setHoveredCategory(cat)}
             onMouseLeave={() => setHoveredCategory(null)}
             className={`flex items-center text-xs py-1 px-1.5 rounded transition-colors duration-150 ${
-              isHovered ? "bg-indigo-50/50 shadow-3xs" : "hover:bg-slate-100/50"
+              isHovered ? "bg-indigo-50/50 dark:bg-indigo-950/40 shadow-3xs" : "hover:bg-zinc-100/50 dark:hover:bg-zinc-900/50"
             }`}
           >
             <span className="w-2.5 h-2.5 rounded-full mr-2 block shrink-0" style={{ backgroundColor: color }}></span>
             
-            <div className="w-[35%] font-medium text-slate-700 truncate" title={step.label}>
+            <div className="w-[35%] font-medium text-zinc-700 dark:text-zinc-300 truncate" title={step.label}>
               {step.label}
             </div>
             
@@ -1870,7 +1870,7 @@ function WaterfallChart({ viewResult, hoveredCategory, setHoveredCategory }: Wat
               <div 
                 className={`h-4 rounded-sm transition-all ${
                   isTotal 
-                    ? "bg-slate-900" 
+                    ? "bg-zinc-900 dark:bg-zinc-100" 
                     : isNegative 
                       ? "bg-rose-500/80" 
                       : "bg-emerald-500/80"
@@ -1878,10 +1878,10 @@ function WaterfallChart({ viewResult, hoveredCategory, setHoveredCategory }: Wat
                 style={{ width: `${barWidth}%`, backgroundColor: isHovered ? color : undefined }}
               ></div>
             </div>
-            <div className="w-[10%] text-right font-semibold text-slate-800">
+            <div className="w-[10%] text-right font-semibold text-zinc-900 dark:text-zinc-100">
               ${Math.abs(step.amount).toFixed(2)}
             </div>
-            <div className="w-[10%] text-right font-mono text-[10px] text-indigo-600 font-bold pr-1">
+            <div className="w-[10%] text-right font-mono text-[10px] text-indigo-600 dark:text-indigo-400 font-bold pr-1">
               {step.percentOfNetSales.toFixed(1)}%
             </div>
           </div>

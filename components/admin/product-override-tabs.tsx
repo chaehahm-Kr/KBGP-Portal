@@ -497,6 +497,34 @@ export function ProductOverrideTabs({
   const [ovPriceUsdFob, setOvPriceUsdFob] = useState(overrides.price_usd_fob?.toString() || "");
   const [ovEstimatedRetailPrice, setOvEstimatedRetailPrice] = useState(overrides.estimated_retail_price?.toString() || "");
 
+  // Tiered Price overrides
+  const portalPriceTiers: { qty: number; price: number }[] = useMemo(() => {
+    const raw = (product.price_additional_info as any)?.price_tiers || (product.price_additional_info as any)?.tiered_prices || [];
+    if (Array.isArray(raw)) {
+      return raw.map((t: any) => ({
+        qty: Number(t.qty || t.min_qty || 0),
+        price: Number(t.price || t.unit_price || 0),
+      })).filter(t => t.qty > 0 && t.price > 0);
+    }
+    return [];
+  }, [product.price_additional_info]);
+
+  const initialOverrideTiers = overrides.price_tiers || [];
+  const [ovPriceTiers, setOvPriceTiers] = useState<Record<number, string>>(() => {
+    const map: Record<number, string> = {};
+    if (Array.isArray(initialOverrideTiers)) {
+      initialOverrideTiers.forEach((tier: any) => {
+        if (tier.qty !== undefined && (tier.override_price !== undefined || tier.price !== undefined)) {
+          const val = tier.override_price !== undefined && tier.override_price !== null ? tier.override_price : (tier.price !== undefined ? tier.price : "");
+          if (val !== "") {
+            map[tier.qty] = val.toString();
+          }
+        }
+      });
+    }
+    return map;
+  });
+
   // Logistics overrides
   const [ovItemWidth, setOvItemWidth] = useState(overrides.item_width?.toString() || "");
   const [ovItemDepth, setOvItemDepth] = useState(overrides.item_depth?.toString() || "");
@@ -804,12 +832,21 @@ export function ProductOverrideTabs({
     if (ovPriceKrwWholesale !== (overrides.price_krw_wholesale?.toString() || "")) return true;
     if (ovPriceUsdFob !== (overrides.price_usd_fob?.toString() || "")) return true;
     if (ovEstimatedRetailPrice !== (overrides.estimated_retail_price?.toString() || "")) return true;
+
+    for (const tier of portalPriceTiers) {
+      const currentVal = ovPriceTiers[tier.qty] || "";
+      const savedOverride = Array.isArray(initialOverrideTiers)
+        ? (initialOverrideTiers.find((t: any) => t.qty === tier.qty)?.override_price?.toString() || initialOverrideTiers.find((t: any) => t.qty === tier.qty)?.price?.toString() || "")
+        : "";
+      if (currentVal !== savedOverride) return true;
+    }
     return false;
   }, [
     ovPriceKrwRetail, overrides.price_krw_retail,
     ovPriceKrwWholesale, overrides.price_krw_wholesale,
     ovPriceUsdFob, overrides.price_usd_fob,
     ovEstimatedRetailPrice, overrides.estimated_retail_price,
+    ovPriceTiers, portalPriceTiers, initialOverrideTiers,
   ]);
 
   const isLogisticsDirty = useMemo(() => {
@@ -966,6 +1003,26 @@ export function ProductOverrideTabs({
       addNum("price_usd_fob", ovPriceUsdFob);
       addNum("estimated_retail_price", ovEstimatedRetailPrice);
 
+      // Save tiered price overrides
+      if (portalPriceTiers.length > 0) {
+        const hasAnyTierOverride = portalPriceTiers.some((t) => (ovPriceTiers[t.qty] || "").trim() !== "");
+        if (hasAnyTierOverride) {
+          payload["price_tiers"] = portalPriceTiers.map((t) => {
+            const ovVal = (ovPriceTiers[t.qty] || "").trim();
+            const num = parseFloat(ovVal);
+            const hasOv = ovVal !== "" && !isNaN(num);
+            return {
+              qty: t.qty,
+              original_price: t.price,
+              override_price: hasOv ? num : null,
+              price: hasOv ? num : t.price,
+            };
+          });
+        } else {
+          payload["price_tiers"] = null;
+        }
+      }
+
       addNum("item_width", ovItemWidth);
       addNum("item_depth", ovItemDepth);
       addNum("item_height", ovItemHeight);
@@ -1092,9 +1149,11 @@ export function ProductOverrideTabs({
           <div className="flex flex-wrap gap-2 items-center text-xs text-zinc-500 dark:text-zinc-400 font-medium">
             <span>브랜드: <Link href={`/admin/brands?search=${encodeURIComponent(brandName)}`} className="text-zinc-700 dark:text-zinc-300 font-bold hover:underline hover:text-zinc-950 dark:hover:text-white transition-colors">{brandName}</Link></span>
             <span className="opacity-40">•</span>
-            <span>제조사: <Link href={`/admin/companies/${product.company_id}`} className="text-zinc-700 dark:text-zinc-300 font-bold hover:underline hover:text-zinc-950 dark:hover:text-white transition-colors">{companyName}</Link></span>
-            <span className="opacity-40">•</span>
             <span>Letusto SKU: <strong className="text-indigo-650 dark:text-indigo-400 font-mono font-bold">{ovLetustoSku || product.letusto_sku || "지정 대기 중"}</strong></span>
+            <span className="opacity-40">•</span>
+            <span>제조사 SKU: <strong className="text-zinc-700 dark:text-zinc-300 font-mono font-bold">{ovManufactureSku || product.manufacture_sku || "-"}</strong></span>
+            <span className="opacity-40">•</span>
+            <span>제조사: <Link href={`/admin/companies/${product.company_id}`} className="text-zinc-700 dark:text-zinc-300 font-bold hover:underline hover:text-zinc-950 dark:hover:text-white transition-colors">{companyName}</Link></span>
           </div>
           <h1 className="text-xl font-bold text-zinc-900 dark:text-white">
             {ovNameEn || product.name_en || ovName || product.name}
@@ -1914,36 +1973,104 @@ export function ProductOverrideTabs({
                 </div>
               </div>
 
-              {/* Display existing tiered pricing read-only */}
-              <div className="pt-4 border-t border-zinc-100 dark:border-zinc-800 space-y-2">
-                <h4 className="text-[11px] font-bold text-zinc-600 dark:text-zinc-400 uppercase tracking-wider">포털 수량별 슬라이딩 공급 가격 (Tiered Pricing Tiers)</h4>
-                {product.price_additional_info?.price_tiers && product.price_additional_info.price_tiers.length > 0 ? (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
-                    {product.price_additional_info.price_tiers.map((tier: any, idx: number) => {
-                      const effectiveFobPrice = ovPriceUsdFob.trim() !== "" ? parseFloat(ovPriceUsdFob) : (product.price_usd_fob || 0);
-                      return (
-                        <div key={idx} className="p-2.5 rounded bg-zinc-50 border border-zinc-150 text-xs text-zinc-650 dark:bg-zinc-950/40 dark:border-zinc-850 font-mono flex justify-between items-center">
-                          <span>{tier.qty ? `${tier.qty.toLocaleString()} 개 이상` : "최소 수량"}</span>
-                          <div className="flex items-center gap-1.5">
-                            <strong className="text-zinc-900 dark:text-white">${tier.price?.toFixed(2)}</strong>
-                            {effectiveFobPrice > 0 && tier.price > 0 && (
-                              <span className={`inline-flex items-center rounded px-1.5 py-0.5 text-[9px] font-bold ${
-                                effectiveFobPrice > tier.price
-                                  ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-900/60"
-                                  : "bg-zinc-100 text-zinc-400 dark:bg-zinc-900 dark:text-zinc-650 border border-zinc-200 dark:border-zinc-800"
-                              }`}>
-                                {effectiveFobPrice > tier.price
-                                  ? `${(((effectiveFobPrice - tier.price) / effectiveFobPrice) * 100).toFixed(1)}%`
-                                  : "0%"}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
+              {/* Display tiered pricing table with Admin Overrides */}
+              <div className="pt-6 border-t border-zinc-100 dark:border-zinc-800 space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                  <div>
+                    <h4 className="text-xs font-bold text-zinc-700 dark:text-zinc-300 uppercase tracking-wider">
+                      포털 수량별 슬라이딩 공급 가격 (Tiered Pricing Tiers)
+                    </h4>
+                    <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                      브랜드사 포털에서 입력한 수량별 공급 단가를 확인하고, 필요 시 어드민 오버라이드 단가를 설정할 수 있습니다.
+                    </p>
+                  </div>
+                  {portalPriceTiers.length > 0 && (
+                    <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-900/60 w-fit">
+                      {portalPriceTiers.length}개 구간 등록됨
+                    </span>
+                  )}
+                </div>
+
+                {portalPriceTiers.length > 0 ? (
+                  <div className="overflow-x-auto rounded-lg border border-zinc-200 dark:border-zinc-800">
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-zinc-50 dark:bg-zinc-850/60 text-[11px] font-bold text-zinc-600 dark:text-zinc-400 border-b border-zinc-200 dark:border-zinc-800">
+                        <tr>
+                          <th className="py-2.5 px-4">MOQ (수량)</th>
+                          <th className="py-2.5 px-4">포털 공급 단가 ($)</th>
+                          <th className="py-2.5 px-4">FOB 대비 할인율</th>
+                          <th className="py-2.5 px-4 min-w-[180px]">어드민 오버라이드 ($)</th>
+                          <th className="py-2.5 px-4 text-right">최종 적용 단가 ($)</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800 font-mono">
+                        {portalPriceTiers.map((tier, idx) => {
+                          const effectiveFobPrice = ovPriceUsdFob.trim() !== "" ? parseFloat(ovPriceUsdFob) : (product.price_usd_fob || 0);
+                          const ovVal = ovPriceTiers[tier.qty] ?? "";
+                          const hasOv = ovVal.trim() !== "" && !isNaN(parseFloat(ovVal));
+                          const effectiveTierPrice = hasOv ? parseFloat(ovVal) : tier.price;
+                          const discountPercent = effectiveFobPrice > 0 && effectiveTierPrice > 0 && effectiveFobPrice > effectiveTierPrice
+                            ? (((effectiveFobPrice - effectiveTierPrice) / effectiveFobPrice) * 100).toFixed(1)
+                            : null;
+
+                          return (
+                            <tr key={idx} className="hover:bg-zinc-50/60 dark:hover:bg-zinc-900/40 transition-colors">
+                              <td className="py-3 px-4 font-bold text-zinc-900 dark:text-zinc-100 font-sans">
+                                {tier.qty.toLocaleString()} 개 이상
+                              </td>
+                              <td className="py-3 px-4 text-zinc-700 dark:text-zinc-300">
+                                ${tier.price.toFixed(2)}
+                              </td>
+                              <td className="py-3 px-4 font-sans">
+                                {discountPercent ? (
+                                  <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-900/60">
+                                    {discountPercent}% 할인
+                                  </span>
+                                ) : (
+                                  <span className="text-zinc-400 text-[11px]">-</span>
+                                )}
+                              </td>
+                              <td className="py-2 px-4">
+                                <div className="relative flex items-center max-w-[160px]">
+                                  <span className="absolute left-2.5 text-zinc-400 text-xs">$</span>
+                                  <input
+                                    type="number"
+                                    step="0.01"
+                                    value={ovVal}
+                                    onChange={(e) => {
+                                      const nextVal = e.target.value;
+                                      setOvPriceTiers((prev) => ({
+                                        ...prev,
+                                        [tier.qty]: nextVal,
+                                      }));
+                                    }}
+                                    placeholder={tier.price.toFixed(2)}
+                                    className="w-full pl-6 pr-2 py-1.5 rounded border border-zinc-200 text-xs text-zinc-900 bg-white dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:border-zinc-950 outline-none"
+                                  />
+                                </div>
+                              </td>
+                              <td className="py-3 px-4 text-right">
+                                <div className="flex items-center justify-end gap-1.5">
+                                  <strong className="text-sm font-bold text-zinc-950 dark:text-white">
+                                    ${effectiveTierPrice.toFixed(2)}
+                                  </strong>
+                                  {hasOv && (
+                                    <span className="inline-flex rounded bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300 px-1.5 py-0.5 text-[9px] font-bold border border-indigo-100 dark:border-indigo-900 font-sans">
+                                      오버라이드
+                                    </span>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
                   </div>
                 ) : (
-                  <p className="text-xs text-zinc-400 italic">설정된 슬라이딩 가격 스케일이 없습니다.</p>
+                  <p className="text-xs text-zinc-400 italic bg-zinc-50 dark:bg-zinc-950/40 p-4 rounded-lg border border-zinc-150 dark:border-zinc-850">
+                    포털에 등록된 슬라이딩 가격 스케일이 없습니다.
+                  </p>
                 )}
               </div>
 

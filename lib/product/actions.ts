@@ -535,6 +535,36 @@ export async function updateProduct(
     .eq("company_id", companyId)
     .single();
 
+  // Parse and sanitize tiered pricing
+  const rawPriceTiers = formData.get("priceTiers");
+  let parsedPriceTiers: { qty: number; price: number }[] = [];
+  if (rawPriceTiers && typeof rawPriceTiers === "string") {
+    try {
+      const parsedJson = JSON.parse(rawPriceTiers);
+      if (Array.isArray(parsedJson)) {
+        parsedPriceTiers = parsedJson
+          .map((item: any) => ({
+            qty: Number(item.qty || item.minimum_order_quantity || item.moq || 0),
+            price: Number(item.price || item.unit_price || item.supply_price || 0),
+          }))
+          .filter((item) => item.qty > 0 && item.price > 0);
+      }
+    } catch (e) {
+      console.error("Failed to parse priceTiers:", e);
+    }
+  }
+
+  const existingMeta = (beforeProduct?.price_additional_info as Record<string, any>) || {};
+  const updatedPriceAdditionalInfo = {
+    ...existingMeta,
+    price_tiers: parsedPriceTiers,
+    tiered_prices: parsedPriceTiers,
+  };
+
+  const effectiveLetustoSku = parsed.data.letustoSku && parsed.data.letustoSku.trim() !== ""
+    ? parsed.data.letustoSku.trim()
+    : beforeProduct?.letusto_sku || null;
+
   const { error: updateError } = await supabase
     .from("products")
     .update({
@@ -554,7 +584,7 @@ export async function updateProduct(
       parent_sku: parsed.data.parentSku || null,
       child_sku: parsed.data.childSku || null,
       manufacture_sku: parsed.data.manufactureSku || null,
-      letusto_sku: parsed.data.letustoSku || null,
+      letusto_sku: effectiveLetustoSku,
       upc: upc,
       ean: ean,
       selling_online: !!parsed.data.sellingOnline,
@@ -565,6 +595,7 @@ export async function updateProduct(
       price_krw_retail: parsed.data.priceKrwRetail,
       price_krw_wholesale: parsed.data.priceKrwWholesale,
       price_usd_fob: parsed.data.priceUsdFob,
+      price_additional_info: updatedPriceAdditionalInfo,
 
       item_width: parsed.data.itemWidth,
       item_depth: parsed.data.itemDepth,
@@ -606,6 +637,11 @@ export async function updateProduct(
     console.error("Product update error:", updateError);
     return { error: "제품 정보 수정에 실패했습니다. 잠시 후 다시 시도해주세요." };
   }
+
+  revalidatePath(`/portal/products/${productId}`);
+  revalidatePath("/portal/products");
+  revalidatePath(`/admin/products/${productId}`);
+  revalidatePath("/admin/products");
 
   // 2. Calculate field diffs
   if (beforeProduct) {

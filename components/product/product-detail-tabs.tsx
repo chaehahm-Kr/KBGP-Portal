@@ -786,6 +786,7 @@ export function ProductDetailTabs({
     formData.set("ingredientsText", ingredientsText.trim());
     formData.set("parentSku", isParentSku ? "Y" : "");
     formData.set("childSku", isChildSku ? "Y" : "");
+    formData.set("letustoSku", effectiveLetustoSku || product.letusto_sku || "");
     formData.set("upc", upc.trim());
     formData.set("ean", ean.trim());
     formData.set("priceKrwRetail", priceKrwRetail.trim());
@@ -1113,19 +1114,26 @@ export function ProductDetailTabs({
             )}
             <div>
               <span className="text-xs font-bold text-zinc-400 font-mono tracking-wider">PRODUCT CATALOG</span>
-              <h1 className="text-2xl font-extrabold text-zinc-900 dark:text-white mt-0.5">{product.name}</h1>
+              <h1 className="text-2xl font-extrabold text-zinc-900 dark:text-white mt-0.5">
+                {nameEn || product.name_en || name || product.name}
+              </h1>
               <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1.5 flex flex-wrap gap-2 items-center">
                 <span>브랜드: <strong className="text-zinc-700 dark:text-zinc-300 font-bold">{brandName}</strong></span>
-                {product.manufacture_sku && (
+                <span className="opacity-40">•</span>
+                <span>
+                  Letusto SKU:{" "}
+                  {effectiveLetustoSku ? (
+                    <strong className="text-indigo-650 dark:text-indigo-400 font-mono font-bold">{effectiveLetustoSku}</strong>
+                  ) : (
+                    <strong className="text-zinc-400 dark:text-zinc-500 font-mono font-medium">지정 대기 중</strong>
+                  )}
+                </span>
+                {(manufactureSku || product.manufacture_sku) && (
                   <>
                     <span className="opacity-40">•</span>
-                    <span>제조사 SKU: <strong className="text-zinc-700 dark:text-zinc-300 font-mono font-bold">{product.manufacture_sku}</strong></span>
-                  </>
-                )}
-                {effectiveLetustoSku && (
-                  <>
-                    <span className="opacity-40">•</span>
-                    <span>Letusto SKU: <strong className="text-indigo-650 dark:text-indigo-400 font-mono font-bold">{effectiveLetustoSku}</strong></span>
+                    <span>
+                      제조사 SKU: <strong className="text-zinc-700 dark:text-zinc-300 font-mono font-bold">{manufactureSku || product.manufacture_sku}</strong>
+                    </span>
                   </>
                 )}
               </p>

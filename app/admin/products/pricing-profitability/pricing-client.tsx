@@ -50,7 +50,7 @@ export function PricingProfitabilityClient({
   return (
     <div className="space-y-6">
       {/* [개선 완료] 탭 네비게이션 좌측 정렬 */}
-      <div className="border-b border-slate-200">
+      <div className="border-b border-zinc-200 dark:border-zinc-800">
         <nav className="flex space-x-8 justify-start" aria-label="Tabs">
           {tabs.map((tab) => {
             const isSelected = activeTab === tab.id;
@@ -64,11 +64,11 @@ export function PricingProfitabilityClient({
                   }
                 }}
                 className={`
-                  py-4 px-1 border-b-2 font-bold text-sm whitespace-nowrap transition-colors duration-200
+                  py-4 px-1 border-b-2 font-bold text-sm whitespace-nowrap transition-colors duration-200 cursor-pointer
                   ${
                     isSelected
-                      ? "border-slate-900 text-slate-900"
-                      : "border-transparent text-slate-400 hover:text-slate-600 hover:border-slate-300"
+                      ? "border-zinc-900 text-zinc-900 dark:border-white dark:text-white"
+                      : "border-transparent text-zinc-400 dark:text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 hover:border-zinc-300 dark:hover:border-zinc-700"
                   }
                 `}
               >
