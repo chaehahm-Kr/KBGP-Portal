@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { verifyAdminSession } from "@/lib/auth/dal";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { resolveEffectiveSku } from "@/lib/product/types";
 
 export interface InventoryBalanceItem {
   id: string;
@@ -87,8 +88,8 @@ export async function getInventoryOverview() {
   for (const p of products ?? []) {
     const adminOverrides = (p.price_additional_info as any)?.admin_overrides || {};
     const displayName = adminOverrides.name_en || p.name_en || adminOverrides.name || p.name;
-    const effectiveLetustoSku = adminOverrides.letusto_sku !== undefined ? adminOverrides.letusto_sku : p.letusto_sku;
-    const effectiveManufactureSku = adminOverrides.manufacture_sku !== undefined ? adminOverrides.manufacture_sku : p.manufacture_sku;
+    const effectiveLetustoSku = resolveEffectiveSku(adminOverrides.letusto_sku, p.letusto_sku);
+    const effectiveManufactureSku = resolveEffectiveSku(adminOverrides.manufacture_sku, p.manufacture_sku);
 
     // Find thumbnail photo path
     const firstImage = (productImages ?? []).find((img) => img.product_id === p.id);

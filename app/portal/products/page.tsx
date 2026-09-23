@@ -76,8 +76,8 @@ export default async function ProductsPage() {
         }
 
         const adminOverrides = (p.price_additional_info as any)?.admin_overrides || {};
-        const effectiveLetustoSku = adminOverrides.letusto_sku || p.letusto_sku || "";
-        const effectiveManufactureSku = adminOverrides.manufacture_sku || p.manufacture_sku || "";
+        const effectiveLetustoSku = resolveEffectiveSku(adminOverrides.letusto_sku, p.letusto_sku);
+        const effectiveManufactureSku = resolveEffectiveSku(adminOverrides.manufacture_sku, p.manufacture_sku);
 
         const catCompletion = categoryCompletions.get(p.id) || null;
         const hasImages = (productImages ?? []).some((img) => img.product_id === p.id);
@@ -91,7 +91,7 @@ export default async function ProductsPage() {
           name_en: p.name_en,
           brand_id: p.brand_id,
           category_code: p.category_code,
-          manufacture_sku: p.manufacture_sku,
+          manufacture_sku: effectiveManufactureSku,
           origin: p.origin,
           price_krw_retail: p.price_krw_retail,
           price_usd_fob: p.price_usd_fob,

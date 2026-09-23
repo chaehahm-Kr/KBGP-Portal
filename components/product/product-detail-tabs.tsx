@@ -14,7 +14,8 @@ import {
   CERTIFICATE_TYPE_LABEL,
   type CertificateType,
   sanitizeSku,
-  trimSkuSeparators
+  trimSkuSeparators,
+  resolveEffectiveSku
 } from "@/lib/product/types";
 import { 
   updateProduct, 
@@ -117,10 +118,10 @@ export function ProductDetailTabs({
     setBrandId(selected);
   };
 
-  // Read admin overrides (specifically for Letusto SKU)
+  // Read admin overrides (specifically for Letusto SKU & Manufacture SKU)
   const adminOverrides = (product.price_additional_info as any)?.admin_overrides || {};
-  const effectiveLetustoSku = adminOverrides.letusto_sku || product.letusto_sku || "";
-  const effectiveManufactureSku = adminOverrides.manufacture_sku || product.manufacture_sku || "";
+  const effectiveLetustoSku = resolveEffectiveSku(adminOverrides.letusto_sku, product.letusto_sku) || "";
+  const effectiveManufactureSku = resolveEffectiveSku(adminOverrides.manufacture_sku, product.manufacture_sku) || "";
 
   // Resolve effective parent/child SKU (considering admin overrides)
   const getInitialParentState = () => {
@@ -1148,14 +1149,10 @@ export function ProductDetailTabs({
                     <strong className="text-zinc-400 dark:text-zinc-500 font-mono font-medium">지정 대기 중</strong>
                   )}
                 </span>
-                {(manufactureSku || product.manufacture_sku) && (
-                  <>
-                    <span className="opacity-40">•</span>
-                    <span>
-                      제조사 SKU: <strong className="text-zinc-700 dark:text-zinc-300 font-mono font-bold">{manufactureSku || product.manufacture_sku}</strong>
-                    </span>
-                  </>
-                )}
+                <span className="opacity-40">•</span>
+                <span>
+                  제조사 SKU: <strong className="text-zinc-700 dark:text-zinc-300 font-mono font-bold">{effectiveManufactureSku || manufactureSku || product.manufacture_sku || "-"}</strong>
+                </span>
               </p>
 
               {/* 3-Status Badges: Registration, Selection, Sales */}

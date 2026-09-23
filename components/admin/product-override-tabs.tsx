@@ -448,7 +448,7 @@ export function ProductOverrideTabs({
 
   // SKU overrides
   const [ovManufactureSku, setOvManufactureSku] = useState(overrides.manufacture_sku || "");
-  const [ovLetustoSku, setOvLetustoSku] = useState(product.letusto_sku || "");
+  const [ovLetustoSku, setOvLetustoSku] = useState(overrides.letusto_sku || product.letusto_sku || "");
   const [ovParentSku, setOvParentSku] = useState(overrides.parent_sku || "");
   const [ovChildSku, setOvChildSku] = useState(overrides.child_sku || "");
 
@@ -1501,9 +1501,9 @@ export function ProductOverrideTabs({
                 <div className="space-y-1">
                   <label className="text-[11px] font-bold text-zinc-600 dark:text-zinc-400">Letusto SKU</label>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-                    <div className="p-2 rounded bg-zinc-50 border border-zinc-150 text-zinc-500 dark:bg-zinc-950/40 dark:border-zinc-850 font-mono">
+                    <div className="p-2 rounded bg-zinc-50 border border-zinc-150 text-zinc-500 dark:bg-zinc-955/40 dark:border-zinc-850 font-mono">
                       <span className="text-[8px] font-bold text-zinc-400 block mb-0.5 uppercase font-sans">포털 원본</span>
-                      {product.letusto_sku || "-"}
+                      {product.letusto_sku || <span className="text-zinc-400 italic font-sans font-normal">지정 대기 중</span>}
                     </div>
                     <input
                       type="text"

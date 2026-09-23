@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { verifyAdminSession } from "@/lib/auth/dal";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getOverallStatus } from "./status-helper";
+import { resolveEffectiveSku } from "@/lib/product/types";
 
 async function verifyWritePermission(supabase: any, userId: string) {
   const { data: userRoles } = await supabase
@@ -338,13 +339,13 @@ export async function getProductsForSupplier(supplierId: string) {
     }
   }
 
-  const { PRODUCT_CATEGORY_LABEL } = await import("@/lib/product/types");
+  const { PRODUCT_CATEGORY_LABEL, resolveEffectiveSku } = await import("@/lib/product/types");
 
   return (products ?? []).map((p: any) => {
     const adminOverrides = p.price_additional_info?.admin_overrides || {};
     const displayName = adminOverrides.name_en || p.name_en || adminOverrides.name || p.name;
-    const effectiveLetustoSku = adminOverrides.letusto_sku !== undefined ? adminOverrides.letusto_sku : p.letusto_sku;
-    const effectiveManufactureSku = adminOverrides.manufacture_sku !== undefined ? adminOverrides.manufacture_sku : p.manufacture_sku;
+    const effectiveLetustoSku = resolveEffectiveSku(adminOverrides.letusto_sku, p.letusto_sku);
+    const effectiveManufactureSku = resolveEffectiveSku(adminOverrides.manufacture_sku, p.manufacture_sku);
     const effectiveFob = adminOverrides.price_usd_fob !== undefined ? parseFloat(adminOverrides.price_usd_fob) : (p.price_usd_fob || 0);
     const effectiveUpc = adminOverrides.upc !== undefined ? adminOverrides.upc : p.upc;
     const effectiveEan = adminOverrides.ean !== undefined ? adminOverrides.ean : p.ean;
@@ -477,8 +478,8 @@ export async function createPurchaseOrder(data: CreatePoInput) {
 
     const adminOverrides = p.price_additional_info?.admin_overrides || {};
     const displayName = adminOverrides.name_en || p.name_en || adminOverrides.name || p.name;
-    const effectiveLetustoSku = adminOverrides.letusto_sku !== undefined ? adminOverrides.letusto_sku : p.letusto_sku;
-    const effectiveManufactureSku = adminOverrides.manufacture_sku !== undefined ? adminOverrides.manufacture_sku : p.manufacture_sku;
+    const effectiveLetustoSku = resolveEffectiveSku(adminOverrides.letusto_sku, p.letusto_sku);
+    const effectiveManufactureSku = resolveEffectiveSku(adminOverrides.manufacture_sku, p.manufacture_sku);
 
     return {
       purchase_order_id: poId,
@@ -588,8 +589,8 @@ export async function updatePurchaseOrder(poId: string, data: CreatePoInput) {
 
     const adminOverrides = p.price_additional_info?.admin_overrides || {};
     const displayName = adminOverrides.name_en || p.name_en || adminOverrides.name || p.name;
-    const effectiveLetustoSku = adminOverrides.letusto_sku !== undefined ? adminOverrides.letusto_sku : p.letusto_sku;
-    const effectiveManufactureSku = adminOverrides.manufacture_sku !== undefined ? adminOverrides.manufacture_sku : p.manufacture_sku;
+    const effectiveLetustoSku = resolveEffectiveSku(adminOverrides.letusto_sku, p.letusto_sku);
+    const effectiveManufactureSku = resolveEffectiveSku(adminOverrides.manufacture_sku, p.manufacture_sku);
 
     return {
       purchase_order_id: poId,
