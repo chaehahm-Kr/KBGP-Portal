@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import type { AppRole } from "@/lib/auth/dal";
 import { checkLoginLockout, recordLoginAttempt, resetLoginAttempts } from "@/lib/auth/login-attempts";
 
@@ -81,11 +82,13 @@ async function login(
   // Clear failure counter immediately upon successful credential authentication
   await resetLoginAttempts(normalizedEmail);
 
-  const { data: profile, error: profileError } = await supabase
+  const adminClient = createAdminClient();
+
+  const { data: profile, error: profileError } = await adminClient
     .from("profiles")
     .select("role")
     .eq("id", data.user.id)
-    .single();
+    .maybeSingle();
 
   if (profileError || !profile || profile.role !== area) {
     // 다른 area의 계정으로 로그인 시도 — 즉시 세션을 정리하고 area 전용 오류만 안내한다.
@@ -100,7 +103,7 @@ async function login(
 
   // 계정 상태 사전 검증
   if (area === "portal") {
-    const { data: companyUser } = await supabase
+    const { data: companyUser } = await adminClient
       .from("company_users")
       .select("status")
       .eq("id", data.user.id)
@@ -131,7 +134,7 @@ async function login(
       };
     }
   } else if (area === "admin") {
-    const { data: staffMember } = await supabase
+    const { data: staffMember } = await adminClient
       .from("staff_members")
       .select("status")
       .eq("id", data.user.id)

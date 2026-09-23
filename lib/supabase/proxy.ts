@@ -90,7 +90,13 @@ export async function updateSession(request: NextRequest) {
     }
   }
 
-  let prefix = pathname.startsWith("/admin") ? "admin-" : pathname.startsWith("/portal") ? "portal-" : "";
+  let prefix = "";
+  if (host.includes("admin.kselectnetwork.com") || pathname.startsWith("/admin")) {
+    prefix = "admin-";
+  } else if (host.includes("portal.kselectnetwork.com") || pathname.startsWith("/portal")) {
+    prefix = "portal-";
+  }
+
   if (!prefix) {
     const allCookies = request.cookies.getAll();
     if (allCookies.some((c) => c.name.startsWith("portal-sb-"))) {
@@ -108,9 +114,12 @@ export async function updateSession(request: NextRequest) {
         getAll() {
           const allCookies = request.cookies.getAll();
           if (!prefix) return allCookies;
+
+          const hasPrefixed = allCookies.some((c) => c.name.startsWith(`${prefix}sb-`));
+
           return allCookies
             .filter((cookie) => {
-              if (cookie.name.startsWith("sb-")) return false;
+              if (cookie.name.startsWith("sb-") && hasPrefixed) return false;
               if (cookie.name.startsWith("admin-sb-") && prefix !== "admin-") return false;
               if (cookie.name.startsWith("portal-sb-") && prefix !== "portal-") return false;
               return true;

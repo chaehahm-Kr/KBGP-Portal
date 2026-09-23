@@ -15,10 +15,17 @@ import { publicEnv } from "@/lib/env/public";
 export async function createClient() {
   const cookieStore = await cookies();
   const reqHeaders = await headers();
+  const host = reqHeaders.get("host") || "";
   const url = reqHeaders.get("x-url") || reqHeaders.get("referer") || "";
-  let prefix = url.includes("/admin") ? "admin-" : url.includes("/portal") ? "portal-" : "";
 
-  // Fallback: If URL/referer does not specify prefix, inspect existing cookies
+  let prefix = "";
+  if (host.includes("admin.kselectnetwork.com") || url.includes("/admin")) {
+    prefix = "admin-";
+  } else if (host.includes("portal.kselectnetwork.com") || url.includes("/portal")) {
+    prefix = "portal-";
+  }
+
+  // Fallback: If domain/URL does not specify prefix, inspect existing cookies
   if (!prefix) {
     const allCookies = cookieStore.getAll();
     if (allCookies.some((c) => c.name.startsWith("portal-sb-"))) {
@@ -36,9 +43,12 @@ export async function createClient() {
         getAll() {
           const allCookies = cookieStore.getAll();
           if (!prefix) return allCookies;
+
+          const hasPrefixed = allCookies.some((c) => c.name.startsWith(`${prefix}sb-`));
+
           return allCookies
             .filter((cookie) => {
-              if (cookie.name.startsWith("sb-")) return false;
+              if (cookie.name.startsWith("sb-") && hasPrefixed) return false;
               if (cookie.name.startsWith("admin-sb-") && prefix !== "admin-") return false;
               if (cookie.name.startsWith("portal-sb-") && prefix !== "portal-") return false;
               return true;
