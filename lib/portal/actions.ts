@@ -4,9 +4,12 @@ import { requireCompanyMembership } from "@/lib/company/dal";
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 import { getInvoiceQuantitiesForPoLines } from "@/lib/supplier-invoice/actions";
+import { formatEasternDateTime } from "@/lib/utils/timezone";
 
 /**
  * Fetch all purchase orders belonging to the logged-in supplier company.
+ * Visibility: Only SENT and subsequent states (Pending, Confirmed, Revised, Cancelled-after-sent).
+ * DRAFT and APPROVED are strictly hidden.
  */
 export async function getPortalPurchaseOrders() {
   const { companyId } = await requireCompanyMembership();
@@ -22,6 +25,8 @@ export async function getPortalPurchaseOrders() {
       supplier_confirmation_status,
       order_date,
       currency,
+      revision_no,
+      cancellation_status,
       created_at,
       lines:purchase_order_lines(qty, confirmed_qty)
     `)
@@ -33,12 +38,18 @@ export async function getPortalPurchaseOrders() {
     throw new Error("발주서 목록을 불러오지 못했습니다.");
   }
 
-  // Calculate totals client-side or in action mapping
-  return data ?? [];
+  // Double guard: strictly filter out DRAFT and APPROVED
+  const safeList = (data ?? []).filter(
+    (po: any) => po.po_status !== "DRAFT" && po.po_status !== "APPROVED"
+  );
+
+  return safeList;
 }
 
 /**
  * Fetch a single purchase order by ID with secure company-scoping.
+ * Excludes DRAFT and APPROVED POs.
+ * Returns complete external Order Overview fields.
  */
 export async function getPortalPurchaseOrderById(id: string) {
   const { companyId } = await requireCompanyMembership();
@@ -54,6 +65,31 @@ export async function getPortalPurchaseOrderById(id: string) {
       supplier_confirmation_status,
       order_date,
       currency,
+      payment_terms,
+      incoterms,
+      port_of_loading,
+      expected_ready_date,
+      expected_ship_date,
+      eta,
+      supplier_facing_note,
+      revision_no,
+      confirmed_by_id,
+      confirmed_by_name,
+      confirmed_at,
+      cancellation_status,
+      cancellation_reason,
+      cancellation_requested_at,
+      cancellation_confirmed_by,
+      cancellation_confirmed_at,
+      cancellation_rejected_by,
+      cancellation_rejected_at,
+      cancellation_reject_reason,
+      activity_logs,
+      revisions,
+      destination_warehouse_id,
+      ship_from_warehouse_id,
+      destination_warehouse:destination_warehouse_id (id, name, code, address1, city, state, zip_code, country),
+      ship_from_warehouse:ship_from_warehouse_id (id, name, code, address1, city, state, zip_code, country),
       created_at,
       lines:purchase_order_lines(
         id,
@@ -65,7 +101,9 @@ export async function getPortalPurchaseOrderById(id: string) {
           id,
           name,
           letusto_sku,
-          manufacture_sku
+          manufacture_sku,
+          brand_id,
+          brands (name)
         )
       )
     `)
@@ -78,20 +116,32 @@ export async function getPortalPurchaseOrderById(id: string) {
     throw new Error("발주서 상세 정보를 불러오지 못했습니다.");
   }
 
-  if (!data || data.po_status === "DRAFT") {
+  if (!data || data.po_status === "DRAFT" || data.po_status === "APPROVED") {
     throw new Error("발주서가 존재하지 않거나 접근 권한이 없습니다.");
   }
+
+  // Fetch linked support cases
+  let linkedCases: any[] = [];
+  try {
+    const { data: inqs } = await supabase
+      .from("partner_inquiries")
+      .select("id, case_number, title, category, status, created_at")
+      .or(`related_po_id.eq.${id},title.ilike.%${data.po_number}%`)
+      .order("created_at", { ascending: false });
+    linkedCases = inqs || [];
+  } catch {}
 
   // Format line products from array to a single object
   const formattedLines = (data.lines || []).map((l: any) => {
     const productArray = Array.isArray(l.product) ? l.product : (l.product ? [l.product] : []);
-    const productObj = productArray[0] || { id: "", name: "", letusto_sku: "", manufacture_sku: "" };
+    const productObj = productArray[0] || { id: "", name: "", letusto_sku: "", manufacture_sku: "", brands: null };
     return {
       id: l.id,
       qty: l.qty,
       confirmed_qty: l.confirmed_qty,
       unit_cost: l.unit_cost,
       line_note: l.line_note,
+      brand_name: productObj.brands?.name || "(미지정 브랜드)",
       product: {
         id: productObj.id,
         name: productObj.name,
@@ -106,9 +156,34 @@ export async function getPortalPurchaseOrderById(id: string) {
     po_number: data.po_number,
     po_status: data.po_status,
     fulfillment_status: data.fulfillment_status,
-    supplier_confirmation_status: data.supplier_confirmation_status,
+    supplier_confirmation_status: data.supplier_confirmation_status || "PENDING",
     order_date: data.order_date,
     currency: data.currency,
+    payment_terms: data.payment_terms || null,
+    incoterms: data.incoterms || null,
+    port_of_loading: data.port_of_loading || null,
+    expected_ready_date: data.expected_ready_date || null,
+    expected_ship_date: data.expected_ship_date || null,
+    eta: data.eta || null,
+    supplier_facing_note: data.supplier_facing_note || null,
+    revision_no: data.revision_no || 1,
+    confirmed_by_name: data.confirmed_by_name || null,
+    confirmed_at: data.confirmed_at || null,
+    cancellation_status: data.cancellation_status || "NONE",
+    cancellation_reason: data.cancellation_reason || null,
+    cancellation_requested_at: data.cancellation_requested_at || null,
+    cancellation_confirmed_by: data.cancellation_confirmed_by || null,
+    cancellation_confirmed_at: data.cancellation_confirmed_at || null,
+    cancellation_rejected_by: data.cancellation_rejected_by || null,
+    cancellation_rejected_at: data.cancellation_rejected_at || null,
+    cancellation_reject_reason: data.cancellation_reject_reason || null,
+    activity_logs: Array.isArray(data.activity_logs) ? data.activity_logs : [],
+    revisions: Array.isArray(data.revisions) ? data.revisions : [],
+    destination_warehouse: data.destination_warehouse,
+    ship_from_warehouse: data.ship_from_warehouse,
+    destination_warehouse_id: data.destination_warehouse_id,
+    ship_from_warehouse_id: data.ship_from_warehouse_id,
+    linkedCases,
     created_at: data.created_at,
     lines: formattedLines
   };
@@ -330,15 +405,24 @@ export async function getPortalReceivingById(id: string) {
 
 /**
  * Supplier confirms a PO directly (confirmed_qty = qty for all lines).
+ * Records confirmed_by, confirmed_at, and appends to activity_logs.
  */
 export async function confirmPortalPurchaseOrder(poId: string) {
-  const { companyId } = await requireCompanyMembership();
+  const { companyId, userId } = await requireCompanyMembership();
   const supabase = await createClient();
+
+  const { data: { user } } = await supabase.auth.getUser();
+  const { data: compUser } = await supabase
+    .from("company_users")
+    .select("name, email")
+    .eq("id", userId)
+    .maybeSingle();
+  const userName = compUser?.name || user?.email?.split("@")[0] || "공급사 담당자";
 
   // 1. Verify PO exists and belongs to company
   const { data: po, error: poErr } = await supabase
-    .from("portal_purchase_orders")
-    .select("id, po_status")
+    .from("purchase_orders")
+    .select("id, po_status, activity_logs")
     .eq("id", poId)
     .eq("supplier_id", companyId)
     .maybeSingle();
@@ -367,17 +451,237 @@ export async function confirmPortalPurchaseOrder(poId: string) {
     if (updateLineErr) throw updateLineErr;
   }
 
+  const easternNow = formatEasternDateTime(new Date().toISOString());
+  const currentLogs = Array.isArray(po.activity_logs) ? po.activity_logs : [];
+  const newLogs = [
+    {
+      event: "Supplier Confirmed",
+      actor: userName,
+      user_id: userId,
+      company_id: companyId,
+      timestamp: easternNow,
+    },
+    ...currentLogs,
+  ];
+
   // 4. Update PO confirmation status
   const { error: updatePoErr } = await supabase
     .from("purchase_orders")
-    .update({ supplier_confirmation_status: "CONFIRMED" })
+    .update({
+      supplier_confirmation_status: "CONFIRMED",
+      confirmed_by_id: userId,
+      confirmed_by_name: userName,
+      confirmed_at: new Date().toISOString(),
+      activity_logs: newLogs,
+      updated_at: new Date().toISOString(),
+    })
     .eq("id", poId);
 
   if (updatePoErr) throw updatePoErr;
 
   revalidatePath(`/portal/orders/purchase-orders/${poId}`);
+  revalidatePath("/portal/orders/purchase-orders");
   revalidatePath(`/admin/purchasing/${poId}`);
+  revalidatePath("/admin/purchasing");
   return { success: true };
+}
+
+/**
+ * Supplier responds to Admin Cancellation Request (Approve or Reject).
+ */
+export async function supplierRespondCancellation(
+  poId: string,
+  action: "APPROVE" | "REJECT",
+  rejectReason?: string
+) {
+  const { companyId, userId } = await requireCompanyMembership();
+  const supabase = await createClient();
+
+  const { data: { user } } = await supabase.auth.getUser();
+  const { data: compUser } = await supabase
+    .from("company_users")
+    .select("name, email")
+    .eq("id", userId)
+    .maybeSingle();
+  const userName = compUser?.name || user?.email?.split("@")[0] || "공급사 담당자";
+
+  // Fetch PO
+  const { data: po, error: poErr } = await supabase
+    .from("purchase_orders")
+    .select("*")
+    .eq("id", poId)
+    .eq("supplier_id", companyId)
+    .maybeSingle();
+
+  if (poErr || !po) {
+    throw new Error("발주서를 찾을 수 없거나 접근 권한이 없습니다.");
+  }
+
+  if (po.cancellation_status !== "CANCELLATION_REQUESTED") {
+    throw new Error("취소 요청 대기 중인 상태가 아닙니다.");
+  }
+
+  const easternNow = formatEasternDateTime(new Date().toISOString());
+  const currentLogs = Array.isArray(po.activity_logs) ? po.activity_logs : [];
+
+  if (action === "APPROVE") {
+    const newLogs = [
+      {
+        event: "Cancellation Approved",
+        actor: userName,
+        user_id: userId,
+        timestamp: easternNow,
+      },
+      ...currentLogs,
+    ];
+
+    const { error: updErr } = await supabase
+      .from("purchase_orders")
+      .update({
+        po_status: "CANCELLED",
+        cancellation_status: "CANCELLED",
+        cancellation_confirmed_by: userName,
+        cancellation_confirmed_at: new Date().toISOString(),
+        activity_logs: newLogs,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", poId);
+
+    if (updErr) throw updErr;
+  } else {
+    // REJECT
+    const newLogs = [
+      {
+        event: "Cancellation Rejected",
+        actor: userName,
+        user_id: userId,
+        reason: rejectReason || "사유 미기재",
+        timestamp: easternNow,
+      },
+      ...currentLogs,
+    ];
+
+    const { error: updErr } = await supabase
+      .from("purchase_orders")
+      .update({
+        cancellation_status: "REJECTED",
+        cancellation_rejected_by: userName,
+        cancellation_rejected_at: new Date().toISOString(),
+        cancellation_reject_reason: rejectReason || null,
+        activity_logs: newLogs,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", poId);
+
+    if (updErr) throw updErr;
+  }
+
+  revalidatePath(`/portal/orders/purchase-orders/${poId}`);
+  revalidatePath("/portal/orders/purchase-orders");
+  revalidatePath(`/admin/purchasing/${poId}`);
+  revalidatePath("/admin/purchasing");
+  return { success: true };
+}
+
+/**
+ * Supplier creates a PO change request Case directly linked to the PO.
+ */
+export async function createPoChangeRequestCase(params: {
+  poId: string;
+  poNumber: string;
+  title: string;
+  content: string;
+  category?: string;
+}) {
+  const { companyId, userId } = await requireCompanyMembership();
+  const supabase = await createClient();
+
+  const { data: { user } } = await supabase.auth.getUser();
+  const { data: compUser } = await supabase
+    .from("company_users")
+    .select("name, email")
+    .eq("id", userId)
+    .maybeSingle();
+  const userName = compUser?.name || user?.email?.split("@")[0] || "공급사 담당자";
+
+  // 1. Fetch PO to verify ownership
+  const { data: po, error: poErr } = await supabase
+    .from("purchase_orders")
+    .select("id, po_number, activity_logs")
+    .eq("id", params.poId)
+    .eq("supplier_id", companyId)
+    .maybeSingle();
+
+  if (poErr || !po) {
+    throw new Error("발주서를 찾을 수 없거나 접근 권한이 없습니다.");
+  }
+
+  // 2. Generate case number
+  const todayStr = new Date().toISOString().slice(2, 10).replace(/-/g, "");
+  const randomSuffix = Math.floor(1000 + Math.random() * 9000);
+  const caseNumber = `CASE-${todayStr}-${randomSuffix}`;
+
+  // 3. Insert into partner_inquiries
+  const insertPayload: any = {
+    company_id: companyId,
+    created_by: userId,
+    case_number: caseNumber,
+    category: params.category || "logistics",
+    title: params.title || `[${params.poNumber}] PO 변경 요청`,
+    content: params.content,
+    status: "open",
+    related_po_id: params.poId,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  };
+
+  const { data: newCase, error: caseErr } = await supabase
+    .from("partner_inquiries")
+    .insert(insertPayload)
+    .select("id, case_number")
+    .single();
+
+  if (caseErr) {
+    // If related_po_id column is not recognized in schema, fallback without it
+    delete insertPayload.related_po_id;
+    const { data: retryCase, error: retryErr } = await supabase
+      .from("partner_inquiries")
+      .insert(insertPayload)
+      .select("id, case_number")
+      .single();
+    if (retryErr) throw retryErr;
+  }
+
+  // 4. Update PO confirmation status to CHANGE_REQUESTED
+  const easternNow = formatEasternDateTime(new Date().toISOString());
+  const currentLogs = Array.isArray(po.activity_logs) ? po.activity_logs : [];
+  const newLogs = [
+    {
+      event: "Change Requested",
+      actor: userName,
+      case_number: caseNumber,
+      timestamp: easternNow,
+    },
+    ...currentLogs,
+  ];
+
+  await supabase
+    .from("purchase_orders")
+    .update({
+      supplier_confirmation_status: "CHANGE_REQUESTED",
+      activity_logs: newLogs,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", params.poId);
+
+  revalidatePath(`/portal/orders/purchase-orders/${params.poId}`);
+  revalidatePath("/portal/orders/purchase-orders");
+  revalidatePath(`/admin/purchasing/${params.poId}`);
+  revalidatePath("/admin/purchasing");
+  revalidatePath("/portal/support");
+  revalidatePath("/admin/inquiries");
+
+  return { success: true, caseNumber, caseId: newCase?.id };
 }
 
 /**

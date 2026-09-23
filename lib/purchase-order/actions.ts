@@ -5,6 +5,8 @@ import { verifyAdminSession } from "@/lib/auth/dal";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getOverallStatus } from "./status-helper";
 import { resolveEffectiveSku } from "@/lib/product/types";
+import { formatEasternDateTime } from "@/lib/utils/timezone";
+import { createPoNotification } from "@/lib/notification/actions";
 
 async function verifyWritePermission(supabase: any, userId: string) {
   const { data: userRoles } = await supabase
@@ -371,8 +373,34 @@ export async function getPurchaseOrderDetail(poId: string) {
   const totalShipped = formattedLines.reduce((sum, l) => sum + l.shipped_qty, 0);
   const totalReceived = formattedLines.reduce((sum, l) => sum + l.received_qty, 0);
 
+  // 3. Fetch linked support cases from partner_inquiries
+  let linkedCases: any[] = [];
+  try {
+    const { data: inqs } = await supabase
+      .from("partner_inquiries")
+      .select("id, case_number, title, category, status, created_at")
+      .or(`related_po_id.eq.${poId},title.ilike.%${po.po_number}%`)
+      .order("created_at", { ascending: false });
+    linkedCases = inqs || [];
+  } catch {}
+
   return {
     ...po,
+    revision_no: po.revision_no || 1,
+    supplier_confirmation_status: po.supplier_confirmation_status || "PENDING",
+    confirmed_by_name: po.confirmed_by_name || null,
+    confirmed_at: po.confirmed_at || null,
+    cancellation_status: po.cancellation_status || "NONE",
+    cancellation_reason: po.cancellation_reason || null,
+    cancellation_requested_at: po.cancellation_requested_at || null,
+    cancellation_confirmed_by: po.cancellation_confirmed_by || null,
+    cancellation_confirmed_at: po.cancellation_confirmed_at || null,
+    cancellation_rejected_by: po.cancellation_rejected_by || null,
+    cancellation_rejected_at: po.cancellation_rejected_at || null,
+    cancellation_reject_reason: po.cancellation_reject_reason || null,
+    activity_logs: Array.isArray(po.activity_logs) ? po.activity_logs : [],
+    revisions: Array.isArray(po.revisions) ? po.revisions : [],
+    linkedCases,
     supplier: enrichedSupplier,
     lines: formattedLines,
     total_qty: totalQty,
@@ -519,8 +547,50 @@ export async function getCompanyOriginsAndContacts(companyId: string) {
  * Fetch active products associated with a supplier company (via company_id, brand ownership, or product_suppliers).
  */
 export async function getProductsForSupplier(supplierId: string) {
-  await verifyAdminSession();
+  if (!supplierId) return [];
+
   const supabase = createAdminClient();
+
+  // Validate session: allow Admin or Portal user of supplierId
+  const { createClient } = await import("@/lib/supabase/server");
+  const supabaseServer = await createClient();
+  const {
+    data: { user },
+  } = await supabaseServer.auth.getUser();
+
+  if (!user) {
+    throw new Error("인증 세션이 만료되었습니다. 다시 로그인해 주세요.");
+  }
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .maybeSingle();
+
+  if (!profile) {
+    throw new Error("사용자 프로필을 찾을 수 없습니다.");
+  }
+
+  if (profile.role === "admin") {
+    // Admin user: full access to any supplier's products
+  } else if (profile.role === "portal") {
+    // Portal user: verify user belongs to supplierId
+    const { data: companyUser } = await supabase
+      .from("company_users")
+      .select("company_id, status")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    if (!companyUser || companyUser.status !== "active") {
+      throw new Error("현재 계정에 연결된 활성 회사 정보를 확인할 수 없습니다. 관리자에게 문의해주세요.");
+    }
+    if (companyUser.company_id !== supplierId) {
+      throw new Error("타사 제품 정보를 조회할 수 없습니다.");
+    }
+  } else {
+    throw new Error("접근 권한이 없습니다.");
+  }
 
   // 1. Fetch brand IDs owned by this company
   const { data: brands } = await supabase
@@ -828,26 +898,38 @@ export async function createPurchaseOrder(data: CreatePoInput) {
 }
 
 /**
- * Update an existing Purchase Order (Only available in DRAFT status).
+ * Update an existing Purchase Order.
+ * Rules:
+ * - DRAFT / APPROVED: Freely editable by Admin without revision increment.
+ * - SENT (Pending or Confirmed): Increments revision_no, snapshots previous version in revisions,
+ *   resets supplier_confirmation_status to "PENDING", logs "Revised", and creates PO_REVISED notification.
  */
 export async function updatePurchaseOrder(poId: string, data: CreatePoInput) {
   const { userId } = await verifyAdminSession();
   const supabase = createAdminClient();
   await verifyWritePermission(supabase, userId);
 
-  // 1. Verify PO exists and is DRAFT
+  // 1. Fetch current user name
+  const { data: staff } = await supabase
+    .from("staff_profiles")
+    .select("display_name")
+    .eq("id", userId)
+    .maybeSingle();
+  const actorName = staff?.display_name || "어드민";
+
+  // 2. Fetch current PO
   const { data: po } = await supabase
     .from("purchase_orders")
-    .select("po_status")
+    .select("*")
     .eq("id", poId)
     .single();
 
   if (!po) throw new Error("Purchase order not found.");
-  if (po.po_status !== "DRAFT") {
-    throw new Error("DRAFT(초안) 상태인 발주서만 수정할 수 있습니다.");
+  if (po.po_status === "CANCELLED") {
+    throw new Error("취소된 발주서는 수정할 수 없습니다.");
   }
 
-  // 2. Verify Destination Warehouse status
+  // 3. Verify Destination Warehouse status
   const { data: warehouse } = await supabase
     .from("warehouses")
     .select("status")
@@ -859,7 +941,7 @@ export async function updatePurchaseOrder(poId: string, data: CreatePoInput) {
     throw new Error("비활성(Inactive) 상태의 물류창고는 입고지로 지정할 수 없습니다.");
   }
 
-  // 3. Validate Lines
+  // 4. Validate Lines
   if (!data.lines || data.lines.length === 0) {
     throw new Error("최소 한 개 이상의 제품 품목이 추가되어야 합니다.");
   }
@@ -869,7 +951,53 @@ export async function updatePurchaseOrder(poId: string, data: CreatePoInput) {
     if (l.unit_cost < 0) throw new Error("구매 단가는 0 이상이어야 합니다.");
   });
 
-  // 4. Update Header
+  const easternNow = formatEasternDateTime(new Date().toISOString());
+  const isSent = po.po_status === "SENT";
+  const newRevisionNo = isSent ? (po.revision_no || 1) + 1 : (po.revision_no || 1);
+
+  // Fetch current lines for revision snapshot if isSent
+  const currentRevisions = Array.isArray(po.revisions) ? po.revisions : [];
+  let updatedRevisions = currentRevisions;
+
+  if (isSent) {
+    const { data: oldLines } = await supabase
+      .from("purchase_order_lines")
+      .select("product_id, qty, unit_cost, product_name_snapshot, manufacture_sku_snapshot, letusto_sku_snapshot, line_note")
+      .eq("purchase_order_id", poId);
+
+    const snapshot = {
+      revision_no: po.revision_no || 1,
+      modified_at: new Date().toISOString(),
+      modified_at_eastern: easternNow,
+      modified_by: actorName,
+      lines: oldLines || [],
+      terms: {
+        currency: po.currency,
+        payment_terms: po.payment_terms,
+        incoterms: po.incoterms,
+        port_of_loading: po.port_of_loading,
+        expected_ready_date: po.expected_ready_date,
+        expected_ship_date: po.expected_ship_date,
+        eta: po.eta,
+        supplier_facing_note: po.supplier_facing_note,
+      },
+    };
+    updatedRevisions = [snapshot, ...currentRevisions];
+  }
+
+  const currentLogs = Array.isArray(po.activity_logs) ? po.activity_logs : [];
+  const logEvent = isSent ? "Revised" : "Admin Modified";
+  const newLogs = [
+    {
+      event: logEvent,
+      actor: actorName,
+      revision_no: newRevisionNo,
+      timestamp: easternNow,
+    },
+    ...currentLogs,
+  ];
+
+  // 5. Update Header
   const updatePayload: any = {
     supplier_id: data.supplier_id,
     order_date: data.order_date,
@@ -885,6 +1013,10 @@ export async function updatePurchaseOrder(poId: string, data: CreatePoInput) {
     po_receiving_email: data.po_receiving_email || null,
     internal_note: data.internal_note || null,
     supplier_facing_note: data.supplier_facing_note || null,
+    revision_no: newRevisionNo,
+    supplier_confirmation_status: isSent ? "PENDING" : (po.supplier_confirmation_status || "PENDING"),
+    revisions: updatedRevisions,
+    activity_logs: newLogs,
     updated_at: new Date().toISOString(),
   };
 
@@ -904,7 +1036,7 @@ export async function updatePurchaseOrder(poId: string, data: CreatePoInput) {
 
   if (poErr) throw new Error(`발주서 헤더 수정 실패: ${poErr.message}`);
 
-  // 5. Delete old lines and insert new ones
+  // 6. Delete old lines and insert new ones
   await supabase.from("purchase_order_lines").delete().eq("purchase_order_id", poId);
 
   const productIds = data.lines.map((l) => l.product_id);
@@ -944,9 +1076,25 @@ export async function updatePurchaseOrder(poId: string, data: CreatePoInput) {
     throw new Error(`발주서 라인 품목 수정 실패: ${linesErr.message}`);
   }
 
+  // 7. If isSent, trigger PO_REVISED notification
+  if (isSent) {
+    await createPoNotification({
+      companyId: data.supplier_id || po.supplier_id,
+      type: "PO_REVISED",
+      title: "발주서가 수정되었습니다.",
+      content: `${po.po_number} · Revision ${newRevisionNo}`,
+      linkUrl: `/portal/orders/purchase-orders/${poId}`,
+      poNumber: po.po_number,
+      poId: poId,
+      metadata: { revision_no: newRevisionNo }
+    });
+  }
+
   revalidatePath("/admin/purchasing");
   revalidatePath(`/admin/purchasing/${poId}`);
-  return { success: true };
+  revalidatePath(`/portal/orders/purchase-orders/${poId}`);
+  revalidatePath("/portal/orders/purchase-orders");
+  return { success: true, revision_no: newRevisionNo };
 }
 
 /**
@@ -957,77 +1105,221 @@ export async function transitionPoStatus(poId: string, targetStatus: string) {
   const supabase = createAdminClient();
   await verifyWritePermission(supabase, userId);
 
+  const { data: staff } = await supabase
+    .from("staff_profiles")
+    .select("display_name")
+    .eq("id", userId)
+    .maybeSingle();
+  const actorName = staff?.display_name || "어드민";
+
   const { data: po } = await supabase
     .from("purchase_orders")
-    .select("po_status, fulfillment_status")
+    .select("*")
     .eq("id", poId)
     .single();
 
   if (!po) throw new Error("Purchase order not found.");
 
+  const easternNow = formatEasternDateTime(new Date().toISOString());
+  const currentLogs = Array.isArray(po.activity_logs) ? po.activity_logs : [];
+
   // Transition validation
   if (targetStatus === "APPROVED") {
     if (po.po_status !== "DRAFT") throw new Error("DRAFT 상태인 발주서만 승인할 수 있습니다.");
     
+    const newLogs = [{ event: "Approved", actor: actorName, timestamp: easternNow }, ...currentLogs];
     await supabase
       .from("purchase_orders")
       .update({
         po_status: "APPROVED",
         approved_by: userId,
         approved_at: new Date().toISOString(),
+        activity_logs: newLogs,
         updated_at: new Date().toISOString(),
       })
       .eq("id", poId);
   } else if (targetStatus === "SENT") {
     if (po.po_status !== "APPROVED") throw new Error("APPROVED 상태인 발주서만 발송 처리할 수 있습니다.");
-    
+
+    // Compute total quantity
+    const { data: poLines } = await supabase.from("purchase_order_lines").select("qty").eq("purchase_order_id", poId);
+    const totalQty = (poLines || []).reduce((sum: number, l: any) => sum + (Number(l.qty) || 0), 0);
+
+    const newLogs = [{ event: "Sent", actor: actorName, timestamp: easternNow }, ...currentLogs];
     await supabase
       .from("purchase_orders")
       .update({
         po_status: "SENT",
         fulfillment_status: "PENDING",
+        supplier_confirmation_status: po.supplier_confirmation_status || "PENDING",
         sent_at: new Date().toISOString(),
+        activity_logs: newLogs,
         updated_at: new Date().toISOString(),
       })
       .eq("id", poId);
+
+    // Create PO_RECEIVED notification for Brand Portal
+    await createPoNotification({
+      companyId: po.supplier_id,
+      type: "PO_RECEIVED",
+      title: "새로운 발주서가 도착했습니다.",
+      content: `${po.po_number} · 총 수량 ${totalQty}개`,
+      linkUrl: `/portal/orders/purchase-orders/${poId}`,
+      poNumber: po.po_number,
+      poId: poId,
+      metadata: { total_qty: totalQty }
+    });
   } else if (targetStatus === "IN_PRODUCTION") {
     if (po.po_status !== "SENT") throw new Error("SENT 상태인 발주서만 생산 상태로 변경할 수 있습니다.");
     
+    const newLogs = [{ event: "In Production", actor: actorName, timestamp: easternNow }, ...currentLogs];
     await supabase
       .from("purchase_orders")
       .update({
         fulfillment_status: "IN_PRODUCTION",
+        activity_logs: newLogs,
         updated_at: new Date().toISOString(),
       })
       .eq("id", poId);
   } else if (targetStatus === "READY_TO_SHIP") {
     if (po.po_status !== "SENT") throw new Error("SENT 상태인 발주서만 선적대기 상태로 변경할 수 있습니다.");
     
+    const newLogs = [{ event: "Ready to Ship", actor: actorName, timestamp: easternNow }, ...currentLogs];
     await supabase
       .from("purchase_orders")
       .update({
         fulfillment_status: "READY_TO_SHIP",
+        activity_logs: newLogs,
         updated_at: new Date().toISOString(),
       })
       .eq("id", poId);
   } else if (targetStatus === "CANCELLED") {
     if (po.po_status === "CANCELLED") throw new Error("이미 취소된 발주서입니다.");
+
+    // Direct Cancellation Rule:
+    // If supplier already CONFIRMED, Admin cannot cancel directly. Must request cancellation!
+    if (po.supplier_confirmation_status === "CONFIRMED") {
+      throw new Error("공급사가 이미 확인 완료(Confirmed)한 발주서는 직접 취소할 수 없습니다. '발주 취소 요청'을 진행해주세요.");
+    }
     
+    const newLogs = [
+      {
+        event: "Cancelled",
+        actor: actorName,
+        previous_status: po.po_status,
+        timestamp: easternNow,
+      },
+      ...currentLogs,
+    ];
+
     await supabase
       .from("purchase_orders")
       .update({
         po_status: "CANCELLED",
         cancelled_by: userId,
         cancelled_at: new Date().toISOString(),
+        cancellation_status: "CANCELLED",
+        activity_logs: newLogs,
         updated_at: new Date().toISOString(),
       })
       .eq("id", poId);
+
+    // If it was SENT, send PO_CANCELLED notification to Portal
+    if (po.po_status === "SENT" || po.sent_at) {
+      await createPoNotification({
+        companyId: po.supplier_id,
+        type: "PO_CANCELLED",
+        title: "발주서가 취소되었습니다.",
+        content: `${po.po_number}`,
+        linkUrl: `/portal/orders/purchase-orders/${poId}`,
+        poNumber: po.po_number,
+        poId: poId,
+      });
+    }
   } else {
     throw new Error(`알 수 없는 발주 진행 상태입니다: ${targetStatus}`);
   }
 
   revalidatePath("/admin/purchasing");
   revalidatePath(`/admin/purchasing/${poId}`);
+  revalidatePath(`/portal/orders/purchase-orders/${poId}`);
+  revalidatePath("/portal/orders/purchase-orders");
+  return { success: true };
+}
+
+/**
+ * Admin requests PO cancellation after Supplier has already Confirmed.
+ */
+export async function requestPoCancellation(
+  poId: string,
+  reason: string,
+  reasonCategory: string = "Other"
+) {
+  const { userId } = await verifyAdminSession();
+  const supabase = createAdminClient();
+  await verifyWritePermission(supabase, userId);
+
+  if (!reason || reason.trim().length === 0) {
+    throw new Error("취소 요청 사유를 입력해주세요.");
+  }
+
+  const { data: staff } = await supabase
+    .from("staff_profiles")
+    .select("display_name")
+    .eq("id", userId)
+    .maybeSingle();
+  const actorName = staff?.display_name || "어드민";
+
+  const { data: po } = await supabase
+    .from("purchase_orders")
+    .select("*")
+    .eq("id", poId)
+    .single();
+
+  if (!po) throw new Error("Purchase order not found.");
+  if (po.po_status === "CANCELLED") throw new Error("이미 취소된 발주서입니다.");
+
+  const easternNow = formatEasternDateTime(new Date().toISOString());
+  const currentLogs = Array.isArray(po.activity_logs) ? po.activity_logs : [];
+  const newLogs = [
+    {
+      event: "Cancellation Requested",
+      actor: actorName,
+      reason,
+      reason_category: reasonCategory,
+      timestamp: easternNow,
+    },
+    ...currentLogs,
+  ];
+
+  await supabase
+    .from("purchase_orders")
+    .update({
+      cancellation_status: "CANCELLATION_REQUESTED",
+      cancellation_reason: reason,
+      cancellation_requested_by: userId,
+      cancellation_requested_at: new Date().toISOString(),
+      activity_logs: newLogs,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", poId);
+
+  // Send PO_CANCELLATION_REQUESTED notification to Portal
+  await createPoNotification({
+    companyId: po.supplier_id,
+    type: "PO_CANCELLATION_REQUESTED",
+    title: "발주 취소 요청이 접수되었습니다.",
+    content: `${po.po_number}`,
+    linkUrl: `/portal/orders/purchase-orders/${poId}`,
+    poNumber: po.po_number,
+    poId: poId,
+    metadata: { reason, reason_category: reasonCategory }
+  });
+
+  revalidatePath("/admin/purchasing");
+  revalidatePath(`/admin/purchasing/${poId}`);
+  revalidatePath(`/portal/orders/purchase-orders/${poId}`);
+  revalidatePath("/portal/orders/purchase-orders");
   return { success: true };
 }
 

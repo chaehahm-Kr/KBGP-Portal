@@ -61,8 +61,88 @@ export async function createNotification(
 }
 
 /**
+ * PO 관련 이벤트(PO_RECEIVED, PO_REVISED, PO_CANCELLATION_REQUESTED, PO_CANCELLED)에 대한 알림을 생성합니다.
+ * 중복 생성을 방지하며 회사 메타데이터 및 notifications 테이블에 안전하게 기록합니다.
+ */
+export async function createPoNotification(params: {
+  companyId: string;
+  type: "PO_RECEIVED" | "PO_REVISED" | "PO_CANCELLATION_REQUESTED" | "PO_CANCELLED";
+  title: string;
+  content: string;
+  linkUrl: string;
+  poNumber: string;
+  poId: string;
+  metadata?: Record<string, any>;
+}) {
+  try {
+    const adminSupabase = createAdminClient();
+    const notificationId = `po-${params.type.toLowerCase()}-${params.poId}-${Date.now()}`;
+
+    // 1. Fetch company intro JSON
+    const { data: comp } = await adminSupabase
+      .from("companies")
+      .select("intro")
+      .eq("id", params.companyId)
+      .maybeSingle();
+
+    let metaObj: any = {};
+    if (comp && comp.intro && comp.intro.startsWith("__COMPANY_METADATA__:")) {
+      try {
+        metaObj = JSON.parse(comp.intro.substring("__COMPANY_METADATA__:".length));
+      } catch (e) {}
+    }
+
+    const existingNotifs: any[] = Array.isArray(metaObj.notifications) ? metaObj.notifications : [];
+    
+    // Deduplication check for identical event (same type, poId, and revision if revised)
+    const revNo = params.metadata?.revision_no;
+    const isDuplicate = existingNotifs.some((n: any) => {
+      if (n.type !== params.type || n.poId !== params.poId) return false;
+      if (params.type === "PO_REVISED" && revNo !== undefined) {
+        return n.metadata?.revision_no === revNo;
+      }
+      return true;
+    });
+
+    if (!isDuplicate) {
+      const newNotif = {
+        id: notificationId,
+        companyId: params.companyId,
+        type: params.type,
+        title: params.title,
+        content: params.content,
+        link_url: params.linkUrl,
+        poNumber: params.poNumber,
+        poId: params.poId,
+        metadata: params.metadata || {},
+        created_at: new Date().toISOString(),
+      };
+
+      existingNotifs.unshift(newNotif);
+      // Keep up to 100 recent notifications
+      metaObj.notifications = existingNotifs.slice(0, 100);
+
+      await adminSupabase
+        .from("companies")
+        .update({
+          intro: `__COMPANY_METADATA__:${JSON.stringify(metaObj)}`,
+        })
+        .eq("id", params.companyId);
+    }
+
+    revalidatePath("/portal", "layout");
+    return { success: true };
+  } catch (err) {
+    console.error("Failed to create PO notification:", err);
+    return { success: false, error: err instanceof Error ? err.message : "알림 생성 실패" };
+  }
+}
+
+/**
  * 로그인한 사용자의 모든 알림을 최신순으로 가져옵니다.
- * Brand Portal 사용자의 경우: 소속 회사의 Case 중 Action Required(조치 필요) 메시지를 알림으로 제공합니다.
+ * Brand Portal 사용자의 경우:
+ * 1. PO 관련 이벤트 알림 (발주 수신, 수정, 취소 등)
+ * 2. Action Required 문의 메시지 알림
  */
 export async function getNotifications(): Promise<NotificationItem[]> {
   try {
@@ -85,52 +165,81 @@ export async function getNotifications(): Promise<NotificationItem[]> {
         ? companyUser.permissions.read_notification_ids
         : [];
 
-      // Fetch partner inquiries for this company
+      const resultNotifications: NotificationItem[] = [];
+
+      // 1-A. Fetch PO notifications from Company Metadata
+      const { data: comp } = await adminSupabase
+        .from("companies")
+        .select("intro")
+        .eq("id", companyId)
+        .maybeSingle();
+
+      if (comp && comp.intro && comp.intro.startsWith("__COMPANY_METADATA__:")) {
+        try {
+          const parsed = JSON.parse(comp.intro.substring("__COMPANY_METADATA__:".length));
+          if (Array.isArray(parsed.notifications)) {
+            parsed.notifications.forEach((n: any) => {
+              resultNotifications.push({
+                id: n.id,
+                user_id: user.id,
+                sender_id: null,
+                title: n.title,
+                content: n.content,
+                link_url: n.link_url || `/portal/orders/purchase-orders/${n.poId}`,
+                is_read: readIds.includes(n.id),
+                created_at: n.created_at,
+              });
+            });
+          }
+        } catch (e) {}
+      }
+
+      // 1-B. Fetch Action Required messages sent by Admin for company cases
       const { data: inquiries } = await adminSupabase
         .from("partner_inquiries")
         .select("id, case_number, category, title")
         .eq("company_id", companyId);
 
-      if (!inquiries || inquiries.length === 0) {
-        return [];
+      if (inquiries && inquiries.length > 0) {
+        const inquiryMap = new Map(inquiries.map((i) => [i.id, i]));
+        const inquiryIds = inquiries.map((i) => i.id);
+
+        const { data: messages } = await adminSupabase
+          .from("partner_inquiry_messages")
+          .select("id, inquiry_id, sender_id, sender_name, content, message_type, is_action_flag, created_at")
+          .in("inquiry_id", inquiryIds)
+          .eq("sender_type", "admin")
+          .eq("is_action_flag", true)
+          .eq("message_type", "message")
+          .order("created_at", { ascending: false });
+
+        if (messages) {
+          messages.forEach((msg) => {
+            const inq = inquiryMap.get(msg.inquiry_id);
+            const caseNum = inq?.case_number || "CASE";
+            const catLabel = inq?.category ? (CATEGORY_LABELS[inq.category] || inq.category) : (inq?.title || "문의");
+            const linkCaseIdentifier = inq?.case_number || inq?.id || msg.inquiry_id;
+
+            resultNotifications.push({
+              id: msg.id,
+              user_id: user.id,
+              sender_id: msg.sender_id,
+              title: "조치가 필요한 문의가 있습니다.",
+              content: `${caseNum} · ${catLabel}`,
+              link_url: `/portal/support?case=${linkCaseIdentifier}`,
+              is_read: readIds.includes(msg.id),
+              created_at: msg.created_at,
+            });
+          });
+        }
       }
 
-      const inquiryMap = new Map(inquiries.map((i) => [i.id, i]));
-      const inquiryIds = inquiries.map((i) => i.id);
+      // Sort all notifications by created_at descending
+      resultNotifications.sort(
+        (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      );
 
-      // Fetch Action Required messages sent by Admin
-      const { data: messages, error: msgError } = await adminSupabase
-        .from("partner_inquiry_messages")
-        .select("id, inquiry_id, sender_id, sender_name, content, message_type, is_action_flag, created_at")
-        .in("inquiry_id", inquiryIds)
-        .eq("sender_type", "admin")
-        .eq("is_action_flag", true)
-        .eq("message_type", "message")
-        .order("created_at", { ascending: false });
-
-      if (msgError || !messages) {
-        return [];
-      }
-
-      const notifications: NotificationItem[] = messages.map((msg) => {
-        const inq = inquiryMap.get(msg.inquiry_id);
-        const caseNum = inq?.case_number || "CASE";
-        const catLabel = inq?.category ? (CATEGORY_LABELS[inq.category] || inq.category) : (inq?.title || "문의");
-        const linkCaseIdentifier = inq?.case_number || inq?.id || msg.inquiry_id;
-
-        return {
-          id: msg.id,
-          user_id: user.id,
-          sender_id: msg.sender_id,
-          title: "조치가 필요한 문의가 있습니다.",
-          content: `${caseNum} · ${catLabel}`,
-          link_url: `/portal/support?case=${linkCaseIdentifier}`,
-          is_read: readIds.includes(msg.id),
-          created_at: msg.created_at
-        };
-      });
-
-      return notifications;
+      return resultNotifications;
     }
 
     // 2. Fallback for staff or system notifications table
