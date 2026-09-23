@@ -214,35 +214,35 @@ export function InvoiceForm({ eligiblePos, initialInvoice }: InvoiceFormProps) {
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       {errorMessage && (
-        <div className="p-3.5 rounded-lg bg-rose-50 border border-rose-250 text-rose-700 font-bold text-xs">
+        <div className="p-3.5 rounded-lg bg-rose-50 border border-rose-250 text-rose-700 dark:bg-rose-950/40 dark:border-rose-900/60 dark:text-rose-300 font-bold text-xs font-sans">
           ⚠️ {errorMessage}
         </div>
       )}
       {successMessage && (
-        <div className="p-3.5 rounded-lg bg-emerald-50 border border-emerald-250 text-emerald-700 font-bold text-xs">
+        <div className="p-3.5 rounded-lg bg-emerald-50 border border-emerald-250 text-emerald-700 dark:bg-emerald-950/40 dark:border-emerald-900/60 dark:text-emerald-300 font-bold text-xs font-sans">
           ✅ {successMessage}
         </div>
       )}
 
       {/* Basic Meta Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="p-5 rounded-xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900 space-y-4">
-          <h2 className="text-sm font-bold text-zinc-900 dark:text-white border-b border-zinc-150 pb-2">
+        <div className="p-5 rounded-xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900 space-y-4 shadow-sm">
+          <h2 className="text-sm font-bold text-zinc-900 dark:text-zinc-100 border-b border-zinc-150 dark:border-zinc-800 pb-2">
             발주 및 기본 정보
           </h2>
 
           <div className="space-y-3">
             <div>
-              <label className="block text-[11px] font-bold text-zinc-400 mb-1">관련 발주서 (PO)</label>
+              <label className="block text-[11px] font-bold text-zinc-500 dark:text-zinc-400 mb-1">관련 발주서 (PO)</label>
               {isEditMode ? (
-                <div className="px-3 py-2 bg-zinc-50 border border-zinc-200 rounded-lg text-xs font-mono font-bold text-zinc-650">
+                <div className="px-3 py-2 bg-zinc-50 border border-zinc-200 dark:bg-zinc-950 dark:border-zinc-800 rounded-lg text-xs font-mono font-bold text-zinc-700 dark:text-zinc-300">
                   {initialInvoice.poNumber}
                 </div>
               ) : (
                 <select
                   value={selectedPoId}
                   onChange={(e) => setSelectedPoId(e.target.value)}
-                  className="w-full px-3 py-2 border border-zinc-200 dark:border-zinc-800 rounded-lg text-xs bg-transparent dark:bg-zinc-950"
+                  className="w-full px-3 py-2 border border-zinc-200 dark:border-zinc-800 rounded-lg text-xs bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100"
                   required
                 >
                   <option value="">-- 발주서 선택 --</option>
@@ -256,50 +256,50 @@ export function InvoiceForm({ eligiblePos, initialInvoice }: InvoiceFormProps) {
             </div>
 
             <div>
-              <label className="block text-[11px] font-bold text-zinc-400 mb-1">인보이스 번호 (Invoice No.)</label>
+              <label className="block text-[11px] font-bold text-zinc-500 dark:text-zinc-400 mb-1">인보이스 번호 (Invoice No.)</label>
               <input
                 type="text"
                 value={supplierInvoiceNumber}
                 onChange={(e) => setSupplierInvoiceNumber(e.target.value)}
                 placeholder="예: TEST-INV-001"
-                className="w-full px-3 py-2 border border-zinc-200 dark:border-zinc-800 rounded-lg text-xs bg-transparent"
+                className="w-full px-3 py-2 border border-zinc-200 dark:border-zinc-800 rounded-lg text-xs bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 dark:placeholder:text-zinc-600"
                 required
               />
             </div>
           </div>
         </div>
 
-        <div className="p-5 rounded-xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900 space-y-4">
-          <h2 className="text-sm font-bold text-zinc-900 dark:text-white border-b border-zinc-150 pb-2">
+        <div className="p-5 rounded-xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900 space-y-4 shadow-sm">
+          <h2 className="text-sm font-bold text-zinc-900 dark:text-zinc-100 border-b border-zinc-150 dark:border-zinc-800 pb-2">
             거래 일자 및 첨부파일
           </h2>
 
           <div className="space-y-3">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-[11px] font-bold text-zinc-400 mb-1">발행 일자 (Invoice Date)</label>
+                <label className="block text-[11px] font-bold text-zinc-500 dark:text-zinc-400 mb-1">발행 일자 (Invoice Date)</label>
                 <input
                   type="date"
                   value={invoiceDate}
                   onChange={(e) => setInvoiceDate(e.target.value)}
-                  className="w-full px-3 py-2 border border-zinc-200 dark:border-zinc-800 rounded-lg text-xs bg-transparent"
+                  className="w-full px-3 py-2 border border-zinc-200 dark:border-zinc-800 rounded-lg text-xs bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100"
                   required
                 />
               </div>
               <div>
-                <label className="block text-[11px] font-bold text-zinc-400 mb-1">만기 일자 (Due Date)</label>
+                <label className="block text-[11px] font-bold text-zinc-500 dark:text-zinc-400 mb-1">만기 일자 (Due Date)</label>
                 <input
                   type="date"
                   value={dueDate}
                   onChange={(e) => setDueDate(e.target.value)}
-                  className="w-full px-3 py-2 border border-zinc-200 dark:border-zinc-800 rounded-lg text-xs bg-transparent"
+                  className="w-full px-3 py-2 border border-zinc-200 dark:border-zinc-800 rounded-lg text-xs bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100"
                   required
                 />
               </div>
             </div>
 
             <div>
-              <label className="block text-[11px] font-bold text-zinc-400 mb-1">인보이스 PDF 파일</label>
+              <label className="block text-[11px] font-bold text-zinc-500 dark:text-zinc-400 mb-1">인보이스 PDF 파일</label>
               <div className="flex items-center gap-3">
                 <input
                   type="file"
@@ -310,11 +310,11 @@ export function InvoiceForm({ eligiblePos, initialInvoice }: InvoiceFormProps) {
                 />
                 <label
                   htmlFor="pdf-upload"
-                  className="px-3.5 py-1.5 border border-zinc-300 dark:border-zinc-700 hover:bg-zinc-50 rounded-lg text-xs font-bold cursor-pointer transition-colors"
+                  className="px-3.5 py-1.5 border border-zinc-300 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-800 rounded-lg text-xs font-bold text-zinc-700 dark:text-zinc-200 cursor-pointer transition-colors"
                 >
                   파일 선택 (PDF)
                 </label>
-                <span className="text-[11px] text-zinc-400 truncate max-w-[200px]">
+                <span className="text-[11px] text-zinc-500 dark:text-zinc-400 truncate max-w-[200px]">
                   {attachmentFilename || "업로드된 파일 없음"}
                 </span>
               </div>
@@ -325,31 +325,31 @@ export function InvoiceForm({ eligiblePos, initialInvoice }: InvoiceFormProps) {
 
       {/* PO Lines Table */}
       <div className="p-5 rounded-xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900 space-y-4 shadow-sm">
-        <h2 className="text-sm font-bold text-zinc-900 dark:text-white">청구 품목 수량 및 단가 입력</h2>
+        <h2 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">청구 품목 수량 및 단가 입력</h2>
 
         {loadingLines ? (
-          <p className="text-xs text-zinc-400 italic">발주 품목 로딩 중...</p>
+          <p className="text-xs text-zinc-400 dark:text-zinc-500 italic">발주 품목 로딩 중...</p>
         ) : lines.length === 0 ? (
-          <p className="text-xs text-zinc-400 italic">발주서를 선택하면 청구 가능한 라인이 표시됩니다.</p>
+          <p className="text-xs text-zinc-400 dark:text-zinc-500 italic">발주서를 선택하면 청구 가능한 라인이 표시됩니다.</p>
         ) : (
           <div className="overflow-x-auto space-y-4">
             <table className="w-full text-left text-xs border-collapse">
               <thead>
-                <tr className="bg-zinc-50/50 text-zinc-500 font-bold border-b border-zinc-200 dark:bg-zinc-900/50 dark:border-zinc-800">
-                  <th className="px-3 py-2">상품 정보 / SKU</th>
-                  <th className="px-3 py-2 text-right">발주 (Ordered)</th>
-                  <th className="px-3 py-2 text-right">확정 (Confirmed)</th>
-                  <th className="px-3 py-2 text-right">선적 (Shipped)</th>
-                  <th className="px-3 py-2 text-right">입고 (Received)</th>
-                  <th className="px-3 py-2 text-right">기 청구 (Invoiced)</th>
-                  <th className="px-3 py-2 text-right">청구 가능 (Available)</th>
-                  <th className="px-3 py-2 text-right">청구 수량 (Invoice Qty)</th>
-                  <th className="px-3 py-2 text-right">FOB 단가</th>
-                  <th className="px-3 py-2 text-right">청구 금액</th>
-                  <th className="px-3 py-2">메모</th>
+                <tr className="bg-zinc-50/80 text-zinc-600 font-bold border-b border-zinc-200 dark:bg-zinc-950/60 dark:border-zinc-800 dark:text-zinc-400">
+                  <th className="px-3 py-2.5">상품 정보 / SKU</th>
+                  <th className="px-3 py-2.5 text-right">발주 (Ordered)</th>
+                  <th className="px-3 py-2.5 text-right">확정 (Confirmed)</th>
+                  <th className="px-3 py-2.5 text-right">선적 (Shipped)</th>
+                  <th className="px-3 py-2.5 text-right">입고 (Received)</th>
+                  <th className="px-3 py-2.5 text-right">기 청구 (Invoiced)</th>
+                  <th className="px-3 py-2.5 text-right">청구 가능 (Available)</th>
+                  <th className="px-3 py-2.5 text-right">청구 수량 (Invoice Qty)</th>
+                  <th className="px-3 py-2.5 text-right">FOB 단가</th>
+                  <th className="px-3 py-2.5 text-right">청구 금액</th>
+                  <th className="px-3 py-2.5">메모</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
+              <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/80">
                 {lines.map((line) => {
                   const input = lineInputs[line.purchaseOrderLineId] || { invoicedQty: 0, unitPrice: 0, lineNote: "" };
                   const lineTotal = input.invoicedQty * input.unitPrice;
@@ -359,17 +359,17 @@ export function InvoiceForm({ eligiblePos, initialInvoice }: InvoiceFormProps) {
                   const isQtyOverConfirm = (line.alreadyInvoicedQty + input.invoicedQty) > line.confirmedQty;
 
                   return (
-                    <tr key={line.purchaseOrderLineId}>
+                    <tr key={line.purchaseOrderLineId} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-800/30 transition-colors">
                       <td className="px-3 py-2.5">
-                        <div className="font-bold text-zinc-900 dark:text-white">{line.productName}</div>
-                        <div className="text-[10px] font-mono text-zinc-400 mt-0.5">{line.sku}</div>
+                        <div className="font-bold text-zinc-900 dark:text-zinc-100">{line.productName}</div>
+                        <div className="text-[10px] font-mono text-zinc-500 dark:text-zinc-400 mt-0.5">{line.sku}</div>
                       </td>
-                      <td className="px-3 py-2.5 text-right font-mono text-zinc-500">{line.orderedQty}</td>
-                      <td className="px-3 py-2.5 text-right font-mono text-zinc-650">{line.confirmedQty}</td>
-                      <td className="px-3 py-2.5 text-right font-mono text-zinc-700">{line.shippedQty}</td>
-                      <td className="px-3 py-2.5 text-right font-mono font-bold text-emerald-600">{line.receivedQty}</td>
-                      <td className="px-3 py-2.5 text-right font-mono text-zinc-400">{line.alreadyInvoicedQty}</td>
-                      <td className="px-3 py-2.5 text-right font-mono font-semibold text-blue-600">{availableQty}</td>
+                      <td className="px-3 py-2.5 text-right font-mono text-zinc-700 dark:text-zinc-300">{line.orderedQty}</td>
+                      <td className="px-3 py-2.5 text-right font-mono text-zinc-700 dark:text-zinc-300">{line.confirmedQty}</td>
+                      <td className="px-3 py-2.5 text-right font-mono text-zinc-700 dark:text-zinc-300">{line.shippedQty}</td>
+                      <td className="px-3 py-2.5 text-right font-mono font-bold text-emerald-600 dark:text-emerald-400">{line.receivedQty}</td>
+                      <td className="px-3 py-2.5 text-right font-mono text-zinc-500 dark:text-zinc-400">{line.alreadyInvoicedQty}</td>
+                      <td className="px-3 py-2.5 text-right font-mono font-semibold text-blue-600 dark:text-blue-400">{availableQty}</td>
                       <td className="px-3 py-2.5 text-right">
                         <div className="flex flex-col items-end">
                           <input
@@ -378,16 +378,16 @@ export function InvoiceForm({ eligiblePos, initialInvoice }: InvoiceFormProps) {
                             min={0}
                             id={`qty-${line.sku}`}
                             onChange={(e) => handleLineFieldChange(line.purchaseOrderLineId, "invoicedQty", parseInt(e.target.value) || 0)}
-                            className={`w-16 px-1.5 py-1 border rounded text-right font-mono text-xs ${
-                              isQtyOverConfirm ? "border-rose-500 bg-rose-50/50" : isQtyOverShip ? "border-amber-500 bg-amber-50/50" : "border-zinc-200 dark:border-zinc-800"
+                            className={`w-16 px-1.5 py-1 border rounded text-right font-mono text-xs bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 ${
+                              isQtyOverConfirm ? "border-rose-500 bg-rose-50/50 dark:bg-rose-950/30" : isQtyOverShip ? "border-amber-500 bg-amber-50/50 dark:bg-amber-950/30" : "border-zinc-200 dark:border-zinc-800"
                             }`}
                             required
                           />
                           {isQtyOverConfirm && (
-                            <span className="text-[9px] text-rose-600 mt-1 font-semibold whitespace-nowrap">Confirmed 초과</span>
+                            <span className="text-[9px] text-rose-600 dark:text-rose-400 mt-1 font-semibold whitespace-nowrap">Confirmed 초과</span>
                           )}
                           {!isQtyOverConfirm && isQtyOverShip && (
-                            <span className="text-[9px] text-amber-600 mt-1 font-semibold whitespace-nowrap">Shipped 초과</span>
+                            <span className="text-[9px] text-amber-600 dark:text-amber-400 mt-1 font-semibold whitespace-nowrap">Shipped 초과</span>
                           )}
                         </div>
                       </td>
@@ -399,11 +399,11 @@ export function InvoiceForm({ eligiblePos, initialInvoice }: InvoiceFormProps) {
                           step={0.01}
                           id={`price-${line.sku}`}
                           onChange={(e) => handleLineFieldChange(line.purchaseOrderLineId, "unitPrice", parseFloat(e.target.value) || 0)}
-                          className="w-16 px-1.5 py-1 border border-zinc-200 dark:border-zinc-800 rounded text-right font-mono text-xs"
+                          className="w-16 px-1.5 py-1 border border-zinc-200 dark:border-zinc-800 rounded text-right font-mono text-xs bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100"
                           required
                         />
                       </td>
-                      <td className="px-3 py-2.5 text-right font-mono font-bold text-zinc-900 dark:text-white">
+                      <td className="px-3 py-2.5 text-right font-mono font-bold text-zinc-900 dark:text-zinc-100">
                         {new Intl.NumberFormat("en-US", { style: "currency", currency }).format(lineTotal)}
                       </td>
                       <td className="px-3 py-2.5">
@@ -412,7 +412,7 @@ export function InvoiceForm({ eligiblePos, initialInvoice }: InvoiceFormProps) {
                           value={input.lineNote}
                           onChange={(e) => handleLineFieldChange(line.purchaseOrderLineId, "lineNote", e.target.value)}
                           placeholder="메모 사항"
-                          className="w-full px-2 py-1 border border-zinc-200 dark:border-zinc-800 rounded text-[11px]"
+                          className="w-full px-2 py-1 border border-zinc-200 dark:border-zinc-800 rounded text-[11px] bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 dark:placeholder:text-zinc-600"
                         />
                       </td>
                     </tr>
@@ -422,28 +422,28 @@ export function InvoiceForm({ eligiblePos, initialInvoice }: InvoiceFormProps) {
             </table>
 
             {/* Invoiced Summary Grid */}
-            <div className="bg-zinc-50 dark:bg-zinc-950 p-4 rounded-xl border border-zinc-200 dark:border-zinc-800 grid grid-cols-2 md:grid-cols-4 gap-4 text-xs mt-4">
+            <div className="bg-zinc-50/80 dark:bg-zinc-950/70 p-4 rounded-xl border border-zinc-200 dark:border-zinc-800 grid grid-cols-2 md:grid-cols-4 gap-4 text-xs mt-4">
               <div>
-                <span className="text-zinc-400 block font-semibold mb-1">PO 확정 금액 (PO Confirmed Value)</span>
-                <span className="text-sm font-bold text-zinc-900 dark:text-white">
+                <span className="text-zinc-500 dark:text-zinc-400 block font-semibold mb-1">PO 확정 금액 (PO Confirmed Value)</span>
+                <span className="text-sm font-bold text-zinc-900 dark:text-zinc-100">
                   {new Intl.NumberFormat("en-US", { style: "currency", currency }).format(poConfirmedValue)}
                 </span>
               </div>
               <div>
-                <span className="text-zinc-400 block font-semibold mb-1">기 청구 금액 (Previously Invoiced)</span>
-                <span className="text-sm font-bold text-zinc-900 dark:text-white">
+                <span className="text-zinc-500 dark:text-zinc-400 block font-semibold mb-1">기 청구 금액 (Previously Invoiced)</span>
+                <span className="text-sm font-bold text-zinc-900 dark:text-zinc-100">
                   {new Intl.NumberFormat("en-US", { style: "currency", currency }).format(previouslyInvoicedAmount)}
                 </span>
               </div>
               <div>
-                <span className="text-zinc-400 block font-semibold mb-1">금회 청구 금액 (Current Invoice)</span>
-                <span className="text-sm font-bold text-emerald-600">
+                <span className="text-zinc-500 dark:text-zinc-400 block font-semibold mb-1">금회 청구 금액 (Current Invoice)</span>
+                <span className="text-sm font-bold text-emerald-600 dark:text-emerald-400">
                   {new Intl.NumberFormat("en-US", { style: "currency", currency }).format(currentInvoiceAmount)}
                 </span>
               </div>
               <div>
-                <span className="text-zinc-400 block font-semibold mb-1">누적 청구 금액 (Cumulative Invoiced)</span>
-                <span className={`text-sm font-bold ${cumulativeInvoicedAmount > poConfirmedValue ? "text-rose-600" : "text-zinc-900 dark:text-white"}`}>
+                <span className="text-zinc-500 dark:text-zinc-400 block font-semibold mb-1">누적 청구 금액 (Cumulative Invoiced)</span>
+                <span className={`text-sm font-bold ${cumulativeInvoicedAmount > poConfirmedValue ? "text-rose-600 dark:text-rose-400" : "text-zinc-900 dark:text-zinc-100"}`}>
                   {new Intl.NumberFormat("en-US", { style: "currency", currency }).format(cumulativeInvoicedAmount)}
                 </span>
               </div>
@@ -451,13 +451,13 @@ export function InvoiceForm({ eligiblePos, initialInvoice }: InvoiceFormProps) {
           </div>
         )}
 
-        <div className="border-t border-zinc-200 pt-4 flex items-center justify-between">
-          <div className="text-zinc-500 text-xs">
-            발주서 통화: <span className="font-bold text-zinc-900 dark:text-white">{currency}</span>
+        <div className="border-t border-zinc-200 dark:border-zinc-800 pt-4 flex items-center justify-between">
+          <div className="text-zinc-500 dark:text-zinc-400 text-xs">
+            발주서 통화: <span className="font-bold text-zinc-900 dark:text-zinc-100">{currency}</span>
           </div>
           <div className="text-right">
-            <span className="text-xs text-zinc-400">송장 공급가액 합계:</span>
-            <div className="text-lg font-extrabold text-zinc-900 dark:text-white">
+            <span className="text-xs text-zinc-500 dark:text-zinc-400">송장 공급가액 합계:</span>
+            <div className="text-lg font-extrabold text-zinc-900 dark:text-zinc-100">
               {new Intl.NumberFormat("en-US", { style: "currency", currency }).format(subtotal)}
             </div>
           </div>
@@ -469,14 +469,14 @@ export function InvoiceForm({ eligiblePos, initialInvoice }: InvoiceFormProps) {
         <button
           type="button"
           onClick={() => router.back()}
-          className="px-4 py-2 border border-zinc-300 dark:border-zinc-700 hover:bg-zinc-50 rounded-lg text-xs font-bold transition-colors cursor-pointer"
+          className="px-4 py-2 border border-zinc-300 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-800 rounded-lg text-xs font-bold text-zinc-700 dark:text-zinc-300 transition-colors cursor-pointer"
         >
           취소
         </button>
         <button
           type="submit"
           disabled={isSubmitting}
-          className="px-4 py-2 bg-zinc-950 text-white hover:bg-zinc-900 dark:bg-white dark:text-zinc-950 rounded-lg text-xs font-bold transition-colors cursor-pointer disabled:opacity-50"
+          className="px-4 py-2 bg-zinc-950 text-white hover:bg-zinc-900 dark:bg-zinc-100 dark:hover:bg-white dark:text-zinc-950 rounded-lg text-xs font-bold transition-colors cursor-pointer disabled:opacity-50"
         >
           {isSubmitting ? "저장 중..." : isEditMode ? "인보이스 수정 완료" : "인보이스 임시저장 (Draft)"}
         </button>

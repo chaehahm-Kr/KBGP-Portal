@@ -31,11 +31,11 @@ export default async function PortalInvoiceDetailPage({
         <div>
           <Link
             href="/portal/finance"
-            className="text-xs text-zinc-500 hover:text-zinc-800 transition-colors"
+            className="text-xs text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200 transition-colors"
           >
             ← 정산 목록으로 돌아가기
           </Link>
-          <h1 className="text-lg font-bold text-zinc-900 dark:text-white mt-2">
+          <h1 className="text-lg font-bold text-zinc-900 dark:text-zinc-100 mt-2">
             인보이스 상세 내역 ({invoice.supplierInvoiceNumber})
           </h1>
         </div>

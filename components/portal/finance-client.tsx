@@ -33,7 +33,7 @@ export function FinanceClient({
             className={`text-sm font-bold pb-2 border-b-2 cursor-pointer transition-colors ${
               activeTab === "invoices"
                 ? "border-zinc-950 text-zinc-950 dark:border-white dark:text-white"
-                : "border-transparent text-zinc-400 hover:text-zinc-650"
+                : "border-transparent text-zinc-500 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200"
             }`}
           >
             인보이스 (Invoices)
@@ -43,7 +43,7 @@ export function FinanceClient({
             className={`text-sm font-bold pb-2 border-b-2 cursor-pointer transition-colors ${
               activeTab === "settlements"
                 ? "border-zinc-950 text-zinc-950 dark:border-white dark:text-white"
-                : "border-transparent text-zinc-400 hover:text-zinc-650"
+                : "border-transparent text-zinc-500 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200"
             }`}
           >
             정산 (Settlements / Adjustments)
@@ -53,7 +53,7 @@ export function FinanceClient({
             className={`text-sm font-bold pb-2 border-b-2 cursor-pointer transition-colors ${
               activeTab === "payments"
                 ? "border-zinc-950 text-zinc-950 dark:border-white dark:text-white"
-                : "border-transparent text-zinc-400 hover:text-zinc-650"
+                : "border-transparent text-zinc-500 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200"
             }`}
           >
             지급 내역 (Payments)
@@ -63,7 +63,7 @@ export function FinanceClient({
         {activeTab === "invoices" && (
           <Link
             href="/portal/finance/new"
-            className="px-3.5 py-1.5 bg-zinc-950 hover:bg-zinc-900 text-white dark:bg-white dark:text-zinc-950 text-xs font-bold rounded-lg cursor-pointer transition-colors"
+            className="px-3.5 py-1.5 bg-zinc-950 hover:bg-zinc-900 text-white dark:bg-zinc-100 dark:hover:bg-white dark:text-zinc-950 text-xs font-bold rounded-lg cursor-pointer transition-colors"
           >
             + 새 인보이스 발행 (New Invoice)
           </Link>
@@ -75,7 +75,7 @@ export function FinanceClient({
         <div className="overflow-x-auto rounded-xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900 shadow-sm">
           <table className="w-full text-left text-xs border-collapse">
             <thead>
-              <tr className="bg-zinc-50/50 text-zinc-500 font-bold border-b border-zinc-200 dark:bg-zinc-900/50 dark:border-zinc-800 dark:text-zinc-400">
+              <tr className="bg-zinc-50/80 text-zinc-600 font-bold border-b border-zinc-200 dark:bg-zinc-950/60 dark:border-zinc-800 dark:text-zinc-400">
                 <th className="px-4 py-3">인보이스 번호</th>
                 <th className="px-4 py-3">발행 일자</th>
                 <th className="px-4 py-3">관련 PO</th>
@@ -87,22 +87,22 @@ export function FinanceClient({
                 <th className="px-4 py-3 text-right">상세 정보</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
+            <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/80">
               {initialInvoices.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="px-4 py-8 text-center text-zinc-400">
+                  <td colSpan={9} className="px-4 py-8 text-center text-zinc-400 dark:text-zinc-500">
                     등록된 청구 인보이스 내역이 존재하지 않습니다.
                   </td>
                 </tr>
               ) : (
                 initialInvoices.map((inv) => (
-                  <tr key={inv.id} className="hover:bg-zinc-50/30 dark:hover:bg-zinc-850/5">
-                    <td className="px-4 py-3.5 font-bold font-mono text-zinc-900 dark:text-white">
+                  <tr key={inv.id} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-800/30 transition-colors">
+                    <td className="px-4 py-3.5 font-bold font-mono text-zinc-900 dark:text-zinc-100">
                       {inv.supplierInvoiceNumber}
                     </td>
                     <td className="px-4 py-3.5 text-zinc-700 dark:text-zinc-300">{inv.invoiceDate}</td>
-                    <td className="px-4 py-3.5 text-zinc-650 dark:text-zinc-400 font-mono">{inv.poNumber}</td>
-                    <td className="px-4 py-3.5 text-right font-bold text-zinc-900 dark:text-white">
+                    <td className="px-4 py-3.5 text-indigo-600 dark:text-indigo-400 font-mono font-bold">{inv.poNumber}</td>
+                    <td className="px-4 py-3.5 text-right font-bold text-zinc-900 dark:text-zinc-100">
                       {formatCurrency(inv.invoiceTotal, inv.currency)}
                     </td>
                     <td className="px-4 py-3.5 text-center">
@@ -119,7 +119,7 @@ export function FinanceClient({
                         <span className="px-2 py-0.5 bg-rose-50 text-rose-700 border border-rose-200 dark:bg-rose-950/60 dark:text-rose-300 dark:border-rose-800 rounded-md font-bold text-[10px]">반려됨</span>
                       )}
                       {inv.invoiceStatus === "VOID" && (
-                        <span className="px-2 py-0.5 bg-zinc-200 text-zinc-600 border border-zinc-300 dark:bg-zinc-800/80 dark:text-zinc-400 dark:border-zinc-700 rounded-md font-bold text-[10px]">무효</span>
+                        <span className="px-2 py-0.5 bg-zinc-100 text-zinc-500 border border-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:border-zinc-700 rounded-md font-bold text-[10px]">무효</span>
                       )}
                     </td>
                     <td className="px-4 py-3.5 text-center">
@@ -133,16 +133,16 @@ export function FinanceClient({
                         <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800 rounded-md font-bold text-[10px]">정산 완료</span>
                       )}
                     </td>
-                    <td className="px-4 py-3.5 text-right text-zinc-700 dark:text-zinc-350">
+                    <td className="px-4 py-3.5 text-right text-zinc-700 dark:text-zinc-300">
                       {formatCurrency(inv.amountPaid, inv.currency)}
                     </td>
-                    <td className="px-4 py-3.5 text-right font-bold text-zinc-900 dark:text-white">
+                    <td className="px-4 py-3.5 text-right font-bold text-zinc-900 dark:text-zinc-100">
                       {formatCurrency(inv.balanceDue, inv.currency)}
                     </td>
                     <td className="px-4 py-3.5 text-right">
                       <Link
                         href={`/portal/finance/${inv.id}`}
-                        className="text-indigo-600 font-bold hover:underline"
+                        className="text-indigo-600 dark:text-indigo-400 font-bold hover:underline"
                       >
                         상세 보기 →
                       </Link>
@@ -160,7 +160,7 @@ export function FinanceClient({
         <div className="overflow-x-auto rounded-xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900 shadow-sm">
           <table className="w-full text-left text-xs border-collapse">
             <thead>
-              <tr className="bg-zinc-50/50 text-zinc-500 font-bold border-b border-zinc-200 dark:bg-zinc-900/50 dark:border-zinc-800 dark:text-zinc-400">
+              <tr className="bg-zinc-50/80 text-zinc-600 font-bold border-b border-zinc-200 dark:bg-zinc-950/60 dark:border-zinc-800 dark:text-zinc-400">
                 <th className="px-4 py-3">인보이스 번호</th>
                 <th className="px-4 py-3">조정 타입</th>
                 <th className="px-4 py-3">구분</th>
@@ -171,17 +171,17 @@ export function FinanceClient({
                 <th className="px-4 py-3">발생 일자</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
+            <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/80">
               {initialAdjustments.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-4 py-8 text-center text-zinc-400">
+                  <td colSpan={8} className="px-4 py-8 text-center text-zinc-400 dark:text-zinc-500">
                     진행 중이거나 승인된 정산 조정 내역이 존재하지 않습니다.
                   </td>
                 </tr>
               ) : (
                 initialAdjustments.map((adj) => (
-                  <tr key={adj.id} className="hover:bg-zinc-50/30 dark:hover:bg-zinc-850/5">
-                    <td className="px-4 py-3.5 font-bold font-mono text-zinc-900 dark:text-white">
+                  <tr key={adj.id} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-800/30 transition-colors">
+                    <td className="px-4 py-3.5 font-bold font-mono text-zinc-900 dark:text-zinc-100">
                       {adj.invoiceNumber}
                     </td>
                     <td className="px-4 py-3.5 text-zinc-700 dark:text-zinc-300">
@@ -192,18 +192,18 @@ export function FinanceClient({
                     </td>
                     <td className="px-4 py-3.5 font-bold">
                       {adj.direction === "CREDIT" ? (
-                        <span className="text-emerald-600">- 감액 (Credit)</span>
+                        <span className="text-emerald-600 dark:text-emerald-400">- 감액 (Credit)</span>
                       ) : (
-                        <span className="text-rose-600">+ 증액 (Charge)</span>
+                        <span className="text-rose-600 dark:text-rose-400">+ 증액 (Charge)</span>
                       )}
                     </td>
-                    <td className="px-4 py-3.5 text-zinc-650 dark:text-zinc-400 font-mono">
+                    <td className="px-4 py-3.5 text-zinc-700 dark:text-zinc-300 font-mono">
                       {adj.qty !== null ? `${adj.qty} 개` : "-"}
                     </td>
-                    <td className="px-4 py-3.5 text-right font-bold text-zinc-905 dark:text-white">
+                    <td className="px-4 py-3.5 text-right font-bold text-zinc-900 dark:text-zinc-100 font-mono">
                       {formatCurrency(adj.amount, adj.currency)}
                     </td>
-                    <td className="px-4 py-3.5 text-zinc-750 dark:text-zinc-300">{adj.reason}</td>
+                    <td className="px-4 py-3.5 text-zinc-700 dark:text-zinc-300">{adj.reason}</td>
                     <td className="px-4 py-3.5 text-center">
                       <span className="px-2 py-0.5 border border-zinc-200 dark:border-zinc-700 rounded-md text-[10px] font-bold bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
                         {adj.status}
@@ -225,7 +225,7 @@ export function FinanceClient({
         <div className="overflow-x-auto rounded-xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900 shadow-sm">
           <table className="w-full text-left text-xs border-collapse">
             <thead>
-              <tr className="bg-zinc-50/50 text-zinc-500 font-bold border-b border-zinc-200 dark:bg-zinc-900/50 dark:border-zinc-800 dark:text-zinc-400">
+              <tr className="bg-zinc-50/80 text-zinc-600 font-bold border-b border-zinc-200 dark:bg-zinc-950/60 dark:border-zinc-800 dark:text-zinc-400">
                 <th className="px-4 py-3">지급 번호</th>
                 <th className="px-4 py-3">인보이스 번호</th>
                 <th className="px-4 py-3">지급 일자</th>
@@ -236,7 +236,7 @@ export function FinanceClient({
                 <th className="px-4 py-3 text-center">상태</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
+            <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/80">
               {initialPayments.length === 0 ? (
                 <tr>
                   <td colSpan={8} className="px-4 py-8 text-center text-zinc-400 dark:text-zinc-500">
@@ -245,17 +245,17 @@ export function FinanceClient({
                 </tr>
               ) : (
                 initialPayments.map((pmt) => (
-                  <tr key={pmt.id} className="hover:bg-zinc-50/30 dark:hover:bg-zinc-850/5">
-                    <td className="px-4 py-3.5 font-bold font-mono text-zinc-900 dark:text-white">
+                  <tr key={pmt.id} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-800/30 transition-colors">
+                    <td className="px-4 py-3.5 font-bold font-mono text-zinc-900 dark:text-zinc-100">
                       {pmt.paymentNumber}
                     </td>
-                    <td className="px-4 py-3.5 font-mono text-zinc-700 dark:text-zinc-350">
+                    <td className="px-4 py-3.5 font-mono text-zinc-700 dark:text-zinc-300">
                       {pmt.invoiceNumber}
                     </td>
                     <td className="px-4 py-3.5 text-zinc-700 dark:text-zinc-300 font-mono">
                       {pmt.paymentDate}
                     </td>
-                    <td className="px-4 py-3.5 text-right font-bold text-zinc-900 dark:text-white">
+                    <td className="px-4 py-3.5 text-right font-bold text-zinc-900 dark:text-zinc-100 font-mono">
                       {formatCurrency(pmt.amount, pmt.currency)}
                     </td>
                     <td className="px-4 py-3.5 text-zinc-700 dark:text-zinc-300 font-bold">
@@ -268,7 +268,7 @@ export function FinanceClient({
                       {pmt.accountLast4 ? `**** ${pmt.accountLast4}` : "-"}
                     </td>
                     <td className="px-4 py-3.5 text-center">
-                      <span className="px-2 py-0.5 border border-emerald-200 dark:border-emerald-800 rounded-md text-[10px] font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300">
+                      <span className="px-2 py-0.5 border border-emerald-200 dark:border-emerald-800/60 rounded-md text-[10px] font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
                         {pmt.status}
                       </span>
                     </td>
