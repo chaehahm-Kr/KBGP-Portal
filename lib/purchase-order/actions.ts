@@ -537,84 +537,123 @@ export async function getSuppliersForPo() {
  * Fetch company shipping origins and registered contacts with task assignment recommendations.
  */
 export async function getCompanyOriginsAndContacts(companyId: string) {
-  await verifyAdminSession();
-  const supabase = createAdminClient();
+  if (!companyId) {
+    return { origins: [], defaultOriginId: "", contacts: [], defaultContactIds: [] };
+  }
 
-  // 1. Fetch Shipping Origins for this company
-  const { getCompanyShippingOrigins } = await import("@/lib/company/shipping-origin-actions");
-  const origins = await getCompanyShippingOrigins(companyId);
-
-  // Identify default origin
-  const defaultOrigin = origins.find((o) => o.is_default) || origins[0] || null;
-
-  // 2. Fetch active Company Users
-  const { data: users, error: uErr } = await supabase
-    .from("company_users")
-    .select("id, name, email, title, position, is_primary, company_role, status")
-    .eq("company_id", companyId)
-    .eq("status", "active")
-    .order("is_primary", { ascending: false })
-    .order("name", { ascending: true });
-
-  const activeUsers = users ?? [];
-
-  // 3. Fetch Task Assignments for 'logistics_inventory'
-  let taskAssignUserIds: string[] = [];
   try {
-    const { data: taskData } = await supabase
-      .from("company_task_assignments")
-      .select("user_id, is_primary, email_notify")
-      .eq("company_id", companyId)
-      .eq("task_code", "logistics_inventory");
+    const supabase = createAdminClient();
 
-    if (taskData && taskData.length > 0) {
-      const primary = taskData.filter((t) => t.is_primary).map((t) => t.user_id);
-      const notify = taskData.filter((t) => t.email_notify).map((t) => t.user_id);
-      taskAssignUserIds = Array.from(new Set([...primary, ...notify]));
+    // 1. Fetch Shipping Origins for this company safely
+    let origins: any[] = [];
+    try {
+      const { getCompanyShippingOrigins } = await import("@/lib/company/shipping-origin-actions");
+      origins = await getCompanyShippingOrigins(companyId);
+    } catch {
+      origins = [];
     }
-  } catch {
-    // If table not queried, fallback
-  }
 
-  // If no task assignments, fallback to is_primary user or first active user
-  let defaultCheckedUserIds: string[] = [];
-  if (taskAssignUserIds.length > 0) {
-    defaultCheckedUserIds = taskAssignUserIds.filter((id) => activeUsers.some((u) => u.id === id));
-  }
-  if (defaultCheckedUserIds.length === 0) {
-    const primaryUser = activeUsers.find((u) => u.is_primary);
-    if (primaryUser) {
-      defaultCheckedUserIds = [primaryUser.id];
-    } else if (activeUsers.length > 0) {
-      defaultCheckedUserIds = [activeUsers[0].id];
+    const defaultOrigin = origins.find((o) => o.is_default) || origins[0] || null;
+
+    // 2. Fetch active Company Users
+    let activeUsers: any[] = [];
+    try {
+      const { data: users, error: uErr } = await supabase
+        .from("company_users")
+        .select("id, name, email, title, position, is_primary, company_role, status")
+        .eq("company_id", companyId)
+        .eq("status", "active")
+        .order("is_primary", { ascending: false })
+        .order("name", { ascending: true });
+
+      if (!uErr && users) {
+        activeUsers = users;
+      }
+    } catch {}
+
+    // Fallback to metadata contacts if company_users table is empty or missing
+    if (activeUsers.length === 0) {
+      try {
+        const { data: comp } = await supabase
+          .from("companies")
+          .select("intro")
+          .eq("id", companyId)
+          .maybeSingle();
+
+        if (comp && comp.intro && comp.intro.startsWith("__COMPANY_METADATA__:")) {
+          const metaObj = JSON.parse(comp.intro.substring("__COMPANY_METADATA__:".length));
+          if (Array.isArray(metaObj.contacts)) {
+            activeUsers = metaObj.contacts.map((c: any) => ({
+              id: c.id || c.email || "meta-contact",
+              name: c.name || "(이름 없음)",
+              email: c.email || "",
+              title: c.title || "",
+              position: c.position || "",
+              is_primary: !!c.isPrimary,
+            }));
+          }
+        }
+      } catch {}
     }
-  }
 
-  return {
-    origins: origins.map((o) => ({
-      id: o.warehouse_id || o.id,
-      origin_id: o.id,
-      name: o.name,
-      is_default: o.is_default,
-      country: o.country,
-      city: o.city,
-      address_line1: o.address_line1,
-      postal_code: o.postal_code,
-      contact_name: o.contact_name,
-      phone: o.phone,
-    })),
-    defaultOriginId: defaultOrigin ? (defaultOrigin.warehouse_id || defaultOrigin.id) : "",
-    contacts: activeUsers.map((u) => ({
-      id: u.id,
-      name: u.name || "(이름 없음)",
-      email: u.email || "",
-      title: u.title || "",
-      position: u.position || "",
-      is_primary: u.is_primary || false,
-      is_logistics_assigned: taskAssignUserIds.includes(u.id),
-    })),
-    defaultContactIds: defaultCheckedUserIds,
-  };
+    // 3. Fetch Task Assignments for 'logistics_inventory'
+    let taskAssignUserIds: string[] = [];
+    try {
+      const { data: taskData } = await supabase
+        .from("company_task_assignments")
+        .select("user_id, is_primary, email_notify")
+        .eq("company_id", companyId)
+        .eq("task_code", "logistics_inventory");
+
+      if (taskData && taskData.length > 0) {
+        const primary = taskData.filter((t) => t.is_primary).map((t) => t.user_id);
+        const notify = taskData.filter((t) => t.email_notify).map((t) => t.user_id);
+        taskAssignUserIds = Array.from(new Set([...primary, ...notify]));
+      }
+    } catch {}
+
+    let defaultCheckedUserIds: string[] = [];
+    if (taskAssignUserIds.length > 0) {
+      defaultCheckedUserIds = taskAssignUserIds.filter((id) => activeUsers.some((u) => u.id === id));
+    }
+    if (defaultCheckedUserIds.length === 0) {
+      const primaryUser = activeUsers.find((u) => u.is_primary);
+      if (primaryUser) {
+        defaultCheckedUserIds = [primaryUser.id];
+      } else if (activeUsers.length > 0) {
+        defaultCheckedUserIds = [activeUsers[0].id];
+      }
+    }
+
+    return {
+      origins: origins.map((o) => ({
+        id: o.warehouse_id || o.id,
+        origin_id: o.id,
+        name: o.name,
+        is_default: o.is_default,
+        country: o.country,
+        city: o.city,
+        address_line1: o.address_line1,
+        postal_code: o.postal_code,
+        contact_name: o.contact_name,
+        phone: o.phone,
+      })),
+      defaultOriginId: defaultOrigin ? (defaultOrigin.warehouse_id || defaultOrigin.id) : "",
+      contacts: activeUsers.map((u) => ({
+        id: u.id,
+        name: u.name || "(이름 없음)",
+        email: u.email || "",
+        title: u.title || "",
+        position: u.position || "",
+        is_primary: u.is_primary || false,
+        is_logistics_assigned: taskAssignUserIds.includes(u.id),
+      })),
+      defaultContactIds: defaultCheckedUserIds,
+    };
+  } catch (err) {
+    console.error("Failed to load company origins and contacts:", err);
+    return { origins: [], defaultOriginId: "", contacts: [], defaultContactIds: [] };
+  }
 }
 
 /**
