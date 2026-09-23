@@ -15,8 +15,11 @@ export async function getPortalPurchaseOrders() {
   const { companyId } = await requireCompanyMembership();
   const supabase = await createClient();
 
-  const { data, error } = await supabase
-    .from("portal_purchase_orders")
+  let data: any[] | null = null;
+
+  // Primary attempt: query purchase_orders directly including 0093 extended columns
+  const primaryRes = await supabase
+    .from("purchase_orders")
     .select(`
       id,
       po_number,
@@ -31,17 +34,48 @@ export async function getPortalPurchaseOrders() {
       lines:purchase_order_lines(qty, confirmed_qty)
     `)
     .eq("supplier_id", companyId)
+    .notIn("po_status", ["DRAFT", "APPROVED"])
     .order("created_at", { ascending: false });
 
-  if (error) {
-    console.error("Failed to fetch portal purchase orders:", error);
-    throw new Error("발주서 목록을 불러오지 못했습니다.");
+  if (!primaryRes.error) {
+    data = primaryRes.data;
+  } else {
+    console.warn("Primary purchase_orders query warning (trying fallback):", primaryRes.error);
+    // Fallback attempt: query purchase_orders without 0093 columns
+    const fallbackRes = await supabase
+      .from("purchase_orders")
+      .select(`
+        id,
+        po_number,
+        po_status,
+        fulfillment_status,
+        supplier_confirmation_status,
+        order_date,
+        currency,
+        created_at,
+        lines:purchase_order_lines(qty, confirmed_qty)
+      `)
+      .eq("supplier_id", companyId)
+      .notIn("po_status", ["DRAFT", "APPROVED"])
+      .order("created_at", { ascending: false });
+
+    if (fallbackRes.error) {
+      console.error("Failed to fetch portal purchase orders:", fallbackRes.error);
+      throw new Error("발주서 목록을 불러오지 못했습니다.");
+    }
+    data = fallbackRes.data;
   }
 
-  // Double guard: strictly filter out DRAFT and APPROVED
-  const safeList = (data ?? []).filter(
-    (po: any) => po.po_status !== "DRAFT" && po.po_status !== "APPROVED"
-  );
+  // Double guard: strictly filter out DRAFT and APPROVED, and sanitize defaults
+  const safeList = (data ?? [])
+    .filter((po: any) => po.po_status !== "DRAFT" && po.po_status !== "APPROVED")
+    .map((po: any) => ({
+      ...po,
+      supplier_confirmation_status: po.supplier_confirmation_status || "UNCONFIRMED",
+      revision_no: po.revision_no ?? 1,
+      cancellation_status: po.cancellation_status || "NONE",
+      lines: po.lines || []
+    }));
 
   return safeList;
 }
@@ -55,8 +89,11 @@ export async function getPortalPurchaseOrderById(id: string) {
   const { companyId } = await requireCompanyMembership();
   const supabase = await createClient();
 
-  const { data, error } = await supabase
-    .from("portal_purchase_orders")
+  let data: any = null;
+
+  // Primary attempt: query purchase_orders with 0093 columns
+  const primaryRes = await supabase
+    .from("purchase_orders")
     .select(`
       id,
       po_number,
@@ -111,14 +148,64 @@ export async function getPortalPurchaseOrderById(id: string) {
     .eq("supplier_id", companyId)
     .maybeSingle();
 
-  if (error) {
-    console.error("Failed to fetch portal purchase order detail:", error);
-    throw new Error("발주서 상세 정보를 불러오지 못했습니다.");
+  if (!primaryRes.error) {
+    data = primaryRes.data;
+  } else {
+    console.warn("Primary purchase_orders detail query warning (trying fallback):", primaryRes.error);
+    // Fallback attempt: query purchase_orders without 0093 columns
+    const fallbackRes = await supabase
+      .from("purchase_orders")
+      .select(`
+        id,
+        po_number,
+        po_status,
+        fulfillment_status,
+        supplier_confirmation_status,
+        order_date,
+        currency,
+        payment_terms,
+        incoterms,
+        port_of_loading,
+        expected_ready_date,
+        expected_ship_date,
+        eta,
+        supplier_facing_note,
+        destination_warehouse_id,
+        ship_from_warehouse_id,
+        destination_warehouse:destination_warehouse_id (id, name, code, address1, city, state, zip_code, country),
+        ship_from_warehouse:ship_from_warehouse_id (id, name, code, address1, city, state, zip_code, country),
+        created_at,
+        lines:purchase_order_lines(
+          id,
+          qty,
+          confirmed_qty,
+          unit_cost,
+          line_note,
+          product:products(
+            id,
+            name,
+            letusto_sku,
+            manufacture_sku,
+            brand_id,
+            brands (name)
+          )
+        )
+      `)
+      .eq("id", id)
+      .eq("supplier_id", companyId)
+      .maybeSingle();
+
+    if (fallbackRes.error) {
+      console.error("Failed to fetch portal purchase order detail:", fallbackRes.error);
+      throw new Error("발주서 상세 정보를 불러오지 못했습니다.");
+    }
+    data = fallbackRes.data;
   }
 
   if (!data || data.po_status === "DRAFT" || data.po_status === "APPROVED") {
     throw new Error("발주서가 존재하지 않거나 접근 권한이 없습니다.");
   }
+
 
   // Fetch linked support cases
   let linkedCases: any[] = [];
