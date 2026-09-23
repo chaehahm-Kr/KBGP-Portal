@@ -162,13 +162,13 @@ export async function getCompanyShippingOrigins(companyId: string): Promise<Comp
   try {
     const { data: whList } = await admin
       .from("warehouses")
-      .select("id, code, name, type, shipping_origin_id, internal_note");
+      .select("id, code, name, type, internal_note");
 
     if (whList && whList.length > 0) {
       return rawOrigins.map((origin) => {
         const linkedWh = whList.find(
-          (wh) =>
-            wh.shipping_origin_id === origin.id ||
+          (wh: any) =>
+            (wh.shipping_origin_id && wh.shipping_origin_id === origin.id) ||
             (wh.internal_note && wh.internal_note.includes(`[ORIGIN_ID:${origin.id}]`))
         );
         if (linkedWh) {

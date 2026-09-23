@@ -384,14 +384,15 @@ export async function getPurchaseOrderDetail(poId: string) {
     return {
       id: l.id,
       product_id: l.product_id,
-      product_name: l.product_name_snapshot,
-      letusto_sku: l.letusto_sku_snapshot,
-      manufacture_sku: l.manufacture_sku_snapshot,
-      qty: l.qty,
-      confirmed_qty: l.confirmed_qty !== null ? Number(l.confirmed_qty) : null,
-      unit_cost: Number(l.unit_cost),
-      line_total: l.qty * Number(l.unit_cost),
-      line_note: l.line_note,
+      product_name: l.product_name_snapshot || "(제품명 없음)",
+      name: l.product_name_snapshot || "(제품명 없음)",
+      letusto_sku: l.letusto_sku_snapshot || null,
+      manufacture_sku: l.manufacture_sku_snapshot || null,
+      qty: Number(l.qty) || 0,
+      confirmed_qty: l.confirmed_qty !== null && l.confirmed_qty !== undefined ? Number(l.confirmed_qty) : null,
+      unit_cost: Number(l.unit_cost) || 0,
+      line_total: (Number(l.qty) || 0) * (Number(l.unit_cost) || 0),
+      line_note: l.line_note || "",
       brand_name: brandMap.get(l.product_id) || "(미지정 브랜드)",
       shipped_qty: shipped,
       received_qty: received,
@@ -418,7 +419,7 @@ export async function getPurchaseOrderDetail(poId: string) {
 
   return {
     ...po,
-    revision_no: po.revision_no || 1,
+    revision_no: Number(po.revision_no) || 1,
     supplier_confirmation_status: po.supplier_confirmation_status || "PENDING",
     confirmed_by_name: po.confirmed_by_name || null,
     confirmed_at: po.confirmed_at || null,
@@ -442,6 +443,17 @@ export async function getPurchaseOrderDetail(poId: string) {
     total_amount: totalAmount,
     total_shipped: totalShipped,
     total_received: totalReceived,
+    destination_warehouse_id: po.destination_warehouse_id || "",
+    ship_from_warehouse_id: po.ship_from_warehouse_id || "",
+    expected_ready_date: po.expected_ready_date || null,
+    expected_ship_date: po.expected_ship_date || null,
+    port_of_loading: po.port_of_loading || "",
+    payment_terms: po.payment_terms || "",
+    incoterms: po.incoterms || "",
+    currency: po.currency || "USD",
+    internal_note: po.internal_note || "",
+    supplier_facing_note: po.supplier_facing_note || "",
+    po_receiving_email: po.po_receiving_email || "",
   };
 }
 
@@ -1155,21 +1167,7 @@ export async function updatePurchaseOrder(poId: string, data: CreatePoInput) {
     updated_at: new Date().toISOString(),
   };
 
-  let { error: poErr } = await supabase
-    .from("purchase_orders")
-    .update(updatePayload)
-    .eq("id", poId);
-
-  if (poErr && (poErr.message?.includes("eta") || poErr.code === "42703")) {
-    delete updatePayload.eta;
-    const retryRes = await supabase
-      .from("purchase_orders")
-      .update(updatePayload)
-      .eq("id", poId);
-    poErr = retryRes.error;
-  }
-
-  if (poErr) throw new Error(`발주서 헤더 수정 실패: ${poErr.message}`);
+  await safeUpdatePurchaseOrder(supabase, poId, updatePayload);
 
   // 6. Delete old lines and insert new ones
   await supabase.from("purchase_order_lines").delete().eq("purchase_order_id", poId);
@@ -1237,6 +1235,46 @@ export async function updatePurchaseOrder(poId: string, data: CreatePoInput) {
 }
 
 /**
+ * Safe helper to update purchase order with multi-tier schema fallback
+ */
+async function safeUpdatePurchaseOrder(supabase: any, poId: string, payload: any) {
+  let { error } = await supabase
+    .from("purchase_orders")
+    .update(payload)
+    .eq("id", poId);
+
+  if (error && (error.code === "PGRST204" || error.code === "42703" || error.message?.includes("column") || error.message?.includes("schema cache"))) {
+    const safePayload = { ...payload };
+    delete safePayload.eta;
+    delete safePayload.revision_no;
+    delete safePayload.revisions;
+    delete safePayload.activity_logs;
+    delete safePayload.confirmed_by_id;
+    delete safePayload.confirmed_by_name;
+    delete safePayload.confirmed_at;
+    delete safePayload.cancellation_status;
+    delete safePayload.cancellation_reason;
+    delete safePayload.cancellation_requested_by;
+    delete safePayload.cancellation_requested_at;
+    delete safePayload.cancellation_confirmed_by;
+    delete safePayload.cancellation_confirmed_at;
+    delete safePayload.cancellation_rejected_by;
+    delete safePayload.cancellation_rejected_at;
+    delete safePayload.cancellation_reject_reason;
+
+    const retryRes = await supabase
+      .from("purchase_orders")
+      .update(safePayload)
+      .eq("id", poId);
+    error = retryRes.error;
+  }
+
+  if (error) {
+    throw new Error(`발주서 헤더 수정 실패: ${error.message}`);
+  }
+}
+
+/**
  * Handle state transitions in the PO workflow (Approve, Send, Cancel, etc.)
  */
 export async function transitionPoStatus(poId: string, targetStatus: string) {
@@ -1267,16 +1305,13 @@ export async function transitionPoStatus(poId: string, targetStatus: string) {
     if (po.po_status !== "DRAFT") throw new Error("DRAFT 상태인 발주서만 승인할 수 있습니다.");
     
     const newLogs = [{ event: "Approved", actor: actorName, timestamp: easternNow }, ...currentLogs];
-    await supabase
-      .from("purchase_orders")
-      .update({
-        po_status: "APPROVED",
-        approved_by: userId,
-        approved_at: new Date().toISOString(),
-        activity_logs: newLogs,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", poId);
+    await safeUpdatePurchaseOrder(supabase, poId, {
+      po_status: "APPROVED",
+      approved_by: userId,
+      approved_at: new Date().toISOString(),
+      activity_logs: newLogs,
+      updated_at: new Date().toISOString(),
+    });
   } else if (targetStatus === "SENT") {
     if (po.po_status !== "APPROVED") throw new Error("APPROVED 상태인 발주서만 발송 처리할 수 있습니다.");
 
@@ -1285,17 +1320,14 @@ export async function transitionPoStatus(poId: string, targetStatus: string) {
     const totalQty = (poLines || []).reduce((sum: number, l: any) => sum + (Number(l.qty) || 0), 0);
 
     const newLogs = [{ event: "Sent", actor: actorName, timestamp: easternNow }, ...currentLogs];
-    await supabase
-      .from("purchase_orders")
-      .update({
-        po_status: "SENT",
-        fulfillment_status: "PENDING",
-        supplier_confirmation_status: po.supplier_confirmation_status || "PENDING",
-        sent_at: new Date().toISOString(),
-        activity_logs: newLogs,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", poId);
+    await safeUpdatePurchaseOrder(supabase, poId, {
+      po_status: "SENT",
+      fulfillment_status: "PENDING",
+      supplier_confirmation_status: po.supplier_confirmation_status || "PENDING",
+      sent_at: new Date().toISOString(),
+      activity_logs: newLogs,
+      updated_at: new Date().toISOString(),
+    });
 
     // Create PO_RECEIVED notification for Brand Portal
     await createPoNotification({
@@ -1312,26 +1344,20 @@ export async function transitionPoStatus(poId: string, targetStatus: string) {
     if (po.po_status !== "SENT") throw new Error("SENT 상태인 발주서만 생산 상태로 변경할 수 있습니다.");
     
     const newLogs = [{ event: "In Production", actor: actorName, timestamp: easternNow }, ...currentLogs];
-    await supabase
-      .from("purchase_orders")
-      .update({
-        fulfillment_status: "IN_PRODUCTION",
-        activity_logs: newLogs,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", poId);
+    await safeUpdatePurchaseOrder(supabase, poId, {
+      fulfillment_status: "IN_PRODUCTION",
+      activity_logs: newLogs,
+      updated_at: new Date().toISOString(),
+    });
   } else if (targetStatus === "READY_TO_SHIP") {
     if (po.po_status !== "SENT") throw new Error("SENT 상태인 발주서만 선적대기 상태로 변경할 수 있습니다.");
     
     const newLogs = [{ event: "Ready to Ship", actor: actorName, timestamp: easternNow }, ...currentLogs];
-    await supabase
-      .from("purchase_orders")
-      .update({
-        fulfillment_status: "READY_TO_SHIP",
-        activity_logs: newLogs,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", poId);
+    await safeUpdatePurchaseOrder(supabase, poId, {
+      fulfillment_status: "READY_TO_SHIP",
+      activity_logs: newLogs,
+      updated_at: new Date().toISOString(),
+    });
   } else if (targetStatus === "CANCELLED") {
     if (po.po_status === "CANCELLED") throw new Error("이미 취소된 발주서입니다.");
 
@@ -1351,17 +1377,14 @@ export async function transitionPoStatus(poId: string, targetStatus: string) {
       ...currentLogs,
     ];
 
-    await supabase
-      .from("purchase_orders")
-      .update({
-        po_status: "CANCELLED",
-        cancelled_by: userId,
-        cancelled_at: new Date().toISOString(),
-        cancellation_status: "CANCELLED",
-        activity_logs: newLogs,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", poId);
+    await safeUpdatePurchaseOrder(supabase, poId, {
+      po_status: "CANCELLED",
+      cancelled_by: userId,
+      cancelled_at: new Date().toISOString(),
+      cancellation_status: "CANCELLED",
+      activity_logs: newLogs,
+      updated_at: new Date().toISOString(),
+    });
 
     // If it was SENT, send PO_CANCELLED notification to Portal
     if (po.po_status === "SENT" || po.sent_at) {
