@@ -88,7 +88,10 @@ export default function PortalSidebar({
       <nav className="flex-1 overflow-y-auto p-3 space-y-1 select-none scrollbar-thin">
         {menuItems.map((item) => {
           if (item.adminOnly && !isCompanyAdmin) return null;
-          const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
+          const isActive =
+            item.href === "/portal"
+              ? pathname === "/portal"
+              : pathname === item.href || pathname.startsWith(item.href + "/");
 
           return (
             <Link

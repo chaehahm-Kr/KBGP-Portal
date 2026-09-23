@@ -1,8 +1,8 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import {
   DashboardIcon,
   ApplicationsIcon,
@@ -49,12 +49,83 @@ interface MenuItem {
   subItems?: SubItem[];
 }
 
+// Calculate the single best-matching href across all navigation items
+function getBestActiveHref(
+  items: MenuItem[],
+  pathname: string,
+  searchParams: ReturnType<typeof useSearchParams>
+): string | null {
+  if (!pathname) return null;
+
+  let bestHref: string | null = null;
+  let bestScore = -1;
+
+  const evaluateCandidate = (href?: string) => {
+    if (!href) return;
+
+    const [targetPath, targetQuery] = href.split("?");
+    const targetParams = new URLSearchParams(targetQuery || "");
+
+    const isExactPath = pathname === targetPath;
+    const isPrefixPath = pathname.startsWith(targetPath + "/");
+
+    if (!isExactPath && !isPrefixPath) {
+      return;
+    }
+
+    // Check query params matching
+    let queryMatches = true;
+    let queryParamCount = 0;
+    if (targetQuery) {
+      for (const [k, v] of targetParams.entries()) {
+        queryParamCount++;
+        if (!searchParams || searchParams.get(k) !== v) {
+          queryMatches = false;
+          break;
+        }
+      }
+    }
+
+    if (!queryMatches) return;
+
+    // Specificity score:
+    // Base score = targetPath length
+    // Exact path match bonus: +1000
+    // Query param match bonus: +5000 per matched query param
+    let score = targetPath.length;
+    if (isExactPath) score += 1000;
+    if (queryParamCount > 0) score += 5000 * queryParamCount;
+
+    if (score > bestScore) {
+      bestScore = score;
+      bestHref = href;
+    }
+  };
+
+  for (const item of items) {
+    if (item.href) evaluateCandidate(item.href);
+    if (item.subItems) {
+      for (const sub of item.subItems) {
+        if (sub.href) evaluateCandidate(sub.href);
+        if (sub.subItems) {
+          for (const child of sub.subItems) {
+            if (child.href) evaluateCandidate(child.href);
+          }
+        }
+      }
+    }
+  }
+
+  return bestHref;
+}
+
 export default function Sidebar({
   isCollapsed,
   toggleCollapse,
   pendingInquiriesCount = 0,
 }: SidebarProps) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
 
   // Depth 1 expand state
   const [expandedMenus, setExpandedMenus] = useState<Record<string, boolean>>({
@@ -248,28 +319,26 @@ export default function Sidebar({
     setExpandedSubMenus((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
+  // Compute the single best-matching active href across all items
+  const bestActiveHref = useMemo(
+    () => getBestActiveHref(menuItems, pathname, searchParams),
+    [pathname, searchParams]
+  );
+
   const isSubItemActive = (sub: SubItem): boolean => {
     if (sub.href) {
-      if (pathname === sub.href) return true;
-      if (sub.href === "/admin/insights" && pathname.startsWith("/admin/insights")) return true;
-      if (sub.href === "/admin/knowledge" && pathname.startsWith("/admin/knowledge")) return true;
-      if (sub.href !== "/admin/insights" && sub.href !== "/admin/knowledge" && pathname.startsWith(sub.href + "/")) {
-        return true;
-      }
+      return sub.href === bestActiveHref;
     }
     if (sub.subItems) {
-      return sub.subItems.some(
-        (child) =>
-          pathname === child.href ||
-          (child.href === "/admin/insights" && pathname.startsWith("/admin/insights")) ||
-          (child.href !== "/admin/insights" && pathname.startsWith(child.href + "/"))
-      );
+      return sub.subItems.some((child) => child.href === bestActiveHref);
     }
     return false;
   };
 
   const isMenuItemActive = (item: MenuItem): boolean => {
-    if (item.href === pathname) return true;
+    if (item.href) {
+      return item.href === bestActiveHref;
+    }
     if (item.subItems) {
       return item.subItems.some((sub) => isSubItemActive(sub));
     }
@@ -382,10 +451,7 @@ export default function Sidebar({
                           {isSubExpanded && (
                             <div className="pl-4 space-y-1 border-l border-zinc-200 dark:border-zinc-800 ml-3">
                               {sub.subItems?.map((child) => {
-                                const isChildActive =
-                                  pathname === child.href ||
-                                  (child.href === "/admin/insights" && pathname === "/admin/insights") ||
-                                  (child.href === "/admin/simulator" && pathname === "/admin/simulator");
+                                const isChildActive = child.href === bestActiveHref;
 
                                 return (
                                   <Link
