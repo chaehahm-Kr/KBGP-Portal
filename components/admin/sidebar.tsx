@@ -161,7 +161,7 @@ export default function Sidebar({
       ...prev,
       Applications: pathname.startsWith("/admin/applications"),
       "Companies & Brands": pathname.startsWith("/admin/companies") || pathname.startsWith("/admin/brands"),
-      Products: pathname.startsWith("/admin/products"),
+      Products: pathname.startsWith("/admin/products") || pathname.startsWith("/admin/inventory"),
       Inventory: pathname.startsWith("/admin/inventory"),
       Purchasing: pathname.startsWith("/admin/purchasing") && !pathname.startsWith("/admin/purchasing/invoices"),
       Finance: pathname.startsWith("/admin/finance"),
@@ -201,7 +201,8 @@ export default function Sidebar({
       icon: ProductsIcon,
       subItems: [
         { name: "Product Catalog", href: "/admin/products" },
-        { name: "Inventory", href: "/admin/inventory" },
+        { name: "Trading Products", href: "/admin/products/trading" },
+        { name: "Inventory Overview", href: "/admin/inventory" },
         { name: "Compliance", href: "/admin/products?status=compliance" },
         { name: "Pricing Simulator", href: "/admin/products/pricing-profitability" },
         { name: "Curation", href: "/admin/products/curation" },
