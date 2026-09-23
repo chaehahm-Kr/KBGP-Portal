@@ -195,23 +195,43 @@ export function AdminPoRequestList({
 
                   {/* Status */}
                   <td className="px-4 py-3.5 text-center">
-                    <span
-                      className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-bold border ${
-                        PO_REQUEST_STATUS_COLORS[req.status] || "bg-zinc-100 text-zinc-700 border-zinc-200"
-                      }`}
-                    >
-                      {PO_REQUEST_STATUS_LABELS_EN[req.status] || req.status}
-                    </span>
+                    <div className="flex flex-col items-center gap-1">
+                      <span
+                        className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-bold border ${
+                          PO_REQUEST_STATUS_COLORS[req.status] || "bg-zinc-100 text-zinc-700 border-zinc-200"
+                        }`}
+                      >
+                        {PO_REQUEST_STATUS_LABELS_EN[req.status] || req.status}
+                      </span>
+                      {req.status === "CONVERTED_TO_PO" && req.converted_po_number && (
+                        <Link
+                          href={`/admin/purchasing/${req.converted_po_id}`}
+                          className="font-mono font-bold text-[10px] text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 hover:underline inline-flex items-center gap-0.5"
+                        >
+                          <span>📄 #{req.converted_po_number}</span>
+                        </Link>
+                      )}
+                    </div>
                   </td>
 
                   {/* Actions */}
                   <td className="px-4 py-3.5 text-center">
-                    <Link
-                      href={`/admin/purchasing/requests/${req.id}`}
-                      className="px-3 py-1.5 rounded-lg bg-zinc-950 hover:bg-zinc-850 text-white dark:bg-white dark:text-zinc-950 font-bold text-xs transition-colors shadow-sm"
-                    >
-                      Review
-                    </Link>
+                    <div className="flex items-center justify-center gap-1.5">
+                      <Link
+                        href={`/admin/purchasing/requests/${req.id}`}
+                        className="px-3 py-1.5 rounded-lg bg-zinc-950 hover:bg-zinc-850 text-white dark:bg-white dark:text-zinc-950 font-bold text-xs transition-colors shadow-sm"
+                      >
+                        Review
+                      </Link>
+                      {req.status === "CONVERTED_TO_PO" && req.converted_po_id && (
+                        <Link
+                          href={`/admin/purchasing/${req.converted_po_id}`}
+                          className="px-2.5 py-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 font-bold text-xs transition-colors border border-emerald-200 dark:border-emerald-800"
+                        >
+                          View PO
+                        </Link>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}

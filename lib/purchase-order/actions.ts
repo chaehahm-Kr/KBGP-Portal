@@ -29,6 +29,7 @@ export interface CreatePoLineInput {
 }
 
 export interface CreatePoInput {
+  request_id?: string;
   supplier_id: string;
   order_date: string;
   currency: string;
@@ -891,6 +892,16 @@ export async function createPurchaseOrder(data: CreatePoInput) {
     // Attempt rollback header
     await supabase.from("purchase_orders").delete().eq("id", poId);
     throw new Error(`발주서 라인 품목 추가 실패: ${linesErr.message}`);
+  }
+
+  // 5. If created from a PO Request, link request atomically and mark as CONVERTED_TO_PO
+  if (data.request_id) {
+    try {
+      const { linkCreatedPoToRequest } = await import("./request-actions");
+      await linkCreatedPoToRequest(data.request_id, poId, (newPo as any).po_number);
+    } catch (linkErr) {
+      console.error("Auto-linking created PO to PO Request failed:", linkErr);
+    }
   }
 
   revalidatePath("/admin/purchasing");

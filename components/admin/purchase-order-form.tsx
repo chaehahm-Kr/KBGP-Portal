@@ -521,6 +521,7 @@ export function PurchaseOrderForm({
       const effectiveIncoterms = incotermsType === "OTHER" ? incotermsCustom.trim() : incotermsType;
 
       const payload = {
+        request_id: initialPo?.request_id || undefined,
         supplier_id: supplierId,
         order_date: orderDate,
         currency,

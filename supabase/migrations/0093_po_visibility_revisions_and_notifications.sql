@@ -131,6 +131,6 @@ FROM public.purchase_orders
 WHERE 
   public.auth_is_admin()
   OR 
-  (supplier_id = public.auth_company_id() AND po_status NOT IN ('DRAFT', 'APPROVED') AND sent_at IS NOT NULL);
+  (supplier_id = public.auth_company_id() AND po_status NOT IN ('DRAFT', 'APPROVED'));
 
 GRANT SELECT ON public.portal_purchase_orders TO authenticated;

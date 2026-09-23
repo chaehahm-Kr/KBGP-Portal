@@ -21,7 +21,7 @@ import type {
 // In-memory / metadata store fallback for zero-downtime resilience
 async function getRequestsFromMeta(companyId?: string): Promise<any[]> {
   const admin = createAdminClient();
-  let query = admin.from("companies").select("id, intro");
+  let query = admin.from("companies").select("id, name, intro");
   if (companyId) query = query.eq("id", companyId);
   const { data: comps } = await query;
 
@@ -31,7 +31,14 @@ async function getRequestsFromMeta(companyId?: string): Promise<any[]> {
       try {
         const parsed = JSON.parse(c.intro.substring("__COMPANY_METADATA__:".length));
         if (Array.isArray(parsed.po_requests)) {
-          results.push(...parsed.po_requests);
+          parsed.po_requests.forEach((r: any) => {
+            results.push({
+              ...r,
+              company_id: r.company_id || c.id,
+              company: { id: c.id, name: c.name },
+              company_name: c.name,
+            });
+          });
         }
       } catch (e) {}
     }
@@ -41,7 +48,7 @@ async function getRequestsFromMeta(companyId?: string): Promise<any[]> {
 
 async function saveRequestToMeta(companyId: string, requestObj: any): Promise<void> {
   const admin = createAdminClient();
-  const { data: comp } = await admin.from("companies").select("intro").eq("id", companyId).single();
+  const { data: comp } = await admin.from("companies").select("id, name, intro").eq("id", companyId).single();
 
   let metaObj: any = {};
   if (comp && comp.intro && comp.intro.startsWith("__COMPANY_METADATA__:")) {
@@ -52,10 +59,16 @@ async function saveRequestToMeta(companyId: string, requestObj: any): Promise<vo
 
   const existingList: any[] = Array.isArray(metaObj.po_requests) ? metaObj.po_requests : [];
   const idx = existingList.findIndex((r) => r.id === requestObj.id);
+  const cleanRequestObj = {
+    ...requestObj,
+    company_id: companyId,
+    company_name: comp?.name || requestObj.company_name || "(회사명 미확인)",
+  };
+
   if (idx >= 0) {
-    existingList[idx] = requestObj;
+    existingList[idx] = cleanRequestObj;
   } else {
-    existingList.unshift(requestObj);
+    existingList.unshift(cleanRequestObj);
   }
 
   metaObj.po_requests = existingList;
@@ -78,6 +91,12 @@ export async function getPortalPoRequests(): Promise<PoRequestDetail[]> {
   const membership = await requireCompanyMembership();
   const companyId = membership.companyId;
   const admin = createAdminClient();
+
+  const { data: comp } = await admin.from("companies").select("id, name").eq("id", companyId).maybeSingle();
+  const companyMap = new Map<string, string>();
+  if (comp) {
+    companyMap.set(comp.id, comp.name);
+  }
 
   let requests: any[] = [];
   try {
@@ -104,7 +123,7 @@ export async function getPortalPoRequests(): Promise<PoRequestDetail[]> {
     requests = await getRequestsFromMeta(companyId);
   }
 
-  return formatRequests(requests);
+  return formatRequests(requests, companyMap);
 }
 
 /**
@@ -114,6 +133,12 @@ export async function getPortalPoRequestDetail(requestId: string): Promise<PoReq
   const membership = await requireCompanyMembership();
   const companyId = membership.companyId;
   const admin = createAdminClient();
+
+  const { data: comp } = await admin.from("companies").select("id, name").eq("id", companyId).maybeSingle();
+  const companyMap = new Map<string, string>();
+  if (comp) {
+    companyMap.set(comp.id, comp.name);
+  }
 
   let req: any = null;
   try {
@@ -139,7 +164,7 @@ export async function getPortalPoRequestDetail(requestId: string): Promise<PoReq
 
   if (!req) {
     const fallbackList = await getRequestsFromMeta(companyId);
-    req = fallbackList.find((r) => r.id === requestId && r.company_id === companyId);
+    req = fallbackList.find((r) => r.id === requestId && (r.company_id === companyId || !r.company_id));
   }
 
   if (!req) {
@@ -505,6 +530,9 @@ export async function getAdminPoRequests(filters?: {
   await verifyAdminSession();
   const admin = createAdminClient();
 
+  const { data: allComps } = await admin.from("companies").select("id, name");
+  const companyMap = new Map((allComps ?? []).map((c: any) => [c.id, c.name]));
+
   let rawList: any[] = [];
   try {
     const { data, error } = await admin
@@ -529,7 +557,7 @@ export async function getAdminPoRequests(filters?: {
     rawList = await getRequestsFromMeta();
   }
 
-  const allFormatted = formatRequests(rawList);
+  const allFormatted = formatRequests(rawList, companyMap);
 
   // Compute status counts
   const counts: Record<string, number> = {
@@ -565,6 +593,7 @@ export async function getAdminPoRequests(filters?: {
         r.company_name.toLowerCase().includes(q) ||
         (r.contact_name || "").toLowerCase().includes(q) ||
         (r.contact_email || "").toLowerCase().includes(q) ||
+        (r.converted_po_number || "").toLowerCase().includes(q) ||
         r.lines.some(
           (l) =>
             l.product_name_snapshot.toLowerCase().includes(q) ||
@@ -582,6 +611,9 @@ export async function getAdminPoRequests(filters?: {
 export async function getAdminPoRequestDetail(requestId: string): Promise<PoRequestDetail> {
   await verifyAdminSession();
   const admin = createAdminClient();
+
+  const { data: allComps } = await admin.from("companies").select("id, name");
+  const companyMap = new Map((allComps ?? []).map((c: any) => [c.id, c.name]));
 
   let req: any = null;
   try {
@@ -660,12 +692,15 @@ export async function getAdminPoRequestDetail(requestId: string): Promise<PoRequ
     })
   );
 
-  const formatted = formatSingleRequest({
-    ...req,
-    shipping_origin_name: matchedOrigin?.name,
-    shipping_origin_address: matchedOrigin ? [matchedOrigin.city, matchedOrigin.country].filter(Boolean).join(", ") : null,
-    lines: enrichedLines,
-  });
+  const formatted = formatSingleRequest(
+    {
+      ...req,
+      shipping_origin_name: matchedOrigin?.name,
+      shipping_origin_address: matchedOrigin ? [matchedOrigin.city, matchedOrigin.country].filter(Boolean).join(", ") : null,
+      lines: enrichedLines,
+    },
+    companyMap
+  );
 
   return formatted;
 }
@@ -678,6 +713,10 @@ export async function startReviewPoRequest(requestId: string): Promise<{ success
   const admin = createAdminClient();
 
   const req = await getAdminPoRequestDetail(requestId);
+  if (req.status === "CONVERTED_TO_PO") {
+    throw new Error("이미 정식 PO로 전환된 발주 요청서는 검토 중 상태로 변경할 수 없습니다.");
+  }
+
   const now = new Date().toISOString();
 
   const historyEntry: PoRequestHistoryEntry = {
@@ -723,6 +762,10 @@ export async function requestChangesPoRequest(requestId: string, reason: string)
 
   const admin = createAdminClient();
   const req = await getAdminPoRequestDetail(requestId);
+  if (req.status === "CONVERTED_TO_PO") {
+    throw new Error("이미 정식 PO로 전환된 발주 요청서는 수정 요청할 수 없습니다.");
+  }
+
   const now = new Date().toISOString();
 
   const historyEntry: PoRequestHistoryEntry = {
@@ -775,6 +818,10 @@ export async function rejectPoRequest(requestId: string, reason: string): Promis
 
   const admin = createAdminClient();
   const req = await getAdminPoRequestDetail(requestId);
+  if (req.status === "CONVERTED_TO_PO") {
+    throw new Error("이미 정식 PO로 전환된 발주 요청서는 반려할 수 없습니다.");
+  }
+
   const now = new Date().toISOString();
 
   const historyEntry: PoRequestHistoryEntry = {
@@ -878,7 +925,6 @@ export async function linkCreatedPoToRequest(
   poId: string,
   poNumber?: string
 ): Promise<{ success: boolean }> {
-  const session = await verifyAdminSession();
   const admin = createAdminClient();
   const req = await getAdminPoRequestDetail(requestId);
   const now = new Date().toISOString();
@@ -888,7 +934,7 @@ export async function linkCreatedPoToRequest(
     id: crypto.randomUUID(),
     po_request_id: requestId,
     action: "CONVERTED_TO_PO",
-    actor_id: session.userId,
+    actor_id: "admin",
     actor_name: "Admin",
     actor_role: "Letusto Admin",
     notes: `정식 발주서(${effectivePoNumber})로 전환 완료`,
@@ -901,7 +947,7 @@ export async function linkCreatedPoToRequest(
       .update({
         status: "CONVERTED_TO_PO",
         converted_po_id: poId,
-        converted_po_number: poNumber,
+        converted_po_number: effectivePoNumber,
         converted_at: now,
         updated_at: now,
       })
@@ -913,7 +959,7 @@ export async function linkCreatedPoToRequest(
     ...req,
     status: "CONVERTED_TO_PO",
     converted_po_id: poId,
-    converted_po_number: poNumber,
+    converted_po_number: effectivePoNumber,
     converted_at: now,
     updated_at: now,
     history: [historyEntry, ...(req.history || [])],
@@ -928,11 +974,11 @@ export async function linkCreatedPoToRequest(
 }
 
 // Helpers for formatting response objects
-function formatRequests(rawList: any[]): PoRequestDetail[] {
-  return rawList.map(formatSingleRequest);
+function formatRequests(rawList: any[], companyMap?: Map<string, string>): PoRequestDetail[] {
+  return rawList.map((r) => formatSingleRequest(r, companyMap));
 }
 
-function formatSingleRequest(r: any): PoRequestDetail {
+function formatSingleRequest(r: any, companyMap?: Map<string, string>): PoRequestDetail {
   const lines: PoRequestLine[] = (r.lines || []).map((l: any) => ({
     id: l.id,
     po_request_id: l.po_request_id || r.id,
@@ -962,11 +1008,17 @@ function formatSingleRequest(r: any): PoRequestDetail {
     (a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
   );
 
+  const resolvedCompanyName =
+    (companyMap && r.company_id ? companyMap.get(r.company_id) : null) ||
+    r.company?.name ||
+    (r.company_name && r.company_name !== "(회사명 미확인)" ? r.company_name : null) ||
+    "(회사명 미확인)";
+
   return {
     id: r.id,
     request_number: r.request_number || "PR-PENDING",
     company_id: r.company_id,
-    company_name: r.company?.name || r.company_name || "(회사명 미확인)",
+    company_name: resolvedCompanyName,
     contact_user_id: r.contact_user_id || null,
     contact_name: r.contact_name || null,
     contact_email: r.contact_email || null,
