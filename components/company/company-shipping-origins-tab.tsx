@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useTransition } from "react";
+import Link from "next/link";
 import {
   type CompanyShippingOrigin,
   type ShippingOriginInput,
@@ -13,11 +14,13 @@ import {
   portalDeleteShippingOrigin,
   portalSetDefaultShippingOrigin,
 } from "@/lib/company/shipping-origin-actions";
+import { createWarehouse, type WarehousePayload } from "@/lib/warehouse/actions";
 import { CountrySelect } from "@/components/shared/country-select";
 import { InternationalPhoneInput } from "@/components/shared/international-phone-input";
 
 interface CompanyShippingOriginsTabProps {
   companyId: string;
+  companyName?: string;
   initialOrigins: CompanyShippingOrigin[];
   mode: "admin" | "portal";
   canEdit?: boolean;
@@ -55,6 +58,23 @@ export function CompanyShippingOriginsTab({
   // Delete modal state
   const [deletingOrigin, setDeletingOrigin] = useState<CompanyShippingOrigin | null>(null);
 
+  // Warehouse registration modal state
+  const [isWarehouseModalOpen, setIsWarehouseModalOpen] = useState(false);
+  const [targetOriginForWarehouse, setTargetOriginForWarehouse] = useState<CompanyShippingOrigin | null>(null);
+  const [whFormCode, setWhFormCode] = useState("");
+  const [whFormName, setWhFormName] = useState("");
+  const [whFormType, setWhFormType] = useState<"partner" | "3pl" | "own" | "other">("partner");
+  const [whFormIsDefaultReceiving, setWhFormIsDefaultReceiving] = useState(false);
+  const [whFormAddress1, setWhFormAddress1] = useState("");
+  const [whFormAddress2, setWhFormAddress2] = useState("");
+  const [whFormCity, setWhFormCity] = useState("");
+  const [whFormState, setWhFormState] = useState("");
+  const [whFormZipCode, setWhFormZipCode] = useState("");
+  const [whFormCountry, setWhFormCountry] = useState("South Korea");
+  const [whFormInternalNote, setWhFormInternalNote] = useState("");
+  const [whFormError, setWhFormError] = useState("");
+  const [whFormSuccess, setWhFormSuccess] = useState("");
+
   const openAddModal = () => {
     setEditingOrigin(null);
     setFormName("");
@@ -91,6 +111,99 @@ export function CompanyShippingOriginsTab({
     setFormNotes(origin.notes || "");
     setFormError("");
     setIsModalOpen(true);
+  };
+
+  const openWarehouseModal = (origin: CompanyShippingOrigin) => {
+    setTargetOriginForWarehouse(origin);
+    setWhFormCode("");
+    setWhFormName(origin.name);
+    setWhFormType("partner");
+    setWhFormIsDefaultReceiving(false);
+    setWhFormAddress1(origin.address_line1 || "");
+    setWhFormAddress2(origin.address_line2 || "");
+    setWhFormCity(origin.city || "");
+    setWhFormState(origin.state_province || "");
+    setWhFormZipCode(origin.postal_code || "");
+    setWhFormCountry(origin.country || "South Korea");
+    setWhFormInternalNote(`[출고지 연동] ${origin.name}`);
+    setWhFormError("");
+    setWhFormSuccess("");
+    setIsWarehouseModalOpen(true);
+  };
+
+  const handleRegisterWarehouse = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!targetOriginForWarehouse) return;
+    setWhFormError("");
+    setWhFormSuccess("");
+
+    if (!whFormCode.trim()) {
+      setWhFormError("물류창고 코드를 입력해주세요. (2~10자리 영대문자/숫자)");
+      return;
+    }
+    if (!whFormName.trim()) {
+      setWhFormError("물류창고 이름을 입력해주세요.");
+      return;
+    }
+    if (!whFormAddress1.trim()) {
+      setWhFormError("주소 1을 입력해주세요.");
+      return;
+    }
+    if (!whFormCity.trim()) {
+      setWhFormError("도시(City)를 입력해주세요.");
+      return;
+    }
+    if (!whFormZipCode.trim()) {
+      setWhFormError("우편번호(ZIP / Postal Code)를 입력해주세요.");
+      return;
+    }
+
+    const payload: WarehousePayload = {
+      name: whFormName.trim(),
+      code: whFormCode.trim().toUpperCase(),
+      company_id: whFormType === "own" ? null : companyId,
+      type: whFormType,
+      status: "active",
+      is_default_receiving: whFormIsDefaultReceiving,
+      address1: whFormAddress1.trim(),
+      address2: whFormAddress2.trim() || undefined,
+      city: whFormCity.trim(),
+      state: whFormState.trim() || "N/A",
+      zip_code: whFormZipCode.trim(),
+      country: whFormCountry.trim(),
+      internal_note: whFormInternalNote.trim() || undefined,
+      shipping_origin_id: targetOriginForWarehouse.id,
+    };
+
+    startTransition(async () => {
+      try {
+        const res = await createWarehouse(payload);
+        if (res.success && res.data) {
+          setWhFormSuccess("물류창고가 성공적으로 등록 및 연동되었습니다.");
+          setOrigins((prev) =>
+            prev.map((o) => {
+              if (o.id === targetOriginForWarehouse.id) {
+                return {
+                  ...o,
+                  warehouse_id: res.data?.id,
+                  warehouse_code: res.data?.code,
+                  warehouse_name: res.data?.name,
+                  warehouse_type: res.data?.type,
+                };
+              }
+              return o;
+            })
+          );
+          setTimeout(() => {
+            setIsWarehouseModalOpen(false);
+          }, 800);
+        } else {
+          setWhFormError(res.error || "물류창고 등록에 실패했습니다.");
+        }
+      } catch (err: any) {
+        setWhFormError(err.message || "물류창고 등록 중 오류가 발생했습니다.");
+      }
+    });
   };
 
   const handleSaveOrigin = async (e: React.FormEvent) => {
@@ -377,6 +490,52 @@ export function CompanyShippingOriginsTab({
                     {origin.notes}
                   </div>
                 )}
+
+                {/* Warehouse Integration Status */}
+                <div className="rounded-md border border-zinc-150 dark:border-zinc-800 bg-zinc-50/70 dark:bg-zinc-950/30 p-2.5 text-xs">
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="text-[10px] font-bold text-zinc-500 dark:text-zinc-400">
+                        물류창고 연동:
+                      </span>
+                      {origin.warehouse_id ? (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                          <span>✓</span> Warehouse 연결됨 ({origin.warehouse_code} · {origin.warehouse_name})
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-700">
+                          <span>●</span> Warehouse 미연결
+                        </span>
+                      )}
+                    </div>
+
+                    {mode === "admin" && (
+                      <div>
+                        {origin.warehouse_id ? (
+                          <Link
+                            href="/admin/settings/warehouses"
+                            className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 transition-colors"
+                          >
+                            <span>물류창고 보기</span>
+                            <span>→</span>
+                          </Link>
+                        ) : (
+                          canEdit && (
+                            <button
+                              type="button"
+                              onClick={() => openWarehouseModal(origin)}
+                              disabled={isPending}
+                              className="inline-flex items-center gap-1 rounded bg-blue-50 hover:bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:hover:bg-blue-900/60 dark:text-blue-300 border border-blue-200 dark:border-blue-800 px-2 py-1 text-[11px] font-bold transition-colors cursor-pointer"
+                            >
+                              <span>🏢</span>
+                              <span>물류창고로 등록</span>
+                            </button>
+                          )
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
 
               {/* Action Buttons */}
@@ -676,35 +835,297 @@ export function CompanyShippingOriginsTab({
             <h4 className="text-sm font-bold text-zinc-950 dark:text-white mb-2">
               출고지 삭제 확인
             </h4>
-            <p className="text-xs text-zinc-600 dark:text-zinc-400 leading-relaxed mb-4">
-              <span className="font-bold text-zinc-900 dark:text-white">
-                "{deletingOrigin.name}"
-              </span>{" "}
-              출고지를 삭제하시겠습니까?
-              {deletingOrigin.is_default && (
-                <span className="block mt-1 text-[11px] text-amber-600 dark:text-amber-400 font-semibold">
-                  ⚠️ 이 출고지는 현재 기본 출고지입니다.
-                </span>
-              )}
-            </p>
-            <div className="flex justify-end gap-2">
+            {deletingOrigin.warehouse_id ? (
+              <div className="space-y-3">
+                <div className="rounded-md bg-rose-50 p-3 text-xs font-semibold text-rose-700 dark:bg-rose-950/50 dark:text-rose-300 border border-rose-200 dark:border-rose-900">
+                  ⚠️ 해당 출고지는 물류창고(
+                  <span className="font-bold font-mono">
+                    {deletingOrigin.warehouse_code || "연동됨"}
+                  </span>
+                  {deletingOrigin.warehouse_name ? ` · ${deletingOrigin.warehouse_name}` : ""}
+                  )와 연동되어 있어 삭제할 수 없습니다.
+                </div>
+                <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                  물류창고 설정에서 연동된 물류창고를 먼저 삭제하거나 연동을 해제한 후 출고지를 삭제해주세요.
+                </p>
+                <div className="flex justify-end gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setDeletingOrigin(null)}
+                    className="rounded bg-zinc-900 px-4 py-1.5 text-xs font-bold text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-100 cursor-pointer"
+                  >
+                    확인
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <>
+                <p className="text-xs text-zinc-600 dark:text-zinc-400 leading-relaxed mb-4">
+                  <span className="font-bold text-zinc-900 dark:text-white">
+                    "{deletingOrigin.name}"
+                  </span>{" "}
+                  출고지를 삭제하시겠습니까?
+                  {deletingOrigin.is_default && (
+                    <span className="block mt-1 text-[11px] text-amber-600 dark:text-amber-400 font-semibold">
+                      ⚠️ 이 출고지는 현재 기본 출고지입니다.
+                    </span>
+                  )}
+                </p>
+                <div className="flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setDeletingOrigin(null)}
+                    disabled={isPending}
+                    className="rounded px-3 py-1.5 text-xs font-semibold text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800 cursor-pointer"
+                  >
+                    취소
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleDelete}
+                    disabled={isPending}
+                    className="rounded bg-rose-600 px-4 py-1.5 text-xs font-bold text-white hover:bg-rose-700 disabled:opacity-50 cursor-pointer"
+                  >
+                    {isPending ? "삭제 중..." : "삭제"}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Warehouse Registration Modal (Admin Only) */}
+      {isWarehouseModalOpen && targetOriginForWarehouse && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs overflow-y-auto">
+          <div className="w-full max-w-lg rounded-xl border border-zinc-200 bg-white p-6 shadow-2xl dark:border-zinc-800 dark:bg-zinc-900 my-8">
+            <div className="flex items-center justify-between pb-3 border-b border-zinc-100 dark:border-zinc-800 mb-4">
+              <div>
+                <h3 className="text-sm font-bold text-zinc-950 dark:text-white flex items-center gap-1.5">
+                  <span>🏢</span>
+                  <span>출고지 기반 물류창고 등록</span>
+                </h3>
+                <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5">
+                  선택한 출고지 정보가 자동으로 입력되며, 관리자 Warehouse Master에 새 물류창고로 연동 등록됩니다.
+                </p>
+              </div>
               <button
                 type="button"
-                onClick={() => setDeletingOrigin(null)}
-                disabled={isPending}
-                className="rounded px-3 py-1.5 text-xs font-semibold text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800 cursor-pointer"
+                onClick={() => setIsWarehouseModalOpen(false)}
+                className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 text-lg leading-none"
               >
-                취소
-              </button>
-              <button
-                type="button"
-                onClick={handleDelete}
-                disabled={isPending}
-                className="rounded bg-rose-600 px-4 py-1.5 text-xs font-bold text-white hover:bg-rose-700 disabled:opacity-50 cursor-pointer"
-              >
-                {isPending ? "삭제 중..." : "삭제"}
+                ✕
               </button>
             </div>
+
+            {whFormError && (
+              <div className="mb-4 rounded-md bg-rose-50 p-3 text-xs font-semibold text-rose-700 dark:bg-rose-950/50 dark:text-rose-300 border border-rose-200 dark:border-rose-900">
+                ⚠️ {whFormError}
+              </div>
+            )}
+            {whFormSuccess && (
+              <div className="mb-4 rounded-md bg-emerald-50 p-3 text-xs font-semibold text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-900">
+                ✓ {whFormSuccess}
+              </div>
+            )}
+
+            <form onSubmit={handleRegisterWarehouse} className="space-y-4 text-xs">
+              <div className="grid grid-cols-2 gap-3">
+                {/* Code */}
+                <div>
+                  <label className="block text-[11px] font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                    창고 코드 <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={whFormCode}
+                    onChange={(e) => setWhFormCode(e.target.value.toUpperCase())}
+                    placeholder="예: WHS-KR1"
+                    required
+                    disabled={isPending}
+                    className="w-full rounded border border-zinc-200 p-2 text-xs outline-none bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white font-mono uppercase focus:border-zinc-900 dark:focus:border-white"
+                  />
+                  <span className="text-[10px] text-zinc-400 mt-0.5 block">2~10자리 영대문자/숫자 고유값</span>
+                </div>
+
+                {/* Warehouse Type */}
+                <div>
+                  <label className="block text-[11px] font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                    창고 유형 <span className="text-rose-500">*</span>
+                  </label>
+                  <select
+                    value={whFormType}
+                    onChange={(e) => setWhFormType(e.target.value as any)}
+                    disabled={isPending}
+                    className="w-full rounded border border-zinc-200 p-2 text-xs outline-none bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white cursor-pointer"
+                  >
+                    <option value="partner">파트너 창고 (Partner)</option>
+                    <option value="3pl">3PL 물류 창고 (3PL)</option>
+                    <option value="own">자사 창고 (Own)</option>
+                    <option value="other">기타 (Other)</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Warehouse Name */}
+              <div>
+                <label className="block text-[11px] font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                  창고명 <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={whFormName}
+                  onChange={(e) => setWhFormName(e.target.value)}
+                  placeholder="물류창고 이름"
+                  required
+                  disabled={isPending}
+                  className="w-full rounded border border-zinc-200 p-2 text-xs outline-none bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:border-zinc-900 dark:focus:border-white"
+                />
+              </div>
+
+              {/* Default Receiving Option */}
+              <div className="p-3 bg-zinc-50 dark:bg-zinc-950/40 rounded-lg border border-zinc-150 dark:border-zinc-850">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={whFormIsDefaultReceiving}
+                    onChange={(e) => setWhFormIsDefaultReceiving(e.target.checked)}
+                    disabled={isPending}
+                    className="rounded border-zinc-300 text-blue-600 focus:ring-blue-500 h-4 w-4"
+                  />
+                  <div>
+                    <span className="text-xs font-bold text-zinc-900 dark:text-white">
+                      기본 입고 창고로 지정
+                    </span>
+                    <p className="text-[10px] text-zinc-500 dark:text-zinc-400">
+                      회사 또는 자사별로 하나의 기본 입고지만 지정할 수 있습니다.
+                    </p>
+                  </div>
+                </label>
+              </div>
+
+              {/* Address Fields */}
+              <div className="space-y-2 pt-2 border-t border-zinc-100 dark:border-zinc-800">
+                <span className="text-[11px] font-bold text-zinc-500 uppercase tracking-wider block">
+                  창고 위치 주소 (Address)
+                </span>
+
+                <div>
+                  <label className="block text-[10px] font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                    기본 주소 (Street Address 1) <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={whFormAddress1}
+                    onChange={(e) => setWhFormAddress1(e.target.value)}
+                    required
+                    disabled={isPending}
+                    className="w-full rounded border border-zinc-200 p-2 text-xs outline-none bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                    상세 주소 (Street Address 2 - 선택)
+                  </label>
+                  <input
+                    type="text"
+                    value={whFormAddress2}
+                    onChange={(e) => setWhFormAddress2(e.target.value)}
+                    disabled={isPending}
+                    className="w-full rounded border border-zinc-200 p-2 text-xs outline-none bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+                  />
+                </div>
+
+                <div className="grid grid-cols-3 gap-2">
+                  <div>
+                    <label className="block text-[10px] font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                      도시 (City) <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={whFormCity}
+                      onChange={(e) => setWhFormCity(e.target.value)}
+                      required
+                      disabled={isPending}
+                      className="w-full rounded border border-zinc-200 p-2 text-xs outline-none bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                      주 / 도 (State)
+                    </label>
+                    <input
+                      type="text"
+                      value={whFormState}
+                      onChange={(e) => setWhFormState(e.target.value)}
+                      disabled={isPending}
+                      className="w-full rounded border border-zinc-200 p-2 text-xs outline-none bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                      우편번호 <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={whFormZipCode}
+                      onChange={(e) => setWhFormZipCode(e.target.value)}
+                      required
+                      disabled={isPending}
+                      className="w-full rounded border border-zinc-200 p-2 text-xs outline-none bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white font-mono"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                    국가 (Country) <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={whFormCountry}
+                    onChange={(e) => setWhFormCountry(e.target.value)}
+                    required
+                    disabled={isPending}
+                    className="w-full rounded border border-zinc-200 p-2 text-xs outline-none bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+                  />
+                </div>
+              </div>
+
+              {/* Internal Note */}
+              <div className="pt-2 border-t border-zinc-100 dark:border-zinc-800">
+                <label className="block text-[10px] font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                  내부 메모 (Internal Note)
+                </label>
+                <textarea
+                  value={whFormInternalNote}
+                  onChange={(e) => setWhFormInternalNote(e.target.value)}
+                  rows={2}
+                  disabled={isPending}
+                  className="w-full rounded border border-zinc-200 p-2 text-xs outline-none bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white resize-none"
+                />
+              </div>
+
+              {/* Actions */}
+              <div className="pt-4 border-t border-zinc-100 dark:border-zinc-800 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsWarehouseModalOpen(false)}
+                  disabled={isPending}
+                  className="rounded px-4 py-2 text-xs font-semibold text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800 cursor-pointer"
+                >
+                  취소
+                </button>
+                <button
+                  type="submit"
+                  disabled={isPending}
+                  className="rounded bg-blue-600 px-5 py-2 text-xs font-bold text-white hover:bg-blue-700 disabled:opacity-50 cursor-pointer"
+                >
+                  {isPending ? "등록 중..." : "물류창고 등록 완료"}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

@@ -4,6 +4,14 @@ import React, { useState } from "react";
 import Link from "next/link";
 import { PRODUCT_CATEGORY_LABEL, type ProductCategory } from "@/lib/product/types";
 import { deleteProduct } from "@/lib/product/actions";
+import {
+  SELECTION_STATUS_LABELS,
+  SELECTION_STATUS_STYLES,
+  SALES_STATUS_LABELS,
+  SALES_STATUS_STYLES,
+  type SelectionStatus,
+  type SalesStatus,
+} from "@/lib/product/registration-status";
 
 interface PortalProductItem {
   id: string;
@@ -17,6 +25,8 @@ interface PortalProductItem {
   photoUrl: string | null;
   is_draft: boolean;
   missing_fields?: string[];
+  selection_status?: SelectionStatus | string;
+  sales_status?: SalesStatus | string;
   deleted_at: string | null;
   category_code?: string | null;
   category_completion?: {
@@ -153,13 +163,13 @@ export function PortalProductsList({ initialProducts, hasBrand }: PortalProducts
 
         {/* Exposed Status Tab Filters */}
         <div className="flex flex-wrap items-center gap-1.5 border-t border-zinc-150 pt-4 dark:border-zinc-800">
-          <span className="text-xs font-bold text-zinc-500 mr-2">상태 필터:</span>
+          <span className="text-xs font-bold text-zinc-500 mr-2">등록 상태 필터:</span>
           {[
             { id: "active_draft", label: "활성/보완 대기 (기본)" },
-            { id: "active", label: "Active" },
-            { id: "draft", label: "Draft" },
-            { id: "deleted", label: "Deleted" },
-            { id: "all", label: "All" },
+            { id: "active", label: "등록 완료" },
+            { id: "draft", label: "보완 대기 (Draft)" },
+            { id: "deleted", label: "삭제됨" },
+            { id: "all", label: "전체" },
           ].map((tab) => {
             const isActive = selectedStatus === tab.id;
             return (
@@ -203,14 +213,16 @@ export function PortalProductsList({ initialProducts, hasBrand }: PortalProducts
           <table className="w-full text-left border-collapse text-xs">
             <thead>
               <tr className="border-b border-zinc-200 bg-zinc-50/50 text-zinc-500 font-bold dark:border-zinc-800 dark:bg-zinc-900/50">
-                <th className="px-6 py-3.5 w-16">사진</th>
-                <th className="px-6 py-3.5">Letusto SKU</th>
-                <th className="px-6 py-3.5">제조사 SKU</th>
-                <th className="px-6 py-3.5">제품명</th>
-                <th className="px-6 py-3.5">브랜드</th>
-                <th className="px-6 py-3.5">카테고리</th>
-                <th className="px-6 py-3.5">상태</th>
-                <th className="px-6 py-3.5 text-right">관리</th>
+                <th className="px-4 py-3.5 w-14">사진</th>
+                <th className="px-4 py-3.5">Letusto SKU</th>
+                <th className="px-4 py-3.5">제조사 SKU</th>
+                <th className="px-4 py-3.5">제품명</th>
+                <th className="px-4 py-3.5">브랜드</th>
+                <th className="px-4 py-3.5">카테고리</th>
+                <th className="px-4 py-3.5 whitespace-nowrap">등록 상태</th>
+                <th className="px-4 py-3.5 whitespace-nowrap">선정 상태</th>
+                <th className="px-4 py-3.5 whitespace-nowrap">판매 상태</th>
+                <th className="px-4 py-3.5 text-right">관리</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-200 text-xs dark:divide-zinc-800/80">
@@ -220,7 +232,7 @@ export function PortalProductsList({ initialProducts, hasBrand }: PortalProducts
                   className="hover:bg-zinc-50/50 dark:hover:bg-zinc-850/20 transition-colors"
                 >
                   {/* Thumbnail */}
-                  <td className="px-6 py-4">
+                  <td className="px-4 py-4">
                     {product.photoUrl ? (
                        <div className="h-12 w-12 rounded-md bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 flex items-center justify-center p-1 shadow-sm overflow-hidden">
                         <img
@@ -237,21 +249,21 @@ export function PortalProductsList({ initialProducts, hasBrand }: PortalProducts
                   </td>
 
                   {/* Letusto SKU */}
-                  <td className="px-6 py-4 font-mono font-bold text-zinc-950 dark:text-white whitespace-nowrap">
+                  <td className="px-4 py-4 font-mono font-bold text-zinc-950 dark:text-white whitespace-nowrap">
                     {product.letusto_sku || (
                       <span className="text-zinc-350 dark:text-zinc-600 italic font-sans font-normal">지정 대기 중</span>
                     )}
                   </td>
 
                   {/* Manufacture SKU */}
-                  <td className="px-6 py-4 text-zinc-700 dark:text-zinc-300 font-mono font-semibold whitespace-nowrap">
+                  <td className="px-4 py-4 text-zinc-700 dark:text-zinc-300 font-mono font-semibold whitespace-nowrap">
                     {product.manufacture_sku || (
                       <span className="text-zinc-350 dark:text-zinc-500 italic">미입력</span>
                     )}
                   </td>
 
                   {/* Product Name */}
-                  <td className="px-6 py-4 font-bold text-zinc-900 dark:text-white">
+                  <td className="px-4 py-4 font-bold text-zinc-900 dark:text-white">
                     <div className="flex flex-col gap-1">
                       <Link
                         href={`/portal/products/${product.id}`}
@@ -282,56 +294,98 @@ export function PortalProductsList({ initialProducts, hasBrand }: PortalProducts
                   </td>
 
                   {/* Brand */}
-                  <td className="px-6 py-4 text-zinc-600 dark:text-zinc-300 font-medium">
+                  <td className="px-4 py-4 text-zinc-600 dark:text-zinc-300 font-medium whitespace-nowrap">
                     {product.brandName}
                   </td>
 
                   {/* Category */}
-                  <td className="px-6 py-4">
+                  <td className="px-4 py-4 whitespace-nowrap">
                     <span className="inline-flex items-center rounded-full bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 text-[10px] font-semibold text-zinc-700 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700">
                       {PRODUCT_CATEGORY_LABEL[product.category as ProductCategory] || product.category}
                     </span>
                   </td>
 
-                  {/* Status Badge */}
-                  <td className="px-6 py-4">
+                  {/* 1. Registration Status Badge */}
+                  <td className="px-4 py-4">
                     {product.deleted_at ? (
-                      <span className="inline-flex items-center rounded bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400 px-2 py-0.5 text-[10px] font-bold border border-zinc-200 dark:border-zinc-700">
+                      <span className="inline-flex items-center rounded bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400 px-2 py-0.5 text-[10px] font-bold border border-zinc-200 dark:border-zinc-700 whitespace-nowrap">
                         Deleted (삭제됨)
                       </span>
                     ) : product.is_draft ? (
                       <div className="space-y-1">
-                        <span className="inline-flex items-center rounded bg-rose-50 text-rose-700 dark:bg-rose-950/20 dark:text-rose-400 px-2 py-0.5 text-[10px] font-bold border border-rose-100 dark:border-rose-900/50">
+                        <span className="inline-flex items-center rounded bg-rose-50 text-rose-700 dark:bg-rose-950/20 dark:text-rose-400 px-2 py-0.5 text-[10px] font-bold border border-rose-200 dark:border-rose-900/50 whitespace-nowrap">
                           Draft (보완 대기)
                         </span>
                         {product.missing_fields && product.missing_fields.length > 0 && (
-                          <div className="text-[9px] text-rose-600 dark:text-rose-450 leading-normal max-w-[160px]">
-                            <span className="font-semibold block">* 필수 정보 누락:</span>
+                          <div className="text-[9px] text-rose-600 dark:text-rose-400 leading-tight max-w-[140px]">
+                            <span className="font-semibold block">* 누락 항목:</span>
                             <span className="block">{product.missing_fields.join(", ")}</span>
                           </div>
                         )}
                       </div>
                     ) : (
-                      <span className="inline-flex items-center rounded bg-emerald-50 text-emerald-700 dark:bg-emerald-950/20 dark:text-emerald-400 px-2 py-0.5 text-[10px] font-bold border border-emerald-100 dark:border-emerald-900/50">
-                        Active
+                      <span className="inline-flex items-center rounded bg-emerald-50 text-emerald-700 dark:bg-emerald-950/20 dark:text-emerald-400 px-2 py-0.5 text-[10px] font-bold border border-emerald-200 dark:border-emerald-900/50 whitespace-nowrap">
+                        등록 완료
                       </span>
                     )}
                   </td>
 
+                  {/* 2. Selection Status Badge (Read Only) */}
+                  <td className="px-4 py-4 whitespace-nowrap">
+                    {(() => {
+                      const selKey = (product.selection_status || "UNREVIEWED") as SelectionStatus;
+                      const label = SELECTION_STATUS_LABELS[selKey] || product.selection_status;
+                      const style = SELECTION_STATUS_STYLES[selKey] || {
+                        bg: "bg-zinc-100 dark:bg-zinc-800",
+                        text: "text-zinc-700 dark:text-zinc-300",
+                        border: "border-zinc-200 dark:border-zinc-700",
+                      };
+                      return (
+                        <span
+                          className={`inline-flex items-center rounded px-2 py-0.5 text-[10px] font-bold border ${style.bg} ${style.text} ${style.border}`}
+                          title="어드민 검토 상태"
+                        >
+                          {label}
+                        </span>
+                      );
+                    })()}
+                  </td>
+
+                  {/* 3. Sales Status Badge (Read Only) */}
+                  <td className="px-4 py-4 whitespace-nowrap">
+                    {(() => {
+                      const salesKey = (product.sales_status || "PREPARING") as SalesStatus;
+                      const label = SALES_STATUS_LABELS[salesKey] || product.sales_status;
+                      const style = SALES_STATUS_STYLES[salesKey] || {
+                        bg: "bg-zinc-100 dark:bg-zinc-800",
+                        text: "text-zinc-700 dark:text-zinc-300",
+                        border: "border-zinc-200 dark:border-zinc-700",
+                      };
+                      return (
+                        <span
+                          className={`inline-flex items-center rounded px-2 py-0.5 text-[10px] font-bold border ${style.bg} ${style.text} ${style.border}`}
+                          title="어드민 판매 운영 상태"
+                        >
+                          {label}
+                        </span>
+                      );
+                    })()}
+                  </td>
+
                   {/* Actions */}
-                  <td className="px-6 py-4 text-right whitespace-nowrap">
-                    <div className="flex justify-end items-center gap-2">
+                  <td className="px-4 py-4 text-right whitespace-nowrap">
+                    <div className="flex justify-end items-center gap-1.5">
                       <Link
                         href={`/portal/products/${product.id}`}
-                        className="rounded bg-zinc-100 dark:bg-zinc-800 px-3 py-1.5 font-bold text-zinc-700 hover:bg-zinc-200 dark:text-zinc-300 dark:hover:bg-zinc-700 hover:underline transition-all whitespace-nowrap shrink-0 inline-flex items-center"
+                        className="rounded bg-zinc-100 dark:bg-zinc-800 px-2.5 py-1.5 font-bold text-zinc-700 hover:bg-zinc-200 dark:text-zinc-300 dark:hover:bg-zinc-700 hover:underline transition-all whitespace-nowrap shrink-0 inline-flex items-center text-[11px]"
                       >
-                        수정 및 세부 정보
+                        수정/상세
                       </Link>
                       {!product.deleted_at && (
                         <button
                           type="button"
                           onClick={() => handleDelete(product.id)}
-                          className="rounded bg-rose-50 text-rose-700 hover:bg-rose-100 dark:bg-rose-950/20 dark:text-rose-455 dark:hover:bg-rose-900/30 px-3 py-1.5 font-bold transition-all cursor-pointer border border-rose-100 dark:border-rose-900/50 whitespace-nowrap shrink-0 inline-flex items-center"
+                          className="rounded bg-rose-50 text-rose-700 hover:bg-rose-100 dark:bg-rose-950/20 dark:text-rose-455 dark:hover:bg-rose-900/30 px-2.5 py-1.5 font-bold transition-all cursor-pointer border border-rose-100 dark:border-rose-900/50 whitespace-nowrap shrink-0 inline-flex items-center text-[11px]"
                         >
                           삭제
                         </button>
@@ -344,7 +398,7 @@ export function PortalProductsList({ initialProducts, hasBrand }: PortalProducts
               {filteredProducts.length === 0 && (
                 <tr>
                   <td
-                    colSpan={8}
+                    colSpan={10}
                     className="px-6 py-12 text-center text-zinc-400 dark:text-zinc-500"
                   >
                     일치하는 등록 제품이 존재하지 않습니다.
@@ -358,3 +412,4 @@ export function PortalProductsList({ initialProducts, hasBrand }: PortalProducts
     </div>
   );
 }
+

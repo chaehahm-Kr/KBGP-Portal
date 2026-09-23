@@ -3,6 +3,8 @@ import { verifyAdminSession } from "@/lib/auth/dal";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getSignedFileUrl } from "@/lib/files/storage";
 import { AdminProductsList } from "@/components/admin/admin-products-list";
+import { evaluateProductRegistrationStatus } from "@/lib/product/registration-status";
+import { getBatchProductCategoryCompletions } from "@/lib/product/attribute-completion";
 
 export const metadata: Metadata = {
   title: "제품 관리 | K SELECT NETWORK 어드민",
@@ -47,123 +49,19 @@ export default async function AdminProductsPage() {
     return path.join(" > ");
   };
 
-  // 4.1 Fetch attributes master data for completeness rate computation (Use admin client to bypass RLS)
-  const { data: dbAllAttrs } = await admin
-    .from("attributes")
-    .select("code, scope, is_required")
-    .eq("is_active", true);
-  const commonAttrCodes = (dbAllAttrs ?? [])
-    .filter((a) => a.scope === "COMMON")
-    .map((a) => a.code);
-
-  // 4.2 Fetch category-profile mappings
-  const { data: dbCatProfileMaps } = await admin
-    .from("category_profile_mappings")
-    .select("category_code, profile_code")
-    .eq("is_active", true);
-  const catToProfile = new Map((dbCatProfileMaps ?? []).map((m) => [m.category_code, m.profile_code]));
-
-  // 4.3 Fetch profile-attributes mappings
-  const { data: dbProfAttrs } = await admin
-    .from("profile_attributes")
-    .select("profile_code, attribute_code, is_required_override")
-    .eq("is_active", true);
-
-  const profileToAttrs = new Map<string, string[]>();
-  (dbProfAttrs ?? []).forEach((pa) => {
-    const list = profileToAttrs.get(pa.profile_code) || [];
-    list.push(pa.attribute_code);
-    profileToAttrs.set(pa.profile_code, list);
-  });
-
-  // 4.4 Fetch all product attribute values
-  const { data: dbAllAttrValues } = await admin
-    .from("product_attribute_values")
-    .select("product_id, attribute_code, value_json, text_value");
-
-  const valuesByProduct = new Map<string, Map<string, any>>();
-  (dbAllAttrValues ?? []).forEach((val) => {
-    const pMap = valuesByProduct.get(val.product_id) || new Map<string, any>();
-    pMap.set(val.attribute_code, val);
-    valuesByProduct.set(val.product_id, pMap);
-  });
-
-  const getProductCompleteness = (productId: string, categoryCode: string | null | undefined): number => {
-    if (!categoryCode) return 0;
-    const profileCode = catToProfile.get(categoryCode);
-    const targetAttrCodes = new Set<string>(commonAttrCodes);
-    if (profileCode) {
-      const pAttrs = profileToAttrs.get(profileCode) || [];
-      pAttrs.forEach((code) => targetAttrCodes.add(code));
-    }
-    if (targetAttrCodes.size === 0) return 100;
-    const pValues = valuesByProduct.get(productId) || new Map<string, any>();
-    let filled = 0;
-    targetAttrCodes.forEach((code) => {
-      const valObj = pValues.get(code);
-      if (valObj) {
-        const val = valObj.value_json;
-        if (Array.isArray(val)) {
-          if (val.length > 0) filled++;
-        } else if (val !== null && val !== undefined && String(val).trim() !== "") {
-          filled++;
-        }
-      }
-    });
-    return Math.round((filled / targetAttrCodes.size) * 100);
-  };
-
-  // Create a map of attribute code to its default is_required status
-  const attrRequiredMap = new Map((dbAllAttrs ?? []).map(a => [a.code, a.is_required]));
-
-  // Build required attributes list per profile code
-  const profileRequiredAttrs = new Map<string, string[]>();
-  (dbProfAttrs ?? []).forEach((pa) => {
-    const isRequired = pa.is_required_override !== null 
-      ? pa.is_required_override 
-      : (attrRequiredMap.get(pa.attribute_code) ?? false);
-    
-    if (isRequired) {
-      const list = profileRequiredAttrs.get(pa.profile_code) || [];
-      list.push(pa.attribute_code);
-      profileRequiredAttrs.set(pa.profile_code, list);
-    }
-  });
-
-  // Common required attributes
-  const commonRequiredAttrCodes = (dbAllAttrs ?? [])
-    .filter((a) => a.scope === "COMMON" && a.is_required)
-    .map((a) => a.code);
-
-  const getProductHasMissingRequiredAttributes = (productId: string, categoryCode: string | null | undefined): boolean => {
-    if (!categoryCode) return false;
-    const profileCode = catToProfile.get(categoryCode);
-    const requiredAttrCodes = new Set<string>(commonRequiredAttrCodes);
-    if (profileCode) {
-      const pRequiredAttrs = profileRequiredAttrs.get(profileCode) || [];
-      pRequiredAttrs.forEach((code) => requiredAttrCodes.add(code));
-    }
-    if (requiredAttrCodes.size === 0) return false;
-
-    const pValues = valuesByProduct.get(productId) || new Map<string, any>();
-    for (const code of requiredAttrCodes) {
-      const valObj = pValues.get(code);
-      if (!valObj) return true;
-      const val = valObj.value_json;
-      if (Array.isArray(val)) {
-        if (val.length === 0) return true;
-      } else if (val === null || val === undefined || String(val).trim() === "") {
-        return true;
-      }
-    }
-    return false;
-  };
-
   // 5. Fetch first images (lowest position) for products to display thumbnail
   const { data: productImages } = await admin
     .from("product_images")
     .select("id, product_id, storage_path, position")
     .order("position", { ascending: true });
+
+  // 6. Fetch batch category & attribute completion status (Single Source of Truth)
+  const categoryCompletions = await getBatchProductCategoryCompletions(
+    (products ?? []).map((p) => ({
+      id: p.id,
+      category_code: p.category_code || null,
+    }))
+  );
 
   const resolvedProducts = await Promise.all(
     (products ?? []).map(async (p) => {
@@ -179,45 +77,34 @@ export default async function AdminProductsPage() {
       }
 
       const adminOverrides = (p.price_additional_info as any)?.admin_overrides || {};
-      const effectiveBrandId = p.brand_id;
-      const effectiveCategory = adminOverrides.category !== undefined && adminOverrides.category !== "" ? adminOverrides.category : p.category;
-      const effectiveNameEn = adminOverrides.name_en !== undefined && adminOverrides.name_en !== "" ? adminOverrides.name_en : p.name_en;
       const effectiveManufactureSku = adminOverrides.manufacture_sku !== undefined && adminOverrides.manufacture_sku !== "" ? adminOverrides.manufacture_sku : p.manufacture_sku;
-      const effectiveOrigin = adminOverrides.origin !== undefined && adminOverrides.origin !== "" ? adminOverrides.origin : p.origin;
-      const effectivePriceKrwRetail = adminOverrides.price_krw_retail !== undefined ? parseFloat(adminOverrides.price_krw_retail) : (p.price_krw_retail || 0);
-      const effectivePriceUsdFob = adminOverrides.price_usd_fob !== undefined ? parseFloat(adminOverrides.price_usd_fob) : (p.price_usd_fob || 0);
-      const effectiveUpc = adminOverrides.upc !== undefined && adminOverrides.upc !== "" ? adminOverrides.upc : p.upc;
-      const effectiveEan = adminOverrides.ean !== undefined && adminOverrides.ean !== "" ? adminOverrides.ean : p.ean;
 
-      const pkgWidth = adminOverrides.package_width !== undefined ? parseFloat(adminOverrides.package_width) : Number(p.package_width || 0);
-      const pkgDepth = adminOverrides.package_depth !== undefined ? parseFloat(adminOverrides.package_depth) : Number(p.package_depth || 0);
-      const pkgHeight = adminOverrides.package_height !== undefined ? parseFloat(adminOverrides.package_height) : Number(p.package_height || 0);
-      const pkgWeight = adminOverrides.package_weight !== undefined ? parseFloat(adminOverrides.package_weight) : Number(p.package_weight || 0);
-
-      // 누락 항목 분석 (상세 페이지의 ov 상태 반영된 Draft 판정과 완전히 동기화)
-      const completenessRate = getProductCompleteness(p.id, p.category_code);
-      const missingFields: string[] = [];
-      if (!effectiveBrandId) missingFields.push("브랜드");
-      if (!p.category_code || getProductHasMissingRequiredAttributes(p.id, p.category_code)) missingFields.push("카테고리");
-      if (!(effectiveNameEn || "").trim()) missingFields.push("영문 제품명");
-      if (!(effectiveManufactureSku || "").trim()) missingFields.push("제조사 SKU");
-      if (!(effectiveOrigin || "").trim()) missingFields.push("원산지");
-      if (Number(effectivePriceKrwRetail) <= 0) missingFields.push("소비자 판매가");
-      if (Number(effectivePriceUsdFob) <= 0) missingFields.push("FOB 수출 가격");
-      
-      if (pkgWidth <= 0 || pkgDepth <= 0 || pkgHeight <= 0 || pkgWeight <= 0) {
-        missingFields.push("패키지 배송 규격");
-      }
-      if (!(effectiveUpc || "").trim() && !(effectiveEan || "").trim()) {
-        missingFields.push("식별 바코드(UPC 또는 EAN)");
-      }
-      
       const hasImages = (productImages ?? []).some((img) => img.product_id === p.id);
-      if (!hasImages) {
-        missingFields.push("대표 이미지");
-      }
+      const catCompletion = categoryCompletions.get(p.id) || null;
 
-      const isDraft = missingFields.length > 0;
+      const registrationEvaluation = evaluateProductRegistrationStatus({
+        id: p.id,
+        name: p.name,
+        name_en: p.name_en,
+        brand_id: p.brand_id,
+        category_code: p.category_code,
+        manufacture_sku: p.manufacture_sku,
+        origin: p.origin,
+        price_krw_retail: p.price_krw_retail,
+        price_usd_fob: p.price_usd_fob,
+        package_width: p.package_width,
+        package_depth: p.package_depth,
+        package_height: p.package_height,
+        package_weight: p.package_weight,
+        upc: p.upc,
+        ean: p.ean,
+        selling_online: p.selling_online,
+        sales_link_1: p.sales_link_1,
+        deleted_at: (p as any).deleted_at,
+        adminOverrides,
+        hasImages,
+        categoryCompletion: catCompletion,
+      });
 
       return {
         id: p.id,
@@ -234,8 +121,9 @@ export default async function AdminProductsPage() {
         companyName: companyNameById.get(p.company_id) || "(미지정 회사)",
         brandName: brandNameById.get(p.brand_id) || "(미지정 브랜드)",
         photoUrl,
-        is_draft: isDraft,
-        missing_fields: missingFields,
+        is_draft: registrationEvaluation.isDraft,
+        missing_fields: registrationEvaluation.missingFields,
+        registration_status: registrationEvaluation.status,
         deleted_at: (p as any).deleted_at || null,
         updated_at: (p as any).updated_at || null,
         last_updated_by_name: (p as any).last_updated_by_name || null,
@@ -244,7 +132,6 @@ export default async function AdminProductsPage() {
         sales_status: p.sales_status || "PREPARING",
         category_code: p.category_code || null,
         category_full_path: p.category_code ? getCategoryFullPath(p.category_code) : null,
-        completeness_rate: completenessRate,
       };
     })
   );

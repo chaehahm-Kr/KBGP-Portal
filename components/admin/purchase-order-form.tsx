@@ -7,6 +7,7 @@ import {
   updatePurchaseOrder,
   getProductsForSupplier,
 } from "@/lib/purchase-order/actions";
+import { formatEasternDate, getEasternTodayString } from "@/lib/utils/timezone";
 
 interface WarehouseOption {
   id: string;
@@ -57,7 +58,7 @@ export function PurchaseOrderForm({
   // Header Fields
   const [supplierId, setSupplierId] = useState(initialPo?.supplier_id || "");
   const [orderDate, setOrderDate] = useState(
-    initialPo?.order_date || new Date().toISOString().split("T")[0]
+    initialPo?.order_date || getEasternTodayString()
   );
   const [currency, setCurrency] = useState(initialPo?.currency || "USD");
   const [paymentTerms, setPaymentTerms] = useState(initialPo?.payment_terms || "");
@@ -118,7 +119,7 @@ export function PurchaseOrderForm({
         if (!isNaN(days)) {
           const readyDate = new Date();
           readyDate.setDate(readyDate.getDate() + days);
-          setExpectedReadyDate(readyDate.toISOString().split("T")[0]);
+          setExpectedReadyDate(formatEasternDate(readyDate));
         }
       }
     }

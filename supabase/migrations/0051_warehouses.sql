@@ -6,7 +6,7 @@ CREATE TABLE IF NOT EXISTS public.warehouses (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   name text NOT NULL,
   code text NOT NULL,
-  company_id uuid NOT NULL REFERENCES public.companies (id) ON DELETE CASCADE,
+  company_id uuid REFERENCES public.companies (id) ON DELETE CASCADE,
   type text NOT NULL CHECK (type IN ('own', '3pl', 'other')),
   status text NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'inactive')),
   is_default_receiving boolean NOT NULL DEFAULT false,

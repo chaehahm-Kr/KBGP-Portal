@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createPayment, updatePayment } from "@/lib/supplier-payment/actions";
 import { uploadInvoiceAttachment } from "@/lib/supplier-invoice/actions";
+import { getEasternTodayString } from "@/lib/utils/timezone";
 
 interface EligibleInvoice {
   id: string;
@@ -32,7 +33,7 @@ export function PaymentForm({ isEdit = false, payment, eligibleInvoices, presele
     isEdit ? payment.supplier_invoice_id : (preselectedInvoiceId || "")
   );
   const [paymentDate, setPaymentDate] = useState(
-    isEdit ? payment.payment_date : new Date().toISOString().split("T")[0]
+    isEdit ? payment.payment_date : getEasternTodayString()
   );
   const [paymentAmount, setPaymentAmount] = useState<number>(
     isEdit ? Number(payment.payment_amount) : 0

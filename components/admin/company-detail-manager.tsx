@@ -1909,6 +1909,7 @@ export function CompanyDetailManager({
               {activeTab === "shipping-origin" && showSupplierTab && (
                 <CompanyShippingOriginsTab
                   companyId={company.id}
+                  companyName={company.name}
                   initialOrigins={initialShippingOrigins}
                   mode="admin"
                   canEdit={true}

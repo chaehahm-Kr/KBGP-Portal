@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import Link from "next/link";
+import { formatEasternDate } from "@/lib/utils/timezone";
 
 interface CasesListProps {
   initialCases: any[];
@@ -114,7 +115,7 @@ export function CasesList({ initialCases }: CasesListProps) {
 
                     {/* Created date */}
                     <td className="px-5 py-3.5 font-mono text-zinc-650">
-                      {new Date(c.created_at).toISOString().split("T")[0]}
+                      {formatEasternDate(c.created_at)}
                     </td>
 
                     {/* Description */}

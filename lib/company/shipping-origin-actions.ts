@@ -28,6 +28,10 @@ export interface CompanyShippingOrigin {
   updated_at: string;
   created_by?: string | null;
   updated_by?: string | null;
+  warehouse_id?: string | null;
+  warehouse_code?: string | null;
+  warehouse_name?: string | null;
+  warehouse_type?: string | null;
 }
 
 export interface ShippingOriginInput {
@@ -127,6 +131,8 @@ export async function getCompanyShippingOrigins(companyId: string): Promise<Comp
   if (!companyId) return [];
 
   const admin = createAdminClient();
+  let rawOrigins: CompanyShippingOrigin[] = [];
+
   try {
     const { data, error } = await admin
       .from("company_shipping_origins")
@@ -136,19 +142,50 @@ export async function getCompanyShippingOrigins(companyId: string): Promise<Comp
       .order("created_at", { ascending: true });
 
     if (!error && data) {
-      return data as CompanyShippingOrigin[];
+      rawOrigins = data as CompanyShippingOrigin[];
     }
   } catch (e) {
     // Fallback to metadata
   }
 
-  // Fallback to metadata
-  const fallback = await getOriginsFromMetadata(companyId);
-  return fallback.sort((a, b) => {
-    if (a.is_default && !b.is_default) return -1;
-    if (!a.is_default && b.is_default) return 1;
-    return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
-  });
+  if (rawOrigins.length === 0) {
+    // Fallback to metadata
+    const fallback = await getOriginsFromMetadata(companyId);
+    rawOrigins = fallback.sort((a, b) => {
+      if (a.is_default && !b.is_default) return -1;
+      if (!a.is_default && b.is_default) return 1;
+      return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+    });
+  }
+
+  // Enrich with warehouse link info
+  try {
+    const { data: whList } = await admin
+      .from("warehouses")
+      .select("id, code, name, type, shipping_origin_id, internal_note");
+
+    if (whList && whList.length > 0) {
+      return rawOrigins.map((origin) => {
+        const linkedWh = whList.find(
+          (wh) =>
+            wh.shipping_origin_id === origin.id ||
+            (wh.internal_note && wh.internal_note.includes(`[ORIGIN_ID:${origin.id}]`))
+        );
+        if (linkedWh) {
+          return {
+            ...origin,
+            warehouse_id: linkedWh.id,
+            warehouse_code: linkedWh.code,
+            warehouse_name: linkedWh.name,
+            warehouse_type: linkedWh.type,
+          };
+        }
+        return origin;
+      });
+    }
+  } catch (e) {}
+
+  return rawOrigins;
 }
 
 /**
@@ -523,6 +560,24 @@ export async function adminDeleteShippingOrigin(
   }
 
   const admin = createAdminClient();
+
+  // Check if linked to an active warehouse
+  try {
+    const { data: linkedWh } = await admin
+      .from("warehouses")
+      .select("id, code, name")
+      .or(`shipping_origin_id.eq.${id},internal_note.ilike.%[ORIGIN_ID:${id}]%`)
+      .limit(1);
+
+    if (linkedWh && linkedWh.length > 0) {
+      throw new Error(
+        `해당 출고지는 물류창고(${linkedWh[0].code} · ${linkedWh[0].name})와 연동되어 있어 삭제할 수 없습니다. 물류창고 설정에서 해당 창고를 먼저 삭제하거나 연동을 해제해주세요.`
+      );
+    }
+  } catch (e: any) {
+    if (e.message?.includes("물류창고")) throw e;
+  }
+
   try {
     await admin
       .from("company_shipping_origins")
@@ -569,6 +624,24 @@ export async function portalDeleteShippingOrigin(
   }
 
   const admin = createAdminClient();
+
+  // Check if linked to an active warehouse
+  try {
+    const { data: linkedWh } = await admin
+      .from("warehouses")
+      .select("id, code, name")
+      .or(`shipping_origin_id.eq.${id},internal_note.ilike.%[ORIGIN_ID:${id}]%`)
+      .limit(1);
+
+    if (linkedWh && linkedWh.length > 0) {
+      throw new Error(
+        `해당 출고지는 물류창고(${linkedWh[0].code} · ${linkedWh[0].name})와 연동되어 있어 삭제할 수 없습니다. 관리자에게 문의하여 물류창고 연동을 먼저 해제해주세요.`
+      );
+    }
+  } catch (e: any) {
+    if (e.message?.includes("물류창고")) throw e;
+  }
+
   try {
     await admin
       .from("company_shipping_origins")

@@ -6,6 +6,7 @@ import { getSignedFileUrl } from "@/lib/files/storage";
 import { ProductOverrideTabs } from "@/components/admin/product-override-tabs";
 import type { Product, ProductVideo } from "@/lib/product/types";
 import { adminGetProductCuration, getProductChangeHistory } from "@/lib/product/admin-actions";
+import { getProductCategoryCompletion } from "@/lib/product/attribute-completion";
 
 export const metadata: Metadata = {
   title: "제품 오버라이드 관리 | K SELECT NETWORK 어드민",
@@ -128,71 +129,9 @@ export default async function AdminProductDetailPage({
     }
   }
 
-  // Fetch attributes data to check for missing required attributes
-  const { data: dbAllAttrs } = await adminSupabase
-    .from("attributes")
-    .select("code, scope, is_required")
-    .eq("is_active", true);
-
-  const { data: dbCatProfileMaps } = await adminSupabase
-    .from("category_profile_mappings")
-    .select("category_code, profile_code")
-    .eq("is_active", true);
-  const catToProfile = new Map((dbCatProfileMaps ?? []).map((m) => [m.category_code, m.profile_code]));
-
-  const { data: dbProfAttrs } = await adminSupabase
-    .from("profile_attributes")
-    .select("profile_code, attribute_code, is_required_override")
-    .eq("is_active", true);
-
-  const { data: dbProductAttrValues } = await adminSupabase
-    .from("product_attribute_values")
-    .select("attribute_code, value_json")
-    .eq("product_id", id);
-
-  const attrRequiredMap = new Map((dbAllAttrs ?? []).map(a => [a.code, a.is_required]));
-  const profileRequiredAttrs = new Map<string, string[]>();
-  (dbProfAttrs ?? []).forEach((pa) => {
-    const isRequired = pa.is_required_override !== null 
-      ? pa.is_required_override 
-      : (attrRequiredMap.get(pa.attribute_code) ?? false);
-    
-    if (isRequired) {
-      const list = profileRequiredAttrs.get(pa.profile_code) || [];
-      list.push(pa.attribute_code);
-      profileRequiredAttrs.set(pa.profile_code, list);
-    }
-  });
-
-  const commonRequiredAttrCodes = (dbAllAttrs ?? [])
-    .filter((a) => a.scope === "COMMON" && a.is_required)
-    .map((a) => a.code);
-
-  const getHasMissingRequiredAttributes = (): boolean => {
-    const categoryCode = product.category_code;
-    if (!categoryCode) return false;
-    const profileCode = catToProfile.get(categoryCode);
-    const requiredAttrCodes = new Set<string>(commonRequiredAttrCodes);
-    if (profileCode) {
-      const pRequiredAttrs = profileRequiredAttrs.get(profileCode) || [];
-      pRequiredAttrs.forEach((code) => requiredAttrCodes.add(code));
-    }
-    if (requiredAttrCodes.size === 0) return false;
-
-    const valuesMap = new Map((dbProductAttrValues ?? []).map(v => [v.attribute_code, v.value_json]));
-    for (const code of requiredAttrCodes) {
-      const val = valuesMap.get(code);
-      if (val === undefined || val === null) return true;
-      if (Array.isArray(val)) {
-        if (val.length === 0) return true;
-      } else if (String(val).trim() === "") {
-        return true;
-      }
-    }
-    return false;
-  };
-
-  const hasMissingRequiredAttributes = getHasMissingRequiredAttributes();
+  // Fetch Category & Attribute Completion status (Single Source of Truth)
+  const categoryCompletion = await getProductCategoryCompletion(product.id, product.category_code);
+  const hasMissingRequiredAttributes = !categoryCompletion.requiredAttributesComplete;
 
   const { curation, matrix } = await adminGetProductCuration(product.id);
 
@@ -255,6 +194,7 @@ export default async function AdminProductDetailPage({
       apProfiles={apProfiles ?? []}
       displayPrograms={displayPrograms ?? []}
       hasMissingRequiredAttributes={hasMissingRequiredAttributes}
+      initialCategoryCompletion={categoryCompletion}
       activeSuppliers={activeSuppliers}
       mappedSupplierIds={mappedSupplierIds}
       changeLogs={changeLogs}

@@ -50,6 +50,13 @@ export async function updateSession(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
   const host = request.headers.get("host") || "";
 
+  request.headers.set("x-url", pathname);
+  let supabaseResponse = NextResponse.next({
+    request: {
+      headers: request.headers,
+    },
+  });
+
   function createRedirectWithCookies(redirectUrl: URL) {
     const redirectResponse = NextResponse.redirect(redirectUrl);
     supabaseResponse.cookies.getAll().forEach((cookie) => {
@@ -92,13 +99,6 @@ export async function updateSession(request: NextRequest) {
       prefix = "admin-";
     }
   }
-
-  request.headers.set("x-url", pathname);
-  let supabaseResponse = NextResponse.next({
-    request: {
-      headers: request.headers,
-    },
-  });
 
   const supabase = createServerClient(
     publicEnv.NEXT_PUBLIC_SUPABASE_URL,

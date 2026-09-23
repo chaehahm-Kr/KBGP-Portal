@@ -7,6 +7,7 @@ import {
   createReceiving,
   updateReceiving,
 } from "@/lib/inbound/actions";
+import { getEasternTodayString } from "@/lib/utils/timezone";
 
 interface ShipmentOption {
   id: string;
@@ -62,7 +63,7 @@ export function ReceivingForm({
   const [purchaseOrderId, setPurchaseOrderId] = useState(initialReceiving?.purchase_order_id || "");
   const [warehouseId, setWarehouseId] = useState(initialReceiving?.warehouse_id || defaultWarehouseId);
   const [receivedDate, setReceivedDate] = useState(
-    initialReceiving?.received_date || new Date().toISOString().split("T")[0]
+    initialReceiving?.received_date || getEasternTodayString()
   );
   const [internalNote, setInternalNote] = useState(initialReceiving?.internal_note || "");
 

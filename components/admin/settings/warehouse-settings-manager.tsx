@@ -57,7 +57,11 @@ export function WarehouseSettingsManager({
     const matchesSearch =
       w.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       w.code.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesCompany = selectedCompanyId === "all" || w.company_id === selectedCompanyId;
+    const matchesCompany =
+      selectedCompanyId === "all" ||
+      (selectedCompanyId === "own_only" && (w.type === "own" || !w.company_id)) ||
+      (selectedCompanyId === "company_linked" && w.type !== "own" && !!w.company_id) ||
+      (w.company_id === selectedCompanyId && w.type !== "own");
     const matchesType = selectedType === "all" || w.type === selectedType;
     const matchesStatus = selectedStatus === "all" || w.status === selectedStatus;
 
@@ -72,7 +76,7 @@ export function WarehouseSettingsManager({
     setFormData({
       name: "",
       code: "",
-      company_id: companies[0]?.id || "",
+      company_id: "",
       type: "own",
       status: "active",
       is_default_receiving: false,
@@ -95,8 +99,8 @@ export function WarehouseSettingsManager({
     setFormData({
       name: w.name,
       code: w.code,
-      company_id: w.company_id,
-      type: w.type as any,
+      company_id: w.type === "own" ? "" : (w.company_id || ""),
+      type: (w.type as any) || "own",
       status: w.status as any,
       is_default_receiving: w.is_default_receiving,
       address1: w.address1,
@@ -110,6 +114,14 @@ export function WarehouseSettingsManager({
     setIsModalOpen(true);
   };
 
+  const handleTypeChange = (newType: "own" | "3pl" | "partner" | "other") => {
+    if (newType === "own") {
+      setFormData((prev) => ({ ...prev, type: newType, company_id: "" }));
+    } else {
+      setFormData((prev) => ({ ...prev, type: newType }));
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!canEdit) return;
@@ -119,7 +131,12 @@ export function WarehouseSettingsManager({
     // Front-end Validations
     if (!formData.name.trim()) return setErrorMsg("물류창고 이름을 입력해주세요.");
     if (!formData.code.trim()) return setErrorMsg("물류창고 코드를 입력해주세요.");
-    if (!formData.company_id) return setErrorMsg("연결할 회사를 선택해주세요.");
+    if (formData.type === "3pl" && !formData.company_id) {
+      return setErrorMsg("3PL 물류창고는 연결할 회사를 반드시 선택해주세요.");
+    }
+    if (formData.type === "partner" && !formData.company_id) {
+      return setErrorMsg("파트너 창고는 연결할 파트너 회사를 반드시 선택해주세요.");
+    }
     if (!formData.address1.trim()) return setErrorMsg("주소 1을 입력해주세요.");
     if (!formData.city.trim()) return setErrorMsg("도시(City)를 입력해주세요.");
     if (!formData.state.trim()) return setErrorMsg("주/도(State/Province)를 입력해주세요.");
@@ -141,7 +158,7 @@ export function WarehouseSettingsManager({
           setTimeout(() => {
             setIsModalOpen(false);
             window.location.reload();
-          }, 1000);
+          }, 800);
         } else {
           setErrorMsg(result.error || "처리 중 오류가 발생했습니다.");
         }
@@ -195,6 +212,8 @@ export function WarehouseSettingsManager({
               className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-850 rounded-xl px-3 py-2 text-xs w-full focus:outline-none focus:border-zinc-400 dark:focus:border-zinc-700"
             >
               <option value="all">전체 회사</option>
+              <option value="own_only">🏢 자사 창고 (회사 연결 없음)</option>
+              <option value="company_linked">🔗 파트너/3PL 연결 창고 전체</option>
               {companies.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name}
@@ -213,8 +232,9 @@ export function WarehouseSettingsManager({
             >
               <option value="all">전체 유형</option>
               <option value="own">자사 창고 (Own)</option>
-              <option value="3pl">3PL 물류창고</option>
-              <option value="other">기타</option>
+              <option value="3pl">3PL 물류 창고 (3PL)</option>
+              <option value="partner">파트너 창고 (Partner)</option>
+              <option value="other">기타 (Other)</option>
             </select>
           </div>
 
@@ -269,12 +289,20 @@ export function WarehouseSettingsManager({
             <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
               {filteredWarehouses.map((w) => {
                 const typeLabel =
-                  w.type === "own" ? "자사 창고" : w.type === "3pl" ? "3PL 물류" : "기타";
+                  w.type === "own"
+                    ? "자사 창고"
+                    : w.type === "3pl"
+                    ? "3PL 물류창고"
+                    : w.type === "partner"
+                    ? "파트너 창고"
+                    : "기타";
                 const typeBg =
                   w.type === "own"
                     ? "bg-blue-50 text-blue-700 border-blue-100 dark:bg-blue-950/30 dark:text-blue-400 dark:border-blue-900/40"
                     : w.type === "3pl"
                     ? "bg-purple-50 text-purple-700 border-purple-100 dark:bg-purple-950/30 dark:text-purple-400 dark:border-purple-900/40"
+                    : w.type === "partner"
+                    ? "bg-emerald-50 text-emerald-700 border-emerald-100 dark:bg-emerald-950/30 dark:text-emerald-400 dark:border-emerald-900/40"
                     : "bg-zinc-50 text-zinc-600 border-zinc-100 dark:bg-zinc-850 dark:text-zinc-400 dark:border-zinc-800";
 
                 return (
@@ -283,10 +311,28 @@ export function WarehouseSettingsManager({
                       {w.code}
                     </td>
                     <td className="px-6 py-4 font-bold text-zinc-900 dark:text-zinc-100">
-                      {w.name}
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span>{w.name}</span>
+                        {w.shipping_origin_id && (
+                          <span
+                            className="inline-flex items-center gap-0.5 rounded bg-amber-50 dark:bg-amber-950/40 px-1.5 py-0.5 text-[10px] font-bold text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800"
+                            title={w.shipping_origin_name ? `출고지: ${w.shipping_origin_name}` : "출고지 연동 창고"}
+                          >
+                            📍 출고지 연동
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-6 py-4 text-zinc-700 dark:text-zinc-300">
-                      {w.companies?.name || "-"}
+                      {w.type === "own" ? (
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded text-[11px] font-bold bg-blue-50/80 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300 border border-blue-200/60 dark:border-blue-800/50">
+                          자사
+                        </span>
+                      ) : w.company_id && w.companies?.name ? (
+                        <span>{w.companies.name}</span>
+                      ) : (
+                        <span className="text-zinc-400 dark:text-zinc-500">-</span>
+                      )}
                     </td>
                     <td className="px-6 py-4">
                       <span className={`inline-block rounded px-2 py-0.5 text-[10px] font-semibold border ${typeBg}`}>
@@ -379,6 +425,30 @@ export function WarehouseSettingsManager({
                 </div>
               )}
 
+              {editingWarehouse?.shipping_origin_id && (
+                <div className="p-3 bg-amber-50 dark:bg-amber-950/20 rounded-xl border border-amber-200 dark:border-amber-800 text-xs">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-1.5 text-amber-800 dark:text-amber-300 font-bold">
+                      <span>📍</span>
+                      <span>
+                        연결된 출고지: {editingWarehouse.shipping_origin_name || "출고지 연동 창고"}
+                      </span>
+                    </div>
+                    {editingWarehouse.company_id && (
+                      <a
+                        href={`/admin/companies/${editingWarehouse.company_id}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-[11px] font-bold text-amber-700 hover:text-amber-900 dark:text-amber-300 dark:hover:text-amber-100 underline flex items-center gap-0.5"
+                      >
+                        <span>회사 출고지 보기</span>
+                        <span>↗</span>
+                      </a>
+                    )}
+                  </div>
+                </div>
+              )}
+
               <div className="grid grid-cols-2 gap-4">
                 {/* Code Field (disabled on edit) */}
                 <div className="flex flex-col gap-1">
@@ -409,36 +479,71 @@ export function WarehouseSettingsManager({
               </div>
 
               <div className="grid grid-cols-2 gap-4">
-                {/* Company Link Field */}
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs font-bold text-zinc-500 dark:text-zinc-400">연결 파트너 회사</label>
-                  <select
-                    disabled={isPending}
-                    value={formData.company_id}
-                    onChange={(e) => setFormData((prev) => ({ ...prev, company_id: e.target.value }))}
-                    className="bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-850 rounded-xl px-4 py-2.5 text-sm w-full focus:outline-none"
-                  >
-                    {companies.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Warehouse Type Field */}
+                {/* Warehouse Type Field (First for conditional UX) */}
                 <div className="flex flex-col gap-1">
                   <label className="text-xs font-bold text-zinc-500 dark:text-zinc-400">창고 유형</label>
                   <select
                     disabled={isPending}
                     value={formData.type}
-                    onChange={(e) => setFormData((prev) => ({ ...prev, type: e.target.value as any }))}
+                    onChange={(e) => handleTypeChange(e.target.value as any)}
                     className="bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-850 rounded-xl px-4 py-2.5 text-sm w-full focus:outline-none"
                   >
                     <option value="own">자사 창고 (Own)</option>
-                    <option value="3pl">3PL 물류창고</option>
-                    <option value="other">기타</option>
+                    <option value="3pl">3PL 물류 창고 (3PL)</option>
+                    <option value="partner">파트너 창고 (Partner)</option>
+                    <option value="other">기타 (Other)</option>
                   </select>
+                </div>
+
+                {/* Company Link Field (Conditional based on Type) */}
+                <div className="flex flex-col gap-1">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-zinc-500 dark:text-zinc-400">
+                      연결 파트너 회사
+                      {(formData.type === "3pl" || formData.type === "partner") && (
+                        <span className="text-rose-500 font-bold ml-1">*</span>
+                      )}
+                    </label>
+                    {formData.type === "own" && (
+                      <span className="text-[10px] text-zinc-400 dark:text-zinc-500 font-medium">(자사 창고 연결 없음)</span>
+                    )}
+                  </div>
+                  {formData.type === "own" ? (
+                    <select
+                      disabled={true}
+                      value=""
+                      className="bg-zinc-100 dark:bg-zinc-850 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2.5 text-sm w-full opacity-70 cursor-not-allowed text-zinc-500 dark:text-zinc-400"
+                    >
+                      <option value="">연결 회사 없음 (자사 창고)</option>
+                    </select>
+                  ) : (
+                    <select
+                      disabled={isPending}
+                      value={formData.company_id || ""}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, company_id: e.target.value }))}
+                      className="bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-850 rounded-xl px-4 py-2.5 text-sm w-full focus:outline-none"
+                    >
+                      <option value="">
+                        {formData.type === "3pl" || formData.type === "partner"
+                          ? "-- 연결 회사 선택 (필수) --"
+                          : "-- 연결 회사 선택 안 함 (선택) --"}
+                      </option>
+                      {companies.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                  <p className="text-[10px] text-zinc-400 mt-0.5">
+                    {formData.type === "own"
+                      ? "💡 자사 창고는 특정 파트너 회사와 연결되지 않습니다."
+                      : formData.type === "3pl"
+                      ? "* 3PL 물류창고는 관리 책임을 갖는 회사를 필수로 지정해야 합니다."
+                      : formData.type === "partner"
+                      ? "* 파트너 창고는 해당 창고를 보유/운영하는 파트너 회사를 연결해야 합니다."
+                      : "기타 창고는 필요 시 파트너 회사를 연결할 수 있습니다."}
+                  </p>
                 </div>
               </div>
 
@@ -475,7 +580,7 @@ export function WarehouseSettingsManager({
                     />
                     기본 입고 창고 지정
                   </label>
-                  <span className="text-[10px] text-zinc-400 mt-1">회사별로 하나의 활성 창고만 기본 입고지로 설정 가능합니다.</span>
+                  <span className="text-[10px] text-zinc-400 mt-1">자사 창고 또는 각 회사별로 하나의 활성 창고만 기본 입고지로 설정 가능합니다.</span>
                 </div>
               </div>
 

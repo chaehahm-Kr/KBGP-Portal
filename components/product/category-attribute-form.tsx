@@ -880,42 +880,6 @@ export const CategoryAttributeForm = forwardRef<CategoryAttributeFormHandle, Cat
         </div>
       )}
 
-      {/* 하단 저장 버튼 */}
-      {attributes.length > 0 && (
-        <div className="flex justify-end pt-4 border-t border-zinc-150 dark:border-zinc-800">
-          <button
-            id="save-attributes-btn"
-            type="button"
-            onClick={handleSubmit}
-            disabled={saving || isPending}
-            className={`
-              flex items-center gap-2 px-8 py-4 rounded-xl font-bold text-sm shadow-md transition-all duration-300 cursor-pointer
-              ${saving || isPending
-                ? 'bg-zinc-250 dark:bg-zinc-800 text-zinc-400 dark:text-zinc-500 cursor-not-allowed border border-zinc-200 dark:border-zinc-750'
-                : 'bg-[#18181b] hover:bg-[#27272a] dark:bg-[#f4f4f5] dark:hover:bg-[#e4e4e7] text-white dark:text-[#09090b] border border-[#18181b] dark:border-[#f4f4f5] hover:scale-[1.02] active:scale-[0.98]'
-              }
-            `}
-          >
-            {(saving || isPending) ? (
-              <>
-                <svg className="animate-spin h-5 w-5 text-indigo-400" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                </svg>
-                저장 중...
-              </>
-            ) : (
-              <>
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
-                </svg>
-                변경사항 저장
-              </>
-            )}
-          </button>
-        </div>
-      )}
-
     </div>
   );
 

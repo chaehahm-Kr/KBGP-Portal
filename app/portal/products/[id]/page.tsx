@@ -33,7 +33,8 @@ export default async function ProductDetailPage({
       carton_pack_qty, carton_width, carton_depth, carton_height, carton_weight, carton_cbm,
       palette_carton_qty, palette_width, palette_depth, palette_height, palette_weight,
       container_20ft_qty, container_20ft_weight, container_20ft_cbm,
-      container_40fthc_qty, container_40fthc_weight, container_40fthc_cbm, category_code
+      container_40fthc_qty, container_40fthc_weight, container_40fthc_cbm, category_code,
+      selection_status, sales_status, deleted_at, status
     `)
     .eq("id", id)
     .eq("company_id", companyId)

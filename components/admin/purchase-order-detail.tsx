@@ -21,6 +21,7 @@ import {
   transitionShipmentStatus,
   closeShipmentWithVariance,
 } from "@/lib/inbound/actions";
+import { getEasternTodayString } from "@/lib/utils/timezone";
 
 interface LineItem {
   id: string;
@@ -177,7 +178,7 @@ export function PurchaseOrderDetail({
   const [showReceivingForm, setShowReceivingForm] = useState(false);
   const [selectedShipmentId, setSelectedShipmentId] = useState("");
   const [receivingWarehouseId, setReceivingWarehouseId] = useState(po.destination_warehouse_id || "");
-  const [receivedDate, setReceivedDate] = useState(new Date().toISOString().split("T")[0]);
+  const [receivedDate, setReceivedDate] = useState(getEasternTodayString());
   const [receivingLines, setReceivingLines] = useState<Array<{
     inbound_shipment_line_id: string;
     purchase_order_line_id: string;

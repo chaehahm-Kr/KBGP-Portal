@@ -9,6 +9,7 @@ import {
   getPurchaseOrderForInvoice,
   uploadInvoiceAttachment
 } from "@/lib/supplier-invoice/actions";
+import { getEasternTodayString } from "@/lib/utils/timezone";
 
 interface PoOption {
   id: string;
@@ -52,7 +53,7 @@ export function InvoiceForm({ invoice, eligiblePos, suppliers }: InvoiceFormProp
   const [poId, setPoId] = useState(invoice?.purchase_order_id || "");
   const [invoiceNumber, setInvoiceNumber] = useState(invoice?.supplier_invoice_number || "");
   const [invoiceDate, setInvoiceDate] = useState(invoice?.invoice_date || "");
-  const [receivedDate, setReceivedDate] = useState(invoice?.received_date || new Date().toISOString().split("T")[0]);
+  const [receivedDate, setReceivedDate] = useState(invoice?.received_date || getEasternTodayString());
   const [dueDate, setDueDate] = useState(invoice?.due_date || "");
   const [currency, setCurrency] = useState(invoice?.currency || "USD");
   const [paymentTerms, setPaymentTerms] = useState(invoice?.payment_terms_snapshot || "");

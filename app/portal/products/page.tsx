@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getSignedFileUrl } from "@/lib/files/storage";
 import { PortalProductsList } from "@/components/product/portal-products-list";
 import { getBatchProductCategoryCompletions } from "@/lib/product/attribute-completion";
+import { evaluateProductRegistrationStatus } from "@/lib/product/registration-status";
 
 export const metadata: Metadata = {
   title: "제품 관리 | 파트너 포털",
@@ -16,14 +17,14 @@ export default async function ProductsPage() {
   let products: any[] | null = null;
   const { data: firstQueryProducts, error: queryError } = await supabase
     .from("products")
-    .select("id, name, name_en, category, brand_id, letusto_sku, manufacture_sku, price_krw_retail, price_usd_fob, package_width, package_depth, package_height, package_weight, price_additional_info, origin, upc, ean, selling_online, selling_offline, sales_link_1, sales_link_2, category_code")
+    .select("id, name, name_en, category, brand_id, letusto_sku, manufacture_sku, price_krw_retail, price_usd_fob, package_width, package_depth, package_height, package_weight, price_additional_info, origin, upc, ean, selling_online, selling_offline, sales_link_1, sales_link_2, category_code, selection_status, sales_status, deleted_at, status")
     .eq("company_id", companyId)
     .order("created_at", { ascending: false });
 
   if (queryError) {
     const fallbackResult = await supabase
       .from("products")
-      .select("id, name, name_en, category, brand_id, letusto_sku, manufacture_sku, price_krw_retail, price_usd_fob, package_width, package_depth, package_height, package_weight, price_additional_info, origin, upc, ean, selling_online, selling_offline, sales_link_1, sales_link_2, category_code")
+      .select("id, name, name_en, category, brand_id, letusto_sku, manufacture_sku, price_krw_retail, price_usd_fob, package_width, package_depth, package_height, package_weight, price_additional_info, origin, upc, ean, selling_online, selling_offline, sales_link_1, sales_link_2, category_code, selection_status, sales_status, deleted_at, status")
       .eq("company_id", companyId)
       .order("created_at", { ascending: false });
     products = fallbackResult.data;
@@ -70,38 +71,33 @@ export default async function ProductsPage() {
       const effectiveLetustoSku = adminOverrides.letusto_sku || p.letusto_sku || "";
       const effectiveManufactureSku = adminOverrides.manufacture_sku || p.manufacture_sku || "";
 
-      // 누락 항목 분석
-      const missingFields: string[] = [];
-      if (!p.brand_id) missingFields.push("브랜드");
-      if (!p.category) missingFields.push("카테고리");
-      if (!p.name_en?.trim()) missingFields.push("영문 제품명");
-      if (!effectiveManufactureSku.trim()) missingFields.push("제조사 SKU");
-      if (!p.origin?.trim()) missingFields.push("원산지");
-      if (!p.price_krw_retail || Number(p.price_krw_retail) <= 0) missingFields.push("소비자 판매가");
-      if (!p.price_usd_fob || Number(p.price_usd_fob) <= 0) missingFields.push("FOB 수출 가격");
-      
-      const widthVal = Number(p.package_width || 0);
-      const depthVal = Number(p.package_depth || 0);
-      const heightVal = Number(p.package_height || 0);
-      const weightVal = Number(p.package_weight || 0);
-      if (widthVal <= 0 || depthVal <= 0 || heightVal <= 0 || weightVal <= 0) {
-        missingFields.push("패키지 배송 규격");
-      }
-      
-      if (!p.upc?.trim() && !p.ean?.trim()) {
-        missingFields.push("식별 바코드(UPC 또는 EAN)");
-      }
-      if (p.selling_online && !p.sales_link_1?.trim()) {
-        missingFields.push("온라인 판매 링크");
-      }
-      
+      const catCompletion = categoryCompletions.get(p.id) || null;
       const hasImages = (productImages ?? []).some((img) => img.product_id === p.id);
-      if (!hasImages) {
-        missingFields.push("대표 이미지");
-      }
 
-      const isDraft = missingFields.length > 0;
-      const catCompletion = categoryCompletions.get(p.id);
+      // Unified Single Source of Truth Registration Evaluation
+      const registrationEvaluation = evaluateProductRegistrationStatus({
+        id: p.id,
+        name: p.name,
+        name_en: p.name_en,
+        brand_id: p.brand_id,
+        category_code: p.category_code,
+        manufacture_sku: p.manufacture_sku,
+        origin: p.origin,
+        price_krw_retail: p.price_krw_retail,
+        price_usd_fob: p.price_usd_fob,
+        package_width: p.package_width,
+        package_depth: p.package_depth,
+        package_height: p.package_height,
+        package_weight: p.package_weight,
+        upc: p.upc,
+        ean: p.ean,
+        selling_online: p.selling_online,
+        sales_link_1: p.sales_link_1,
+        deleted_at: p.deleted_at,
+        adminOverrides,
+        hasImages,
+        categoryCompletion: catCompletion,
+      });
 
       return {
         id: p.id,
@@ -113,11 +109,14 @@ export default async function ProductsPage() {
         brand_id: p.brand_id,
         brandName: brandNameById.get(p.brand_id) || "(미지정 브랜드)",
         photoUrl,
-        is_draft: isDraft,
-        missing_fields: missingFields,
-        deleted_at: p.deleted_at,
+        is_draft: registrationEvaluation.isDraft,
+        missing_fields: registrationEvaluation.missingFields,
+        registration_status: registrationEvaluation.status,
+        selection_status: p.selection_status || "UNREVIEWED",
+        sales_status: p.sales_status || "PREPARING",
+        deleted_at: p.deleted_at || null,
         category_code: p.category_code || null,
-        category_completion: catCompletion || null,
+        category_completion: catCompletion,
       };
     })
   );
@@ -128,4 +127,5 @@ export default async function ProductsPage() {
     </div>
   );
 }
+
 

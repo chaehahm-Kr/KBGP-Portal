@@ -7,8 +7,8 @@ import { createClient } from "@/lib/supabase/server";
 export interface WarehousePayload {
   name: string;
   code: string;
-  company_id: string;
-  type: "own" | "3pl" | "other";
+  company_id: string | null;
+  type: "own" | "3pl" | "partner" | "other";
   status: "active" | "inactive";
   is_default_receiving: boolean;
   address1: string;
@@ -18,38 +18,113 @@ export interface WarehousePayload {
   zip_code: string;
   country: string;
   internal_note?: string | null;
+  shipping_origin_id?: string | null;
 }
 
 export interface WarehouseRow extends WarehousePayload {
   id: string;
   created_at: string;
   updated_at: string;
+  shipping_origin_name?: string | null;
 }
 
 /**
- * Fetch all warehouses with associated company names
+ * Fetch all warehouses with associated company names and linked shipping origins
  */
 export async function getWarehouses() {
   await verifyAdminSession();
   const supabase = await createClient();
 
-  const { data, error } = await supabase
-    .from("warehouses")
-    .select(`
-      *,
-      companies (
-        id,
-        name
-      )
-    `)
-    .order("created_at", { ascending: false });
+  // Attempt to select shipping_origin_id and join company_shipping_origins
+  let data: any[] | null = null;
+  let queryError: any = null;
 
-  if (error) {
-    console.error("Error fetching warehouses:", error);
-    throw new Error("물류창고 정보를 가져오지 못했습니다.");
+  try {
+    const res = await supabase
+      .from("warehouses")
+      .select(`
+        *,
+        companies (
+          id,
+          name
+        ),
+        company_shipping_origins (
+          id,
+          name
+        )
+      `)
+      .order("created_at", { ascending: false });
+    
+    if (res.error) {
+      queryError = res.error;
+    } else {
+      data = res.data;
+    }
+  } catch (e) {
+    queryError = e;
   }
 
-  return (data || []) as (WarehouseRow & { companies: { name: string } | null })[];
+  // Fallback query without company_shipping_origins if relationship is not created yet
+  if (queryError || !data) {
+    const fallbackRes = await supabase
+      .from("warehouses")
+      .select(`
+        *,
+        companies (
+          id,
+          name
+        )
+      `)
+      .order("created_at", { ascending: false });
+
+    if (fallbackRes.error) {
+      console.error("Error fetching warehouses:", fallbackRes.error);
+      throw new Error("물류창고 정보를 가져오지 못했습니다.");
+    }
+    data = fallbackRes.data;
+  }
+
+  const normalized = (data || []).map((w: any) => {
+    let resolvedType = w.type;
+    let resolvedNote = w.internal_note || "";
+    let originId = w.shipping_origin_id || null;
+    let originName = w.company_shipping_origins?.name || null;
+
+    if (resolvedNote.includes("[TYPE:partner]")) {
+      resolvedType = "partner";
+      resolvedNote = resolvedNote.replace(/\[TYPE:partner\]\n?/, "").trim();
+    }
+
+    if (!originId && resolvedNote.includes("[ORIGIN_ID:")) {
+      const match = resolvedNote.match(/\[ORIGIN_ID:([^\]]+)\]/);
+      if (match) {
+        originId = match[1];
+        resolvedNote = resolvedNote.replace(/\[ORIGIN_ID:[^\]]+\]\n?/, "").trim();
+      }
+    }
+
+    if (resolvedType === "own") {
+      return {
+        ...w,
+        type: "own",
+        company_id: null,
+        companies: null,
+        shipping_origin_id: originId,
+        shipping_origin_name: originName,
+        internal_note: resolvedNote || null
+      };
+    }
+
+    return {
+      ...w,
+      type: resolvedType,
+      shipping_origin_id: originId,
+      shipping_origin_name: originName,
+      internal_note: resolvedNote || null
+    };
+  });
+
+  return normalized as (WarehouseRow & { companies: { name: string } | null })[];
 }
 
 /**
@@ -63,6 +138,19 @@ export async function createWarehouse(payload: WarehousePayload) {
   const code = payload.code.trim().toUpperCase();
   if (!/^[A-Z0-9]{2,10}$/.test(code)) {
     return { success: false, error: "창고 코드는 2~10자리의 영문 대문자 및 숫자만 가능합니다." };
+  }
+
+  // Parse companyId (enforce null for own warehouses)
+  const companyId = payload.type === "own"
+    ? null
+    : (payload.company_id && payload.company_id.trim() !== "" ? payload.company_id.trim() : null);
+
+  // Validate: 3PL and Partner must have a connected company
+  if (payload.type === "3pl" && !companyId) {
+    return { success: false, error: "3PL 물류창고는 연결 회사를 반드시 선택해야 합니다." };
+  }
+  if (payload.type === "partner" && !companyId) {
+    return { success: false, error: "파트너 창고는 연결할 파트너 회사를 반드시 선택해야 합니다." };
   }
 
   // Validate: Default receiving active check
@@ -81,12 +169,19 @@ export async function createWarehouse(payload: WarehousePayload) {
     return { success: false, error: `이미 사용 중인 창고 코드입니다: ${code}` };
   }
 
-  // If set as default, unset other defaults for the same company first
+  // If set as default, unset other defaults for the same company (or unset other own warehouses if company_id is null)
   if (payload.is_default_receiving) {
-    const { error: unsetError } = await supabase
+    let unsetQuery = supabase
       .from("warehouses")
-      .update({ is_default_receiving: false })
-      .eq("company_id", payload.company_id);
+      .update({ is_default_receiving: false });
+
+    if (companyId) {
+      unsetQuery = unsetQuery.eq("company_id", companyId);
+    } else {
+      unsetQuery = unsetQuery.is("company_id", null);
+    }
+
+    const { error: unsetError } = await unsetQuery;
 
     if (unsetError) {
       console.error("Error unsetting existing defaults:", unsetError);
@@ -94,31 +189,90 @@ export async function createWarehouse(payload: WarehousePayload) {
     }
   }
 
-  const { error: insertError } = await supabase
-    .from("warehouses")
-    .insert({
-      name: payload.name.trim(),
-      code,
-      company_id: payload.company_id,
-      type: payload.type,
-      status: payload.status,
-      is_default_receiving: payload.is_default_receiving,
-      address1: payload.address1.trim(),
-      address2: payload.address2 ? payload.address2.trim() : null,
-      city: payload.city.trim(),
-      state: payload.state.trim(),
-      zip_code: payload.zip_code.trim(),
-      country: payload.country.trim(),
-      internal_note: payload.internal_note ? payload.internal_note.trim() : null,
-    });
+  // Validate: Duplicate check on shipping_origin_id
+  if (payload.shipping_origin_id) {
+    const { data: duplicateOrigin } = await supabase
+      .from("warehouses")
+      .select("id, code, name")
+      .eq("shipping_origin_id", payload.shipping_origin_id)
+      .maybeSingle();
 
-  if (insertError) {
-    console.error("Error creating warehouse:", insertError);
-    return { success: false, error: "물류창고 등록에 실패했습니다. 입력값을 확인해주세요." };
+    if (duplicateOrigin) {
+      return { success: false, error: `해당 출고지는 이미 물류창고(${duplicateOrigin.code} · ${duplicateOrigin.name})와 연결되어 있습니다.` };
+    }
   }
 
+  let insertPayload: any = {
+    name: payload.name.trim(),
+    code,
+    company_id: companyId,
+    type: payload.type,
+    status: payload.status,
+    is_default_receiving: payload.is_default_receiving,
+    address1: payload.address1.trim(),
+    address2: payload.address2 ? payload.address2.trim() : null,
+    city: payload.city.trim(),
+    state: payload.state.trim(),
+    zip_code: payload.zip_code.trim(),
+    country: payload.country.trim(),
+    internal_note: payload.internal_note ? payload.internal_note.trim() : null,
+    shipping_origin_id: payload.shipping_origin_id || null,
+  };
+
+  let { error: insertError } = await supabase
+    .from("warehouses")
+    .insert(insertPayload);
+
+  // Resilient fallback for unmigrated database schema constraints
+  if (insertError) {
+    let handled = false;
+    // Fallback 1: company_id NOT NULL constraint
+    if (insertError.message.includes('null value in column "company_id"') && payload.type === "own") {
+      const { data: defaultComp } = await supabase.from("companies").select("id").eq("status", "active").limit(1).maybeSingle();
+      if (defaultComp) {
+        insertPayload.company_id = defaultComp.id;
+        const retry = await supabase.from("warehouses").insert(insertPayload);
+        if (!retry.error) handled = true;
+      }
+    }
+
+    // Fallback 2: type check constraint (partner)
+    if (insertError.message.includes('violates check constraint "warehouses_type_check"') && payload.type === "partner") {
+      insertPayload.type = "3pl";
+      insertPayload.internal_note = (insertPayload.internal_note ? insertPayload.internal_note + "\n" : "") + "[TYPE:partner]";
+      const retry = await supabase.from("warehouses").insert(insertPayload);
+      if (!retry.error) handled = true;
+    }
+
+    // Fallback 3: column shipping_origin_id does not exist
+    if (insertError.message.includes('column "shipping_origin_id" of relation "warehouses" does not exist') || insertError.message.includes('column "shipping_origin_id" does not exist')) {
+      delete insertPayload.shipping_origin_id;
+      if (payload.shipping_origin_id) {
+        insertPayload.internal_note = (insertPayload.internal_note ? insertPayload.internal_note + "\n" : "") + `[ORIGIN_ID:${payload.shipping_origin_id}]`;
+      }
+      const retry = await supabase.from("warehouses").insert(insertPayload);
+      if (!retry.error) handled = true;
+    }
+
+    if (!handled) {
+      console.error("Error creating warehouse:", insertError);
+      return { success: false, error: "물류창고 등록에 실패했습니다. 입력값을 확인해주세요." };
+    }
+  }
+
+  // Fetch the created warehouse
+  const { data: createdRecord } = await supabase
+    .from("warehouses")
+    .select("*")
+    .eq("code", code)
+    .maybeSingle();
+
   revalidatePath("/admin/settings/warehouses");
-  return { success: true };
+  if (companyId) {
+    revalidatePath(`/admin/companies/${companyId}`);
+  }
+  revalidatePath("/portal/company/info");
+  return { success: true, data: createdRecord || { code, ...insertPayload } };
 }
 
 /**
@@ -132,6 +286,19 @@ export async function updateWarehouse(id: string, payload: WarehousePayload) {
   const code = payload.code.trim().toUpperCase();
   if (!/^[A-Z0-9]{2,10}$/.test(code)) {
     return { success: false, error: "창고 코드는 2~10자리의 영문 대문자 및 숫자만 가능합니다." };
+  }
+
+  // Parse companyId (enforce null for own warehouses)
+  const companyId = payload.type === "own"
+    ? null
+    : (payload.company_id && payload.company_id.trim() !== "" ? payload.company_id.trim() : null);
+
+  // Validate: 3PL and Partner must have a connected company
+  if (payload.type === "3pl" && !companyId) {
+    return { success: false, error: "3PL 물류창고는 연결 회사를 반드시 선택해야 합니다." };
+  }
+  if (payload.type === "partner" && !companyId) {
+    return { success: false, error: "파트너 창고는 연결할 파트너 회사를 반드시 선택해야 합니다." };
   }
 
   // Validate: Default receiving active check
@@ -168,13 +335,34 @@ export async function updateWarehouse(id: string, payload: WarehousePayload) {
     return { success: false, error: `이미 사용 중인 창고 코드입니다: ${code}` };
   }
 
-  // If updating default to true, unset other defaults for the same company first
+  // Validate: Duplicate check on shipping_origin_id
+  if (payload.shipping_origin_id) {
+    const { data: duplicateOrigin } = await supabase
+      .from("warehouses")
+      .select("id, code, name")
+      .eq("shipping_origin_id", payload.shipping_origin_id)
+      .neq("id", id)
+      .maybeSingle();
+
+    if (duplicateOrigin) {
+      return { success: false, error: `해당 출고지는 이미 다른 물류창고(${duplicateOrigin.code} · ${duplicateOrigin.name})와 연결되어 있습니다.` };
+    }
+  }
+
+  // If updating default to true, unset other defaults for the same company (or unset other own warehouses if company_id is null)
   if (payload.is_default_receiving) {
-    const { error: unsetError } = await supabase
+    let unsetQuery = supabase
       .from("warehouses")
       .update({ is_default_receiving: false })
-      .eq("company_id", payload.company_id)
       .neq("id", id);
+
+    if (companyId) {
+      unsetQuery = unsetQuery.eq("company_id", companyId);
+    } else {
+      unsetQuery = unsetQuery.is("company_id", null);
+    }
+
+    const { error: unsetError } = await unsetQuery;
 
     if (unsetError) {
       console.error("Error unsetting existing defaults during update:", unsetError);
@@ -182,32 +370,74 @@ export async function updateWarehouse(id: string, payload: WarehousePayload) {
     }
   }
 
-  const { error: updateError } = await supabase
+  let updatePayload: any = {
+    name: payload.name.trim(),
+    code,
+    company_id: companyId,
+    type: payload.type,
+    status: payload.status,
+    is_default_receiving: payload.is_default_receiving,
+    address1: payload.address1.trim(),
+    address2: payload.address2 ? payload.address2.trim() : null,
+    city: payload.city.trim(),
+    state: payload.state.trim(),
+    zip_code: payload.zip_code.trim(),
+    country: payload.country.trim(),
+    internal_note: payload.internal_note ? payload.internal_note.trim() : null,
+    updated_at: new Date().toISOString()
+  };
+
+  if (payload.shipping_origin_id !== undefined) {
+    updatePayload.shipping_origin_id = payload.shipping_origin_id || null;
+  }
+
+  let { error: updateError } = await supabase
     .from("warehouses")
-    .update({
-      name: payload.name.trim(),
-      code,
-      company_id: payload.company_id,
-      type: payload.type,
-      status: payload.status,
-      is_default_receiving: payload.is_default_receiving,
-      address1: payload.address1.trim(),
-      address2: payload.address2 ? payload.address2.trim() : null,
-      city: payload.city.trim(),
-      state: payload.state.trim(),
-      zip_code: payload.zip_code.trim(),
-      country: payload.country.trim(),
-      internal_note: payload.internal_note ? payload.internal_note.trim() : null,
-      updated_at: new Date().toISOString()
-    })
+    .update(updatePayload)
     .eq("id", id);
 
+  // Resilient fallback for unmigrated database schema constraints
   if (updateError) {
-    console.error("Error updating warehouse:", updateError);
-    return { success: false, error: "물류창고 수정에 실패했습니다. 입력값을 확인해주세요." };
+    let handled = false;
+    // Fallback 1: company_id NOT NULL constraint
+    if (updateError.message.includes('null value in column "company_id"') && payload.type === "own") {
+      const { data: defaultComp } = await supabase.from("companies").select("id").eq("status", "active").limit(1).maybeSingle();
+      if (defaultComp) {
+        updatePayload.company_id = defaultComp.id;
+        const retry = await supabase.from("warehouses").update(updatePayload).eq("id", id);
+        if (!retry.error) handled = true;
+      }
+    }
+
+    // Fallback 2: type check constraint (partner)
+    if (updateError.message.includes('violates check constraint "warehouses_type_check"') && payload.type === "partner") {
+      updatePayload.type = "3pl";
+      updatePayload.internal_note = (updatePayload.internal_note ? updatePayload.internal_note + "\n" : "") + "[TYPE:partner]";
+      const retry = await supabase.from("warehouses").update(updatePayload).eq("id", id);
+      if (!retry.error) handled = true;
+    }
+
+    // Fallback 3: column shipping_origin_id does not exist
+    if (updateError.message.includes('column "shipping_origin_id" of relation "warehouses" does not exist') || updateError.message.includes('column "shipping_origin_id" does not exist')) {
+      delete updatePayload.shipping_origin_id;
+      if (payload.shipping_origin_id) {
+        updatePayload.internal_note = (updatePayload.internal_note ? updatePayload.internal_note + "\n" : "") + `[ORIGIN_ID:${payload.shipping_origin_id}]`;
+      }
+      const retry = await supabase.from("warehouses").update(updatePayload).eq("id", id);
+      if (!retry.error) handled = true;
+    }
+
+    if (!handled) {
+      console.error("Error updating warehouse:", updateError);
+      return { success: false, error: "물류창고 수정에 실패했습니다. 입력값을 확인해주세요." };
+    }
   }
 
   revalidatePath("/admin/settings/warehouses");
+  if (companyId) {
+    revalidatePath(`/admin/companies/${companyId}`);
+  }
+  revalidatePath("/portal/company/info");
   return { success: true };
 }
 
@@ -221,7 +451,7 @@ export async function deleteWarehouse(id: string) {
   // Validate: Cannot delete default receiving warehouse
   const { data: current } = await supabase
     .from("warehouses")
-    .select("is_default_receiving")
+    .select("company_id, is_default_receiving")
     .eq("id", id)
     .single();
 
@@ -240,5 +470,9 @@ export async function deleteWarehouse(id: string) {
   }
 
   revalidatePath("/admin/settings/warehouses");
+  if (current?.company_id) {
+    revalidatePath(`/admin/companies/${current.company_id}`);
+  }
+  revalidatePath("/portal/company/info");
   return { success: true };
 }

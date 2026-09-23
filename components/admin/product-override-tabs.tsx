@@ -33,6 +33,9 @@ import { CategoryAttributeForm, type CategoryAttributeFormHandle } from "@/compo
 import { ProductChangeHistoryTab } from "@/components/product/product-change-history-tab";
 import type { ProductChangeLogItem } from "@/lib/product/audit";
 import { useUnsavedChangesGuard } from "@/hooks/use-unsaved-changes-guard";
+import { evaluateProductRegistrationStatus } from "@/lib/product/registration-status";
+import type { CategoryCompletionResult } from "@/lib/product/attribute-completion";
+import { formatEasternDate, getEasternTodayString } from "@/lib/utils/timezone";
 
 interface ProductOverrideTabsProps {
   product: Product;
@@ -59,6 +62,7 @@ interface ProductOverrideTabsProps {
   apProfiles: { id: number; display_program: string; code: string; name: string; description: string | null; is_active: boolean }[];
   displayPrograms: { code: string; name: string; description: string | null; min_sku?: number; max_sku?: number; is_active: boolean }[];
   hasMissingRequiredAttributes?: boolean;
+  initialCategoryCompletion?: CategoryCompletionResult | null;
   activeSuppliers?: { id: string; name: string }[];
   mappedSupplierIds?: string[];
   changeLogs?: ProductChangeLogItem[];
@@ -83,6 +87,7 @@ export function ProductOverrideTabs({
   apProfiles,
   displayPrograms,
   hasMissingRequiredAttributes = false,
+  initialCategoryCompletion = null,
   activeSuppliers = [],
   mappedSupplierIds = [],
   changeLogs = [],
@@ -368,18 +373,18 @@ export function ProductOverrideTabs({
   const [isPending, startTransition] = useTransition();
   const [statusMessage, setStatusMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
-  // 90 days calculator helper
+  // 90 days calculator helper (Eastern Time standardized)
   const get90DaysLater = (dateStr?: string | null) => {
     const baseDate = dateStr ? new Date(dateStr) : new Date();
     baseDate.setDate(baseDate.getDate() + 90);
-    return baseDate.toISOString().split("T")[0];
+    return formatEasternDate(baseDate);
   };
 
   // Automated date helper from intervals
   const updateNextReviewDate = (days: number, baseDateStr?: string | null) => {
     const base = baseDateStr ? new Date(baseDateStr) : new Date();
     base.setDate(base.getDate() + days);
-    setOvNextReviewDate(base.toISOString().split("T")[0]);
+    setOvNextReviewDate(formatEasternDate(base));
   };
 
   // Curation States
@@ -391,7 +396,7 @@ export function ProductOverrideTabs({
   const [reviewInterval, setReviewInterval] = useState<string>("90");
   const [customReviewDays, setCustomReviewDays] = useState<number>(90);
   const [ovNextReviewDate, setOvNextReviewDate] = useState(
-    curation.next_review_date || get90DaysLater(curation.last_review_date || new Date().toISOString().split("T")[0])
+    curation.next_review_date || get90DaysLater(curation.last_review_date || getEasternTodayString())
   );
   const [curationRole, setCurationRole] = useState(curation.role || "SUPPORT");
   const [ovMatrix, setOvMatrix] = useState<Record<string, string>>(matrix || {});
@@ -653,12 +658,55 @@ export function ProductOverrideTabs({
   const [ovC40Qty, setOvC40Qty] = useState(overrides.container_40fthc_qty?.toString() || "");
   const [ovC40Weight, setOvC40Weight] = useState(overrides.container_40fthc_weight?.toString() || "");
   const [ovC40Cbm, setOvC40Cbm] = useState(overrides.container_40fthc_cbm?.toString() || "");
+  const hasImages = imageUrls.length > 0 && imageUrls[0] !== null;
 
-  // 누락 항목 분석 (Draft 상태 판정) - 오버라이드 실시간 입력값 연동 반영
-  const missingFields: string[] = [];
+  // Unified Single Source of Truth Registration Evaluation (with real-time overrides)
+  const currentOverrides = {
+    brand_id: ovBrandId || undefined,
+    name_en: ovNameEn.trim() !== "" ? ovNameEn : undefined,
+    manufacture_sku: ovManufactureSku.trim() !== "" ? ovManufactureSku : undefined,
+    origin: ovOrigin.trim() !== "" ? ovOrigin : undefined,
+    price_krw_retail: ovPriceKrwRetail.trim() !== "" ? ovPriceKrwRetail : undefined,
+    price_usd_fob: ovPriceUsdFob.trim() !== "" ? ovPriceUsdFob : undefined,
+    upc: ovUpc.trim() !== "" ? ovUpc : undefined,
+    ean: ovEan.trim() !== "" ? ovEan : undefined,
+    package_width: ovPackageWidth.trim() !== "" ? ovPackageWidth : undefined,
+    package_depth: ovPackageDepth.trim() !== "" ? ovPackageDepth : undefined,
+    package_height: ovPackageHeight.trim() !== "" ? ovPackageHeight : undefined,
+    package_weight: ovPackageWeight.trim() !== "" ? ovPackageWeight : undefined,
+  };
+
+  const registrationEvaluation = evaluateProductRegistrationStatus({
+    id: product.id,
+    name: product.name,
+    name_en: product.name_en,
+    brand_id: product.brand_id,
+    category_code: (product as any).category_code,
+    manufacture_sku: product.manufacture_sku,
+    origin: product.origin,
+    price_krw_retail: product.price_krw_retail,
+    price_usd_fob: product.price_usd_fob,
+    package_width: product.package_width,
+    package_depth: product.package_depth,
+    package_height: product.package_height,
+    package_weight: product.package_weight,
+    upc: product.upc,
+    ean: product.ean,
+    selling_online: product.selling_online,
+    sales_link_1: product.sales_link_1,
+    deleted_at: product.deleted_at,
+    adminOverrides: currentOverrides,
+    hasImages,
+    categoryCompletion: initialCategoryCompletion || {
+      categoryComplete: Boolean((product as any).category_code),
+      requiredAttributesComplete: !hasMissingRequiredAttributes,
+    },
+  });
+
+  const missingFields = registrationEvaluation.missingFields;
+  const isDraft = registrationEvaluation.isDraft;
 
   const effectiveBrandId = ovBrandId || product.brand_id;
-  const effectiveCategory = ovCategory.trim() !== "" ? ovCategory : product.category;
   const effectiveNameEn = ovNameEn.trim() !== "" ? ovNameEn : product.name_en;
   const effectiveManufactureSku = ovManufactureSku.trim() !== "" ? ovManufactureSku : product.manufacture_sku;
   const effectiveOrigin = ovOrigin.trim() !== "" ? ovOrigin : product.origin;
@@ -671,30 +719,6 @@ export function ProductOverrideTabs({
   const pkgDepth = ovPackageDepth.trim() !== "" ? parseFloat(ovPackageDepth) : Number(product.package_depth || 0);
   const pkgHeight = ovPackageHeight.trim() !== "" ? parseFloat(ovPackageHeight) : Number(product.package_height || 0);
   const pkgWeight = ovPackageWeight.trim() !== "" ? parseFloat(ovPackageWeight) : Number(product.package_weight || 0);
-
-  if (!effectiveBrandId) missingFields.push("브랜드 지정");
-  if (!(product as any).category_code) {
-    missingFields.push("카테고리 지정");
-  } else if (hasMissingRequiredAttributes) {
-    missingFields.push("카테고리 필수 속성 누락");
-  }
-  if (!(effectiveNameEn || "").trim()) missingFields.push("영문 제품명");
-  if (!(effectiveManufactureSku || "").trim()) missingFields.push("제조사 SKU");
-  if (!(effectiveOrigin || "").trim()) missingFields.push("원산지");
-  if (Number(effectivePriceKrwRetail) <= 0) missingFields.push("소비자 판매가");
-  if (Number(effectivePriceUsdFob) <= 0) missingFields.push("FOB 수출 가격");
-  
-  if (pkgWidth <= 0 || pkgDepth <= 0 || pkgHeight <= 0 || pkgWeight <= 0) {
-    missingFields.push("단품 포장 패키지 스펙 (로지스틱스)");
-  }
-  if (!(effectiveUpc || "").trim() && !(effectiveEan || "").trim()) {
-    missingFields.push("식별 바코드 (UPC 또는 EAN)");
-  }
-  const hasImages = imageUrls.length > 0 && imageUrls[0] !== null;
-  if (!hasImages) {
-    missingFields.push("대표 이미지 업로드");
-  }
-  const isDraft = missingFields.length > 0;
 
   // 탭별 실시간 필수 항목 누락 여부 연산
   const isBasicTabMissing = !effectiveBrandId || !(effectiveNameEn || "").trim() || !(effectiveManufactureSku || "").trim() || !(effectiveOrigin || "").trim() || (!(effectiveUpc || "").trim() && !(effectiveEan || "").trim());
@@ -846,7 +870,7 @@ export function ProductOverrideTabs({
   const isCurationDirty = useMemo(() => {
     if (curationStatus !== (curation.status || "NOT_REVIEWED")) return true;
     if (ovCurator !== (curation.curator || "")) return true;
-    if (ovNextReviewDate !== (curation.next_review_date || get90DaysLater(curation.last_review_date || new Date().toISOString().split("T")[0]))) return true;
+    if (ovNextReviewDate !== (curation.next_review_date || get90DaysLater(curation.last_review_date || getEasternTodayString()))) return true;
     if (curationRole !== (curation.role || "SUPPORT")) return true;
     if (ovLandedCost !== ((curation as any).landed_cost?.toString() || "")) return true;
     if (ovWholesalePrice !== ((curation as any).wholesale_price?.toString() || "")) return true;
@@ -1781,6 +1805,26 @@ export function ProductOverrideTabs({
             </div>
           </div>
         )}
+
+        {/* Category & Dynamic Attributes Tab */}
+        <div className={activeTab === "category_attributes" ? "space-y-6" : "hidden"}>
+          <CategoryAttributeForm
+            ref={categoryAttrRef}
+            productId={product.id}
+            initialCategoryCode={(product as any).category_code || null}
+            brandName={brandName}
+            companyName={companyName}
+            productName={ovName || product.name}
+            productNameEn={ovNameEn || product.name_en || null}
+            manufactureSku={ovManufactureSku || product.manufacture_sku || null}
+            letustoSku={ovLetustoSku || product.letusto_sku || null}
+            origin={ovOrigin || product.origin || null}
+            volume={ovVolume || product.volume || null}
+            colorMap={ovColorMap || product.color_map || null}
+            isAdmin={true}
+            onDirtyChange={setIsCatAttrDirty}
+          />
+        </div>
 
         {/* Price Tab */}
         {activeTab === "price" && (
@@ -2855,7 +2899,7 @@ export function ProductOverrideTabs({
                       setCurationStatus(e.target.value);
                       // Update next review automatically if empty or unset
                       if (!ovNextReviewDate) {
-                        setOvNextReviewDate(get90DaysLater(ovLastReviewDate || new Date().toISOString().split("T")[0]));
+                        setOvNextReviewDate(get90DaysLater(ovLastReviewDate || getEasternTodayString()));
                       }
                     }}
                     className="w-full rounded border border-zinc-200 p-2.5 text-xs text-zinc-900 bg-white dark:border-zinc-850 dark:bg-zinc-950 dark:text-white focus:border-zinc-950 outline-none font-bold"
@@ -2997,7 +3041,7 @@ export function ProductOverrideTabs({
                           if (val !== "custom") {
                             const days = parseInt(val);
                             setCustomReviewDays(days);
-                            updateNextReviewDate(days, ovLastReviewDate || new Date().toISOString().split("T")[0]);
+                            updateNextReviewDate(days, ovLastReviewDate || getEasternTodayString());
                           }
                         }}
                         className="rounded border border-zinc-200 p-1.5 text-xs text-zinc-900 bg-white dark:border-zinc-850 dark:bg-zinc-950 dark:text-white outline-none font-semibold flex-1"
@@ -3017,7 +3061,7 @@ export function ProductOverrideTabs({
                             onChange={(e) => {
                               const days = parseInt(e.target.value) || 0;
                               setCustomReviewDays(days);
-                              updateNextReviewDate(days, ovLastReviewDate || new Date().toISOString().split("T")[0]);
+                              updateNextReviewDate(days, ovLastReviewDate || getEasternTodayString());
                             }}
                             className="w-16 rounded border border-zinc-200 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white p-1 text-xs outline-none focus:border-zinc-950 font-bold"
                           />

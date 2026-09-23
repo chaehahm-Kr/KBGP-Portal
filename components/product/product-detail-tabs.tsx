@@ -33,6 +33,14 @@ import { AddCertificateForm } from "@/components/product/add-certificate-form";
 
 import { type CategoryCompletionResult } from "@/lib/product/attribute-completion";
 import { useUnsavedChangesGuard } from "@/hooks/use-unsaved-changes-guard";
+import {
+  SELECTION_STATUS_LABELS,
+  SELECTION_STATUS_STYLES,
+  SALES_STATUS_LABELS,
+  SALES_STATUS_STYLES,
+  type SelectionStatus,
+  type SalesStatus,
+} from "@/lib/product/registration-status";
 
 interface ProductDetailTabsProps {
   product: Product;
@@ -441,7 +449,6 @@ export function ProductDetailTabs({
     
     // Basic Info tab
     if (!brandId) missing.push({ tab: "basic", field: "브랜드", inputName: "brandId" });
-    if (!category) missing.push({ tab: "basic", field: "카테고리", inputName: "category" });
     if (!nameEn.trim()) missing.push({ tab: "basic", field: "영문 제품명", inputName: "nameEn" });
     if (!manufactureSku.trim()) missing.push({ tab: "basic", field: "제조사 SKU", inputName: "manufactureSku" });
     if (!origin) missing.push({ tab: "basic", field: "원산지", inputName: "origin" });
@@ -471,7 +478,7 @@ export function ProductDetailTabs({
           missing.push({ tab: "category_attributes", field: "카테고리 필수 속성 미입력", inputName: "categoryAttributes" });
         }
       }
-    } else if (!product.category_code && !category) {
+    } else if (!product.category_code) {
       missing.push({ tab: "category_attributes", field: "카테고리 및 속성 미선택", inputName: "categorySelect" });
     }
     
@@ -1122,6 +1129,75 @@ export function ProductDetailTabs({
                   </>
                 )}
               </p>
+
+              {/* 3-Status Badges: Registration, Selection, Sales */}
+              <div className="flex flex-wrap items-center gap-3 mt-3 pt-2.5 border-t border-zinc-100 dark:border-zinc-800">
+                {/* 1. Registration Status Badge */}
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[11px] font-bold text-zinc-500 dark:text-zinc-400">등록 상태:</span>
+                  {product.deleted_at ? (
+                    <span className="inline-flex items-center rounded bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400 px-2 py-0.5 text-[10px] font-bold border border-zinc-200 dark:border-zinc-700 whitespace-nowrap">
+                      Deleted (삭제됨)
+                    </span>
+                  ) : getMissingFieldsList().length > 0 ? (
+                    <span className="inline-flex items-center rounded bg-rose-50 text-rose-700 dark:bg-rose-950/20 dark:text-rose-400 px-2 py-0.5 text-[10px] font-bold border border-rose-200 dark:border-rose-900/50 whitespace-nowrap">
+                      Draft (보완 대기)
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center rounded bg-emerald-50 text-emerald-700 dark:bg-emerald-950/20 dark:text-emerald-400 px-2 py-0.5 text-[10px] font-bold border border-emerald-200 dark:border-emerald-900/50 whitespace-nowrap">
+                      등록 완료
+                    </span>
+                  )}
+                </div>
+
+                <span className="text-zinc-300 dark:text-zinc-700">•</span>
+
+                {/* 2. Selection Status Badge (Read Only) */}
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[11px] font-bold text-zinc-500 dark:text-zinc-400">선정 상태:</span>
+                  {(() => {
+                    const selKey = (product.selection_status || "UNREVIEWED") as SelectionStatus;
+                    const label = SELECTION_STATUS_LABELS[selKey] || product.selection_status || "미검토";
+                    const style = SELECTION_STATUS_STYLES[selKey] || {
+                      bg: "bg-zinc-100 dark:bg-zinc-800",
+                      text: "text-zinc-700 dark:text-zinc-300",
+                      border: "border-zinc-200 dark:border-zinc-700",
+                    };
+                    return (
+                      <span
+                        className={`inline-flex items-center rounded px-2 py-0.5 text-[10px] font-bold border ${style.bg} ${style.text} ${style.border} whitespace-nowrap`}
+                        title="어드민 검토 상태 (Read Only)"
+                      >
+                        {label}
+                      </span>
+                    );
+                  })()}
+                </div>
+
+                <span className="text-zinc-300 dark:text-zinc-700">•</span>
+
+                {/* 3. Sales Status Badge (Read Only) */}
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[11px] font-bold text-zinc-500 dark:text-zinc-400">판매 상태:</span>
+                  {(() => {
+                    const salesKey = (product.sales_status || "PREPARING") as SalesStatus;
+                    const label = SALES_STATUS_LABELS[salesKey] || product.sales_status || "판매 준비";
+                    const style = SALES_STATUS_STYLES[salesKey] || {
+                      bg: "bg-zinc-100 dark:bg-zinc-800",
+                      text: "text-zinc-700 dark:text-zinc-300",
+                      border: "border-zinc-200 dark:border-zinc-700",
+                    };
+                    return (
+                      <span
+                        className={`inline-flex items-center rounded px-2 py-0.5 text-[10px] font-bold border ${style.bg} ${style.text} ${style.border} whitespace-nowrap`}
+                        title="어드민 판매 운영 상태 (Read Only)"
+                      >
+                        {label}
+                      </span>
+                    );
+                  })()}
+                </div>
+              </div>
             </div>
           </div>
           
@@ -1732,8 +1808,27 @@ export function ProductDetailTabs({
           </div>
         </div>
 
-        {/* Tab Panel 2: 가격 정보 */}
-        {/* Tab Panel 2: 가격 정보 */}
+        {/* Tab Panel 2: 카테고리 & 속성 */}
+        <div className={activeTab === "category_attributes" ? "space-y-6" : "hidden"}>
+          <CategoryAttributeForm
+            ref={categoryAttrRef}
+            productId={product.id}
+            initialCategoryCode={(product as any).category_code || null}
+            brandName={brandName}
+            productName={name}
+            productNameEn={nameEn || null}
+            manufactureSku={manufactureSku || null}
+            letustoSku={effectiveLetustoSku || null}
+            origin={origin || null}
+            volume={volume || null}
+            colorMap={colorMap || null}
+            isAdmin={false}
+            onCompletionChange={setCategoryCompletion}
+            onDirtyChange={setIsCatAttrDirty}
+          />
+        </div>
+
+        {/* Tab Panel 3: 가격 정보 */}
         <div className={activeTab === "price" ? "space-y-6" : "hidden"}>
           {/* Reference Prices Card */}
           <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 space-y-6">

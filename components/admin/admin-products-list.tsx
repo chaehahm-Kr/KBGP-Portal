@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { PRODUCT_CATEGORY_LABEL, type ProductCategory } from "@/lib/product/types";
 import { adminUpdateProductOverrides, adminBulkSoftDeleteProducts, adminRestoreProduct } from "@/lib/product/admin-actions";
+import { formatEasternDate } from "@/lib/utils/timezone";
 
 interface AdminProductItem {
   id: string;
@@ -283,7 +284,7 @@ export function AdminProductsList({ initialProducts }: AdminProductsListProps) {
     if (!product.updated_at && !product.last_updated_by_name) {
       return <span className="text-zinc-400 dark:text-zinc-600">-</span>;
     }
-    const dateStr = product.updated_at ? new Date(product.updated_at).toISOString().split("T")[0] : "";
+    const dateStr = product.updated_at ? formatEasternDate(product.updated_at) : "";
     const userName = product.last_updated_by_name || "";
     const sourceLabel =
       product.last_updated_source === "ADMIN"

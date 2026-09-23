@@ -2,6 +2,7 @@
 
 import React, { useState, useMemo } from "react";
 import type { ProductChangeLogItem } from "@/lib/product/audit";
+import { formatEasternDateTime } from "@/lib/utils/timezone";
 
 interface ProductChangeHistoryTabProps {
   logs: ProductChangeLogItem[];
@@ -148,20 +149,7 @@ export function ProductChangeHistoryTab({
   };
 
   const formatDateTime = (isoString: string) => {
-    try {
-      const date = new Date(isoString);
-      return date.toLocaleString("ko-KR", {
-        year: "numeric",
-        month: "2-digit",
-        day: "2-digit",
-        hour: "2-digit",
-        minute: "2-digit",
-        second: "2-digit",
-        hour12: false,
-      });
-    } catch {
-      return isoString;
-    }
+    return formatEasternDateTime(isoString, true);
   };
 
   if (isLoading) {

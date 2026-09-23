@@ -10,6 +10,7 @@ import crypto from "crypto";
 import { z } from "zod";
 import { type ProductCategory } from "@/lib/product/types";
 import { recordProductChangeLog, getProductChangeHistory, computeProductFieldDiffs, type AuditActionType } from "@/lib/product/audit";
+import { formatEasternDate, getEasternTodayString } from "@/lib/utils/timezone";
 
 export { getProductChangeHistory };
 
@@ -318,14 +319,14 @@ export async function adminUpdateProductCuration(
   let finalNextReviewDate = curationPayload.next_review_date || null;
 
   if (isCurationChanged) {
-    // If changed, automatically set last review date to today
-    finalLastReviewDate = new Date().toISOString().split("T")[0];
+    // If changed, automatically set last review date to today in Eastern Time
+    finalLastReviewDate = getEasternTodayString();
 
     // If next review date is blank, suggest/auto-calculate last_review_date + 90 days
     if (!finalNextReviewDate) {
       const nextDate = new Date();
       nextDate.setDate(nextDate.getDate() + 90);
-      finalNextReviewDate = nextDate.toISOString().split("T")[0];
+      finalNextReviewDate = formatEasternDate(nextDate);
     }
   }
 
