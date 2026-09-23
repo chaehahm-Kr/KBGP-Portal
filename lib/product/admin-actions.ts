@@ -1640,24 +1640,44 @@ export async function adminSoftDeleteProduct(productId: string): Promise<{ succe
 
   const now = new Date().toISOString();
 
-  // Fetch product for audit log
+  // Fetch product for audit log & price_additional_info
   const { data: product } = await adminSupabase
     .from("products")
-    .select("id, name, letusto_sku, manufacture_sku, is_draft, selection_status, sales_status")
+    .select("id, name, letusto_sku, manufacture_sku, is_draft, selection_status, sales_status, price_additional_info")
     .eq("id", productId)
     .single();
 
-  const { error } = await adminSupabase
+  let updateError = null;
+  const { error: directErr } = await adminSupabase
     .from("products")
     .update({
       deleted_at: now,
       selection_status: "NOT_SELECTED",
       sales_status: "ENDED",
-    })
+    } as any)
     .eq("id", productId);
 
-  if (error) {
-    return { success: false, error: error.message || "상품 삭제 처리에 실패했습니다." };
+  if (directErr) {
+    const updatedInfo = {
+      ...(typeof product?.price_additional_info === "object" && product?.price_additional_info !== null ? product.price_additional_info : {}),
+      deleted_at: now,
+    };
+    const { error: fallbackErr } = await adminSupabase
+      .from("products")
+      .update({
+        price_additional_info: updatedInfo,
+        selection_status: "NOT_SELECTED",
+        sales_status: "ENDED",
+      })
+      .eq("id", productId);
+
+    if (fallbackErr) {
+      updateError = fallbackErr;
+    }
+  }
+
+  if (updateError) {
+    return { success: false, error: updateError.message || "상품 삭제 처리에 실패했습니다." };
   }
 
   // Fetch admin name
@@ -1700,6 +1720,8 @@ export async function adminSoftDeleteProduct(productId: string): Promise<{ succe
 
   revalidatePath("/admin/products");
   revalidatePath(`/admin/products/${productId}`);
+  revalidatePath("/portal/products");
+  revalidatePath(`/portal/products/${productId}`);
   return { success: true };
 }
 
@@ -1715,17 +1737,35 @@ export async function adminBulkSoftDeleteProducts(productIds: string[]): Promise
   const adminSupabase = createAdminClient();
   const now = new Date().toISOString();
 
-  const { error } = await adminSupabase
+  const { error: directErr } = await adminSupabase
     .from("products")
     .update({
       deleted_at: now,
       selection_status: "NOT_SELECTED",
       sales_status: "ENDED",
-    })
+    } as any)
     .in("id", productIds);
 
-  if (error) {
-    return { success: false, error: error.message || "일괄 상품 삭제 처리에 실패했습니다." };
+  if (directErr) {
+    for (const id of productIds) {
+      const { data: p } = await adminSupabase
+        .from("products")
+        .select("price_additional_info")
+        .eq("id", id)
+        .maybeSingle();
+      const updatedInfo = {
+        ...(typeof p?.price_additional_info === "object" && p?.price_additional_info !== null ? p.price_additional_info : {}),
+        deleted_at: now,
+      };
+      await adminSupabase
+        .from("products")
+        .update({
+          price_additional_info: updatedInfo,
+          selection_status: "NOT_SELECTED",
+          sales_status: "ENDED",
+        })
+        .eq("id", id);
+    }
   }
 
   // Fetch admin name
@@ -1756,6 +1796,7 @@ export async function adminBulkSoftDeleteProducts(productIds: string[]): Promise
   }
 
   revalidatePath("/admin/products");
+  revalidatePath("/portal/products");
   return { success: true, count: productIds.length };
 }
 
@@ -1768,21 +1809,41 @@ export async function adminRestoreProduct(productId: string): Promise<{ success:
 
   const { data: product } = await adminSupabase
     .from("products")
-    .select("id, name, letusto_sku, manufacture_sku, is_draft")
+    .select("id, name, letusto_sku, manufacture_sku, is_draft, price_additional_info")
     .eq("id", productId)
     .single();
 
-  const { error } = await adminSupabase
+  let updateError = null;
+  const { error: directErr } = await adminSupabase
     .from("products")
     .update({
       deleted_at: null,
       selection_status: "UNREVIEWED",
       sales_status: "PREPARING",
-    })
+    } as any)
     .eq("id", productId);
 
-  if (error) {
-    return { success: false, error: error.message || "상품 복구 처리에 실패했습니다." };
+  if (directErr) {
+    const updatedInfo = {
+      ...(typeof product?.price_additional_info === "object" && product?.price_additional_info !== null ? product.price_additional_info : {}),
+      deleted_at: null,
+    };
+    const { error: fallbackErr } = await adminSupabase
+      .from("products")
+      .update({
+        price_additional_info: updatedInfo,
+        selection_status: "UNREVIEWED",
+        sales_status: "PREPARING",
+      })
+      .eq("id", productId);
+
+    if (fallbackErr) {
+      updateError = fallbackErr;
+    }
+  }
+
+  if (updateError) {
+    return { success: false, error: updateError.message || "상품 복구 처리에 실패했습니다." };
   }
 
   // Fetch admin name
@@ -1825,5 +1886,7 @@ export async function adminRestoreProduct(productId: string): Promise<{ success:
 
   revalidatePath("/admin/products");
   revalidatePath(`/admin/products/${productId}`);
+  revalidatePath("/portal/products");
+  revalidatePath(`/portal/products/${productId}`);
   return { success: true };
 }

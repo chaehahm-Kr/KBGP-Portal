@@ -5,6 +5,7 @@ import { getSignedFileUrl } from "@/lib/files/storage";
 import { AdminProductsList } from "@/components/admin/admin-products-list";
 import { evaluateProductRegistrationStatus } from "@/lib/product/registration-status";
 import { getBatchProductCategoryCompletions } from "@/lib/product/attribute-completion";
+import { resolveEffectiveSku } from "@/lib/product/types";
 
 export const metadata: Metadata = {
   title: "제품 관리 | K SELECT NETWORK 어드민",
@@ -87,7 +88,8 @@ export default async function AdminProductsPage() {
         }
 
         const adminOverrides = (p.price_additional_info as any)?.admin_overrides || {};
-        const effectiveManufactureSku = adminOverrides.manufacture_sku !== undefined && adminOverrides.manufacture_sku !== "" ? adminOverrides.manufacture_sku : p.manufacture_sku;
+        const effectiveManufactureSku = resolveEffectiveSku(adminOverrides.manufacture_sku, p.manufacture_sku);
+        const effectiveLetustoSku = resolveEffectiveSku(adminOverrides.letusto_sku, p.letusto_sku);
 
         const hasImages = (productImages ?? []).some((img) => img.product_id === p.id);
         const catCompletion = categoryCompletions.get(p.id) || null;
@@ -100,7 +102,7 @@ export default async function AdminProductsPage() {
           name_en: p.name_en,
           brand_id: p.brand_id,
           category_code: p.category_code,
-          manufacture_sku: p.manufacture_sku,
+          manufacture_sku: effectiveManufactureSku,
           origin: p.origin,
           price_krw_retail: p.price_krw_retail,
           price_usd_fob: p.price_usd_fob,
@@ -124,7 +126,7 @@ export default async function AdminProductsPage() {
           display_name: adminOverrides.name_en || p.name_en || adminOverrides.name || p.name,
           manufacture_sku: p.manufacture_sku,
           display_manufacture_sku: effectiveManufactureSku,
-          letusto_sku: adminOverrides.letusto_sku !== undefined ? adminOverrides.letusto_sku : p.letusto_sku,
+          letusto_sku: effectiveLetustoSku,
           parent_sku: adminOverrides.parent_sku !== undefined ? adminOverrides.parent_sku : p.parent_sku,
           child_sku: adminOverrides.child_sku !== undefined ? adminOverrides.child_sku : p.child_sku,
           category: p.category,

@@ -270,7 +270,7 @@ export function TradingProductDetail({
               <div className="pt-3">
                 <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 block mb-1">Letusto SKU</span>
                 <span className="font-mono font-bold text-zinc-955 dark:text-white">
-                  {product.letusto_sku || <span className="text-zinc-350 dark:text-zinc-600 italic font-sans font-normal">지정 대기</span>}
+                  {product.letusto_sku || <span className="text-zinc-350 dark:text-zinc-600 italic font-sans font-normal">지정 대기 중</span>}
                 </span>
               </div>
 

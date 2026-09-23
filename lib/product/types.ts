@@ -142,3 +142,21 @@ export function trimSkuSeparators(val: string): string {
   return val.replace(/^[\-_]+|[\-_]+$/g, "");
 }
 
+/**
+ * Single Source of Truth helper for resolving effective SKU:
+ * Effective Value = Admin Override (if non-empty string) ?? Product Base Value (if non-empty string) ?? null
+ */
+export function resolveEffectiveSku(
+  overrideValue?: string | null,
+  baseValue?: string | null
+): string | null {
+  if (overrideValue && typeof overrideValue === "string" && overrideValue.trim() !== "") {
+    return overrideValue.trim();
+  }
+  if (baseValue && typeof baseValue === "string" && baseValue.trim() !== "") {
+    return baseValue.trim();
+  }
+  return null;
+}
+
+

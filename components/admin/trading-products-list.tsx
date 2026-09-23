@@ -87,7 +87,7 @@ export function TradingProductsList({ initialProducts }: TradingProductsListProp
       p.display_name.toLowerCase().includes(s) ||
       p.name.toLowerCase().includes(s) ||
       (p.letusto_sku || "").toLowerCase().includes(s) ||
-      (p.display_manufacture_sku || "").toLowerCase().includes(s) ||
+      (p.display_manufacture_sku || p.manufacture_sku || "").toLowerCase().includes(s) ||
       p.companyName.toLowerCase().includes(s) ||
       p.brandName.toLowerCase().includes(s);
 
@@ -270,13 +270,13 @@ export function TradingProductsList({ initialProducts }: TradingProductsListProp
                     {/* Letusto SKU */}
                     <td className="px-6 py-4 align-middle font-mono font-bold text-zinc-955 dark:text-white whitespace-nowrap">
                       {product.letusto_sku || (
-                        <span className="text-zinc-350 dark:text-zinc-650 italic font-sans font-normal">지정 대기</span>
+                        <span className="text-zinc-350 dark:text-zinc-650 italic font-sans font-normal">지정 대기 중</span>
                       )}
                     </td>
 
                     {/* Manufacture SKU */}
                     <td className="px-6 py-4 align-middle font-mono font-semibold text-zinc-800 dark:text-zinc-350 whitespace-nowrap">
-                      {product.display_manufacture_sku || (
+                      {product.display_manufacture_sku || product.manufacture_sku || (
                         <span className="text-zinc-350 dark:text-zinc-650 italic font-sans font-normal">미입력</span>
                       )}
                     </td>

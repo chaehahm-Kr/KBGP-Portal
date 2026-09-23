@@ -6,6 +6,7 @@ import { getSignedFileUrl } from "@/lib/files/storage";
 import { TradingProductDetail } from "@/components/admin/trading-product-detail";
 import { getProductInventory } from "@/lib/inventory/actions";
 import { getProductCostSummary } from "@/lib/landed-cost/actions";
+import { resolveEffectiveSku } from "@/lib/product/types";
 
 export const metadata: Metadata = {
   title: "제품 운영 정보 (360° View) | K SELECT NETWORK 어드민",
@@ -88,12 +89,15 @@ export default async function AdminTradingProductDetailPage({
   }
 
   const adminOverrides = (product.price_additional_info as any)?.admin_overrides || {};
+  const effectiveManufactureSku = resolveEffectiveSku(adminOverrides.manufacture_sku, product.manufacture_sku);
+  const effectiveLetustoSku = resolveEffectiveSku(adminOverrides.letusto_sku, product.letusto_sku);
+
   const resolvedProduct = {
     id: product.id,
     name: product.name,
     display_name: adminOverrides.name_en || product.name_en || adminOverrides.name || product.name,
-    manufacture_sku: adminOverrides.manufacture_sku !== undefined ? adminOverrides.manufacture_sku : product.manufacture_sku,
-    letusto_sku: adminOverrides.letusto_sku !== undefined ? adminOverrides.letusto_sku : product.letusto_sku,
+    manufacture_sku: effectiveManufactureSku,
+    letusto_sku: effectiveLetustoSku,
     parent_sku: adminOverrides.parent_sku !== undefined ? adminOverrides.parent_sku : product.parent_sku,
     child_sku: adminOverrides.child_sku !== undefined ? adminOverrides.child_sku : product.child_sku,
     category: product.category,

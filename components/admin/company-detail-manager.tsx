@@ -1511,7 +1511,7 @@ export function CompanyDetailManager({
                                 {prod.display_manufacture_sku || prod.manufacture_sku || <span className="text-zinc-400 italic">미입력</span>}
                               </td>
                               <td className="px-4 py-3 font-mono text-[11px] text-zinc-655 dark:text-zinc-350">
-                                {prod.letusto_sku || <span className="text-zinc-400 italic">미발급</span>}
+                                {prod.letusto_sku || <span className="text-zinc-400 italic font-sans font-normal">지정 대기 중</span>}
                               </td>
                               <td className="px-4 py-3 font-semibold text-zinc-900 dark:text-white">
                                 <Link

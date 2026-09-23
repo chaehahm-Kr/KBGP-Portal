@@ -9,6 +9,7 @@ import { parseCompanyMetadata } from "@/lib/company/admin-actions";
 import { getSystemCompanyConfigs } from "@/lib/settings/actions";
 import { getCompanyShippingOrigins } from "@/lib/company/shipping-origin-actions";
 import { CompanyDetailManager } from "@/components/admin/company-detail-manager";
+import { resolveEffectiveSku } from "@/lib/product/types";
 
 export const metadata: Metadata = {
   title: "회사 상세 정보 | K SELECT NETWORK 어드민",
@@ -167,7 +168,8 @@ export default async function AdminCompanyDetailPage({
       const effectiveBrandId = p.brand_id;
       const effectiveCategory = adminOverrides.category !== undefined && adminOverrides.category !== "" ? adminOverrides.category : p.category;
       const effectiveNameEn = adminOverrides.name_en !== undefined && adminOverrides.name_en !== "" ? adminOverrides.name_en : p.name_en;
-      const effectiveManufactureSku = adminOverrides.manufacture_sku !== undefined && adminOverrides.manufacture_sku !== "" ? adminOverrides.manufacture_sku : p.manufacture_sku;
+      const effectiveManufactureSku = resolveEffectiveSku(adminOverrides.manufacture_sku, p.manufacture_sku);
+      const effectiveLetustoSku = resolveEffectiveSku(adminOverrides.letusto_sku, p.letusto_sku);
       const effectiveOrigin = adminOverrides.origin !== undefined && adminOverrides.origin !== "" ? adminOverrides.origin : p.origin;
       const effectivePriceKrwRetail = adminOverrides.price_krw_retail !== undefined ? parseFloat(adminOverrides.price_krw_retail) : (p.price_krw_retail || 0);
       const effectivePriceUsdFob = adminOverrides.price_usd_fob !== undefined ? parseFloat(adminOverrides.price_usd_fob) : (p.price_usd_fob || 0);
@@ -211,7 +213,7 @@ export default async function AdminCompanyDetailPage({
         price_additional_info: p.price_additional_info,
         manufacture_sku: p.manufacture_sku,
         display_manufacture_sku: effectiveManufactureSku,
-        letusto_sku: adminOverrides.letusto_sku !== undefined ? adminOverrides.letusto_sku : p.letusto_sku,
+        letusto_sku: effectiveLetustoSku,
         is_draft: isDraft,
         selection_status: p.selection_status || "UNREVIEWED",
         sales_status: p.sales_status || "PREPARING",

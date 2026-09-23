@@ -3,6 +3,7 @@ import { verifyAdminSession } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { getSignedFileUrl } from "@/lib/files/storage";
 import { TradingProductsList } from "@/components/admin/trading-products-list";
+import { resolveEffectiveSku } from "@/lib/product/types";
 
 export const metadata: Metadata = {
   title: "거래 대상 제품 관리 (Trading Products) | K SELECT NETWORK 어드민",
@@ -100,7 +101,8 @@ export default async function AdminTradingProductsPage() {
       const adminOverrides = (p.price_additional_info as any)?.admin_overrides || {};
       const effectiveBrandId = p.brand_id;
       const effectiveNameEn = adminOverrides.name_en !== undefined && adminOverrides.name_en !== "" ? adminOverrides.name_en : p.name_en;
-      const effectiveManufactureSku = adminOverrides.manufacture_sku !== undefined && adminOverrides.manufacture_sku !== "" ? adminOverrides.manufacture_sku : p.manufacture_sku;
+      const effectiveManufactureSku = resolveEffectiveSku(adminOverrides.manufacture_sku, p.manufacture_sku);
+      const effectiveLetustoSku = resolveEffectiveSku(adminOverrides.letusto_sku, p.letusto_sku);
 
       const totalOnHand = onHandByProduct.get(p.id) || 0;
       const totalHold = holdByProduct.get(p.id) || 0;
@@ -112,7 +114,7 @@ export default async function AdminTradingProductsPage() {
         display_name: adminOverrides.name_en || p.name_en || adminOverrides.name || p.name,
         manufacture_sku: p.manufacture_sku,
         display_manufacture_sku: effectiveManufactureSku,
-        letusto_sku: adminOverrides.letusto_sku !== undefined ? adminOverrides.letusto_sku : p.letusto_sku,
+        letusto_sku: effectiveLetustoSku,
         parent_sku: adminOverrides.parent_sku !== undefined ? adminOverrides.parent_sku : p.parent_sku,
         child_sku: adminOverrides.child_sku !== undefined ? adminOverrides.child_sku : p.child_sku,
         category: p.category,

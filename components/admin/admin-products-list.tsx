@@ -218,7 +218,7 @@ export function AdminProductsList({ initialProducts }: AdminProductsListProps) {
     const searchLower = searchTerm.toLowerCase();
     const matchesSearch =
       product.display_name.toLowerCase().includes(searchLower) ||
-      (product.display_manufacture_sku || "").toLowerCase().includes(searchLower) ||
+      (product.display_manufacture_sku || product.manufacture_sku || "").toLowerCase().includes(searchLower) ||
       (product.letusto_sku || "").toLowerCase().includes(searchLower) ||
       (product.parent_sku || "").toLowerCase().includes(searchLower) ||
       (product.child_sku || "").toLowerCase().includes(searchLower) ||

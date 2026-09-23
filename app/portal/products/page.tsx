@@ -5,6 +5,7 @@ import { getSignedFileUrl } from "@/lib/files/storage";
 import { PortalProductsList } from "@/components/product/portal-products-list";
 import { getBatchProductCategoryCompletions } from "@/lib/product/attribute-completion";
 import { evaluateProductRegistrationStatus } from "@/lib/product/registration-status";
+import { resolveEffectiveSku } from "@/lib/product/types";
 
 export const metadata: Metadata = {
   title: "제품 관리 | 파트너 포털",
