@@ -8,6 +8,7 @@ import {
   getProductsForSupplier,
   getCompanyOriginsAndContacts,
 } from "@/lib/purchase-order/actions";
+import { linkCreatedPoToRequest } from "@/lib/purchase-order/request-actions";
 import { formatEasternDate, getEasternTodayString } from "@/lib/utils/timezone";
 
 interface WarehouseOption {
@@ -547,6 +548,13 @@ export function PurchaseOrderForm({
         router.push(`/admin/purchasing/${initialPo.id}`);
       } else {
         const res = await createPurchaseOrder(payload);
+        if (initialPo?.request_id && res?.id) {
+          try {
+            await linkCreatedPoToRequest(initialPo.request_id, res.id, res.po_number);
+          } catch (linkErr) {
+            console.error("Failed to link PO request to created PO:", linkErr);
+          }
+        }
         router.push(`/admin/purchasing/${res.id}`);
       }
       router.refresh();
@@ -569,6 +577,27 @@ export function PurchaseOrderForm({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
+      {initialPo?.request_number && (
+        <div className="p-4 rounded-xl bg-purple-50 border border-purple-200 dark:bg-purple-950/20 dark:border-purple-800 flex items-center justify-between text-xs">
+          <div className="flex items-center gap-2">
+            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-purple-600 text-white font-bold text-xs">
+              ⚡
+            </span>
+            <div>
+              <p className="font-bold text-purple-900 dark:text-purple-300">
+                Converting PO Request #{initialPo.request_number} to Official Purchase Order
+              </p>
+              <p className="text-purple-700 dark:text-purple-400 text-[11px]">
+                Supplier, shipping origins, and products with approved quantities and FOB pricing have been pre-filled.
+              </p>
+            </div>
+          </div>
+          <span className="px-2.5 py-1 rounded bg-purple-100 dark:bg-purple-900/50 text-purple-800 dark:text-purple-200 font-mono text-[11px] font-bold">
+            Req #{initialPo.request_number}
+          </span>
+        </div>
+      )}
+
       {submitError && (
         <div className="p-3.5 rounded-lg bg-rose-50 border border-rose-200 text-rose-600 font-bold dark:bg-rose-950/10 dark:border-rose-900/50 dark:text-rose-400 text-xs">
           ⚠️ {submitError}

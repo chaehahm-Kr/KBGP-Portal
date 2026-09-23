@@ -27,8 +27,9 @@ interface PortalSidebarProps {
 interface MenuItem {
   name: string;
   icon: React.ComponentType<any>;
-  href: string;
+  href?: string;
   adminOnly?: boolean;
+  subItems?: { name: string; href: string }[];
 }
 
 export default function PortalSidebar({
@@ -40,18 +41,29 @@ export default function PortalSidebar({
   const pathname = usePathname();
   const isCompanyAdmin = companyRole === "company_admin";
 
-  const menuItems: MenuItem[] = [
-    { name: "대시보드", icon: DashboardIcon, href: "/portal" },
-    { name: "제품 관리", icon: ProductsIcon, href: "/portal/products" },
-    { name: "주문 관리", icon: SalesIcon, href: "/portal/orders/purchase-orders" },
-    { name: "정산 관리", icon: ReportsIcon, href: "/portal/finance" },
-    { name: "문의 지원", icon: SupportIcon, href: "/portal/support" },
-    { name: "입점 신청서", icon: ApplicationsIcon, href: "/portal/applications" },
-  ];
+  const [isOrdersOpen, setIsOrdersOpen] = useState(() => {
+    return pathname.startsWith("/portal/orders");
+  });
 
   const [isSettingsOpen, setIsSettingsOpen] = useState(() => {
     return pathname.startsWith("/portal/company/") || pathname.startsWith("/portal/brands");
   });
+
+  const menuItems: MenuItem[] = [
+    { name: "대시보드", icon: DashboardIcon, href: "/portal" },
+    { name: "제품 관리", icon: ProductsIcon, href: "/portal/products" },
+    {
+      name: "주문 관리",
+      icon: SalesIcon,
+      subItems: [
+        { name: "발주 요청", href: "/portal/orders/requests" },
+        { name: "발주서", href: "/portal/orders/purchase-orders" },
+      ],
+    },
+    { name: "정산 관리", icon: ReportsIcon, href: "/portal/finance" },
+    { name: "문의 지원", icon: SupportIcon, href: "/portal/support" },
+    { name: "입점 신청서", icon: ApplicationsIcon, href: "/portal/applications" },
+  ];
 
   const settingsPages = [
     { name: "회사 정보", href: "/portal/company/info" },
@@ -88,18 +100,80 @@ export default function PortalSidebar({
       <nav className="flex-1 overflow-y-auto p-3 space-y-1 select-none scrollbar-thin">
         {menuItems.map((item) => {
           if (item.adminOnly && !isCompanyAdmin) return null;
+
+          if (item.subItems) {
+            const isGroupActive = pathname.startsWith("/portal/orders");
+            return (
+              <div key={item.name} className="space-y-1">
+                {isCollapsed ? (
+                  <Link
+                    href={item.subItems[0].href}
+                    className={`flex h-10 w-full items-center justify-center rounded-md text-sm font-medium transition-colors ${
+                      isGroupActive
+                        ? "bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-white"
+                        : "text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-900 dark:hover:text-white"
+                    }`}
+                    title={item.name}
+                  >
+                    <item.icon className="h-5 w-5 shrink-0" />
+                  </Link>
+                ) : (
+                  <div>
+                    <button
+                      type="button"
+                      onClick={() => setIsOrdersOpen(!isOrdersOpen)}
+                      className={`flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors cursor-pointer ${
+                        isGroupActive
+                          ? "bg-zinc-100/70 text-zinc-900 dark:bg-zinc-800/70 dark:text-white font-semibold"
+                          : "text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-900 dark:hover:text-white"
+                      }`}
+                    >
+                      <item.icon className="h-5 w-5 shrink-0" />
+                      <span className="flex-1 text-left">{item.name}</span>
+                      <span className="text-[10px] text-zinc-400 font-mono">
+                        {isOrdersOpen ? "▼" : "▶"}
+                      </span>
+                    </button>
+
+                    {isOrdersOpen && (
+                      <div className="pl-4 space-y-1 border-l border-zinc-200 dark:border-zinc-800 ml-5 mt-1">
+                        {item.subItems.map((sub) => {
+                          const isSubActive = pathname === sub.href || (sub.href !== "/portal/orders" && pathname.startsWith(sub.href));
+                          return (
+                            <Link
+                              key={sub.name}
+                              href={sub.href}
+                              className={`flex items-center gap-2 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                                isSubActive
+                                  ? "bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-white font-bold"
+                                  : "text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-900 dark:hover:text-white"
+                              }`}
+                            >
+                              <span className="text-zinc-400 text-[10px]">•</span>
+                              <span>{sub.name}</span>
+                            </Link>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          }
+
           const isActive =
             item.href === "/portal"
               ? pathname === "/portal"
-              : pathname === item.href || pathname.startsWith(item.href + "/");
+              : pathname === item.href || (item.href && pathname.startsWith(item.href + "/"));
 
           return (
             <Link
               key={item.name}
-              href={item.href}
+              href={item.href || "#"}
               className={`flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
                 isActive
-                  ? "bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-white"
+                  ? "bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-white font-semibold"
                   : "text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-900 dark:hover:text-white"
               }`}
             >

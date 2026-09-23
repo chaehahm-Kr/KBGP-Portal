@@ -693,7 +693,7 @@ export async function createPurchaseOrder(data: CreatePoInput) {
   let { data: newPo, error: poErr } = await supabase
     .from("purchase_orders")
     .insert(insertPayload)
-    .select("id")
+    .select("id, po_number")
     .single();
 
   if (poErr && (poErr.message?.includes("eta") || poErr.code === "42703")) {
@@ -701,7 +701,7 @@ export async function createPurchaseOrder(data: CreatePoInput) {
     const retryRes = await supabase
       .from("purchase_orders")
       .insert(insertPayload)
-      .select("id")
+      .select("id, po_number")
       .single();
     newPo = retryRes.data;
     poErr = retryRes.error;
@@ -751,7 +751,7 @@ export async function createPurchaseOrder(data: CreatePoInput) {
   }
 
   revalidatePath("/admin/purchasing");
-  return { success: true, id: poId };
+  return { success: true, id: poId, po_number: (newPo as any).po_number as string | undefined };
 }
 
 /**
