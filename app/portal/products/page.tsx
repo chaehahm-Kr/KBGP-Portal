@@ -81,6 +81,8 @@ export default async function ProductsPage() {
         const catCompletion = categoryCompletions.get(p.id) || null;
         const hasImages = (productImages ?? []).some((img) => img.product_id === p.id);
 
+        const effectiveDeletedAt = (p as any).deleted_at || (p.price_additional_info as any)?.deleted_at || null;
+
         // Unified Single Source of Truth Registration Evaluation
         const registrationEvaluation = evaluateProductRegistrationStatus({
           id: p.id,
@@ -100,7 +102,7 @@ export default async function ProductsPage() {
           ean: p.ean,
           selling_online: p.selling_online,
           sales_link_1: p.sales_link_1,
-          deleted_at: (p as any).deleted_at || null,
+          deleted_at: effectiveDeletedAt,
           adminOverrides,
           hasImages,
           categoryCompletion: catCompletion,
@@ -121,12 +123,13 @@ export default async function ProductsPage() {
           registration_status: registrationEvaluation.status,
           selection_status: p.selection_status || "UNREVIEWED",
           sales_status: p.sales_status || "PREPARING",
-          deleted_at: (p as any).deleted_at || null,
+          deleted_at: effectiveDeletedAt,
           category_code: p.category_code || null,
           category_completion: catCompletion,
         };
       } catch (prodErr) {
         console.error("Error resolving product for portal list:", p?.id, prodErr);
+        const fallbackDeletedAt = (p as any)?.deleted_at || (p?.price_additional_info as any)?.deleted_at || null;
         return {
           id: p.id,
           name: p.name || "",
@@ -142,7 +145,7 @@ export default async function ProductsPage() {
           registration_status: "DRAFT" as const,
           selection_status: p.selection_status || "UNREVIEWED",
           sales_status: p.sales_status || "PREPARING",
-          deleted_at: (p as any).deleted_at || null,
+          deleted_at: fallbackDeletedAt,
           category_code: p.category_code || null,
           category_completion: null,
         };

@@ -46,24 +46,56 @@ interface PortalProductsListProps {
 }
 
 export function PortalProductsList({ initialProducts, hasBrand }: PortalProductsListProps) {
+  const [products, setProducts] = useState<PortalProductItem[]>(initialProducts);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [selectedStatus, setSelectedStatus] = useState<string>("active_draft"); // 디폴트 값: 활성/보완 대기
 
-  const handleDelete = async (productId: string) => {
-    if (!confirm("정말로 이 제품을 삭제하시겠습니까? (삭제 시 상태가 'Deleted'로 변경됩니다)")) {
-      return;
-    }
-    const res = await deleteProduct(productId);
-    if (res.success) {
-      alert("성공적으로 삭제되었습니다.");
-      window.location.reload();
-    } else {
-      alert(res.error || "삭제에 실패했습니다.");
+  // Delete modal & Toast states
+  const [deletingProduct, setDeletingProduct] = useState<PortalProductItem | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  React.useEffect(() => {
+    setProducts(initialProducts);
+  }, [initialProducts]);
+
+  const openDeleteModal = (product: PortalProductItem) => {
+    setDeletingProduct(product);
+    setDeleteError(null);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deletingProduct) return;
+    setIsDeleting(true);
+    setDeleteError(null);
+
+    try {
+      const res = await deleteProduct(deletingProduct.id);
+      if (res.success) {
+        const now = new Date().toISOString();
+        setProducts((prev) =>
+          prev.map((p) =>
+            p.id === deletingProduct.id
+              ? { ...p, deleted_at: now, is_draft: false, selection_status: "NOT_SELECTED", sales_status: "ENDED" }
+              : p
+          )
+        );
+        setDeletingProduct(null);
+        setToastMessage("제품이 삭제되었습니다.");
+        setTimeout(() => setToastMessage(null), 4000);
+      } else {
+        setDeleteError(res.error || "제품 삭제에 실패했습니다.");
+      }
+    } catch (err: any) {
+      setDeleteError(err.message || "제품을 삭제하지 못했습니다. 잠시 후 다시 시도해주세요.");
+    } finally {
+      setIsDeleting(false);
     }
   };
 
-  const filteredProducts = initialProducts.filter((product) => {
+  const filteredProducts = products.filter((product) => {
     // 1. Search filter
     const searchLower = searchTerm.toLowerCase();
     const matchesSearch =
@@ -384,7 +416,7 @@ export function PortalProductsList({ initialProducts, hasBrand }: PortalProducts
                       {!product.deleted_at && (
                         <button
                           type="button"
-                          onClick={() => handleDelete(product.id)}
+                          onClick={() => openDeleteModal(product)}
                           className="rounded bg-rose-50 text-rose-700 hover:bg-rose-100 dark:bg-rose-950/20 dark:text-rose-455 dark:hover:bg-rose-900/30 px-2.5 py-1.5 font-bold transition-all cursor-pointer border border-rose-100 dark:border-rose-900/50 whitespace-nowrap shrink-0 inline-flex items-center text-[11px]"
                         >
                           삭제
@@ -409,6 +441,81 @@ export function PortalProductsList({ initialProducts, hasBrand }: PortalProducts
           </table>
         </div>
       </div>
+
+      {/* Top Floating Toast Notification */}
+      {toastMessage && (
+        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2 rounded-lg bg-zinc-900 px-4 py-3 text-xs font-semibold text-white shadow-xl dark:bg-white dark:text-zinc-900 animate-in fade-in slide-in-from-bottom-2">
+          <span>✅</span>
+          <span>{toastMessage}</span>
+        </div>
+      )}
+
+      {/* Safe Soft-Delete Confirmation Modal */}
+      {deletingProduct && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
+          <div className="w-full max-w-md rounded-xl border border-zinc-200 bg-white p-6 shadow-2xl dark:border-zinc-800 dark:bg-zinc-900">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-rose-100 text-rose-600 dark:bg-rose-950/40 dark:text-rose-400">
+                <span className="text-lg">⚠️</span>
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-zinc-900 dark:text-white">
+                  제품을 삭제하시겠습니까?
+                </h3>
+                <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
+                  안전한 데이터 보존을 위해 비활성화(Soft Delete) 처리됩니다.
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-4 rounded-lg bg-zinc-50 p-3.5 border border-zinc-200/80 dark:bg-zinc-950/60 dark:border-zinc-800">
+              <div className="text-xs font-bold text-zinc-900 dark:text-white truncate">
+                {deletingProduct.display_name}
+              </div>
+              <div className="mt-1 flex items-center gap-3 text-[11px] text-zinc-500 dark:text-zinc-400 font-mono">
+                {deletingProduct.letusto_sku && (
+                  <span>Letusto: {deletingProduct.letusto_sku}</span>
+                )}
+                {deletingProduct.manufacture_sku && (
+                  <span>제조사: {deletingProduct.manufacture_sku}</span>
+                )}
+              </div>
+            </div>
+
+            {deleteError && (
+              <div className="mt-3 rounded-md bg-rose-50 p-3 text-xs font-medium text-rose-700 dark:bg-rose-950/30 dark:text-rose-400 border border-rose-200 dark:border-rose-900/50">
+                {deleteError}
+              </div>
+            )}
+
+            <p className="mt-3 text-[11px] text-zinc-500 dark:text-zinc-400">
+              삭제된 제품은 활성 목록에서 제외되며, &apos;삭제됨&apos; 필터에서 조회할 수 있습니다.
+            </p>
+
+            <div className="mt-6 flex justify-end gap-2.5">
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={() => {
+                  setDeletingProduct(null);
+                  setDeleteError(null);
+                }}
+                className="rounded-lg border border-zinc-200 bg-white px-4 py-2 text-xs font-semibold text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700 disabled:opacity-50 transition-colors cursor-pointer"
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={handleConfirmDelete}
+                className="inline-flex items-center justify-center rounded-lg bg-rose-600 px-4 py-2 text-xs font-semibold text-white hover:bg-rose-700 disabled:opacity-50 transition-colors shadow-sm cursor-pointer"
+              >
+                {isDeleting ? "삭제 처리 중..." : "제품 삭제"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

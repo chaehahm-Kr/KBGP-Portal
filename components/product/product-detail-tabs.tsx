@@ -72,6 +72,7 @@ export function ProductDetailTabs({
   initialCategoryCompletion,
 }: ProductDetailTabsProps) {
   const router = useRouter();
+  const isDeleted = Boolean(product.deleted_at || (product.price_additional_info as any)?.deleted_at);
   const [activeTab, setActiveTab] = useState<"basic" | "category_attributes" | "price" | "logistics" | "media" | "certs">("basic");
   const [isPending, startTransition] = useTransition();
   const [statusMessage, setStatusMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
@@ -1041,6 +1042,25 @@ export function ProductDetailTabs({
         </div>
       )}
 
+      {/* Soft-Deleted Product Banner */}
+      {isDeleted && (
+        <div className="rounded-xl border border-zinc-300 bg-zinc-100/90 p-5 dark:border-zinc-800 dark:bg-zinc-850 shadow-xs">
+          <div className="flex items-start gap-3 text-zinc-700 dark:text-zinc-300">
+            <span className="mt-0.5 inline-flex items-center justify-center w-5 h-5 rounded-full bg-zinc-200 text-zinc-700 text-[11px] font-bold dark:bg-zinc-700 dark:text-zinc-200">
+              ℹ️
+            </span>
+            <div className="space-y-1">
+              <h4 className="text-xs font-bold text-zinc-900 dark:text-zinc-100">
+                삭제(비활성화)된 제품
+              </h4>
+              <p className="text-[11px] leading-relaxed text-zinc-600 dark:text-zinc-400">
+                본 제품은 현재 비활성화(삭제) 상태입니다. 상품 정보는 안전하게 보존되어 조회할 수 있습니다.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Missing Fields Warning Banner */}
       {getMissingFieldsList().length > 0 && (
         <div className="rounded-xl border border-rose-250 bg-rose-50/40 p-5 dark:border-rose-950/30 dark:bg-rose-950/10 shadow-xs animate-fadeIn">
@@ -1143,7 +1163,7 @@ export function ProductDetailTabs({
                 {/* 1. Registration Status Badge */}
                 <div className="flex items-center gap-1.5">
                   <span className="text-[11px] font-bold text-zinc-500 dark:text-zinc-400">등록 상태:</span>
-                  {product.deleted_at ? (
+                  {isDeleted ? (
                     <span className="inline-flex items-center rounded bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400 px-2 py-0.5 text-[10px] font-bold border border-zinc-200 dark:border-zinc-700 whitespace-nowrap">
                       Deleted (삭제됨)
                     </span>

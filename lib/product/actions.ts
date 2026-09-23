@@ -1061,37 +1061,87 @@ export async function updateProductImagesOrder(productId: string, imageIdsInOrde
 }
 
 /**
- * 제품을 소프트 삭제(deleted_at 설정)합니다.
+ * 제품을 소프트 삭제(Soft Delete)합니다.
+ * 회사 권한 검증, 이미 삭제 여부 검증, 이중 지속성(Dual Persistence) 및 감사 로그를 보장합니다.
  */
 export async function deleteProduct(productId: string): Promise<{ success: boolean; error?: string }> {
   try {
     const { companyId } = await requireCompanyMembership();
     const supabase = await createClient();
 
-    // 제품이 해당 회사 소유인지 확인
-    const { data: product } = await supabase
+    // 1. 제품 조회 (존재 여부 및 소속 회사 검증 분리)
+    const { data: product, error: fetchError } = await supabase
       .from("products")
-      .select("id, name, name_en, manufacture_sku, letusto_sku")
+      .select("id, name, name_en, manufacture_sku, letusto_sku, company_id, selection_status, sales_status, price_additional_info")
       .eq("id", productId)
-      .eq("company_id", companyId)
-      .single();
+      .maybeSingle();
 
-    if (!product) {
-      return { success: false, error: "제품을 찾을 수 없거나 삭제 권한이 없습니다." };
+    if (fetchError || !product) {
+      console.warn(`[deleteProduct] Product not found: ${productId}`, fetchError);
+      return { success: false, error: "제품을 찾을 수 없습니다." };
+    }
+
+    if (product.company_id !== companyId) {
+      console.warn(`[deleteProduct] Unauthorized delete attempt by company ${companyId} on product ${productId} (owned by ${product.company_id})`);
+      return { success: false, error: "이 제품을 삭제할 권한이 없습니다." };
+    }
+
+    // 2. 이미 삭제된 상태인지 검증
+    const currentMeta = (product.price_additional_info as any) || {};
+    const isAlreadyDeleted = Boolean((product as any).deleted_at || currentMeta.deleted_at);
+    if (isAlreadyDeleted) {
+      return { success: false, error: "이미 삭제된 제품입니다." };
     }
 
     const now = new Date().toISOString();
-    const { error: deleteError } = await supabase
-      .from("products")
-      .update({ deleted_at: now })
-      .eq("id", productId)
-      .eq("company_id", companyId);
+    const updatedPriceInfo = {
+      ...currentMeta,
+      deleted_at: now,
+    };
 
-    if (deleteError) {
-      console.error("Delete product error:", deleteError);
-      return { success: false, error: "제품 삭제 중 오류가 발생했습니다." };
+    // 3. 이중 지속성(Dual Persistence) 업데이트
+    // 시도 1: deleted_at 컬럼과 상태 업데이트
+    let updateSuccess = false;
+    try {
+      const { error: colUpdateError } = await supabase
+        .from("products")
+        .update({
+          deleted_at: now,
+          selection_status: "NOT_SELECTED",
+          sales_status: "ENDED",
+          price_additional_info: updatedPriceInfo,
+        })
+        .eq("id", productId)
+        .eq("company_id", companyId);
+
+      if (!colUpdateError) {
+        updateSuccess = true;
+      } else {
+        console.warn("[deleteProduct] Column update attempt with deleted_at failed:", colUpdateError.message);
+      }
+    } catch (e: any) {
+      console.warn("[deleteProduct] Exception in deleted_at column update:", e?.message);
     }
 
+    // 시도 2: 만약 deleted_at 컬럼 미존재 시 fallback 지속성 업데이트
+    if (!updateSuccess) {
+      const { error: fallbackError } = await supabase
+        .from("products")
+        .update({
+          selection_status: "NOT_SELECTED",
+          sales_status: "ENDED",
+          price_additional_info: updatedPriceInfo,
+        })
+        .eq("id", productId)
+        .eq("company_id", companyId);
+
+      if (fallbackError) {
+        console.error("[deleteProduct] Fallback soft-delete update failed:", fallbackError);
+        return { success: false, error: "제품을 삭제하지 못했습니다. 잠시 후 다시 시도해주세요." };
+      }
+    }
+
+    // 4. 감사 이력(Audit Change Log) 기록
     try {
       const { data: { user } } = await supabase.auth.getUser();
       const { data: profile } = user ? await supabase.from("profiles").select("display_name").eq("id", user.id).maybeSingle() : { data: null };
@@ -1112,14 +1162,30 @@ export async function deleteProduct(productId: string): Promise<{ success: boole
             before: null,
             after: now,
           },
+          selection_status: {
+            label: "선정 상태",
+            before: product.selection_status || "UNREVIEWED",
+            after: "NOT_SELECTED",
+          },
+          sales_status: {
+            label: "판매 상태",
+            before: product.sales_status || "PREPARING",
+            after: "ENDED",
+          },
         },
       });
-    } catch (e) {}
+    } catch (logErr) {
+      console.warn("[deleteProduct] Change log recording warning:", logErr);
+    }
 
+    // 5. 캐시 무효화 (Portal & Admin 동시 갱신)
     revalidatePath("/portal/products");
     revalidatePath(`/portal/products/${productId}`);
+    revalidatePath("/admin/products");
+    revalidatePath(`/admin/products/${productId}`);
     return { success: true };
   } catch (err: any) {
-    return { success: false, error: err.message || "오류가 발생했습니다." };
+    console.error("[deleteProduct] Unexpected exception:", err);
+    return { success: false, error: "제품을 삭제하지 못했습니다. 잠시 후 다시 시도해주세요." };
   }
 }

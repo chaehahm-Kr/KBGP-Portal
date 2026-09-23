@@ -91,7 +91,9 @@ export default async function AdminProductsPage() {
 
         const hasImages = (productImages ?? []).some((img) => img.product_id === p.id);
         const catCompletion = categoryCompletions.get(p.id) || null;
+        const effectiveDeletedAt = (p as any).deleted_at || (p.price_additional_info as any)?.deleted_at || null;
 
+        // Unified Single Source of Truth Registration Evaluation
         const registrationEvaluation = evaluateProductRegistrationStatus({
           id: p.id,
           name: p.name,
@@ -110,7 +112,7 @@ export default async function AdminProductsPage() {
           ean: p.ean,
           selling_online: p.selling_online,
           sales_link_1: p.sales_link_1,
-          deleted_at: (p as any).deleted_at,
+          deleted_at: effectiveDeletedAt,
           adminOverrides,
           hasImages,
           categoryCompletion: catCompletion,
@@ -134,7 +136,7 @@ export default async function AdminProductsPage() {
           is_draft: registrationEvaluation.isDraft,
           missing_fields: registrationEvaluation.missingFields,
           registration_status: registrationEvaluation.status,
-          deleted_at: (p as any).deleted_at || null,
+          deleted_at: effectiveDeletedAt,
           updated_at: (p as any).updated_at || null,
           last_updated_by_name: (p as any).last_updated_by_name || null,
           last_updated_source: (p as any).last_updated_source || null,
@@ -145,6 +147,7 @@ export default async function AdminProductsPage() {
         };
       } catch (prodErr) {
         console.error("Error resolving product for admin list:", p?.id, prodErr);
+        const fallbackDeletedAt = (p as any)?.deleted_at || (p?.price_additional_info as any)?.deleted_at || null;
         return {
           id: p.id,
           name: p.name || "",
@@ -163,13 +166,13 @@ export default async function AdminProductsPage() {
           is_draft: true,
           missing_fields: [],
           registration_status: "DRAFT" as const,
-          deleted_at: (p as any).deleted_at || null,
-          updated_at: (p as any).updated_at || null,
+          deleted_at: fallbackDeletedAt,
+          updated_at: (p as any)?.updated_at || null,
           last_updated_by_name: null,
           last_updated_source: null,
-          selection_status: p.selection_status || "UNREVIEWED",
-          sales_status: p.sales_status || "PREPARING",
-          category_code: p.category_code || null,
+          selection_status: p?.selection_status || "UNREVIEWED",
+          sales_status: p?.sales_status || "PREPARING",
+          category_code: p?.category_code || null,
           category_full_path: null,
         };
       }
