@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { verifyAdminSession } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 export interface WarehousePayload {
   name: string;
@@ -26,6 +27,27 @@ export interface WarehouseRow extends WarehousePayload {
   created_at: string;
   updated_at: string;
   shipping_origin_name?: string | null;
+}
+
+export interface UnlinkedShippingOriginItem {
+  id: string;
+  company_id: string;
+  company_name?: string;
+  name: string;
+  is_default: boolean;
+  contact_name?: string;
+  phone?: string;
+  email?: string;
+  country: string;
+  address_line1: string;
+  address_line2?: string;
+  city: string;
+  state_province?: string;
+  postal_code: string;
+  status: "active" | "inactive";
+  notes?: string;
+  created_at: string;
+  updated_at: string;
 }
 
 /**
@@ -125,6 +147,123 @@ export async function getWarehouses() {
   });
 
   return normalized as (WarehouseRow & { companies: { name: string } | null })[];
+}
+
+/**
+ * Fetch all unlinked shipping origins from company_shipping_origins (including metadata fallback)
+ * that are NOT linked to any warehouse in warehouses table.
+ */
+export async function getUnlinkedShippingOrigins(): Promise<UnlinkedShippingOriginItem[]> {
+  await verifyAdminSession();
+  const admin = createAdminClient();
+
+  let rawOrigins: UnlinkedShippingOriginItem[] = [];
+
+  // 1. Try to fetch from company_shipping_origins with companies join
+  try {
+    const { data, error } = await admin
+      .from("company_shipping_origins")
+      .select(`
+        *,
+        companies (
+          id,
+          name
+        )
+      `)
+      .order("created_at", { ascending: false });
+
+    if (!error && data) {
+      rawOrigins = data.map((item: any) => ({
+        id: item.id,
+        company_id: item.company_id,
+        company_name: item.companies?.name || "알 수 없는 회사",
+        name: item.name,
+        is_default: !!item.is_default,
+        contact_name: item.contact_name || "",
+        phone: item.phone || "",
+        email: item.email || "",
+        country: item.country || "South Korea",
+        address_line1: item.address_line1 || "",
+        address_line2: item.address_line2 || "",
+        city: item.city || "",
+        state_province: item.state_province || "",
+        postal_code: item.postal_code || "",
+        status: item.status || "active",
+        notes: item.notes || "",
+        created_at: item.created_at || new Date().toISOString(),
+        updated_at: item.updated_at || new Date().toISOString(),
+      }));
+    }
+  } catch (e) {}
+
+  // 2. Metadata fallback (companies.intro starting with __COMPANY_METADATA__:)
+  try {
+    const { data: companiesWithIntro } = await admin
+      .from("companies")
+      .select("id, name, intro")
+      .like("intro", "__COMPANY_METADATA__%");
+
+    if (companiesWithIntro) {
+      for (const comp of companiesWithIntro) {
+        try {
+          const jsonStr = comp.intro.substring("__COMPANY_METADATA__:".length);
+          const meta = JSON.parse(jsonStr);
+          if (Array.isArray(meta.shipping_origins)) {
+            for (const origin of meta.shipping_origins) {
+              if (!rawOrigins.some((r) => r.id === origin.id)) {
+                rawOrigins.push({
+                  id: origin.id,
+                  company_id: comp.id,
+                  company_name: comp.name,
+                  name: origin.name,
+                  is_default: !!origin.is_default,
+                  contact_name: origin.contact_name || "",
+                  phone: origin.phone || "",
+                  email: origin.email || "",
+                  country: origin.country || "South Korea",
+                  address_line1: origin.address_line1 || "",
+                  address_line2: origin.address_line2 || "",
+                  city: origin.city || "",
+                  state_province: origin.state_province || "",
+                  postal_code: origin.postal_code || "",
+                  status: origin.status || "active",
+                  notes: origin.notes || "",
+                  created_at: origin.created_at || new Date().toISOString(),
+                  updated_at: origin.updated_at || new Date().toISOString(),
+                });
+              }
+            }
+          }
+        } catch (e) {}
+      }
+    }
+  } catch (e) {}
+
+  // 3. Get all linked shipping origin IDs from warehouses
+  const linkedOriginIds = new Set<string>();
+  try {
+    const { data: whList } = await admin
+      .from("warehouses")
+      .select("shipping_origin_id, internal_note");
+
+    if (whList) {
+      for (const wh of whList) {
+        if (wh.shipping_origin_id) {
+          linkedOriginIds.add(wh.shipping_origin_id);
+        }
+        if (wh.internal_note && wh.internal_note.includes("[ORIGIN_ID:")) {
+          const match = wh.internal_note.match(/\[ORIGIN_ID:([^\]]+)\]/);
+          if (match && match[1]) {
+            linkedOriginIds.add(match[1]);
+          }
+        }
+      }
+    }
+  } catch (e) {}
+
+  // 4. Return unlinked shipping origins
+  const unlinked = rawOrigins.filter((o) => !linkedOriginIds.has(o.id));
+  return unlinked;
 }
 
 /**

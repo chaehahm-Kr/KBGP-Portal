@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { verifyAdminSession } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
-import { getWarehouses } from "@/lib/warehouse/actions";
+import { getWarehouses, getUnlinkedShippingOrigins } from "@/lib/warehouse/actions";
 import { WarehouseSettingsManager } from "@/components/admin/settings/warehouse-settings-manager";
 
 export const metadata: Metadata = {
@@ -12,8 +12,11 @@ export default async function AdminWarehousesPage() {
   const session = await verifyAdminSession();
   const supabase = await createClient();
 
-  // 1. Fetch warehouses
-  const warehouses = await getWarehouses();
+  // 1. Fetch warehouses and unlinked shipping origins in parallel
+  const [warehouses, unlinkedOrigins] = await Promise.all([
+    getWarehouses(),
+    getUnlinkedShippingOrigins(),
+  ]);
 
   // 2. Fetch companies for select dropdown
   const { data: companies } = await supabase
@@ -46,6 +49,7 @@ export default async function AdminWarehousesPage() {
 
       <WarehouseSettingsManager
         initialWarehouses={warehouses}
+        initialUnlinkedOrigins={unlinkedOrigins}
         companies={companies || []}
         canEdit={canEdit}
       />

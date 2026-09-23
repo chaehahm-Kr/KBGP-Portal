@@ -6,21 +6,26 @@ import {
   updateWarehouse,
   deleteWarehouse,
   type WarehouseRow,
-  type WarehousePayload
+  type WarehousePayload,
+  type UnlinkedShippingOriginItem,
 } from "@/lib/warehouse/actions";
 
 interface WarehouseSettingsManagerProps {
   initialWarehouses: (WarehouseRow & { companies: { name: string } | null })[];
+  initialUnlinkedOrigins?: UnlinkedShippingOriginItem[];
   companies: { id: string; name: string }[];
   canEdit: boolean;
 }
 
 export function WarehouseSettingsManager({
   initialWarehouses,
+  initialUnlinkedOrigins = [],
   companies,
   canEdit
 }: WarehouseSettingsManagerProps) {
   const [warehouses, setWarehouses] = useState(initialWarehouses);
+  const [unlinkedOrigins, setUnlinkedOrigins] = useState<UnlinkedShippingOriginItem[]>(initialUnlinkedOrigins);
+  const [activeTab, setActiveTab] = useState<"all" | "warehouses" | "origins">("all");
   const [isPending, startTransition] = useTransition();
 
   // Search & Filter state
@@ -49,14 +54,19 @@ export function WarehouseSettingsManager({
     state: "",
     zip_code: "",
     country: "United States",
-    internal_note: ""
+    internal_note: "",
+    shipping_origin_id: undefined,
   });
 
   // Filtered Warehouses
   const filteredWarehouses = warehouses.filter((w) => {
     const matchesSearch =
       w.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      w.code.toLowerCase().includes(searchQuery.toLowerCase());
+      w.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (w.companies?.name && w.companies.name.toLowerCase().includes(searchQuery.toLowerCase())) ||
+      w.address1.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      w.city.toLowerCase().includes(searchQuery.toLowerCase());
+
     const matchesCompany =
       selectedCompanyId === "all" ||
       (selectedCompanyId === "own_only" && (w.type === "own" || !w.company_id)) ||
@@ -66,6 +76,26 @@ export function WarehouseSettingsManager({
     const matchesStatus = selectedStatus === "all" || w.status === selectedStatus;
 
     return matchesSearch && matchesCompany && matchesType && matchesStatus;
+  });
+
+  // Filtered Unlinked Shipping Origins
+  const filteredUnlinkedOrigins = unlinkedOrigins.filter((origin) => {
+    const matchesSearch =
+      origin.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (origin.company_name && origin.company_name.toLowerCase().includes(searchQuery.toLowerCase())) ||
+      origin.address_line1.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      origin.city.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (origin.contact_name && origin.contact_name.toLowerCase().includes(searchQuery.toLowerCase()));
+
+    const matchesCompany =
+      selectedCompanyId === "all" ||
+      (selectedCompanyId === "company_linked" && !!origin.company_id) ||
+      origin.company_id === selectedCompanyId;
+
+    const matchesStatus =
+      selectedStatus === "all" || origin.status === selectedStatus;
+
+    return matchesSearch && matchesCompany && matchesStatus;
   });
 
   const handleOpenCreate = () => {
@@ -86,7 +116,32 @@ export function WarehouseSettingsManager({
       state: "",
       zip_code: "",
       country: "United States",
-      internal_note: ""
+      internal_note: "",
+      shipping_origin_id: undefined,
+    });
+    setIsModalOpen(true);
+  };
+
+  const handleOpenCreateFromOrigin = (origin: UnlinkedShippingOriginItem) => {
+    if (!canEdit) return;
+    setErrorMsg("");
+    setSuccessMsg("");
+    setEditingWarehouse(null);
+    setFormData({
+      name: origin.name,
+      code: "",
+      company_id: origin.company_id,
+      type: "partner",
+      status: "active",
+      is_default_receiving: false,
+      address1: origin.address_line1 || "",
+      address2: origin.address_line2 || "",
+      city: origin.city || "",
+      state: origin.state_province || "",
+      zip_code: origin.postal_code || "",
+      country: origin.country || "South Korea",
+      internal_note: `[출고지 연동] ${origin.name}`,
+      shipping_origin_id: origin.id,
     });
     setIsModalOpen(true);
   };
@@ -154,6 +209,9 @@ export function WarehouseSettingsManager({
 
         if (result.success) {
           setSuccessMsg(editingWarehouse ? "물류창고가 성공적으로 수정되었습니다." : "물류창고가 성공적으로 등록되었습니다.");
+          if (formData.shipping_origin_id) {
+            setUnlinkedOrigins((prev) => prev.filter((o) => o.id !== formData.shipping_origin_id));
+          }
           // Reload page state or refresh
           setTimeout(() => {
             setIsModalOpen(false);
@@ -188,15 +246,60 @@ export function WarehouseSettingsManager({
 
   return (
     <div className="space-y-6 text-zinc-900 dark:text-zinc-100">
+      {/* View Mode Tabs */}
+      <div className="flex items-center gap-2 border-b border-zinc-200 dark:border-zinc-800 pb-2">
+        <button
+          type="button"
+          onClick={() => setActiveTab("all")}
+          className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+            activeTab === "all"
+              ? "bg-zinc-900 text-white dark:bg-white dark:text-zinc-950 shadow-sm"
+              : "text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800"
+          }`}
+        >
+          전체 보기 ({warehouses.length + unlinkedOrigins.length})
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab("warehouses")}
+          className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+            activeTab === "warehouses"
+              ? "bg-zinc-900 text-white dark:bg-white dark:text-zinc-950 shadow-sm"
+              : "text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800"
+          }`}
+        >
+          <span>🏢 등록된 물류창고</span>
+          <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${activeTab === "warehouses" ? "bg-white/20 text-white dark:bg-zinc-950/20 dark:text-zinc-950" : "bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300"}`}>
+            {warehouses.length}
+          </span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab("origins")}
+          className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+            activeTab === "origins"
+              ? "bg-zinc-900 text-white dark:bg-white dark:text-zinc-950 shadow-sm"
+              : "text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800"
+          }`}
+        >
+          <span>📍 출고지 정보 (Warehouse 미연결)</span>
+          {unlinkedOrigins.length > 0 && (
+            <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${activeTab === "origins" ? "bg-amber-400 text-zinc-950" : "bg-amber-100 dark:bg-amber-900/60 text-amber-800 dark:text-amber-300"}`}>
+              {unlinkedOrigins.length}
+            </span>
+          )}
+        </button>
+      </div>
+
       {/* Control Panel (Filters & Add button) */}
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between bg-zinc-50 dark:bg-zinc-900/40 p-4 rounded-2xl border border-zinc-200 dark:border-zinc-800">
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 flex-1">
           {/* Search Input */}
           <div className="flex flex-col gap-1">
-            <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase">창고명 / 코드 검색</span>
+            <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase">창고명 / 코드 / 출고지명 / 회사 검색</span>
             <input
               type="text"
-              placeholder="예: NJ1 또는 NJ Main..."
+              placeholder="예: LETNJ1, ROLAND, 테스트..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-850 rounded-xl px-3 py-2 text-xs w-full focus:outline-none focus:border-zinc-400 dark:focus:border-zinc-700"
@@ -213,7 +316,7 @@ export function WarehouseSettingsManager({
             >
               <option value="all">전체 회사</option>
               <option value="own_only">🏢 자사 창고 (회사 연결 없음)</option>
-              <option value="company_linked">🔗 파트너/3PL 연결 창고 전체</option>
+              <option value="company_linked">🔗 파트너/3PL 연결 창고 및 출고지</option>
               {companies.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name}
@@ -269,136 +372,327 @@ export function WarehouseSettingsManager({
         )}
       </div>
 
-      {/* Warehouse List Table */}
-      <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950/20 shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full border-collapse text-left text-xs">
-            <thead>
-              <tr className="border-b border-zinc-200 bg-zinc-50 font-bold text-zinc-950 dark:border-zinc-850 dark:bg-zinc-900/50 dark:text-white">
-                <th className="px-6 py-3.5 font-semibold">코드</th>
-                <th className="px-6 py-3.5 font-semibold">창고명</th>
-                <th className="px-6 py-3.5 font-semibold">연결 회사</th>
-                <th className="px-6 py-3.5 font-semibold">창고 유형</th>
-                <th className="px-6 py-3.5 font-semibold text-center">기본 입고지</th>
-                <th className="px-6 py-3.5 font-semibold text-center">상태</th>
-                <th className="px-6 py-3.5 font-semibold">주소</th>
-                <th className="px-6 py-3.5 font-semibold">메모</th>
-                {canEdit && <th className="px-6 py-3.5 text-right font-semibold">관리</th>}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
-              {filteredWarehouses.map((w) => {
-                const typeLabel =
-                  w.type === "own"
-                    ? "자사 창고"
-                    : w.type === "3pl"
-                    ? "3PL 물류창고"
-                    : w.type === "partner"
-                    ? "파트너 창고"
-                    : "기타";
-                const typeBg =
-                  w.type === "own"
-                    ? "bg-blue-50 text-blue-700 border-blue-100 dark:bg-blue-950/30 dark:text-blue-400 dark:border-blue-900/40"
-                    : w.type === "3pl"
-                    ? "bg-purple-50 text-purple-700 border-purple-100 dark:bg-purple-950/30 dark:text-purple-400 dark:border-purple-900/40"
-                    : w.type === "partner"
-                    ? "bg-emerald-50 text-emerald-700 border-emerald-100 dark:bg-emerald-950/30 dark:text-emerald-400 dark:border-emerald-900/40"
-                    : "bg-zinc-50 text-zinc-600 border-zinc-100 dark:bg-zinc-850 dark:text-zinc-400 dark:border-zinc-800";
+      {/* Section A: 등록된 물류창고 */}
+      {(activeTab === "all" || activeTab === "warehouses") && (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between pb-1">
+            <div className="flex items-center gap-2">
+              <h3 className="text-sm font-bold text-zinc-950 dark:text-white flex items-center gap-1.5">
+                <span>🏢</span>
+                <span>Section A — 등록된 물류창고</span>
+              </h3>
+              <span className="rounded-full bg-zinc-100 dark:bg-zinc-800 px-2.5 py-0.5 text-[11px] font-bold text-zinc-600 dark:text-zinc-300">
+                {filteredWarehouses.length}개
+              </span>
+            </div>
+            {activeTab === "all" && unlinkedOrigins.length > 0 && (
+              <span className="text-[11px] text-zinc-400">
+                아래에 미연결 출고지 {unlinkedOrigins.length}건이 있습니다.
+              </span>
+            )}
+          </div>
 
-                return (
-                  <tr key={w.id} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-900/30">
-                    <td className="px-6 py-4 font-mono font-bold text-zinc-950 dark:text-white">
-                      {w.code}
-                    </td>
-                    <td className="px-6 py-4 font-bold text-zinc-900 dark:text-zinc-100">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <span>{w.name}</span>
-                        {w.shipping_origin_id && (
-                          <span
-                            className="inline-flex items-center gap-0.5 rounded bg-amber-50 dark:bg-amber-950/40 px-1.5 py-0.5 text-[10px] font-bold text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800"
-                            title={w.shipping_origin_name ? `출고지: ${w.shipping_origin_name}` : "출고지 연동 창고"}
-                          >
-                            📍 출고지 연동
+          <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950/20 shadow-sm overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse text-left text-xs">
+                <thead>
+                  <tr className="border-b border-zinc-200 bg-zinc-50 font-bold text-zinc-950 dark:border-zinc-850 dark:bg-zinc-900/50 dark:text-white">
+                    <th className="px-6 py-3.5 font-semibold">코드</th>
+                    <th className="px-6 py-3.5 font-semibold">창고명</th>
+                    <th className="px-6 py-3.5 font-semibold">연결 회사</th>
+                    <th className="px-6 py-3.5 font-semibold">창고 유형</th>
+                    <th className="px-6 py-3.5 font-semibold text-center">기본 입고지</th>
+                    <th className="px-6 py-3.5 font-semibold text-center">상태</th>
+                    <th className="px-6 py-3.5 font-semibold">주소</th>
+                    <th className="px-6 py-3.5 font-semibold">메모</th>
+                    {canEdit && <th className="px-6 py-3.5 text-right font-semibold">관리</th>}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
+                  {filteredWarehouses.map((w) => {
+                    const typeLabel =
+                      w.type === "own"
+                        ? "자사 창고"
+                        : w.type === "3pl"
+                        ? "3PL 물류창고"
+                        : w.type === "partner"
+                        ? "파트너 창고"
+                        : "기타";
+                    const typeBg =
+                      w.type === "own"
+                        ? "bg-blue-50 text-blue-700 border-blue-100 dark:bg-blue-950/30 dark:text-blue-400 dark:border-blue-900/40"
+                        : w.type === "3pl"
+                        ? "bg-purple-50 text-purple-700 border-purple-100 dark:bg-purple-950/30 dark:text-purple-400 dark:border-purple-900/40"
+                        : w.type === "partner"
+                        ? "bg-emerald-50 text-emerald-700 border-emerald-100 dark:bg-emerald-950/30 dark:text-emerald-400 dark:border-emerald-900/40"
+                        : "bg-zinc-50 text-zinc-600 border-zinc-100 dark:bg-zinc-850 dark:text-zinc-400 dark:border-zinc-800";
+
+                    return (
+                      <tr key={w.id} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-900/30">
+                        <td className="px-6 py-4 font-mono font-bold text-zinc-950 dark:text-white">
+                          {w.code}
+                        </td>
+                        <td className="px-6 py-4 font-bold text-zinc-900 dark:text-zinc-100">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span>{w.name}</span>
+                            {w.shipping_origin_id && (
+                              <span
+                                className="inline-flex items-center gap-0.5 rounded bg-amber-50 dark:bg-amber-950/40 px-1.5 py-0.5 text-[10px] font-bold text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800"
+                                title={w.shipping_origin_name ? `출고지: ${w.shipping_origin_name}` : "출고지 연동 창고"}
+                              >
+                                📍 출고지 연동
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 text-zinc-700 dark:text-zinc-300">
+                          {w.type === "own" ? (
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded text-[11px] font-bold bg-blue-50/80 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300 border border-blue-200/60 dark:border-blue-800/50">
+                              자사
+                            </span>
+                          ) : w.company_id && w.companies?.name ? (
+                            <span>{w.companies.name}</span>
+                          ) : (
+                            <span className="text-zinc-400 dark:text-zinc-500">-</span>
+                          )}
+                        </td>
+                        <td className="px-6 py-4">
+                          <span className={`inline-block rounded px-2 py-0.5 text-[10px] font-semibold border ${typeBg}`}>
+                            {typeLabel}
                           </span>
+                        </td>
+                        <td className="px-6 py-4 text-center">
+                          {w.is_default_receiving ? (
+                            <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-450 font-bold bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-100 dark:border-emerald-900/30 px-2 py-0.5 rounded text-[10px]">
+                              ✓ 기본
+                            </span>
+                          ) : (
+                            <span className="text-zinc-350 dark:text-zinc-600">-</span>
+                          )}
+                        </td>
+                        <td className="px-6 py-4 text-center">
+                          <span
+                            className={`inline-block rounded px-2.5 py-0.5 text-[10px] font-bold border ${
+                              w.status === "active"
+                                ? "bg-emerald-50 text-emerald-700 border-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-900"
+                                : "bg-rose-50 text-rose-700 border-rose-100 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-900"
+                            }`}
+                          >
+                            {w.status === "active" ? "활성" : "비활성"}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 text-zinc-650 dark:text-zinc-400 max-w-xs truncate" title={`${w.address1} ${w.address2 || ""} ${w.city}, ${w.state} ${w.zip_code}, ${w.country}`}>
+                          {w.address1} {w.address2 ? `, ${w.address2}` : ""}, {w.city}, {w.state} {w.zip_code}, {w.country}
+                        </td>
+                        <td className="px-6 py-4 text-zinc-500 dark:text-zinc-500 max-w-xs truncate" title={w.internal_note || ""}>
+                          {w.internal_note || "-"}
+                        </td>
+                        {canEdit && (
+                          <td className="px-6 py-4 text-right">
+                            <div className="flex justify-end items-center gap-2">
+                              <button
+                                onClick={() => handleOpenEdit(w)}
+                                className="px-2 py-1 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 text-[10px] font-bold rounded cursor-pointer"
+                              >
+                                수정
+                              </button>
+                              {!w.is_default_receiving && (
+                                <button
+                                  onClick={() => handleDelete(w.id)}
+                                  className="px-2 py-1 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/20 dark:hover:bg-rose-950/40 text-rose-600 dark:text-rose-400 text-[10px] font-bold rounded cursor-pointer"
+                                >
+                                  삭제
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        )}
+                      </tr>
+                    );
+                  })}
+                  {filteredWarehouses.length === 0 && (
+                    <tr>
+                      <td colSpan={canEdit ? 9 : 8} className="py-12 text-center text-zinc-400 dark:text-zinc-500">
+                        등록된 물류창고 정보가 존재하지 않습니다.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Section B: 출고지 정보 (Warehouse 미연결) */}
+      {(activeTab === "all" || activeTab === "origins") && (
+        <div className="space-y-4 pt-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-zinc-200 dark:border-zinc-800">
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-bold text-zinc-950 dark:text-white flex items-center gap-1.5">
+                  <span>📍</span>
+                  <span>Section B — 출고지 정보 (Warehouse 미연결)</span>
+                </h3>
+                <span className="rounded-full bg-amber-100 dark:bg-amber-950/60 px-2.5 py-0.5 text-[11px] font-bold text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+                  {filteredUnlinkedOrigins.length}개 미연결
+                </span>
+              </div>
+              <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5">
+                브랜드/파트너사가 등록한 출고지 중 아직 물류창고로 등록되지 않은 장소입니다. [물류창고로 등록] 시 마스터 창고로 승격되며 시스템 전반에 연동됩니다.
+              </p>
+            </div>
+          </div>
+
+          {filteredUnlinkedOrigins.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-zinc-200 dark:border-zinc-800 p-8 text-center bg-zinc-50/50 dark:bg-zinc-900/30">
+              <div className="mx-auto w-10 h-10 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-zinc-400 mb-2">
+                📍
+              </div>
+              <p className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">
+                미연결 출고지가 없습니다.
+              </p>
+              <p className="text-[11px] text-zinc-400 dark:text-zinc-500 mt-1">
+                모든 출고지가 물류창고로 연동되었거나 등록된 출고지가 없습니다.
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {filteredUnlinkedOrigins.map((origin) => (
+                <div
+                  key={origin.id}
+                  className="rounded-2xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900 p-5 shadow-sm flex flex-col justify-between hover:border-zinc-300 dark:hover:border-zinc-700 transition-all"
+                >
+                  <div className="space-y-3">
+                    {/* Card Top Title & Badges */}
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <h4 className="text-xs font-bold text-zinc-950 dark:text-white">
+                            {origin.name}
+                          </h4>
+                          {origin.is_default && (
+                            <span className="inline-flex items-center gap-1 rounded bg-emerald-100 dark:bg-emerald-900/60 px-2 py-0.5 text-[10px] font-bold text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                              <span>✓</span> 기본 출고지
+                            </span>
+                          )}
+                          <span
+                            className={`rounded px-1.5 py-0.5 text-[9px] font-bold border ${
+                              origin.status === "active"
+                                ? "bg-zinc-100 text-zinc-700 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:border-zinc-700"
+                                : "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-900"
+                            }`}
+                          >
+                            {origin.status === "active" ? "Active" : "Inactive"}
+                          </span>
+                        </div>
+                        {/* Company Name */}
+                        <div className="mt-1 flex items-center gap-1 text-[11px]">
+                          <span className="text-zinc-400 font-medium">회사:</span>
+                          <span className="font-bold text-zinc-900 dark:text-zinc-100">
+                            {origin.company_name || "알 수 없는 회사"}
+                          </span>
+                        </div>
+                      </div>
+
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border border-amber-200 dark:border-amber-800 shrink-0">
+                        <span>●</span> Warehouse 미연결
+                      </span>
+                    </div>
+
+                    {/* Address Information */}
+                    <div className="rounded-xl bg-zinc-50 dark:bg-zinc-950/40 p-3 border border-zinc-150 dark:border-zinc-850 text-xs space-y-1">
+                      <div className="text-[11px] text-zinc-850 dark:text-zinc-200 font-medium">
+                        {origin.address_line1}
+                        {origin.address_line2 ? ` ${origin.address_line2}` : ""}
+                      </div>
+                      <div className="text-[10px] text-zinc-500 dark:text-zinc-400 flex items-center gap-1.5 flex-wrap font-mono">
+                        <span>{origin.city}</span>
+                        {origin.state_province && <span>, {origin.state_province}</span>}
+                        <span className="font-bold">({origin.postal_code})</span>
+                        <span className="text-zinc-300 dark:text-zinc-700">|</span>
+                        <span className="font-sans font-semibold text-zinc-700 dark:text-zinc-300">
+                          {origin.country}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Contact Information */}
+                    {(origin.contact_name || origin.phone || origin.email) && (
+                      <div className="text-[11px] space-y-0.5 text-zinc-600 dark:text-zinc-400 pt-0.5">
+                        {origin.contact_name && (
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 w-12">
+                              담당자
+                            </span>
+                            <span className="font-medium text-zinc-900 dark:text-zinc-100">
+                              {origin.contact_name}
+                            </span>
+                          </div>
+                        )}
+                        {origin.phone && (
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 w-12">
+                              전화번호
+                            </span>
+                            <span className="font-mono text-zinc-800 dark:text-zinc-200">
+                              {origin.phone}
+                            </span>
+                          </div>
+                        )}
+                        {origin.email && (
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 w-12">
+                              이메일
+                            </span>
+                            <span className="font-mono text-zinc-800 dark:text-zinc-200">
+                              {origin.email}
+                            </span>
+                          </div>
                         )}
                       </div>
-                    </td>
-                    <td className="px-6 py-4 text-zinc-700 dark:text-zinc-300">
-                      {w.type === "own" ? (
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded text-[11px] font-bold bg-blue-50/80 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300 border border-blue-200/60 dark:border-blue-800/50">
-                          자사
-                        </span>
-                      ) : w.company_id && w.companies?.name ? (
-                        <span>{w.companies.name}</span>
-                      ) : (
-                        <span className="text-zinc-400 dark:text-zinc-500">-</span>
-                      )}
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className={`inline-block rounded px-2 py-0.5 text-[10px] font-semibold border ${typeBg}`}>
-                        {typeLabel}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-center">
-                      {w.is_default_receiving ? (
-                        <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-450 font-bold bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-100 dark:border-emerald-900/30 px-2 py-0.5 rounded text-[10px]">
-                          ✓ 기본
-                        </span>
-                      ) : (
-                        <span className="text-zinc-350 dark:text-zinc-600">-</span>
-                      )}
-                    </td>
-                    <td className="px-6 py-4 text-center">
-                      <span
-                        className={`inline-block rounded px-2.5 py-0.5 text-[10px] font-bold border ${
-                          w.status === "active"
-                            ? "bg-emerald-50 text-emerald-700 border-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-900"
-                            : "bg-rose-50 text-rose-700 border-rose-100 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-900"
-                        }`}
-                      >
-                        {w.status === "active" ? "활성" : "비활성"}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-zinc-650 dark:text-zinc-400 max-w-xs truncate" title={`${w.address1} ${w.address2 || ""} ${w.city}, ${w.state} ${w.zip_code}, ${w.country}`}>
-                      {w.address1} {w.address2 ? `, ${w.address2}` : ""}, {w.city}, {w.state} {w.zip_code}, {w.country}
-                    </td>
-                    <td className="px-6 py-4 text-zinc-500 dark:text-zinc-500 max-w-xs truncate" title={w.internal_note || ""}>
-                      {w.internal_note || "-"}
-                    </td>
-                    {canEdit && (
-                      <td className="px-6 py-4 text-right">
-                        <div className="flex justify-end items-center gap-2">
-                          <button
-                            onClick={() => handleOpenEdit(w)}
-                            className="px-2 py-1 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 text-[10px] font-bold rounded cursor-pointer"
-                          >
-                            수정
-                          </button>
-                          {!w.is_default_receiving && (
-                            <button
-                              onClick={() => handleDelete(w.id)}
-                              className="px-2 py-1 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/20 dark:hover:bg-rose-950/40 text-rose-600 dark:text-rose-400 text-[10px] font-bold rounded cursor-pointer"
-                            >
-                              삭제
-                            </button>
-                          )}
-                        </div>
-                      </td>
                     )}
-                  </tr>
-                );
-              })}
-              {filteredWarehouses.length === 0 && (
-                <tr>
-                  <td colSpan={canEdit ? 9 : 8} className="py-12 text-center text-zinc-400 dark:text-zinc-500">
-                    등록된 물류창고 정보가 존재하지 않습니다.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+
+                    {/* Notes */}
+                    {origin.notes && (
+                      <div className="text-[10px] text-zinc-500 dark:text-zinc-400 bg-amber-50/50 dark:bg-amber-950/20 p-2 rounded-xl border border-amber-200/60 dark:border-amber-900/40 whitespace-pre-wrap">
+                        <span className="font-bold text-amber-800 dark:text-amber-400 block mb-0.5">
+                          메모:
+                        </span>
+                        {origin.notes}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Card Action */}
+                  {canEdit && (
+                    <div className="mt-4 pt-3 border-t border-zinc-100 dark:border-zinc-800 flex items-center justify-between gap-2">
+                      <a
+                        href={`/admin/companies/${origin.company_id}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-[11px] font-semibold text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200 underline flex items-center gap-0.5"
+                      >
+                        <span>회사 상세 보기</span>
+                        <span>↗</span>
+                      </a>
+                      <button
+                        type="button"
+                        onClick={() => handleOpenCreateFromOrigin(origin)}
+                        disabled={isPending}
+                        className="inline-flex items-center gap-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-3.5 py-2 shadow-sm transition-colors cursor-pointer"
+                      >
+                        <span>🏢</span>
+                        <span>물류창고로 등록</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
-      </div>
+      )}
 
       {/* Create / Edit Modal Dialog */}
       {isModalOpen && (
