@@ -42,6 +42,7 @@ interface LineItem {
   line_total: number;
   line_note: string | null;
   brand_name: string;
+  ready_qty?: number;
   shipped_qty?: number;
   received_qty?: number;
   remaining_to_ship?: number;
@@ -1143,10 +1144,10 @@ export function PurchaseOrderDetail({
                     <th className="px-4 py-3.5 font-mono">Letusto SKU</th>
                     <th className="px-4 py-3.5">제품 설명</th>
                     <th className="px-4 py-3.5 text-right">주문 수량 (PO)</th>
-                    <th className="px-4 py-3.5 text-right">공급사 확정</th>
-                    <th className="px-4 py-3.5 text-right">출고 수량</th>
-                    <th className="px-4 py-3.5 text-right">미선적 잔량</th>
-                    <th className="px-4 py-3.5 text-right">입고 완료</th>
+                    <th className="px-4 py-3.5 text-right">공급사 확정 (Confirmed)</th>
+                    <th className="px-4 py-3.5 text-right">출고 준비 (Ready)</th>
+                    <th className="px-4 py-3.5 text-right">출고 수량 (Shipped)</th>
+                    <th className="px-4 py-3.5 text-right">입고 완료 (Received)</th>
                     <th className="px-4 py-3.5 text-right">단가</th>
                     <th className="px-4 py-3.5 text-right">합계</th>
                   </tr>
@@ -1154,8 +1155,9 @@ export function PurchaseOrderDetail({
                 <tbody className="divide-y divide-zinc-150 dark:divide-zinc-800/80">
                   {po.lines.map((l) => {
                     const targetQty = (l.confirmed_qty !== null && l.confirmed_qty !== undefined) ? Number(l.confirmed_qty) : Number(l.qty);
+                    const readyQty = Number(l.ready_qty || 0);
                     const shippedQty = Number(l.shipped_qty || 0);
-                    const remainingToShip = Math.max(0, targetQty - shippedQty);
+                    const receivedQty = Number(l.received_qty || 0);
                     return (
                       <tr key={l.id} className="hover:bg-zinc-50/30 dark:hover:bg-zinc-850/10">
                         <td className="px-4 py-3 font-semibold text-zinc-650 dark:text-zinc-400">{l.brand_name}</td>
@@ -1174,14 +1176,12 @@ export function PurchaseOrderDetail({
                             <span className="text-zinc-400 italic">미확정 ({l.qty.toLocaleString()})</span>
                           )}
                         </td>
-                        <td className="px-4 py-3 text-right font-mono font-semibold">{shippedQty.toLocaleString()}</td>
-                        <td className="px-4 py-3 text-right font-mono font-semibold">
-                          <span className={remainingToShip > 0 ? "text-indigo-600 dark:text-indigo-400" : "text-zinc-400"}>
-                            {remainingToShip.toLocaleString()}
-                          </span>
+                        <td className="px-4 py-3 text-right font-mono font-semibold text-indigo-600 dark:text-indigo-400 font-bold">
+                          {readyQty.toLocaleString()}
                         </td>
+                        <td className="px-4 py-3 text-right font-mono font-semibold">{shippedQty.toLocaleString()}</td>
                         <td className="px-4 py-3 text-right font-mono font-semibold text-emerald-600 dark:text-emerald-400">
-                          {l.received_qty?.toLocaleString() || "0"}
+                          {receivedQty.toLocaleString()}
                         </td>
                         <td className="px-4 py-3 text-right font-mono">
                           {po.currency} {l.unit_cost.toLocaleString(undefined, { minimumFractionDigits: 2 })}

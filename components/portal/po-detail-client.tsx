@@ -94,6 +94,7 @@ interface PoDetailClientProps {
   receivings?: any[];
   goodsReadiness?: any[];
   warehouses?: any[];
+  shippingOrigins?: any[];
 }
 
 export default function PoDetailClient({
@@ -103,6 +104,7 @@ export default function PoDetailClient({
   receivings = [],
   goodsReadiness = [],
   warehouses = [],
+  shippingOrigins = [],
 }: PoDetailClientProps) {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState("overview");
@@ -154,7 +156,8 @@ export default function PoDetailClient({
     const map: Record<string, { readyQty: number; shippedQty: number; receivedQty: number }> = {};
     
     (goodsReadiness || []).forEach((gr) => {
-      (gr.items || []).forEach((item: any) => {
+      const grLines = gr.lines || gr.items || [];
+      grLines.forEach((item: any) => {
         const lineId = item.purchase_order_line_id;
         if (!map[lineId]) map[lineId] = { readyQty: 0, shippedQty: 0, receivedQty: 0 };
         map[lineId].readyQty += Number(item.ready_qty || 0);
@@ -183,11 +186,15 @@ export default function PoDetailClient({
 
   // Goods Readiness Form State
   const [showGoodsReadyForm, setShowGoodsReadyForm] = useState(false);
+  const [selectedOriginId, setSelectedOriginId] = useState("");
   const [goodsReadyDate, setGoodsReadyDate] = useState("");
   const [pickupLocation, setPickupLocation] = useState("");
   const [handoverLocation, setHandoverLocation] = useState("");
   const [fobPort, setFobPort] = useState("");
   const [warehouseFactoryAddress, setWarehouseFactoryAddress] = useState("");
+  const [contactName, setContactName] = useState("");
+  const [contactEmail, setContactEmail] = useState("");
+  const [contactPhone, setContactPhone] = useState("");
   const [contactPerson, setContactPerson] = useState("");
   const [specialInstructions, setSpecialInstructions] = useState("");
   const [packingListPath, setPackingListPath] = useState("");
@@ -204,6 +211,7 @@ export default function PoDetailClient({
     cartons: number;
     gross_weight: number;
     cbm: number;
+    product?: any;
   }>>([]);
 
   // Direct Shipment submission for Supplier Arranged shipping
@@ -251,19 +259,48 @@ export default function PoDetailClient({
     };
   }, [po.lines, shipments, receivings]);
 
+  // Helper function for packaging auto-calculation
+  const calcPackaging = (readyQty: number, prod: any) => {
+    const packQty = Math.max(1, Number(prod?.carton_pack_qty) || 1);
+    const cartons = Math.ceil(readyQty / packQty);
+    const weightPerCarton = Number(prod?.carton_weight) || (Number(prod?.piece_weight || 0) * packQty) || 0;
+    const cbmPerCarton = Number(prod?.carton_cbm) || 0;
+    return {
+      cartons: cartons > 0 ? cartons : 1,
+      gross_weight: Math.round(cartons * weightPerCarton * 100) / 100,
+      cbm: Math.round(cartons * cbmPerCarton * 1000) / 1000,
+    };
+  };
+
   // Initialize goods readiness form lines
   const initGoodsReadinessForm = () => {
-    const items = po.lines.map((l) => ({
-      purchase_order_line_id: l.id,
-      product_id: l.product.id,
-      product_name: l.product.name,
-      letusto_sku: l.product.letusto_sku,
-      qty: l.qty,
-      ready_qty: l.confirmed_qty ?? l.qty,
-      cartons: 1,
-      gross_weight: 0,
-      cbm: 0,
-    }));
+    // Check default origin
+    const defaultOrigin = shippingOrigins.find((o) => o.is_default) || shippingOrigins[0];
+    if (defaultOrigin) {
+      setSelectedOriginId(defaultOrigin.id);
+      setPickupLocation(defaultOrigin.name || "");
+      setWarehouseFactoryAddress([defaultOrigin.address_line1, defaultOrigin.address_line2, defaultOrigin.city, defaultOrigin.country].filter(Boolean).join(", "));
+      setContactName(defaultOrigin.contact_name || "");
+      setContactEmail(defaultOrigin.email || "");
+      setContactPhone(defaultOrigin.phone || "");
+    }
+
+    const items = po.lines.map((l) => {
+      const readyQty = l.confirmed_qty ?? l.qty;
+      const pack = calcPackaging(readyQty, l.product);
+      return {
+        purchase_order_line_id: l.id,
+        product_id: l.product.id,
+        product_name: l.product.name,
+        letusto_sku: l.product.letusto_sku,
+        qty: l.qty,
+        ready_qty: readyQty,
+        cartons: pack.cartons,
+        gross_weight: pack.gross_weight,
+        cbm: pack.cbm,
+        product: l.product,
+      };
+    });
     setReadyLines(items);
     setShowGoodsReadyForm(true);
   };
@@ -421,6 +458,8 @@ export default function PoDetailClient({
     setGeneralSuccess(null);
     setIsConfirming(true);
 
+    const fullContact = contactPerson.trim() || [contactName, contactEmail, contactPhone].filter(Boolean).join(" / ");
+
     try {
       await submitPortalGoodsReady({
         purchaseOrderId: po.id,
@@ -429,7 +468,7 @@ export default function PoDetailClient({
         handoverLocation,
         fobPort,
         warehouseFactoryAddress,
-        contactPerson,
+        contactPerson: fullContact,
         specialInstructions,
         packingListPath: packingListPath || null,
         packingListFilename: packingListFilename || null,
@@ -1094,8 +1133,37 @@ export default function PoDetailClient({
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {shippingOrigins && shippingOrigins.length > 0 && (
+                    <div className="md:col-span-3">
+                      <label className="block font-bold text-zinc-500 mb-1">등록된 출고지 선택 (Shipping Origin Select)</label>
+                      <select
+                        value={selectedOriginId}
+                        onChange={(e) => {
+                          const origId = e.target.value;
+                          setSelectedOriginId(origId);
+                          const matched = shippingOrigins.find((o) => o.id === origId);
+                          if (matched) {
+                            setPickupLocation(matched.name || "");
+                            setWarehouseFactoryAddress([matched.address_line1, matched.address_line2, matched.city, matched.country].filter(Boolean).join(", "));
+                            setContactName(matched.contact_name || "");
+                            setContactEmail(matched.email || "");
+                            setContactPhone(matched.phone || "");
+                          }
+                        }}
+                        className="w-full rounded-lg border-zinc-300 text-xs py-1.5 focus:ring-indigo-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+                      >
+                        <option value="">-- 직접 입력 (Direct Input) --</option>
+                        {shippingOrigins.map((o) => (
+                          <option key={o.id} value={o.id}>
+                            {o.name} {o.is_default ? "(기본 출고지)" : ""} - {o.city || ""}, {o.country || ""}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
                   <div>
-                    <label className="block font-bold text-zinc-500 mb-1">출고 완료 예정일 (Ready Date)</label>
+                    <label className="block font-bold text-zinc-500 mb-1">출고 완료 예정일 (Ready Date) *</label>
                     <input
                       type="date"
                       required
@@ -1106,9 +1174,10 @@ export default function PoDetailClient({
                     />
                   </div>
                   <div>
-                    <label className="block font-bold text-zinc-500 mb-1">인수지 위치 (Pickup Location)</label>
+                    <label className="block font-bold text-zinc-500 mb-1">인수지/출고지 명칭 (Pickup Location)</label>
                     <input
                       type="text"
+                      placeholder="예: 인천 1창고 / 부산 공장"
                       value={pickupLocation}
                       onChange={(e) => setPickupLocation(e.target.value)}
                       className="w-full rounded-lg border-zinc-300 text-xs py-1.5 focus:ring-indigo-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
@@ -1118,6 +1187,7 @@ export default function PoDetailClient({
                     <label className="block font-bold text-zinc-500 mb-1">인도 장소 (Handover Location)</label>
                     <input
                       type="text"
+                      placeholder="예: 공장 상차 / CY 전달"
                       value={handoverLocation}
                       onChange={(e) => setHandoverLocation(e.target.value)}
                       className="w-full rounded-lg border-zinc-300 text-xs py-1.5 focus:ring-indigo-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
@@ -1127,26 +1197,50 @@ export default function PoDetailClient({
                     <label className="block font-bold text-zinc-500 mb-1">FOB 항구명</label>
                     <input
                       type="text"
+                      placeholder="예: Busan Port, Incheon Port"
                       value={fobPort}
                       onChange={(e) => setFobPort(e.target.value)}
                       className="w-full rounded-lg border-zinc-300 text-xs py-1.5 focus:ring-indigo-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
                     />
                   </div>
-                  <div>
-                    <label className="block font-bold text-zinc-500 mb-1">공장/창고 주소</label>
+                  <div className="md:col-span-2">
+                    <label className="block font-bold text-zinc-500 mb-1">공장/창고 상세 주소</label>
                     <input
                       type="text"
+                      placeholder="상세 도로명 주소 및 건물명"
                       value={warehouseFactoryAddress}
                       onChange={(e) => setWarehouseFactoryAddress(e.target.value)}
                       className="w-full rounded-lg border-zinc-300 text-xs py-1.5 focus:ring-indigo-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
                     />
                   </div>
+
                   <div>
-                    <label className="block font-bold text-zinc-500 mb-1">담당자 연락처 (Contact)</label>
+                    <label className="block font-bold text-zinc-500 mb-1">담당자 성명 (Contact Name)</label>
                     <input
                       type="text"
-                      value={contactPerson}
-                      onChange={(e) => setContactPerson(e.target.value)}
+                      placeholder="홍길동"
+                      value={contactName}
+                      onChange={(e) => setContactName(e.target.value)}
+                      className="w-full rounded-lg border-zinc-300 text-xs py-1.5 focus:ring-indigo-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-bold text-zinc-500 mb-1">담당자 이메일 (Contact Email)</label>
+                    <input
+                      type="email"
+                      placeholder="contact@company.com"
+                      value={contactEmail}
+                      onChange={(e) => setContactEmail(e.target.value)}
+                      className="w-full rounded-lg border-zinc-300 text-xs py-1.5 focus:ring-indigo-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-bold text-zinc-500 mb-1">담당자 전화번호 (Contact Phone)</label>
+                    <input
+                      type="text"
+                      placeholder="010-0000-0000"
+                      value={contactPhone}
+                      onChange={(e) => setContactPhone(e.target.value)}
                       className="w-full rounded-lg border-zinc-300 text-xs py-1.5 focus:ring-indigo-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
                     />
                   </div>
@@ -1154,7 +1248,12 @@ export default function PoDetailClient({
 
                 {/* Line quantities input */}
                 <div className="space-y-2 pt-2">
-                  <h5 className="font-bold text-zinc-800 dark:text-zinc-300 text-xs">준비 수량 및 박스 정보</h5>
+                  <div className="flex justify-between items-center">
+                    <h5 className="font-bold text-zinc-800 dark:text-zinc-300 text-xs">준비 수량 및 패키징 자동 계산 정보</h5>
+                    <span className="text-[11px] text-indigo-600 dark:text-indigo-400 font-medium">
+                      * 출고 수량 변경 시 박스 수/중량/부피가 상품 마스터 기준으로 자동 산출되며 직접 수정(Override) 가능합니다.
+                    </span>
+                  </div>
                   <div className="overflow-x-auto">
                     <table className="w-full text-left text-[11px] border-collapse bg-white dark:bg-zinc-950 rounded-lg">
                       <thead>
@@ -1179,11 +1278,19 @@ export default function PoDetailClient({
                                 min={0}
                                 value={line.ready_qty}
                                 onChange={(e) => {
+                                  const newQty = Number(e.target.value) || 0;
+                                  const pack = calcPackaging(newQty, line.product);
                                   const updated = [...readyLines];
-                                  updated[idx].ready_qty = Number(e.target.value);
+                                  updated[idx] = {
+                                    ...updated[idx],
+                                    ready_qty: newQty,
+                                    cartons: pack.cartons,
+                                    gross_weight: pack.gross_weight,
+                                    cbm: pack.cbm,
+                                  };
                                   setReadyLines(updated);
                                 }}
-                                className="w-20 text-right rounded-md border-zinc-300 text-xs px-2 py-1 dark:border-zinc-850 dark:bg-zinc-900 dark:text-white focus:ring-indigo-500"
+                                className="w-20 text-right rounded-md border-zinc-300 text-xs px-2 py-1 dark:border-zinc-850 dark:bg-zinc-900 dark:text-white focus:ring-indigo-500 font-bold text-indigo-600"
                               />
                             </td>
                             <td className="p-2.5 text-right">
@@ -1196,7 +1303,7 @@ export default function PoDetailClient({
                                   updated[idx].cartons = Number(e.target.value);
                                   setReadyLines(updated);
                                 }}
-                                className="w-20 text-right rounded-md border-zinc-300 text-xs px-2 py-1 dark:border-zinc-850 dark:bg-zinc-900 dark:text-white"
+                                className="w-20 text-right rounded-md border-zinc-300 text-xs px-2 py-1 dark:border-zinc-850 dark:bg-zinc-900 dark:text-white font-mono"
                               />
                             </td>
                             <td className="p-2.5 text-right">
@@ -1209,7 +1316,7 @@ export default function PoDetailClient({
                                   updated[idx].gross_weight = Number(e.target.value);
                                   setReadyLines(updated);
                                 }}
-                                className="w-20 text-right rounded-md border-zinc-300 text-xs px-2 py-1 dark:border-zinc-850 dark:bg-zinc-900 dark:text-white"
+                                className="w-20 text-right rounded-md border-zinc-300 text-xs px-2 py-1 dark:border-zinc-850 dark:bg-zinc-900 dark:text-white font-mono"
                               />
                             </td>
                             <td className="p-2.5 text-right">
@@ -1222,7 +1329,7 @@ export default function PoDetailClient({
                                   updated[idx].cbm = Number(e.target.value);
                                   setReadyLines(updated);
                                 }}
-                                className="w-20 text-right rounded-md border-zinc-300 text-xs px-2 py-1 dark:border-zinc-850 dark:bg-zinc-900 dark:text-white"
+                                className="w-20 text-right rounded-md border-zinc-300 text-xs px-2 py-1 dark:border-zinc-850 dark:bg-zinc-900 dark:text-white font-mono"
                               />
                             </td>
                           </tr>

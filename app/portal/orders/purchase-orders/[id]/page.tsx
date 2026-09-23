@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { getPortalPurchaseOrderById, getPortalPoChangeRequests } from "@/lib/portal/actions";
+import { getCompanyShippingOrigins } from "@/lib/company/shipping-origin-actions";
 import PoDetailClient from "@/components/portal/po-detail-client";
 import { requireCompanyMembership } from "@/lib/company/dal";
 import { createClient } from "@/lib/supabase/server";
@@ -29,6 +30,9 @@ export default async function PortalPoDetailPage({ params }: PortalPoDetailPageP
     console.warn("PO not accessible or unauthorized for supplier:", e?.message);
     redirect("/portal/orders/purchase-orders");
   }
+
+  // Fetch shipping origins
+  const shippingOrigins = await getCompanyShippingOrigins(companyId);
 
   // Fetch shipments scoping by PO ID
   const { data: dbShipments } = await supabase
@@ -88,6 +92,7 @@ export default async function PortalPoDetailPage({ params }: PortalPoDetailPageP
       receivings={receivings}
       goodsReadiness={goodsReadiness}
       warehouses={warehouses}
+      shippingOrigins={shippingOrigins}
     />
   );
 }

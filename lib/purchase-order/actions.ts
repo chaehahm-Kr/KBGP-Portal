@@ -349,6 +349,19 @@ export async function getPurchaseOrderDetail(poId: string) {
     } catch {}
   }
 
+  // Fetch active goods readiness totals per PO line
+  const { data: readyData } = await supabase
+    .from("goods_readiness_lines")
+    .select("purchase_order_line_id, ready_qty, goods_readiness!inner(handover_status)")
+    .eq("goods_readiness.purchase_order_id", poId)
+    .neq("goods_readiness.handover_status", "DRAFT");
+
+  const readyMap = new Map<string, number>();
+  (readyData ?? []).forEach((r: any) => {
+    const cur = readyMap.get(r.purchase_order_line_id) || 0;
+    readyMap.set(r.purchase_order_line_id, cur + (r.ready_qty || 0));
+  });
+
   // Fetch active shipped totals per PO line
   const { data: shipData } = await supabase
     .from("inbound_shipment_lines")
@@ -376,6 +389,7 @@ export async function getPurchaseOrderDetail(poId: string) {
   });
 
   const formattedLines = (lines ?? []).map((l: any) => {
+    const ready = readyMap.get(l.id) || 0;
     const shipped = shippedMap.get(l.id) || 0;
     const received = receivedMap.get(l.id) || 0;
     const remainingToShip = Math.max(0, l.qty - shipped);
@@ -394,6 +408,7 @@ export async function getPurchaseOrderDetail(poId: string) {
       line_total: (Number(l.qty) || 0) * (Number(l.unit_cost) || 0),
       line_note: l.line_note || "",
       brand_name: brandMap.get(l.product_id) || "(미지정 브랜드)",
+      ready_qty: ready,
       shipped_qty: shipped,
       received_qty: received,
       remaining_to_ship: remainingToShip,

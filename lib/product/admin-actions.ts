@@ -159,6 +159,7 @@ export async function adminUpdateProductOverrides(
 
   revalidatePath(`/admin/products/${productId}`);
   revalidatePath(`/admin/products`);
+  revalidatePath(`/admin/inventory`);
   revalidatePath(`/admin/products/trading/${productId}`);
   revalidatePath(`/admin/products/trading`);
   revalidatePath(`/portal/products/${productId}`);
