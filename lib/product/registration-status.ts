@@ -141,6 +141,11 @@ export interface ProductRegistrationEvaluationResult {
   missingFields: string[];
 }
 
+function safeString(val: any): string {
+  if (val === null || val === undefined) return "";
+  return String(val).trim();
+}
+
 /**
  * Unified evaluator for product registration completeness.
  * Strictly checks ONLY required fields to prevent false drafts on optional attributes.
@@ -160,19 +165,19 @@ export function evaluateProductRegistrationStatus(
 
   const overrides = input.adminOverrides || {};
 
-  const effectiveBrandId = overrides.brand_id !== undefined ? overrides.brand_id : input.brand_id;
-  const effectiveNameEn = (overrides.name_en !== undefined ? overrides.name_en : (input.name_en || "")).trim();
-  const effectiveManufactureSku = (overrides.manufacture_sku !== undefined ? overrides.manufacture_sku : (input.manufacture_sku || "")).trim();
-  const effectiveOrigin = (overrides.origin !== undefined ? overrides.origin : (input.origin || "")).trim();
-  const effectivePriceKrw = overrides.price_krw_retail !== undefined ? Number(overrides.price_krw_retail) : Number(input.price_krw_retail || 0);
-  const effectivePriceUsd = overrides.price_usd_fob !== undefined ? Number(overrides.price_usd_fob) : Number(input.price_usd_fob || 0);
-  const effectiveUpc = (overrides.upc !== undefined ? overrides.upc : (input.upc || "")).trim();
-  const effectiveEan = (overrides.ean !== undefined ? overrides.ean : (input.ean || "")).trim();
+  const effectiveBrandId = overrides.brand_id !== undefined && overrides.brand_id !== null ? overrides.brand_id : input.brand_id;
+  const effectiveNameEn = safeString(overrides.name_en !== undefined && overrides.name_en !== null ? overrides.name_en : input.name_en);
+  const effectiveManufactureSku = safeString(overrides.manufacture_sku !== undefined && overrides.manufacture_sku !== null ? overrides.manufacture_sku : input.manufacture_sku);
+  const effectiveOrigin = safeString(overrides.origin !== undefined && overrides.origin !== null ? overrides.origin : input.origin);
+  const effectivePriceKrw = overrides.price_krw_retail !== undefined && overrides.price_krw_retail !== null ? Number(overrides.price_krw_retail) : Number(input.price_krw_retail || 0);
+  const effectivePriceUsd = overrides.price_usd_fob !== undefined && overrides.price_usd_fob !== null ? Number(overrides.price_usd_fob) : Number(input.price_usd_fob || 0);
+  const effectiveUpc = safeString(overrides.upc !== undefined && overrides.upc !== null ? overrides.upc : input.upc);
+  const effectiveEan = safeString(overrides.ean !== undefined && overrides.ean !== null ? overrides.ean : input.ean);
 
-  const pkgWidth = overrides.package_width !== undefined ? Number(overrides.package_width) : Number(input.package_width || 0);
-  const pkgDepth = overrides.package_depth !== undefined ? Number(overrides.package_depth) : Number(input.package_depth || 0);
-  const pkgHeight = overrides.package_height !== undefined ? Number(overrides.package_height) : Number(input.package_height || 0);
-  const pkgWeight = overrides.package_weight !== undefined ? Number(overrides.package_weight) : Number(input.package_weight || 0);
+  const pkgWidth = overrides.package_width !== undefined && overrides.package_width !== null ? Number(overrides.package_width) : Number(input.package_width || 0);
+  const pkgDepth = overrides.package_depth !== undefined && overrides.package_depth !== null ? Number(overrides.package_depth) : Number(input.package_depth || 0);
+  const pkgHeight = overrides.package_height !== undefined && overrides.package_height !== null ? Number(overrides.package_height) : Number(input.package_height || 0);
+  const pkgWeight = overrides.package_weight !== undefined && overrides.package_weight !== null ? Number(overrides.package_weight) : Number(input.package_weight || 0);
 
   const missingFields: string[] = [];
 
@@ -229,7 +234,7 @@ export function evaluateProductRegistrationStatus(
   }
 
   // 9. Online sales link if selling online
-  if (input.selling_online && !input.sales_link_1?.trim()) {
+  if (input.selling_online && !safeString(input.sales_link_1)) {
     missingFields.push("온라인 판매 링크");
   }
 

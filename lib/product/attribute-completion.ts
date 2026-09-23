@@ -36,9 +36,10 @@ export function isAttributeValueFilled(inputType: string, val: any): boolean {
  */
 export async function getProductCategoryCompletion(
   productId: string,
-  categoryCode: string | null
+  categoryCode: string | null,
+  customClient?: any
 ): Promise<CategoryCompletionResult> {
-  const supabase = await createClient();
+  const supabase = customClient || (await createClient());
 
   // 1. Verify Category Completeness
   let categoryComplete = false;
@@ -97,7 +98,7 @@ export async function getProductCategoryCompletion(
     .eq("product_id", productId);
 
   const savedMap = new Map<string, any>();
-  (savedValues || []).forEach((row) => {
+  (savedValues || []).forEach((row: any) => {
     savedMap.set(row.attribute_code, row.value_json);
   });
 
@@ -155,9 +156,10 @@ export async function getProductCategoryCompletion(
  * Batch version to evaluate multiple products efficiently for Product List.
  */
 export async function getBatchProductCategoryCompletions(
-  products: { id: string; category_code: string | null }[]
+  products: { id: string; category_code: string | null }[],
+  customClient?: any
 ): Promise<Map<string, CategoryCompletionResult>> {
-  const supabase = await createClient();
+  const supabase = customClient || (await createClient());
   const results = new Map<string, CategoryCompletionResult>();
   if (products.length === 0) return results;
 
@@ -173,7 +175,7 @@ export async function getBatchProductCategoryCompletions(
         .eq("is_active", true)
     : { data: [] };
 
-  const finalCats = new Set((catData || []).filter((c) => c.is_final).map((c) => c.code));
+  const finalCats = new Set((catData || []).filter((c: any) => c.is_final).map((c: any) => c.code));
 
   // 2. Fetch Common required attributes
   const { data: commonAttrs } = await supabase
@@ -194,9 +196,9 @@ export async function getBatchProductCategoryCompletions(
         .eq("is_active", true)
     : { data: [] };
 
-  const profileCodes = Array.from(new Set((mappings || []).map((m) => m.profile_code)));
+  const profileCodes = Array.from(new Set((mappings || []).map((m: any) => m.profile_code)));
   const catToProfile = new Map<string, string>();
-  (mappings || []).forEach((m) => catToProfile.set(m.category_code, m.profile_code));
+  (mappings || []).forEach((m: any) => catToProfile.set(m.category_code, m.profile_code));
 
   const { data: pAttrs } = profileCodes.length > 0
     ? await supabase
@@ -222,7 +224,7 @@ export async function getBatchProductCategoryCompletions(
     .in("product_id", productIds);
 
   const productValuesMap = new Map<string, Map<string, any>>();
-  (allSavedValues || []).forEach((row) => {
+  (allSavedValues || []).forEach((row: any) => {
     let map = productValuesMap.get(row.product_id);
     if (!map) {
       map = new Map<string, any>();

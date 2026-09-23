@@ -39,6 +39,7 @@ export function WarehouseSettingsManager({
   const [editingWarehouse, setEditingWarehouse] = useState<(WarehouseRow & { companies: { name: string } | null }) | null>(null);
   const [errorMsg, setErrorMsg] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   // Form State
   const [formData, setFormData] = useState<WarehousePayload>({
@@ -98,10 +99,15 @@ export function WarehouseSettingsManager({
     return matchesSearch && matchesCompany && matchesStatus;
   });
 
-  const handleOpenCreate = () => {
-    if (!canEdit) return;
+  const clearErrors = () => {
     setErrorMsg("");
     setSuccessMsg("");
+    setFieldErrors({});
+  };
+
+  const handleOpenCreate = () => {
+    if (!canEdit) return;
+    clearErrors();
     setEditingWarehouse(null);
     setFormData({
       name: "",
@@ -124,8 +130,7 @@ export function WarehouseSettingsManager({
 
   const handleOpenCreateFromOrigin = (origin: UnlinkedShippingOriginItem) => {
     if (!canEdit) return;
-    setErrorMsg("");
-    setSuccessMsg("");
+    clearErrors();
     setEditingWarehouse(null);
     setFormData({
       name: origin.name,
@@ -148,8 +153,7 @@ export function WarehouseSettingsManager({
 
   const handleOpenEdit = (w: WarehouseRow & { companies: { name: string } | null }) => {
     if (!canEdit) return;
-    setErrorMsg("");
-    setSuccessMsg("");
+    clearErrors();
     setEditingWarehouse(w);
     setFormData({
       name: w.name,
@@ -164,7 +168,8 @@ export function WarehouseSettingsManager({
       state: w.state,
       zip_code: w.zip_code,
       country: w.country,
-      internal_note: w.internal_note || ""
+      internal_note: w.internal_note || "",
+      shipping_origin_id: w.shipping_origin_id,
     });
     setIsModalOpen(true);
   };
@@ -175,28 +180,54 @@ export function WarehouseSettingsManager({
     } else {
       setFormData((prev) => ({ ...prev, type: newType }));
     }
+    setFieldErrors((prev) => {
+      const next = { ...prev };
+      delete next.company_id;
+      return next;
+    });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!canEdit) return;
-    setErrorMsg("");
-    setSuccessMsg("");
+    clearErrors();
+
+    const errors: Record<string, string> = {};
 
     // Front-end Validations
-    if (!formData.name.trim()) return setErrorMsg("물류창고 이름을 입력해주세요.");
-    if (!formData.code.trim()) return setErrorMsg("물류창고 코드를 입력해주세요.");
+    if (!formData.name.trim()) {
+      errors.name = "물류창고 이름을 입력해주세요.";
+    }
+    if (!formData.code.trim()) {
+      errors.code = "물류창고 코드를 입력해주세요.";
+    } else if (!/^[A-Z0-9]{2,10}$/.test(formData.code.trim().toUpperCase())) {
+      errors.code = "창고 코드는 2~10자리의 영문 대문자 및 숫자만 가능합니다.";
+    }
+
     if (formData.type === "3pl" && !formData.company_id) {
-      return setErrorMsg("3PL 물류창고는 연결할 회사를 반드시 선택해주세요.");
+      errors.company_id = "3PL 물류창고는 연결 회사를 반드시 선택해야 합니다.";
     }
     if (formData.type === "partner" && !formData.company_id) {
-      return setErrorMsg("파트너 창고는 연결할 파트너 회사를 반드시 선택해주세요.");
+      errors.company_id = "파트너 창고는 연결 회사를 선택해야 합니다.";
     }
-    if (!formData.address1.trim()) return setErrorMsg("주소 1을 입력해주세요.");
-    if (!formData.city.trim()) return setErrorMsg("도시(City)를 입력해주세요.");
-    if (!formData.state.trim()) return setErrorMsg("주/도(State/Province)를 입력해주세요.");
-    if (!formData.zip_code.trim()) return setErrorMsg("우편번호(ZIP/Postal Code)를 입력해주세요.");
-    if (!formData.country.trim()) return setErrorMsg("국가(Country)를 입력해주세요.");
+    if (!formData.address1.trim()) {
+      errors.address1 = "주소 1을 입력해주세요.";
+    }
+    if (!formData.city.trim()) {
+      errors.city = "도시(City)를 입력해주세요.";
+    }
+    if (!formData.zip_code.trim()) {
+      errors.zip_code = "우편번호(ZIP / Postal Code)를 입력해주세요.";
+    }
+    if (!formData.country.trim()) {
+      errors.country = "국가(Country)를 입력해주세요.";
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors);
+      setErrorMsg("필수 입력 항목을 확인해주세요.");
+      return;
+    }
 
     startTransition(async () => {
       try {
@@ -207,17 +238,34 @@ export function WarehouseSettingsManager({
           result = await createWarehouse(formData);
         }
 
-        if (result.success) {
+        if (result.success && result.data) {
           setSuccessMsg(editingWarehouse ? "물류창고가 성공적으로 수정되었습니다." : "물류창고가 성공적으로 등록되었습니다.");
+          
+          // Update local warehouses list
+          const savedRow = result.data;
+          const companyObj = companies.find((c) => c.id === savedRow.company_id);
+          const fullRow = {
+            ...savedRow,
+            companies: companyObj ? { name: companyObj.name } : null,
+          };
+
+          if (editingWarehouse) {
+            setWarehouses((prev) => prev.map((w) => (w.id === editingWarehouse.id ? fullRow : w)));
+          } else {
+            setWarehouses((prev) => [fullRow, ...prev]);
+          }
+
           if (formData.shipping_origin_id) {
             setUnlinkedOrigins((prev) => prev.filter((o) => o.id !== formData.shipping_origin_id));
           }
-          // Reload page state or refresh
+
           setTimeout(() => {
             setIsModalOpen(false);
-            window.location.reload();
           }, 800);
         } else {
+          if (result.field) {
+            setFieldErrors({ [result.field]: result.error || "입력값을 확인해주세요." });
+          }
           setErrorMsg(result.error || "처리 중 오류가 발생했습니다.");
         }
       } catch (err: any) {
@@ -234,7 +282,7 @@ export function WarehouseSettingsManager({
       try {
         const result = await deleteWarehouse(id);
         if (result.success) {
-          window.location.reload();
+          setWarehouses((prev) => prev.filter((w) => w.id !== id));
         } else {
           alert(result.error || "삭제에 실패했습니다.");
         }
@@ -746,29 +794,58 @@ export function WarehouseSettingsManager({
               <div className="grid grid-cols-2 gap-4">
                 {/* Code Field (disabled on edit) */}
                 <div className="flex flex-col gap-1">
-                  <label className="text-xs font-bold text-zinc-500 dark:text-zinc-400">창고 코드 (대문자 고유값)</label>
+                  <label className="text-xs font-bold text-zinc-500 dark:text-zinc-400">
+                    창고 코드 <span className="text-rose-500">*</span>
+                  </label>
                   <input
                     type="text"
                     placeholder="예: NJ1"
                     disabled={!!editingWarehouse || isPending}
                     value={formData.code}
-                    onChange={(e) => setFormData((prev) => ({ ...prev, code: e.target.value.toUpperCase() }))}
-                    className="bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-850 rounded-xl px-4 py-2.5 text-sm w-full disabled:opacity-50"
+                    onChange={(e) => {
+                      setFormData((prev) => ({ ...prev, code: e.target.value.toUpperCase() }));
+                      setFieldErrors((prev) => {
+                        const next = { ...prev };
+                        delete next.code;
+                        return next;
+                      });
+                    }}
+                    className={`bg-zinc-50 dark:bg-zinc-950 border ${
+                      fieldErrors.code ? "border-rose-500 focus:border-rose-600" : "border-zinc-200 dark:border-zinc-850"
+                    } rounded-xl px-4 py-2.5 text-sm w-full disabled:opacity-50 font-mono`}
                   />
-                  <span className="text-[10px] text-zinc-400">2~10자리 영대문자/숫자만 가능하며 생성 후 변경할 수 없습니다.</span>
+                  {fieldErrors.code ? (
+                    <span className="text-[10px] text-rose-500 font-bold">{fieldErrors.code}</span>
+                  ) : (
+                    <span className="text-[10px] text-zinc-400">2~10자리 영대문자/숫자만 가능하며 생성 후 변경할 수 없습니다.</span>
+                  )}
                 </div>
 
                 {/* Name Field */}
                 <div className="flex flex-col gap-1">
-                  <label className="text-xs font-bold text-zinc-500 dark:text-zinc-400">창고 이름</label>
+                  <label className="text-xs font-bold text-zinc-500 dark:text-zinc-400">
+                    창고 이름 <span className="text-rose-500">*</span>
+                  </label>
                   <input
                     type="text"
                     placeholder="예: NJ Main Warehouse"
                     disabled={isPending}
                     value={formData.name}
-                    onChange={(e) => setFormData((prev) => ({ ...prev, name: e.target.value }))}
-                    className="bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-850 rounded-xl px-4 py-2.5 text-sm w-full"
+                    onChange={(e) => {
+                      setFormData((prev) => ({ ...prev, name: e.target.value }));
+                      setFieldErrors((prev) => {
+                        const next = { ...prev };
+                        delete next.name;
+                        return next;
+                      });
+                    }}
+                    className={`bg-zinc-50 dark:bg-zinc-950 border ${
+                      fieldErrors.name ? "border-rose-500 focus:border-rose-600" : "border-zinc-200 dark:border-zinc-850"
+                    } rounded-xl px-4 py-2.5 text-sm w-full`}
                   />
+                  {fieldErrors.name && (
+                    <span className="text-[10px] text-rose-500 font-bold">{fieldErrors.name}</span>
+                  )}
                 </div>
               </div>
 
@@ -814,8 +891,17 @@ export function WarehouseSettingsManager({
                     <select
                       disabled={isPending}
                       value={formData.company_id || ""}
-                      onChange={(e) => setFormData((prev) => ({ ...prev, company_id: e.target.value }))}
-                      className="bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-850 rounded-xl px-4 py-2.5 text-sm w-full focus:outline-none"
+                      onChange={(e) => {
+                        setFormData((prev) => ({ ...prev, company_id: e.target.value }));
+                        setFieldErrors((prev) => {
+                          const next = { ...prev };
+                          delete next.company_id;
+                          return next;
+                        });
+                      }}
+                      className={`bg-zinc-50 dark:bg-zinc-950 border ${
+                        fieldErrors.company_id ? "border-rose-500 focus:border-rose-600" : "border-zinc-200 dark:border-zinc-850"
+                      } rounded-xl px-4 py-2.5 text-sm w-full focus:outline-none`}
                     >
                       <option value="">
                         {formData.type === "3pl" || formData.type === "partner"
@@ -829,15 +915,19 @@ export function WarehouseSettingsManager({
                       ))}
                     </select>
                   )}
-                  <p className="text-[10px] text-zinc-400 mt-0.5">
-                    {formData.type === "own"
-                      ? "💡 자사 창고는 특정 파트너 회사와 연결되지 않습니다."
-                      : formData.type === "3pl"
-                      ? "* 3PL 물류창고는 관리 책임을 갖는 회사를 필수로 지정해야 합니다."
-                      : formData.type === "partner"
-                      ? "* 파트너 창고는 해당 창고를 보유/운영하는 파트너 회사를 연결해야 합니다."
-                      : "기타 창고는 필요 시 파트너 회사를 연결할 수 있습니다."}
-                  </p>
+                  {fieldErrors.company_id ? (
+                    <span className="text-[10px] text-rose-500 font-bold">{fieldErrors.company_id}</span>
+                  ) : (
+                    <p className="text-[10px] text-zinc-400 mt-0.5">
+                      {formData.type === "own"
+                        ? "💡 자사 창고는 특정 파트너 회사와 연결되지 않습니다."
+                        : formData.type === "3pl"
+                        ? "* 3PL 물류창고는 관리 책임을 갖는 회사를 필수로 지정해야 합니다."
+                        : formData.type === "partner"
+                        ? "* 파트너 창고는 해당 창고를 보유/운영하는 파트너 회사를 연결해야 합니다."
+                        : "기타 창고는 필요 시 파트너 회사를 연결할 수 있습니다."}
+                    </p>
+                  )}
                 </div>
               </div>
 
@@ -883,15 +973,29 @@ export function WarehouseSettingsManager({
                 <h4 className="text-xs font-bold border-b border-zinc-100 dark:border-zinc-800 pb-1 text-zinc-400">위치 주소 정보 (Address)</h4>
                 
                 <div className="flex flex-col gap-1">
-                  <label className="text-xs font-bold text-zinc-500 dark:text-zinc-400">주소 1 (Street Address 1)</label>
+                  <label className="text-xs font-bold text-zinc-500 dark:text-zinc-400">
+                    주소 1 (Street Address 1) <span className="text-rose-500">*</span>
+                  </label>
                   <input
                     type="text"
                     placeholder="예: 23B Roland Avenue"
                     disabled={isPending}
                     value={formData.address1}
-                    onChange={(e) => setFormData((prev) => ({ ...prev, address1: e.target.value }))}
-                    className="bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-850 rounded-xl px-4 py-2.5 text-sm w-full"
+                    onChange={(e) => {
+                      setFormData((prev) => ({ ...prev, address1: e.target.value }));
+                      setFieldErrors((prev) => {
+                        const next = { ...prev };
+                        delete next.address1;
+                        return next;
+                      });
+                    }}
+                    className={`bg-zinc-50 dark:bg-zinc-950 border ${
+                      fieldErrors.address1 ? "border-rose-500 focus:border-rose-600" : "border-zinc-200 dark:border-zinc-850"
+                    } rounded-xl px-4 py-2.5 text-sm w-full`}
                   />
+                  {fieldErrors.address1 && (
+                    <span className="text-[10px] text-rose-500 font-bold">{fieldErrors.address1}</span>
+                  )}
                 </div>
 
                 <div className="flex flex-col gap-1">
@@ -908,15 +1012,29 @@ export function WarehouseSettingsManager({
 
                 <div className="grid grid-cols-2 gap-4">
                   <div className="flex flex-col gap-1">
-                    <label className="text-xs font-bold text-zinc-500 dark:text-zinc-400">도시 (City)</label>
+                    <label className="text-xs font-bold text-zinc-500 dark:text-zinc-400">
+                      도시 (City) <span className="text-rose-500">*</span>
+                    </label>
                     <input
                       type="text"
                       placeholder="예: Mount Laurel"
                       disabled={isPending}
                       value={formData.city}
-                      onChange={(e) => setFormData((prev) => ({ ...prev, city: e.target.value }))}
-                      className="bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-850 rounded-xl px-4 py-2.5 text-sm w-full"
+                      onChange={(e) => {
+                        setFormData((prev) => ({ ...prev, city: e.target.value }));
+                        setFieldErrors((prev) => {
+                          const next = { ...prev };
+                          delete next.city;
+                          return next;
+                        });
+                      }}
+                      className={`bg-zinc-50 dark:bg-zinc-950 border ${
+                        fieldErrors.city ? "border-rose-500 focus:border-rose-600" : "border-zinc-200 dark:border-zinc-850"
+                      } rounded-xl px-4 py-2.5 text-sm w-full`}
                     />
+                    {fieldErrors.city && (
+                      <span className="text-[10px] text-rose-500 font-bold">{fieldErrors.city}</span>
+                    )}
                   </div>
 
                   <div className="flex flex-col gap-1">
@@ -934,27 +1052,55 @@ export function WarehouseSettingsManager({
 
                 <div className="grid grid-cols-2 gap-4">
                   <div className="flex flex-col gap-1">
-                    <label className="text-xs font-bold text-zinc-500 dark:text-zinc-400">우편번호 (ZIP / Postal Code)</label>
+                    <label className="text-xs font-bold text-zinc-500 dark:text-zinc-400">
+                      우편번호 (ZIP / Postal Code) <span className="text-rose-500">*</span>
+                    </label>
                     <input
                       type="text"
                       placeholder="예: 08054"
                       disabled={isPending}
                       value={formData.zip_code}
-                      onChange={(e) => setFormData((prev) => ({ ...prev, zip_code: e.target.value }))}
-                      className="bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-850 rounded-xl px-4 py-2.5 text-sm w-full"
+                      onChange={(e) => {
+                        setFormData((prev) => ({ ...prev, zip_code: e.target.value }));
+                        setFieldErrors((prev) => {
+                          const next = { ...prev };
+                          delete next.zip_code;
+                          return next;
+                        });
+                      }}
+                      className={`bg-zinc-50 dark:bg-zinc-950 border ${
+                        fieldErrors.zip_code ? "border-rose-500 focus:border-rose-600" : "border-zinc-200 dark:border-zinc-850"
+                      } rounded-xl px-4 py-2.5 text-sm w-full font-mono`}
                     />
+                    {fieldErrors.zip_code && (
+                      <span className="text-[10px] text-rose-500 font-bold">{fieldErrors.zip_code}</span>
+                    )}
                   </div>
 
                   <div className="flex flex-col gap-1">
-                    <label className="text-xs font-bold text-zinc-500 dark:text-zinc-400">국가 (Country)</label>
+                    <label className="text-xs font-bold text-zinc-500 dark:text-zinc-400">
+                      국가 (Country) <span className="text-rose-500">*</span>
+                    </label>
                     <input
                       type="text"
                       placeholder="예: United States"
                       disabled={isPending}
                       value={formData.country}
-                      onChange={(e) => setFormData((prev) => ({ ...prev, country: e.target.value }))}
-                      className="bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-850 rounded-xl px-4 py-2.5 text-sm w-full"
+                      onChange={(e) => {
+                        setFormData((prev) => ({ ...prev, country: e.target.value }));
+                        setFieldErrors((prev) => {
+                          const next = { ...prev };
+                          delete next.country;
+                          return next;
+                        });
+                      }}
+                      className={`bg-zinc-50 dark:bg-zinc-950 border ${
+                        fieldErrors.country ? "border-rose-500 focus:border-rose-600" : "border-zinc-200 dark:border-zinc-850"
+                      } rounded-xl px-4 py-2.5 text-sm w-full`}
                     />
+                    {fieldErrors.country && (
+                      <span className="text-[10px] text-rose-500 font-bold">{fieldErrors.country}</span>
+                    )}
                   </div>
                 </div>
               </div>

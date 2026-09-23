@@ -56,83 +56,123 @@ export default async function AdminProductsPage() {
     .order("position", { ascending: true });
 
   // 6. Fetch batch category & attribute completion status (Single Source of Truth)
-  const categoryCompletions = await getBatchProductCategoryCompletions(
-    (products ?? []).map((p) => ({
-      id: p.id,
-      category_code: p.category_code || null,
-    }))
-  );
+  let categoryCompletions = new Map<string, any>();
+  try {
+    categoryCompletions = await getBatchProductCategoryCompletions(
+      (products ?? []).map((p) => ({
+        id: p.id,
+        category_code: p.category_code || null,
+      })),
+      admin
+    );
+  } catch (err) {
+    console.error("Admin products categoryCompletions error:", err);
+  }
 
   const resolvedProducts = await Promise.all(
     (products ?? []).map(async (p) => {
-      // Find the first image for this product
-      const firstImage = (productImages ?? []).find((img) => img.product_id === p.id);
-      let photoUrl: string | null = null;
-      if (firstImage?.storage_path) {
-        try {
-          photoUrl = await getSignedFileUrl(firstImage.storage_path);
-        } catch {
-          // Ignore signed URL error
+      try {
+        // Find the first image for this product
+        const firstImage = (productImages ?? []).find((img) => img.product_id === p.id);
+        let photoUrl: string | null = null;
+        if (firstImage?.storage_path) {
+          try {
+            const { data } = await admin.storage
+              .from("company-uploads")
+              .createSignedUrl(firstImage.storage_path, 3600);
+            photoUrl = data?.signedUrl || null;
+          } catch {
+            // Ignore signed URL error
+          }
         }
+
+        const adminOverrides = (p.price_additional_info as any)?.admin_overrides || {};
+        const effectiveManufactureSku = adminOverrides.manufacture_sku !== undefined && adminOverrides.manufacture_sku !== "" ? adminOverrides.manufacture_sku : p.manufacture_sku;
+
+        const hasImages = (productImages ?? []).some((img) => img.product_id === p.id);
+        const catCompletion = categoryCompletions.get(p.id) || null;
+
+        const registrationEvaluation = evaluateProductRegistrationStatus({
+          id: p.id,
+          name: p.name,
+          name_en: p.name_en,
+          brand_id: p.brand_id,
+          category_code: p.category_code,
+          manufacture_sku: p.manufacture_sku,
+          origin: p.origin,
+          price_krw_retail: p.price_krw_retail,
+          price_usd_fob: p.price_usd_fob,
+          package_width: p.package_width,
+          package_depth: p.package_depth,
+          package_height: p.package_height,
+          package_weight: p.package_weight,
+          upc: p.upc,
+          ean: p.ean,
+          selling_online: p.selling_online,
+          sales_link_1: p.sales_link_1,
+          deleted_at: (p as any).deleted_at,
+          adminOverrides,
+          hasImages,
+          categoryCompletion: catCompletion,
+        });
+
+        return {
+          id: p.id,
+          name: p.name,
+          display_name: adminOverrides.name_en || p.name_en || adminOverrides.name || p.name,
+          manufacture_sku: p.manufacture_sku,
+          display_manufacture_sku: effectiveManufactureSku,
+          letusto_sku: adminOverrides.letusto_sku !== undefined ? adminOverrides.letusto_sku : p.letusto_sku,
+          parent_sku: adminOverrides.parent_sku !== undefined ? adminOverrides.parent_sku : p.parent_sku,
+          child_sku: adminOverrides.child_sku !== undefined ? adminOverrides.child_sku : p.child_sku,
+          category: p.category,
+          brand_id: p.brand_id,
+          company_id: p.company_id,
+          companyName: companyNameById.get(p.company_id) || "(미지정 회사)",
+          brandName: brandNameById.get(p.brand_id) || "(미지정 브랜드)",
+          photoUrl,
+          is_draft: registrationEvaluation.isDraft,
+          missing_fields: registrationEvaluation.missingFields,
+          registration_status: registrationEvaluation.status,
+          deleted_at: (p as any).deleted_at || null,
+          updated_at: (p as any).updated_at || null,
+          last_updated_by_name: (p as any).last_updated_by_name || null,
+          last_updated_source: (p as any).last_updated_source || null,
+          selection_status: p.selection_status || "UNREVIEWED",
+          sales_status: p.sales_status || "PREPARING",
+          category_code: p.category_code || null,
+          category_full_path: p.category_code ? getCategoryFullPath(p.category_code) : null,
+        };
+      } catch (prodErr) {
+        console.error("Error resolving product for admin list:", p?.id, prodErr);
+        return {
+          id: p.id,
+          name: p.name || "",
+          display_name: p.name_en || p.name || "",
+          manufacture_sku: p.manufacture_sku || null,
+          display_manufacture_sku: p.manufacture_sku || null,
+          letusto_sku: p.letusto_sku || null,
+          parent_sku: p.parent_sku || null,
+          child_sku: p.child_sku || null,
+          category: p.category || "",
+          brand_id: p.brand_id || "",
+          company_id: p.company_id || "",
+          companyName: companyNameById.get(p.company_id) || "(미지정 회사)",
+          brandName: brandNameById.get(p.brand_id) || "(미지정 브랜드)",
+          photoUrl: null,
+          is_draft: true,
+          missing_fields: [],
+          registration_status: "DRAFT" as const,
+          deleted_at: (p as any).deleted_at || null,
+          updated_at: (p as any).updated_at || null,
+          last_updated_by_name: null,
+          last_updated_source: null,
+          selection_status: p.selection_status || "UNREVIEWED",
+          sales_status: p.sales_status || "PREPARING",
+          category_code: p.category_code || null,
+          category_full_path: null,
+        };
       }
-
-      const adminOverrides = (p.price_additional_info as any)?.admin_overrides || {};
-      const effectiveManufactureSku = adminOverrides.manufacture_sku !== undefined && adminOverrides.manufacture_sku !== "" ? adminOverrides.manufacture_sku : p.manufacture_sku;
-
-      const hasImages = (productImages ?? []).some((img) => img.product_id === p.id);
-      const catCompletion = categoryCompletions.get(p.id) || null;
-
-      const registrationEvaluation = evaluateProductRegistrationStatus({
-        id: p.id,
-        name: p.name,
-        name_en: p.name_en,
-        brand_id: p.brand_id,
-        category_code: p.category_code,
-        manufacture_sku: p.manufacture_sku,
-        origin: p.origin,
-        price_krw_retail: p.price_krw_retail,
-        price_usd_fob: p.price_usd_fob,
-        package_width: p.package_width,
-        package_depth: p.package_depth,
-        package_height: p.package_height,
-        package_weight: p.package_weight,
-        upc: p.upc,
-        ean: p.ean,
-        selling_online: p.selling_online,
-        sales_link_1: p.sales_link_1,
-        deleted_at: (p as any).deleted_at,
-        adminOverrides,
-        hasImages,
-        categoryCompletion: catCompletion,
-      });
-
-      return {
-        id: p.id,
-        name: p.name,
-        display_name: adminOverrides.name_en || p.name_en || adminOverrides.name || p.name,
-        manufacture_sku: p.manufacture_sku,
-        display_manufacture_sku: effectiveManufactureSku,
-        letusto_sku: adminOverrides.letusto_sku !== undefined ? adminOverrides.letusto_sku : p.letusto_sku,
-        parent_sku: adminOverrides.parent_sku !== undefined ? adminOverrides.parent_sku : p.parent_sku,
-        child_sku: adminOverrides.child_sku !== undefined ? adminOverrides.child_sku : p.child_sku,
-        category: p.category,
-        brand_id: p.brand_id,
-        company_id: p.company_id,
-        companyName: companyNameById.get(p.company_id) || "(미지정 회사)",
-        brandName: brandNameById.get(p.brand_id) || "(미지정 브랜드)",
-        photoUrl,
-        is_draft: registrationEvaluation.isDraft,
-        missing_fields: registrationEvaluation.missingFields,
-        registration_status: registrationEvaluation.status,
-        deleted_at: (p as any).deleted_at || null,
-        updated_at: (p as any).updated_at || null,
-        last_updated_by_name: (p as any).last_updated_by_name || null,
-        last_updated_source: (p as any).last_updated_source || null,
-        selection_status: p.selection_status || "UNREVIEWED",
-        sales_status: p.sales_status || "PREPARING",
-        category_code: p.category_code || null,
-        category_full_path: p.category_code ? getCategoryFullPath(p.category_code) : null,
-      };
     })
   );
 

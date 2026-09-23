@@ -20,7 +20,8 @@ export default async function ProductDetailPage({
   const { companyId } = await requireCompanyMembership();
   const supabase = await createClient();
 
-  const { data: product } = await supabase
+  let product: any = null;
+  const { data: fetchedProduct, error: fetchErr } = await supabase
     .from("products")
     .select(`
       id, name, name_en, category, volume, estimated_retail_price, ingredients_text, ingredients_file_path, ingredients_file_path_en, brand_id,
@@ -34,11 +35,24 @@ export default async function ProductDetailPage({
       palette_carton_qty, palette_width, palette_depth, palette_height, palette_weight,
       container_20ft_qty, container_20ft_weight, container_20ft_cbm,
       container_40fthc_qty, container_40fthc_weight, container_40fthc_cbm, category_code,
-      selection_status, sales_status, deleted_at, status
+      selection_status, sales_status, status
     `)
     .eq("id", id)
     .eq("company_id", companyId)
-    .single();
+    .maybeSingle();
+
+  if (fetchErr) {
+    console.error("Error fetching product detail, trying select('*'):", fetchErr);
+    const fallback = await supabase
+      .from("products")
+      .select("*")
+      .eq("id", id)
+      .eq("company_id", companyId)
+      .maybeSingle();
+    product = fallback.data;
+  } else {
+    product = fetchedProduct;
+  }
 
   if (!product) {
     notFound();

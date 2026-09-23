@@ -50,6 +50,15 @@ export interface UnlinkedShippingOriginItem {
   updated_at: string;
 }
 
+export interface ActionResult<T = any> {
+  success: boolean;
+  data?: T;
+  error?: string;
+  code?: string;
+  field?: string;
+  details?: string;
+}
+
 /**
  * Fetch all warehouses with associated company names and linked shipping origins
  */
@@ -269,14 +278,34 @@ export async function getUnlinkedShippingOrigins(): Promise<UnlinkedShippingOrig
 /**
  * Create a new warehouse
  */
-export async function createWarehouse(payload: WarehousePayload) {
+export async function createWarehouse(payload: WarehousePayload): Promise<ActionResult<WarehouseRow>> {
   await verifyAdminSession();
   const supabase = await createClient();
 
-  // Validate: Code format (uppercase, alphanumeric, short)
+  // Validate: Required Fields
+  if (!payload.name || !payload.name.trim()) {
+    return { success: false, code: "REQUIRED_NAME", field: "name", error: "물류창고 이름을 입력해주세요." };
+  }
+  if (!payload.code || !payload.code.trim()) {
+    return { success: false, code: "REQUIRED_CODE", field: "code", error: "물류창고 코드를 입력해주세요." };
+  }
+  if (!payload.address1 || !payload.address1.trim()) {
+    return { success: false, code: "REQUIRED_ADDRESS1", field: "address1", error: "주소 1을 입력해주세요." };
+  }
+  if (!payload.city || !payload.city.trim()) {
+    return { success: false, code: "REQUIRED_CITY", field: "city", error: "도시(City)를 입력해주세요." };
+  }
+  if (!payload.zip_code || !payload.zip_code.trim()) {
+    return { success: false, code: "REQUIRED_POSTAL_CODE", field: "zip_code", error: "우편번호(ZIP / Postal Code)를 입력해주세요." };
+  }
+  if (!payload.country || !payload.country.trim()) {
+    return { success: false, code: "REQUIRED_COUNTRY", field: "country", error: "국가(Country)를 입력해주세요." };
+  }
+
+  // Validate: Code format (uppercase, alphanumeric, 2-10 chars)
   const code = payload.code.trim().toUpperCase();
   if (!/^[A-Z0-9]{2,10}$/.test(code)) {
-    return { success: false, error: "창고 코드는 2~10자리의 영문 대문자 및 숫자만 가능합니다." };
+    return { success: false, code: "INVALID_CODE_FORMAT", field: "code", error: "창고 코드는 2~10자리의 영문 대문자 및 숫자만 가능합니다." };
   }
 
   // Parse companyId (enforce null for own warehouses)
@@ -286,15 +315,15 @@ export async function createWarehouse(payload: WarehousePayload) {
 
   // Validate: 3PL and Partner must have a connected company
   if (payload.type === "3pl" && !companyId) {
-    return { success: false, error: "3PL 물류창고는 연결 회사를 반드시 선택해야 합니다." };
+    return { success: false, code: "REQUIRED_COMPANY", field: "company_id", error: "3PL 물류창고는 연결 회사를 반드시 선택해야 합니다." };
   }
   if (payload.type === "partner" && !companyId) {
-    return { success: false, error: "파트너 창고는 연결할 파트너 회사를 반드시 선택해야 합니다." };
+    return { success: false, code: "REQUIRED_COMPANY", field: "company_id", error: "파트너 창고는 연결 회사를 선택해야 합니다." };
   }
 
   // Validate: Default receiving active check
   if (payload.is_default_receiving && payload.status === "inactive") {
-    return { success: false, error: "비활성 창고는 기본 입고 창고로 설정할 수 없습니다." };
+    return { success: false, code: "INVALID_DEFAULT_STATUS", field: "status", error: "비활성 창고는 기본 입고 창고로 설정할 수 없습니다." };
   }
 
   // Validate: Code duplicate check
@@ -305,7 +334,29 @@ export async function createWarehouse(payload: WarehousePayload) {
     .maybeSingle();
 
   if (codeCheck) {
-    return { success: false, error: `이미 사용 중인 창고 코드입니다: ${code}` };
+    return { success: false, code: "DUPLICATE_CODE", field: "code", error: `이미 사용 중인 창고 코드입니다. 다른 창고 코드를 입력해주세요.` };
+  }
+
+  // Validate: Duplicate check on shipping_origin_id (both physical column and metadata tags)
+  if (payload.shipping_origin_id) {
+    const { data: allWh } = await supabase
+      .from("warehouses")
+      .select("id, code, name, internal_note");
+
+    if (allWh) {
+      for (const w of allWh) {
+        const hasCanonical = (w as any).shipping_origin_id === payload.shipping_origin_id;
+        const hasTag = w.internal_note && w.internal_note.includes(`[ORIGIN_ID:${payload.shipping_origin_id}]`);
+        if (hasCanonical || hasTag) {
+          return {
+            success: false,
+            code: "ORIGIN_ALREADY_LINKED",
+            field: "shipping_origin_id",
+            error: `이 출고지는 이미 다른 물류창고(${w.code} · ${w.name})와 연결되어 있습니다.`
+          };
+        }
+      }
+    }
   }
 
   // If set as default, unset other defaults for the same company (or unset other own warehouses if company_id is null)
@@ -324,24 +375,16 @@ export async function createWarehouse(payload: WarehousePayload) {
 
     if (unsetError) {
       console.error("Error unsetting existing defaults:", unsetError);
-      return { success: false, error: "기존 기본 입고 창고 설정을 변경하지 못했습니다." };
+      return {
+        success: false,
+        code: "DEFAULT_UNSET_FAILED",
+        error: "기존 기본 입고 창고 설정을 변경하지 못했습니다.",
+        details: unsetError.message
+      };
     }
   }
 
-  // Validate: Duplicate check on shipping_origin_id
-  if (payload.shipping_origin_id) {
-    const { data: duplicateOrigin } = await supabase
-      .from("warehouses")
-      .select("id, code, name")
-      .eq("shipping_origin_id", payload.shipping_origin_id)
-      .maybeSingle();
-
-    if (duplicateOrigin) {
-      return { success: false, error: `해당 출고지는 이미 물류창고(${duplicateOrigin.code} · ${duplicateOrigin.name})와 연결되어 있습니다.` };
-    }
-  }
-
-  let insertPayload: any = {
+  const insertPayload: any = {
     name: payload.name.trim(),
     code,
     company_id: companyId,
@@ -351,80 +394,124 @@ export async function createWarehouse(payload: WarehousePayload) {
     address1: payload.address1.trim(),
     address2: payload.address2 ? payload.address2.trim() : null,
     city: payload.city.trim(),
-    state: payload.state.trim(),
+    state: payload.state.trim() || "N/A",
     zip_code: payload.zip_code.trim(),
     country: payload.country.trim(),
     internal_note: payload.internal_note ? payload.internal_note.trim() : null,
     shipping_origin_id: payload.shipping_origin_id || null,
   };
 
-  let { error: insertError } = await supabase
+  let { data: insertedData, error: insertError } = await supabase
     .from("warehouses")
-    .insert(insertPayload);
+    .insert(insertPayload)
+    .select();
 
-  // Resilient fallback for unmigrated database schema constraints
+  // Compound resilient fallback for unmigrated database schema constraints
   if (insertError) {
-    let handled = false;
-    // Fallback 1: company_id NOT NULL constraint
-    if (insertError.message.includes('null value in column "company_id"') && payload.type === "own") {
-      const { data: defaultComp } = await supabase.from("companies").select("id").eq("status", "active").limit(1).maybeSingle();
-      if (defaultComp) {
-        insertPayload.company_id = defaultComp.id;
-        const retry = await supabase.from("warehouses").insert(insertPayload);
-        if (!retry.error) handled = true;
-      }
-    }
+    console.warn("createWarehouse initial insert failed, applying compound adaptations:", insertError);
+    const retryPayload = { ...insertPayload };
+    const noteTags: string[] = [];
 
-    // Fallback 2: type check constraint (partner)
-    if (insertError.message.includes('violates check constraint "warehouses_type_check"') && payload.type === "partner") {
-      insertPayload.type = "3pl";
-      insertPayload.internal_note = (insertPayload.internal_note ? insertPayload.internal_note + "\n" : "") + "[TYPE:partner]";
-      const retry = await supabase.from("warehouses").insert(insertPayload);
-      if (!retry.error) handled = true;
-    }
-
-    // Fallback 3: column shipping_origin_id does not exist
-    if (insertError.message.includes('column "shipping_origin_id" of relation "warehouses" does not exist') || insertError.message.includes('column "shipping_origin_id" does not exist')) {
-      delete insertPayload.shipping_origin_id;
+    // Fallback A: column shipping_origin_id does not exist in schema
+    if (insertError.code === "PGRST204" || insertError.message?.includes("shipping_origin_id")) {
+      delete retryPayload.shipping_origin_id;
       if (payload.shipping_origin_id) {
-        insertPayload.internal_note = (insertPayload.internal_note ? insertPayload.internal_note + "\n" : "") + `[ORIGIN_ID:${payload.shipping_origin_id}]`;
+        noteTags.push(`[ORIGIN_ID:${payload.shipping_origin_id}]`);
       }
-      const retry = await supabase.from("warehouses").insert(insertPayload);
-      if (!retry.error) handled = true;
     }
 
-    if (!handled) {
-      console.error("Error creating warehouse:", insertError);
-      return { success: false, error: "물류창고 등록에 실패했습니다. 입력값을 확인해주세요." };
+    // Fallback B: type check constraint (partner type not in CHECK enum)
+    if (insertError.code === "23514" || insertError.message?.includes("warehouses_type_check") || retryPayload.type === "partner") {
+      retryPayload.type = "3pl";
+      noteTags.push("[TYPE:partner]");
     }
+
+    // Fallback C: company_id NOT NULL constraint for own warehouse
+    if (insertError.message?.includes('null value in column "company_id"') || (retryPayload.type === "own" && !retryPayload.company_id)) {
+      const { data: defaultComp } = await supabase.from("companies").select("id").limit(1).maybeSingle();
+      if (defaultComp) {
+        retryPayload.company_id = defaultComp.id;
+      }
+    }
+
+    if (noteTags.length > 0) {
+      retryPayload.internal_note = (retryPayload.internal_note ? retryPayload.internal_note + "\n" : "") + noteTags.join("\n");
+    }
+
+    const retryRes = await supabase
+      .from("warehouses")
+      .insert(retryPayload)
+      .select();
+
+    if (retryRes.error) {
+      console.error("createWarehouse compound retry failed:", retryRes.error);
+      if (retryRes.error.code === "23505" || retryRes.error.message?.includes("warehouses_code_key")) {
+        return {
+          success: false,
+          code: "DUPLICATE_CODE",
+          field: "code",
+          error: `이미 사용 중인 창고 코드입니다. 다른 창고 코드를 입력해주세요.`
+        };
+      }
+      return {
+        success: false,
+        code: retryRes.error.code || "DB_ERROR",
+        error: "물류창고 설정을 저장할 수 없습니다. 시스템 설정을 확인해주세요.",
+        details: retryRes.error.message
+      };
+    }
+
+    insertedData = retryRes.data;
   }
 
-  // Fetch the created warehouse
-  const { data: createdRecord } = await supabase
-    .from("warehouses")
-    .select("*")
-    .eq("code", code)
-    .maybeSingle();
+  const createdRow = insertedData?.[0] || { code, ...insertPayload };
+  const normalizedRow: WarehouseRow = {
+    ...createdRow,
+    type: payload.type,
+    company_id: payload.type === "own" ? null : createdRow.company_id,
+    shipping_origin_id: payload.shipping_origin_id || null,
+    internal_note: payload.internal_note || null,
+  };
 
   revalidatePath("/admin/settings/warehouses");
   if (companyId) {
     revalidatePath(`/admin/companies/${companyId}`);
   }
   revalidatePath("/portal/company/info");
-  return { success: true, data: createdRecord || { code, ...insertPayload } };
+  return { success: true, data: normalizedRow };
 }
 
 /**
  * Update an existing warehouse
  */
-export async function updateWarehouse(id: string, payload: WarehousePayload) {
+export async function updateWarehouse(id: string, payload: WarehousePayload): Promise<ActionResult<WarehouseRow>> {
   await verifyAdminSession();
   const supabase = await createClient();
 
-  // Validate: Code format (uppercase, alphanumeric, short)
+  // Validate: Required Fields
+  if (!payload.name || !payload.name.trim()) {
+    return { success: false, code: "REQUIRED_NAME", field: "name", error: "물류창고 이름을 입력해주세요." };
+  }
+  if (!payload.code || !payload.code.trim()) {
+    return { success: false, code: "REQUIRED_CODE", field: "code", error: "물류창고 코드를 입력해주세요." };
+  }
+  if (!payload.address1 || !payload.address1.trim()) {
+    return { success: false, code: "REQUIRED_ADDRESS1", field: "address1", error: "주소 1을 입력해주세요." };
+  }
+  if (!payload.city || !payload.city.trim()) {
+    return { success: false, code: "REQUIRED_CITY", field: "city", error: "도시(City)를 입력해주세요." };
+  }
+  if (!payload.zip_code || !payload.zip_code.trim()) {
+    return { success: false, code: "REQUIRED_POSTAL_CODE", field: "zip_code", error: "우편번호(ZIP / Postal Code)를 입력해주세요." };
+  }
+  if (!payload.country || !payload.country.trim()) {
+    return { success: false, code: "REQUIRED_COUNTRY", field: "country", error: "국가(Country)를 입력해주세요." };
+  }
+
+  // Validate: Code format (uppercase, alphanumeric, 2-10 chars)
   const code = payload.code.trim().toUpperCase();
   if (!/^[A-Z0-9]{2,10}$/.test(code)) {
-    return { success: false, error: "창고 코드는 2~10자리의 영문 대문자 및 숫자만 가능합니다." };
+    return { success: false, code: "INVALID_CODE_FORMAT", field: "code", error: "창고 코드는 2~10자리의 영문 대문자 및 숫자만 가능합니다." };
   }
 
   // Parse companyId (enforce null for own warehouses)
@@ -434,20 +521,19 @@ export async function updateWarehouse(id: string, payload: WarehousePayload) {
 
   // Validate: 3PL and Partner must have a connected company
   if (payload.type === "3pl" && !companyId) {
-    return { success: false, error: "3PL 물류창고는 연결 회사를 반드시 선택해야 합니다." };
+    return { success: false, code: "REQUIRED_COMPANY", field: "company_id", error: "3PL 물류창고는 연결 회사를 반드시 선택해야 합니다." };
   }
   if (payload.type === "partner" && !companyId) {
-    return { success: false, error: "파트너 창고는 연결할 파트너 회사를 반드시 선택해야 합니다." };
+    return { success: false, code: "REQUIRED_COMPANY", field: "company_id", error: "파트너 창고는 연결 회사를 선택해야 합니다." };
   }
 
   // Validate: Default receiving active check
   if (payload.is_default_receiving && payload.status === "inactive") {
-    return { success: false, error: "비활성 창고는 기본 입고 창고로 설정할 수 없습니다." };
+    return { success: false, code: "INVALID_DEFAULT_STATUS", field: "status", error: "비활성 창고는 기본 입고 창고로 설정할 수 없습니다." };
   }
 
   // Validate: Default warehouse cannot be inactivated without changing default first
   if (!payload.is_default_receiving && payload.status === "inactive") {
-    // Check if it was previously the default receiving warehouse
     const { data: current } = await supabase
       .from("warehouses")
       .select("is_default_receiving")
@@ -457,6 +543,7 @@ export async function updateWarehouse(id: string, payload: WarehousePayload) {
     if (current?.is_default_receiving) {
       return {
         success: false,
+        code: "CANNOT_INACTIVATE_DEFAULT",
         error: "기본 입고 창고로 지정된 활성 창고는 비활성화할 수 없습니다. 먼저 다른 창고를 기본 입고 창고로 지정하십시오."
       };
     }
@@ -471,20 +558,29 @@ export async function updateWarehouse(id: string, payload: WarehousePayload) {
     .maybeSingle();
 
   if (codeCheck) {
-    return { success: false, error: `이미 사용 중인 창고 코드입니다: ${code}` };
+    return { success: false, code: "DUPLICATE_CODE", field: "code", error: `이미 사용 중인 창고 코드입니다. 다른 창고 코드를 입력해주세요.` };
   }
 
-  // Validate: Duplicate check on shipping_origin_id
+  // Validate: Duplicate check on shipping_origin_id (excluding itself)
   if (payload.shipping_origin_id) {
-    const { data: duplicateOrigin } = await supabase
+    const { data: allWh } = await supabase
       .from("warehouses")
-      .select("id, code, name")
-      .eq("shipping_origin_id", payload.shipping_origin_id)
-      .neq("id", id)
-      .maybeSingle();
+      .select("id, code, name, internal_note")
+      .neq("id", id);
 
-    if (duplicateOrigin) {
-      return { success: false, error: `해당 출고지는 이미 다른 물류창고(${duplicateOrigin.code} · ${duplicateOrigin.name})와 연결되어 있습니다.` };
+    if (allWh) {
+      for (const w of allWh) {
+        const hasCanonical = (w as any).shipping_origin_id === payload.shipping_origin_id;
+        const hasTag = w.internal_note && w.internal_note.includes(`[ORIGIN_ID:${payload.shipping_origin_id}]`);
+        if (hasCanonical || hasTag) {
+          return {
+            success: false,
+            code: "ORIGIN_ALREADY_LINKED",
+            field: "shipping_origin_id",
+            error: `이 출고지는 이미 다른 물류창고(${w.code} · ${w.name})와 연결되어 있습니다.`
+          };
+        }
+      }
     }
   }
 
@@ -505,11 +601,16 @@ export async function updateWarehouse(id: string, payload: WarehousePayload) {
 
     if (unsetError) {
       console.error("Error unsetting existing defaults during update:", unsetError);
-      return { success: false, error: "기존 기본 입고 창고 설정을 변경하지 못했습니다." };
+      return {
+        success: false,
+        code: "DEFAULT_UNSET_FAILED",
+        error: "기존 기본 입고 창고 설정을 변경하지 못했습니다.",
+        details: unsetError.message
+      };
     }
   }
 
-  let updatePayload: any = {
+  const updatePayload: any = {
     name: payload.name.trim(),
     code,
     company_id: companyId,
@@ -519,7 +620,7 @@ export async function updateWarehouse(id: string, payload: WarehousePayload) {
     address1: payload.address1.trim(),
     address2: payload.address2 ? payload.address2.trim() : null,
     city: payload.city.trim(),
-    state: payload.state.trim(),
+    state: payload.state.trim() || "N/A",
     zip_code: payload.zip_code.trim(),
     country: payload.country.trim(),
     internal_note: payload.internal_note ? payload.internal_note.trim() : null,
@@ -530,60 +631,92 @@ export async function updateWarehouse(id: string, payload: WarehousePayload) {
     updatePayload.shipping_origin_id = payload.shipping_origin_id || null;
   }
 
-  let { error: updateError } = await supabase
+  let { data: updatedData, error: updateError } = await supabase
     .from("warehouses")
     .update(updatePayload)
-    .eq("id", id);
+    .eq("id", id)
+    .select();
 
-  // Resilient fallback for unmigrated database schema constraints
+  // Compound resilient fallback for unmigrated database schema constraints
   if (updateError) {
-    let handled = false;
-    // Fallback 1: company_id NOT NULL constraint
-    if (updateError.message.includes('null value in column "company_id"') && payload.type === "own") {
-      const { data: defaultComp } = await supabase.from("companies").select("id").eq("status", "active").limit(1).maybeSingle();
-      if (defaultComp) {
-        updatePayload.company_id = defaultComp.id;
-        const retry = await supabase.from("warehouses").update(updatePayload).eq("id", id);
-        if (!retry.error) handled = true;
-      }
-    }
+    console.warn("updateWarehouse initial update failed, applying compound adaptations:", updateError);
+    const retryPayload = { ...updatePayload };
+    const noteTags: string[] = [];
 
-    // Fallback 2: type check constraint (partner)
-    if (updateError.message.includes('violates check constraint "warehouses_type_check"') && payload.type === "partner") {
-      updatePayload.type = "3pl";
-      updatePayload.internal_note = (updatePayload.internal_note ? updatePayload.internal_note + "\n" : "") + "[TYPE:partner]";
-      const retry = await supabase.from("warehouses").update(updatePayload).eq("id", id);
-      if (!retry.error) handled = true;
-    }
-
-    // Fallback 3: column shipping_origin_id does not exist
-    if (updateError.message.includes('column "shipping_origin_id" of relation "warehouses" does not exist') || updateError.message.includes('column "shipping_origin_id" does not exist')) {
-      delete updatePayload.shipping_origin_id;
+    // Fallback A: column shipping_origin_id does not exist in schema
+    if (updateError.code === "PGRST204" || updateError.message?.includes("shipping_origin_id")) {
+      delete retryPayload.shipping_origin_id;
       if (payload.shipping_origin_id) {
-        updatePayload.internal_note = (updatePayload.internal_note ? updatePayload.internal_note + "\n" : "") + `[ORIGIN_ID:${payload.shipping_origin_id}]`;
+        noteTags.push(`[ORIGIN_ID:${payload.shipping_origin_id}]`);
       }
-      const retry = await supabase.from("warehouses").update(updatePayload).eq("id", id);
-      if (!retry.error) handled = true;
     }
 
-    if (!handled) {
-      console.error("Error updating warehouse:", updateError);
-      return { success: false, error: "물류창고 수정에 실패했습니다. 입력값을 확인해주세요." };
+    // Fallback B: type check constraint
+    if (updateError.code === "23514" || updateError.message?.includes("warehouses_type_check") || retryPayload.type === "partner") {
+      retryPayload.type = "3pl";
+      noteTags.push("[TYPE:partner]");
     }
+
+    // Fallback C: company_id NOT NULL for own warehouse
+    if (updateError.message?.includes('null value in column "company_id"') || (retryPayload.type === "own" && !retryPayload.company_id)) {
+      const { data: defaultComp } = await supabase.from("companies").select("id").limit(1).maybeSingle();
+      if (defaultComp) {
+        retryPayload.company_id = defaultComp.id;
+      }
+    }
+
+    if (noteTags.length > 0) {
+      retryPayload.internal_note = (retryPayload.internal_note ? retryPayload.internal_note + "\n" : "") + noteTags.join("\n");
+    }
+
+    const retryRes = await supabase
+      .from("warehouses")
+      .update(retryPayload)
+      .eq("id", id)
+      .select();
+
+    if (retryRes.error) {
+      console.error("updateWarehouse compound retry failed:", retryRes.error);
+      if (retryRes.error.code === "23505" || retryRes.error.message?.includes("warehouses_code_key")) {
+        return {
+          success: false,
+          code: "DUPLICATE_CODE",
+          field: "code",
+          error: `이미 사용 중인 창고 코드입니다. 다른 창고 코드를 입력해주세요.`
+        };
+      }
+      return {
+        success: false,
+        code: retryRes.error.code || "DB_ERROR",
+        error: "물류창고 설정을 저장할 수 없습니다. 시스템 설정을 확인해주세요.",
+        details: retryRes.error.message
+      };
+    }
+
+    updatedData = retryRes.data;
   }
+
+  const updatedRow = updatedData?.[0] || { id, code, ...updatePayload };
+  const normalizedRow: WarehouseRow = {
+    ...updatedRow,
+    type: payload.type,
+    company_id: payload.type === "own" ? null : updatedRow.company_id,
+    shipping_origin_id: payload.shipping_origin_id || null,
+    internal_note: payload.internal_note || null,
+  };
 
   revalidatePath("/admin/settings/warehouses");
   if (companyId) {
     revalidatePath(`/admin/companies/${companyId}`);
   }
   revalidatePath("/portal/company/info");
-  return { success: true };
+  return { success: true, data: normalizedRow };
 }
 
 /**
  * Delete a warehouse
  */
-export async function deleteWarehouse(id: string) {
+export async function deleteWarehouse(id: string): Promise<ActionResult> {
   await verifyAdminSession();
   const supabase = await createClient();
 
@@ -595,7 +728,7 @@ export async function deleteWarehouse(id: string) {
     .single();
 
   if (current?.is_default_receiving) {
-    return { success: false, error: "기본 입고 창고로 설정된 물류창고는 삭제할 수 없습니다." };
+    return { success: false, code: "CANNOT_DELETE_DEFAULT", error: "기본 입고 창고로 설정된 물류창고는 삭제할 수 없습니다." };
   }
 
   const { error } = await supabase
@@ -605,7 +738,12 @@ export async function deleteWarehouse(id: string) {
 
   if (error) {
     console.error("Error deleting warehouse:", error);
-    return { success: false, error: "물류창고 삭제에 실패했습니다. 다른 데이터에서 참조 중인지 확인하십시오." };
+    return {
+      success: false,
+      code: error.code || "DELETE_FAILED",
+      error: "물류창고 삭제에 실패했습니다. 다른 데이터에서 참조 중인지 확인하십시오.",
+      details: error.message
+    };
   }
 
   revalidatePath("/admin/settings/warehouses");
