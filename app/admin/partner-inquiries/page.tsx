@@ -1,6 +1,11 @@
 import type { Metadata } from "next";
 import { verifyAdminSession } from "@/lib/auth/dal";
-import { getAdminPartnerInquiries, answerPartnerInquiry } from "@/lib/inquiry/actions";
+import {
+  getAdminPartnerInquiries,
+  answerPartnerInquiry,
+  getCompaniesAndUsersForCaseCreation,
+  createAdminPartnerInquiry
+} from "@/lib/inquiry/actions";
 import { AdminPartnerInquiries } from "@/components/admin/admin-partner-inquiries";
 
 export const metadata: Metadata = {
@@ -9,11 +14,20 @@ export const metadata: Metadata = {
 
 export default async function AdminPartnerInquiriesPage() {
   await verifyAdminSession();
-  const inquiries = await getAdminPartnerInquiries();
+  const [inquiries, caseCreationData] = await Promise.all([
+    getAdminPartnerInquiries(),
+    getCompaniesAndUsersForCaseCreation()
+  ]);
 
   return (
     <div className="w-full space-y-6">
-      <AdminPartnerInquiries initialInquiries={inquiries} answerAction={answerPartnerInquiry} />
+      <AdminPartnerInquiries
+        initialInquiries={inquiries}
+        companies={caseCreationData.companies}
+        companyUsers={caseCreationData.companyUsers}
+        answerAction={answerPartnerInquiry}
+        createCaseAction={createAdminPartnerInquiry}
+      />
     </div>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import type { PartnerInquiryItem, CaseStatus, InquiryMessageItem, OfficialCaseStatus } from "@/lib/inquiry/types";
 import {
   getNormalizedStatus,
@@ -10,14 +10,30 @@ import {
 } from "@/lib/inquiry/types";
 import { updateCaseStatus, closeCaseAdmin, answerAndClosePartnerInquiry } from "@/lib/inquiry/actions";
 
+export interface CaseCreationCompany {
+  id: string;
+  name: string;
+}
+
+export interface CaseCreationUser {
+  id: string;
+  company_id: string;
+  name: string;
+  email: string;
+  company_role: string;
+}
+
 interface AdminPartnerInquiriesProps {
   initialInquiries: PartnerInquiryItem[];
+  companies?: CaseCreationCompany[];
+  companyUsers?: CaseCreationUser[];
   answerAction: (
     inquiryId: string,
     replyContent: string,
     isActionRequired: boolean,
     sendEmail: boolean
   ) => Promise<{ success: boolean; error?: string }>;
+  createCaseAction?: (formData: FormData) => Promise<{ success: boolean; error?: string; data?: any }>;
 }
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -37,7 +53,13 @@ const MSG_TYPE_LABEL: Record<string, { icon: string; label: string; style: strin
   satisfaction:    { icon: "⭐", label: "만족도", style: "bg-yellow-50 text-yellow-700 dark:bg-yellow-950/20 dark:text-yellow-300" }
 };
 
-export function AdminPartnerInquiries({ initialInquiries, answerAction }: AdminPartnerInquiriesProps) {
+export function AdminPartnerInquiries({
+  initialInquiries,
+  companies = [],
+  companyUsers = [],
+  answerAction,
+  createCaseAction
+}: AdminPartnerInquiriesProps) {
   const [inquiries, setInquiries] = useState<PartnerInquiryItem[]>(initialInquiries);
   const [selectedInquiry, setSelectedInquiry] = useState<PartnerInquiryItem | null>(null);
 
@@ -61,13 +83,49 @@ export function AdminPartnerInquiries({ initialInquiries, answerAction }: AdminP
   const [showCloseConfirmModal, setShowCloseConfirmModal] = useState(false);
   const [showDirectCloseConfirmModal, setShowDirectCloseConfirmModal] = useState(false);
 
+  // Admin New Case Creation states
+  const [showCreateCaseModal, setShowCreateCaseModal] = useState(false);
+  const [selectedCompanyId, setSelectedCompanyId] = useState<string>(companies[0]?.id || "");
+  const [selectedContactUserId, setSelectedContactUserId] = useState<string>("");
+  const [newCategory, setNewCategory] = useState<string>("product");
+  const [newTitle, setNewTitle] = useState<string>("");
+  const [newContent, setNewContent] = useState<string>("");
+  const [newPriority, setNewPriority] = useState<string>("normal");
+  const [newIsActionRequired, setNewIsActionRequired] = useState<boolean>(false);
+  const [newSendEmail, setNewSendEmail] = useState<boolean>(false);
+  const [newFile, setNewFile] = useState<File | null>(null);
+  const [isCreatingCase, setIsCreatingCase] = useState<boolean>(false);
+  const [createCaseError, setCreateCaseError] = useState<string>("");
+
   // Status update states
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
   const [isClosing, setIsClosing] = useState(false);
 
+  // Company -> Available users filter
+  const availableUsersForCompany = useMemo(() => {
+    if (!selectedCompanyId) return [];
+    return companyUsers.filter((u) => u.company_id === selectedCompanyId);
+  }, [selectedCompanyId, companyUsers]);
+
+  // When selected company changes, auto select contact user
+  useEffect(() => {
+    if (availableUsersForCompany.length > 0) {
+      if (!availableUsersForCompany.some((u) => u.id === selectedContactUserId)) {
+        setSelectedContactUserId(availableUsersForCompany[0].id);
+      }
+    } else {
+      setSelectedContactUserId("");
+    }
+  }, [selectedCompanyId, availableUsersForCompany, selectedContactUserId]);
+
   const formatDate = (dateStr: string) => {
     const d = new Date(dateStr);
     return `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, "0")}.${String(d.getDate()).padStart(2, "0")} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  };
+
+  const formatFileSize = (bytes: number) => {
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
   };
 
   const handleActionRequiredToggle = (checked: boolean) => {
@@ -76,6 +134,61 @@ export function AdminPartnerInquiries({ initialInquiries, answerAction }: AdminP
       setSendEmail(true); // Default to ON when action required is checked
     } else {
       setSendEmail(false); // Auto turn OFF when action required is unchecked
+    }
+  };
+
+  const handleNewActionRequiredToggle = (checked: boolean) => {
+    setNewIsActionRequired(checked);
+    if (checked) {
+      setNewSendEmail(true); // Auto-check email when action required is checked
+    } else {
+      setNewSendEmail(false); // Auto-uncheck email when action required is unchecked
+    }
+  };
+
+  const handleCreateCaseSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setCreateCaseError("");
+
+    if (!selectedCompanyId) { setCreateCaseError("회사를 선택해주세요."); return; }
+    if (!selectedContactUserId) { setCreateCaseError("담당자를 선택해주세요."); return; }
+    if (!newTitle.trim()) { setCreateCaseError("제목을 입력해주세요."); return; }
+    if (!newContent.trim()) { setCreateCaseError("내용을 입력해주세요."); return; }
+
+    setIsCreatingCase(true);
+    const fd = new FormData();
+    fd.append("company_id", selectedCompanyId);
+    fd.append("contact_user_id", selectedContactUserId);
+    fd.append("category", newCategory);
+    fd.append("title", newTitle.trim());
+    fd.append("content", newContent.trim());
+    fd.append("priority", newPriority);
+    fd.append("is_action_required", newIsActionRequired ? "true" : "false");
+    fd.append("send_email", newSendEmail ? "true" : "false");
+    if (newFile) {
+      fd.append("file", newFile);
+    }
+
+    try {
+      if (!createCaseAction) {
+        throw new Error("케이스 생성 액션이 설정되지 않았습니다.");
+      }
+      const res = await createCaseAction(fd);
+      if (res.success) {
+        setShowCreateCaseModal(false);
+        setNewTitle("");
+        setNewContent("");
+        setNewFile(null);
+        setNewIsActionRequired(false);
+        setNewSendEmail(false);
+        window.location.reload();
+      } else {
+        setCreateCaseError(res.error || "케이스 생성에 실패했습니다.");
+      }
+    } catch (err) {
+      setCreateCaseError(err instanceof Error ? err.message : "서버 오류가 발생했습니다.");
+    } finally {
+      setIsCreatingCase(false);
     }
   };
 
@@ -208,16 +321,38 @@ export function AdminPartnerInquiries({ initialInquiries, answerAction }: AdminP
           <div>
             <h2 className="text-sm font-bold text-zinc-900 dark:text-white">케이스 관리</h2>
             <p className="text-[10px] text-zinc-400 dark:text-zinc-500 mt-0.5">
-              파트너사 1:1 케이스 접수 및 처리 현황입니다.
+              파트너사 1:1 케이스 접수 및 어드민 케이스 생성/처리 현황입니다.
             </p>
           </div>
-          <div className="flex items-center gap-2">
-            <span className="text-[10px] font-semibold text-zinc-400">전체 {inquiries.length}건</span>
-            {inquiries.filter((i) => getNormalizedStatus(i.status) !== "CLOSED").length > 0 && (
-              <span className="text-[10px] font-bold text-rose-600 dark:text-rose-400">
-                🔴 처리필요 {inquiries.filter((i) => getNormalizedStatus(i.status) !== "CLOSED").length}건
-              </span>
-            )}
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-semibold text-zinc-400">전체 {inquiries.length}건</span>
+              {inquiries.filter((i) => getNormalizedStatus(i.status) !== "CLOSED").length > 0 && (
+                <span className="text-[10px] font-bold text-rose-600 dark:text-rose-400">
+                  🔴 처리필요 {inquiries.filter((i) => getNormalizedStatus(i.status) !== "CLOSED").length}건
+                </span>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setShowCreateCaseModal(true);
+                if (companies.length > 0 && !selectedCompanyId) {
+                  setSelectedCompanyId(companies[0].id);
+                }
+                setNewCategory("product");
+                setNewTitle("");
+                setNewContent("");
+                setNewPriority("normal");
+                setNewIsActionRequired(false);
+                setNewSendEmail(false);
+                setNewFile(null);
+                setCreateCaseError("");
+              }}
+              className="rounded-lg bg-zinc-950 px-3.5 py-2 text-xs font-bold text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-100 transition-colors shadow-sm cursor-pointer"
+            >
+              + 새 케이스
+            </button>
           </div>
         </div>
       </div>
@@ -383,14 +518,38 @@ export function AdminPartnerInquiries({ initialInquiries, answerAction }: AdminP
                       </span>
                     </div>
                     <h3 className="text-sm font-bold text-zinc-900 dark:text-white leading-snug">{selectedInquiry.title}</h3>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1 pt-1 text-[11px] text-zinc-600 dark:text-zinc-400">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1.5 pt-1 text-[11px] text-zinc-600 dark:text-zinc-400">
                       <div className="flex items-center gap-1.5">
                         <span className="font-semibold text-zinc-400 dark:text-zinc-500 shrink-0">회사명:</span>
                         <span className="font-bold text-zinc-800 dark:text-zinc-200 truncate">{selectedInquiry.companyName}</span>
                       </div>
                       <div className="flex items-center gap-1.5">
+                        <span className="font-semibold text-zinc-400 dark:text-zinc-500 shrink-0">생성 출처:</span>
+                        {selectedInquiry.created_source === "admin" ? (
+                          <span className="rounded bg-indigo-50 border border-indigo-200 dark:bg-indigo-950/40 dark:border-indigo-800 px-1.5 py-0.2 text-[9px] font-bold text-indigo-700 dark:text-indigo-300">
+                            어드민 생성 (Admin)
+                          </span>
+                        ) : (
+                          <span className="rounded bg-zinc-100 dark:bg-zinc-800 px-1.5 py-0.2 text-[9px] font-medium text-zinc-600 dark:text-zinc-400">
+                            파트너 포털 (Portal)
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1.5">
                         <span className="font-semibold text-zinc-400 dark:text-zinc-500 shrink-0">접수일:</span>
                         <span>{formatDate(selectedInquiry.created_at)}</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-semibold text-zinc-400 dark:text-zinc-500 shrink-0">우선순위:</span>
+                        <span className={`font-bold text-[10px] ${
+                          selectedInquiry.priority === "urgent"
+                            ? "text-rose-600"
+                            : selectedInquiry.priority === "high"
+                            ? "text-amber-600"
+                            : "text-zinc-600 dark:text-zinc-400"
+                        }`}>
+                          {selectedInquiry.priority === "urgent" ? "🚨 긴급 (Urgent)" : selectedInquiry.priority === "high" ? "⚡ 높음 (High)" : "일반 (Normal)"}
+                        </span>
                       </div>
                       <div className="flex items-center gap-1.5">
                         <span className="font-semibold text-zinc-400 dark:text-zinc-500 shrink-0">접수 담당자:</span>
@@ -553,10 +712,13 @@ export function AdminPartnerInquiries({ initialInquiries, answerAction }: AdminP
                     <div className="flex items-start gap-2.5 text-xs text-zinc-600 dark:text-zinc-300">
                       <span className="text-xs">📥</span>
                       <div className="space-y-0.5">
-                        <p className="font-bold text-zinc-900 dark:text-white">케이스 접수</p>
+                        <p className="font-bold text-zinc-900 dark:text-white">
+                          {selectedInquiry.created_source === "admin" ? "어드민 케이스 생성" : "케이스 접수"}
+                        </p>
                         <p className="text-[10px] text-zinc-400">
                           {formatDate(selectedInquiry.created_at)} · {selectedInquiry.companyName}
-                          {selectedInquiry.requesterName ? ` (${selectedInquiry.requesterName}${selectedInquiry.requesterEmail ? ` · ${selectedInquiry.requesterEmail}` : ""})` : ""}이 케이스를 접수함
+                          {selectedInquiry.requesterName ? ` (${selectedInquiry.requesterName}${selectedInquiry.requesterEmail ? ` · ${selectedInquiry.requesterEmail}` : ""})` : ""}
+                          {selectedInquiry.created_source === "admin" ? " 앞으로 어드민이 케이스를 생성함" : "이 케이스를 접수함"}
                         </p>
                       </div>
                     </div>
@@ -680,9 +842,9 @@ export function AdminPartnerInquiries({ initialInquiries, answerAction }: AdminP
                           type="button"
                           onClick={() => setShowDirectCloseConfirmModal(true)}
                           disabled={isClosing}
-                          className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-1.5 text-[10px] font-bold text-zinc-600 hover:bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400 transition-all cursor-pointer disabled:opacity-50"
+                          className="rounded-lg border border-zinc-200 bg-zinc-50 px-3.5 py-2 text-xs font-bold text-zinc-700 hover:bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300 transition-all cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
                         >
-                          {isClosing ? "종료 중..." : "🔒 케이스 종료 (답변 없이)"}
+                          <span>🔒 케이스 종료</span>
                         </button>
                       </div>
                     </div>
@@ -732,6 +894,234 @@ export function AdminPartnerInquiries({ initialInquiries, answerAction }: AdminP
         </div>
       </div>
 
+      {/* Admin New Case Creation Modal */}
+      {showCreateCaseModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="w-full max-w-lg rounded-2xl border border-zinc-200 bg-white p-6 shadow-2xl dark:border-zinc-800 dark:bg-zinc-900 space-y-4 my-8">
+            <div className="flex justify-between items-start">
+              <div>
+                <h3 className="text-sm font-bold text-zinc-900 dark:text-white flex items-center gap-1.5">
+                  <span>+ 새 케이스 등록</span>
+                  <span className="text-[10px] text-zinc-400 font-normal">(Admin Case Creation)</span>
+                </h3>
+                <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5">
+                  파트너/브랜드사 담당자 앞으로 직접 케이스를 생성합니다.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowCreateCaseModal(false)}
+                className="text-xs text-zinc-400 hover:text-zinc-700 dark:hover:text-white cursor-pointer"
+              >
+                닫기
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateCaseSubmit} className="space-y-3 text-xs">
+              {createCaseError && (
+                <div className="p-3 rounded-lg border border-red-200 bg-red-50 text-xs font-semibold text-red-800 dark:border-red-900/50 dark:bg-red-950/15 dark:text-red-400">
+                  {createCaseError}
+                </div>
+              )}
+
+              {/* 1. Company selection */}
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-bold text-zinc-700 dark:text-zinc-300 flex items-center gap-1">
+                  <span>회사 (Company)</span> <span className="text-rose-500">*</span>
+                </label>
+                <select
+                  value={selectedCompanyId}
+                  onChange={(e) => setSelectedCompanyId(e.target.value)}
+                  className="w-full rounded-lg border border-zinc-200 bg-zinc-50/50 px-3 py-2 text-xs outline-none dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:border-zinc-950 dark:focus:border-white transition-colors cursor-pointer"
+                >
+                  {companies.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* 2. Contact User selection */}
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-bold text-zinc-700 dark:text-zinc-300 flex items-center gap-1">
+                  <span>담당자 (Contact Person)</span> <span className="text-rose-500">*</span>
+                </label>
+                {availableUsersForCompany.length > 0 ? (
+                  <select
+                    value={selectedContactUserId}
+                    onChange={(e) => setSelectedContactUserId(e.target.value)}
+                    className="w-full rounded-lg border border-zinc-200 bg-zinc-50/50 px-3 py-2 text-xs outline-none dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:border-zinc-950 dark:focus:border-white transition-colors cursor-pointer"
+                  >
+                    {availableUsersForCompany.map((u) => (
+                      <option key={u.id} value={u.id}>
+                        {u.name} ({u.email}) {u.company_role === "company_admin" ? "— 관리자" : ""}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <div className="p-2.5 rounded-lg border border-amber-200 bg-amber-50 text-[11px] text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-300">
+                    선택한 회사에 등록된 활성 사용자가 없습니다.
+                  </div>
+                )}
+              </div>
+
+              {/* 3. Case Type (Category) & Priority */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <label className="text-[11px] font-bold text-zinc-700 dark:text-zinc-300 flex items-center gap-1">
+                    <span>케이스 유형</span> <span className="text-rose-500">*</span>
+                  </label>
+                  <select
+                    value={newCategory}
+                    onChange={(e) => setNewCategory(e.target.value)}
+                    className="w-full rounded-lg border border-zinc-200 bg-zinc-50/50 px-3 py-2 text-xs outline-none dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:border-zinc-950 dark:focus:border-white transition-colors cursor-pointer"
+                  >
+                    {Object.entries(CATEGORY_LABELS).map(([k, v]) => (
+                      <option key={k} value={k}>{v}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-[11px] font-bold text-zinc-700 dark:text-zinc-300">
+                    우선순위 (Priority)
+                  </label>
+                  <select
+                    value={newPriority}
+                    onChange={(e) => setNewPriority(e.target.value)}
+                    className="w-full rounded-lg border border-zinc-200 bg-zinc-50/50 px-3 py-2 text-xs outline-none dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:border-zinc-950 dark:focus:border-white transition-colors cursor-pointer"
+                  >
+                    <option value="normal">일반 (Normal)</option>
+                    <option value="high">⚡ 높음 (High)</option>
+                    <option value="urgent">🚨 긴급 (Urgent)</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* 4. Title */}
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-bold text-zinc-700 dark:text-zinc-300 flex items-center gap-1">
+                  <span>제목 (Title)</span> <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={newTitle}
+                  onChange={(e) => setNewTitle(e.target.value)}
+                  placeholder="케이스 제목을 입력하세요."
+                  className="w-full rounded-lg border border-zinc-200 bg-zinc-50/50 px-3 py-2 text-xs outline-none dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:border-zinc-950 dark:focus:border-white transition-colors"
+                />
+              </div>
+
+              {/* 5. Content */}
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-bold text-zinc-700 dark:text-zinc-300 flex items-center gap-1">
+                  <span>내용 (Content)</span> <span className="text-rose-500">*</span>
+                </label>
+                <textarea
+                  rows={4}
+                  value={newContent}
+                  onChange={(e) => setNewContent(e.target.value)}
+                  placeholder="파트너사에게 전달할 상세 내용을 입력하세요."
+                  className="w-full rounded-lg border border-zinc-200 bg-zinc-50/50 p-2.5 text-xs outline-none dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:border-zinc-950 dark:focus:border-white transition-colors leading-relaxed resize-none"
+                />
+              </div>
+
+              {/* 6. Action Required & Email Controls */}
+              <div className="space-y-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50/70 dark:bg-zinc-950/40 p-3">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="newIsActionRequired"
+                    checked={newIsActionRequired}
+                    onChange={(e) => handleNewActionRequiredToggle(e.target.checked)}
+                    className="rounded border-zinc-300 text-rose-600 focus:ring-rose-500 h-4 w-4 cursor-pointer"
+                  />
+                  <label htmlFor="newIsActionRequired" className="text-xs font-bold text-rose-700 dark:text-rose-400 cursor-pointer select-none">
+                    ⚠️ 조치 필요 (파트너사 확인 및 조치 요구 상태로 생성)
+                  </label>
+                </div>
+
+                <div className="flex items-center gap-2 pl-6 pt-1.5 border-t border-zinc-200/60 dark:border-zinc-800/60">
+                  <input
+                    type="checkbox"
+                    id="newSendEmail"
+                    checked={newSendEmail}
+                    onChange={(e) => setNewSendEmail(e.target.checked)}
+                    className="rounded border-zinc-300 text-blue-600 focus:ring-blue-500 h-3.5 w-3.5 cursor-pointer"
+                  />
+                  <label htmlFor="newSendEmail" className="text-[11px] font-semibold text-zinc-700 dark:text-zinc-300 cursor-pointer select-none flex items-center gap-1.5">
+                    <span>✉️ 담당자에게 이메일 알림 발송</span>
+                    {selectedContactUserId && availableUsersForCompany.find((u) => u.id === selectedContactUserId)?.email && (
+                      <span className="text-[10px] text-zinc-400 font-mono">
+                        ({availableUsersForCompany.find((u) => u.id === selectedContactUserId)?.email})
+                      </span>
+                    )}
+                  </label>
+                </div>
+              </div>
+
+              {/* 7. Attachment */}
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-bold text-zinc-700 dark:text-zinc-300">첨부파일 (최대 20MB, 선택)</label>
+                {!newFile ? (
+                  <input
+                    type="file"
+                    accept="image/*,application/pdf"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) {
+                        if (f.size > 20 * 1024 * 1024) {
+                          alert("첨부파일은 최대 20MB까지 업로드할 수 있습니다.");
+                          e.target.value = "";
+                          setNewFile(null);
+                          return;
+                        }
+                        setNewFile(f);
+                      }
+                    }}
+                    className="block w-full text-[10px] text-zinc-500 file:mr-3 file:py-1 file:px-2 file:rounded file:border-0 file:text-[10px] file:font-semibold file:bg-zinc-100 file:text-zinc-700 dark:file:bg-zinc-800 dark:file:text-zinc-300 hover:file:bg-zinc-200 dark:hover:file:bg-zinc-700 cursor-pointer"
+                  />
+                ) : (
+                  <div className="flex items-center justify-between rounded-lg border border-zinc-200 bg-zinc-50 p-2 dark:border-zinc-800 dark:bg-zinc-950 text-xs">
+                    <div className="flex items-center gap-2 truncate">
+                      <span>📎</span>
+                      <span className="font-semibold text-zinc-800 dark:text-zinc-200 truncate">{newFile.name}</span>
+                      <span className="text-[10px] text-zinc-400 font-mono">({formatFileSize(newFile.size)})</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setNewFile(null)}
+                      className="rounded px-2 py-1 text-[10px] font-bold text-rose-600 hover:bg-rose-50 dark:text-rose-400 cursor-pointer shrink-0"
+                    >
+                      [삭제]
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Actions */}
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowCreateCaseModal(false)}
+                  className="flex-1 rounded-lg border border-zinc-200 py-2.5 text-xs font-semibold text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+                >
+                  취소 (Cancel)
+                </button>
+                <button
+                  type="submit"
+                  disabled={isCreatingCase || !selectedContactUserId}
+                  className="flex-1 rounded-lg bg-zinc-950 dark:bg-white py-2.5 text-xs font-bold text-white dark:text-zinc-950 hover:bg-zinc-800 dark:hover:bg-zinc-100 disabled:opacity-50 transition-colors cursor-pointer"
+                >
+                  {isCreatingCase ? "생성 중..." : "케이스 생성하기"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* Reply & Close Confirm Modal */}
       {showCloseConfirmModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
@@ -776,8 +1166,8 @@ export function AdminPartnerInquiries({ initialInquiries, answerAction }: AdminP
             <div>
               <h3 className="text-sm font-bold text-zinc-900 dark:text-white">케이스 종료</h3>
               <p className="text-[11px] text-zinc-600 dark:text-zinc-400 mt-1 leading-relaxed">
-                이 케이스를 종료하시겠습니까?<br />
-                <span className="text-[10px] text-zinc-400">Are you sure you want to close this case?</span>
+                답변 없이 이 케이스를 종료하시겠습니까?<br />
+                <span className="text-[10px] text-zinc-400">Close this case without sending a reply? The conversation and case log will be preserved.</span>
               </p>
             </div>
 
@@ -795,7 +1185,7 @@ export function AdminPartnerInquiries({ initialInquiries, answerAction }: AdminP
                 disabled={isClosing}
                 className="flex-1 rounded-lg bg-zinc-950 dark:bg-white py-2.5 text-xs font-bold text-white dark:text-zinc-950 hover:bg-zinc-800 dark:hover:bg-zinc-100 disabled:opacity-50 transition-colors cursor-pointer"
               >
-                {isClosing ? "처리 중..." : "🔒 케이스 종료하기"}
+                {isClosing ? "종료 중..." : "🔒 케이스 종료"}
               </button>
             </div>
           </div>

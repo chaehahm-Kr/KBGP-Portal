@@ -100,16 +100,19 @@ async function getMessagesForInquiry(
 
     // Seed initial inquiry message if not already in thread
     const hasInitial = (dbMessages || []).some(
-      (m: any) => m.content === item.content && m.sender_type === "partner"
+      (m: any) => m.content === item.content && m.sender_type === (item.created_source === "admin" ? "admin" : "partner")
     );
     if (!hasInitial) {
+      const isCreatedByAdmin = item.created_source === "admin";
       result.push({
         id: "initial-" + item.id,
-        senderType: "partner",
-        senderName: defaultSenderName,
+        senderType: isCreatedByAdmin ? "admin" : "partner",
+        senderName: isPortal
+          ? (isCreatedByAdmin ? "K SELECT NETWORK 담당자" : defaultSenderName)
+          : (isCreatedByAdmin ? (repliedStaffName || "어드민 담당자") : defaultSenderName),
         content: item.content,
         messageType: "message",
-        isActionFlag: false,
+        isActionFlag: !!item.is_action_required,
         attachmentUrl: item.attachment_url || null,
         attachmentFilename: item.attachment_filename || null,
         createdAt: item.created_at
@@ -142,8 +145,8 @@ async function getMessagesForInquiry(
     return [
       {
         id: "initial-" + item.id,
-        senderType: "partner",
-        senderName: defaultSenderName,
+        senderType: item.created_source === "admin" ? "admin" : "partner",
+        senderName: isPortal && item.created_source === "admin" ? "K SELECT NETWORK 담당자" : defaultSenderName,
         content: item.content,
         messageType: "message",
         isActionFlag: false,
@@ -213,18 +216,33 @@ export async function createPartnerInquiry(formData: FormData) {
       attachment_path: attachmentPath,
       attachment_filename: attachmentFilename,
       status: "open",
-      is_action_required: false
+      is_action_required: false,
+      created_source: "portal",
+      priority: "normal"
     };
 
     if (previousCaseId) {
       insertPayload.previous_case_id = previousCaseId;
     }
 
-    const { data: newInquiry, error } = await supabase
+    let { data: newInquiry, error } = await supabase
       .from("partner_inquiries")
       .insert(insertPayload)
       .select()
       .single();
+
+    if (error && (error.message?.includes("created_source") || error.message?.includes("priority") || error.code === "42703")) {
+      const fallbackPayload = { ...insertPayload };
+      delete fallbackPayload.created_source;
+      delete fallbackPayload.priority;
+      const retryRes = await supabase
+        .from("partner_inquiries")
+        .insert(fallbackPayload)
+        .select()
+        .single();
+      newInquiry = retryRes.data;
+      error = retryRes.error;
+    }
 
     if (error) {
       console.error("Failed to create partner inquiry:", error);
@@ -232,9 +250,10 @@ export async function createPartnerInquiry(formData: FormData) {
         return { success: false, error: "문의 지원 서비스를 준비 중입니다. 관리자에게 문의해 주세요." };
       }
       if (error.message?.includes("previous_case_id") || error.code === "42703") {
-        // Fallback retry without previous_case_id if column is temporary unreachable
         const fallbackPayload = { ...insertPayload };
         delete fallbackPayload.previous_case_id;
+        delete fallbackPayload.created_source;
+        delete fallbackPayload.priority;
         const { data: fallbackInquiry, error: fallbackErr } = await supabase
           .from("partner_inquiries")
           .insert(fallbackPayload)
@@ -271,6 +290,271 @@ export async function createPartnerInquiry(formData: FormData) {
   } catch (e) {
     console.error("Failed to create partner inquiry:", e);
     return { success: false, error: e instanceof Error ? e.message : "문의 등록 실패" };
+  }
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// getCompaniesAndUsersForCaseCreation (Admin Case Creation Support)
+// ────────────────────────────────────────────────────────────────────────────
+
+export interface CaseCreationCompany {
+  id: string;
+  name: string;
+}
+
+export interface CaseCreationUser {
+  id: string;
+  company_id: string;
+  name: string;
+  email: string;
+  company_role: string;
+}
+
+/**
+ * 어드민 새 케이스 생성 모달을 위한 회사 및 소속 담당자 목록 조회
+ */
+export async function getCompaniesAndUsersForCaseCreation(): Promise<{
+  companies: CaseCreationCompany[];
+  companyUsers: CaseCreationUser[];
+}> {
+  try {
+    await verifyAdminSession();
+    const adminSupabase = createAdminClient();
+
+    const [{ data: companies, error: compErr }, { data: companyUsers, error: userErr }] = await Promise.all([
+      adminSupabase
+        .from("companies")
+        .select("id, name, status")
+        .eq("status", "active")
+        .order("name", { ascending: true }),
+      adminSupabase
+        .from("company_users")
+        .select("id, company_id, name, email, company_role, status")
+        .eq("status", "active")
+        .order("name", { ascending: true })
+    ]);
+
+    if (compErr) console.error("Failed to fetch companies for case creation:", compErr);
+    if (userErr) console.error("Failed to fetch company users for case creation:", userErr);
+
+    return {
+      companies: (companies || []).map((c: any) => ({ id: c.id, name: c.name })),
+      companyUsers: (companyUsers || []).map((u: any) => ({
+        id: u.id,
+        company_id: u.company_id,
+        name: u.name || "담당자",
+        email: u.email || "",
+        company_role: u.company_role || "member"
+      }))
+    };
+  } catch (e) {
+    console.error("Failed in getCompaniesAndUsersForCaseCreation:", e);
+    return { companies: [], companyUsers: [] };
+  }
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// createAdminPartnerInquiry (Admin에서 새 케이스 직접 생성)
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * 어드민에서 특정 파트너/브랜드사 담당자 앞으로 새 케이스를 직접 등록합니다.
+ */
+export async function createAdminPartnerInquiry(formData: FormData) {
+  try {
+    const session = await verifyAdminSession();
+    const adminSupabase = createAdminClient();
+
+    const companyId = String(formData.get("company_id") || "").trim();
+    const contactUserId = String(formData.get("contact_user_id") || "").trim();
+    const category = String(formData.get("category") || "general").trim();
+    const title = String(formData.get("title") || "").trim();
+    const content = String(formData.get("content") || "").trim();
+    const priority = String(formData.get("priority") || "normal").trim();
+    const isActionRequired = formData.get("is_action_required") === "true" || formData.get("is_action_required") === "on";
+    const sendEmailFlag = formData.get("send_email") === "true" || formData.get("send_email") === "on";
+    const file = formData.get("file");
+
+    if (!companyId) return { success: false, error: "회사를 선택해주세요." };
+    if (!contactUserId) return { success: false, error: "담당자를 선택해주세요." };
+    if (!title) return { success: false, error: "제목을 입력해주세요." };
+    if (!content) return { success: false, error: "내용을 입력해주세요." };
+
+    let attachmentPath = null;
+    let attachmentFilename = null;
+
+    if (file instanceof File && file.size > 0) {
+      if (file.size > 20 * 1024 * 1024) {
+        return { success: false, error: "첨부파일은 최대 20MB까지 업로드할 수 있습니다." };
+      }
+
+      const validation = await validateUploadedFile(file, ["image", "document"]);
+      if (!validation.ok) {
+        return { success: false, error: validation.error };
+      }
+
+      const path = `${companyId}/inquiries/${crypto.randomUUID()}.${extensionFor(validation.detectedMime)}`;
+      const { error: uploadError } = await adminSupabase.storage
+        .from("company-uploads")
+        .upload(path, file, { contentType: validation.detectedMime });
+
+      if (uploadError) {
+        console.error("Failed to upload admin inquiry attachment:", uploadError);
+        return { success: false, error: "첨부파일 업로드에 실패했습니다." };
+      }
+
+      attachmentPath = path;
+      attachmentFilename = file.name;
+    }
+
+    // Admin created case status: default 'in_review' (검토중), or 'action_required' (조치필요) if is_action_required is true
+    const initialStatus: CaseStatus = isActionRequired ? "action_required" : "in_review";
+
+    const insertPayload: any = {
+      company_id: companyId,
+      created_by: contactUserId,
+      category,
+      title,
+      content,
+      attachment_path: attachmentPath,
+      attachment_filename: attachmentFilename,
+      status: initialStatus,
+      is_action_required: isActionRequired,
+      created_source: "admin",
+      priority: priority || "normal"
+    };
+
+    let { data: newInquiry, error: insertError } = await adminSupabase
+      .from("partner_inquiries")
+      .insert(insertPayload)
+      .select()
+      .single();
+
+    if (insertError && (insertError.message?.includes("created_source") || insertError.message?.includes("priority") || insertError.code === "42703")) {
+      const fallbackPayload = { ...insertPayload };
+      delete fallbackPayload.created_source;
+      delete fallbackPayload.priority;
+      const retryRes = await adminSupabase
+        .from("partner_inquiries")
+        .insert(fallbackPayload)
+        .select()
+        .single();
+      newInquiry = retryRes.data;
+      insertError = retryRes.error;
+    }
+
+    if (insertError || !newInquiry) {
+      console.error("Failed to create admin partner inquiry:", insertError);
+      return { success: false, error: "케이스를 등록하지 못했습니다. 다시 시도해 주세요." };
+    }
+
+    // Get staff name and contact user details for logging & email
+    const [{ data: staffDoc }, { data: contactUser }] = await Promise.all([
+      adminSupabase.from("staff_members").select("name, email").eq("id", session.userId).maybeSingle(),
+      adminSupabase.from("company_users").select("name, email").eq("id", contactUserId).maybeSingle()
+    ]);
+
+    const staffName = staffDoc?.name || "어드민 담당자";
+    const contactName = contactUser?.name || "담당자";
+    const contactEmail = contactUser?.email || "";
+
+    // 1. Initial Human Message in Conversation Thread
+    await adminSupabase.from("partner_inquiry_messages").insert({
+      inquiry_id: newInquiry.id,
+      sender_type: "admin",
+      sender_id: session.userId,
+      sender_name: staffName,
+      content: content,
+      attachment_path: attachmentPath,
+      attachment_filename: attachmentFilename,
+      message_type: "message",
+      is_action_flag: isActionRequired
+    });
+
+    // 2. Case Log Event: Admin Case Created & Contact Assigned
+    await adminSupabase.from("partner_inquiry_messages").insert({
+      inquiry_id: newInquiry.id,
+      sender_type: "admin",
+      sender_id: session.userId,
+      sender_name: staffName,
+      content: `어드민이 케이스를 생성하고 [${contactName}]을(를) 담당자로 지정함 (상태: ${isActionRequired ? "조치필요" : "검토중"})`,
+      message_type: "status_change",
+      is_action_flag: isActionRequired
+    });
+
+    // 3. Case Log Event: If Action Required
+    if (isActionRequired) {
+      await adminSupabase.from("partner_inquiry_messages").insert({
+        inquiry_id: newInquiry.id,
+        sender_type: "admin",
+        sender_id: session.userId,
+        sender_name: staffName,
+        content: "어드민 조치 요청 (상태 전이: 조치필요)",
+        message_type: "action_required",
+        is_action_flag: true
+      });
+    }
+
+    // 4. Case Log Event & Send Email if checked
+    if (sendEmailFlag && contactEmail) {
+      try {
+        const caseLabel = newInquiry.case_number ? `#${newInquiry.case_number}` : title;
+        const portalUrl = `${publicEnv.NEXT_PUBLIC_SITE_URL || "https://portal.kselectnetwork.com"}/portal/support?case=${newInquiry.case_number || newInquiry.id}`;
+        const emailSubject = isActionRequired
+          ? `[K SELECT NETWORK] 케이스 ${caseLabel} 조치 요청 안내`
+          : `[K SELECT NETWORK] 신규 케이스 ${caseLabel} 등록 안내`;
+
+        await sendEmail({
+          to: contactEmail,
+          subject: emailSubject,
+          text: `안녕하세요 ${contactName}님,\n\nK SELECT NETWORK에서 귀사에 신규 케이스(${caseLabel} - ${title})를 등록하였습니다.\n\n[내용]\n${content}\n\n포털에 접속하여 상세 내용 확인 및 지원을 진행해 주시기 바랍니다.\n접속 주소: ${portalUrl}\n\n감사합니다.\nK SELECT NETWORK 팀`,
+          html: `
+            <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #18181b; max-width: 600px; margin: 0 auto; padding: 20px;">
+              <h2 style="color: #18181b; font-size: 18px; margin-bottom: 16px;">[K SELECT NETWORK] ${isActionRequired ? "케이스 조치 요청" : "신규 케이스 등록"}</h2>
+              <p style="font-size: 14px; margin-bottom: 12px;">안녕하세요 ${contactName}님,</p>
+              <p style="font-size: 14px; margin-bottom: 16px;">K SELECT NETWORK 운영팀에서 신규 케이스(<strong>${caseLabel}</strong>: ${title})를 등록하였습니다.</p>
+              
+              <div style="background-color: ${isActionRequired ? "#fff1f2" : "#f4f4f5"}; border-left: 4px solid ${isActionRequired ? "#e11d48" : "#18181b"}; padding: 14px 16px; margin: 20px 0; border-radius: 6px;">
+                <p style="margin: 0 0 6px 0; font-size: 13px; font-weight: bold; color: ${isActionRequired ? "#be123c" : "#18181b"};">${isActionRequired ? "⚠️ 조치 요청 내용" : "📋 케이스 내용"}</p>
+                <p style="margin: 0; font-size: 13px; color: #374151; white-space: pre-wrap; line-height: 1.5;">${content}</p>
+              </div>
+
+              <div style="margin: 24px 0;">
+                <a href="${portalUrl}" style="display: inline-block; background-color: #18181b; color: #ffffff; padding: 10px 20px; font-size: 14px; font-weight: bold; text-decoration: none; border-radius: 6px;">
+                  포털에서 케이스 확인하기 →
+                </a>
+              </div>
+
+              <p style="font-size: 12px; color: #71717a; border-top: 1px solid #e4e4e7; padding-top: 16px; margin-top: 24px;">
+                본 메일은 K SELECT NETWORK 파트너 포털 케이스 알림 메일입니다.
+              </p>
+            </div>
+          `
+        });
+
+        await adminSupabase.from("partner_inquiry_messages").insert({
+          inquiry_id: newInquiry.id,
+          sender_type: "admin",
+          sender_id: session.userId,
+          sender_name: staffName,
+          content: `이메일 알림 발송 완료: ${contactEmail}`,
+          message_type: "status_change",
+          is_action_flag: false
+        });
+      } catch (emailErr) {
+        console.error("Failed to send case email:", emailErr);
+      }
+    }
+
+    revalidatePath("/admin/partner-inquiries");
+    revalidatePath("/portal/support");
+    revalidatePath("/admin", "layout");
+    revalidatePath("/portal", "layout");
+
+    return { success: true, data: newInquiry };
+  } catch (e) {
+    console.error("Failed to create admin partner inquiry:", e);
+    return { success: false, error: e instanceof Error ? e.message : "케이스 등록 실패" };
   }
 }
 
@@ -325,12 +609,15 @@ export async function getPartnerInquiries(): Promise<PartnerInquiryItem[]> {
         );
 
         const prevInfo = item.previous_case_id ? inquiryMap.get(item.previous_case_id) : null;
+        const isCreatedByAdmin = item.created_source === "admin" || (messages && messages.length > 0 && messages[0].senderType === "admin");
 
         return {
           ...item,
           status: normalizeStatus(item.status) as CaseStatus,
           attachment_url: attachmentUrl,
           repliedStaffName,
+          created_source: isCreatedByAdmin ? "admin" : "portal",
+          priority: item.priority || "normal",
           previous_case_id: item.previous_case_id || null,
           previous_case_number: item.previous_case_number || prevInfo?.case_number || null,
           previous_case_title: item.previous_case_title || prevInfo?.title || null,
@@ -420,6 +707,7 @@ export async function getAdminPartnerInquiries(): Promise<PartnerInquiryItem[]> 
 
         const prevInfo = item.previous_case_id ? inquiryMap.get(item.previous_case_id) : null;
         const requester = item.created_by ? userMap.get(item.created_by) : null;
+        const isCreatedByAdmin = item.created_source === "admin" || (messages && messages.length > 0 && messages[0].senderType === "admin");
 
         return {
           id: item.id,
@@ -440,6 +728,8 @@ export async function getAdminPartnerInquiries(): Promise<PartnerInquiryItem[]> 
           closed_at: item.closed_at,
           closed_by: item.closed_by,
           closed_by_side: item.closed_by_side || null,
+          created_source: isCreatedByAdmin ? "admin" : "portal",
+          priority: item.priority || "normal",
           previous_case_id: item.previous_case_id || null,
           previous_case_number: item.previous_case_number || prevInfo?.case_number || null,
           previous_case_title: item.previous_case_title || prevInfo?.title || null,
@@ -1289,13 +1579,20 @@ export async function closeCaseAdmin(inquiryId: string) {
       };
     }
 
+    const { data: staffDoc } = await adminSupabase
+      .from("staff_members")
+      .select("name")
+      .eq("id", session.userId)
+      .maybeSingle();
+    const actorName = staffDoc?.name || "어드민 담당자";
+
     if (!isAlreadyClosed) {
       await adminSupabase.from("partner_inquiry_messages").insert({
         inquiry_id: inquiryId,
         sender_type: "admin",
         sender_id: session.userId,
-        sender_name: "어드민 담당자",
-        content: "어드민 담당자가 답변 없이 케이스를 종료했습니다.",
+        sender_name: actorName,
+        content: `어드민 담당자(${actorName})가 답변 없이 케이스를 종료했습니다.`,
         message_type: "case_closed",
         is_action_flag: false
       });
@@ -1303,6 +1600,8 @@ export async function closeCaseAdmin(inquiryId: string) {
 
     revalidatePath("/admin/partner-inquiries");
     revalidatePath("/portal/support");
+    revalidatePath("/admin", "layout");
+    revalidatePath("/portal", "layout");
     return { success: true };
   } catch (e) {
     console.error("Failed to close case (admin):", e);
