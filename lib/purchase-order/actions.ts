@@ -467,7 +467,7 @@ export async function getSuppliersForPo() {
   // Fetch active companies
   const { data: companies, error: cErr } = await supabase
     .from("companies")
-    .select("id, name, country, contact_name, contact_phone, status")
+    .select("id, name, country, contact_name, contact_phone, status, company_code")
     .eq("status", "active")
     .order("name", { ascending: true });
 
@@ -493,6 +493,7 @@ export async function getSuppliersForPo() {
     return {
       id: c.id,
       name: c.name || "(이름 없음)",
+      company_code: c.company_code || "",
       address: c.country || "",
       default_currency: p?.default_currency || "USD",
       default_payment_terms: p?.default_payment_terms || "",
@@ -853,9 +854,10 @@ export async function generateNextPoNumber(
     throw new Error("공급사 회사 정보를 찾을 수 없습니다.");
   }
 
-  const rawCode = (company.company_code || "").trim();
+  let rawCode = (company.company_code || "").trim();
   if (!rawCode) {
-    throw new Error(`공급사 '${company.name}'의 회사 코드(company_code)가 설정되어 있지 않습니다. [회사 관리] 메뉴에서 회사 코드를 등록 후 다시 시도해 주세요.`);
+    const derived = (company.name || "").replace(/[^a-zA-Z0-9]/g, "").slice(0, 3).toUpperCase();
+    rawCode = derived || "SUP";
   }
 
   const companyCode = rawCode.toUpperCase();
