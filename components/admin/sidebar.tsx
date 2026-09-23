@@ -216,7 +216,8 @@ export default function Sidebar({
       name: "Purchasing",
       icon: PurchasingIcon,
       subItems: [
-        { name: "Purchase Orders", href: "/admin/purchasing" },
+        { name: "Order Dashboard", href: "/admin/purchasing/dashboard" },
+        { name: "Purchase Orders", href: "/admin/purchasing/orders" },
       ],
     },
     {

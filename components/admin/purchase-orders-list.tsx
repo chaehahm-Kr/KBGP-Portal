@@ -3,6 +3,7 @@
 import React, { useState, useMemo } from "react";
 import Link from "next/link";
 import Image from "next/image";
+import { useSearchParams } from "next/navigation";
 import { getEasternTodayString } from "@/lib/utils/timezone";
 
 export interface PurchaseOrderLineItem {
@@ -118,15 +119,22 @@ export function PurchaseOrdersList({
   suppliers,
 }: PurchaseOrdersListProps) {
   const today = getEasternTodayString();
+  const searchParams = useSearchParams();
+
+  const urlSupplier = searchParams ? searchParams.get("supplierId") : null;
+  const urlSearch = searchParams ? searchParams.get("search") : null;
+  const urlOrderStatus = searchParams ? searchParams.get("orderStatus") : null;
 
   // View mode switcher: 'po' (PO별 보기) vs 'product' (제품별 보기)
   const [viewMode, setViewMode] = useState<"po" | "product">("po");
 
   // Shared Filters
-  const [searchTerm, setSearchTerm] = useState("");
-  const [selectedSupplierId, setSelectedSupplierId] = useState("all");
+  const [searchTerm, setSearchTerm] = useState(urlSearch || "");
+  const [selectedSupplierId, setSelectedSupplierId] = useState(urlSupplier || "all");
   const [selectedPoStatuses, setSelectedPoStatuses] = useState<string[]>([]);
-  const [selectedOrderStatuses, setSelectedOrderStatuses] = useState<string[]>([]);
+  const [selectedOrderStatuses, setSelectedOrderStatuses] = useState<string[]>(
+    urlOrderStatus ? [urlOrderStatus] : []
+  );
   const [selectedWarehouseId, setSelectedWarehouseId] = useState("all");
 
   // Toggle multi-select PO status
@@ -177,7 +185,16 @@ export function PurchaseOrdersList({
 
       // 3. Order Status filter (multi-select: if empty, match all)
       const matchesOrderStatus =
-        selectedOrderStatuses.length === 0 || selectedOrderStatuses.includes(po.fulfillment_status);
+        selectedOrderStatuses.length === 0 ||
+        selectedOrderStatuses.includes(po.fulfillment_status) ||
+        selectedOrderStatuses.some((st) => {
+          if (st === 'Pending') return po.fulfillment_status === 'PENDING' || po.po_status === 'DRAFT' || po.po_status === 'APPROVED';
+          if (st === 'In Production') return po.fulfillment_status === 'IN_PRODUCTION';
+          if (st === 'Ready to Ship') return po.fulfillment_status === 'READY_TO_SHIP';
+          if (st === 'Shipped') return po.fulfillment_status === 'SHIPPED';
+          if (st === 'Received') return po.fulfillment_status === 'RECEIVED';
+          return false;
+        });
 
       // 4. Warehouse filter
       const matchesWarehouse =
