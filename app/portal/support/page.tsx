@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import type { Metadata } from "next";
 import { getPartnerInquiries, createPartnerInquiry } from "@/lib/inquiry/actions";
 import { PortalSupportView } from "@/components/support/portal-support-view";
@@ -11,7 +12,9 @@ export default async function PortalSupportPage() {
 
   return (
     <div className="w-full max-w-7xl">
-      <PortalSupportView initialInquiries={inquiries} createAction={createPartnerInquiry} />
+      <Suspense fallback={null}>
+        <PortalSupportView initialInquiries={inquiries} createAction={createPartnerInquiry} />
+      </Suspense>
     </div>
   );
 }

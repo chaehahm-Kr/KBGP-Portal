@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import type { PartnerInquiryItem, CaseStatus, InquiryMessageItem, OfficialCaseStatus } from "@/lib/inquiry/types";
 import {
   getNormalizedStatus,
@@ -38,9 +39,29 @@ const MSG_TYPE_META: Record<string, { icon: string; style: string }> = {
 };
 
 export function PortalSupportView({ initialInquiries, createAction }: PortalSupportViewProps) {
+  const searchParams = useSearchParams();
+  const caseParam = searchParams.get("case") || searchParams.get("id");
+
   const [inquiries, setInquiries] = useState<PartnerInquiryItem[]>(initialInquiries);
   const [isWriteOpen, setIsWriteOpen] = useState(false);
   const [selectedInquiry, setSelectedInquiry] = useState<PartnerInquiryItem | null>(null);
+
+  // Auto-select case if query param ?case=... is provided
+  useEffect(() => {
+    if (caseParam && inquiries.length > 0) {
+      const paramLower = caseParam.trim().toLowerCase();
+      const matched = inquiries.find(
+        (i) =>
+          i.case_number?.toLowerCase() === paramLower ||
+          i.id.toLowerCase() === paramLower
+      );
+      if (matched) {
+        setSelectedInquiry(matched);
+        setIsWriteOpen(false);
+        setActiveTab("conversation");
+      }
+    }
+  }, [caseParam, inquiries]);
 
   // Detail View Tab: 'conversation' vs 'caselog'
   const [activeTab, setActiveTab] = useState<"conversation" | "caselog">("conversation");

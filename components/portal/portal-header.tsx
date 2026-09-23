@@ -167,68 +167,91 @@ export default function PortalHeader({
 
         {/* Notifications Popover */}
         <div className="relative">
-          <button
-            onClick={() => setIsNotificationsOpen(!isNotificationsOpen)}
-            className="relative flex h-8 w-8 items-center justify-center rounded-md border border-zinc-200 text-zinc-500 hover:bg-zinc-50 hover:text-zinc-900 dark:border-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-900 dark:hover:text-white"
-          >
-            <BellIcon size={16} />
-            {notifications.some(n => !n.is_read) && (
-              <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-rose-500 ring-2 ring-white dark:ring-zinc-950 animate-pulse" />
-            )}
-          </button>
+          {(() => {
+            const unreadCount = notifications.filter(n => !n.is_read).length;
+            return (
+              <>
+                <button
+                  onClick={() => setIsNotificationsOpen(!isNotificationsOpen)}
+                  className="relative flex h-8 w-8 items-center justify-center rounded-md border border-zinc-200 text-zinc-500 hover:bg-zinc-50 hover:text-zinc-900 dark:border-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-900 dark:hover:text-white cursor-pointer"
+                  title="알림 센터"
+                  aria-label="알림 센터"
+                >
+                  <BellIcon size={16} />
+                  {unreadCount > 0 && (
+                    <span className="absolute -top-1.5 -right-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-bold text-white ring-2 ring-white dark:ring-zinc-950 animate-pulse">
+                      {unreadCount > 9 ? "9+" : unreadCount}
+                    </span>
+                  )}
+                </button>
 
-          {isNotificationsOpen && (
-            <div className="absolute right-0 mt-2 w-80 rounded-lg border border-zinc-200 bg-white p-3 shadow-lg dark:border-zinc-800 dark:bg-zinc-950 z-50">
-              <div className="flex items-center justify-between border-b border-zinc-100 pb-2 mb-2 dark:border-zinc-900">
-                <span className="text-xs font-extrabold text-zinc-900 dark:text-white">
-                  알림 센터
-                </span>
-                {notifications.some(n => !n.is_read) && (
-                  <button
-                    onClick={handleMarkAllRead}
-                    className="text-[10px] font-bold text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white"
-                  >
-                    모두 읽음
-                  </button>
-                )}
-              </div>
-              
-              <div className="max-h-72 overflow-y-auto space-y-1 scrollbar-thin">
-                {notifications.length > 0 ? (
-                  notifications.map((n) => (
-                    <button
-                      key={n.id}
-                      onClick={() => handleNotificationClick(n)}
-                      className={`w-full text-left p-2.5 rounded-lg text-xs transition-colors flex gap-2.5 items-start ${
-                        n.is_read
-                          ? "hover:bg-zinc-50 dark:hover:bg-zinc-900 text-zinc-650 dark:text-zinc-400"
-                          : "bg-indigo-50/40 hover:bg-indigo-50/70 border-l-2 border-indigo-500 pl-2 dark:bg-indigo-950/10 dark:hover:bg-indigo-950/20 text-zinc-900 dark:text-white"
-                      }`}
-                    >
-                      <div className="flex-1 min-w-0">
-                        <p className={`font-bold truncate ${!n.is_read ? "text-indigo-600 dark:text-indigo-400" : ""}`}>
-                          {n.title}
-                        </p>
-                        <p className="text-zinc-500 dark:text-zinc-400 mt-0.5 line-clamp-2 leading-relaxed">
-                          {n.content}
-                        </p>
-                        <span className="text-[9px] text-zinc-400 dark:text-zinc-500 mt-1.5 block font-medium">
-                          {formatRelativeTime(n.created_at)}
+                {isNotificationsOpen && (
+                  <div className="absolute right-0 mt-2 w-84 rounded-xl border border-zinc-200 bg-white p-3 shadow-xl dark:border-zinc-800 dark:bg-zinc-950 z-50">
+                    <div className="flex items-center justify-between border-b border-zinc-100 pb-2.5 mb-2 dark:border-zinc-900">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-xs font-extrabold text-zinc-900 dark:text-white">
+                          알림 센터
                         </span>
+                        {unreadCount > 0 && (
+                          <span className="rounded-full bg-rose-100 px-1.5 py-0.2 text-[9px] font-bold text-rose-600 dark:bg-rose-950/40 dark:text-rose-400">
+                            {unreadCount}
+                          </span>
+                        )}
                       </div>
-                      {!n.is_read && (
-                        <span className="h-1.5 w-1.5 rounded-full bg-indigo-500 self-center shrink-0" />
+                      {unreadCount > 0 && (
+                        <button
+                          onClick={handleMarkAllRead}
+                          className="text-[10px] font-bold text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white cursor-pointer"
+                        >
+                          모두 읽음
+                        </button>
                       )}
-                    </button>
-                  ))
-                ) : (
-                  <div className="text-xs text-zinc-400 dark:text-zinc-500 text-center py-6">
-                    새로운 알림이 없습니다.
+                    </div>
+                    
+                    <div className="max-h-80 overflow-y-auto space-y-1.5 scrollbar-thin">
+                      {notifications.length > 0 ? (
+                        notifications.map((n) => (
+                          <button
+                            key={n.id}
+                            onClick={() => handleNotificationClick(n)}
+                            className={`w-full text-left p-2.5 rounded-lg text-xs transition-colors flex gap-2 items-start cursor-pointer ${
+                              n.is_read
+                                ? "hover:bg-zinc-50 dark:hover:bg-zinc-900 text-zinc-600 dark:text-zinc-400 bg-white dark:bg-zinc-950"
+                                : "bg-rose-50/50 hover:bg-rose-50/80 border-l-2 border-rose-500 pl-2 dark:bg-rose-950/20 dark:hover:bg-rose-950/30 text-zinc-900 dark:text-white"
+                            }`}
+                          >
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center justify-between gap-1 mb-1">
+                                <span className="rounded bg-rose-100 dark:bg-rose-900/40 px-1.5 py-0.2 text-[9px] font-extrabold text-rose-600 dark:text-rose-400">
+                                  ⚠️ 조치 필요
+                                </span>
+                                <span className="text-[9px] text-zinc-400 dark:text-zinc-500 font-mono">
+                                  {formatRelativeTime(n.created_at)}
+                                </span>
+                              </div>
+                              <p className={`font-bold truncate text-xs ${!n.is_read ? "text-zinc-900 dark:text-white" : "text-zinc-700 dark:text-zinc-300"}`}>
+                                {n.title}
+                              </p>
+                              <p className="text-zinc-500 dark:text-zinc-400 mt-0.5 text-[11px] line-clamp-2 leading-relaxed">
+                                {n.content}
+                              </p>
+                            </div>
+                            {!n.is_read && (
+                              <span className="h-1.5 w-1.5 rounded-full bg-rose-500 self-center shrink-0" />
+                            )}
+                          </button>
+                        ))
+                      ) : (
+                        <div className="text-xs text-zinc-400 dark:text-zinc-500 text-center py-6">
+                          새로운 알림이 없습니다.
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )}
-              </div>
-            </div>
-          )}
+              </>
+            );
+          })()}
         </div>
 
         {/* Profile Dropdown */}
