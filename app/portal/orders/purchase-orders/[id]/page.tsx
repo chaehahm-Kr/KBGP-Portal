@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { getPortalPurchaseOrderById, getPortalPoChangeRequests } from "@/lib/portal/actions";
 import { getCompanyShippingOrigins } from "@/lib/company/shipping-origin-actions";
+import { getPoDocuments } from "@/lib/purchase-order/document-actions";
 import PoDetailClient from "@/components/portal/po-detail-client";
 import { requireCompanyMembership } from "@/lib/company/dal";
 import { createClient } from "@/lib/supabase/server";
@@ -33,6 +34,9 @@ export default async function PortalPoDetailPage({ params }: PortalPoDetailPageP
 
   // Fetch shipping origins
   const shippingOrigins = await getCompanyShippingOrigins(companyId);
+
+  // Fetch documents
+  const documents = await getPoDocuments(id);
 
   // Fetch shipments scoping by PO ID
   const { data: dbShipments } = await supabase
@@ -91,6 +95,7 @@ export default async function PortalPoDetailPage({ params }: PortalPoDetailPageP
       shipments={shipments}
       receivings={receivings}
       goodsReadiness={goodsReadiness}
+      documents={documents}
       warehouses={warehouses}
       shippingOrigins={shippingOrigins}
     />

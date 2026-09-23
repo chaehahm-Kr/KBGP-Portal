@@ -18,6 +18,13 @@ import {
   OVERALL_STATUS_COLORS,
 } from "@/lib/purchase-order/status-helper";
 import { PoUnifiedStepper } from "@/components/shared/po-unified-stepper";
+import {
+  PoDocument,
+  PoDocumentType,
+  PO_DOCUMENT_TYPE_LABELS,
+  PO_DOCUMENT_TYPE_BADGES,
+  } from "@/lib/purchase-order/document-types";
+import { uploadPoDocument } from "@/lib/purchase-order/document-actions";
 
 interface PoLine {
   id: string;
@@ -95,6 +102,7 @@ interface PoDetailClientProps {
   goodsReadiness?: any[];
   warehouses?: any[];
   shippingOrigins?: any[];
+  documents?: PoDocument[];
 }
 
 export default function PoDetailClient({
@@ -105,6 +113,7 @@ export default function PoDetailClient({
   goodsReadiness = [],
   warehouses = [],
   shippingOrigins = [],
+  documents = [],
 }: PoDetailClientProps) {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState("overview");
@@ -214,6 +223,44 @@ export default function PoDetailClient({
     product?: any;
   }>>([]);
 
+  const [editingReadinessId, setEditingReadinessId] = useState<string | null>(null);
+
+  // Document Upload Modal state
+  const [showDocUploadModal, setShowDocUploadModal] = useState(false);
+  const [uploadDocType, setUploadDocType] = useState<PoDocumentType>("PACKING_LIST");
+  const [uploadRelatedType, setUploadRelatedType] = useState<"PO" | "GOODS_READY" | "SHIPMENT">("PO");
+  const [uploadRelatedId, setUploadRelatedId] = useState<string>("");
+  const [uploadNote, setUploadNote] = useState<string>("");
+  const [selectedDocFile, setSelectedDocFile] = useState<File | null>(null);
+  const [isUploadingDoc, setIsUploadingDoc] = useState(false);
+
+  // Helper: check if readiness record is linked to an active shipment
+  const isLinkedToActiveShipment = (gr: any) => {
+    const grLineIds = (gr.lines || []).map((l: any) => l.id);
+    return (shipments || []).some((shp: any) => {
+      if (shp.status === "CANCELLED") return false;
+      return (shp.lines || []).some((sl: any) => grLineIds.includes(sl.goods_readiness_line_id));
+    });
+  };
+
+  const totalTargetQty = useMemo(() => {
+    return po.lines.reduce((sum, l) => sum + (l.confirmed_qty ?? l.qty), 0);
+  }, [po.lines]);
+
+  const totalReadyCommitted = useMemo(() => {
+    return (goodsReadiness || []).reduce((sum, gr) => {
+      if (gr.handover_status === "CANCELLED") return sum;
+      const lines = gr.lines || [];
+      return sum + lines.reduce((lSum: number, l: any) => lSum + Number(l.ready_qty || 0), 0);
+    }, 0);
+  }, [goodsReadiness]);
+
+  const unlinkedReadiness = useMemo(() => {
+    return (goodsReadiness || []).find((gr) => gr.handover_status !== "CANCELLED" && !isLinkedToActiveShipment(gr));
+  }, [goodsReadiness, shipments]);
+
+  const remainingTargetQty = Math.max(0, totalTargetQty - totalReadyCommitted);
+
   // Direct Shipment submission for Supplier Arranged shipping
   const [showSupplierShipmentForm, setShowSupplierShipmentForm] = useState<string | null>(null);
   const [carrier, setCarrier] = useState("");
@@ -272,37 +319,140 @@ export default function PoDetailClient({
     };
   };
 
-  // Initialize goods readiness form lines
-  const initGoodsReadinessForm = () => {
-    // Check default origin
-    const defaultOrigin = shippingOrigins.find((o) => o.is_default) || shippingOrigins[0];
-    if (defaultOrigin) {
-      setSelectedOriginId(defaultOrigin.id);
-      setPickupLocation(defaultOrigin.name || "");
-      setWarehouseFactoryAddress([defaultOrigin.address_line1, defaultOrigin.address_line2, defaultOrigin.city, defaultOrigin.country].filter(Boolean).join(", "));
-      setContactName(defaultOrigin.contact_name || "");
-      setContactEmail(defaultOrigin.email || "");
-      setContactPhone(defaultOrigin.phone || "");
+  // Initialize goods readiness form lines (Edit vs Create / Additional)
+  const initGoodsReadinessForm = (targetGr?: any) => {
+    const gr = targetGr || unlinkedReadiness;
+    if (gr) {
+      // EDIT MODE
+      setEditingReadinessId(gr.id);
+      setGoodsReadyDate(gr.goods_ready_date || "");
+      setPickupLocation(gr.pickup_location || "");
+      setHandoverLocation(gr.handover_location || "");
+      setFobPort(gr.fob_port || "");
+      setWarehouseFactoryAddress(gr.warehouse_factory_address || "");
+      setContactPerson(gr.contact_person || "");
+      const parts = (gr.contact_person || "").split(" / ");
+      setContactName(parts[0] || "");
+      setContactEmail(parts[1] || "");
+      setContactPhone(parts[2] || "");
+      setSpecialInstructions(gr.special_instructions || "");
+      setPackingListPath(gr.packing_list_path || "");
+      setPackingListFilename(gr.packing_list_filename || "");
+      setCommercialInvoicePath(gr.commercial_invoice_path || "");
+      setCommercialInvoiceFilename(gr.commercial_invoice_filename || "");
+
+      const items = po.lines.map((l) => {
+        const existingLine = (gr.lines || []).find((gl: any) => gl.purchase_order_line_id === l.id);
+        const readyQty = existingLine ? existingLine.ready_qty : (l.confirmed_qty ?? l.qty);
+        const cartons = existingLine && existingLine.cartons !== undefined ? existingLine.cartons : calcPackaging(readyQty, l.product).cartons;
+        const grossWeight = existingLine && existingLine.gross_weight !== undefined ? Number(existingLine.gross_weight) : calcPackaging(readyQty, l.product).gross_weight;
+        const cbm = existingLine && existingLine.cbm !== undefined ? Number(existingLine.cbm) : calcPackaging(readyQty, l.product).cbm;
+
+        return {
+          purchase_order_line_id: l.id,
+          product_id: l.product.id,
+          product_name: l.product.name,
+          letusto_sku: l.product.letusto_sku,
+          qty: l.qty,
+          ready_qty: readyQty,
+          cartons,
+          gross_weight: grossWeight,
+          cbm,
+          product: l.product,
+        };
+      });
+      setReadyLines(items);
+    } else {
+      // CREATE MODE (New or Additional)
+      setEditingReadinessId(null);
+      setGoodsReadyDate(po.expected_ready_date || new Date().toISOString().split("T")[0]);
+      
+      const defaultOrigin = shippingOrigins.find((o) => o.is_default) || shippingOrigins[0];
+      if (defaultOrigin) {
+        setSelectedOriginId(defaultOrigin.id);
+        setPickupLocation(defaultOrigin.name || "");
+        setWarehouseFactoryAddress([defaultOrigin.address_line1, defaultOrigin.address_line2, defaultOrigin.city, defaultOrigin.country].filter(Boolean).join(", "));
+        setContactName(defaultOrigin.contact_name || "");
+        setContactEmail(defaultOrigin.email || "");
+        setContactPhone(defaultOrigin.phone || "");
+        setContactPerson([defaultOrigin.contact_name, defaultOrigin.email, defaultOrigin.phone].filter(Boolean).join(" / "));
+      } else {
+        setPickupLocation("");
+        setWarehouseFactoryAddress("");
+        setContactName("");
+        setContactEmail("");
+        setContactPhone("");
+        setContactPerson("");
+      }
+      setHandoverLocation("공장 상차 / CY 전달");
+      setFobPort(po.port_of_loading || "Busan Port");
+      setSpecialInstructions("");
+      setPackingListPath("");
+      setPackingListFilename("");
+      setCommercialInvoicePath("");
+      setCommercialInvoiceFilename("");
+
+      // Calculate remaining allowable qty per line
+      const items = po.lines.map((l) => {
+        const targetQty = l.confirmed_qty ?? l.qty;
+        const otherActiveSum = (goodsReadiness || []).reduce((sum, otherGr) => {
+          if (otherGr.handover_status === "CANCELLED") return sum;
+          const line = (otherGr.lines || []).find((gl: any) => gl.purchase_order_line_id === l.id);
+          return sum + Number(line?.ready_qty || 0);
+        }, 0);
+
+        const remainingAvailable = Math.max(0, targetQty - otherActiveSum);
+        const pack = calcPackaging(remainingAvailable, l.product);
+
+        return {
+          purchase_order_line_id: l.id,
+          product_id: l.product.id,
+          product_name: l.product.name,
+          letusto_sku: l.product.letusto_sku,
+          qty: l.qty,
+          ready_qty: remainingAvailable,
+          cartons: pack.cartons,
+          gross_weight: pack.gross_weight,
+          cbm: pack.cbm,
+          product: l.product,
+        };
+      });
+      setReadyLines(items);
     }
 
-    const items = po.lines.map((l) => {
-      const readyQty = l.confirmed_qty ?? l.qty;
-      const pack = calcPackaging(readyQty, l.product);
-      return {
-        purchase_order_line_id: l.id,
-        product_id: l.product.id,
-        product_name: l.product.name,
-        letusto_sku: l.product.letusto_sku,
-        qty: l.qty,
-        ready_qty: readyQty,
-        cartons: pack.cartons,
-        gross_weight: pack.gross_weight,
-        cbm: pack.cbm,
-        product: l.product,
-      };
-    });
-    setReadyLines(items);
     setShowGoodsReadyForm(true);
+  };
+
+  // Handle direct document upload
+  const handleDocumentUploadSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedDocFile) {
+      alert("업로드할 파일을 선택해주세요.");
+      return;
+    }
+    setIsUploadingDoc(true);
+    setGeneralError(null);
+    setGeneralSuccess(null);
+    try {
+      const formData = new FormData();
+      formData.append("poId", po.id);
+      formData.append("documentType", uploadDocType);
+      formData.append("relatedType", uploadRelatedType);
+      if (uploadRelatedId) formData.append("relatedId", uploadRelatedId);
+      if (uploadNote) formData.append("note", uploadNote);
+      formData.append("file", selectedDocFile);
+
+      await uploadPoDocument(formData);
+      setGeneralSuccess("증빙 서류가 성공적으로 업로드되었습니다.");
+      setShowDocUploadModal(false);
+      setSelectedDocFile(null);
+      setUploadNote("");
+      router.refresh();
+    } catch (err: any) {
+      setGeneralError(err.message || "서류 업로드 실패");
+    } finally {
+      setIsUploadingDoc(false);
+    }
   };
 
   // Confirm PO with per-line Confirmed Quantities
@@ -461,7 +611,8 @@ export default function PoDetailClient({
     const fullContact = contactPerson.trim() || [contactName, contactEmail, contactPhone].filter(Boolean).join(" / ");
 
     try {
-      await submitPortalGoodsReady({
+      const res = await submitPortalGoodsReady({
+        id: editingReadinessId || undefined,
         purchaseOrderId: po.id,
         goodsReadyDate,
         pickupLocation,
@@ -485,7 +636,11 @@ export default function PoDetailClient({
         })),
       });
 
-      setGeneralSuccess("출고 준비(Goods Readiness) 정보 제출이 완료되었습니다.");
+      setGeneralSuccess(
+        res.isUpdate
+          ? "출고 준비(Goods Readiness) 정보 수정이 성공적으로 완료되었습니다."
+          : "출고 준비(Goods Readiness) 등록이 완료되었습니다."
+      );
       setShowGoodsReadyForm(false);
       router.refresh();
     } catch (err: any) {
@@ -1107,14 +1262,41 @@ export default function PoDetailClient({
         {activeTab === "shipment" && (
           <div className="space-y-6 text-xs">
             <div className="flex justify-between items-center">
-              <h3 className="text-sm font-bold text-zinc-800 dark:text-white">출고 및 선적 관리</h3>
+              <div>
+                <h3 className="text-sm font-bold text-zinc-800 dark:text-white">출고 및 선적 관리</h3>
+                <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5">
+                  총 발주 확정 수량: <strong>{totalTargetQty.toLocaleString()}</strong> PCS | 등록된 출고 준비 수량: <strong className="text-indigo-600">{totalReadyCommitted.toLocaleString()}</strong> PCS {remainingTargetQty > 0 ? `| 잔여 수량: ${remainingTargetQty.toLocaleString()} PCS` : ''}
+                </p>
+              </div>
               {po.po_status === "SENT" && po.supplier_confirmation_status === "CONFIRMED" && !showGoodsReadyForm && (
-                <button
-                  onClick={initGoodsReadinessForm}
-                  className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg transition-colors cursor-pointer"
-                >
-                  + 출고 준비 등록 (Create Goods Readiness)
-                </button>
+                <div>
+                  {unlinkedReadiness ? (
+                    <button
+                      onClick={() => initGoodsReadinessForm(unlinkedReadiness)}
+                      className="px-3.5 py-2 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-lg transition-colors cursor-pointer flex items-center gap-1.5 shadow-sm"
+                    >
+                      ✏️ 출고 준비 정보 수정 (Edit Goods Readiness)
+                    </button>
+                  ) : totalReadyCommitted === 0 ? (
+                    <button
+                      onClick={() => initGoodsReadinessForm()}
+                      className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg transition-colors cursor-pointer shadow-sm"
+                    >
+                      + 출고 준비 등록 (Create Goods Readiness)
+                    </button>
+                  ) : remainingTargetQty > 0 ? (
+                    <button
+                      onClick={() => initGoodsReadinessForm()}
+                      className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg transition-colors cursor-pointer shadow-sm"
+                    >
+                      + 추가 출고 준비 등록 (Create Additional Goods Ready)
+                    </button>
+                  ) : (
+                    <span className="px-3 py-1.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg text-xs font-bold dark:bg-emerald-950/20 dark:text-emerald-400">
+                      ✓ 전량 출고 준비 완료 ({totalReadyCommitted.toLocaleString()} PCS)
+                    </span>
+                  )}
+                </div>
               )}
             </div>
 
@@ -1122,7 +1304,16 @@ export default function PoDetailClient({
             {showGoodsReadyForm && (
               <form onSubmit={handleSubmitGoodsReady} className="rounded-xl border border-zinc-300 bg-zinc-50 p-5 dark:border-zinc-800 dark:bg-zinc-900/50 space-y-4">
                 <div className="flex justify-between items-center border-b border-zinc-200 pb-2 dark:border-zinc-800">
-                  <h4 className="font-bold text-zinc-900 dark:text-white text-xs">📥 출고 예정 정보 (Goods Ready Details)</h4>
+                  <div className="flex items-center gap-2">
+                    <h4 className="font-bold text-zinc-900 dark:text-white text-xs">
+                      {editingReadinessId ? "✏️ 출고 준비 정보 수정 (Edit Goods Readiness)" : "📥 출고 준비 정보 등록 (Create Goods Readiness)"}
+                    </h4>
+                    {editingReadinessId && (
+                      <span className="px-2 py-0.5 bg-amber-100 text-amber-800 border border-amber-300 rounded text-[10px] font-bold dark:bg-amber-950/40 dark:text-amber-300">
+                        기존 레코드 수정 모드 (기존 수량 대체)
+                      </span>
+                    )}
+                  </div>
                   <button
                     type="button"
                     onClick={() => setShowGoodsReadyForm(false)}
@@ -1358,13 +1549,38 @@ export default function PoDetailClient({
             )}
 
             {/* List goods readiness with supplier arranged direct shipping forms */}
-            {goodsReadiness.map((gr) => (
+            {goodsReadiness.map((gr) => {
+              const isLocked = isLinkedToActiveShipment(gr);
+              const grLines = gr.lines || [];
+              const totalLinesQty = grLines.reduce((s: number, l: any) => s + Number(l.ready_qty || 0), 0);
+              const totalCartons = grLines.reduce((s: number, l: any) => s + Number(l.cartons || 0), 0);
+              const totalWeight = grLines.reduce((s: number, l: any) => s + Number(l.gross_weight || 0), 0);
+              const totalCbm = grLines.reduce((s: number, l: any) => s + Number(l.cbm || 0), 0);
+
+              return (
               <div key={gr.id} className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 space-y-4">
                 <div className="flex justify-between items-center border-b border-zinc-150 pb-3 dark:border-zinc-850">
-                  <div>
-                    <span className="font-bold text-zinc-800 dark:text-zinc-250">출고 준비 이력 (Ready Date: {gr.goods_ready_date})</span>
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-zinc-800 dark:text-zinc-250">출고 준비 내역 (Ready Date: {gr.goods_ready_date})</span>
+                    {isLocked ? (
+                      <span className="px-2 py-0.5 bg-blue-50 text-blue-700 border border-blue-200 rounded text-[10px] font-bold dark:bg-blue-950/20 dark:text-blue-400">
+                        🔒 선적 연결됨 (Shipment Linked)
+                      </span>
+                    ) : (
+                      <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded text-[10px] font-bold dark:bg-emerald-950/20 dark:text-emerald-400">
+                        수정 가능 (Editable)
+                      </span>
+                    )}
                   </div>
                   <div className="flex items-center gap-2">
+                    {!isLocked && !showGoodsReadyForm && (
+                      <button
+                        onClick={() => initGoodsReadinessForm(gr)}
+                        className="px-2.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-300 font-bold rounded text-xs cursor-pointer transition-colors"
+                      >
+                        ✏️ 수정 (Edit)
+                      </button>
+                    )}
                     {po.shipping_responsibility === "SUPPLIER_ARRANGED" && gr.handover_status === "READY_SUBMITTED" && (
                       <button
                         onClick={() => setShowSupplierShipmentForm(gr.id)}
@@ -1378,6 +1594,67 @@ export default function PoDetailClient({
                     </span>
                   </div>
                 </div>
+
+                {/* Summary metrics */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-zinc-50 dark:bg-zinc-950/40 p-3 rounded-lg text-[11px]">
+                  <div>
+                    <span className="text-zinc-400 block text-[10px]">총 준비 수량</span>
+                    <strong className="text-indigo-600 font-bold font-mono">{totalLinesQty.toLocaleString()} PCS</strong>
+                  </div>
+                  <div>
+                    <span className="text-zinc-400 block text-[10px]">총 박스(Carton) 수</span>
+                    <strong className="text-zinc-800 dark:text-zinc-200 font-bold font-mono">{totalCartons.toLocaleString()} CTN</strong>
+                  </div>
+                  <div>
+                    <span className="text-zinc-400 block text-[10px]">총 중량(Gross Weight)</span>
+                    <strong className="text-zinc-800 dark:text-zinc-200 font-bold font-mono">{totalWeight.toFixed(2)} kg</strong>
+                  </div>
+                  <div>
+                    <span className="text-zinc-400 block text-[10px]">총 부피(CBM)</span>
+                    <strong className="text-zinc-800 dark:text-zinc-200 font-bold font-mono">{totalCbm.toFixed(3)} CBM</strong>
+                  </div>
+                </div>
+
+                {/* Pickup & Contact info */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-[11px] text-zinc-600 dark:text-zinc-400">
+                  <div>
+                    <span className="text-zinc-400 block text-[10px]">인수지 / 상세 주소</span>
+                    <span>{gr.pickup_location || '-'} {gr.warehouse_factory_address ? `(${gr.warehouse_factory_address})` : ''}</span>
+                  </div>
+                  <div>
+                    <span className="text-zinc-400 block text-[10px]">담당자 연락처</span>
+                    <span>{gr.contact_person || '-'}</span>
+                  </div>
+                </div>
+
+                {/* Attached Documents on this Goods Readiness */}
+                {(gr.packing_list_path || gr.commercial_invoice_path) && (
+                  <div className="pt-2 border-t border-zinc-150 dark:border-zinc-850">
+                    <span className="text-[10px] font-bold text-zinc-400 block mb-1.5">첨부 선적 서류</span>
+                    <div className="flex flex-wrap gap-2">
+                      {gr.packing_list_path && (
+                        <a
+                          href={gr.packing_list_path}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-indigo-50 text-indigo-700 border border-indigo-200 text-xs font-semibold hover:bg-indigo-100 dark:bg-indigo-950/30 dark:text-indigo-400 dark:border-indigo-900"
+                        >
+                          📄 패킹 리스트: {gr.packing_list_filename || "Packing_List.pdf"}
+                        </a>
+                      )}
+                      {gr.commercial_invoice_path && (
+                        <a
+                          href={gr.commercial_invoice_path}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-emerald-50 text-emerald-700 border border-emerald-250 text-xs font-semibold hover:bg-emerald-100 dark:bg-emerald-950/30 dark:text-emerald-400 dark:border-emerald-900"
+                        >
+                          📄 상업 송장: {gr.commercial_invoice_filename || "Commercial_Invoice.pdf"}
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                )}
 
                 {/* Direct shipment input form */}
                 {showSupplierShipmentForm === gr.id && (
@@ -1458,7 +1735,8 @@ export default function PoDetailClient({
                   </form>
                 )}
               </div>
-            ))}
+            );
+          })}
 
             {/* List active shipments */}
             <div className="space-y-4 pt-4 border-t">
@@ -1545,36 +1823,177 @@ export default function PoDetailClient({
         {/* Tab 5: Documents */}
         {activeTab === "documents" && (
           <div className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 space-y-4 text-xs">
-            <h3 className="text-sm font-bold text-zinc-800 dark:text-white">주문 및 선적 서류 목록</h3>
-            <div className="divide-y divide-zinc-150 dark:divide-zinc-850">
-              {goodsReadiness.map((gr) => (
-                <div key={gr.id} className="py-3 space-y-2">
-                  <div className="font-bold text-zinc-400 text-[10px]">파트너사 제출 서류 (Ready Date: {gr.goods_ready_date})</div>
-                  <div className="flex flex-col gap-1.5 ml-2.5">
-                    {gr.packing_list_path && (
-                      <a
-                        href={gr.packing_list_path}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-indigo-600 dark:text-indigo-400 font-medium hover:underline flex items-center gap-1.5"
-                      >
-                        📂 패킹 리스트 (Packing List): {gr.packing_list_filename || "Download"}
-                      </a>
-                    )}
-                    {gr.commercial_invoice_path && (
-                      <a
-                        href={gr.commercial_invoice_path}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-indigo-600 dark:text-indigo-400 font-medium hover:underline flex items-center gap-1.5"
-                      >
-                        📂 상업 송장 (Commercial Invoice): {gr.commercial_invoice_filename || "Download"}
-                      </a>
-                    )}
-                  </div>
-                </div>
-              ))}
+            <div className="flex justify-between items-center border-b border-zinc-150 pb-3 dark:border-zinc-850">
+              <div>
+                <h3 className="text-sm font-bold text-zinc-800 dark:text-white">발주 및 선적 공유 서류 (Shared Documents)</h3>
+                <p className="text-[11px] text-zinc-400 mt-0.5">
+                  출고 준비, 선적, 통관 및 원산지 증명 관련 모든 서류가 실시간 동기화되어 통합 관리됩니다.
+                </p>
+              </div>
+              <button
+                onClick={() => setShowDocUploadModal(true)}
+                className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg transition-colors cursor-pointer text-xs flex items-center gap-1.5 shadow-sm"
+              >
+                + 문서 업로드 (Upload Document)
+              </button>
             </div>
+
+            {/* Document Upload Modal */}
+            {showDocUploadModal && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+                <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 space-y-4">
+                  <div className="flex justify-between items-center border-b border-zinc-150 pb-3 dark:border-zinc-850">
+                    <h4 className="text-sm font-bold text-zinc-900 dark:text-white">📄 증빙 서류 업로드</h4>
+                    <button
+                      onClick={() => setShowDocUploadModal(false)}
+                      className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 font-bold"
+                    >
+                      ✕
+                    </button>
+                  </div>
+
+                  <form onSubmit={handleDocumentUploadSubmit} className="space-y-3.5 text-xs">
+                    <div>
+                      <label className="block font-bold text-zinc-600 dark:text-zinc-300 mb-1">문서 유형 (Document Type) *</label>
+                      <select
+                        value={uploadDocType}
+                        onChange={(e) => setUploadDocType(e.target.value as PoDocumentType)}
+                        className="w-full rounded-lg border-zinc-300 text-xs py-2 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white font-medium"
+                      >
+                        <option value="PACKING_LIST">패킹 리스트 (Packing List)</option>
+                        <option value="COMMERCIAL_INVOICE">상업 송장 (Commercial Invoice)</option>
+                        <option value="CERTIFICATE_OF_ORIGIN">원산지 증명서 (Certificate of Origin)</option>
+                        <option value="PRODUCT_SPECIFICATION">성분표 / 사양서 (Product Spec)</option>
+                        <option value="CUSTOMS_DOCUMENT">통관 서류 (Customs Document)</option>
+                        <option value="OTHER">기타 선적 서류 (Other Shipping Document)</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block font-bold text-zinc-600 dark:text-zinc-300 mb-1">관련 항목 연결 (Related To)</label>
+                      <select
+                        value={uploadRelatedType}
+                        onChange={(e) => {
+                          const val = e.target.value as any;
+                          setUploadRelatedType(val);
+                          if (val === 'GOODS_READY' && goodsReadiness.length > 0) setUploadRelatedId(goodsReadiness[0].id);
+                          else if (val === 'SHIPMENT' && shipments.length > 0) setUploadRelatedId(shipments[0].id);
+                          else setUploadRelatedId('');
+                        }}
+                        className="w-full rounded-lg border-zinc-300 text-xs py-2 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+                      >
+                        <option value="PO">발주서 전체 ({po.po_number})</option>
+                        {goodsReadiness.length > 0 && (
+                          <option value="GOODS_READY">출고 준비 (Ready Date: {goodsReadiness[0].goods_ready_date})</option>
+                        )}
+                        {shipments.map((s) => (
+                          <option key={s.id} value="SHIPMENT">선적물 ({s.shipment_number})</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block font-bold text-zinc-600 dark:text-zinc-300 mb-1">파일 선택 (File) *</label>
+                      <input
+                        type="file"
+                        required
+                        onChange={(e) => setSelectedDocFile(e.target.files?.[0] || null)}
+                        className="w-full text-xs text-zinc-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100 dark:file:bg-indigo-950/40 dark:file:text-indigo-400"
+                      />
+                      <span className="text-[10px] text-zinc-400 mt-1 block">PDF, Excel, Word, 이미지, ZIP 지원 (최대 20MB)</span>
+                    </div>
+
+                    <div>
+                      <label className="block font-bold text-zinc-600 dark:text-zinc-300 mb-1">메모 (Note - 선택 사항)</label>
+                      <input
+                        type="text"
+                        placeholder="서류 관련 참고 메모"
+                        value={uploadNote}
+                        onChange={(e) => setUploadNote(e.target.value)}
+                        className="w-full rounded-lg border-zinc-300 text-xs py-1.5 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+                      />
+                    </div>
+
+                    <div className="flex justify-end gap-2 pt-3 border-t border-zinc-150 dark:border-zinc-850">
+                      <button
+                        type="button"
+                        onClick={() => setShowDocUploadModal(false)}
+                        className="px-3.5 py-1.5 rounded-lg bg-zinc-100 hover:bg-zinc-200 text-zinc-700 font-bold dark:bg-zinc-800 dark:text-zinc-300 text-xs"
+                      >
+                        취소
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={isUploadingDoc}
+                        className="px-4 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs disabled:opacity-50"
+                      >
+                        {isUploadingDoc ? "업로드 중..." : "업로드 완료"}
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            )}
+
+            {/* Documents List Table */}
+            {documents.length === 0 ? (
+              <div className="py-8 text-center text-zinc-400">
+                등록된 서류가 없습니다. [+ 문서 업로드] 버튼을 눌러 서류를 등록할 수 있습니다.
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="border-b border-zinc-200 bg-zinc-50/50 text-zinc-550 font-bold dark:border-zinc-850 dark:bg-zinc-900/50 dark:text-white">
+                      <th className="py-2.5 px-3">문서 유형</th>
+                      <th className="py-2.5 px-3">파일명</th>
+                      <th className="py-2.5 px-3">관련 대상</th>
+                      <th className="py-2.5 px-3">등록자</th>
+                      <th className="py-2.5 px-3">등록일시</th>
+                      <th className="py-2.5 px-3 text-right">다운로드 / 보기</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-zinc-150 dark:divide-zinc-800">
+                    {documents.map((doc) => (
+                      <tr key={doc.id} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-850/20">
+                        <td className="py-3 px-3">
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold border ${PO_DOCUMENT_TYPE_BADGES[doc.documentType] || PO_DOCUMENT_TYPE_BADGES.OTHER}`}>
+                            {PO_DOCUMENT_TYPE_LABELS[doc.documentType] || doc.documentType}
+                          </span>
+                        </td>
+                        <td className="py-3 px-3 font-medium text-zinc-800 dark:text-zinc-200">
+                          {doc.fileName}
+                          {doc.note && <span className="text-[10px] text-zinc-400 block font-normal">{doc.note}</span>}
+                        </td>
+                        <td className="py-3 px-3 text-zinc-500 font-mono text-[11px]">
+                          {doc.relatedLabel}
+                        </td>
+                        <td className="py-3 px-3 text-zinc-500">
+                          {doc.uploaderName || '공급사'}
+                        </td>
+                        <td className="py-3 px-3 text-zinc-400 font-mono text-[11px]">
+                          {doc.uploadedAt ? (doc.uploadedAt.includes('T') ? doc.uploadedAt.split('T')[0] : doc.uploadedAt) : '-'}
+                        </td>
+                        <td className="py-3 px-3 text-right">
+                          {doc.signedUrl ? (
+                            <a
+                              href={doc.signedUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex items-center px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 dark:bg-indigo-950/30 dark:text-indigo-400 dark:border-indigo-900 text-xs font-bold rounded transition-colors"
+                            >
+                              📂 열기 / 다운로드
+                            </a>
+                          ) : (
+                            <span className="text-zinc-400 italic text-[10px]">다운로드 불가</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         )}
 

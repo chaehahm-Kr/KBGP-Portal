@@ -23,6 +23,13 @@ import {
   closeShipmentWithVariance,
 } from "@/lib/inbound/actions";
 import { PoUnifiedStepper } from "@/components/shared/po-unified-stepper";
+import {
+  PoDocument,
+  PoDocumentType,
+  PO_DOCUMENT_TYPE_LABELS,
+  PO_DOCUMENT_TYPE_BADGES,
+  } from "@/lib/purchase-order/document-types";
+import { uploadPoDocument } from "@/lib/purchase-order/document-actions";
 import { getEasternTodayString } from "@/lib/utils/timezone";
 
 function formatEasternDate(dStr: string | null | undefined): string {
@@ -50,6 +57,7 @@ interface LineItem {
 }
 
 interface PurchaseOrderDetailProps {
+  documents?: PoDocument[];
   po: {
     id: string;
     po_number: string;
@@ -167,6 +175,7 @@ interface PurchaseOrderDetailProps {
 }
 
 export function PurchaseOrderDetail({
+  documents = [],
   po,
   isReadOnly = false,
   invoices = [],
@@ -177,6 +186,46 @@ export function PurchaseOrderDetail({
   warehouses = [],
 }: PurchaseOrderDetailProps) {
   const router = useRouter();
+  // Document Upload modal state for Admin
+  const [showDocUploadModal, setShowDocUploadModal] = useState(false);
+  const [uploadDocType, setUploadDocType] = useState<PoDocumentType>("PACKING_LIST");
+  const [uploadRelatedType, setUploadRelatedType] = useState<"PO" | "GOODS_READY" | "SHIPMENT">("PO");
+  const [uploadRelatedId, setUploadRelatedId] = useState<string>("");
+  const [uploadNote, setUploadNote] = useState<string>("");
+  const [selectedDocFile, setSelectedDocFile] = useState<File | null>(null);
+  const [isUploadingDoc, setIsUploadingDoc] = useState(false);
+
+  const handleDocumentUploadSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedDocFile) {
+      alert("업로드할 파일을 선택해주세요.");
+      return;
+    }
+    setIsUploadingDoc(true);
+    setErrorMessage('');
+    setSuccessMessage('');
+    try {
+      const formData = new FormData();
+      formData.append("poId", po.id);
+      formData.append("documentType", uploadDocType);
+      formData.append("relatedType", uploadRelatedType);
+      if (uploadRelatedId) formData.append("relatedId", uploadRelatedId);
+      if (uploadNote) formData.append("note", uploadNote);
+      formData.append("file", selectedDocFile);
+
+      await uploadPoDocument(formData);
+      setSuccessMessage("증빙 서류가 성공적으로 업로드되었습니다.");
+      setShowDocUploadModal(false);
+      setSelectedDocFile(null);
+      setUploadNote("");
+      router.refresh();
+    } catch (err: any) {
+      setErrorMessage(err.message || "서류 업로드 실패");
+    } finally {
+      setIsUploadingDoc(false);
+    }
+  };
+
   const [activeTab, setActiveTab] = useState("overview");
   const [isActionLoading, setIsActionLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");

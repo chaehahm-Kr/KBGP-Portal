@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { verifyAdminSession } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { getPurchaseOrderDetail, getSupplierPoChangeRequests } from "@/lib/purchase-order/actions";
+import { getPoDocuments } from "@/lib/purchase-order/document-actions";
 import { PurchaseOrderDetail } from "@/components/admin/purchase-order-detail";
 
 export const metadata: Metadata = {
@@ -41,6 +42,9 @@ export default async function AdminPurchaseOrderDetailPage({
     .from("supplier_invoices")
     .select("id, internal_ap_number, supplier_invoice_number, invoice_total, currency, invoice_status")
     .eq("purchase_order_id", id);
+
+  // Fetch shared documents
+  const documents = await getPoDocuments(id);
 
   // Fetch shipments
   const { data: dbShipments } = await supabase
@@ -101,6 +105,7 @@ export default async function AdminPurchaseOrderDetailPage({
         shipments={shipments}
         receivings={receivings}
         goodsReadiness={goodsReadiness}
+        documents={documents}
         warehouses={warehouses}
       />
     </div>

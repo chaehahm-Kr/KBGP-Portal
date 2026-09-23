@@ -1150,7 +1150,9 @@ export async function submitPortalGoodsReady(input: {
     const remainingAvailable = Math.max(0, targetQty - cumulativeShipped - activeReady);
 
     if (line.readyQty > remainingAvailable) {
-      overageDetected = true;
+      throw new Error(
+        `[${pol.product_name_snapshot || "품목"}] 출고 준비 수량(${line.readyQty}개)이 잔여 가용 수량(${remainingAvailable}개)을 초과할 수 없습니다.`
+      );
     }
 
     verifiedLines.push({
@@ -1165,6 +1167,41 @@ export async function submitPortalGoodsReady(input: {
 
   const timestamp = new Date().toISOString();
   let readinessId = input.id;
+
+  // If no ID passed, check if an existing unlinked readiness record exists for this PO
+  if (!readinessId) {
+    const { data: existingList } = await supabase
+      .from("goods_readiness")
+      .select("id, handover_status")
+      .eq("purchase_order_id", input.purchaseOrderId)
+      .eq("supplier_id", companyId)
+      .neq("handover_status", "CANCELLED")
+      .order("created_at", { ascending: false });
+
+    if (existingList && existingList.length > 0) {
+      // Find the first unlinked readiness
+      for (const gr of existingList) {
+        const { data: lines } = await supabase
+          .from("goods_readiness_lines")
+          .select("id")
+          .eq("goods_readiness_id", gr.id);
+        
+        const lineIds = (lines || []).map(l => l.id);
+        const { data: linkedShip } = await supabase
+          .from("inbound_shipment_lines")
+          .select("id, inbound_shipments!inner(status)")
+          .in("goods_readiness_line_id", lineIds.length > 0 ? lineIds : ["00000000-0000-0000-0000-000000000000"])
+          .neq("inbound_shipments.status", "CANCELLED");
+
+        if (!linkedShip || linkedShip.length === 0) {
+          readinessId = gr.id;
+          break;
+        }
+      }
+    }
+  }
+
+  const isUpdate = !!readinessId;
 
   if (readinessId) {
     // Update existing
@@ -1234,16 +1271,44 @@ export async function submitPortalGoodsReady(input: {
 
   // Update PO fulfillment_status to READY_TO_SHIP if submitted and po status is approved/sent
   if (input.handoverStatus === 'READY_SUBMITTED') {
+    // Record structured activity log
+    const { data: currentPo } = await supabase
+      .from("purchase_orders")
+      .select("activity_logs")
+      .eq("id", input.purchaseOrderId)
+      .single();
+
+    const activityLogs = (currentPo?.activity_logs as any[]) || [];
+    const eventDescription = isUpdate
+      ? `[출고 준비 수정] 출고 완료 예정일(${input.goodsReadyDate}) 및 수량/패키징 정보가 수정되었습니다.`
+      : `[출고 준비 제출] 공급사에서 출고 준비(Goods Ready, 예정일: ${input.goodsReadyDate})를 제출하였습니다.`;
+
+    const newLogs = [
+      ...activityLogs,
+      {
+        event: isUpdate ? "GOODS_READINESS_UPDATED" : "GOODS_READY_SUBMITTED",
+        actor: "공급사",
+        actorId: userId,
+        timestamp,
+        description: eventDescription,
+      },
+    ];
+
     await supabase
       .from("purchase_orders")
-      .update({ fulfillment_status: "READY_TO_SHIP" })
+      .update({
+        fulfillment_status: "READY_TO_SHIP",
+        activity_logs: newLogs,
+        updated_at: timestamp,
+      })
       .eq("id", input.purchaseOrderId);
   }
 
   revalidatePath(`/portal/orders/shipping`);
   revalidatePath(`/portal/orders/shipping/${readinessId}`);
   revalidatePath(`/portal/orders/purchase-orders/${input.purchaseOrderId}`);
-  return { success: true, id: readinessId, overageDetected };
+  revalidatePath(`/admin/purchasing/${input.purchaseOrderId}`);
+  return { success: true, id: readinessId, overageDetected, isUpdate };
 }
 
 /**
