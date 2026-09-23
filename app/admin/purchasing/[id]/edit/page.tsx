@@ -45,7 +45,7 @@ export default async function AdminEditPurchaseOrderPage({
   // 2. Fetch active warehouses
   const { data: dbWarehouses } = await supabase
     .from("warehouses")
-    .select("id, name, code, status, company_id")
+    .select("id, name, code, type, status, is_default_receiving, company_id")
     .eq("status", "active")
     .order("name", { ascending: true });
   const warehouses = dbWarehouses ?? [];

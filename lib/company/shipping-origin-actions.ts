@@ -149,13 +149,17 @@ export async function getCompanyShippingOrigins(companyId: string): Promise<Comp
   }
 
   if (rawOrigins.length === 0) {
-    // Fallback to metadata
-    const fallback = await getOriginsFromMetadata(companyId);
-    rawOrigins = fallback.sort((a, b) => {
-      if (a.is_default && !b.is_default) return -1;
-      if (!a.is_default && b.is_default) return 1;
-      return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
-    });
+    try {
+      // Fallback to metadata
+      const fallback = await getOriginsFromMetadata(companyId);
+      rawOrigins = (fallback || []).sort((a, b) => {
+        if (a.is_default && !b.is_default) return -1;
+        if (!a.is_default && b.is_default) return 1;
+        return new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime();
+      });
+    } catch {
+      rawOrigins = [];
+    }
   }
 
   // Enrich with warehouse link info

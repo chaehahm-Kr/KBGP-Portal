@@ -35,22 +35,62 @@ export interface InventoryMovementItem {
   creator_name?: string;
 }
 
+export interface WarehouseBalanceDetail {
+  id: string;
+  warehouse_id: string;
+  warehouse_name: string;
+  warehouse_code: string;
+  warehouse_status: string;
+  qty_on_hand: number;
+  qty_hold: number;
+  available: number;
+  last_activity: string;
+}
+
+export interface InventoryOverviewItem {
+  id: string;
+  product_id: string;
+  name: string;
+  display_name: string;
+  letusto_sku: string | null;
+  manufacture_sku: string | null;
+  parent_sku: string | null;
+  child_sku: string | null;
+  brand_id: string | null;
+  brand_name: string;
+  company_id: string | null;
+  company_name: string;
+  photoPath: string | null;
+  photoUrl?: string | null;
+  category: string | null;
+  price_usd_fob?: number | null;
+  trading_status: string;
+  sales_status: string;
+  selection_status: string;
+  qty_on_hand: number;
+  qty_hold: number;
+  available: number;
+  incoming: number;
+  last_activity: string;
+  warehouse_balances: WarehouseBalanceDetail[];
+}
+
 /**
- * Fetch all trading products (active, historical) and their inventory balances.
- * Products with no inventory will be displayed with zero quantities.
+ * Fetch all trading/selected products, their inventory balances, and incoming PO quantities.
+ * Products with no inventory will be displayed with zero quantities and incoming totals.
  */
-export async function getInventoryOverview() {
+export async function getInventoryOverview(): Promise<InventoryOverviewItem[]> {
   await verifyAdminSession();
   const supabase = createAdminClient();
 
-  // 1. Fetch active and historical trading products
+  // 1. Fetch active/historical trading products or selected products
   const { data: products, error: pErr } = await supabase
     .from("products")
-    .select("id, name, name_en, category, brand_id, company_id, manufacture_sku, letusto_sku, price_additional_info, trading_status")
-    .in("trading_status", ["active", "historical"])
+    .select("id, name, name_en, category, brand_id, company_id, manufacture_sku, letusto_sku, parent_sku, child_sku, price_usd_fob, price_krw_retail, price_additional_info, selection_status, sales_status, trading_status, created_at, updated_at")
+    .or("trading_status.in.(active,historical),selection_status.eq.SELECTED")
     .order("created_at", { ascending: false });
 
-  if (pErr) throw new Error(`Failed to fetch trading products: ${pErr.message}`);
+  if (pErr) throw new Error(`Failed to fetch products for inventory: ${pErr.message}`);
 
   // 2. Fetch all companies for name mapping
   const { data: companies } = await supabase.from("companies").select("id, name");
@@ -66,7 +106,42 @@ export async function getInventoryOverview() {
     .select("id, product_id, storage_path, position")
     .order("position", { ascending: true });
 
-  // 5. Fetch all inventory balances with warehouse information
+  // 5. Fetch finalized receiving lines to calculate accurate received qty per PO line
+  const { data: receivingLines } = await supabase
+    .from("receiving_lines")
+    .select("purchase_order_line_id, received_qty, receivings!inner(status)")
+    .eq("receivings.status", "FINALIZED");
+
+  const receivedMap = new Map<string, number>();
+  (receivingLines ?? []).forEach((r: any) => {
+    const cur = receivedMap.get(r.purchase_order_line_id) || 0;
+    receivedMap.set(r.purchase_order_line_id, cur + Number(r.received_qty || 0));
+  });
+
+  // 6. Fetch active open PO lines to compute incoming quantities
+  const { data: poLines } = await supabase
+    .from("purchase_order_lines")
+    .select(`
+      id, product_id, qty, confirmed_qty,
+      purchase_orders!inner(id, po_number, po_status, fulfillment_status)
+    `)
+    .in("purchase_orders.po_status", ["APPROVED", "SENT"]);
+
+  const incomingMap = new Map<string, number>();
+  (poLines ?? []).forEach((pol: any) => {
+    const po = pol.purchase_orders;
+    if (!po) return;
+    if (po.fulfillment_status === "COMPLETED" || po.fulfillment_status === "CANCELLED" || po.po_status === "CANCELLED") return;
+
+    const targetQty = pol.confirmed_qty !== null && pol.confirmed_qty !== undefined ? Number(pol.confirmed_qty) : Number(pol.qty);
+    const received = receivedMap.get(pol.id) || 0;
+    const remaining = Math.max(0, targetQty - received);
+    if (remaining > 0) {
+      incomingMap.set(pol.product_id, (incomingMap.get(pol.product_id) || 0) + remaining);
+    }
+  });
+
+  // 7. Fetch all inventory balances with warehouse information
   const { data: balances, error: bErr } = await supabase
     .from("inventory_balances")
     .select(`
@@ -83,7 +158,7 @@ export async function getInventoryOverview() {
     balanceMap.set(b.product_id, list);
   });
 
-  const overviewList: any[] = [];
+  const overviewList: InventoryOverviewItem[] = [];
 
   for (const p of products ?? []) {
     const adminOverrides = (p.price_additional_info as any)?.admin_overrides || {};
@@ -97,54 +172,56 @@ export async function getInventoryOverview() {
 
     const prodBalances = balanceMap.get(p.id) || [];
 
-    if (prodBalances.length === 0) {
-      // If product has no inventory, push a single row with zero quantities
-      overviewList.push({
-        id: `no-inv-${p.id}`,
-        product_id: p.id,
-        name: p.name,
-        display_name: displayName,
-        letusto_sku: effectiveLetustoSku,
-        manufacture_sku: effectiveManufactureSku,
-        brand_name: brandMap.get(p.brand_id) || "(미지정 브랜드)",
-        company_name: companyMap.get(p.company_id) || "(미지정 회사)",
-        photoPath,
-        warehouse_id: null,
-        warehouse_name: "등록된 재고 없음",
-        warehouse_code: "-",
-        warehouse_status: "-",
-        qty_on_hand: 0,
-        qty_hold: 0,
-        available: 0,
-        trading_status: p.trading_status,
-        last_activity: "-",
-      });
-    } else {
-      // If product has inventory in one or more warehouses, push each as a separate row
-      prodBalances.forEach((b: any) => {
-        const wh = b.warehouses || {};
-        overviewList.push({
-          id: b.id,
-          product_id: p.id,
-          name: p.name,
-          display_name: displayName,
-          letusto_sku: effectiveLetustoSku,
-          manufacture_sku: effectiveManufactureSku,
-          brand_name: brandMap.get(p.brand_id) || "(미지정 브랜드)",
-          company_name: companyMap.get(p.company_id) || "(미지정 회사)",
-          photoPath,
-          warehouse_id: b.warehouse_id,
-          warehouse_name: wh.name || "(미지정 창고)",
-          warehouse_code: wh.code || "-",
-          warehouse_status: wh.status || "-",
-          qty_on_hand: b.qty_on_hand,
-          qty_hold: b.qty_hold,
-          available: b.qty_on_hand - b.qty_hold,
-          trading_status: p.trading_status,
-          last_activity: b.updated_at,
-        });
-      });
-    }
+    const totalOnHand = prodBalances.reduce((sum, b) => sum + Number(b.qty_on_hand || 0), 0);
+    const totalHold = prodBalances.reduce((sum, b) => sum + Number(b.qty_hold || 0), 0);
+    const totalAvailable = totalOnHand - totalHold;
+    const incomingQty = incomingMap.get(p.id) || 0;
+
+    let latestActivity = p.updated_at || p.created_at;
+    const warehouseDetails: WarehouseBalanceDetail[] = prodBalances.map((b: any) => {
+      const wh = b.warehouses || {};
+      if (b.updated_at && b.updated_at > latestActivity) {
+        latestActivity = b.updated_at;
+      }
+      return {
+        id: b.id,
+        warehouse_id: b.warehouse_id,
+        warehouse_name: wh.name || "(미지정 창고)",
+        warehouse_code: wh.code || "-",
+        warehouse_status: wh.status || "-",
+        qty_on_hand: Number(b.qty_on_hand || 0),
+        qty_hold: Number(b.qty_hold || 0),
+        available: Number(b.qty_on_hand || 0) - Number(b.qty_hold || 0),
+        last_activity: b.updated_at || "-",
+      };
+    });
+
+    overviewList.push({
+      id: p.id,
+      product_id: p.id,
+      name: p.name,
+      display_name: displayName,
+      letusto_sku: effectiveLetustoSku,
+      manufacture_sku: effectiveManufactureSku,
+      parent_sku: adminOverrides.parent_sku !== undefined ? adminOverrides.parent_sku : p.parent_sku,
+      child_sku: adminOverrides.child_sku !== undefined ? adminOverrides.child_sku : p.child_sku,
+      brand_id: p.brand_id,
+      brand_name: brandMap.get(p.brand_id) || "(미지정 브랜드)",
+      company_id: p.company_id,
+      company_name: companyMap.get(p.company_id) || "(미지정 회사)",
+      photoPath,
+      category: p.category,
+      price_usd_fob: adminOverrides.price_usd_fob !== undefined ? adminOverrides.price_usd_fob : p.price_usd_fob,
+      trading_status: p.trading_status || "active",
+      sales_status: p.sales_status || "PREPARING",
+      selection_status: p.selection_status || "UNREVIEWED",
+      qty_on_hand: totalOnHand,
+      qty_hold: totalHold,
+      available: totalAvailable,
+      incoming: incomingQty,
+      last_activity: latestActivity,
+      warehouse_balances: warehouseDetails,
+    });
   }
 
   return overviewList;

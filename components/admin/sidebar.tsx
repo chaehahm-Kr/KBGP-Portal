@@ -201,16 +201,11 @@ export default function Sidebar({
       icon: ProductsIcon,
       subItems: [
         { name: "Product Catalog", href: "/admin/products" },
-        { name: "Trading Products", href: "/admin/products/trading" },
+        { name: "Inventory", href: "/admin/inventory" },
         { name: "Compliance", href: "/admin/products?status=compliance" },
         { name: "Pricing Simulator", href: "/admin/products/pricing-profitability" },
         { name: "Curation", href: "/admin/products/curation" },
       ],
-    },
-    {
-      name: "Inventory",
-      icon: TasksIcon,
-      subItems: [{ name: "Inventory Overview", href: "/admin/inventory" }],
     },
     {
       name: "Purchasing",

@@ -409,17 +409,28 @@ export async function getPurchaseOrderDetail(poId: string) {
   // 3. Fetch linked support cases from partner_inquiries
   let linkedCases: any[] = [];
   try {
-    const { data: inqs } = await supabase
+    const { data: inqs, error: inqErr } = await supabase
       .from("partner_inquiries")
       .select("id, case_number, title, category, status, created_at")
       .or(`related_po_id.eq.${poId},title.ilike.%${po.po_number}%`)
       .order("created_at", { ascending: false });
-    linkedCases = inqs || [];
+
+    if (!inqErr && inqs) {
+      linkedCases = inqs;
+    } else {
+      // Fallback query if related_po_id column is not in DB schema cache yet
+      const { data: fallbackInqs } = await supabase
+        .from("partner_inquiries")
+        .select("id, case_number, title, category, status, created_at")
+        .ilike("title", `%${po.po_number}%`)
+        .order("created_at", { ascending: false });
+      linkedCases = fallbackInqs || [];
+    }
   } catch {}
 
   return {
     ...po,
-    revision_no: Number(po.revision_no) || 1,
+    revision_no: po.revision_no != null && !isNaN(Number(po.revision_no)) ? Number(po.revision_no) : 1,
     supplier_confirmation_status: po.supplier_confirmation_status || "PENDING",
     confirmed_by_name: po.confirmed_by_name || null,
     confirmed_at: po.confirmed_at || null,
@@ -1057,7 +1068,7 @@ export async function updatePurchaseOrder(poId: string, data: CreatePoInput) {
 
   // 1. Fetch current user name
   const { data: staff } = await supabase
-    .from("staff_profiles")
+    .from("profiles")
     .select("display_name")
     .eq("id", userId)
     .maybeSingle();
