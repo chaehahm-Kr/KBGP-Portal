@@ -568,7 +568,7 @@ export function PortalSupportView({ initialInquiries, createAction }: PortalSupp
                           return (
                             <div key={msg.id} className={`flex flex-col gap-1 ${isAdmin ? "items-start" : "items-end"}`}>
                               <div className="flex items-center gap-1.5 text-[9px] text-zinc-400 dark:text-zinc-500">
-                                {isAdmin && <span className="font-bold text-zinc-600 dark:text-zinc-300">{msg.senderName} (어드민)</span>}
+                                {isAdmin && <span className="font-bold text-zinc-600 dark:text-zinc-300">K SELECT NETWORK 담당자</span>}
                                 <span>{formatDate(msg.createdAt)}</span>
                                 {!isAdmin && <span className="font-bold text-zinc-600 dark:text-zinc-300">나</span>}
                               </div>
@@ -622,11 +622,12 @@ export function PortalSupportView({ initialInquiries, createAction }: PortalSupp
                       .filter((m) => m.messageType !== "message")
                       .map((msg) => {
                         const meta = MSG_TYPE_META[msg.messageType] || { icon: "ℹ️", style: "bg-zinc-100 text-zinc-500" };
+                        const displayName = msg.senderType === "admin" ? "K SELECT NETWORK 담당자" : msg.senderName;
                         return (
                           <div key={msg.id} className="flex items-start gap-2.5 text-xs text-zinc-600 dark:text-zinc-300">
                             <span className="text-xs">{meta.icon}</span>
                             <div className="space-y-0.5">
-                              <p className="font-bold text-zinc-900 dark:text-white">{msg.senderName}</p>
+                              <p className="font-bold text-zinc-900 dark:text-white">{displayName}</p>
                               <p className="text-[10px] text-zinc-400">{formatDate(msg.createdAt)} · {msg.content}</p>
                             </div>
                           </div>
@@ -641,7 +642,7 @@ export function PortalSupportView({ initialInquiries, createAction }: PortalSupp
                           <p className="font-bold text-zinc-900 dark:text-white">문의 종료됨 (Closed)</p>
                           <p className="text-[10px] text-zinc-400">
                             {selectedInquiry.closed_at ? formatDate(selectedInquiry.closed_at) : formatDate(selectedInquiry.updated_at)}
-                            {selectedInquiry.closed_by_side ? ` · ${selectedInquiry.closed_by_side === "admin" ? "어드민 담당자" : "파트너사"} 종료` : ""}
+                            {selectedInquiry.closed_by_side ? ` · ${selectedInquiry.closed_by_side === "admin" ? "K SELECT NETWORK 담당자" : "파트너사"} 종료` : ""}
                           </p>
                         </div>
                       </div>

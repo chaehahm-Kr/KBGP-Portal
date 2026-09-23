@@ -66,6 +66,8 @@ export interface PartnerInquiryItem {
   created_at: string;
   updated_at: string;
   companyName?: string;
+  requesterName?: string | null;
+  requesterEmail?: string | null;
   repliedStaffName?: string;
   messages?: InquiryMessageItem[];
 }

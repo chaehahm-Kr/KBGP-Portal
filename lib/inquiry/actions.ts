@@ -8,6 +8,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createNotification } from "@/lib/notification/actions";
 import { validateUploadedFile } from "@/lib/files/validate";
 import { getSignedFileUrl } from "@/lib/files/storage";
+import { sendEmail } from "@/lib/notifications/email";
+import { publicEnv } from "@/lib/env/public";
 import type { CaseStatus, MessageType, InquiryMessageItem, PartnerInquiryItem } from "@/lib/inquiry/types";
 import { CASE_STATUS_LABEL } from "@/lib/inquiry/types";
 
@@ -53,7 +55,8 @@ async function getMessagesForInquiry(
   supabase: any,
   item: any,
   defaultSenderName: string,
-  repliedStaffName: string | undefined
+  repliedStaffName: string | undefined,
+  isPortal: boolean = false
 ): Promise<InquiryMessageItem[]> {
   try {
     const { data: dbMessages, error: msgError } = await supabase
@@ -81,7 +84,7 @@ async function getMessagesForInquiry(
         fallback.push({
           id: "reply-" + item.id,
           senderType: "admin",
-          senderName: repliedStaffName || "어드민 담당자",
+          senderName: isPortal ? "K SELECT NETWORK 담당자" : (repliedStaffName || "어드민 담당자"),
           content: item.reply_content,
           messageType: item.is_action_required ? "action_required" : "message",
           isActionFlag: !!item.is_action_required,
@@ -118,10 +121,12 @@ async function getMessagesForInquiry(
       if (m.attachment_path) {
         attachmentUrl = await getSignedFileUrl(m.attachment_path);
       }
+      const rawSenderName = m.sender_name || (m.sender_type === "admin" ? "어드민 담당자" : defaultSenderName);
+      const displaySenderName = isPortal && m.sender_type === "admin" ? "K SELECT NETWORK 담당자" : rawSenderName;
       result.push({
         id: m.id,
         senderType: m.sender_type as "partner" | "admin" | "system",
-        senderName: m.sender_name,
+        senderName: displaySenderName,
         content: m.content,
         messageType: (m.message_type || "message") as MessageType,
         isActionFlag: !!m.is_action_flag,
@@ -315,7 +320,8 @@ export async function getPartnerInquiries(): Promise<PartnerInquiryItem[]> {
           supabase,
           { ...item, attachment_url: attachmentUrl },
           "파트너사",
-          repliedStaffName
+          repliedStaffName,
+          true // isPortal: true -> mask admin staff names
         );
 
         const prevInfo = item.previous_case_id ? inquiryMap.get(item.previous_case_id) : null;
@@ -367,6 +373,33 @@ export async function getAdminPartnerInquiries(): Promise<PartnerInquiryItem[]> 
       return [];
     }
 
+    // Query requester details for all created_by IDs
+    const userIds = Array.from(new Set((inquiries || []).map((i: any) => i.created_by).filter(Boolean)));
+    const userMap = new Map<string, { name: string; email: string }>();
+
+    if (userIds.length > 0) {
+      // 1. Check company_users
+      const { data: companyUsers } = await adminSupabase
+        .from("company_users")
+        .select("id, name, email")
+        .in("id", userIds);
+      (companyUsers || []).forEach((u: any) => {
+        if (u.id) userMap.set(u.id, { name: u.name, email: u.email });
+      });
+
+      // 2. Missing IDs check staff_members
+      const missingStaffIds = userIds.filter((id) => !userMap.has(id));
+      if (missingStaffIds.length > 0) {
+        const { data: staffUsers } = await adminSupabase
+          .from("staff_members")
+          .select("id, name, email")
+          .in("id", missingStaffIds);
+        (staffUsers || []).forEach((s: any) => {
+          if (s.id) userMap.set(s.id, { name: s.name, email: s.email });
+        });
+      }
+    }
+
     const inquiryMap = new Map((inquiries || []).map((i: any) => [i.id, { case_number: i.case_number, title: i.title }]));
 
     const items = await Promise.all(
@@ -381,10 +414,12 @@ export async function getAdminPartnerInquiries(): Promise<PartnerInquiryItem[]> 
           adminSupabase,
           { ...item, attachment_url: attachmentUrl },
           "파트너사",
-          repliedStaffName
+          repliedStaffName,
+          false // isPortal: false -> show admin staff names in Admin
         );
 
         const prevInfo = item.previous_case_id ? inquiryMap.get(item.previous_case_id) : null;
+        const requester = item.created_by ? userMap.get(item.created_by) : null;
 
         return {
           id: item.id,
@@ -414,6 +449,8 @@ export async function getAdminPartnerInquiries(): Promise<PartnerInquiryItem[]> 
           created_at: item.created_at,
           updated_at: item.updated_at,
           companyName: item.companies?.name || "(알 수 없음)",
+          requesterName: requester?.name || null,
+          requesterEmail: requester?.email || null,
           repliedStaffName,
           messages
         } as PartnerInquiryItem;
@@ -435,11 +472,13 @@ export async function getAdminPartnerInquiries(): Promise<PartnerInquiryItem[]> 
  * 어드민에서 케이스에 답변을 작성합니다.
  * isActionRequired = true 이면 status → action_required
  * isActionRequired = false 이면 status → in_review (awaiting_reply로 브랜드사 답변 대기)
+ * sendEmailFlag: isActionRequired 일 때 담당자에게 이메일 발송 여부
  */
 export async function answerPartnerInquiry(
   inquiryId: string,
   replyContent: string,
-  isActionRequired: boolean
+  isActionRequired: boolean,
+  sendEmailFlag: boolean = true
 ) {
   try {
     const session = await verifyAdminSession();
@@ -447,7 +486,7 @@ export async function answerPartnerInquiry(
 
     const { data: originalInquiry, error: fetchError } = await adminSupabase
       .from("partner_inquiries")
-      .select("created_by, title, case_number")
+      .select("created_by, title, case_number, company_id")
       .eq("id", inquiryId)
       .single();
 
@@ -503,7 +542,82 @@ export async function answerPartnerInquiry(
         });
     }
 
-    // Notify portal user
+    // Lookup requester info for email & notification
+    let targetEmail: string | null = null;
+    let targetName: string | null = null;
+    if (originalInquiry.created_by) {
+      const { data: userDoc } = await adminSupabase
+        .from("company_users")
+        .select("name, email")
+        .eq("id", originalInquiry.created_by)
+        .maybeSingle();
+      if (userDoc) {
+        targetEmail = userDoc.email;
+        targetName = userDoc.name;
+      } else {
+        const { data: staffDoc } = await adminSupabase
+          .from("staff_members")
+          .select("name, email")
+          .eq("id", originalInquiry.created_by)
+          .maybeSingle();
+        if (staffDoc) {
+          targetEmail = staffDoc.email;
+          targetName = staffDoc.name;
+        }
+      }
+    }
+
+    if (!targetEmail && originalInquiry.company_id) {
+      const { data: companyDoc } = await adminSupabase
+        .from("companies")
+        .select("contact_email, name")
+        .eq("id", originalInquiry.company_id)
+        .maybeSingle();
+      if (companyDoc?.contact_email) {
+        targetEmail = companyDoc.contact_email;
+        targetName = targetName || companyDoc.name;
+      }
+    }
+
+    // Send email ONLY IF isActionRequired === true && sendEmailFlag === true
+    if (isActionRequired && sendEmailFlag && targetEmail) {
+      try {
+        const caseLabel = originalInquiry.case_number ? `#${originalInquiry.case_number}` : originalInquiry.title;
+        const portalUrl = `${publicEnv.NEXT_PUBLIC_SITE_URL || "https://portal.kselectnetwork.com"}/portal/support`;
+        await sendEmail({
+          to: targetEmail,
+          subject: `[K SELECT NETWORK] 케이스 ${caseLabel} 조치 요청 안내`,
+          text: `안녕하세요 ${targetName || "담당자"}님,\n\nK SELECT NETWORK에서 등록하신 케이스(${caseLabel} - ${originalInquiry.title})에 대한 조치를 요청드립니다.\n\n[조치 요청 내용]\n${replyContent}\n\n포털에 접속하여 상세 내용 확인 및 조치를 진행해 주시기 바랍니다.\n접속 주소: ${portalUrl}\n\n감사합니다.\nK SELECT NETWORK 팀`,
+          html: `
+            <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #18181b; max-width: 600px; margin: 0 auto; padding: 20px;">
+              <h2 style="color: #18181b; font-size: 18px; margin-bottom: 16px;">[K SELECT NETWORK] 케이스 조치 요청</h2>
+              <p style="font-size: 14px; margin-bottom: 12px;">안녕하세요 ${targetName || "담당자"}님,</p>
+              <p style="font-size: 14px; margin-bottom: 16px;">등록하신 케이스(<strong>${caseLabel}</strong>: ${originalInquiry.title})에 대한 조치가 요청되었습니다.</p>
+              
+              <div style="background-color: #fff1f2; border-left: 4px solid #e11d48; padding: 14px 16px; margin: 20px 0; border-radius: 6px;">
+                <p style="margin: 0 0 6px 0; font-size: 13px; font-weight: bold; color: #be123c;">⚠️ 조치 요청 내용</p>
+                <p style="margin: 0; font-size: 13px; color: #374151; white-space: pre-wrap; line-height: 1.5;">${replyContent}</p>
+              </div>
+
+              <p style="font-size: 14px; color: #4b5563; margin-bottom: 20px;">브랜드 포털의 [문의 지원] 메뉴에서 상세 내용을 확인하시고 조치를 완료해 주시기 바랍니다.</p>
+              
+              <div style="margin: 24px 0;">
+                <a href="${portalUrl}" style="background-color: #18181b; color: #ffffff; padding: 10px 20px; text-decoration: none; border-radius: 6px; font-size: 13px; font-weight: 600; display: inline-block;">
+                  브랜드 포털에서 확인하기 →
+                </a>
+              </div>
+              
+              <hr style="border: none; border-top: 1px solid #e4e4e7; margin: 28px 0 16px 0;" />
+              <p style="font-size: 11px; color: #a1a1aa; margin: 0;">본 메일은 K SELECT NETWORK 시스템에서 자동 발송되었습니다.</p>
+            </div>
+          `
+        });
+      } catch (emailErr) {
+        console.error("Failed to send action required email:", emailErr);
+      }
+    }
+
+    // Notify portal user in-app
     const caseLabel = originalInquiry.case_number
       ? `케이스 ${originalInquiry.case_number}`
       : `문의 '${originalInquiry.title}'`;

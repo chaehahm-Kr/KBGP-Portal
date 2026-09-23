@@ -12,7 +12,12 @@ import { updateCaseStatus, closeCaseAdmin, answerAndClosePartnerInquiry } from "
 
 interface AdminPartnerInquiriesProps {
   initialInquiries: PartnerInquiryItem[];
-  answerAction: (inquiryId: string, replyContent: string, isActionRequired: boolean) => Promise<{ success: boolean; error?: string }>;
+  answerAction: (
+    inquiryId: string,
+    replyContent: string,
+    isActionRequired: boolean,
+    sendEmail: boolean
+  ) => Promise<{ success: boolean; error?: string }>;
 }
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -50,6 +55,7 @@ export function AdminPartnerInquiries({ initialInquiries, answerAction }: AdminP
   // Reply & Reply+Close states
   const [replyText, setReplyText] = useState("");
   const [isActionRequired, setIsActionRequired] = useState(false);
+  const [sendEmail, setSendEmail] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
   const [showCloseConfirmModal, setShowCloseConfirmModal] = useState(false);
@@ -64,6 +70,15 @@ export function AdminPartnerInquiries({ initialInquiries, answerAction }: AdminP
     return `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, "0")}.${String(d.getDate()).padStart(2, "0")} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
   };
 
+  const handleActionRequiredToggle = (checked: boolean) => {
+    setIsActionRequired(checked);
+    if (checked) {
+      setSendEmail(true); // Default to ON when action required is checked
+    } else {
+      setSendEmail(false); // Auto turn OFF when action required is unchecked
+    }
+  };
+
   const handleAnswerSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedInquiry) return;
@@ -76,10 +91,16 @@ export function AdminPartnerInquiries({ initialInquiries, answerAction }: AdminP
 
     setIsSubmitting(true);
     try {
-      const res = await answerAction(selectedInquiry.id, replyText, isActionRequired);
+      const res = await answerAction(
+        selectedInquiry.id,
+        replyText,
+        isActionRequired,
+        isActionRequired && sendEmail
+      );
       if (res.success) {
         setReplyText("");
         setIsActionRequired(false);
+        setSendEmail(false);
         window.location.reload();
       } else {
         setSubmitError(res.error || "답변 등록에 실패했습니다.");
@@ -299,7 +320,18 @@ export function AdminPartnerInquiries({ initialInquiries, answerAction }: AdminP
                         <span className="text-[9px] text-zinc-400 dark:text-zinc-500 shrink-0">{formatDate(item.created_at)}</span>
                       </div>
                       <p className="text-xs font-bold text-zinc-900 dark:text-white leading-snug truncate">{item.title}</p>
-                      <p className="text-[10px] text-zinc-500 dark:text-zinc-400 mt-0.5 font-semibold">{item.companyName}</p>
+                      <div className="flex items-center gap-1.5 text-[10px] text-zinc-500 dark:text-zinc-400 mt-0.5 font-medium truncate">
+                        <span className="font-semibold text-zinc-700 dark:text-zinc-300">{item.companyName}</span>
+                        {(item.requesterName || item.requesterEmail) && (
+                          <>
+                            <span className="text-zinc-300 dark:text-zinc-600">·</span>
+                            <span className="truncate text-zinc-500 dark:text-zinc-400">
+                              {item.requesterName || "담당자"}
+                              {item.requesterEmail ? ` (${item.requesterEmail})` : ""}
+                            </span>
+                          </>
+                        )}
+                      </div>
                       <p className="text-[10px] text-zinc-400 dark:text-zinc-500 mt-0.5 truncate">{item.content}</p>
                       {norm === "ACTION_REQUIRED" && (
                         <div className="mt-1.5 flex items-center gap-1 text-[9px] font-bold text-rose-600 dark:text-rose-400">
@@ -336,7 +368,7 @@ export function AdminPartnerInquiries({ initialInquiries, answerAction }: AdminP
               {/* Case Header */}
               <div className="p-5 border-b border-zinc-100 dark:border-zinc-800">
                 <div className="flex items-start justify-between gap-3 mb-3">
-                  <div className="space-y-1 min-w-0">
+                  <div className="space-y-2 min-w-0 flex-1">
                     <div className="flex items-center gap-2 flex-wrap">
                       {selectedInquiry.case_number && (
                         <span className="text-[10px] font-mono font-bold text-zinc-500 dark:text-zinc-400">
@@ -351,11 +383,36 @@ export function AdminPartnerInquiries({ initialInquiries, answerAction }: AdminP
                       </span>
                     </div>
                     <h3 className="text-sm font-bold text-zinc-900 dark:text-white leading-snug">{selectedInquiry.title}</h3>
-                    <p className="text-[10px] text-zinc-500 dark:text-zinc-400">
-                      {selectedInquiry.companyName} · {formatDate(selectedInquiry.created_at)}
-                      {selectedInquiry.closed_at ? ` · 종료: ${formatDate(selectedInquiry.closed_at)}` : ""}
-                      {selectedInquiry.reopen_count ? ` · 재오픈 ${selectedInquiry.reopen_count}회` : ""}
-                    </p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1 pt-1 text-[11px] text-zinc-600 dark:text-zinc-400">
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-semibold text-zinc-400 dark:text-zinc-500 shrink-0">회사명:</span>
+                        <span className="font-bold text-zinc-800 dark:text-zinc-200 truncate">{selectedInquiry.companyName}</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-semibold text-zinc-400 dark:text-zinc-500 shrink-0">접수일:</span>
+                        <span>{formatDate(selectedInquiry.created_at)}</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-semibold text-zinc-400 dark:text-zinc-500 shrink-0">접수 담당자:</span>
+                        <span className="font-medium text-zinc-800 dark:text-zinc-200">{selectedInquiry.requesterName || "담당자"}</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-semibold text-zinc-400 dark:text-zinc-500 shrink-0">이메일:</span>
+                        <span className="font-mono text-zinc-700 dark:text-zinc-300">{selectedInquiry.requesterEmail || "-"}</span>
+                      </div>
+                      {selectedInquiry.closed_at && (
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-semibold text-zinc-400 dark:text-zinc-500 shrink-0">종료일:</span>
+                          <span>{formatDate(selectedInquiry.closed_at)}</span>
+                        </div>
+                      )}
+                      {selectedInquiry.reopen_count ? (
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-semibold text-zinc-400 dark:text-zinc-500 shrink-0">재오픈:</span>
+                          <span className="text-amber-600 font-bold">{selectedInquiry.reopen_count}회</span>
+                        </div>
+                      ) : null}
+                    </div>
                   </div>
                   <button
                     onClick={() => setSelectedInquiry(null)}
@@ -497,7 +554,10 @@ export function AdminPartnerInquiries({ initialInquiries, answerAction }: AdminP
                       <span className="text-xs">📥</span>
                       <div className="space-y-0.5">
                         <p className="font-bold text-zinc-900 dark:text-white">케이스 접수</p>
-                        <p className="text-[10px] text-zinc-400">{formatDate(selectedInquiry.created_at)} · {selectedInquiry.companyName}</p>
+                        <p className="text-[10px] text-zinc-400">
+                          {formatDate(selectedInquiry.created_at)} · {selectedInquiry.companyName}
+                          {selectedInquiry.requesterName ? ` (${selectedInquiry.requesterName}${selectedInquiry.requesterEmail ? ` · ${selectedInquiry.requesterEmail}` : ""})` : ""}이 케이스를 접수함
+                        </p>
                       </div>
                     </div>
 
@@ -552,18 +612,38 @@ export function AdminPartnerInquiries({ initialInquiries, answerAction }: AdminP
                       className="w-full rounded-lg border border-zinc-200 p-2.5 outline-none bg-zinc-50/50 dark:border-zinc-800 dark:bg-zinc-950 text-zinc-900 dark:text-white focus:border-zinc-950 dark:focus:border-white focus:bg-zinc-50 dark:focus:bg-zinc-900 transition-colors leading-relaxed resize-none"
                     />
 
-                    {/* Action Required Toggle */}
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        id="isActionRequired"
-                        checked={isActionRequired}
-                        onChange={(e) => setIsActionRequired(e.target.checked)}
-                        className="rounded border-zinc-300 text-rose-600 focus:ring-rose-500 h-3.5 w-3.5 cursor-pointer"
-                      />
-                      <label htmlFor="isActionRequired" className="text-[10px] font-extrabold text-rose-700 dark:text-rose-400 cursor-pointer select-none">
-                        ⚠️ 조치 요청 포함 (파트너사에서 추가 조치 필요)
-                      </label>
+                    {/* Action Required & Email Controls */}
+                    <div className="space-y-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50/70 dark:bg-zinc-950/40 p-3">
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          id="isActionRequired"
+                          checked={isActionRequired}
+                          onChange={(e) => handleActionRequiredToggle(e.target.checked)}
+                          className="rounded border-zinc-300 text-rose-600 focus:ring-rose-500 h-4 w-4 cursor-pointer"
+                        />
+                        <label htmlFor="isActionRequired" className="text-xs font-bold text-rose-700 dark:text-rose-400 cursor-pointer select-none">
+                          ⚠️ 조치 요청 포함 (파트너사에서 추가 조치 필요)
+                        </label>
+                      </div>
+
+                      {isActionRequired && (
+                        <div className="flex items-center gap-2 pl-6 pt-1.5 border-t border-zinc-200/60 dark:border-zinc-800/60">
+                          <input
+                            type="checkbox"
+                            id="sendEmail"
+                            checked={sendEmail}
+                            onChange={(e) => setSendEmail(e.target.checked)}
+                            className="rounded border-zinc-300 text-blue-600 focus:ring-blue-500 h-3.5 w-3.5 cursor-pointer"
+                          />
+                          <label htmlFor="sendEmail" className="text-[11px] font-semibold text-zinc-700 dark:text-zinc-300 cursor-pointer select-none flex items-center gap-1.5 flex-wrap">
+                            <span>✉️ 담당자에게 이메일 발송</span>
+                            <span className="text-[10px] text-zinc-400 font-mono">
+                              ({selectedInquiry.requesterEmail ? `${selectedInquiry.requesterName || "담당자"} <${selectedInquiry.requesterEmail}>` : "등록된 이메일"})
+                            </span>
+                          </label>
+                        </div>
+                      )}
                     </div>
 
                     {/* Integrated 3-Action Group */}
@@ -590,7 +670,7 @@ export function AdminPartnerInquiries({ initialInquiries, answerAction }: AdminP
                         {replyText ? (
                           <button
                             type="button"
-                            onClick={() => { setReplyText(""); setIsActionRequired(false); }}
+                            onClick={() => { setReplyText(""); setIsActionRequired(false); setSendEmail(false); }}
                             className="text-[10px] font-bold text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300 cursor-pointer"
                           >
                             [작성 취소]
