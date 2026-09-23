@@ -2,6 +2,7 @@
 
 import React, { useState, useMemo } from "react";
 import Link from "next/link";
+import { CompanyContactPopover } from "@/components/admin/company-contact-popover";
 
 export interface CompanyUserItem {
   name?: string;
@@ -403,15 +404,9 @@ export function CompaniesTableClient({ companies, partnerStatuses }: CompaniesTa
                     ? "bg-blue-50 text-blue-700 border-blue-100 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-900"
                     : "bg-zinc-50 text-zinc-700 border-zinc-100 dark:bg-zinc-850 dark:text-zinc-300 dark:border-zinc-700";
 
-                const isTopRow = index < 3;
-                const tooltipPositionClass = isTopRow ? "top-full mt-2.5" : "bottom-full mb-2.5";
-                const tooltipArrowClass = isTopRow 
-                  ? "absolute bottom-full left-1/2 -translate-x-1/2 border-4 border-transparent border-b-white dark:border-b-zinc-955 -mb-[1px]" 
-                  : "absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-white dark:border-t-zinc-955 -mt-[1px]";
-
                 return (
                   <tr key={company.id} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-900/50">
-                    <td className="px-6 py-3.5 font-bold text-zinc-950 dark:text-white">
+                    <td className="px-6 py-3.5 font-bold text-zinc-955 dark:text-white">
                       <Link
                         href={`/admin/companies/${company.id}`}
                         className="hover:underline hover:text-zinc-900 dark:hover:text-zinc-300"
@@ -437,29 +432,15 @@ export function CompaniesTableClient({ companies, partnerStatuses }: CompaniesTa
                       </span>
                     </td>
                     
-                    {/* Primary Contact with hover Tooltip */}
+                    {/* Primary Contact with Portal-based Popover */}
                     <td className="px-6 py-3.5">
-                      <div className="relative group inline-block">
-                        <span className="cursor-help font-semibold text-zinc-800 dark:text-zinc-200 border-b border-dashed border-zinc-300 hover:text-zinc-955 dark:hover:text-white">
-                          {company.contactName}
-                        </span>
-                        
-                        {company.contactName !== "담당자 정보 없음" && (
-                          <div className={`absolute ${tooltipPositionClass} left-1/2 -translate-x-1/2 hidden group-hover:block w-56 p-3.5 rounded-lg border border-zinc-200 bg-white shadow-xl dark:border-zinc-800 dark:bg-zinc-950 z-20 pointer-events-none transition-all`}>
-                            <div className="space-y-1.5 text-[11px] text-zinc-600 dark:text-zinc-400">
-                              <div className="flex items-center justify-between border-b border-zinc-100 pb-1.5 mb-1.5 dark:border-zinc-800">
-                                <span className="font-bold text-zinc-955 dark:text-white text-xs">{company.contactName}</span>
-                                <span className="rounded bg-emerald-50 text-emerald-705 px-1.5 py-0.5 text-[8px] font-bold dark:bg-emerald-950/40 dark:text-emerald-300">주 컨택</span>
-                              </div>
-                              {company.contactTitle && <p><span className="font-bold text-zinc-405 block mb-0.5">직함</span>{company.contactTitle}</p>}
-                              {company.contactPosition && <p><span className="font-bold text-zinc-405 block mb-0.5">부서 / 포지션</span>{company.contactPosition}</p>}
-                              {company.contactPhone && <p><span className="font-bold text-zinc-405 block mb-0.5">연락처</span>{company.contactPhone}</p>}
-                              {company.contactEmail && <p className="truncate"><span className="font-bold text-zinc-405 block mb-0.5">이메일</span>{company.contactEmail}</p>}
-                            </div>
-                            <div className={tooltipArrowClass} />
-                          </div>
-                        )}
-                      </div>
+                      <CompanyContactPopover
+                        contactName={company.contactName}
+                        contactTitle={company.contactTitle}
+                        contactPosition={company.contactPosition}
+                        contactPhone={company.contactPhone}
+                        contactEmail={company.contactEmail}
+                      />
                     </td>
                     
                     {/* Registered Users Count Column (Admin + Staff) */}
