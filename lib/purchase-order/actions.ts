@@ -822,6 +822,61 @@ export async function updateProductSuppliers(productId: string, supplierIds: str
 }
 
 /**
+ * Helper to generate PO Number following convention: PO-YYYYMMDD-COMPANYCODE-###
+ * Sequence restarts at 001 for each Supplier + Order Date.
+ */
+export async function generateNextPoNumber(
+  supabase: any,
+  supplierId: string,
+  orderDateStr: string,
+  extraOffset: number = 0
+): Promise<{ poNumber: string; companyCode: string }> {
+  const { data: company, error: cErr } = await supabase
+    .from("companies")
+    .select("id, name, company_code")
+    .eq("id", supplierId)
+    .single();
+
+  if (cErr || !company) {
+    throw new Error("공급사 회사 정보를 찾을 수 없습니다.");
+  }
+
+  const rawCode = (company.company_code || "").trim();
+  if (!rawCode) {
+    throw new Error(`공급사 '${company.name}'의 회사 코드(company_code)가 설정되어 있지 않습니다. [회사 관리] 메뉴에서 회사 코드를 등록 후 다시 시도해 주세요.`);
+  }
+
+  const companyCode = rawCode.toUpperCase();
+  const dateFormatted = orderDateStr.replace(/-/g, "");
+  const prefix = `PO-${dateFormatted}-${companyCode}-`;
+
+  const { data: existingPos } = await supabase
+    .from("purchase_orders")
+    .select("po_number")
+    .eq("supplier_id", supplierId)
+    .eq("order_date", orderDateStr);
+
+  let maxSeq = 0;
+  (existingPos ?? []).forEach((p: any) => {
+    const poNum = p.po_number || "";
+    if (poNum.startsWith(prefix)) {
+      const parts = poNum.split("-");
+      const seqPart = parts[parts.length - 1];
+      const seqNum = parseInt(seqPart, 10);
+      if (!isNaN(seqNum) && seqNum > maxSeq) {
+        maxSeq = seqNum;
+      }
+    }
+  });
+
+  const nextSeq = maxSeq + 1 + extraOffset;
+  const seqStr = String(nextSeq).padStart(3, "0");
+  const poNumber = `${prefix}${seqStr}`;
+
+  return { poNumber, companyCode };
+}
+
+/**
  * Create a new Purchase Order in DRAFT status.
  */
 export async function createPurchaseOrder(data: CreatePoInput) {
@@ -852,45 +907,72 @@ export async function createPurchaseOrder(data: CreatePoInput) {
     if (l.unit_cost < 0) throw new Error("구매 단가는 0 이상이어야 합니다.");
   });
 
-  // 3. Create PO Header
-  const insertPayload: any = {
-    supplier_id: data.supplier_id,
-    order_date: data.order_date,
-    currency: data.currency,
-    payment_terms: data.payment_terms || null,
-    incoterms: data.incoterms || null,
-    port_of_loading: data.port_of_loading || null,
-    expected_ready_date: data.expected_ready_date || null,
-    expected_ship_date: data.expected_ship_date || null,
-    eta: data.eta || null,
-    ship_from_warehouse_id: data.ship_from_warehouse_id || null,
-    destination_warehouse_id: data.destination_warehouse_id,
-    po_receiving_email: data.po_receiving_email || null,
-    internal_note: data.internal_note || null,
-    supplier_facing_note: data.supplier_facing_note || null,
-    created_by: userId,
-    po_status: "DRAFT",
-    fulfillment_status: "PENDING",
-  };
+  // 3. Create PO Header with convention PO-YYYYMMDD-COMPANYCODE-###
+  let newPo: any = null;
+  let poErr: any = null;
+  let attempts = 0;
 
-  let { data: newPo, error: poErr } = await supabase
-    .from("purchase_orders")
-    .insert(insertPayload)
-    .select("id, po_number")
-    .single();
+  while (!newPo && attempts < 5) {
+    const { poNumber } = await generateNextPoNumber(
+      supabase,
+      data.supplier_id,
+      data.order_date,
+      attempts
+    );
 
-  if (poErr && (poErr.message?.includes("eta") || poErr.code === "42703")) {
-    delete insertPayload.eta;
-    const retryRes = await supabase
+    const insertPayload: any = {
+      po_number: poNumber,
+      supplier_id: data.supplier_id,
+      order_date: data.order_date,
+      currency: data.currency,
+      payment_terms: data.payment_terms || null,
+      incoterms: data.incoterms || null,
+      port_of_loading: data.port_of_loading || null,
+      expected_ready_date: data.expected_ready_date || null,
+      expected_ship_date: data.expected_ship_date || null,
+      eta: data.eta || null,
+      ship_from_warehouse_id: data.ship_from_warehouse_id || null,
+      destination_warehouse_id: data.destination_warehouse_id,
+      po_receiving_email: data.po_receiving_email || null,
+      internal_note: data.internal_note || null,
+      supplier_facing_note: data.supplier_facing_note || null,
+      created_by: userId,
+      po_status: "DRAFT",
+      fulfillment_status: "PENDING",
+    };
+
+    const res = await supabase
       .from("purchase_orders")
       .insert(insertPayload)
       .select("id, po_number")
       .single();
-    newPo = retryRes.data;
-    poErr = retryRes.error;
+
+    if (!res.error && res.data) {
+      newPo = res.data;
+    } else {
+      poErr = res.error;
+      if (res.error?.message?.includes("eta") || res.error?.code === "42703") {
+        delete insertPayload.eta;
+        const retryRes = await supabase
+          .from("purchase_orders")
+          .insert(insertPayload)
+          .select("id, po_number")
+          .single();
+        if (!retryRes.error && retryRes.data) {
+          newPo = retryRes.data;
+          break;
+        }
+      }
+
+      if (res.error?.code === "23505" || res.error?.message?.includes("po_number")) {
+        attempts++;
+      } else {
+        throw new Error(`발주서 헤더 생성 실패: ${res.error?.message || "알 수 없는 오류"}`);
+      }
+    }
   }
 
-  if (poErr || !newPo) throw new Error(`발주서 헤더 생성 실패: ${poErr?.message || "알 수 없는 오류"}`);
+  if (!newPo) throw new Error(`발주서 헤더 생성 실패: ${poErr?.message || "알 수 없는 오류"}`);
   const poId = newPo.id;
 
   // 4. Create PO Lines (taking snapshotted details from product master)

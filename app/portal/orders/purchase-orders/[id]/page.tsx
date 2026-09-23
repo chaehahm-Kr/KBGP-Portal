@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 import { getPortalPurchaseOrderById, getPortalPoChangeRequests } from "@/lib/portal/actions";
 import PoDetailClient from "@/components/portal/po-detail-client";
 import { requireCompanyMembership } from "@/lib/company/dal";
@@ -19,8 +20,15 @@ export default async function PortalPoDetailPage({ params }: PortalPoDetailPageP
   const supabase = await createClient();
 
   // Fetch PO detail and change request logs
-  const po = await getPortalPurchaseOrderById(id);
-  const changeRequests = await getPortalPoChangeRequests(id);
+  let po: any = null;
+  let changeRequests: any[] = [];
+  try {
+    po = await getPortalPurchaseOrderById(id);
+    changeRequests = await getPortalPoChangeRequests(id);
+  } catch (e: any) {
+    console.warn("PO not accessible or unauthorized for supplier:", e?.message);
+    redirect("/portal/orders/purchase-orders");
+  }
 
   // Fetch shipments scoping by PO ID
   const { data: dbShipments } = await supabase
