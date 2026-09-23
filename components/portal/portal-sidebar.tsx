@@ -42,11 +42,11 @@ export default function PortalSidebar({
 
   const menuItems: MenuItem[] = [
     { name: "대시보드", icon: DashboardIcon, href: "/portal" },
-    { name: "입점 신청서", icon: ApplicationsIcon, href: "/portal/applications" },
     { name: "제품 관리", icon: ProductsIcon, href: "/portal/products" },
     { name: "주문 관리", icon: SalesIcon, href: "/portal/orders/purchase-orders" },
     { name: "정산 관리", icon: ReportsIcon, href: "/portal/finance" },
     { name: "문의 지원", icon: SupportIcon, href: "/portal/support" },
+    { name: "입점 신청서", icon: ApplicationsIcon, href: "/portal/applications" },
   ];
 
   const [isSettingsOpen, setIsSettingsOpen] = useState(() => {
