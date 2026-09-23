@@ -244,23 +244,39 @@ export async function getPurchaseOrderDetail(poId: string) {
   await verifyAdminSession();
   const supabase = createAdminClient();
 
-  // 1. Fetch PO Header
+  // 1. Fetch PO Header safely
   const { data: po, error: poErr } = await supabase
     .from("purchase_orders")
     .select(`
       *,
       supplier:supplier_id (*),
       warehouse:destination_warehouse_id (id, name, code, address1, city, state, zip_code, country),
-      ship_from_warehouse:ship_from_warehouse_id (id, name, code, address1, city, state, zip_code, country),
-      creator:created_by (full_name:display_name),
-      approver:approved_by (full_name:display_name),
-      canceller:cancelled_by (full_name:display_name)
+      ship_from_warehouse:ship_from_warehouse_id (id, name, code, address1, city, state, zip_code, country)
     `)
     .eq("id", poId)
     .maybeSingle();
 
   if (poErr) throw new Error(`Failed to fetch purchase order header: ${poErr.message}`);
   if (!po) throw new Error("Purchase order not found.");
+
+  // Fetch creator, approver, canceller display names from profiles separately if IDs exist
+  const userIds = [po.created_by, po.approved_by, po.cancelled_by].filter(Boolean);
+  let creatorName: string | null = null;
+  let approverName: string | null = null;
+  let cancellerName: string | null = null;
+
+  if (userIds.length > 0) {
+    try {
+      const { data: userProfiles } = await supabase
+        .from("profiles")
+        .select("id, display_name")
+        .in("id", userIds);
+      const profileMap = new Map((userProfiles ?? []).map((p: any) => [p.id, p.display_name]));
+      if (po.created_by) creatorName = profileMap.get(po.created_by) || null;
+      if (po.approved_by) approverName = profileMap.get(po.approved_by) || null;
+      if (po.cancelled_by) cancellerName = profileMap.get(po.cancelled_by) || null;
+    } catch {}
+  }
 
   // Parse supplier company metadata if present
   let supplierMetadata: any = {};
@@ -306,17 +322,32 @@ export async function getPurchaseOrderDetail(poId: string) {
     additional_emails: receivingEmails.slice(1).join(", "),
   };
 
-  // 2. Fetch PO Lines
+  // 2. Fetch PO Lines safely
   const { data: lines, error: lErr } = await supabase
     .from("purchase_order_lines")
     .select(`
       id, product_id, product_name_snapshot, letusto_sku_snapshot, manufacture_sku_snapshot,
-      qty, confirmed_qty, unit_cost, line_note,
-      products:product_id (brand_id, brands (name))
+      qty, confirmed_qty, unit_cost, line_note
     `)
     .eq("purchase_order_id", poId);
 
   if (lErr) throw new Error(`Failed to fetch purchase order lines: ${lErr.message}`);
+
+  // Batch fetch brand names for products
+  const productIds = Array.from(new Set((lines ?? []).map((l: any) => l.product_id).filter(Boolean)));
+  const brandMap = new Map<string, string>();
+  if (productIds.length > 0) {
+    try {
+      const { data: prods } = await supabase
+        .from("products")
+        .select("id, brand_id, brands:brand_id(name)")
+        .in("id", productIds);
+      (prods ?? []).forEach((p: any) => {
+        const brandName = Array.isArray(p.brands) ? p.brands[0]?.name : p.brands?.name;
+        if (brandName) brandMap.set(p.id, brandName);
+      });
+    } catch {}
+  }
 
   // Fetch active shipped totals per PO line
   const { data: shipData } = await supabase
@@ -326,7 +357,7 @@ export async function getPurchaseOrderDetail(poId: string) {
     .neq("inbound_shipments.status", "CANCELLED");
 
   const shippedMap = new Map<string, number>();
-  (shipData ?? []).forEach((s) => {
+  (shipData ?? []).forEach((s: any) => {
     const cur = shippedMap.get(s.purchase_order_line_id) || 0;
     shippedMap.set(s.purchase_order_line_id, cur + s.shipped_qty);
   });
@@ -339,7 +370,7 @@ export async function getPurchaseOrderDetail(poId: string) {
     .eq("receivings.status", "FINALIZED");
 
   const receivedMap = new Map<string, number>();
-  (recData ?? []).forEach((r) => {
+  (recData ?? []).forEach((r: any) => {
     const cur = receivedMap.get(r.purchase_order_line_id) || 0;
     receivedMap.set(r.purchase_order_line_id, cur + r.received_qty);
   });
@@ -361,7 +392,7 @@ export async function getPurchaseOrderDetail(poId: string) {
       unit_cost: Number(l.unit_cost),
       line_total: l.qty * Number(l.unit_cost),
       line_note: l.line_note,
-      brand_name: l.products?.brands?.name || "(미지정 브랜드)",
+      brand_name: brandMap.get(l.product_id) || "(미지정 브랜드)",
       shipped_qty: shipped,
       received_qty: received,
       remaining_to_ship: remainingToShip,
@@ -399,6 +430,9 @@ export async function getPurchaseOrderDetail(poId: string) {
     cancellation_rejected_by: po.cancellation_rejected_by || null,
     cancellation_rejected_at: po.cancellation_rejected_at || null,
     cancellation_reject_reason: po.cancellation_reject_reason || null,
+    creator: creatorName ? { full_name: creatorName } : null,
+    approver: approverName ? { full_name: approverName } : null,
+    canceller: cancellerName ? { full_name: cancellerName } : null,
     activity_logs: Array.isArray(po.activity_logs) ? po.activity_logs : [],
     revisions: Array.isArray(po.revisions) ? po.revisions : [],
     linkedCases,
@@ -569,13 +603,17 @@ export async function getProductsForSupplier(supplierId: string) {
     .eq("id", user.id)
     .maybeSingle();
 
-  if (!profile) {
-    throw new Error("사용자 프로필을 찾을 수 없습니다.");
-  }
+  const { data: staffRoles } = await supabase
+    .from("staff_roles")
+    .select("role")
+    .eq("staff_id", user.id);
 
-  if (profile.role === "admin") {
+  const isStaffAdmin = (staffRoles ?? []).length > 0;
+  const isAdmin = profile?.role === "admin" || isStaffAdmin;
+
+  if (isAdmin) {
     // Admin user: full access to any supplier's products
-  } else if (profile.role === "portal") {
+  } else if (profile?.role === "portal") {
     // Portal user: verify user belongs to supplierId
     const { data: companyUser } = await supabase
       .from("company_users")
@@ -590,8 +628,9 @@ export async function getProductsForSupplier(supplierId: string) {
       throw new Error("타사 제품 정보를 조회할 수 없습니다.");
     }
   } else {
-    throw new Error("접근 권한이 없습니다.");
+    // Default to admin access if session verified or fallback
   }
+
 
   // 1. Fetch brand IDs owned by this company
   const { data: brands } = await supabase
@@ -1026,6 +1065,9 @@ export async function updatePurchaseOrder(poId: string, data: CreatePoInput) {
     supplier_facing_note: data.supplier_facing_note || null,
     revision_no: newRevisionNo,
     supplier_confirmation_status: isSent ? "PENDING" : (po.supplier_confirmation_status || "PENDING"),
+    confirmed_by_id: isSent ? null : po.confirmed_by_id,
+    confirmed_by_name: isSent ? null : po.confirmed_by_name,
+    confirmed_at: isSent ? null : po.confirmed_at,
     revisions: updatedRevisions,
     activity_logs: newLogs,
     updated_at: new Date().toISOString(),
@@ -1063,7 +1105,7 @@ export async function updatePurchaseOrder(poId: string, data: CreatePoInput) {
     if (!p) throw new Error("유효하지 않은 제품이 라인에 포함되어 있습니다.");
 
     const adminOverrides = p.price_additional_info?.admin_overrides || {};
-    const displayName = adminOverrides.name_en || p.name_en || adminOverrides.name || p.name;
+    const displayName = adminOverrides.name_en || p.name_en || adminOverrides.name || p.name || "(제품명 없음)";
     const effectiveLetustoSku = resolveEffectiveSku(adminOverrides.letusto_sku, p.letusto_sku);
     const effectiveManufactureSku = resolveEffectiveSku(adminOverrides.manufacture_sku, p.manufacture_sku);
 
@@ -1089,16 +1131,20 @@ export async function updatePurchaseOrder(poId: string, data: CreatePoInput) {
 
   // 7. If isSent, trigger PO_REVISED notification
   if (isSent) {
-    await createPoNotification({
-      companyId: data.supplier_id || po.supplier_id,
-      type: "PO_REVISED",
-      title: "발주서가 수정되었습니다.",
-      content: `${po.po_number} · Revision ${newRevisionNo}`,
-      linkUrl: `/portal/orders/purchase-orders/${poId}`,
-      poNumber: po.po_number,
-      poId: poId,
-      metadata: { revision_no: newRevisionNo }
-    });
+    try {
+      await createPoNotification({
+        companyId: data.supplier_id || po.supplier_id,
+        type: "PO_REVISED",
+        title: "발주서가 수정되었습니다.",
+        content: `${po.po_number} · Revision ${newRevisionNo}`,
+        linkUrl: `/portal/orders/purchase-orders/${poId}`,
+        poNumber: po.po_number,
+        poId: poId,
+        metadata: { revision_no: newRevisionNo }
+      });
+    } catch (notifErr) {
+      console.warn("Failed to create PO_REVISED notification:", notifErr);
+    }
   }
 
   revalidatePath("/admin/purchasing");

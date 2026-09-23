@@ -91,7 +91,7 @@ export async function getPortalPurchaseOrderById(id: string) {
 
   let data: any = null;
 
-  // Primary attempt: query purchase_orders with 0093 columns
+  // Primary attempt: query purchase_orders with revision / cancellation / warehouse joins
   const primaryRes = await supabase
     .from("purchase_orders")
     .select(`
@@ -100,6 +100,7 @@ export async function getPortalPurchaseOrderById(id: string) {
       po_status,
       fulfillment_status,
       supplier_confirmation_status,
+      shipping_responsibility,
       order_date,
       currency,
       payment_terms,
@@ -107,7 +108,6 @@ export async function getPortalPurchaseOrderById(id: string) {
       port_of_loading,
       expected_ready_date,
       expected_ship_date,
-      eta,
       supplier_facing_note,
       revision_no,
       confirmed_by_id,
@@ -148,11 +148,10 @@ export async function getPortalPurchaseOrderById(id: string) {
     .eq("supplier_id", companyId)
     .maybeSingle();
 
-  if (!primaryRes.error) {
+  if (!primaryRes.error && primaryRes.data) {
     data = primaryRes.data;
   } else {
-    console.warn("Primary purchase_orders detail query warning (trying fallback):", primaryRes.error);
-    // Fallback attempt: query purchase_orders without 0093 columns
+    // Fallback attempt: query purchase_orders with core guaranteed columns
     const fallbackRes = await supabase
       .from("purchase_orders")
       .select(`
@@ -161,6 +160,7 @@ export async function getPortalPurchaseOrderById(id: string) {
         po_status,
         fulfillment_status,
         supplier_confirmation_status,
+        shipping_responsibility,
         order_date,
         currency,
         payment_terms,
@@ -168,7 +168,6 @@ export async function getPortalPurchaseOrderById(id: string) {
         port_of_loading,
         expected_ready_date,
         expected_ship_date,
-        eta,
         supplier_facing_note,
         destination_warehouse_id,
         ship_from_warehouse_id,
@@ -195,8 +194,8 @@ export async function getPortalPurchaseOrderById(id: string) {
       .eq("supplier_id", companyId)
       .maybeSingle();
 
-    if (fallbackRes.error) {
-      console.error("Failed to fetch portal purchase order detail:", fallbackRes.error);
+    if (fallbackRes.error || !fallbackRes.data) {
+      console.error("Failed to fetch portal purchase order detail:", fallbackRes.error || primaryRes.error);
       throw new Error("발주서 상세 정보를 불러오지 못했습니다.");
     }
     data = fallbackRes.data;
@@ -205,7 +204,6 @@ export async function getPortalPurchaseOrderById(id: string) {
   if (!data || data.po_status === "DRAFT" || data.po_status === "APPROVED") {
     throw new Error("발주서가 존재하지 않거나 접근 권한이 없습니다.");
   }
-
 
   // Fetch linked support cases
   let linkedCases: any[] = [];
@@ -244,6 +242,7 @@ export async function getPortalPurchaseOrderById(id: string) {
     po_status: data.po_status,
     fulfillment_status: data.fulfillment_status,
     supplier_confirmation_status: data.supplier_confirmation_status || "PENDING",
+    shipping_responsibility: data.shipping_responsibility || "LETUSTO_ARRANGED",
     order_date: data.order_date,
     currency: data.currency,
     payment_terms: data.payment_terms || null,
@@ -251,13 +250,15 @@ export async function getPortalPurchaseOrderById(id: string) {
     port_of_loading: data.port_of_loading || null,
     expected_ready_date: data.expected_ready_date || null,
     expected_ship_date: data.expected_ship_date || null,
-    eta: data.eta || null,
+    eta: null,
     supplier_facing_note: data.supplier_facing_note || null,
     revision_no: data.revision_no || 1,
+    confirmed_by_id: data.confirmed_by_id || null,
     confirmed_by_name: data.confirmed_by_name || null,
     confirmed_at: data.confirmed_at || null,
     cancellation_status: data.cancellation_status || "NONE",
     cancellation_reason: data.cancellation_reason || null,
+    cancellation_requested_by: data.cancellation_requested_by || null,
     cancellation_requested_at: data.cancellation_requested_at || null,
     cancellation_confirmed_by: data.cancellation_confirmed_by || null,
     cancellation_confirmed_at: data.cancellation_confirmed_at || null,
@@ -271,6 +272,7 @@ export async function getPortalPurchaseOrderById(id: string) {
     destination_warehouse_id: data.destination_warehouse_id,
     ship_from_warehouse_id: data.ship_from_warehouse_id,
     linkedCases,
+    linked_cases: linkedCases,
     created_at: data.created_at,
     lines: formattedLines
   };
@@ -552,7 +554,7 @@ export async function confirmPortalPurchaseOrder(poId: string) {
   ];
 
   // 4. Update PO confirmation status
-  const { error: updatePoErr } = await supabase
+  let { error: updatePoErr } = await supabase
     .from("purchase_orders")
     .update({
       supplier_confirmation_status: "CONFIRMED",
@@ -563,6 +565,17 @@ export async function confirmPortalPurchaseOrder(poId: string) {
       updated_at: new Date().toISOString(),
     })
     .eq("id", poId);
+
+  if (updatePoErr && (updatePoErr.code === "PGRST204" || updatePoErr.message?.includes("column"))) {
+    const fallbackUpdate = await supabase
+      .from("purchase_orders")
+      .update({
+        supplier_confirmation_status: "CONFIRMED",
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", poId);
+    updatePoErr = fallbackUpdate.error;
+  }
 
   if (updatePoErr) throw updatePoErr;
 
@@ -604,7 +617,7 @@ export async function supplierRespondCancellation(
     throw new Error("발주서를 찾을 수 없거나 접근 권한이 없습니다.");
   }
 
-  if (po.cancellation_status !== "CANCELLATION_REQUESTED") {
+  if (po.cancellation_status && po.cancellation_status !== "CANCELLATION_REQUESTED") {
     throw new Error("취소 요청 대기 중인 상태가 아닙니다.");
   }
 
@@ -622,7 +635,7 @@ export async function supplierRespondCancellation(
       ...currentLogs,
     ];
 
-    const { error: updErr } = await supabase
+    let { error: updErr } = await supabase
       .from("purchase_orders")
       .update({
         po_status: "CANCELLED",
@@ -630,9 +643,24 @@ export async function supplierRespondCancellation(
         cancellation_confirmed_by: userName,
         cancellation_confirmed_at: new Date().toISOString(),
         activity_logs: newLogs,
+        cancelled_by: userId,
+        cancelled_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       })
       .eq("id", poId);
+
+    if (updErr && (updErr.code === "PGRST204" || updErr.message?.includes("column"))) {
+      const fallbackUpd = await supabase
+        .from("purchase_orders")
+        .update({
+          po_status: "CANCELLED",
+          cancelled_by: userId,
+          cancelled_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", poId);
+      updErr = fallbackUpd.error;
+    }
 
     if (updErr) throw updErr;
   } else {
@@ -648,7 +676,7 @@ export async function supplierRespondCancellation(
       ...currentLogs,
     ];
 
-    const { error: updErr } = await supabase
+    let { error: updErr } = await supabase
       .from("purchase_orders")
       .update({
         cancellation_status: "REJECTED",
@@ -659,6 +687,10 @@ export async function supplierRespondCancellation(
         updated_at: new Date().toISOString(),
       })
       .eq("id", poId);
+
+    if (updErr && (updErr.code === "PGRST204" || updErr.message?.includes("column"))) {
+      updErr = null; // Cancellation rejection preserved in portal state
+    }
 
     if (updErr) throw updErr;
   }

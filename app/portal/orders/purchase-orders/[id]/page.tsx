@@ -22,7 +22,7 @@ export default async function PortalPoDetailPage({ params }: PortalPoDetailPageP
   const po = await getPortalPurchaseOrderById(id);
   const changeRequests = await getPortalPoChangeRequests(id);
 
-  // Fetch shipments scoping by supplier companyId
+  // Fetch shipments scoping by PO ID
   const { data: dbShipments } = await supabase
     .from("inbound_shipments")
     .select(`
@@ -33,7 +33,6 @@ export default async function PortalPoDetailPage({ params }: PortalPoDetailPageP
       )
     `)
     .eq("purchase_order_id", id)
-    .eq("supplier_id", companyId)
     .order("created_at", { ascending: false });
   const shipments = dbShipments ?? [];
 
