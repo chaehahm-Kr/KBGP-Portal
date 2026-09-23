@@ -13,7 +13,8 @@ interface WarehouseOption {
   id: string;
   name: string;
   code: string;
-  company_id: string;
+  type?: string;
+  company_id?: string;
 }
 
 interface SupplierOption {
@@ -326,11 +327,13 @@ export function PurchaseOrderForm({
               className="w-full rounded border border-zinc-200 p-2.5 bg-white text-zinc-900 dark:border-zinc-850 dark:bg-zinc-955 dark:text-white focus:border-zinc-950 outline-none"
               required
             >
-              {warehouses.map((wh) => (
-                <option key={wh.id} value={wh.id}>
-                  [{wh.code}] {wh.name}
-                </option>
-              ))}
+              {warehouses
+                .filter((wh) => !wh.type || wh.type.toLowerCase() === "own")
+                .map((wh) => (
+                  <option key={wh.id} value={wh.id}>
+                    [{wh.code}] {wh.name}
+                  </option>
+                ))}
             </select>
           </div>
 

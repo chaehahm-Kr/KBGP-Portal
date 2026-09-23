@@ -24,13 +24,13 @@ export default async function AdminPurchasingPage() {
   // 1. Fetch all PO records
   const pos = await getPurchaseOrders();
 
-  // 2. Fetch active warehouses for dropdown filter
+  // 2. Fetch active Own warehouses for dropdown filter
   const { data: dbWarehouses } = await supabase
     .from("warehouses")
-    .select("id, name, code")
+    .select("id, name, code, type")
     .eq("status", "active")
     .order("name", { ascending: true });
-  const warehouses = dbWarehouses ?? [];
+  const warehouses = (dbWarehouses ?? []).filter((w: any) => (w.type || "").toLowerCase() === "own");
 
   // 3. Fetch suppliers for dropdown filter
   const suppliers = await getSuppliersForPo();

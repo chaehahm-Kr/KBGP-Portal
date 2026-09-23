@@ -44,7 +44,7 @@ export interface CreatePoInput {
 }
 
 /**
- * Fetch all purchase orders with aggregated statistics and names.
+ * Fetch all purchase orders with aggregated statistics, names, and enriched line items for product-level view.
  */
 export async function getPurchaseOrders() {
   await verifyAdminSession();
@@ -54,28 +54,79 @@ export async function getPurchaseOrders() {
     .from("purchase_orders")
     .select(`
       id, po_number, order_date, po_status, fulfillment_status, supplier_confirmation_status, currency, expected_ready_date, updated_at,
-      companies:supplier_id (name),
-      destination_warehouse:destination_warehouse_id (name, code),
-      ship_from_warehouse:ship_from_warehouse_id (name, code),
-      purchase_order_lines (qty, unit_cost)
+      companies:supplier_id (id, name),
+      destination_warehouse:destination_warehouse_id (id, name, code),
+      ship_from_warehouse:ship_from_warehouse_id (id, name, code),
+      purchase_order_lines (
+        id, product_id, qty, unit_cost, confirmed_qty, product_name_snapshot, manufacture_sku_snapshot, letusto_sku_snapshot, line_note,
+        products (
+          id, name, name_en, manufacture_sku, letusto_sku, parent_sku, child_sku, brand_id, price_additional_info,
+          brands (name),
+          product_images (storage_path, position)
+        )
+      )
     `)
     .order("created_at", { ascending: false });
 
   if (error) throw new Error(`Failed to fetch purchase orders: ${error.message}`);
 
-  // Fetch all shipments and receivings in batch for mapping
+  // Fetch all shipments with lines in batch
   const { data: allShipments } = await supabase
     .from("inbound_shipments")
-    .select("purchase_order_id, status, eta");
+    .select("id, purchase_order_id, status, eta, inbound_shipment_lines (purchase_order_line_id, shipped_qty)");
 
+  // Fetch all receivings with lines in batch
   const { data: allReceivings } = await supabase
     .from("receivings")
-    .select("purchase_order_id, status, receiving_lines(received_qty, damaged_qty, hold_qty)");
+    .select("id, purchase_order_id, status, receiving_lines (purchase_order_line_id, received_qty, damaged_qty, hold_qty)");
+
+  // Build shipped & received maps by purchase_order_line_id
+  const shippedLineMap = new Map<string, number>();
+  (allShipments ?? []).forEach((s: any) => {
+    if (s.status !== "CANCELLED") {
+      (s.inbound_shipment_lines ?? []).forEach((sl: any) => {
+        const cur = shippedLineMap.get(sl.purchase_order_line_id) || 0;
+        shippedLineMap.set(sl.purchase_order_line_id, cur + (sl.shipped_qty || 0));
+      });
+    }
+  });
+
+  const receivedLineMap = new Map<string, number>();
+  (allReceivings ?? []).forEach((r: any) => {
+    (r.receiving_lines ?? []).forEach((rl: any) => {
+      const cur = receivedLineMap.get(rl.purchase_order_line_id) || 0;
+      const net = (rl.received_qty || 0) - (rl.damaged_qty || 0) - (rl.hold_qty || 0);
+      receivedLineMap.set(rl.purchase_order_line_id, cur + Math.max(0, net));
+    });
+  });
+
+  const { getSignedFileUrl } = await import("@/lib/files/storage");
+
+  // Collect image paths to sign
+  const storagePaths = new Set<string>();
+  (pos ?? []).forEach((po: any) => {
+    (po.purchase_order_lines ?? []).forEach((l: any) => {
+      const imgs = l.products?.product_images || [];
+      if (imgs.length > 0 && imgs[0]?.storage_path) {
+        storagePaths.add(imgs[0].storage_path);
+      }
+    });
+  });
+
+  const signedImageMap = new Map<string, string>();
+  for (const path of storagePaths) {
+    try {
+      const url = await getSignedFileUrl(path);
+      if (url) signedImageMap.set(path, url);
+    } catch {
+      // Ignore
+    }
+  }
 
   return (pos ?? []).map((po: any) => {
-    const lines = po.purchase_order_lines || [];
-    const totalQty = lines.reduce((sum: number, l: any) => sum + l.qty, 0);
-    const totalAmount = lines.reduce((sum: number, l: any) => sum + (l.qty * Number(l.unit_cost)), 0);
+    const rawLines = po.purchase_order_lines || [];
+    const totalQty = rawLines.reduce((sum: number, l: any) => sum + l.qty, 0);
+    const totalAmount = rawLines.reduce((sum: number, l: any) => sum + (l.qty * Number(l.unit_cost)), 0);
 
     const shipments = (allShipments ?? []).filter((s) => s.purchase_order_id === po.id);
     const receivings = (allReceivings ?? []).filter((r) => r.purchase_order_id === po.id);
@@ -106,6 +157,52 @@ export async function getPurchaseOrders() {
 
     const eta = activeShipments.length > 0 && activeShipments[0].eta ? activeShipments[0].eta : po.expected_ready_date;
 
+    const supplierName = po.companies?.name || "(미지정 공급사)";
+    const warehouseName = po.destination_warehouse?.name || "(미지정 창고)";
+    const warehouseCode = po.destination_warehouse?.code || "-";
+
+    const lines = rawLines.map((l: any) => {
+      const p = l.products || {};
+      const adminOverrides = p.price_additional_info?.admin_overrides || {};
+      const prodName = l.product_name_snapshot || adminOverrides.name_en || p.name_en || adminOverrides.name || p.name || "(이름 없음)";
+      const letustoSku = l.letusto_sku_snapshot || resolveEffectiveSku(adminOverrides.letusto_sku, p.letusto_sku) || "-";
+      const manufactureSku = l.manufacture_sku_snapshot || resolveEffectiveSku(adminOverrides.manufacture_sku, p.manufacture_sku) || "-";
+      
+      const shippedQty = shippedLineMap.get(l.id) || 0;
+      const receivedQty = receivedLineMap.get(l.id) || 0;
+      const remainingQty = Math.max(0, l.qty - receivedQty);
+
+      const firstImg = (p.product_images || []).sort((a: any, b: any) => (a.position || 0) - (b.position || 0))[0];
+      const imageUrl = firstImg?.storage_path ? signedImageMap.get(firstImg.storage_path) || null : null;
+
+      return {
+        id: l.id,
+        po_id: po.id,
+        po_number: po.po_number,
+        product_id: l.product_id,
+        product_name: prodName,
+        letusto_sku: letustoSku,
+        manufacture_sku: manufactureSku,
+        brand_name: p.brands?.name || "(미지정 브랜드)",
+        qty: l.qty,
+        unit_cost: Number(l.unit_cost),
+        confirmed_qty: l.confirmed_qty !== null ? Number(l.confirmed_qty) : null,
+        line_note: l.line_note || "",
+        shipped_qty: shippedQty,
+        received_qty: receivedQty,
+        remaining_qty: remainingQty,
+        image_url: imageUrl,
+        supplier_name: supplierName,
+        order_date: po.order_date,
+        po_status: po.po_status,
+        fulfillment_status: po.fulfillment_status,
+        supplier_confirmation_status: po.supplier_confirmation_status,
+        warehouse_code: warehouseCode,
+        warehouse_name: warehouseName,
+        eta: eta,
+      };
+    });
+
     return {
       id: po.id,
       po_number: po.po_number,
@@ -117,9 +214,11 @@ export async function getPurchaseOrders() {
       currency: po.currency,
       expected_ready_date: po.expected_ready_date,
       last_updated: po.updated_at,
-      supplier_name: po.companies?.name || "(미지정 공급사)",
-      warehouse_name: po.destination_warehouse?.name || "(미지정 창고)",
-      warehouse_code: po.destination_warehouse?.code || "-",
+      supplier_name: supplierName,
+      supplier_id: po.companies?.id || "",
+      warehouse_name: warehouseName,
+      warehouse_code: warehouseCode,
+      destination_warehouse_id: po.destination_warehouse_id,
       ship_from_name: po.ship_from_warehouse?.name || "-",
       ship_from_code: po.ship_from_warehouse?.code || "-",
       total_qty: totalQty,
@@ -129,6 +228,7 @@ export async function getPurchaseOrders() {
       receiving_status: receivingStatus,
       final_qty: finalQty,
       eta: eta,
+      lines: lines,
     };
   });
 }
@@ -237,86 +337,107 @@ export async function getPurchaseOrderDetail(poId: string) {
 }
 
 /**
- * Fetch all companies that have the active Supplier role profile mapping.
+ * Fetch all active companies to serve as Suppliers for Purchase Orders.
  */
 export async function getSuppliersForPo() {
   await verifyAdminSession();
   const supabase = createAdminClient();
 
-  // Fetch company IDs that have the Supplier role
-  const { data: roles, error: rErr } = await supabase
-    .from("company_roles")
-    .select("company_id")
-    .eq("role", "Supplier");
+  // Fetch active companies
+  const { data: companies, error: cErr } = await supabase
+    .from("companies")
+    .select("id, name, country, contact_name, contact_phone, status")
+    .eq("status", "active")
+    .order("name", { ascending: true });
 
-  if (rErr) throw new Error(`Failed to fetch company roles: ${rErr.message}`);
+  if (cErr) throw new Error(`Failed to fetch active companies: ${cErr.message}`);
+  if (!companies || companies.length === 0) return [];
 
-  const supplierIds = (roles ?? []).map((r) => r.company_id);
-  if (supplierIds.length === 0) return [];
+  const companyIds = companies.map((c) => c.id);
 
-  // Fetch supplier profiles that are active joined with their company details
-  const { data: profiles, error: pErr } = await supabase
+  // Fetch optional supplier profiles for commercial defaults
+  const { data: profiles } = await supabase
     .from("supplier_profiles")
     .select(`
       company_id, default_currency, default_payment_terms, default_payment_terms_custom,
       default_incoterms, default_port_of_loading, default_production_lead_time, po_receiving_email,
-      default_ship_from_warehouse_id,
-      companies:company_id (name)
+      default_ship_from_warehouse_id
     `)
-    .in("company_id", supplierIds)
-    .eq("status", "active")
-    .order("companies(name)", { ascending: true } as any);
+    .in("company_id", companyIds);
 
-  if (pErr) throw new Error(`Failed to fetch active supplier profiles: ${pErr.message}`);
+  const profileMap = new Map((profiles ?? []).map((p: any) => [p.company_id, p]));
 
-  return (profiles ?? []).map((p: any) => ({
-    id: p.company_id,
-    name: p.companies?.name || "",
-    address: p.companies?.address || "",
-    default_currency: p.default_currency || "USD",
-    default_payment_terms: p.default_payment_terms || "",
-    default_payment_terms_custom: p.default_payment_terms_custom || "",
-    default_incoterms: p.default_incoterms || "",
-    default_port_of_loading: p.default_port_of_loading || "",
-    default_production_lead_time: p.default_production_lead_time || "",
-    po_receiving_email: p.po_receiving_email || "",
-    default_ship_from_warehouse_id: p.default_ship_from_warehouse_id || "",
-  }));
+  return companies.map((c) => {
+    const p = profileMap.get(c.id);
+    return {
+      id: c.id,
+      name: c.name || "(이름 없음)",
+      address: c.country || "",
+      default_currency: p?.default_currency || "USD",
+      default_payment_terms: p?.default_payment_terms || "",
+      default_payment_terms_custom: p?.default_payment_terms_custom || "",
+      default_incoterms: p?.default_incoterms || "",
+      default_port_of_loading: p?.default_port_of_loading || "",
+      default_production_lead_time: p?.default_production_lead_time || "",
+      po_receiving_email: p?.po_receiving_email || "",
+      default_ship_from_warehouse_id: p?.default_ship_from_warehouse_id || "",
+    };
+  });
 }
 
 /**
- * Fetch active trading products mapped to a supplier.
+ * Fetch active products associated with a supplier company (via company_id, brand ownership, or product_suppliers).
  */
 export async function getProductsForSupplier(supplierId: string) {
   await verifyAdminSession();
   const supabase = createAdminClient();
 
-  // 1. Fetch mapped product IDs for this supplier
-  const { data: mappedProducts, error: mapErr } = await supabase
-    .from("product_suppliers")
-    .select("product_id")
-    .eq("supplier_id", supplierId);
+  // 1. Fetch brand IDs owned by this company
+  const { data: brands } = await supabase
+    .from("brands")
+    .select("id")
+    .eq("company_id", supplierId);
+  const brandIds = (brands ?? []).map((b) => b.id);
 
-  if (mapErr) throw new Error(`공급사 매핑 제품 조회 실패: ${mapErr.message}`);
-  
-  const productIds = (mappedProducts ?? []).map((mp) => mp.product_id);
-  if (productIds.length === 0) return [];
+  // 2. Fetch mapped product IDs from product_suppliers if any
+  let mappedProductIds: string[] = [];
+  try {
+    const { data: mappedProducts } = await supabase
+      .from("product_suppliers")
+      .select("product_id")
+      .eq("supplier_id", supplierId);
+    mappedProductIds = (mappedProducts ?? []).map((mp) => mp.product_id);
+  } catch {
+    // If table doesn't exist, proceed
+  }
 
-  // 2. Fetch active trading products for these IDs (excluding soft-deleted products)
+  // 3. Construct OR filter for supplier association
+  const orFilters = [`company_id.eq.${supplierId}`];
+  if (brandIds.length > 0) {
+    orFilters.push(`brand_id.in.(${brandIds.join(",")})`);
+  }
+  if (mappedProductIds.length > 0) {
+    orFilters.push(`id.in.(${mappedProductIds.join(",")})`);
+  }
+
   const { data: products, error } = await supabase
     .from("products")
-    .select("id, name, name_en, manufacture_sku, letusto_sku, parent_sku, child_sku, price_usd_fob, price_additional_info, category, brand_id, brands (name), upc, ean")
-    .in("id", productIds)
-    .eq("trading_status", "active")
-    .is("deleted_at", null)
+    .select(`
+      id, name, name_en, manufacture_sku, letusto_sku, parent_sku, child_sku, price_usd_fob, price_additional_info, category, brand_id, company_id,
+      brands (name), upc, ean, status, trading_status
+    `)
+    .or(orFilters.join(","))
     .order("name", { ascending: true });
 
-  if (error) throw new Error(`Failed to fetch products: ${error.message}`);
+  if (error) throw new Error(`공급사 제품 조회 실패: ${error.message}`);
+  if (!products || products.length === 0) return [];
 
-  // 3. Fetch first images (lowest position) for these products
+  const productIds = products.map((p) => p.id);
+
+  // 4. Fetch first images (lowest position) for these products
   const { data: productImages } = await supabase
     .from("product_images")
-    .select("product_id, storage_path")
+    .select("product_id, storage_path, position")
     .in("product_id", productIds)
     .order("position", { ascending: true });
 
@@ -341,7 +462,7 @@ export async function getProductsForSupplier(supplierId: string) {
 
   const { PRODUCT_CATEGORY_LABEL, resolveEffectiveSku } = await import("@/lib/product/types");
 
-  return (products ?? []).map((p: any) => {
+  return products.map((p: any) => {
     const adminOverrides = p.price_additional_info?.admin_overrides || {};
     const displayName = adminOverrides.name_en || p.name_en || adminOverrides.name || p.name;
     const effectiveLetustoSku = resolveEffectiveSku(adminOverrides.letusto_sku, p.letusto_sku);
