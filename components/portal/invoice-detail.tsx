@@ -264,13 +264,13 @@ export function InvoiceDetail({ invoice, attachmentUrl }: InvoiceDetailProps) {
                 <span className="text-zinc-500 dark:text-zinc-400 font-medium">지급 실행 상태:</span>
                 <div>
                   {invoice.paymentStatus === "UNPAID" && (
-                    <span className="px-2 py-0.5 bg-zinc-100 text-zinc-700 border border-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:border-zinc-700 rounded font-bold text-[11px]">미지급</span>
+                    <span className="px-2 py-0.5 bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-950/50 dark:text-amber-300 dark:border-amber-800/60 rounded font-bold text-[11px]">미지급 (Unpaid)</span>
                   )}
                   {invoice.paymentStatus === "PARTIALLY_PAID" && (
-                    <span className="px-2 py-0.5 bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-950/50 dark:text-amber-300 dark:border-amber-800/60 rounded font-bold text-[11px]">일부 지급됨</span>
+                    <span className="px-2 py-0.5 bg-teal-50 text-teal-700 border border-teal-200 dark:bg-teal-950/50 dark:text-teal-300 dark:border-teal-800/60 rounded font-bold text-[11px]">일부 지급 (Partially Paid)</span>
                   )}
                   {invoice.paymentStatus === "PAID" && (
-                    <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-800/60 rounded font-bold text-[11px]">완납</span>
+                    <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-800/60 rounded font-bold text-[11px]">지급 완료 (Paid)</span>
                   )}
                 </div>
               </div>
