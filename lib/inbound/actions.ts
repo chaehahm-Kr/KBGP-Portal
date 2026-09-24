@@ -745,7 +745,7 @@ export async function createReceiving(data: CreateReceivingInput) {
   const { data: newRec, error: rErr } = await supabase
     .from("receivings")
     .insert({
-      inbound_shipment_id: data.inbound_shipment_id,
+      inbound_shipment_id: data.inbound_shipment_id || null,
       purchase_order_id: data.purchase_order_id,
       warehouse_id: data.warehouse_id,
       received_date: data.received_date,
@@ -762,7 +762,7 @@ export async function createReceiving(data: CreateReceivingInput) {
   // Create Lines
   const lineInserts = data.lines.map((l) => ({
     receiving_id: recId,
-    inbound_shipment_line_id: l.inbound_shipment_line_id,
+    inbound_shipment_line_id: l.inbound_shipment_line_id || null,
     purchase_order_line_id: l.purchase_order_line_id,
     product_id: l.product_id,
     received_qty: l.received_qty,
@@ -781,6 +781,12 @@ export async function createReceiving(data: CreateReceivingInput) {
   }
 
   revalidatePath("/admin/purchasing/receiving");
+  revalidatePath(`/admin/purchasing/receiving/${recId}`);
+  revalidatePath("/admin/purchasing");
+  revalidatePath(`/admin/purchasing/${data.purchase_order_id}`);
+  revalidatePath("/admin/purchasing/orders");
+  revalidatePath("/portal/orders/purchase-orders");
+  revalidatePath(`/portal/orders/purchase-orders/${data.purchase_order_id}`);
   return { success: true, id: recId };
 }
 
@@ -818,6 +824,7 @@ export async function updateReceiving(receivingId: string, data: CreateReceiving
   const { error: rErr } = await supabase
     .from("receivings")
     .update({
+      inbound_shipment_id: data.inbound_shipment_id || null,
       warehouse_id: data.warehouse_id,
       received_date: data.received_date,
       internal_note: data.internal_note || null,
@@ -832,7 +839,7 @@ export async function updateReceiving(receivingId: string, data: CreateReceiving
 
   const lineInserts = data.lines.map((l) => ({
     receiving_id: receivingId,
-    inbound_shipment_line_id: l.inbound_shipment_line_id,
+    inbound_shipment_line_id: l.inbound_shipment_line_id || null,
     purchase_order_line_id: l.purchase_order_line_id,
     product_id: l.product_id,
     received_qty: l.received_qty,
@@ -851,6 +858,13 @@ export async function updateReceiving(receivingId: string, data: CreateReceiving
 
   revalidatePath("/admin/purchasing/receiving");
   revalidatePath(`/admin/purchasing/receiving/${receivingId}`);
+  revalidatePath("/admin/purchasing");
+  if (data.purchase_order_id) {
+    revalidatePath(`/admin/purchasing/${data.purchase_order_id}`);
+    revalidatePath("/portal/orders/purchase-orders");
+    revalidatePath(`/portal/orders/purchase-orders/${data.purchase_order_id}`);
+  }
+  revalidatePath("/admin/purchasing/orders");
   return { success: true };
 }
 
@@ -873,11 +887,24 @@ export async function finalizeReceiving(receivingId: string) {
     throw new Error(data.error || "입고 확정 처리 중 알 수 없는 오류가 발생했습니다.");
   }
 
+  // Fetch PO ID for revalidations
+  const { data: recObj } = await supabase
+    .from("receivings")
+    .select("purchase_order_id")
+    .eq("id", receivingId)
+    .single();
+
   revalidatePath("/admin/purchasing/receiving");
   revalidatePath(`/admin/purchasing/receiving/${receivingId}`);
   revalidatePath("/admin/purchasing/shipments");
   revalidatePath("/admin/purchasing");
+  revalidatePath("/admin/purchasing/orders");
   revalidatePath("/admin/inventory");
+  if (recObj?.purchase_order_id) {
+    revalidatePath(`/admin/purchasing/${recObj.purchase_order_id}`);
+    revalidatePath("/portal/orders/purchase-orders");
+    revalidatePath(`/portal/orders/purchase-orders/${recObj.purchase_order_id}`);
+  }
   return { success: true };
 }
 

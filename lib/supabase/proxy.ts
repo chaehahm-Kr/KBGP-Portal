@@ -211,8 +211,12 @@ export async function updateSession(request: NextRequest) {
       return createRedirectWithCookies(url);
     }
 
-    // C. API routes and manifest pass through without rewrite
-    if (pathname.startsWith("/api") || pathname === "/manifest.webmanifest") {
+    // C. API routes, manifest, and static asset files pass through without rewrite
+    if (
+      pathname.startsWith("/api") ||
+      pathname === "/manifest.webmanifest" ||
+      pathname.includes(".")
+    ) {
       return supabaseResponse;
     }
 

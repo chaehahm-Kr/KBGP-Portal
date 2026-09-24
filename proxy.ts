@@ -15,10 +15,8 @@ export const config = {
      * - _next/static (정적 파일)
      * - _next/image (이미지 최적화 파일)
      * - favicon.ico
-     * - 정적 이미지 확장자
-     * 마케팅 사이트(kselectnetwork.com)와 이 포털은 완전히 분리된 Vercel
-     * 프로젝트이므로, 여기서는 /portal, /admin 하위 경로만 신경 쓰면 된다.
+     * - 정적 이미지/아이콘/매니페스트 확장자
      */
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|webmanifest)$).*)",
   ],
 };
