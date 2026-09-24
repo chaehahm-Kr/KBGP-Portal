@@ -457,7 +457,7 @@ export function InvoiceDetail({ invoice, po, prevInvoicesTotal, poMerchandiseTot
       setSuccessMessage(`지급(${invoice.currency} ${amount.toLocaleString(undefined, { minimumFractionDigits: 2 })})이 성공적으로 등록되었습니다.`);
       router.refresh();
     } catch (err: any) {
-      setPaymentError(err.message || "지급 등록 처리에 실패했습니다.");
+      setPaymentError(formatActionError(err, "지급 등록 처리에 실패했습니다."));
     } finally {
       setIsPaymentSubmitting(false);
     }
