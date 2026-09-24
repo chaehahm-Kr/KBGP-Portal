@@ -4,7 +4,7 @@ import { verifyRetailerSession } from "@/lib/auth/dal";
 
 export const dynamic = "force-dynamic";
 
-export default async function RetailerOrdersPage() {
+export default async function RetailerSalesPage() {
   await verifyRetailerSession();
 
   return (
@@ -13,25 +13,25 @@ export default async function RetailerOrdersPage() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-zinc-200 dark:border-zinc-800 pb-5">
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-zinc-900 dark:text-white tracking-tight">
-            Order Management
+            Sales & Reorder Analytics
           </h1>
           <p className="text-xs sm:text-sm text-zinc-500 dark:text-zinc-400 mt-1">
-            Track submitted purchase orders, shipment tracking numbers, and delivery confirmations.
+            Store velocity suggestions, estimated stock runout, and automated reorder alerts.
           </p>
         </div>
       </div>
 
       {/* Placeholder State */}
       <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/60 p-8 sm:p-12 text-center space-y-4 shadow-sm">
-        <div className="w-14 h-14 rounded-2xl bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 mx-auto flex items-center justify-center text-2xl font-bold">
-          🛒
+        <div className="w-14 h-14 rounded-2xl bg-purple-50 dark:bg-purple-950/60 text-purple-600 dark:text-purple-400 mx-auto flex items-center justify-center text-2xl font-bold">
+          📊
         </div>
         <div className="max-w-md mx-auto space-y-1.5">
           <h2 className="text-base font-bold text-zinc-900 dark:text-white">
-            Order Tracking & Reorders
+            Sales Velocity & Restock Intelligence
           </h2>
           <p className="text-xs text-zinc-500 dark:text-zinc-400 leading-relaxed">
-            Wholesale ordering, cart management, shipment tracking, and invoice synchronization will be enabled in upcoming feature rollout.
+            Reorder calculations, 90-day return protection tracking, and store sales estimation will be available in upcoming feature rollout.
           </p>
         </div>
 

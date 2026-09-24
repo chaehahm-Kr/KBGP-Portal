@@ -1,73 +1,48 @@
 import React from "react";
+import Link from "next/link";
+import { verifyRetailerSession } from "@/lib/auth/dal";
 
-export default function RetailerProductsCatalogPage() {
-  // 임시 제품 데이터 목록
-  const sampleProducts = [
-    { id: 1, name: "Premium Snail BB Cream", brand: "LUSCIOUS K", category: "Skincare", sku: "LT-BB-01", price: "$12.50" },
-    { id: 2, name: "Hyaluronic Acid Sun Balm", brand: "SUNFLOW", category: "Skincare", sku: "LT-SB-02", price: "$14.00" },
-    { id: 3, name: "Vita C Glow Ampoule", brand: "K-GLOW", category: "Skincare", sku: "LT-AMP-03", price: "$18.50" }
-  ];
+export const dynamic = "force-dynamic";
+
+export default async function RetailerProductsPage() {
+  await verifyRetailerSession();
 
   return (
     <div className="space-y-6">
-      {/* 타이틀 */}
-      <div>
-        <h1 className="text-2xl font-bold text-zinc-900 dark:text-white">Product Catalog</h1>
-        <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-1">
-          Explore and source premium K-Beauty products approved by K-SELECT Admin.
-        </p>
-      </div>
-
-      {/* 필터 껍데기 */}
-      <div className="p-4 bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-800 flex flex-wrap gap-4 items-center justify-between shadow-sm">
-        <div className="flex gap-3">
-          <select className="px-3 py-1.5 rounded-md border border-zinc-200 dark:border-zinc-800 bg-transparent text-sm">
-            <option>All Categories</option>
-            <option>Skincare</option>
-            <option>Hair & Scalp</option>
-          </select>
-          <select className="px-3 py-1.5 rounded-md border border-zinc-200 dark:border-zinc-800 bg-transparent text-sm">
-            <option>All Brands</option>
-          </select>
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-zinc-200 dark:border-zinc-800 pb-5">
+        <div>
+          <h1 className="text-xl sm:text-2xl font-bold text-zinc-900 dark:text-white tracking-tight">
+            Product Discovery
+          </h1>
+          <p className="text-xs sm:text-sm text-zinc-500 dark:text-zinc-400 mt-1">
+            Browse verified K-Beauty brands, check wholesale pricing, and view marketing packshots.
+          </p>
         </div>
-        <input 
-          type="text" 
-          placeholder="Search products..." 
-          className="px-3 py-1.5 rounded-md border border-zinc-200 dark:border-zinc-800 bg-transparent text-sm w-64"
-        />
       </div>
 
-      {/* 제품 목록 그리드 */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {sampleProducts.map((p) => (
-          <div key={p.id} className="bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-800 overflow-hidden shadow-sm flex flex-col justify-between">
-            {/* 임시 상품 이미지 영역 */}
-            <div className="h-48 bg-zinc-100 dark:bg-zinc-800/50 flex items-center justify-center font-bold text-zinc-350 dark:text-zinc-650">
-              No Image Available
-            </div>
-            
-            {/* 정보 영역 */}
-            <div className="p-6 space-y-4">
-              <div>
-                <p className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">{p.brand}</p>
-                <h3 className="font-bold text-zinc-900 dark:text-white mt-1">{p.name}</h3>
-                <p className="text-xs text-zinc-400 dark:text-zinc-500 mt-1">SKU: {p.sku}</p>
-              </div>
+      {/* Placeholder State */}
+      <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/60 p-8 sm:p-12 text-center space-y-4 shadow-sm">
+        <div className="w-14 h-14 rounded-2xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 mx-auto flex items-center justify-center text-2xl font-bold">
+          📦
+        </div>
+        <div className="max-w-md mx-auto space-y-1.5">
+          <h2 className="text-base font-bold text-zinc-900 dark:text-white">
+            Product Catalog & Live Inventory
+          </h2>
+          <p className="text-xs text-zinc-500 dark:text-zinc-400 leading-relaxed">
+            Wholesale product discovery, tier pricing inquiry, and direct ordering modules will be activated in upcoming feature rollout.
+          </p>
+        </div>
 
-              <div className="flex justify-between items-center pt-4 border-t border-zinc-100 dark:border-zinc-800">
-                <span className="text-lg font-bold text-zinc-900 dark:text-white">{p.price}</span>
-                <span className="text-xs text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded font-bold">Available</span>
-              </div>
-            </div>
-
-            {/* 장바구니 추가 버튼 */}
-            <div className="px-6 pb-6">
-              <button className="w-full py-2.5 rounded-md bg-zinc-900 text-white dark:bg-white dark:text-black font-bold text-xs hover:bg-zinc-800 dark:hover:bg-zinc-100 transition-colors shadow">
-                Add to Cart
-              </button>
-            </div>
-          </div>
-        ))}
+        <div className="pt-2">
+          <Link
+            href="/retailer"
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors"
+          >
+            ← Back to Home
+          </Link>
+        </div>
       </div>
     </div>
   );
