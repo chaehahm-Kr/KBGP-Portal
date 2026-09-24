@@ -43,12 +43,8 @@ export function getOverallStatus(
       });
     });
 
-    // Step 6: Completed (Explicit fulfillment_status COMPLETED, or all shipments RECEIVED and all receivings finalized with no remaining to receive)
-    const allShipmentsReceived = activeShipments.length > 0 && activeShipments.every((s) => s.status === "RECEIVED");
-    if (
-      po.fulfillment_status === "COMPLETED" ||
-      (po.fulfillment_status === "RECEIVED" && activeReceivings.length === 0 && allShipmentsReceived && totalShippedQty > 0 && totalReceivedQty >= totalShippedQty)
-    ) {
+    // Step 6: Completed (Explicit fulfillment_status COMPLETED after Complete PO action)
+    if (po.fulfillment_status === "COMPLETED") {
       return "Completed";
     }
 

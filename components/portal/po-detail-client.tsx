@@ -290,23 +290,23 @@ export default function PoDetailClient({
 
     let totalReceived = 0;
     let totalAccepted = 0;
-    let totalDamaged = 0;
+    let totalDamagedHold = 0;
 
     finalizedReceivings.forEach((r) => {
       (r.lines ?? []).forEach((rl: any) => {
         totalReceived += rl.received_qty;
         totalAccepted += rl.received_qty - rl.damaged_qty - rl.hold_qty;
-        totalDamaged += rl.damaged_qty;
+        totalDamagedHold += (Number(rl.damaged_qty) || 0) + (Number(rl.hold_qty) || 0);
       });
     });
 
-    const variance = totalAccepted - po.lines.reduce((sum, l) => sum + l.qty, 0);
+    const variance = totalShipped > 0 ? totalShipped - totalAccepted : 0;
 
     return {
       shipped: totalShipped,
       received: totalReceived,
       accepted: totalAccepted,
-      damaged: totalDamaged,
+      damagedHold: totalDamagedHold,
       variance,
     };
   }, [po.lines, shipments, receivings]);
@@ -899,26 +899,24 @@ export default function PoDetailClient({
           <span className="text-sm font-bold font-mono text-zinc-900 dark:text-white">{totalTargetQty.toLocaleString()}</span>
         </div>
         <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 text-center">
-          <span className="text-[10px] text-zinc-400 block uppercase font-bold">확정 수량</span>
-          <span className="text-sm font-bold font-mono text-emerald-600 dark:text-emerald-400">
-            {po.lines.reduce((s, l) => s + (l.confirmed_qty ?? l.qty), 0).toLocaleString()}
-          </span>
+          <span className="text-[10px] text-zinc-400 block uppercase font-bold">출고 완료 수량</span>
+          <span className="text-sm font-bold font-mono text-zinc-700 dark:text-zinc-300">{stats.shipped.toLocaleString()}</span>
         </div>
         <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 text-center">
-          <span className="text-[10px] text-zinc-400 block uppercase font-bold">출고 준비 수량</span>
-          <span className="text-sm font-bold font-mono text-indigo-600 dark:text-indigo-400">{totalReadyCommitted.toLocaleString()}</span>
+          <span className="text-[10px] text-zinc-400 block uppercase font-bold">입고 수량</span>
+          <span className="text-sm font-bold font-mono text-zinc-700 dark:text-zinc-300">{stats.received.toLocaleString()}</span>
         </div>
         <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 text-center">
-          <span className="text-[10px] text-zinc-400 block uppercase font-bold">출고/선적 수량</span>
-          <span className="text-sm font-bold font-mono text-zinc-900 dark:text-white font-bold">{stats.shipped.toLocaleString()}</span>
+          <span className="text-[10px] text-zinc-400 block uppercase font-bold">불량/대기 수량</span>
+          <span className="text-sm font-bold font-mono text-rose-600">{stats.damagedHold.toLocaleString()}</span>
         </div>
         <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 text-center">
-          <span className="text-[10px] text-zinc-400 block uppercase font-bold">창고 입고 수량</span>
-          <span className="text-sm font-bold font-mono text-emerald-600 dark:text-emerald-400">{stats.received.toLocaleString()}</span>
+          <span className="text-[10px] text-zinc-400 block uppercase font-bold">최종 승인 수량</span>
+          <span className="text-sm font-bold font-mono text-emerald-600 dark:text-emerald-400">{stats.accepted.toLocaleString()}</span>
         </div>
         <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 text-center">
-          <span className="text-[10px] text-zinc-400 block uppercase font-bold">미입고/잔여</span>
-          <span className={`text-sm font-bold font-mono ${stats.variance < 0 ? "text-rose-600" : "text-emerald-600"}`}>
+          <span className="text-[10px] text-zinc-400 block uppercase font-bold">입고 차이 (Variance)</span>
+          <span className={`text-sm font-bold font-mono ${stats.variance !== 0 ? "text-amber-600" : "text-emerald-600"}`}>
             {stats.variance.toLocaleString()}
           </span>
         </div>

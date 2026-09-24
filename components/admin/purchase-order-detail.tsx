@@ -416,23 +416,23 @@ export function PurchaseOrderDetail({
 
     let totalReceived = 0;
     let totalAccepted = 0;
-    let totalDamaged = 0;
+    let totalDamagedHold = 0;
 
     finalizedReceivings.forEach((r) => {
       (r.lines ?? []).forEach((rl: any) => {
         totalReceived += rl.received_qty;
         totalAccepted += rl.received_qty - rl.damaged_qty - rl.hold_qty;
-        totalDamaged += rl.damaged_qty;
+        totalDamagedHold += (Number(rl.damaged_qty) || 0) + (Number(rl.hold_qty) || 0);
       });
     });
 
-    const variance = totalAccepted - po.total_qty;
+    const variance = totalShipped > 0 ? totalShipped - totalAccepted : 0;
 
     return {
       shipped: totalShipped,
       received: totalReceived,
       accepted: totalAccepted,
-      damaged: totalDamaged,
+      damagedHold: totalDamagedHold,
       variance,
     };
   }, [po.total_qty, shipments, receivings]);
@@ -782,7 +782,7 @@ export function PurchaseOrderDetail({
 
       if (finalizeImmediately && recId) {
         await finalizeReceiving(recId);
-        setSuccessMessage("입고 검수가 확정 완료되어 실재고에 반영되었습니다.");
+        setSuccessMessage("입고 검수 결과가 확정되었습니다. 최종 확인 후 '발주 완료 종결(Complete PO)'을 클릭하여 재고 반영을 진행하십시오.");
       } else {
         setSuccessMessage("입고서 초안(DRAFT)이 저장되었습니다. 검수 완료 후 '입고 전표 확정'을 진행하십시오.");
       }
@@ -798,14 +798,14 @@ export function PurchaseOrderDetail({
 
   // Finalize Receiving
   const handleFinalizeReceiving = async (recId: string) => {
-    if (!confirm("입고 검수를 종결하고 실재고 가산 및 발주 이행 상태를 확정하시겠습니까?")) return;
+    if (!confirm("입고 검수 결과를 확정하시겠습니까? (최종 재고 반영은 '발주 완료 종결' 시 수행됩니다)")) return;
     setErrorMessage("");
     setSuccessMessage("");
     setIsActionLoading(true);
 
     try {
       await finalizeReceiving(recId);
-      setSuccessMessage("입고 처리가 확정 완료되었습니다.");
+      setSuccessMessage("입고 검수 결과가 확정되었습니다. 최종 확인 후 '발주 완료 종결(Complete PO)'을 진행하십시오.");
       router.refresh();
     } catch (err: any) {
       setErrorMessage(err.message || "입고 확정 처리 중 오류가 발생했습니다.");
@@ -1610,15 +1610,15 @@ export function PurchaseOrderDetail({
           <span className="text-sm font-bold font-mono text-zinc-700 dark:text-zinc-300">{stats.received.toLocaleString()}</span>
         </div>
         <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 text-center">
+          <span className="text-[10px] text-zinc-400 block uppercase font-bold">불량/대기 수량</span>
+          <span className="text-sm font-bold font-mono text-rose-600">{stats.damagedHold.toLocaleString()}</span>
+        </div>
+        <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 text-center">
           <span className="text-[10px] text-zinc-400 block uppercase font-bold">최종 승인 수량</span>
           <span className="text-sm font-bold font-mono text-emerald-600">{stats.accepted.toLocaleString()}</span>
         </div>
         <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 text-center">
-          <span className="text-[10px] text-zinc-400 block uppercase font-bold">불량/대기 수량</span>
-          <span className="text-sm font-bold font-mono text-rose-600">{stats.damaged.toLocaleString()}</span>
-        </div>
-        <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 text-center">
-          <span className="text-[10px] text-zinc-400 block uppercase font-bold">미입고/차이(Variance)</span>
+          <span className="text-[10px] text-zinc-400 block uppercase font-bold">입고 차이 (Variance)</span>
           <span className={`text-sm font-bold font-mono ${stats.variance < 0 ? "text-rose-600" : "text-emerald-600"}`}>
             {stats.variance.toLocaleString()}
           </span>

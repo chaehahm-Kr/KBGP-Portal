@@ -49,3 +49,4 @@ scratch/
 .mcp.json*
 Manual/
 public/manuals/
+supabase/.temp/

@@ -1578,6 +1578,22 @@ export async function completePurchaseOrder(
     throw new Error("발송 완료(SENT) 상태의 발주서만 종결할 수 있습니다.");
   }
 
+  // Post inventory for any unposted finalized receivings idempotently
+  const { data: rpcRes, error: rpcErr } = await supabase.rpc("post_receiving_inventory_transaction", {
+    p_po_id: poId,
+    p_user_id: userId,
+  });
+
+  if (rpcErr) {
+    console.error("Failed to post receiving inventory transaction:", rpcErr);
+    // Throw error if RPC execution fails
+    throw new Error(`재고 반영 트랜잭션 오류: ${rpcErr.message}`);
+  }
+
+  if (rpcRes && !rpcRes.success) {
+    throw new Error(rpcRes.error || "재고 반영 처리 중 오류가 발생했습니다.");
+  }
+
   const easternNow = formatEasternDateTime(new Date().toISOString());
   const currentLogs = Array.isArray(po.activity_logs) ? po.activity_logs : [];
 
@@ -1606,6 +1622,7 @@ export async function completePurchaseOrder(
   revalidatePath(`/portal/orders/purchase-orders/${poId}`);
   revalidatePath("/portal/orders/purchase-orders");
   revalidatePath("/admin/purchasing/orders");
+  revalidatePath("/admin/inventory");
   return { success: true };
 }
 
