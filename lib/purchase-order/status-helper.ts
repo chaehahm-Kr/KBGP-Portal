@@ -1,3 +1,7 @@
+/**
+ * Unified Purchase Order Status & Stepper Helper
+ * Task ID: ADM-PUR-UI-001-R3 / PORT-PO-UI-001-R3 (Shipment Confirmation & Progress Synchronization)
+ */
 export function getOverallStatus(
   po: {
     po_status: string;
