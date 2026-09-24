@@ -157,3 +157,8 @@ BEGIN
   RETURN jsonb_build_object('success', true, 'posted_count', v_posted_count);
 END;
 $$ LANGUAGE plpgsql;
+
+-- 3. Update purchase_orders_fulfillment_status_check constraint to include COMPLETED
+ALTER TABLE public.purchase_orders DROP CONSTRAINT IF EXISTS purchase_orders_fulfillment_status_check;
+ALTER TABLE public.purchase_orders ADD CONSTRAINT purchase_orders_fulfillment_status_check CHECK (fulfillment_status IN ('PENDING', 'IN_PRODUCTION', 'READY_TO_SHIP', 'SHIPPED', 'PARTIALLY_RECEIVED', 'RECEIVED', 'COMPLETED'));
+
