@@ -95,6 +95,10 @@ export default async function AdminPurchaseOrderDetailPage({
     .order("name", { ascending: true });
   const warehouses = dbAllWarehouses ?? [];
 
+  const finalShipments = (po?.shipments && po.shipments.length > 0) ? po.shipments : shipments;
+  const finalReceivings = (po?.receivings && po.receivings.length > 0) ? po.receivings : receivings;
+  const finalGoodsReadiness = (po?.goodsReadiness && po.goodsReadiness.length > 0) ? po.goodsReadiness : goodsReadiness;
+
   return (
     <div className="space-y-6">
       <PurchaseOrderDetail 
@@ -102,9 +106,9 @@ export default async function AdminPurchaseOrderDetailPage({
         isReadOnly={isReadOnly} 
         invoices={invoices ?? []} 
         changeRequests={changeRequests} 
-        shipments={shipments}
-        receivings={receivings}
-        goodsReadiness={goodsReadiness}
+        shipments={finalShipments}
+        receivings={finalReceivings}
+        goodsReadiness={finalGoodsReadiness}
         documents={documents}
         warehouses={warehouses}
       />

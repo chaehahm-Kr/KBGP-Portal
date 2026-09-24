@@ -96,13 +96,17 @@ export default async function PortalPoDetailPage({ params }: PortalPoDetailPageP
     .order("created_at", { ascending: false });
   const linkedCases = dbCases ?? [];
 
+  const finalShipments = (po?.shipments && po.shipments.length > 0) ? po.shipments : shipments;
+  const finalReceivings = (po?.receivings && po.receivings.length > 0) ? po.receivings : receivings;
+  const finalGoodsReadiness = (po?.goodsReadiness && po.goodsReadiness.length > 0) ? po.goodsReadiness : goodsReadiness;
+
   return (
     <PoDetailClient 
       po={po} 
       changeRequests={changeRequests} 
-      shipments={shipments}
-      receivings={receivings}
-      goodsReadiness={goodsReadiness}
+      shipments={finalShipments}
+      receivings={finalReceivings}
+      goodsReadiness={finalGoodsReadiness}
       documents={documents}
       warehouses={warehouses}
       shippingOrigins={shippingOrigins}

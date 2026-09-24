@@ -15,6 +15,7 @@ import {
   getOverallStatus,
   OVERALL_STATUS_LABELS,
   OVERALL_STATUS_COLORS,
+  computeCanonicalPoAggregation,
 } from "@/lib/purchase-order/status-helper";
 import { PoUnifiedStepper } from "@/components/shared/po-unified-stepper";
 import {
@@ -271,71 +272,52 @@ export default function PoDetailClient({
   const [etd, setEtd] = useState("");
   const [eta, setEta] = useState("");
 
+  // Effective arrays (falling back to po attached arrays if props are empty)
+  const effectiveReceivings = useMemo(() => {
+    return (receivings && receivings.length > 0) ? receivings : ((po as any)?.receivings ?? []);
+  }, [receivings, po]);
+
+  const effectiveShipments = useMemo(() => {
+    return (shipments && shipments.length > 0) ? shipments : ((po as any)?.shipments ?? []);
+  }, [shipments, po]);
+
+  const effectiveGoodsReadiness = useMemo(() => {
+    return (goodsReadiness && goodsReadiness.length > 0) ? goodsReadiness : ((po as any)?.goodsReadiness ?? []);
+  }, [goodsReadiness, po]);
+
+  // Canonical PO summary aggregation
+  const canonical = useMemo(() => {
+    return (po as any)?.canonicalSummary || computeCanonicalPoAggregation(po, effectiveShipments, effectiveReceivings, effectiveGoodsReadiness);
+  }, [po, effectiveShipments, effectiveReceivings, effectiveGoodsReadiness]);
+
   const overallStatus = useMemo(() => {
-    return getOverallStatus(po, shipments, receivings, goodsReadiness);
-  }, [po, shipments, receivings, goodsReadiness]);
+    return canonical.overallStatus;
+  }, [canonical]);
 
   // Aggregate quantities
   const stats = useMemo(() => {
-    const activeShipments = shipments.filter((s) => s.status !== "CANCELLED");
-    const finalizedReceivings = receivings.filter((r) => r.status === "FINALIZED");
-
-    const totalShipped = Math.max(
-      activeShipments.reduce(
-        (sum, s) => sum + (s.lines ?? []).reduce((lSum: number, sl: any) => lSum + (Number(sl.shipped_qty) || 0), 0),
-        0
-      ),
-      po.lines.reduce((sum, l) => sum + Number((l as any).shipped_qty !== undefined ? (l as any).shipped_qty : lineQuantities[l.id]?.shippedQty || 0), 0)
-    );
-
-    let totalReceived = 0;
-    let totalAccepted = 0;
-    let totalDamagedHold = 0;
-
-    finalizedReceivings.forEach((r) => {
-      const rLines = r.lines ?? r.receiving_lines ?? [];
-      rLines.forEach((rl: any) => {
-        totalReceived += rl.received_qty;
-        totalAccepted += rl.received_qty - rl.damaged_qty - rl.hold_qty;
-        totalDamagedHold += (Number(rl.damaged_qty) || 0) + (Number(rl.hold_qty) || 0);
-      });
-    });
-
-    const variance = totalShipped > 0 ? totalShipped - totalAccepted : 0;
-
     return {
-      shipped: totalShipped,
-      received: totalReceived,
-      accepted: totalAccepted,
-      damagedHold: totalDamagedHold,
-      variance,
+      shipped: canonical.totalShippedQty,
+      received: canonical.totalReceivedQty,
+      accepted: canonical.totalAcceptedQty,
+      damagedHold: canonical.totalDamagedHoldQty,
+      variance: canonical.totalVariance,
     };
-  }, [po.lines, shipments, receivings]);
+  }, [canonical]);
 
   // Aggregate line-level finalized receiving metrics for Portal
   const lineReceivingMap = useMemo(() => {
     const map = new Map<string, { received: number; damaged: number; hold: number; accepted: number }>();
-    const finalized = receivings.filter((r) => r.status === "FINALIZED");
-    finalized.forEach((r) => {
-      const rLines = r.lines ?? r.receiving_lines ?? [];
-      rLines.forEach((rl: any) => {
-        const lineId = rl.purchase_order_line_id;
-        if (!lineId) return;
-        const cur = map.get(lineId) || { received: 0, damaged: 0, hold: 0, accepted: 0 };
-        const rec = Number(rl.received_qty) || 0;
-        const dam = Number(rl.damaged_qty) || 0;
-        const hld = Number(rl.hold_qty) || 0;
-        const acc = Math.max(0, rec - dam - hld);
-        map.set(lineId, {
-          received: cur.received + rec,
-          damaged: cur.damaged + dam,
-          hold: cur.hold + hld,
-          accepted: cur.accepted + acc,
-        });
+    canonical.lines.forEach((l: any) => {
+      map.set(l.id, {
+        received: l.receivedQty,
+        damaged: l.damagedQty,
+        hold: l.holdQty,
+        accepted: l.acceptedQty,
       });
     });
     return map;
-  }, [receivings]);
+  }, [canonical]);
 
   // Helper function for packaging auto-calculation
   const calcPackaging = (readyQty: number, prod: any) => {
@@ -1902,12 +1884,12 @@ export default function PoDetailClient({
           <div className="space-y-6 text-xs">
             <h3 className="text-sm font-bold text-zinc-800 dark:text-white">Letusto 창고 실물 입고 검수 내역</h3>
             <div className="grid grid-cols-1 gap-6">
-              {receivings.length === 0 ? (
+              {effectiveReceivings.length === 0 ? (
                 <div className="py-12 border-2 border-dashed border-zinc-200 dark:border-zinc-850 rounded-xl text-center text-zinc-500">
                   창고 입고 검수 기록이 존재하지 않습니다.
                 </div>
               ) : (
-                receivings.map((r) => (
+                effectiveReceivings.map((r: any) => (
                   <div key={r.id} className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 space-y-4">
                     <div className="flex justify-between items-center border-b border-zinc-150 pb-3 dark:border-zinc-850">
                       <div>

@@ -203,3 +203,162 @@ export function getNextAction(overallStatus: string, isReadOnly: boolean = false
       return null;
   }
 }
+
+export interface CanonicalPoLineSummary {
+  id: string;
+  productId: string;
+  productName: string;
+  letustoSku: string;
+  poQty: number;
+  confirmedQty: number;
+  readyQty: number;
+  shippedQty: number;
+  receivedQty: number;
+  damagedQty: number;
+  holdQty: number;
+  damagedHoldQty: number;
+  acceptedQty: number;
+  variance: number;
+}
+
+export interface CanonicalPoSummary {
+  totalPoQty: number;
+  totalConfirmedQty: number;
+  totalReadyQty: number;
+  totalShippedQty: number;
+  totalReceivedQty: number;
+  totalDamagedQty: number;
+  totalHoldQty: number;
+  totalDamagedHoldQty: number;
+  totalAcceptedQty: number;
+  totalVariance: number;
+  lineMap: Map<string, CanonicalPoLineSummary>;
+  lines: CanonicalPoLineSummary[];
+  overallStatus: string;
+  hasDraftReceiving: boolean;
+  hasFinalizedReceiving: boolean;
+  activeReceivingCount: number;
+  finalizedReceivingCount: number;
+}
+
+export function computeCanonicalPoAggregation(
+  po: any,
+  shipments: any[] = [],
+  receivings: any[] = [],
+  goodsReadiness: any[] = []
+): CanonicalPoSummary {
+  const activeShipments = (shipments || []).filter((s) => s.status !== "CANCELLED");
+  const finalizedReceivings = (receivings || []).filter((r) => r.status === "FINALIZED");
+  const activeReceivings = (receivings || []).filter((r) => r.status === "DRAFT");
+  const activeReadiness = (goodsReadiness || []).filter(
+    (gr) => gr.handover_status !== "CANCELLED" && gr.handover_status !== "DRAFT"
+  );
+
+  const poLines = po.lines || po.purchase_order_lines || [];
+
+  const readyLineMap = new Map<string, number>();
+  activeReadiness.forEach((gr) => {
+    (gr.lines ?? gr.items ?? []).forEach((gl: any) => {
+      const lineId = gl.purchase_order_line_id;
+      if (lineId) {
+        readyLineMap.set(lineId, (readyLineMap.get(lineId) || 0) + (Number(gl.ready_qty) || 0));
+      }
+    });
+  });
+
+  const shippedLineMap = new Map<string, number>();
+  activeShipments.forEach((s) => {
+    (s.lines ?? s.inbound_shipment_lines ?? []).forEach((sl: any) => {
+      const lineId = sl.purchase_order_line_id;
+      if (lineId) {
+        shippedLineMap.set(lineId, (shippedLineMap.get(lineId) || 0) + (Number(sl.shipped_qty) || 0));
+      }
+    });
+  });
+
+  const receivedLineMap = new Map<string, number>();
+  const damagedLineMap = new Map<string, number>();
+  const holdLineMap = new Map<string, number>();
+
+  finalizedReceivings.forEach((r) => {
+    (r.lines ?? r.receiving_lines ?? []).forEach((rl: any) => {
+      const lineId = rl.purchase_order_line_id;
+      if (lineId) {
+        receivedLineMap.set(lineId, (receivedLineMap.get(lineId) || 0) + (Number(rl.received_qty) || 0));
+        damagedLineMap.set(lineId, (damagedLineMap.get(lineId) || 0) + (Number(rl.damaged_qty) || 0));
+        holdLineMap.set(lineId, (holdLineMap.get(lineId) || 0) + (Number(rl.hold_qty) || 0));
+      }
+    });
+  });
+
+  const lineSummaries: CanonicalPoLineSummary[] = poLines.map((l: any) => {
+    const poQty = Number(l.qty) || 0;
+    const confirmedQty = l.confirmed_qty !== null && l.confirmed_qty !== undefined ? Number(l.confirmed_qty) : poQty;
+    const readyQty = readyLineMap.get(l.id) || Number(l.ready_qty) || 0;
+    const shippedQty = shippedLineMap.get(l.id) || Number(l.shipped_qty) || 0;
+    const receivedQty = receivedLineMap.get(l.id) || Number(l.received_qty) || 0;
+    const damagedQty = damagedLineMap.get(l.id) || Number(l.damaged_qty) || 0;
+    const holdQty = holdLineMap.get(l.id) || Number(l.hold_qty) || 0;
+    const damagedHoldQty = damagedQty + holdQty;
+    const acceptedQty = Math.max(0, receivedQty - damagedHoldQty);
+    const variance = shippedQty > 0 ? (shippedQty - acceptedQty) : Math.max(0, poQty - acceptedQty);
+
+    return {
+      id: l.id,
+      productId: l.product_id,
+      productName: l.product_name || l.product_name_snapshot || l.product?.name || "(제품명 없음)",
+      letustoSku: l.letusto_sku || l.letusto_sku_snapshot || l.product?.letusto_sku || "-",
+      poQty,
+      confirmedQty,
+      readyQty,
+      shippedQty,
+      receivedQty,
+      damagedQty,
+      holdQty,
+      damagedHoldQty,
+      acceptedQty,
+      variance,
+    };
+  });
+
+  const lineMap = new Map<string, CanonicalPoLineSummary>(lineSummaries.map((ls) => [ls.id, ls]));
+
+  const totalPoQty = lineSummaries.reduce((sum, l) => sum + l.poQty, 0);
+  const totalConfirmedQty = lineSummaries.reduce((sum, l) => sum + l.confirmedQty, 0);
+  const totalReadyQty = lineSummaries.reduce((sum, l) => sum + l.readyQty, 0);
+  const totalShippedQty = Math.max(
+    activeShipments.reduce(
+      (sum, s) => sum + (s.lines ?? s.inbound_shipment_lines ?? []).reduce((lSum: number, sl: any) => lSum + (Number(sl.shipped_qty) || 0), 0),
+      0
+    ),
+    lineSummaries.reduce((sum, l) => sum + l.shippedQty, 0)
+  );
+  const totalReceivedQty = lineSummaries.reduce((sum, l) => sum + l.receivedQty, 0);
+  const totalDamagedQty = lineSummaries.reduce((sum, l) => sum + l.damagedQty, 0);
+  const totalHoldQty = lineSummaries.reduce((sum, l) => sum + l.holdQty, 0);
+  const totalDamagedHoldQty = totalDamagedQty + totalHoldQty;
+  const totalAcceptedQty = lineSummaries.reduce((sum, l) => sum + l.acceptedQty, 0);
+  const totalVariance = totalShippedQty > 0 ? totalShippedQty - totalAcceptedQty : Math.max(0, totalPoQty - totalAcceptedQty);
+
+  const overallStatus = getOverallStatus(po, shipments, receivings, goodsReadiness);
+
+  return {
+    totalPoQty,
+    totalConfirmedQty,
+    totalReadyQty,
+    totalShippedQty,
+    totalReceivedQty,
+    totalDamagedQty,
+    totalHoldQty,
+    totalDamagedHoldQty,
+    totalAcceptedQty,
+    totalVariance,
+    lineMap,
+    lines: lineSummaries,
+    overallStatus,
+    hasDraftReceiving: activeReceivings.length > 0,
+    hasFinalizedReceiving: finalizedReceivings.length > 0,
+    activeReceivingCount: activeReceivings.length,
+    finalizedReceivingCount: finalizedReceivings.length,
+  };
+}

@@ -444,6 +444,48 @@ export async function getPurchaseOrderDetail(poId: string) {
     }
   } catch {}
 
+  // Fetch shipments, receivings, goodsReadiness with admin privileges to avoid RLS mismatches
+  const { data: dbShipments } = await supabase
+    .from("inbound_shipments")
+    .select(`
+      *,
+      warehouse:destination_warehouse_id (id, name, code),
+      lines:inbound_shipment_lines (
+        id, purchase_order_line_id, product_id, shipped_qty, line_note
+      )
+    `)
+    .eq("purchase_order_id", poId)
+    .order("created_at", { ascending: false });
+  const shipments = dbShipments ?? [];
+
+  const { data: dbReceivings } = await supabase
+    .from("receivings")
+    .select(`
+      *,
+      warehouse:warehouse_id (id, name, code),
+      lines:receiving_lines (
+        id, inbound_shipment_line_id, purchase_order_line_id, product_id, received_qty, damaged_qty, hold_qty, line_note
+      )
+    `)
+    .eq("purchase_order_id", poId)
+    .order("created_at", { ascending: false });
+  const receivings = dbReceivings ?? [];
+
+  const { data: dbGoodsReadiness } = await supabase
+    .from("goods_readiness")
+    .select(`
+      *,
+      lines:goods_readiness_lines (
+        id, purchase_order_line_id, product_id, ready_qty, cartons, gross_weight, cbm
+      )
+    `)
+    .eq("purchase_order_id", poId)
+    .order("created_at", { ascending: false });
+  const goodsReadiness = dbGoodsReadiness ?? [];
+
+  const { computeCanonicalPoAggregation } = await import("./status-helper");
+  const canonicalSummary = computeCanonicalPoAggregation({ ...po, lines: formattedLines }, shipments, receivings, goodsReadiness);
+
   return {
     ...po,
     revision_no: po.revision_no != null && !isNaN(Number(po.revision_no)) ? Number(po.revision_no) : 1,
@@ -466,6 +508,10 @@ export async function getPurchaseOrderDetail(poId: string) {
     linkedCases,
     supplier: enrichedSupplier,
     lines: formattedLines,
+    shipments,
+    receivings,
+    goodsReadiness,
+    canonicalSummary,
     total_qty: totalQty,
     total_amount: totalAmount,
     total_shipped: totalShipped,

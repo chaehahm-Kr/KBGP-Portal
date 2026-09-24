@@ -297,6 +297,51 @@ export async function getPortalPurchaseOrderById(id: string) {
   const totalQty = formattedLines.reduce((sum: number, l: any) => sum + (Number(l.qty) || 0), 0);
   const totalAmount = formattedLines.reduce((sum: number, l: any) => sum + ((Number(l.qty) || 0) * (Number(l.unit_cost) || 0)), 0);
 
+  // Fetch shipments, receivings, goodsReadiness with admin client to bypass RLS mismatches
+  const adminSupabase = createAdminClient();
+
+  const { data: dbShipments } = await adminSupabase
+    .from("inbound_shipments")
+    .select(`
+      *,
+      warehouse:destination_warehouse_id (id, name, code),
+      lines:inbound_shipment_lines (
+        id, purchase_order_line_id, product_id, shipped_qty, line_note
+      )
+    `)
+    .eq("purchase_order_id", id)
+    .order("created_at", { ascending: false });
+  const shipments = dbShipments ?? [];
+
+  const { data: dbReceivings } = await adminSupabase
+    .from("receivings")
+    .select(`
+      *,
+      warehouse:warehouse_id (id, name, code),
+      lines:receiving_lines (
+        id, inbound_shipment_line_id, purchase_order_line_id, product_id, received_qty, damaged_qty, hold_qty, line_note
+      )
+    `)
+    .eq("purchase_order_id", id)
+    .order("created_at", { ascending: false });
+  const receivings = dbReceivings ?? [];
+
+  const { data: dbGoodsReadiness } = await adminSupabase
+    .from("goods_readiness")
+    .select(`
+      *,
+      lines:goods_readiness_lines (
+        id, purchase_order_line_id, product_id, ready_qty, cartons, gross_weight, cbm
+      )
+    `)
+    .eq("purchase_order_id", id)
+    .eq("supplier_id", companyId)
+    .order("created_at", { ascending: false });
+  const goodsReadiness = dbGoodsReadiness ?? [];
+
+  const { computeCanonicalPoAggregation } = await import("@/lib/purchase-order/status-helper");
+  const canonicalSummary = computeCanonicalPoAggregation({ ...data, lines: formattedLines }, shipments, receivings, goodsReadiness);
+
   return {
     id: data.id,
     po_number: data.po_number,
@@ -335,6 +380,10 @@ export async function getPortalPurchaseOrderById(id: string) {
     linkedCases,
     linked_cases: linkedCases,
     created_at: data.created_at,
+    shipments,
+    receivings,
+    goodsReadiness,
+    canonicalSummary,
     total_qty: totalQty,
     total_amount: totalAmount,
     lines: formattedLines
