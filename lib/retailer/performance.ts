@@ -166,7 +166,9 @@ export async function getRetailerPerformanceData(
         previous_reported_qty,
         delivered_since_previous,
         estimated_movement,
-        is_counted
+        is_counted,
+        retail_price_snapshot,
+        retail_price_basis
       )
     `)
     .eq("company_id", companyId)
@@ -255,6 +257,8 @@ export async function getRetailerPerformanceData(
     previousReported: number | null;
     deliveredSincePrevious: number | null;
     estimatedMovement: number | null;
+    retailPriceSnapshot: number | null;
+    retailPriceBasis: string | null;
   }
 
   const productStoreSnapshots = new Map<string, Map<string, CheckItemSnapshot[]>>();
@@ -280,6 +284,8 @@ export async function getRetailerPerformanceData(
         previousReported: item.previous_reported_qty,
         deliveredSincePrevious: item.delivered_since_previous,
         estimatedMovement: item.estimated_movement,
+        retailPriceSnapshot: item.retail_price_snapshot ?? null,
+        retailPriceBasis: item.retail_price_basis ?? null,
       });
     });
   });
@@ -360,8 +366,10 @@ export async function getRetailerPerformanceData(
     let companyProvisionalMovement = 0;
     let companyUsableWeeks = 0;
     let companyVarianceCount = 0;
+    let companyTotalSales = 0;
     let hasAnyCount = false;
     let isAllBaseline = true;
+    let hasTaggedPriceSnapshot = false;
 
     // Process each accessible store for this product
     for (const store of stores.filter((s) => activeStoreIds.includes(s.id))) {
@@ -427,6 +435,18 @@ export async function getRetailerPerformanceData(
         } else {
           storeMovement += intervalMovement;
           storeUsableWeeks += 1;
+
+          // Resolve effective unit selling price for this specific interval
+          const unitSellingPrice =
+            snap.retailPriceSnapshot !== null && snap.retailPriceSnapshot > 0
+              ? snap.retailPriceSnapshot
+              : msrp;
+
+          if (snap.retailPriceSnapshot !== null && snap.retailPriceSnapshot > 0) {
+            hasTaggedPriceSnapshot = true;
+          }
+
+          companyTotalSales += intervalMovement * unitSellingPrice;
         }
       }
 
@@ -476,8 +496,8 @@ export async function getRetailerPerformanceData(
         ? Number((companyTotalRemaining / averageWeeklyMovement).toFixed(1))
         : null;
 
-    // Financial Metrics
-    const estimatedRetailSales = Number((companyTotalMovement * msrp).toFixed(2));
+    // Financial Metrics (Calculated using interval price snapshots with MSRP fallback)
+    const estimatedRetailSales = Number(companyTotalSales.toFixed(2));
     const estimatedProductCost = Number((companyTotalMovement * wholesalePrice).toFixed(2));
     const estimatedGrossProfit = Number((estimatedRetailSales - estimatedProductCost).toFixed(2));
     const estimatedGrossMargin =
@@ -518,6 +538,10 @@ export async function getRetailerPerformanceData(
       reorderSignal = "sufficient_stock";
     }
 
+    const priceBasisLabel = hasTaggedPriceSnapshot
+      ? "Store Tagged Price"
+      : "Suggested Retail Price (MSRP)";
+
     productPerformanceList.push({
       productId: rawProd.id,
       productName: overrides.name?.trim() || rawProd.name,
@@ -531,7 +555,7 @@ export async function getRetailerPerformanceData(
       cartonPackQty,
       wholesalePrice,
       msrp,
-      priceBasisLabel: "Suggested Retail Price (MSRP)",
+      priceBasisLabel,
       totalReportedRemaining: companyTotalRemaining,
       estimatedMovement: companyTotalMovement,
       movementStatus: companyMovementStatus,
