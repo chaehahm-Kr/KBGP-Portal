@@ -1041,7 +1041,7 @@ export function PurchaseOrderDetail({
                     {po.currency} {l.unit_cost.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                   </td>
                   <td className="py-2 px-2 text-right font-mono font-bold">
-                    {po.currency} {l.line_total.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                    {po.currency} {(l.line_total ?? ((l.qty || 0) * (l.unit_cost || 0))).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                   </td>
                 </tr>
               ))}
@@ -1693,7 +1693,7 @@ export function PurchaseOrderDetail({
                       {po.currency} {l.unit_cost.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                     </td>
                     <td className="px-4 py-3 text-right font-mono font-black text-zinc-950 dark:text-white">
-                      {po.currency} {l.line_total.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                      {po.currency} {(l.line_total ?? ((l.qty || 0) * (l.unit_cost || 0))).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                     </td>
                   </tr>
                 );
@@ -2523,7 +2523,7 @@ export function PurchaseOrderDetail({
                                 <span className="font-mono text-[10px] text-zinc-400">{line.letusto_sku}</span>
                               </td>
                               <td className="p-3 text-right font-mono font-semibold text-zinc-700 dark:text-zinc-300">
-                                {line.shipped_qty.toLocaleString()}
+                                {(line.shipped_qty || 0).toLocaleString()}
                               </td>
                               <td className="p-3 text-right font-mono text-zinc-500">
                                 {(line.previously_received || 0).toLocaleString()}
