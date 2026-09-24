@@ -72,7 +72,7 @@ interface PurchaseOrderDetailProps {
     supplier_id: string;
     order_date: string;
     po_status: "DRAFT" | "APPROVED" | "SENT" | "CANCELLED";
-    fulfillment_status: "PENDING" | "IN_PRODUCTION" | "READY_TO_SHIP" | "SHIPPED" | "RECEIVED";
+    fulfillment_status: "PENDING" | "IN_PRODUCTION" | "READY_TO_SHIP" | "SHIPPED" | "RECEIVED" | "COMPLETED" | string;
     supplier_confirmation_status?: string | null;
     currency: string;
     payment_terms: string | null;
@@ -2856,21 +2856,35 @@ export function PurchaseOrderDetail({
                         )}
                       </div>
                       <div className="flex items-center gap-2">
-                        {r.status === "DRAFT" && !isReadOnly && (
+                        {!isReadOnly && po.fulfillment_status !== "COMPLETED" && (
                           <>
                             <button
                               type="button"
                               onClick={() => initReceivingForm(undefined, r)}
-                              className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-bold rounded transition-colors cursor-pointer"
+                              className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-bold rounded transition-colors cursor-pointer flex items-center gap-1"
                             >
-                              ✏️ 초안 수정 (Edit Draft)
+                              <span>✏️</span>
+                              <span>수정 (Edit)</span>
                             </button>
+
+                            {r.status === "DRAFT" && (
+                              <button
+                                type="button"
+                                onClick={() => handleFinalizeReceiving(r.id)}
+                                className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold rounded transition-colors cursor-pointer flex items-center gap-1"
+                              >
+                                <span>✔️</span>
+                                <span>입고 전표 확정 (Finalize)</span>
+                              </button>
+                            )}
+
                             <button
                               type="button"
-                              onClick={() => handleFinalizeReceiving(r.id)}
-                              className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold rounded transition-colors cursor-pointer"
+                              onClick={() => handleOpenDeleteReceivingModal(r)}
+                              className="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300 text-[10px] font-bold rounded transition-colors cursor-pointer flex items-center gap-1"
                             >
-                              ✔️ 입고 전표 확정 (Finalize)
+                              <span>🗑️</span>
+                              <span>삭제 (Delete)</span>
                             </button>
                           </>
                         )}
