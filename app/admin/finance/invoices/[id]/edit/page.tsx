@@ -40,6 +40,13 @@ export default async function InvoiceEditPage({ params }: EditPageProps) {
     name: s.supplier_name
   }));
 
+  if (invoice?.supplier_company_id && !formattedSuppliers.some((s: any) => s.id === invoice.supplier_company_id)) {
+    formattedSuppliers.push({
+      id: invoice.supplier_company_id,
+      name: invoice.supplier?.name || "연결 공급사"
+    });
+  }
+
   // Ensure the invoice's PO is included in the options even if its status changed
   const formattedPos = eligiblePos.map((po: any) => ({
     id: po.id,
