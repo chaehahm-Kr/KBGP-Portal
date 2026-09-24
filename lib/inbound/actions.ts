@@ -378,6 +378,9 @@ export async function createInboundShipment(data: CreateShipmentInput) {
 
   revalidatePath("/admin/purchasing/shipments");
   revalidatePath(`/admin/purchasing/${data.purchase_order_id}`);
+  revalidatePath("/portal/orders/purchase-orders");
+  revalidatePath(`/portal/orders/purchase-orders/${data.purchase_order_id}`);
+  revalidatePath("/portal/orders/shipping");
   revalidatePath(`/portal/orders/purchase-orders/${data.purchase_order_id}`);
   revalidatePath(`/portal/orders/purchase-orders`);
   revalidatePath(`/admin/purchasing/orders`);

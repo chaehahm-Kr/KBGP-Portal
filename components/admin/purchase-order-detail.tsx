@@ -1203,7 +1203,7 @@ export function PurchaseOrderDetail({
           {[
             { id: "overview", label: "발주 개요 (Overview)" },
             { id: "products", label: "품목 리스트 (Products)" },
-            { id: "shipment", label: "선적 관리 (Shipments)" },
+            { id: "shipments", label: "선적 관리 (Shipments)" },
             { id: "receiving", label: "입고 및 검수 (Receiving)" },
             { id: "documents", label: "증빙 서류 (Documents)" },
             { id: "activity", label: "활동 내역 (Activity)" },
@@ -1380,75 +1380,10 @@ export function PurchaseOrderDetail({
               </div>
             </div>
           </div>
-        )}
-
-        {/* Tab 2: Products */}
-        {activeTab === "products" && (
-          <div className="rounded-xl border border-zinc-200 bg-white overflow-hidden shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse text-xs">
-                <thead>
-                  <tr className="border-b border-zinc-200 bg-zinc-50/50 text-zinc-550 font-bold dark:border-zinc-850 dark:bg-zinc-900/50 dark:text-white">
-                    <th className="px-4 py-3.5">브랜드</th>
-                    <th className="px-4 py-3.5 font-mono">Letusto SKU</th>
-                    <th className="px-4 py-3.5">제품 설명</th>
-                    <th className="px-4 py-3.5 text-right">주문 수량 (PO)</th>
-                    <th className="px-4 py-3.5 text-right">공급사 확정 (Confirmed)</th>
-                    <th className="px-4 py-3.5 text-right">출고 준비 (Ready)</th>
-                    <th className="px-4 py-3.5 text-right">출고 수량 (Shipped)</th>
-                    <th className="px-4 py-3.5 text-right">입고 완료 (Received)</th>
-                    <th className="px-4 py-3.5 text-right">단가</th>
-                    <th className="px-4 py-3.5 text-right">합계</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-zinc-150 dark:divide-zinc-800/80">
-                  {po.lines.map((l) => {
-                    const targetQty = (l.confirmed_qty !== null && l.confirmed_qty !== undefined) ? Number(l.confirmed_qty) : Number(l.qty);
-                    const readyQty = Number(l.ready_qty || 0);
-                    const shippedQty = Number(l.shipped_qty || 0);
-                    const receivedQty = Number(l.received_qty || 0);
-                    return (
-                      <tr key={l.id} className="hover:bg-zinc-50/30 dark:hover:bg-zinc-850/10">
-                        <td className="px-4 py-3 font-semibold text-zinc-650 dark:text-zinc-400">{l.brand_name}</td>
-                        <td className="px-4 py-3 font-mono font-bold">{l.letusto_sku || "-"}</td>
-                        <td className="px-4 py-3">
-                          <span className="font-bold text-zinc-900 dark:text-white block">{l.product_name}</span>
-                          {l.line_note && <span className="text-[10px] text-zinc-450 italic mt-0.5 block">{l.line_note}</span>}
-                        </td>
-                        <td className="px-4 py-3 text-right font-mono font-semibold">{l.qty.toLocaleString()}</td>
-                        <td className="px-4 py-3 text-right font-mono font-semibold">
-                          {l.confirmed_qty !== null && l.confirmed_qty !== undefined ? (
-                            <span className={l.confirmed_qty !== l.qty ? "text-amber-600 dark:text-amber-400 font-bold" : "text-emerald-600 dark:text-emerald-400"}>
-                              {l.confirmed_qty.toLocaleString()}
-                            </span>
-                          ) : (
-                            <span className="text-zinc-400 italic">미확정 ({l.qty.toLocaleString()})</span>
-                          )}
-                        </td>
-                        <td className="px-4 py-3 text-right font-mono font-semibold text-indigo-600 dark:text-indigo-400 font-bold">
-                          {readyQty.toLocaleString()}
-                        </td>
-                        <td className="px-4 py-3 text-right font-mono font-semibold">{shippedQty.toLocaleString()}</td>
-                        <td className="px-4 py-3 text-right font-mono font-semibold text-emerald-600 dark:text-emerald-400">
-                          {receivedQty.toLocaleString()}
-                        </td>
-                        <td className="px-4 py-3 text-right font-mono">
-                          {po.currency} {l.unit_cost.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                        </td>
-                        <td className="px-4 py-3 text-right font-mono font-bold">
-                          {po.currency} {l.line_total.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
+        )}
 
         {/* Tab 3: Shipments */}
-        {activeTab === "shipment" && (
+        {activeTab === "shipments" && (
           <div className="space-y-6 text-xs">
             {/* Goods Readiness & Forwarding Section */}
             <div className="space-y-4">

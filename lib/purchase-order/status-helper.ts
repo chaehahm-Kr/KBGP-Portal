@@ -44,10 +44,12 @@ export function getOverallStatus(
     );
 
     // Check if shipped/transit (Requirement 4: Shipped Qty > 0 must transition to Shipped)
+    // Check if shipped/transit (Requirement: Any active shipment or shipped_qty > 0 transitions to Shipped)
     if (
       po.fulfillment_status === "SHIPPED" ||
       po.fulfillment_status === "PARTIALLY_SHIPPED" ||
-      activeShipments.some((s) => s.status === "IN_TRANSIT" || s.status === "BOOKED" || s.status === "SHIPPED" || s.status === "DRAFT") ||
+      po.fulfillment_status === "IN_TRANSIT" ||
+      activeShipments.length > 0 ||
       totalShippedQty > 0
     ) {
       return "Shipped";

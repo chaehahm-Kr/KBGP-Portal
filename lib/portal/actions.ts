@@ -224,22 +224,71 @@ export async function getPortalPurchaseOrderById(id: string) {
     linkedCases = inqs || [];
   } catch {}
 
-  // Format line products from array to a single object
+  // Fetch active goods readiness totals per PO line
+  const { data: readyData } = await supabase
+    .from("goods_readiness_lines")
+    .select("purchase_order_line_id, ready_qty, goods_readiness!inner(handover_status)")
+    .eq("goods_readiness.purchase_order_id", id)
+    .neq("goods_readiness.handover_status", "DRAFT");
+
+  const readyMap = new Map<string, number>();
+  (readyData ?? []).forEach((r: any) => {
+    const cur = readyMap.get(r.purchase_order_line_id) || 0;
+    readyMap.set(r.purchase_order_line_id, cur + (Number(r.ready_qty) || 0));
+  });
+
+  // Fetch active shipped totals per PO line
+  const { data: shipData } = await supabase
+    .from("inbound_shipment_lines")
+    .select("purchase_order_line_id, shipped_qty, inbound_shipments!inner(status)")
+    .eq("inbound_shipments.purchase_order_id", id)
+    .neq("inbound_shipments.status", "CANCELLED");
+
+  const shippedMap = new Map<string, number>();
+  (shipData ?? []).forEach((s: any) => {
+    const cur = shippedMap.get(s.purchase_order_line_id) || 0;
+    shippedMap.set(s.purchase_order_line_id, cur + (Number(s.shipped_qty) || 0));
+  });
+
+  // Fetch finalized received totals per PO line
+  const { data: recData } = await supabase
+    .from("receiving_lines")
+    .select("purchase_order_line_id, received_qty, receivings!inner(status)")
+    .eq("receivings.purchase_order_id", id)
+    .eq("receivings.status", "FINALIZED");
+
+  const receivedMap = new Map<string, number>();
+  (recData ?? []).forEach((r: any) => {
+    const cur = receivedMap.get(r.purchase_order_line_id) || 0;
+    receivedMap.set(r.purchase_order_line_id, cur + (Number(r.received_qty) || 0));
+  });
+
+  // Format line products from array to a single object with canonical quantities
   const formattedLines = (data.lines || []).map((l: any) => {
     const productArray = Array.isArray(l.product) ? l.product : (l.product ? [l.product] : []);
     const productObj = productArray[0] || { id: "", name: "", letusto_sku: "", manufacture_sku: "", brands: null };
+    const targetQty = l.confirmed_qty !== null && l.confirmed_qty !== undefined ? Number(l.confirmed_qty) : Number(l.qty);
+    const ready = readyMap.get(l.id) || 0;
+    const shipped = shippedMap.get(l.id) || 0;
+    const received = receivedMap.get(l.id) || 0;
+
     return {
       id: l.id,
-      qty: l.qty,
-      confirmed_qty: l.confirmed_qty,
-      unit_cost: l.unit_cost,
-      line_note: l.line_note,
+      qty: Number(l.qty) || 0,
+      confirmed_qty: l.confirmed_qty !== null && l.confirmed_qty !== undefined ? Number(l.confirmed_qty) : null,
+      unit_cost: Number(l.unit_cost) || 0,
+      line_note: l.line_note || "",
       brand_name: productObj.brands?.name || "(미지정 브랜드)",
+      ready_qty: ready,
+      shipped_qty: shipped,
+      received_qty: received,
+      remaining_to_ship: Math.max(0, targetQty - shipped),
+      remaining_to_receive: Math.max(0, targetQty - received),
       product: {
         id: productObj.id,
-        name: productObj.name,
-        letusto_sku: productObj.letusto_sku,
-        manufacture_sku: productObj.manufacture_sku
+        name: productObj.name || "(제품명 없음)",
+        letusto_sku: productObj.letusto_sku || "-",
+        manufacture_sku: productObj.manufacture_sku || "-"
       }
     };
   });
