@@ -143,3 +143,37 @@ export const CASE_STATUS_COLOR: Record<CaseStatus, string> = {
   pending:         "bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800",
   replied:         "bg-blue-50 text-blue-800 border-blue-200 dark:bg-blue-950/60 dark:text-blue-300 dark:border-blue-800",
 };
+
+export interface SettlementInquiryQueryParams {
+  new?: string;
+  category?: string;
+  invoice_id?: string;
+  invoice_no?: string;
+  ap_no?: string;
+  po_id?: string;
+  po_no?: string;
+  invoice_total?: string | number;
+  outstanding_balance?: string | number;
+}
+
+/**
+ * Builds the canonical portal support URL for initiating a prefilled settlement inquiry.
+ */
+export function buildSettlementInquiryUrl(params: SettlementInquiryQueryParams): string {
+  const searchParams = new URLSearchParams();
+  searchParams.set("new", "1");
+  searchParams.set("category", params.category || "settlement");
+  if (params.invoice_id) searchParams.set("invoice_id", params.invoice_id);
+  if (params.invoice_no) searchParams.set("invoice_no", params.invoice_no);
+  if (params.ap_no) searchParams.set("ap_no", params.ap_no);
+  if (params.po_id) searchParams.set("po_id", params.po_id);
+  if (params.po_no) searchParams.set("po_no", params.po_no);
+  if (params.invoice_total !== undefined && params.invoice_total !== null && params.invoice_total !== "") {
+    searchParams.set("invoice_total", String(params.invoice_total));
+  }
+  if (params.outstanding_balance !== undefined && params.outstanding_balance !== null && params.outstanding_balance !== "") {
+    searchParams.set("outstanding_balance", String(params.outstanding_balance));
+  }
+  return `/portal/support?${searchParams.toString()}`;
+}
+

@@ -45,13 +45,13 @@ export function PortalSupportView({ initialInquiries, createAction }: PortalSupp
   const caseParam = searchParams.get("case") || searchParams.get("id");
   const newParam = searchParams.get("new");
   const categoryParam = searchParams.get("category");
-  const invoiceIdParam = searchParams.get("invoiceId");
-  const invoiceNoParam = searchParams.get("invoiceNo");
-  const apNoParam = searchParams.get("apNo");
-  const poIdParam = searchParams.get("poId");
-  const poNoParam = searchParams.get("poNo");
-  const balanceParam = searchParams.get("balance");
-  const totalParam = searchParams.get("total");
+  const invoiceIdParam = searchParams.get("invoice_id") || searchParams.get("invoiceId");
+  const invoiceNoParam = searchParams.get("invoice_no") || searchParams.get("invoiceNo");
+  const apNoParam = searchParams.get("ap_no") || searchParams.get("apNo");
+  const poIdParam = searchParams.get("po_id") || searchParams.get("poId");
+  const poNoParam = searchParams.get("po_no") || searchParams.get("poNo");
+  const balanceParam = searchParams.get("outstanding_balance") || searchParams.get("balance");
+  const totalParam = searchParams.get("invoice_total") || searchParams.get("total");
 
   const [inquiries, setInquiries] = useState<PartnerInquiryItem[]>(initialInquiries);
   const [isWriteOpen, setIsWriteOpen] = useState(false);
@@ -67,29 +67,76 @@ export function PortalSupportView({ initialInquiries, createAction }: PortalSupp
   const [previousCaseId, setPreviousCaseId] = useState<string | null>(null);
   const [relatedInvoiceId, setRelatedInvoiceId] = useState<string | null>(null);
   const [relatedPoId, setRelatedPoId] = useState<string | null>(null);
+  const [linkedContext, setLinkedContext] = useState<{
+    invoiceId?: string | null;
+    invoiceNo?: string | null;
+    apNo?: string | null;
+    poId?: string | null;
+    poNo?: string | null;
+    total?: string | null;
+    balance?: string | null;
+  } | null>(null);
   const [newCaseFile, setNewCaseFile] = useState<File | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
 
   // Auto-fill from query params (e.g. from Invoice inquiry CTA)
   useEffect(() => {
-    if (newParam === "true" || invoiceIdParam) {
+    // 1. If specific case requested via query param
+    if (caseParam && inquiries.length > 0) {
+      const match = inquiries.find(
+        (i) => i.id === caseParam || (i.case_number && i.case_number.toLowerCase() === caseParam.toLowerCase())
+      );
+      if (match) {
+        setSelectedInquiry(match);
+        setIsWriteOpen(false);
+        return;
+      }
+    }
+
+    // 2. If new inquiry / settlement inquiry requested
+    const isNewRequested = newParam === "1" || newParam === "true" || !!invoiceIdParam || categoryParam === "settlement";
+    if (isNewRequested) {
       setIsWriteOpen(true);
       setSelectedInquiry(null);
-      if (categoryParam) setCategory(categoryParam);
-      else if (invoiceIdParam) setCategory("settlement");
+      setCategory(categoryParam || (invoiceIdParam ? "settlement" : "general"));
 
       if (invoiceIdParam) setRelatedInvoiceId(invoiceIdParam);
       if (poIdParam) setRelatedPoId(poIdParam);
 
-      if (invoiceIdParam || invoiceNoParam || apNoParam) {
-        const invLabel = invoiceNoParam || apNoParam || "";
-        const poLabel = poNoParam || "";
-        setTitle(`[정산 문의] Invoice #${invLabel}${poLabel ? ` (PO #${poLabel})` : ""} 정산 이견 문의`);
-        setContent(`안녕하세요, 인보이스 및 정산 내역에 대한 이견 사항이 있어 문의드립니다.\n\n[관련 인보이스 정보]\n- 인보이스 번호: ${invoiceNoParam || "-"}\n- 관리 번호 (AP No.): ${apNoParam || "-"}\n- 관련 발주서 (PO): ${poNoParam || "-"}\n- 청구 금액: ${totalParam ? `$${totalParam}` : "-"}\n- 미지급 잔액: ${balanceParam ? `$${balanceParam}` : "-"}\n\n[문의 및 소명 내용]\n`);
+      if (invoiceIdParam || invoiceNoParam || apNoParam || poIdParam || poNoParam) {
+        setLinkedContext({
+          invoiceId: invoiceIdParam || null,
+          invoiceNo: invoiceNoParam || null,
+          apNo: apNoParam || null,
+          poId: poIdParam || null,
+          poNo: poNoParam || null,
+          total: totalParam || null,
+          balance: balanceParam || null,
+        });
+
+        const invLabel = invoiceNoParam || apNoParam || "인보이스";
+        const poLabel = poNoParam ? ` / ${poNoParam}` : "";
+        setTitle(`[Invoice ${invLabel}${poLabel}] 정산 이견 문의`);
+
+        const formattedTotal = totalParam ? (totalParam.startsWith("$") ? totalParam : `$${Number(totalParam).toLocaleString()}`) : "-";
+        const formattedBalance = balanceParam ? (balanceParam.startsWith("$") ? balanceParam : `$${Number(balanceParam).toLocaleString()}`) : "-";
+
+        setContent(
+`정산 내역에 대해 문의드립니다.
+
+Invoice No: ${invoiceNoParam || "-"}
+AP No: ${apNoParam || "-"}
+Related PO: ${poNoParam || "-"}
+Invoice Amount: ${formattedTotal}
+Outstanding Balance: ${formattedBalance}
+
+문의 내용을 아래에 작성해 주세요.
+`
+        );
       }
     }
-  }, [newParam, categoryParam, invoiceIdParam, invoiceNoParam, apNoParam, poIdParam, poNoParam, balanceParam, totalParam]);
+  }, [searchParams, inquiries]);
 
   const formatFileSize = (bytes: number) => {
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}KB`;
@@ -174,7 +221,7 @@ export function PortalSupportView({ initialInquiries, createAction }: PortalSupp
       if (res.success) {
         setIsWriteOpen(false);
         setTitle(""); setContent(""); setCategory("general"); setPreviousCaseId(null);
-        setRelatedInvoiceId(null); setRelatedPoId(null);
+        setRelatedInvoiceId(null); setRelatedPoId(null); setLinkedContext(null);
         window.location.reload();
       } else {
         setSubmitError(res.error || "등록에 실패했습니다.");
@@ -192,6 +239,7 @@ export function PortalSupportView({ initialInquiries, createAction }: PortalSupp
     setTitle(prevInquiry.title.startsWith("Re:") ? prevInquiry.title : `Re: ${prevInquiry.title}`);
     setContent("");
     setSubmitError("");
+    setLinkedContext(null);
     setIsWriteOpen(true);
   };
 
@@ -290,7 +338,17 @@ export function PortalSupportView({ initialInquiries, createAction }: PortalSupp
             <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5">K SELECT NETWORK 전용 1:1 케이스 및 온라인 문의 지원 현황입니다.</p>
           </div>
           <button
-            onClick={() => { setPreviousCaseId(null); setTitle(""); setContent(""); setSubmitError(""); setIsWriteOpen(!isWriteOpen); setSelectedInquiry(null); }}
+            onClick={() => {
+              setPreviousCaseId(null);
+              setRelatedInvoiceId(null);
+              setRelatedPoId(null);
+              setLinkedContext(null);
+              setTitle("");
+              setContent("");
+              setSubmitError("");
+              setIsWriteOpen(!isWriteOpen);
+              setSelectedInquiry(null);
+            }}
             className="rounded-lg bg-zinc-950 px-4 py-2.5 text-xs font-bold text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-100 transition-colors cursor-pointer"
           >
             + 새 문의 작성
@@ -397,6 +455,12 @@ export function PortalSupportView({ initialInquiries, createAction }: PortalSupp
                       )}
                       <p className="text-xs font-bold text-zinc-900 dark:text-white truncate">{item.title}</p>
                       <p className="text-[10px] text-zinc-400 dark:text-zinc-500 mt-0.5 truncate">{item.content}</p>
+                      {(item.related_invoice_number || item.related_ap_number || item.related_invoice_id) && (
+                        <div className="mt-1 flex items-center gap-1 text-[9px] font-mono font-medium text-indigo-600 dark:text-indigo-400">
+                          <span>🧾</span>
+                          <span className="truncate">Invoice #{item.related_invoice_number || item.related_ap_number || "연계"}</span>
+                        </div>
+                      )}
                       {normStatus === "ACTION_REQUIRED" && (
                         <p className="text-[9px] font-bold text-rose-600 dark:text-rose-400 mt-1">⚠️ 조치 요청 수신 — 확인 필요</p>
                       )}
@@ -424,8 +488,61 @@ export function PortalSupportView({ initialInquiries, createAction }: PortalSupp
             <div className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 space-y-4">
               <div className="flex justify-between items-center">
                 <h3 className="text-sm font-bold text-zinc-900 dark:text-white">새 케이스 등록</h3>
-                <button onClick={() => setIsWriteOpen(false)} className="text-xs text-zinc-400 hover:text-zinc-700 dark:hover:text-white cursor-pointer">닫기</button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsWriteOpen(false);
+                    setLinkedContext(null);
+                  }}
+                  className="text-xs text-zinc-400 hover:text-zinc-700 dark:hover:text-white cursor-pointer"
+                >
+                  닫기
+                </button>
               </div>
+
+              {/* Visual Reference Context Card */}
+              {linkedContext && (
+                <div className="p-3.5 rounded-xl border border-indigo-200 bg-indigo-50/70 dark:border-indigo-900/50 dark:bg-indigo-950/40 text-xs space-y-2">
+                  <div className="flex items-center justify-between font-bold text-indigo-900 dark:text-indigo-300">
+                    <span className="flex items-center gap-1.5">
+                      <span>🧾</span>
+                      <span>연계된 인보이스 및 정산 컨텍스트 (Linked Context)</span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setRelatedInvoiceId(null);
+                        setRelatedPoId(null);
+                        setLinkedContext(null);
+                      }}
+                      className="text-[10px] text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-200 underline cursor-pointer"
+                    >
+                      연계 해제
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px] pt-1">
+                    <div>
+                      <span className="text-zinc-500 dark:text-zinc-400 block text-[10px] font-medium">인보이스 번호</span>
+                      <span className="font-mono font-bold text-zinc-900 dark:text-zinc-100">{linkedContext.invoiceNo || "-"}</span>
+                    </div>
+                    <div>
+                      <span className="text-zinc-500 dark:text-zinc-400 block text-[10px] font-medium">관리번호 (AP No.)</span>
+                      <span className="font-mono font-bold text-zinc-700 dark:text-zinc-300">{linkedContext.apNo || "-"}</span>
+                    </div>
+                    <div>
+                      <span className="text-zinc-500 dark:text-zinc-400 block text-[10px] font-medium">관련 PO 번호</span>
+                      <span className="font-mono font-bold text-indigo-600 dark:text-indigo-400">{linkedContext.poNo || "-"}</span>
+                    </div>
+                    <div>
+                      <span className="text-zinc-500 dark:text-zinc-400 block text-[10px] font-medium">미지급 잔액</span>
+                      <span className="font-mono font-bold text-rose-600 dark:text-rose-400">
+                        {linkedContext.balance ? (linkedContext.balance.startsWith("$") ? linkedContext.balance : `$${Number(linkedContext.balance).toLocaleString()}`) : "-"}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <form onSubmit={handleSubmit} className="space-y-3">
                 {submitError && (
                   <div className="p-3 rounded-lg border border-red-200 bg-red-50 text-xs font-semibold text-red-800 dark:border-red-900/50 dark:bg-red-950/15 dark:text-red-400">

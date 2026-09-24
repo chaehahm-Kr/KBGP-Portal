@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { submitPortalInvoice, deletePortalInvoiceDraft } from "@/lib/portal/actions";
+import { buildSettlementInquiryUrl } from "@/lib/inquiry/types";
 
 interface InvoiceDetailProps {
   invoice: any;
@@ -73,6 +74,17 @@ export function InvoiceDetail({ invoice, attachmentUrl }: InvoiceDetailProps) {
   const baseAmount = Number(invoice.subtotal || 0);
   const finalPayable = Number(invoice.invoiceTotal || (baseAmount + totalAdjustments));
 
+  // Build unified Settlement Inquiry URL for CTAs
+  const settlementInquiryUrl = buildSettlementInquiryUrl({
+    invoice_id: invoice.id,
+    invoice_no: invoice.supplierInvoiceNumber,
+    ap_no: invoice.internalApNumber,
+    po_id: invoice.purchaseOrderId,
+    po_no: invoice.poNumber,
+    invoice_total: finalPayable,
+    outstanding_balance: invoice.balanceDue,
+  });
+
   return (
     <div className="space-y-6">
       {errorMessage && (
@@ -93,12 +105,20 @@ export function InvoiceDetail({ invoice, attachmentUrl }: InvoiceDetailProps) {
             <span className="text-xs font-bold text-indigo-900 dark:text-indigo-300 flex items-center gap-1.5">
               💬 <strong>연계된 정산 문의 케이스 ({invoice.linkedInquiries.length}건)</strong>
             </span>
-            <Link
-              href={`/portal/support?case=${invoice.linkedInquiries[0].caseNumber || invoice.linkedInquiries[0].id}`}
-              className="text-[11px] font-bold text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 underline"
-            >
-              케이스 바로가기 →
-            </Link>
+            <div className="flex items-center gap-3">
+              <Link
+                href={settlementInquiryUrl}
+                className="text-[11px] font-bold text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 underline"
+              >
+                + 새 정산 문의 등록
+              </Link>
+              <Link
+                href={`/portal/support?case=${invoice.linkedInquiries[0].caseNumber || invoice.linkedInquiries[0].id}`}
+                className="text-[11px] font-bold text-zinc-600 hover:text-zinc-800 dark:text-zinc-400 underline"
+              >
+                케이스 목록 보기 →
+              </Link>
+            </div>
           </div>
           <div className="flex flex-wrap gap-2">
             {invoice.linkedInquiries.map((inq: any) => (
@@ -263,7 +283,7 @@ export function InvoiceDetail({ invoice, attachmentUrl }: InvoiceDetailProps) {
             )}
           </div>
 
-          {invoice.invoiceStatus === "DRAFT" && (
+          {invoice.invoiceStatus === "DRAFT" ? (
             <div className="flex flex-col gap-2 pt-4">
               <button
                 onClick={handleSubmitInvoice}
@@ -287,6 +307,16 @@ export function InvoiceDetail({ invoice, attachmentUrl }: InvoiceDetailProps) {
                   삭제
                 </button>
               </div>
+            </div>
+          ) : (
+            <div className="pt-3 border-t border-zinc-150 dark:border-zinc-800">
+              <Link
+                href={settlementInquiryUrl}
+                className="w-full py-2 px-3 rounded-lg bg-zinc-100 hover:bg-zinc-200 text-zinc-800 dark:bg-zinc-800 dark:hover:bg-zinc-700 dark:text-zinc-200 text-xs font-bold transition-colors flex items-center justify-center gap-1.5 border border-zinc-200 dark:border-zinc-700"
+              >
+                <span>💬</span>
+                <span>정산 및 인보이스 문의하기</span>
+              </Link>
             </div>
           )}
         </div>
@@ -406,14 +436,13 @@ export function InvoiceDetail({ invoice, attachmentUrl }: InvoiceDetailProps) {
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">지급 및 이체 이력 (Payment History — View Only)</h2>
 
-          {invoice.balanceDue > 0 && (
-            <Link
-              href="/portal/support"
-              className="px-2.5 py-1 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 dark:bg-zinc-800 dark:hover:bg-zinc-700 dark:text-zinc-200 text-[10px] font-bold rounded border border-zinc-200 dark:border-zinc-700 transition-colors"
-            >
-              정산 이견 문의하기 (Inquiry CTA)
-            </Link>
-          )}
+          <Link
+            href={settlementInquiryUrl}
+            className="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 dark:bg-indigo-950/60 dark:hover:bg-indigo-900/60 dark:text-indigo-300 text-xs font-bold rounded-lg border border-indigo-200 dark:border-indigo-800 transition-colors flex items-center gap-1.5 shadow-2xs"
+          >
+            <span>💬</span>
+            <span>정산 이견 문의하기 (Inquiry CTA)</span>
+          </Link>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">

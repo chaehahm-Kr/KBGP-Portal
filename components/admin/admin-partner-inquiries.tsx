@@ -470,6 +470,12 @@ export function AdminPartnerInquiries({
                         )}
                       </div>
                       <p className="text-[10px] text-zinc-400 dark:text-zinc-500 mt-0.5 truncate">{item.content}</p>
+                      {(item.related_invoice_number || item.related_ap_number || item.related_invoice_id) && (
+                        <div className="mt-1 flex items-center gap-1 text-[9px] font-mono font-medium text-indigo-600 dark:text-indigo-400">
+                          <span>🧾</span>
+                          <span className="truncate">Invoice #{item.related_invoice_number || item.related_ap_number || "연계"}</span>
+                        </div>
+                      )}
                       {norm === "ACTION_REQUIRED" && (
                         <div className="mt-1.5 flex items-center gap-1 text-[9px] font-bold text-rose-600 dark:text-rose-400">
                           <span>⚠️</span><span>조치 요청 중</span>

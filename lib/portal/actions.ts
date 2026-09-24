@@ -1858,6 +1858,25 @@ export async function getPortalInvoiceDetail(id: string) {
     remittanceSwiftBicMasked: (inv as any).remittance_swift_bic_masked || rem?.swift_bic_masked || rem?.swift_code || null,
     remittanceCurrency: (inv as any).remittance_currency || rem?.currency || inv.currency || null,
     remittancePaymentMethod: (inv as any).remittance_payment_method || rem?.payment_method || null,
+    linkedInquiries: await (async () => {
+      try {
+        const { data: inqs } = await adminDb
+          .from("partner_inquiries")
+          .select("id, case_number, title, category, status, created_at")
+          .eq("related_invoice_id", id)
+          .order("created_at", { ascending: false });
+        return (inqs || []).map((q: any) => ({
+          id: q.id,
+          caseNumber: q.case_number,
+          title: q.title,
+          category: q.category,
+          status: q.status,
+          createdAt: q.created_at
+        }));
+      } catch {
+        return [];
+      }
+    })(),
     payments: (payments ?? []).map((p: any) => ({
       id: p.id,
       paymentNumber: p.payment_number,
