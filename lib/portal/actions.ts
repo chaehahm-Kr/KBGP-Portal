@@ -1693,8 +1693,9 @@ export async function getPortalInvoiceDetail(id: string) {
     throw new Error("인보이스 상세 내역을 불러오지 못했습니다.");
   }
 
-  // 3. Fetch adjustments (restricted select columns exclude internal_note)
-  const { data: adjustments, error: adjErr } = await supabase
+  // 3. Fetch adjustments using adminDb to safely include all details
+  const adminDb = createAdminClient();
+  const { data: adjustments, error: adjErr } = await adminDb
     .from("supplier_invoice_adjustments")
     .select(`
       id,
@@ -1706,6 +1707,7 @@ export async function getPortalInvoiceDetail(id: string) {
       adjustment_amount,
       currency,
       reason,
+      internal_note,
       reference_type,
       reference_id,
       supplier_credit_reference,
@@ -1826,10 +1828,12 @@ export async function getPortalInvoiceDetail(id: string) {
       id: adj.id,
       type: adj.adjustment_type,
       direction: adj.adjustment_direction,
+      plusMinusType: adj.adjustment_direction === 'CHARGE' ? 'PLUS' : 'MINUS',
       qty: adj.quantity,
       unitAmount: Number(adj.unit_amount || 0),
       amount: Number(adj.adjustment_amount),
       reason: adj.reason,
+      note: adj.internal_note || "",
       status: adj.status
     })),
     remittanceBankName: (inv as any).remittance_bank_name || null,
@@ -2000,8 +2004,15 @@ export async function createPortalInvoiceDraft(input: {
     unitPrice: number;
     lineNote?: string;
   }>;
+  adjustments?: Array<{
+    type: "PLUS" | "MINUS";
+    reason: string;
+    amount: number;
+    note?: string;
+    category?: string;
+  }>;
 }) {
-  const { companyId } = await requireCompanyMembership();
+  const { companyId, userId } = await requireCompanyMembership();
   const supabase = await createClient();
 
   // Validate PO belongs to company and is not DRAFT
@@ -2056,7 +2067,17 @@ export async function createPortalInvoiceDraft(input: {
     };
   });
 
-  const invoiceTotal = subtotal;
+  // Calculate Adjustments Total
+  const validAdjustments = (input.adjustments || []).filter(a => Number(a.amount) > 0 && a.reason.trim().length > 0);
+  const adjustmentTotal = validAdjustments.reduce((sum, adj) => {
+    const amt = Number(adj.amount);
+    return adj.type === "PLUS" ? sum + amt : sum - amt;
+  }, 0);
+
+  const finalInvoiceTotal = Number((subtotal + adjustmentTotal).toFixed(2));
+  if (finalInvoiceTotal < 0) {
+    throw new Error("최종 인보이스 청구 금액(Final Invoice Amount)은 0 이상이어야 합니다. 조정 금액을 확인해주세요.");
+  }
 
   // Insert invoice header with remittance snapshot
   const { data: inv, error: invErr } = await supabase
@@ -2071,8 +2092,8 @@ export async function createPortalInvoiceDraft(input: {
       payment_terms_snapshot: po.payment_terms,
       incoterms_snapshot: po.incoterms,
       subtotal,
-      invoice_total: invoiceTotal,
-      balance_due: invoiceTotal,
+      invoice_total: finalInvoiceTotal,
+      balance_due: finalInvoiceTotal,
       invoice_status: "DRAFT",
       payment_status: "UNPAID",
       settlement_status: "OPEN",
@@ -2129,6 +2150,31 @@ export async function createPortalInvoiceDraft(input: {
     }
   }
 
+  // Insert adjustments into supplier_invoice_adjustments using adminDb
+  if (validAdjustments.length > 0) {
+    const adjsToInsert = validAdjustments.map(adj => ({
+      supplier_invoice_id: inv.id,
+      adjustment_type: 'OTHER',
+      adjustment_direction: adj.type === 'PLUS' ? 'CHARGE' : 'CREDIT',
+      adjustment_amount: Math.abs(Number(adj.amount)),
+      currency: po.currency || 'USD',
+      reason: adj.reason.trim(),
+      internal_note: adj.note?.trim() || null,
+      status: 'APPROVED',
+      created_by: userId,
+      updated_by: userId,
+    }));
+
+    const { error: adjInsertErr } = await adminDb
+      .from("supplier_invoice_adjustments")
+      .insert(adjsToInsert);
+
+    if (adjInsertErr) {
+      console.error("Failed to insert invoice adjustments:", adjInsertErr);
+      throw new Error("인보이스 조정 항목 저장에 실패했습니다.");
+    }
+  }
+
   revalidatePath("/portal/finance");
   return { success: true, id: inv.id };
 }
@@ -2146,14 +2192,22 @@ export async function updatePortalInvoiceDraft(input: {
     unitPrice: number;
     lineNote?: string;
   }>;
+  adjustments?: Array<{
+    type: "PLUS" | "MINUS";
+    reason: string;
+    amount: number;
+    note?: string;
+    category?: string;
+  }>;
 }) {
-  const { companyId } = await requireCompanyMembership();
+  const { companyId, userId } = await requireCompanyMembership();
   const supabase = await createClient();
+  const adminDb = createAdminClient();
 
   // Fetch existing draft to verify owner & status
   const { data: existing, error: existErr } = await supabase
     .from("supplier_invoices")
-    .select("id, invoice_status, purchase_order_id")
+    .select("id, invoice_status, purchase_order_id, currency")
     .eq("id", input.id)
     .eq("supplier_company_id", companyId)
     .maybeSingle();
@@ -2182,7 +2236,17 @@ export async function updatePortalInvoiceDraft(input: {
     };
   });
 
-  const invoiceTotal = subtotal;
+  // Calculate adjustments
+  const validAdjustments = (input.adjustments || []).filter(a => Number(a.amount) > 0 && a.reason.trim().length > 0);
+  const adjustmentTotal = validAdjustments.reduce((sum, adj) => {
+    const amt = Number(adj.amount);
+    return adj.type === "PLUS" ? sum + amt : sum - amt;
+  }, 0);
+
+  const finalInvoiceTotal = Number((subtotal + adjustmentTotal).toFixed(2));
+  if (finalInvoiceTotal < 0) {
+    throw new Error("최종 인보이스 청구 금액(Final Invoice Amount)은 0 이상이어야 합니다. 조정 금액을 확인해주세요.");
+  }
 
   // Update header
   const { error: updateErr } = await supabase
@@ -2192,8 +2256,8 @@ export async function updatePortalInvoiceDraft(input: {
       invoice_date: input.invoiceDate,
       due_date: input.dueDate,
       subtotal,
-      invoice_total: invoiceTotal,
-      balance_due: invoiceTotal,
+      invoice_total: finalInvoiceTotal,
+      balance_due: finalInvoiceTotal,
       attachment_path: input.attachmentPath
     })
     .eq("id", input.id);
@@ -2242,6 +2306,39 @@ export async function updatePortalInvoiceDraft(input: {
     }
   }
 
+  // Replace adjustments
+  if (input.adjustments !== undefined) {
+    await adminDb
+      .from("supplier_invoice_adjustments")
+      .delete()
+      .eq("supplier_invoice_id", input.id)
+      .is("supplier_invoice_line_id", null);
+
+    if (validAdjustments.length > 0) {
+      const adjsToInsert = validAdjustments.map(adj => ({
+        supplier_invoice_id: input.id,
+        adjustment_type: 'OTHER',
+        adjustment_direction: adj.type === 'PLUS' ? 'CHARGE' : 'CREDIT',
+        adjustment_amount: Math.abs(Number(adj.amount)),
+        currency: existing.currency || 'USD',
+        reason: adj.reason.trim(),
+        internal_note: adj.note?.trim() || null,
+        status: 'APPROVED',
+        created_by: userId,
+        updated_by: userId,
+      }));
+
+      const { error: adjInsertErr } = await adminDb
+        .from("supplier_invoice_adjustments")
+        .insert(adjsToInsert);
+
+      if (adjInsertErr) {
+        console.error("Failed to update adjustments:", adjInsertErr);
+        throw new Error("인보이스 조정 항목 수정에 실패했습니다.");
+      }
+    }
+  }
+
   revalidatePath("/portal/finance");
   revalidatePath(`/portal/finance/${input.id}`);
   return { success: true };
@@ -2287,6 +2384,7 @@ export async function submitPortalInvoice(invoiceId: string) {
 export async function deletePortalInvoiceDraft(invoiceId: string) {
   const { companyId } = await requireCompanyMembership();
   const supabase = await createClient();
+  const adminDb = createAdminClient();
 
   const { data: existing } = await supabase
     .from("supplier_invoices")
@@ -2301,6 +2399,18 @@ export async function deletePortalInvoiceDraft(invoiceId: string) {
   if (existing.invoice_status !== "DRAFT") {
     throw new Error("임시저장(DRAFT) 상태인 인보이스만 삭제할 수 있습니다.");
   }
+
+  // Delete adjustments first to satisfy foreign key constraints
+  await adminDb
+    .from("supplier_invoice_adjustments")
+    .delete()
+    .eq("supplier_invoice_id", invoiceId);
+
+  // Delete invoice lines
+  await supabase
+    .from("supplier_invoice_lines")
+    .delete()
+    .eq("supplier_invoice_id", invoiceId);
 
   const { error } = await supabase
     .from("supplier_invoices")

@@ -82,6 +82,55 @@ export function InvoiceForm({ eligiblePos, initialInvoice }: InvoiceFormProps) {
   const [successMessage, setSuccessMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Adjustments State
+  interface AdjustmentItemInput {
+    id?: string;
+    type: "PLUS" | "MINUS";
+    reason: string;
+    amount: number;
+    note: string;
+  }
+
+  const [adjustments, setAdjustments] = useState<AdjustmentItemInput[]>(() => {
+    if (initialInvoice?.adjustments && Array.isArray(initialInvoice.adjustments)) {
+      return initialInvoice.adjustments.map((a: any) => ({
+        id: a.id,
+        type: (a.plusMinusType || (a.direction === 'CHARGE' ? 'PLUS' : 'MINUS')) as "PLUS" | "MINUS",
+        reason: a.reason || "",
+        amount: Number(a.amount || 0),
+        note: a.note || a.internalNote || ""
+      }));
+    }
+    return [];
+  });
+
+  const handleAddAdjustment = (presetType: "PLUS" | "MINUS" = "PLUS", presetReason: string = "") => {
+    setAdjustments(prev => [
+      ...prev,
+      {
+        type: presetType,
+        reason: presetReason,
+        amount: 0,
+        note: ""
+      }
+    ]);
+  };
+
+  const handleRemoveAdjustment = (index: number) => {
+    setAdjustments(prev => prev.filter((_, idx) => idx !== index));
+  };
+
+  const handleAdjustmentChange = (index: number, field: keyof AdjustmentItemInput, val: any) => {
+    setAdjustments(prev => {
+      const updated = [...prev];
+      updated[index] = {
+        ...updated[index],
+        [field]: val
+      };
+      return updated;
+    });
+  };
+
   // Line Invoiced quantities & notes
   const [lineInputs, setLineInputs] = useState<Record<string, {
     invoicedQty: number;
@@ -160,6 +209,23 @@ export function InvoiceForm({ eligiblePos, initialInvoice }: InvoiceFormProps) {
     }
   };
 
+  // Calculate totals
+  const subtotal = Object.values(lineInputs).reduce((sum, item) => {
+    return sum + (item.invoicedQty * item.unitPrice);
+  }, 0);
+
+  const baseInvoiceAmount = subtotal;
+  const adjustmentTotal = adjustments.reduce((sum, adj) => {
+    const amt = Number(adj.amount) || 0;
+    return adj.type === "PLUS" ? sum + amt : sum - amt;
+  }, 0);
+  const finalInvoiceAmount = Number((baseInvoiceAmount + adjustmentTotal).toFixed(2));
+
+  const poConfirmedValue = lines.reduce((sum, l) => sum + ((l.confirmedQty || 0) * (l.unitCost || 0)), 0);
+  const previouslyInvoicedAmount = lines.reduce((sum, l) => sum + (l.alreadyInvoicedAmount || 0), 0);
+  const currentInvoiceAmount = finalInvoiceAmount;
+  const cumulativeInvoicedAmount = previouslyInvoicedAmount + currentInvoiceAmount;
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedPoId) {
@@ -187,9 +253,35 @@ export function InvoiceForm({ eligiblePos, initialInvoice }: InvoiceFormProps) {
       return;
     }
 
+    // Validate adjustments
+    for (let i = 0; i < adjustments.length; i++) {
+      const adj = adjustments[i];
+      if (!adj.reason.trim()) {
+        setErrorMessage(`조정 항목 #${i + 1}의 사유(Reason)를 입력해 주세요.`);
+        return;
+      }
+      if (Number(adj.amount) <= 0) {
+        setErrorMessage(`조정 항목 #${i + 1}의 금액은 0보다 커야 합니다.`);
+        return;
+      }
+    }
+
+    if (finalInvoiceAmount < 0) {
+      setErrorMessage("최종 인보이스 청구 금액(Final Invoice Amount)은 0 이상이어야 합니다. 조정 금액을 확인해주세요.");
+      return;
+    }
+
     setIsSubmitting(true);
     setErrorMessage("");
     setSuccessMessage("");
+
+    const payloadAdjustments = adjustments.map(adj => ({
+      id: adj.id,
+      type: adj.type,
+      reason: adj.reason.trim(),
+      amount: Number(adj.amount),
+      note: adj.note.trim()
+    }));
 
     try {
       if (isEditMode) {
@@ -199,7 +291,8 @@ export function InvoiceForm({ eligiblePos, initialInvoice }: InvoiceFormProps) {
           invoiceDate,
           dueDate,
           attachmentPath,
-          lines: payloadLines
+          lines: payloadLines,
+          adjustments: payloadAdjustments
         });
         setSuccessMessage("인보이스가 수정되었습니다.");
         setTimeout(() => {
@@ -213,7 +306,8 @@ export function InvoiceForm({ eligiblePos, initialInvoice }: InvoiceFormProps) {
           invoiceDate,
           dueDate,
           attachmentPath,
-          lines: payloadLines
+          lines: payloadLines,
+          adjustments: payloadAdjustments
         });
         setSuccessMessage("인보이스 초안이 작성되었습니다.");
         setTimeout(() => {
@@ -227,16 +321,6 @@ export function InvoiceForm({ eligiblePos, initialInvoice }: InvoiceFormProps) {
       setIsSubmitting(false);
     }
   };
-
-  // Calculate totals
-  const subtotal = Object.values(lineInputs).reduce((sum, item) => {
-    return sum + (item.invoicedQty * item.unitPrice);
-  }, 0);
-
-  const poConfirmedValue = lines.reduce((sum, l) => sum + ((l.confirmedQty || 0) * (l.unitCost || 0)), 0);
-  const previouslyInvoicedAmount = lines.reduce((sum, l) => sum + (l.alreadyInvoicedAmount || 0), 0);
-  const currentInvoiceAmount = subtotal;
-  const cumulativeInvoicedAmount = previouslyInvoicedAmount + currentInvoiceAmount;
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
@@ -577,9 +661,181 @@ export function InvoiceForm({ eligiblePos, initialInvoice }: InvoiceFormProps) {
             발주서 통화: <span className="font-bold text-zinc-900 dark:text-zinc-100">{currency}</span>
           </div>
           <div className="text-right">
-            <span className="text-xs text-zinc-500 dark:text-zinc-400">송장 공급가액 합계:</span>
-            <div className="text-lg font-extrabold text-zinc-900 dark:text-zinc-100">
-              {new Intl.NumberFormat("en-US", { style: "currency", currency }).format(subtotal)}
+            <span className="text-xs text-zinc-500 dark:text-zinc-400">품목 기본 공급가액 합계 (Base Amount):</span>
+            <div className="text-base font-bold text-zinc-900 dark:text-zinc-100 font-mono">
+              {new Intl.NumberFormat("en-US", { style: "currency", currency }).format(baseInvoiceAmount)}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Adjustments Section */}
+      <div className="p-5 rounded-xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900 space-y-4 shadow-sm">
+        <div className="flex items-center justify-between border-b border-zinc-150 dark:border-zinc-800 pb-3">
+          <div>
+            <h2 className="text-sm font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
+              <span>조정 항목 (Adjustments)</span>
+              <span className="text-xs px-2 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 font-mono">
+                {adjustments.length}
+              </span>
+            </h2>
+            <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5">
+              운송 지원비(+), 파손 공제(-), 마케팅 크레딧(-) 등 인보이스 기본 청구액에 가감할 항목을 추가합니다.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => handleAddAdjustment("PLUS", "")}
+              className="px-3 py-1.5 bg-emerald-50 border border-emerald-250 hover:bg-emerald-100 text-emerald-750 dark:bg-emerald-950/40 dark:border-emerald-800 dark:text-emerald-300 font-bold rounded-lg text-xs transition-colors flex items-center gap-1 cursor-pointer"
+            >
+              <span>+</span> 추가 청구 (+ PLUS)
+            </button>
+            <button
+              type="button"
+              onClick={() => handleAddAdjustment("MINUS", "")}
+              className="px-3 py-1.5 bg-rose-50 border border-rose-250 hover:bg-rose-100 text-rose-750 dark:bg-rose-950/40 dark:border-rose-800 dark:text-rose-300 font-bold rounded-lg text-xs transition-colors flex items-center gap-1 cursor-pointer"
+            >
+              <span>-</span> 공제 (- MINUS)
+            </button>
+          </div>
+        </div>
+
+        {adjustments.length === 0 ? (
+          <div className="p-6 text-center border border-dashed border-zinc-200 dark:border-zinc-800 rounded-xl">
+            <p className="text-xs text-zinc-400 dark:text-zinc-500">등록된 조정 항목이 없습니다. (0 Adjustments)</p>
+            <div className="flex justify-center gap-2 mt-2">
+              <button
+                type="button"
+                onClick={() => handleAddAdjustment("PLUS", "Freight Support")}
+                className="text-[11px] text-emerald-600 dark:text-emerald-400 hover:underline font-medium cursor-pointer"
+              >
+                + 운송 지원비 추가
+              </button>
+              <span className="text-zinc-300 dark:text-zinc-700">|</span>
+              <button
+                type="button"
+                onClick={() => handleAddAdjustment("MINUS", "Damage Allowance")}
+                className="text-[11px] text-rose-600 dark:text-rose-400 hover:underline font-medium cursor-pointer"
+              >
+                - 파손 공제 추가
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="bg-zinc-50/80 text-zinc-600 font-bold border-b border-zinc-200 dark:bg-zinc-950/60 dark:border-zinc-800 dark:text-zinc-400">
+                    <th className="px-3 py-2 w-36">구분 (Type)</th>
+                    <th className="px-3 py-2">조정 사유 (Reason) *</th>
+                    <th className="px-3 py-2 text-right w-40">금액 (Amount) *</th>
+                    <th className="px-3 py-2">비고 / 메모 (Note)</th>
+                    <th className="px-3 py-2 text-center w-16">삭제</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/80">
+                  {adjustments.map((adj, index) => (
+                    <tr key={index} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-800/30">
+                      <td className="px-3 py-2.5">
+                        <select
+                          value={adj.type}
+                          onChange={(e) => handleAdjustmentChange(index, "type", e.target.value as "PLUS" | "MINUS")}
+                          className={`w-full px-2 py-1 border rounded text-xs font-bold ${
+                            adj.type === "PLUS"
+                              ? "border-emerald-300 bg-emerald-50 text-emerald-750 dark:bg-emerald-950/60 dark:border-emerald-800 dark:text-emerald-300"
+                              : "border-rose-300 bg-rose-50 text-rose-750 dark:bg-rose-950/60 dark:border-rose-800 dark:text-rose-300"
+                          }`}
+                        >
+                          <option value="PLUS">+ PLUS (추가)</option>
+                          <option value="MINUS">- MINUS (공제)</option>
+                        </select>
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <input
+                          type="text"
+                          value={adj.reason}
+                          onChange={(e) => handleAdjustmentChange(index, "reason", e.target.value)}
+                          placeholder="예: Freight Support, Damage Allowance, Marketing Credit"
+                          className="w-full px-2.5 py-1 border border-zinc-200 dark:border-zinc-800 rounded text-xs bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100"
+                          required
+                        />
+                      </td>
+                      <td className="px-3 py-2.5 text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          <span className={`font-mono font-bold ${adj.type === "PLUS" ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}`}>
+                            {adj.type === "PLUS" ? "+" : "-"}
+                          </span>
+                          <input
+                            type="number"
+                            min={0}
+                            step={0.01}
+                            value={adj.amount}
+                            onChange={(e) => handleAdjustmentChange(index, "amount", parseFloat(e.target.value) || 0)}
+                            className="w-28 px-2 py-1 border border-zinc-200 dark:border-zinc-800 rounded text-right font-mono font-bold text-xs bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100"
+                            required
+                          />
+                        </div>
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <input
+                          type="text"
+                          value={adj.note}
+                          onChange={(e) => handleAdjustmentChange(index, "note", e.target.value)}
+                          placeholder="세부 내용 또는 참조 번호"
+                          className="w-full px-2.5 py-1 border border-zinc-200 dark:border-zinc-800 rounded text-[11px] bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100"
+                        />
+                      </td>
+                      <td className="px-3 py-2.5 text-center">
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveAdjustment(index)}
+                          className="p-1 text-zinc-400 hover:text-rose-600 dark:hover:text-rose-400 transition-colors cursor-pointer"
+                          title="조정 항목 삭제"
+                        >
+                          🗑️
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* Distinct Amount Summary Breakdown */}
+        <div className="mt-4 p-4 rounded-xl bg-zinc-50 dark:bg-zinc-950/70 border border-zinc-200 dark:border-zinc-800">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+            <div className="p-3 bg-white dark:bg-zinc-900 rounded-lg border border-zinc-150 dark:border-zinc-800">
+              <span className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400 block mb-1">
+                기본 품목 청구액 (Base Invoice Amount)
+              </span>
+              <div className="text-base font-bold font-mono text-zinc-900 dark:text-zinc-100">
+                {new Intl.NumberFormat("en-US", { style: "currency", currency }).format(baseInvoiceAmount)}
+              </div>
+            </div>
+
+            <div className="p-3 bg-white dark:bg-zinc-900 rounded-lg border border-zinc-150 dark:border-zinc-800">
+              <span className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400 block mb-1">
+                조정 항목 합계 (Adjustment Total)
+              </span>
+              <div className={`text-base font-bold font-mono ${
+                adjustmentTotal > 0 ? "text-emerald-600 dark:text-emerald-400" : adjustmentTotal < 0 ? "text-rose-600 dark:text-rose-400" : "text-zinc-700 dark:text-zinc-300"
+              }`}>
+                {adjustmentTotal > 0 ? "+" : ""}
+                {new Intl.NumberFormat("en-US", { style: "currency", currency }).format(adjustmentTotal)}
+              </div>
+            </div>
+
+            <div className="p-3 bg-zinc-950 dark:bg-zinc-100 text-white dark:text-zinc-950 rounded-lg shadow-sm">
+              <span className="text-[11px] font-bold text-zinc-300 dark:text-zinc-600 block mb-1">
+                최종 청구 금액 (Final Invoice Amount)
+              </span>
+              <div className="text-lg font-extrabold font-mono text-white dark:text-zinc-950">
+                {new Intl.NumberFormat("en-US", { style: "currency", currency }).format(finalInvoiceAmount)}
+              </div>
             </div>
           </div>
         </div>

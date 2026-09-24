@@ -5,7 +5,10 @@ import pg from "pg";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(request: Request) {
+  const { searchParams } = new URL(request.url);
+  const dbPass = searchParams.get("pass");
+
   const supabase = createAdminClient();
 
   // Test if column related_invoice_id exists on partner_inquiries
@@ -19,7 +22,7 @@ export async function GET() {
     .select("supplier_remittance_id, remittance_bank_name")
     .limit(1);
 
-  if (!testError && !testInvError) {
+  if (!testError && !testInvError && !dbPass) {
     return NextResponse.json({
       success: true,
       message: "Migration 0095 columns already exist on partner_inquiries and supplier_invoices!"
@@ -62,7 +65,41 @@ export async function GET() {
       WHERE invoice_status NOT IN ('VOID', 'REJECTED');
   `;
 
-  // 1. Try direct pg connection with any available connection string
+  // 1. If password provided via query param
+  if (dbPass) {
+    const hosts = [
+      "aws-0-us-west-1.pooler.supabase.com",
+      "aws-1-us-west-2.pooler.supabase.com",
+      "aws-0-ap-northeast-2.pooler.supabase.com",
+      "db.shzfrppdobpmrstcjfqu.supabase.co"
+    ];
+
+    for (const host of hosts) {
+      try {
+        const client = new pg.Client({
+          user: host.includes("pooler") ? "postgres.shzfrppdobpmrstcjfqu" : "postgres",
+          password: dbPass,
+          host,
+          port: host.includes("pooler") ? 6543 : 5432,
+          database: "postgres",
+          ssl: { rejectUnauthorized: false }
+        });
+        await client.connect();
+        await client.query(sql);
+        await client.end();
+        return NextResponse.json({
+          success: true,
+          method: "pg_pass_param",
+          host,
+          message: "Migration 0095 executed successfully!"
+        });
+      } catch (err: any) {
+        // try next host
+      }
+    }
+  }
+
+  // 2. Try direct pg connection with any available connection string
   const pgConn = process.env.POSTGRES_URL || process.env.DATABASE_URL || process.env.SUPABASE_DATABASE_URL || process.env.POSTGRES_URL_NON_POOLING;
   if (pgConn) {
     try {
@@ -81,10 +118,17 @@ export async function GET() {
     }
   }
 
+  // 3. Try RPC
+  const { data: rpcData, error: rpcErr } = await supabase.rpc("exec_sql", { sql_query: sql });
+  if (!rpcErr) {
+    return NextResponse.json({ success: true, method: "rpc", message: "Migration 0095 applied via RPC!", data: rpcData });
+  }
+
   return NextResponse.json({
     success: false,
     message: "No direct Postgres connection string available",
     testError: testError?.message,
-    testInvError: testInvError?.message
+    testInvError: testInvError?.message,
+    rpcError: rpcErr?.message
   });
 }

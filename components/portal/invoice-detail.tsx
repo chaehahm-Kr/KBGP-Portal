@@ -65,13 +65,13 @@ export function InvoiceDetail({ invoice, attachmentUrl }: InvoiceDetailProps) {
   };
 
   // Adjustments summary calculation
-  const totalAdjustments = invoice.adjustments.reduce((sum: number, adj: any) => {
-    if (adj.status !== "APPROVED") return sum;
-    const val = adj.amount;
+  const totalAdjustments = (invoice.adjustments || []).reduce((sum: number, adj: any) => {
+    const val = Number(adj.amount) || 0;
     return adj.direction === "CREDIT" ? sum - val : sum + val;
   }, 0);
 
-  const finalPayable = invoice.invoiceTotal + totalAdjustments;
+  const baseAmount = Number(invoice.subtotal || 0);
+  const finalPayable = Number(invoice.invoiceTotal || (baseAmount + totalAdjustments));
 
   return (
     <div className="space-y-6">
@@ -341,28 +341,34 @@ export function InvoiceDetail({ invoice, attachmentUrl }: InvoiceDetailProps) {
 
       {/* Settlement Section (VIEW ONLY) */}
       <div className="p-5 rounded-xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900 space-y-4 shadow-sm">
-        <h2 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">최종 정산 명세 (Settlement Details — View Only)</h2>
+        <h2 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">최종 정산 명세 (Settlement & Adjustments Breakdown)</h2>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* Adjustments details */}
           <div className="space-y-2 text-xs">
-            <span className="text-[11px] font-bold text-zinc-500 dark:text-zinc-400 block mb-1">적용된 공제/추가 조정 항목</span>
+            <span className="text-[11px] font-bold text-zinc-500 dark:text-zinc-400 block mb-1">
+              적용된 조정 항목 (Adjustments — {invoice.adjustments.length}건)
+            </span>
             {invoice.adjustments.length === 0 ? (
               <p className="text-zinc-400 dark:text-zinc-500 italic">적용된 조정 내역이 없습니다.</p>
             ) : (
               <div className="space-y-1.5">
                 {invoice.adjustments.map((adj: any) => (
                   <div key={adj.id} className="flex items-center justify-between p-2.5 rounded-lg bg-zinc-50 border border-zinc-200 dark:bg-zinc-950/60 dark:border-zinc-800">
-                    <div>
-                      <div className="font-bold text-zinc-850 dark:text-zinc-200">
-                        {adj.type === "DAMAGE" && "💥 파손 조정 (Damage Credit)"}
-                        {adj.type === "SHORTAGE" && "📉 수량 부족 공제 (Shortage Credit)"}
-                        {adj.type === "PRICE_DIFFERENCE" && "💵 단가 조율 차액"}
-                        {adj.type === "OTHER" && "⚙️ 기타 정산 조정"}
+                    <div className="space-y-0.5">
+                      <div className="flex items-center gap-1.5">
+                        <span className={`px-1.5 py-0.2 rounded text-[10px] font-bold ${
+                          adj.direction === "CREDIT"
+                            ? "bg-rose-100 text-rose-750 dark:bg-rose-950 dark:text-rose-300"
+                            : "bg-emerald-100 text-emerald-750 dark:bg-emerald-950 dark:text-emerald-300"
+                        }`}>
+                          {adj.direction === "CREDIT" ? "- MINUS (공제)" : "+ PLUS (추가)"}
+                        </span>
+                        <span className="font-bold text-zinc-900 dark:text-zinc-100">{adj.reason}</span>
                       </div>
-                      <div className="text-[10px] text-zinc-500 dark:text-zinc-400 mt-0.5">{adj.reason}</div>
+                      {adj.note && <div className="text-[10px] text-zinc-500 dark:text-zinc-400">{adj.note}</div>}
                     </div>
-                    <span className={`font-mono font-bold ${adj.direction === "CREDIT" ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}`}>
+                    <span className={`font-mono font-bold text-xs ${adj.direction === "CREDIT" ? "text-rose-600 dark:text-rose-400" : "text-emerald-600 dark:text-emerald-400"}`}>
                       {adj.direction === "CREDIT" ? "-" : "+"}
                       {formatCurrency(adj.amount, invoice.currency)}
                     </span>
@@ -375,18 +381,18 @@ export function InvoiceDetail({ invoice, attachmentUrl }: InvoiceDetailProps) {
           {/* Calculations */}
           <div className="p-4 rounded-xl bg-zinc-50/80 border border-zinc-200 dark:bg-zinc-950/70 dark:border-zinc-800 flex flex-col justify-center space-y-2.5">
             <div className="flex justify-between text-xs text-zinc-500 dark:text-zinc-400">
-              <span>송장 기본 청구 금액 (Gross Total):</span>
-              <span className="font-mono font-medium text-zinc-800 dark:text-zinc-200">{formatCurrency(invoice.invoiceTotal, invoice.currency)}</span>
+              <span>기본 품목 청구액 (Base Invoice Amount):</span>
+              <span className="font-mono font-medium text-zinc-800 dark:text-zinc-200">{formatCurrency(baseAmount, invoice.currency)}</span>
             </div>
             <div className="flex justify-between text-xs text-zinc-500 dark:text-zinc-400 border-b border-zinc-200 dark:border-zinc-800 pb-2">
-              <span>정산 조정액 (Approved Adjustments):</span>
-              <span className={`font-mono font-bold ${totalAdjustments < 0 ? "text-emerald-600 dark:text-emerald-400" : totalAdjustments > 0 ? "text-rose-600 dark:text-rose-400" : "text-zinc-600 dark:text-zinc-400"}`}>
+              <span>조정 항목 합계 (Adjustment Total):</span>
+              <span className={`font-mono font-bold ${totalAdjustments < 0 ? "text-rose-600 dark:text-rose-400" : totalAdjustments > 0 ? "text-emerald-600 dark:text-emerald-400" : "text-zinc-600 dark:text-zinc-400"}`}>
                 {totalAdjustments > 0 ? "+" : ""}
                 {formatCurrency(totalAdjustments, invoice.currency)}
               </span>
             </div>
             <div className="flex justify-between items-center text-sm font-bold text-zinc-900 dark:text-zinc-100 pt-0.5">
-              <span>최종 정산 확정액 (Final Net Payable):</span>
+              <span>최종 청구 금액 (Final Invoice Amount):</span>
               <span className="font-mono text-base font-extrabold text-zinc-950 dark:text-white px-2 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700">
                 {formatCurrency(finalPayable, invoice.currency)}
               </span>

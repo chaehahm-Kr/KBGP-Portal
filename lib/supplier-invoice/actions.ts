@@ -127,6 +127,15 @@ export interface InvoiceLineInput {
   line_note?: string;
 }
 
+export interface InvoiceAdjustmentInput {
+  id?: string;
+  type: 'PLUS' | 'MINUS';
+  reason: string;
+  amount: number;
+  note?: string;
+  category?: string;
+}
+
 export interface CreateInvoiceInput {
   supplier_company_id: string;
   purchase_order_id: string;
@@ -142,6 +151,7 @@ export interface CreateInvoiceInput {
   internal_note?: string;
   attachment_path?: string;
   lines: InvoiceLineInput[];
+  adjustments?: InvoiceAdjustmentInput[];
 }
 
 export async function getEligiblePurchaseOrders() {
@@ -311,7 +321,16 @@ export async function createInvoice(input: CreateInvoiceInput) {
 
   const tax = input.tax_amount || 0;
   const other = input.other_charges || 0;
-  const total = Number((subtotal + tax + other).toFixed(2));
+  const validAdjustments = (input.adjustments || []).filter(a => Number(a.amount) > 0 && a.reason.trim().length > 0);
+  const adjustmentTotal = validAdjustments.reduce((sum, adj) => {
+    const amt = Number(adj.amount);
+    return adj.type === 'PLUS' ? sum + amt : sum - amt;
+  }, 0);
+
+  const total = Number((subtotal + tax + other + adjustmentTotal).toFixed(2));
+  if (total < 0) {
+    throw new Error("최종 인보이스 청구 금액(Final Invoice Amount)은 0 이상이어야 합니다. 조정 금액을 확인해 주세요.");
+  }
 
   // Insert invoice header with remittance snapshot
   const { data: inv, error: invErr } = await supabase
@@ -334,6 +353,7 @@ export async function createInvoice(input: CreateInvoiceInput) {
       balance_due: total,
       invoice_status: "DRAFT",
       payment_status: "UNPAID",
+      settlement_status: "OPEN",
       attachment_path: input.attachment_path || null,
       internal_note: input.internal_note || null,
       // Remittance snapshot
@@ -372,6 +392,31 @@ export async function createInvoice(input: CreateInvoiceInput) {
     throw new Error(`인보이스 품목 등록 실패: ${linesErr.message}`);
   }
 
+  // Insert adjustments into supplier_invoice_adjustments
+  if (validAdjustments.length > 0) {
+    const adjsToInsert = validAdjustments.map(adj => ({
+      supplier_invoice_id: inv.id,
+      adjustment_type: 'OTHER',
+      adjustment_direction: adj.type === 'PLUS' ? 'CHARGE' : 'CREDIT',
+      adjustment_amount: Math.abs(Number(adj.amount)),
+      currency: input.currency || 'USD',
+      reason: adj.reason.trim(),
+      internal_note: adj.note?.trim() || null,
+      status: 'APPROVED',
+      created_by: userId,
+      updated_by: userId,
+    }));
+
+    const { error: adjErr } = await supabase
+      .from("supplier_invoice_adjustments")
+      .insert(adjsToInsert);
+
+    if (adjErr) {
+      console.error("Failed to insert adjustments:", adjErr);
+      throw new Error(`인보이스 조정 항목 등록 실패: ${adjErr.message}`);
+    }
+  }
+
   revalidatePath("/admin/finance/invoices");
   return inv;
 }
@@ -383,7 +428,7 @@ export async function updateInvoice(id: string, input: Partial<CreateInvoiceInpu
 
   const { data: current } = await supabase
     .from("supplier_invoices")
-    .select("id, invoice_status, supplier_company_id")
+    .select("id, invoice_status, supplier_company_id, subtotal, tax_amount, other_charges, currency")
     .eq("id", id)
     .single();
 
@@ -407,26 +452,33 @@ export async function updateInvoice(id: string, input: Partial<CreateInvoiceInpu
     }
   }
 
-  // Calculate totals
-  let updateData: any = {
-    invoice_date: input.invoice_date,
-    received_date: input.received_date,
-    due_date: input.due_date,
-    currency: input.currency,
-    payment_terms_snapshot: input.payment_terms_snapshot,
-    incoterms_snapshot: input.incoterms_snapshot,
-    attachment_path: input.attachment_path,
-    internal_note: input.internal_note,
-    updated_by: userId,
-    updated_at: new Date().toISOString(),
-  };
+  // Calculate adjustments
+  const validAdjustments = input.adjustments !== undefined
+    ? input.adjustments.filter(a => Number(a.amount) > 0 && a.reason.trim().length > 0)
+    : undefined;
 
-  if (input.supplier_invoice_number) {
-    updateData.supplier_invoice_number = input.supplier_invoice_number.trim();
+  let adjustmentTotal = 0;
+  if (validAdjustments !== undefined) {
+    adjustmentTotal = validAdjustments.reduce((sum, adj) => {
+      const amt = Number(adj.amount);
+      return adj.type === 'PLUS' ? sum + amt : sum - amt;
+    }, 0);
+  } else {
+    const { data: existingAdjs } = await supabase
+      .from("supplier_invoice_adjustments")
+      .select("adjustment_direction, adjustment_amount")
+      .eq("supplier_invoice_id", id);
+    if (existingAdjs) {
+      adjustmentTotal = existingAdjs.reduce((sum: number, a: any) => {
+        const amt = Number(a.adjustment_amount);
+        return a.adjustment_direction === 'CHARGE' ? sum + amt : sum - amt;
+      }, 0);
+    }
   }
 
+  let subtotal = Number(current.subtotal || 0);
   if (input.lines) {
-    let subtotal = 0;
+    subtotal = 0;
     const linesToInsert = input.lines.map(line => {
       const lineAmount = Number((line.invoiced_qty * line.unit_price).toFixed(2));
       subtotal += lineAmount;
@@ -443,16 +495,6 @@ export async function updateInvoice(id: string, input: Partial<CreateInvoiceInpu
       };
     });
 
-    const tax = input.tax_amount ?? 0;
-    const other = input.other_charges ?? 0;
-    const total = Number((subtotal + tax + other).toFixed(2));
-
-    updateData.subtotal = subtotal;
-    updateData.tax_amount = tax;
-    updateData.other_charges = other;
-    updateData.invoice_total = total;
-    updateData.balance_due = total;
-
     // Delete and replace lines
     await supabase.from("supplier_invoice_lines").delete().eq("supplier_invoice_id", id);
     const { error: linesErr } = await supabase
@@ -462,12 +504,73 @@ export async function updateInvoice(id: string, input: Partial<CreateInvoiceInpu
     if (linesErr) throw new Error(`인보이스 품목 수정 실패: ${linesErr.message}`);
   }
 
+  const tax = input.tax_amount !== undefined ? input.tax_amount : Number(current.tax_amount || 0);
+  const other = input.other_charges !== undefined ? input.other_charges : Number(current.other_charges || 0);
+  const total = Number((subtotal + tax + other + adjustmentTotal).toFixed(2));
+
+  if (total < 0) {
+    throw new Error("최종 인보이스 청구 금액(Final Invoice Amount)은 0 이상이어야 합니다. 조정 금액을 확인해 주세요.");
+  }
+
+  // Calculate totals
+  let updateData: any = {
+    invoice_date: input.invoice_date,
+    received_date: input.received_date,
+    due_date: input.due_date,
+    currency: input.currency,
+    payment_terms_snapshot: input.payment_terms_snapshot,
+    incoterms_snapshot: input.incoterms_snapshot,
+    attachment_path: input.attachment_path,
+    internal_note: input.internal_note,
+    subtotal,
+    tax_amount: tax,
+    other_charges: other,
+    invoice_total: total,
+    balance_due: total,
+    updated_by: userId,
+    updated_at: new Date().toISOString(),
+  };
+
+  if (input.supplier_invoice_number) {
+    updateData.supplier_invoice_number = input.supplier_invoice_number.trim();
+  }
+
   const { error: headerErr } = await supabase
     .from("supplier_invoices")
     .update(updateData)
     .eq("id", id);
 
   if (headerErr) throw new Error(`인보이스 헤더 수정 실패: ${headerErr.message}`);
+
+  // Replace adjustments
+  if (validAdjustments !== undefined) {
+    await supabase
+      .from("supplier_invoice_adjustments")
+      .delete()
+      .eq("supplier_invoice_id", id)
+      .is("supplier_invoice_line_id", null);
+
+    if (validAdjustments.length > 0) {
+      const adjsToInsert = validAdjustments.map(adj => ({
+        supplier_invoice_id: id,
+        adjustment_type: 'OTHER',
+        adjustment_direction: adj.type === 'PLUS' ? 'CHARGE' : 'CREDIT',
+        adjustment_amount: Math.abs(Number(adj.amount)),
+        currency: input.currency || current.currency || 'USD',
+        reason: adj.reason.trim(),
+        internal_note: adj.note?.trim() || null,
+        status: 'APPROVED',
+        created_by: userId,
+        updated_by: userId,
+      }));
+
+      const { error: adjErr } = await supabase
+        .from("supplier_invoice_adjustments")
+        .insert(adjsToInsert);
+
+      if (adjErr) throw new Error(`인보이스 조정 항목 수정 실패: ${adjErr.message}`);
+    }
+  }
 
   revalidatePath("/admin/finance/invoices");
   revalidatePath(`/admin/finance/invoices/${id}`);
