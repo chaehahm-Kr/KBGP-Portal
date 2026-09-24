@@ -1206,13 +1206,7 @@ export async function closeSettlement(invoiceId: string) {
     throw new Error("공급사 합의 대기 중(PENDING)인 조정 항목이 남아있어 정산을 종결할 수 없습니다.");
   }
 
-  // Logistics unresolved check
-  const po = await getPurchaseOrderForInvoice(invoice.purchase_order_id);
-  const hasUnresolvedLogistics = po.lines.some((l: any) => l.qty > l.resolved_qty);
-  if (hasUnresolvedLogistics) {
-    throw new Error("미해결 선적/입고 항목이 존재하여 대금 정산을 종결할 수 없습니다. (Logistics Unresolved)");
-  }
-
+  // Decoupled from logistics receiving completion: settlement can be closed as soon as invoice is approved and adjustments are settled
   const { error } = await supabase
     .from("supplier_invoices")
     .update({
@@ -1226,6 +1220,9 @@ export async function closeSettlement(invoiceId: string) {
 
   revalidatePath("/admin/finance/invoices");
   revalidatePath(`/admin/finance/invoices/${invoiceId}`);
+  revalidatePath("/admin/finance/payments");
+  revalidatePath("/portal/finance");
+  revalidatePath(`/portal/finance/${invoiceId}`);
   return { success: true };
 }
 

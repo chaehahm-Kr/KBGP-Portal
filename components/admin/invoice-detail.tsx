@@ -14,8 +14,10 @@ import {
   updateAdjustment,
   transitionAdjustmentStatus,
   closeSettlement,
-  reopenSettlement
+  reopenSettlement,
+  uploadInvoiceAttachment
 } from "@/lib/supplier-invoice/actions";
+import { recordInvoicePayment } from "@/lib/supplier-payment/actions";
 import { formatActionError } from "@/lib/utils/error-formatter";
 
 interface InvoiceLine {
@@ -117,6 +119,10 @@ interface InvoiceDetailProps {
       payment_amount: number;
       currency: string;
       payment_method: "WIRE" | "ACH" | "CHECK" | "OTHER";
+      bank_reference?: string | null;
+      remittance_reference?: string | null;
+      internal_note?: string | null;
+      attachment_path?: string | null;
       status: "DRAFT" | "COMPLETED" | "VOID";
       created_at: string;
     }>;
@@ -217,6 +223,18 @@ export function InvoiceDetail({ invoice, po, prevInvoicesTotal, poMerchandiseTot
   const [showAdjRejectModal, setShowAdjRejectModal] = useState(false);
   const [rejectingAdjId, setRejectingAdjId] = useState<string | null>(null);
   const [adjRejectReason, setAdjRejectReason] = useState<string>("");
+
+  // Record Payment Modal State
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [paymentDate, setPaymentDate] = useState("");
+  const [paymentAmount, setPaymentAmount] = useState<number | string>("");
+  const [paymentMethod, setPaymentMethod] = useState<"WIRE" | "ACH" | "CHECK" | "OTHER">("WIRE");
+  const [bankReference, setBankReference] = useState("");
+  const [remittanceReference, setRemittanceReference] = useState("");
+  const [paymentNote, setPaymentNote] = useState("");
+  const [paymentFile, setPaymentFile] = useState<File | null>(null);
+  const [isPaymentSubmitting, setIsPaymentSubmitting] = useState(false);
+  const [paymentError, setPaymentError] = useState("");
 
   // Load bank info and attachment URL on client mount
   useEffect(() => {
@@ -359,7 +377,7 @@ export function InvoiceDetail({ invoice, po, prevInvoicesTotal, poMerchandiseTot
       setSuccessMessage("대금 정산이 성공적으로 종결 처리되었습니다.");
       router.refresh();
     } catch (err: any) {
-      setErrorMessage(formatActionError(err, "정산 종결 처리에 실패했습니다. 물류 입고 검수 및 조정 항목을 확인해 주세요."));
+      setErrorMessage(formatActionError(err, "정산 종결 처리에 실패했습니다. 미결 조정 항목을 확인해 주세요."));
     } finally {
       setIsActionLoading(false);
     }
@@ -377,6 +395,84 @@ export function InvoiceDetail({ invoice, po, prevInvoicesTotal, poMerchandiseTot
       setErrorMessage(formatActionError(err, "정산 재개 처리에 실패했습니다."));
     } finally {
       setIsActionLoading(false);
+    }
+  };
+
+  // Payment Modal Handlers
+  const openPaymentModal = () => {
+    const today = new Date().toISOString().split("T")[0];
+    setPaymentDate(today);
+    setPaymentAmount(balanceDue > 0 ? balanceDue : 0);
+    setPaymentMethod((invoice.remittance_payment_method as any) || "WIRE");
+    setBankReference("");
+    setRemittanceReference("");
+    setPaymentNote("");
+    setPaymentFile(null);
+    setPaymentError("");
+    setShowPaymentModal(true);
+  };
+
+  const handleRecordPaymentSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const amount = Number(paymentAmount);
+    if (isNaN(amount) || amount <= 0) {
+      setPaymentError("지급 금액을 0보다 큰 숫자로 입력해 주세요.");
+      return;
+    }
+    if (amount > balanceDue + 0.001) {
+      setPaymentError(`지급 금액(${invoice.currency} ${amount.toLocaleString(undefined, { minimumFractionDigits: 2 })})은 미지급 잔액(${invoice.currency} ${balanceDue.toLocaleString(undefined, { minimumFractionDigits: 2 })})을 초과할 수 없습니다.`);
+      return;
+    }
+    if (!paymentDate) {
+      setPaymentError("지급 일자를 입력해 주세요.");
+      return;
+    }
+
+    setIsPaymentSubmitting(true);
+    setPaymentError("");
+
+    try {
+      let attachmentPath: string | null = null;
+      if (paymentFile) {
+        const formData = new FormData();
+        formData.append("file", paymentFile);
+        const uploadRes = await uploadInvoiceAttachment(formData);
+        if (uploadRes.path) {
+          attachmentPath = uploadRes.path;
+        }
+      }
+
+      await recordInvoicePayment({
+        supplier_invoice_id: invoice.id,
+        payment_date: paymentDate,
+        payment_amount: amount,
+        payment_method: paymentMethod,
+        bank_reference: bankReference.trim() || null,
+        remittance_reference: remittanceReference.trim() || null,
+        internal_note: paymentNote.trim() || null,
+        attachment_path: attachmentPath,
+      });
+
+      setShowPaymentModal(false);
+      setSuccessMessage(`지급(${invoice.currency} ${amount.toLocaleString(undefined, { minimumFractionDigits: 2 })})이 성공적으로 등록되었습니다.`);
+      router.refresh();
+    } catch (err: any) {
+      setPaymentError(err.message || "지급 등록 처리에 실패했습니다.");
+    } finally {
+      setIsPaymentSubmitting(false);
+    }
+  };
+
+  const handleViewPaymentReceipt = async (path: string) => {
+    try {
+      const url = await getInvoiceAttachmentUrl(path);
+      if (url) {
+        window.open(url, "_blank");
+      } else {
+        alert("영수증 첨부 파일을 찾을 수 없습니다.");
+      }
+    } catch (err: any) {
+      alert("영수증 URL 생성 실패: " + err.message);
     }
   };
 
@@ -696,9 +792,8 @@ export function InvoiceDetail({ invoice, po, prevInvoicesTotal, poMerchandiseTot
       {/* Logistics unresolved Alert warning */}
       {hasUnresolvedLogistics && (
         <div className="p-3.5 rounded-lg bg-amber-50 border border-amber-250 text-amber-800 font-medium leading-relaxed dark:bg-amber-950/10 dark:border-amber-900/50 dark:text-amber-400">
-          ⚠️ <strong>물류 미결 경고 (Logistics Unresolved)</strong>:
-          해당 발주서(PO)의 일부 품목이 아직 예약 선적 또는 입고 검수가 최종 종결되지 않았습니다. 
-          물류 정보 확인 후 종결(RECEIVED) 처리가 완료될 때까지 재무 정산 종결(Close Settlement)이 차단됩니다.
+          ⚠️ <strong>물류 미결 안내 (Logistics Information)</strong>:
+          해당 발주서(PO)의 일부 품목이 아직 입고/검수 완료되지 않았습니다. 입고 완료 전에도 정산 종결(Close Settlement) 및 지급 등록을 진행할 수 있습니다.
         </div>
       )}
 
@@ -1174,16 +1269,22 @@ export function InvoiceDetail({ invoice, po, prevInvoicesTotal, poMerchandiseTot
           {/* Payment History */}
           <div className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 space-y-4">
             <div className="flex justify-between items-center border-b border-zinc-100 pb-2 dark:border-zinc-800">
-              <h3 className="text-sm font-bold text-zinc-850 dark:text-white font-sans">
-                지급 거래 내역 (Payment History)
-              </h3>
-              {invoice.invoice_status === "APPROVED" && invoice.settlement_status === "SETTLED" && balanceDue > 0 && (
-                <Link
-                  href={`/admin/finance/payments/new?invoice_id=${invoice.id}`}
-                  className="px-2.5 py-1.5 bg-zinc-950 text-white dark:bg-white dark:text-zinc-950 hover:opacity-85 font-bold rounded-lg text-[10px] cursor-pointer"
+              <div>
+                <h3 className="text-sm font-bold text-zinc-850 dark:text-white font-sans">
+                  지급 거래 내역 (Payment History)
+                </h3>
+                <p className="text-[10px] text-zinc-400 mt-0.5">
+                  해당 인보이스에 대해 실행된 분할 및 전액 지급 내역입니다.
+                </p>
+              </div>
+              {invoice.invoice_status === "APPROVED" && balanceDue > 0 && (
+                <button
+                  type="button"
+                  onClick={openPaymentModal}
+                  className="px-3 py-1.5 bg-zinc-950 text-white dark:bg-white dark:text-zinc-950 hover:opacity-85 font-bold rounded-lg text-xs cursor-pointer shadow-sm transition-opacity"
                 >
                   + 지급 등록 (Record Payment)
-                </Link>
+                </button>
               )}
             </div>
 
@@ -1195,13 +1296,15 @@ export function InvoiceDetail({ invoice, po, prevInvoicesTotal, poMerchandiseTot
                     <th className="px-3 py-2">지급 일자</th>
                     <th className="px-3 py-2 text-right">지급 금액</th>
                     <th className="px-3 py-2">지급 방식</th>
+                    <th className="px-3 py-2">은행/송금 참조</th>
+                    <th className="px-3 py-2 text-center">영수증</th>
                     <th className="px-3 py-2">상태</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
                   {(!invoice.payments || invoice.payments.length === 0) ? (
                     <tr>
-                      <td colSpan={5} className="px-3 py-6 text-center text-zinc-400 italic">
+                      <td colSpan={7} className="px-3 py-6 text-center text-zinc-400 italic">
                         기록된 지급 내역이 없습니다.
                       </td>
                     </tr>
@@ -1221,6 +1324,22 @@ export function InvoiceDetail({ invoice, po, prevInvoicesTotal, poMerchandiseTot
                         </td>
                         <td className="px-3 py-2.5 font-bold text-zinc-700 dark:text-zinc-300">
                           {p.payment_method}
+                        </td>
+                        <td className="px-3 py-2.5 text-zinc-600 dark:text-zinc-400 font-mono text-[11px]">
+                          {p.bank_reference || p.remittance_reference || "-"}
+                        </td>
+                        <td className="px-3 py-2.5 text-center">
+                          {p.attachment_path ? (
+                            <button
+                              type="button"
+                              onClick={() => handleViewPaymentReceipt(p.attachment_path!)}
+                              className="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-50 text-indigo-700 hover:bg-indigo-100 dark:bg-indigo-950/40 dark:text-indigo-300 transition-colors"
+                            >
+                              📎 영수증
+                            </button>
+                          ) : (
+                            <span className="text-zinc-350 italic">-</span>
+                          )}
                         </td>
                         <td className="px-3 py-2.5">
                           <span className={`inline-flex items-center rounded-md border px-2 py-0.5 text-[8px] font-bold ${
@@ -1558,6 +1677,204 @@ export function InvoiceDetail({ invoice, po, prevInvoicesTotal, poMerchandiseTot
                 className="px-4 py-1.5 bg-zinc-950 hover:bg-zinc-900 text-white dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-100 rounded-lg font-bold cursor-pointer transition-colors disabled:opacity-50"
               >
                 {isActionLoading ? "저장 중..." : "항목 저장 (Save)"}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* Record Payment Modal */}
+      {showPaymentModal && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4 overflow-y-auto">
+          <form onSubmit={handleRecordPaymentSubmit} className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 w-full max-w-lg rounded-xl p-6 shadow-2xl space-y-4 my-8">
+            <div className="flex items-center justify-between border-b border-zinc-150 pb-3 dark:border-zinc-800">
+              <div>
+                <h4 className="text-sm font-bold text-zinc-900 dark:text-white font-sans">
+                  공급사 대금 지급 등록 (Record Payment)
+                </h4>
+                <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5">
+                  실제 집행된 송금 내역을 등록하여 인보이스 미지급 잔액을 차감합니다.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowPaymentModal(false)}
+                className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 text-base font-bold cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Context Summary Box */}
+            <div className="bg-zinc-50 dark:bg-zinc-950 p-3.5 rounded-xl border border-zinc-200 dark:border-zinc-800 space-y-2 text-xs">
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <span className="text-[10px] text-zinc-400 block font-bold">내부 AP 번호 / 공급사 인보이스</span>
+                  <span className="font-mono font-bold text-zinc-850 dark:text-zinc-200">
+                    {invoice.internal_ap_number} ({invoice.supplier_invoice_number})
+                  </span>
+                </div>
+                <div>
+                  <span className="text-[10px] text-zinc-400 block font-bold">공급사 (Supplier)</span>
+                  <span className="font-bold text-zinc-850 dark:text-zinc-200">{invoice.supplier.name}</span>
+                </div>
+              </div>
+              <div className="grid grid-cols-3 gap-2 border-t border-zinc-200/60 pt-2 dark:border-zinc-800">
+                <div>
+                  <span className="text-[10px] text-zinc-400 block">최종 청구액</span>
+                  <span className="font-mono font-bold text-zinc-900 dark:text-white">
+                    {invoice.currency} {finalPayable.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-[10px] text-zinc-400 block">기지급액</span>
+                  <span className="font-mono text-zinc-650 dark:text-zinc-400">
+                    {invoice.currency} {invoice.amount_paid.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold block">남은 미지급 잔액</span>
+                  <span className="font-mono font-extrabold text-emerald-700 dark:text-emerald-300">
+                    {invoice.currency} {balanceDue.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {paymentError && (
+              <div className="p-3 rounded-lg bg-rose-50 border border-rose-250 text-rose-600 font-bold text-xs dark:bg-rose-950/20 dark:border-rose-900/50 dark:text-rose-400">
+                ⚠️ {paymentError}
+              </div>
+            )}
+
+            <div className="grid grid-cols-2 gap-3">
+              {/* Payment Date */}
+              <div>
+                <label className="block text-[10px] font-bold text-zinc-500 mb-1">지급 일자 (Payment Date) *</label>
+                <input
+                  type="date"
+                  value={paymentDate}
+                  onChange={(e) => setPaymentDate(e.target.value)}
+                  className="w-full h-9 rounded-lg border border-zinc-200 bg-white px-2.5 outline-none dark:border-zinc-800 dark:bg-zinc-950 dark:text-white font-mono"
+                  required
+                />
+              </div>
+
+              {/* Payment Amount */}
+              <div>
+                <label className="block text-[10px] font-bold text-zinc-500 mb-1">
+                  지급 금액 ({invoice.currency}) *
+                </label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0.01"
+                    max={balanceDue}
+                    value={paymentAmount}
+                    onChange={(e) => setPaymentAmount(e.target.value)}
+                    className="w-full h-9 rounded-lg border border-zinc-200 bg-white px-2.5 outline-none dark:border-zinc-800 dark:bg-zinc-950 dark:text-white font-mono font-bold"
+                    placeholder="0.00"
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setPaymentAmount(balanceDue > 0 ? balanceDue : 0)}
+                    className="absolute right-2 top-1.5 px-1.5 py-0.5 rounded text-[9px] font-bold bg-zinc-100 hover:bg-zinc-200 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 cursor-pointer"
+                  >
+                    전액
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              {/* Payment Method */}
+              <div>
+                <label className="block text-[10px] font-bold text-zinc-500 mb-1">지급 방식 (Method) *</label>
+                <select
+                  value={paymentMethod}
+                  onChange={(e) => setPaymentMethod(e.target.value as any)}
+                  className="w-full h-9 rounded-lg border border-zinc-200 bg-white px-2 outline-none dark:border-zinc-800 dark:bg-zinc-950 dark:text-white font-semibold"
+                  required
+                >
+                  <option value="WIRE">해외송금 (WIRE)</option>
+                  <option value="ACH">ACH 계좌이체</option>
+                  <option value="CHECK">수표 (CHECK)</option>
+                  <option value="OTHER">기타 (OTHER)</option>
+                </select>
+              </div>
+
+              {/* Bank / Transaction Reference */}
+              <div>
+                <label className="block text-[10px] font-bold text-zinc-500 mb-1">은행 송금번호 / 참조 ID</label>
+                <input
+                  type="text"
+                  placeholder="예: Wire Ref #, Txn ID, 수표번호"
+                  value={bankReference}
+                  onChange={(e) => setBankReference(e.target.value)}
+                  className="w-full h-9 rounded-lg border border-zinc-200 bg-white px-2.5 outline-none dark:border-zinc-800 dark:bg-zinc-950 dark:text-white font-mono"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-3">
+              {/* Remittance Memo */}
+              <div>
+                <label className="block text-[10px] font-bold text-zinc-500 mb-1">송금 메모 / 적요 (Remittance Memo)</label>
+                <input
+                  type="text"
+                  placeholder="예: 2026-09차 1차 분할 지급"
+                  value={remittanceReference}
+                  onChange={(e) => setRemittanceReference(e.target.value)}
+                  className="w-full h-9 rounded-lg border border-zinc-200 bg-white px-2.5 outline-none dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+                />
+              </div>
+            </div>
+
+            {/* Receipt Attachment */}
+            <div>
+              <label className="block text-[10px] font-bold text-zinc-500 mb-1">송금 영수증 / 이체 확인증 첨부 (Receipt File)</label>
+              <input
+                type="file"
+                accept="image/*,application/pdf"
+                onChange={(e) => {
+                  const files = e.target.files;
+                  if (files && files.length > 0) {
+                    setPaymentFile(files[0]);
+                  } else {
+                    setPaymentFile(null);
+                  }
+                }}
+                className="w-full text-xs text-zinc-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-zinc-100 file:text-zinc-700 hover:file:bg-zinc-200 dark:file:bg-zinc-800 dark:file:text-zinc-300 cursor-pointer"
+              />
+            </div>
+
+            {/* Internal Note */}
+            <div>
+              <label className="block text-[10px] font-bold text-zinc-500 mb-1">내부 결제 비고 (Internal Note)</label>
+              <textarea
+                placeholder="지급 관련 특이사항이나 결재 내역을 기입하세요..."
+                value={paymentNote}
+                onChange={(e) => setPaymentNote(e.target.value)}
+                className="w-full border border-zinc-200 dark:border-zinc-800 rounded-lg p-2.5 text-xs bg-zinc-50 dark:bg-zinc-950 dark:text-white outline-none min-h-[50px]"
+              />
+            </div>
+
+            <div className="flex justify-end gap-2 border-t border-zinc-150 pt-3 dark:border-zinc-800">
+              <button
+                type="button"
+                onClick={() => setShowPaymentModal(false)}
+                className="px-4 py-2 border border-zinc-200 text-zinc-650 hover:bg-zinc-50 dark:border-zinc-800 dark:text-zinc-300 rounded-xl font-bold cursor-pointer transition-colors text-xs"
+              >
+                취소
+              </button>
+              <button
+                type="submit"
+                disabled={isPaymentSubmitting}
+                className="px-5 py-2 bg-emerald-600 hover:bg-emerald-750 text-white rounded-xl font-bold cursor-pointer transition-colors disabled:opacity-50 text-xs shadow-sm"
+              >
+                {isPaymentSubmitting ? "지급 등록 중..." : "지급 완료 등록 (Submit Payment)"}
               </button>
             </div>
           </form>

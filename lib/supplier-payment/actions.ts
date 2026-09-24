@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { verifyAdminSession } from "@/lib/auth/dal";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { getEasternTodayString, formatEasternDate } from "@/lib/utils/timezone";
 
 // Role-based write permission validator (from supplier-invoice actions)
 async function verifyWritePermission(supabase: any, userId: string) {
@@ -195,9 +196,6 @@ export async function createPayment(input: CreatePaymentInput) {
   if (invoice.invoice_status !== "APPROVED") {
     throw new Error("승인(APPROVED) 상태인 인보이스에 대해서만 대금 지급을 등록할 수 있습니다.");
   }
-  if (invoice.settlement_status !== "SETTLED") {
-    throw new Error("정산 종결(SETTLED) 상태인 인보이스에 대해서만 대금 지급을 등록할 수 있습니다.");
-  }
   if (invoice.currency !== input.currency) {
     throw new Error(`인보이스 통화(${invoice.currency})와 지급 통화(${input.currency})가 일치해야 합니다.`);
   }
@@ -254,6 +252,137 @@ export async function createPayment(input: CreatePaymentInput) {
   revalidatePath("/admin/finance/payments");
   revalidatePath(`/admin/finance/invoices/${input.supplier_invoice_id}`);
   return payment;
+}
+
+export interface RecordInvoicePaymentInput {
+  supplier_invoice_id: string;
+  payment_date: string;
+  payment_amount: number;
+  payment_method: 'WIRE' | 'ACH' | 'CHECK' | 'OTHER';
+  bank_reference?: string | null;
+  remittance_reference?: string | null;
+  internal_note?: string | null;
+  attachment_path?: string | null;
+}
+
+/**
+ * Authoritative Canonical Action: Records an executed payment directly from Invoice Detail.
+ * Immediately registers as COMPLETED, recalculates invoice balance and payment status,
+ * and tracks audit trail (creator, completer, timestamps).
+ */
+export async function recordInvoicePayment(input: RecordInvoicePaymentInput) {
+  const { userId } = await verifyAdminSession();
+  const supabase = createAdminClient();
+  await verifyWritePermission(supabase, userId);
+
+  const amount = Number(input.payment_amount);
+  if (isNaN(amount) || amount <= 0) {
+    throw new Error("지급 금액은 0보다 커야 합니다.");
+  }
+
+  // 1. Fetch invoice
+  const { data: invoice, error: invErr } = await supabase
+    .from("supplier_invoices")
+    .select("id, invoice_status, settlement_status, currency, supplier_company_id, invoice_total")
+    .eq("id", input.supplier_invoice_id)
+    .single();
+
+  if (invErr || !invoice) throw new Error("대상 인보이스를 찾을 수 없습니다.");
+  if (invoice.invoice_status !== "APPROVED") {
+    throw new Error("승인(APPROVED) 완료된 인보이스에 대해서만 대금 지급을 등록할 수 있습니다.");
+  }
+
+  // 2. Compute authoritative Final Payable & current remaining balance
+  const { data: adjs } = await supabase
+    .from("supplier_invoice_adjustments")
+    .select("adjustment_amount, adjustment_direction")
+    .eq("supplier_invoice_id", input.supplier_invoice_id)
+    .eq("status", "APPROVED");
+
+  let credits = 0;
+  let charges = 0;
+  (adjs ?? []).forEach((a: any) => {
+    if (a.adjustment_direction === 'CREDIT') credits += Number(a.adjustment_amount);
+    else charges += Number(a.adjustment_amount);
+  });
+
+  const finalPayable = Number((Number(invoice.invoice_total) + charges - credits).toFixed(2));
+
+  // 3. Sum existing completed payments
+  const { data: pmts } = await supabase
+    .from("supplier_payments")
+    .select("payment_amount")
+    .eq("supplier_invoice_id", input.supplier_invoice_id)
+    .eq("status", "COMPLETED");
+
+  const totalPaidSoFar = (pmts ?? []).reduce((sum: number, p: any) => sum + Number(p.payment_amount), 0);
+  const remainingBalance = Math.max(Number((finalPayable - totalPaidSoFar).toFixed(2)), 0);
+
+  // Validate amount does not exceed remaining balance
+  if (amount > remainingBalance + 0.001) {
+    throw new Error(`지급 금액(${invoice.currency} ${amount.toLocaleString(undefined, { minimumFractionDigits: 2 })})은 남은 미지급 잔액(${invoice.currency} ${remainingBalance.toLocaleString(undefined, { minimumFractionDigits: 2 })})을 초과할 수 없습니다.`);
+  }
+
+  // 4. Load Remittance Bank Details for historical snapshot
+  const { data: remittance } = await supabase
+    .from("supplier_remittances")
+    .select("*")
+    .eq("company_id", invoice.supplier_company_id)
+    .maybeSingle();
+
+  const mask = (str: string | null) => {
+    if (!str) return "";
+    if (str.length <= 4) return "****";
+    return "****" + str.substring(str.length - 4);
+  };
+
+  const bankName = remittance?.bank_name || null;
+  const beneficiaryName = remittance?.beneficiary_name || null;
+  const accountLast4 = remittance?.account_number ? remittance.account_number.substring(Math.max(0, remittance.account_number.length - 4)) : null;
+  const swiftBicMasked = remittance?.swift_bic ? mask(remittance.swift_bic) : null;
+
+  // 5. Insert completed payment directly
+  const now = new Date().toISOString();
+  const { data: payment, error: pmtErr } = await supabase
+    .from("supplier_payments")
+    .insert({
+      supplier_invoice_id: input.supplier_invoice_id,
+      supplier_remittance_id: remittance?.company_id || null,
+      payment_date: input.payment_date || getEasternTodayString(),
+      payment_amount: amount,
+      currency: invoice.currency,
+      payment_method: input.payment_method,
+      bank_reference: input.bank_reference?.trim() || null,
+      remittance_reference: input.remittance_reference?.trim() || null,
+      internal_note: input.internal_note?.trim() || null,
+      attachment_path: input.attachment_path || null,
+      status: "COMPLETED",
+      completed_at: now,
+      completed_by: userId,
+      created_by: userId,
+      updated_by: userId,
+      remittance_bank_name: bankName,
+      remittance_beneficiary_name: beneficiaryName,
+      remittance_account_last4: accountLast4,
+      remittance_swift_bic_masked: swiftBicMasked,
+    })
+    .select()
+    .single();
+
+  if (pmtErr || !payment) {
+    throw new Error(`지급 등록 실패: ${pmtErr?.message}`);
+  }
+
+  // 6. Recalculate invoice payment status
+  await recalculateInvoicePaymentStatus(supabase, input.supplier_invoice_id);
+
+  revalidatePath("/admin/finance/payments");
+  revalidatePath(`/admin/finance/invoices/${input.supplier_invoice_id}`);
+  revalidatePath("/admin/finance/invoices");
+  revalidatePath("/portal/finance");
+  revalidatePath(`/portal/finance/${input.supplier_invoice_id}`);
+
+  return { success: true, payment };
 }
 
 export async function updatePayment(id: string, input: Partial<CreatePaymentInput>) {
@@ -381,8 +510,7 @@ export async function getEligibleInvoicesForPayment() {
   const { data, error } = await supabase
     .from("supplier_invoices")
     .select("id, internal_ap_number, supplier_invoice_number, currency, invoice_total, amount_paid, balance_due, supplier:companies!supplier_company_id (name)")
-    .eq("invoice_status", "APPROVED")
-    .eq("settlement_status", "SETTLED");
+    .eq("invoice_status", "APPROVED");
       
   if (error) throw error;
     
@@ -418,4 +546,303 @@ export async function getEligibleInvoicesForPayment() {
     });
   }
   return formattedInvoices;
+}
+
+export interface PaymentDashboardKPIs {
+  dueTodayCount: number;
+  dueTodayAmount: number;
+  dueThisWeekCount: number;
+  dueThisWeekAmount: number;
+  dueNext30DaysCount: number;
+  dueNext30DaysAmount: number;
+  overdueCount: number;
+  overdueAmount: number;
+  totalOutstandingAmount: number;
+  paidThisMonthAmount: number;
+}
+
+export interface PaymentScheduleItem {
+  id: string;
+  internal_ap_number: string;
+  supplier_invoice_number: string;
+  supplier_company_id: string;
+  supplier_name: string;
+  po_number?: string | null;
+  due_date: string;
+  currency: string;
+  subtotal: number;
+  final_payable: number;
+  amount_paid: number;
+  balance_due: number;
+  payment_status: 'UNPAID' | 'PARTIALLY_PAID' | 'PAID';
+  settlement_status: string;
+  invoice_status: string;
+  d_day_label: string;
+  is_overdue: boolean;
+}
+
+export interface PaymentHistoryItem {
+  id: string;
+  payment_number: string;
+  payment_date: string;
+  payment_amount: number;
+  currency: string;
+  payment_method: string;
+  bank_reference: string | null;
+  remittance_reference: string | null;
+  status: string;
+  attachment_path: string | null;
+  attachment_url?: string | null;
+  internal_note: string | null;
+  created_at: string;
+  creator_name?: string | null;
+  supplier_name: string;
+  invoice_id: string;
+  internal_ap_number: string;
+  supplier_invoice_number: string;
+}
+
+/**
+ * Loads consolidated data for the Finance > Payments Dashboard:
+ * - Real-time KPI summaries (Due Today, This Week, Next 30 Days, Overdue, Outstanding, Paid This Month)
+ * - Complete Upcoming & Outstanding payment schedule across all approved invoices
+ * - Historical ledger of all executed payments
+ */
+export async function getPaymentsDashboardData(): Promise<{
+  kpis: PaymentDashboardKPIs;
+  schedule: PaymentScheduleItem[];
+  history: PaymentHistoryItem[];
+}> {
+  await verifyAdminSession();
+  const supabase = createAdminClient();
+
+  const todayStr = getEasternTodayString();
+  const todayDate = new Date(todayStr + "T00:00:00Z");
+
+  const addDays = (d: Date, days: number) => {
+    const copy = new Date(d);
+    copy.setUTCDate(copy.getUTCDate() + days);
+    return copy.toISOString().split("T")[0];
+  };
+
+  const next7DaysStr = addDays(todayDate, 7);
+  const next30DaysStr = addDays(todayDate, 30);
+  const firstDayOfMonthStr = todayStr.slice(0, 7) + "-01";
+
+  // 1. Fetch all approved invoices with adjustments, supplier and PO
+  const { data: rawInvoices, error: invErr } = await supabase
+    .from("supplier_invoices")
+    .select(`
+      id,
+      internal_ap_number,
+      supplier_invoice_number,
+      supplier_company_id,
+      purchase_order_id,
+      invoice_date,
+      due_date,
+      currency,
+      subtotal,
+      invoice_total,
+      amount_paid,
+      balance_due,
+      payment_status,
+      settlement_status,
+      invoice_status,
+      supplier:companies!supplier_company_id (name),
+      po:purchase_orders!purchase_order_id (po_number),
+      adjustments:supplier_invoice_adjustments (
+        adjustment_amount,
+        adjustment_direction,
+        status
+      )
+    `)
+    .eq("invoice_status", "APPROVED")
+    .order("due_date", { ascending: true });
+
+  if (invErr) {
+    console.error("Failed to fetch invoices for payment dashboard:", invErr);
+  }
+
+  // 2. Fetch all payments from supplier_payments
+  const { data: rawPayments, error: pmtErr } = await supabase
+    .from("supplier_payments")
+    .select(`
+      id,
+      payment_number,
+      supplier_invoice_id,
+      payment_date,
+      payment_amount,
+      currency,
+      payment_method,
+      bank_reference,
+      remittance_reference,
+      internal_note,
+      attachment_path,
+      status,
+      created_at,
+      creator:profiles!created_by (display_name),
+      invoice:supplier_invoices!supplier_invoice_id (
+        id,
+        internal_ap_number,
+        supplier_invoice_number,
+        supplier:companies!supplier_company_id (name)
+      )
+    `)
+    .order("payment_date", { ascending: false });
+
+  if (pmtErr) {
+    console.error("Failed to fetch payments for dashboard:", pmtErr);
+  }
+
+  // KPI aggregations
+  let dueTodayCount = 0;
+  let dueTodayAmount = 0;
+  let dueThisWeekCount = 0;
+  let dueThisWeekAmount = 0;
+  let dueNext30DaysCount = 0;
+  let dueNext30DaysAmount = 0;
+  let overdueCount = 0;
+  let overdueAmount = 0;
+  let totalOutstandingAmount = 0;
+  let paidThisMonthAmount = 0;
+
+  const schedule: PaymentScheduleItem[] = [];
+
+  (rawInvoices || []).forEach((inv: any) => {
+    let credits = 0;
+    let charges = 0;
+    (inv.adjustments || []).forEach((a: any) => {
+      if (a.status === "APPROVED") {
+        if (a.adjustment_direction === "CREDIT") credits += Number(a.adjustment_amount);
+        else charges += Number(a.adjustment_amount);
+      }
+    });
+
+    const finalPayable = Number((Number(inv.invoice_total) + charges - credits).toFixed(2));
+    const paidAmount = Number(Number(inv.amount_paid || 0).toFixed(2));
+    const balanceDue = Math.max(Number((finalPayable - paidAmount).toFixed(2)), 0);
+
+    let paymentStatus: 'UNPAID' | 'PARTIALLY_PAID' | 'PAID' = 'UNPAID';
+    if (paidAmount === 0) paymentStatus = 'UNPAID';
+    else if (paidAmount < finalPayable) paymentStatus = 'PARTIALLY_PAID';
+    else paymentStatus = 'PAID';
+
+    const dueDate = inv.due_date || "";
+    let dDayLabel = "-";
+    let isOverdue = false;
+
+    if (dueDate) {
+      if (dueDate === todayStr) {
+        dDayLabel = "오늘 만기 (D-Day)";
+      } else if (dueDate > todayStr) {
+        const diffMs = new Date(dueDate + "T00:00:00Z").getTime() - todayDate.getTime();
+        const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+        dDayLabel = `D-${diffDays}`;
+      } else {
+        const diffMs = todayDate.getTime() - new Date(dueDate + "T00:00:00Z").getTime();
+        const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+        dDayLabel = `연체 D+${diffDays}`;
+        isOverdue = true;
+      }
+    }
+
+    // Accumulate KPIs if balance > 0
+    if (balanceDue > 0) {
+      totalOutstandingAmount += balanceDue;
+
+      if (dueDate === todayStr) {
+        dueTodayCount++;
+        dueTodayAmount += balanceDue;
+      }
+      if (dueDate >= todayStr && dueDate <= next7DaysStr) {
+        dueThisWeekCount++;
+        dueThisWeekAmount += balanceDue;
+      }
+      if (dueDate >= todayStr && dueDate <= next30DaysStr) {
+        dueNext30DaysCount++;
+        dueNext30DaysAmount += balanceDue;
+      }
+      if (dueDate < todayStr && dueDate !== "") {
+        overdueCount++;
+        overdueAmount += balanceDue;
+      }
+    }
+
+    const supplierObj: any = Array.isArray(inv.supplier) ? inv.supplier[0] : inv.supplier;
+    const poObj: any = Array.isArray(inv.po) ? inv.po[0] : inv.po;
+
+    schedule.push({
+      id: inv.id,
+      internal_ap_number: inv.internal_ap_number,
+      supplier_invoice_number: inv.supplier_invoice_number,
+      supplier_company_id: inv.supplier_company_id,
+      supplier_name: supplierObj?.name || "-",
+      po_number: poObj?.po_number || null,
+      due_date: dueDate,
+      currency: inv.currency || "USD",
+      subtotal: Number(inv.subtotal || 0),
+      final_payable: finalPayable,
+      amount_paid: paidAmount,
+      balance_due: balanceDue,
+      payment_status: paymentStatus,
+      settlement_status: inv.settlement_status || "OPEN",
+      invoice_status: inv.invoice_status,
+      d_day_label: dDayLabel,
+      is_overdue: isOverdue,
+    });
+  });
+
+  const history: PaymentHistoryItem[] = [];
+
+  (rawPayments || []).forEach((p: any) => {
+    const pmtAmount = Number(p.payment_amount || 0);
+    if (p.status === "COMPLETED") {
+      if (p.payment_date >= firstDayOfMonthStr) {
+        paidThisMonthAmount += pmtAmount;
+      }
+    }
+
+    const invObj: any = Array.isArray(p.invoice) ? p.invoice[0] : p.invoice;
+    const suppObj: any = invObj ? (Array.isArray(invObj.supplier) ? invObj.supplier[0] : invObj.supplier) : null;
+    const creatorObj: any = Array.isArray(p.creator) ? p.creator[0] : p.creator;
+
+    history.push({
+      id: p.id,
+      payment_number: p.payment_number,
+      payment_date: p.payment_date,
+      payment_amount: pmtAmount,
+      currency: p.currency || "USD",
+      payment_method: p.payment_method,
+      bank_reference: p.bank_reference || null,
+      remittance_reference: p.remittance_reference || null,
+      status: p.status,
+      attachment_path: p.attachment_path || null,
+      internal_note: p.internal_note || null,
+      created_at: p.created_at,
+      creator_name: creatorObj?.display_name || null,
+      supplier_name: suppObj?.name || "-",
+      invoice_id: p.supplier_invoice_id,
+      internal_ap_number: invObj?.internal_ap_number || "-",
+      supplier_invoice_number: invObj?.supplier_invoice_number || "-",
+    });
+  });
+
+  const kpis: PaymentDashboardKPIs = {
+    dueTodayCount,
+    dueTodayAmount: Number(dueTodayAmount.toFixed(2)),
+    dueThisWeekCount,
+    dueThisWeekAmount: Number(dueThisWeekAmount.toFixed(2)),
+    dueNext30DaysCount,
+    dueNext30DaysAmount: Number(dueNext30DaysAmount.toFixed(2)),
+    overdueCount,
+    overdueAmount: Number(overdueAmount.toFixed(2)),
+    totalOutstandingAmount: Number(totalOutstandingAmount.toFixed(2)),
+    paidThisMonthAmount: Number(paidThisMonthAmount.toFixed(2)),
+  };
+
+  return {
+    kpis,
+    schedule,
+    history,
+  };
 }
