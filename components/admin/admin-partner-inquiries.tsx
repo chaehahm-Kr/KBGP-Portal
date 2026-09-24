@@ -38,6 +38,7 @@ interface AdminPartnerInquiriesProps {
 }
 
 const CATEGORY_LABELS: Record<string, string> = {
+  po_change:   "PO 변경 요청",
   product:     "제품 등록 및 스펙 수정",
   onboarding:  "입점 신청 및 심사 현황",
   logistics:   "물류 공급 및 패키징",
@@ -607,26 +608,66 @@ export function AdminPartnerInquiries({
                   </div>
                 )}
 
-                {/* Related Invoice / PO Quick Links */}
-                {(selectedInquiry.related_invoice_id || selectedInquiry.related_po_id) && (
+                {/* Related PO Context & Actions Card */}
+                {selectedInquiry.related_po_id && (
+                  <div className="p-3.5 rounded-xl border border-indigo-200 bg-indigo-50/70 dark:border-indigo-900/50 dark:bg-indigo-950/40 text-xs space-y-2.5">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 font-bold text-indigo-900 dark:text-indigo-300">
+                      <span className="flex items-center gap-1.5">
+                        <span>📦</span>
+                        <span>연계된 발주서 정보 (Linked Purchase Order)</span>
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <Link
+                          href={`/admin/purchasing/${selectedInquiry.related_po_id}`}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-bold bg-white dark:bg-zinc-900 border border-indigo-300 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-50 transition-colors shadow-xs"
+                        >
+                          View PO (발주서 보기) →
+                        </Link>
+                        <Link
+                          href={`/admin/purchasing/${selectedInquiry.related_po_id}/edit`}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-bold bg-indigo-600 hover:bg-indigo-700 text-white transition-colors shadow-xs"
+                        >
+                          ✏️ Edit / Revise PO (발주서 수정)
+                        </Link>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-[11px] pt-1">
+                      <div>
+                        <span className="text-zinc-500 dark:text-zinc-400 block text-[10px] font-medium">발주서 번호</span>
+                        <span className="font-mono font-bold text-indigo-600 dark:text-indigo-400">{selectedInquiry.related_po_number || "-"}</span>
+                      </div>
+                      <div>
+                        <span className="text-zinc-500 dark:text-zinc-400 block text-[10px] font-medium">공급사 (Supplier)</span>
+                        <span className="font-medium text-zinc-900 dark:text-zinc-100 truncate block">{selectedInquiry.related_po_supplier_name || selectedInquiry.companyName}</span>
+                      </div>
+                      <div>
+                        <span className="text-zinc-500 dark:text-zinc-400 block text-[10px] font-medium">주문 일자</span>
+                        <span className="font-medium text-zinc-800 dark:text-zinc-200">{selectedInquiry.related_po_order_date || "-"}</span>
+                      </div>
+                      <div>
+                        <span className="text-zinc-500 dark:text-zinc-400 block text-[10px] font-medium">현재 발주 상태</span>
+                        <span className="font-bold text-zinc-800 dark:text-zinc-200">{selectedInquiry.related_po_status || "-"}</span>
+                      </div>
+                      <div>
+                        <span className="text-zinc-500 dark:text-zinc-400 block text-[10px] font-medium">Revision 번호</span>
+                        <span className="font-mono font-bold text-purple-600 dark:text-purple-400">
+                          Rev {selectedInquiry.related_po_revision_no || 1}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Related Invoice Quick Links (if standalone invoice or additional) */}
+                {selectedInquiry.related_invoice_id && (
                   <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-zinc-100 dark:border-zinc-800">
-                    <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500">연계 문서:</span>
-                    {selectedInquiry.related_invoice_id && (
-                      <Link
-                        href={`/admin/finance/invoices/${selectedInquiry.related_invoice_id}`}
-                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-bold bg-indigo-50 border border-indigo-200 text-indigo-700 hover:bg-indigo-100 dark:bg-indigo-950/40 dark:border-indigo-800 dark:text-indigo-300 transition-colors"
-                      >
-                        📄 인보이스 바로가기 {selectedInquiry.related_invoice_number || selectedInquiry.related_ap_number ? `(${selectedInquiry.related_invoice_number || selectedInquiry.related_ap_number})` : ""}
-                      </Link>
-                    )}
-                    {selectedInquiry.related_po_id && (
-                      <Link
-                        href={`/admin/purchasing/${selectedInquiry.related_po_id}`}
-                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-bold bg-zinc-100 border border-zinc-200 text-zinc-700 hover:bg-zinc-200 dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-300 transition-colors"
-                      >
-                        📦 발주서 바로가기 {selectedInquiry.related_po_number ? `(${selectedInquiry.related_po_number})` : ""}
-                      </Link>
-                    )}
+                    <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500">연계 인보이스:</span>
+                    <Link
+                      href={`/admin/finance/invoices/${selectedInquiry.related_invoice_id}`}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-bold bg-indigo-50 border border-indigo-200 text-indigo-700 hover:bg-indigo-100 dark:bg-indigo-950/40 dark:border-indigo-800 dark:text-indigo-300 transition-colors"
+                    >
+                      📄 인보이스 바로가기 {selectedInquiry.related_invoice_number || selectedInquiry.related_ap_number ? `(${selectedInquiry.related_invoice_number || selectedInquiry.related_ap_number})` : ""}
+                    </Link>
                   </div>
                 )}
 

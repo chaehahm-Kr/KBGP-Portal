@@ -88,6 +88,14 @@ export default async function PortalPoDetailPage({ params }: PortalPoDetailPageP
     .order("name", { ascending: true });
   const warehouses = dbAllWarehouses ?? [];
 
+  // Fetch linked cases (Partner Inquiries)
+  const { data: dbCases } = await supabase
+    .from("partner_inquiries")
+    .select("id, case_number, title, status, category, created_at, updated_at")
+    .eq("related_po_id", id)
+    .order("created_at", { ascending: false });
+  const linkedCases = dbCases ?? [];
+
   return (
     <PoDetailClient 
       po={po} 
@@ -98,6 +106,7 @@ export default async function PortalPoDetailPage({ params }: PortalPoDetailPageP
       documents={documents}
       warehouses={warehouses}
       shippingOrigins={shippingOrigins}
+      linkedCases={linkedCases}
     />
   );
 }

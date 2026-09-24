@@ -21,6 +21,7 @@ export type { CaseStatus, MessageType, InquiryMessageItem, PartnerInquiryItem } 
 // ────────────────────────────────────────────────────────────────────────────
 
 const CATEGORY_LABELS: Record<string, string> = {
+  po_change:   "PO 변경 요청",
   product:     "제품 등록 및 스펙 수정",
   onboarding:  "입점 신청 및 심사 현황",
   logistics:   "물류 공급 및 패키징",
@@ -618,10 +619,22 @@ export async function getPartnerInquiries(): Promise<PartnerInquiryItem[]> {
     const poIds = Array.from(new Set((data || []).map((i: any) => i.related_po_id).filter(Boolean)));
     const invIds = Array.from(new Set((data || []).map((i: any) => i.related_invoice_id).filter(Boolean)));
 
-    const poMap = new Map<string, string>();
+    const poMap = new Map<string, { poNumber: string; orderDate: string; status: string; revisionNo: number; supplierName?: string }>();
     if (poIds.length > 0) {
-      const { data: pos } = await adminSupabase.from("purchase_orders").select("id, po_number").in("id", poIds);
-      (pos || []).forEach((p: any) => poMap.set(p.id, p.po_number));
+      const { data: pos } = await adminSupabase
+        .from("purchase_orders")
+        .select("id, po_number, order_date, po_status, revision_no, supplier:supplier_id(name)")
+        .in("id", poIds);
+      (pos || []).forEach((p: any) => {
+        const supName = Array.isArray(p.supplier) ? p.supplier[0]?.name : p.supplier?.name;
+        poMap.set(p.id, {
+          poNumber: p.po_number,
+          orderDate: p.order_date,
+          status: p.po_status,
+          revisionNo: p.revision_no || 1,
+          supplierName: supName || ""
+        });
+      });
     }
 
     const invMap = new Map<string, { invNumber: string; apNumber: string; poId?: string }>();
@@ -649,7 +662,8 @@ export async function getPartnerInquiries(): Promise<PartnerInquiryItem[]> {
         const prevInfo = item.previous_case_id ? inquiryMap.get(item.previous_case_id) : null;
         const isCreatedByAdmin = item.created_source === "admin" || (messages && messages.length > 0 && messages[0].senderType === "admin");
         const invInfo = item.related_invoice_id ? invMap.get(item.related_invoice_id) : null;
-        const poNumber = item.related_po_id ? poMap.get(item.related_po_id) : (invInfo?.poId ? poMap.get(invInfo.poId) : null);
+        const poKey = item.related_po_id || invInfo?.poId || null;
+        const poInfo = poKey ? poMap.get(poKey) : null;
 
         return {
           ...item,
@@ -664,7 +678,11 @@ export async function getPartnerInquiries(): Promise<PartnerInquiryItem[]> {
           closed_by_side: item.closed_by_side || null,
           related_po_id: item.related_po_id || invInfo?.poId || null,
           related_invoice_id: item.related_invoice_id || null,
-          related_po_number: poNumber || null,
+          related_po_number: poInfo?.poNumber || null,
+          related_po_order_date: poInfo?.orderDate || null,
+          related_po_status: poInfo?.status || null,
+          related_po_revision_no: poInfo?.revisionNo || null,
+          related_po_supplier_name: poInfo?.supplierName || null,
           related_invoice_number: invInfo?.invNumber || null,
           related_ap_number: invInfo?.apNumber || null,
           messages
@@ -737,10 +755,22 @@ export async function getAdminPartnerInquiries(): Promise<PartnerInquiryItem[]> 
     const poIds = Array.from(new Set((inquiries || []).map((i: any) => i.related_po_id).filter(Boolean)));
     const invIds = Array.from(new Set((inquiries || []).map((i: any) => i.related_invoice_id).filter(Boolean)));
 
-    const poMap = new Map<string, string>();
+    const poMap = new Map<string, { poNumber: string; orderDate: string; status: string; revisionNo: number; supplierName?: string }>();
     if (poIds.length > 0) {
-      const { data: pos } = await adminSupabase.from("purchase_orders").select("id, po_number").in("id", poIds);
-      (pos || []).forEach((p: any) => poMap.set(p.id, p.po_number));
+      const { data: pos } = await adminSupabase
+        .from("purchase_orders")
+        .select("id, po_number, order_date, po_status, revision_no, supplier:supplier_id(name)")
+        .in("id", poIds);
+      (pos || []).forEach((p: any) => {
+        const supName = Array.isArray(p.supplier) ? p.supplier[0]?.name : p.supplier?.name;
+        poMap.set(p.id, {
+          poNumber: p.po_number,
+          orderDate: p.order_date,
+          status: p.po_status,
+          revisionNo: p.revision_no || 1,
+          supplierName: supName || ""
+        });
+      });
     }
 
     const invMap = new Map<string, { invNumber: string; apNumber: string; poId?: string }>();
@@ -769,7 +799,8 @@ export async function getAdminPartnerInquiries(): Promise<PartnerInquiryItem[]> 
         const requester = item.created_by ? userMap.get(item.created_by) : null;
         const isCreatedByAdmin = item.created_source === "admin" || (messages && messages.length > 0 && messages[0].senderType === "admin");
         const invInfo = item.related_invoice_id ? invMap.get(item.related_invoice_id) : null;
-        const poNumber = item.related_po_id ? poMap.get(item.related_po_id) : (invInfo?.poId ? poMap.get(invInfo.poId) : null);
+        const poKey = item.related_po_id || invInfo?.poId || null;
+        const poInfo = poKey ? poMap.get(poKey) : null;
 
         return {
           id: item.id,
@@ -806,7 +837,11 @@ export async function getAdminPartnerInquiries(): Promise<PartnerInquiryItem[]> 
           repliedStaffName,
           related_po_id: item.related_po_id || invInfo?.poId || null,
           related_invoice_id: item.related_invoice_id || null,
-          related_po_number: poNumber || null,
+          related_po_number: poInfo?.poNumber || null,
+          related_po_order_date: poInfo?.orderDate || null,
+          related_po_status: poInfo?.status || null,
+          related_po_revision_no: poInfo?.revisionNo || null,
+          related_po_supplier_name: poInfo?.supplierName || null,
           related_invoice_number: invInfo?.invNumber || null,
           related_ap_number: invInfo?.apNumber || null,
           messages

@@ -112,12 +112,6 @@ export function PoUnifiedStepper({
               </span>
             )}
 
-            {supplierConfirmationStatus === "CHANGE_REQUESTED" && (
-              <span className="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-bold bg-amber-50 border border-amber-200 text-amber-700 dark:bg-amber-950/40 dark:border-amber-900 dark:text-amber-300">
-                📝 변경 제안 검토중
-              </span>
-            )}
-
             {supplierConfirmationStatus === "PENDING" && currentStep === 1 && (
               <span className="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-bold bg-zinc-100 border border-zinc-200 text-zinc-600 dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-300">
                 ⏳ 공급사 확인 대기

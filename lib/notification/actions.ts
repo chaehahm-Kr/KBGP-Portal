@@ -16,6 +16,7 @@ export interface NotificationItem {
 }
 
 const CATEGORY_LABELS: Record<string, string> = {
+  po_change:   "PO 변경 요청",
   product:     "제품 등록 및 스펙 수정",
   onboarding:  "입점 신청 및 심사 현황",
   logistics:   "물류 공급 및 패키징",

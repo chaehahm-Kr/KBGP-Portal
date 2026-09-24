@@ -23,6 +23,7 @@ interface PortalSupportViewProps {
 }
 
 const CATEGORY_LABELS: Record<string, string> = {
+  po_change:   "PO 변경 요청",
   product:     "제품 등록 및 스펙 수정",
   onboarding:  "입점 신청 및 심사 현황",
   logistics:   "물류 공급 및 패키징",
@@ -50,6 +51,10 @@ export function PortalSupportView({ initialInquiries, createAction }: PortalSupp
   const apNoParam = searchParams.get("ap_no") || searchParams.get("apNo");
   const poIdParam = searchParams.get("po_id") || searchParams.get("poId");
   const poNoParam = searchParams.get("po_no") || searchParams.get("poNo");
+  const orderDateParam = searchParams.get("order_date") || searchParams.get("orderDate");
+  const poStatusParam = searchParams.get("po_status") || searchParams.get("poStatus");
+  const revisionNoParam = searchParams.get("revision_no") || searchParams.get("revisionNo");
+  const companyNameParam = searchParams.get("company_name") || searchParams.get("companyName");
   const balanceParam = searchParams.get("outstanding_balance") || searchParams.get("balance");
   const totalParam = searchParams.get("invoice_total") || searchParams.get("total");
 
@@ -73,6 +78,10 @@ export function PortalSupportView({ initialInquiries, createAction }: PortalSupp
     apNo?: string | null;
     poId?: string | null;
     poNo?: string | null;
+    orderDate?: string | null;
+    poStatus?: string | null;
+    revisionNo?: string | null;
+    companyName?: string | null;
     total?: string | null;
     balance?: string | null;
   } | null>(null);
@@ -80,7 +89,7 @@ export function PortalSupportView({ initialInquiries, createAction }: PortalSupp
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
 
-  // Auto-fill from query params (e.g. from Invoice inquiry CTA)
+  // Auto-fill from query params (e.g. from PO Change Request or Invoice inquiry CTA)
   useEffect(() => {
     // 1. If specific case requested via query param
     if (caseParam && inquiries.length > 0) {
@@ -94,7 +103,39 @@ export function PortalSupportView({ initialInquiries, createAction }: PortalSupp
       }
     }
 
-    // 2. If new inquiry / settlement inquiry requested
+    // 2. If PO Change Request requested
+    const isPoChangeRequested = categoryParam === "po_change" || (poIdParam && !invoiceIdParam);
+    if (isPoChangeRequested) {
+      setIsWriteOpen(true);
+      setSelectedInquiry(null);
+      setCategory("po_change");
+      if (poIdParam) setRelatedPoId(poIdParam);
+
+      setLinkedContext({
+        poId: poIdParam || null,
+        poNo: poNoParam || null,
+        orderDate: orderDateParam || null,
+        poStatus: poStatusParam || null,
+        revisionNo: revisionNoParam || null,
+        companyName: companyNameParam || null,
+      });
+
+      const poLabel = poNoParam ? `[${poNoParam}] ` : "";
+      setTitle(`${poLabel}PO 변경 요청`);
+
+      setContent(
+`PO 변경을 요청합니다.
+
+PO Number: ${poNoParam || "-"}
+Order Date: ${orderDateParam || "-"}
+
+변경을 원하는 내용을 아래에 작성해 주세요.
+`
+      );
+      return;
+    }
+
+    // 3. If new inquiry / settlement inquiry requested
     const isNewRequested = newParam === "1" || newParam === "true" || !!invoiceIdParam || categoryParam === "settlement";
     if (isNewRequested) {
       setIsWriteOpen(true);
@@ -505,8 +546,12 @@ Outstanding Balance: ${formattedBalance}
                 <div className="p-3.5 rounded-xl border border-indigo-200 bg-indigo-50/70 dark:border-indigo-900/50 dark:bg-indigo-950/40 text-xs space-y-2">
                   <div className="flex items-center justify-between font-bold text-indigo-900 dark:text-indigo-300">
                     <span className="flex items-center gap-1.5">
-                      <span>🧾</span>
-                      <span>연계된 인보이스 및 정산 컨텍스트 (Linked Context)</span>
+                      <span>{category === "po_change" || (!linkedContext.invoiceId && linkedContext.poId) ? "📦" : "🧾"}</span>
+                      <span>
+                        {category === "po_change" || (!linkedContext.invoiceId && linkedContext.poId)
+                          ? "연계된 발주서 정보 (Linked Purchase Order Context)"
+                          : "연계된 인보이스 및 정산 컨텍스트 (Linked Context)"}
+                      </span>
                     </span>
                     <button
                       type="button"
@@ -520,26 +565,49 @@ Outstanding Balance: ${formattedBalance}
                       연계 해제
                     </button>
                   </div>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px] pt-1">
-                    <div>
-                      <span className="text-zinc-500 dark:text-zinc-400 block text-[10px] font-medium">인보이스 번호</span>
-                      <span className="font-mono font-bold text-zinc-900 dark:text-zinc-100">{linkedContext.invoiceNo || "-"}</span>
+                  {category === "po_change" || (!linkedContext.invoiceId && linkedContext.poId) ? (
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px] pt-1">
+                      <div>
+                        <span className="text-zinc-500 dark:text-zinc-400 block text-[10px] font-medium">발주서 번호</span>
+                        <span className="font-mono font-bold text-indigo-600 dark:text-indigo-400">{linkedContext.poNo || "-"}</span>
+                      </div>
+                      <div>
+                        <span className="text-zinc-500 dark:text-zinc-400 block text-[10px] font-medium">주문 일자</span>
+                        <span className="font-medium text-zinc-900 dark:text-zinc-100">{linkedContext.orderDate || "-"}</span>
+                      </div>
+                      <div>
+                        <span className="text-zinc-500 dark:text-zinc-400 block text-[10px] font-medium">현재 발주 상태</span>
+                        <span className="font-bold text-zinc-700 dark:text-zinc-300">{linkedContext.poStatus || "-"}</span>
+                      </div>
+                      <div>
+                        <span className="text-zinc-500 dark:text-zinc-400 block text-[10px] font-medium">Revision 번호</span>
+                        <span className="font-mono font-bold text-purple-600 dark:text-purple-400">
+                          Rev {linkedContext.revisionNo || 1}
+                        </span>
+                      </div>
                     </div>
-                    <div>
-                      <span className="text-zinc-500 dark:text-zinc-400 block text-[10px] font-medium">관리번호 (AP No.)</span>
-                      <span className="font-mono font-bold text-zinc-700 dark:text-zinc-300">{linkedContext.apNo || "-"}</span>
+                  ) : (
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px] pt-1">
+                      <div>
+                        <span className="text-zinc-500 dark:text-zinc-400 block text-[10px] font-medium">인보이스 번호</span>
+                        <span className="font-mono font-bold text-zinc-900 dark:text-zinc-100">{linkedContext.invoiceNo || "-"}</span>
+                      </div>
+                      <div>
+                        <span className="text-zinc-500 dark:text-zinc-400 block text-[10px] font-medium">관리번호 (AP No.)</span>
+                        <span className="font-mono font-bold text-zinc-700 dark:text-zinc-300">{linkedContext.apNo || "-"}</span>
+                      </div>
+                      <div>
+                        <span className="text-zinc-500 dark:text-zinc-400 block text-[10px] font-medium">관련 PO 번호</span>
+                        <span className="font-mono font-bold text-indigo-600 dark:text-indigo-400">{linkedContext.poNo || "-"}</span>
+                      </div>
+                      <div>
+                        <span className="text-zinc-500 dark:text-zinc-400 block text-[10px] font-medium">미지급 잔액</span>
+                        <span className="font-mono font-bold text-rose-600 dark:text-rose-400">
+                          {linkedContext.balance ? (linkedContext.balance.startsWith("$") ? linkedContext.balance : `$${Number(linkedContext.balance).toLocaleString()}`) : "-"}
+                        </span>
+                      </div>
                     </div>
-                    <div>
-                      <span className="text-zinc-500 dark:text-zinc-400 block text-[10px] font-medium">관련 PO 번호</span>
-                      <span className="font-mono font-bold text-indigo-600 dark:text-indigo-400">{linkedContext.poNo || "-"}</span>
-                    </div>
-                    <div>
-                      <span className="text-zinc-500 dark:text-zinc-400 block text-[10px] font-medium">미지급 잔액</span>
-                      <span className="font-mono font-bold text-rose-600 dark:text-rose-400">
-                        {linkedContext.balance ? (linkedContext.balance.startsWith("$") ? linkedContext.balance : `$${Number(linkedContext.balance).toLocaleString()}`) : "-"}
-                      </span>
-                    </div>
-                  </div>
+                  )}
                 </div>
               )}
 
@@ -670,7 +738,7 @@ Outstanding Balance: ${formattedBalance}
                         )}
                         {selectedInquiry.related_po_id && (
                           <Link
-                            href={`/portal/orders/${selectedInquiry.related_po_id}`}
+                            href={`/portal/orders/purchase-orders/${selectedInquiry.related_po_id}`}
                             className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-bold bg-zinc-100 border border-zinc-200 text-zinc-700 hover:bg-zinc-200 dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-300 transition-colors"
                           >
                             📦 관련 발주서 바로가기 {selectedInquiry.related_po_number ? `(${selectedInquiry.related_po_number})` : ""}

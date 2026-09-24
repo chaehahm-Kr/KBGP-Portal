@@ -74,6 +74,10 @@ export interface PartnerInquiryItem {
   related_po_id?: string | null;
   related_invoice_id?: string | null;
   related_po_number?: string | null;
+  related_po_order_date?: string | null;
+  related_po_status?: string | null;
+  related_po_revision_no?: number | null;
+  related_po_supplier_name?: string | null;
   related_invoice_number?: string | null;
   related_ap_number?: string | null;
   messages?: InquiryMessageItem[];
@@ -173,6 +177,35 @@ export function buildSettlementInquiryUrl(params: SettlementInquiryQueryParams):
   }
   if (params.outstanding_balance !== undefined && params.outstanding_balance !== null && params.outstanding_balance !== "") {
     searchParams.set("outstanding_balance", String(params.outstanding_balance));
+  }
+  return `/portal/support?${searchParams.toString()}`;
+}
+
+export interface PoChangeInquiryQueryParams {
+  new?: string;
+  category?: string;
+  po_id?: string;
+  po_no?: string;
+  order_date?: string;
+  company_name?: string;
+  po_status?: string;
+  revision_no?: string | number;
+}
+
+/**
+ * Builds the canonical portal support URL for initiating a prefilled PO change request case.
+ */
+export function buildPoChangeInquiryUrl(params: PoChangeInquiryQueryParams): string {
+  const searchParams = new URLSearchParams();
+  searchParams.set("new", "1");
+  searchParams.set("category", params.category || "po_change");
+  if (params.po_id) searchParams.set("po_id", params.po_id);
+  if (params.po_no) searchParams.set("po_no", params.po_no);
+  if (params.order_date) searchParams.set("order_date", params.order_date);
+  if (params.company_name) searchParams.set("company_name", params.company_name);
+  if (params.po_status) searchParams.set("po_status", params.po_status);
+  if (params.revision_no !== undefined && params.revision_no !== null) {
+    searchParams.set("revision_no", String(params.revision_no));
   }
   return `/portal/support?${searchParams.toString()}`;
 }

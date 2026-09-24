@@ -57,10 +57,6 @@ export function getOverallStatus(
       return "Supplier Confirmed";
     }
 
-    if (po.supplier_confirmation_status === "CHANGE_REQUESTED") {
-      return "Change Requested";
-    }
-
     return "Sent to Supplier";
   }
 

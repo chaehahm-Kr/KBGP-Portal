@@ -5,12 +5,10 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   confirmPortalPurchaseOrder,
-  submitPortalPoChangeRequest,
   withdrawPortalPoChangeRequest,
   submitPortalGoodsReady,
   submitPortalSupplierArrangedShipment,
   supplierRespondCancellation,
-  createPoChangeRequestCase,
 } from "@/lib/portal/actions";
 import {
   getOverallStatus,
@@ -23,10 +21,16 @@ import {
   PoDocumentType,
   PO_DOCUMENT_TYPE_LABELS,
   PO_DOCUMENT_TYPE_BADGES,
-  } from "@/lib/purchase-order/document-types";
+} from "@/lib/purchase-order/document-types";
 import { uploadPoDocument } from "@/lib/purchase-order/document-actions";
 import { parseSpecialInstructions } from "@/lib/purchase-order/forwarder-helper";
 import { formatActionError } from "@/lib/utils/error-formatter";
+import {
+  buildPoChangeInquiryUrl,
+  getNormalizedStatus,
+  OFFICIAL_STATUS_LABEL,
+  OFFICIAL_STATUS_COLOR,
+} from "@/lib/inquiry/types";
 
 interface PoLine {
   id: string;
@@ -92,6 +96,8 @@ interface PoDetailClientProps {
     activity_logs?: any[];
     revisions?: any[];
     linked_cases?: any[];
+    supplier?: any;
+    company?: any;
     warehouse?: any;
     ship_from_warehouse?: any;
     total_qty?: number;
@@ -105,6 +111,7 @@ interface PoDetailClientProps {
   warehouses?: any[];
   shippingOrigins?: any[];
   documents?: PoDocument[];
+  linkedCases?: any[];
 }
 
 export default function PoDetailClient({
@@ -116,41 +123,29 @@ export default function PoDetailClient({
   warehouses = [],
   shippingOrigins = [],
   documents = [],
+  linkedCases = [],
 }: PoDetailClientProps) {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState("overview");
   const [isConfirming, setIsConfirming] = useState(false);
-  const [isChangeFormOpen, setIsChangeFormOpen] = useState(false);
-  const [isSubmittingChange, setIsSubmittingChange] = useState(false);
   const [isWithdrawing, setIsWithdrawing] = useState<string | null>(null);
-
-  // Proposed change quantities and reasons state
-  const [proposedQties, setProposedQties] = useState<Record<string, number>>(() => {
-    const initial: Record<string, number> = {};
-    po.lines.forEach((l) => {
-      initial[l.id] = l.confirmed_qty ?? l.qty;
-    });
-    return initial;
-  });
-
-  const [reasons, setReasons] = useState<Record<string, string>>(() => {
-    const initial: Record<string, string> = {};
-    po.lines.forEach((l) => {
-      initial[l.id] = "";
-    });
-    return initial;
-  });
 
   const [generalError, setGeneralError] = useState<string | null>(null);
   const [generalSuccess, setGeneralSuccess] = useState<string | null>(null);
-
-  // Case / Change Request modal state
-  const [showCaseModal, setShowCaseModal] = useState(false);
-  const [caseCategory, setCaseCategory] = useState("수량 변경");
-  const [caseTitle, setCaseTitle] = useState("");
-  const [caseMessage, setCaseMessage] = useState("");
-  const [isSubmittingCase, setIsSubmittingCase] = useState(false);
   const [isRespondingCancel, setIsRespondingCancel] = useState(false);
+
+  // Active or closed linked change request cases
+  const allLinkedCases = useMemo(() => {
+    return linkedCases.length > 0 ? linkedCases : (po.linked_cases || []);
+  }, [linkedCases, po.linked_cases]);
+
+  const activeChangeCase = useMemo(() => {
+    return allLinkedCases.find((c: any) => getNormalizedStatus(c.status) !== "CLOSED");
+  }, [allLinkedCases]);
+
+  const latestClosedCase = useMemo(() => {
+    return allLinkedCases.find((c: any) => getNormalizedStatus(c.status) === "CLOSED");
+  }, [allLinkedCases]);
 
   // Confirm Modal state & per-line confirmed qty
   const [showConfirmModal, setShowConfirmModal] = useState(false);
@@ -532,77 +527,7 @@ export default function PoDetailClient({
     }
   };
 
-  // Submit PO Change Request Case (Partner Inquiry)
-  const handleSubmitChangeCase = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!caseTitle.trim() || !caseMessage.trim()) {
-      alert("문의 제목과 상세 변경 요청 내용을 모두 입력해주세요.");
-      return;
-    }
-    setIsSubmittingCase(true);
-    setGeneralError(null);
-    setGeneralSuccess(null);
-    try {
-      await createPoChangeRequestCase({
-        poId: po.id,
-        poNumber: po.po_number,
-        category: caseCategory,
-        title: caseTitle,
-        content: caseMessage,
-      });
-      setGeneralSuccess("PO 변경 요청 문의가 정상 접수되었습니다. 어드민에서 검토 후 답변드립니다.");
-      setShowCaseModal(false);
-      router.refresh();
-    } catch (err: any) {
-      setGeneralError(err.message || "문의 등록 실패");
-    } finally {
-      setIsSubmittingCase(false);
-    }
-  };
-
-  // Propose change request
-  const handleSubmitChange = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const requests = po.lines
-      .map((l) => ({
-        lineId: l.id,
-        proposedQty: proposedQties[l.id],
-        reason: reasons[l.id].trim(),
-      }))
-      .filter((req) => {
-        const origLine = po.lines.find((l) => l.id === req.lineId);
-        return origLine && req.proposedQty !== origLine.qty;
-      });
-
-    if (requests.length === 0) {
-      alert("변경된 수량이 존재하지 않습니다.");
-      return;
-    }
-
-    const missingReason = requests.find((r) => !r.reason);
-    if (missingReason) {
-      alert("수량이 변경된 항목에는 반드시 변경 사유를 입력하셔야 합니다.");
-      return;
-    }
-
-    if (!window.confirm(`총 ${requests.length}건의 수량 변경 제안을 제출하시겠습니까?`)) return;
-
-    setIsSubmittingChange(true);
-    setGeneralError(null);
-    setGeneralSuccess(null);
-    try {
-      await submitPortalPoChangeRequest(po.id, requests);
-      setIsChangeFormOpen(false);
-      setGeneralSuccess("수량 변경 제안서가 정상 등록되었습니다.");
-      router.refresh();
-    } catch (err: any) {
-      setGeneralError(err.message || "변경 요청 등록 실패");
-    } finally {
-      setIsSubmittingChange(false);
-    }
-  };
-
-  // Withdraw change request
+  // Withdraw legacy change request
   const handleWithdraw = async (requestId: string) => {
     if (!window.confirm("제출한 변경 요청을 철회하시겠습니까?")) return;
     setIsWithdrawing(requestId);
@@ -756,87 +681,6 @@ export default function PoDetailClient({
         </div>
       )}
 
-      {/* Case Creation Modal for PO Change Request */}
-      {showCaseModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="bg-white dark:bg-zinc-900 rounded-xl max-w-lg w-full p-6 shadow-2xl border border-zinc-200 dark:border-zinc-800 space-y-4">
-            <div className="flex justify-between items-center border-b border-zinc-150 pb-3 dark:border-zinc-800">
-              <h3 className="font-bold text-sm text-zinc-900 dark:text-white">
-                📝 PO 변경 요청 (문의/케이스 접수)
-              </h3>
-              <button
-                onClick={() => setShowCaseModal(false)}
-                className="text-zinc-400 hover:text-zinc-600 text-lg font-bold"
-              >
-                ✕
-              </button>
-            </div>
-            <p className="text-xs text-zinc-600 dark:text-zinc-400">
-              발주서 #{po.po_number}에 대한 조건 변경(수량, 단가, 납기일, 출하지 등)을 Letusto 담당자에게 공식 요청합니다.
-            </p>
-            <form onSubmit={handleSubmitChangeCase} className="space-y-3 text-xs">
-              <div>
-                <label className="block text-[11px] font-bold text-zinc-600 dark:text-zinc-400 mb-1">
-                  변경 요청 구분
-                </label>
-                <select
-                  value={caseCategory}
-                  onChange={(e) => setCaseCategory(e.target.value)}
-                  className="w-full text-xs rounded-lg border border-zinc-300 p-2 dark:bg-zinc-800 dark:border-zinc-700 dark:text-white"
-                >
-                  <option value="수량 변경">수량 변경 (Quantity Change)</option>
-                  <option value="단가/가격 변경">단가/가격 변경 (Price Adjustment)</option>
-                  <option value="납기/출고일정 변경">납기/출고일정 변경 (Ready Date Change)</option>
-                  <option value="출하지/물류조건 변경">출하지/물류조건 변경 (Ship From / Terms)</option>
-                  <option value="기타 조건 변경">기타 조건 변경 (Other)</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-[11px] font-bold text-zinc-600 dark:text-zinc-400 mb-1">
-                  문의 제목 *
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder={`[PO 변경요청] ${po.po_number} - ${caseCategory}`}
-                  value={caseTitle}
-                  onChange={(e) => setCaseTitle(e.target.value)}
-                  className="w-full text-xs rounded-lg border border-zinc-300 p-2.5 dark:bg-zinc-800 dark:border-zinc-700 dark:text-white"
-                />
-              </div>
-              <div>
-                <label className="block text-[11px] font-bold text-zinc-600 dark:text-zinc-400 mb-1">
-                  상세 변경 요청 내용 *
-                </label>
-                <textarea
-                  rows={4}
-                  required
-                  placeholder="구체적으로 어떤 품목의 수량/일정/단가를 어떻게 변경 요청하시는지 상세히 작성해주세요."
-                  value={caseMessage}
-                  onChange={(e) => setCaseMessage(e.target.value)}
-                  className="w-full text-xs rounded-lg border border-zinc-300 p-2.5 dark:bg-zinc-800 dark:border-zinc-700 dark:text-white"
-                />
-              </div>
-              <div className="flex justify-end gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setShowCaseModal(false)}
-                  className="px-4 py-2 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 text-xs font-bold rounded-lg transition-colors cursor-pointer"
-                >
-                  취소
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSubmittingCase}
-                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg transition-colors cursor-pointer disabled:opacity-50"
-                >
-                  {isSubmittingCase ? "접수 중..." : "변경 요청 접수"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
 
       {/* Confirm PO Modal with per-line Confirmed Qty */}
       {showConfirmModal && (
@@ -933,6 +777,48 @@ export default function PoDetailClient({
         </div>
       )}
 
+      {/* Open PO Change Request Case Banner */}
+      {activeChangeCase && (
+        <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-300 text-amber-900 dark:bg-amber-950/40 dark:border-amber-900 dark:text-amber-200 text-xs flex items-center justify-between gap-3 shadow-xs">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-base leading-none">📝</span>
+            <span className="font-bold">PO 변경 요청 진행 중</span>
+            {activeChangeCase.case_number && (
+              <span className="font-mono font-bold text-zinc-600 dark:text-zinc-300">#{activeChangeCase.case_number}</span>
+            )}
+            <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${OFFICIAL_STATUS_COLOR[getNormalizedStatus(activeChangeCase.status)]}`}>
+              {OFFICIAL_STATUS_LABEL[getNormalizedStatus(activeChangeCase.status)].ko}
+            </span>
+            <span className="text-[11px] text-amber-800 dark:text-amber-300 truncate max-w-xs">{activeChangeCase.title}</span>
+          </div>
+          <Link
+            href={`/portal/support?case=${activeChangeCase.case_number || activeChangeCase.id}`}
+            className="font-bold text-xs text-amber-800 hover:text-amber-950 dark:text-amber-300 dark:hover:text-white underline whitespace-nowrap cursor-pointer"
+          >
+            문의 보기 →
+          </Link>
+        </div>
+      )}
+
+      {!activeChangeCase && latestClosedCase && (
+        <div className="p-3 rounded-xl bg-zinc-100 border border-zinc-200 text-zinc-600 dark:bg-zinc-800/60 dark:border-zinc-700 dark:text-zinc-300 text-xs flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-sm">🔒</span>
+            <span className="font-semibold text-zinc-700 dark:text-zinc-200">PO 변경 요청 종료</span>
+            {latestClosedCase.case_number && (
+              <span className="font-mono text-[11px] text-zinc-500">#{latestClosedCase.case_number}</span>
+            )}
+            <span className="text-[11px] text-zinc-500 truncate max-w-xs">{latestClosedCase.title}</span>
+          </div>
+          <Link
+            href={`/portal/support?case=${latestClosedCase.case_number || latestClosedCase.id}`}
+            className="text-xs text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-200 underline whitespace-nowrap cursor-pointer"
+          >
+            문의 내역 보기 →
+          </Link>
+        </div>
+      )}
+
       {/* Unified 6-Step Stepper Component */}
       <PoUnifiedStepper
         overallStatus={overallStatus || "Draft"}
@@ -968,33 +854,35 @@ export default function PoDetailClient({
               </>
             )}
 
+            <button
+              type="button"
+              onClick={() => {
+                const url = buildPoChangeInquiryUrl({
+                  po_id: po.id,
+                  po_no: po.po_number,
+                  order_date: po.order_date,
+                  company_name: po.supplier?.name || po.company?.name || "",
+                  po_status: po.po_status,
+                  revision_no: po.revision_no || 1,
+                });
+                router.push(url);
+              }}
+              disabled={isConfirming}
+              className="px-3.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 font-bold text-xs rounded-lg transition-colors cursor-pointer flex items-center gap-1.5"
+            >
+              <span>📝</span>
+              <span>PO 변경 요청</span>
+            </button>
+
             {po.po_status === "SENT" && po.supplier_confirmation_status === "PENDING" && (
-              <>
-                <button
-                  type="button"
-                  onClick={() => setShowCaseModal(true)}
-                  disabled={isConfirming}
-                  className="px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 font-bold text-xs rounded-lg transition-colors cursor-pointer"
-                >
-                  📝 PO 변경 요청 (문의)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setIsChangeFormOpen(true)}
-                  disabled={isConfirming}
-                  className="px-3 py-1.5 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 font-bold text-xs rounded-lg transition-colors cursor-pointer"
-                >
-                  수량 직접 조율 제안
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setShowConfirmModal(true)}
-                  disabled={isConfirming}
-                  className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-lg transition-colors cursor-pointer shadow-sm"
-                >
-                  ✓ 발주 확인 (Confirm PO)
-                </button>
-              </>
+              <button
+                type="button"
+                onClick={() => setShowConfirmModal(true)}
+                disabled={isConfirming}
+                className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-lg transition-colors cursor-pointer shadow-sm"
+              >
+                ✓ 발주 확인 (Confirm PO)
+              </button>
             )}
           </div>
         }
@@ -1154,67 +1042,6 @@ export default function PoDetailClient({
                   ))}
                 </div>
               </div>
-            )}
-
-            {/* Change requests list */}
-            {isChangeFormOpen && (
-              <form onSubmit={handleSubmitChange} className="rounded-xl border border-zinc-300 bg-zinc-50 p-5 dark:border-zinc-800 dark:bg-zinc-900/50 space-y-4">
-                <div className="flex justify-between items-center border-b border-zinc-200 pb-2 dark:border-zinc-800">
-                  <h4 className="font-bold text-zinc-900 dark:text-white text-xs">📝 발주서 품목 수량 직접 조율</h4>
-                  <button
-                    type="button"
-                    onClick={() => setIsChangeFormOpen(false)}
-                    className="text-zinc-400 hover:text-zinc-650 cursor-pointer"
-                  >
-                    닫기
-                  </button>
-                </div>
-                <div className="space-y-4">
-                  {po.lines.map((l) => (
-                    <div key={l.id} className="grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
-                      <div>
-                        <span className="font-semibold text-zinc-800 dark:text-zinc-200">{l.product.name}</span>
-                        <span className="font-mono text-[10px] text-zinc-450 block">{l.product.letusto_sku}</span>
-                      </div>
-                      <div className="flex gap-2 items-center">
-                        <span className="text-[10px] text-zinc-400">발주량: {l.qty}개 ➔ 제안량:</span>
-                        <input
-                          type="number"
-                          min={0}
-                          value={proposedQties[l.id]}
-                          onChange={(e) => setProposedQties({ ...proposedQties, [l.id]: Number(e.target.value) })}
-                          className="w-20 rounded-md border-zinc-300 px-2 py-1 text-right dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
-                        />
-                      </div>
-                      <div>
-                        <input
-                          type="text"
-                          placeholder="수량 조율 사유를 입력하십시오."
-                          value={reasons[l.id]}
-                          onChange={(e) => setReasons({ ...reasons, [l.id]: e.target.value })}
-                          className="w-full rounded-md border-zinc-300 px-2.5 py-1 focus:ring-indigo-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
-                        />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                <div className="flex justify-end gap-2 pt-2 border-t border-zinc-200 dark:border-zinc-800">
-                  <button
-                    type="button"
-                    onClick={() => setIsChangeFormOpen(false)}
-                    className="px-3.5 py-2 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 text-xs font-bold rounded-lg cursor-pointer"
-                  >
-                    취소
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={isSubmittingChange}
-                    className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg cursor-pointer"
-                  >
-                    변경 제안 제출
-                  </button>
-                </div>
-              </form>
             )}
           </div>
         )}
@@ -2206,78 +2033,145 @@ export default function PoDetailClient({
               )}
             </div>
 
-            {/* Collaboration Logs */}
+            {/* Linked Support & Change Request Cases */}
             <div className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 space-y-4">
-              <h3 className="text-sm font-bold text-zinc-800 dark:text-white">수량 직접 조율 이력 (Line Change Requests)</h3>
-              <div className="divide-y divide-zinc-150 dark:divide-zinc-800 text-xs">
-                {changeRequests.length === 0 ? (
-                  <div className="py-6 text-center text-zinc-500">직접 수량 조율 제안 내역이 없습니다.</div>
-                ) : (
-                changeRequests.map((req) => {
-                  const matchedLine = po.lines.find((l) => l.id === req.purchaseOrderLineId);
-                  return (
-                    <div key={req.id} className="py-4 space-y-3 last:pb-0">
-                      <div className="flex justify-between items-center">
-                        <div>
-                          <span className="font-bold text-zinc-900 dark:text-white">
-                            {matchedLine?.product.name || "전체 변경"}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-[10px] text-zinc-400">
-                            제안일자: {new Date(req.createdAt).toLocaleString()}
-                          </span>
-                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                            req.status === "PENDING" ? "bg-amber-50 text-amber-700" :
-                            req.status === "APPROVED" ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700"
-                          }`}>
-                            {req.status}
-                          </span>
-                        </div>
-                      </div>
+              <div className="flex justify-between items-center">
+                <h3 className="text-sm font-bold text-zinc-800 dark:text-white flex items-center gap-1.5">
+                  <span>📋</span>
+                  <span>연계된 PO 변경 요청 케이스 (Linked Change Request Cases)</span>
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const url = buildPoChangeInquiryUrl({
+                      po_id: po.id,
+                      po_no: po.po_number,
+                      order_date: po.order_date,
+                      company_name: po.supplier?.name || po.company?.name || "",
+                      po_status: po.po_status,
+                      revision_no: po.revision_no || 1,
+                    });
+                    router.push(url);
+                  }}
+                  className="px-3 py-1 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 font-bold text-xs rounded-lg transition-colors cursor-pointer flex items-center gap-1"
+                >
+                  <span>+</span>
+                  <span>새 PO 변경 요청 작성</span>
+                </button>
+              </div>
 
-                      <div className="grid grid-cols-3 gap-4 text-center bg-zinc-50 dark:bg-zinc-950 p-3 rounded-lg border text-xs">
-                        <div>
-                          <div className="text-[10px] text-zinc-400">발주 수량</div>
-                          <div className="font-bold font-mono text-zinc-700 dark:text-zinc-300">{req.originalQty}</div>
-                        </div>
-                        <div>
-                          <div className="text-[10px] text-zinc-400">제안 수량</div>
-                          <div className="font-bold font-mono text-zinc-900 dark:text-white">{req.proposedQty}</div>
-                        </div>
-                        <div>
-                          <div className="text-[10px] text-zinc-400">수량 차이</div>
-                          <div className="font-bold font-mono text-indigo-650 dark:text-indigo-400">
-                            {req.proposedQty - req.originalQty}
+              {allLinkedCases.length === 0 ? (
+                <div className="py-6 text-center text-zinc-400 text-xs">
+                  연계된 PO 변경 요청 및 문의 케이스가 없습니다.
+                </div>
+              ) : (
+                <div className="divide-y divide-zinc-150 dark:divide-zinc-800 text-xs">
+                  {allLinkedCases.map((c: any) => {
+                    const norm = getNormalizedStatus(c.status);
+                    return (
+                      <div key={c.id} className="py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            {c.case_number && (
+                              <span className="font-mono font-bold text-zinc-500">#{c.case_number}</span>
+                            )}
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${OFFICIAL_STATUS_COLOR[norm]}`}>
+                              {OFFICIAL_STATUS_LABEL[norm].ko}
+                            </span>
+                            <span className="font-bold text-zinc-900 dark:text-white">{c.title}</span>
+                          </div>
+                          <div className="text-[11px] text-zinc-400">
+                            접수일: {c.created_at ? (c.created_at.includes("T") ? c.created_at.split("T")[0] : c.created_at) : "-"}
                           </div>
                         </div>
+                        <Link
+                          href={`/portal/support?case=${c.case_number || c.id}`}
+                          className="font-bold text-xs text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-200 underline shrink-0"
+                        >
+                          문의 상세 대화 보기 →
+                        </Link>
                       </div>
-
-                      <div className="space-y-1">
-                        <div className="font-bold text-zinc-400 uppercase tracking-wide text-[10px]">파트너 변경 제안 사유</div>
-                        <div className="p-2 bg-zinc-50/50 border-l-2 border-zinc-300">{req.reason}</div>
-                      </div>
-
-                      {req.status === "PENDING" && (
-                        <div className="flex justify-end pt-2">
-                          <button
-                            onClick={() => handleWithdraw(req.id)}
-                            disabled={isWithdrawing === req.id}
-                            className="px-3 py-1 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 font-bold rounded text-xs transition-colors cursor-pointer"
-                          >
-                            {isWithdrawing === req.id ? "철회중..." : "제안 철회 (Withdraw)"}
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })
+                    );
+                  })}
+                </div>
               )}
             </div>
+
+            {/* Legacy Collaboration Logs (Read Only) */}
+            {changeRequests.length > 0 && (
+              <div className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-bold text-zinc-800 dark:text-white">
+                    📜 기존 수량 조율 제안 기록 (Legacy Proposals - Read Only)
+                  </h3>
+                  <span className="text-[10px] text-zinc-400 font-medium">이전 시스템 보존 데이터</span>
+                </div>
+                <div className="divide-y divide-zinc-150 dark:divide-zinc-800 text-xs">
+                  {changeRequests.map((req) => {
+                    const matchedLine = po.lines.find((l) => l.id === req.purchaseOrderLineId);
+                    return (
+                      <div key={req.id} className="py-4 space-y-3 last:pb-0">
+                        <div className="flex justify-between items-center">
+                          <div>
+                            <span className="font-bold text-zinc-900 dark:text-white">
+                              {matchedLine?.product.name || "전체 변경"}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] text-zinc-400">
+                              제안일자: {new Date(req.createdAt).toLocaleString()}
+                            </span>
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                              req.status === "PENDING" ? "bg-amber-50 text-amber-700" :
+                              req.status === "APPROVED" ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700"
+                            }`}>
+                              {req.status}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-3 gap-4 text-center bg-zinc-50 dark:bg-zinc-950 p-3 rounded-lg border text-xs">
+                          <div>
+                            <div className="text-[10px] text-zinc-400">발주 수량</div>
+                            <div className="font-bold font-mono text-zinc-700 dark:text-zinc-300">{req.originalQty}</div>
+                          </div>
+                          <div>
+                            <div className="text-[10px] text-zinc-400">제안 수량</div>
+                            <div className="font-bold font-mono text-zinc-900 dark:text-white">{req.proposedQty}</div>
+                          </div>
+                          <div>
+                            <div className="text-[10px] text-zinc-400">수량 차이</div>
+                            <div className="font-bold font-mono text-indigo-650 dark:text-indigo-400">
+                              {req.proposedQty - req.originalQty}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="space-y-1">
+                          <div className="font-bold text-zinc-400 uppercase tracking-wide text-[10px]">파트너 변경 제안 사유</div>
+                          <div className="p-2 bg-zinc-50/50 border-l-2 border-zinc-300">{req.reason}</div>
+                        </div>
+
+                        {req.status === "PENDING" && (
+                          <div className="flex justify-end pt-2">
+                            <button
+                              onClick={() => handleWithdraw(req.id)}
+                              disabled={isWithdrawing === req.id}
+                              className="px-3 py-1 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 font-bold rounded text-xs transition-colors cursor-pointer"
+                            >
+                              {isWithdrawing === req.id ? "철회중..." : "제안 철회 (Withdraw)"}
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
-  </div>
-);
+  );
 }
