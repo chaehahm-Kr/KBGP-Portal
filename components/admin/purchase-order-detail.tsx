@@ -8,7 +8,9 @@ import {
   deleteDraftPo,
   reviewSupplierPoChangeRequest,
   requestPoCancellation,
+  updateAdminGoodsReadinessForwarderInfo,
 } from "@/lib/purchase-order/actions";
+import { parseSpecialInstructions } from "@/lib/purchase-order/forwarder-helper";
 import {
   getOverallStatus,
   OVERALL_STATUS_LABELS,
@@ -241,6 +243,58 @@ export function PurchaseOrderDetail({
   // Collaboration change requests state
   const [reviewNotes, setReviewNotes] = useState<Record<string, string>>({});
   const [reviewLoading, setReviewLoading] = useState<string | null>(null);
+
+  // Forwarder & Handover modal state for Admin
+  const [showForwarderModal, setShowForwarderModal] = useState(false);
+  const [editingGrId, setEditingGrId] = useState<string>("");
+  const [forwarderFobPort, setForwarderFobPort] = useState("");
+  const [forwarderHandoverLoc, setForwarderHandoverLoc] = useState("");
+  const [adminForwarderName, setAdminForwarderName] = useState("");
+  const [adminForwarderContact, setAdminForwarderContact] = useState("");
+  const [adminForwarderEmail, setAdminForwarderEmail] = useState("");
+  const [adminForwarderPhone, setAdminForwarderPhone] = useState("");
+  const [adminForwarderNotes, setAdminForwarderNotes] = useState("");
+  const [isSavingForwarder, setIsSavingForwarder] = useState(false);
+
+  const openForwarderModal = (gr: any) => {
+    setEditingGrId(gr.id);
+    setForwarderFobPort(gr.fob_port || po.port_of_loading || "");
+    setForwarderHandoverLoc(gr.handover_location || "");
+    const fwd = parseSpecialInstructions(gr.special_instructions);
+    setAdminForwarderName(fwd.forwarderName || "");
+    setAdminForwarderContact(fwd.forwarderContact || "");
+    setAdminForwarderEmail(fwd.forwarderEmail || "");
+    setAdminForwarderPhone(fwd.forwarderPhone || "");
+    setAdminForwarderNotes(fwd.notes || "");
+    setShowForwarderModal(true);
+  };
+
+  const handleSaveForwarderSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSavingForwarder(true);
+    setErrorMessage("");
+    setSuccessMessage("");
+    try {
+      await updateAdminGoodsReadinessForwarderInfo({
+        readinessId: editingGrId,
+        poId: po.id,
+        fobPort: forwarderFobPort,
+        handoverLocation: forwarderHandoverLoc,
+        forwarderName: adminForwarderName,
+        forwarderContact: adminForwarderContact,
+        forwarderEmail: adminForwarderEmail,
+        forwarderPhone: adminForwarderPhone,
+        notes: adminForwarderNotes,
+      });
+      setSuccessMessage("인도 조건 및 포워더 정보가 성공적으로 저장되었습니다.");
+      setShowForwarderModal(false);
+      router.refresh();
+    } catch (err: any) {
+      setErrorMessage(err.message || "포워더 정보 저장 실패");
+    } finally {
+      setIsSavingForwarder(false);
+    }
+  };
 
   // Shipment registration form state
   const [showShipmentForm, setShowShipmentForm] = useState(false);
@@ -927,6 +981,141 @@ export function PurchaseOrderDetail({
         </div>
       )}
 
+      {/* Forwarder & Handover Info Edit Modal for Admin */}
+      {showForwarderModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white dark:bg-zinc-900 rounded-xl max-w-xl w-full p-6 shadow-2xl border border-zinc-200 dark:border-zinc-800 space-y-4">
+            <div className="flex justify-between items-center border-b border-zinc-150 pb-3 dark:border-zinc-800">
+              <h3 className="font-bold text-sm text-zinc-900 dark:text-white flex items-center gap-1.5">
+                <span>🚢</span>
+                <span>인도 조건 및 지정 포워더 정보 수정</span>
+              </h3>
+              <button
+                onClick={() => setShowForwarderModal(false)}
+                className="text-zinc-400 hover:text-zinc-600 text-lg font-bold cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+            <p className="text-xs text-zinc-500 dark:text-zinc-400">
+              관리자 및 공급사가 공유하는 FOB 항구, 인도 방식 및 지정 포워더(Forwarder) 담당자 정보를 수정합니다.
+            </p>
+            <form onSubmit={handleSaveForwarderSubmit} className="space-y-3 text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-bold text-zinc-600 dark:text-zinc-400 mb-1">
+                    FOB 항구명 또는 선적 기준 위치
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="예: Busan Port, Incheon Port"
+                    value={forwarderFobPort}
+                    onChange={(e) => setForwarderFobPort(e.target.value)}
+                    className="w-full text-xs rounded-lg border border-zinc-300 p-2 dark:bg-zinc-800 dark:border-zinc-700 dark:text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-zinc-600 dark:text-zinc-400 mb-1">
+                    인도 장소 / 방식 (Handover Location)
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="예: 공장 상차 / CY 전달 / 지정 창고 입고"
+                    value={forwarderHandoverLoc}
+                    onChange={(e) => setForwarderHandoverLoc(e.target.value)}
+                    className="w-full text-xs rounded-lg border border-zinc-300 p-2 dark:bg-zinc-800 dark:border-zinc-700 dark:text-white"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-bold text-zinc-600 dark:text-zinc-400 mb-1">
+                    포워딩 회사명 (Forwarder Company)
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="예: 현대글로비스 / CJ대한통운 / Letusto Logistics"
+                    value={adminForwarderName}
+                    onChange={(e) => setAdminForwarderName(e.target.value)}
+                    className="w-full text-xs rounded-lg border border-zinc-300 p-2 dark:bg-zinc-800 dark:border-zinc-700 dark:text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-zinc-600 dark:text-zinc-400 mb-1">
+                    포워딩 담당자 성명 (Forwarder Contact)
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="예: 김물류 팀장"
+                    value={adminForwarderContact}
+                    onChange={(e) => setAdminForwarderContact(e.target.value)}
+                    className="w-full text-xs rounded-lg border border-zinc-300 p-2 dark:bg-zinc-800 dark:border-zinc-700 dark:text-white"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-bold text-zinc-600 dark:text-zinc-400 mb-1">
+                    포워딩 담당자 이메일
+                  </label>
+                  <input
+                    type="email"
+                    placeholder="forwarder@email.com"
+                    value={adminForwarderEmail}
+                    onChange={(e) => setAdminForwarderEmail(e.target.value)}
+                    className="w-full text-xs rounded-lg border border-zinc-300 p-2 dark:bg-zinc-800 dark:border-zinc-700 dark:text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-zinc-600 dark:text-zinc-400 mb-1">
+                    포워딩 담당자 전화번호
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="010-0000-0000"
+                    value={adminForwarderPhone}
+                    onChange={(e) => setAdminForwarderPhone(e.target.value)}
+                    className="w-full text-xs rounded-lg border border-zinc-300 p-2 dark:bg-zinc-800 dark:border-zinc-700 dark:text-white"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-zinc-600 dark:text-zinc-400 mb-1">
+                  인도/포워딩 특이사항 및 메모 (Special Instructions / Notes)
+                </label>
+                <textarea
+                  rows={3}
+                  placeholder="통관 관련 특이사항, 픽업 시 주의사항, 팔레트 작업 요청 등"
+                  value={adminForwarderNotes}
+                  onChange={(e) => setAdminForwarderNotes(e.target.value)}
+                  className="w-full text-xs rounded-lg border border-zinc-300 p-2.5 dark:bg-zinc-800 dark:border-zinc-700 dark:text-white"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-zinc-150 dark:border-zinc-800">
+                <button
+                  type="button"
+                  onClick={() => setShowForwarderModal(false)}
+                  className="px-4 py-2 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 text-xs font-bold rounded-lg transition-colors cursor-pointer"
+                >
+                  취소
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingForwarder}
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg transition-colors cursor-pointer disabled:opacity-50"
+                >
+                  {isSavingForwarder ? "저장 중..." : "포워더 정보 저장"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* Unified 6-Step PO Progress Stepper & Alerts */}
       <PoUnifiedStepper
         overallStatus={overallStatus}
@@ -1249,7 +1438,194 @@ export function PurchaseOrderDetail({
 
         {/* Tab 3: Shipments */}
         {activeTab === "shipment" && (
-          <div className="space-y-6">
+          <div className="space-y-6 text-xs">
+            {/* Goods Readiness & Forwarding Section */}
+            <div className="space-y-4">
+              <div className="flex justify-between items-center">
+                <div>
+                  <h3 className="text-sm font-bold text-zinc-800 dark:text-white">출고 준비 및 포워딩 관리 (Goods Readiness & Forwarding)</h3>
+                  <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5">
+                    공급사 출고 준비(Goods Ready) 현황 및 FOB 선적항, 인도 방식, 지정 포워더(Forwarder) 정보입니다.
+                  </p>
+                </div>
+              </div>
+
+              {goodsReadiness.length === 0 ? (
+                <div className="py-8 border-2 border-dashed border-zinc-200 dark:border-zinc-850 rounded-xl text-center text-zinc-500 dark:text-zinc-400">
+                  공급사가 등록한 출고 준비(Goods Ready) 내역이 아직 없습니다.
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {goodsReadiness.map((gr) => {
+                    const grLines = gr.lines || [];
+                    const totalLinesQty = grLines.reduce((s: number, l: any) => s + Number(l.ready_qty || 0), 0);
+                    const totalCartons = grLines.reduce((s: number, l: any) => s + Number(l.cartons || 0), 0);
+                    const totalWeight = grLines.reduce((s: number, l: any) => s + Number(l.gross_weight || 0), 0);
+                    const totalCbm = grLines.reduce((s: number, l: any) => s + Number(l.cbm || 0), 0);
+
+                    const fwd = parseSpecialInstructions(gr.special_instructions);
+                    const contactParts = (gr.contact_person || "").split(" / ");
+                    const originContactName = contactParts[0] || "-";
+                    const originContactEmail = contactParts[1] || "-";
+                    const originContactPhone = contactParts[2] || "-";
+
+                    return (
+                      <div key={gr.id} className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 space-y-4">
+                        <div className="flex justify-between items-center border-b border-zinc-150 pb-3 dark:border-zinc-850">
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-zinc-800 dark:text-zinc-250">
+                              출고 준비 내역 (Ready Date: {gr.goods_ready_date})
+                            </span>
+                            <span className="px-2 py-0.5 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded text-[10px] font-bold dark:bg-indigo-950/30 dark:text-indigo-400">
+                              {gr.handover_status}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {!isReadOnly && (
+                              <button
+                                onClick={() => openForwarderModal(gr)}
+                                className="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 font-bold rounded text-xs cursor-pointer transition-colors flex items-center gap-1 dark:bg-indigo-950/40 dark:text-indigo-300 dark:border-indigo-800"
+                              >
+                                ✏️ 인도 / 포워딩 정보 수정 (Edit Forwarder Info)
+                              </button>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Section 1 & Section 2 Display Cards */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-[11px]">
+                          {/* Origin Card */}
+                          <div className="rounded-lg border border-zinc-200 bg-zinc-50/70 p-3.5 dark:border-zinc-800 dark:bg-zinc-950/40 space-y-2">
+                            <h6 className="font-bold text-zinc-800 dark:text-zinc-200 text-xs flex items-center gap-1 border-b border-zinc-200/60 pb-1.5 dark:border-zinc-800">
+                              <span>🏢</span>
+                              <span>출고지 및 출고 담당자</span>
+                            </h6>
+                            <div className="grid grid-cols-2 gap-2 text-zinc-600 dark:text-zinc-400">
+                              <div>
+                                <span className="text-zinc-400 block text-[10px]">인수지 명칭</span>
+                                <span className="font-semibold text-zinc-800 dark:text-zinc-300">{gr.pickup_location || "-"}</span>
+                              </div>
+                              <div>
+                                <span className="text-zinc-400 block text-[10px]">출고 완료 예정일</span>
+                                <span className="font-semibold text-zinc-800 dark:text-zinc-300 font-mono">{gr.goods_ready_date}</span>
+                              </div>
+                              <div className="col-span-2">
+                                <span className="text-zinc-400 block text-[10px]">공장/창고 상세 주소</span>
+                                <span>{gr.warehouse_factory_address || "-"}</span>
+                              </div>
+                              <div className="col-span-2">
+                                <span className="text-zinc-400 block text-[10px]">현장 출고 담당자</span>
+                                <span>
+                                  {originContactName !== "-" ? (
+                                    <span className="font-semibold text-zinc-800 dark:text-zinc-300">
+                                      {originContactName} {originContactEmail !== "-" ? `(${originContactEmail})` : ""} {originContactPhone !== "-" ? `/ ${originContactPhone}` : ""}
+                                    </span>
+                                  ) : (
+                                    "-"
+                                  )}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Forwarder & Handover Card */}
+                          <div className="rounded-lg border border-indigo-150 bg-indigo-50/20 p-3.5 dark:border-indigo-950 dark:bg-indigo-950/20 space-y-2">
+                            <h6 className="font-bold text-indigo-900 dark:text-indigo-300 text-xs flex items-center gap-1 border-b border-indigo-100/60 pb-1.5 dark:border-indigo-900/40">
+                              <span>🚢</span>
+                              <span>인도 조건 및 지정 포워더</span>
+                            </h6>
+                            <div className="grid grid-cols-2 gap-2 text-zinc-600 dark:text-zinc-400">
+                              <div>
+                                <span className="text-zinc-400 block text-[10px]">FOB 항구명</span>
+                                <span className="font-semibold text-indigo-900 dark:text-indigo-300">{gr.fob_port || "-"}</span>
+                              </div>
+                              <div>
+                                <span className="text-zinc-400 block text-[10px]">인도 장소/방식</span>
+                                <span className="font-semibold text-zinc-800 dark:text-zinc-300">{gr.handover_location || "-"}</span>
+                              </div>
+                              <div>
+                                <span className="text-zinc-400 block text-[10px]">포워딩 회사명</span>
+                                <span className="font-semibold text-zinc-800 dark:text-zinc-300">{fwd.forwarderName || "-"}</span>
+                              </div>
+                              <div>
+                                <span className="text-zinc-400 block text-[10px]">포워더 담당자 / 연락처</span>
+                                <span>
+                                  {fwd.forwarderContact || fwd.forwarderEmail || fwd.forwarderPhone ? (
+                                    <span>
+                                      {fwd.forwarderContact || ""} {fwd.forwarderEmail ? `(${fwd.forwarderEmail})` : ""} {fwd.forwarderPhone ? `/ ${fwd.forwarderPhone}` : ""}
+                                    </span>
+                                  ) : (
+                                    "-"
+                                  )}
+                                </span>
+                              </div>
+                              {fwd.notes && (
+                                <div className="col-span-2 pt-1 border-t border-indigo-100/40 dark:border-indigo-900/30">
+                                  <span className="text-zinc-400 block text-[10px]">특이사항 / 메모</span>
+                                  <span className="text-zinc-700 dark:text-zinc-300">{fwd.notes}</span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Section 3: Summary metrics */}
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-zinc-50 dark:bg-zinc-950/40 p-3 rounded-lg text-[11px]">
+                          <div>
+                            <span className="text-zinc-400 block text-[10px]">총 준비 수량</span>
+                            <strong className="text-indigo-600 font-bold font-mono">{totalLinesQty.toLocaleString()} PCS</strong>
+                          </div>
+                          <div>
+                            <span className="text-zinc-400 block text-[10px]">총 박스(Carton) 수</span>
+                            <strong className="text-zinc-800 dark:text-zinc-200 font-bold font-mono">{totalCartons.toLocaleString()} CTN</strong>
+                          </div>
+                          <div>
+                            <span className="text-zinc-400 block text-[10px]">총 중량(Gross Weight)</span>
+                            <strong className="text-zinc-800 dark:text-zinc-200 font-bold font-mono">{totalWeight.toFixed(2)} kg</strong>
+                          </div>
+                          <div>
+                            <span className="text-zinc-400 block text-[10px]">총 부피(CBM)</span>
+                            <strong className="text-zinc-800 dark:text-zinc-200 font-bold font-mono">{totalCbm.toFixed(3)} CBM</strong>
+                          </div>
+                        </div>
+
+                        {/* Attached Documents on this Goods Readiness */}
+                        {(gr.packing_list_path || gr.commercial_invoice_path) && (
+                          <div className="pt-2 border-t border-zinc-150 dark:border-zinc-850">
+                            <span className="text-[10px] font-bold text-zinc-400 block mb-1.5">첨부 선적 서류</span>
+                            <div className="flex flex-wrap gap-2">
+                              {gr.packing_list_path && (
+                                <a
+                                  href={gr.packing_list_path}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-indigo-50 text-indigo-700 border border-indigo-200 text-xs font-semibold hover:bg-indigo-100 dark:bg-indigo-950/30 dark:text-indigo-400 dark:border-indigo-900"
+                                >
+                                  📄 패킹 리스트: {gr.packing_list_filename || "Packing_List.pdf"}
+                                </a>
+                              )}
+                              {gr.commercial_invoice_path && (
+                                <a
+                                  href={gr.commercial_invoice_path}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-emerald-50 text-emerald-700 border border-emerald-250 text-xs font-semibold hover:bg-emerald-100 dark:bg-emerald-950/30 dark:text-emerald-400 dark:border-emerald-900"
+                                >
+                                  📄 상업 송장: {gr.commercial_invoice_filename || "Commercial_Invoice.pdf"}
+                                </a>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            <hr className="border-zinc-200 dark:border-zinc-800" />
+
             <div className="flex justify-between items-center">
               <h3 className="text-sm font-bold text-zinc-800 dark:text-white">선적 내역 (Shipment Logs)</h3>
               {!isReadOnly && po.po_status === "SENT" && (

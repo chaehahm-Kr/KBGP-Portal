@@ -1069,7 +1069,11 @@ export async function submitPortalGoodsReady(input: {
   fobPort: string;
   warehouseFactoryAddress: string;
   contactPerson: string;
-  specialInstructions: string;
+  forwarderName?: string;
+  forwarderContact?: string;
+  forwarderEmail?: string;
+  forwarderPhone?: string;
+  specialInstructions?: string;
   packingListPath: string | null;
   packingListFilename: string | null;
   commercialInvoicePath: string | null;
@@ -1086,6 +1090,7 @@ export async function submitPortalGoodsReady(input: {
 }) {
   const { companyId, userId } = await requireCompanyMembership();
   const { createAdminClient } = await import("@/lib/supabase/admin");
+  const { serializeSpecialInstructions } = await import("@/lib/purchase-order/forwarder-helper");
   const supabase = createAdminClient(); // Bypasses RLS to write to restricted tables
 
   // 1. Verify PO ownership
@@ -1101,7 +1106,7 @@ export async function submitPortalGoodsReady(input: {
     throw new Error("발주서 정보를 확인하지 못했거나 접근 권한이 없습니다.");
   }
 
-  // 2. Compute Overage
+  // 2. Validate Lines & Compute Overage
   let overageDetected = false;
   const verifiedLines = [];
 
@@ -1165,42 +1170,16 @@ export async function submitPortalGoodsReady(input: {
     });
   }
 
+  const serializedInstructions = serializeSpecialInstructions({
+    forwarderName: input.forwarderName,
+    forwarderContact: input.forwarderContact,
+    forwarderEmail: input.forwarderEmail,
+    forwarderPhone: input.forwarderPhone,
+    notes: input.specialInstructions,
+  });
+
   const timestamp = new Date().toISOString();
   let readinessId = input.id;
-
-  // If no ID passed, check if an existing unlinked readiness record exists for this PO
-  if (!readinessId) {
-    const { data: existingList } = await supabase
-      .from("goods_readiness")
-      .select("id, handover_status")
-      .eq("purchase_order_id", input.purchaseOrderId)
-      .eq("supplier_id", companyId)
-      .neq("handover_status", "CANCELLED")
-      .order("created_at", { ascending: false });
-
-    if (existingList && existingList.length > 0) {
-      // Find the first unlinked readiness
-      for (const gr of existingList) {
-        const { data: lines } = await supabase
-          .from("goods_readiness_lines")
-          .select("id")
-          .eq("goods_readiness_id", gr.id);
-        
-        const lineIds = (lines || []).map(l => l.id);
-        const { data: linkedShip } = await supabase
-          .from("inbound_shipment_lines")
-          .select("id, inbound_shipments!inner(status)")
-          .in("goods_readiness_line_id", lineIds.length > 0 ? lineIds : ["00000000-0000-0000-0000-000000000000"])
-          .neq("inbound_shipments.status", "CANCELLED");
-
-        if (!linkedShip || linkedShip.length === 0) {
-          readinessId = gr.id;
-          break;
-        }
-      }
-    }
-  }
-
   const isUpdate = !!readinessId;
 
   if (readinessId) {
@@ -1214,13 +1193,12 @@ export async function submitPortalGoodsReady(input: {
         fob_port: input.fobPort,
         warehouse_factory_address: input.warehouseFactoryAddress,
         contact_person: input.contactPerson,
-        special_instructions: input.specialInstructions,
+        special_instructions: serializedInstructions,
         packing_list_path: input.packingListPath,
         packing_list_filename: input.packingListFilename,
         commercial_invoice_path: input.commercialInvoicePath,
         commercial_invoice_filename: input.commercialInvoiceFilename,
         handover_status: input.handoverStatus,
-        overage_review_required: overageDetected,
         updated_at: timestamp
       })
       .eq("id", readinessId)
@@ -1248,13 +1226,12 @@ export async function submitPortalGoodsReady(input: {
         fob_port: input.fobPort,
         warehouse_factory_address: input.warehouseFactoryAddress,
         contact_person: input.contactPerson,
-        special_instructions: input.specialInstructions,
+        special_instructions: serializedInstructions,
         packing_list_path: input.packingListPath,
         packing_list_filename: input.packingListFilename,
         commercial_invoice_path: input.commercialInvoicePath,
         commercial_invoice_filename: input.commercialInvoiceFilename,
         handover_status: input.handoverStatus,
-        overage_review_required: overageDetected,
         created_by: userId
       })
       .select("id")
@@ -1450,7 +1427,6 @@ export async function getPortalReadinessList() {
       purchase_order_id,
       goods_ready_date,
       handover_status,
-      overage_review_required,
       created_at,
       purchase_orders(po_number, shipping_responsibility)
     `)
@@ -1469,7 +1445,6 @@ export async function getPortalReadinessList() {
       purchaseOrderId: gr.purchase_order_id,
       goodsReadyDate: gr.goods_ready_date,
       handoverStatus: gr.handover_status,
-      overageReviewRequired: gr.overage_review_required,
       createdAt: gr.created_at,
       poNumber: poInfo?.po_number || "-",
       shippingResponsibility: poInfo?.shipping_responsibility || "LETUSTO_ARRANGED"
@@ -1497,7 +1472,6 @@ export async function getPortalReadinessById(id: string) {
       contact_person,
       special_instructions,
       handover_status,
-      overage_review_required,
       packing_list_path,
       packing_list_filename,
       commercial_invoice_path,
@@ -1555,7 +1529,6 @@ export async function getPortalReadinessById(id: string) {
     contactPerson: data.contact_person,
     specialInstructions: data.special_instructions,
     handoverStatus: data.handover_status,
-    overageReviewRequired: data.overage_review_required,
     packingListPath: data.packing_list_path,
     packingListFilename: data.packing_list_filename,
     commercialInvoicePath: data.commercial_invoice_path,

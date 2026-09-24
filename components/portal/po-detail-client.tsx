@@ -25,6 +25,7 @@ import {
   PO_DOCUMENT_TYPE_BADGES,
   } from "@/lib/purchase-order/document-types";
 import { uploadPoDocument } from "@/lib/purchase-order/document-actions";
+import { parseSpecialInstructions } from "@/lib/purchase-order/forwarder-helper";
 
 interface PoLine {
   id: string;
@@ -205,6 +206,10 @@ export default function PoDetailClient({
   const [contactEmail, setContactEmail] = useState("");
   const [contactPhone, setContactPhone] = useState("");
   const [contactPerson, setContactPerson] = useState("");
+  const [forwarderName, setForwarderName] = useState("");
+  const [forwarderContact, setForwarderContact] = useState("");
+  const [forwarderEmail, setForwarderEmail] = useState("");
+  const [forwarderPhone, setForwarderPhone] = useState("");
   const [specialInstructions, setSpecialInstructions] = useState("");
   const [packingListPath, setPackingListPath] = useState("");
   const [packingListFilename, setPackingListFilename] = useState("");
@@ -321,28 +326,35 @@ export default function PoDetailClient({
 
   // Initialize goods readiness form lines (Edit vs Create / Additional)
   const initGoodsReadinessForm = (targetGr?: any) => {
-    const gr = targetGr || unlinkedReadiness;
-    if (gr) {
+    if (targetGr) {
       // EDIT MODE
-      setEditingReadinessId(gr.id);
-      setGoodsReadyDate(gr.goods_ready_date || "");
-      setPickupLocation(gr.pickup_location || "");
-      setHandoverLocation(gr.handover_location || "");
-      setFobPort(gr.fob_port || "");
-      setWarehouseFactoryAddress(gr.warehouse_factory_address || "");
-      setContactPerson(gr.contact_person || "");
-      const parts = (gr.contact_person || "").split(" / ");
+      setEditingReadinessId(targetGr.id);
+      setGoodsReadyDate(targetGr.goods_ready_date || "");
+      setSelectedOriginId("");
+      setPickupLocation(targetGr.pickup_location || "");
+      setHandoverLocation(targetGr.handover_location || "공장 상차 / CY 전달");
+      setFobPort(targetGr.fob_port || po.port_of_loading || "Busan Port");
+      setWarehouseFactoryAddress(targetGr.warehouse_factory_address || "");
+      setContactPerson(targetGr.contact_person || "");
+      const parts = (targetGr.contact_person || "").split(" / ");
       setContactName(parts[0] || "");
       setContactEmail(parts[1] || "");
       setContactPhone(parts[2] || "");
-      setSpecialInstructions(gr.special_instructions || "");
-      setPackingListPath(gr.packing_list_path || "");
-      setPackingListFilename(gr.packing_list_filename || "");
-      setCommercialInvoicePath(gr.commercial_invoice_path || "");
-      setCommercialInvoiceFilename(gr.commercial_invoice_filename || "");
+
+      const fwd = parseSpecialInstructions(targetGr.special_instructions);
+      setForwarderName(fwd.forwarderName || "");
+      setForwarderContact(fwd.forwarderContact || "");
+      setForwarderEmail(fwd.forwarderEmail || "");
+      setForwarderPhone(fwd.forwarderPhone || "");
+      setSpecialInstructions(fwd.notes || "");
+
+      setPackingListPath(targetGr.packing_list_path || "");
+      setPackingListFilename(targetGr.packing_list_filename || "");
+      setCommercialInvoicePath(targetGr.commercial_invoice_path || "");
+      setCommercialInvoiceFilename(targetGr.commercial_invoice_filename || "");
 
       const items = po.lines.map((l) => {
-        const existingLine = (gr.lines || []).find((gl: any) => gl.purchase_order_line_id === l.id);
+        const existingLine = (targetGr.lines || []).find((gl: any) => gl.purchase_order_line_id === l.id);
         const readyQty = existingLine ? existingLine.ready_qty : (l.confirmed_qty ?? l.qty);
         const cartons = existingLine && existingLine.cartons !== undefined ? existingLine.cartons : calcPackaging(readyQty, l.product).cartons;
         const grossWeight = existingLine && existingLine.gross_weight !== undefined ? Number(existingLine.gross_weight) : calcPackaging(readyQty, l.product).gross_weight;
@@ -377,6 +389,7 @@ export default function PoDetailClient({
         setContactPhone(defaultOrigin.phone || "");
         setContactPerson([defaultOrigin.contact_name, defaultOrigin.email, defaultOrigin.phone].filter(Boolean).join(" / "));
       } else {
+        setSelectedOriginId("");
         setPickupLocation("");
         setWarehouseFactoryAddress("");
         setContactName("");
@@ -386,6 +399,10 @@ export default function PoDetailClient({
       }
       setHandoverLocation("공장 상차 / CY 전달");
       setFobPort(po.port_of_loading || "Busan Port");
+      setForwarderName("");
+      setForwarderContact("");
+      setForwarderEmail("");
+      setForwarderPhone("");
       setSpecialInstructions("");
       setPackingListPath("");
       setPackingListFilename("");
@@ -620,6 +637,10 @@ export default function PoDetailClient({
         fobPort,
         warehouseFactoryAddress,
         contactPerson: fullContact,
+        forwarderName,
+        forwarderContact,
+        forwarderEmail,
+        forwarderPhone,
         specialInstructions,
         packingListPath: packingListPath || null,
         packingListFilename: packingListFilename || null,
@@ -1270,24 +1291,17 @@ export default function PoDetailClient({
               </div>
               {po.po_status === "SENT" && po.supplier_confirmation_status === "CONFIRMED" && !showGoodsReadyForm && (
                 <div>
-                  {unlinkedReadiness ? (
-                    <button
-                      onClick={() => initGoodsReadinessForm(unlinkedReadiness)}
-                      className="px-3.5 py-2 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-lg transition-colors cursor-pointer flex items-center gap-1.5 shadow-sm"
-                    >
-                      ✏️ 출고 준비 정보 수정 (Edit Goods Readiness)
-                    </button>
-                  ) : totalReadyCommitted === 0 ? (
+                  {totalReadyCommitted === 0 ? (
                     <button
                       onClick={() => initGoodsReadinessForm()}
-                      className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg transition-colors cursor-pointer shadow-sm"
+                      className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg transition-colors cursor-pointer shadow-sm flex items-center gap-1.5"
                     >
                       + 출고 준비 등록 (Create Goods Readiness)
                     </button>
                   ) : remainingTargetQty > 0 ? (
                     <button
                       onClick={() => initGoodsReadinessForm()}
-                      className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg transition-colors cursor-pointer shadow-sm"
+                      className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg transition-colors cursor-pointer shadow-sm flex items-center gap-1.5"
                     >
                       + 추가 출고 준비 등록 (Create Additional Goods Ready)
                     </button>
@@ -1302,8 +1316,8 @@ export default function PoDetailClient({
 
             {/* Goods Readiness form */}
             {showGoodsReadyForm && (
-              <form onSubmit={handleSubmitGoodsReady} className="rounded-xl border border-zinc-300 bg-zinc-50 p-5 dark:border-zinc-800 dark:bg-zinc-900/50 space-y-4">
-                <div className="flex justify-between items-center border-b border-zinc-200 pb-2 dark:border-zinc-800">
+              <form onSubmit={handleSubmitGoodsReady} className="rounded-xl border border-zinc-300 bg-zinc-50 p-5 dark:border-zinc-800 dark:bg-zinc-900/50 space-y-5">
+                <div className="flex justify-between items-center border-b border-zinc-200 pb-3 dark:border-zinc-800">
                   <div className="flex items-center gap-2">
                     <h4 className="font-bold text-zinc-900 dark:text-white text-xs">
                       {editingReadinessId ? "✏️ 출고 준비 정보 수정 (Edit Goods Readiness)" : "📥 출고 준비 정보 등록 (Create Goods Readiness)"}
@@ -1317,16 +1331,27 @@ export default function PoDetailClient({
                   <button
                     type="button"
                     onClick={() => setShowGoodsReadyForm(false)}
-                    className="text-zinc-400 hover:text-zinc-650 cursor-pointer"
+                    className="text-zinc-400 hover:text-zinc-650 cursor-pointer text-xs font-bold"
                   >
                     닫기
                   </button>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {/* Section 1: 출고지 정보 (Shipping Origin) */}
+                <div className="rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-950 space-y-3">
+                  <div className="flex items-center justify-between border-b border-zinc-100 pb-2 dark:border-zinc-850">
+                    <h5 className="font-bold text-zinc-800 dark:text-zinc-200 text-xs flex items-center gap-1.5">
+                      <span>🏢</span>
+                      <span>1. 출고지 및 현장 담당자 정보 (Shipping Origin)</span>
+                    </h5>
+                    <span className="text-[10px] text-zinc-400 font-medium">
+                      * 공급사 출고지/공장 위치 및 현장 출고 담당자 연락처
+                    </span>
+                  </div>
+
                   {shippingOrigins && shippingOrigins.length > 0 && (
-                    <div className="md:col-span-3">
-                      <label className="block font-bold text-zinc-500 mb-1">등록된 출고지 선택 (Shipping Origin Select)</label>
+                    <div>
+                      <label className="block font-bold text-zinc-500 mb-1 text-[11px]">등록된 출고지 선택 (Shipping Origin Select)</label>
                       <select
                         value={selectedOriginId}
                         onChange={(e) => {
@@ -1341,7 +1366,7 @@ export default function PoDetailClient({
                             setContactPhone(matched.phone || "");
                           }
                         }}
-                        className="w-full rounded-lg border-zinc-300 text-xs py-1.5 focus:ring-indigo-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+                        className="w-full rounded-lg border-zinc-300 text-xs py-1.5 focus:ring-indigo-500 dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
                       >
                         <option value="">-- 직접 입력 (Direct Input) --</option>
                         {shippingOrigins.map((o) => (
@@ -1353,98 +1378,173 @@ export default function PoDetailClient({
                     </div>
                   )}
 
-                  <div>
-                    <label className="block font-bold text-zinc-500 mb-1">출고 완료 예정일 (Ready Date) *</label>
-                    <input
-                      type="date"
-                      required
-                      value={goodsReadyDate}
-                      onChange={(e) => setGoodsReadyDate(e.target.value)}
-                      onClick={(e) => (e.target as any).showPicker?.()}
-                      className="w-full rounded-lg border-zinc-300 text-xs py-1.5 focus:ring-indigo-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white cursor-pointer"
-                    />
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <div>
+                      <label className="block font-bold text-zinc-500 mb-1 text-[11px]">출고 완료 예정일 (Ready Date) *</label>
+                      <input
+                        type="date"
+                        required
+                        value={goodsReadyDate}
+                        onChange={(e) => setGoodsReadyDate(e.target.value)}
+                        onClick={(e) => (e.target as any).showPicker?.()}
+                        className="w-full rounded-lg border-zinc-300 text-xs py-1.5 focus:ring-indigo-500 dark:border-zinc-800 dark:bg-zinc-900 dark:text-white cursor-pointer"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-bold text-zinc-500 mb-1 text-[11px]">인수지/출고지 명칭 (Pickup Location)</label>
+                      <input
+                        type="text"
+                        placeholder="예: 인천 제1물류센터 / 안성공장"
+                        value={pickupLocation}
+                        onChange={(e) => setPickupLocation(e.target.value)}
+                        className="w-full rounded-lg border-zinc-300 text-xs py-1.5 focus:ring-indigo-500 dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-bold text-zinc-500 mb-1 text-[11px]">공장/창고 상세 주소</label>
+                      <input
+                        type="text"
+                        placeholder="상세 도로명 주소 및 건물명"
+                        value={warehouseFactoryAddress}
+                        onChange={(e) => setWarehouseFactoryAddress(e.target.value)}
+                        className="w-full rounded-lg border-zinc-300 text-xs py-1.5 focus:ring-indigo-500 dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block font-bold text-zinc-500 mb-1 text-[11px]">출고 담당자 성명 (Contact Name)</label>
+                      <input
+                        type="text"
+                        placeholder="홍길동"
+                        value={contactName}
+                        onChange={(e) => setContactName(e.target.value)}
+                        className="w-full rounded-lg border-zinc-300 text-xs py-1.5 focus:ring-indigo-500 dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-bold text-zinc-500 mb-1 text-[11px]">출고 담당자 이메일 (Contact Email)</label>
+                      <input
+                        type="email"
+                        placeholder="contact@company.com"
+                        value={contactEmail}
+                        onChange={(e) => setContactEmail(e.target.value)}
+                        className="w-full rounded-lg border-zinc-300 text-xs py-1.5 focus:ring-indigo-500 dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-bold text-zinc-500 mb-1 text-[11px]">출고 담당자 전화번호 (Contact Phone)</label>
+                      <input
+                        type="text"
+                        placeholder="010-0000-0000"
+                        value={contactPhone}
+                        onChange={(e) => setContactPhone(e.target.value)}
+                        className="w-full rounded-lg border-zinc-300 text-xs py-1.5 focus:ring-indigo-500 dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
+                      />
+                    </div>
                   </div>
-                  <div>
-                    <label className="block font-bold text-zinc-500 mb-1">인수지/출고지 명칭 (Pickup Location)</label>
-                    <input
-                      type="text"
-                      placeholder="예: 인천 1창고 / 부산 공장"
-                      value={pickupLocation}
-                      onChange={(e) => setPickupLocation(e.target.value)}
-                      className="w-full rounded-lg border-zinc-300 text-xs py-1.5 focus:ring-indigo-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
-                    />
+                </div>
+
+                {/* Section 2: 인도 / 포워딩 정보 (Handover & Forwarder Info) */}
+                <div className="rounded-lg border border-indigo-150 bg-indigo-50/20 p-4 dark:border-indigo-950 dark:bg-indigo-950/20 space-y-3">
+                  <div className="flex items-center justify-between border-b border-indigo-100/60 pb-2 dark:border-indigo-900/40">
+                    <h5 className="font-bold text-indigo-900 dark:text-indigo-300 text-xs flex items-center gap-1.5">
+                      <span>🚢</span>
+                      <span>2. 인도 조건 및 포워더 정보 (Handover & Forwarder Info)</span>
+                    </h5>
+                    <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-medium">
+                      * FOB 항구, 인도 방식 및 지정 포워딩사 정보 (관리자/공급사 공통 조회 및 수정)
+                    </span>
                   </div>
-                  <div>
-                    <label className="block font-bold text-zinc-500 mb-1">인도 장소 (Handover Location)</label>
-                    <input
-                      type="text"
-                      placeholder="예: 공장 상차 / CY 전달"
-                      value={handoverLocation}
-                      onChange={(e) => setHandoverLocation(e.target.value)}
-                      className="w-full rounded-lg border-zinc-300 text-xs py-1.5 focus:ring-indigo-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
-                    />
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block font-bold text-zinc-500 mb-1 text-[11px]">FOB 항구명 또는 선적 기준 위치</label>
+                      <input
+                        type="text"
+                        placeholder="예: Busan Port, Incheon Port"
+                        value={fobPort}
+                        onChange={(e) => setFobPort(e.target.value)}
+                        className="w-full rounded-lg border-zinc-300 text-xs py-1.5 focus:ring-indigo-500 dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-bold text-zinc-500 mb-1 text-[11px]">인도 장소 / 방식 (Handover Location)</label>
+                      <input
+                        type="text"
+                        placeholder="예: 공장 상차 / CY 전달 / 지정 물류센터 입고"
+                        value={handoverLocation}
+                        onChange={(e) => setHandoverLocation(e.target.value)}
+                        className="w-full rounded-lg border-zinc-300 text-xs py-1.5 focus:ring-indigo-500 dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
+                      />
+                    </div>
                   </div>
-                  <div>
-                    <label className="block font-bold text-zinc-500 mb-1">FOB 항구명</label>
-                    <input
-                      type="text"
-                      placeholder="예: Busan Port, Incheon Port"
-                      value={fobPort}
-                      onChange={(e) => setFobPort(e.target.value)}
-                      className="w-full rounded-lg border-zinc-300 text-xs py-1.5 focus:ring-indigo-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
-                    />
-                  </div>
-                  <div className="md:col-span-2">
-                    <label className="block font-bold text-zinc-500 mb-1">공장/창고 상세 주소</label>
-                    <input
-                      type="text"
-                      placeholder="상세 도로명 주소 및 건물명"
-                      value={warehouseFactoryAddress}
-                      onChange={(e) => setWarehouseFactoryAddress(e.target.value)}
-                      className="w-full rounded-lg border-zinc-300 text-xs py-1.5 focus:ring-indigo-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
-                    />
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <div>
+                      <label className="block font-bold text-zinc-500 mb-1 text-[11px]">포워딩 회사명 (Forwarder Company)</label>
+                      <input
+                        type="text"
+                        placeholder="예: 현대글로비스 / CJ대한통운 / Letusto Logistics"
+                        value={forwarderName}
+                        onChange={(e) => setForwarderName(e.target.value)}
+                        className="w-full rounded-lg border-zinc-300 text-xs py-1.5 focus:ring-indigo-500 dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-bold text-zinc-500 mb-1 text-[11px]">포워딩 담당자 성명 (Forwarder Contact)</label>
+                      <input
+                        type="text"
+                        placeholder="예: 김물류 팀장"
+                        value={forwarderContact}
+                        onChange={(e) => setForwarderContact(e.target.value)}
+                        className="w-full rounded-lg border-zinc-300 text-xs py-1.5 focus:ring-indigo-500 dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-bold text-zinc-500 mb-1 text-[11px]">포워딩 담당자 연락처 / 이메일</label>
+                      <div className="grid grid-cols-2 gap-1.5">
+                        <input
+                          type="email"
+                          placeholder="forwarder@email.com"
+                          value={forwarderEmail}
+                          onChange={(e) => setForwarderEmail(e.target.value)}
+                          className="w-full rounded-lg border-zinc-300 text-xs py-1.5 focus:ring-indigo-500 dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
+                        />
+                        <input
+                          type="text"
+                          placeholder="010-0000-0000"
+                          value={forwarderPhone}
+                          onChange={(e) => setForwarderPhone(e.target.value)}
+                          className="w-full rounded-lg border-zinc-300 text-xs py-1.5 focus:ring-indigo-500 dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
+                        />
+                      </div>
+                    </div>
                   </div>
 
                   <div>
-                    <label className="block font-bold text-zinc-500 mb-1">담당자 성명 (Contact Name)</label>
-                    <input
-                      type="text"
-                      placeholder="홍길동"
-                      value={contactName}
-                      onChange={(e) => setContactName(e.target.value)}
-                      className="w-full rounded-lg border-zinc-300 text-xs py-1.5 focus:ring-indigo-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
-                    />
-                  </div>
-                  <div>
-                    <label className="block font-bold text-zinc-500 mb-1">담당자 이메일 (Contact Email)</label>
-                    <input
-                      type="email"
-                      placeholder="contact@company.com"
-                      value={contactEmail}
-                      onChange={(e) => setContactEmail(e.target.value)}
-                      className="w-full rounded-lg border-zinc-300 text-xs py-1.5 focus:ring-indigo-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
-                    />
-                  </div>
-                  <div>
-                    <label className="block font-bold text-zinc-500 mb-1">담당자 전화번호 (Contact Phone)</label>
-                    <input
-                      type="text"
-                      placeholder="010-0000-0000"
-                      value={contactPhone}
-                      onChange={(e) => setContactPhone(e.target.value)}
-                      className="w-full rounded-lg border-zinc-300 text-xs py-1.5 focus:ring-indigo-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+                    <label className="block font-bold text-zinc-500 mb-1 text-[11px]">인도/포워딩 특이사항 및 메모 (Special Instructions / Notes)</label>
+                    <textarea
+                      rows={2}
+                      placeholder="통관 관련 특이사항, 픽업 시 주의사항, 팔레트 작업 요청 등"
+                      value={specialInstructions}
+                      onChange={(e) => setSpecialInstructions(e.target.value)}
+                      className="w-full rounded-lg border-zinc-300 text-xs p-2 focus:ring-indigo-500 dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
                     />
                   </div>
                 </div>
 
-                {/* Line quantities input */}
-                <div className="space-y-2 pt-2">
-                  <div className="flex justify-between items-center">
-                    <h5 className="font-bold text-zinc-800 dark:text-zinc-300 text-xs">준비 수량 및 패키징 자동 계산 정보</h5>
-                    <span className="text-[11px] text-indigo-600 dark:text-indigo-400 font-medium">
+                {/* Section 3: 준비 수량 및 패키징 자동 계산 정보 */}
+                <div className="rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-950 space-y-3">
+                  <div className="flex items-center justify-between border-b border-zinc-100 pb-2 dark:border-zinc-850">
+                    <h5 className="font-bold text-zinc-800 dark:text-zinc-200 text-xs flex items-center gap-1.5">
+                      <span>📦</span>
+                      <span>3. 준비 수량 및 패키징 자동 계산 정보 (Quantities & Packaging)</span>
+                    </h5>
+                    <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-medium">
                       * 출고 수량 변경 시 박스 수/중량/부피가 상품 마스터 기준으로 자동 산출되며 직접 수정(Override) 가능합니다.
                     </span>
                   </div>
+
                   <div className="overflow-x-auto">
                     <table className="w-full text-left text-[11px] border-collapse bg-white dark:bg-zinc-950 rounded-lg">
                       <thead>
@@ -1540,15 +1640,15 @@ export default function PoDetailClient({
                   </button>
                   <button
                     type="submit"
-                    className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg cursor-pointer"
+                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg cursor-pointer shadow-sm"
                   >
-                    준비 완료 제출
+                    {editingReadinessId ? "출고 준비 정보 수정 저장" : "출고 준비 등록 완료"}
                   </button>
                 </div>
               </form>
             )}
 
-            {/* List goods readiness with supplier arranged direct shipping forms */}
+            {/* List goods readiness with clear Section separation */}
             {goodsReadiness.map((gr) => {
               const isLocked = isLinkedToActiveShipment(gr);
               const grLines = gr.lines || [];
@@ -1556,6 +1656,12 @@ export default function PoDetailClient({
               const totalCartons = grLines.reduce((s: number, l: any) => s + Number(l.cartons || 0), 0);
               const totalWeight = grLines.reduce((s: number, l: any) => s + Number(l.gross_weight || 0), 0);
               const totalCbm = grLines.reduce((s: number, l: any) => s + Number(l.cbm || 0), 0);
+
+              const fwd = parseSpecialInstructions(gr.special_instructions);
+              const contactParts = (gr.contact_person || "").split(" / ");
+              const originContactName = contactParts[0] || "-";
+              const originContactEmail = contactParts[1] || "-";
+              const originContactPhone = contactParts[2] || "-";
 
               return (
               <div key={gr.id} className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 space-y-4">
@@ -1576,7 +1682,7 @@ export default function PoDetailClient({
                     {!isLocked && !showGoodsReadyForm && (
                       <button
                         onClick={() => initGoodsReadinessForm(gr)}
-                        className="px-2.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-300 font-bold rounded text-xs cursor-pointer transition-colors"
+                        className="px-2.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-300 font-bold rounded text-xs cursor-pointer transition-colors flex items-center gap-1"
                       >
                         ✏️ 수정 (Edit)
                       </button>
@@ -1595,7 +1701,84 @@ export default function PoDetailClient({
                   </div>
                 </div>
 
-                {/* Summary metrics */}
+                {/* Section 1 & Section 2 Display Cards */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-[11px]">
+                  {/* Origin Card */}
+                  <div className="rounded-lg border border-zinc-200 bg-zinc-50/70 p-3.5 dark:border-zinc-800 dark:bg-zinc-950/40 space-y-2">
+                    <h6 className="font-bold text-zinc-800 dark:text-zinc-200 text-xs flex items-center gap-1 border-b border-zinc-200/60 pb-1.5 dark:border-zinc-800">
+                      <span>🏢</span>
+                      <span>출고지 및 출고 담당자</span>
+                    </h6>
+                    <div className="grid grid-cols-2 gap-2 text-zinc-600 dark:text-zinc-400">
+                      <div>
+                        <span className="text-zinc-400 block text-[10px]">인수지 명칭</span>
+                        <span className="font-semibold text-zinc-800 dark:text-zinc-300">{gr.pickup_location || "-"}</span>
+                      </div>
+                      <div>
+                        <span className="text-zinc-400 block text-[10px]">출고 완료 예정일</span>
+                        <span className="font-semibold text-zinc-800 dark:text-zinc-300 font-mono">{gr.goods_ready_date}</span>
+                      </div>
+                      <div className="col-span-2">
+                        <span className="text-zinc-400 block text-[10px]">공장/창고 상세 주소</span>
+                        <span>{gr.warehouse_factory_address || "-"}</span>
+                      </div>
+                      <div className="col-span-2">
+                        <span className="text-zinc-400 block text-[10px]">현장 출고 담당자</span>
+                        <span>
+                          {originContactName !== "-" ? (
+                            <span className="font-semibold text-zinc-800 dark:text-zinc-300">
+                              {originContactName} {originContactEmail !== "-" ? `(${originContactEmail})` : ""} {originContactPhone !== "-" ? `/ ${originContactPhone}` : ""}
+                            </span>
+                          ) : (
+                            "-"
+                          )}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Forwarder & Handover Card */}
+                  <div className="rounded-lg border border-indigo-150 bg-indigo-50/20 p-3.5 dark:border-indigo-950 dark:bg-indigo-950/20 space-y-2">
+                    <h6 className="font-bold text-indigo-900 dark:text-indigo-300 text-xs flex items-center gap-1 border-b border-indigo-100/60 pb-1.5 dark:border-indigo-900/40">
+                      <span>🚢</span>
+                      <span>인도 조건 및 지정 포워더</span>
+                    </h6>
+                    <div className="grid grid-cols-2 gap-2 text-zinc-600 dark:text-zinc-400">
+                      <div>
+                        <span className="text-zinc-400 block text-[10px]">FOB 항구명</span>
+                        <span className="font-semibold text-indigo-900 dark:text-indigo-300">{gr.fob_port || "-"}</span>
+                      </div>
+                      <div>
+                        <span className="text-zinc-400 block text-[10px]">인도 장소/방식</span>
+                        <span className="font-semibold text-zinc-800 dark:text-zinc-300">{gr.handover_location || "-"}</span>
+                      </div>
+                      <div>
+                        <span className="text-zinc-400 block text-[10px]">포워딩 회사명</span>
+                        <span className="font-semibold text-zinc-800 dark:text-zinc-300">{fwd.forwarderName || "-"}</span>
+                      </div>
+                      <div>
+                        <span className="text-zinc-400 block text-[10px]">포워더 담당자 / 연락처</span>
+                        <span>
+                          {fwd.forwarderContact || fwd.forwarderEmail || fwd.forwarderPhone ? (
+                            <span>
+                              {fwd.forwarderContact || ""} {fwd.forwarderEmail ? `(${fwd.forwarderEmail})` : ""} {fwd.forwarderPhone ? `/ ${fwd.forwarderPhone}` : ""}
+                            </span>
+                          ) : (
+                            "-"
+                          )}
+                        </span>
+                      </div>
+                      {fwd.notes && (
+                        <div className="col-span-2 pt-1 border-t border-indigo-100/40 dark:border-indigo-900/30">
+                          <span className="text-zinc-400 block text-[10px]">특이사항 / 메모</span>
+                          <span className="text-zinc-700 dark:text-zinc-300">{fwd.notes}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Section 3: Summary metrics */}
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-zinc-50 dark:bg-zinc-950/40 p-3 rounded-lg text-[11px]">
                   <div>
                     <span className="text-zinc-400 block text-[10px]">총 준비 수량</span>
@@ -1612,18 +1795,6 @@ export default function PoDetailClient({
                   <div>
                     <span className="text-zinc-400 block text-[10px]">총 부피(CBM)</span>
                     <strong className="text-zinc-800 dark:text-zinc-200 font-bold font-mono">{totalCbm.toFixed(3)} CBM</strong>
-                  </div>
-                </div>
-
-                {/* Pickup & Contact info */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-[11px] text-zinc-600 dark:text-zinc-400">
-                  <div>
-                    <span className="text-zinc-400 block text-[10px]">인수지 / 상세 주소</span>
-                    <span>{gr.pickup_location || '-'} {gr.warehouse_factory_address ? `(${gr.warehouse_factory_address})` : ''}</span>
-                  </div>
-                  <div>
-                    <span className="text-zinc-400 block text-[10px]">담당자 연락처</span>
-                    <span>{gr.contact_person || '-'}</span>
                   </div>
                 </div>
 

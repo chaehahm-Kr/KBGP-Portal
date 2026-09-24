@@ -1728,3 +1728,89 @@ export async function reviewSupplierPoChangeRequest(
 
   return { success: true };
 }
+
+export interface UpdateAdminGoodsReadinessForwarderInput {
+  readinessId: string;
+  poId: string;
+  fobPort?: string;
+  handoverLocation?: string;
+  forwarderName?: string;
+  forwarderContact?: string;
+  forwarderEmail?: string;
+  forwarderPhone?: string;
+  notes?: string;
+}
+
+/**
+ * Admin action to update Goods Readiness forwarder and handover details.
+ */
+export async function updateAdminGoodsReadinessForwarderInfo(input: UpdateAdminGoodsReadinessForwarderInput) {
+  const session = await verifyAdminSession();
+  const supabase = createAdminClient();
+  await verifyWritePermission(supabase, session.userId);
+
+  const { serializeSpecialInstructions } = await import("@/lib/purchase-order/forwarder-helper");
+
+  const serializedInstructions = serializeSpecialInstructions({
+    forwarderName: input.forwarderName,
+    forwarderContact: input.forwarderContact,
+    forwarderEmail: input.forwarderEmail,
+    forwarderPhone: input.forwarderPhone,
+    notes: input.notes,
+  });
+
+  const timestamp = new Date().toISOString();
+
+  const { error: updateErr } = await supabase
+    .from("goods_readiness")
+    .update({
+      fob_port: input.fobPort || null,
+      handover_location: input.handoverLocation || null,
+      special_instructions: serializedInstructions,
+      updated_at: timestamp,
+    })
+    .eq("id", input.readinessId);
+
+  if (updateErr) {
+    throw new Error(`인도 및 포워더 정보 수정 실패: ${updateErr.message}`);
+  }
+
+  // Record structured activity log on PO
+  const { data: currentPo } = await supabase
+    .from("purchase_orders")
+    .select("activity_logs")
+    .eq("id", input.poId)
+    .single();
+
+  const activityLogs = (currentPo?.activity_logs as any[]) || [];
+  const forwarderSummary = [
+    input.forwarderName ? `포워더: ${input.forwarderName}` : null,
+    input.fobPort ? `FOB: ${input.fobPort}` : null,
+    input.handoverLocation ? `인도장소: ${input.handoverLocation}` : null,
+  ].filter(Boolean).join(", ");
+
+  const newLogs = [
+    ...activityLogs,
+    {
+      event: "FORWARDER_INFO_UPDATED",
+      actor: "관리자",
+      actorId: session.userId,
+      timestamp,
+      description: `[인도/포워딩 정보 수정] 관리자가 인도 및 포워더 정보를 업데이트하였습니다. (${forwarderSummary || "상세 수정"})`,
+    },
+  ];
+
+  await supabase
+    .from("purchase_orders")
+    .update({
+      activity_logs: newLogs,
+      updated_at: timestamp,
+    })
+    .eq("id", input.poId);
+
+  revalidatePath("/admin/purchasing");
+  revalidatePath(`/admin/purchasing/${input.poId}`);
+  revalidatePath(`/portal/orders/purchase-orders/${input.poId}`);
+
+  return { success: true };
+}
