@@ -47,6 +47,13 @@ export const RETAILER_NAV_ITEMS: NavItem[] = [
     isBottomNav: false,
   },
   {
+    name: "Price Tags",
+    href: "/tags",
+    icon: "tag",
+    roles: ["owner", "buyer", "store_manager", "employee"],
+    isBottomNav: false,
+  },
+  {
     name: "Stores",
     href: "/stores",
     icon: "store",
