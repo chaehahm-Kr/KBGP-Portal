@@ -104,9 +104,14 @@ export async function updateSession(request: NextRequest) {
       url.pathname = "/retailer/login";
       return createRedirectWithCookies(url);
     }
-    if (pathname === "/") {
+    if (pathname === "/login") {
       const url = request.nextUrl.clone();
       url.pathname = "/retailer/login";
+      return createRedirectWithCookies(url);
+    }
+    if (pathname === "/") {
+      const url = request.nextUrl.clone();
+      url.pathname = "/retailer";
       return createRedirectWithCookies(url);
     }
   }

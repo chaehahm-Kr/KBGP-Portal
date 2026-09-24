@@ -1548,6 +1548,68 @@ export async function transitionPoStatus(poId: string, targetStatus: string) {
 }
 
 /**
+ * Complete Purchase Order (Step 6 Completed).
+ * Supports normal completion or completion with quantity variance.
+ */
+export async function completePurchaseOrder(
+  poId: string,
+  note?: string,
+  withVariance: boolean = false
+) {
+  const { userId } = await verifyAdminSession();
+  const supabase = createAdminClient();
+  await verifyWritePermission(supabase, userId);
+
+  const { data: staff } = await supabase
+    .from("profiles")
+    .select("display_name")
+    .eq("id", userId)
+    .maybeSingle();
+  const actorName = staff?.display_name || "어드민";
+
+  const { data: po } = await supabase
+    .from("purchase_orders")
+    .select("*")
+    .eq("id", poId)
+    .single();
+
+  if (!po) throw new Error("Purchase order not found.");
+  if (po.po_status !== "SENT") {
+    throw new Error("발송 완료(SENT) 상태의 발주서만 종결할 수 있습니다.");
+  }
+
+  const easternNow = formatEasternDateTime(new Date().toISOString());
+  const currentLogs = Array.isArray(po.activity_logs) ? po.activity_logs : [];
+
+  const logDesc = withVariance
+    ? `[발주 종결 (차이 포함)] ${note && note.trim() ? note.trim() : "수량 과부족 차이를 확인하고 발주를 종결(Completed) 처리하였습니다."}`
+    : `[발주 종결] ${note && note.trim() ? note.trim() : "입고 및 검수가 완료되어 발주를 정상 종결(Completed) 처리하였습니다."}`;
+
+  const newLogs = [
+    {
+      event: "Completed",
+      actor: actorName,
+      description: logDesc,
+      timestamp: easternNow,
+    },
+    ...currentLogs,
+  ];
+
+  await safeUpdatePurchaseOrder(supabase, poId, {
+    fulfillment_status: "COMPLETED",
+    activity_logs: newLogs,
+    updated_at: new Date().toISOString(),
+  });
+
+  revalidatePath("/admin/purchasing");
+  revalidatePath(`/admin/purchasing/${poId}`);
+  revalidatePath(`/portal/orders/purchase-orders/${poId}`);
+  revalidatePath("/portal/orders/purchase-orders");
+  revalidatePath("/admin/purchasing/orders");
+  return { success: true };
+}
+
+/**
  * Admin requests PO cancellation after Supplier has already Confirmed.
  */
 export async function requestPoCancellation(

@@ -35,7 +35,11 @@ async function login(
     !email ||
     !password
   ) {
-    return { error: "이메일과 비밀번호를 입력해주세요." };
+    return {
+      error: area === "retailer" 
+        ? "Please enter both email and password." 
+        : "이메일과 비밀번호를 입력해주세요."
+    };
   }
 
   const normalizedEmail = email.trim().toLowerCase();
@@ -43,7 +47,9 @@ async function login(
   const lockout = await checkLoginLockout(normalizedEmail);
   if (lockout.locked) {
     return {
-      error: `로그인 시도가 너무 많습니다. ${lockout.retryAfterMinutes}분 후 다시 시도해주세요.`,
+      error: area === "retailer"
+        ? `Too many failed login attempts. Please try again after ${lockout.retryAfterMinutes} minutes.`
+        : `로그인 시도가 너무 많습니다. ${lockout.retryAfterMinutes}분 후 다시 시도해주세요.`,
     };
   }
 
@@ -57,8 +63,9 @@ async function login(
   if (error) {
     if (error.code === "email_not_confirmed" || error.message?.includes("Email not confirmed")) {
       return {
-        error:
-          "이메일 인증이 아직 완료되지 않았습니다. 가입 시 받으신 이메일의 링크를 먼저 확인해주세요.",
+        error: area === "retailer"
+          ? "Your email has not been confirmed yet. Please check your invitation email."
+          : "이메일 인증이 아직 완료되지 않았습니다. 가입 시 받으신 이메일의 링크를 먼저 확인해주세요.",
       };
     }
     
@@ -66,18 +73,28 @@ async function login(
     if ((error.status && error.status >= 500) || error.message?.includes("fetch failed")) {
       console.error("[login] System auth error:", error);
       return {
-        error: "로그인 처리 중 문제가 발생했습니다. 잠시 후 다시 시도해주세요.",
+        error: area === "retailer"
+          ? "A temporary system error occurred. Please try again in a few moments."
+          : "로그인 처리 중 문제가 발생했습니다. 잠시 후 다시 시도해주세요.",
       };
     }
 
     // Record failure only for actual invalid credentials
     await recordLoginAttempt(normalizedEmail, false);
-    return { error: "이메일 또는 비밀번호가 올바르지 않습니다." };
+    return {
+      error: area === "retailer"
+        ? "Invalid email or password."
+        : "이메일 또는 비밀번호가 올바르지 않습니다.",
+    };
   }
 
   if (!data.user) {
     await recordLoginAttempt(normalizedEmail, false);
-    return { error: "이메일 또는 비밀번호가 올바르지 않습니다." };
+    return {
+      error: area === "retailer"
+        ? "Invalid email or password."
+        : "이메일 또는 비밀번호가 올바르지 않습니다.",
+    };
   }
 
   // Clear failure counter immediately upon successful credential authentication
@@ -98,7 +115,7 @@ async function login(
     if (area === "portal") {
       errorMsg = "이 계정은 파트너 포털 계정이 아닙니다.";
     } else if (area === "retailer") {
-      errorMsg = "이 계정은 리테일러 포털 계정이 아닙니다.";
+      errorMsg = "This account is not authorized as a Retailer Portal account.";
     }
     return {
       error: errorMsg,
@@ -160,13 +177,13 @@ async function login(
     if (!companyUser) {
       await supabase.auth.signOut();
       return {
-        error: "소속 회사 정보가 조회되지 않는 계정입니다. 관리자에게 문의해주세요.",
+        error: "Retailer company account not found. Please contact support.",
       };
     }
     if (companyUser.status === "suspended") {
       await supabase.auth.signOut();
       return {
-        error: "이용이 정지된 계정입니다. 회사 관리자에게 문의해주세요.",
+        error: "This retailer account has been suspended. Please contact support.",
       };
     }
   }

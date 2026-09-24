@@ -43,28 +43,29 @@ export function getOverallStatus(
       });
     });
 
-    // Step 6: Completed (Finalized receivings or completed fulfillment status)
+    // Step 6: Completed (Explicit fulfillment_status COMPLETED, or all shipments RECEIVED and all receivings finalized with no remaining to receive)
+    const allShipmentsReceived = activeShipments.length > 0 && activeShipments.every((s) => s.status === "RECEIVED");
     if (
-      po.fulfillment_status === "RECEIVED" ||
       po.fulfillment_status === "COMPLETED" ||
-      (finalizedReceivings.length > 0 && activeReceivings.length === 0 && totalAcceptedQty > 0)
+      (po.fulfillment_status === "RECEIVED" && activeReceivings.length === 0 && allShipmentsReceived && totalShippedQty > 0 && totalReceivedQty >= totalShippedQty)
     ) {
       return "Completed";
     }
 
-    // Step 5: Receiving / Arrived (Active inspection or warehouse arrived)
-    if (activeReceivings.length > 0 || totalReceivedQty > 0 || po.fulfillment_status === "PARTIALLY_RECEIVED") {
+    // Step 5: Receiving / Arrived (Active draft inspection, warehouse arrived, partial receiving, or receiving in progress)
+    if (
+      activeReceivings.length > 0 ||
+      totalReceivedQty > 0 ||
+      po.fulfillment_status === "PARTIALLY_RECEIVED" ||
+      po.fulfillment_status === "RECEIVED" ||
+      activeShipments.some((s) => s.status === "ARRIVED" || s.status === "PARTIALLY_RECEIVED")
+    ) {
       return "Receiving";
     }
 
-    if (activeShipments.some((s) => s.status === "ARRIVED" || s.status === "PARTIALLY_RECEIVED")) {
-      return "Arrived";
-    }
-
-    // Step 4: Shipped (Shipped Qty > 0 or active shipments or fulfillment_status SHIPPED/PARTIALLY_SHIPPED/IN_TRANSIT)
+    // Step 4: Shipped (Shipped Qty > 0 or active shipments or fulfillment_status SHIPPED/IN_TRANSIT)
     if (
       po.fulfillment_status === "SHIPPED" ||
-      po.fulfillment_status === "PARTIALLY_SHIPPED" ||
       po.fulfillment_status === "IN_TRANSIT" ||
       activeShipments.length > 0 ||
       totalShippedQty > 0
@@ -193,11 +194,11 @@ export function getNextAction(overallStatus: string, isReadOnly: boolean = false
     case "Ready to Ship":
       return { label: "선적 등록 (Create Shipment)", action: "create_shipment" };
     case "Shipped":
-      return { label: "창고 도착 처리 대기 중", action: "none", disabled: true };
+      return { label: "입고 검수 등록 (Start Receiving)", action: "create_receiving" };
     case "Arrived":
-      return { label: "실물 입고 검수 등록 (Create Receiving)", action: "create_receiving" };
+      return { label: "입고 검수 등록 (Start Receiving)", action: "create_receiving" };
     case "Receiving":
-      return { label: "입고 확정 (Finalize Receiving)", action: "finalize" };
+      return { label: "입고 검수 계속 / 확정 (Receiving & Finalize)", action: "continue_receiving" };
     case "Completed":
       return { label: "발주 종결됨 (Completed)", action: "none", disabled: true };
     default:

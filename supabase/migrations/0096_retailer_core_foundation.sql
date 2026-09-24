@@ -234,7 +234,7 @@ STABLE
 AS $$
   SELECT EXISTS (
     SELECT 1 FROM public.profiles
-    WHERE id = auth.uid() AND role = 'retailer'
+    WHERE id = auth.uid() AND role::text = 'retailer'
   );
 $$;
 
@@ -313,3 +313,7 @@ CREATE POLICY "published_assets_admin_all"
   ON public.published_product_assets FOR ALL
   TO authenticated
   USING (public.auth_is_admin());
+
+-- Notify PostgREST to reload schema cache
+NOTIFY pgrst, 'reload schema';
+
