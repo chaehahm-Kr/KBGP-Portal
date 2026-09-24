@@ -46,6 +46,17 @@ export interface CreatePaymentInput {
   attachment_path?: string | null;
 }
 
+// Helper to normalize payment method string to valid DB constraint values ('WIRE', 'ACH', 'CHECK', 'OTHER')
+export async function normalizePaymentMethod(method?: string | null): Promise<'WIRE' | 'ACH' | 'CHECK' | 'OTHER'> {
+  if (!method) return 'WIRE';
+  const upper = method.trim().toUpperCase();
+  if (upper.includes('WIRE') || upper.includes('송금') || upper.includes('TT') || upper.includes('BANK')) return 'WIRE';
+  if (upper.includes('ACH')) return 'ACH';
+  if (upper.includes('CHECK') || upper.includes('수표')) return 'CHECK';
+  if (['WIRE', 'ACH', 'CHECK', 'OTHER'].includes(upper)) return upper as any;
+  return 'OTHER';
+}
+
 // Authoritative Calculation: updates amount_paid, balance_due, and payment_status on the invoice
 export async function recalculateInvoicePaymentStatus(supabase: any, invoiceId: string) {
   // 1. Fetch invoice info
@@ -351,7 +362,7 @@ export async function recordInvoicePayment(input: RecordInvoicePaymentInput) {
       payment_date: input.payment_date || getEasternTodayString(),
       payment_amount: amount,
       currency: invoice.currency,
-      payment_method: input.payment_method,
+      payment_method: await normalizePaymentMethod(input.payment_method),
       bank_reference: input.bank_reference?.trim() || null,
       remittance_reference: input.remittance_reference?.trim() || null,
       internal_note: input.internal_note?.trim() || null,

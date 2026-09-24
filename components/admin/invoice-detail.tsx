@@ -17,7 +17,7 @@ import {
   reopenSettlement,
   uploadInvoiceAttachment
 } from "@/lib/supplier-invoice/actions";
-import { recordInvoicePayment } from "@/lib/supplier-payment/actions";
+import { recordInvoicePayment, normalizePaymentMethod } from "@/lib/supplier-payment/actions";
 import { formatActionError } from "@/lib/utils/error-formatter";
 
 interface InvoiceLine {
@@ -399,11 +399,12 @@ export function InvoiceDetail({ invoice, po, prevInvoicesTotal, poMerchandiseTot
   };
 
   // Payment Modal Handlers
-  const openPaymentModal = () => {
+  const openPaymentModal = async () => {
     const today = new Date().toISOString().split("T")[0];
     setPaymentDate(today);
     setPaymentAmount(balanceDue > 0 ? balanceDue : 0);
-    setPaymentMethod((invoice.remittance_payment_method as any) || "WIRE");
+    const initialPm = await normalizePaymentMethod(invoice.remittance_payment_method);
+    setPaymentMethod(initialPm);
     setBankReference("");
     setRemittanceReference("");
     setPaymentNote("");
