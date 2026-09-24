@@ -956,6 +956,108 @@ export async function generateNextPoNumber(
 }
 
 /**
+ * Resolves a given warehouse identifier to a verified warehouse ID in public.warehouses.
+ * Accepts either a warehouses.id or warehouses.shipping_origin_id.
+ * If neither is found, returns null to avoid Foreign Key constraint violations.
+ */
+export async function resolveValidWarehouseId(supabase: any, warehouseId?: string | null): Promise<string | null> {
+  if (!warehouseId || typeof warehouseId !== "string" || !warehouseId.trim()) return null;
+  const cleanId = warehouseId.trim();
+
+  // 1. Direct match on warehouses.id
+  const { data: directWh } = await supabase
+    .from("warehouses")
+    .select("id")
+    .eq("id", cleanId)
+    .maybeSingle();
+
+  if (directWh) return directWh.id;
+
+  // 2. Match on warehouses.shipping_origin_id
+  try {
+    const { data: originWh } = await supabase
+      .from("warehouses")
+      .select("id")
+      .eq("shipping_origin_id", cleanId)
+      .maybeSingle();
+
+    if (originWh) return originWh.id;
+  } catch {}
+
+  // 3. Fallback: if not a valid warehouse, return null to avoid FK violation
+  return null;
+}
+
+/**
+ * Schema-safe helper to insert a purchase order with full fallback for unmigrated columns and FK safety
+ */
+async function safeInsertPurchaseOrder(supabase: any, initialPayload: any) {
+  const attemptPayload = { ...initialPayload };
+
+  if (attemptPayload.ship_from_warehouse_id) {
+    attemptPayload.ship_from_warehouse_id = await resolveValidWarehouseId(supabase, attemptPayload.ship_from_warehouse_id);
+  }
+
+  let res = await supabase
+    .from("purchase_orders")
+    .insert(attemptPayload)
+    .select("id, po_number")
+    .single();
+
+  if (!res.error && res.data) {
+    return { data: res.data, error: null };
+  }
+
+  // Handle schema mismatch (e.g. missing columns like eta, revisions, etc.)
+  if (res.error?.code === "PGRST204" || res.error?.code === "42703" || res.error?.message?.includes("column") || res.error?.message?.includes("schema cache")) {
+    const safePayload = { ...attemptPayload };
+    delete safePayload.eta;
+    delete safePayload.revision_no;
+    delete safePayload.revisions;
+    delete safePayload.activity_logs;
+    delete safePayload.confirmed_by_id;
+    delete safePayload.confirmed_by_name;
+    delete safePayload.confirmed_at;
+    delete safePayload.cancellation_status;
+    delete safePayload.cancellation_reason;
+    delete safePayload.cancellation_requested_by;
+    delete safePayload.cancellation_requested_at;
+    delete safePayload.cancellation_confirmed_by;
+    delete safePayload.cancellation_confirmed_at;
+    delete safePayload.cancellation_rejected_by;
+    delete safePayload.cancellation_rejected_at;
+    delete safePayload.cancellation_reject_reason;
+
+    res = await supabase
+      .from("purchase_orders")
+      .insert(safePayload)
+      .select("id, po_number")
+      .single();
+
+    if (!res.error && res.data) {
+      return { data: res.data, error: null };
+    }
+  }
+
+  // If ship_from_warehouse_id foreign key constraint violation (23503), retry with null
+  if (res.error?.code === "23503" && (res.error?.message?.includes("ship_from_warehouse_id") || res.error?.details?.includes("ship_from_warehouse_id"))) {
+    const noShipFromPayload = { ...attemptPayload, ship_from_warehouse_id: null };
+    delete noShipFromPayload.eta;
+    res = await supabase
+      .from("purchase_orders")
+      .insert(noShipFromPayload)
+      .select("id, po_number")
+      .single();
+
+    if (!res.error && res.data) {
+      return { data: res.data, error: null };
+    }
+  }
+
+  return { data: null, error: res.error };
+}
+
+/**
  * Create a new Purchase Order in DRAFT status.
  */
 export async function createPurchaseOrder(data: CreatePoInput) {
@@ -1020,34 +1122,18 @@ export async function createPurchaseOrder(data: CreatePoInput) {
       fulfillment_status: "PENDING",
     };
 
-    const res = await supabase
-      .from("purchase_orders")
-      .insert(insertPayload)
-      .select("id, po_number")
-      .single();
+    const { data: createdPo, error: insertError } = await safeInsertPurchaseOrder(supabase, insertPayload);
 
-    if (!res.error && res.data) {
-      newPo = res.data;
+    if (createdPo) {
+      newPo = createdPo;
+      break;
+    }
+
+    poErr = insertError;
+    if (insertError?.code === "23505" || insertError?.message?.includes("po_number")) {
+      attempts++;
     } else {
-      poErr = res.error;
-      if (res.error?.message?.includes("eta") || res.error?.code === "42703") {
-        delete insertPayload.eta;
-        const retryRes = await supabase
-          .from("purchase_orders")
-          .insert(insertPayload)
-          .select("id, po_number")
-          .single();
-        if (!retryRes.error && retryRes.data) {
-          newPo = retryRes.data;
-          break;
-        }
-      }
-
-      if (res.error?.code === "23505" || res.error?.message?.includes("po_number")) {
-        attempts++;
-      } else {
-        throw new Error(`발주서 헤더 생성 실패: ${res.error?.message || "알 수 없는 오류"}`);
-      }
+      throw new Error(`발주서 헤더 생성 실패: ${insertError?.message || "알 수 없는 오류"}`);
     }
   }
 
@@ -1305,13 +1391,19 @@ export async function updatePurchaseOrder(poId: string, data: CreatePoInput) {
  * Safe helper to update purchase order with multi-tier schema fallback
  */
 async function safeUpdatePurchaseOrder(supabase: any, poId: string, payload: any) {
+  const attemptPayload = { ...payload };
+
+  if (attemptPayload.ship_from_warehouse_id) {
+    attemptPayload.ship_from_warehouse_id = await resolveValidWarehouseId(supabase, attemptPayload.ship_from_warehouse_id);
+  }
+
   let { error } = await supabase
     .from("purchase_orders")
-    .update(payload)
+    .update(attemptPayload)
     .eq("id", poId);
 
   if (error && (error.code === "PGRST204" || error.code === "42703" || error.message?.includes("column") || error.message?.includes("schema cache"))) {
-    const safePayload = { ...payload };
+    const safePayload = { ...attemptPayload };
     delete safePayload.eta;
     delete safePayload.revision_no;
     delete safePayload.revisions;
@@ -1336,6 +1428,18 @@ async function safeUpdatePurchaseOrder(supabase: any, poId: string, payload: any
     error = retryRes.error;
   }
 
+  if (error && error.code === "23503" && (error.message?.includes("ship_from_warehouse_id") || error.details?.includes("ship_from_warehouse_id"))) {
+    const noShipFromPayload = { ...attemptPayload, ship_from_warehouse_id: null };
+    delete noShipFromPayload.eta;
+    delete noShipFromPayload.revisions;
+    delete noShipFromPayload.activity_logs;
+    const retryRes = await supabase
+      .from("purchase_orders")
+      .update(noShipFromPayload)
+      .eq("id", poId);
+    error = retryRes.error;
+  }
+
   if (error) {
     throw new Error(`발주서 헤더 수정 실패: ${error.message}`);
   }
@@ -1350,7 +1454,7 @@ export async function transitionPoStatus(poId: string, targetStatus: string) {
   await verifyWritePermission(supabase, userId);
 
   const { data: staff } = await supabase
-    .from("staff_profiles")
+    .from("profiles")
     .select("display_name")
     .eq("id", userId)
     .maybeSingle();
@@ -1493,7 +1597,7 @@ export async function requestPoCancellation(
   }
 
   const { data: staff } = await supabase
-    .from("staff_profiles")
+    .from("profiles")
     .select("display_name")
     .eq("id", userId)
     .maybeSingle();
@@ -1521,17 +1625,14 @@ export async function requestPoCancellation(
     ...currentLogs,
   ];
 
-  await supabase
-    .from("purchase_orders")
-    .update({
-      cancellation_status: "CANCELLATION_REQUESTED",
-      cancellation_reason: reason,
-      cancellation_requested_by: userId,
-      cancellation_requested_at: new Date().toISOString(),
-      activity_logs: newLogs,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", poId);
+  await safeUpdatePurchaseOrder(supabase, poId, {
+    cancellation_status: "CANCELLATION_REQUESTED",
+    cancellation_reason: reason,
+    cancellation_requested_by: userId,
+    cancellation_requested_at: new Date().toISOString(),
+    activity_logs: newLogs,
+    updated_at: new Date().toISOString(),
+  });
 
   // Send PO_CANCELLATION_REQUESTED notification to Portal
   await createPoNotification({
