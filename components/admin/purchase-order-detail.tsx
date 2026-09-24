@@ -419,7 +419,8 @@ export function PurchaseOrderDetail({
     let totalDamagedHold = 0;
 
     finalizedReceivings.forEach((r) => {
-      (r.lines ?? []).forEach((rl: any) => {
+      const rLines = r.lines ?? r.receiving_lines ?? [];
+      rLines.forEach((rl: any) => {
         totalReceived += rl.received_qty;
         totalAccepted += rl.received_qty - rl.damaged_qty - rl.hold_qty;
         totalDamagedHold += (Number(rl.damaged_qty) || 0) + (Number(rl.hold_qty) || 0);
@@ -436,6 +437,31 @@ export function PurchaseOrderDetail({
       variance,
     };
   }, [po.total_qty, shipments, receivings]);
+
+  // Aggregate line-level finalized receiving metrics
+  const lineReceivingMap = useMemo(() => {
+    const map = new Map<string, { received: number; damaged: number; hold: number; accepted: number }>();
+    const finalized = receivings.filter((r) => r.status === "FINALIZED");
+    finalized.forEach((r) => {
+      const rLines = r.lines ?? r.receiving_lines ?? [];
+      rLines.forEach((rl: any) => {
+        const lineId = rl.purchase_order_line_id;
+        if (!lineId) return;
+        const cur = map.get(lineId) || { received: 0, damaged: 0, hold: 0, accepted: 0 };
+        const rec = Number(rl.received_qty) || 0;
+        const dam = Number(rl.damaged_qty) || 0;
+        const hld = Number(rl.hold_qty) || 0;
+        const acc = Math.max(0, rec - dam - hld);
+        map.set(lineId, {
+          received: cur.received + rec,
+          damaged: cur.damaged + dam,
+          hold: cur.hold + hld,
+          accepted: cur.accepted + acc,
+        });
+      });
+    });
+    return map;
+  }, [receivings]);
 
   // Overall status helper calculation
   const overallStatus = useMemo(() => {
@@ -1126,7 +1152,7 @@ export function PurchaseOrderDetail({
           </div>
 
           <div className="flex items-center flex-wrap gap-2">
-            {!isReadOnly && overallStatus === "Shipped" && (
+            {!isReadOnly && overallStatus === "Shipped" && !receivings.some((r: any) => r.status === "FINALIZED") && (
               <button
                 type="button"
                 onClick={() => initReceivingForm()}
@@ -1138,36 +1164,40 @@ export function PurchaseOrderDetail({
             )}
 
             {!isReadOnly && overallStatus === "Receiving" && (
-              <button
-                type="button"
-                onClick={() => initReceivingForm()}
-                className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs rounded-xl shadow-md transition-all cursor-pointer flex items-center gap-1.5"
-              >
-                <span>📥</span>
-                <span>입고 검수 계속 / 추가 (Receiving)</span>
-              </button>
-            )}
+              <>
+                {receivings.some((r: any) => r.status === "DRAFT") && (
+                  <button
+                    type="button"
+                    onClick={() => initReceivingForm()}
+                    className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs rounded-xl shadow-md transition-all cursor-pointer flex items-center gap-1.5"
+                  >
+                    <span>📥</span>
+                    <span>입고 검수 계속 (Continue Draft)</span>
+                  </button>
+                )}
 
-            {!isReadOnly && overallStatus === "Receiving" && receivings.length > 0 && receivings.every((r: any) => r.status === "FINALIZED") && (
-              stats.received >= po.total_qty ? (
-                <button
-                  type="button"
-                  onClick={() => handleOpenCompleteModal(false)}
-                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-md transition-all cursor-pointer flex items-center gap-1.5"
-                >
-                  <span>🎉</span>
-                  <span>발주 종결 (Complete PO)</span>
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => handleOpenCompleteModal(true)}
-                  className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs rounded-xl shadow-md transition-all cursor-pointer flex items-center gap-1.5"
-                >
-                  <span>⚠️</span>
-                  <span>차이 포함 발주 종결 (Complete with Variance)</span>
-                </button>
-              )
+                {receivings.length > 0 && receivings.every((r: any) => r.status === "FINALIZED") && (
+                  stats.variance === 0 || stats.received >= po.total_qty ? (
+                    <button
+                      type="button"
+                      onClick={() => handleOpenCompleteModal(false)}
+                      className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-md transition-all cursor-pointer flex items-center gap-1.5"
+                    >
+                      <span>🎉</span>
+                      <span>발주 종결 (Complete PO)</span>
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => handleOpenCompleteModal(true)}
+                      className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs rounded-xl shadow-md transition-all cursor-pointer flex items-center gap-1.5"
+                    >
+                      <span>⚠️</span>
+                      <span>차이 포함 발주 종결 (Complete with Variance)</span>
+                    </button>
+                  )
+                )}
+              </>
             )}
 
             {!isReadOnly && po.po_status !== "CANCELLED" && po.po_status !== "DRAFT" && overallStatus !== "Completed" && (
@@ -1654,6 +1684,9 @@ export function PurchaseOrderDetail({
                 <th className="px-4 py-3.5 text-right">출고 준비 (Ready)</th>
                 <th className="px-4 py-3.5 text-right">출고 수량 (Shipped)</th>
                 <th className="px-4 py-3.5 text-right">입고 완료 (Received)</th>
+                <th className="px-4 py-3.5 text-right text-rose-600">불량/보류 (Damaged/Hold)</th>
+                <th className="px-4 py-3.5 text-right text-emerald-600">최종 양품 (Accepted)</th>
+                <th className="px-4 py-3.5 text-right">입고 차이 (Variance)</th>
                 <th className="px-4 py-3.5 text-right">단가</th>
                 <th className="px-4 py-3.5 text-right">합계</th>
               </tr>
@@ -1663,7 +1696,11 @@ export function PurchaseOrderDetail({
                 const targetQty = (l.confirmed_qty !== null && l.confirmed_qty !== undefined) ? Number(l.confirmed_qty) : Number(l.qty);
                 const readyQty = Number(l.ready_qty || 0);
                 const shippedQty = Number(l.shipped_qty || 0);
-                const receivedQty = Number(l.received_qty || 0);
+                const recStats = lineReceivingMap.get(l.id);
+                const receivedQty = recStats?.received ?? Number(l.received_qty || 0);
+                const damagedHoldQty = recStats ? (recStats.damaged + recStats.hold) : 0;
+                const acceptedQty = recStats?.accepted ?? Math.max(0, receivedQty - damagedHoldQty);
+                const lineVariance = shippedQty > 0 ? shippedQty - acceptedQty : 0;
                 return (
                   <tr key={l.id} className="hover:bg-zinc-50/30 dark:hover:bg-zinc-850/10">
                     <td className="px-4 py-3 font-semibold text-zinc-650 dark:text-zinc-400">{l.brand_name}</td>
@@ -1686,8 +1723,19 @@ export function PurchaseOrderDetail({
                       {readyQty.toLocaleString()}
                     </td>
                     <td className="px-4 py-3 text-right font-mono font-semibold text-zinc-900 dark:text-white font-bold">{shippedQty.toLocaleString()}</td>
-                    <td className="px-4 py-3 text-right font-mono font-semibold text-emerald-600 dark:text-emerald-400 font-bold">
+                    <td className="px-4 py-3 text-right font-mono font-semibold text-zinc-800 dark:text-zinc-200 font-bold">
                       {receivedQty.toLocaleString()}
+                    </td>
+                    <td className="px-4 py-3 text-right font-mono font-semibold text-rose-600 font-bold">
+                      {damagedHoldQty.toLocaleString()}
+                    </td>
+                    <td className="px-4 py-3 text-right font-mono font-semibold text-emerald-600 dark:text-emerald-400 font-bold">
+                      {acceptedQty.toLocaleString()}
+                    </td>
+                    <td className="px-4 py-3 text-right font-mono font-semibold">
+                      <span className={lineVariance > 0 ? "text-amber-600 font-bold" : "text-emerald-600 font-bold"}>
+                        {lineVariance.toLocaleString()}
+                      </span>
                     </td>
                     <td className="px-4 py-3 text-right font-mono text-zinc-600 dark:text-zinc-400">
                       {po.currency} {l.unit_cost.toLocaleString(undefined, { minimumFractionDigits: 2 })}
@@ -1712,8 +1760,19 @@ export function PurchaseOrderDetail({
                 <td className="px-4 py-3 text-right font-mono text-zinc-900 dark:text-white">
                   {Math.max(stats.shipped, po.lines.reduce((s, l) => s + Number(l.shipped_qty || 0), 0)).toLocaleString()}
                 </td>
-                <td className="px-4 py-3 text-right font-mono text-emerald-600 dark:text-emerald-400">
+                <td className="px-4 py-3 text-right font-mono text-zinc-800 dark:text-zinc-200">
                   {stats.received.toLocaleString()}
+                </td>
+                <td className="px-4 py-3 text-right font-mono text-rose-600">
+                  {stats.damagedHold.toLocaleString()}
+                </td>
+                <td className="px-4 py-3 text-right font-mono text-emerald-600 dark:text-emerald-400">
+                  {stats.accepted.toLocaleString()}
+                </td>
+                <td className="px-4 py-3 text-right font-mono">
+                  <span className={stats.variance > 0 ? "text-amber-600 font-bold" : "text-emerald-600 font-bold"}>
+                    {stats.variance.toLocaleString()}
+                  </span>
                 </td>
                 <td className="px-4 py-3 text-right font-mono text-zinc-400">-</td>
                 <td className="px-4 py-3 text-right font-mono font-black text-zinc-950 dark:text-white">
@@ -2749,19 +2808,28 @@ export function PurchaseOrderDetail({
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-zinc-150 dark:divide-zinc-800">
-                          {(r.lines || []).map((line: any) => (
-                            <tr key={line.id} className="align-middle">
-                              <td className="p-2.5 font-mono font-bold text-zinc-700 dark:text-zinc-300">{line.letusto_sku || "-"}</td>
-                              <td className="p-2.5 font-medium">{line.product_name || "Unknown Product"}</td>
-                              <td className="p-2.5 text-right font-mono font-semibold">{line.received_qty}개</td>
-                              <td className="p-2.5 text-right font-mono font-bold text-emerald-600">
-                                {Math.max(0, line.received_qty - (line.damaged_qty || 0) - (line.hold_qty || 0))}개
-                              </td>
-                              <td className="p-2.5 text-right font-mono text-rose-600">{line.damaged_qty || 0}개</td>
-                              <td className="p-2.5 text-right font-mono text-amber-600">{line.hold_qty || 0}개</td>
-                              <td className="p-2.5 text-zinc-500">{line.line_note || "-"}</td>
-                            </tr>
-                          ))}
+                          {(r.lines ?? r.receiving_lines ?? []).map((line: any) => {
+                            const matchedPoLine = po.lines.find((l) => l.id === line.purchase_order_line_id);
+                            const sku = line.letusto_sku || matchedPoLine?.letusto_sku || "-";
+                            const name = line.product_name || matchedPoLine?.product_name || "Unknown Product";
+                            const recQty = Number(line.received_qty) || 0;
+                            const damQty = Number(line.damaged_qty) || 0;
+                            const hldQty = Number(line.hold_qty) || 0;
+                            const accQty = Math.max(0, recQty - damQty - hldQty);
+                            return (
+                              <tr key={line.id} className="align-middle">
+                                <td className="p-2.5 font-mono font-bold text-zinc-700 dark:text-zinc-300">{sku}</td>
+                                <td className="p-2.5 font-medium">{name}</td>
+                                <td className="p-2.5 text-right font-mono font-semibold">{recQty.toLocaleString()}개</td>
+                                <td className="p-2.5 text-right font-mono font-bold text-emerald-600">
+                                  {accQty.toLocaleString()}개
+                                </td>
+                                <td className="p-2.5 text-right font-mono text-rose-600">{damQty.toLocaleString()}개</td>
+                                <td className="p-2.5 text-right font-mono text-amber-600">{hldQty.toLocaleString()}개</td>
+                                <td className="p-2.5 text-zinc-500">{line.line_note || "-"}</td>
+                              </tr>
+                            );
+                          })}
                         </tbody>
                       </table>
                     </div>

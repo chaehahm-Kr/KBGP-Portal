@@ -293,7 +293,8 @@ export default function PoDetailClient({
     let totalDamagedHold = 0;
 
     finalizedReceivings.forEach((r) => {
-      (r.lines ?? []).forEach((rl: any) => {
+      const rLines = r.lines ?? r.receiving_lines ?? [];
+      rLines.forEach((rl: any) => {
         totalReceived += rl.received_qty;
         totalAccepted += rl.received_qty - rl.damaged_qty - rl.hold_qty;
         totalDamagedHold += (Number(rl.damaged_qty) || 0) + (Number(rl.hold_qty) || 0);
@@ -310,6 +311,31 @@ export default function PoDetailClient({
       variance,
     };
   }, [po.lines, shipments, receivings]);
+
+  // Aggregate line-level finalized receiving metrics for Portal
+  const lineReceivingMap = useMemo(() => {
+    const map = new Map<string, { received: number; damaged: number; hold: number; accepted: number }>();
+    const finalized = receivings.filter((r) => r.status === "FINALIZED");
+    finalized.forEach((r) => {
+      const rLines = r.lines ?? r.receiving_lines ?? [];
+      rLines.forEach((rl: any) => {
+        const lineId = rl.purchase_order_line_id;
+        if (!lineId) return;
+        const cur = map.get(lineId) || { received: 0, damaged: 0, hold: 0, accepted: 0 };
+        const rec = Number(rl.received_qty) || 0;
+        const dam = Number(rl.damaged_qty) || 0;
+        const hld = Number(rl.hold_qty) || 0;
+        const acc = Math.max(0, rec - dam - hld);
+        map.set(lineId, {
+          received: cur.received + rec,
+          damaged: cur.damaged + dam,
+          hold: cur.hold + hld,
+          accepted: cur.accepted + acc,
+        });
+      });
+    });
+    return map;
+  }, [receivings]);
 
   // Helper function for packaging auto-calculation
   const calcPackaging = (readyQty: number, prod: any) => {
@@ -949,6 +975,9 @@ export default function PoDetailClient({
                 <th className="px-4 py-3.5 text-right">출고 준비 (Ready)</th>
                 <th className="px-4 py-3.5 text-right">출고/선적 (Shipped)</th>
                 <th className="px-4 py-3.5 text-right">창고 입고 (Received)</th>
+                <th className="px-4 py-3.5 text-right text-rose-600">불량/보류 (Damaged/Hold)</th>
+                <th className="px-4 py-3.5 text-right text-emerald-600">최종 양품 (Accepted)</th>
+                <th className="px-4 py-3.5 text-right">입고 차이 (Variance)</th>
                 <th className="px-4 py-3.5 text-right">단가</th>
                 <th className="px-4 py-3.5 text-right">합계</th>
               </tr>
@@ -958,7 +987,11 @@ export default function PoDetailClient({
                 const q = lineQuantities[l.id] || { readyQty: 0, shippedQty: 0, receivedQty: 0 };
                 const readyVal = (l as any).ready_qty !== undefined ? Number((l as any).ready_qty) : q.readyQty;
                 const shippedVal = (l as any).shipped_qty !== undefined ? Number((l as any).shipped_qty) : q.shippedQty;
-                const receivedVal = (l as any).received_qty !== undefined ? Number((l as any).received_qty) : q.receivedQty;
+                const recStats = lineReceivingMap.get(l.id);
+                const receivedVal = recStats?.received ?? ((l as any).received_qty !== undefined ? Number((l as any).received_qty) : q.receivedQty);
+                const damagedHoldVal = recStats ? (recStats.damaged + recStats.hold) : 0;
+                const acceptedVal = recStats?.accepted ?? Math.max(0, receivedVal - damagedHoldVal);
+                const lineVariance = shippedVal > 0 ? shippedVal - acceptedVal : 0;
                 const targetQty = (l.confirmed_qty !== null && l.confirmed_qty !== undefined) ? Number(l.confirmed_qty) : Number(l.qty);
                 return (
                   <tr key={l.id} className="hover:bg-zinc-50/30 dark:hover:bg-zinc-850/10">
@@ -983,8 +1016,19 @@ export default function PoDetailClient({
                     <td className="px-4 py-3 text-right font-mono font-semibold text-zinc-900 dark:text-white font-bold">
                       {shippedVal.toLocaleString()}
                     </td>
-                    <td className="px-4 py-3 text-right font-mono font-semibold text-emerald-600 dark:text-emerald-400 font-bold">
+                    <td className="px-4 py-3 text-right font-mono font-semibold text-zinc-800 dark:text-zinc-200 font-bold">
                       {receivedVal.toLocaleString()}
+                    </td>
+                    <td className="px-4 py-3 text-right font-mono font-semibold text-rose-600 font-bold">
+                      {damagedHoldVal.toLocaleString()}
+                    </td>
+                    <td className="px-4 py-3 text-right font-mono font-semibold text-emerald-600 dark:text-emerald-400 font-bold">
+                      {acceptedVal.toLocaleString()}
+                    </td>
+                    <td className="px-4 py-3 text-right font-mono font-semibold">
+                      <span className={lineVariance > 0 ? "text-amber-600 font-bold" : "text-emerald-600 font-bold"}>
+                        {lineVariance.toLocaleString()}
+                      </span>
                     </td>
                     <td className="px-4 py-3 text-right font-mono text-zinc-600 dark:text-zinc-400">
                       {po.currency} {l.unit_cost.toLocaleString(undefined, { minimumFractionDigits: 2 })}
@@ -1011,8 +1055,19 @@ export default function PoDetailClient({
                 <td className="px-4 py-3 text-right font-mono text-zinc-900 dark:text-white">
                   {Math.max(stats.shipped, po.lines.reduce((s, l) => s + Number((l as any).shipped_qty !== undefined ? (l as any).shipped_qty : lineQuantities[l.id]?.shippedQty || 0), 0)).toLocaleString()}
                 </td>
-                <td className="px-4 py-3 text-right font-mono text-emerald-600 dark:text-emerald-400">
+                <td className="px-4 py-3 text-right font-mono text-zinc-800 dark:text-zinc-200">
                   {stats.received.toLocaleString()}
+                </td>
+                <td className="px-4 py-3 text-right font-mono text-rose-600">
+                  {stats.damagedHold.toLocaleString()}
+                </td>
+                <td className="px-4 py-3 text-right font-mono text-emerald-600 dark:text-emerald-400">
+                  {stats.accepted.toLocaleString()}
+                </td>
+                <td className="px-4 py-3 text-right font-mono">
+                  <span className={stats.variance > 0 ? "text-amber-600 font-bold" : "text-emerald-600 font-bold"}>
+                    {stats.variance.toLocaleString()}
+                  </span>
                 </td>
                 <td className="px-4 py-3 text-right font-mono text-zinc-400">-</td>
                 <td className="px-4 py-3 text-right font-mono font-black text-zinc-950 dark:text-white">

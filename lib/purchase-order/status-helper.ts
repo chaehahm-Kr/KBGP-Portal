@@ -37,7 +37,8 @@ export function getOverallStatus(
     let totalAcceptedQty = 0;
     let totalReceivedQty = 0;
     finalizedReceivings.forEach((r) => {
-      (r.lines ?? []).forEach((rl: any) => {
+      const rLines = r.lines ?? r.receiving_lines ?? [];
+      rLines.forEach((rl: any) => {
         totalReceivedQty += Number(rl.received_qty) || 0;
         totalAcceptedQty += (Number(rl.received_qty) || 0) - (Number(rl.damaged_qty) || 0) - (Number(rl.hold_qty) || 0);
       });
@@ -48,9 +49,10 @@ export function getOverallStatus(
       return "Completed";
     }
 
-    // Step 5: Receiving / Arrived (Active draft inspection, warehouse arrived, partial receiving, or receiving in progress)
+    // Step 5: Receiving / Arrived (Active draft inspection, warehouse arrived, partial receiving, receiving in progress, or finalized receiving pending PO completion)
     if (
       activeReceivings.length > 0 ||
+      finalizedReceivings.length > 0 ||
       totalReceivedQty > 0 ||
       po.fulfillment_status === "PARTIALLY_RECEIVED" ||
       po.fulfillment_status === "RECEIVED" ||
