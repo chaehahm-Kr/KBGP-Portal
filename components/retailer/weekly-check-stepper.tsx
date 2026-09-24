@@ -249,14 +249,23 @@ export function RetailerWeeklyCheckStepper({ session }: WeeklyCheckStepperProps)
                       </p>
                     )}
 
-                    {/* Historical Context */}
-                    <div className="pt-2 flex items-center gap-4 text-xs text-zinc-500 dark:text-zinc-400">
+                    {/* Historical Context & Movement Semantics */}
+                    <div className="pt-2 flex flex-wrap items-center gap-4 text-xs text-zinc-500 dark:text-zinc-400">
                       <div>
-                        Previous Count:{" "}
+                        Previous Reported:{" "}
                         <strong className="text-zinc-700 dark:text-zinc-300">
-                          {activeItem.previousReportedQty !== null ? `${activeItem.previousReportedQty} units` : "First count"}
+                          {activeItem.previousReportedQty !== null ? `${activeItem.previousReportedQty} units` : "Baseline (Initial count)"}
                         </strong>
                       </div>
+                      {activeItem.previousReportedQty !== null && currentCountState.isCounted && (
+                        <div className="text-indigo-600 dark:text-indigo-400 font-semibold">
+                          Provisional Movement:{" "}
+                          <span>
+                            {Math.max(0, activeItem.previousReportedQty - currentCountState.remainingQty)} units
+                          </span>{" "}
+                          <span className="text-[10px] text-zinc-400 font-normal">(Delivery tracking pending)</span>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>

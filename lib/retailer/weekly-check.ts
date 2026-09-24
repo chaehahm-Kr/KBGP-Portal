@@ -1,5 +1,4 @@
 import "server-only";
-import { revalidatePath } from "next/cache";
 import { verifyRetailerSession } from "@/lib/auth/dal";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { resolveEffectiveSku } from "@/lib/product/types";
@@ -14,7 +13,7 @@ export interface WeeklyCheckItemState {
   thumbnailUrl: string | null;
   reportedRemainingQty: number;
   previousReportedQty: number | null;
-  deliveredSincePrevious: number;
+  deliveredSincePrevious: number | null;
   estimatedMovement: number | null;
   isCounted: boolean;
   notes: string | null;
@@ -118,6 +117,61 @@ export async function getRetailerAccessibleStores() {
 }
 
 /**
+ * Fetch Store-specific eligible products (Store Assortment)
+ * Preference order:
+ * 1. Explicitly assigned products in retailer_store_products
+ * 2. Products ordered for that store in retailer_orders/items
+ * 3. Fallback active curated products if store has no assortment or order history yet
+ */
+async function getStoreAssortmentProductIds(companyId: string, storeId: string): Promise<string[]> {
+  const adminClient = createAdminClient();
+
+  // 1. Check retailer_store_products table (if table exists)
+  try {
+    const { data: storeProducts } = await adminClient
+      .from("retailer_store_products")
+      .select("product_id")
+      .eq("store_id", storeId)
+      .eq("is_active", true);
+
+    if (storeProducts && storeProducts.length > 0) {
+      return storeProducts.map((sp) => sp.product_id);
+    }
+  } catch {
+    // table might be pending migration
+  }
+
+  // 2. Check retailer_orders for this store
+  try {
+    const { data: storeOrders } = await adminClient
+      .from("retailer_orders")
+      .select(`
+        id,
+        retailer_order_items (
+          product_id
+        )
+      `)
+      .eq("store_id", storeId);
+
+    if (storeOrders && storeOrders.length > 0) {
+      const pIds = new Set<string>();
+      storeOrders.forEach((o) => {
+        const items = (o.retailer_order_items as any[]) || [];
+        items.forEach((it) => pIds.add(it.product_id));
+      });
+      if (pIds.size > 0) {
+        return Array.from(pIds);
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  // 3. Fallback for brand new store without prior orders: Return active curated products
+  return [];
+}
+
+/**
  * Fetch or start a Weekly Check Session (Draft or existing submitted check) for a store
  */
 export async function getOrCreateStoreWeeklyCheck(storeId: string): Promise<WeeklyCheckSession | null> {
@@ -207,6 +261,14 @@ export async function getOrCreateStoreWeeklyCheck(storeId: string): Promise<Week
           }
         }
 
+        // Compute honest movement:
+        // If delivered_since_previous is null and previousReportedQty exists -> provisional movement
+        let movement: number | null = item.estimated_movement ?? null;
+        if (movement === null && item.previous_reported_qty !== null && item.is_counted) {
+          const delivered = item.delivered_since_previous ?? 0;
+          movement = item.previous_reported_qty + delivered - (item.reported_remaining_qty || 0);
+        }
+
         return {
           id: item.id,
           productId: item.product_id,
@@ -217,8 +279,8 @@ export async function getOrCreateStoreWeeklyCheck(storeId: string): Promise<Week
           thumbnailUrl: thumb,
           reportedRemainingQty: item.reported_remaining_qty || 0,
           previousReportedQty: item.previous_reported_qty ?? null,
-          deliveredSincePrevious: item.delivered_since_previous || 0,
-          estimatedMovement: item.estimated_movement ?? null,
+          deliveredSincePrevious: item.delivered_since_previous ?? null,
+          estimatedMovement: movement,
           isCounted: Boolean(item.is_counted),
           notes: item.notes || null,
         };
@@ -245,8 +307,11 @@ export async function getOrCreateStoreWeeklyCheck(storeId: string): Promise<Week
   }
 
   // 3. No existing check for this week -> Create new Draft Session
-  // Fetch active eligible products for K SELECT
-  const { data: rawProducts } = await adminClient
+  // Fetch store-specific assortment product IDs
+  const assortmentIds = await getStoreAssortmentProductIds(companyId, storeId);
+
+  // Fetch candidate products
+  let productsQuery = adminClient
     .from("products")
     .select(`
       id,
@@ -269,6 +334,12 @@ export async function getOrCreateStoreWeeklyCheck(storeId: string): Promise<Week
     `)
     .eq("status", "selling")
     .order("created_at", { ascending: false });
+
+  if (assortmentIds.length > 0) {
+    productsQuery = productsQuery.in("id", assortmentIds);
+  }
+
+  const { data: rawProducts } = await productsQuery;
 
   // Filter products that are active and curated
   const candidateProducts = (rawProducts || []).filter((p) => {
@@ -336,13 +407,13 @@ export async function getOrCreateStoreWeeklyCheck(storeId: string): Promise<Week
     throw new Error("Failed to start weekly product check session.");
   }
 
-  // Insert Items
+  // Insert Items with NULL delivered_since_previous (Pending Delivery Tracking)
   const itemsToInsert = candidateProducts.map((p) => ({
     check_id: newCheck.id,
     product_id: p.id,
     reported_remaining_qty: 0,
     previous_reported_qty: prevQtyMap.get(p.id) ?? null,
-    delivered_since_previous: 0,
+    delivered_since_previous: null,
     estimated_movement: null,
     is_counted: false,
   }));
@@ -446,6 +517,12 @@ export async function getWeeklyCheckById(checkId: string): Promise<WeeklyCheckSe
         }
       }
 
+      let movement: number | null = item.estimated_movement ?? null;
+      if (movement === null && item.previous_reported_qty !== null && item.is_counted) {
+        const delivered = item.delivered_since_previous ?? 0;
+        movement = item.previous_reported_qty + delivered - (item.reported_remaining_qty || 0);
+      }
+
       return {
         id: item.id,
         productId: item.product_id,
@@ -456,8 +533,8 @@ export async function getWeeklyCheckById(checkId: string): Promise<WeeklyCheckSe
         thumbnailUrl: thumb,
         reportedRemainingQty: item.reported_remaining_qty || 0,
         previousReportedQty: item.previous_reported_qty ?? null,
-        deliveredSincePrevious: item.delivered_since_previous || 0,
-        estimatedMovement: item.estimated_movement ?? null,
+        deliveredSincePrevious: item.delivered_since_previous ?? null,
+        estimatedMovement: movement,
         isCounted: Boolean(item.is_counted),
         notes: item.notes || null,
       };

@@ -79,8 +79,9 @@ export function RetailerWeeklyCheckDetailView({ session }: WeeklyCheckDetailView
               <tr>
                 <th className="py-3 px-4">Product</th>
                 <th className="py-3 px-4">SKU</th>
-                <th className="py-3 px-4 text-right">Previous Count</th>
+                <th className="py-3 px-4 text-right">Previous Reported</th>
                 <th className="py-3 px-4 text-right">Reported Remaining</th>
+                <th className="py-3 px-4 text-right">Estimated Movement</th>
                 <th className="py-3 px-4">Notes</th>
               </tr>
             </thead>
@@ -104,10 +105,13 @@ export function RetailerWeeklyCheckDetailView({ session }: WeeklyCheckDetailView
                   </td>
                   <td className="py-3.5 px-4 font-mono text-zinc-400">{it.sku}</td>
                   <td className="py-3.5 px-4 text-right text-zinc-500">
-                    {it.previousReportedQty !== null ? `${it.previousReportedQty} units` : "-"}
+                    {it.previousReportedQty !== null ? `${it.previousReportedQty} units` : "Baseline"}
                   </td>
                   <td className="py-3.5 px-4 text-right font-bold text-zinc-900 dark:text-white">
                     {it.reportedRemainingQty} units
+                  </td>
+                  <td className="py-3.5 px-4 text-right font-semibold text-indigo-600 dark:text-indigo-400">
+                    {it.estimatedMovement !== null ? `${it.estimatedMovement} units*` : "Baseline"}
                   </td>
                   <td className="py-3.5 px-4 text-zinc-500">{it.notes || "-"}</td>
                 </tr>
@@ -115,6 +119,15 @@ export function RetailerWeeklyCheckDetailView({ session }: WeeklyCheckDetailView
             </tbody>
           </table>
         </div>
+      </div>
+
+      {/* Methodology Disclaimer Note */}
+      <div className="p-4 rounded-xl bg-zinc-50 dark:bg-zinc-800/30 border border-zinc-200/80 dark:border-zinc-800 text-[11px] text-zinc-500 dark:text-zinc-400 space-y-0.5">
+        <div className="font-semibold text-zinc-700 dark:text-zinc-300">Movement Estimation Methodology:</div>
+        <p>
+          * Estimated Movement is calculated provisionally from weekly reported counts (Previous Remaining − Current Remaining + Confirmed Deliveries).
+          It provides replenishment velocity guidance and is not a replacement for direct POS sales records.
+        </p>
       </div>
     </div>
   );
