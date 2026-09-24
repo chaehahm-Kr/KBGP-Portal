@@ -17,6 +17,7 @@ export interface RetailerProductSummary {
   msrp: number;
   marginPercent: number;
   moq: number;
+  isOrderable: boolean;
   thumbnailUrl: string | null;
   origin: string | null;
   volume: string | null;
@@ -170,15 +171,13 @@ export async function getRetailerProducts(
         resolveEffectiveSku(overrides.manufacture_sku, p.manufacture_sku) ||
         "KS-PROD";
 
-      // Pricing resolution (Strictly Retailer safe, no FOB or supplier margin exposed)
+      // Pricing resolution (Strictly Retailer wholesale price from product_curations, confidential FOB is never used)
       let wholesalePrice = 0;
       if (curation?.wholesale_price && Number(curation.wholesale_price) > 0) {
         wholesalePrice = Number(curation.wholesale_price);
-      } else if (p.price_usd_fob && Number(p.price_usd_fob) > 0) {
-        wholesalePrice = Number(p.price_usd_fob);
-      } else if (p.estimated_retail_price && Number(p.estimated_retail_price) > 0) {
-        wholesalePrice = Number((Number(p.estimated_retail_price) * 0.5).toFixed(2));
       }
+
+      const isOrderable = wholesalePrice > 0;
 
       let msrp = 0;
       if (curation?.suggest_retail_price && Number(curation.suggest_retail_price) > 0) {
@@ -192,7 +191,7 @@ export async function getRetailerProducts(
       const marginPercent =
         msrp > 0 && wholesalePrice > 0
           ? Number((((msrp - wholesalePrice) / msrp) * 100).toFixed(1))
-          : 50.0;
+          : 0;
 
       // Image signing
       const rawImages = (p.product_images as any[]) || [];
@@ -234,6 +233,7 @@ export async function getRetailerProducts(
         msrp,
         marginPercent,
         moq,
+        isOrderable,
         thumbnailUrl,
         origin: overrides.origin || p.origin || "Republic of Korea",
         volume: overrides.volume || p.volume || null,
@@ -359,15 +359,13 @@ export async function getRetailerProductDetail(
     resolveEffectiveSku(overrides.manufacture_sku, p.manufacture_sku) ||
     "KS-PROD";
 
-  // Pricing resolution
+  // Pricing resolution (Strictly Retailer wholesale price from product_curations, confidential FOB is never used)
   let wholesalePrice = 0;
   if (curation?.wholesale_price && Number(curation.wholesale_price) > 0) {
     wholesalePrice = Number(curation.wholesale_price);
-  } else if (p.price_usd_fob && Number(p.price_usd_fob) > 0) {
-    wholesalePrice = Number(p.price_usd_fob);
-  } else if (p.estimated_retail_price && Number(p.estimated_retail_price) > 0) {
-    wholesalePrice = Number((Number(p.estimated_retail_price) * 0.5).toFixed(2));
   }
+
+  const isOrderable = wholesalePrice > 0;
 
   let msrp = 0;
   if (curation?.suggest_retail_price && Number(curation.suggest_retail_price) > 0) {
@@ -381,7 +379,7 @@ export async function getRetailerProductDetail(
   const marginPercent =
     msrp > 0 && wholesalePrice > 0
       ? Number((((msrp - wholesalePrice) / msrp) * 100).toFixed(1))
-      : 50.0;
+      : 0;
 
   // Sign all product images
   const rawImages = (p.product_images as any[]) || [];
@@ -431,6 +429,7 @@ export async function getRetailerProductDetail(
     msrp,
     marginPercent,
     moq,
+    isOrderable,
     thumbnailUrl: images.length > 0 ? images[0].url : null,
     origin: overrides.origin || p.origin || "Republic of Korea",
     volume: overrides.volume || p.volume || null,

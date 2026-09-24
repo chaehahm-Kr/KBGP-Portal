@@ -95,6 +95,24 @@ export async function submitRetailerOrder(
       companyName.toLowerCase().includes("qa") ||
       companyName.toLowerCase().includes("demo");
 
+    // Check caller's role authorization in retailer_user_roles
+    const { data: userRoleRow } = await adminClient
+      .from("retailer_user_roles")
+      .select("role, has_all_stores_access")
+      .eq("user_id", session.userId)
+      .eq("company_id", companyId)
+      .maybeSingle();
+
+    const userRole = userRoleRow?.role || "employee";
+    const hasAllStoresAccess = userRoleRow?.has_all_stores_access ?? false;
+
+    if (userRole !== "owner" && userRole !== "buyer" && userRole !== "store_manager") {
+      return {
+        success: false,
+        error: `User role "${userRole}" is not authorized to submit orders. Only owners, buyers, and store managers can place orders.`,
+      };
+    }
+
     // Fetch Profile Payment Terms
     const { data: retailerProfile } = await adminClient
       .from("retailer_profiles")
@@ -131,6 +149,24 @@ export async function submitRetailerOrder(
       if (stores && stores.length > 0) {
         storeData = stores[0];
         storeId = stores[0].id;
+      }
+    }
+
+    // If store_manager, verify store-scope assignment
+    if (userRole === "store_manager" && !hasAllStoresAccess && storeId) {
+      const { data: storeAccess } = await adminClient
+        .from("retailer_user_store_access")
+        .select("id")
+        .eq("user_id", session.userId)
+        .eq("company_id", companyId)
+        .eq("store_id", storeId)
+        .maybeSingle();
+
+      if (!storeAccess) {
+        return {
+          success: false,
+          error: "You do not have authorization to place orders for the selected store.",
+        };
       }
     }
 
@@ -215,14 +251,17 @@ export async function submitRetailerOrder(
         };
       }
 
-      // Snapshot Wholesale & MSRP
+      // Snapshot Wholesale strictly from product_curations (Confidential FOB is NEVER used)
       let wholesalePrice = 0;
       if (curation?.wholesale_price && Number(curation.wholesale_price) > 0) {
         wholesalePrice = Number(curation.wholesale_price);
-      } else if (prod.price_usd_fob && Number(prod.price_usd_fob) > 0) {
-        wholesalePrice = Number(prod.price_usd_fob);
-      } else if (prod.estimated_retail_price && Number(prod.estimated_retail_price) > 0) {
-        wholesalePrice = Number((Number(prod.estimated_retail_price) * 0.5).toFixed(2));
+      }
+
+      if (wholesalePrice <= 0) {
+        return {
+          success: false,
+          error: `Product "${prod.name}" has no valid wholesale pricing configured and cannot be ordered.`,
+        };
       }
 
       let msrp: number | null = null;
@@ -254,15 +293,15 @@ export async function submitRetailerOrder(
     subtotalAmount = Number(subtotalAmount.toFixed(2));
     const totalAmount = subtotalAmount; // Tax and shipping calculated at dispatch
 
-    // 5. Generate Human-Readable Order Number
+    // 5. Generate Concurrency-Safe Order Number
     let orderNumber = `KSR-${new Date().getFullYear()}-${Date.now().toString().slice(-6)}`;
     try {
-      const { data: generatedNo } = await adminClient.rpc("generate_retailer_order_number");
-      if (generatedNo) {
+      const { data: generatedNo, error: rpcErr } = await adminClient.rpc("generate_retailer_order_number");
+      if (!rpcErr && generatedNo) {
         orderNumber = generatedNo;
       }
-    } catch {
-      // Fallback unique order number
+    } catch (rpcEx) {
+      console.warn("Could not generate order number via sequence, fallback used:", rpcEx);
     }
 
     // 6. Insert into retailer_orders

@@ -1,7 +1,10 @@
 -- 0097_retailer_orders_foundation.sql
--- RTP-ORD-001: Retailer Orders & Order Items Data Architecture with Strict Multi-Tenant RLS
+-- RTP-ORD-001 & RTP-ORD-001-R1: Retailer Orders & Order Items Data Architecture with Strict Role & Store-Scope RLS
 
--- 1. Create retailer_orders table
+-- 1. Create Concurrency-Safe Order Number Sequence
+CREATE SEQUENCE IF NOT EXISTS public.retailer_order_number_seq START 1;
+
+-- 2. Create retailer_orders table
 CREATE TABLE IF NOT EXISTS public.retailer_orders (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   order_number TEXT NOT NULL UNIQUE,
@@ -38,7 +41,7 @@ CREATE INDEX IF NOT EXISTS idx_retailer_orders_is_test ON public.retailer_orders
 
 COMMENT ON TABLE public.retailer_orders IS '리테일러 기업의 B2B 상품 발주 주문서 (주문 상태, 배송 매장, 결제 조건 및 총액)';
 
--- 2. Create retailer_order_items table
+-- 3. Create retailer_order_items table
 CREATE TABLE IF NOT EXISTS public.retailer_order_items (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   order_id UUID NOT NULL REFERENCES public.retailer_orders(id) ON DELETE CASCADE,
@@ -59,72 +62,59 @@ CREATE INDEX IF NOT EXISTS idx_retailer_order_items_product_id ON public.retaile
 
 COMMENT ON TABLE public.retailer_order_items IS '리테일러 주문서의 개별 품목 및 체결 당시의 도매단가(Wholesale) 스냅샷';
 
--- 3. Row Level Security for retailer_orders
-ALTER TABLE public.retailer_orders ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.retailer_orders FORCE ROW LEVEL SECURITY;
-
-DROP POLICY IF EXISTS "retailer_orders_admin_all" ON public.retailer_orders;
-DROP POLICY IF EXISTS "retailer_orders_retailer_select" ON public.retailer_orders;
-DROP POLICY IF EXISTS "retailer_orders_retailer_insert" ON public.retailer_orders;
-DROP POLICY IF EXISTS "retailer_orders_retailer_update" ON public.retailer_orders;
-
-CREATE POLICY "retailer_orders_admin_all"
-  ON public.retailer_orders FOR ALL
-  TO authenticated
-  USING (public.auth_is_admin());
-
-CREATE POLICY "retailer_orders_retailer_select"
-  ON public.retailer_orders FOR SELECT
-  TO authenticated
-  USING (company_id = public.auth_company_id());
-
-CREATE POLICY "retailer_orders_retailer_insert"
-  ON public.retailer_orders FOR INSERT
-  TO authenticated
-  WITH CHECK (company_id = public.auth_company_id());
-
-CREATE POLICY "retailer_orders_retailer_update"
-  ON public.retailer_orders FOR UPDATE
-  TO authenticated
-  USING (company_id = public.auth_company_id())
-  WITH CHECK (company_id = public.auth_company_id());
-
--- 4. Row Level Security for retailer_order_items
-ALTER TABLE public.retailer_order_items ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.retailer_order_items FORCE ROW LEVEL SECURITY;
-
-DROP POLICY IF EXISTS "retailer_order_items_admin_all" ON public.retailer_order_items;
-DROP POLICY IF EXISTS "retailer_order_items_retailer_select" ON public.retailer_order_items;
-DROP POLICY IF EXISTS "retailer_order_items_retailer_insert" ON public.retailer_order_items;
-
-CREATE POLICY "retailer_order_items_admin_all"
-  ON public.retailer_order_items FOR ALL
-  TO authenticated
-  USING (public.auth_is_admin());
-
-CREATE POLICY "retailer_order_items_retailer_select"
-  ON public.retailer_order_items FOR SELECT
-  TO authenticated
-  USING (
-    EXISTS (
-      SELECT 1 FROM public.retailer_orders ro
-      WHERE ro.id = retailer_order_items.order_id
-        AND ro.company_id = public.auth_company_id()
-    )
+-- 4. Helper Functions for Role-Aware & Store-Scoped Order Authorization
+CREATE OR REPLACE FUNCTION public.auth_can_retailer_submit_order(p_company_id uuid, p_store_id uuid)
+RETURNS boolean
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = public
+STABLE
+AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM public.retailer_user_roles rur
+    WHERE rur.user_id = auth.uid()
+      AND rur.company_id = p_company_id
+      AND rur.role IN ('owner', 'buyer', 'store_manager')
+      AND (
+        rur.role IN ('owner', 'buyer')
+        OR rur.has_all_stores_access = true
+        OR p_store_id IS NULL
+        OR EXISTS (
+          SELECT 1 FROM public.retailer_user_store_access rusa
+          WHERE rusa.user_id = auth.uid()
+            AND rusa.company_id = p_company_id
+            AND rusa.store_id = p_store_id
+        )
+      )
   );
+$$;
 
-CREATE POLICY "retailer_order_items_retailer_insert"
-  ON public.retailer_order_items FOR INSERT
-  TO authenticated
-  WITH CHECK (
-    EXISTS (
-      SELECT 1 FROM public.retailer_orders ro
-      WHERE ro.id = retailer_order_items.order_id
-        AND ro.company_id = public.auth_company_id()
-    )
+CREATE OR REPLACE FUNCTION public.auth_can_retailer_view_order(p_company_id uuid, p_store_id uuid)
+RETURNS boolean
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = public
+STABLE
+AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM public.retailer_user_roles rur
+    WHERE rur.user_id = auth.uid()
+      AND rur.company_id = p_company_id
+      AND (
+        rur.role IN ('owner', 'buyer', 'accounting')
+        OR rur.has_all_stores_access = true
+        OR p_store_id IS NULL
+        OR EXISTS (
+          SELECT 1 FROM public.retailer_user_store_access rusa
+          WHERE rusa.user_id = auth.uid()
+            AND rusa.company_id = p_company_id
+            AND rusa.store_id = p_store_id
+        )
+      )
   );
+$$;
 
--- 5. Helper Function: Atomic Order Number Generation (e.g. KSR-2026-000001)
+-- 5. Helper Function: Concurrency-Safe Atomic Order Number Generation
 CREATE OR REPLACE FUNCTION public.generate_retailer_order_number()
 RETURNS TEXT
 LANGUAGE plpgsql
@@ -133,25 +123,108 @@ SET search_path = public
 AS $$
 DECLARE
   current_year TEXT;
-  next_seq INTEGER;
-  new_order_number TEXT;
+  next_val BIGINT;
 BEGIN
   current_year := to_char(now(), 'YYYY');
-  
-  SELECT COALESCE(
-    MAX(
-      NULLIF(
-        substring(order_number from 'KSR-' || current_year || '-(\d+)'),
-        ''
-      )::INTEGER
-    ),
-    0
-  ) + 1
-  INTO next_seq
-  FROM public.retailer_orders
-  WHERE order_number LIKE 'KSR-' || current_year || '-%';
-
-  new_order_number := 'KSR-' || current_year || '-' || LPAD(next_seq::TEXT, 6, '0');
-  RETURN new_order_number;
+  next_val := nextval('public.retailer_order_number_seq');
+  RETURN 'KSR-' || current_year || '-' || LPAD(next_val::TEXT, 6, '0');
 END;
 $$;
+
+-- 6. Row Level Security for retailer_orders
+ALTER TABLE public.retailer_orders ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.retailer_orders FORCE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "retailer_orders_admin_all" ON public.retailer_orders;
+DROP POLICY IF EXISTS "retailer_orders_retailer_select" ON public.retailer_orders;
+DROP POLICY IF EXISTS "retailer_orders_retailer_insert" ON public.retailer_orders;
+DROP POLICY IF EXISTS "retailer_orders_retailer_update" ON public.retailer_orders;
+DROP POLICY IF EXISTS "retailer_orders_select" ON public.retailer_orders;
+DROP POLICY IF EXISTS "retailer_orders_insert" ON public.retailer_orders;
+DROP POLICY IF EXISTS "retailer_orders_update_admin_only" ON public.retailer_orders;
+DROP POLICY IF EXISTS "retailer_orders_delete_admin_only" ON public.retailer_orders;
+
+-- SELECT: Admins or Authorized Retailers matching company & store-view scope
+CREATE POLICY "retailer_orders_select"
+  ON public.retailer_orders FOR SELECT
+  TO authenticated
+  USING (
+    public.auth_is_admin()
+    OR (
+      company_id = public.auth_company_id()
+      AND public.auth_can_retailer_view_order(company_id, store_id)
+    )
+  );
+
+-- INSERT: Admins or Authorized Retailers (Owner, Buyer, Store Manager with store access)
+CREATE POLICY "retailer_orders_insert"
+  ON public.retailer_orders FOR INSERT
+  TO authenticated
+  WITH CHECK (
+    public.auth_is_admin()
+    OR (
+      company_id = public.auth_company_id()
+      AND user_id = auth.uid()
+      AND public.auth_can_retailer_submit_order(company_id, store_id)
+    )
+  );
+
+-- UPDATE: Admin only (Submitted orders are immutable from Retailer client)
+CREATE POLICY "retailer_orders_update_admin_only"
+  ON public.retailer_orders FOR UPDATE
+  TO authenticated
+  USING (public.auth_is_admin())
+  WITH CHECK (public.auth_is_admin());
+
+-- DELETE: Admin only
+CREATE POLICY "retailer_orders_delete_admin_only"
+  ON public.retailer_orders FOR DELETE
+  TO authenticated
+  USING (public.auth_is_admin());
+
+-- 7. Row Level Security for retailer_order_items
+ALTER TABLE public.retailer_order_items ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.retailer_order_items FORCE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "retailer_order_items_admin_all" ON public.retailer_order_items;
+DROP POLICY IF EXISTS "retailer_order_items_retailer_select" ON public.retailer_order_items;
+DROP POLICY IF EXISTS "retailer_order_items_retailer_insert" ON public.retailer_order_items;
+DROP POLICY IF EXISTS "retailer_order_items_select" ON public.retailer_order_items;
+DROP POLICY IF EXISTS "retailer_order_items_insert" ON public.retailer_order_items;
+DROP POLICY IF EXISTS "retailer_order_items_modify_admin_only" ON public.retailer_order_items;
+
+-- SELECT: Admins or Retailers who have view permission on parent order
+CREATE POLICY "retailer_order_items_select"
+  ON public.retailer_order_items FOR SELECT
+  TO authenticated
+  USING (
+    public.auth_is_admin()
+    OR EXISTS (
+      SELECT 1 FROM public.retailer_orders ro
+      WHERE ro.id = retailer_order_items.order_id
+        AND ro.company_id = public.auth_company_id()
+        AND public.auth_can_retailer_view_order(ro.company_id, ro.store_id)
+    )
+  );
+
+-- INSERT: Admins or Retailers inserting into their own authorized order
+CREATE POLICY "retailer_order_items_insert"
+  ON public.retailer_order_items FOR INSERT
+  TO authenticated
+  WITH CHECK (
+    public.auth_is_admin()
+    OR EXISTS (
+      SELECT 1 FROM public.retailer_orders ro
+      WHERE ro.id = retailer_order_items.order_id
+        AND ro.company_id = public.auth_company_id()
+        AND ro.user_id = auth.uid()
+        AND public.auth_can_retailer_submit_order(ro.company_id, ro.store_id)
+    )
+  );
+
+-- UPDATE/DELETE: Admin only
+CREATE POLICY "retailer_order_items_modify_admin_only"
+  ON public.retailer_order_items FOR ALL
+  TO authenticated
+  USING (public.auth_is_admin())
+  WITH CHECK (public.auth_is_admin());

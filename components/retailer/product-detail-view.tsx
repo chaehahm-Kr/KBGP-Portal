@@ -226,96 +226,107 @@ export function RetailerProductDetailView({ product }: ProductDetailViewProps) {
             </div>
 
             {/* Ordering Controls & Add to Cart */}
-            <div className="pt-2 space-y-4">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl bg-white dark:bg-zinc-900/90 border border-zinc-200 dark:border-zinc-800">
-                <div>
-                  <div className="text-xs font-bold text-zinc-900 dark:text-white flex items-center gap-1.5">
-                    <span>Order Quantity</span>
-                    <span className="text-[10px] font-normal text-zinc-500 dark:text-zinc-400">
-                      (Multiple of {moq})
-                    </span>
+            {product.isOrderable && product.wholesalePrice > 0 ? (
+              <div className="pt-2 space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl bg-white dark:bg-zinc-900/90 border border-zinc-200 dark:border-zinc-800">
+                  <div>
+                    <div className="text-xs font-bold text-zinc-900 dark:text-white flex items-center gap-1.5">
+                      <span>Order Quantity</span>
+                      <span className="text-[10px] font-normal text-zinc-500 dark:text-zinc-400">
+                        (Multiple of {moq})
+                      </span>
+                    </div>
+                    <div className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
+                      Line Total:{" "}
+                      <strong className="text-zinc-900 dark:text-white font-bold text-sm">
+                        ${(orderQty * product.wholesalePrice).toFixed(2)}
+                      </strong>
+                    </div>
                   </div>
-                  <div className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
-                    Line Total:{" "}
-                    <strong className="text-zinc-900 dark:text-white font-bold text-sm">
-                      ${(orderQty * product.wholesalePrice).toFixed(2)}
-                    </strong>
+
+                  {/* Quantity Stepper */}
+                  <div className="flex items-center gap-2">
+                    <div className="inline-flex items-center rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 p-1">
+                      <button
+                        type="button"
+                        onClick={() => setOrderQty((prev) => Math.max(moq, prev - moq))}
+                        disabled={orderQty <= moq}
+                        className="w-8 h-8 rounded-lg flex items-center justify-center font-bold text-sm text-zinc-700 dark:text-zinc-300 hover:bg-white dark:hover:bg-zinc-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                        aria-label="Decrease quantity"
+                      >
+                        −
+                      </button>
+                      <input
+                        type="number"
+                        value={orderQty}
+                        onChange={(e) => {
+                          const val = parseInt(e.target.value, 10);
+                          if (!isNaN(val) && val > 0) setOrderQty(val);
+                        }}
+                        onBlur={() => {
+                          let val = Math.max(moq, orderQty);
+                          const rem = val % moq;
+                          if (rem !== 0) val = val + (moq - rem);
+                          setOrderQty(val);
+                        }}
+                        className="w-14 text-center font-bold text-sm bg-transparent border-0 text-zinc-900 dark:text-white focus:outline-none"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setOrderQty((prev) => prev + moq)}
+                        className="w-8 h-8 rounded-lg flex items-center justify-center font-bold text-sm text-zinc-700 dark:text-zinc-300 hover:bg-white dark:hover:bg-zinc-700 transition-colors"
+                        aria-label="Increase quantity"
+                      >
+                        +
+                      </button>
+                    </div>
                   </div>
                 </div>
 
-                {/* Quantity Stepper */}
-                <div className="flex items-center gap-2">
-                  <div className="inline-flex items-center rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 p-1">
-                    <button
-                      type="button"
-                      onClick={() => setOrderQty((prev) => Math.max(moq, prev - moq))}
-                      disabled={orderQty <= moq}
-                      className="w-8 h-8 rounded-lg flex items-center justify-center font-bold text-sm text-zinc-700 dark:text-zinc-300 hover:bg-white dark:hover:bg-zinc-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                      aria-label="Decrease quantity"
-                    >
-                      −
-                    </button>
-                    <input
-                      type="number"
-                      value={orderQty}
-                      onChange={(e) => {
-                        const val = parseInt(e.target.value, 10);
-                        if (!isNaN(val) && val > 0) setOrderQty(val);
-                      }}
-                      onBlur={() => {
-                        let val = Math.max(moq, orderQty);
-                        const rem = val % moq;
-                        if (rem !== 0) val = val + (moq - rem);
-                        setOrderQty(val);
-                      }}
-                      className="w-14 text-center font-bold text-sm bg-transparent border-0 text-zinc-900 dark:text-white focus:outline-none"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setOrderQty((prev) => prev + moq)}
-                      className="w-8 h-8 rounded-lg flex items-center justify-center font-bold text-sm text-zinc-700 dark:text-zinc-300 hover:bg-white dark:hover:bg-zinc-700 transition-colors"
-                      aria-label="Increase quantity"
-                    >
-                      +
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              {/* Action Buttons */}
-              <div className="flex flex-col sm:flex-row gap-3">
-                <button
-                  type="button"
-                  onClick={handleAddToCart}
-                  className={`flex-1 py-3.5 px-6 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all shadow-sm cursor-pointer ${
-                    addedSuccess
-                      ? "bg-emerald-600 text-white"
-                      : "bg-zinc-900 dark:bg-white text-white dark:text-zinc-950 hover:opacity-95"
-                  }`}
-                >
-                  {addedSuccess ? (
-                    <>
-                      <span>✓</span>
-                      <span>Added to Cart ({orderQty} units)</span>
-                    </>
-                  ) : (
-                    <>
-                      <span>🛒</span>
-                      <span>Add to Order Cart</span>
-                    </>
-                  )}
-                </button>
-
-                {addedSuccess && (
-                  <Link
-                    href="/cart"
-                    className="py-3.5 px-6 rounded-xl font-bold text-sm bg-indigo-50 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 hover:bg-indigo-100 dark:hover:bg-indigo-900 transition-colors flex items-center justify-center gap-1.5"
+                {/* Action Buttons */}
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <button
+                    type="button"
+                    onClick={handleAddToCart}
+                    className={`flex-1 py-3.5 px-6 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all shadow-sm cursor-pointer ${
+                      addedSuccess
+                        ? "bg-emerald-600 text-white"
+                        : "bg-zinc-900 dark:bg-white text-white dark:text-zinc-950 hover:opacity-95"
+                    }`}
                   >
-                    <span>View Cart →</span>
-                  </Link>
-                )}
+                    {addedSuccess ? (
+                      <>
+                        <span>✓</span>
+                        <span>Added to Cart ({orderQty} units)</span>
+                      </>
+                    ) : (
+                      <>
+                        <span>🛒</span>
+                        <span>Add to Order Cart</span>
+                      </>
+                    )}
+                  </button>
+
+                  {addedSuccess && (
+                    <Link
+                      href="/cart"
+                      className="py-3.5 px-6 rounded-xl font-bold text-sm bg-indigo-50 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 hover:bg-indigo-100 dark:hover:bg-indigo-900 transition-colors flex items-center justify-center gap-1.5"
+                    >
+                      <span>View Cart →</span>
+                    </Link>
+                  )}
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className="pt-2 p-4 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-center space-y-1">
+                <div className="text-xs font-bold text-amber-800 dark:text-amber-300">
+                  Wholesale Pricing Pending
+                </div>
+                <div className="text-[11px] text-amber-700 dark:text-amber-400">
+                  This product is currently undergoing pricing review and cannot be added to cart. Please contact your K SELECT account representative for commercial inquiries.
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Key Bullet Points / Highlights */}
