@@ -1088,6 +1088,20 @@ export function PurchaseOrderDetail({
         </Link>
       </div>
 
+      {/* Top Action Alerts */}
+      {errorMessage && (
+        <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 dark:bg-rose-950/40 dark:border-rose-900 dark:text-rose-300 text-xs font-bold flex justify-between items-center shadow-sm">
+          <span>⚠️ {errorMessage}</span>
+          <button onClick={() => setErrorMessage("")} className="text-rose-500 hover:text-rose-700 font-bold ml-2 cursor-pointer">✕</button>
+        </div>
+      )}
+      {successMessage && (
+        <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 dark:bg-emerald-950/40 dark:border-emerald-900 dark:text-emerald-300 text-xs font-bold flex justify-between items-center shadow-sm">
+          <span>✅ {successMessage}</span>
+          <button onClick={() => setSuccessMessage("")} className="text-emerald-500 hover:text-emerald-700 font-bold ml-2 cursor-pointer">✕</button>
+        </div>
+      )}
+
       {/* Prominent Top PO Header Banner (ADM-PUR-UI-001) */}
       <div className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
@@ -2639,19 +2653,21 @@ export function PurchaseOrderDetail({
                     </button>
                     <button
                       type="submit"
+                      disabled={isActionLoading}
                       onClick={(e) => handleSubmitReceiving(e, false)}
-                      className="px-3.5 py-2 bg-zinc-200 hover:bg-zinc-300 dark:bg-zinc-700 dark:hover:bg-zinc-600 text-zinc-800 dark:text-white text-xs font-bold rounded-lg cursor-pointer flex items-center gap-1.5"
+                      className="px-3.5 py-2 bg-zinc-200 hover:bg-zinc-300 dark:bg-zinc-700 dark:hover:bg-zinc-600 text-zinc-800 dark:text-white text-xs font-bold rounded-lg cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
                     >
                       <span>💾</span>
-                      <span>{editingReceivingId ? "초안 수정 저장 (Update Draft)" : "임시저장 (Save Draft)"}</span>
+                      <span>{isActionLoading ? "저장 중..." : editingReceivingId ? "초안 수정 저장 (Update Draft)" : "임시저장 (Save Draft)"}</span>
                     </button>
                     <button
                       type="button"
+                      disabled={isActionLoading}
                       onClick={(e) => handleSubmitReceiving(e, true)}
-                      className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg cursor-pointer shadow-sm flex items-center gap-1.5"
+                      className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg cursor-pointer shadow-sm flex items-center gap-1.5 disabled:opacity-50"
                     >
-                      <span>✔️</span>
-                      <span>검수 및 입고 확정 (Save & Finalize)</span>
+                      <span>{isActionLoading ? "⏳" : "✔️"}</span>
+                      <span>{isActionLoading ? "입고 확정 중..." : "검수 및 입고 확정 (Save & Finalize)"}</span>
                     </button>
                   </div>
                 </div>
@@ -2755,7 +2771,7 @@ export function PurchaseOrderDetail({
             </div>
 
             {/* PO Completion Banner when all receivings are finalized */}
-            {receivings.some((r) => r.status === "FINALIZED") && !showReceivingForm && !isReadOnly && po.po_status !== "CANCELLED" && po.fulfillment_status !== "RECEIVED" && (
+            {receivings.some((r) => r.status === "FINALIZED") && !showReceivingForm && !isReadOnly && po.po_status !== "CANCELLED" && (po.fulfillment_status as string) !== "COMPLETED" && (
               <div className="rounded-xl border border-emerald-200 bg-emerald-50/40 dark:bg-emerald-950/20 p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-sm">
                 <div>
                   <h4 className="font-bold text-xs text-emerald-900 dark:text-emerald-300 flex items-center gap-1.5">
