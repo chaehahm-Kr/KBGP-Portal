@@ -211,9 +211,10 @@ export async function updateSession(request: NextRequest) {
       return createRedirectWithCookies(url);
     }
 
-    // C. API routes, manifest, and static asset files pass through without rewrite
+    // C. API routes, manifest, static asset files, and public product QR landing pages pass through without rewrite
     if (
       pathname.startsWith("/api") ||
+      pathname.startsWith("/products") ||
       pathname === "/manifest.webmanifest" ||
       pathname.includes(".")
     ) {
