@@ -156,6 +156,7 @@ export function InvoicesList({ initialInvoices, suppliers }: InvoicesListProps) 
                 <th className="px-5 py-3">공급사 (Supplier)</th>
                 <th className="px-5 py-3">발주 번호 (PO No.)</th>
                 <th className="px-5 py-3 text-right">인보이스 총액</th>
+                <th className="px-5 py-3 text-right">지급액 (Paid Amount)</th>
                 <th className="px-5 py-3 text-right">잔여 채무액 (Balance Due)</th>
                 <th className="px-5 py-3">발행일 (Invoice Date)</th>
                 <th className="px-5 py-3">지급 기한 (Due Date)</th>
@@ -166,7 +167,7 @@ export function InvoicesList({ initialInvoices, suppliers }: InvoicesListProps) 
             <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
               {filteredInvoices.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="px-5 py-12 text-center text-zinc-400 font-semibold">
+                  <td colSpan={11} className="px-5 py-12 text-center text-zinc-400 font-semibold">
                     일치하는 공급사 인보이스/AP 내역이 존재하지 않습니다.
                   </td>
                 </tr>
@@ -200,6 +201,11 @@ export function InvoicesList({ initialInvoices, suppliers }: InvoicesListProps) 
                     {/* Total Amount */}
                     <td className="px-5 py-3.5 text-right font-mono font-bold text-zinc-900 dark:text-white">
                       {inv.currency} {inv.invoice_total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </td>
+
+                    {/* Paid Amount */}
+                    <td className="px-5 py-3.5 text-right font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                      {inv.currency} {inv.amount_paid.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </td>
 
                     {/* Balance Due */}

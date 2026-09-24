@@ -57,12 +57,12 @@ export async function normalizePaymentMethod(method?: string | null): Promise<'W
   return 'OTHER';
 }
 
-// Authoritative Calculation: updates amount_paid, balance_due, and payment_status on the invoice
+// Authoritative Calculation: updates invoice_total, amount_paid, balance_due, and payment_status on the invoice
 export async function recalculateInvoicePaymentStatus(supabase: any, invoiceId: string) {
   // 1. Fetch invoice info
   const { data: invoice, error: invErr } = await supabase
     .from("supplier_invoices")
-    .select("id, invoice_total, currency")
+    .select("id, subtotal, tax_amount, other_charges, currency")
     .eq("id", invoiceId)
     .single();
 
@@ -82,7 +82,10 @@ export async function recalculateInvoicePaymentStatus(supabase: any, invoiceId: 
     else charges += Number(a.adjustment_amount);
   });
 
-  const finalPayable = Number((Number(invoice.invoice_total) + charges - credits).toFixed(2));
+  const baseInvoiceAmount = Number(invoice.subtotal || 0);
+  const tax = Number(invoice.tax_amount || 0);
+  const other = Number(invoice.other_charges || 0);
+  const finalPayable = Number((baseInvoiceAmount + tax + other + charges - credits).toFixed(2));
 
   // 3. Sum completed payments
   const { data: pmts } = await supabase
@@ -100,7 +103,7 @@ export async function recalculateInvoicePaymentStatus(supabase: any, invoiceId: 
   let paymentStatus: 'UNPAID' | 'PARTIALLY_PAID' | 'PAID' = 'UNPAID';
   if (formattedAmountPaid === 0) {
     paymentStatus = 'UNPAID';
-  } else if (formattedAmountPaid < finalPayable) {
+  } else if (formattedAmountPaid < finalPayable - 0.001) {
     paymentStatus = 'PARTIALLY_PAID';
   } else {
     paymentStatus = 'PAID';
@@ -110,6 +113,7 @@ export async function recalculateInvoicePaymentStatus(supabase: any, invoiceId: 
   const { error: updateErr } = await supabase
     .from("supplier_invoices")
     .update({
+      invoice_total: finalPayable,
       amount_paid: formattedAmountPaid,
       balance_due: balanceDue,
       payment_status: paymentStatus,
@@ -294,7 +298,7 @@ export async function recordInvoicePayment(input: RecordInvoicePaymentInput) {
   // 1. Fetch invoice
   const { data: invoice, error: invErr } = await supabase
     .from("supplier_invoices")
-    .select("id, invoice_status, settlement_status, currency, supplier_company_id, invoice_total")
+    .select("id, invoice_status, settlement_status, currency, supplier_company_id, subtotal, tax_amount, other_charges")
     .eq("id", input.supplier_invoice_id)
     .single();
 
@@ -317,7 +321,10 @@ export async function recordInvoicePayment(input: RecordInvoicePaymentInput) {
     else charges += Number(a.adjustment_amount);
   });
 
-  const finalPayable = Number((Number(invoice.invoice_total) + charges - credits).toFixed(2));
+  const baseInvoiceAmount = Number(invoice.subtotal || 0);
+  const tax = Number(invoice.tax_amount || 0);
+  const other = Number(invoice.other_charges || 0);
+  const finalPayable = Number((baseInvoiceAmount + tax + other + charges - credits).toFixed(2));
 
   // 3. Sum existing completed payments
   const { data: pmts } = await supabase
