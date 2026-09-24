@@ -380,6 +380,7 @@ export function PurchaseOrderDetail({
 
   // Init shipment lines input quantities based on remaining items to ship
   const initShipmentForm = () => {
+    setActiveTab("shipments");
     const activeShipmentLines = shipments
       .filter((s) => s.status !== "CANCELLED")
       .flatMap((s) => s.lines || []);
@@ -406,11 +407,21 @@ export function PurchaseOrderDetail({
     });
 
     setShipmentLines(items);
+    if (!destinationWarehouseId && po.destination_warehouse_id) {
+      setDestinationWarehouseId(po.destination_warehouse_id);
+    }
+    if (!originPort && po.port_of_loading) {
+      setOriginPort(po.port_of_loading);
+    }
+    if (!etd && po.expected_ship_date) {
+      setEtd(po.expected_ship_date);
+    }
     setShowShipmentForm(true);
   };
 
   // Init receiving inspection form
   const initReceivingForm = (shipmentId: string) => {
+    setActiveTab("receiving");
     const target = shipments.find((s) => s.id === shipmentId);
     if (!target) return;
 
@@ -1800,9 +1811,10 @@ export function PurchaseOrderDetail({
                   </button>
                   <button
                     type="submit"
-                    className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg cursor-pointer"
+                    disabled={isActionLoading}
+                    className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg cursor-pointer disabled:opacity-50"
                   >
-                    선적 정보 저장
+                    {isActionLoading ? "선적 등록 중..." : "선적 등록 및 출고 확정 (Confirm Shipment)"}
                   </button>
                 </div>
               </form>

@@ -37,10 +37,18 @@ export function getOverallStatus(
       return "Arrived";
     }
 
-    // Check if shipped/transit
+    // Calculate total shipped quantity across all active shipments
+    const totalShippedQty = activeShipments.reduce(
+      (sum, s) => sum + (s.lines ?? []).reduce((lSum: number, sl: any) => lSum + (Number(sl.shipped_qty) || 0), 0),
+      0
+    );
+
+    // Check if shipped/transit (Requirement 4: Shipped Qty > 0 must transition to Shipped)
     if (
       po.fulfillment_status === "SHIPPED" ||
-      activeShipments.some((s) => s.status === "IN_TRANSIT" || s.status === "BOOKED" || s.status === "SHIPPED")
+      po.fulfillment_status === "PARTIALLY_SHIPPED" ||
+      activeShipments.some((s) => s.status === "IN_TRANSIT" || s.status === "BOOKED" || s.status === "SHIPPED" || s.status === "DRAFT") ||
+      totalShippedQty > 0
     ) {
       return "Shipped";
     }

@@ -27,6 +27,7 @@ export interface CreateShipmentInput {
   air_waybill?: string;
   booking_number?: string;
   internal_note?: string;
+  status?: string;
   lines: CreateShipmentLineInput[];
 }
 
@@ -331,11 +332,55 @@ export async function createInboundShipment(data: CreateShipmentInput) {
     throw new Error(`선적 생성 및 검증 실패: ${rpcErr.message}`);
   }
 
-  if (data.carrier) {
-    await supabase.from("inbound_shipments").update({ carrier: data.carrier }).eq("id", shpId);
-  }
+  // Update shipment status to IN_TRANSIT (or provided status) and set departure date and carrier
+  const finalStatus = data.status || "IN_TRANSIT";
+  const departureDate = data.actual_departure_date || new Date().toISOString().split("T")[0];
+
+  await supabase
+    .from("inbound_shipments")
+    .update({
+      status: finalStatus,
+      actual_departure_date: departureDate,
+      ...(data.carrier ? { carrier: data.carrier } : {}),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", shpId);
+
+  // Update PO fulfillment_status to SHIPPED and record activity log
+  const timestamp = new Date().toISOString();
+  const { data: currentPo } = await supabase
+    .from("purchase_orders")
+    .select("activity_logs")
+    .eq("id", data.purchase_order_id)
+    .single();
+
+  const activityLogs = (currentPo?.activity_logs as any[]) || [];
+  const totalShippedThis = data.lines.reduce((sum, l) => sum + (Number(l.shipped_qty) || 0), 0);
+  const newLogs = [
+    ...activityLogs,
+    {
+      event: "SHIPMENT_CREATED",
+      actor: "어드민",
+      actorId: userId,
+      timestamp,
+      description: `[선적 등록] 선적(${data.shipping_method}, 총 ${totalShippedThis.toLocaleString()}개)이 등록되어 출고/선적(SHIPPED) 상태로 전환되었습니다.`,
+    },
+  ];
+
+  await supabase
+    .from("purchase_orders")
+    .update({
+      fulfillment_status: "SHIPPED",
+      activity_logs: newLogs,
+      updated_at: timestamp,
+    })
+    .eq("id", data.purchase_order_id);
 
   revalidatePath("/admin/purchasing/shipments");
+  revalidatePath(`/admin/purchasing/${data.purchase_order_id}`);
+  revalidatePath(`/portal/orders/purchase-orders/${data.purchase_order_id}`);
+  revalidatePath(`/portal/orders/purchase-orders`);
+  revalidatePath(`/admin/purchasing/orders`);
   return { success: true, id: shpId };
 }
 
