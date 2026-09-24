@@ -390,6 +390,65 @@ export async function createInboundShipment(data: CreateShipmentInput) {
 /**
  * Update Inbound Shipment (Only allowed in DRAFT status).
  */
+
+/**
+ * Update Inbound Shipment Logistics Details (Allowed in BOOKED, IN_TRANSIT, ARRIVED).
+ */
+export async function updateInboundShipmentLogistics(shipmentId: string, data: {
+  carrier?: string;
+  tracking_number?: string;
+  container_number?: string;
+  bill_of_lading?: string;
+  booking_number?: string;
+  origin_port?: string;
+  etd?: string | null;
+  eta?: string | null;
+  actual_departure_date?: string | null;
+  actual_arrival_date?: string | null;
+  internal_note?: string | null;
+}) {
+  await verifyAdminSession();
+  const supabase = createAdminClient();
+
+  const { data: shp, error: fErr } = await supabase
+    .from("inbound_shipments")
+    .select("id, purchase_order_id, status")
+    .eq("id", shipmentId)
+    .single();
+
+  if (fErr || !shp) throw new Error("Shipment not found.");
+
+  const { error } = await supabase
+    .from("inbound_shipments")
+    .update({
+      ...(data.carrier !== undefined ? { carrier: data.carrier } : {}),
+      ...(data.tracking_number !== undefined ? { tracking_number: data.tracking_number || null } : {}),
+      ...(data.container_number !== undefined ? { container_number: data.container_number || null } : {}),
+      ...(data.bill_of_lading !== undefined ? { bill_of_lading: data.bill_of_lading || null } : {}),
+      ...(data.booking_number !== undefined ? { booking_number: data.booking_number || null } : {}),
+      ...(data.origin_port !== undefined ? { origin_port: data.origin_port || null } : {}),
+      ...(data.etd !== undefined ? { etd: data.etd || null } : {}),
+      ...(data.eta !== undefined ? { eta: data.eta || null } : {}),
+      ...(data.actual_departure_date !== undefined ? { actual_departure_date: data.actual_departure_date || null } : {}),
+      ...(data.actual_arrival_date !== undefined ? { actual_arrival_date: data.actual_arrival_date || null } : {}),
+      ...(data.internal_note !== undefined ? { internal_note: data.internal_note || null } : {}),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", shipmentId);
+
+  if (error) throw new Error(`선적 물류 정보 수정 실패: ${error.message}`);
+
+  revalidatePath("/admin/purchasing/shipments");
+  revalidatePath(`/admin/purchasing/shipments/${shipmentId}`);
+  if (shp.purchase_order_id) {
+    revalidatePath(`/admin/purchasing/${shp.purchase_order_id}`);
+    revalidatePath(`/portal/orders/purchase-orders/${shp.purchase_order_id}`);
+    revalidatePath("/portal/orders/purchase-orders");
+    revalidatePath("/portal/orders/shipping");
+  }
+  return { success: true };
+}
+
 export async function updateInboundShipment(shipmentId: string, data: CreateShipmentInput) {
   await verifyAdminSession();
   const supabase = createAdminClient();

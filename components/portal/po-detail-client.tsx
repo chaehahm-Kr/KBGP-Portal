@@ -279,9 +279,12 @@ export default function PoDetailClient({
     const activeShipments = shipments.filter((s) => s.status !== "CANCELLED");
     const finalizedReceivings = receivings.filter((r) => r.status === "FINALIZED");
 
-    const totalShipped = activeShipments.reduce(
-      (sum, s) => sum + (s.lines ?? []).reduce((lSum: number, sl: any) => lSum + sl.shipped_qty, 0),
-      0
+    const totalShipped = Math.max(
+      activeShipments.reduce(
+        (sum, s) => sum + (s.lines ?? []).reduce((lSum: number, sl: any) => lSum + (Number(sl.shipped_qty) || 0), 0),
+        0
+      ),
+      po.lines.reduce((sum, l) => sum + Number((l as any).shipped_qty !== undefined ? (l as any).shipped_qty : lineQuantities[l.id]?.shippedQty || 0), 0)
     );
 
     let totalReceived = 0;
@@ -1007,7 +1010,7 @@ export default function PoDetailClient({
                   {po.lines.reduce((s, l) => s + Number((l as any).ready_qty !== undefined ? (l as any).ready_qty : lineQuantities[l.id]?.readyQty || 0), 0).toLocaleString()}
                 </td>
                 <td className="px-4 py-3 text-right font-mono text-zinc-900 dark:text-white">
-                  {stats.shipped.toLocaleString()}
+                  {Math.max(stats.shipped, po.lines.reduce((s, l) => s + Number((l as any).shipped_qty !== undefined ? (l as any).shipped_qty : lineQuantities[l.id]?.shippedQty || 0), 0)).toLocaleString()}
                 </td>
                 <td className="px-4 py-3 text-right font-mono text-emerald-600 dark:text-emerald-400">
                   {stats.received.toLocaleString()}

@@ -22,6 +22,7 @@ import {
   createReceiving,
   finalizeReceiving,
   transitionShipmentStatus,
+  updateInboundShipmentLogistics,
   closeShipmentWithVariance,
 } from "@/lib/inbound/actions";
 import { PoUnifiedStepper } from "@/components/shared/po-unified-stepper";
@@ -336,14 +337,71 @@ export function PurchaseOrderDetail({
     line_note: string;
   }>>([]);
 
+  // Edit Shipment Logistics modal state
+  const [showEditShipmentModal, setShowEditShipmentModal] = useState(false);
+  const [editingShipmentId, setEditingShipmentId] = useState("");
+  const [editShipmentNumber, setEditShipmentNumber] = useState("");
+  const [editCarrier, setEditCarrier] = useState("");
+  const [editTrackingNumber, setEditTrackingNumber] = useState("");
+  const [editContainerNumber, setEditContainerNumber] = useState("");
+  const [editBillOfLading, setEditBillOfLading] = useState("");
+  const [editBookingNumber, setEditBookingNumber] = useState("");
+  const [editOriginPort, setEditOriginPort] = useState("");
+  const [editEtd, setEditEtd] = useState("");
+  const [editEta, setEditEta] = useState("");
+  const [isSavingShipmentEdit, setIsSavingShipmentEdit] = useState(false);
+
+  const openEditShipmentModal = (shp: any) => {
+    setEditingShipmentId(shp.id);
+    setEditShipmentNumber(shp.shipment_number || "");
+    setEditCarrier(shp.carrier || "");
+    setEditTrackingNumber(shp.tracking_number || "");
+    setEditContainerNumber(shp.container_number || "");
+    setEditBillOfLading(shp.bill_of_lading || "");
+    setEditBookingNumber(shp.booking_number || "");
+    setEditOriginPort(shp.origin_port || "");
+    setEditEtd(shp.etd || "");
+    setEditEta(shp.eta || "");
+    setShowEditShipmentModal(true);
+  };
+
+  const handleSaveShipmentEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSavingShipmentEdit(true);
+    setErrorMessage("");
+    setSuccessMessage("");
+    try {
+      await updateInboundShipmentLogistics(editingShipmentId, {
+        carrier: editCarrier,
+        tracking_number: editTrackingNumber,
+        container_number: editContainerNumber,
+        bill_of_lading: editBillOfLading,
+        booking_number: editBookingNumber,
+        origin_port: editOriginPort,
+        etd: editEtd || null,
+        eta: editEta || null,
+      });
+      setSuccessMessage("선적 물류 정보가 성공적으로 수정되었습니다.");
+      setShowEditShipmentModal(false);
+      router.refresh();
+    } catch (err: any) {
+      setErrorMessage(err.message || "선적 정보 수정 실패");
+    } finally {
+      setIsSavingShipmentEdit(false);
+    }
+  };
+
   // Aggregate shipped, received, accepted and variance stats dynamically
   const stats = useMemo(() => {
     const activeShipments = shipments.filter((s) => s.status !== "CANCELLED");
     const finalizedReceivings = receivings.filter((r) => r.status === "FINALIZED");
 
-    const totalShipped = activeShipments.reduce(
-      (sum, s) => sum + (s.lines ?? []).reduce((lSum: number, sl: any) => lSum + sl.shipped_qty, 0),
-      0
+    const totalShipped = Math.max(
+      activeShipments.reduce(
+        (sum, s) => sum + (s.lines ?? []).reduce((lSum: number, sl: any) => lSum + (Number(sl.shipped_qty) || 0), 0),
+        0
+      ),
+      (po.lines || []).reduce((sum: number, l: any) => sum + (Number(l.shipped_qty) || 0), 0)
     );
 
     let totalReceived = 0;
@@ -879,47 +937,83 @@ export function PurchaseOrderDetail({
 
   return (
     <div className="space-y-6">
-      {/* Breadcrumb / Actions header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      {/* Top Breadcrumb */}
+      <div>
         <Link
           href="/admin/purchasing"
           className="text-xs text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white transition-colors inline-flex items-center gap-1"
         >
           ← 발주 목록으로 돌아가기
         </Link>
-        <div className="flex items-center flex-wrap gap-2">
-          <button
-            onClick={handlePrint}
-            className="px-3 py-1.5 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 text-xs font-bold rounded-lg transition-colors cursor-pointer"
-          >
-            🖨️ PDF / 인쇄 화면
-          </button>
-          {!isReadOnly && po.po_status !== "CANCELLED" && (
-            <Link
-              href={`/admin/purchasing/${po.id}/edit`}
-              className="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300 dark:hover:bg-indigo-900/60 text-xs font-bold rounded-lg transition-colors"
-            >
-              ✏️ 발주 수정 {po.po_status === "SENT" ? "(개정/Revision)" : ""}
-            </Link>
-          )}
-          {!isReadOnly && po.po_status === "DRAFT" && (
+      </div>
+
+      {/* Prominent Top PO Header Banner (ADM-PUR-UI-001) */}
+      <div className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-3 flex-wrap">
+              <span className="text-2xl sm:text-3xl font-black font-mono tracking-tight text-zinc-950 dark:text-white">
+                {po.po_number}
+              </span>
+              <span className={`px-3 py-1 rounded-full text-xs font-bold border ${OVERALL_STATUS_COLORS[overallStatus] || "bg-zinc-100 text-zinc-700"}`}>
+                {OVERALL_STATUS_LABELS[overallStatus] || overallStatus}
+              </span>
+              <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-purple-50 text-purple-700 dark:bg-purple-950/40 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
+                Rev. {po.revision_no ?? 0}
+              </span>
+            </div>
+            <div className="flex items-center gap-4 text-xs text-zinc-500 dark:text-zinc-400 flex-wrap">
+              <span>공급사: <strong className="text-zinc-800 dark:text-zinc-200">{po.supplier?.name || "-"}</strong></span>
+              <span>발주일자: <strong className="text-zinc-800 dark:text-zinc-200">{po.order_date}</strong></span>
+              <span>화폐: <strong className="font-mono text-zinc-800 dark:text-zinc-200">{po.currency}</strong></span>
+              <span>총 수량: <strong className="font-mono text-zinc-800 dark:text-zinc-200">{po.total_qty.toLocaleString()} PCS</strong></span>
+            </div>
+          </div>
+
+          <div className="flex items-center flex-wrap gap-2">
+            {!isReadOnly && po.po_status !== "CANCELLED" && po.po_status !== "DRAFT" && (
+              <button
+                type="button"
+                onClick={initShipmentForm}
+                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-sm transition-all cursor-pointer flex items-center gap-1.5"
+              >
+                <span>🚢</span>
+                <span>{po.lines.some(l => (l.remaining_to_ship || (l.qty - (l.shipped_qty || 0))) > 0) || shipments.length === 0 ? "선적 등록 (Create Shipment)" : "선적 관리 (View Shipments)"}</span>
+              </button>
+            )}
             <button
-              onClick={handleDelete}
-              disabled={isActionLoading}
-              className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300 text-xs font-bold rounded-lg transition-colors cursor-pointer disabled:opacity-50"
+              onClick={handlePrint}
+              className="px-3.5 py-2 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 text-xs font-bold rounded-xl transition-colors cursor-pointer"
             >
-              🗑️ 초안 삭제
+              🖨️ PDF / 인쇄
             </button>
-          )}
-          {!isReadOnly && po.po_status !== "CANCELLED" && po.po_status !== "DRAFT" && po.cancellation_status !== "CANCELLATION_REQUESTED" && (
-            <button
-              onClick={handleCancelPo}
-              disabled={isActionLoading}
-              className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300 text-xs font-bold rounded-lg transition-colors cursor-pointer disabled:opacity-50"
-            >
-              ❌ {po.supplier_confirmation_status === "CONFIRMED" ? "발주 취소 요청" : "발주 취소"}
-            </button>
-          )}
+            {!isReadOnly && po.po_status !== "CANCELLED" && (
+              <Link
+                href={`/admin/purchasing/${po.id}/edit`}
+                className="px-3.5 py-2 bg-zinc-100 hover:bg-zinc-200 text-zinc-800 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700 text-xs font-bold rounded-xl transition-colors"
+              >
+                ✏️ 발주 수정 {po.po_status === "SENT" ? "(개정/Revision)" : ""}
+              </Link>
+            )}
+            {!isReadOnly && po.po_status === "DRAFT" && (
+              <button
+                onClick={handleDelete}
+                disabled={isActionLoading}
+                className="px-3.5 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300 text-xs font-bold rounded-xl transition-colors cursor-pointer disabled:opacity-50"
+              >
+                🗑️ 초안 삭제
+              </button>
+            )}
+            {!isReadOnly && po.po_status !== "CANCELLED" && po.po_status !== "DRAFT" && po.cancellation_status !== "CANCELLATION_REQUESTED" && (
+              <button
+                onClick={handleCancelPo}
+                disabled={isActionLoading}
+                className="px-3.5 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300 text-xs font-bold rounded-xl transition-colors cursor-pointer disabled:opacity-50"
+              >
+                ❌ {po.supplier_confirmation_status === "CONFIRMED" ? "발주 취소 요청" : "발주 취소"}
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
@@ -985,6 +1079,133 @@ export function PurchaseOrderDetail({
                   className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-lg transition-colors cursor-pointer disabled:opacity-50"
                 >
                   {isSubmittingCancel ? "전송 중..." : "취소 요청 발송"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Shipment Logistics Modal */}
+      {showEditShipmentModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white dark:bg-zinc-900 rounded-xl max-w-xl w-full p-6 shadow-2xl border border-zinc-200 dark:border-zinc-800 space-y-4">
+            <div className="flex justify-between items-center border-b border-zinc-150 pb-3 dark:border-zinc-800">
+              <h3 className="font-bold text-sm text-zinc-900 dark:text-white flex items-center gap-1.5">
+                <span>🚢</span>
+                <span>선적 물류 정보 수정 ({editShipmentNumber})</span>
+              </h3>
+              <button
+                onClick={() => setShowEditShipmentModal(false)}
+                className="text-zinc-400 hover:text-zinc-600 text-lg font-bold cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+            <form onSubmit={handleSaveShipmentEdit} className="space-y-3 text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-bold text-zinc-600 dark:text-zinc-400 mb-1">
+                    운송사 (Carrier)
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="예: DHL, Fedex, Maersk"
+                    value={editCarrier}
+                    onChange={(e) => setEditCarrier(e.target.value)}
+                    className="w-full text-xs rounded-lg border border-zinc-300 p-2 dark:bg-zinc-800 dark:border-zinc-700 dark:text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-zinc-600 dark:text-zinc-400 mb-1">
+                    송장/트래킹 번호 (Tracking No)
+                  </label>
+                  <input
+                    type="text"
+                    value={editTrackingNumber}
+                    onChange={(e) => setEditTrackingNumber(e.target.value)}
+                    className="w-full text-xs rounded-lg border border-zinc-300 p-2 dark:bg-zinc-800 dark:border-zinc-700 dark:text-white"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-bold text-zinc-600 dark:text-zinc-400 mb-1">
+                    컨테이너 번호 (Container No)
+                  </label>
+                  <input
+                    type="text"
+                    value={editContainerNumber}
+                    onChange={(e) => setEditContainerNumber(e.target.value)}
+                    className="w-full text-xs rounded-lg border border-zinc-300 p-2 dark:bg-zinc-800 dark:border-zinc-700 dark:text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-zinc-600 dark:text-zinc-400 mb-1">
+                    선하증권 (B/L Number)
+                  </label>
+                  <input
+                    type="text"
+                    value={editBillOfLading}
+                    onChange={(e) => setEditBillOfLading(e.target.value)}
+                    className="w-full text-xs rounded-lg border border-zinc-300 p-2 dark:bg-zinc-800 dark:border-zinc-700 dark:text-white"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-[11px] font-bold text-zinc-600 dark:text-zinc-400 mb-1">
+                    부킹 번호 (Booking No)
+                  </label>
+                  <input
+                    type="text"
+                    value={editBookingNumber}
+                    onChange={(e) => setEditBookingNumber(e.target.value)}
+                    className="w-full text-xs rounded-lg border border-zinc-300 p-2 dark:bg-zinc-800 dark:border-zinc-700 dark:text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-zinc-600 dark:text-zinc-400 mb-1">
+                    ETD (출항일자)
+                  </label>
+                  <input
+                    type="date"
+                    value={editEtd}
+                    onChange={(e) => setEditEtd(e.target.value)}
+                    onClick={(e) => (e.target as any).showPicker?.()}
+                    className="w-full text-xs rounded-lg border border-zinc-300 p-2 dark:bg-zinc-800 dark:border-zinc-700 dark:text-white cursor-pointer"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-zinc-600 dark:text-zinc-400 mb-1">
+                    ETA (도착일자)
+                  </label>
+                  <input
+                    type="date"
+                    value={editEta}
+                    onChange={(e) => setEditEta(e.target.value)}
+                    onClick={(e) => (e.target as any).showPicker?.()}
+                    className="w-full text-xs rounded-lg border border-zinc-300 p-2 dark:bg-zinc-800 dark:border-zinc-700 dark:text-white cursor-pointer"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-zinc-150 dark:border-zinc-800">
+                <button
+                  type="button"
+                  onClick={() => setShowEditShipmentModal(false)}
+                  className="px-4 py-2 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 text-xs font-bold rounded-lg transition-colors cursor-pointer"
+                >
+                  취소
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingShipmentEdit}
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg transition-colors cursor-pointer disabled:opacity-50"
+                >
+                  {isSavingShipmentEdit ? "저장 중..." : "선적 정보 저장"}
                 </button>
               </div>
             </form>
@@ -1282,7 +1503,7 @@ export function PurchaseOrderDetail({
                   {po.lines.reduce((s, l) => s + Number(l.ready_qty || 0), 0).toLocaleString()}
                 </td>
                 <td className="px-4 py-3 text-right font-mono text-zinc-900 dark:text-white">
-                  {stats.shipped.toLocaleString()}
+                  {Math.max(stats.shipped, po.lines.reduce((s, l) => s + Number(l.shipped_qty || 0), 0)).toLocaleString()}
                 </td>
                 <td className="px-4 py-3 text-right font-mono text-emerald-600 dark:text-emerald-400">
                   {stats.received.toLocaleString()}
