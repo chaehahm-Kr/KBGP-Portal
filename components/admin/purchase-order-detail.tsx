@@ -10,6 +10,7 @@ import {
   reviewSupplierPoChangeRequest,
   requestPoCancellation,
   updateAdminGoodsReadinessForwarderInfo,
+  completePurchaseOrder,
 } from "@/lib/purchase-order/actions";
 import { parseSpecialInstructions } from "@/lib/purchase-order/forwarder-helper";
 import {
@@ -325,6 +326,10 @@ export function PurchaseOrderDetail({
   const [selectedShipmentId, setSelectedShipmentId] = useState("");
   const [receivingWarehouseId, setReceivingWarehouseId] = useState(po.destination_warehouse_id || "");
   const [receivedDate, setReceivedDate] = useState(getEasternTodayString());
+  const [showCompletePoModal, setShowCompletePoModal] = useState(false);
+  const [completePoNote, setCompletePoNote] = useState("");
+  const [isCompletingPo, setIsCompletingPo] = useState(false);
+  const [completeWithVariance, setCompleteWithVariance] = useState(false);
   const [receivingLines, setReceivingLines] = useState<Array<{
     inbound_shipment_line_id: string;
     purchase_order_line_id: string;
@@ -332,6 +337,8 @@ export function PurchaseOrderDetail({
     product_name: string;
     letusto_sku: string;
     shipped_qty: number;
+    previously_received?: number;
+    remaining_to_receive?: number;
     received_qty: number;
     damaged_qty: number;
     hold_qty: number;
@@ -479,14 +486,15 @@ export function PurchaseOrderDetail({
   };
 
   // Init receiving inspection form
-  const initReceivingForm = (shipmentId: string) => {
+  const initReceivingForm = (shipmentId?: string) => {
     setActiveTab("receiving");
-    const target = shipments.find((s) => s.id === shipmentId);
+    const activeShipments = shipments.filter((s) => s.status !== "CANCELLED");
+    const target = (shipmentId ? shipments.find((s) => s.id === shipmentId) : activeShipments[0]) || shipments[0];
     if (!target) return;
 
     // Filter out already received counts for the shipment lines
     const matchedReceivings = receivings.filter(
-      (r) => r.inbound_shipment_id === shipmentId && r.status === "FINALIZED"
+      (r) => r.inbound_shipment_id === target.id && r.status === "FINALIZED"
     );
 
     const receivedCountMap = new Map<string, number>();
@@ -507,7 +515,10 @@ export function PurchaseOrderDetail({
         product_id: sl.product_id,
         product_name: matchedPoLine?.product_name || "Unknown Product",
         letusto_sku: matchedPoLine?.letusto_sku || "-",
+        manufacture_sku: matchedPoLine?.manufacture_sku || "-",
         shipped_qty: sl.shipped_qty,
+        previously_received: already,
+        remaining_to_receive: remaining,
         received_qty: remaining,
         damaged_qty: 0,
         hold_qty: 0,
@@ -515,7 +526,9 @@ export function PurchaseOrderDetail({
       };
     });
 
-    setSelectedShipmentId(shipmentId);
+    setSelectedShipmentId(target.id);
+    setReceivingWarehouseId(target.destination_warehouse_id || po.destination_warehouse_id || (warehouses[0]?.id ?? ""));
+    setReceivedDate(getEasternTodayString());
     setReceivingLines(items);
     setShowReceivingForm(true);
   };
@@ -637,7 +650,7 @@ export function PurchaseOrderDetail({
   };
 
   // Submit Receiving inline
-  const handleSubmitReceiving = async (e: React.FormEvent) => {
+  const handleSubmitReceiving = async (e: React.FormEvent, finalizeImmediately: boolean = false) => {
     e.preventDefault();
     setErrorMessage("");
     setSuccessMessage("");
@@ -662,7 +675,7 @@ export function PurchaseOrderDetail({
     }
 
     try {
-      await createReceiving({
+      const res = await createReceiving({
         inbound_shipment_id: selectedShipmentId,
         purchase_order_id: po.id,
         warehouse_id: receivingWarehouseId,
@@ -670,7 +683,12 @@ export function PurchaseOrderDetail({
         lines: validLines,
       });
 
-      setSuccessMessage("입고서 초안이 생성되었습니다. 입고 및 검수 탭에서 입고 확정을 진행하십시오.");
+      if (finalizeImmediately && res?.id) {
+        await finalizeReceiving(res.id);
+        setSuccessMessage("입고 검수가 확정 완료되어 실재고에 반영되었습니다.");
+      } else {
+        setSuccessMessage("입고서 초안(DRAFT)이 생성되었습니다. 검수 완료 후 '입고 전표 확정'을 진행하십시오.");
+      }
       setShowReceivingForm(false);
       router.refresh();
     } catch (err: any) {
@@ -695,6 +713,30 @@ export function PurchaseOrderDetail({
       setErrorMessage(err.message || "입고 확정 처리 중 오류가 발생했습니다.");
     } finally {
       setIsActionLoading(false);
+    }
+  };
+
+  // Complete PO Actions
+  const handleOpenCompleteModal = (withVar: boolean = false) => {
+    setCompleteWithVariance(withVar);
+    setCompletePoNote(withVar ? "공급사 협의 하에 잔여 수량 차이를 반영하여 발주를 최종 종결합니다." : "");
+    setShowCompletePoModal(true);
+  };
+
+  const handleExecuteCompletePo = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsCompletingPo(true);
+    setErrorMessage("");
+    setSuccessMessage("");
+    try {
+      await completePurchaseOrder(po.id, completePoNote, completeWithVariance);
+      setSuccessMessage(completeWithVariance ? "차이를 포함하여 발주가 최종 종결(Completed)되었습니다." : "발주가 성공적으로 최종 종결(Completed)되었습니다.");
+      setShowCompletePoModal(false);
+      router.refresh();
+    } catch (err: any) {
+      setErrorMessage(err.message || "발주 종결 처리 실패");
+    } finally {
+      setIsCompletingPo(false);
     }
   };
 
@@ -972,15 +1014,70 @@ export function PurchaseOrderDetail({
           </div>
 
           <div className="flex items-center flex-wrap gap-2">
-            {!isReadOnly && po.po_status !== "CANCELLED" && po.po_status !== "DRAFT" && (
+            {!isReadOnly && overallStatus === "Shipped" && (
               <button
                 type="button"
-                onClick={initShipmentForm}
-                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-sm transition-all cursor-pointer flex items-center gap-1.5"
+                onClick={() => initReceivingForm()}
+                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-md transition-all cursor-pointer flex items-center gap-1.5"
               >
-                <span>🚢</span>
-                <span>{po.lines.some(l => (l.remaining_to_ship || (l.qty - (l.shipped_qty || 0))) > 0) || shipments.length === 0 ? "선적 등록 (Create Shipment)" : "선적 관리 (View Shipments)"}</span>
+                <span>📥</span>
+                <span>입고 검수 등록 (Start Receiving)</span>
               </button>
+            )}
+
+            {!isReadOnly && overallStatus === "Receiving" && (
+              <button
+                type="button"
+                onClick={() => initReceivingForm()}
+                className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs rounded-xl shadow-md transition-all cursor-pointer flex items-center gap-1.5"
+              >
+                <span>📥</span>
+                <span>입고 검수 계속 / 추가 (Receiving)</span>
+              </button>
+            )}
+
+            {!isReadOnly && overallStatus === "Receiving" && receivings.length > 0 && receivings.every((r: any) => r.status === "FINALIZED") && (
+              stats.received >= po.total_qty ? (
+                <button
+                  type="button"
+                  onClick={() => handleOpenCompleteModal(false)}
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-md transition-all cursor-pointer flex items-center gap-1.5"
+                >
+                  <span>🎉</span>
+                  <span>발주 종결 (Complete PO)</span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => handleOpenCompleteModal(true)}
+                  className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs rounded-xl shadow-md transition-all cursor-pointer flex items-center gap-1.5"
+                >
+                  <span>⚠️</span>
+                  <span>차이 포함 발주 종결 (Complete with Variance)</span>
+                </button>
+              )
+            )}
+
+            {!isReadOnly && po.po_status !== "CANCELLED" && po.po_status !== "DRAFT" && overallStatus !== "Completed" && (
+              po.lines.some(l => (l.remaining_to_ship || (l.qty - (l.shipped_qty || 0))) > 0) || shipments.length === 0 ? (
+                <button
+                  type="button"
+                  onClick={initShipmentForm}
+                  className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-sm transition-all cursor-pointer flex items-center gap-1.5"
+                >
+                  <span>🚢</span>
+                  <span>{overallStatus === "Shipped" || overallStatus === "Receiving" ? "+ 추가 선적 (Shipment)" : "선적 등록 (Create Shipment)"}</span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={initShipmentForm}
+                  className="px-3.5 py-2 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 font-bold text-xs rounded-xl transition-all cursor-pointer flex items-center gap-1.5"
+                >
+                  <span>🚢</span>
+                  <span>선적 관리 (View Shipments)</span>
+                </button>
+              )
             )}
             <button
               onClick={handlePrint}
@@ -1369,15 +1466,12 @@ export function PurchaseOrderDetail({
                 else if (nextAction.action === "send") handleTransition("SENT");
                 else if (nextAction.action === "ready_to_ship") handleTransition("READY_TO_SHIP");
                 else if (nextAction.action === "create_shipment") initShipmentForm();
-                else if (nextAction.action === "create_receiving") {
-                  const activeShipments = shipments.filter(
-                    (s) => s.status === "ARRIVED" || s.status === "PARTIALLY_RECEIVED"
-                  );
-                  if (activeShipments.length > 0) initReceivingForm(activeShipments[0].id);
-                  else alert("도착 처리된 선적이 존재하지 않습니다. 먼저 선적을 Arrived 상태로 변경해주십시오.");
+                else if (nextAction.action === "create_receiving" || nextAction.action === "continue_receiving") {
+                  initReceivingForm();
                 } else if (nextAction.action === "finalize") {
                   const drafts = receivings.filter((r) => r.status === "DRAFT");
                   if (drafts.length > 0) handleFinalizeReceiving(drafts[0].id);
+                  else initReceivingForm();
                 }
               }}
               className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg cursor-pointer transition-all shadow-sm flex items-center gap-1.5"
@@ -2182,35 +2276,62 @@ export function PurchaseOrderDetail({
 
             {/* Receiving Form inline */}
             {showReceivingForm && (
-              <form onSubmit={handleSubmitReceiving} className="rounded-xl border border-zinc-300 bg-zinc-50 p-5 dark:border-zinc-800 dark:bg-zinc-900/50 space-y-4">
-                <div className="flex justify-between items-center border-b border-zinc-200 pb-2 dark:border-zinc-800">
-                  <h4 className="font-bold text-zinc-900 dark:text-white text-xs">📥 창고 실물 입고 검수 기록 등록</h4>
+              <form onSubmit={(e) => handleSubmitReceiving(e, false)} className="rounded-xl border border-indigo-200 bg-white dark:bg-zinc-900 p-5 dark:border-zinc-800 shadow-md space-y-5">
+                <div className="flex justify-between items-center border-b border-zinc-200 pb-3 dark:border-zinc-800">
+                  <div className="flex items-center gap-2">
+                    <span className="text-base">📥</span>
+                    <div>
+                      <h4 className="font-bold text-zinc-900 dark:text-white text-xs">창고 실물 입고 및 검수 등록 (Receiving & Inspection)</h4>
+                      <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                        선적 화물의 실제 입고 수량 및 불량/보류 여부를 검수하여 기록합니다.
+                      </p>
+                    </div>
+                  </div>
                   <button
                     type="button"
                     onClick={() => setShowReceivingForm(false)}
-                    className="text-zinc-400 hover:text-zinc-650 cursor-pointer"
+                    className="text-zinc-400 hover:text-zinc-650 cursor-pointer text-xs font-bold px-2 py-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800"
                   >
-                    취소 (Close)
+                    ✕ 취소 (Close)
                   </button>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
+                  {shipments.length > 1 && (
+                    <div>
+                      <label className="block font-bold text-zinc-600 dark:text-zinc-300 mb-1">입고 대상 선적물 (Shipment)</label>
+                      <select
+                        value={selectedShipmentId}
+                        onChange={(e) => initReceivingForm(e.target.value)}
+                        className="w-full rounded-lg border border-zinc-300 text-xs py-1.5 focus:ring-indigo-500 dark:border-zinc-700 dark:bg-zinc-950 dark:text-white"
+                      >
+                        {shipments
+                          .filter((s) => s.status !== "CANCELLED")
+                          .map((s) => (
+                            <option key={s.id} value={s.id}>
+                              {s.shipment_number} ({s.status} / {s.carrier || "Carrier"})
+                            </option>
+                          ))}
+                      </select>
+                    </div>
+                  )}
                   <div>
-                    <label className="block font-bold text-zinc-500 mb-1">실제 입고일자 (Received Date)</label>
+                    <label className="block font-bold text-zinc-600 dark:text-zinc-300 mb-1">실제 입고일자 (Received Date) *</label>
                     <input
                       type="date"
+                      required
                       value={receivedDate}
                       onChange={(e) => setReceivedDate(e.target.value)}
                       onClick={(e) => (e.target as any).showPicker?.()}
-                      className="w-full rounded-lg border-zinc-300 text-xs py-1.5 focus:ring-indigo-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white cursor-pointer"
+                      className="w-full rounded-lg border border-zinc-300 text-xs py-1.5 focus:ring-indigo-500 dark:border-zinc-700 dark:bg-zinc-950 dark:text-white cursor-pointer"
                     />
                   </div>
                   <div>
-                    <label className="block font-bold text-zinc-500 mb-1">실물 검수 창고 (Warehouse)</label>
+                    <label className="block font-bold text-zinc-600 dark:text-zinc-300 mb-1">실물 검수 입고 창고 (Warehouse) *</label>
                     <select
                       value={receivingWarehouseId}
                       onChange={(e) => setReceivingWarehouseId(e.target.value)}
-                      className="w-full rounded-lg border-zinc-300 text-xs py-1.5 focus:ring-indigo-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+                      className="w-full rounded-lg border border-zinc-300 text-xs py-1.5 focus:ring-indigo-500 dark:border-zinc-700 dark:bg-zinc-950 dark:text-white"
                     >
                       {warehouses.map((w) => (
                         <option key={w.id} value={w.id}>
@@ -2222,88 +2343,187 @@ export function PurchaseOrderDetail({
                 </div>
 
                 {/* Line quantities input */}
-                <div className="space-y-2 pt-2">
-                  <h5 className="font-bold text-zinc-800 dark:text-zinc-300 text-xs">실제 품목 검수 결과</h5>
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left text-[11px] border-collapse bg-white dark:bg-zinc-950 rounded-lg">
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center">
+                    <h5 className="font-bold text-zinc-900 dark:text-white text-xs flex items-center gap-1.5">
+                      <span>📦</span>
+                      <span>품목별 실물 검수 수량 (Line Items Inspection)</span>
+                    </h5>
+                    <span className="text-[11px] text-zinc-500">
+                      양품 수량 = 입고 수량 - 불량 - 보류 (자동 계산 및 실재고 반영)
+                    </span>
+                  </div>
+
+                  <div className="overflow-x-auto border border-zinc-200 dark:border-zinc-800 rounded-xl">
+                    <table className="w-full text-left text-xs border-collapse bg-white dark:bg-zinc-950">
                       <thead>
-                        <tr className="border-b border-zinc-200 bg-zinc-50/50 text-zinc-550 font-bold dark:border-zinc-850 dark:bg-zinc-900/50 dark:text-white">
-                          <th className="p-2.5">제품명 / SKU</th>
-                          <th className="p-2.5 text-right">선적 수량</th>
-                          <th className="p-2.5 text-right w-24">정상입고 (Good)</th>
-                          <th className="p-2.5 text-right w-24">불량파손 (Damaged)</th>
-                          <th className="p-2.5 text-right w-24">검수보류 (Hold)</th>
+                        <tr className="border-b border-zinc-200 bg-zinc-50/70 text-zinc-600 font-bold dark:border-zinc-800 dark:bg-zinc-900/70 dark:text-zinc-200 text-[11px]">
+                          <th className="p-3">제품명 / Letusto SKU</th>
+                          <th className="p-3 text-right">선적 수량</th>
+                          <th className="p-3 text-right">기입고 수량</th>
+                          <th className="p-3 text-right">미입고 잔여</th>
+                          <th className="p-3 text-right w-24">이번 입고 (Total)</th>
+                          <th className="p-3 text-right w-20">불량 (Damaged)</th>
+                          <th className="p-3 text-right w-20">보류 (Hold)</th>
+                          <th className="p-3 text-right">최종 양품 (Accepted)</th>
+                          <th className="p-3 text-right">차이 (Variance)</th>
+                          <th className="p-3">특이사항 / 메모</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-zinc-150 dark:divide-zinc-800">
-                        {receivingLines.map((line, idx) => (
-                          <tr key={line.inbound_shipment_line_id} className="align-middle">
-                            <td className="p-2.5">
-                              <span className="font-bold block text-zinc-850 dark:text-zinc-300">{line.product_name}</span>
-                              <span className="font-mono text-[10px] text-zinc-450">{line.letusto_sku}</span>
-                            </td>
-                            <td className="p-2.5 text-right font-mono font-semibold">{line.shipped_qty}개</td>
-                            <td className="p-2.5 text-right">
-                              <input
-                                type="number"
-                                min={0}
-                                max={line.shipped_qty}
-                                value={line.received_qty}
-                                onChange={(e) => {
-                                  const updated = [...receivingLines];
-                                  updated[idx].received_qty = Number(e.target.value);
-                                  setReceivingLines(updated);
-                                }}
-                                className="w-20 text-right rounded-md border-zinc-300 text-xs px-2 py-1 dark:border-zinc-800 dark:bg-zinc-900 dark:text-white focus:ring-indigo-500"
-                              />
-                            </td>
-                            <td className="p-2.5 text-right">
-                              <input
-                                type="number"
-                                min={0}
-                                value={line.damaged_qty}
-                                onChange={(e) => {
-                                  const updated = [...receivingLines];
-                                  updated[idx].damaged_qty = Number(e.target.value);
-                                  setReceivingLines(updated);
-                                }}
-                                className="w-20 text-right rounded-md border-zinc-350 text-xs px-2 py-1 dark:border-zinc-800 dark:bg-zinc-900 dark:text-white focus:ring-indigo-500"
-                              />
-                            </td>
-                            <td className="p-2.5 text-right">
-                              <input
-                                type="number"
-                                min={0}
-                                value={line.hold_qty}
-                                onChange={(e) => {
-                                  const updated = [...receivingLines];
-                                  updated[idx].hold_qty = Number(e.target.value);
-                                  setReceivingLines(updated);
-                                }}
-                                className="w-20 text-right rounded-md border-zinc-350 text-xs px-2 py-1 dark:border-zinc-800 dark:bg-zinc-900 dark:text-white focus:ring-indigo-500"
-                              />
-                            </td>
-                          </tr>
-                        ))}
+                      <tbody className="divide-y divide-zinc-150 dark:divide-zinc-800/60 text-xs">
+                        {receivingLines.map((line, idx) => {
+                          const accepted = Math.max(0, (line.received_qty || 0) - (line.damaged_qty || 0) - (line.hold_qty || 0));
+                          const lineVariance = (line.received_qty || 0) - (line.remaining_to_receive || 0);
+
+                          return (
+                            <tr key={line.inbound_shipment_line_id || idx} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-900/30">
+                              <td className="p-3">
+                                <span className="font-bold block text-zinc-900 dark:text-white">{line.product_name}</span>
+                                <span className="font-mono text-[10px] text-zinc-400">{line.letusto_sku}</span>
+                              </td>
+                              <td className="p-3 text-right font-mono font-semibold text-zinc-700 dark:text-zinc-300">
+                                {line.shipped_qty.toLocaleString()}
+                              </td>
+                              <td className="p-3 text-right font-mono text-zinc-500">
+                                {(line.previously_received || 0).toLocaleString()}
+                              </td>
+                              <td className="p-3 text-right font-mono font-bold text-indigo-600 dark:text-indigo-400">
+                                {(line.remaining_to_receive || 0).toLocaleString()}
+                              </td>
+                              <td className="p-3 text-right">
+                                <input
+                                  type="number"
+                                  min={0}
+                                  value={line.received_qty}
+                                  onChange={(e) => {
+                                    const updated = [...receivingLines];
+                                    updated[idx].received_qty = Number(e.target.value);
+                                    setReceivingLines(updated);
+                                  }}
+                                  className="w-20 text-right rounded-md border border-zinc-300 text-xs px-2 py-1 dark:border-zinc-700 dark:bg-zinc-900 dark:text-white font-mono font-bold focus:ring-indigo-500"
+                                />
+                              </td>
+                              <td className="p-3 text-right">
+                                <input
+                                  type="number"
+                                  min={0}
+                                  value={line.damaged_qty}
+                                  onChange={(e) => {
+                                    const updated = [...receivingLines];
+                                    updated[idx].damaged_qty = Number(e.target.value);
+                                    setReceivingLines(updated);
+                                  }}
+                                  className="w-18 text-right rounded-md border border-zinc-300 text-xs px-2 py-1 dark:border-zinc-700 dark:bg-zinc-900 dark:text-rose-400 font-mono focus:ring-indigo-500"
+                                />
+                              </td>
+                              <td className="p-3 text-right">
+                                <input
+                                  type="number"
+                                  min={0}
+                                  value={line.hold_qty}
+                                  onChange={(e) => {
+                                    const updated = [...receivingLines];
+                                    updated[idx].hold_qty = Number(e.target.value);
+                                    setReceivingLines(updated);
+                                  }}
+                                  className="w-18 text-right rounded-md border border-zinc-300 text-xs px-2 py-1 dark:border-zinc-700 dark:bg-zinc-900 dark:text-amber-400 font-mono focus:ring-indigo-500"
+                                />
+                              </td>
+                              <td className="p-3 text-right font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                                {accepted.toLocaleString()}
+                              </td>
+                              <td className="p-3 text-right font-mono font-semibold">
+                                <span className={lineVariance < 0 ? "text-rose-600 font-bold" : lineVariance > 0 ? "text-indigo-600 font-bold" : "text-zinc-400"}>
+                                  {lineVariance > 0 ? `+${lineVariance}` : lineVariance}
+                                </span>
+                              </td>
+                              <td className="p-3">
+                                <input
+                                  type="text"
+                                  placeholder="불량 파손 부위 또는 비고"
+                                  value={line.line_note || ""}
+                                  onChange={(e) => {
+                                    const updated = [...receivingLines];
+                                    updated[idx].line_note = e.target.value;
+                                    setReceivingLines(updated);
+                                  }}
+                                  className="w-full rounded-md border border-zinc-200 text-xs px-2 py-1 dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
+                                />
+                              </td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
+                      <tfoot className="border-t-2 border-zinc-200 dark:border-zinc-700 bg-zinc-50/60 dark:bg-zinc-900/60 font-bold text-xs">
+                        <tr>
+                          <td className="p-3 text-zinc-600 dark:text-zinc-400">검수 합계 (Total)</td>
+                          <td className="p-3 text-right font-mono">
+                            {receivingLines.reduce((s, l) => s + (l.shipped_qty || 0), 0).toLocaleString()}
+                          </td>
+                          <td className="p-3 text-right font-mono text-zinc-500">
+                            {receivingLines.reduce((s, l) => s + (l.previously_received || 0), 0).toLocaleString()}
+                          </td>
+                          <td className="p-3 text-right font-mono text-indigo-600">
+                            {receivingLines.reduce((s, l) => s + (l.remaining_to_receive || 0), 0).toLocaleString()}
+                          </td>
+                          <td className="p-3 text-right font-mono text-zinc-900 dark:text-white">
+                            {receivingLines.reduce((s, l) => s + (l.received_qty || 0), 0).toLocaleString()}
+                          </td>
+                          <td className="p-3 text-right font-mono text-rose-600">
+                            {receivingLines.reduce((s, l) => s + (l.damaged_qty || 0), 0).toLocaleString()}
+                          </td>
+                          <td className="p-3 text-right font-mono text-amber-600">
+                            {receivingLines.reduce((s, l) => s + (l.hold_qty || 0), 0).toLocaleString()}
+                          </td>
+                          <td className="p-3 text-right font-mono text-emerald-600">
+                            {receivingLines.reduce((s, l) => s + Math.max(0, (l.received_qty || 0) - (l.damaged_qty || 0) - (l.hold_qty || 0)), 0).toLocaleString()}
+                          </td>
+                          <td className="p-3 text-right font-mono">
+                            {(() => {
+                              const totalVar = receivingLines.reduce((s, l) => s + ((l.received_qty || 0) - (l.remaining_to_receive || 0)), 0);
+                              return (
+                                <span className={totalVar < 0 ? "text-rose-600" : totalVar > 0 ? "text-indigo-600" : "text-zinc-500"}>
+                                  {totalVar > 0 ? `+${totalVar}` : totalVar}
+                                </span>
+                              );
+                            })()}
+                          </td>
+                          <td className="p-3 text-zinc-400 font-normal text-[11px]">-</td>
+                        </tr>
+                      </tfoot>
                     </table>
                   </div>
                 </div>
 
-                <div className="flex justify-end gap-2 pt-2 border-t border-zinc-200 dark:border-zinc-800">
-                  <button
-                    type="button"
-                    onClick={() => setShowReceivingForm(false)}
-                    className="px-3.5 py-2 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 text-xs font-bold rounded-lg cursor-pointer"
-                  >
-                    취소
-                  </button>
-                  <button
-                    type="submit"
-                    className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg cursor-pointer"
-                  >
-                    실물 입고기록 저장
-                  </button>
+                <div className="flex justify-between items-center pt-3 border-t border-zinc-200 dark:border-zinc-800">
+                  <div className="text-[11px] text-zinc-500">
+                    * <strong>[입고 확정]</strong> 시 실시간 재고 이동(Inventory Movement) 및 가용재고가 자동 반영됩니다.
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowReceivingForm(false)}
+                      className="px-3.5 py-2 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 text-xs font-bold rounded-lg cursor-pointer"
+                    >
+                      취소
+                    </button>
+                    <button
+                      type="submit"
+                      onClick={(e) => handleSubmitReceiving(e, false)}
+                      className="px-3.5 py-2 bg-zinc-200 hover:bg-zinc-300 dark:bg-zinc-700 dark:hover:bg-zinc-600 text-zinc-800 dark:text-white text-xs font-bold rounded-lg cursor-pointer flex items-center gap-1.5"
+                    >
+                      <span>💾</span>
+                      <span>임시저장 (Save Draft)</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => handleSubmitReceiving(e, true)}
+                      className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg cursor-pointer shadow-sm flex items-center gap-1.5"
+                    >
+                      <span>✔️</span>
+                      <span>검수 및 입고 확정 (Save & Finalize)</span>
+                    </button>
+                  </div>
                 </div>
               </form>
             )}
@@ -2556,6 +2776,96 @@ export function PurchaseOrderDetail({
                 })
               )}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Complete PO Modal */}
+      {showCompletePoModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm animate-fade-in">
+          <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 space-y-5">
+            <div className="flex justify-between items-center border-b border-zinc-150 pb-3 dark:border-zinc-800">
+              <div className="flex items-center gap-2">
+                <span className="text-xl">🎉</span>
+                <div>
+                  <h3 className="text-sm font-black text-zinc-900 dark:text-white">
+                    발주 최종 종결 (Complete Purchase Order)
+                  </h3>
+                  <span className="text-[11px] font-mono text-zinc-500 dark:text-zinc-400">
+                    {po.po_number}
+                  </span>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowCompletePoModal(false)}
+                className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Summary metrics strip */}
+            <div className="grid grid-cols-3 gap-2 text-center text-xs bg-zinc-50 dark:bg-zinc-950 p-3 rounded-xl border border-zinc-200 dark:border-zinc-800">
+              <div>
+                <span className="text-[10px] text-zinc-400 block font-bold">발주 수량</span>
+                <span className="font-mono font-bold text-zinc-900 dark:text-white">{po.total_qty.toLocaleString()}</span>
+              </div>
+              <div>
+                <span className="text-[10px] text-zinc-400 block font-bold">출고 수량</span>
+                <span className="font-mono font-bold text-zinc-700 dark:text-zinc-300">{stats.shipped.toLocaleString()}</span>
+              </div>
+              <div>
+                <span className="text-[10px] text-zinc-400 block font-bold">최종 양품 입고</span>
+                <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">{stats.accepted.toLocaleString()}</span>
+              </div>
+            </div>
+
+            {/* Variance Warning if shortage or variance exists */}
+            {(completeWithVariance || stats.variance !== 0) && (
+              <div className="rounded-xl border border-amber-300 bg-amber-50/50 dark:border-amber-900/60 dark:bg-amber-950/30 p-3.5 space-y-1.5 text-xs text-amber-900 dark:text-amber-300">
+                <div className="font-bold flex items-center gap-1.5 text-amber-800 dark:text-amber-400">
+                  <span>⚠️</span>
+                  <span>발주-입고 수량 차이 발생 (Variance: {stats.variance > 0 ? `+${stats.variance}` : stats.variance} PCS)</span>
+                </div>
+                <p className="text-[11px] leading-relaxed text-amber-700 dark:text-amber-300/80">
+                  발주 수량({po.total_qty.toLocaleString()}개) 대비 실제 최종 승인 입고 수량({stats.accepted.toLocaleString()}개)에 차이가 있습니다.
+                  공급사와의 협의를 완료하였으며 더 이상의 추가 입고 없이 발주를 종결 처리하시겠습니까?
+                </p>
+              </div>
+            )}
+
+            <form onSubmit={handleExecuteCompletePo} className="space-y-4 text-xs">
+              <div>
+                <label className="block font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                  종결 사유 및 메모 (Completion Note)
+                </label>
+                <textarea
+                  rows={3}
+                  placeholder="발주 종결 관련 특이사항이나 메모를 입력해주세요."
+                  value={completePoNote}
+                  onChange={(e) => setCompletePoNote(e.target.value)}
+                  className="w-full rounded-xl border border-zinc-300 p-2.5 text-xs dark:border-zinc-700 dark:bg-zinc-950 dark:text-white focus:ring-indigo-500"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-zinc-150 dark:border-zinc-850">
+                <button
+                  type="button"
+                  onClick={() => setShowCompletePoModal(false)}
+                  className="px-4 py-2 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 font-bold text-xs rounded-xl dark:bg-zinc-800 dark:text-zinc-300"
+                >
+                  취소
+                </button>
+                <button
+                  type="submit"
+                  disabled={isCompletingPo}
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-md transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+                >
+                  <span>🎉</span>
+                  <span>{isCompletingPo ? "종결 처리 중..." : "발주 최종 종결 확정"}</span>
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
