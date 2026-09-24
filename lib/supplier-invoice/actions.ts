@@ -752,7 +752,8 @@ export async function getSupplierInvoiceById(id: string) {
   await verifyAdminSession();
   const supabase = createAdminClient();
 
-  const { data: inv, error: invErr } = await supabase
+  let inv: any = null;
+  const { data: primaryInv, error: invErr } = await supabase
     .from("supplier_invoices")
     .select(`
       id,
@@ -802,57 +803,115 @@ export async function getSupplierInvoiceById(id: string) {
         unit_price,
         line_amount,
         line_note
-      ),
-      creator:profiles!created_by (full_name:display_name),
-      submitter:profiles!submitted_by (full_name:display_name),
-      approver:profiles!approved_by (full_name:display_name),
-      rejecter:profiles!rejected_by (full_name:display_name),
-      voider:profiles!voided_by (full_name:display_name),
-      adjustments:supplier_invoice_adjustments (
+      )
+    `)
+    .eq("id", id)
+    .maybeSingle();
+
+  if (primaryInv) {
+    inv = primaryInv;
+  } else {
+    // Fallback: simple query without PO join if PO FK was broken or null
+    const { data: fallbackInv, error: fallbackErr } = await supabase
+      .from("supplier_invoices")
+      .select(`
         id,
-        supplier_invoice_id,
-        supplier_invoice_line_id,
-        adjustment_type,
-        adjustment_direction,
-        quantity,
-        unit_amount,
-        adjustment_amount,
+        purchase_order_id,
+        supplier_company_id,
+        internal_ap_number,
+        supplier_invoice_number,
+        invoice_date,
+        received_date,
+        due_date,
         currency,
-        reason,
-        reference_type,
-        reference_id,
-        supplier_credit_reference,
-        status,
+        payment_terms_snapshot,
+        incoterms_snapshot,
+        subtotal,
+        tax_amount,
+        other_charges,
+        invoice_total,
+        amount_paid,
+        balance_due,
+        invoice_status,
+        payment_status,
+        settlement_status,
+        attachment_path,
         internal_note,
-        created_at,
-        created_by,
+        rejection_reason,
+        submitted_at,
+        submitted_by,
         approved_at,
         approved_by,
         rejected_at,
         rejected_by,
-        rejection_reason,
         voided_at,
         voided_by,
-        creator:profiles!created_by (full_name:display_name),
-        approver:profiles!approved_by (full_name:display_name),
-        rejecter:profiles!rejected_by (full_name:display_name),
-        voider:profiles!voided_by (full_name:display_name)
-      ),
-      payments:supplier_payments (
-        id,
-        payment_number,
-        payment_date,
-        payment_amount,
-        currency,
-        payment_method,
-        status,
-        created_at
-      )
-    `)
-    .eq("id", id)
-    .single();
+        created_at,
+        created_by,
+        updated_at,
+        updated_by,
+        supplier:companies!supplier_company_id (id, name),
+        lines:supplier_invoice_lines (
+          id,
+          purchase_order_line_id,
+          product_id,
+          sku_snapshot,
+          product_name_snapshot,
+          invoiced_qty,
+          unit_price,
+          line_amount,
+          line_note
+        )
+      `)
+      .eq("id", id)
+      .maybeSingle();
 
-  if (invErr || !inv) throw new Error("Invoice not found.");
+    if (!fallbackInv) {
+      console.error("Failed to fetch supplier invoice by id:", invErr || fallbackErr);
+      throw new Error("Invoice not found.");
+    }
+    inv = { ...fallbackInv, po: null };
+  }
+
+  // Fetch adjustments safely
+  let adjustments: any[] = [];
+  try {
+    const { data: adjData } = await supabase
+      .from("supplier_invoice_adjustments")
+      .select("*")
+      .eq("supplier_invoice_id", id)
+      .order("created_at", { ascending: true });
+    adjustments = (adjData || []).map((a: any) => ({
+      ...a,
+      creator: null,
+      approver: null,
+      rejecter: null,
+      voider: null
+    }));
+  } catch (err) {
+    console.error("Failed to fetch invoice adjustments:", err);
+  }
+
+  // Fetch payments safely
+  let payments: any[] = [];
+  try {
+    const { data: payData } = await supabase
+      .from("supplier_payments")
+      .select("*")
+      .eq("supplier_invoice_id", id)
+      .order("created_at", { ascending: true });
+    payments = payData || [];
+  } catch (err) {
+    console.error("Failed to fetch invoice payments:", err);
+  }
+
+  inv.adjustments = adjustments;
+  inv.payments = payments;
+  inv.creator = null;
+  inv.submitter = null;
+  inv.approver = null;
+  inv.rejecter = null;
+  inv.voider = null;
 
   // Fetch remittance data safely from supplier_remittances
   const { data: rem } = await supabase
