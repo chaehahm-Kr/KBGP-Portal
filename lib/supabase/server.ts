@@ -23,6 +23,8 @@ export async function createClient() {
     prefix = "admin-";
   } else if (host.includes("portal.kselectnetwork.com") || url.includes("/portal")) {
     prefix = "portal-";
+  } else if (host.includes("portal.kselecthub.com") || url.includes("/retailer")) {
+    prefix = "retailer-";
   }
 
   // Fallback: If domain/URL does not specify prefix, inspect existing cookies
@@ -32,6 +34,8 @@ export async function createClient() {
       prefix = "portal-";
     } else if (allCookies.some((c) => c.name.startsWith("admin-sb-"))) {
       prefix = "admin-";
+    } else if (allCookies.some((c) => c.name.startsWith("retailer-sb-"))) {
+      prefix = "retailer-";
     }
   }
 
@@ -51,6 +55,7 @@ export async function createClient() {
               if (cookie.name.startsWith("sb-") && hasPrefixed) return false;
               if (cookie.name.startsWith("admin-sb-") && prefix !== "admin-") return false;
               if (cookie.name.startsWith("portal-sb-") && prefix !== "portal-") return false;
+              if (cookie.name.startsWith("retailer-sb-") && prefix !== "retailer-") return false;
               return true;
             })
             .map((cookie) => {

@@ -147,6 +147,7 @@ export async function updateSession(request: NextRequest) {
               if (cookie.name.startsWith("sb-") && hasPrefixed) return false;
               if (cookie.name.startsWith("admin-sb-") && prefix !== "admin-") return false;
               if (cookie.name.startsWith("portal-sb-") && prefix !== "portal-") return false;
+              if (cookie.name.startsWith("retailer-sb-") && prefix !== "retailer-") return false;
               return true;
             })
             .map((cookie) => {
