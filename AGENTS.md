@@ -213,9 +213,9 @@ COMPLETE
 # 22. 핵심 작업 신조 (Core Mantras)
 > 1. 개발의 완료는 Local Code가 아니라 Production에서 실제 사용자가 사용할 수 있는 상태를 의미한다.
 > 2. 다른 Agent가 작업할 수 있으므로 작업 시작 전과 Push 직전에 반드시 origin/main을 다시 확인한다.
-# 23. Strict Command & Network Verification Timeout
-- 모든 Shell 명령, `curl` 요청, Vercel 배포 확인, 도메인 네트워크 검증에는 반드시 합리적인 제한 시간(Strict Timeout, 예: `curl -sS --max-time 15`)을 지정합니다.
-- 백그라운드 태스크나 네트워크 대기 프로세스를 무한정 실행 상태로 방치하지 않으며, 타임아웃 발생 시 즉시 실패 또는 타임아웃 결과를 기록하고 다음 절차를 진행합니다.
+# 24. Standalone One-Click Copyable SQL Execution Block
+- 작업 중 Supabase SQL Editor 등에서 사용자/관리자가 직접 SQL을 실행해야 하는 경우, 반드시 **실행할 순수 SQL만 포함된 독립된 단일 ` ```sql ` 코드 블록**을 제공합니다.
+- 복사 과정에서 문법 오류를 유발할 수 있는 불필요한 서식, 마크다운 중첩, 오류 유발 주석을 배제하고 즉시 "Copy code" 버튼 하나로 복사하여 붙여넣고 실행할 수 있도록 작성합니다.
 
 ---
 
@@ -265,7 +265,12 @@ Always run and verify:
   - Brand Portal: `https://portal.kselectnetwork.com`
 - Strict Timeout: All curl/network requests must use strict timeouts (e.g. `curl -sS --max-time 15`) and must never run indefinitely.
 
-## 8. Mandatory Completion Report Format
+## 8. Standalone One-Click Copyable SQL Blocks
+Whenever manual SQL execution is required in Supabase SQL Editor:
+- Always provide the pure SQL code in a standalone, dedicated ` ```sql ` code block.
+- Do not nest the SQL inside other markdown containers so the user can copy and run it with one click.
+
+## 9. Mandatory Completion Report Format
 Every completed task MUST output a single one-click copyable markdown block containing:
 - Task ID & Name
 - Development (Modified files, Migration files)
