@@ -213,8 +213,11 @@ COMPLETE
 # 22. 핵심 작업 신조 (Core Mantras)
 > 1. 개발의 완료는 Local Code가 아니라 Production에서 실제 사용자가 사용할 수 있는 상태를 의미한다.
 > 2. 다른 Agent가 작업할 수 있으므로 작업 시작 전과 Push 직전에 반드시 origin/main을 다시 확인한다.
-> 3. SQL Migration은 파일 생성으로 완료되지 않으며 Production Supabase에 실제 적용되고 Schema가 확인되어야 완료이다.
+# 23. Strict Command & Network Verification Timeout
+- 모든 Shell 명령, `curl` 요청, Vercel 배포 확인, 도메인 네트워크 검증에는 반드시 합리적인 제한 시간(Strict Timeout, 예: `curl -sS --max-time 15`)을 지정합니다.
+- 백그라운드 태스크나 네트워크 대기 프로세스를 무한정 실행 상태로 방치하지 않으며, 타임아웃 발생 시 즉시 실패 또는 타임아웃 결과를 기록하고 다음 절차를 진행합니다.
 
+---
 
 <!-- BEGIN:deploy-std-001-rules -->
 # [DEPLOY-STD-001] Standard Development → Git → Vercel Production Deployment Workflow
@@ -260,6 +263,7 @@ Always run and verify:
 - Verify custom domains:
   - Admin: `https://admin.kselectnetwork.com`
   - Brand Portal: `https://portal.kselectnetwork.com`
+- Strict Timeout: All curl/network requests must use strict timeouts (e.g. `curl -sS --max-time 15`) and must never run indefinitely.
 
 ## 8. Mandatory Completion Report Format
 Every completed task MUST output a single one-click copyable markdown block containing:
