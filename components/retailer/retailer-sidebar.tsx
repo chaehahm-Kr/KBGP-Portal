@@ -26,7 +26,7 @@ export function RetailerSidebar({
     <aside className="hidden lg:flex lg:w-64 lg:flex-col shrink-0 border-r border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 min-h-screen">
       {/* Brand & Store Header */}
       <div className="h-16 px-6 border-b border-zinc-200 dark:border-zinc-800/80 flex items-center justify-between">
-        <Link href="/retailer" className="flex items-center gap-2.5">
+        <Link href="/" className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-lg bg-zinc-900 dark:bg-white text-white dark:text-zinc-950 flex items-center justify-center font-black text-sm shadow-sm">
             K
           </div>
@@ -60,9 +60,12 @@ export function RetailerSidebar({
       <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
         {navItems.map((item) => {
           const isActive =
-            item.href === "/retailer"
-              ? pathname === "/retailer" || pathname === "/"
-              : pathname.startsWith(item.href);
+            item.href === "/"
+              ? pathname === "/" || pathname === "/retailer"
+              : pathname === item.href ||
+                pathname.startsWith(`${item.href}/`) ||
+                pathname === `/retailer${item.href}` ||
+                pathname.startsWith(`/retailer${item.href}/`);
 
           return (
             <Link

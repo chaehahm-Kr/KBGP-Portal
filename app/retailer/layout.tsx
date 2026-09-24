@@ -9,16 +9,18 @@ import { RetailerBottomNav } from "@/components/retailer/retailer-bottom-nav";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "K SELECT Retailer Portal",
-  description: "Official B2B Retailer & Store Operations Portal",
+  title: "K SELECT HUB - Retailer Portal",
+  description: "Official B2B Retailer & Store Operations Portal for K SELECT HUB",
   manifest: "/manifest.webmanifest",
   icons: {
     icon: [
-      { url: "/symbol-Cyan-Hotpink.png?v=hub_v2", type: "image/png" },
-      { url: "/favicon.ico?v=hub_v2", sizes: "any" },
+      { url: "/hub-favicon.ico", sizes: "32x32", type: "image/x-icon" },
+      { url: "/hub-favicon.ico", sizes: "any" },
+      { url: "/hub-icon.png", type: "image/png" },
     ],
+    shortcut: ["/hub-favicon.ico"],
     apple: [
-      { url: "/symbol-Cyan-Hotpink.png?v=hub_v2", sizes: "180x180", type: "image/png" },
+      { url: "/hub-icon.png", sizes: "180x180", type: "image/png" },
     ],
   },
 };

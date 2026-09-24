@@ -133,7 +133,7 @@ export default async function RetailerHomePage() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {/* Card 1: Products */}
           <Link
-            href="/retailer/products"
+            href="/products"
             className="group rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-5 shadow-sm hover:border-zinc-400 dark:hover:border-zinc-600 transition-all space-y-3"
           >
             <div className="w-10 h-10 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-bold text-lg group-hover:scale-105 transition-transform">
@@ -151,7 +151,7 @@ export default async function RetailerHomePage() {
 
           {/* Card 2: Weekly Check */}
           <Link
-            href="/retailer/check"
+            href="/check"
             className="group rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-5 shadow-sm hover:border-zinc-400 dark:hover:border-zinc-600 transition-all space-y-3"
           >
             <div className="w-10 h-10 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center font-bold text-lg group-hover:scale-105 transition-transform">
@@ -169,7 +169,7 @@ export default async function RetailerHomePage() {
 
           {/* Card 3: Orders */}
           <Link
-            href="/retailer/orders"
+            href="/orders"
             className="group rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-5 shadow-sm hover:border-zinc-400 dark:hover:border-zinc-600 transition-all space-y-3"
           >
             <div className="w-10 h-10 rounded-lg bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 flex items-center justify-center font-bold text-lg group-hover:scale-105 transition-transform">
@@ -187,7 +187,7 @@ export default async function RetailerHomePage() {
 
           {/* Card 4: Sales & Reorder */}
           <Link
-            href="/retailer/sales"
+            href="/sales"
             className="group rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-5 shadow-sm hover:border-zinc-400 dark:hover:border-zinc-600 transition-all space-y-3"
           >
             <div className="w-10 h-10 rounded-lg bg-purple-50 dark:bg-purple-950/60 text-purple-600 dark:text-purple-400 flex items-center justify-center font-bold text-lg group-hover:scale-105 transition-transform">
@@ -205,7 +205,7 @@ export default async function RetailerHomePage() {
 
           {/* Card 5: Training */}
           <Link
-            href="/retailer/training"
+            href="/training"
             className="group rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-5 shadow-sm hover:border-zinc-400 dark:hover:border-zinc-600 transition-all space-y-3"
           >
             <div className="w-10 h-10 rounded-lg bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 flex items-center justify-center font-bold text-lg group-hover:scale-105 transition-transform">
@@ -223,7 +223,7 @@ export default async function RetailerHomePage() {
 
           {/* Card 6: Stores */}
           <Link
-            href="/retailer/stores"
+            href="/stores"
             className="group rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-5 shadow-sm hover:border-zinc-400 dark:hover:border-zinc-600 transition-all space-y-3"
           >
             <div className="w-10 h-10 rounded-lg bg-rose-50 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 flex items-center justify-center font-bold text-lg group-hover:scale-105 transition-transform">

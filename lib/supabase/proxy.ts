@@ -75,6 +75,18 @@ export async function updateSession(request: NextRequest) {
     return redirectResponse;
   }
 
+  function createRewriteWithCookies(rewriteUrl: URL) {
+    const rewriteResponse = NextResponse.rewrite(rewriteUrl, {
+      request: {
+        headers: request.headers,
+      },
+    });
+    supabaseResponse.cookies.getAll().forEach((cookie) => {
+      rewriteResponse.cookies.set(cookie);
+    });
+    return rewriteResponse;
+  }
+
   // 1. 도메인별 접속 경로 자동 분기 및 보안 영역 제한
   if (host.includes("admin.kselectnetwork.com")) {
     if (pathname.startsWith("/portal") || pathname.startsWith("/retailer")) {
@@ -96,22 +108,6 @@ export async function updateSession(request: NextRequest) {
     if (pathname === "/") {
       const url = request.nextUrl.clone();
       url.pathname = "/portal/login";
-      return createRedirectWithCookies(url);
-    }
-  } else if (host.includes("portal.kselecthub.com")) {
-    if (pathname.startsWith("/admin") || pathname.startsWith("/portal")) {
-      const url = request.nextUrl.clone();
-      url.pathname = "/retailer/login";
-      return createRedirectWithCookies(url);
-    }
-    if (pathname === "/login") {
-      const url = request.nextUrl.clone();
-      url.pathname = "/retailer/login";
-      return createRedirectWithCookies(url);
-    }
-    if (pathname === "/") {
-      const url = request.nextUrl.clone();
-      url.pathname = "/retailer";
       return createRedirectWithCookies(url);
     }
   }
@@ -198,6 +194,52 @@ export async function updateSession(request: NextRequest) {
   }
   const isAuthenticated = Boolean(user);
 
+  // 2. Retailer Portal (portal.kselecthub.com) Clean URL Routing & Host Isolation
+  if (host.includes("portal.kselecthub.com")) {
+    // A. Block access to admin or brand portal paths
+    if (pathname.startsWith("/admin") || pathname.startsWith("/portal")) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/login";
+      return createRedirectWithCookies(url);
+    }
+
+    // B. Direct access with /retailer prefix -> redirect to clean public URL
+    if (pathname.startsWith("/retailer")) {
+      const cleanPath = pathname === "/retailer" ? "/" : pathname.replace(/^\/retailer/, "");
+      const url = request.nextUrl.clone();
+      url.pathname = cleanPath;
+      return createRedirectWithCookies(url);
+    }
+
+    // C. API routes and manifest pass through without rewrite
+    if (pathname.startsWith("/api") || pathname === "/manifest.webmanifest") {
+      return supabaseResponse;
+    }
+
+    // D. Public retailer paths
+    const isPublicRetailerPath = [
+      "/login",
+      "/signup",
+      "/reset-password",
+      "/invite/accept",
+    ].some((p) => pathname === p || pathname.startsWith(`${p}/`));
+
+    // E. Unauthenticated access to protected route -> redirect to /login
+    if (!isAuthenticated && !isPublicRetailerPath) {
+      console.warn(`[Auth Security Audit] [${new Date().toISOString()}] Proxy updateSession redirected unauthenticated retailer request from ${pathname} to /login`);
+      const url = request.nextUrl.clone();
+      url.pathname = "/login";
+      return createRedirectWithCookies(url);
+    }
+
+    // F. Authenticated user or public path -> internally rewrite clean public URL to /retailer/*
+    const internalPath = `/retailer${pathname === "/" ? "" : pathname}`;
+    const internalUrl = request.nextUrl.clone();
+    internalUrl.pathname = internalPath;
+    return createRewriteWithCookies(internalUrl);
+  }
+
+  // 3. General Area Routing for other domains (Admin / Brand Portal / Localhost)
   const area = AREAS.find(({ prefix }) =>
     request.nextUrl.pathname.startsWith(prefix)
   );

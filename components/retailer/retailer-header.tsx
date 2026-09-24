@@ -46,7 +46,7 @@ export function RetailerHeader({
           </button>
 
           {/* Mobile Logo */}
-          <Link href="/retailer" className="flex items-center gap-2 lg:hidden">
+          <Link href="/" className="flex items-center gap-2 lg:hidden">
             <div className="w-7 h-7 rounded-md bg-zinc-900 dark:bg-white text-white dark:text-zinc-950 flex items-center justify-center font-black text-xs">
               K
             </div>
@@ -121,7 +121,7 @@ export function RetailerHeader({
 
                   <div className="border-t border-zinc-100 dark:border-zinc-800 pt-2">
                     <Link
-                      href="/retailer/account"
+                      href="/account"
                       onClick={() => setUserDropdownOpen(false)}
                       className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
                     >
@@ -188,9 +188,12 @@ export function RetailerHeader({
             <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
               {navItems.map((item) => {
                 const isActive =
-                  item.href === "/retailer"
-                    ? pathname === "/retailer" || pathname === "/"
-                    : pathname.startsWith(item.href);
+                  item.href === "/"
+                    ? pathname === "/" || pathname === "/retailer"
+                    : pathname === item.href ||
+                      pathname.startsWith(`${item.href}/`) ||
+                      pathname === `/retailer${item.href}` ||
+                      pathname.startsWith(`/retailer${item.href}/`);
 
                 return (
                   <Link

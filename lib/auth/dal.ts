@@ -15,7 +15,7 @@ export type VerifiedSession = {
 const LOGIN_PATH: Record<AppRole, string> = {
   portal: "/portal/login",
   admin: "/admin/login",
-  retailer: "/retailer/login",
+  retailer: "/login",
 };
 
 /**

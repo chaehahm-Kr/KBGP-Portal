@@ -11,7 +11,7 @@ export type LoginFormState = { error: string } | undefined;
 const HOME_PATH: Record<AppRole, string> = {
   portal: "/portal",
   admin: "/admin",
-  retailer: "/retailer",
+  retailer: "/",
 };
 
 /**
@@ -227,5 +227,5 @@ export async function logoutAdmin() {
 export async function logoutRetailer() {
   const supabase = await createClient();
   await supabase.auth.signOut();
-  redirect("/retailer/login");
+  redirect("/login");
 }

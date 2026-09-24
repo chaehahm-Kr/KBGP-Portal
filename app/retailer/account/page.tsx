@@ -3,6 +3,7 @@ import Link from "next/link";
 import { verifyRetailerSession } from "@/lib/auth/dal";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ThemeToggle } from "@/components/retailer/theme-toggle";
+import { logoutRetailer } from "@/lib/auth/actions";
 
 export const dynamic = "force-dynamic";
 
@@ -208,10 +209,10 @@ export default async function RetailerAccountPage() {
           </div>
 
           <div className="pt-3 border-t border-zinc-100 dark:border-zinc-800">
-            <form action="/api/retailer/auth/logout" method="POST">
+            <form action={logoutRetailer}>
               <button
                 type="submit"
-                className="w-full py-2 px-4 rounded-xl border border-rose-200 dark:border-rose-900/60 bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 text-xs font-semibold hover:bg-rose-100 dark:hover:bg-rose-900/60 transition-colors flex items-center justify-center gap-2"
+                className="w-full py-2 px-4 rounded-xl border border-rose-200 dark:border-rose-900/60 bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 text-xs font-semibold hover:bg-rose-100 dark:hover:bg-rose-900/60 transition-colors flex items-center justify-center gap-2 cursor-pointer"
               >
                 <span>🚪</span>
                 <span>Sign Out of Retailer Portal</span>

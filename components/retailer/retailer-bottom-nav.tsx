@@ -13,11 +13,11 @@ export function RetailerBottomNav({ }: RetailerBottomNavProps) {
   const pathname = usePathname();
 
   const items = [
-    { name: "Home", href: "/retailer", icon: "home" },
-    { name: "Products", href: "/retailer/products", icon: "package" },
-    { name: "Check", href: "/retailer/check", icon: "clipboard-check", highlight: true },
-    { name: "Orders", href: "/retailer/orders", icon: "shopping-cart" },
-    { name: "Account", href: "/retailer/account", icon: "user" },
+    { name: "Home", href: "/", icon: "home" },
+    { name: "Products", href: "/products", icon: "package" },
+    { name: "Check", href: "/check", icon: "clipboard-check", highlight: true },
+    { name: "Orders", href: "/orders", icon: "shopping-cart" },
+    { name: "Account", href: "/account", icon: "user" },
   ];
 
   return (
@@ -25,9 +25,12 @@ export function RetailerBottomNav({ }: RetailerBottomNavProps) {
       <div className="grid grid-cols-5 h-14">
         {items.map((item) => {
           const isActive =
-            item.href === "/retailer"
-              ? pathname === "/retailer" || pathname === "/"
-              : pathname.startsWith(item.href);
+            item.href === "/"
+              ? pathname === "/" || pathname === "/retailer"
+              : pathname === item.href ||
+                pathname.startsWith(`${item.href}/`) ||
+                pathname === `/retailer${item.href}` ||
+                pathname.startsWith(`/retailer${item.href}/`);
 
           return (
             <Link
