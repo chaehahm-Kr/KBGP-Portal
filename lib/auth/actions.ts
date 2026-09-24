@@ -11,11 +11,12 @@ export type LoginFormState = { error: string } | undefined;
 const HOME_PATH: Record<AppRole, string> = {
   portal: "/portal",
   admin: "/admin",
+  retailer: "/retailer",
 };
 
 /**
  * 이메일+비밀번호 로그인 처리. area별로 로그인 경로가 완전히 분리되어 있으므로
- * (10_보안과권한요구사항.md 2번) 이 함수도 portal/admin 각각의 서버 액션으로 감싸 노출한다.
+ * (10_보안과권한요구사항.md 2번) 이 함수도 portal/admin/retailer 각각의 서버 액션으로 감싸 노출한다.
  *
  * 5회 연속 실패 시 15분 잠금(10_보안과권한요구사항.md 2번)은 lib/auth/login-attempts.ts가
  * 담당한다. 잠긴 동안에는 Supabase Auth에 실제 로그인 요청 자체를 보내지 않는다 —
@@ -93,11 +94,14 @@ async function login(
   if (profileError || !profile || profile.role !== area) {
     // 다른 area의 계정으로 로그인 시도 — 즉시 세션을 정리하고 area 전용 오류만 안내한다.
     await supabase.auth.signOut();
+    let errorMsg = "이 계정은 관리자 계정이 아닙니다.";
+    if (area === "portal") {
+      errorMsg = "이 계정은 파트너 포털 계정이 아닙니다.";
+    } else if (area === "retailer") {
+      errorMsg = "이 계정은 리테일러 포털 계정이 아닙니다.";
+    }
     return {
-      error:
-        area === "portal"
-          ? "이 계정은 파트너 포털 계정이 아닙니다."
-          : "이 계정은 관리자 계정이 아닙니다.",
+      error: errorMsg,
     };
   }
 
@@ -146,6 +150,25 @@ async function login(
         error: "이용이 정지된 관리자 계정입니다.",
       };
     }
+  } else if (area === "retailer") {
+    const { data: companyUser } = await adminClient
+      .from("company_users")
+      .select("status")
+      .eq("id", data.user.id)
+      .maybeSingle();
+
+    if (!companyUser) {
+      await supabase.auth.signOut();
+      return {
+        error: "소속 회사 정보가 조회되지 않는 계정입니다. 관리자에게 문의해주세요.",
+      };
+    }
+    if (companyUser.status === "suspended") {
+      await supabase.auth.signOut();
+      return {
+        error: "이용이 정지된 계정입니다. 회사 관리자에게 문의해주세요.",
+      };
+    }
   }
 
   redirect(HOME_PATH[area]);
@@ -165,6 +188,13 @@ export async function loginAdmin(
   return login("admin", formData);
 }
 
+export async function loginRetailer(
+  _prevState: LoginFormState,
+  formData: FormData
+): Promise<LoginFormState> {
+  return login("retailer", formData);
+}
+
 export async function logoutPortal() {
   const supabase = await createClient();
   await supabase.auth.signOut();
@@ -175,4 +205,10 @@ export async function logoutAdmin() {
   const supabase = await createClient();
   await supabase.auth.signOut();
   redirect("/admin/login");
+}
+
+export async function logoutRetailer() {
+  const supabase = await createClient();
+  await supabase.auth.signOut();
+  redirect("/retailer/login");
 }

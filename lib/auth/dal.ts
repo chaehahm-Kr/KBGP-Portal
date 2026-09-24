@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 
-export type AppRole = "portal" | "admin";
+export type AppRole = "portal" | "admin" | "retailer";
 
 export type VerifiedSession = {
   userId: string;
@@ -15,10 +15,11 @@ export type VerifiedSession = {
 const LOGIN_PATH: Record<AppRole, string> = {
   portal: "/portal/login",
   admin: "/admin/login",
+  retailer: "/retailer/login",
 };
 
 /**
- * Data Access Layer의 핵심 함수. area("portal" 또는 "admin")별로 세션을 검증한다.
+ * Data Access Layer의 핵심 함수. area("portal", "admin", "retailer")별로 세션을 검증한다.
  */
 async function verifySession(area: AppRole): Promise<VerifiedSession> {
   const supabase = await createClient();
@@ -59,7 +60,7 @@ async function verifySession(area: AppRole): Promise<VerifiedSession> {
       console.warn(`[Auth Security Audit] [${new Date().toISOString()}] DAL verifySession [${area}] staff status rejected for user ${user.id}. Status: ${staffMember?.status || "missing"}`);
       redirect(`${LOGIN_PATH[area]}?reason=account_inactive`);
     }
-  } else {
+  } else if (area === "portal") {
     const { data: companyUser } = await adminClient
       .from("company_users")
       .select("status")
@@ -68,6 +69,17 @@ async function verifySession(area: AppRole): Promise<VerifiedSession> {
 
     if (!companyUser || companyUser.status !== "active") {
       console.warn(`[Auth Security Audit] [${new Date().toISOString()}] DAL verifySession [${area}] company_user status rejected for user ${user.id}. Status: ${companyUser?.status || "missing"}`);
+      redirect(`${LOGIN_PATH[area]}?reason=membership_inactive`);
+    }
+  } else if (area === "retailer") {
+    const { data: companyUser } = await adminClient
+      .from("company_users")
+      .select("status")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    if (!companyUser || !["active", "invited"].includes(companyUser.status)) {
+      console.warn(`[Auth Security Audit] [${new Date().toISOString()}] DAL verifySession [${area}] retailer user status rejected for user ${user.id}. Status: ${companyUser?.status || "missing"}`);
       redirect(`${LOGIN_PATH[area]}?reason=membership_inactive`);
     }
   }
@@ -81,6 +93,7 @@ async function verifySession(area: AppRole): Promise<VerifiedSession> {
 
 // React cache()로 같은 렌더 패스 안에서는 중복 호출해도 한 번만 실제 검증한다.
 export const verifyPortalSession = cache(() => verifySession("portal"));
+export const verifyRetailerSession = cache(() => verifySession("retailer"));
 
 /**
  * 활성화된 일반 직원(Active)만 접근을 허용합니다.

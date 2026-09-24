@@ -30,6 +30,16 @@ const AREAS: { prefix: string; login: string; publicPaths: string[] }[] = [
       "/admin/reset-password"
     ],
   },
+  {
+    prefix: "/retailer",
+    login: "/retailer/login",
+    publicPaths: [
+      "/retailer/login",
+      "/retailer/signup",
+      "/retailer/reset-password",
+      "/retailer/invite/accept",
+    ],
+  },
 ];
 
 /**
@@ -67,7 +77,7 @@ export async function updateSession(request: NextRequest) {
 
   // 1. 도메인별 접속 경로 자동 분기 및 보안 영역 제한
   if (host.includes("admin.kselectnetwork.com")) {
-    if (pathname.startsWith("/portal")) {
+    if (pathname.startsWith("/portal") || pathname.startsWith("/retailer")) {
       const url = request.nextUrl.clone();
       url.pathname = "/admin/login";
       return createRedirectWithCookies(url);
@@ -78,7 +88,7 @@ export async function updateSession(request: NextRequest) {
       return createRedirectWithCookies(url);
     }
   } else if (host.includes("portal.kselectnetwork.com")) {
-    if (pathname.startsWith("/admin")) {
+    if (pathname.startsWith("/admin") || pathname.startsWith("/retailer")) {
       const url = request.nextUrl.clone();
       url.pathname = "/portal/login";
       return createRedirectWithCookies(url);
@@ -88,6 +98,17 @@ export async function updateSession(request: NextRequest) {
       url.pathname = "/portal/login";
       return createRedirectWithCookies(url);
     }
+  } else if (host.includes("portal.kselecthub.com")) {
+    if (pathname.startsWith("/admin") || pathname.startsWith("/portal")) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/retailer/login";
+      return createRedirectWithCookies(url);
+    }
+    if (pathname === "/") {
+      const url = request.nextUrl.clone();
+      url.pathname = "/retailer/login";
+      return createRedirectWithCookies(url);
+    }
   }
 
   let prefix = "";
@@ -95,6 +116,8 @@ export async function updateSession(request: NextRequest) {
     prefix = "admin-";
   } else if (host.includes("portal.kselectnetwork.com") || pathname.startsWith("/portal")) {
     prefix = "portal-";
+  } else if (host.includes("portal.kselecthub.com") || pathname.startsWith("/retailer")) {
+    prefix = "retailer-";
   }
 
   if (!prefix) {
@@ -103,6 +126,8 @@ export async function updateSession(request: NextRequest) {
       prefix = "portal-";
     } else if (allCookies.some((c) => c.name.startsWith("admin-sb-"))) {
       prefix = "admin-";
+    } else if (allCookies.some((c) => c.name.startsWith("retailer-sb-"))) {
+      prefix = "retailer-";
     }
   }
 
