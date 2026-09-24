@@ -5,7 +5,8 @@ export function getOverallStatus(
     supplier_confirmation_status?: string | null;
   },
   shipments: any[] = [],
-  receivings: any[] = []
+  receivings: any[] = [],
+  goodsReadiness: any[] = []
 ): string {
   if (po.po_status === "DRAFT") return "Draft";
   if (po.po_status === "CANCELLED") return "Cancelled";
@@ -15,36 +16,48 @@ export function getOverallStatus(
     const activeReceivings = receivings.filter((r) => r.status === "DRAFT");
     const finalizedReceivings = receivings.filter((r) => r.status === "FINALIZED");
     const activeShipments = shipments.filter((s) => s.status !== "CANCELLED");
+    const activeReadiness = goodsReadiness.filter(
+      (gr) => gr.handover_status !== "CANCELLED" && gr.handover_status !== "DRAFT"
+    );
 
-    // Check if received or finalized
-    if (
-      po.fulfillment_status === "RECEIVED" ||
-      po.fulfillment_status === "COMPLETED" ||
-      (finalizedReceivings.length > 0 && activeReceivings.length === 0)
-    ) {
-      return "Completed";
-    }
+    const totalReadyQty = activeReadiness.reduce(
+      (sum, gr) => sum + (gr.lines ?? []).reduce((lSum: number, gl: any) => lSum + (Number(gl.ready_qty) || 0), 0),
+      0
+    );
 
-    // Check if currently receiving (draft receiving exists)
-    if (activeReceivings.length > 0) {
-      return "Receiving";
-    }
-
-    // Check if arrived/inspecting
-    if (
-      activeShipments.some((s) => s.status === "ARRIVED" || s.status === "PARTIALLY_RECEIVED")
-    ) {
-      return "Arrived";
-    }
-
-    // Calculate total shipped quantity across all active shipments
     const totalShippedQty = activeShipments.reduce(
       (sum, s) => sum + (s.lines ?? []).reduce((lSum: number, sl: any) => lSum + (Number(sl.shipped_qty) || 0), 0),
       0
     );
 
-    // Check if shipped/transit (Requirement 4: Shipped Qty > 0 must transition to Shipped)
-    // Check if shipped/transit (Requirement: Any active shipment or shipped_qty > 0 transitions to Shipped)
+    let totalAcceptedQty = 0;
+    let totalReceivedQty = 0;
+    finalizedReceivings.forEach((r) => {
+      (r.lines ?? []).forEach((rl: any) => {
+        totalReceivedQty += Number(rl.received_qty) || 0;
+        totalAcceptedQty += (Number(rl.received_qty) || 0) - (Number(rl.damaged_qty) || 0) - (Number(rl.hold_qty) || 0);
+      });
+    });
+
+    // Step 6: Completed (Finalized receivings or completed fulfillment status)
+    if (
+      po.fulfillment_status === "RECEIVED" ||
+      po.fulfillment_status === "COMPLETED" ||
+      (finalizedReceivings.length > 0 && activeReceivings.length === 0 && totalAcceptedQty > 0)
+    ) {
+      return "Completed";
+    }
+
+    // Step 5: Receiving / Arrived (Active inspection or warehouse arrived)
+    if (activeReceivings.length > 0 || totalReceivedQty > 0 || po.fulfillment_status === "PARTIALLY_RECEIVED") {
+      return "Receiving";
+    }
+
+    if (activeShipments.some((s) => s.status === "ARRIVED" || s.status === "PARTIALLY_RECEIVED")) {
+      return "Arrived";
+    }
+
+    // Step 4: Shipped (Shipped Qty > 0 or active shipments or fulfillment_status SHIPPED/PARTIALLY_SHIPPED/IN_TRANSIT)
     if (
       po.fulfillment_status === "SHIPPED" ||
       po.fulfillment_status === "PARTIALLY_SHIPPED" ||
@@ -55,10 +68,16 @@ export function getOverallStatus(
       return "Shipped";
     }
 
-    if (po.fulfillment_status === "READY_TO_SHIP") {
+    // Step 3: Ready to Ship (Ready Qty > 0 or active goods readiness or fulfillment_status READY_TO_SHIP)
+    if (
+      po.fulfillment_status === "READY_TO_SHIP" ||
+      activeReadiness.length > 0 ||
+      totalReadyQty > 0
+    ) {
       return "Ready to Ship";
     }
 
+    // Step 2: Supplier Confirmed / In Production
     if (po.fulfillment_status === "IN_PRODUCTION") {
       return "In Production";
     }
@@ -67,6 +86,7 @@ export function getOverallStatus(
       return "Supplier Confirmed";
     }
 
+    // Step 1: PO Sent
     return "Sent to Supplier";
   }
 
@@ -180,4 +200,3 @@ export function getNextAction(overallStatus: string, isReadOnly: boolean = false
       return null;
   }
 }
-

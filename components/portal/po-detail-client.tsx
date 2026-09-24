@@ -271,8 +271,8 @@ export default function PoDetailClient({
   const [eta, setEta] = useState("");
 
   const overallStatus = useMemo(() => {
-    return getOverallStatus(po, shipments, receivings);
-  }, [po, shipments, receivings]);
+    return getOverallStatus(po, shipments, receivings, goodsReadiness);
+  }, [po, shipments, receivings, goodsReadiness]);
 
   // Aggregate quantities
   const stats = useMemo(() => {
@@ -888,13 +888,146 @@ export default function PoDetailClient({
         }
       />
 
+      {/* Overview Stats Strip */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-4">
+        <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 text-center">
+          <span className="text-[10px] text-zinc-400 block uppercase font-bold">발주 수량</span>
+          <span className="text-sm font-bold font-mono text-zinc-900 dark:text-white">{totalTargetQty.toLocaleString()}</span>
+        </div>
+        <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 text-center">
+          <span className="text-[10px] text-zinc-400 block uppercase font-bold">확정 수량</span>
+          <span className="text-sm font-bold font-mono text-emerald-600 dark:text-emerald-400">
+            {po.lines.reduce((s, l) => s + (l.confirmed_qty ?? l.qty), 0).toLocaleString()}
+          </span>
+        </div>
+        <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 text-center">
+          <span className="text-[10px] text-zinc-400 block uppercase font-bold">출고 준비 수량</span>
+          <span className="text-sm font-bold font-mono text-indigo-600 dark:text-indigo-400">{totalReadyCommitted.toLocaleString()}</span>
+        </div>
+        <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 text-center">
+          <span className="text-[10px] text-zinc-400 block uppercase font-bold">출고/선적 수량</span>
+          <span className="text-sm font-bold font-mono text-zinc-900 dark:text-white font-bold">{stats.shipped.toLocaleString()}</span>
+        </div>
+        <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 text-center">
+          <span className="text-[10px] text-zinc-400 block uppercase font-bold">창고 입고 수량</span>
+          <span className="text-sm font-bold font-mono text-emerald-600 dark:text-emerald-400">{stats.received.toLocaleString()}</span>
+        </div>
+        <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 text-center">
+          <span className="text-[10px] text-zinc-400 block uppercase font-bold">미입고/잔여</span>
+          <span className={`text-sm font-bold font-mono ${stats.variance < 0 ? "text-rose-600" : "text-emerald-600"}`}>
+            {stats.variance.toLocaleString()}
+          </span>
+        </div>
+      </div>
+
+      {/* Permanent Order Products Summary Table (Always rendered outside tabs) */}
+      <div className="rounded-2xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900 overflow-hidden space-y-0">
+        <div className="px-5 py-4 border-b border-zinc-150 dark:border-zinc-800 flex justify-between items-center bg-zinc-50/50 dark:bg-zinc-900/50">
+          <div>
+            <h3 className="text-xs font-black uppercase tracking-wider text-zinc-900 dark:text-white flex items-center gap-2">
+              <span>📦</span>
+              <span>주문 품목 리스트 (Order Products & Line Quantities)</span>
+            </h3>
+            <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5">
+              품목별 발주 수량, 공급사 확정 수량, 출고 준비, 출고(선적), 입고 완료 현황입니다.
+            </p>
+          </div>
+          <span className="font-mono text-xs font-bold text-zinc-500 dark:text-zinc-400">
+            총 {po.lines.length}개 품목
+          </span>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse text-xs">
+            <thead>
+              <tr className="border-b border-zinc-200 bg-zinc-50/50 text-zinc-550 font-bold dark:border-zinc-850 dark:bg-zinc-900/50 dark:text-white">
+                <th className="px-4 py-3.5">제품명 / Letusto SKU</th>
+                <th className="px-4 py-3.5 text-right">발주 수량 (PO)</th>
+                <th className="px-4 py-3.5 text-right">공급사 확정 (Confirmed)</th>
+                <th className="px-4 py-3.5 text-right">출고 준비 (Ready)</th>
+                <th className="px-4 py-3.5 text-right">출고/선적 (Shipped)</th>
+                <th className="px-4 py-3.5 text-right">창고 입고 (Received)</th>
+                <th className="px-4 py-3.5 text-right">단가</th>
+                <th className="px-4 py-3.5 text-right">합계</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-zinc-150 dark:divide-zinc-800/80">
+              {po.lines.map((l) => {
+                const q = lineQuantities[l.id] || { readyQty: 0, shippedQty: 0, receivedQty: 0 };
+                const readyVal = (l as any).ready_qty !== undefined ? Number((l as any).ready_qty) : q.readyQty;
+                const shippedVal = (l as any).shipped_qty !== undefined ? Number((l as any).shipped_qty) : q.shippedQty;
+                const receivedVal = (l as any).received_qty !== undefined ? Number((l as any).received_qty) : q.receivedQty;
+                const targetQty = (l.confirmed_qty !== null && l.confirmed_qty !== undefined) ? Number(l.confirmed_qty) : Number(l.qty);
+                return (
+                  <tr key={l.id} className="hover:bg-zinc-50/30 dark:hover:bg-zinc-850/10">
+                    <td className="px-4 py-3">
+                      <span className="font-bold text-zinc-900 dark:text-white block">{l.product.name}</span>
+                      <span className="font-mono text-[10px] text-zinc-450 mt-0.5 block">{l.product.letusto_sku}</span>
+                      {l.line_note && <span className="text-[10px] text-zinc-450 italic mt-0.5 block">{l.line_note}</span>}
+                    </td>
+                    <td className="px-4 py-3 text-right font-mono font-semibold">{l.qty.toLocaleString()}</td>
+                    <td className="px-4 py-3 text-right font-mono font-semibold">
+                      {l.confirmed_qty !== null && l.confirmed_qty !== undefined ? (
+                        <span className={l.confirmed_qty !== l.qty ? "text-amber-600 dark:text-amber-400 font-bold" : "text-emerald-600 dark:text-emerald-400 font-semibold"}>
+                          {l.confirmed_qty.toLocaleString()}
+                        </span>
+                      ) : (
+                        <span className="text-zinc-400 italic">미확정 ({l.qty.toLocaleString()})</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-right font-mono font-semibold text-indigo-600 dark:text-indigo-400 font-bold">
+                      {readyVal.toLocaleString()}
+                    </td>
+                    <td className="px-4 py-3 text-right font-mono font-semibold text-zinc-900 dark:text-white font-bold">
+                      {shippedVal.toLocaleString()}
+                    </td>
+                    <td className="px-4 py-3 text-right font-mono font-semibold text-emerald-600 dark:text-emerald-400 font-bold">
+                      {receivedVal.toLocaleString()}
+                    </td>
+                    <td className="px-4 py-3 text-right font-mono text-zinc-600 dark:text-zinc-400">
+                      {po.currency} {l.unit_cost.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                    </td>
+                    <td className="px-4 py-3 text-right font-mono font-black text-zinc-950 dark:text-white">
+                      {po.currency} {(targetQty * l.unit_cost).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+            <tfoot className="border-t-2 border-zinc-200 dark:border-zinc-700 bg-zinc-50/60 dark:bg-zinc-900/60 font-bold">
+              <tr>
+                <td className="px-4 py-3 text-zinc-600 dark:text-zinc-400">합계 (Total)</td>
+                <td className="px-4 py-3 text-right font-mono text-zinc-900 dark:text-white">
+                  {po.lines.reduce((s, l) => s + Number(l.qty || 0), 0).toLocaleString()}
+                </td>
+                <td className="px-4 py-3 text-right font-mono text-zinc-900 dark:text-white">
+                  {po.lines.reduce((s, l) => s + (l.confirmed_qty ?? l.qty), 0).toLocaleString()}
+                </td>
+                <td className="px-4 py-3 text-right font-mono text-indigo-600 dark:text-indigo-400">
+                  {po.lines.reduce((s, l) => s + Number((l as any).ready_qty !== undefined ? (l as any).ready_qty : lineQuantities[l.id]?.readyQty || 0), 0).toLocaleString()}
+                </td>
+                <td className="px-4 py-3 text-right font-mono text-zinc-900 dark:text-white">
+                  {stats.shipped.toLocaleString()}
+                </td>
+                <td className="px-4 py-3 text-right font-mono text-emerald-600 dark:text-emerald-400">
+                  {stats.received.toLocaleString()}
+                </td>
+                <td className="px-4 py-3 text-right font-mono text-zinc-400">-</td>
+                <td className="px-4 py-3 text-right font-mono font-black text-zinc-950 dark:text-white">
+                  {po.currency} {po.lines.reduce((s, l) => s + ((l.confirmed_qty ?? l.qty) * l.unit_cost), 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                </td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </div>
+
       {/* Tabs */}
       <div className="border-b border-zinc-200 dark:border-zinc-850">
         <nav className="flex space-x-6 text-xs font-bold overflow-x-auto">
           {[
             { id: "overview", label: "주문 개요 (Overview)" },
-            { id: "products", label: "주문 품목 (Products)" },
-            { id: "shipment", label: "출고 & 선적 관리 (Shipments)" },
+            { id: "shipments", label: "출고 & 선적 관리 (Shipments)" },
             { id: "receiving", label: "창고 입고 현황 (Receiving)" },
             { id: "documents", label: "서류 및 송장 (Documents)" },
             { id: "communication", label: "이력 및 협업 (Collaboration)" },
@@ -1047,7 +1180,7 @@ export default function PoDetailClient({
         )}
 
         {/* Tab 3: Shipment */}
-        {activeTab === "shipment" && (
+        {activeTab === "shipments" && (
           <div className="space-y-6 text-xs">
             <div className="flex justify-between items-center">
               <div>
