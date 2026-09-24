@@ -487,12 +487,14 @@ export function InvoiceDetail({ invoice, po, prevInvoicesTotal, poMerchandiseTot
   const approvedAdjustments = invoice.adjustments.filter(a => a.status === "APPROVED");
   const approvedCredits = approvedAdjustments
     .filter(a => a.adjustment_direction === "CREDIT")
-    .reduce((sum, a) => sum + a.adjustment_amount, 0);
+    .reduce((sum, a) => sum + Number(a.adjustment_amount), 0);
   const approvedCharges = approvedAdjustments
     .filter(a => a.adjustment_direction === "CHARGE")
-    .reduce((sum, a) => sum + a.adjustment_amount, 0);
+    .reduce((sum, a) => sum + Number(a.adjustment_amount), 0);
 
-  const finalPayable = invoice.invoice_total + approvedCharges - approvedCredits;
+  const baseInvoiceAmount = invoice.subtotal || 0;
+  const netAdjustmentTotal = approvedCharges - approvedCredits;
+  const finalPayable = baseInvoiceAmount + (invoice.tax_amount || 0) + (invoice.other_charges || 0) + netAdjustmentTotal;
   const balanceDue = finalPayable - invoice.amount_paid;
 
   // Logistics mapping for summaries
@@ -1127,26 +1129,26 @@ export function InvoiceDetail({ invoice, po, prevInvoicesTotal, poMerchandiseTot
 
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 bg-zinc-50 dark:bg-zinc-950 p-4 border border-zinc-150 dark:border-zinc-850 rounded-xl">
               <div>
-                <span className="text-[10px] text-zinc-400 block mb-0.5">인보이스 원 청구 총액</span>
+                <span className="text-[10px] text-zinc-400 block mb-0.5">품목 기본 공급가액 (Base Amount)</span>
                 <span className="text-sm font-mono font-bold text-zinc-900 dark:text-white">
-                  {invoice.currency} {invoice.invoice_total.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                  {invoice.currency} {baseInvoiceAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                 </span>
               </div>
               <div className="border-l border-zinc-200 pl-4 dark:border-zinc-850">
-                <span className="text-[10px] text-rose-500 block mb-0.5">차감 합계 (Approved Credits)</span>
+                <span className="text-[10px] text-emerald-600 block mb-0.5 font-semibold">가산 합계 (+ Approved Charges)</span>
+                <span className="text-sm font-mono font-bold text-emerald-600">
+                  +{invoice.currency} {approvedCharges.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                </span>
+              </div>
+              <div className="border-l border-zinc-200 pl-4 dark:border-zinc-850">
+                <span className="text-[10px] text-rose-500 block mb-0.5 font-semibold">차감 합계 (- Approved Credits)</span>
                 <span className="text-sm font-mono font-bold text-rose-600">
                   -{invoice.currency} {approvedCredits.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                 </span>
               </div>
               <div className="border-l border-zinc-200 pl-4 dark:border-zinc-850">
-                <span className="text-[10px] text-blue-500 block mb-0.5">가산 합계 (Approved Charges)</span>
-                <span className="text-sm font-mono font-bold text-blue-600">
-                  +{invoice.currency} {approvedCharges.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                </span>
-              </div>
-              <div className="border-l border-zinc-200 pl-4 dark:border-zinc-850">
-                <span className="text-[10px] text-emerald-650 block mb-0.5 font-bold">최종 미지급 채무 (Final Payable)</span>
-                <span className="text-sm font-mono font-bold text-emerald-700 dark:text-emerald-400">
+                <span className="text-[10px] text-zinc-900 dark:text-zinc-100 block mb-0.5 font-bold">최종 청구액 (Final Payable)</span>
+                <span className="text-sm font-mono font-extrabold text-zinc-950 dark:text-white">
                   {invoice.currency} {finalPayable.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                 </span>
               </div>

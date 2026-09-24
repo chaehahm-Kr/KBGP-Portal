@@ -73,6 +73,55 @@ export function InvoiceForm({ invoice, eligiblePos, suppliers }: InvoiceFormProp
   const [errorMessage, setErrorMessage] = useState("");
   const [uploadingFile, setUploadingFile] = useState(false);
 
+  // Adjustments State
+  interface AdjustmentItemInput {
+    id?: string;
+    type: "PLUS" | "MINUS";
+    reason: string;
+    amount: number;
+    note: string;
+  }
+
+  const [adjustments, setAdjustments] = useState<AdjustmentItemInput[]>(() => {
+    if (invoice?.adjustments && Array.isArray(invoice.adjustments)) {
+      return invoice.adjustments.map((a: any) => ({
+        id: a.id,
+        type: (a.adjustment_direction === 'CHARGE' ? 'PLUS' : 'MINUS') as "PLUS" | "MINUS",
+        reason: a.reason || "",
+        amount: Number(a.adjustment_amount || a.amount || 0),
+        note: a.internal_note || a.note || ""
+      }));
+    }
+    return [];
+  });
+
+  const handleAddAdjustment = (presetType: "PLUS" | "MINUS" = "PLUS", presetReason: string = "") => {
+    setAdjustments(prev => [
+      ...prev,
+      {
+        type: presetType,
+        reason: presetReason,
+        amount: 0,
+        note: ""
+      }
+    ]);
+  };
+
+  const handleRemoveAdjustment = (index: number) => {
+    setAdjustments(prev => prev.filter((_, idx) => idx !== index));
+  };
+
+  const handleAdjustmentChange = (index: number, field: keyof AdjustmentItemInput, val: any) => {
+    setAdjustments(prev => {
+      const updated = [...prev];
+      updated[index] = {
+        ...updated[index],
+        [field]: val
+      };
+      return updated;
+    });
+  };
+
   // Filter POs by selected Supplier
   const supplierPos = eligiblePos.filter(po => po.supplier_id === supplierId);
   const selectedPo = supplierPos.find(p => p.id === poId);
@@ -178,7 +227,12 @@ export function InvoiceForm({ invoice, eligiblePos, suppliers }: InvoiceFormProp
 
   // Computations
   const subtotal = lines.reduce((sum, l) => sum + (l.invoiced_qty * l.unit_price), 0);
-  const total = subtotal + Number(taxAmount) + Number(otherCharges);
+  const baseInvoiceAmount = subtotal;
+  const adjustmentTotal = adjustments.reduce((sum, adj) => {
+    const amt = Number(adj.amount) || 0;
+    return adj.type === "PLUS" ? sum + amt : sum - amt;
+  }, 0);
+  const total = Number((baseInvoiceAmount + Number(taxAmount) + Number(otherCharges) + adjustmentTotal).toFixed(2));
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -188,6 +242,24 @@ export function InvoiceForm({ invoice, eligiblePos, suppliers }: InvoiceFormProp
     }
     if (lines.length === 0) {
       setErrorMessage("최소 하나의 품목 라인이 필요합니다.");
+      return;
+    }
+
+    // Validate adjustments
+    for (let i = 0; i < adjustments.length; i++) {
+      const adj = adjustments[i];
+      if (!adj.reason.trim()) {
+        setErrorMessage(`조정 항목 #${i + 1}의 사유(Reason)를 입력해 주세요.`);
+        return;
+      }
+      if (Number(adj.amount) <= 0) {
+        setErrorMessage(`조정 항목 #${i + 1}의 금액은 0보다 커야 합니다.`);
+        return;
+      }
+    }
+
+    if (total < 0) {
+      setErrorMessage("최종 인보이스 청구 금액(Final Invoice Amount)은 0 이상이어야 합니다. 조정 금액을 확인해 주세요.");
       return;
     }
 
@@ -216,6 +288,13 @@ export function InvoiceForm({ invoice, eligiblePos, suppliers }: InvoiceFormProp
         invoiced_qty: Number(l.invoiced_qty),
         unit_price: Number(l.unit_price),
         line_note: l.line_note
+      })),
+      adjustments: adjustments.map(adj => ({
+        id: adj.id,
+        type: adj.type,
+        reason: adj.reason.trim(),
+        amount: Number(adj.amount),
+        note: adj.note.trim()
       }))
     };
 
@@ -537,13 +616,181 @@ export function InvoiceForm({ invoice, eligiblePos, suppliers }: InvoiceFormProp
               </div>
             )}
 
-            {/* Subtotal, Tax, Other Charges and Total */}
-            <div className="border-t border-zinc-150 pt-4 dark:border-zinc-800 flex justify-end">
-              <div className="w-64 space-y-2 text-right">
+            {/* Adjustments Section */}
+            <div className="border-t border-zinc-150 pt-5 dark:border-zinc-800 space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="text-xs font-bold text-zinc-850 dark:text-zinc-200 flex items-center gap-2">
+                    <span>조정 항목 (Adjustments)</span>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 font-mono">
+                      {adjustments.length}
+                    </span>
+                  </h4>
+                  <p className="text-[11px] text-zinc-400 dark:text-zinc-500 mt-0.5">
+                    운송 지원비(+), 파손 공제(-), 마케팅 크레딧(-) 등 인보이스 기본 청구액에 가감할 항목을 추가합니다.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleAddAdjustment("PLUS", "")}
+                    className="px-2.5 py-1.5 bg-emerald-50 border border-emerald-250 hover:bg-emerald-100 text-emerald-750 dark:bg-emerald-950/40 dark:border-emerald-800 dark:text-emerald-300 font-bold rounded-lg text-xs transition-colors flex items-center gap-1 cursor-pointer"
+                  >
+                    <span>+</span> 추가 청구 (+ PLUS)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleAddAdjustment("MINUS", "")}
+                    className="px-2.5 py-1.5 bg-rose-50 border border-rose-250 hover:bg-rose-100 text-rose-750 dark:bg-rose-950/40 dark:border-rose-800 dark:text-rose-300 font-bold rounded-lg text-xs transition-colors flex items-center gap-1 cursor-pointer"
+                  >
+                    <span>-</span> 공제 (- MINUS)
+                  </button>
+                </div>
+              </div>
+
+              {adjustments.length === 0 ? (
+                <div className="p-4 text-center border border-dashed border-zinc-200 dark:border-zinc-800 rounded-xl">
+                  <p className="text-xs text-zinc-400 dark:text-zinc-500">등록된 조정 항목이 없습니다. (0 Adjustments)</p>
+                  <div className="flex justify-center gap-2 mt-1.5">
+                    <button
+                      type="button"
+                      onClick={() => handleAddAdjustment("PLUS", "Freight Support")}
+                      className="text-[11px] text-emerald-600 dark:text-emerald-400 hover:underline font-medium cursor-pointer"
+                    >
+                      + 운송 지원비 추가
+                    </button>
+                    <span className="text-zinc-300 dark:text-zinc-700">|</span>
+                    <button
+                      type="button"
+                      onClick={() => handleAddAdjustment("MINUS", "Damage Allowance")}
+                      className="text-[11px] text-rose-600 dark:text-rose-400 hover:underline font-medium cursor-pointer"
+                    >
+                      - 파손 공제 추가
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="overflow-x-auto rounded-lg border border-zinc-150 dark:border-zinc-800/80">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead>
+                      <tr className="bg-zinc-50/50 text-zinc-500 font-bold border-b border-zinc-150 dark:bg-zinc-900/50 dark:border-zinc-800 dark:text-zinc-350">
+                        <th className="px-3 py-2 w-36">구분 (Type)</th>
+                        <th className="px-3 py-2">조정 사유 (Reason) *</th>
+                        <th className="px-3 py-2 text-right w-36">금액 (Amount) *</th>
+                        <th className="px-3 py-2">비고 / 메모 (Note)</th>
+                        <th className="px-3 py-2 text-center w-12">삭제</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
+                      {adjustments.map((adj, index) => (
+                        <tr key={index} className="hover:bg-zinc-50/30 dark:hover:bg-zinc-850/5">
+                          <td className="px-3 py-2">
+                            <select
+                              value={adj.type}
+                              onChange={(e) => handleAdjustmentChange(index, "type", e.target.value as "PLUS" | "MINUS")}
+                              className={`w-full px-2 py-1 rounded border text-xs font-bold ${
+                                adj.type === "PLUS"
+                                  ? "border-emerald-300 bg-emerald-50 text-emerald-750 dark:bg-emerald-950/60 dark:border-emerald-800 dark:text-emerald-300"
+                                  : "border-rose-300 bg-rose-50 text-rose-750 dark:bg-rose-950/60 dark:border-rose-800 dark:text-rose-300"
+                              }`}
+                            >
+                              <option value="PLUS">+ PLUS (추가)</option>
+                              <option value="MINUS">- MINUS (공제)</option>
+                            </select>
+                          </td>
+                          <td className="px-3 py-2">
+                            <input
+                              type="text"
+                              value={adj.reason}
+                              onChange={(e) => handleAdjustmentChange(index, "reason", e.target.value)}
+                              placeholder="예: Freight Support, Damage Allowance, Marketing Credit"
+                              className="w-full rounded border border-zinc-200 p-1 text-xs dark:border-zinc-850 dark:bg-zinc-950 dark:text-white"
+                              required
+                            />
+                          </td>
+                          <td className="px-3 py-2 text-right">
+                            <div className="flex items-center justify-end gap-1">
+                              <span className={`font-mono font-bold ${adj.type === "PLUS" ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}`}>
+                                {adj.type === "PLUS" ? "+" : "-"}
+                              </span>
+                              <input
+                                type="number"
+                                min={0}
+                                step={0.01}
+                                value={adj.amount}
+                                onChange={(e) => handleAdjustmentChange(index, "amount", parseFloat(e.target.value) || 0)}
+                                className="w-24 text-right font-mono font-bold rounded border border-zinc-200 p-1 text-xs dark:border-zinc-850 dark:bg-zinc-950 dark:text-white"
+                                required
+                              />
+                            </div>
+                          </td>
+                          <td className="px-3 py-2">
+                            <input
+                              type="text"
+                              value={adj.note}
+                              onChange={(e) => handleAdjustmentChange(index, "note", e.target.value)}
+                              placeholder="세부 메모 또는 참조 번호"
+                              className="w-full rounded border border-zinc-200 p-1 text-xs dark:border-zinc-850 dark:bg-zinc-950 dark:text-white"
+                            />
+                          </td>
+                          <td className="px-3 py-2 text-center">
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveAdjustment(index)}
+                              className="p-1 text-zinc-400 hover:text-rose-600 dark:hover:text-rose-400 transition-colors cursor-pointer"
+                              title="조정 항목 삭제"
+                            >
+                              🗑️
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            {/* Subtotal, Adjustments, Tax, Other Charges and Final Total */}
+            <div className="border-t border-zinc-150 pt-4 dark:border-zinc-800 flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
+              {/* Summary Cards */}
+              <div className="grid grid-cols-3 gap-2 w-full md:w-auto text-xs">
+                <div className="p-2.5 rounded-lg border border-zinc-150 bg-zinc-50/50 dark:border-zinc-800 dark:bg-zinc-950/50">
+                  <div className="text-[10px] text-zinc-400 font-semibold">Base Amount</div>
+                  <div className="font-mono font-bold text-zinc-800 dark:text-zinc-200 text-sm">
+                    {currency} {baseInvoiceAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </div>
+                </div>
+                <div className="p-2.5 rounded-lg border border-zinc-150 bg-zinc-50/50 dark:border-zinc-800 dark:bg-zinc-950/50">
+                  <div className="text-[10px] text-zinc-400 font-semibold">Adjustments</div>
+                  <div className={`font-mono font-bold text-sm ${
+                    adjustmentTotal > 0 ? "text-emerald-600 dark:text-emerald-400" : adjustmentTotal < 0 ? "text-rose-600 dark:text-rose-400" : "text-zinc-600 dark:text-zinc-400"
+                  }`}>
+                    {adjustmentTotal > 0 ? "+" : ""}{currency} {adjustmentTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </div>
+                </div>
+                <div className="p-2.5 rounded-lg bg-zinc-950 text-white dark:bg-zinc-100 dark:text-zinc-950">
+                  <div className="text-[10px] opacity-70 font-semibold">Final Total</div>
+                  <div className="font-mono font-extrabold text-sm">
+                    {currency} {total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </div>
+                </div>
+              </div>
+
+              {/* Detailed Breakdown Inputs */}
+              <div className="w-full md:w-72 space-y-2 text-right">
                 <div className="flex justify-between items-center">
-                  <span className="text-zinc-400 font-semibold">Subtotal (공급가액):</span>
+                  <span className="text-zinc-400 font-semibold">품목 공급가액 (Base Amount):</span>
                   <span className="font-mono font-bold text-zinc-800 dark:text-zinc-200">
-                    {currency} {subtotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    {currency} {baseInvoiceAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-zinc-400 font-semibold">조정 합계 (Adjustment Total):</span>
+                  <span className={`font-mono font-bold ${
+                    adjustmentTotal > 0 ? "text-emerald-600 dark:text-emerald-400" : adjustmentTotal < 0 ? "text-rose-600 dark:text-rose-400" : "text-zinc-800 dark:text-zinc-200"
+                  }`}>
+                    {adjustmentTotal > 0 ? "+" : ""}{currency} {adjustmentTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </span>
                 </div>
                 <div className="flex justify-between items-center">
@@ -569,7 +816,7 @@ export function InvoiceForm({ invoice, eligiblePos, suppliers }: InvoiceFormProp
                   />
                 </div>
                 <div className="flex justify-between items-center border-t border-zinc-100 pt-2 dark:border-zinc-800 font-bold text-sm">
-                  <span className="text-zinc-700 dark:text-white">인보이스 합계 (Total):</span>
+                  <span className="text-zinc-700 dark:text-white">최종 청구액 (Final Invoice Total):</span>
                   <span className="font-mono text-zinc-950 dark:text-white">
                     {currency} {total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </span>
