@@ -516,6 +516,8 @@ export async function confirmPortalPurchaseOrder(
   const { companyId, userId } = await requireCompanyMembership();
   const supabase = await createClient();
 
+  console.log(`[ConfirmPortalPO] [Start] PO: ${poId}, Company: ${companyId}, User: ${userId}`);
+
   const { data: { user } } = await supabase.auth.getUser();
   const { data: compUser } = await supabase
     .from("company_users")
@@ -524,15 +526,16 @@ export async function confirmPortalPurchaseOrder(
     .maybeSingle();
   const userName = compUser?.name || user?.email?.split("@")[0] || "공급사 담당자";
 
-  // 1. Verify PO exists and belongs to company
+  // 1. Verify PO exists and belongs to company (query safe columns first)
   const { data: po, error: poErr } = await supabase
     .from("purchase_orders")
-    .select("id, po_status, activity_logs")
+    .select("id, po_status")
     .eq("id", poId)
     .eq("supplier_id", companyId)
     .maybeSingle();
 
   if (poErr || !po) {
+    console.error(`[ConfirmPortalPO] PO verification failed. Error:`, poErr, `poId: ${poId}, companyId: ${companyId}`);
     throw new Error("발주서를 찾을 수 없거나 접근 권한이 없습니다.");
   }
 
@@ -542,7 +545,8 @@ export async function confirmPortalPurchaseOrder(
     .select("id, qty")
     .eq("purchase_order_id", poId);
 
-  if (linesErr || !lines) {
+  if (linesErr || !lines || lines.length === 0) {
+    console.error(`[ConfirmPortalPO] Lines query failed. Error:`, linesErr, `poId: ${poId}`);
     throw new Error("발주 품목 상세 조회를 실패했습니다.");
   }
 
@@ -552,53 +556,82 @@ export async function confirmPortalPurchaseOrder(
   // 3. Set confirmed_qty (use per-line confirmedQty if provided, else default to line.qty)
   const confirmedMap = new Map((confirmedLines || []).map((cl) => [cl.lineId, cl.confirmedQty]));
   for (const line of lines) {
-    const val = confirmedMap.has(line.id) ? Number(confirmedMap.get(line.id)) : line.qty;
+    const rawVal = confirmedMap.get(line.id);
+    const val = (rawVal !== undefined && rawVal !== null && !isNaN(Number(rawVal)))
+      ? Number(rawVal)
+      : (line.qty ?? 0);
+
     const { error: updateLineErr } = await adminDb
       .from("purchase_order_lines")
       .update({ confirmed_qty: val })
       .eq("id", line.id);
 
-    if (updateLineErr) throw updateLineErr;
+    if (updateLineErr) {
+      console.error(`[ConfirmPortalPO] Failed to update line ${line.id}:`, updateLineErr);
+      throw new Error(`품목 확정 수량 저장 실패: ${updateLineErr.message}`);
+    }
   }
 
   const easternNow = formatEasternDateTime(new Date().toISOString());
-  const currentLogs = Array.isArray(po.activity_logs) ? po.activity_logs : [];
-  const newLogs = [
-    {
-      event: "Supplier Confirmed",
-      actor: userName,
-      user_id: userId,
-      company_id: companyId,
-      timestamp: easternNow,
-    },
-    ...currentLogs,
-  ];
 
-  // 4. Update PO confirmation status
-  let { error: updatePoErr } = await adminDb
-    .from("purchase_orders")
-    .update({
-      supplier_confirmation_status: "CONFIRMED",
-      confirmed_by_id: userId,
-      confirmed_by_name: userName,
-      confirmed_at: new Date().toISOString(),
-      activity_logs: newLogs,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", poId);
+  // 4. Update PO confirmation status (Try full metadata first, then fallback to core columns)
+  let fullUpdateSucceeded = false;
+  try {
+    const { data: existingPo } = await adminDb
+      .from("purchase_orders")
+      .select("activity_logs")
+      .eq("id", poId)
+      .maybeSingle();
 
-  if (updatePoErr && (updatePoErr.code === "PGRST204" || updatePoErr.message?.includes("column"))) {
-    const fallbackUpdate = await adminDb
+    const currentLogs = Array.isArray(existingPo?.activity_logs) ? existingPo.activity_logs : [];
+    const newLogs = [
+      {
+        event: "Supplier Confirmed",
+        actor: userName,
+        user_id: userId,
+        company_id: companyId,
+        timestamp: easternNow,
+      },
+      ...currentLogs,
+    ];
+
+    const fullRes = await adminDb
+      .from("purchase_orders")
+      .update({
+        supplier_confirmation_status: "CONFIRMED",
+        confirmed_by_id: userId,
+        confirmed_by_name: userName,
+        confirmed_at: new Date().toISOString(),
+        activity_logs: newLogs,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", poId);
+
+    if (!fullRes.error) {
+      fullUpdateSucceeded = true;
+    } else {
+      console.warn(`[ConfirmPortalPO] Full column update notice:`, fullRes.error.message);
+    }
+  } catch (err: any) {
+    console.warn(`[ConfirmPortalPO] Full column update exception:`, err?.message || err);
+  }
+
+  if (!fullUpdateSucceeded) {
+    const fallbackRes = await adminDb
       .from("purchase_orders")
       .update({
         supplier_confirmation_status: "CONFIRMED",
         updated_at: new Date().toISOString(),
       })
       .eq("id", poId);
-    updatePoErr = fallbackUpdate.error;
+
+    if (fallbackRes.error) {
+      console.error(`[ConfirmPortalPO] Core PO confirmation update failed:`, fallbackRes.error);
+      throw new Error(`발주 확인 상태 저장 실패: ${fallbackRes.error.message}`);
+    }
   }
 
-  if (updatePoErr) throw updatePoErr;
+  console.log(`[ConfirmPortalPO] [Success] PO: ${poId} confirmed successfully by ${userName} (${userId})`);
 
   revalidatePath(`/portal/orders/purchase-orders/${poId}`);
   revalidatePath("/portal/orders/purchase-orders");
