@@ -76,6 +76,7 @@ Files Modified:
 - `lib/retailer/performance.ts`
 - `lib/retailer/weekly-check-actions.ts`
 - `lib/retailer/navigation.ts`
+- `lib/supabase/proxy.ts`
 - `components/retailer/nav-icon.tsx`
 - `package.json` & `package-lock.json`
 
