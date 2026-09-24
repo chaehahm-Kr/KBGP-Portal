@@ -26,6 +26,7 @@ import {
   } from "@/lib/purchase-order/document-types";
 import { uploadPoDocument } from "@/lib/purchase-order/document-actions";
 import { parseSpecialInstructions } from "@/lib/purchase-order/forwarder-helper";
+import { formatActionError } from "@/lib/utils/error-formatter";
 
 interface PoLine {
   id: string;
@@ -466,7 +467,7 @@ export default function PoDetailClient({
       setUploadNote("");
       router.refresh();
     } catch (err: any) {
-      setGeneralError(err.message || "서류 업로드 실패");
+      setGeneralError(formatActionError(err, "서류 업로드 실패"));
     } finally {
       setIsUploadingDoc(false);
     }
@@ -487,7 +488,7 @@ export default function PoDetailClient({
       setGeneralSuccess("발주 확인 처리가 성공적으로 완료되었습니다.");
       router.refresh();
     } catch (err: any) {
-      setGeneralError(err.message || "확인 처리 중 오류가 발생했습니다.");
+      setGeneralError(formatActionError(err, "확인 처리 중 오류가 발생했습니다."));
     } finally {
       setIsConfirming(false);
     }
@@ -504,7 +505,7 @@ export default function PoDetailClient({
       setGeneralSuccess("발주 취소에 동의하여 취소 처리가 완료되었습니다.");
       router.refresh();
     } catch (err: any) {
-      setGeneralError(err.message || "취소 동의 처리 실패");
+      setGeneralError(formatActionError(err, "취소 동의 처리 실패"));
     } finally {
       setIsRespondingCancel(false);
     }
@@ -525,7 +526,7 @@ export default function PoDetailClient({
       setGeneralSuccess("발주 취소 요청을 거절하였습니다. 발주는 유효 상태로 유지됩니다.");
       router.refresh();
     } catch (err: any) {
-      setGeneralError(err.message || "취소 거절 처리 실패");
+      setGeneralError(formatActionError(err, "취소 거절 처리 실패"));
     } finally {
       setIsRespondingCancel(false);
     }
@@ -665,7 +666,7 @@ export default function PoDetailClient({
       setShowGoodsReadyForm(false);
       router.refresh();
     } catch (err: any) {
-      setGeneralError(err.message || "제출 실패");
+      setGeneralError(formatActionError(err, "출고 준비 정보 저장 실패"));
     } finally {
       setIsConfirming(false);
     }
@@ -691,7 +692,7 @@ export default function PoDetailClient({
       setShowSupplierShipmentForm(null);
       router.refresh();
     } catch (err: any) {
-      setGeneralError(err.message || "선적 등록 실패");
+      setGeneralError(formatActionError(err, "선적 정보 등록 실패"));
     } finally {
       setIsConfirming(false);
     }

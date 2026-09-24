@@ -16,6 +16,7 @@ import {
   closeSettlement,
   reopenSettlement
 } from "@/lib/supplier-invoice/actions";
+import { formatActionError } from "@/lib/utils/error-formatter";
 
 interface InvoiceLine {
   id: string;
@@ -293,7 +294,7 @@ export function InvoiceDetail({ invoice, po, prevInvoicesTotal, poMerchandiseTot
       setSuccessMessage("인보이스가 성공적으로 제출되었습니다!");
       router.refresh();
     } catch (err: any) {
-      setErrorMessage(err.message || "제출 처리에 실패했습니다.");
+      setErrorMessage(formatActionError(err, "제출 처리에 실패했습니다."));
     } finally {
       setIsActionLoading(false);
     }
@@ -308,7 +309,7 @@ export function InvoiceDetail({ invoice, po, prevInvoicesTotal, poMerchandiseTot
       setSuccessMessage("인보이스가 최종 승인 처리되었습니다.");
       router.refresh();
     } catch (err: any) {
-      setErrorMessage(err.message || "승인 처리에 실패했습니다.");
+      setErrorMessage(formatActionError(err, "승인 처리에 실패했습니다."));
     } finally {
       setIsActionLoading(false);
     }
@@ -327,7 +328,7 @@ export function InvoiceDetail({ invoice, po, prevInvoicesTotal, poMerchandiseTot
       setShowRejectModal(false);
       router.refresh();
     } catch (err: any) {
-      setErrorMessage(err.message || "반려 처리에 실패했습니다.");
+      setErrorMessage(formatActionError(err, "반려 처리에 실패했습니다."));
     } finally {
       setIsActionLoading(false);
     }
@@ -342,7 +343,7 @@ export function InvoiceDetail({ invoice, po, prevInvoicesTotal, poMerchandiseTot
       setSuccessMessage("인보이스가 무효 처리되었습니다.");
       router.refresh();
     } catch (err: any) {
-      setErrorMessage(err.message || "무효 처리에 실패했습니다.");
+      setErrorMessage(formatActionError(err, "무효 처리에 실패했습니다."));
     } finally {
       setIsActionLoading(false);
     }
@@ -358,7 +359,7 @@ export function InvoiceDetail({ invoice, po, prevInvoicesTotal, poMerchandiseTot
       setSuccessMessage("대금 정산이 성공적으로 종결 처리되었습니다.");
       router.refresh();
     } catch (err: any) {
-      setErrorMessage(err.message || "정산 종결 처리에 실패했습니다.");
+      setErrorMessage(formatActionError(err, "정산 종결 처리에 실패했습니다. 물류 입고 검수 및 조정 항목을 확인해 주세요."));
     } finally {
       setIsActionLoading(false);
     }
@@ -373,7 +374,7 @@ export function InvoiceDetail({ invoice, po, prevInvoicesTotal, poMerchandiseTot
       setSuccessMessage("대금 정산이 재개되었습니다.");
       router.refresh();
     } catch (err: any) {
-      setErrorMessage(err.message || "정산 재개 처리에 실패했습니다.");
+      setErrorMessage(formatActionError(err, "정산 재개 처리에 실패했습니다."));
     } finally {
       setIsActionLoading(false);
     }

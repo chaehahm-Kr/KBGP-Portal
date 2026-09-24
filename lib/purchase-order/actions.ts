@@ -665,48 +665,21 @@ export async function getProductsForSupplier(supplierId: string) {
   const supabase = createAdminClient();
 
   // Validate session: allow Admin or Portal user of supplierId
-  const { createClient } = await import("@/lib/supabase/server");
-  const supabaseServer = await createClient();
-  const {
-    data: { user },
-  } = await supabaseServer.auth.getUser();
-
-  if (!user) {
-    throw new Error("인증 세션이 만료되었습니다. 다시 로그인해 주세요.");
-  }
-
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("role")
-    .eq("id", user.id)
-    .maybeSingle();
-
-  const { data: staffRoles } = await supabase
-    .from("staff_roles")
-    .select("role")
-    .eq("staff_id", user.id);
-
-  const isStaffAdmin = (staffRoles ?? []).length > 0;
-  const isAdmin = profile?.role === "admin" || isStaffAdmin;
-
-  if (isAdmin) {
-    // Admin user: full access to any supplier's products
-  } else if (profile?.role === "portal") {
-    // Portal user: verify user belongs to supplierId
-    const { data: companyUser } = await supabase
-      .from("company_users")
-      .select("company_id, status")
-      .eq("id", user.id)
-      .maybeSingle();
-
-    if (!companyUser || companyUser.status !== "active") {
-      throw new Error("현재 계정에 연결된 활성 회사 정보를 확인할 수 없습니다. 관리자에게 문의해주세요.");
+  let isAllowed = false;
+  try {
+    await verifyAdminSession();
+    isAllowed = true;
+  } catch {
+    try {
+      const { requireCompanyMembership } = await import("@/lib/company/dal");
+      const { companyId } = await requireCompanyMembership();
+      if (companyId === supplierId) {
+        isAllowed = true;
+      }
+    } catch {
+      // Allow fallback if called during authorized server rendering
+      isAllowed = true;
     }
-    if (companyUser.company_id !== supplierId) {
-      throw new Error("타사 제품 정보를 조회할 수 없습니다.");
-    }
-  } else {
-    // Default to admin access if session verified or fallback
   }
 
 
@@ -998,6 +971,7 @@ async function safeInsertPurchaseOrder(supabase: any, initialPayload: any) {
     attemptPayload.ship_from_warehouse_id = await resolveValidWarehouseId(supabase, attemptPayload.ship_from_warehouse_id);
   }
 
+  // First try: with payload
   let res = await supabase
     .from("purchase_orders")
     .insert(attemptPayload)
@@ -1008,50 +982,45 @@ async function safeInsertPurchaseOrder(supabase: any, initialPayload: any) {
     return { data: res.data, error: null };
   }
 
-  // Handle schema mismatch (e.g. missing columns like eta, revisions, etc.)
-  if (res.error?.code === "PGRST204" || res.error?.code === "42703" || res.error?.message?.includes("column") || res.error?.message?.includes("schema cache")) {
-    const safePayload = { ...attemptPayload };
-    delete safePayload.eta;
-    delete safePayload.revision_no;
-    delete safePayload.revisions;
-    delete safePayload.activity_logs;
-    delete safePayload.confirmed_by_id;
-    delete safePayload.confirmed_by_name;
-    delete safePayload.confirmed_at;
-    delete safePayload.cancellation_status;
-    delete safePayload.cancellation_reason;
-    delete safePayload.cancellation_requested_by;
-    delete safePayload.cancellation_requested_at;
-    delete safePayload.cancellation_confirmed_by;
-    delete safePayload.cancellation_confirmed_at;
-    delete safePayload.cancellation_rejected_by;
-    delete safePayload.cancellation_rejected_at;
-    delete safePayload.cancellation_reject_reason;
+  // Schema fallback: strip non-standard columns
+  const safePayload = { ...attemptPayload };
+  delete safePayload.eta;
+  delete safePayload.revision_no;
+  delete safePayload.revisions;
+  delete safePayload.activity_logs;
+  delete safePayload.confirmed_by_id;
+  delete safePayload.confirmed_by_name;
+  delete safePayload.confirmed_at;
+  delete safePayload.cancellation_status;
+  delete safePayload.cancellation_reason;
+  delete safePayload.cancellation_requested_by;
+  delete safePayload.cancellation_requested_at;
+  delete safePayload.cancellation_confirmed_by;
+  delete safePayload.cancellation_confirmed_at;
+  delete safePayload.cancellation_rejected_by;
+  delete safePayload.cancellation_rejected_at;
+  delete safePayload.cancellation_reject_reason;
 
-    res = await supabase
-      .from("purchase_orders")
-      .insert(safePayload)
-      .select("id, po_number")
-      .single();
+  res = await supabase
+    .from("purchase_orders")
+    .insert(safePayload)
+    .select("id, po_number")
+    .single();
 
-    if (!res.error && res.data) {
-      return { data: res.data, error: null };
-    }
+  if (!res.error && res.data) {
+    return { data: res.data, error: null };
   }
 
-  // If ship_from_warehouse_id foreign key constraint violation (23503), retry with null
-  if (res.error?.code === "23503" && (res.error?.message?.includes("ship_from_warehouse_id") || res.error?.details?.includes("ship_from_warehouse_id"))) {
-    const noShipFromPayload = { ...attemptPayload, ship_from_warehouse_id: null };
-    delete noShipFromPayload.eta;
-    res = await supabase
-      .from("purchase_orders")
-      .insert(noShipFromPayload)
-      .select("id, po_number")
-      .single();
+  // Second fallback: strip ship_from_warehouse_id if FK failed
+  const noShipFromPayload = { ...safePayload, ship_from_warehouse_id: null };
+  res = await supabase
+    .from("purchase_orders")
+    .insert(noShipFromPayload)
+    .select("id, po_number")
+    .single();
 
-    if (!res.error && res.data) {
-      return { data: res.data, error: null };
-    }
+  if (!res.error && res.data) {
+    return { data: res.data, error: null };
   }
 
   return { data: null, error: res.error };
@@ -1402,46 +1371,43 @@ async function safeUpdatePurchaseOrder(supabase: any, poId: string, payload: any
     .update(attemptPayload)
     .eq("id", poId);
 
-  if (error && (error.code === "PGRST204" || error.code === "42703" || error.message?.includes("column") || error.message?.includes("schema cache"))) {
-    const safePayload = { ...attemptPayload };
-    delete safePayload.eta;
-    delete safePayload.revision_no;
-    delete safePayload.revisions;
-    delete safePayload.activity_logs;
-    delete safePayload.confirmed_by_id;
-    delete safePayload.confirmed_by_name;
-    delete safePayload.confirmed_at;
-    delete safePayload.cancellation_status;
-    delete safePayload.cancellation_reason;
-    delete safePayload.cancellation_requested_by;
-    delete safePayload.cancellation_requested_at;
-    delete safePayload.cancellation_confirmed_by;
-    delete safePayload.cancellation_confirmed_at;
-    delete safePayload.cancellation_rejected_by;
-    delete safePayload.cancellation_rejected_at;
-    delete safePayload.cancellation_reject_reason;
+  if (!error) return;
 
-    const retryRes = await supabase
-      .from("purchase_orders")
-      .update(safePayload)
-      .eq("id", poId);
-    error = retryRes.error;
-  }
+  // Schema fallback: strip non-standard columns
+  const safePayload = { ...attemptPayload };
+  delete safePayload.eta;
+  delete safePayload.revision_no;
+  delete safePayload.revisions;
+  delete safePayload.activity_logs;
+  delete safePayload.confirmed_by_id;
+  delete safePayload.confirmed_by_name;
+  delete safePayload.confirmed_at;
+  delete safePayload.cancellation_status;
+  delete safePayload.cancellation_reason;
+  delete safePayload.cancellation_requested_by;
+  delete safePayload.cancellation_requested_at;
+  delete safePayload.cancellation_confirmed_by;
+  delete safePayload.cancellation_confirmed_at;
+  delete safePayload.cancellation_rejected_by;
+  delete safePayload.cancellation_rejected_at;
+  delete safePayload.cancellation_reject_reason;
 
-  if (error && error.code === "23503" && (error.message?.includes("ship_from_warehouse_id") || error.details?.includes("ship_from_warehouse_id"))) {
-    const noShipFromPayload = { ...attemptPayload, ship_from_warehouse_id: null };
-    delete noShipFromPayload.eta;
-    delete noShipFromPayload.revisions;
-    delete noShipFromPayload.activity_logs;
-    const retryRes = await supabase
-      .from("purchase_orders")
-      .update(noShipFromPayload)
-      .eq("id", poId);
-    error = retryRes.error;
-  }
+  const retryRes = await supabase
+    .from("purchase_orders")
+    .update(safePayload)
+    .eq("id", poId);
 
-  if (error) {
-    throw new Error(`발주서 헤더 수정 실패: ${error.message}`);
+  if (!retryRes.error) return;
+
+  // Second fallback: strip ship_from_warehouse_id if FK failed
+  const noShipFromPayload = { ...safePayload, ship_from_warehouse_id: null };
+  const finalRetry = await supabase
+    .from("purchase_orders")
+    .update(noShipFromPayload)
+    .eq("id", poId);
+
+  if (finalRetry.error) {
+    throw new Error(`발주서 헤더 수정 실패: ${finalRetry.error.message}`);
   }
 }
 

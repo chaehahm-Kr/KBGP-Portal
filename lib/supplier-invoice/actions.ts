@@ -20,85 +20,95 @@ async function verifyWritePermission(supabase: any, userId: string) {
 }
 
 export async function getInvoiceQuantitiesForPoLines(
-  supabase: any,
+  supabaseClient: any,
   poLineIds: string[],
   excludeInvoiceId?: string
 ) {
-  if (poLineIds.length === 0) return {};
+  if (!poLineIds || poLineIds.length === 0) return {};
 
-  // 1. Shipped Qty: inbound_shipment_lines status in IN_TRANSIT, PARTIALLY_RECEIVED, RECEIVED
-  const { data: shipData } = await supabase
-    .from("inbound_shipment_lines")
-    .select("purchase_order_line_id, shipped_qty, inbound_shipments!inner(status)")
-    .in("purchase_order_line_id", poLineIds)
-    .in("inbound_shipments.status", ["IN_TRANSIT", "PARTIALLY_RECEIVED", "RECEIVED"]);
+  const { createAdminClient } = await import("@/lib/supabase/admin");
+  const db = createAdminClient();
 
-  // 2. Received Qty: receiving_lines status = FINALIZED
-  const { data: recData } = await supabase
-    .from("receiving_lines")
-    .select("purchase_order_line_id, received_qty, hold_qty, damaged_qty, receivings!inner(status)")
-    .in("purchase_order_line_id", poLineIds)
-    .eq("receivings.status", "FINALIZED");
-
-  // 3. Ready Qty: goods_readiness_lines status in READY_SUBMITTED, HANDOVER_PENDING, HANDED_OVER
-  const { data: grData } = await supabase
-    .from("goods_readiness_lines")
-    .select("purchase_order_line_id, ready_qty, goods_readiness!inner(handover_status)")
-    .in("purchase_order_line_id", poLineIds)
-    .in("goods_readiness.handover_status", ["READY_SUBMITTED", "HANDOVER_PENDING", "HANDED_OVER"]);
-
-  // 4. Already Invoiced Qty: parent invoice status in SUBMITTED, APPROVED
-  let query = supabase
-    .from("supplier_invoice_lines")
-    .select("purchase_order_line_id, invoiced_qty, line_amount, supplier_invoices!inner(id, invoice_status)")
-    .in("purchase_order_line_id", poLineIds)
-    .in("supplier_invoices.invoice_status", ["SUBMITTED", "APPROVED"]);
-
-  if (excludeInvoiceId) {
-    query = query.neq("supplier_invoices.id", excludeInvoiceId);
-  }
-  const { data: invLines } = await query;
-
-  // Aggregate
   const result: Record<string, { shipped: number; received: number; ready: number; invoiced: number; hold: number; damaged: number; invoiced_amount: number }> = {};
   for (const id of poLineIds) {
     result[id] = { shipped: 0, received: 0, ready: 0, invoiced: 0, hold: 0, damaged: 0, invoiced_amount: 0 };
   }
 
-  if (shipData) {
-    for (const s of shipData) {
-      if (result[s.purchase_order_line_id]) {
-        result[s.purchase_order_line_id].shipped += s.shipped_qty || 0;
-      }
-    }
-  }
+  // 1. Shipped Qty
+  try {
+    const { data: shipData } = await db
+      .from("inbound_shipment_lines")
+      .select("purchase_order_line_id, shipped_qty, inbound_shipments!inner(status)")
+      .in("purchase_order_line_id", poLineIds)
+      .in("inbound_shipments.status", ["IN_TRANSIT", "PARTIALLY_RECEIVED", "RECEIVED"]);
 
-  if (recData) {
-    for (const r of recData) {
-      if (result[r.purchase_order_line_id]) {
-        result[r.purchase_order_line_id].received += r.received_qty || 0;
-        result[r.purchase_order_line_id].hold += r.hold_qty || 0;
-        result[r.purchase_order_line_id].damaged += r.damaged_qty || 0;
+    if (shipData) {
+      for (const s of shipData) {
+        if (result[s.purchase_order_line_id]) {
+          result[s.purchase_order_line_id].shipped += Number(s.shipped_qty) || 0;
+        }
       }
     }
-  }
+  } catch {}
 
-  if (grData) {
-    for (const g of grData) {
-      if (result[g.purchase_order_line_id]) {
-        result[g.purchase_order_line_id].ready += g.ready_qty || 0;
-      }
-    }
-  }
+  // 2. Received Qty
+  try {
+    const { data: recData } = await db
+      .from("receiving_lines")
+      .select("purchase_order_line_id, received_qty, hold_qty, damaged_qty, receivings!inner(status)")
+      .in("purchase_order_line_id", poLineIds)
+      .eq("receivings.status", "FINALIZED");
 
-  if (invLines) {
-    for (const inv of invLines) {
-      if (result[inv.purchase_order_line_id]) {
-        result[inv.purchase_order_line_id].invoiced += inv.invoiced_qty || 0;
-        result[inv.purchase_order_line_id].invoiced_amount += Number(inv.line_amount) || 0;
+    if (recData) {
+      for (const r of recData) {
+        if (result[r.purchase_order_line_id]) {
+          result[r.purchase_order_line_id].received += Number(r.received_qty) || 0;
+          result[r.purchase_order_line_id].hold += Number(r.hold_qty) || 0;
+          result[r.purchase_order_line_id].damaged += Number(r.damaged_qty) || 0;
+        }
       }
     }
-  }
+  } catch {}
+
+  // 3. Ready Qty
+  try {
+    const { data: grData } = await db
+      .from("goods_readiness_lines")
+      .select("purchase_order_line_id, ready_qty, goods_readiness!inner(handover_status)")
+      .in("purchase_order_line_id", poLineIds)
+      .in("goods_readiness.handover_status", ["READY_SUBMITTED", "HANDOVER_PENDING", "HANDED_OVER"]);
+
+    if (grData) {
+      for (const g of grData) {
+        if (result[g.purchase_order_line_id]) {
+          result[g.purchase_order_line_id].ready += Number(g.ready_qty) || 0;
+        }
+      }
+    }
+  } catch {}
+
+  // 4. Already Invoiced Qty
+  try {
+    let query = db
+      .from("supplier_invoice_lines")
+      .select("purchase_order_line_id, invoiced_qty, line_amount, supplier_invoices!inner(id, invoice_status)")
+      .in("purchase_order_line_id", poLineIds)
+      .in("supplier_invoices.invoice_status", ["SUBMITTED", "APPROVED"]);
+
+    if (excludeInvoiceId) {
+      query = query.neq("supplier_invoices.id", excludeInvoiceId);
+    }
+    const { data: invLines } = await query;
+
+    if (invLines) {
+      for (const inv of invLines) {
+        if (result[inv.purchase_order_line_id]) {
+          result[inv.purchase_order_line_id].invoiced += Number(inv.invoiced_qty) || 0;
+          result[inv.purchase_order_line_id].invoiced_amount += Number(inv.line_amount) || 0;
+        }
+      }
+    }
+  } catch {}
 
   return result;
 }

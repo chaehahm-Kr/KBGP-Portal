@@ -10,6 +10,7 @@ import {
 } from "@/lib/purchase-order/actions";
 import { linkCreatedPoToRequest } from "@/lib/purchase-order/request-actions";
 import { formatEasternDate, getEasternTodayString } from "@/lib/utils/timezone";
+import { formatActionError } from "@/lib/utils/error-formatter";
 
 interface WarehouseOption {
   id: string;
@@ -560,7 +561,7 @@ export function PurchaseOrderForm({
       }
       router.refresh();
     } catch (err: any) {
-      setSubmitError(err.message || "발주서 저장 중 오류가 발생했습니다.");
+      setSubmitError(formatActionError(err, "발주서 저장 중 오류가 발생했습니다. 입력 정보를 다시 확인해 주세요."));
     } finally {
       setIsSubmitting(false);
     }

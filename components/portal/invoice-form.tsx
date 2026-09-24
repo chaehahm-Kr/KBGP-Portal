@@ -10,6 +10,7 @@ import {
   uploadPortalInvoiceAttachment,
   getPortalSupplierRemittance
 } from "@/lib/portal/actions";
+import { formatActionError } from "@/lib/utils/error-formatter";
 
 interface PoOption {
   id: string;
@@ -170,7 +171,7 @@ export function InvoiceForm({ eligiblePos, initialInvoice }: InvoiceFormProps) {
 
         setLineInputs(initialInputs);
       } catch (err: any) {
-        setErrorMessage(err.message || "발주 품목 로드 실패");
+        setErrorMessage(formatActionError(err, "발주 품목을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요."));
       } finally {
         setLoadingLines(false);
       }
@@ -316,7 +317,7 @@ export function InvoiceForm({ eligiblePos, initialInvoice }: InvoiceFormProps) {
         }, 1000);
       }
     } catch (err: any) {
-      setErrorMessage(err.message || "저장 실패");
+      setErrorMessage(formatActionError(err, "인보이스 저장 중 오류가 발생했습니다. 입력 정보를 확인해 주세요."));
     } finally {
       setIsSubmitting(false);
     }

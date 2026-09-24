@@ -546,11 +546,14 @@ export async function confirmPortalPurchaseOrder(
     throw new Error("발주 품목 상세 조회를 실패했습니다.");
   }
 
+  const { createAdminClient } = await import("@/lib/supabase/admin");
+  const adminDb = createAdminClient();
+
   // 3. Set confirmed_qty (use per-line confirmedQty if provided, else default to line.qty)
   const confirmedMap = new Map((confirmedLines || []).map((cl) => [cl.lineId, cl.confirmedQty]));
   for (const line of lines) {
     const val = confirmedMap.has(line.id) ? Number(confirmedMap.get(line.id)) : line.qty;
-    const { error: updateLineErr } = await supabase
+    const { error: updateLineErr } = await adminDb
       .from("purchase_order_lines")
       .update({ confirmed_qty: val })
       .eq("id", line.id);
@@ -572,7 +575,7 @@ export async function confirmPortalPurchaseOrder(
   ];
 
   // 4. Update PO confirmation status
-  let { error: updatePoErr } = await supabase
+  let { error: updatePoErr } = await adminDb
     .from("purchase_orders")
     .update({
       supplier_confirmation_status: "CONFIRMED",
@@ -585,7 +588,7 @@ export async function confirmPortalPurchaseOrder(
     .eq("id", poId);
 
   if (updatePoErr && (updatePoErr.code === "PGRST204" || updatePoErr.message?.includes("column"))) {
-    const fallbackUpdate = await supabase
+    const fallbackUpdate = await adminDb
       .from("purchase_orders")
       .update({
         supplier_confirmation_status: "CONFIRMED",
@@ -1118,6 +1121,19 @@ export async function submitPortalGoodsReady(input: {
   let overageDetected = false;
   const verifiedLines = [];
 
+  let readinessId = input.id;
+  if (!readinessId) {
+    const { data: existingGr } = await supabase
+      .from("goods_readiness")
+      .select("id")
+      .eq("purchase_order_id", input.purchaseOrderId)
+      .eq("supplier_id", companyId)
+      .maybeSingle();
+    if (existingGr) {
+      readinessId = existingGr.id;
+    }
+  }
+
   for (const line of input.lines) {
     // Get PO line details
     const { data: pol } = await supabase
@@ -1133,7 +1149,7 @@ export async function submitPortalGoodsReady(input: {
       .from("goods_readiness_lines")
       .select("id, ready_qty, goods_readiness!inner(id, handover_status)")
       .eq("purchase_order_line_id", line.purchaseOrderLineId)
-      .neq("goods_readiness.id", input.id || "00000000-0000-0000-0000-000000000000")
+      .neq("goods_readiness.id", readinessId || "00000000-0000-0000-0000-000000000000")
       .in("goods_readiness.handover_status", ["READY_SUBMITTED", "HANDOVER_PENDING", "HANDED_OVER"]);
 
     const otherActiveReady = (grLines ?? []).reduce((sum, g: any) => sum + (Number(g.ready_qty) || 0), 0);
@@ -1166,7 +1182,6 @@ export async function submitPortalGoodsReady(input: {
   });
 
   const timestamp = new Date().toISOString();
-  let readinessId = input.id;
   const isUpdate = !!readinessId;
 
   if (readinessId) {
