@@ -28,6 +28,7 @@ import {
   transitionShipmentStatus,
   updateInboundShipmentLogistics,
   closeShipmentWithVariance,
+  deleteReceiving,
 } from "@/lib/inbound/actions";
 import { PoUnifiedStepper } from "@/components/shared/po-unified-stepper";
 import {
@@ -333,6 +334,34 @@ export function PurchaseOrderDetail({
   const [completePoNote, setCompletePoNote] = useState("");
   const [isCompletingPo, setIsCompletingPo] = useState(false);
   const [completeWithVariance, setCompleteWithVariance] = useState(false);
+  // Delete Receiving modal state
+  const [showDeleteReceivingModal, setShowDeleteReceivingModal] = useState(false);
+  const [deletingReceiving, setDeletingReceiving] = useState<any>(null);
+  const [isDeletingReceiving, setIsDeletingReceiving] = useState(false);
+
+  const handleOpenDeleteReceivingModal = (r: any) => {
+    setDeletingReceiving(r);
+    setShowDeleteReceivingModal(true);
+  };
+
+  const handleExecuteDeleteReceiving = async () => {
+    if (!deletingReceiving) return;
+    setIsDeletingReceiving(true);
+    setErrorMessage("");
+    setSuccessMessage("");
+    try {
+      await deleteReceiving(deletingReceiving.id);
+      setSuccessMessage(`입고 검수 기록 (${deletingReceiving.receiving_number})이 정상적으로 삭제되었습니다.`);
+      setShowDeleteReceivingModal(false);
+      setDeletingReceiving(null);
+      router.refresh();
+    } catch (err: any) {
+      setErrorMessage(err.message || "입고 검수 삭제 실패");
+    } finally {
+      setIsDeletingReceiving(false);
+    }
+  };
+
   const [receivingLines, setReceivingLines] = useState<Array<{
     inbound_shipment_line_id: string;
     purchase_order_line_id: string;
@@ -1145,8 +1174,17 @@ export function PurchaseOrderDetail({
               </button>
             )}
 
-            {!isReadOnly && overallStatus === "Receiving" && (
+            {!isReadOnly && overallStatus === "Receiving" && po.fulfillment_status !== "COMPLETED" && (
               <>
+                <button
+                  type="button"
+                  onClick={() => initReceivingForm()}
+                  className="px-3.5 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 font-bold text-xs rounded-xl shadow-xs transition-all cursor-pointer flex items-center gap-1.5"
+                >
+                  <span>➕</span>
+                  <span>+ 입고 검수 추가 (+ Add Receiving)</span>
+                </button>
+
                 {effectiveReceivings.some((r: any) => r.status === "DRAFT") && (
                   <button
                     type="button"
@@ -1154,11 +1192,11 @@ export function PurchaseOrderDetail({
                     className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs rounded-xl shadow-md transition-all cursor-pointer flex items-center gap-1.5"
                   >
                     <span>📥</span>
-                    <span>입고 검수 계속 (Continue Draft)</span>
+                    <span>입고 검수 작성 중 (Continue Draft)</span>
                   </button>
                 )}
 
-                {effectiveReceivings.length > 0 && effectiveReceivings.every((r: any) => r.status === "FINALIZED") && (
+                {effectiveReceivings.length > 0 && (
                   stats.variance === 0 || stats.received >= po.total_qty ? (
                     <button
                       type="button"
@@ -1435,7 +1473,78 @@ export function PurchaseOrderDetail({
         </div>
       )}
 
-      {/* Forwarder & Handover Info Edit Modal for Admin */}
+            {/* Delete Receiving Modal */}
+      {showDeleteReceivingModal && deletingReceiving && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs">
+          <div className="bg-white dark:bg-zinc-900 rounded-2xl max-w-md w-full p-6 shadow-2xl border border-zinc-200 dark:border-zinc-800 space-y-4">
+            <div className="flex justify-between items-center border-b border-zinc-150 pb-3 dark:border-zinc-800">
+              <h3 className="font-bold text-sm text-zinc-900 dark:text-white flex items-center gap-1.5">
+                <span>🗑️</span>
+                <span>입고 검수 기록 삭제 Confirmation</span>
+              </h3>
+              <button
+                onClick={() => {
+                  setShowDeleteReceivingModal(false);
+                  setDeletingReceiving(null);
+                }}
+                className="text-zinc-400 hover:text-zinc-600 text-lg font-bold cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <p className="font-bold text-zinc-800 dark:text-zinc-200">
+                이 입고 검수 기록을 삭제하시겠습니까?
+              </p>
+
+              <div className="bg-zinc-50 dark:bg-zinc-950 p-3 rounded-xl border border-zinc-200 dark:border-zinc-800 space-y-1.5 text-zinc-700 dark:text-zinc-300">
+                <div className="flex justify-between">
+                  <span className="text-zinc-400">입고 번호:</span>
+                  <span className="font-mono font-bold text-zinc-900 dark:text-white">{deletingReceiving.receiving_number}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-zinc-400">입고 일자:</span>
+                  <span className="font-mono">{deletingReceiving.received_date}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-zinc-400">총 입고 수량:</span>
+                  <span className="font-mono font-bold text-emerald-600">
+                    {(deletingReceiving.lines ?? deletingReceiving.receiving_lines ?? []).reduce((s: number, l: any) => s + (Number(l.received_qty) || 0), 0).toLocaleString()} PCS
+                  </span>
+                </div>
+              </div>
+
+              <p className="text-[11px] text-rose-600 dark:text-rose-400">
+                * 삭제 시 해당 입고 내역이 제거되며, 발주서의 총 입고 수량 및 차이가 자동으로 재계산됩니다.
+              </p>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-zinc-150 dark:border-zinc-800">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowDeleteReceivingModal(false);
+                  setDeletingReceiving(null);
+                }}
+                className="px-4 py-2 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 text-xs font-bold rounded-lg transition-colors cursor-pointer"
+              >
+                취소 (Cancel)
+              </button>
+              <button
+                type="button"
+                disabled={isDeletingReceiving}
+                onClick={handleExecuteDeleteReceiving}
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-lg transition-colors cursor-pointer disabled:opacity-50 shadow-sm"
+              >
+                {isDeletingReceiving ? "삭제 처리 중..." : "삭제 실행 (Confirm Delete)"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+{/* Forwarder & Handover Info Edit Modal for Admin */}
       {showForwarderModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="bg-white dark:bg-zinc-900 rounded-xl max-w-xl w-full p-6 shadow-2xl border border-zinc-200 dark:border-zinc-800 space-y-4">

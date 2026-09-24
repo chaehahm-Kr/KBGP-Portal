@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { WeeklyCheckSession } from "@/lib/retailer/weekly-check";
 import { updateWeeklyCheckItemsAction } from "@/lib/retailer/weekly-check-actions";
+import { WeeklyCheckScannerModal } from "@/components/retailer/weekly-check-scanner-modal";
 
 interface WeeklyCheckStepperProps {
   session: WeeklyCheckSession;
@@ -13,6 +14,7 @@ interface WeeklyCheckStepperProps {
 export function RetailerWeeklyCheckStepper({ session }: WeeklyCheckStepperProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
+  const [isScannerOpen, setIsScannerOpen] = useState(false);
 
   // Local state for counts: map of productId -> { remainingQty, isCounted, notes }
   const [counts, setCounts] = useState<Record<string, { remainingQty: number; isCounted: boolean; notes: string }>>(() => {
@@ -76,6 +78,47 @@ export function RetailerWeeklyCheckStepper({ session }: WeeklyCheckStepperProps)
         notes,
       },
     }));
+  };
+
+  const handleScannerSaveCount = (
+    productId: string,
+    remainingQty: number,
+    notes: string,
+    andSaveDraft: boolean = true
+  ) => {
+    const validQty = Math.max(0, isNaN(remainingQty) ? 0 : remainingQty);
+    const updatedCounts = {
+      ...counts,
+      [productId]: {
+        remainingQty: validQty,
+        isCounted: true,
+        notes: notes || counts[productId]?.notes || "",
+      },
+    };
+    setCounts(updatedCounts);
+
+    // Sync index to this item
+    const foundIdx = filteredItems.findIndex((it) => it.productId === productId);
+    if (foundIdx !== -1) {
+      setCurrentIndex(foundIdx);
+    }
+
+    if (andSaveDraft) {
+      const payload = Object.entries(updatedCounts).map(([pId, state]) => ({
+        productId: pId,
+        remainingQty: state.remainingQty,
+        isCounted: state.isCounted,
+        notes: state.notes,
+      }));
+
+      startTransition(async () => {
+        const res = await updateWeeklyCheckItemsAction(session.id, payload, "draft", checkNotes);
+        if (res.success) {
+          setSaveMessage("Draft saved ✓");
+          setTimeout(() => setSaveMessage(null), 2500);
+        }
+      });
+    }
   };
 
   const handleSaveDraft = async () => {
@@ -161,6 +204,14 @@ export function RetailerWeeklyCheckStepper({ session }: WeeklyCheckStepperProps)
 
         <div className="flex items-center gap-2">
           {saveMessage && <span className="text-xs font-semibold text-emerald-600">{saveMessage}</span>}
+          <button
+            type="button"
+            onClick={() => setIsScannerOpen(true)}
+            className="px-3.5 py-1.5 rounded-lg text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
+          >
+            <span>📷</span>
+            <span>Scan Product</span>
+          </button>
           <button
             type="button"
             onClick={handleSaveDraft}
@@ -357,7 +408,17 @@ export function RetailerWeeklyCheckStepper({ session }: WeeklyCheckStepperProps)
           {/* Quick Jump Carousel / Grid */}
           <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-4 space-y-3 shadow-xs">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-zinc-700 dark:text-zinc-300">Quick Jump to Product:</span>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-zinc-700 dark:text-zinc-300">Quick Jump to Product:</span>
+                <button
+                  type="button"
+                  onClick={() => setIsScannerOpen(true)}
+                  className="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1 cursor-pointer"
+                >
+                  <span>📷</span>
+                  <span>Scan QR</span>
+                </button>
+              </div>
               <input
                 type="text"
                 placeholder="Search SKU or name..."
@@ -503,6 +564,29 @@ export function RetailerWeeklyCheckStepper({ session }: WeeklyCheckStepperProps)
           </div>
         </div>
       )}
+
+      {/* Mobile Floating Scan Button */}
+      <div className="fixed bottom-6 right-6 z-30 sm:hidden">
+        <button
+          type="button"
+          onClick={() => setIsScannerOpen(true)}
+          className="px-5 py-3.5 rounded-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-2xl flex items-center gap-2 active:scale-95 transition-all border border-indigo-400/30 cursor-pointer"
+          aria-label="Scan Product QR"
+        >
+          <span className="text-base">📷</span>
+          <span>Scan Product</span>
+        </button>
+      </div>
+
+      {/* Camera Fast-Count Scanner Modal */}
+      <WeeklyCheckScannerModal
+        isOpen={isScannerOpen}
+        onClose={() => setIsScannerOpen(false)}
+        items={session.items}
+        currentCounts={counts}
+        onSaveItemCount={handleScannerSaveCount}
+        storeName={session.storeName}
+      />
     </div>
   );
 }

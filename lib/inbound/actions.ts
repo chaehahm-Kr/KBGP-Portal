@@ -818,8 +818,16 @@ export async function updateReceiving(
     .single();
 
   if (!rec) throw new Error("Receiving record not found.");
-  if (rec.status !== "DRAFT") {
-    throw new Error("DRAFT(초안) 상태의 입고서만 수정할 수 있습니다.");
+  if (rec.purchase_order_id) {
+    const { data: po } = await supabase
+      .from("purchase_orders")
+      .select("fulfillment_status")
+      .eq("id", rec.purchase_order_id)
+      .single();
+
+    if (po && po.fulfillment_status === "COMPLETED") {
+      throw new Error("Completed PO receiving records cannot be modified.");
+    }
   }
 
   // Validate Warehouse
@@ -942,5 +950,67 @@ export async function closeShipmentWithVariance(shipmentId: string, note?: strin
 
   revalidatePath("/admin/purchasing/shipments");
   revalidatePath(`/admin/purchasing/shipments/${shipmentId}`);
+  return { success: true };
+}
+
+/**
+ * Delete Receiving record before PO completion.
+ */
+export async function deleteReceiving(receivingId: string) {
+  const { userId } = await verifyAdminSession();
+  const supabase = createAdminClient();
+
+  const { data: rec } = await supabase
+    .from("receivings")
+    .select("id, receiving_number, status, purchase_order_id, received_date")
+    .eq("id", receivingId)
+    .single();
+
+  if (!rec) throw new Error("Receiving record not found.");
+
+  if (rec.purchase_order_id) {
+    const { data: po } = await supabase
+      .from("purchase_orders")
+      .select("fulfillment_status")
+      .eq("id", rec.purchase_order_id)
+      .single();
+
+    if (po && po.fulfillment_status === "COMPLETED") {
+      throw new Error("Completed PO receiving records cannot be modified.");
+    }
+  }
+
+  // 1. Delete receiving lines
+  const { error: linesErr } = await supabase
+    .from("receiving_lines")
+    .delete()
+    .eq("receiving_id", receivingId);
+
+  if (linesErr) {
+    throw new Error(`입고 상세 품목 삭제 실패: ${linesErr.message}`);
+  }
+
+  // 2. Delete receiving header
+  const { error: headerErr } = await supabase
+    .from("receivings")
+    .delete()
+    .eq("id", receivingId);
+
+  if (headerErr) {
+    throw new Error(`입고 헤더 삭제 실패: ${headerErr.message}`);
+  }
+
+  // 3. Revalidate paths
+  revalidatePath("/admin/purchasing/receiving");
+  revalidatePath(`/admin/purchasing/receiving/${receivingId}`);
+  revalidatePath("/admin/purchasing/shipments");
+  revalidatePath("/admin/purchasing");
+  revalidatePath("/admin/purchasing/orders");
+  if (rec.purchase_order_id) {
+    revalidatePath(`/admin/purchasing/${rec.purchase_order_id}`);
+    revalidatePath("/portal/orders/purchase-orders");
+    revalidatePath(`/portal/orders/purchase-orders/${rec.purchase_order_id}`);
+  }
+
   return { success: true };
 }
