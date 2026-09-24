@@ -332,7 +332,7 @@ export async function createInvoice(input: CreateInvoiceInput) {
     throw new Error("최종 인보이스 청구 금액(Final Invoice Amount)은 0 이상이어야 합니다. 조정 금액을 확인해 주세요.");
   }
 
-  // Insert invoice header with remittance snapshot
+  // Insert invoice header
   const { data: inv, error: invErr } = await supabase
     .from("supplier_invoices")
     .insert({
@@ -356,16 +356,6 @@ export async function createInvoice(input: CreateInvoiceInput) {
       settlement_status: "OPEN",
       attachment_path: input.attachment_path || null,
       internal_note: input.internal_note || null,
-      // Remittance snapshot
-      supplier_remittance_id: remittance?.id || null,
-      remittance_bank_name: remittance?.bank_name || null,
-      remittance_beneficiary_name: remittance?.beneficiary_name || null,
-      remittance_account_number: remittance?.account_number || null,
-      remittance_account_last4: remittance?.account_last4 || (remittance?.account_number ? remittance.account_number.slice(-4) : null),
-      remittance_routing_number: remittance?.routing_number || null,
-      remittance_swift_bic_masked: remittance?.swift_bic_masked || remittance?.swift_code || null,
-      remittance_currency: remittance?.currency || input.currency || null,
-      remittance_payment_method: remittance?.payment_method || null,
       created_by: userId,
       updated_by: userId,
     })
@@ -788,15 +778,6 @@ export async function getSupplierInvoiceById(id: string) {
       attachment_path,
       internal_note,
       rejection_reason,
-      supplier_remittance_id,
-      remittance_bank_name,
-      remittance_beneficiary_name,
-      remittance_account_number,
-      remittance_account_last4,
-      remittance_routing_number,
-      remittance_swift_bic_masked,
-      remittance_currency,
-      remittance_payment_method,
       submitted_at,
       submitted_by,
       approved_at,
@@ -873,16 +854,42 @@ export async function getSupplierInvoiceById(id: string) {
 
   if (invErr || !inv) throw new Error("Invoice not found.");
 
-  // Fetch linked partner inquiries
-  const { data: linkedInquiries } = await supabase
-    .from("partner_inquiries")
-    .select("id, ticket_number, title, category, status, priority, created_at")
-    .eq("related_invoice_id", id)
-    .order("created_at", { ascending: false });
+  // Fetch remittance data safely from supplier_remittances
+  const { data: rem } = await supabase
+    .from("supplier_remittances")
+    .select("*")
+    .eq("company_id", inv.supplier_company_id)
+    .maybeSingle();
+
+  // Fetch linked partner inquiries safely
+  let linkedInquiries: any[] = [];
+  try {
+    const { data: inqs, error: inqErr } = await supabase
+      .from("partner_inquiries")
+      .select("id, case_number, title, category, status, priority, created_at")
+      .eq("related_invoice_id", id)
+      .order("created_at", { ascending: false });
+    if (!inqErr && inqs) {
+      linkedInquiries = inqs.map((q: any) => ({
+        ...q,
+        ticket_number: q.case_number || q.id.slice(0, 8)
+      }));
+    }
+  } catch (err) {
+    // Gracefully continue if related_invoice_id column not present
+  }
 
   return {
     ...inv,
-    linked_inquiries: linkedInquiries ?? [],
+    remittance_bank_name: (inv as any).remittance_bank_name || rem?.bank_name || null,
+    remittance_beneficiary_name: (inv as any).remittance_beneficiary_name || rem?.beneficiary_name || null,
+    remittance_account_number: (inv as any).remittance_account_number || rem?.account_number || null,
+    remittance_account_last4: (inv as any).remittance_account_last4 || (rem?.account_number ? String(rem.account_number).slice(-4) : null),
+    remittance_routing_number: (inv as any).remittance_routing_number || rem?.routing_number || null,
+    remittance_swift_bic_masked: (inv as any).remittance_swift_bic_masked || rem?.swift_bic_masked || rem?.swift_code || null,
+    remittance_currency: (inv as any).remittance_currency || rem?.currency || inv.currency || null,
+    remittance_payment_method: (inv as any).remittance_payment_method || rem?.payment_method || null,
+    linked_inquiries: linkedInquiries,
   };
 }
 

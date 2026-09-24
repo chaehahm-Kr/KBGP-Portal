@@ -244,6 +244,8 @@ export async function createPartnerInquiry(formData: FormData) {
       const fallbackPayload = { ...insertPayload };
       delete fallbackPayload.created_source;
       delete fallbackPayload.priority;
+      delete fallbackPayload.related_invoice_id;
+      delete fallbackPayload.related_po_id;
       const retryRes = await supabase
         .from("partner_inquiries")
         .insert(fallbackPayload)
@@ -263,6 +265,8 @@ export async function createPartnerInquiry(formData: FormData) {
         delete fallbackPayload.previous_case_id;
         delete fallbackPayload.created_source;
         delete fallbackPayload.priority;
+        delete fallbackPayload.related_invoice_id;
+        delete fallbackPayload.related_po_id;
         const { data: fallbackInquiry, error: fallbackErr } = await supabase
           .from("partner_inquiries")
           .insert(fallbackPayload)

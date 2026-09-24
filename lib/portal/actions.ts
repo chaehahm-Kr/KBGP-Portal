@@ -1626,6 +1626,7 @@ export async function getPortalInvoices() {
 export async function getPortalInvoiceDetail(id: string) {
   const { companyId } = await requireCompanyMembership();
   const supabase = await createClient();
+  const adminDb = createAdminClient();
 
   // 1. Fetch invoice header and verify ownership
   const { data: inv, error: invErr } = await supabase
@@ -1653,12 +1654,6 @@ export async function getPortalInvoiceDetail(id: string) {
       settlement_status,
       attachment_path,
       rejection_reason,
-      remittance_bank_name,
-      remittance_beneficiary_name,
-      remittance_account_last4,
-      remittance_swift_bic_masked,
-      remittance_currency,
-      remittance_payment_method,
       submitted_at,
       created_at,
       purchase_orders(po_number)
@@ -1694,7 +1689,6 @@ export async function getPortalInvoiceDetail(id: string) {
   }
 
   // 3. Fetch adjustments using adminDb to safely include all details
-  const adminDb = createAdminClient();
   const { data: adjustments, error: adjErr } = await adminDb
     .from("supplier_invoice_adjustments")
     .select(`
@@ -1721,7 +1715,6 @@ export async function getPortalInvoiceDetail(id: string) {
 
   if (adjErr) {
     console.error("Failed to fetch invoice adjustments:", adjErr);
-    throw new Error("정산 조정 내역을 불러오지 못했습니다.");
   }
 
   // 4. Fetch payments (restricted select columns exclude internal_note)
@@ -1749,31 +1742,39 @@ export async function getPortalInvoiceDetail(id: string) {
 
   if (pmtErr) {
     console.error("Failed to fetch invoice payments:", pmtErr);
-    throw new Error("지급 내역을 불러오지 못했습니다.");
   }
 
   // 5. Gather PO lines to calculate Qty facts per line
-  const { data: poLines } = await supabase
-    .from("purchase_order_lines")
-    .select("id, qty, confirmed_qty")
-    .eq("purchase_order_id", inv.purchase_order_id);
+  let poLineMap = new Map();
+  if (inv.purchase_order_id) {
+    const { data: poLines } = await supabase
+      .from("purchase_order_lines")
+      .select("id, qty, confirmed_qty")
+      .eq("purchase_order_id", inv.purchase_order_id);
 
-  const poLineMap = new Map();
-  if (poLines && poLines.length > 0) {
-    const poLineIds = poLines.map((pol: any) => pol.id);
-    const qtyMap = await getInvoiceQuantitiesForPoLines(supabase, poLineIds);
+    if (poLines && poLines.length > 0) {
+      const poLineIds = poLines.map((pol: any) => pol.id);
+      const qtyMap = await getInvoiceQuantitiesForPoLines(supabase, poLineIds);
 
-    for (const pol of poLines) {
-      const q = qtyMap[pol.id] || { shipped: 0, received: 0, ready: 0, invoiced: 0, hold: 0, damaged: 0 };
-      poLineMap.set(pol.id, {
-        orderedQty: pol.qty,
-        confirmedQty: pol.confirmed_qty !== null ? pol.confirmed_qty : pol.qty,
-        readyQty: q.ready,
-        shippedQty: q.shipped,
-        receivedQty: q.received
-      });
+      for (const pol of poLines) {
+        const q = qtyMap[pol.id] || { shipped: 0, received: 0, ready: 0, invoiced: 0, hold: 0, damaged: 0 };
+        poLineMap.set(pol.id, {
+          orderedQty: pol.qty,
+          confirmedQty: pol.confirmed_qty !== null ? pol.confirmed_qty : pol.qty,
+          readyQty: q.ready,
+          shippedQty: q.shipped,
+          receivedQty: q.received
+        });
+      }
     }
   }
+
+  // 6. Fetch remittance details from supplier_remittances as fallback
+  const { data: rem } = await adminDb
+    .from("supplier_remittances")
+    .select("*")
+    .eq("company_id", companyId)
+    .maybeSingle();
 
   // Merge context into invoice lines
   const formattedLines = (lines ?? []).map((l: any) => {
@@ -1836,12 +1837,12 @@ export async function getPortalInvoiceDetail(id: string) {
       note: adj.internal_note || "",
       status: adj.status
     })),
-    remittanceBankName: (inv as any).remittance_bank_name || null,
-    remittanceBeneficiaryName: (inv as any).remittance_beneficiary_name || null,
-    remittanceAccountLast4: (inv as any).remittance_account_last4 || null,
-    remittanceSwiftBicMasked: (inv as any).remittance_swift_bic_masked || null,
-    remittanceCurrency: (inv as any).remittance_currency || null,
-    remittancePaymentMethod: (inv as any).remittance_payment_method || null,
+    remittanceBankName: (inv as any).remittance_bank_name || rem?.bank_name || null,
+    remittanceBeneficiaryName: (inv as any).remittance_beneficiary_name || rem?.beneficiary_name || null,
+    remittanceAccountLast4: (inv as any).remittance_account_last4 || (rem?.account_number ? String(rem.account_number).slice(-4) : null),
+    remittanceSwiftBicMasked: (inv as any).remittance_swift_bic_masked || rem?.swift_bic_masked || rem?.swift_code || null,
+    remittanceCurrency: (inv as any).remittance_currency || rem?.currency || inv.currency || null,
+    remittancePaymentMethod: (inv as any).remittance_payment_method || rem?.payment_method || null,
     payments: (payments ?? []).map((p: any) => ({
       id: p.id,
       paymentNumber: p.payment_number,
@@ -2079,7 +2080,7 @@ export async function createPortalInvoiceDraft(input: {
     throw new Error("최종 인보이스 청구 금액(Final Invoice Amount)은 0 이상이어야 합니다. 조정 금액을 확인해주세요.");
   }
 
-  // Insert invoice header with remittance snapshot
+  // Insert invoice header
   const { data: inv, error: invErr } = await supabase
     .from("supplier_invoices")
     .insert({
@@ -2098,15 +2099,6 @@ export async function createPortalInvoiceDraft(input: {
       payment_status: "UNPAID",
       settlement_status: "OPEN",
       attachment_path: input.attachmentPath,
-      supplier_remittance_id: rem ? companyId : null,
-      remittance_bank_name: rem?.bank_name || null,
-      remittance_beneficiary_name: rem?.beneficiary_name || null,
-      remittance_account_number: rem?.account_number || null,
-      remittance_account_last4: rem?.account_number ? rem.account_number.slice(-4) : null,
-      remittance_routing_number: rem?.routing_number || null,
-      remittance_swift_bic_masked: rem?.swift_bic || null,
-      remittance_currency: rem?.account_currency || po.currency || "USD",
-      remittance_payment_method: rem?.payment_method || null,
     })
     .select("id")
     .single();
