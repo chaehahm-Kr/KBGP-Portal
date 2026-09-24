@@ -6,7 +6,7 @@ import { InvoiceForm } from "@/components/portal/invoice-form";
 export default async function EditPortalInvoicePage({
   params
 }: {
-  params: Promise<{ id: string }> | { id: string };
+  params: Promise<{ id: string }>;
 }) {
   const resolvedParams = await params;
   const { id } = resolvedParams;

@@ -57,6 +57,12 @@ const PAYMENT_STATUS_LABELS: Record<string, string> = {
   PAID: "지급 완료 (Paid)",
 };
 
+// Default Preset Definitions for Practical Operations:
+// Default Invoice Status = Submitted + Approved
+// Default Payment Status = Unpaid + Partially Paid
+const DEFAULT_INVOICE_STATUSES = ["SUBMITTED", "APPROVED"];
+const DEFAULT_PAYMENT_STATUSES = ["UNPAID", "PARTIALLY_PAID"];
+
 export function getDueDateIndicator(dueDateStr: string, balanceDue: number) {
   if (balanceDue <= 0 || !dueDateStr) return null;
 
@@ -100,7 +106,7 @@ export function getDueDateIndicator(dueDateStr: string, balanceDue: number) {
 }
 
 export function InvoicesList({ initialInvoices, suppliers }: InvoicesListProps) {
-  // Filter States
+  // Filter States with Practical Operational Defaults (ADM-FIN-004-R1)
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedSupplierId, setSelectedSupplierId] = useState("all");
   const [startDate, setStartDate] = useState("");
@@ -108,25 +114,29 @@ export function InvoicesList({ initialInvoices, suppliers }: InvoicesListProps) 
   const [selectedDueDateFilter, setSelectedDueDateFilter] = useState<
     "all" | "due_soon" | "7_days" | "14_days" | "30_days" | "overdue"
   >("all");
-  const [selectedInvoiceStatuses, setSelectedInvoiceStatuses] = useState<string[]>(["all"]);
-  const [selectedPaymentStatuses, setSelectedPaymentStatuses] = useState<string[]>(["all"]);
+  const [selectedInvoiceStatuses, setSelectedInvoiceStatuses] = useState<string[]>(DEFAULT_INVOICE_STATUSES);
+  const [selectedPaymentStatuses, setSelectedPaymentStatuses] = useState<string[]>(DEFAULT_PAYMENT_STATUSES);
 
   // Format Helper
   const formatCurrency = (val: number, currency = "USD") => {
     return `${currency} ${val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   };
 
-  // Preset Handlers for Invoice Date
-  const handleDatePresetChange = (preset: "ALL" | "THIS_MONTH" | "LAST_30_DAYS" | "LAST_60_DAYS") => {
+  // Preset Handlers for Invoice Date (Includes "THIS_WEEK")
+  const handleDatePresetChange = (preset: "ALL" | "THIS_WEEK" | "LAST_30_DAYS" | "LAST_60_DAYS") => {
     const now = new Date();
     const todayStr = now.toISOString().split("T")[0];
 
     if (preset === "ALL") {
       setStartDate("");
       setEndDate("");
-    } else if (preset === "THIS_MONTH") {
-      const firstDay = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split("T")[0];
-      setStartDate(firstDay);
+    } else if (preset === "THIS_WEEK") {
+      const dayOfWeek = now.getDay();
+      const distanceToMonday = (dayOfWeek + 6) % 7;
+      const monday = new Date(now);
+      monday.setDate(now.getDate() - distanceToMonday);
+      const mondayStr = monday.toISOString().split("T")[0];
+      setStartDate(mondayStr);
       setEndDate(todayStr);
     } else if (preset === "LAST_30_DAYS") {
       const past30 = new Date(new Date().setDate(now.getDate() - 30)).toISOString().split("T")[0];
@@ -184,15 +194,15 @@ export function InvoicesList({ initialInvoices, suppliers }: InvoicesListProps) 
     }
   };
 
-  // Reset All Filters
+  // Reset All Filters (Restores operational default presets)
   const handleResetFilters = () => {
     setSearchTerm("");
     setSelectedSupplierId("all");
     setStartDate("");
     setEndDate("");
     setSelectedDueDateFilter("all");
-    setSelectedInvoiceStatuses(["all"]);
-    setSelectedPaymentStatuses(["all"]);
+    setSelectedInvoiceStatuses(DEFAULT_INVOICE_STATUSES);
+    setSelectedPaymentStatuses(DEFAULT_PAYMENT_STATUSES);
   };
 
   // Filter Computation
@@ -361,9 +371,9 @@ export function InvoicesList({ initialInvoices, suppliers }: InvoicesListProps) 
         </div>
       </div>
 
-      {/* 2. Filter Controls Dashboard */}
+      {/* 2. Filter Controls Dashboard (2-Row Refined Layout - ADM-FIN-004-R1) */}
       <div className="bg-zinc-50/70 p-4 border border-zinc-200 rounded-xl dark:bg-zinc-950/40 dark:border-zinc-850 space-y-3 text-xs">
-        {/* Row 1: Search & Supplier & Reset */}
+        {/* Top Control Bar: Search & Supplier Dropdown & Reset Filters */}
         <div className="flex flex-col md:flex-row gap-2.5 items-stretch md:items-center justify-between">
           <div className="flex flex-1 flex-col md:flex-row gap-2.5">
             <input
@@ -395,174 +405,181 @@ export function InvoicesList({ initialInvoices, suppliers }: InvoicesListProps) 
           </button>
         </div>
 
-        {/* Row 2: Invoice Date Filter & Presets */}
-        <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-zinc-200/60 dark:border-zinc-850">
-          <span className="font-bold text-zinc-700 dark:text-zinc-300 w-28">
-            발행 일자 (Invoice Date):
-          </span>
-          <div className="flex items-center gap-1.5">
-            <input
-              type="date"
-              value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
-              className="h-8 rounded-md border border-zinc-200 bg-white px-2 text-xs outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-200"
-            />
-            <span className="text-zinc-400">~</span>
-            <input
-              type="date"
-              value={endDate}
-              onChange={(e) => setEndDate(e.target.value)}
-              className="h-8 rounded-md border border-zinc-200 bg-white px-2 text-xs outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-200"
-            />
+        {/* Filter Row 1: Invoice Date (Left) & Payment Due (Right) */}
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-3.5 pt-2.5 border-t border-zinc-200/60 dark:border-zinc-850">
+          {/* Row 1 Left: Invoice Date */}
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-bold text-zinc-700 dark:text-zinc-300 w-28 shrink-0">
+              발행 일자 (Invoice Date):
+            </span>
+            <div className="flex items-center gap-1.5">
+              <input
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                className="h-8 rounded-md border border-zinc-200 bg-white px-2 text-xs outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-200"
+              />
+              <span className="text-zinc-400">~</span>
+              <input
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                className="h-8 rounded-md border border-zinc-200 bg-white px-2 text-xs outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-200"
+              />
+            </div>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => handleDatePresetChange("ALL")}
+                className={`h-8 px-2.5 rounded-md text-xs font-semibold cursor-pointer border transition-colors ${
+                  !startDate && !endDate
+                    ? "bg-zinc-900 text-white border-zinc-900 dark:bg-zinc-100 dark:text-zinc-950 dark:border-zinc-100 font-bold"
+                    : "bg-white text-zinc-600 border-zinc-200 dark:bg-zinc-900 dark:text-zinc-300 dark:border-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                }`}
+              >
+                전체 (All)
+              </button>
+              <button
+                onClick={() => handleDatePresetChange("THIS_WEEK")}
+                className="h-8 px-2.5 rounded-md text-xs font-semibold cursor-pointer border bg-white text-zinc-600 border-zinc-200 dark:bg-zinc-900 dark:text-zinc-300 dark:border-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+              >
+                이번 주
+              </button>
+              <button
+                onClick={() => handleDatePresetChange("LAST_30_DAYS")}
+                className="h-8 px-2.5 rounded-md text-xs font-semibold cursor-pointer border bg-white text-zinc-600 border-zinc-200 dark:bg-zinc-900 dark:text-zinc-300 dark:border-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+              >
+                최근 30일
+              </button>
+              <button
+                onClick={() => handleDatePresetChange("LAST_60_DAYS")}
+                className="h-8 px-2.5 rounded-md text-xs font-semibold cursor-pointer border bg-white text-zinc-600 border-zinc-200 dark:bg-zinc-900 dark:text-zinc-300 dark:border-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+              >
+                최근 60일
+              </button>
+            </div>
           </div>
-          <div className="flex items-center gap-1">
-            <button
-              onClick={() => handleDatePresetChange("ALL")}
-              className={`h-8 px-2.5 rounded-md text-xs font-semibold cursor-pointer border transition-colors ${
-                !startDate && !endDate
-                  ? "bg-zinc-900 text-white border-zinc-900 dark:bg-zinc-100 dark:text-zinc-950 dark:border-zinc-100"
-                  : "bg-white text-zinc-600 border-zinc-200 dark:bg-zinc-900 dark:text-zinc-300 dark:border-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-800"
-              }`}
-            >
-              전체 (All)
-            </button>
-            <button
-              onClick={() => handleDatePresetChange("THIS_MONTH")}
-              className="h-8 px-2.5 rounded-md text-xs font-semibold cursor-pointer border bg-white text-zinc-600 border-zinc-200 dark:bg-zinc-900 dark:text-zinc-300 dark:border-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
-            >
-              이번 달
-            </button>
-            <button
-              onClick={() => handleDatePresetChange("LAST_30_DAYS")}
-              className="h-8 px-2.5 rounded-md text-xs font-semibold cursor-pointer border bg-white text-zinc-600 border-zinc-200 dark:bg-zinc-900 dark:text-zinc-300 dark:border-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
-            >
-              최근 30일
-            </button>
-            <button
-              onClick={() => handleDatePresetChange("LAST_60_DAYS")}
-              className="h-8 px-2.5 rounded-md text-xs font-semibold cursor-pointer border bg-white text-zinc-600 border-zinc-200 dark:bg-zinc-900 dark:text-zinc-300 dark:border-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
-            >
-              최근 60일
-            </button>
+
+          {/* Row 1 Right: Payment Due */}
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-bold text-zinc-700 dark:text-zinc-300 w-28 shrink-0">
+              지급 기한 (Payment Due):
+            </span>
+            <div className="flex flex-wrap items-center gap-1.5">
+              {[
+                { id: "all", label: "전체 (All Due Dates)" },
+                { id: "due_soon", label: `지급기한 임박 (${operationalCounts.dueIn7DaysCount})` },
+                { id: "7_days", label: "7일 이내" },
+                { id: "14_days", label: "14일 이내" },
+                { id: "30_days", label: "30일 이내" },
+                { id: "overdue", label: `연체 Overdue (${operationalCounts.overdueCount})` },
+              ].map((btn) => {
+                const isActive = selectedDueDateFilter === btn.id;
+                const isOverdueBtn = btn.id === "overdue";
+                return (
+                  <button
+                    key={btn.id}
+                    onClick={() => setSelectedDueDateFilter(btn.id as any)}
+                    className={`h-8 px-2.5 rounded-md text-xs font-bold cursor-pointer border transition-colors ${
+                      isActive
+                        ? isOverdueBtn
+                          ? "bg-rose-600 text-white border-rose-600"
+                          : "bg-zinc-900 text-white border-zinc-900 dark:bg-zinc-100 dark:text-zinc-950 dark:border-zinc-100"
+                        : isOverdueBtn
+                        ? "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-900/60 hover:bg-rose-100"
+                        : "bg-white text-zinc-600 border-zinc-200 dark:bg-zinc-900 dark:text-zinc-300 dark:border-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                    }`}
+                  >
+                    {btn.label}
+                  </button>
+                );
+              })}
+            </div>
           </div>
         </div>
 
-        {/* Row 3: Due Date / Payment Deadline Filter */}
-        <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-zinc-200/60 dark:border-zinc-850">
-          <span className="font-bold text-zinc-700 dark:text-zinc-300 w-28">
-            지급 기한 (Payment Due):
-          </span>
-          <div className="flex flex-wrap items-center gap-1.5">
-            {[
-              { id: "all", label: "전체 (All Due Dates)" },
-              { id: "due_soon", label: `지급기한 임박 (${operationalCounts.dueIn7DaysCount})` },
-              { id: "7_days", label: "7일 이내" },
-              { id: "14_days", label: "14일 이내" },
-              { id: "30_days", label: "30일 이내" },
-              { id: "overdue", label: `연체 Overdue (${operationalCounts.overdueCount})` },
-            ].map((btn) => {
-              const isActive = selectedDueDateFilter === btn.id;
-              const isOverdueBtn = btn.id === "overdue";
-              return (
-                <button
-                  key={btn.id}
-                  onClick={() => setSelectedDueDateFilter(btn.id as any)}
-                  className={`h-8 px-2.5 rounded-md text-xs font-bold cursor-pointer border transition-colors ${
-                    isActive
-                      ? isOverdueBtn
-                        ? "bg-rose-600 text-white border-rose-600"
-                        : "bg-zinc-900 text-white border-zinc-900 dark:bg-zinc-100 dark:text-zinc-950 dark:border-zinc-100"
-                      : isOverdueBtn
-                      ? "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-900/60 hover:bg-rose-100"
-                      : "bg-white text-zinc-600 border-zinc-200 dark:bg-zinc-900 dark:text-zinc-300 dark:border-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-800"
-                  }`}
-                >
-                  {btn.label}
-                </button>
-              );
-            })}
+        {/* Filter Row 2: Invoice Status (Left) & Payment Status (Right) */}
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-3.5 pt-2.5 border-t border-zinc-200/60 dark:border-zinc-850">
+          {/* Row 2 Left: Invoice Status */}
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-bold text-zinc-700 dark:text-zinc-300 w-28 shrink-0">
+              문서 상태 (Invoice Status):
+            </span>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <button
+                onClick={() => handleToggleInvoiceStatus("all")}
+                className={`h-8 px-2.5 rounded-md text-xs font-bold cursor-pointer border transition-colors ${
+                  selectedInvoiceStatuses.includes("all")
+                    ? "bg-zinc-900 text-white border-zinc-900 dark:bg-zinc-100 dark:text-zinc-950 dark:border-zinc-100"
+                    : "bg-white text-zinc-600 border-zinc-200 dark:bg-zinc-900 dark:text-zinc-300 dark:border-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                }`}
+              >
+                전체 (All)
+              </button>
+              {Object.entries(INVOICE_STATUS_LABELS).map(([k, label]) => {
+                const isActive = selectedInvoiceStatuses.includes(k);
+                return (
+                  <button
+                    key={k}
+                    onClick={() => handleToggleInvoiceStatus(k)}
+                    className={`h-8 px-2.5 rounded-md text-xs font-bold cursor-pointer border transition-colors ${
+                      isActive
+                        ? "bg-indigo-650 text-white border-indigo-650 dark:bg-indigo-600 dark:text-white"
+                        : "bg-white text-zinc-600 border-zinc-200 dark:bg-zinc-900 dark:text-zinc-300 dark:border-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
           </div>
-        </div>
 
-        {/* Row 4: Invoice Status Multi-Select */}
-        <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-zinc-200/60 dark:border-zinc-850">
-          <span className="font-bold text-zinc-700 dark:text-zinc-300 w-28">
-            문서 상태 (Invoice Status):
-          </span>
-          <div className="flex flex-wrap items-center gap-1.5">
-            <button
-              onClick={() => handleToggleInvoiceStatus("all")}
-              className={`h-8 px-2.5 rounded-md text-xs font-bold cursor-pointer border transition-colors ${
-                selectedInvoiceStatuses.includes("all")
-                  ? "bg-zinc-900 text-white border-zinc-900 dark:bg-zinc-100 dark:text-zinc-950 dark:border-zinc-100"
-                  : "bg-white text-zinc-600 border-zinc-200 dark:bg-zinc-900 dark:text-zinc-300 dark:border-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-800"
-              }`}
-            >
-              전체 (All)
-            </button>
-            {Object.entries(INVOICE_STATUS_LABELS).map(([k, label]) => {
-              const isActive = selectedInvoiceStatuses.includes(k);
-              return (
-                <button
-                  key={k}
-                  onClick={() => handleToggleInvoiceStatus(k)}
-                  className={`h-8 px-2.5 rounded-md text-xs font-bold cursor-pointer border transition-colors ${
-                    isActive
-                      ? "bg-indigo-650 text-white border-indigo-650 dark:bg-indigo-600 dark:text-white"
-                      : "bg-white text-zinc-600 border-zinc-200 dark:bg-zinc-900 dark:text-zinc-300 dark:border-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-800"
-                  }`}
-                >
-                  {label}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Row 5: Payment Status Multi-Select & Outstanding Quick Filter */}
-        <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-zinc-200/60 dark:border-zinc-850">
-          <span className="font-bold text-zinc-700 dark:text-zinc-300 w-28">
-            지급 상태 (Payment Status):
-          </span>
-          <div className="flex flex-wrap items-center gap-1.5">
-            <button
-              onClick={() => handleTogglePaymentStatus("all")}
-              className={`h-8 px-2.5 rounded-md text-xs font-bold cursor-pointer border transition-colors ${
-                selectedPaymentStatuses.includes("all")
-                  ? "bg-zinc-900 text-white border-zinc-900 dark:bg-zinc-100 dark:text-zinc-950 dark:border-zinc-100"
-                  : "bg-white text-zinc-600 border-zinc-200 dark:bg-zinc-900 dark:text-zinc-300 dark:border-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-800"
-              }`}
-            >
-              전체 (All)
-            </button>
-            {Object.entries(PAYMENT_STATUS_LABELS).map(([k, label]) => {
-              const isActive = selectedPaymentStatuses.includes(k);
-              return (
-                <button
-                  key={k}
-                  onClick={() => handleTogglePaymentStatus(k)}
-                  className={`h-8 px-2.5 rounded-md text-xs font-bold cursor-pointer border transition-colors ${
-                    isActive
-                      ? "bg-teal-650 text-white border-teal-650 dark:bg-teal-600 dark:text-white"
-                      : "bg-white text-zinc-600 border-zinc-200 dark:bg-zinc-900 dark:text-zinc-300 dark:border-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-800"
-                  }`}
-                >
-                  {label}
-                </button>
-              );
-            })}
-            <button
-              onClick={() => handleTogglePaymentStatus("OUTSTANDING")}
-              className={`h-8 px-2.5 rounded-md text-xs font-bold cursor-pointer border transition-colors ${
-                selectedPaymentStatuses.includes("UNPAID") &&
-                selectedPaymentStatuses.includes("PARTIALLY_PAID") &&
-                !selectedPaymentStatuses.includes("PAID")
-                  ? "bg-amber-600 text-white border-amber-600"
-                  : "bg-amber-50 text-amber-800 border-amber-250 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800 hover:bg-amber-100"
-              }`}
-            >
-              ⚡ Outstanding (미지급/부분지급 - {operationalCounts.outstandingCount}건)
-            </button>
+          {/* Row 2 Right: Payment Status */}
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-bold text-zinc-700 dark:text-zinc-300 w-28 shrink-0">
+              지급 상태 (Payment Status):
+            </span>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <button
+                onClick={() => handleTogglePaymentStatus("all")}
+                className={`h-8 px-2.5 rounded-md text-xs font-bold cursor-pointer border transition-colors ${
+                  selectedPaymentStatuses.includes("all")
+                    ? "bg-zinc-900 text-white border-zinc-900 dark:bg-zinc-100 dark:text-zinc-950 dark:border-zinc-100"
+                    : "bg-white text-zinc-600 border-zinc-200 dark:bg-zinc-900 dark:text-zinc-300 dark:border-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                }`}
+              >
+                전체 (All)
+              </button>
+              {Object.entries(PAYMENT_STATUS_LABELS).map(([k, label]) => {
+                const isActive = selectedPaymentStatuses.includes(k);
+                return (
+                  <button
+                    key={k}
+                    onClick={() => handleTogglePaymentStatus(k)}
+                    className={`h-8 px-2.5 rounded-md text-xs font-bold cursor-pointer border transition-colors ${
+                      isActive
+                        ? "bg-teal-650 text-white border-teal-650 dark:bg-teal-600 dark:text-white"
+                        : "bg-white text-zinc-600 border-zinc-200 dark:bg-zinc-900 dark:text-zinc-300 dark:border-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+              <button
+                onClick={() => handleTogglePaymentStatus("OUTSTANDING")}
+                className={`h-8 px-2.5 rounded-md text-xs font-bold cursor-pointer border transition-colors ${
+                  selectedPaymentStatuses.includes("UNPAID") &&
+                  selectedPaymentStatuses.includes("PARTIALLY_PAID") &&
+                  !selectedPaymentStatuses.includes("PAID") &&
+                  !selectedPaymentStatuses.includes("all")
+                    ? "bg-amber-600 text-white border-amber-600"
+                    : "bg-amber-50 text-amber-800 border-amber-250 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800 hover:bg-amber-100"
+                }`}
+              >
+                ⚡ Outstanding ({operationalCounts.outstandingCount}건)
+              </button>
+            </div>
           </div>
         </div>
       </div>

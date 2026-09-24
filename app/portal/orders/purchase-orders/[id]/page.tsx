@@ -12,7 +12,7 @@ export const metadata: Metadata = {
 };
 
 interface PortalPoDetailPageProps {
-  params: Promise<{ id: string }> | { id: string };
+  params: Promise<{ id: string }>;
 }
 
 export default async function PortalPoDetailPage({ params }: PortalPoDetailPageProps) {

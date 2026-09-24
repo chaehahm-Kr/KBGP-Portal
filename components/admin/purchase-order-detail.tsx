@@ -22,6 +22,7 @@ import {
 import {
   createInboundShipment,
   createReceiving,
+  updateReceiving,
   finalizeReceiving,
   transitionShipmentStatus,
   updateInboundShipmentLogistics,
@@ -323,6 +324,7 @@ export function PurchaseOrderDetail({
 
   // Receiving inspection form state
   const [showReceivingForm, setShowReceivingForm] = useState(false);
+  const [editingReceivingId, setEditingReceivingId] = useState<string | null>(null);
   const [selectedShipmentId, setSelectedShipmentId] = useState("");
   const [receivingWarehouseId, setReceivingWarehouseId] = useState(po.destination_warehouse_id || "");
   const [receivedDate, setReceivedDate] = useState(getEasternTodayString());
@@ -486,51 +488,134 @@ export function PurchaseOrderDetail({
   };
 
   // Init receiving inspection form
-  const initReceivingForm = (shipmentId?: string) => {
+  const initReceivingForm = (shipmentId?: string, draftReceiving?: any) => {
     setActiveTab("receiving");
+    setShowReceivingForm(true);
+
+    // If editing a draft receiving directly
+    if (draftReceiving) {
+      setEditingReceivingId(draftReceiving.id);
+      setSelectedShipmentId(draftReceiving.inbound_shipment_id || "");
+      setReceivingWarehouseId(draftReceiving.warehouse_id || po.destination_warehouse_id || (warehouses[0]?.id ?? ""));
+      setReceivedDate(draftReceiving.received_date || getEasternTodayString());
+
+      const lines = (draftReceiving.lines || []).map((rl: any) => {
+        const matchedPoLine = po.lines.find((l) => l.id === rl.purchase_order_line_id);
+        const matchedShipmentLine = shipments.flatMap((s) => s.lines || []).find((sl: any) => sl.id === rl.inbound_shipment_line_id);
+        const shippedQty = matchedShipmentLine?.shipped_qty ?? matchedPoLine?.confirmed_qty ?? matchedPoLine?.qty ?? rl.received_qty;
+
+        return {
+          inbound_shipment_line_id: rl.inbound_shipment_line_id || "",
+          purchase_order_line_id: rl.purchase_order_line_id || matchedPoLine?.id || "",
+          product_id: rl.product_id,
+          product_name: matchedPoLine?.product_name || "Unknown Product",
+          letusto_sku: matchedPoLine?.letusto_sku || "-",
+          manufacture_sku: matchedPoLine?.manufacture_sku || "-",
+          shipped_qty: shippedQty,
+          previously_received: 0,
+          remaining_to_receive: shippedQty,
+          received_qty: rl.received_qty || 0,
+          damaged_qty: rl.damaged_qty || 0,
+          hold_qty: rl.hold_qty || 0,
+          line_note: rl.line_note || "",
+        };
+      });
+
+      if (lines.length > 0) {
+        setReceivingLines(lines);
+      }
+      setTimeout(() => {
+        const el = document.getElementById("receiving-section");
+        if (el) el.scrollIntoView({ behavior: "smooth" });
+      }, 50);
+      return;
+    }
+
+    // Check if there is an existing DRAFT receiving for this PO
+    const existingDraft = receivings.find((r) => r.status === "DRAFT");
+    if (existingDraft) {
+      initReceivingForm(undefined, existingDraft);
+      return;
+    }
+
+    setEditingReceivingId(null);
+
     const activeShipments = shipments.filter((s) => s.status !== "CANCELLED");
     const target = (shipmentId ? shipments.find((s) => s.id === shipmentId) : activeShipments[0]) || shipments[0];
-    if (!target) return;
 
-    // Filter out already received counts for the shipment lines
-    const matchedReceivings = receivings.filter(
-      (r) => r.inbound_shipment_id === target.id && r.status === "FINALIZED"
-    );
-
+    // Filter out already received counts for finalized receivings
+    const finalizedReceivings = receivings.filter((r) => r.status === "FINALIZED");
     const receivedCountMap = new Map<string, number>();
-    matchedReceivings.flatMap((r) => r.lines || []).forEach((rl) => {
-      const cur = receivedCountMap.get(rl.inbound_shipment_line_id) || 0;
-      receivedCountMap.set(rl.inbound_shipment_line_id, cur + rl.received_qty);
+    finalizedReceivings.flatMap((r) => r.lines || []).forEach((rl: any) => {
+      if (rl.inbound_shipment_line_id) {
+        const cur = receivedCountMap.get(rl.inbound_shipment_line_id) || 0;
+        receivedCountMap.set(rl.inbound_shipment_line_id, cur + (rl.received_qty || 0));
+      }
+      if (rl.purchase_order_line_id) {
+        const curPo = receivedCountMap.get(rl.purchase_order_line_id) || 0;
+        receivedCountMap.set(rl.purchase_order_line_id, curPo + (rl.received_qty || 0));
+      }
     });
 
-    const items = (target.lines || []).map((sl: any) => {
-      const already = receivedCountMap.get(sl.id) || 0;
-      const remaining = Math.max(0, sl.shipped_qty - already);
+    let items: any[] = [];
+    if (target && target.lines && target.lines.length > 0) {
+      setSelectedShipmentId(target.id);
+      setReceivingWarehouseId(target.destination_warehouse_id || po.destination_warehouse_id || (warehouses[0]?.id ?? ""));
+      setReceivedDate(getEasternTodayString());
 
-      const matchedPoLine = po.lines.find((l) => l.id === sl.purchase_order_line_id);
+      items = target.lines.map((sl: any) => {
+        const already = receivedCountMap.get(sl.id) || 0;
+        const remaining = Math.max(0, sl.shipped_qty - already);
+        const matchedPoLine = po.lines.find((l) => l.id === sl.purchase_order_line_id);
 
-      return {
-        inbound_shipment_line_id: sl.id,
-        purchase_order_line_id: sl.purchase_order_line_id,
-        product_id: sl.product_id,
-        product_name: matchedPoLine?.product_name || "Unknown Product",
-        letusto_sku: matchedPoLine?.letusto_sku || "-",
-        manufacture_sku: matchedPoLine?.manufacture_sku || "-",
-        shipped_qty: sl.shipped_qty,
-        previously_received: already,
-        remaining_to_receive: remaining,
-        received_qty: remaining,
-        damaged_qty: 0,
-        hold_qty: 0,
-        line_note: "",
-      };
-    });
+        return {
+          inbound_shipment_line_id: sl.id,
+          purchase_order_line_id: sl.purchase_order_line_id || matchedPoLine?.id || "",
+          product_id: sl.product_id,
+          product_name: matchedPoLine?.product_name || "Unknown Product",
+          letusto_sku: matchedPoLine?.letusto_sku || "-",
+          manufacture_sku: matchedPoLine?.manufacture_sku || "-",
+          shipped_qty: sl.shipped_qty,
+          previously_received: already,
+          remaining_to_receive: remaining,
+          received_qty: remaining,
+          damaged_qty: 0,
+          hold_qty: 0,
+          line_note: "",
+        };
+      });
+    } else {
+      setSelectedShipmentId(target?.id || "");
+      setReceivingWarehouseId(po.destination_warehouse_id || (warehouses[0]?.id ?? ""));
+      setReceivedDate(getEasternTodayString());
 
-    setSelectedShipmentId(target.id);
-    setReceivingWarehouseId(target.destination_warehouse_id || po.destination_warehouse_id || (warehouses[0]?.id ?? ""));
-    setReceivedDate(getEasternTodayString());
+      items = po.lines.map((pol: any) => {
+        const already = receivedCountMap.get(pol.id) || 0;
+        const remaining = Math.max(0, (pol.confirmed_qty ?? pol.qty) - already);
+
+        return {
+          inbound_shipment_line_id: "",
+          purchase_order_line_id: pol.id,
+          product_id: pol.product_id,
+          product_name: pol.product_name || "Unknown Product",
+          letusto_sku: pol.letusto_sku || "-",
+          manufacture_sku: pol.manufacture_sku || "-",
+          shipped_qty: pol.confirmed_qty ?? pol.qty,
+          previously_received: already,
+          remaining_to_receive: remaining,
+          received_qty: remaining,
+          damaged_qty: 0,
+          hold_qty: 0,
+          line_note: "",
+        };
+      });
+    }
+
     setReceivingLines(items);
-    setShowReceivingForm(true);
+    setTimeout(() => {
+      const el = document.getElementById("receiving-section");
+      if (el) el.scrollIntoView({ behavior: "smooth" });
+    }, 50);
   };
 
   // Status transitions
@@ -657,9 +742,9 @@ export function PurchaseOrderDetail({
     setIsActionLoading(true);
 
     const validLines = receivingLines
-      .filter((l) => l.received_qty > 0)
+      .filter((l) => (l.received_qty || 0) > 0 || (l.damaged_qty || 0) > 0 || (l.hold_qty || 0) > 0)
       .map((l) => ({
-        inbound_shipment_line_id: l.inbound_shipment_line_id,
+        inbound_shipment_line_id: l.inbound_shipment_line_id || undefined,
         purchase_order_line_id: l.purchase_order_line_id,
         product_id: l.product_id,
         received_qty: l.received_qty,
@@ -675,21 +760,34 @@ export function PurchaseOrderDetail({
     }
 
     try {
-      const res = await createReceiving({
-        inbound_shipment_id: selectedShipmentId,
-        purchase_order_id: po.id,
-        warehouse_id: receivingWarehouseId,
-        received_date: receivedDate,
-        lines: validLines,
-      });
+      let recId = editingReceivingId;
+      if (recId) {
+        await updateReceiving({
+          receiving_id: recId,
+          warehouse_id: receivingWarehouseId,
+          received_date: receivedDate,
+          inbound_shipment_id: selectedShipmentId || null,
+          lines: validLines,
+        });
+      } else {
+        const res = await createReceiving({
+          inbound_shipment_id: selectedShipmentId || undefined,
+          purchase_order_id: po.id,
+          warehouse_id: receivingWarehouseId,
+          received_date: receivedDate,
+          lines: validLines,
+        });
+        recId = res?.id || null;
+      }
 
-      if (finalizeImmediately && res?.id) {
-        await finalizeReceiving(res.id);
+      if (finalizeImmediately && recId) {
+        await finalizeReceiving(recId);
         setSuccessMessage("입고 검수가 확정 완료되어 실재고에 반영되었습니다.");
       } else {
-        setSuccessMessage("입고서 초안(DRAFT)이 생성되었습니다. 검수 완료 후 '입고 전표 확정'을 진행하십시오.");
+        setSuccessMessage("입고서 초안(DRAFT)이 저장되었습니다. 검수 완료 후 '입고 전표 확정'을 진행하십시오.");
       }
       setShowReceivingForm(false);
+      setEditingReceivingId(null);
       router.refresh();
     } catch (err: any) {
       setErrorMessage(err.message || "입고 검수서 등록 실패");
@@ -2246,27 +2344,50 @@ export function PurchaseOrderDetail({
 
         {/* Tab 4: Receiving & Inspection */}
         {activeTab === "receiving" && (
-          <div className="space-y-6">
-            <h3 className="text-sm font-bold text-zinc-800 dark:text-white">창고 입고 및 실물 검수 정보</h3>
+          <div id="receiving-section" className="space-y-6">
+            <div className="flex justify-between items-center">
+              <div>
+                <h3 className="text-sm font-bold text-zinc-800 dark:text-white">창고 입고 및 실물 검수 정보</h3>
+                <p className="text-[11px] text-zinc-500 mt-0.5">
+                  도착한 선적 화물의 실물 수량 검수, 불량/보류 처리 및 실재고(Inventory) 반영을 관리합니다.
+                </p>
+              </div>
+              {!showReceivingForm && !isReadOnly && (
+                <button
+                  type="button"
+                  onClick={() => initReceivingForm()}
+                  className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-sm transition-all cursor-pointer flex items-center gap-1.5"
+                >
+                  <span>📥</span>
+                  <span>{receivings.some((r) => r.status === "DRAFT") ? "초안 검수 계속하기" : "+ 입고 검수 등록"}</span>
+                </button>
+              )}
+            </div>
 
             {/* Waiting shipments list */}
-            {shipments.filter(s => s.status === "ARRIVED" || s.status === "PARTIALLY_RECEIVED").length > 0 && !isReadOnly && (
-              <div className="rounded-xl border border-amber-250 bg-amber-50/20 p-5 space-y-3 dark:border-amber-900/50">
-                <h4 className="font-bold text-amber-800 dark:text-amber-400 text-xs">📥 대기 중인 입고 검수 대상 선적물</h4>
-                <div className="space-y-2">
+            {shipments.filter(s => s.status === "ARRIVED" || s.status === "PARTIALLY_RECEIVED" || s.status === "IN_TRANSIT").length > 0 && !isReadOnly && !showReceivingForm && (
+              <div className="rounded-xl border border-amber-200 bg-amber-50/30 p-4 space-y-3 dark:border-amber-900/50 dark:bg-amber-950/20">
+                <h4 className="font-bold text-amber-800 dark:text-amber-400 text-xs flex items-center gap-1.5">
+                  <span>📥</span>
+                  <span>입고 검수 대상 선적물 (Shipments Eligible for Receiving)</span>
+                </h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                   {shipments
-                    .filter((s) => s.status === "ARRIVED" || s.status === "PARTIALLY_RECEIVED")
+                    .filter((s) => s.status !== "CANCELLED" && s.status !== "RECEIVED")
                     .map((shp) => (
-                      <div key={shp.id} className="flex justify-between items-center bg-white dark:bg-zinc-950 p-3 rounded-lg border border-zinc-150 dark:border-zinc-850 text-xs">
+                      <div key={shp.id} className="flex justify-between items-center bg-white dark:bg-zinc-950 p-3 rounded-lg border border-zinc-200 dark:border-zinc-800 text-xs">
                         <div>
-                          <span className="font-mono font-bold text-zinc-850 dark:text-zinc-250">{shp.shipment_number}</span>
-                          <span className="ml-2 text-zinc-450">ETA: {shp.eta || "-"} | 목적지: {shp.warehouse?.name}</span>
+                          <span className="font-mono font-bold text-zinc-900 dark:text-zinc-100">{shp.shipment_number}</span>
+                          <span className="ml-2 text-zinc-500 dark:text-zinc-400 text-[11px]">
+                            {shp.shipping_method} | ETA: {shp.eta || "-"}
+                          </span>
                         </div>
                         <button
+                          type="button"
                           onClick={() => initReceivingForm(shp.id)}
-                          className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg cursor-pointer transition-colors"
+                          className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg cursor-pointer transition-colors"
                         >
-                          실물 입고 검수 시작
+                          실물 검수 시작
                         </button>
                       </div>
                     ))}
@@ -2276,12 +2397,14 @@ export function PurchaseOrderDetail({
 
             {/* Receiving Form inline */}
             {showReceivingForm && (
-              <form onSubmit={(e) => handleSubmitReceiving(e, false)} className="rounded-xl border border-indigo-200 bg-white dark:bg-zinc-900 p-5 dark:border-zinc-800 shadow-md space-y-5">
+              <form onSubmit={(e) => handleSubmitReceiving(e, false)} className="rounded-xl border-2 border-indigo-300 bg-white dark:bg-zinc-900 p-5 dark:border-indigo-800/80 shadow-md space-y-5">
                 <div className="flex justify-between items-center border-b border-zinc-200 pb-3 dark:border-zinc-800">
                   <div className="flex items-center gap-2">
                     <span className="text-base">📥</span>
                     <div>
-                      <h4 className="font-bold text-zinc-900 dark:text-white text-xs">창고 실물 입고 및 검수 등록 (Receiving & Inspection)</h4>
+                      <h4 className="font-bold text-zinc-900 dark:text-white text-xs">
+                        {editingReceivingId ? "창고 실물 입고 검수 수정 (DRAFT Edit)" : "창고 실물 입고 및 검수 등록 (Receiving & Inspection)"}
+                      </h4>
                       <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
                         선적 화물의 실제 입고 수량 및 불량/보류 여부를 검수하여 기록합니다.
                       </p>
@@ -2289,7 +2412,10 @@ export function PurchaseOrderDetail({
                   </div>
                   <button
                     type="button"
-                    onClick={() => setShowReceivingForm(false)}
+                    onClick={() => {
+                      setShowReceivingForm(false);
+                      setEditingReceivingId(null);
+                    }}
                     className="text-zinc-400 hover:text-zinc-650 cursor-pointer text-xs font-bold px-2 py-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800"
                   >
                     ✕ 취소 (Close)
@@ -2297,7 +2423,7 @@ export function PurchaseOrderDetail({
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
-                  {shipments.length > 1 && (
+                  {shipments.length > 0 && (
                     <div>
                       <label className="block font-bold text-zinc-600 dark:text-zinc-300 mb-1">입고 대상 선적물 (Shipment)</label>
                       <select
@@ -2305,6 +2431,7 @@ export function PurchaseOrderDetail({
                         onChange={(e) => initReceivingForm(e.target.value)}
                         className="w-full rounded-lg border border-zinc-300 text-xs py-1.5 focus:ring-indigo-500 dark:border-zinc-700 dark:bg-zinc-950 dark:text-white"
                       >
+                        <option value="">(전체 / PO 기준 직접 입고)</option>
                         {shipments
                           .filter((s) => s.status !== "CANCELLED")
                           .map((s) => (
@@ -2376,7 +2503,7 @@ export function PurchaseOrderDetail({
                           const lineVariance = (line.received_qty || 0) - (line.remaining_to_receive || 0);
 
                           return (
-                            <tr key={line.inbound_shipment_line_id || idx} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-900/30">
+                            <tr key={line.inbound_shipment_line_id || line.purchase_order_line_id || idx} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-900/30">
                               <td className="p-3">
                                 <span className="font-bold block text-zinc-900 dark:text-white">{line.product_name}</span>
                                 <span className="font-mono text-[10px] text-zinc-400">{line.letusto_sku}</span>
@@ -2502,7 +2629,10 @@ export function PurchaseOrderDetail({
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
-                      onClick={() => setShowReceivingForm(false)}
+                      onClick={() => {
+                        setShowReceivingForm(false);
+                        setEditingReceivingId(null);
+                      }}
                       className="px-3.5 py-2 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 text-xs font-bold rounded-lg cursor-pointer"
                     >
                       취소
@@ -2513,7 +2643,7 @@ export function PurchaseOrderDetail({
                       className="px-3.5 py-2 bg-zinc-200 hover:bg-zinc-300 dark:bg-zinc-700 dark:hover:bg-zinc-600 text-zinc-800 dark:text-white text-xs font-bold rounded-lg cursor-pointer flex items-center gap-1.5"
                     >
                       <span>💾</span>
-                      <span>임시저장 (Save Draft)</span>
+                      <span>{editingReceivingId ? "초안 수정 저장 (Update Draft)" : "임시저장 (Save Draft)"}</span>
                     </button>
                     <button
                       type="button"
@@ -2530,9 +2660,23 @@ export function PurchaseOrderDetail({
 
             {/* List receivings */}
             <div className="grid grid-cols-1 gap-6">
-              {receivings.length === 0 ? (
-                <div className="py-12 border-2 border-dashed border-zinc-200 dark:border-zinc-850 rounded-xl text-center text-zinc-500">
-                  현재 완료 또는 등록된 입고 내역이 없습니다.
+              {receivings.length === 0 && !showReceivingForm ? (
+                <div className="py-10 px-6 border-2 border-dashed border-indigo-200 dark:border-indigo-900/60 rounded-xl text-center bg-indigo-50/20 dark:bg-zinc-900/40 space-y-3">
+                  <div className="text-3xl">📥</div>
+                  <div>
+                    <h4 className="font-bold text-sm text-zinc-900 dark:text-white">선적 화물이 출고되어 창고 입고 검수가 가능합니다.</h4>
+                    <p className="text-xs text-zinc-500 mt-1">창고에 실물이 도착했을 때 실입고 수량, 불량, 보류 수량을 검수하여 기록하세요.</p>
+                  </div>
+                  {!isReadOnly && (
+                    <button
+                      type="button"
+                      onClick={() => initReceivingForm()}
+                      className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-md transition-all cursor-pointer inline-flex items-center gap-1.5"
+                    >
+                      <span>📥</span>
+                      <span>입고 검수 등록 시작 (Start Receiving)</span>
+                    </button>
+                  )}
                 </div>
               ) : (
                 receivings.map((r) => (
@@ -2540,18 +2684,35 @@ export function PurchaseOrderDetail({
                     <div className="flex justify-between items-center border-b border-zinc-150 pb-3 dark:border-zinc-850">
                       <div>
                         <span className="font-mono text-sm font-bold text-zinc-900 dark:text-white">{r.receiving_number}</span>
-                        <span className="ml-2.5 text-[10px] text-zinc-450">입고일자: {r.received_date}</span>
+                        <span className="ml-2.5 text-[10px] text-zinc-500">입고일자: {r.received_date}</span>
+                        {r.warehouse?.name && (
+                          <span className="ml-2 text-[10px] text-zinc-400">| 입고 창고: [{r.warehouse?.code}] {r.warehouse?.name}</span>
+                        )}
                       </div>
                       <div className="flex items-center gap-2">
                         {r.status === "DRAFT" && !isReadOnly && (
-                          <button
-                            onClick={() => handleFinalizeReceiving(r.id)}
-                            className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold rounded transition-colors cursor-pointer"
-                          >
-                            ✔️ 입고 전표 확정 (Finalize)
-                          </button>
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => initReceivingForm(undefined, r)}
+                              className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-bold rounded transition-colors cursor-pointer"
+                            >
+                              ✏️ 초안 수정 (Edit Draft)
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleFinalizeReceiving(r.id)}
+                              className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold rounded transition-colors cursor-pointer"
+                            >
+                              ✔️ 입고 전표 확정 (Finalize)
+                            </button>
+                          </>
                         )}
-                        <span className="px-2 py-0.5 bg-zinc-100 text-zinc-650 border border-zinc-250 rounded text-[10px] font-bold dark:bg-zinc-800 dark:text-zinc-300 dark:border-zinc-700">
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
+                          r.status === "FINALIZED"
+                            ? "bg-emerald-50 text-emerald-700 border-emerald-300 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800"
+                            : "bg-amber-50 text-amber-700 border-amber-300 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800"
+                        }`}>
                           {r.status}
                         </span>
                       </div>
@@ -2561,20 +2722,28 @@ export function PurchaseOrderDetail({
                     <div className="overflow-x-auto">
                       <table className="w-full text-left text-[11px] border-collapse bg-zinc-50 dark:bg-zinc-950 rounded-lg">
                         <thead>
-                          <tr className="border-b border-zinc-200 bg-zinc-100/50 text-zinc-550 font-bold dark:border-zinc-850 dark:bg-zinc-900/50 dark:text-white">
-                            <th className="p-2">제품 코드</th>
-                            <th className="p-2">제품 설명</th>
-                            <th className="p-2 text-right">정상 입고</th>
-                            <th className="p-2 text-right">불량/보류</th>
+                          <tr className="border-b border-zinc-200 bg-zinc-100/50 text-zinc-600 font-bold dark:border-zinc-850 dark:bg-zinc-900/50 dark:text-zinc-200">
+                            <th className="p-2.5">제품 코드 / Letusto SKU</th>
+                            <th className="p-2.5">제품명</th>
+                            <th className="p-2.5 text-right">총 입고 수량</th>
+                            <th className="p-2.5 text-right text-emerald-600">최종 양품 (Accepted)</th>
+                            <th className="p-2.5 text-right text-rose-600">불량 (Damaged)</th>
+                            <th className="p-2.5 text-right text-amber-600">보류 (Hold)</th>
+                            <th className="p-2.5">특이사항</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-zinc-150 dark:divide-zinc-800">
                           {(r.lines || []).map((line: any) => (
                             <tr key={line.id} className="align-middle">
-                              <td className="p-2 font-mono font-bold text-zinc-700 dark:text-zinc-300">{line.letusto_sku || "-"}</td>
-                              <td className="p-2 font-medium">{line.product_name}</td>
-                              <td className="p-2 text-right font-mono font-semibold text-emerald-600">{line.received_qty - line.damaged_qty - line.hold_qty}개</td>
-                              <td className="p-2 text-right font-mono text-rose-600">{line.damaged_qty + line.hold_qty}개</td>
+                              <td className="p-2.5 font-mono font-bold text-zinc-700 dark:text-zinc-300">{line.letusto_sku || "-"}</td>
+                              <td className="p-2.5 font-medium">{line.product_name || "Unknown Product"}</td>
+                              <td className="p-2.5 text-right font-mono font-semibold">{line.received_qty}개</td>
+                              <td className="p-2.5 text-right font-mono font-bold text-emerald-600">
+                                {Math.max(0, line.received_qty - (line.damaged_qty || 0) - (line.hold_qty || 0))}개
+                              </td>
+                              <td className="p-2.5 text-right font-mono text-rose-600">{line.damaged_qty || 0}개</td>
+                              <td className="p-2.5 text-right font-mono text-amber-600">{line.hold_qty || 0}개</td>
+                              <td className="p-2.5 text-zinc-500">{line.line_note || "-"}</td>
                             </tr>
                           ))}
                         </tbody>
@@ -2584,6 +2753,37 @@ export function PurchaseOrderDetail({
                 ))
               )}
             </div>
+
+            {/* PO Completion Banner when all receivings are finalized */}
+            {receivings.some((r) => r.status === "FINALIZED") && !showReceivingForm && !isReadOnly && po.po_status !== "CANCELLED" && po.fulfillment_status !== "RECEIVED" && (
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50/40 dark:bg-emerald-950/20 p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-sm">
+                <div>
+                  <h4 className="font-bold text-xs text-emerald-900 dark:text-emerald-300 flex items-center gap-1.5">
+                    <span>🏁</span>
+                    <span>입고 검수 완료 및 발주 종결 처리 (PO Completion)</span>
+                  </h4>
+                  <p className="text-[11px] text-zinc-600 dark:text-zinc-400 mt-0.5">
+                    모든 검수가 완료되었거나 추가 입고가 없을 경우 발주를 최종 완료 상태(Step 6 Completed)로 종결합니다.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleOpenCompleteModal(false)}
+                    className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg cursor-pointer transition-colors shadow-sm"
+                  >
+                    발주 완료 종결 (Complete PO)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleOpenCompleteModal(true)}
+                    className="px-3.5 py-2 bg-zinc-200 hover:bg-zinc-300 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-800 dark:text-zinc-200 text-xs font-bold rounded-lg cursor-pointer transition-colors"
+                  >
+                    차이 수량 종결 (Complete with Variance)
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
 

@@ -180,7 +180,10 @@ export function ReceivingForm({
       };
 
       if (isEdit) {
-        await updateReceiving(initialReceiving.id, payload);
+        await updateReceiving({
+          receiving_id: initialReceiving.id,
+          ...payload,
+        });
         router.push(`/admin/purchasing/receiving/${initialReceiving.id}`);
       } else {
         const res = await createReceiving(payload);

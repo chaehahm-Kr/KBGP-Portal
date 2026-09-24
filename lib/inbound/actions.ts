@@ -33,21 +33,21 @@ export interface CreateShipmentInput {
 }
 
 export interface CreateReceivingLineInput {
-  inbound_shipment_line_id: string;
+  inbound_shipment_line_id?: string | null;
   purchase_order_line_id: string;
   product_id: string;
   received_qty: number;
   damaged_qty: number;
   hold_qty: number;
-  line_note?: string;
+  line_note?: string | null;
 }
 
 export interface CreateReceivingInput {
-  inbound_shipment_id: string;
+  inbound_shipment_id?: string | null;
   purchase_order_id: string;
   warehouse_id: string;
   received_date: string;
-  internal_note?: string;
+  internal_note?: string | null;
   lines: CreateReceivingLineInput[];
 }
 
@@ -703,7 +703,7 @@ export async function getReceivingDetail(receivingId: string) {
 
   const formattedLines = (lines ?? []).map((l: any) => ({
     id: l.id,
-    inbound_shipment_line_id: l.inbound_shipment_line_id,
+    inbound_shipment_line_id: l.inbound_shipment_line_id || null,
     purchase_order_line_id: l.purchase_order_line_id,
     product_id: l.product_id,
     received_qty: l.received_qty,
@@ -793,14 +793,28 @@ export async function createReceiving(data: CreateReceivingInput) {
 /**
  * Update Receiving (Allowed in DRAFT).
  */
-export async function updateReceiving(receivingId: string, data: CreateReceivingInput) {
+export async function updateReceiving(
+  arg1: string | {
+    receiving_id: string;
+    warehouse_id: string;
+    received_date: string;
+    inbound_shipment_id?: string | null;
+    internal_note?: string | null;
+    lines: CreateReceivingLineInput[];
+  },
+  arg2?: CreateReceivingInput
+) {
   await verifyAdminSession();
   const supabase = createAdminClient();
 
+  const data = typeof arg1 === "string" 
+    ? { ...arg2!, receiving_id: arg1 } 
+    : arg1;
+
   const { data: rec } = await supabase
     .from("receivings")
-    .select("status")
-    .eq("id", receivingId)
+    .select("status, purchase_order_id")
+    .eq("id", data.receiving_id)
     .single();
 
   if (!rec) throw new Error("Receiving record not found.");
@@ -830,15 +844,15 @@ export async function updateReceiving(receivingId: string, data: CreateReceiving
       internal_note: data.internal_note || null,
       updated_at: new Date().toISOString(),
     })
-    .eq("id", receivingId);
+    .eq("id", data.receiving_id);
 
   if (rErr) throw new Error(`입고 헤더 수정 실패: ${rErr.message}`);
 
   // Delete old lines and insert new ones
-  await supabase.from("receiving_lines").delete().eq("receiving_id", receivingId);
+  await supabase.from("receiving_lines").delete().eq("receiving_id", data.receiving_id);
 
   const lineInserts = data.lines.map((l) => ({
-    receiving_id: receivingId,
+    receiving_id: data.receiving_id,
     inbound_shipment_line_id: l.inbound_shipment_line_id || null,
     purchase_order_line_id: l.purchase_order_line_id,
     product_id: l.product_id,
@@ -857,12 +871,12 @@ export async function updateReceiving(receivingId: string, data: CreateReceiving
   }
 
   revalidatePath("/admin/purchasing/receiving");
-  revalidatePath(`/admin/purchasing/receiving/${receivingId}`);
+  revalidatePath(`/admin/purchasing/receiving/${data.receiving_id}`);
   revalidatePath("/admin/purchasing");
-  if (data.purchase_order_id) {
-    revalidatePath(`/admin/purchasing/${data.purchase_order_id}`);
+  if (rec.purchase_order_id) {
+    revalidatePath(`/admin/purchasing/${rec.purchase_order_id}`);
     revalidatePath("/portal/orders/purchase-orders");
-    revalidatePath(`/portal/orders/purchase-orders/${data.purchase_order_id}`);
+    revalidatePath(`/portal/orders/purchase-orders/${rec.purchase_order_id}`);
   }
   revalidatePath("/admin/purchasing/orders");
   return { success: true };
