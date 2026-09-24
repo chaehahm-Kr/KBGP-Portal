@@ -77,6 +77,24 @@ interface InvoiceDetailProps {
     attachment_path: string | null;
     internal_note: string | null;
     rejection_reason: string | null;
+    supplier_remittance_id?: string | null;
+    remittance_bank_name?: string | null;
+    remittance_beneficiary_name?: string | null;
+    remittance_account_number?: string | null;
+    remittance_account_last4?: string | null;
+    remittance_routing_number?: string | null;
+    remittance_swift_bic_masked?: string | null;
+    remittance_currency?: string | null;
+    remittance_payment_method?: string | null;
+    linked_inquiries?: Array<{
+      id: string;
+      ticket_number: string;
+      title: string;
+      category: string;
+      status: string;
+      priority: string;
+      created_at: string;
+    }>;
     submitted_at: string | null;
     approved_at: string | null;
     rejected_at: string | null;
@@ -519,6 +537,44 @@ export function InvoiceDetail({ invoice, po, prevInvoicesTotal, poMerchandiseTot
         </div>
       )}
 
+      {/* Linked Settlement Inquiry Cases */}
+      {invoice.linked_inquiries && invoice.linked_inquiries.length > 0 && (
+        <div className="p-4 rounded-xl bg-purple-50 border border-purple-200 dark:bg-purple-950/20 dark:border-purple-900/50 space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="font-bold text-purple-900 dark:text-purple-300 text-xs flex items-center gap-1.5">
+              💬 연계된 정산 이견/인보이스 문의 케이스 ({invoice.linked_inquiries.length}건)
+            </span>
+            <Link
+              href={`/admin/partner-inquiries?category=settlement`}
+              className="text-[11px] font-bold text-purple-700 hover:text-purple-900 dark:text-purple-400 dark:hover:text-purple-200 underline"
+            >
+              전체 케이스 보기 →
+            </Link>
+          </div>
+          <div className="divide-y divide-purple-100 dark:divide-purple-900/40">
+            {invoice.linked_inquiries.map((inq) => (
+              <div key={inq.id} className="pt-2 pb-1 flex items-center justify-between text-xs">
+                <div className="flex items-center gap-2">
+                  <span className="font-mono font-bold text-purple-800 dark:text-purple-300">[{inq.ticket_number}]</span>
+                  <span className="text-zinc-800 dark:text-zinc-200 font-medium">{inq.title}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-800 dark:bg-purple-900/60 dark:text-purple-300">
+                    {inq.status}
+                  </span>
+                  <Link
+                    href={`/admin/partner-inquiries`}
+                    className="px-2.5 py-1 rounded bg-purple-600 hover:bg-purple-700 text-white font-bold text-[10px] transition-colors"
+                  >
+                    케이스 열기
+                  </Link>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Top Operations Panel */}
       <div className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div className="flex flex-wrap items-center gap-4">
@@ -738,38 +794,57 @@ export function InvoiceDetail({ invoice, po, prevInvoicesTotal, poMerchandiseTot
 
           {/* Supplier Remittance Bank Details Card */}
           <div className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 space-y-3.5">
-            <h3 className="text-xs font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider border-b border-zinc-100 pb-2 dark:border-zinc-800">
-              공급사 수취 계좌 정보 (Remittance Bank)
-            </h3>
+            <div className="flex items-center justify-between border-b border-zinc-100 pb-2 dark:border-zinc-800">
+              <h3 className="text-xs font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">
+                공급사 수취 계좌 정보 (Remittance Bank)
+              </h3>
+              {invoice.remittance_bank_name && (
+                <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400">
+                  인보이스 시점 스냅샷
+                </span>
+              )}
+            </div>
 
-            {remittance ? (
+            {(invoice.remittance_bank_name || remittance) ? (
               <div className="space-y-3">
                 <div>
                   <span className="text-[10px] text-zinc-400 block">수취 은행 (Bank Name)</span>
-                  <span className="font-bold text-zinc-850 dark:text-zinc-200">{remittance.bank_name || "-"}</span>
+                  <span className="font-bold text-zinc-850 dark:text-zinc-200">
+                    {invoice.remittance_bank_name || remittance?.bank_name || "-"}
+                  </span>
                 </div>
                 <div>
                   <span className="text-[10px] text-zinc-400 block">예금주 (Beneficiary)</span>
-                  <span className="font-bold text-zinc-850 dark:text-zinc-200">{remittance.beneficiary_name || "-"}</span>
+                  <span className="font-bold text-zinc-850 dark:text-zinc-200">
+                    {invoice.remittance_beneficiary_name || remittance?.beneficiary_name || "-"}
+                  </span>
                 </div>
                 <div>
                   <span className="text-[10px] text-zinc-400 block">계좌 번호 (Account Number)</span>
-                  <span className="font-mono font-bold text-zinc-850 dark:text-zinc-200">{remittance.account_number || "-"}</span>
+                  <span className="font-mono font-bold text-zinc-850 dark:text-zinc-200">
+                    {invoice.remittance_account_number || (invoice.remittance_account_last4 ? `****${invoice.remittance_account_last4}` : remittance?.account_number || "-")}
+                  </span>
                 </div>
-                {remittance.routing_number && (
+                {(invoice.remittance_routing_number || remittance?.routing_number) && (
                   <div>
                     <span className="text-[10px] text-zinc-400 block">라우팅 번호 (Routing Number)</span>
-                    <span className="font-mono font-bold text-zinc-850 dark:text-zinc-200">{remittance.routing_number}</span>
+                    <span className="font-mono font-bold text-zinc-850 dark:text-zinc-200">
+                      {invoice.remittance_routing_number || remittance?.routing_number}
+                    </span>
                   </div>
                 )}
-                {remittance.swift_bic && (
+                {(invoice.remittance_swift_bic_masked || remittance?.swift_bic) && (
                   <div>
                     <span className="text-[10px] text-zinc-400 block">SWIFT/BIC Code</span>
-                    <span className="font-mono font-bold text-zinc-850 dark:text-zinc-200">{remittance.swift_bic}</span>
+                    <span className="font-mono font-bold text-zinc-850 dark:text-zinc-200">
+                      {invoice.remittance_swift_bic_masked || remittance?.swift_bic}
+                    </span>
                   </div>
                 )}
                 <div className="text-[9px] text-zinc-400 leading-normal border-t border-zinc-100 pt-2.5 dark:border-zinc-800">
-                  {remittance.is_masked ? (
+                  {invoice.remittance_bank_name ? (
+                    <span className="text-emerald-650 font-bold">✓ 인보이스 생성 시 공급사 프로필에서 확정된 송금 계좌 스냅샷입니다.</span>
+                  ) : remittance?.is_masked ? (
                     <span>⚠️ 일반 관리자 모드로 원감 보존을 위해 계좌 마스킹 처리되었습니다.</span>
                   ) : (
                     <span className="text-emerald-650 font-bold">✓ 승인된 계정/보안 권한에 의해 전체 계좌 정보가 노출되었습니다.</span>

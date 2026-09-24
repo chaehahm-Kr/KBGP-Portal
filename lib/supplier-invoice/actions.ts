@@ -164,7 +164,36 @@ export async function getEligiblePurchaseOrders() {
     .order("created_at", { ascending: false });
 
   if (error) throw error;
-  return data ?? [];
+  const pos = data ?? [];
+
+  const poIds = pos.map((p: any) => p.id);
+  let activeInvoicesMap: Record<string, any> = {};
+  if (poIds.length > 0) {
+    const { data: invs } = await supabase
+      .from("supplier_invoices")
+      .select("id, purchase_order_id, supplier_invoice_number, invoice_status")
+      .in("purchase_order_id", poIds)
+      .not("invoice_status", "in", '("VOID","REJECTED")');
+
+    if (invs) {
+      for (const inv of invs) {
+        if (inv.purchase_order_id) {
+          activeInvoicesMap[inv.purchase_order_id] = inv;
+        }
+      }
+    }
+  }
+
+  return pos.map((po: any) => {
+    const activeInv = activeInvoicesMap[po.id];
+    return {
+      ...po,
+      active_invoice_id: activeInv?.id || null,
+      active_invoice_no: activeInv?.supplier_invoice_number || null,
+      active_invoice_status: activeInv?.invoice_status || null,
+      is_locked: !!activeInv && activeInv.invoice_status !== "DRAFT",
+    };
+  });
 }
 
 export async function getPurchaseOrderForInvoice(poId: string) {
@@ -240,6 +269,29 @@ export async function createInvoice(input: CreateInvoiceInput) {
     throw new Error(`이미 해당 공급업체에 대한 인보이스 번호(${input.supplier_invoice_number})가 존재합니다.`);
   }
 
+  // Validate one active invoice per PO
+  if (input.purchase_order_id) {
+    const { data: activeInv } = await supabase
+      .from("supplier_invoices")
+      .select("id, supplier_invoice_number, invoice_status")
+      .eq("purchase_order_id", input.purchase_order_id)
+      .not("invoice_status", "in", '("VOID","REJECTED")')
+      .maybeSingle();
+
+    if (activeInv) {
+      throw new Error(
+        `해당 발주서(PO)에 이미 활성 인보이스(${activeInv.supplier_invoice_number} - 상태: ${activeInv.invoice_status})가 존재합니다. PO당 1개의 활성 인보이스만 등록할 수 있습니다.`
+      );
+    }
+  }
+
+  // Fetch supplier remittance for snapshot
+  const { data: remittance } = await supabase
+    .from("supplier_remittances")
+    .select("*")
+    .eq("company_id", input.supplier_company_id)
+    .maybeSingle();
+
   // Calculate totals
   let subtotal = 0;
   const linesToInsert = input.lines.map(line => {
@@ -261,7 +313,7 @@ export async function createInvoice(input: CreateInvoiceInput) {
   const other = input.other_charges || 0;
   const total = Number((subtotal + tax + other).toFixed(2));
 
-  // Insert invoice header
+  // Insert invoice header with remittance snapshot
   const { data: inv, error: invErr } = await supabase
     .from("supplier_invoices")
     .insert({
@@ -284,6 +336,16 @@ export async function createInvoice(input: CreateInvoiceInput) {
       payment_status: "UNPAID",
       attachment_path: input.attachment_path || null,
       internal_note: input.internal_note || null,
+      // Remittance snapshot
+      supplier_remittance_id: remittance?.id || null,
+      remittance_bank_name: remittance?.bank_name || null,
+      remittance_beneficiary_name: remittance?.beneficiary_name || null,
+      remittance_account_number: remittance?.account_number || null,
+      remittance_account_last4: remittance?.account_last4 || (remittance?.account_number ? remittance.account_number.slice(-4) : null),
+      remittance_routing_number: remittance?.routing_number || null,
+      remittance_swift_bic_masked: remittance?.swift_bic_masked || remittance?.swift_code || null,
+      remittance_currency: remittance?.currency || input.currency || null,
+      remittance_payment_method: remittance?.payment_method || null,
       created_by: userId,
       updated_by: userId,
     })
@@ -602,6 +664,7 @@ export async function getSupplierInvoiceById(id: string) {
     .select(`
       id,
       purchase_order_id,
+      supplier_company_id,
       internal_ap_number,
       supplier_invoice_number,
       invoice_date,
@@ -622,6 +685,15 @@ export async function getSupplierInvoiceById(id: string) {
       attachment_path,
       internal_note,
       rejection_reason,
+      supplier_remittance_id,
+      remittance_bank_name,
+      remittance_beneficiary_name,
+      remittance_account_number,
+      remittance_account_last4,
+      remittance_routing_number,
+      remittance_swift_bic_masked,
+      remittance_currency,
+      remittance_payment_method,
       submitted_at,
       submitted_by,
       approved_at,
@@ -697,7 +769,18 @@ export async function getSupplierInvoiceById(id: string) {
     .single();
 
   if (invErr || !inv) throw new Error("Invoice not found.");
-  return inv;
+
+  // Fetch linked partner inquiries
+  const { data: linkedInquiries } = await supabase
+    .from("partner_inquiries")
+    .select("id, ticket_number, title, category, status, priority, created_at")
+    .eq("related_invoice_id", id)
+    .order("created_at", { ascending: false });
+
+  return {
+    ...inv,
+    linked_inquiries: linkedInquiries ?? [],
+  };
 }
 
 export async function uploadInvoiceAttachment(formData: FormData) {

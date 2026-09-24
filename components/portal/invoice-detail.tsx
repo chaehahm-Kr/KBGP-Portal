@@ -86,6 +86,38 @@ export function InvoiceDetail({ invoice, attachmentUrl }: InvoiceDetailProps) {
         </div>
       )}
 
+      {/* Linked Settlement Inquiries Banner */}
+      {invoice.linkedInquiries && invoice.linkedInquiries.length > 0 && (
+        <div className="p-4 rounded-xl border border-indigo-200 bg-indigo-50/70 dark:border-indigo-900/50 dark:bg-indigo-950/30 space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-indigo-900 dark:text-indigo-300 flex items-center gap-1.5">
+              💬 <strong>연계된 정산 문의 케이스 ({invoice.linkedInquiries.length}건)</strong>
+            </span>
+            <Link
+              href={`/portal/support?case=${invoice.linkedInquiries[0].caseNumber || invoice.linkedInquiries[0].id}`}
+              className="text-[11px] font-bold text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 underline"
+            >
+              케이스 바로가기 →
+            </Link>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {invoice.linkedInquiries.map((inq: any) => (
+              <Link
+                key={inq.id}
+                href={`/portal/support?case=${inq.caseNumber || inq.id}`}
+                className="px-2.5 py-1 rounded-lg bg-white dark:bg-zinc-900 border border-indigo-200 dark:border-indigo-800 text-xs font-medium text-zinc-800 dark:text-zinc-200 hover:border-indigo-400 transition-colors flex items-center gap-2"
+              >
+                <span className="font-mono font-bold text-indigo-600 dark:text-indigo-400">#{inq.caseNumber || "CASE"}</span>
+                <span className="truncate max-w-[200px]">{inq.title}</span>
+                <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400">
+                  {inq.status}
+                </span>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Header Info Section */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="p-5 rounded-xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900 md:col-span-2 space-y-4 shadow-sm">
@@ -132,6 +164,37 @@ export function InvoiceDetail({ invoice, attachmentUrl }: InvoiceDetailProps) {
                 {invoice.paymentTerms || "-"} / {invoice.incoterms || "-"}
               </span>
             </div>
+          </div>
+
+          {/* Remittance Snapshot Card */}
+          <div className="border-t border-zinc-150 dark:border-zinc-800 pt-3">
+            <span className="text-[10px] font-bold text-zinc-400 block mb-1">지정된 수취 계좌 정보 (Remittance Account Snapshot)</span>
+            {invoice.remittanceBankName || invoice.remittanceAccountLast4 ? (
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs bg-zinc-50 dark:bg-zinc-950 p-3 rounded-lg border border-zinc-200 dark:border-zinc-800">
+                <div>
+                  <span className="text-[10px] text-zinc-400 block">수취 은행</span>
+                  <span className="font-bold text-zinc-850 dark:text-zinc-200">{invoice.remittanceBankName || "-"}</span>
+                </div>
+                <div>
+                  <span className="text-[10px] text-zinc-400 block">예금주 (Beneficiary)</span>
+                  <span className="font-bold text-zinc-850 dark:text-zinc-200">{invoice.remittanceBeneficiaryName || "-"}</span>
+                </div>
+                <div>
+                  <span className="text-[10px] text-zinc-400 block">계좌 번호</span>
+                  <span className="font-mono font-bold text-zinc-850 dark:text-zinc-200">
+                    {invoice.remittanceAccountLast4 ? `**** ${invoice.remittanceAccountLast4}` : "-"}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-[10px] text-zinc-400 block">통화 / SWIFT</span>
+                  <span className="font-medium text-zinc-800 dark:text-zinc-200">
+                    {invoice.remittanceCurrency || invoice.currency || "USD"} {invoice.remittanceSwiftBicMasked ? `/ ${invoice.remittanceSwiftBicMasked}` : ""}
+                  </span>
+                </div>
+              </div>
+            ) : (
+              <p className="text-zinc-400 text-xs italic">인보이스에 저장된 송금 수취 계좌 정보가 없습니다.</p>
+            )}
           </div>
         </div>
 

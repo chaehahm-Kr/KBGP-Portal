@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useMemo, useEffect } from "react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import type { PartnerInquiryItem, CaseStatus, InquiryMessageItem, OfficialCaseStatus } from "@/lib/inquiry/types";
 import {
@@ -26,6 +27,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   onboarding:  "입점 신청 및 심사 현황",
   logistics:   "물류 공급 및 패키징",
   translation: "번역 및 전성분표 기재",
+  settlement:  "정산 / 인보이스 문의",
   system:      "시스템 오류 제보 및 기능 제안",
   general:     "기타 일반 문의"
 };
@@ -41,43 +43,53 @@ const MSG_TYPE_META: Record<string, { icon: string; style: string }> = {
 export function PortalSupportView({ initialInquiries, createAction }: PortalSupportViewProps) {
   const searchParams = useSearchParams();
   const caseParam = searchParams.get("case") || searchParams.get("id");
+  const newParam = searchParams.get("new");
+  const categoryParam = searchParams.get("category");
+  const invoiceIdParam = searchParams.get("invoiceId");
+  const invoiceNoParam = searchParams.get("invoiceNo");
+  const apNoParam = searchParams.get("apNo");
+  const poIdParam = searchParams.get("poId");
+  const poNoParam = searchParams.get("poNo");
+  const balanceParam = searchParams.get("balance");
+  const totalParam = searchParams.get("total");
 
   const [inquiries, setInquiries] = useState<PartnerInquiryItem[]>(initialInquiries);
   const [isWriteOpen, setIsWriteOpen] = useState(false);
   const [selectedInquiry, setSelectedInquiry] = useState<PartnerInquiryItem | null>(null);
-
-  // Auto-select case if query param ?case=... is provided
-  useEffect(() => {
-    if (caseParam && inquiries.length > 0) {
-      const paramLower = caseParam.trim().toLowerCase();
-      const matched = inquiries.find(
-        (i) =>
-          i.case_number?.toLowerCase() === paramLower ||
-          i.id.toLowerCase() === paramLower
-      );
-      if (matched) {
-        setSelectedInquiry(matched);
-        setIsWriteOpen(false);
-        setActiveTab("conversation");
-      }
-    }
-  }, [caseParam, inquiries]);
-
-  // Detail View Tab: 'conversation' vs 'caselog'
+  const [statusFilter, setStatusFilter] = useState<string>("ALL");
+  const [searchQuery, setSearchQuery] = useState<string>("");
   const [activeTab, setActiveTab] = useState<"conversation" | "caselog">("conversation");
-
-  // Search & Filter states
-  const [searchQuery, setSearchQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"ALL" | OfficialCaseStatus>("ALL");
 
   // New case form & Follow-up
   const [category, setCategory] = useState("general");
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [previousCaseId, setPreviousCaseId] = useState<string | null>(null);
+  const [relatedInvoiceId, setRelatedInvoiceId] = useState<string | null>(null);
+  const [relatedPoId, setRelatedPoId] = useState<string | null>(null);
   const [newCaseFile, setNewCaseFile] = useState<File | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
+
+  // Auto-fill from query params (e.g. from Invoice inquiry CTA)
+  useEffect(() => {
+    if (newParam === "true" || invoiceIdParam) {
+      setIsWriteOpen(true);
+      setSelectedInquiry(null);
+      if (categoryParam) setCategory(categoryParam);
+      else if (invoiceIdParam) setCategory("settlement");
+
+      if (invoiceIdParam) setRelatedInvoiceId(invoiceIdParam);
+      if (poIdParam) setRelatedPoId(poIdParam);
+
+      if (invoiceIdParam || invoiceNoParam || apNoParam) {
+        const invLabel = invoiceNoParam || apNoParam || "";
+        const poLabel = poNoParam || "";
+        setTitle(`[정산 문의] Invoice #${invLabel}${poLabel ? ` (PO #${poLabel})` : ""} 정산 이견 문의`);
+        setContent(`안녕하세요, 인보이스 및 정산 내역에 대한 이견 사항이 있어 문의드립니다.\n\n[관련 인보이스 정보]\n- 인보이스 번호: ${invoiceNoParam || "-"}\n- 관리 번호 (AP No.): ${apNoParam || "-"}\n- 관련 발주서 (PO): ${poNoParam || "-"}\n- 청구 금액: ${totalParam ? `$${totalParam}` : "-"}\n- 미지급 잔액: ${balanceParam ? `$${balanceParam}` : "-"}\n\n[문의 및 소명 내용]\n`);
+      }
+    }
+  }, [newParam, categoryParam, invoiceIdParam, invoiceNoParam, apNoParam, poIdParam, poNoParam, balanceParam, totalParam]);
 
   const formatFileSize = (bytes: number) => {
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}KB`;
@@ -151,11 +163,18 @@ export function PortalSupportView({ initialInquiries, createAction }: PortalSupp
     if (previousCaseId) {
       fd.append("previous_case_id", previousCaseId);
     }
+    if (relatedInvoiceId) {
+      fd.append("related_invoice_id", relatedInvoiceId);
+    }
+    if (relatedPoId) {
+      fd.append("related_po_id", relatedPoId);
+    }
     try {
       const res = await createAction(fd);
       if (res.success) {
         setIsWriteOpen(false);
         setTitle(""); setContent(""); setCategory("general"); setPreviousCaseId(null);
+        setRelatedInvoiceId(null); setRelatedPoId(null);
         window.location.reload();
       } else {
         setSubmitError(res.error || "등록에 실패했습니다.");
@@ -520,6 +539,28 @@ export function PortalSupportView({ initialInquiries, createAction }: PortalSupp
                       접수: {formatDate(selectedInquiry.created_at)}
                       {selectedInquiry.closed_at ? ` · 종료: ${formatDate(selectedInquiry.closed_at)}` : ""}
                     </p>
+
+                    {/* Related Invoice / PO Quick Links */}
+                    {(selectedInquiry.related_invoice_id || selectedInquiry.related_po_id) && (
+                      <div className="flex flex-wrap items-center gap-2 pt-1">
+                        {selectedInquiry.related_invoice_id && (
+                          <Link
+                            href={`/portal/finance/${selectedInquiry.related_invoice_id}`}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-bold bg-indigo-50 border border-indigo-200 text-indigo-700 hover:bg-indigo-100 dark:bg-indigo-950/40 dark:border-indigo-800 dark:text-indigo-300 transition-colors"
+                          >
+                            📄 관련 인보이스 바로가기 {selectedInquiry.related_invoice_number || selectedInquiry.related_ap_number ? `(${selectedInquiry.related_invoice_number || selectedInquiry.related_ap_number})` : ""}
+                          </Link>
+                        )}
+                        {selectedInquiry.related_po_id && (
+                          <Link
+                            href={`/portal/orders/${selectedInquiry.related_po_id}`}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-bold bg-zinc-100 border border-zinc-200 text-zinc-700 hover:bg-zinc-200 dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-300 transition-colors"
+                          >
+                            📦 관련 발주서 바로가기 {selectedInquiry.related_po_number ? `(${selectedInquiry.related_po_number})` : ""}
+                          </Link>
+                        )}
+                      </div>
+                    )}
                   </div>
                   <button onClick={() => setSelectedInquiry(null)} className="text-[10px] text-zinc-400 hover:text-zinc-700 dark:hover:text-white cursor-pointer shrink-0">닫기</button>
                 </div>

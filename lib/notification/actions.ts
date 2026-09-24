@@ -20,6 +20,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   onboarding:  "입점 신청 및 심사 현황",
   logistics:   "물류 공급 및 패키징",
   translation: "번역 및 전성분표 기재",
+  settlement:  "정산 / 인보이스 문의",
   system:      "시스템 오류 제보 및 기능 제안",
   general:     "기타 일반 문의"
 };

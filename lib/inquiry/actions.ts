@@ -25,6 +25,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   onboarding:  "입점 신청 및 심사 현황",
   logistics:   "물류 공급 및 패키징",
   translation: "번역 및 전성분표 기재",
+  settlement:  "정산 / 인보이스 문의",
   system:      "시스템 오류 제보 및 기능 제안",
   general:     "기타 일반 문의"
 };
@@ -206,6 +207,8 @@ export async function createPartnerInquiry(formData: FormData) {
     }
 
     const previousCaseId = (formData.get("previous_case_id") as string) || null;
+    const relatedInvoiceId = (formData.get("related_invoice_id") as string) || null;
+    const relatedPoId = (formData.get("related_po_id") as string) || null;
 
     const insertPayload: any = {
       company_id: companyId,
@@ -223,6 +226,12 @@ export async function createPartnerInquiry(formData: FormData) {
 
     if (previousCaseId) {
       insertPayload.previous_case_id = previousCaseId;
+    }
+    if (relatedInvoiceId) {
+      insertPayload.related_invoice_id = relatedInvoiceId;
+    }
+    if (relatedPoId) {
+      insertPayload.related_po_id = relatedPoId;
     }
 
     let { data: newInquiry, error } = await supabase
@@ -407,6 +416,9 @@ export async function createAdminPartnerInquiry(formData: FormData) {
       attachmentFilename = file.name;
     }
 
+    const relatedInvoiceId = (formData.get("related_invoice_id") as string) || null;
+    const relatedPoId = (formData.get("related_po_id") as string) || null;
+
     // Admin created case status: default 'in_review' (검토중), or 'action_required' (조치필요) if is_action_required is true
     const initialStatus: CaseStatus = isActionRequired ? "action_required" : "in_review";
 
@@ -423,6 +435,13 @@ export async function createAdminPartnerInquiry(formData: FormData) {
       created_source: "admin",
       priority: priority || "normal"
     };
+
+    if (relatedInvoiceId) {
+      insertPayload.related_invoice_id = relatedInvoiceId;
+    }
+    if (relatedPoId) {
+      insertPayload.related_po_id = relatedPoId;
+    }
 
     let { data: newInquiry, error: insertError } = await adminSupabase
       .from("partner_inquiries")
@@ -592,6 +611,21 @@ export async function getPartnerInquiries(): Promise<PartnerInquiryItem[]> {
     // Map of inquiryId -> { case_number, title } for quick previous_case lookup
     const inquiryMap = new Map((data || []).map((i: any) => [i.id, { case_number: i.case_number, title: i.title }]));
 
+    const poIds = Array.from(new Set((data || []).map((i: any) => i.related_po_id).filter(Boolean)));
+    const invIds = Array.from(new Set((data || []).map((i: any) => i.related_invoice_id).filter(Boolean)));
+
+    const poMap = new Map<string, string>();
+    if (poIds.length > 0) {
+      const { data: pos } = await adminSupabase.from("purchase_orders").select("id, po_number").in("id", poIds);
+      (pos || []).forEach((p: any) => poMap.set(p.id, p.po_number));
+    }
+
+    const invMap = new Map<string, { invNumber: string; apNumber: string; poId?: string }>();
+    if (invIds.length > 0) {
+      const { data: invs } = await adminSupabase.from("supplier_invoices").select("id, supplier_invoice_number, internal_ap_number, purchase_order_id").in("id", invIds);
+      (invs || []).forEach((inv: any) => invMap.set(inv.id, { invNumber: inv.supplier_invoice_number, apNumber: inv.internal_ap_number, poId: inv.purchase_order_id }));
+    }
+
     const items = await Promise.all(
       (data || []).map(async (item) => {
         let attachmentUrl = null;
@@ -610,6 +644,8 @@ export async function getPartnerInquiries(): Promise<PartnerInquiryItem[]> {
 
         const prevInfo = item.previous_case_id ? inquiryMap.get(item.previous_case_id) : null;
         const isCreatedByAdmin = item.created_source === "admin" || (messages && messages.length > 0 && messages[0].senderType === "admin");
+        const invInfo = item.related_invoice_id ? invMap.get(item.related_invoice_id) : null;
+        const poNumber = item.related_po_id ? poMap.get(item.related_po_id) : (invInfo?.poId ? poMap.get(invInfo.poId) : null);
 
         return {
           ...item,
@@ -622,6 +658,11 @@ export async function getPartnerInquiries(): Promise<PartnerInquiryItem[]> {
           previous_case_number: item.previous_case_number || prevInfo?.case_number || null,
           previous_case_title: item.previous_case_title || prevInfo?.title || null,
           closed_by_side: item.closed_by_side || null,
+          related_po_id: item.related_po_id || invInfo?.poId || null,
+          related_invoice_id: item.related_invoice_id || null,
+          related_po_number: poNumber || null,
+          related_invoice_number: invInfo?.invNumber || null,
+          related_ap_number: invInfo?.apNumber || null,
           messages
         } as PartnerInquiryItem;
       })
@@ -689,6 +730,21 @@ export async function getAdminPartnerInquiries(): Promise<PartnerInquiryItem[]> 
 
     const inquiryMap = new Map((inquiries || []).map((i: any) => [i.id, { case_number: i.case_number, title: i.title }]));
 
+    const poIds = Array.from(new Set((inquiries || []).map((i: any) => i.related_po_id).filter(Boolean)));
+    const invIds = Array.from(new Set((inquiries || []).map((i: any) => i.related_invoice_id).filter(Boolean)));
+
+    const poMap = new Map<string, string>();
+    if (poIds.length > 0) {
+      const { data: pos } = await adminSupabase.from("purchase_orders").select("id, po_number").in("id", poIds);
+      (pos || []).forEach((p: any) => poMap.set(p.id, p.po_number));
+    }
+
+    const invMap = new Map<string, { invNumber: string; apNumber: string; poId?: string }>();
+    if (invIds.length > 0) {
+      const { data: invs } = await adminSupabase.from("supplier_invoices").select("id, supplier_invoice_number, internal_ap_number, purchase_order_id").in("id", invIds);
+      (invs || []).forEach((inv: any) => invMap.set(inv.id, { invNumber: inv.supplier_invoice_number, apNumber: inv.internal_ap_number, poId: inv.purchase_order_id }));
+    }
+
     const items = await Promise.all(
       (inquiries ?? []).map(async (item: any) => {
         let attachmentUrl = null;
@@ -708,6 +764,8 @@ export async function getAdminPartnerInquiries(): Promise<PartnerInquiryItem[]> 
         const prevInfo = item.previous_case_id ? inquiryMap.get(item.previous_case_id) : null;
         const requester = item.created_by ? userMap.get(item.created_by) : null;
         const isCreatedByAdmin = item.created_source === "admin" || (messages && messages.length > 0 && messages[0].senderType === "admin");
+        const invInfo = item.related_invoice_id ? invMap.get(item.related_invoice_id) : null;
+        const poNumber = item.related_po_id ? poMap.get(item.related_po_id) : (invInfo?.poId ? poMap.get(invInfo.poId) : null);
 
         return {
           id: item.id,
@@ -742,6 +800,11 @@ export async function getAdminPartnerInquiries(): Promise<PartnerInquiryItem[]> 
           requesterName: requester?.name || null,
           requesterEmail: requester?.email || null,
           repliedStaffName,
+          related_po_id: item.related_po_id || invInfo?.poId || null,
+          related_invoice_id: item.related_invoice_id || null,
+          related_po_number: poNumber || null,
+          related_invoice_number: invInfo?.invNumber || null,
+          related_ap_number: invInfo?.apNumber || null,
           messages
         } as PartnerInquiryItem;
       })
@@ -750,6 +813,37 @@ export async function getAdminPartnerInquiries(): Promise<PartnerInquiryItem[]> 
     return items;
   } catch (e) {
     console.error("Failed to fetch admin partner inquiries:", e);
+    return [];
+  }
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// getInquiriesForInvoice
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * 특정 인보이스에 연결된 케이스 목록을 조회합니다.
+ */
+export async function getInquiriesForInvoice(invoiceId: string) {
+  try {
+    const adminSupabase = createAdminClient();
+    const { data, error } = await adminSupabase
+      .from("partner_inquiries")
+      .select("id, case_number, title, category, status, is_action_required, created_at, updated_at")
+      .eq("related_invoice_id", invoiceId)
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error("Failed to fetch inquiries for invoice:", error);
+      return [];
+    }
+
+    return (data || []).map(item => ({
+      ...item,
+      status: normalizeStatus(item.status) as CaseStatus
+    }));
+  } catch (e) {
+    console.error("Failed in getInquiriesForInvoice:", e);
     return [];
   }
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useMemo, useEffect } from "react";
+import Link from "next/link";
 import type { PartnerInquiryItem, CaseStatus, InquiryMessageItem, OfficialCaseStatus } from "@/lib/inquiry/types";
 import {
   getNormalizedStatus,
@@ -41,6 +42,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   onboarding:  "입점 신청 및 심사 현황",
   logistics:   "물류 공급 및 패키징",
   translation: "번역 및 전성분표 기재",
+  settlement:  "정산 / 인보이스 문의",
   system:      "시스템 오류 제보 및 기능 제안",
   general:     "기타 일반 문의"
 };
@@ -595,6 +597,29 @@ export function AdminPartnerInquiries({
                       >
                         [이전 문의 보기]
                       </button>
+                    )}
+                  </div>
+                )}
+
+                {/* Related Invoice / PO Quick Links */}
+                {(selectedInquiry.related_invoice_id || selectedInquiry.related_po_id) && (
+                  <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-zinc-100 dark:border-zinc-800">
+                    <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500">연계 문서:</span>
+                    {selectedInquiry.related_invoice_id && (
+                      <Link
+                        href={`/admin/finance/invoices/${selectedInquiry.related_invoice_id}`}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-bold bg-indigo-50 border border-indigo-200 text-indigo-700 hover:bg-indigo-100 dark:bg-indigo-950/40 dark:border-indigo-800 dark:text-indigo-300 transition-colors"
+                      >
+                        📄 인보이스 바로가기 {selectedInquiry.related_invoice_number || selectedInquiry.related_ap_number ? `(${selectedInquiry.related_invoice_number || selectedInquiry.related_ap_number})` : ""}
+                      </Link>
+                    )}
+                    {selectedInquiry.related_po_id && (
+                      <Link
+                        href={`/admin/purchasing/${selectedInquiry.related_po_id}`}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-bold bg-zinc-100 border border-zinc-200 text-zinc-700 hover:bg-zinc-200 dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-300 transition-colors"
+                      >
+                        📦 발주서 바로가기 {selectedInquiry.related_po_number ? `(${selectedInquiry.related_po_number})` : ""}
+                      </Link>
                     )}
                   </div>
                 )}

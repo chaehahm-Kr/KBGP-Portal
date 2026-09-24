@@ -2,6 +2,7 @@
 
 import { requireCompanyMembership } from "@/lib/company/dal";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { revalidatePath } from "next/cache";
 import { getInvoiceQuantitiesForPoLines } from "@/lib/supplier-invoice/actions";
 import { formatEasternDateTime } from "@/lib/utils/timezone";
@@ -17,7 +18,7 @@ export async function getPortalPurchaseOrders() {
 
   let data: any[] | null = null;
 
-  // Primary attempt: query purchase_orders directly including 0093 extended columns
+  // Primary attempt: query purchase_orders directly including 0093 extended columns and status relations
   const primaryRes = await supabase
     .from("purchase_orders")
     .select(`
@@ -31,7 +32,9 @@ export async function getPortalPurchaseOrders() {
       revision_no,
       cancellation_status,
       created_at,
-      lines:purchase_order_lines(qty, confirmed_qty)
+      lines:purchase_order_lines(qty, confirmed_qty),
+      shipments:inbound_shipments(id, status),
+      receivings:receivings(id, status)
     `)
     .eq("supplier_id", companyId)
     .notIn("po_status", ["DRAFT", "APPROVED"])
@@ -53,7 +56,9 @@ export async function getPortalPurchaseOrders() {
         order_date,
         currency,
         created_at,
-        lines:purchase_order_lines(qty, confirmed_qty)
+        lines:purchase_order_lines(qty, confirmed_qty),
+        shipments:inbound_shipments(id, status),
+        receivings:receivings(id, status)
       `)
       .eq("supplier_id", companyId)
       .notIn("po_status", ["DRAFT", "APPROVED"])
@@ -66,12 +71,15 @@ export async function getPortalPurchaseOrders() {
     data = fallbackRes.data;
   }
 
-  // Double guard: strictly filter out DRAFT and APPROVED, and sanitize defaults
+  const { getOverallStatus } = await import("@/lib/purchase-order/status-helper");
+
+  // Double guard: strictly filter out DRAFT and APPROVED, compute canonical overall_status and sanitize defaults
   const safeList = (data ?? [])
     .filter((po: any) => po.po_status !== "DRAFT" && po.po_status !== "APPROVED")
     .map((po: any) => ({
       ...po,
       supplier_confirmation_status: po.supplier_confirmation_status || "UNCONFIRMED",
+      overall_status: getOverallStatus(po, po.shipments || [], po.receivings || []),
       revision_no: po.revision_no ?? 1,
       cancellation_status: po.cancellation_status || "NONE",
       lines: po.lines || []
@@ -1120,16 +1128,7 @@ export async function submitPortalGoodsReady(input: {
 
     if (!pol) throw new Error("발주 품목 라인을 확인할 수 없습니다.");
 
-    // 1. Fetch cumulative shipped quantities
-    const { data: shipData } = await supabase
-      .from("inbound_shipment_lines")
-      .select("shipped_qty, inbound_shipments!inner(status)")
-      .eq("purchase_order_line_id", line.purchaseOrderLineId)
-      .neq("inbound_shipments.status", "CANCELLED");
-
-    const cumulativeShipped = (shipData ?? []).reduce((sum, s: any) => sum + s.shipped_qty, 0);
-
-    // 2. Fetch active readiness lines (excluding current readiness ID)
+    // 2. Fetch active readiness lines on other readiness records (excluding current readiness ID)
     const { data: grLines } = await supabase
       .from("goods_readiness_lines")
       .select("id, ready_qty, goods_readiness!inner(id, handover_status)")
@@ -1137,22 +1136,10 @@ export async function submitPortalGoodsReady(input: {
       .neq("goods_readiness.id", input.id || "00000000-0000-0000-0000-000000000000")
       .in("goods_readiness.handover_status", ["READY_SUBMITTED", "HANDOVER_PENDING", "HANDED_OVER"]);
 
-    let activeReady = 0;
-    for (const grl of (grLines ?? [])) {
-      const { data: linkedShip } = await supabase
-        .from("inbound_shipment_lines")
-        .select("id, inbound_shipments!inner(status)")
-        .eq("goods_readiness_line_id", grl.id)
-        .neq("inbound_shipments.status", "CANCELLED")
-        .maybeSingle();
-
-      if (!linkedShip) {
-        activeReady += grl.ready_qty;
-      }
-    }
+    const otherActiveReady = (grLines ?? []).reduce((sum, g: any) => sum + (Number(g.ready_qty) || 0), 0);
 
     const targetQty = pol.confirmed_qty !== null ? pol.confirmed_qty : pol.qty;
-    const remainingAvailable = Math.max(0, targetQty - cumulativeShipped - activeReady);
+    const remainingAvailable = Math.max(0, targetQty - otherActiveReady);
 
     if (line.readyQty > remainingAvailable) {
       throw new Error(
@@ -1183,7 +1170,7 @@ export async function submitPortalGoodsReady(input: {
   const isUpdate = !!readinessId;
 
   if (readinessId) {
-    // Update existing
+    // Update existing header
     const { error: hErr } = await supabase
       .from("goods_readiness")
       .update({
@@ -1206,12 +1193,47 @@ export async function submitPortalGoodsReady(input: {
 
     if (hErr) throw hErr;
 
-    // Recreate lines
-    await supabase.from("goods_readiness_lines").delete().eq("goods_readiness_id", readinessId);
-    const { error: linesErr } = await supabase
+    // In-place update existing lines to prevent breaking foreign keys or losing line references
+    const { data: existingLines } = await supabase
       .from("goods_readiness_lines")
-      .insert(verifiedLines.map(l => ({ ...l, goods_readiness_id: readinessId })));
-    if (linesErr) throw linesErr;
+      .select("id, purchase_order_line_id")
+      .eq("goods_readiness_id", readinessId);
+
+    const existingMap = new Map((existingLines || []).map((el: any) => [el.purchase_order_line_id, el.id]));
+
+    for (const l of verifiedLines) {
+      const existingLineId = existingMap.get(l.purchase_order_line_id);
+      if (existingLineId) {
+        const { error: updErr } = await supabase
+          .from("goods_readiness_lines")
+          .update({
+            ready_qty: l.ready_qty,
+            cartons: l.cartons,
+            gross_weight: l.gross_weight,
+            cbm: l.cbm,
+          })
+          .eq("id", existingLineId);
+        if (updErr) throw updErr;
+        existingMap.delete(l.purchase_order_line_id);
+      } else {
+        const { error: insErr } = await supabase
+          .from("goods_readiness_lines")
+          .insert({
+            ...l,
+            goods_readiness_id: readinessId,
+          });
+        if (insErr) throw insErr;
+      }
+    }
+
+    if (existingMap.size > 0) {
+      const idsToDelete = Array.from(existingMap.values());
+      const { error: delErr } = await supabase
+        .from("goods_readiness_lines")
+        .delete()
+        .in("id", idsToDelete);
+      if (delErr) throw delErr;
+    }
 
   } else {
     // Insert new
@@ -1283,6 +1305,7 @@ export async function submitPortalGoodsReady(input: {
 
   revalidatePath(`/portal/orders/shipping`);
   revalidatePath(`/portal/orders/shipping/${readinessId}`);
+  revalidatePath(`/portal/orders/purchase-orders`);
   revalidatePath(`/portal/orders/purchase-orders/${input.purchaseOrderId}`);
   revalidatePath(`/admin/purchasing/${input.purchaseOrderId}`);
   return { success: true, id: readinessId, overageDetected, isUpdate };
@@ -1630,6 +1653,12 @@ export async function getPortalInvoiceDetail(id: string) {
       settlement_status,
       attachment_path,
       rejection_reason,
+      remittance_bank_name,
+      remittance_beneficiary_name,
+      remittance_account_last4,
+      remittance_swift_bic_masked,
+      remittance_currency,
+      remittance_payment_method,
       submitted_at,
       created_at,
       purchase_orders(po_number)
@@ -1803,6 +1832,12 @@ export async function getPortalInvoiceDetail(id: string) {
       reason: adj.reason,
       status: adj.status
     })),
+    remittanceBankName: (inv as any).remittance_bank_name || null,
+    remittanceBeneficiaryName: (inv as any).remittance_beneficiary_name || null,
+    remittanceAccountLast4: (inv as any).remittance_account_last4 || null,
+    remittanceSwiftBicMasked: (inv as any).remittance_swift_bic_masked || null,
+    remittanceCurrency: (inv as any).remittance_currency || null,
+    remittancePaymentMethod: (inv as any).remittance_payment_method || null,
     payments: (payments ?? []).map((p: any) => ({
       id: p.id,
       paymentNumber: p.payment_number,
@@ -1823,11 +1858,29 @@ export async function getPortalInvoiceDetail(id: string) {
   };
 }
 
+export async function getPortalSupplierRemittance() {
+  const { companyId } = await requireCompanyMembership();
+  const adminDb = createAdminClient();
+
+  const { data, error } = await adminDb
+    .from("supplier_remittances")
+    .select("*")
+    .eq("company_id", companyId)
+    .maybeSingle();
+
+  if (error) {
+    console.error("Failed to fetch supplier remittance:", error);
+    return null;
+  }
+
+  return data;
+}
+
 export async function getEligiblePosForInvoice() {
   const { companyId } = await requireCompanyMembership();
   const supabase = await createClient();
 
-  const { data, error } = await supabase
+  const { data: pos, error } = await supabase
     .from("purchase_orders")
     .select("id, po_number, order_date, currency")
     .eq("supplier_id", companyId)
@@ -1840,7 +1893,33 @@ export async function getEligiblePosForInvoice() {
     throw new Error("인보이스 발행 가능한 발주 목록을 불러오지 못했습니다.");
   }
 
-  return data ?? [];
+  if (!pos || pos.length === 0) return [];
+
+  const poIds = pos.map((p: any) => p.id);
+  const { data: activeInvoices } = await supabase
+    .from("supplier_invoices")
+    .select("id, purchase_order_id, supplier_invoice_number, internal_ap_number, invoice_status, invoice_total")
+    .eq("supplier_company_id", companyId)
+    .in("purchase_order_id", poIds)
+    .not("invoice_status", "in", '("VOID","REJECTED")');
+
+  const invByPo = new Map((activeInvoices || []).map((inv: any) => [inv.purchase_order_id, inv]));
+
+  return pos.map((po: any) => {
+    const activeInv = invByPo.get(po.id);
+    return {
+      id: po.id,
+      po_number: po.po_number,
+      order_date: po.order_date,
+      currency: po.currency,
+      hasActiveInvoice: !!activeInv,
+      activeInvoiceId: activeInv?.id || null,
+      activeInvoiceStatus: activeInv?.invoice_status || null,
+      activeInvoiceNumber: activeInv?.supplier_invoice_number || null,
+      activeApNumber: activeInv?.internal_ap_number || null,
+      activeInvoiceTotal: activeInv ? Number(activeInv.invoice_total) : null,
+    };
+  });
 }
 
 export async function getPoLinesForInvoice(poId: string, excludeInvoiceId?: string) {
@@ -1895,7 +1974,7 @@ export async function getPoLinesForInvoice(poId: string, excludeInvoiceId?: stri
       receivedQty: q.received,
       alreadyInvoicedQty: q.invoiced,
       alreadyInvoicedAmount: q.invoiced_amount,
-      unitCost: Number(line.unit_cost)
+      unitCost: Number(line.unitCost || line.unit_cost)
     };
   });
 
@@ -1938,6 +2017,28 @@ export async function createPortalInvoiceDraft(input: {
     throw new Error("발주서(PO) 권한이 없거나 찾을 수 없습니다.");
   }
 
+  // 1. Single Active Invoice Check
+  const { data: activeInv } = await supabase
+    .from("supplier_invoices")
+    .select("id, internal_ap_number, supplier_invoice_number, invoice_status")
+    .eq("purchase_order_id", input.purchaseOrderId)
+    .not("invoice_status", "in", '("VOID","REJECTED")')
+    .maybeSingle();
+
+  if (activeInv) {
+    throw new Error(
+      `해당 발주서(PO)에 이미 진행 중인 인보이스(${activeInv.internal_ap_number || activeInv.supplier_invoice_number}, 상태: ${activeInv.invoice_status})가 존재합니다. 한 PO당 1개의 활성 인보이스만 작성 가능합니다.`
+    );
+  }
+
+  // 2. Query supplier remittance snapshot
+  const adminDb = createAdminClient();
+  const { data: rem } = await adminDb
+    .from("supplier_remittances")
+    .select("*")
+    .eq("company_id", companyId)
+    .maybeSingle();
+
   // Pre-calculate line amounts and totals
   let subtotal = 0;
   const insertLines = input.lines.map(line => {
@@ -1957,7 +2058,7 @@ export async function createPortalInvoiceDraft(input: {
 
   const invoiceTotal = subtotal;
 
-  // Insert invoice header
+  // Insert invoice header with remittance snapshot
   const { data: inv, error: invErr } = await supabase
     .from("supplier_invoices")
     .insert({
@@ -1975,7 +2076,16 @@ export async function createPortalInvoiceDraft(input: {
       invoice_status: "DRAFT",
       payment_status: "UNPAID",
       settlement_status: "OPEN",
-      attachment_path: input.attachmentPath
+      attachment_path: input.attachmentPath,
+      supplier_remittance_id: rem ? companyId : null,
+      remittance_bank_name: rem?.bank_name || null,
+      remittance_beneficiary_name: rem?.beneficiary_name || null,
+      remittance_account_number: rem?.account_number || null,
+      remittance_account_last4: rem?.account_number ? rem.account_number.slice(-4) : null,
+      remittance_routing_number: rem?.routing_number || null,
+      remittance_swift_bic_masked: rem?.swift_bic || null,
+      remittance_currency: rem?.account_currency || po.currency || "USD",
+      remittance_payment_method: rem?.payment_method || null,
     })
     .select("id")
     .single();
@@ -1983,7 +2093,7 @@ export async function createPortalInvoiceDraft(input: {
   if (invErr || !inv) {
     console.error("Failed to insert supplier invoice:", invErr);
     if (invErr?.code === '23505') {
-      throw new Error("이미 동일한 인보이스 번호가 등록되어 있습니다.");
+      throw new Error("이미 동일한 인보이스 번호 또는 해당 PO의 활성 인보이스가 등록되어 있습니다.");
     }
     throw new Error("인보이스 임시저장을 처리하지 못했습니다.");
   }

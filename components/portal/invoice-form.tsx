@@ -1,12 +1,14 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   getPoLinesForInvoice,
   createPortalInvoiceDraft,
   updatePortalInvoiceDraft,
-  uploadPortalInvoiceAttachment
+  uploadPortalInvoiceAttachment,
+  getPortalSupplierRemittance
 } from "@/lib/portal/actions";
 
 interface PoOption {
@@ -14,6 +16,12 @@ interface PoOption {
   po_number: string;
   order_date: string;
   currency: string;
+  hasActiveInvoice?: boolean;
+  activeInvoiceId?: string | null;
+  activeInvoiceStatus?: string | null;
+  activeInvoiceNumber?: string | null;
+  activeApNumber?: string | null;
+  activeInvoiceTotal?: number | null;
 }
 
 interface InvoiceFormProps {
@@ -40,6 +48,25 @@ export function InvoiceForm({ eligiblePos, initialInvoice }: InvoiceFormProps) {
   );
 
   const [currency, setCurrency] = useState(initialInvoice?.currency || "USD");
+
+  // Remittance
+  const [remittance, setRemittance] = useState<any>(null);
+  const [loadingRemittance, setLoadingRemittance] = useState(false);
+
+  useEffect(() => {
+    const loadRemittance = async () => {
+      setLoadingRemittance(true);
+      try {
+        const rem = await getPortalSupplierRemittance();
+        setRemittance(rem);
+      } catch (e) {
+        console.error("Failed to load remittance:", e);
+      } finally {
+        setLoadingRemittance(false);
+      }
+    };
+    loadRemittance();
+  }, []);
 
   // Attachments
   const [attachmentPath, setAttachmentPath] = useState<string | null>(initialInvoice?.attachmentPath || null);
@@ -233,36 +260,71 @@ export function InvoiceForm({ eligiblePos, initialInvoice }: InvoiceFormProps) {
 
           <div className="space-y-3">
             <div>
-              <label className="block text-[11px] font-bold text-zinc-500 dark:text-zinc-400 mb-1">관련 발주서 (PO)</label>
+              <label className="block text-[11px] font-bold text-zinc-500 dark:text-zinc-400 mb-1">관련 발주서 (PO) *</label>
               {isEditMode ? (
                 <div className="px-3 py-2 bg-zinc-50 border border-zinc-200 dark:bg-zinc-950 dark:border-zinc-800 rounded-lg text-xs font-mono font-bold text-zinc-700 dark:text-zinc-300">
                   {initialInvoice.poNumber}
                 </div>
               ) : (
-                <select
-                  value={selectedPoId}
-                  onChange={(e) => setSelectedPoId(e.target.value)}
-                  className="w-full px-3 py-2 border border-zinc-200 dark:border-zinc-800 rounded-lg text-xs bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100"
-                  required
-                >
-                  <option value="">-- 발주서 선택 --</option>
-                  {eligiblePos.map((po) => (
-                    <option key={po.id} value={po.id}>
-                      {po.po_number} ({po.order_date})
-                    </option>
-                  ))}
-                </select>
+                <div className="space-y-2">
+                  <select
+                    value={selectedPoId}
+                    onChange={(e) => setSelectedPoId(e.target.value)}
+                    className="w-full px-3 py-2 border border-zinc-200 dark:border-zinc-800 rounded-lg text-xs bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100"
+                    required
+                  >
+                    <option value="">-- 발주서 선택 --</option>
+                    {eligiblePos.map((po) => {
+                      const isDraft = po.hasActiveInvoice && po.activeInvoiceStatus === "DRAFT";
+                      const isLocked = po.hasActiveInvoice && po.activeInvoiceStatus !== "DRAFT";
+                      return (
+                        <option
+                          key={po.id}
+                          value={po.id}
+                          disabled={isLocked}
+                        >
+                          {po.po_number} ({po.order_date})
+                          {isDraft ? ` [작성 중인 Draft 있음]` : isLocked ? ` [진행 중인 인보이스: ${po.activeApNumber || po.activeInvoiceNumber} (${po.activeInvoiceStatus})]` : ""}
+                        </option>
+                      );
+                    })}
+                  </select>
+
+                  {/* Duplicate Active Invoice Warning */}
+                  {(() => {
+                    const selectedPo = eligiblePos.find((p) => p.id === selectedPoId);
+                    if (!selectedPo?.hasActiveInvoice) return null;
+                    const isDraft = selectedPo.activeInvoiceStatus === "DRAFT";
+                    return (
+                      <div className="p-3 bg-amber-50 border border-amber-250 rounded-lg dark:bg-amber-950/40 dark:border-amber-900/60 text-xs text-amber-800 dark:text-amber-300 flex items-center justify-between gap-2">
+                        <div>
+                          ⚠️ <strong>안내:</strong> 해당 발주서(PO)에 이미 등록된 인보이스(
+                          <strong>{selectedPo.activeApNumber || selectedPo.activeInvoiceNumber}</strong>, 상태:{" "}
+                          <strong>{selectedPo.activeInvoiceStatus}</strong>)가 존재합니다.
+                        </div>
+                        {isDraft && selectedPo.activeInvoiceId && (
+                          <Link
+                            href={`/portal/finance/${selectedPo.activeInvoiceId}/edit`}
+                            className="px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded text-[11px] whitespace-nowrap transition-colors"
+                          >
+                            기존 Draft 열기 →
+                          </Link>
+                        )}
+                      </div>
+                    );
+                  })()}
+                </div>
               )}
             </div>
 
             <div>
-              <label className="block text-[11px] font-bold text-zinc-500 dark:text-zinc-400 mb-1">인보이스 번호 (Invoice No.)</label>
+              <label className="block text-[11px] font-bold text-zinc-500 dark:text-zinc-400 mb-1">인보이스 번호 (Invoice No.) *</label>
               <input
                 type="text"
                 value={supplierInvoiceNumber}
                 onChange={(e) => setSupplierInvoiceNumber(e.target.value)}
                 placeholder="예: TEST-INV-001"
-                className="w-full px-3 py-2 border border-zinc-200 dark:border-zinc-800 rounded-lg text-xs bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 dark:placeholder:text-zinc-600"
+                className="w-full px-3 py-2 border border-zinc-200 dark:border-zinc-800 rounded-lg text-xs bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 dark:placeholder:text-zinc-600 font-mono font-bold"
                 required
               />
             </div>
@@ -277,7 +339,7 @@ export function InvoiceForm({ eligiblePos, initialInvoice }: InvoiceFormProps) {
           <div className="space-y-3">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-[11px] font-bold text-zinc-500 dark:text-zinc-400 mb-1">발행 일자 (Invoice Date)</label>
+                <label className="block text-[11px] font-bold text-zinc-500 dark:text-zinc-400 mb-1">발행 일자 (Invoice Date) *</label>
                 <input
                   type="date"
                   value={invoiceDate}
@@ -287,7 +349,7 @@ export function InvoiceForm({ eligiblePos, initialInvoice }: InvoiceFormProps) {
                 />
               </div>
               <div>
-                <label className="block text-[11px] font-bold text-zinc-500 dark:text-zinc-400 mb-1">만기 일자 (Due Date)</label>
+                <label className="block text-[11px] font-bold text-zinc-500 dark:text-zinc-400 mb-1">만기 일자 (Due Date) *</label>
                 <input
                   type="date"
                   value={dueDate}
@@ -320,6 +382,65 @@ export function InvoiceForm({ eligiblePos, initialInvoice }: InvoiceFormProps) {
               </div>
             </div>
           </div>
+        </div>
+
+        {/* Remittance Bank Account Card */}
+        <div className="p-5 rounded-xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900 space-y-3 shadow-sm md:col-span-2">
+          <div className="flex items-center justify-between border-b border-zinc-150 dark:border-zinc-800 pb-2">
+            <div>
+              <h2 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">
+                수취 계좌 정보 (Remittance Bank Account)
+              </h2>
+              <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5">
+                인보이스 발행 시 회사에 등록된 송금 수취 계좌가 스냅샷으로 저장되어 정산 대금 지급 시 사용됩니다.
+              </p>
+            </div>
+            <Link
+              href="/portal/company/info"
+              className="px-2.5 py-1 text-[11px] font-bold border border-zinc-300 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-800 rounded-lg text-zinc-700 dark:text-zinc-300 transition-colors"
+            >
+              ⚙️ 계좌 관리
+            </Link>
+          </div>
+
+          {loadingRemittance ? (
+            <p className="text-xs text-zinc-400 dark:text-zinc-500 italic">계좌 정보 로딩 중...</p>
+          ) : remittance ? (
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs pt-1">
+              <div>
+                <span className="text-[10px] font-bold text-zinc-400 block mb-0.5">수취 은행</span>
+                <span className="font-bold text-zinc-900 dark:text-zinc-100">{remittance.bank_name || "-"}</span>
+              </div>
+              <div>
+                <span className="text-[10px] font-bold text-zinc-400 block mb-0.5">예금주 (Beneficiary)</span>
+                <span className="font-bold text-zinc-900 dark:text-zinc-100">{remittance.beneficiary_name || "-"}</span>
+              </div>
+              <div>
+                <span className="text-[10px] font-bold text-zinc-400 block mb-0.5">계좌 번호</span>
+                <span className="font-mono font-bold text-zinc-900 dark:text-zinc-100">
+                  {remittance.account_number ? `**** ${remittance.account_number.slice(-4)}` : "-"}
+                </span>
+              </div>
+              <div>
+                <span className="text-[10px] font-bold text-zinc-400 block mb-0.5">통화 / SWIFT</span>
+                <span className="font-medium text-zinc-800 dark:text-zinc-200">
+                  {remittance.account_currency || "USD"} {remittance.swift_bic ? `/ ${remittance.swift_bic}` : ""}
+                </span>
+              </div>
+            </div>
+          ) : (
+            <div className="p-3 rounded-lg bg-amber-50 border border-amber-250 dark:bg-amber-950/30 dark:border-amber-900/50 text-amber-800 dark:text-amber-300 text-xs flex items-center justify-between">
+              <span>
+                💡 <strong>등록된 송금 계좌가 없습니다.</strong> 원활한 정산 및 대금 지급을 위해 회사 정보에서 계좌를 등록해 주세요.
+              </span>
+              <Link
+                href="/portal/company/info"
+                className="px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded text-[11px] shrink-0 ml-3"
+              >
+                계좌 등록하러 가기 →
+              </Link>
+            </div>
+          )}
         </div>
       </div>
 

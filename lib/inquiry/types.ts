@@ -71,6 +71,11 @@ export interface PartnerInquiryItem {
   requesterName?: string | null;
   requesterEmail?: string | null;
   repliedStaffName?: string;
+  related_po_id?: string | null;
+  related_invoice_id?: string | null;
+  related_po_number?: string | null;
+  related_invoice_number?: string | null;
+  related_ap_number?: string | null;
   messages?: InquiryMessageItem[];
 }
 

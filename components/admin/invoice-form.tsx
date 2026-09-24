@@ -19,6 +19,10 @@ interface PoOption {
   currency: string;
   payment_terms?: string;
   incoterms?: string;
+  active_invoice_id?: string | null;
+  active_invoice_no?: string | null;
+  active_invoice_status?: string | null;
+  is_locked?: boolean;
 }
 
 interface InvoiceLineItem {
@@ -71,6 +75,7 @@ export function InvoiceForm({ invoice, eligiblePos, suppliers }: InvoiceFormProp
 
   // Filter POs by selected Supplier
   const supplierPos = eligiblePos.filter(po => po.supplier_id === supplierId);
+  const selectedPo = supplierPos.find(p => p.id === poId);
 
   // Load lines when PO is selected in New mode
   useEffect(() => {
@@ -292,17 +297,46 @@ export function InvoiceForm({ invoice, eligiblePos, suppliers }: InvoiceFormProp
                     해당 공급사의 발송 완료 상태(<code className="font-mono text-rose-900 bg-rose-100 dark:bg-rose-900/50 px-1 py-0.5 rounded">SENT</code>)인 발주서가 존재하지 않습니다.
                   </div>
                 ) : (
-                  <select
-                    value={poId}
-                    onChange={(e) => setPoId(e.target.value)}
-                    className="w-full h-9 rounded-xl border border-zinc-200 bg-white px-3 outline-none dark:border-zinc-850 dark:bg-zinc-955 dark:text-white"
-                    required
-                  >
-                    <option value="">발주서를 선택하세요</option>
-                    {supplierPos.map(po => (
-                      <option key={po.id} value={po.id}>{po.po_number}</option>
-                    ))}
-                  </select>
+                  <div className="space-y-2">
+                    <select
+                      value={poId}
+                      onChange={(e) => setPoId(e.target.value)}
+                      className="w-full h-9 rounded-xl border border-zinc-200 bg-white px-3 outline-none dark:border-zinc-850 dark:bg-zinc-955 dark:text-white"
+                      required
+                    >
+                      <option value="">발주서를 선택하세요</option>
+                      {supplierPos.map(po => {
+                        const isDraft = po.active_invoice_status === "DRAFT";
+                        const isLocked = po.is_locked;
+                        let label = po.po_number;
+                        if (isDraft) {
+                          label += ` [Draft 존재: ${po.active_invoice_no || "DRAFT"}]`;
+                        } else if (isLocked) {
+                          label += ` [진행 중인 인보이스: ${po.active_invoice_no || ""} (${po.active_invoice_status})]`;
+                        }
+
+                        return (
+                          <option key={po.id} value={po.id} disabled={isLocked}>
+                            {label}
+                          </option>
+                        );
+                      })}
+                    </select>
+
+                    {selectedPo?.active_invoice_id && selectedPo.active_invoice_status === "DRAFT" && (
+                      <div className="p-2.5 rounded-lg bg-blue-50 border border-blue-200 text-blue-700 dark:bg-blue-950/20 dark:border-blue-900/50 dark:text-blue-300 text-[11px] flex items-center justify-between gap-2">
+                        <span>
+                          💡 이 발주서에 작성 중인 <strong>Draft 인보이스({selectedPo.active_invoice_no || "DRAFT"})</strong>가 있습니다.
+                        </span>
+                        <Link
+                          href={`/admin/finance/invoices/${selectedPo.active_invoice_id}/edit`}
+                          className="px-2 py-1 rounded bg-blue-600 text-white font-bold text-[10px] hover:bg-blue-700 shrink-0"
+                        >
+                          기존 Draft 열기 →
+                        </Link>
+                      </div>
+                    )}
+                  </div>
                 )}
               </div>
 
