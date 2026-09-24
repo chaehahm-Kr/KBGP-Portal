@@ -8,6 +8,8 @@ import { NavIcon } from "@/components/retailer/nav-icon";
 import { getNavItemsForRole } from "@/lib/retailer/navigation";
 import { usePathname } from "next/navigation";
 
+import { useCart } from "@/components/retailer/cart-context";
+
 interface RetailerHeaderProps {
   userName: string;
   userEmail: string;
@@ -24,6 +26,7 @@ export function RetailerHeader({
   storeName,
 }: RetailerHeaderProps) {
   const pathname = usePathname();
+  const { totalSkus } = useCart();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
   const navItems = getNavItemsForRole(role);
@@ -66,8 +69,35 @@ export function RetailerHeader({
           </div>
         </div>
 
-        {/* Right Actions: Theme Toggle & User Menu */}
+        {/* Right Actions: Cart, Theme Toggle & User Menu */}
         <div className="flex items-center gap-2 sm:gap-3">
+          {/* Cart Icon & Count */}
+          <Link
+            href="/cart"
+            className="relative p-2 rounded-lg text-zinc-700 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-900 transition-colors flex items-center"
+            aria-label="View Shopping Cart"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              className="h-5 w-5"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={1.75}
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M2.25 3h1.386c.51 0 .955.343 1.087.835l.383 1.437M7.5 14.25a3 3 0 0 0-3 3h15.75m-12.75-3h11.218c1.121-2.3 2.1-4.684 2.924-7.138a60.114 60.114 0 0 0-16.536-1.84M7.5 14.25 5.106 5.272M6 20.25a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0Zm12.75 0a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0Z"
+              />
+            </svg>
+            {totalSkus > 0 && (
+              <span className="absolute -top-1 -right-1 flex h-4.5 min-w-[18px] px-1 items-center justify-center rounded-full bg-indigo-600 text-[10px] font-bold text-white shadow-xs">
+                {totalSkus}
+              </span>
+            )}
+          </Link>
+
           {/* Theme Toggle (Desktop and Mobile) */}
           <ThemeToggle variant="compact" />
 

@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import Link from "next/link";
+import { useCart } from "@/components/retailer/cart-context";
 import { RetailerProductDetail } from "@/lib/retailer/products";
 
 interface ProductDetailViewProps {
@@ -9,6 +10,10 @@ interface ProductDetailViewProps {
 }
 
 export function RetailerProductDetailView({ product }: ProductDetailViewProps) {
+  const { addItem } = useCart();
+  const moq = Math.max(1, product.cartonPackQty || 1);
+  const [orderQty, setOrderQty] = useState(moq);
+  const [addedSuccess, setAddedSuccess] = useState(false);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [copiedSku, setCopiedSku] = useState(false);
 
@@ -21,6 +26,12 @@ export function RetailerProductDetailView({ product }: ProductDetailViewProps) {
     navigator.clipboard.writeText(product.sku);
     setCopiedSku(true);
     setTimeout(() => setCopiedSku(false), 2000);
+  };
+
+  const handleAddToCart = () => {
+    addItem(product, orderQty);
+    setAddedSuccess(true);
+    setTimeout(() => setAddedSuccess(false), 3000);
   };
 
   return (
@@ -214,19 +225,96 @@ export function RetailerProductDetailView({ product }: ProductDetailViewProps) {
               )}
             </div>
 
-            {/* Commercial Action Placeholder */}
-            <div className="pt-2 space-y-2">
-              <button
-                type="button"
-                disabled
-                className="w-full py-3.5 px-6 rounded-xl bg-zinc-200 dark:bg-zinc-800 text-zinc-400 dark:text-zinc-500 font-semibold text-sm cursor-not-allowed flex items-center justify-center gap-2"
-              >
-                <span>🛒</span>
-                <span>Direct B2B Ordering (Coming in RTP-ORD)</span>
-              </button>
-              <p className="text-[11px] text-center text-zinc-400 dark:text-zinc-500">
-                Cart, purchase orders, and multi-store replenishment will open in the upcoming release.
-              </p>
+            {/* Ordering Controls & Add to Cart */}
+            <div className="pt-2 space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl bg-white dark:bg-zinc-900/90 border border-zinc-200 dark:border-zinc-800">
+                <div>
+                  <div className="text-xs font-bold text-zinc-900 dark:text-white flex items-center gap-1.5">
+                    <span>Order Quantity</span>
+                    <span className="text-[10px] font-normal text-zinc-500 dark:text-zinc-400">
+                      (Multiple of {moq})
+                    </span>
+                  </div>
+                  <div className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
+                    Line Total:{" "}
+                    <strong className="text-zinc-900 dark:text-white font-bold text-sm">
+                      ${(orderQty * product.wholesalePrice).toFixed(2)}
+                    </strong>
+                  </div>
+                </div>
+
+                {/* Quantity Stepper */}
+                <div className="flex items-center gap-2">
+                  <div className="inline-flex items-center rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 p-1">
+                    <button
+                      type="button"
+                      onClick={() => setOrderQty((prev) => Math.max(moq, prev - moq))}
+                      disabled={orderQty <= moq}
+                      className="w-8 h-8 rounded-lg flex items-center justify-center font-bold text-sm text-zinc-700 dark:text-zinc-300 hover:bg-white dark:hover:bg-zinc-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                      aria-label="Decrease quantity"
+                    >
+                      −
+                    </button>
+                    <input
+                      type="number"
+                      value={orderQty}
+                      onChange={(e) => {
+                        const val = parseInt(e.target.value, 10);
+                        if (!isNaN(val) && val > 0) setOrderQty(val);
+                      }}
+                      onBlur={() => {
+                        let val = Math.max(moq, orderQty);
+                        const rem = val % moq;
+                        if (rem !== 0) val = val + (moq - rem);
+                        setOrderQty(val);
+                      }}
+                      className="w-14 text-center font-bold text-sm bg-transparent border-0 text-zinc-900 dark:text-white focus:outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setOrderQty((prev) => prev + moq)}
+                      className="w-8 h-8 rounded-lg flex items-center justify-center font-bold text-sm text-zinc-700 dark:text-zinc-300 hover:bg-white dark:hover:bg-zinc-700 transition-colors"
+                      aria-label="Increase quantity"
+                    >
+                      +
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex flex-col sm:flex-row gap-3">
+                <button
+                  type="button"
+                  onClick={handleAddToCart}
+                  className={`flex-1 py-3.5 px-6 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all shadow-sm cursor-pointer ${
+                    addedSuccess
+                      ? "bg-emerald-600 text-white"
+                      : "bg-zinc-900 dark:bg-white text-white dark:text-zinc-950 hover:opacity-95"
+                  }`}
+                >
+                  {addedSuccess ? (
+                    <>
+                      <span>✓</span>
+                      <span>Added to Cart ({orderQty} units)</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>🛒</span>
+                      <span>Add to Order Cart</span>
+                    </>
+                  )}
+                </button>
+
+                {addedSuccess && (
+                  <Link
+                    href="/cart"
+                    className="py-3.5 px-6 rounded-xl font-bold text-sm bg-indigo-50 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 hover:bg-indigo-100 dark:hover:bg-indigo-900 transition-colors flex items-center justify-center gap-1.5"
+                  >
+                    <span>View Cart →</span>
+                  </Link>
+                )}
+              </div>
             </div>
           </div>
 

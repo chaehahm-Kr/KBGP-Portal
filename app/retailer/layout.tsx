@@ -5,6 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { RetailerSidebar } from "@/components/retailer/retailer-sidebar";
 import { RetailerHeader } from "@/components/retailer/retailer-header";
 import { RetailerBottomNav } from "@/components/retailer/retailer-bottom-nav";
+import { CartProvider } from "@/components/retailer/cart-context";
 
 export const dynamic = "force-dynamic";
 
@@ -93,32 +94,34 @@ export default async function RetailerLayout({
   }
 
   return (
-    <div className="min-h-screen flex bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 font-sans transition-colors">
-      {/* Desktop Sidebar */}
-      <RetailerSidebar
-        role={role}
-        companyName={companyName}
-        storeName={storeName}
-        userName={userName}
-      />
-
-      {/* Main Content Column */}
-      <div className="flex-1 flex flex-col min-w-0">
-        <RetailerHeader
-          userName={userName}
-          userEmail={userEmail}
-          companyName={companyName}
+    <CartProvider>
+      <div className="min-h-screen flex bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 font-sans transition-colors">
+        {/* Desktop Sidebar */}
+        <RetailerSidebar
           role={role}
+          companyName={companyName}
           storeName={storeName}
+          userName={userName}
         />
 
-        <main className="flex-1 p-4 sm:p-6 lg:p-8 pb-24 lg:pb-8 overflow-y-auto">
-          <div className="w-full max-w-7xl">{children}</div>
-        </main>
+        {/* Main Content Column */}
+        <div className="flex-1 flex flex-col min-w-0">
+          <RetailerHeader
+            userName={userName}
+            userEmail={userEmail}
+            companyName={companyName}
+            role={role}
+            storeName={storeName}
+          />
 
-        {/* Mobile Bottom Navigation */}
-        <RetailerBottomNav role={role} />
+          <main className="flex-1 p-4 sm:p-6 lg:p-8 pb-24 lg:pb-8 overflow-y-auto">
+            <div className="w-full max-w-7xl">{children}</div>
+          </main>
+
+          {/* Mobile Bottom Navigation */}
+          <RetailerBottomNav role={role} />
+        </div>
       </div>
-    </div>
+    </CartProvider>
   );
 }
