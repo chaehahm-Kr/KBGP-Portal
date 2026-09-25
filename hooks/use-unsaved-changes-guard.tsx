@@ -115,6 +115,13 @@ export function useUnsavedChangesGuard({ isDirty, onSave }: UseUnsavedChangesGua
     };
   }, [isDirty]);
 
+  // Reset bypass guard flag when isDirty is false
+  useEffect(() => {
+    if (!isDirty) {
+      bypassGuardRef.current = false;
+    }
+  }, [isDirty]);
+
   // Execute pending navigation
   const executeNavigation = useCallback((nav: PendingNavigation) => {
     bypassGuardRef.current = true;
@@ -124,8 +131,16 @@ export function useUnsavedChangesGuard({ isDirty, onSave }: UseUnsavedChangesGua
       // Go back twice because we pushed 1 dummy state
       window.history.go(-2);
     } else if (nav.type === "url") {
-      // Use router.push or window.location
-      router.push(nav.url);
+      try {
+        const targetUrl = new URL(nav.url, window.location.href);
+        if (targetUrl.origin === window.location.origin) {
+          router.push(targetUrl.pathname + targetUrl.search + targetUrl.hash);
+        } else {
+          window.location.href = nav.url;
+        }
+      } catch {
+        router.push(nav.url);
+      }
     } else if (nav.type === "custom") {
       nav.action();
     }
@@ -182,7 +197,16 @@ export function useUnsavedChangesGuard({ isDirty, onSave }: UseUnsavedChangesGua
     (target: string | (() => void)) => {
       if (!isDirty) {
         if (typeof target === "string") {
-          router.push(target);
+          try {
+            const targetUrl = new URL(target, window.location.href);
+            if (targetUrl.origin === window.location.origin) {
+              router.push(targetUrl.pathname + targetUrl.search + targetUrl.hash);
+            } else {
+              window.location.href = target;
+            }
+          } catch {
+            router.push(target);
+          }
         } else {
           target();
         }
@@ -203,7 +227,16 @@ export function useUnsavedChangesGuard({ isDirty, onSave }: UseUnsavedChangesGua
   const bypassGuardAndNavigate = useCallback(
     (url: string) => {
       bypassGuardRef.current = true;
-      router.push(url);
+      try {
+        const targetUrl = new URL(url, window.location.href);
+        if (targetUrl.origin === window.location.origin) {
+          router.push(targetUrl.pathname + targetUrl.search + targetUrl.hash);
+        } else {
+          window.location.href = url;
+        }
+      } catch {
+        router.push(url);
+      }
     },
     [router]
   );

@@ -444,11 +444,15 @@ export const CategoryAttributeForm = forwardRef<CategoryAttributeFormHandle, Cat
   // Dirty state checker comparing current values against initial snapshot
   const checkIsDirty = useCallback((): boolean => {
     if (!initialSnapshotRef.current || loading || !hasInitialized) return false;
-    const currentCatCode = finalCat
-      ? finalCat.code
-      : selectedCat1 || selectedCat2 || selectedCat3
-      ? null
-      : initialCategoryCode;
+
+    const getSelectedCatCode = (): string | null => {
+      if (selectedCat3) return selectedCat3;
+      if (selectedCat2) return selectedCat2;
+      if (selectedCat1) return selectedCat1;
+      return initialCategoryCode || null;
+    };
+
+    const currentCatCode = getSelectedCatCode();
     if (currentCatCode !== initialSnapshotRef.current.categoryCode) {
       return true;
     }
@@ -478,7 +482,7 @@ export const CategoryAttributeForm = forwardRef<CategoryAttributeFormHandle, Cat
       }
     }
     return false;
-  }, [finalCat, attributes, formValues, formTextValues]);
+  }, [selectedCat1, selectedCat2, selectedCat3, initialCategoryCode, attributes, formValues, formTextValues, loading, hasInitialized]);
 
   useEffect(() => {
     if (onDirtyChange && hasInitialized) {
