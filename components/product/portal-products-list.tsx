@@ -38,6 +38,9 @@ interface PortalProductItem {
     status: string;
     warningLabel: string | null;
     warningType: string;
+    totalRequiredCount?: number;
+    filledRequiredCount?: number;
+    completionPercent?: number;
   } | null;
 }
 
@@ -261,6 +264,7 @@ export function PortalProductsList({ initialProducts, hasBrand }: PortalProducts
                 <th className="px-4 py-3.5">제품명</th>
                 <th className="px-4 py-3.5">브랜드</th>
                 <th className="px-4 py-3.5">카테고리</th>
+                <th className="px-4 py-3.5 whitespace-nowrap">속성 완성도</th>
                 <th className="px-4 py-3.5 whitespace-nowrap">등록 상태</th>
                 <th className="px-4 py-3.5 whitespace-nowrap">선정 상태</th>
                 <th className="px-4 py-3.5 whitespace-nowrap">판매 상태</th>
@@ -313,29 +317,6 @@ export function PortalProductsList({ initialProducts, hasBrand }: PortalProducts
                       >
                         {product.display_name}
                       </Link>
-                      {product.category_completion?.status === "COMPLETE" ? (
-                        <span className="inline-flex items-center w-fit rounded-md bg-emerald-50 text-emerald-700 dark:bg-emerald-950/20 dark:text-emerald-400 px-2 py-0.5 text-[9px] font-bold border border-emerald-200 dark:border-emerald-900/50">
-                          ✓ 속성 완료 (100%)
-                        </span>
-                      ) : product.category_completion?.warningLabel ? (
-                        <Link
-                          href={`/portal/products/${product.id}?tab=category_attributes${
-                            product.category_completion.missingRequiredAttributes?.[0]?.code
-                              ? `#attr-${product.category_completion.missingRequiredAttributes[0].code}`
-                              : ""
-                          }`}
-                          className="inline-flex items-center w-fit rounded-md bg-amber-500/10 hover:bg-amber-500/20 dark:bg-amber-950/30 dark:hover:bg-amber-950/50 px-2 py-0.5 text-[9px] font-bold text-amber-600 dark:text-amber-400 border border-amber-500/20 transition-all cursor-pointer shadow-2xs"
-                        >
-                          ⚠️ {product.category_completion.warningLabel}
-                        </Link>
-                      ) : !product.category_code ? (
-                        <Link
-                          href={`/portal/products/${product.id}?tab=category_attributes`}
-                          className="inline-flex items-center w-fit rounded-md bg-amber-500/10 hover:bg-amber-500/20 dark:bg-amber-950/30 dark:hover:bg-amber-950/50 px-2 py-0.5 text-[9px] font-bold text-amber-600 dark:text-amber-400 border border-amber-500/20 transition-all cursor-pointer shadow-2xs"
-                        >
-                          ⚠️ 카테고리 설정 필요
-                        </Link>
-                      ) : null}
                     </div>
                   </td>
 
@@ -349,6 +330,49 @@ export function PortalProductsList({ initialProducts, hasBrand }: PortalProducts
                     <span className="inline-flex items-center rounded-full bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 text-[10px] font-semibold text-zinc-700 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700">
                       {PRODUCT_CATEGORY_LABEL[product.category as ProductCategory] || product.category}
                     </span>
+                  </td>
+
+                  {/* Attribute Completion Fixed Column */}
+                  <td className="px-4 py-4 whitespace-nowrap">
+                    {product.category_completion ? (
+                      <div className="flex flex-col gap-1">
+                        <div className="flex items-center gap-2">
+                          <div className="w-16 bg-zinc-200 dark:bg-zinc-800 rounded-full h-2 overflow-hidden">
+                            <div
+                              className={`h-full rounded-full transition-all ${
+                                product.category_completion.completionPercent === 100
+                                  ? "bg-emerald-500"
+                                  : (product.category_completion.completionPercent ?? 0) >= 50
+                                  ? "bg-indigo-500"
+                                  : "bg-amber-500"
+                              }`}
+                              style={{ width: `${product.category_completion.completionPercent ?? 0}%` }}
+                            />
+                          </div>
+                          <span className={`text-xs font-bold font-mono ${
+                            product.category_completion.completionPercent === 100
+                              ? "text-emerald-700 dark:text-emerald-400"
+                              : "text-zinc-700 dark:text-zinc-300"
+                          }`}>
+                            {product.category_completion.completionPercent ?? 0}%
+                          </span>
+                        </div>
+                        {product.category_completion.warningLabel && (
+                          <Link
+                            href={`/portal/products/${product.id}?tab=category_attributes${
+                              product.category_completion.missingRequiredAttributes?.[0]?.code
+                                ? `#attr-${product.category_completion.missingRequiredAttributes[0].code}`
+                                : ""
+                            }`}
+                            className="text-[9px] text-amber-600 dark:text-amber-400 font-semibold hover:underline"
+                          >
+                            ⚠️ {product.category_completion.warningLabel}
+                          </Link>
+                        )}
+                      </div>
+                    ) : (
+                      <span className="text-zinc-400 text-xs italic">-</span>
+                    )}
                   </td>
 
                   {/* 1. Registration Status Badge */}
@@ -444,7 +468,7 @@ export function PortalProductsList({ initialProducts, hasBrand }: PortalProducts
               {filteredProducts.length === 0 && (
                 <tr>
                   <td
-                    colSpan={10}
+                    colSpan={11}
                     className="px-6 py-12 text-center text-zinc-400 dark:text-zinc-500"
                   >
                     일치하는 등록 제품이 존재하지 않습니다.

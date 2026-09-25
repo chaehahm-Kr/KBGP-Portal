@@ -2677,9 +2677,18 @@ export function ProductDetailTabs({
       <div className={activeTab === "media" ? "space-y-6" : "hidden"}>
         {/* Images List */}
         <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 space-y-4">
-          <h2 className="text-sm font-bold text-zinc-900 dark:text-white border-b border-zinc-100 pb-3 dark:border-zinc-850">
-            제품 이미지 관리 (최대 10장)
-          </h2>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-zinc-100 dark:border-zinc-850 pb-3 gap-3">
+            <h2 className="text-sm font-bold text-zinc-900 dark:text-white">
+              제품 이미지 관리 (최대 10장)
+            </h2>
+            <div className="flex items-center gap-3 text-xs font-semibold text-zinc-600 dark:text-zinc-400 bg-zinc-50 dark:bg-zinc-950 px-3 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-800">
+              <span>등록된 이미지: <strong className="text-zinc-900 dark:text-white font-bold">{localImages.length}개</strong></span>
+              <span className="text-zinc-300 dark:text-zinc-700">|</span>
+              <span>추가 대기 이미지: <strong className="text-indigo-650 dark:text-indigo-400 font-bold">{pendingImages.length}개</strong></span>
+              <span className="text-zinc-300 dark:text-zinc-700">|</span>
+              <span>최대: <strong className="text-zinc-700 dark:text-zinc-300 font-bold">10개</strong></span>
+            </div>
+          </div>
           
           {localImages.length === 0 ? (
             <p className="mt-4 text-xs text-zinc-400 dark:text-zinc-500 py-6 text-center">등록된 제품 이미지가 없습니다. 아래 폼에서 이미지를 추가해 주세요.</p>
@@ -2743,14 +2752,14 @@ export function ProductDetailTabs({
 
           {/* Staging Area for Selected Pending Files */}
           {pendingImages.length > 0 && (
-            <div className="mt-4 p-4 rounded-xl border border-indigo-200 bg-indigo-50/40 dark:border-indigo-900/60 dark:bg-indigo-950/20 space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-indigo-900 dark:text-indigo-300 flex items-center gap-1.5">
-                  <span>📸</span>
-                  <span>추가 대기 중인 이미지 ({pendingImages.length}개)</span>
+            <div className="mt-4 p-4 rounded-xl border-2 border-indigo-500 bg-indigo-50/50 dark:border-indigo-900/60 dark:bg-indigo-950/30 shadow-md space-y-4">
+              <div className="flex items-center justify-between border-b border-indigo-100 dark:border-indigo-900/60 pb-2.5">
+                <span className="text-xs font-bold text-indigo-950 dark:text-indigo-200 flex items-center gap-2">
+                  <span className="text-base">📸</span>
+                  <span>추가 대기 목록 ({pendingImages.length}개 선택됨)</span>
                 </span>
-                <span className="text-[10px] text-indigo-650 dark:text-indigo-400 font-medium">
-                  아래 버튼을 눌러야 실제 서버에 저장 및 추가됩니다.
+                <span className="text-[11px] font-semibold text-indigo-700 dark:text-indigo-300">
+                  아래 [선택한 이미지 {pendingImages.length}개 추가] 버튼을 눌러야 저장됩니다.
                 </span>
               </div>
 
@@ -2758,46 +2767,56 @@ export function ProductDetailTabs({
                 {pendingImages.map((img) => (
                   <div
                     key={img.id}
-                    className="relative group border border-indigo-200 dark:border-indigo-800 rounded-lg p-1.5 bg-white dark:bg-zinc-900 shadow-sm w-28 text-center"
+                    className="relative group border border-indigo-200 dark:border-indigo-800 rounded-xl p-2 bg-white dark:bg-zinc-900 shadow-sm w-32 flex flex-col items-center text-center"
                   >
                     <img
                       src={img.previewUrl}
                       alt={img.file.name}
-                      className="h-24 w-full rounded-md object-cover"
+                      className="h-24 w-full rounded-lg object-cover border border-zinc-100 dark:border-zinc-800"
                     />
-                    <p className="mt-1 text-[10px] font-bold text-zinc-700 dark:text-zinc-300 truncate px-0.5" title={img.file.name}>
+                    <p className="mt-1.5 text-[11px] font-bold text-zinc-900 dark:text-white truncate w-full px-1" title={img.file.name}>
                       {img.file.name}
                     </p>
-                    <p className="text-[9px] text-zinc-400 font-mono">
+                    <p className="text-[10px] text-zinc-500 dark:text-zinc-400 font-mono">
                       {img.formattedSize}
                     </p>
 
                     <button
                       type="button"
                       onClick={() => handleRemovePendingImage(img.id)}
-                      className="absolute -top-2 -right-2 rounded-full bg-rose-600 hover:bg-rose-700 text-white w-5 h-5 text-[11px] font-bold flex items-center justify-center shadow-md cursor-pointer transition-transform hover:scale-110"
-                      title="선택 목록에서 제외"
+                      className="mt-2 w-full rounded-md bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900/60 text-rose-700 dark:text-rose-300 text-[10px] font-bold py-1 border border-rose-200 dark:border-rose-900/60 transition-colors cursor-pointer flex items-center justify-center gap-1"
+                      title="이 선택 파일 제외"
                     >
-                      ✕
+                      <span>✕</span>
+                      <span>삭제</span>
                     </button>
                   </div>
                 ))}
               </div>
 
-              <div className="pt-2 flex items-center justify-between border-t border-indigo-100 dark:border-indigo-900/40">
-                <span className="text-[11px] text-indigo-700 dark:text-indigo-300">
-                  선택한 {pendingImages.length}개의 이미지를 서버로 업로드합니다.
-                </span>
+              <div className="pt-3 border-t border-indigo-100 dark:border-indigo-900/60 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                <p className="text-xs text-indigo-900 dark:text-indigo-200 font-semibold">
+                  선택된 파일은 아직 저장되지 않았습니다. 업로드 완료 버튼을 눌러주세요.
+                </p>
                 <button
                   type="button"
                   onClick={handleUploadPendingImages}
                   disabled={uploadingImages}
-                  className="rounded-lg bg-indigo-650 hover:bg-indigo-700 text-white px-4 py-2 text-xs font-bold transition-all shadow cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+                  className="rounded-xl bg-indigo-650 hover:bg-indigo-700 active:scale-95 text-white px-6 py-2.5 text-xs font-extrabold shadow-lg transition-all cursor-pointer disabled:opacity-50 flex items-center gap-2 border border-indigo-500 ring-2 ring-indigo-500/30 shrink-0"
                 >
                   {uploadingImages ? (
-                    <span>업로드 중...</span>
+                    <>
+                      <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                      </svg>
+                      <span>이미지 업로드 중...</span>
+                    </>
                   ) : (
-                    <span>선택한 이미지 {pendingImages.length}개 추가</span>
+                    <>
+                      <span>📤</span>
+                      <span>선택한 이미지 {pendingImages.length}개 추가</span>
+                    </>
                   )}
                 </button>
               </div>

@@ -8,6 +8,9 @@ export interface CategoryCompletionResult {
   status: "COMPLETE" | "CATEGORY_INCOMPLETE" | "ATTRIBUTE_INCOMPLETE" | "BOTH_INCOMPLETE";
   warningLabel: string | null;
   warningType: "none" | "category" | "attribute" | "both";
+  totalRequiredCount: number;
+  filledRequiredCount: number;
+  completionPercent: number;
 }
 
 /**
@@ -115,6 +118,9 @@ export async function getProductCategoryCompletion(
   });
 
   const requiredAttributesComplete = missingRequiredAttributes.length === 0;
+  const totalRequiredCount = allRequired.length;
+  const filledRequiredCount = totalRequiredCount - missingRequiredAttributes.length;
+  const completionPercent = totalRequiredCount === 0 ? 100 : Math.round((filledRequiredCount / totalRequiredCount) * 100);
 
   // 5. Determine Unified Status and Warning Label
   let status: CategoryCompletionResult["status"] = "COMPLETE";
@@ -149,6 +155,9 @@ export async function getProductCategoryCompletion(
     status,
     warningLabel,
     warningType,
+    totalRequiredCount,
+    filledRequiredCount,
+    completionPercent,
   };
 }
 
@@ -251,6 +260,9 @@ export async function getBatchProductCategoryCompletions(
     });
 
     const requiredAttributesComplete = missing.length === 0;
+    const totalRequiredCount = allRequired.length;
+    const filledRequiredCount = totalRequiredCount - missing.length;
+    const completionPercent = totalRequiredCount === 0 ? 100 : Math.round((filledRequiredCount / totalRequiredCount) * 100);
 
     let status: CategoryCompletionResult["status"] = "COMPLETE";
     let warningLabel: string | null = null;
@@ -284,6 +296,9 @@ export async function getBatchProductCategoryCompletions(
       status,
       warningLabel,
       warningType,
+      totalRequiredCount,
+      filledRequiredCount,
+      completionPercent,
     });
   });
 
