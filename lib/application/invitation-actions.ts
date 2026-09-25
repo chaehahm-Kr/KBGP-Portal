@@ -6,8 +6,36 @@ import { verifyAdminSession } from "@/lib/auth/dal";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { publicEnv } from "@/lib/env/public";
 import { sendEmail } from "@/lib/notifications/email";
-import { createRetailerInvitation } from "@/lib/retailer/onboarding-actions";
+import {
+  createRetailerInvitation,
+  resendRetailerInvitation,
+  revokeRetailerInvitation,
+} from "@/lib/retailer/onboarding-actions";
 import { normalizeEmail } from "@/lib/user/validation";
+import { sendPortalInvitationAction } from "@/lib/company/admin-actions";
+
+async function logApplicationActivity(
+  admin: any,
+  applicationId: string,
+  beforeState: string,
+  afterState: string,
+  actorId: string,
+  reason?: string
+) {
+  try {
+    await admin.from("activity_logs").insert({
+      entity_type: "application",
+      entity_id: applicationId,
+      before_state: beforeState,
+      after_state: afterState,
+      changed_by: actorId,
+      reason: reason || null,
+      created_at: new Date().toISOString(),
+    });
+  } catch (err) {
+    console.warn("[logApplicationActivity] Failed to write activity log:", err);
+  }
+}
 
 /**
  * Admin direct Brand Partner invitation flow
@@ -19,7 +47,7 @@ export async function adminInviteBrandPartner(payload: {
   phone?: string;
   adminNotes?: string;
 }): Promise<{ success: boolean; error?: string; applicationId?: string; companyId?: string }> {
-  await verifyAdminSession();
+  const session = await verifyAdminSession();
   const admin = createAdminClient();
 
   const normalizedEmail = normalizeEmail(payload.email);
@@ -34,7 +62,7 @@ export async function adminInviteBrandPartner(payload: {
     return { success: false, error: "Primary Contact Name is required." };
   }
 
-  // 1. Duplicate check warning
+  // 1. Duplicate check warning & lookup
   const { data: existingComp } = await admin
     .from("companies")
     .select("id, name")
@@ -46,7 +74,6 @@ export async function adminInviteBrandPartner(payload: {
   if (existingComp) {
     companyId = existingComp.id;
   } else {
-    // Insert new Company
     const introStr = `__COMPANY_METADATA__:${JSON.stringify({
       description: "",
       address: "",
@@ -93,15 +120,17 @@ export async function adminInviteBrandPartner(payload: {
     .eq("email", normalizedEmail)
     .maybeSingle();
 
+  let companyUserId: string | null = existingUser?.id || null;
+
   if (!existingUser) {
-    // Create auth user & company_user
-    const { data: invitedAuth, error: authErr } = await admin.auth.admin.createUser({
+    const { data: invitedAuth } = await admin.auth.admin.createUser({
       email: normalizedEmail,
       email_confirm: false,
       user_metadata: { role: "portal", display_name: payload.contactName.trim() },
     });
 
     if (invitedAuth?.user) {
+      companyUserId = invitedAuth.user.id;
       await admin.from("company_users").insert({
         id: invitedAuth.user.id,
         company_id: companyId,
@@ -145,7 +174,9 @@ export async function adminInviteBrandPartner(payload: {
     return { success: false, error: "Failed to create application record." };
   }
 
-  // 5. Send Brand invitation email
+  await logApplicationActivity(admin, appRow.id, "none", "invitation_sent", session.userId, "Admin Direct Brand Invitation");
+
+  // 5. Send Brand invitation email strictly pointing to portal.kselectnetwork.com
   const brandSiteUrl = publicEnv.NEXT_PUBLIC_SITE_URL || "https://portal.kselectnetwork.com";
   const activationUrl = `${brandSiteUrl}/portal/login`;
 
@@ -178,7 +209,7 @@ export async function adminInviteBrandPartner(payload: {
       `,
     });
   } catch (emailErr) {
-    console.warn("[adminInviteBrandPartner] Resend email warning:", emailErr);
+    console.warn("[adminInviteBrandPartner] Email delivery warning:", emailErr);
   }
 
   revalidatePath("/admin/applications");
@@ -196,7 +227,7 @@ export async function adminInviteRetailerPartner(payload: {
   companyAddress?: string;
   adminNotes?: string;
 }): Promise<{ success: boolean; error?: string; applicationId?: string; companyId?: string }> {
-  await verifyAdminSession();
+  const session = await verifyAdminSession();
   const admin = createAdminClient();
 
   const normalizedEmail = normalizeEmail(payload.email);
@@ -265,7 +296,7 @@ export async function adminInviteRetailerPartner(payload: {
   const { data: appNum } = await admin.rpc("generate_application_number");
   const applicationNumber = appNum || `APP-${Date.now().toString().slice(-6)}`;
 
-  // 3. Create Retailer Invitation via existing secure token framework (RTP-ONB-001)
+  // 3. Create Retailer Invitation via single-use hashed token framework (RTP-ONB-001)
   const inviteRes = await createRetailerInvitation({
     companyId,
     email: normalizedEmail,
@@ -305,6 +336,8 @@ export async function adminInviteRetailerPartner(payload: {
     return { success: false, error: "Failed to create application record." };
   }
 
+  await logApplicationActivity(admin, appRow.id, "none", "invitation_sent", session.userId, "Admin Direct Retailer Invitation");
+
   revalidatePath("/admin/applications");
   return { success: true, applicationId: appRow.id, companyId };
 }
@@ -316,7 +349,7 @@ export async function approveAndInviteApplication(
   applicationId: string,
   reviewerNotes?: string
 ): Promise<{ success: boolean; error?: string }> {
-  await verifyAdminSession();
+  const session = await verifyAdminSession();
   const admin = createAdminClient();
 
   const { data: app, error: findErr } = await admin
@@ -329,13 +362,13 @@ export async function approveAndInviteApplication(
     return { success: false, error: "Application record not found." };
   }
 
+  const beforeState = app.status || "submitted";
   const partnerType = app.partner_type || "brand";
   const compName = app.applicant_company_name || app.company_id || "Partner Company";
   const contactName = app.applicant_contact_name || "Partner Contact";
   const contactEmail = app.applicant_contact_email;
 
   if (partnerType === "retailer") {
-    // If applicant email missing, fetch from company_users or inquiries
     let emailToUse = contactEmail;
     let nameToUse = contactName;
 
@@ -398,6 +431,8 @@ export async function approveAndInviteApplication(
         updated_at: new Date().toISOString(),
       })
       .eq("id", applicationId);
+
+    await logApplicationActivity(admin, applicationId, beforeState, "invitation_sent", session.userId, reviewerNotes || "Approved & Invited Retailer");
   } else {
     // Brand Approve & Invite
     let emailToUse = contactEmail;
@@ -465,7 +500,7 @@ export async function approveAndInviteApplication(
       }
     }
 
-    // Send Brand Invitation email
+    // Send Brand Invitation email strictly pointing to portal.kselectnetwork.com
     const brandSiteUrl = publicEnv.NEXT_PUBLIC_SITE_URL || "https://portal.kselectnetwork.com";
     const activationUrl = `${brandSiteUrl}/portal/login`;
 
@@ -498,9 +533,77 @@ export async function approveAndInviteApplication(
         updated_at: new Date().toISOString(),
       })
       .eq("id", applicationId);
+
+    await logApplicationActivity(admin, applicationId, beforeState, "approved", session.userId, reviewerNotes || "Approved & Invited Brand");
   }
 
   revalidatePath("/admin/applications");
+  revalidatePath(`/admin/applications/${applicationId}`);
+  return { success: true };
+}
+
+/**
+ * Resend Invitation for Application
+ */
+export async function resendApplicationInvitation(applicationId: string): Promise<{ success: boolean; error?: string }> {
+  const session = await verifyAdminSession();
+  const admin = createAdminClient();
+
+  const { data: app } = await admin
+    .from("applications")
+    .select("id, partner_type, status, invitation_id, company_id, applicant_contact_email")
+    .eq("id", applicationId)
+    .single();
+
+  if (!app) return { success: false, error: "Application not found." };
+
+  if (app.partner_type === "retailer" && app.invitation_id) {
+    const res = await resendRetailerInvitation(app.invitation_id);
+    if (!res.success) return { success: false, error: res.error || "Failed to resend retailer invitation." };
+  } else if (app.company_id) {
+    const { data: cu } = await admin
+      .from("company_users")
+      .select("id")
+      .eq("company_id", app.company_id)
+      .eq("status", "invited")
+      .maybeSingle();
+
+    if (cu) {
+      await sendPortalInvitationAction(cu.id);
+    }
+  }
+
+  await logApplicationActivity(admin, applicationId, app.status, app.status, session.userId, "Resent Invitation");
+  revalidatePath(`/admin/applications/${applicationId}`);
+  return { success: true };
+}
+
+/**
+ * Revoke Invitation for Application
+ */
+export async function revokeApplicationInvitation(applicationId: string): Promise<{ success: boolean; error?: string }> {
+  const session = await verifyAdminSession();
+  const admin = createAdminClient();
+
+  const { data: app } = await admin
+    .from("applications")
+    .select("id, partner_type, status, invitation_id, company_id")
+    .eq("id", applicationId)
+    .single();
+
+  if (!app) return { success: false, error: "Application not found." };
+
+  if (app.partner_type === "retailer" && app.invitation_id) {
+    const res = await revokeRetailerInvitation(app.invitation_id);
+    if (!res.success) return { success: false, error: res.error || "Failed to revoke retailer invitation." };
+  }
+
+  await admin
+    .from("applications")
+    .update({ status: "cancelled", updated_at: new Date().toISOString() })
+    .eq("id", applicationId);
+
+  await logApplicationActivity(admin, applicationId, app.status, "cancelled", session.userId, "Revoked Invitation");
   revalidatePath(`/admin/applications/${applicationId}`);
   return { success: true };
 }
@@ -512,8 +615,16 @@ export async function rejectApplication(
   applicationId: string,
   rejectReason: string
 ): Promise<{ success: boolean; error?: string }> {
-  await verifyAdminSession();
+  const session = await verifyAdminSession();
   const admin = createAdminClient();
+
+  const { data: app } = await admin
+    .from("applications")
+    .select("status")
+    .eq("id", applicationId)
+    .single();
+
+  const beforeState = app?.status || "under_review";
 
   const { error } = await admin
     .from("applications")
@@ -527,6 +638,8 @@ export async function rejectApplication(
   if (error) {
     return { success: false, error: "Failed to reject application." };
   }
+
+  await logApplicationActivity(admin, applicationId, beforeState, "rejected", session.userId, rejectReason || "Application Rejected");
 
   revalidatePath("/admin/applications");
   revalidatePath(`/admin/applications/${applicationId}`);

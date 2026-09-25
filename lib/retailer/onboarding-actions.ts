@@ -329,6 +329,20 @@ export async function acceptRetailerInvitation(params: {
       })
       .eq("token_hash", tokenHash);
 
+    // 9. Update linked Application record to onboarded status
+    try {
+      await adminClient
+        .from("applications")
+        .update({
+          status: "onboarded",
+          onboarded_company_id: inv.companyId,
+          updated_at: now,
+        })
+        .or(`invitation_id.eq.${inv.id},company_id.eq.${inv.companyId}`);
+    } catch (appUpdateErr) {
+      console.warn("[acceptRetailerInvitation] Application status update warning:", appUpdateErr);
+    }
+
     return {
       success: true,
       redirectTo: "/retailer",

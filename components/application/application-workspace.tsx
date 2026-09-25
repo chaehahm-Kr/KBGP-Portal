@@ -40,6 +40,8 @@ interface ApplicationWorkspaceProps {
   deleteAction?: any;
   approveAndInviteAction?: any;
   rejectAppAction?: any;
+  resendInviteAction?: any;
+  revokeInviteAction?: any;
 }
 
 export default function ApplicationWorkspace({
@@ -67,13 +69,15 @@ export default function ApplicationWorkspace({
   deleteAction,
   approveAndInviteAction,
   rejectAppAction,
+  resendInviteAction,
+  revokeInviteAction,
 }: ApplicationWorkspaceProps) {
   const [isProcessingAction, setIsProcessingAction] = useState(false);
 
   const handleApproveAndInvite = async () => {
     if (!approveAndInviteAction) return;
     const note = prompt("승인 및 초대 관련 리뷰 메모를 입력하세요 (선택 사항):", "Approved & Invited by Admin");
-    if (note === null) return; // User cancelled
+    if (note === null) return;
 
     setIsProcessingAction(true);
     try {
@@ -83,6 +87,46 @@ export default function ApplicationWorkspace({
         window.location.reload();
       } else {
         alert("승인/초대 처리 실패: " + (res?.error || "알 수 없는 오류"));
+      }
+    } catch (err: any) {
+      alert("오류 발생: " + err.message);
+    } finally {
+      setIsProcessingAction(false);
+    }
+  };
+
+  const handleResendInvite = async () => {
+    if (!resendInviteAction) return;
+    if (!confirm("이 파트너사에게 초대장을 재발송하시겠습니까?")) return;
+
+    setIsProcessingAction(true);
+    try {
+      const res = await resendInviteAction();
+      if (res?.success) {
+        alert("초대장을 재발송했습니다.");
+        window.location.reload();
+      } else {
+        alert("초대장 재발송 실패: " + (res?.error || "알 수 없는 오류"));
+      }
+    } catch (err: any) {
+      alert("오류 발생: " + err.message);
+    } finally {
+      setIsProcessingAction(false);
+    }
+  };
+
+  const handleRevokeInvite = async () => {
+    if (!revokeInviteAction) return;
+    if (!confirm("⚠️ 정말로 발송된 초대장을 취소/회수하시겠습니까? (기존 초대 링크는 즉시 무효화됩니다)")) return;
+
+    setIsProcessingAction(true);
+    try {
+      const res = await revokeInviteAction();
+      if (res?.success) {
+        alert("초대장이 취소 처리되었습니다.");
+        window.location.reload();
+      } else {
+        alert("초대장 취소 실패: " + (res?.error || "알 수 없는 오류"));
       }
     } catch (err: any) {
       alert("오류 발생: " + err.message);
@@ -327,7 +371,7 @@ export default function ApplicationWorkspace({
             </span>
 
             {/* Action 1: Approve & Invite */}
-            {approveAndInviteAction && application.status !== "onboarded" && application.status !== "rejected" && (
+            {approveAndInviteAction && application.status !== "onboarded" && application.status !== "rejected" && application.status !== "invitation_sent" && (
               <button
                 type="button"
                 onClick={handleApproveAndInvite}
@@ -335,6 +379,30 @@ export default function ApplicationWorkspace({
                 className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs rounded-xl transition-all shadow-xs cursor-pointer disabled:opacity-50"
               >
                 {isProcessingAction ? "Processing..." : "✓ Approve & Invite Partner"}
+              </button>
+            )}
+
+            {/* Action: Resend Invite */}
+            {resendInviteAction && (application.status === "invitation_sent" || application.status === "approved") && (
+              <button
+                type="button"
+                onClick={handleResendInvite}
+                disabled={isProcessingAction}
+                className="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs rounded-xl transition-all shadow-xs cursor-pointer disabled:opacity-50"
+              >
+                📨 Resend Invitation
+              </button>
+            )}
+
+            {/* Action: Revoke Invite */}
+            {revokeInviteAction && (application.status === "invitation_sent" || application.status === "approved") && (
+              <button
+                type="button"
+                onClick={handleRevokeInvite}
+                disabled={isProcessingAction}
+                className="px-3 py-2 bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-xs rounded-xl transition-all shadow-xs cursor-pointer disabled:opacity-50"
+              >
+                🚫 Revoke Invitation
               </button>
             )}
 

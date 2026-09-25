@@ -15,6 +15,8 @@ import { deleteApplicationAction } from "@/lib/application/actions";
 import {
   approveAndInviteApplication,
   rejectApplication,
+  resendApplicationInvitation,
+  revokeApplicationInvitation,
 } from "@/lib/application/invitation-actions";
 import ApplicationWorkspace from "@/components/application/application-workspace";
 
@@ -164,6 +166,8 @@ export default async function AdminApplicationDetailPage({
       deleteAction={deleteApplicationAction}
       approveAndInviteAction={approveAndInviteApplication.bind(null, id)}
       rejectAppAction={rejectApplication.bind(null, id)}
+      resendInviteAction={resendApplicationInvitation.bind(null, id)}
+      revokeInviteAction={revokeApplicationInvitation.bind(null, id)}
     />
   );
 }
