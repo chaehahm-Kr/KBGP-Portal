@@ -130,6 +130,11 @@ export async function getAdminRetailerDetail(companyId: string) {
         payment_terms_custom,
         credit_limit,
         terms_approved_by_admin,
+        payment_method_card_enabled,
+        payment_method_ach_enabled,
+        terms_enabled,
+        approved_terms,
+        terms_status,
         stripe_customer_id,
         resale_certificate_number,
         tax_exempt_status,
@@ -374,6 +379,11 @@ export async function updateRetailerTermsAction(
     status?: string;
     paymentTerms?: string;
     creditLimit?: number;
+    paymentMethodCardEnabled?: boolean;
+    paymentMethodAchEnabled?: boolean;
+    termsEnabled?: boolean;
+    approvedTerms?: string;
+    termsStatus?: string;
     resaleCertificateNumber?: string;
     internalNote?: string;
   }
@@ -388,6 +398,13 @@ export async function updateRetailerTermsAction(
   if (payload.status !== undefined) updateData.status = payload.status;
   if (payload.paymentTerms !== undefined) updateData.payment_terms = payload.paymentTerms;
   if (payload.creditLimit !== undefined) updateData.credit_limit = payload.creditLimit;
+  if (payload.paymentMethodCardEnabled !== undefined)
+    updateData.payment_method_card_enabled = payload.paymentMethodCardEnabled;
+  if (payload.paymentMethodAchEnabled !== undefined)
+    updateData.payment_method_ach_enabled = payload.paymentMethodAchEnabled;
+  if (payload.termsEnabled !== undefined) updateData.terms_enabled = payload.termsEnabled;
+  if (payload.approvedTerms !== undefined) updateData.approved_terms = payload.approvedTerms;
+  if (payload.termsStatus !== undefined) updateData.terms_status = payload.termsStatus;
   if (payload.resaleCertificateNumber !== undefined)
     updateData.resale_certificate_number = payload.resaleCertificateNumber;
   if (payload.internalNote !== undefined) updateData.internal_note = payload.internalNote;

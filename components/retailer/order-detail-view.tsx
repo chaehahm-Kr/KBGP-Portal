@@ -56,6 +56,51 @@ export function RetailerOrderDetailView({ order }: OrderDetailViewProps) {
     }
   };
 
+  const getPaymentStatusBadge = (status: string) => {
+    switch (status.toLowerCase()) {
+      case "paid":
+        return (
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-[11px] font-bold bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800">
+            <span>✓</span> Paid
+          </span>
+        );
+      case "pending":
+        return (
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-[11px] font-bold bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800">
+            <span>⏳</span> Processing
+          </span>
+        );
+      case "partially_paid":
+        return (
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-[11px] font-bold bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-400 border border-blue-200 dark:border-blue-800">
+            Partially Paid
+          </span>
+        );
+      case "failed":
+        return (
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-[11px] font-bold bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-400 border border-rose-200 dark:border-rose-800">
+            Payment Failed
+          </span>
+        );
+      case "unpaid":
+      default:
+        return (
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-[11px] font-bold bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700">
+            Unpaid (Invoice Settlement)
+          </span>
+        );
+    }
+  };
+
+  const paymentMethodLabel =
+    order.paymentMethod === "terms"
+      ? `${order.paymentTerms.replace(/_/g, " ")} Terms`
+      : order.paymentMethod === "ach"
+      ? "ACH Bank Transfer"
+      : order.paymentMethod === "card"
+      ? "Credit / Debit Card"
+      : order.paymentTerms.replace(/_/g, " ");
+
   return (
     <div className="space-y-8">
       {/* Breadcrumbs */}
@@ -105,7 +150,7 @@ export function RetailerOrderDetailView({ order }: OrderDetailViewProps) {
 
       {/* Details Grid: Left Info + Right Summary */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-        {/* Left Column: Destination, Terms & Items (7 cols) */}
+        {/* Left Column: Destination, Terms, Payments & Items (7 cols) */}
         <div className="lg:col-span-7 space-y-6">
           {/* Destination & Payment Terms Cards */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -130,23 +175,29 @@ export function RetailerOrderDetailView({ order }: OrderDetailViewProps) {
               )}
             </div>
 
-            {/* Commercial Terms */}
+            {/* Commercial Terms & Payment Info */}
             <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-5 shadow-xs space-y-2">
               <span className="text-[10px] uppercase font-bold tracking-wider text-zinc-400">
-                Commercial & Terms
+                Commercial Terms & Payment
               </span>
-              <div className="font-bold text-sm text-zinc-900 dark:text-white">
-                💳 {order.paymentTerms.replace(/_/g, " ")}
+              <div className="font-bold text-sm text-zinc-900 dark:text-white flex items-center gap-1.5">
+                <span>💳</span>
+                <span>{paymentMethodLabel}</span>
               </div>
-              <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                Payment Status:{" "}
-                <span className="font-semibold text-zinc-800 dark:text-zinc-200 uppercase text-[11px]">
-                  {order.paymentStatus}
-                </span>
-              </p>
-              <p className="text-[11px] text-zinc-400">
-                Invoice & payment settlement coordinated by K SELECT.
-              </p>
+              <div className="flex items-center gap-2 pt-1">
+                <span className="text-xs text-zinc-500">Status:</span>
+                {getPaymentStatusBadge(order.paymentStatus)}
+              </div>
+              {order.paymentDueDate && (
+                <p className="text-[11px] text-purple-600 dark:text-purple-400 font-medium">
+                  Payment Due Date: {new Date(order.paymentDueDate).toLocaleDateString()}
+                </p>
+              )}
+              {order.paidAt && (
+                <p className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">
+                  Paid on: {new Date(order.paidAt).toLocaleDateString()}
+                </p>
+              )}
             </div>
           </div>
 
@@ -159,6 +210,38 @@ export function RetailerOrderDetailView({ order }: OrderDetailViewProps) {
               <p className="text-zinc-500 dark:text-zinc-400 whitespace-pre-line">
                 {order.notes}
               </p>
+            </div>
+          )}
+
+          {/* Payment Transactions Log (if present) */}
+          {order.payments && order.payments.length > 0 && (
+            <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-5 shadow-xs space-y-3">
+              <h2 className="text-xs font-bold uppercase tracking-wider text-zinc-900 dark:text-white flex items-center gap-2">
+                <span>🧾</span>
+                <span>Payment Settlement History</span>
+              </h2>
+
+              <div className="divide-y divide-zinc-100 dark:divide-zinc-800 text-xs">
+                {order.payments.map((p) => (
+                  <div key={p.id} className="py-2.5 flex items-center justify-between">
+                    <div>
+                      <span className="font-bold text-zinc-900 dark:text-white capitalize">
+                        {p.paymentMethod} Payment
+                      </span>
+                      <p className="text-[11px] text-zinc-400">
+                        {new Date(p.createdAt).toLocaleDateString()} • {p.provider}
+                        {p.providerPaymentId ? ` (${p.providerPaymentId})` : ""}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <span className="font-bold text-zinc-900 dark:text-white">
+                        ${p.amount.toFixed(2)}
+                      </span>
+                      <div>{getPaymentStatusBadge(p.status)}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
 

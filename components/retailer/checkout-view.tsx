@@ -2,9 +2,12 @@
 
 import React, { useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useCart } from "@/components/retailer/cart-context";
 import { submitRetailerOrder } from "@/lib/retailer/orders";
+import {
+  RetailerPaymentEligibility,
+  RetailerPaymentMethod,
+} from "@/lib/retailer/payment-types";
 
 interface StoreOption {
   id: string;
@@ -19,36 +22,60 @@ interface StoreOption {
 interface CheckoutViewProps {
   companyName: string;
   userEmail: string;
-  paymentTerms: string;
-  termsApproved: boolean;
+  paymentEligibility: RetailerPaymentEligibility;
   stores: StoreOption[];
 }
 
 export function RetailerCheckoutView({
   companyName,
   userEmail,
-  paymentTerms,
-  termsApproved,
+  paymentEligibility,
   stores,
 }: CheckoutViewProps) {
-  const router = useRouter();
   const { items, subtotal, totalUnits, totalSkus, clearCart, isLoading } = useCart();
   const [selectedStoreId, setSelectedStoreId] = useState<string>(
     stores.length > 0 ? stores[0].id : ""
   );
+
+  // Default to first available payment method or 'terms' if approved
+  const defaultMethod =
+    paymentEligibility.availableMethods.find((m) => m.id === "terms")?.id ||
+    paymentEligibility.availableMethods[0]?.id ||
+    "card";
+
+  const [selectedPaymentMethod, setSelectedPaymentMethod] =
+    useState<RetailerPaymentMethod>(defaultMethod);
   const [notes, setNotes] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submittedOrder, setSubmittedOrder] = useState<{
     orderId: string;
     orderNumber: string;
+    paymentMethod: RetailerPaymentMethod;
+    termsLabel?: string;
   } | null>(null);
 
   const selectedStore = stores.find((s) => s.id === selectedStoreId) || stores[0] || null;
 
+  const currentMethodObj = paymentEligibility.availableMethods.find(
+    (m) => m.id === selectedPaymentMethod
+  );
+
+  const isExceedingCreditLimit =
+    selectedPaymentMethod === "terms" &&
+    paymentEligibility.creditLimit > 0 &&
+    subtotal > paymentEligibility.creditLimit;
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (items.length === 0) return;
+
+    if (isExceedingCreditLimit) {
+      setSubmitError(
+        `Order total ($${subtotal.toFixed(2)}) exceeds your approved credit line ($${paymentEligibility.creditLimit.toLocaleString()}). Please adjust quantity or select Prepaid Card/ACH.`
+      );
+      return;
+    }
 
     setIsSubmitting(true);
     setSubmitError(null);
@@ -56,6 +83,7 @@ export function RetailerCheckoutView({
     try {
       const result = await submitRetailerOrder({
         storeId: selectedStoreId || undefined,
+        paymentMethod: selectedPaymentMethod,
         notes: notes.trim() || undefined,
         items: items.map((i) => ({
           productId: i.productId,
@@ -68,6 +96,8 @@ export function RetailerCheckoutView({
         setSubmittedOrder({
           orderId: result.orderId,
           orderNumber: result.orderNumber,
+          paymentMethod: selectedPaymentMethod,
+          termsLabel: currentMethodObj?.termsLabel,
         });
       } else {
         setSubmitError(result.error || "Failed to submit order. Please try again.");
@@ -81,6 +111,7 @@ export function RetailerCheckoutView({
 
   // 1. Success Screen
   if (submittedOrder) {
+    const isTerms = submittedOrder.paymentMethod === "terms";
     return (
       <div className="max-w-2xl mx-auto py-8 sm:py-12 space-y-6 text-center">
         <div className="rounded-3xl border border-emerald-500/20 bg-gradient-to-b from-emerald-500/5 to-transparent dark:from-emerald-500/10 p-8 sm:p-12 shadow-sm space-y-6">
@@ -113,9 +144,19 @@ export function RetailerCheckoutView({
               </div>
             )}
             <div className="flex justify-between border-b border-zinc-100 dark:border-zinc-800 pb-2">
+              <span className="text-zinc-500">Payment Arrangement:</span>
+              <span className="font-semibold text-zinc-900 dark:text-white capitalize">
+                {isTerms
+                  ? `${submittedOrder.termsLabel || "Net Terms"} (Formal Invoice Arranged)`
+                  : submittedOrder.paymentMethod === "ach"
+                  ? "ACH Bank Transfer (Invoice Settlement)"
+                  : "Credit / Debit Card (Prepaid Settlement)"}
+              </span>
+            </div>
+            <div className="flex justify-between border-b border-zinc-100 dark:border-zinc-800 pb-2">
               <span className="text-zinc-500">Payment Status:</span>
-              <span className="font-semibold text-amber-600 dark:text-amber-400">
-                Unpaid (Terms Invoice Arranged by K SELECT)
+              <span className="font-bold text-amber-600 dark:text-amber-400">
+                Unpaid (Pending Dispatch & Fulfillment)
               </span>
             </div>
             <div className="flex justify-between items-baseline pt-1">
@@ -174,10 +215,10 @@ export function RetailerCheckoutView({
           </Link>
         </nav>
         <h1 className="text-2xl sm:text-3xl font-bold text-zinc-900 dark:text-white tracking-tight">
-          Order Review & Confirmation
+          Order Review & Payment Setup
         </h1>
         <p className="text-xs sm:text-sm text-zinc-500 dark:text-zinc-400 mt-1">
-          Review destination store, approved terms, and snapshot pricing before placing your order.
+          Review destination store location, select approved payment method/terms, and snapshot wholesale pricing.
         </p>
       </div>
 
@@ -190,13 +231,13 @@ export function RetailerCheckoutView({
 
       {/* Two Columns */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-        {/* Left Column: Delivery Destination & Terms Review (7 cols) */}
+        {/* Left Column: Delivery Destination, Payment Selection, Items Review (7 cols) */}
         <div className="lg:col-span-7 space-y-6">
           {/* 1. Delivery Destination */}
           <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-5 sm:p-6 shadow-xs space-y-4">
             <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-3">
               <h2 className="text-sm font-bold uppercase tracking-wider text-zinc-900 dark:text-white">
-                1. Delivery Destination
+                1. Delivery Destination Store
               </h2>
               <span className="text-xs font-medium text-zinc-500">
                 {companyName}
@@ -249,29 +290,93 @@ export function RetailerCheckoutView({
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
                 rows={2}
-                placeholder="e.g. Receiving dock instructions, preferred delivery days, store PO #..."
+                placeholder="e.g. Receiving dock instructions, preferred delivery schedule, store PO #..."
                 className="w-full px-3.5 py-2 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-xs text-zinc-900 dark:text-white placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
               />
             </div>
           </div>
 
-          {/* 2. Commercial Terms Notice */}
+          {/* 2. Payment Method & Terms Selection */}
           <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-5 sm:p-6 shadow-xs space-y-4">
-            <h2 className="text-sm font-bold uppercase tracking-wider text-zinc-900 dark:text-white border-b border-zinc-100 dark:border-zinc-800 pb-3">
-              2. Commercial Terms & Payment Status
-            </h2>
+            <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-3">
+              <h2 className="text-sm font-bold uppercase tracking-wider text-zinc-900 dark:text-white">
+                2. Authorized Payment Method
+              </h2>
+              <span className="text-[11px] text-zinc-500 font-medium">
+                Approved terms & methods
+              </span>
+            </div>
 
-            <div className="flex items-start gap-3 p-4 rounded-xl bg-indigo-50/60 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900/60 text-xs">
-              <span className="text-lg">💳</span>
-              <div className="space-y-1">
-                <div className="font-bold text-zinc-900 dark:text-white">
-                  Payment Arrangement: {paymentTerms.replace(/_/g, " ")}
+            <div className="space-y-3">
+              {paymentEligibility.availableMethods.length === 0 ? (
+                <div className="p-4 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-xs text-amber-700 dark:text-amber-300">
+                  No payment methods are currently enabled for your account. Please contact K SELECT Admin support.
                 </div>
-                <p className="text-zinc-600 dark:text-zinc-400 leading-relaxed">
-                  No payment method will be charged at this moment. Upon order submission, K SELECT Operations will confirm inventory allocation and provide the formal B2B invoice according to your approved credit terms.
+              ) : (
+                paymentEligibility.availableMethods.map((method) => {
+                  const isSelected = selectedPaymentMethod === method.id;
+                  return (
+                    <label
+                      key={method.id}
+                      className={`block p-4 rounded-2xl border transition-all cursor-pointer ${
+                        isSelected
+                          ? "border-indigo-600 bg-indigo-50/50 dark:bg-indigo-950/40 ring-2 ring-indigo-600/20 shadow-xs"
+                          : "border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700 bg-white dark:bg-zinc-900"
+                      }`}
+                    >
+                      <div className="flex items-start gap-3.5">
+                        <input
+                          type="radio"
+                          name="paymentMethod"
+                          value={method.id}
+                          checked={isSelected}
+                          onChange={() => setSelectedPaymentMethod(method.id)}
+                          className="mt-1 h-4 w-4 text-indigo-600 border-zinc-300 focus:ring-indigo-500"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="font-bold text-xs sm:text-sm text-zinc-900 dark:text-white">
+                              {method.label}
+                            </span>
+                            {method.badge && (
+                              <span
+                                className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
+                                  method.isTerms
+                                    ? "bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-800"
+                                    : "bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 border-zinc-200 dark:border-zinc-700"
+                                }`}
+                              >
+                                {method.badge}
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5 leading-relaxed">
+                            {method.description}
+                          </p>
+                        </div>
+                      </div>
+                    </label>
+                  );
+                })
+              )}
+            </div>
+
+            {/* Credit Limit & Terms Notice */}
+            {selectedPaymentMethod === "terms" && (
+              <div className="mt-3 p-3.5 rounded-xl bg-purple-50/70 dark:bg-purple-950/30 border border-purple-200/80 dark:border-purple-800/60 text-xs space-y-1.5">
+                <div className="flex items-center justify-between font-bold text-purple-900 dark:text-purple-200">
+                  <span>🏢 Account Credit Line</span>
+                  <span>
+                    {paymentEligibility.creditLimit > 0
+                      ? `$${paymentEligibility.creditLimit.toLocaleString()} USD`
+                      : "Uncapped Authorized Credit"}
+                  </span>
+                </div>
+                <p className="text-[11px] text-purple-700 dark:text-purple-300 leading-relaxed">
+                  No upfront charge at checkout. A formal commercial invoice will be issued upon dispatch with payment due according to your {currentMethodObj?.termsLabel || "Net Terms"}.
                 </p>
               </div>
-            </div>
+            )}
           </div>
 
           {/* 3. Items Review Table */}
@@ -312,6 +417,12 @@ export function RetailerCheckoutView({
 
             <div className="space-y-3 text-xs">
               <div className="flex justify-between text-zinc-600 dark:text-zinc-400">
+                <span>Selected Method:</span>
+                <span className="font-semibold text-zinc-900 dark:text-white">
+                  {currentMethodObj?.label || "Credit / Debit Card"}
+                </span>
+              </div>
+              <div className="flex justify-between text-zinc-600 dark:text-zinc-400">
                 <span>Total SKUs:</span>
                 <span className="font-semibold text-zinc-900 dark:text-white">{totalSkus}</span>
               </div>
@@ -338,7 +449,7 @@ export function RetailerCheckoutView({
             <div className="pt-4 border-t border-zinc-200 dark:border-zinc-800 flex justify-between items-baseline">
               <div>
                 <div className="text-xs font-bold text-zinc-900 dark:text-white">Total Amount</div>
-                <div className="text-[10px] text-zinc-400">Wholesale B2B Total</div>
+                <div className="text-[10px] text-zinc-400">Authoritative B2B Total</div>
               </div>
               <div className="text-2xl font-black text-zinc-900 dark:text-white">
                 ${subtotal.toFixed(2)}
@@ -348,13 +459,13 @@ export function RetailerCheckoutView({
             <div className="pt-2 space-y-3">
               <button
                 type="submit"
-                disabled={isSubmitting || items.length === 0}
+                disabled={isSubmitting || items.length === 0 || isExceedingCreditLimit}
                 className="w-full py-4 px-6 rounded-xl font-bold text-sm bg-zinc-900 dark:bg-white text-white dark:text-zinc-950 hover:opacity-95 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-md cursor-pointer flex items-center justify-center gap-2"
               >
                 {isSubmitting ? (
                   <>
                     <span className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                    <span>Placing Your Order...</span>
+                    <span>Submitting Order...</span>
                   </>
                 ) : (
                   <>

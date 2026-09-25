@@ -27,6 +27,11 @@ interface RetailerDetailViewProps {
       payment_terms: string;
       payment_terms_custom?: string;
       credit_limit: number;
+      payment_method_card_enabled?: boolean;
+      payment_method_ach_enabled?: boolean;
+      terms_enabled?: boolean;
+      approved_terms?: string;
+      terms_status?: string;
       resale_certificate_number?: string;
       internal_note?: string;
     };
@@ -75,10 +80,28 @@ export function RetailerDetailView({ data }: RetailerDetailViewProps) {
 
   // Commercial Terms State
   const [status, setStatus] = useState(data.profile?.status || "active");
-  const [paymentTerms, setPaymentTerms] = useState(data.profile?.payment_terms || "PREPAID_CARD");
+  const [cardEnabled, setCardEnabled] = useState(
+    data.profile?.payment_method_card_enabled ?? true
+  );
+  const [achEnabled, setAchEnabled] = useState(
+    data.profile?.payment_method_ach_enabled ?? true
+  );
+  const [termsEnabled, setTermsEnabled] = useState(
+    data.profile?.terms_enabled ?? false
+  );
+  const [approvedTerms, setApprovedTerms] = useState(
+    data.profile?.approved_terms || "prepaid"
+  );
+  const [termsStatus, setTermsStatus] = useState(
+    data.profile?.terms_status || "pending"
+  );
   const [creditLimit, setCreditLimit] = useState(data.profile?.credit_limit || 0);
-  const [resaleCert, setResaleCert] = useState(data.profile?.resale_certificate_number || "");
-  const [internalNote, setInternalNote] = useState(data.profile?.internal_note || "");
+  const [resaleCert, setResaleCert] = useState(
+    data.profile?.resale_certificate_number || ""
+  );
+  const [internalNote, setInternalNote] = useState(
+    data.profile?.internal_note || ""
+  );
   const [saveSuccess, setSaveSuccess] = useState(false);
 
   // Add Store Modal
@@ -95,7 +118,9 @@ export function RetailerDetailView({ data }: RetailerDetailViewProps) {
   const [inviteName, setInviteName] = useState("");
   const [inviteRole, setInviteRole] = useState<RetailerRole>("store_manager");
   const [inviteAllStores, setInviteAllStores] = useState(true);
-  const [inviteStoreIds, setInviteStoreIds] = useState<string[]>(data.stores.map((s) => s.id));
+  const [inviteStoreIds, setInviteStoreIds] = useState<string[]>(
+    data.stores.map((s) => s.id)
+  );
 
   const handleSaveTerms = (e: React.FormEvent) => {
     e.preventDefault();
@@ -104,7 +129,11 @@ export function RetailerDetailView({ data }: RetailerDetailViewProps) {
     startTransition(async () => {
       const res = await updateRetailerTermsAction(data.company.id, {
         status,
-        paymentTerms,
+        paymentMethodCardEnabled: cardEnabled,
+        paymentMethodAchEnabled: achEnabled,
+        termsEnabled,
+        approvedTerms,
+        termsStatus,
         creditLimit: Number(creditLimit) || 0,
         resaleCertificateNumber: resaleCert.trim() || undefined,
         internalNote: internalNote.trim() || undefined,
@@ -224,7 +253,7 @@ export function RetailerDetailView({ data }: RetailerDetailViewProps) {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left Column: Commercial Terms Editor */}
+        {/* Left Column: Commercial Terms & Payment Methods Editor */}
         <div className="lg:col-span-1 space-y-6">
           <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-5 shadow-xs space-y-4">
             <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-3">
@@ -239,7 +268,7 @@ export function RetailerDetailView({ data }: RetailerDetailViewProps) {
               )}
             </div>
 
-            <form onSubmit={handleSaveTerms} className="space-y-3 text-xs">
+            <form onSubmit={handleSaveTerms} className="space-y-4 text-xs">
               <div>
                 <label className="block font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
                   Account Status
@@ -256,22 +285,79 @@ export function RetailerDetailView({ data }: RetailerDetailViewProps) {
                 </select>
               </div>
 
-              <div>
-                <label className="block font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
-                  Payment Terms
+              {/* Payment Methods Checkboxes */}
+              <div className="p-3.5 rounded-xl bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 space-y-2">
+                <span className="font-bold text-zinc-900 dark:text-white block mb-1">
+                  Allowed Payment Methods
+                </span>
+                <label className="flex items-center gap-2 text-zinc-700 dark:text-zinc-300 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={cardEnabled}
+                    onChange={(e) => setCardEnabled(e.target.checked)}
+                    className="rounded border-zinc-300 text-indigo-600 focus:ring-indigo-500"
+                  />
+                  <span>Credit / Debit Card (Prepaid)</span>
                 </label>
-                <select
-                  value={paymentTerms}
-                  onChange={(e) => setPaymentTerms(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-white focus:outline-none"
-                >
-                  <option value="PREPAID_CARD">Prepaid (Credit Card)</option>
-                  <option value="PREPAID_ACH">Prepaid (ACH / Bank)</option>
-                  <option value="NET_30">Net 30 Days</option>
-                  <option value="NET_45">Net 45 Days</option>
-                  <option value="NET_60">Net 60 Days</option>
-                </select>
+                <label className="flex items-center gap-2 text-zinc-700 dark:text-zinc-300 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={achEnabled}
+                    onChange={(e) => setAchEnabled(e.target.checked)}
+                    className="rounded border-zinc-300 text-indigo-600 focus:ring-indigo-500"
+                  />
+                  <span>ACH Direct Bank Transfer (Prepaid)</span>
+                </label>
+                <label className="flex items-center gap-2 text-zinc-700 dark:text-zinc-300 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={termsEnabled}
+                    onChange={(e) => setTermsEnabled(e.target.checked)}
+                    className="rounded border-zinc-300 text-indigo-600 focus:ring-indigo-500"
+                  />
+                  <span className="font-semibold text-purple-700 dark:text-purple-300">
+                    Net Terms (B2B Credit Line)
+                  </span>
+                </label>
               </div>
+
+              {/* Net Terms Approval Controls */}
+              {termsEnabled && (
+                <div className="p-3.5 rounded-xl bg-purple-50/60 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-800/60 space-y-3">
+                  <div>
+                    <label className="block font-semibold text-purple-900 dark:text-purple-200 mb-1">
+                      Approved Terms
+                    </label>
+                    <select
+                      value={approvedTerms}
+                      onChange={(e) => setApprovedTerms(e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg border border-purple-200 dark:border-purple-800 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white focus:outline-none"
+                    >
+                      <option value="net15">Net 15 Days</option>
+                      <option value="net30">Net 30 Days</option>
+                      <option value="net45">Net 45 Days</option>
+                      <option value="net60">Net 60 Days</option>
+                      <option value="prepaid">Prepaid Only</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold text-purple-900 dark:text-purple-200 mb-1">
+                      Terms Review Status
+                    </label>
+                    <select
+                      value={termsStatus}
+                      onChange={(e) => setTermsStatus(e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg border border-purple-200 dark:border-purple-800 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white focus:outline-none"
+                    >
+                      <option value="approved">Approved (Active)</option>
+                      <option value="pending">Pending Review</option>
+                      <option value="suspended">Suspended</option>
+                      <option value="rejected">Rejected</option>
+                    </select>
+                  </div>
+                </div>
+              )}
 
               <div>
                 <label className="block font-semibold text-zinc-700 dark:text-zinc-300 mb-1">

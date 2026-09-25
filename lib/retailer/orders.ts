@@ -4,13 +4,18 @@ import { revalidatePath } from "next/cache";
 import { verifyRetailerSession } from "@/lib/auth/dal";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { resolveEffectiveSku } from "@/lib/product/types";
+import { getRetailerPaymentEligibility, getOrderPayments } from "@/lib/retailer/payment-actions";
+import { RetailerPaymentMethod, RetailerPaymentRecord } from "@/lib/retailer/payment-types";
 
 export interface RetailerOrderSummary {
   id: string;
   orderNumber: string;
   orderStatus: string;
   paymentStatus: string;
+  paymentMethod: RetailerPaymentMethod | null;
   paymentTerms: string;
+  paymentDueDate: string | null;
+  paidAt: string | null;
   totalAmount: number;
   subtotalAmount: number;
   totalItemsCount: number;
@@ -44,11 +49,15 @@ export interface RetailerOrderDetail extends RetailerOrderSummary {
   shippingPhone: string | null;
   recipientName: string | null;
   notes: string | null;
+  paymentProviderRef: string | null;
+  paymentNotes: string | null;
   items: RetailerOrderItemDetail[];
+  payments: RetailerPaymentRecord[];
 }
 
 export interface SubmitOrderPayload {
   storeId?: string;
+  paymentMethod?: RetailerPaymentMethod;
   notes?: string;
   items: Array<{
     productId: string;
@@ -61,6 +70,102 @@ export interface SubmitOrderResult {
   orderId?: string;
   orderNumber?: string;
   error?: string;
+}
+
+/**
+ * Authoritative Server-side Retailer Wholesale Price Resolver
+ * Hierarchy:
+ * 1. Active Trading Promo Wholesale (if within valid date range)
+ * 2. Trading Wholesale
+ * 3. Approved legacy product_curations.wholesale_price
+ * 4. Otherwise unavailable (FOB price_usd_fob is NEVER used!)
+ */
+function resolveAuthoritativeWholesalePrice(prod: {
+  price_additional_info?: any;
+  product_curations?: any;
+  trading_wholesale_price?: number | null;
+  trading_promo_wholesale_price?: number | null;
+  trading_promo_start_date?: string | null;
+  trading_promo_end_date?: string | null;
+  estimated_retail_price?: number | null;
+}): {
+  wholesalePrice: number;
+  isPromo: boolean;
+  srp: number | null;
+  isOrderable: boolean;
+} {
+  const info = (prod.price_additional_info as any) || {};
+  const overrides = info.trading_overrides || {};
+  const curation = Array.isArray(prod.product_curations)
+    ? prod.product_curations[0]
+    : prod.product_curations;
+
+  const now = new Date();
+
+  // 1. Check Promo Wholesale Price
+  const promoPrice = Number(
+    overrides.promo_wholesale_price || (prod as any).trading_promo_wholesale_price || 0
+  );
+  const promoStart = overrides.promo_start_date || (prod as any).trading_promo_start_date;
+  const promoEnd = overrides.promo_end_date || (prod as any).trading_promo_end_date;
+
+  if (promoPrice > 0) {
+    const isStartValid = !promoStart || new Date(promoStart) <= now;
+    const isEndValid = !promoEnd || new Date(promoEnd) >= now;
+    if (isStartValid && isEndValid) {
+      return {
+        wholesalePrice: promoPrice,
+        isPromo: true,
+        srp:
+          Number(
+            overrides.srp_price ||
+              curation?.suggest_retail_price ||
+              prod.estimated_retail_price ||
+              0
+          ) || null,
+        isOrderable: true,
+      };
+    }
+  }
+
+  // 2. Check Standard Trading Wholesale Price
+  const tradingWholesale = Number(
+    overrides.wholesale_price || (prod as any).trading_wholesale_price || 0
+  );
+  if (tradingWholesale > 0) {
+    return {
+      wholesalePrice: tradingWholesale,
+      isPromo: false,
+      srp:
+        Number(
+          overrides.srp_price ||
+            curation?.suggest_retail_price ||
+            prod.estimated_retail_price ||
+            0
+        ) || null,
+      isOrderable: true,
+    };
+  }
+
+  // 3. Check Legacy Approved Wholesale Price from product_curations
+  const curationWholesale = Number(curation?.wholesale_price || 0);
+  if (curationWholesale > 0) {
+    return {
+      wholesalePrice: curationWholesale,
+      isPromo: false,
+      srp:
+        Number(curation?.suggest_retail_price || prod.estimated_retail_price || 0) || null,
+      isOrderable: true,
+    };
+  }
+
+  // 4. Confidential FOB (price_usd_fob) is NEVER used as wholesale selling price!
+  return {
+    wholesalePrice: 0,
+    isPromo: false,
+    srp: null,
+    isOrderable: false,
+  };
 }
 
 /**
@@ -113,16 +218,55 @@ export async function submitRetailerOrder(
       };
     }
 
-    // Fetch Profile Payment Terms
-    const { data: retailerProfile } = await adminClient
-      .from("retailer_profiles")
-      .select("payment_terms, terms_approved_by_admin")
-      .eq("company_id", companyId)
-      .maybeSingle();
+    // 2. Validate Payment Eligibility & Terms
+    const eligibility = await getRetailerPaymentEligibility(companyId);
+    let chosenPaymentMethod: RetailerPaymentMethod = payload.paymentMethod || "card";
 
-    const paymentTerms = retailerProfile?.payment_terms || "PREPAID_CARD";
+    // Validate that the chosen payment method is allowed for this retailer
+    const isMethodAllowed = eligibility.availableMethods.some(
+      (m) => m.id === chosenPaymentMethod
+    );
 
-    // 2. Validate Store & Address
+    if (!isMethodAllowed) {
+      // Fall back to first available method if provided method is disallowed
+      if (eligibility.availableMethods.length > 0) {
+        chosenPaymentMethod = eligibility.availableMethods[0].id;
+      } else {
+        chosenPaymentMethod = "card";
+      }
+    }
+
+    // Determine effective payment terms and due date
+    let paymentTerms = "PREPAID";
+    let paymentDueDate: string | null = null;
+
+    if (chosenPaymentMethod === "terms") {
+      if (!eligibility.termsEnabled || eligibility.termsStatus !== "approved") {
+        return {
+          success: false,
+          error: "Payment terms are not authorized or approved for your account. Please select Card or ACH.",
+        };
+      }
+      paymentTerms = eligibility.approvedTerms.toUpperCase();
+
+      // Calculate preliminary due date based on approved terms
+      const termDaysMap: Record<string, number> = {
+        net15: 15,
+        net30: 30,
+        net45: 45,
+        net60: 60,
+      };
+      const days = termDaysMap[eligibility.approvedTerms] || 30;
+      const due = new Date();
+      due.setDate(due.getDate() + days);
+      paymentDueDate = due.toISOString();
+    } else if (chosenPaymentMethod === "card") {
+      paymentTerms = "PREPAID_CARD";
+    } else if (chosenPaymentMethod === "ach") {
+      paymentTerms = "PREPAID_ACH";
+    }
+
+    // 3. Validate Store & Address
     let storeId: string | null = payload.storeId || null;
     let storeData: any = null;
 
@@ -170,7 +314,7 @@ export async function submitRetailerOrder(
       }
     }
 
-    // 3. Fetch Real Products from Product Master & Validate
+    // 4. Fetch Real Products from Product Master & Validate
     const productIds = payload.items.map((i) => i.productId);
     const { data: dbProducts, error: prodErr } = await adminClient
       .from("products")
@@ -203,7 +347,7 @@ export async function submitRetailerOrder(
 
     const dbProductMap = new Map(dbProducts.map((p) => [p.id, p]));
 
-    // 4. Validate Quantities and Calculate Snapshots
+    // 5. Validate Quantities and Calculate Authoritative Server Snapshots
     let subtotalAmount = 0;
     let totalItemsCount = 0;
     const validatedLines: Array<{
@@ -230,10 +374,6 @@ export async function submitRetailerOrder(
       }
 
       const overrides = info.admin_overrides || {};
-      const curation = Array.isArray(prod.product_curations)
-        ? prod.product_curations[0]
-        : prod.product_curations;
-
       const brand = (prod.brands as any) || {};
       const brandName = brand.name || "K SELECT Brand";
       const sku =
@@ -251,25 +391,19 @@ export async function submitRetailerOrder(
         };
       }
 
-      // Snapshot Wholesale strictly from product_curations (Confidential FOB is NEVER used)
-      let wholesalePrice = 0;
-      if (curation?.wholesale_price && Number(curation.wholesale_price) > 0) {
-        wholesalePrice = Number(curation.wholesale_price);
-      }
+      // Authoritative Wholesale Price Resolution (Never FOB)
+      const priceResolution = resolveAuthoritativeWholesalePrice(prod);
+      const wholesalePrice = priceResolution.wholesalePrice;
 
-      if (wholesalePrice <= 0) {
+      if (!priceResolution.isOrderable || wholesalePrice <= 0) {
         return {
           success: false,
           error: `Product "${prod.name}" has no valid wholesale pricing configured and cannot be ordered.`,
         };
       }
 
-      let msrp: number | null = null;
-      if (curation?.suggest_retail_price && Number(curation.suggest_retail_price) > 0) {
-        msrp = Number(curation.suggest_retail_price);
-      } else if (prod.estimated_retail_price && Number(prod.estimated_retail_price) > 0) {
-        msrp = Number(prod.estimated_retail_price);
-      } else if (wholesalePrice > 0) {
+      let msrp: number | null = priceResolution.srp;
+      if (!msrp || msrp <= 0) {
         msrp = Number((wholesalePrice * 2.0).toFixed(2));
       }
 
@@ -291,12 +425,14 @@ export async function submitRetailerOrder(
     }
 
     subtotalAmount = Number(subtotalAmount.toFixed(2));
-    const totalAmount = subtotalAmount; // Tax and shipping calculated at dispatch
+    const totalAmount = subtotalAmount;
 
-    // 5. Generate Concurrency-Safe Order Number
+    // 6. Generate Concurrency-Safe Order Number
     let orderNumber = `KSR-${new Date().getFullYear()}-${Date.now().toString().slice(-6)}`;
     try {
-      const { data: generatedNo, error: rpcErr } = await adminClient.rpc("generate_retailer_order_number");
+      const { data: generatedNo, error: rpcErr } = await adminClient.rpc(
+        "generate_retailer_order_number"
+      );
       if (!rpcErr && generatedNo) {
         orderNumber = generatedNo;
       }
@@ -304,7 +440,7 @@ export async function submitRetailerOrder(
       console.warn("Could not generate order number via sequence, fallback used:", rpcEx);
     }
 
-    // 6. Insert into retailer_orders
+    // 7. Insert into retailer_orders
     const { data: orderRow, error: orderErr } = await adminClient
       .from("retailer_orders")
       .insert({
@@ -314,10 +450,12 @@ export async function submitRetailerOrder(
         store_id: storeId,
         order_status: "submitted",
         payment_status: "unpaid",
+        payment_method: chosenPaymentMethod,
         payment_terms: paymentTerms,
+        payment_due_date: paymentDueDate,
         subtotal_amount: subtotalAmount,
-        tax_amount: 0.00,
-        shipping_amount: 0.00,
+        tax_amount: 0.0,
+        shipping_amount: 0.0,
         total_amount: totalAmount,
         total_items_count: totalItemsCount,
         total_skus_count: validatedLines.length,
@@ -338,7 +476,7 @@ export async function submitRetailerOrder(
       return { success: false, error: orderErr?.message || "Failed to create order record." };
     }
 
-    // 7. Insert into retailer_order_items
+    // 8. Insert into retailer_order_items
     const lineItemsToInsert = validatedLines.map((line) => ({
       order_id: orderRow.id,
       product_id: line.productId,
@@ -361,9 +499,10 @@ export async function submitRetailerOrder(
       return { success: false, error: "Failed to attach items to order." };
     }
 
-    // 8. Revalidate paths
+    // 9. Revalidate paths
     revalidatePath("/retailer/orders");
     revalidatePath("/orders");
+    revalidatePath("/retailer/checkout");
 
     return {
       success: true,
@@ -403,7 +542,10 @@ export async function getRetailerOrders(): Promise<RetailerOrderSummary[]> {
         order_number,
         order_status,
         payment_status,
+        payment_method,
         payment_terms,
+        payment_due_date,
+        paid_at,
         total_amount,
         subtotal_amount,
         total_items_count,
@@ -429,7 +571,10 @@ export async function getRetailerOrders(): Promise<RetailerOrderSummary[]> {
       orderNumber: o.order_number,
       orderStatus: o.order_status,
       paymentStatus: o.payment_status,
+      paymentMethod: (o.payment_method as RetailerPaymentMethod) || null,
       paymentTerms: o.payment_terms || "PREPAID",
+      paymentDueDate: o.payment_due_date,
+      paidAt: o.paid_at,
       totalAmount: Number(o.total_amount),
       subtotalAmount: Number(o.subtotal_amount),
       totalItemsCount: o.total_items_count,
@@ -446,7 +591,7 @@ export async function getRetailerOrders(): Promise<RetailerOrderSummary[]> {
 }
 
 /**
- * Fetch detailed order and its snapshotted items
+ * Fetch detailed order, snapshotted items, and payment transaction history
  */
 export async function getRetailerOrderDetail(
   orderIdentifier: string
@@ -472,7 +617,13 @@ export async function getRetailerOrderDetail(
         order_number,
         order_status,
         payment_status,
+        payment_method,
         payment_terms,
+        payment_due_date,
+        paid_at,
+        payment_provider,
+        payment_provider_ref,
+        payment_notes,
         subtotal_amount,
         tax_amount,
         shipping_amount,
@@ -536,15 +687,24 @@ export async function getRetailerOrderDetail(
       unitMsrp: item.unit_msrp ? Number(item.unit_msrp) : null,
       quantity: item.quantity,
       casePackQty: item.case_pack_qty,
+      line_total: Number(item.line_total),
       lineTotal: Number(item.line_total),
     }));
+
+    // Fetch payments history
+    const payments = await getOrderPayments(order.id);
 
     return {
       id: order.id,
       orderNumber: order.order_number,
       orderStatus: order.order_status,
       paymentStatus: order.payment_status,
+      paymentMethod: (order.payment_method as RetailerPaymentMethod) || null,
       paymentTerms: order.payment_terms || "PREPAID",
+      paymentDueDate: order.payment_due_date,
+      paidAt: order.paid_at,
+      paymentProviderRef: order.payment_provider_ref,
+      paymentNotes: order.payment_notes,
       totalAmount: Number(order.total_amount),
       subtotalAmount: Number(order.subtotal_amount),
       taxAmount: Number(order.tax_amount || 0),
@@ -563,6 +723,7 @@ export async function getRetailerOrderDetail(
       storeId: order.store_id,
       storeName: (order.stores as any)?.name || "Main Store",
       items,
+      payments,
     };
   } catch (err) {
     console.error("getRetailerOrderDetail exception:", err);
