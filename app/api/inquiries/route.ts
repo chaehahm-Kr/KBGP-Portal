@@ -113,6 +113,67 @@ export async function POST(request: Request) {
     );
   }
 
+  // 1. Retailer Application Branch (if partnerType/partner_type === 'retailer' or retailer mode)
+  const isRetailerPayload =
+    parsedInput?.partnerType === "retailer" ||
+    parsedInput?.partner_type === "retailer" ||
+    parsedInput?.type === "retailer" ||
+    (parsedInput?.companyName && parsedInput?.contactName && parsedInput?.email && (!parsedInput?.products || parsedInput?.products.length === 0));
+
+  if (isRetailerPayload) {
+    const admin = createAdminClient();
+    const companyName = String(parsedInput.companyName || "").trim();
+    const contactName = String(parsedInput.contactName || "").trim();
+    const email = String(parsedInput.email || "").trim().toLowerCase();
+    const phone = String(parsedInput.phone || "").trim();
+    const address = String(parsedInput.companyAddress || parsedInput.streetAddress || "").trim();
+
+    if (!companyName || !contactName || !email) {
+      return NextResponse.json(
+        { ok: false, errors: ["Company Name, Owner/Contact Name, and Email are required for Retailer Applications."] },
+        { status: 422 }
+      );
+    }
+
+    let applicationNumber = `APP-RET-${Date.now().toString().slice(-6)}`;
+    try {
+      const { data: numberResult } = await admin.rpc("generate_application_number");
+      if (numberResult) applicationNumber = numberResult;
+    } catch (e) {}
+
+    const { data: appRow, error: appError } = await admin
+      .from("applications")
+      .insert({
+        application_number: applicationNumber,
+        partner_type: "retailer",
+        entry_mode: "public_application",
+        status: "submitted",
+        applicant_company_name: companyName,
+        applicant_contact_name: contactName,
+        applicant_contact_email: email,
+        applicant_contact_phone: phone,
+        applicant_address: { address, city: parsedInput.city || "", state: parsedInput.state || "", zip: parsedInput.zipCode || "" },
+        eligibility_responses: parsedInput.readinessAnswers || parsedInput.eligibilityResponses || [],
+        self_check_answers: Array.isArray(parsedInput.readinessAnswers)
+          ? parsedInput.readinessAnswers.map((r: any) => r.response === "ready")
+          : [true, true, true, true],
+        motivation_note: parsedInput.comments || "Public Retailer Application via K SELECT HUB",
+        submitted_at: new Date().toISOString(),
+      })
+      .select("id")
+      .single();
+
+    if (appError || !appRow) {
+      console.error("[inquiries] Retailer application insert failed:", appError);
+      return NextResponse.json(
+        { ok: false, errors: ["신청서 저장에 실패했습니다. 다시 시도해 주세요."] },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json({ ok: true, id: applicationNumber, applicationId: appRow.id });
+  }
+
   const result = payloadSchema.safeParse(parsedInput);
   if (!result.success) {
     return NextResponse.json(
