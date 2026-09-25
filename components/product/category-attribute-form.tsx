@@ -1099,7 +1099,8 @@ export const CategoryAttributeForm = forwardRef<CategoryAttributeFormHandle, Cat
               placeholder="숫자 입력"
               value={val === "NA" ? "" : (val ?? "")}
               disabled={!isEditable || saving || val === "NA"}
-              onChange={(e) => updateValue(attr.code, e.target.value === "" ? "" : Number(e.target.value))}
+              onFocus={(e) => e.target.select()}
+              onChange={(e) => updateValue(attr.code, e.target.value)}
               className="bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 text-zinc-900 dark:text-zinc-100 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:bg-white dark:focus:bg-zinc-950 focus:border-zinc-900 dark:focus:border-zinc-100 disabled:opacity-60 w-32"
             />
             {attr.inputType === "NUMBER_UNIT" && attr.unitSet && (
@@ -1132,10 +1133,11 @@ export const CategoryAttributeForm = forwardRef<CategoryAttributeFormHandle, Cat
               type="number"
               step="any"
               placeholder="최소"
-              value={val === "NA" ? "" : (Array.isArray(val) ? (val[0] ?? "") : (typeof val === "number" ? val : ""))}
+              value={val === "NA" ? "" : (Array.isArray(val) ? (val[0] ?? "") : (val ?? ""))}
               disabled={!isEditable || saving || val === "NA"}
+              onFocus={(e) => e.target.select()}
               onChange={(e) => {
-                const minVal = e.target.value === "" ? "" : (isNaN(Number(e.target.value)) ? e.target.value : Number(e.target.value));
+                const minVal = e.target.value;
                 const maxVal = Array.isArray(val) ? (val[1] ?? "") : "";
                 updateValue(attr.code, [minVal, maxVal]);
               }}
@@ -1149,9 +1151,10 @@ export const CategoryAttributeForm = forwardRef<CategoryAttributeFormHandle, Cat
               placeholder="최대"
               value={val === "NA" ? "" : (Array.isArray(val) ? (val[1] ?? "") : "")}
               disabled={!isEditable || saving || val === "NA"}
+              onFocus={(e) => e.target.select()}
               onChange={(e) => {
-                const maxVal = e.target.value === "" ? "" : (isNaN(Number(e.target.value)) ? e.target.value : Number(e.target.value));
-                const minVal = Array.isArray(val) ? (val[0] ?? "") : (typeof val === "number" ? val : "");
+                const maxVal = e.target.value;
+                const minVal = Array.isArray(val) ? (val[0] ?? "") : (val ?? "");
                 updateValue(attr.code, [minVal, maxVal]);
               }}
               className="bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 text-zinc-900 dark:text-zinc-100 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:bg-white dark:focus:bg-zinc-950 focus:border-zinc-900 dark:focus:border-zinc-100 disabled:opacity-60 w-24"
@@ -1170,7 +1173,7 @@ export const CategoryAttributeForm = forwardRef<CategoryAttributeFormHandle, Cat
                   onChange={(e) => {
                     updateValue(attr.code, e.target.checked ? "NA" : ["", ""]);
                   }}
-                  className="rounded text-indigo-650 focus:ring-indigo-500 bg-white dark:bg-zinc-950 border-zinc-300 dark:border-zinc-800"
+                  className="rounded text-indigo-650 focus:ring-indigo-500 bg-white dark:bg-zinc-300 dark:border-zinc-800"
                 />
                 해당 없음
               </label>

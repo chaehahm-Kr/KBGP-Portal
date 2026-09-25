@@ -331,7 +331,7 @@ export function ProductDetailTabs({
   const [c40Cbm, setC40Cbm] = useState(product.container_40fthc_cbm?.toString() || "");
 
   // FOB price state for dynamic discount calculations
-  const [priceUsdFobState, setPriceUsdFobState] = useState(product.price_usd_fob || 0);
+  const [priceUsdFobState, setPriceUsdFobState] = useState<number | string>(product.price_usd_fob ? product.price_usd_fob.toString() : "");
 
   // Video Inputs
   const [videoUrlInput, setVideoUrlInput] = useState("");
@@ -339,7 +339,7 @@ export function ProductDetailTabs({
   const [videoError, setVideoError] = useState<string | null>(null);
 
   // Tiered Pricing State
-  const [priceTiers, setPriceTiers] = useState<{ qty: number; price: number }[]>(() => {
+  const [priceTiers, setPriceTiers] = useState<{ qty: number | string; price: number | string }[]>(() => {
     const additionalInfo = product.price_additional_info as Record<string, any> | null;
     if (additionalInfo && Array.isArray(additionalInfo.price_tiers)) {
       return additionalInfo.price_tiers;
@@ -502,7 +502,7 @@ export function ProductDetailTabs({
     priceKrwRetail: product.price_krw_retail?.toString() || "",
     priceKrwWholesale: product.price_krw_wholesale?.toString() || "",
     estimatedRetailPrice: product.estimated_retail_price?.toString() || "",
-    priceUsdFobState: product.price_usd_fob || 0,
+    priceUsdFobState: product.price_usd_fob ? product.price_usd_fob.toString() : "",
     priceTiers: JSON.stringify((product.price_additional_info as any)?.price_tiers || []),
     itemWidth: product.item_width?.toString() || "",
     itemDepth: product.item_depth?.toString() || "",
@@ -729,11 +729,11 @@ export function ProductDetailTabs({
   };
 
   // Tiered Pricing Helpers
-  const addPriceTier = () => setPriceTiers([...priceTiers, { qty: 100, price: 0 }]);
+  const addPriceTier = () => setPriceTiers([...priceTiers, { qty: 100, price: "" }]);
   const removePriceTier = (idx: number) => {
     setPriceTiers(priceTiers.filter((_, i) => i !== idx));
   };
-  const updatePriceTier = (idx: number, field: "qty" | "price", val: number) => {
+  const updatePriceTier = (idx: number, field: "qty" | "price", val: string | number) => {
     const updated = [...priceTiers];
     updated[idx] = { ...updated[idx], [field]: val };
     setPriceTiers(updated);
@@ -971,7 +971,7 @@ export function ProductDetailTabs({
         priceKrwRetail,
         priceKrwWholesale,
         estimatedRetailPrice,
-        priceUsdFobState,
+        priceUsdFobState: priceUsdFobState ? priceUsdFobState.toString() : "",
         priceTiers: JSON.stringify(priceTiers),
         itemWidth,
         itemDepth,
@@ -1953,7 +1953,9 @@ export function ProductDetailTabs({
                   <input
                     name="priceKrwRetail"
                     type="number"
-                    value={priceKrwRetail} onChange={(e) => setPriceKrwRetail(e.target.value)}
+                    value={priceKrwRetail}
+                    onFocus={(e) => e.target.select()}
+                    onChange={(e) => setPriceKrwRetail(e.target.value)}
                     placeholder="0"
                     className="block w-full rounded-lg border border-zinc-300 pl-8 pr-3.5 py-2 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-zinc-900 dark:focus:border-white"
                   />
@@ -1968,6 +1970,7 @@ export function ProductDetailTabs({
                     name="priceKrwWholesale"
                     type="number"
                     value={priceKrwWholesale}
+                    onFocus={(e) => e.target.select()}
                     onChange={(e) => setPriceKrwWholesale(e.target.value)}
                     placeholder="0"
                     className="block w-full rounded-lg border border-zinc-300 pl-8 pr-3.5 py-2 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-zinc-900 dark:focus:border-white"
@@ -1984,6 +1987,7 @@ export function ProductDetailTabs({
                     type="number"
                     step="0.01"
                     value={estimatedRetailPrice}
+                    onFocus={(e) => e.target.select()}
                     onChange={(e) => setEstimatedRetailPrice(e.target.value)}
                     placeholder="0.00"
                     className="block w-full rounded-lg border border-zinc-300 pl-8 pr-3.5 py-2 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-zinc-900 dark:focus:border-white"
@@ -1999,8 +2003,9 @@ export function ProductDetailTabs({
                     name="priceUsdFob"
                     type="number"
                     step="0.01"
-                    value={priceUsdFobState || ""}
-                    onChange={(e) => setPriceUsdFobState(Number(e.target.value) || 0)}
+                    value={priceUsdFobState}
+                    onFocus={(e) => e.target.select()}
+                    onChange={(e) => setPriceUsdFobState(e.target.value)}
                     placeholder="0.00"
                     className="block w-full rounded-lg border border-zinc-300 pl-8 pr-3.5 py-2 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-zinc-900 dark:focus:border-white"
                   />
@@ -2049,7 +2054,8 @@ export function ProductDetailTabs({
                             type="number"
                             min="1"
                             value={tier.qty}
-                            onChange={(e) => updatePriceTier(idx, "qty", Number(e.target.value))}
+                            onFocus={(e) => e.target.select()}
+                            onChange={(e) => updatePriceTier(idx, "qty", e.target.value)}
                             placeholder="100"
                             className="block w-full max-w-[200px] rounded-lg border border-zinc-300 px-3 py-1.5 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-indigo-500"
                           />
@@ -2063,22 +2069,31 @@ export function ProductDetailTabs({
                                 step="0.01"
                                 min="0"
                                 value={tier.price}
-                                onChange={(e) => updatePriceTier(idx, "price", Number(e.target.value))}
+                                onFocus={(e) => e.target.select()}
+                                onChange={(e) => updatePriceTier(idx, "price", e.target.value)}
                                 placeholder="0.00"
                                 className="block w-full rounded-lg border border-zinc-300 pl-8 pr-3 py-1.5 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-indigo-500"
                               />
                             </div>
-                            {priceUsdFobState > 0 && tier.price > 0 && (
-                              <span className={`inline-flex items-center rounded px-2 py-1 text-[10px] font-bold ${
-                                priceUsdFobState > tier.price
-                                  ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400 border border-emerald-150 dark:border-emerald-900"
-                                  : "bg-zinc-50 text-zinc-400 dark:bg-zinc-900 dark:text-zinc-650 border border-zinc-150 dark:border-zinc-800"
-                              }`}>
-                                {priceUsdFobState > tier.price
-                                  ? `${(((priceUsdFobState - tier.price) / priceUsdFobState) * 100).toFixed(1)}% 할인`
-                                  : "0% 할인"}
-                              </span>
-                            )}
+                            {(() => {
+                              const fobNum = Number(priceUsdFobState) || 0;
+                              const tierPriceNum = Number(tier.price) || 0;
+                              if (fobNum > 0 && tierPriceNum > 0) {
+                                const isDiscount = fobNum > tierPriceNum;
+                                return (
+                                  <span className={`inline-flex items-center rounded px-2 py-1 text-[10px] font-bold ${
+                                    isDiscount
+                                      ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400 border border-emerald-150 dark:border-emerald-900"
+                                      : "bg-zinc-50 text-zinc-400 dark:bg-zinc-900 dark:text-zinc-650 border border-zinc-150 dark:border-zinc-800"
+                                  }`}>
+                                    {isDiscount
+                                      ? `${(((fobNum - tierPriceNum) / fobNum) * 100).toFixed(1)}% 할인`
+                                      : "0% 할인"}
+                                  </span>
+                                );
+                              }
+                              return null;
+                            })()}
                           </div>
                         </td>
                         <td className="px-4 py-3 text-center">
@@ -2143,6 +2158,7 @@ export function ProductDetailTabs({
                   type="number"
                   step="0.1"
                   value={itemWidth}
+                  onFocus={(e) => e.target.select()}
                   onChange={(e) => setItemWidth(e.target.value)}
                   placeholder="0.0"
                   className="block w-full rounded-lg border border-zinc-300 px-3.5 py-1.5 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-zinc-900 dark:focus:border-white"
@@ -2155,6 +2171,7 @@ export function ProductDetailTabs({
                   type="number"
                   step="0.1"
                   value={itemDepth}
+                  onFocus={(e) => e.target.select()}
                   onChange={(e) => setItemDepth(e.target.value)}
                   placeholder="0.0"
                   className="block w-full rounded-lg border border-zinc-300 px-3.5 py-1.5 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-zinc-900 dark:focus:border-white"
@@ -2167,6 +2184,7 @@ export function ProductDetailTabs({
                   type="number"
                   step="0.1"
                   value={itemHeight}
+                  onFocus={(e) => e.target.select()}
                   onChange={(e) => setItemHeight(e.target.value)}
                   placeholder="0.0"
                   className="block w-full rounded-lg border border-zinc-300 px-3.5 py-1.5 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-zinc-900 dark:focus:border-white"
@@ -2179,6 +2197,7 @@ export function ProductDetailTabs({
                   type="number"
                   step="0.1"
                   value={itemWeight}
+                  onFocus={(e) => e.target.select()}
                   onChange={(e) => setItemWeight(e.target.value)}
                   placeholder="0.0"
                   className="block w-full rounded-lg border border-zinc-300 px-3.5 py-1.5 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-zinc-900 dark:focus:border-white"
@@ -2216,6 +2235,7 @@ export function ProductDetailTabs({
                       step="0.1"
                       placeholder="0.0"
                       value={packageWidth}
+                      onFocus={(e) => e.target.select()}
                       onChange={(e) => handleWidthCmChange(e.target.value)}
                       className="mt-0.5 block w-full rounded border border-zinc-300 bg-white px-2 py-1 text-xs text-zinc-900 outline-none focus:border-zinc-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
                     />
@@ -2227,6 +2247,7 @@ export function ProductDetailTabs({
                       step="0.01"
                       placeholder="0.00"
                       value={packageWidthInch}
+                      onFocus={(e) => e.target.select()}
                       onChange={(e) => handleWidthInchChange(e.target.value)}
                       className="mt-0.5 block w-full rounded border border-zinc-300 bg-white px-2 py-1 text-xs text-zinc-900 outline-none focus:border-zinc-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
                     />
@@ -2246,6 +2267,7 @@ export function ProductDetailTabs({
                       step="0.1"
                       placeholder="0.0"
                       value={packageDepth}
+                      onFocus={(e) => e.target.select()}
                       onChange={(e) => handleDepthCmChange(e.target.value)}
                       className="mt-0.5 block w-full rounded border border-zinc-300 bg-white px-2 py-1 text-xs text-zinc-900 outline-none focus:border-zinc-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
                     />
@@ -2257,6 +2279,7 @@ export function ProductDetailTabs({
                       step="0.01"
                       placeholder="0.00"
                       value={packageDepthInch}
+                      onFocus={(e) => e.target.select()}
                       onChange={(e) => handleDepthInchChange(e.target.value)}
                       className="mt-0.5 block w-full rounded border border-zinc-300 bg-white px-2 py-1 text-xs text-zinc-900 outline-none focus:border-zinc-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
                     />
@@ -2276,6 +2299,7 @@ export function ProductDetailTabs({
                       step="0.1"
                       placeholder="0.0"
                       value={packageHeight}
+                      onFocus={(e) => e.target.select()}
                       onChange={(e) => handleHeightCmChange(e.target.value)}
                       className="mt-0.5 block w-full rounded border border-zinc-300 bg-white px-2 py-1 text-xs text-zinc-900 outline-none focus:border-zinc-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
                     />
@@ -2287,6 +2311,7 @@ export function ProductDetailTabs({
                       step="0.01"
                       placeholder="0.00"
                       value={packageHeightInch}
+                      onFocus={(e) => e.target.select()}
                       onChange={(e) => handleHeightInchChange(e.target.value)}
                       className="mt-0.5 block w-full rounded border border-zinc-300 bg-white px-2 py-1 text-xs text-zinc-900 outline-none focus:border-zinc-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
                     />
@@ -2306,6 +2331,7 @@ export function ProductDetailTabs({
                       step="0.1"
                       placeholder="0.0"
                       value={packageWeight}
+                      onFocus={(e) => e.target.select()}
                       onChange={(e) => handleWeightGChange(e.target.value)}
                       className="mt-0.5 block w-full rounded border border-zinc-300 bg-white px-1.5 py-1 text-[11px] text-zinc-900 outline-none focus:border-zinc-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
                     />
@@ -2317,6 +2343,7 @@ export function ProductDetailTabs({
                       step="0.001"
                       placeholder="0.000"
                       value={packageWeightLb}
+                      onFocus={(e) => e.target.select()}
                       onChange={(e) => handleWeightLbChange(e.target.value)}
                       className="mt-0.5 block w-full rounded border border-zinc-300 bg-white px-1.5 py-1 text-[11px] text-zinc-900 outline-none focus:border-zinc-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
                     />
@@ -2328,6 +2355,7 @@ export function ProductDetailTabs({
                       step="0.01"
                       placeholder="0.00"
                       value={packageWeightOz}
+                      onFocus={(e) => e.target.select()}
                       onChange={(e) => handleWeightOzChange(e.target.value)}
                       className="mt-0.5 block w-full rounded border border-zinc-300 bg-white px-1.5 py-1 text-[11px] text-zinc-900 outline-none focus:border-zinc-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
                     />
@@ -2356,6 +2384,7 @@ export function ProductDetailTabs({
                   name="cartonPackQty"
                   type="number"
                   value={cartonPackQty}
+                  onFocus={(e) => e.target.select()}
                   onChange={(e) => setCartonPackQty(e.target.value)}
                   placeholder="1"
                   className="block w-full rounded-lg border border-zinc-300 px-3.5 py-1.5 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-zinc-900 dark:focus:border-white"
@@ -2368,6 +2397,7 @@ export function ProductDetailTabs({
                   type="number"
                   step="0.1"
                   value={cartonWidth}
+                  onFocus={(e) => e.target.select()}
                   onChange={(e) => setCartonWidth(e.target.value)}
                   placeholder="0.0"
                   className="block w-full rounded-lg border border-zinc-300 px-3.5 py-1.5 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-zinc-900 dark:focus:border-white"
@@ -2380,6 +2410,7 @@ export function ProductDetailTabs({
                   type="number"
                   step="0.1"
                   value={cartonDepth}
+                  onFocus={(e) => e.target.select()}
                   onChange={(e) => setCartonDepth(e.target.value)}
                   placeholder="0.0"
                   className="block w-full rounded-lg border border-zinc-300 px-3.5 py-1.5 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-zinc-900 dark:focus:border-white"
@@ -2392,6 +2423,7 @@ export function ProductDetailTabs({
                   type="number"
                   step="0.1"
                   value={cartonHeight}
+                  onFocus={(e) => e.target.select()}
                   onChange={(e) => setCartonHeight(e.target.value)}
                   placeholder="0.0"
                   className="block w-full rounded-lg border border-zinc-300 px-3.5 py-1.5 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-zinc-900 dark:focus:border-white"
@@ -2404,6 +2436,7 @@ export function ProductDetailTabs({
                   type="number"
                   step="0.01"
                   value={cartonWeight}
+                  onFocus={(e) => e.target.select()}
                   onChange={(e) => setCartonWeight(e.target.value)}
                   placeholder="0.00"
                   className="block w-full rounded-lg border border-zinc-300 px-3.5 py-1.5 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-zinc-900 dark:focus:border-white"
@@ -2441,6 +2474,7 @@ export function ProductDetailTabs({
                   name="paletteCartonQty"
                   type="number"
                   value={paletteCartonQty}
+                  onFocus={(e) => e.target.select()}
                   onChange={(e) => setPaletteCartonQty(e.target.value)}
                   placeholder="0"
                   className="block w-full rounded-lg border border-zinc-300 px-3.5 py-1.5 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-zinc-900 dark:focus:border-white"
@@ -2453,6 +2487,7 @@ export function ProductDetailTabs({
                   type="number"
                   step="0.1"
                   value={paletteWidth}
+                  onFocus={(e) => e.target.select()}
                   onChange={(e) => setPaletteWidth(e.target.value)}
                   placeholder="0.0"
                   className="block w-full rounded-lg border border-zinc-300 px-3.5 py-1.5 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-zinc-900 dark:focus:border-white"
@@ -2465,6 +2500,7 @@ export function ProductDetailTabs({
                   type="number"
                   step="0.1"
                   value={paletteDepth}
+                  onFocus={(e) => e.target.select()}
                   onChange={(e) => setPaletteDepth(e.target.value)}
                   placeholder="0.0"
                   className="block w-full rounded-lg border border-zinc-300 px-3.5 py-1.5 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-zinc-900 dark:focus:border-white"
@@ -2477,6 +2513,7 @@ export function ProductDetailTabs({
                   type="number"
                   step="0.1"
                   value={paletteHeight}
+                  onFocus={(e) => e.target.select()}
                   onChange={(e) => setPaletteHeight(e.target.value)}
                   placeholder="0.0"
                   className="block w-full rounded-lg border border-zinc-300 px-3.5 py-1.5 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-zinc-900 dark:focus:border-white"
@@ -2489,6 +2526,7 @@ export function ProductDetailTabs({
                   type="number"
                   step="0.1"
                   value={paletteWeight}
+                  onFocus={(e) => e.target.select()}
                   onChange={(e) => setPaletteWeight(e.target.value)}
                   placeholder="0.0"
                   className="block w-full rounded-lg border border-zinc-300 px-3.5 py-1.5 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-zinc-900 dark:focus:border-white"
@@ -2564,6 +2602,7 @@ export function ProductDetailTabs({
                         name="container20ftQty"
                         type="number"
                         value={c20Qty}
+                        onFocus={(e) => e.target.select()}
                         onChange={(e) => setC20Qty(e.target.value)}
                         placeholder="0"
                         className="block w-full text-center rounded border border-zinc-300 py-1 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none"
@@ -2576,6 +2615,7 @@ export function ProductDetailTabs({
                         type="number"
                         step="0.01"
                         value={c20Weight}
+                        onFocus={(e) => e.target.select()}
                         onChange={(e) => setC20Weight(e.target.value)}
                         placeholder="0.00"
                         className="block w-full text-center rounded border border-zinc-300 py-1 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none"
@@ -2588,6 +2628,7 @@ export function ProductDetailTabs({
                         type="number"
                         step="0.001"
                         value={c20Cbm}
+                        onFocus={(e) => e.target.select()}
                         onChange={(e) => setC20Cbm(e.target.value)}
                         placeholder="0.000"
                         className="block w-full text-center rounded border border-zinc-300 py-1 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none"
@@ -2636,6 +2677,7 @@ export function ProductDetailTabs({
                         name="container40fthcQty"
                         type="number"
                         value={c40Qty}
+                        onFocus={(e) => e.target.select()}
                         onChange={(e) => setC40Qty(e.target.value)}
                         placeholder="0"
                         className="block w-full text-center rounded border border-zinc-300 py-1 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none"
@@ -2648,6 +2690,7 @@ export function ProductDetailTabs({
                         type="number"
                         step="0.01"
                         value={c40Weight}
+                        onFocus={(e) => e.target.select()}
                         onChange={(e) => setC40Weight(e.target.value)}
                         placeholder="0.00"
                         className="block w-full text-center rounded border border-zinc-300 py-1 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none"
@@ -2660,6 +2703,7 @@ export function ProductDetailTabs({
                         type="number"
                         step="0.001"
                         value={c40Cbm}
+                        onFocus={(e) => e.target.select()}
                         onChange={(e) => setC40Cbm(e.target.value)}
                         placeholder="0.000"
                         className="block w-full text-center rounded border border-zinc-300 py-1 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none"

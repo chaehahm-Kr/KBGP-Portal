@@ -488,6 +488,7 @@ export function ProductForm({ action, brands }: ProductFormProps) {
                 type="number"
                 placeholder="예: 25000"
                 value={priceKrwRetail}
+                onFocus={(e) => e.target.select()}
                 onChange={(e) => {
                   setPriceKrwRetail(e.target.value);
                   setFieldErrors((prev) => ({ ...prev, priceKrwRetail: false }));
@@ -507,6 +508,7 @@ export function ProductForm({ action, brands }: ProductFormProps) {
                 step="0.01"
                 placeholder="예: 12.50"
                 value={priceUsdFob}
+                onFocus={(e) => e.target.select()}
                 onChange={(e) => {
                   setPriceUsdFob(e.target.value);
                   setFieldErrors((prev) => ({ ...prev, priceUsdFob: false }));
@@ -611,6 +613,7 @@ export function ProductForm({ action, brands }: ProductFormProps) {
                     step="0.1"
                     placeholder="0.0"
                     value={packageWidth}
+                    onFocus={(e) => e.target.select()}
                     onChange={(e) => handleWidthCmChange(e.target.value)}
                     className="mt-0.5 block w-full rounded border border-zinc-300 bg-white px-2 py-1 text-xs text-zinc-900 outline-none focus:border-zinc-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
                   />
@@ -622,6 +625,7 @@ export function ProductForm({ action, brands }: ProductFormProps) {
                     step="0.01"
                     placeholder="0.00"
                     value={packageWidthInch}
+                    onFocus={(e) => e.target.select()}
                     onChange={(e) => handleWidthInchChange(e.target.value)}
                     className="mt-0.5 block w-full rounded border border-zinc-300 bg-white px-2 py-1 text-xs text-zinc-900 outline-none focus:border-zinc-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
                   />
@@ -641,6 +645,7 @@ export function ProductForm({ action, brands }: ProductFormProps) {
                     step="0.1"
                     placeholder="0.0"
                     value={packageDepth}
+                    onFocus={(e) => e.target.select()}
                     onChange={(e) => handleDepthCmChange(e.target.value)}
                     className="mt-0.5 block w-full rounded border border-zinc-300 bg-white px-2 py-1 text-xs text-zinc-900 outline-none focus:border-zinc-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
                   />
@@ -652,6 +657,7 @@ export function ProductForm({ action, brands }: ProductFormProps) {
                     step="0.01"
                     placeholder="0.00"
                     value={packageDepthInch}
+                    onFocus={(e) => e.target.select()}
                     onChange={(e) => handleDepthInchChange(e.target.value)}
                     className="mt-0.5 block w-full rounded border border-zinc-300 bg-white px-2 py-1 text-xs text-zinc-900 outline-none focus:border-zinc-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
                   />
@@ -671,6 +677,7 @@ export function ProductForm({ action, brands }: ProductFormProps) {
                     step="0.1"
                     placeholder="0.0"
                     value={packageHeight}
+                    onFocus={(e) => e.target.select()}
                     onChange={(e) => handleHeightCmChange(e.target.value)}
                     className="mt-0.5 block w-full rounded border border-zinc-300 bg-white px-2 py-1 text-xs text-zinc-900 outline-none focus:border-zinc-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
                   />
@@ -682,6 +689,7 @@ export function ProductForm({ action, brands }: ProductFormProps) {
                     step="0.01"
                     placeholder="0.00"
                     value={packageHeightInch}
+                    onFocus={(e) => e.target.select()}
                     onChange={(e) => handleHeightInchChange(e.target.value)}
                     className="mt-0.5 block w-full rounded border border-zinc-300 bg-white px-2 py-1 text-xs text-zinc-900 outline-none focus:border-zinc-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
                   />
@@ -701,6 +709,7 @@ export function ProductForm({ action, brands }: ProductFormProps) {
                     step="0.1"
                     placeholder="0.0"
                     value={packageWeight}
+                    onFocus={(e) => e.target.select()}
                     onChange={(e) => handleWeightGChange(e.target.value)}
                     className="mt-0.5 block w-full rounded border border-zinc-300 bg-white px-1.5 py-1 text-[11px] text-zinc-900 outline-none focus:border-zinc-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
                   />
@@ -712,6 +721,7 @@ export function ProductForm({ action, brands }: ProductFormProps) {
                     step="0.001"
                     placeholder="0.000"
                     value={packageWeightLb}
+                    onFocus={(e) => e.target.select()}
                     onChange={(e) => handleWeightLbChange(e.target.value)}
                     className="mt-0.5 block w-full rounded border border-zinc-300 bg-white px-1.5 py-1 text-[11px] text-zinc-900 outline-none focus:border-zinc-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
                   />
@@ -723,6 +733,7 @@ export function ProductForm({ action, brands }: ProductFormProps) {
                     step="0.01"
                     placeholder="0.00"
                     value={packageWeightOz}
+                    onFocus={(e) => e.target.select()}
                     onChange={(e) => handleWeightOzChange(e.target.value)}
                     className="mt-0.5 block w-full rounded border border-zinc-300 bg-white px-1.5 py-1 text-[11px] text-zinc-900 outline-none focus:border-zinc-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
                   />

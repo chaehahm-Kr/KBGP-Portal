@@ -69,7 +69,14 @@ Persisted images remain individually manageable (thumbnail, position badge, indi
 Enforced total 10 image limit (`localImages.length + pendingImages.length <= 10`). Over-selection displays:
 `"제품 이미지는 최대 10장까지 등록할 수 있습니다."`
 
-## 16. QA Matrix
+## 20. Numeric Input Replacement & Editability Behavior Fix
+- Fixed numeric input editing UX across Product forms (`components/product/product-detail-tabs.tsx`, `components/product/category-attribute-form.tsx`, `components/product/product-form.tsx`).
+- Backspace on `0` makes field completely blank (`""`).
+- Focusing any numeric input selects all text via `onFocus={(e) => e.target.select()}`, allowing immediate single-keystroke replacement.
+- Active typing allows intermediate string states (`"2."`, `""`) without forcing premature numeric coercion or prepending `0` (`02.5`).
+- Tiered B2B Supply Price fields (`qty`, `price`), Retail/FOB price fields, logistics dimensions/weights, and Category Attribute numeric fields (`NUMBER`, `NUMBER_UNIT`, `NUMBER_RANGE`, `NUMBER_RANGE_UNIT`) updated.
+
+## 21. QA Matrix
 - Total Shelf Life survives 1Depth change: PASS
 - Total Shelf Life survives 2Depth change: PASS
 - Total Shelf Life survives 3Depth change: PASS
@@ -95,6 +102,10 @@ Enforced total 10 image limit (`localImages.length + pendingImages.length <= 10`
 - Representative Image Regression: PASS
 - Image Reorder Regression: PASS
 - 10 Image Maximum: PASS
+- Backspace on 0 makes field blank (""): PASS
+- Typing 2.5 replaces value (never 02.5): PASS
+- Focus selects all text for immediate replacement: PASS
+- Decimal string state ("2.") preserved during active typing: PASS
 - Draft Save Regression: PASS
 - UPC/EAN Regression: PASS
 - Retailer Draft Isolation: PASS
@@ -102,19 +113,16 @@ Enforced total 10 image limit (`localImages.length + pendingImages.length <= 10`
 - TypeScript: PASS (0 Errors)
 - Production Build: PASS (Success)
 
-## 17. Modified Files
+## 22. Modified Files
 - `lib/product/attribute-completion.ts`
 - `components/product/category-attribute-form.tsx`
 - `components/product/product-detail-tabs.tsx`
 - `components/product/portal-products-list.tsx`
+- `components/product/product-form.tsx`
 - `reports/PORT-PROD-NEW-002-R1.md`
 
-## 18. Database / Migration
+## 23. Database / Migration
 No schema migration required. Schema remains intact.
-
-## 19. Git & Vercel
-- Commit SHA: `c2fb0e8`
-- origin/main SHA: `c2fb0e8`
 
 ## Final Status
 COMPLETED
