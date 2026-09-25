@@ -10,6 +10,7 @@ import {
   RetailerTeamMember,
   RetailerInvitationItem,
 } from "./onboarding-types";
+import { processAgreementPdfGeneration } from "./agreement-actions";
 
 function hashToken(rawToken: string): string {
   return crypto.createHash("sha256").update(rawToken).digest("hex");
@@ -278,8 +279,19 @@ export async function acceptRetailerInvitation(params: {
         { onConflict: "company_id" }
       );
 
-    // 7. Record Agreement Acceptance
-    await adminClient
+    // 7. Record Agreement Acceptance with Signer Metadata
+    const roleTitle =
+      inv.role === "owner"
+        ? "Company Owner"
+        : inv.role === "buyer"
+        ? "Retail Buyer"
+        : inv.role === "store_manager"
+        ? "Store Manager"
+        : inv.role === "accounting"
+        ? "Finance / Accounting"
+        : "Store Employee";
+
+    const { data: accData } = await adminClient
       .from("retailer_agreement_acceptances")
       .upsert(
         {
@@ -288,10 +300,22 @@ export async function acceptRetailerInvitation(params: {
           agreement_type: "retailer_terms_v1",
           agreement_version: "1.0",
           accepted_name: name.trim(),
+          signer_title: roleTitle,
+          signer_email: normalizedEmail,
+          pdf_status: "pending",
           accepted_at: now,
         },
         { onConflict: "company_id,user_id,agreement_version" }
-      );
+      )
+      .select("id")
+      .single();
+
+    // Trigger PDF generation & email delivery in background/async
+    if (accData?.id) {
+      processAgreementPdfGeneration(accData.id).catch((pdfErr) => {
+        console.error("[acceptRetailerInvitation] Async PDF generation error:", pdfErr);
+      });
+    }
 
     // 8. Mark invitation as accepted
     const tokenHash = hashToken(rawToken.trim());

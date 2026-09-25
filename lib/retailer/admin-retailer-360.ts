@@ -296,8 +296,16 @@ export interface Retailer360Data {
     agreement_type: string;
     agreement_version: string;
     accepted_name: string;
+    signer_title?: string | null;
+    signer_email?: string | null;
     accepted_ip?: string | null;
     accepted_at: string;
+    pdf_status?: "pending" | "generated" | "failed" | null;
+    pdf_storage_path?: string | null;
+    pdf_filename?: string | null;
+    pdf_generated_at?: string | null;
+    pdf_error?: string | null;
+    signedPdfUrl?: string | null;
   }>;
   orders: Retailer360OrderItem[];
   performance: Retailer360PerformanceSummary;
@@ -447,7 +455,7 @@ export async function getAdminRetailer360Data(companyId: string): Promise<Retail
   });
 
   // 4. Fetch Invitations & Agreements
-  const [invitationsRes, agreementsRes] = await Promise.all([
+  const [invitationsRes, rawAgreementsRes] = await Promise.all([
     adminClient
       .from("retailer_invitations")
       .select("*")
@@ -461,7 +469,35 @@ export async function getAdminRetailer360Data(companyId: string): Promise<Retail
   ]);
 
   const invitations: Retailer360InvitationItem[] = invitationsRes.data || [];
-  const agreements = agreementsRes.data || [];
+  const rawAgreements = rawAgreementsRes.data || [];
+
+  const agreements: Retailer360Data["agreements"] = [];
+  for (const acc of rawAgreements) {
+    let signedPdfUrl: string | null = null;
+    if (acc.pdf_storage_path && acc.pdf_status === "generated") {
+      const { data: signedData } = await adminClient.storage
+        .from("company-uploads")
+        .createSignedUrl(acc.pdf_storage_path, 3600);
+      signedPdfUrl = signedData?.signedUrl || null;
+    }
+
+    agreements.push({
+      id: acc.id,
+      agreement_type: acc.agreement_type,
+      agreement_version: acc.agreement_version,
+      accepted_name: acc.accepted_name,
+      signer_title: acc.signer_title,
+      signer_email: acc.signer_email,
+      accepted_ip: acc.accepted_ip,
+      accepted_at: acc.accepted_at,
+      pdf_status: acc.pdf_status,
+      pdf_storage_path: acc.pdf_storage_path,
+      pdf_filename: acc.pdf_filename,
+      pdf_generated_at: acc.pdf_generated_at,
+      pdf_error: acc.pdf_error,
+      signedPdfUrl,
+    });
+  }
 
   // 5. Fetch Retailer Orders & Fulfillments
   const { data: rawOrders } = await adminClient

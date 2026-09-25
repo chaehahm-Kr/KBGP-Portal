@@ -2,6 +2,7 @@ import React from "react";
 import { verifyRetailerSession } from "@/lib/auth/dal";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getRetailerTeamData } from "@/lib/retailer/onboarding-actions";
+import { getRetailerCompanyAgreementsAndDocuments } from "@/lib/retailer/agreement-actions";
 import {
   AccountOrganizationView,
   StoreLocationItem,
@@ -17,7 +18,7 @@ interface RetailerAccountPageProps {
 
 export default async function RetailerAccountPage({ searchParams }: RetailerAccountPageProps) {
   const { tab } = await searchParams;
-  const currentTab = tab === "team" ? "team" : "overview";
+  const currentTab = tab === "team" ? "team" : tab === "documents" ? "documents" : "overview";
 
   const session = await verifyRetailerSession();
   const adminClient = createAdminClient();
@@ -77,16 +78,23 @@ export default async function RetailerAccountPage({ searchParams }: RetailerAcco
     managerPhone: s.manager_phone,
   }));
 
-  // 5. Fetch team data
+  // 5. Fetch team data & agreements/documents
   let teamMembers: any[] = [];
   let pendingInvitations: any[] = [];
+  let agreements: any[] = [];
+  let documents: any[] = [];
 
   try {
-    const teamData = await getRetailerTeamData(companyId);
+    const [teamData, docsData] = await Promise.all([
+      getRetailerTeamData(companyId),
+      getRetailerCompanyAgreementsAndDocuments(companyId),
+    ]);
     teamMembers = teamData.members;
     pendingInvitations = teamData.invitations;
+    agreements = docsData.agreements;
+    documents = docsData.documents;
   } catch (err) {
-    console.error("Error loading team data:", err);
+    console.error("Error loading team or document data:", err);
   }
 
   // Assemble props
@@ -126,6 +134,8 @@ export default async function RetailerAccountPage({ searchParams }: RetailerAcco
       stores={storesList}
       teamMembers={teamMembers}
       pendingInvitations={pendingInvitations}
+      agreements={agreements}
+      documents={documents}
     />
   );
 }

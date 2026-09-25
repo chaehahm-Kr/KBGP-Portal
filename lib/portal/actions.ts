@@ -33,9 +33,23 @@ export async function getPortalPurchaseOrders() {
       revision_no,
       cancellation_status,
       created_at,
-      lines:purchase_order_lines(qty, confirmed_qty),
-      shipments:inbound_shipments(id, status),
-      receivings:receivings(id, status)
+      updated_at,
+      confirmed_at,
+      activity_logs,
+      lines:purchase_order_lines(
+        id,
+        qty,
+        confirmed_qty,
+        unit_cost,
+        product:products(
+          id,
+          name,
+          letusto_sku,
+          manufacture_sku
+        )
+      ),
+      shipments:inbound_shipments(id, status, updated_at, created_at),
+      receivings:receivings(id, status, updated_at, created_at)
     `)
     .eq("supplier_id", companyId)
     .notIn("po_status", ["DRAFT", "APPROVED"])
@@ -57,9 +71,22 @@ export async function getPortalPurchaseOrders() {
         order_date,
         currency,
         created_at,
-        lines:purchase_order_lines(qty, confirmed_qty),
-        shipments:inbound_shipments(id, status),
-        receivings:receivings(id, status)
+        updated_at,
+        confirmed_at,
+        lines:purchase_order_lines(
+          id,
+          qty,
+          confirmed_qty,
+          unit_cost,
+          product:products(
+            id,
+            name,
+            letusto_sku,
+            manufacture_sku
+          )
+        ),
+        shipments:inbound_shipments(id, status, updated_at, created_at),
+        receivings:receivings(id, status, updated_at, created_at)
       `)
       .eq("supplier_id", companyId)
       .notIn("po_status", ["DRAFT", "APPROVED"])
@@ -74,17 +101,101 @@ export async function getPortalPurchaseOrders() {
 
   const { getOverallStatus } = await import("@/lib/purchase-order/status-helper");
 
-  // Double guard: strictly filter out DRAFT and APPROVED, compute canonical overall_status and sanitize defaults
+  // Double guard: strictly filter out DRAFT and APPROVED, compute canonical overall_status, amount, aging and sanitize defaults
   const safeList = (data ?? [])
     .filter((po: any) => po.po_status !== "DRAFT" && po.po_status !== "APPROVED")
-    .map((po: any) => ({
-      ...po,
-      supplier_confirmation_status: po.supplier_confirmation_status || "UNCONFIRMED",
-      overall_status: getOverallStatus(po, po.shipments || [], po.receivings || []),
-      revision_no: po.revision_no ?? 1,
-      cancellation_status: po.cancellation_status || "NONE",
-      lines: po.lines || []
-    }));
+    .map((po: any) => {
+      const lines = po.lines || [];
+      const shipments = po.shipments || [];
+      const receivings = po.receivings || [];
+
+      const overall_status = getOverallStatus(po, shipments, receivings);
+
+      // Amount calculation using PO line historical unit_cost
+      const total_amount = lines.reduce(
+        (sum: number, l: any) => sum + (Number(l.qty) || 0) * (Number(l.unit_cost) || 0),
+        0
+      );
+
+      // Total Qty & Confirmed Qty
+      const total_ordered = lines.reduce((sum: number, l: any) => sum + (Number(l.qty) || 0), 0);
+      const isAllConfirmed =
+        lines.length > 0 &&
+        lines.every((l: any) => l.confirmed_qty !== null && l.confirmed_qty !== undefined);
+      const total_confirmed = isAllConfirmed
+        ? lines.reduce((sum: number, l: any) => sum + (Number(l.confirmed_qty) || 0), 0)
+        : null;
+
+      // Primary product summary info
+      const primaryLine = lines[0] || null;
+      const primaryProductName = primaryLine?.product?.name || "(상품 미지정)";
+      const primarySku =
+        primaryLine?.product?.letusto_sku || primaryLine?.product?.manufacture_sku || "-";
+      const extraItemCount = Math.max(0, lines.length - 1);
+
+      // Search keywords aggregation
+      const searchKeywords = [
+        po.po_number,
+        ...lines.map((l: any) => l.product?.name),
+        ...lines.map((l: any) => l.product?.letusto_sku),
+        ...lines.map((l: any) => l.product?.manufacture_sku),
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+
+      // Latest status update timestamp calculation
+      const timestamps: number[] = [];
+      if (po.updated_at) timestamps.push(new Date(po.updated_at).getTime());
+      if (po.confirmed_at) timestamps.push(new Date(po.confirmed_at).getTime());
+      if (po.created_at) timestamps.push(new Date(po.created_at).getTime());
+      shipments.forEach((s: any) => {
+        if (s.updated_at) timestamps.push(new Date(s.updated_at).getTime());
+        if (s.created_at) timestamps.push(new Date(s.created_at).getTime());
+      });
+      receivings.forEach((r: any) => {
+        if (r.updated_at) timestamps.push(new Date(r.updated_at).getTime());
+        if (r.created_at) timestamps.push(new Date(r.created_at).getTime());
+      });
+      if (Array.isArray(po.activity_logs)) {
+        po.activity_logs.forEach((log: any) => {
+          if (log.created_at) timestamps.push(new Date(log.created_at).getTime());
+          if (log.timestamp) timestamps.push(new Date(log.timestamp).getTime());
+        });
+      }
+      const maxTimestamp =
+        timestamps.length > 0
+          ? Math.max(...timestamps)
+          : new Date(po.created_at || Date.now()).getTime();
+      const last_status_update = new Date(maxTimestamp).toISOString();
+
+      // Aging / Elapsed Days calculation
+      const orderTime = new Date(po.order_date || po.created_at).getTime();
+      const isFinished = overall_status === "Completed" || overall_status === "Cancelled";
+      const endTime = isFinished ? maxTimestamp : Date.now();
+      const elapsedDays = Math.max(0, Math.floor((endTime - orderTime) / (1000 * 60 * 60 * 24)));
+
+      return {
+        ...po,
+        supplier_confirmation_status: po.supplier_confirmation_status || "UNCONFIRMED",
+        overall_status,
+        revision_no: po.revision_no ?? 1,
+        cancellation_status: po.cancellation_status || "NONE",
+        lines,
+        shipments,
+        receivings,
+        total_amount,
+        total_ordered,
+        total_confirmed,
+        primary_product_name: primaryProductName,
+        primary_sku: primarySku,
+        extra_item_count: extraItemCount,
+        search_keywords: searchKeywords,
+        last_status_update,
+        elapsed_days: elapsedDays,
+        is_finished: isFinished,
+      };
+    });
 
   return safeList;
 }
