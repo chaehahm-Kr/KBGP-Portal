@@ -19,7 +19,7 @@ export default async function ProductsPage() {
   let products: any[] | null = null;
   const { data: firstQueryProducts, error: queryError } = await supabase
     .from("products")
-    .select("id, name, name_en, category, brand_id, letusto_sku, manufacture_sku, price_krw_retail, price_usd_fob, package_width, package_depth, package_height, package_weight, price_additional_info, origin, upc, ean, selling_online, selling_offline, sales_link_1, sales_link_2, category_code, selection_status, sales_status, status")
+    .select("id, name, name_en, category, brand_id, letusto_sku, manufacture_sku, price_krw_retail, price_usd_fob, item_width, item_depth, item_height, item_weight, package_width, package_depth, package_height, package_weight, carton_pack_qty, carton_width, carton_depth, carton_height, carton_weight, price_additional_info, origin, upc, ean, selling_online, selling_offline, sales_link_1, sales_link_2, category_code, selection_status, sales_status, status")
     .eq("company_id", companyId)
     .order("created_at", { ascending: false });
 
@@ -96,10 +96,19 @@ export default async function ProductsPage() {
           origin: p.origin,
           price_krw_retail: p.price_krw_retail,
           price_usd_fob: p.price_usd_fob,
+          item_width: p.item_width,
+          item_depth: p.item_depth,
+          item_height: p.item_height,
+          item_weight: p.item_weight,
           package_width: p.package_width,
           package_depth: p.package_depth,
           package_height: p.package_height,
           package_weight: p.package_weight,
+          carton_pack_qty: p.carton_pack_qty,
+          carton_width: p.carton_width,
+          carton_depth: p.carton_depth,
+          carton_height: p.carton_height,
+          carton_weight: p.carton_weight,
           upc: p.upc,
           ean: p.ean,
           selling_online: p.selling_online,

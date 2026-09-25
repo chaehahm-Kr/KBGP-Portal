@@ -573,12 +573,29 @@ export function ProductDetailTabs({
     }
     
     // Logistics tab
-    const w = Number(packageWidth || 0);
-    const d = Number(packageDepth || 0);
-    const h = Number(packageHeight || 0);
-    const wt = Number(packageWeight || 0);
-    if (!packageWidth || w <= 0 || !packageDepth || d <= 0 || !packageHeight || h <= 0 || !packageWeight || wt <= 0) {
-      missing.push({ tab: "logistics", field: "단품 포장 패키지 규격(가로/세로/높이/무게)", inputName: "packageWidth" });
+    const iw = Number(itemWidth || 0);
+    const id = Number(itemDepth || 0);
+    const ih = Number(itemHeight || 0);
+    const iwt = Number(itemWeight || 0);
+    if (!itemWidth || iw <= 0 || !itemDepth || id <= 0 || !itemHeight || ih <= 0 || !itemWeight || iwt <= 0) {
+      missing.push({ tab: "logistics", field: "단품 규격 (가로/세로/높이/무게)", inputName: "itemWidth" });
+    }
+    
+    const pw = Number(packageWidth || 0);
+    const pd = Number(packageDepth || 0);
+    const ph = Number(packageHeight || 0);
+    const pwt = Number(packageWeight || 0);
+    if (!packageWidth || pw <= 0 || !packageDepth || pd <= 0 || !packageHeight || ph <= 0 || !packageWeight || pwt <= 0) {
+      missing.push({ tab: "logistics", field: "단품 포장 패키지 규격 (가로/세로/높이/무게)", inputName: "packageWidth" });
+    }
+
+    const cq = Number(cartonPackQty || 0);
+    const cw = Number(cartonWidth || 0);
+    const cd = Number(cartonDepth || 0);
+    const ch = Number(cartonHeight || 0);
+    const cwt = Number(cartonWeight || 0);
+    if (!cartonPackQty || cq <= 0 || !cartonWidth || cw <= 0 || !cartonDepth || cd <= 0 || !cartonHeight || ch <= 0 || !cartonWeight || cwt <= 0) {
+      missing.push({ tab: "logistics", field: "아웃 카톤 규격 (입수량/가로/세로/높이/무게)", inputName: "cartonPackQty" });
     }
     
     // Media tab
@@ -2137,28 +2154,6 @@ export function ProductDetailTabs({
           </div>
         </div>
 
-        {/* Tab Panel: 카테고리 & 속성 */}
-        <div className={activeTab === "category_attributes" ? "space-y-6" : "hidden"}>
-          <CategoryAttributeForm
-            ref={categoryAttrRef}
-            productId={product.id}
-            initialCategoryCode={(product as any).category_code || null}
-            brandName={brandName}
-            companyName={brands.find(b => b.id === product.brand_id)?.name || ""}
-            productName={product.name}
-            productNameEn={product.name_en || null}
-            manufactureSku={product.manufacture_sku || null}
-            letustoSku={product.letusto_sku || null}
-            origin={product.origin || null}
-            volume={product.volume || null}
-            colorMap={product.color_map || null}
-            isAdmin={false}
-            onCompletionChange={(status) => setCategoryCompletion((prev) => (prev ? { ...prev, ...status } : (status as any)))}
-            onDirtyChange={setIsCatAttrDirty}
-          />
-        </div>
-
-        {/* Tab Panel 3: 로지스틱스 정보 */}
         {/* Tab Panel 3: 로지스틱스 정보 */}
         <div className={activeTab === "logistics" ? "space-y-6" : "hidden"}>
           {/* Item */}
@@ -2175,7 +2170,7 @@ export function ProductDetailTabs({
             </h2>
             <div className="grid gap-4 grid-cols-2 md:grid-cols-4">
               <div>
-                <label className="block text-xs font-semibold text-zinc-650 dark:text-zinc-300 mb-1">가로 (Width, cm)</label>
+                <label className="block text-xs font-semibold text-zinc-650 dark:text-zinc-300 mb-1">가로 (Width, cm) <span className="text-rose-600 dark:text-rose-400 font-bold ml-0.5">*</span></label>
                 <input
                   name="itemWidth"
                   type="text"
@@ -2188,7 +2183,7 @@ export function ProductDetailTabs({
                 />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-zinc-650 dark:text-zinc-300 mb-1">세로 (Depth, cm)</label>
+                <label className="block text-xs font-semibold text-zinc-650 dark:text-zinc-300 mb-1">세로 (Depth, cm) <span className="text-rose-600 dark:text-rose-400 font-bold ml-0.5">*</span></label>
                 <input
                   name="itemDepth"
                   type="text"
@@ -2201,7 +2196,7 @@ export function ProductDetailTabs({
                 />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-zinc-650 dark:text-zinc-300 mb-1">높이 (Height, cm)</label>
+                <label className="block text-xs font-semibold text-zinc-650 dark:text-zinc-300 mb-1">높이 (Height, cm) <span className="text-rose-600 dark:text-rose-400 font-bold ml-0.5">*</span></label>
                 <input
                   name="itemHeight"
                   type="text"
@@ -2214,7 +2209,7 @@ export function ProductDetailTabs({
                 />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-zinc-650 dark:text-zinc-300 mb-1">무게 (Weight, g)</label>
+                <label className="block text-xs font-semibold text-zinc-650 dark:text-zinc-300 mb-1">무게 (Weight, g) <span className="text-rose-600 dark:text-rose-400 font-bold ml-0.5">*</span></label>
                 <input
                   name="itemWeight"
                   type="text"
@@ -2402,66 +2397,67 @@ export function ProductDetailTabs({
             </h2>
             <div className="grid gap-4 grid-cols-2 md:grid-cols-3 lg:grid-cols-6">
               <div>
-                <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-1">입수 수량 (Qty, 개) *</label>
+                <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-1">입수 수량 (Qty, 개) <span className="text-rose-600 dark:text-rose-400 font-bold ml-0.5">*</span></label>
                 <input
                   name="cartonPackQty"
-                  type="number"
+                  type="text"
+                  inputMode="numeric"
                   value={cartonPackQty}
                   onFocus={(e) => e.target.select()}
-                  onChange={(e) => setCartonPackQty(e.target.value)}
+                  onChange={(e) => setCartonPackQty(e.target.value.replace(/[^0-9]/g, ""))}
                   placeholder="1"
                   className="block w-full rounded-lg border border-zinc-300 px-3.5 py-1.5 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-zinc-900 dark:focus:border-white"
                 />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-zinc-650 dark:text-zinc-300 mb-1">가로 (Width, cm)</label>
+                <label className="block text-xs font-semibold text-zinc-650 dark:text-zinc-300 mb-1">가로 (Width, cm) <span className="text-rose-600 dark:text-rose-400 font-bold ml-0.5">*</span></label>
                 <input
                   name="cartonWidth"
-                  type="number"
-                  step="0.1"
+                  type="text"
+                  inputMode="decimal"
                   value={cartonWidth}
                   onFocus={(e) => e.target.select()}
-                  onChange={(e) => setCartonWidth(e.target.value)}
+                  onChange={(e) => setCartonWidth(e.target.value.replace(/[^0-9.]/g, ""))}
                   placeholder="0.0"
                   className="block w-full rounded-lg border border-zinc-300 px-3.5 py-1.5 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-zinc-900 dark:focus:border-white"
                 />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-zinc-650 dark:text-zinc-300 mb-1">세로 (Depth, cm)</label>
+                <label className="block text-xs font-semibold text-zinc-650 dark:text-zinc-300 mb-1">세로 (Depth, cm) <span className="text-rose-600 dark:text-rose-400 font-bold ml-0.5">*</span></label>
                 <input
                   name="cartonDepth"
-                  type="number"
-                  step="0.1"
+                  type="text"
+                  inputMode="decimal"
                   value={cartonDepth}
                   onFocus={(e) => e.target.select()}
-                  onChange={(e) => setCartonDepth(e.target.value)}
+                  onChange={(e) => setCartonDepth(e.target.value.replace(/[^0-9.]/g, ""))}
                   placeholder="0.0"
                   className="block w-full rounded-lg border border-zinc-300 px-3.5 py-1.5 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-zinc-900 dark:focus:border-white"
                 />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-zinc-650 dark:text-zinc-300 mb-1">높이 (Height, cm)</label>
+                <label className="block text-xs font-semibold text-zinc-650 dark:text-zinc-300 mb-1">높이 (Height, cm) <span className="text-rose-600 dark:text-rose-400 font-bold ml-0.5">*</span></label>
                 <input
                   name="cartonHeight"
-                  type="number"
-                  step="0.1"
+                  type="text"
+                  inputMode="decimal"
                   value={cartonHeight}
                   onFocus={(e) => e.target.select()}
-                  onChange={(e) => setCartonHeight(e.target.value)}
+                  onChange={(e) => setCartonHeight(e.target.value.replace(/[^0-9.]/g, ""))}
                   placeholder="0.0"
                   className="block w-full rounded-lg border border-zinc-300 px-3.5 py-1.5 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-zinc-900 dark:focus:border-white"
                 />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-zinc-650 dark:text-zinc-300 mb-1">중량 (Weight, kg)</label>
+                <label className="block text-xs font-semibold text-zinc-650 dark:text-zinc-300 mb-1">중량 (Weight, kg) <span className="text-rose-600 dark:text-rose-400 font-bold ml-0.5">*</span></label>
                 <input
                   name="cartonWeight"
-                  type="number"
-                  step="0.01"
+                  type="text"
+                  inputMode="decimal"
                   value={cartonWeight}
                   onFocus={(e) => e.target.select()}
-                  onChange={(e) => setCartonWeight(e.target.value)}
-                  placeholder="0.00"
+                  onChange={(e) => setCartonWeight(e.target.value.replace(/[^0-9.]/g, ""))}
+                  placeholder="0.0"
                   className="block w-full rounded-lg border border-zinc-300 px-3.5 py-1.5 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-zinc-900 dark:focus:border-white"
                 />
               </div>

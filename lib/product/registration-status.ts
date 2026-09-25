@@ -115,10 +115,19 @@ export interface ProductRegistrationEvaluationInput {
   origin?: string | null;
   price_krw_retail?: number | string | null;
   price_usd_fob?: number | string | null;
+  item_width?: number | string | null;
+  item_depth?: number | string | null;
+  item_height?: number | string | null;
+  item_weight?: number | string | null;
   package_width?: number | string | null;
   package_depth?: number | string | null;
   package_height?: number | string | null;
   package_weight?: number | string | null;
+  carton_pack_qty?: number | string | null;
+  carton_width?: number | string | null;
+  carton_depth?: number | string | null;
+  carton_height?: number | string | null;
+  carton_weight?: number | string | null;
   upc?: string | null;
   ean?: string | null;
   selling_online?: boolean | null;
@@ -148,7 +157,7 @@ function safeString(val: any): string {
 
 /**
  * Unified evaluator for product registration completeness.
- * Strictly checks ONLY required fields to prevent false drafts on optional attributes.
+ * Strictly checks required fields across Basic Info, Category & Attributes, Price Info, Logistics (Item, Package, Carton), and Media.
  */
 export function evaluateProductRegistrationStatus(
   input: ProductRegistrationEvaluationInput
@@ -174,10 +183,21 @@ export function evaluateProductRegistrationStatus(
   const effectiveUpc = safeString(overrides.upc !== undefined && overrides.upc !== null ? overrides.upc : input.upc);
   const effectiveEan = safeString(overrides.ean !== undefined && overrides.ean !== null ? overrides.ean : input.ean);
 
-  const pkgWidth = overrides.package_width !== undefined && overrides.package_width !== null ? Number(overrides.package_width) : Number(input.package_width || 0);
-  const pkgDepth = overrides.package_depth !== undefined && overrides.package_depth !== null ? Number(overrides.package_depth) : Number(input.package_depth || 0);
-  const pkgHeight = overrides.package_height !== undefined && overrides.package_height !== null ? Number(overrides.package_height) : Number(input.package_height || 0);
-  const pkgWeight = overrides.package_weight !== undefined && overrides.package_weight !== null ? Number(overrides.package_weight) : Number(input.package_weight || 0);
+  const itemW = overrides.item_width !== undefined && overrides.item_width !== null ? Number(overrides.item_width) : Number(input.item_width || 0);
+  const itemD = overrides.item_depth !== undefined && overrides.item_depth !== null ? Number(overrides.item_depth) : Number(input.item_depth || 0);
+  const itemH = overrides.item_height !== undefined && overrides.item_height !== null ? Number(overrides.item_height) : Number(input.item_height || 0);
+  const itemWt = overrides.item_weight !== undefined && overrides.item_weight !== null ? Number(overrides.item_weight) : Number(input.item_weight || 0);
+
+  const pkgW = overrides.package_width !== undefined && overrides.package_width !== null ? Number(overrides.package_width) : Number(input.package_width || 0);
+  const pkgD = overrides.package_depth !== undefined && overrides.package_depth !== null ? Number(overrides.package_depth) : Number(input.package_depth || 0);
+  const pkgH = overrides.package_height !== undefined && overrides.package_height !== null ? Number(overrides.package_height) : Number(input.package_height || 0);
+  const pkgWt = overrides.package_weight !== undefined && overrides.package_weight !== null ? Number(overrides.package_weight) : Number(input.package_weight || 0);
+
+  const cartonQty = overrides.carton_pack_qty !== undefined && overrides.carton_pack_qty !== null ? Number(overrides.carton_pack_qty) : Number(input.carton_pack_qty || 0);
+  const cartonW = overrides.carton_width !== undefined && overrides.carton_width !== null ? Number(overrides.carton_width) : Number(input.carton_width || 0);
+  const cartonD = overrides.carton_depth !== undefined && overrides.carton_depth !== null ? Number(overrides.carton_depth) : Number(input.carton_depth || 0);
+  const cartonH = overrides.carton_height !== undefined && overrides.carton_height !== null ? Number(overrides.carton_height) : Number(input.carton_height || 0);
+  const cartonWt = overrides.carton_weight !== undefined && overrides.carton_weight !== null ? Number(overrides.carton_weight) : Number(input.carton_weight || 0);
 
   const missingFields: string[] = [];
 
@@ -194,7 +214,6 @@ export function evaluateProductRegistrationStatus(
       missingFields.push("카테고리 필수 속성");
     }
   } else {
-    // If categoryCompletion not pre-fetched, check basic category_code presence
     if (!input.category_code) {
       missingFields.push("카테고리");
     }
@@ -223,9 +242,15 @@ export function evaluateProductRegistrationStatus(
     missingFields.push("FOB 수출 가격");
   }
 
-  // 7. Package Dimensions & Weight
-  if (pkgWidth <= 0 || pkgDepth <= 0 || pkgHeight <= 0 || pkgWeight <= 0) {
-    missingFields.push("패키지 배송 규격");
+  // 7. Logistics Specifications (A. Item Spec, B. Package Spec, C. Carton Spec)
+  if (itemW <= 0 || itemD <= 0 || itemH <= 0 || itemWt <= 0) {
+    missingFields.push("단품 규격");
+  }
+  if (pkgW <= 0 || pkgD <= 0 || pkgH <= 0 || pkgWt <= 0) {
+    missingFields.push("단품 포장 패키지 규격");
+  }
+  if (cartonQty <= 0 || cartonW <= 0 || cartonD <= 0 || cartonH <= 0 || cartonWt <= 0) {
+    missingFields.push("아웃 카톤 규격");
   }
 
   // 8. Barcode (UPC or EAN)
