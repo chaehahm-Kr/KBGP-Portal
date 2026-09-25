@@ -438,60 +438,44 @@ export async function createRetailerInvitation(params: {
   const inviteUrl = `${publicEnv.NEXT_PUBLIC_SITE_URL || "https://portal.kselecthub.com"}/invite/${rawToken}`;
 
   try {
-    const roleLabel =
-      role === "owner"
-        ? "Company Owner"
-        : role === "buyer"
-        ? "Retail Buyer"
-        : role === "store_manager"
-        ? "Store Manager"
-        : role === "accounting"
-        ? "Finance / Accounting"
-        : "Store Employee";
+    const { sendTemplatedEmail } = await import("@/lib/notifications/templates");
+    const templateKey = role === "owner" ? "hub_retailer_partner_invited" : "hub_retailer_user_invited";
 
-    await sendEmail({
-      to: normalizedEmail,
-      subject: `[K SELECT] Invitation to join ${comp.name} on K SELECT Retailer Portal`,
-      text: `Hello,\n\nYou have been invited to join ${comp.name} as ${roleLabel} on the K SELECT Retailer Portal.\n\nPlease activate your account by visiting:\n${inviteUrl}\n\nThis invitation link is valid for 7 days.\n\nThank you,\nK SELECT Operations Team`,
-      html: `
-        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 32px 20px; color: #18181b; background-color: #ffffff;">
-          <div style="margin-bottom: 24px;">
-            <span style="font-size: 20px; font-weight: 900; letter-spacing: -0.5px; color: #18181b;">K SELECT</span>
-            <span style="font-size: 13px; font-weight: 700; color: #71717a; margin-left: 8px;">Retailer Portal</span>
-          </div>
-          
-          <div style="background: #f4f4f5; border-radius: 16px; padding: 24px; margin-bottom: 24px;">
-            <h2 style="font-size: 18px; font-weight: 800; margin: 0 0 12px 0; color: #18181b;">Welcome to K SELECT Retailer Network</h2>
-            <p style="font-size: 14px; line-height: 1.6; color: #3f3f46; margin: 0;">
-              You have been invited to join <strong>${comp.name}</strong> as <strong>${roleLabel}</strong>.
-            </p>
-          </div>
-
-          <p style="font-size: 14px; line-height: 1.6; color: #52525b; margin-bottom: 28px;">
-            As an authorized member, you will have access to physical weekly store counts, common product QR scanning, retail training guides, store pricing tags, and 90-day initial trial protections.
-          </p>
-
-          <div style="text-align: center; margin-bottom: 32px;">
-            <a href="${inviteUrl}" style="display: inline-block; background-color: #18181b; color: #ffffff; font-size: 14px; font-weight: 700; text-decoration: none; padding: 14px 28px; border-radius: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
-              Activate Retailer Account →
-            </a>
-          </div>
-
-          <p style="font-size: 12px; color: #a1a1aa; line-height: 1.5; margin: 0;">
-            This invitation link is single-use and will expire in 7 days.<br/>
-            If you did not expect this invitation, please disregard this email.
-          </p>
-        </div>
-      `,
+    await sendTemplatedEmail(templateKey, normalizedEmail, {
+      contactName: name || "Retail Partner",
+      companyName: comp.name,
+      invitationLink: inviteUrl,
+      link: inviteUrl,
+      supportEmail: "support@kselectnetwork.com",
     });
   } catch (emailErr) {
-    console.warn("[createRetailerInvitation] Resend email delivery failed:", emailErr);
-    emailDeliveryStatus = "failed";
+    console.warn("[createRetailerInvitation] Templated email delivery failed, trying fallback:", emailErr);
+    try {
+      const roleLabel =
+        role === "owner"
+          ? "Company Owner"
+          : role === "buyer"
+          ? "Retail Buyer"
+          : role === "store_manager"
+          ? "Store Manager"
+          : role === "accounting"
+          ? "Finance / Accounting"
+          : "Store Employee";
 
-    await adminClient
-      .from("retailer_invitations")
-      .update({ email_delivery_status: "failed" })
-      .eq("id", inserted.id);
+      await sendEmail({
+        to: normalizedEmail,
+        subject: `[K SELECT HUB] Invitation to join ${comp.name} on K SELECT Retailer Portal`,
+        text: `Hello,\n\nYou have been invited to join ${comp.name} as ${roleLabel} on the K SELECT Retailer Portal.\n\nPlease activate your account by visiting:\n${inviteUrl}\n\nThis invitation link is valid for 7 days.\n\nThank you,\nK SELECT Operations Team`,
+      });
+    } catch (fallbackErr) {
+      console.warn("[createRetailerInvitation] Email delivery failed:", fallbackErr);
+      emailDeliveryStatus = "failed";
+
+      await adminClient
+        .from("retailer_invitations")
+        .update({ email_delivery_status: "failed" })
+        .eq("id", inserted.id);
+    }
   }
 
   return {

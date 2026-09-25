@@ -3,7 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { sendEmail } from "@/lib/notifications/email";
 import { publicEnv } from "@/lib/env/public";
 
-export const TEMPLATE_KEYS = [
+export const NETWORK_TEMPLATE_KEYS = [
   "application_submitted_company",
   "application_received_internal",
   "assignment_assigned",
@@ -23,16 +23,40 @@ export const TEMPLATE_KEYS = [
   "staff_invited",
 ] as const;
 
+export const HUB_TEMPLATE_KEYS = [
+  "hub_retailer_application_received",
+  "hub_application_under_review",
+  "hub_info_request_created",
+  "hub_application_approved",
+  "hub_application_rejected",
+  "hub_retailer_partner_invited",
+  "hub_retailer_user_invited",
+  "hub_retailer_account_activated",
+  "hub_welcome_retailer",
+  "hub_password_reset",
+  "hub_order_confirmed",
+  "hub_shipment_created",
+  "hub_shipment_tracking_update",
+  "hub_order_delivered",
+] as const;
+
+export const TEMPLATE_KEYS = [
+  ...NETWORK_TEMPLATE_KEYS,
+  ...HUB_TEMPLATE_KEYS,
+] as const;
+
+export type NetworkTemplateKey = (typeof NETWORK_TEMPLATE_KEYS)[number];
+export type HubTemplateKey = (typeof HUB_TEMPLATE_KEYS)[number];
 export type TemplateKey = (typeof TEMPLATE_KEYS)[number];
 
 /**
- * supabase/migrations/0010_...sql이 email_templates 테이블에 심는 시드값과 반드시
- * 같은 문구를 유지한다.
+ * supabase/migrations 및 기본 템플릿 딕셔너리
  */
 export const DEFAULT_TEMPLATES: Record<
   TemplateKey,
   { description: string; subject: string; body: string }
 > = {
+  // === K SELECT NETWORK (브랜드/공급사) ===
   application_submitted_company: {
     description: "회사 담당자 — 신청서 제출 완료",
     subject: "[K SELECT NETWORK] {{applicationNumber}} 파트너 신청이 접수되었습니다",
@@ -118,33 +142,114 @@ export const DEFAULT_TEMPLATES: Record<
     subject: "[K SELECT NETWORK] {{contactName}}님, 관리자 포털로 초대합니다",
     body: "안녕하세요, {{contactName}}님.\n\nK SELECT NETWORK 관리자 포털의 내부 직원으로 초대되었습니다.\n\n아래 로그인 정보와 임시 비밀번호로 최초 로그인하신 후, 비밀번호 변경 및 계정 설정 절차를 완료해 주세요.\n\n- 접속 이메일: {{email}}\n- 임시 비밀번호: {{tempPassword}}\n\n* 본 임시 비밀번호는 최초 1회 로그인 전용입니다.\n\n{{ctaButton}}",
   },
+
+  // === K SELECT HUB (리테일러 파트너) ===
+  hub_retailer_application_received: {
+    description: "Retailer Partner — Application Received Confirmation",
+    subject: "[K SELECT HUB] Retailer Application Received — {{applicationNumber}}",
+    body: "Thank you for applying to K SELECT HUB.\n\nHello {{contactName}},\n\nWe have successfully received your retail partnership application for {{companyName}}.\n\nOur curation and retail onboarding team is currently reviewing your store profile and territory eligibility.\n\n{{infoBox}}\n\nWhat happens next?\n• Our team will review your application within 1–2 business days.\n• Once approved, you will receive an invitation link to set up your K SELECT Retailer Portal account.\n\nIf you have any questions in the meantime, please contact our team at {{supportEmail}}.",
+  },
+  hub_application_under_review: {
+    description: "Retailer Partner — Application Under Review",
+    subject: "[K SELECT HUB] Your Application {{applicationNumber}} is Under Review",
+    body: "Your application is currently under review.\n\nHello {{contactName}},\n\nOur retail operations team has started evaluating your partnership application for {{companyName}}.\n\n{{infoBox}}\n\nWe are confirming product allocation and logistics support for your store location(s). We will update you shortly with final onboarding steps.\n\n{{ctaButton}}",
+  },
+  hub_info_request_created: {
+    description: "Retailer Partner — Additional Information Requested",
+    subject: "[K SELECT HUB] Action Required: Additional Information for {{applicationNumber}}",
+    body: "Additional information is required for your retailer application.\n\nHello {{contactName}},\n\nTo proceed with your application for {{companyName}}, our team needs a few additional details:\n\n{{requestContent}}\n\nPlease submit the requested information by clicking the button below:\n\n{{ctaButton}}",
+  },
+  hub_application_approved: {
+    description: "Retailer Partner — Application Approved",
+    subject: "[K SELECT HUB] Welcome to K SELECT HUB — Partnership Approved!",
+    body: "Congratulations! Your retail partnership application has been approved.\n\nHello {{contactName}},\n\nWe are excited to welcome {{companyName}} to the K SELECT HUB retail network.\n\n{{infoBox}}\n\nNext Step: Activate your Retailer Portal account to access curated K-Beauty inventory, order opening stock, and access retail training materials.\n\n{{ctaButton}}",
+  },
+  hub_application_rejected: {
+    description: "Retailer Partner — Application Not Accepted",
+    subject: "[K SELECT HUB] Update on Your Retailer Application — {{applicationNumber}}",
+    body: "Thank you for your interest in K SELECT HUB.\n\nHello {{contactName}},\n\nThank you for taking the time to submit your retail partnership application for {{companyName}}.\n\nAfter careful review of current territory capacity and product distribution availability, we are unable to approve your application at this time.\n\n{{notes}}\n\nWe will keep your store information on file for future expansion opportunities.",
+  },
+  hub_retailer_partner_invited: {
+    description: "Retailer Partner — Invitation to Activate Retailer Account",
+    subject: "[K SELECT HUB] You are invited to join K SELECT HUB as {{companyName}}",
+    body: "You have been invited to K SELECT HUB Retailer Portal.\n\nHello {{contactName}},\n\nYou have been invited to set up and manage the official retail account for {{companyName}} on K SELECT HUB.\n\n{{infoBox}}\n\nAs a K SELECT HUB retail partner, you will receive:\n• Direct wholesale access to verified, trending K-Beauty brands\n• 90-Day Initial Trial Protection on eligible opening assortments\n• Turnkey store merchandising kits, product QR guides, and price tags\n• Weekly inventory management and rapid US replenishment\n\nClick the link below to accept your invitation and activate your account (valid for 7 days):\n\n{{ctaButton}}",
+  },
+  hub_retailer_user_invited: {
+    description: "Retailer Team Member — Team Member Invitation",
+    subject: "[K SELECT HUB] Team Invitation: Join {{companyName}} on Retailer Portal",
+    body: "You have been invited to join your team on K SELECT HUB.\n\nHello {{contactName}},\n\nYou have been invited to join {{companyName}}'s team on the K SELECT Retailer Portal as an authorized team member.\n\n{{infoBox}}\n\nClick below to activate your user account and access store operations:\n\n{{ctaButton}}",
+  },
+  hub_retailer_account_activated: {
+    description: "Retailer Partner — Account Activation Confirmation",
+    subject: "[K SELECT HUB] Account Activated — Welcome to {{companyName}} Retail Portal",
+    body: "Your K SELECT HUB account is now active!\n\nHello {{contactName}},\n\nYour retail account for {{companyName}} has been successfully activated. You now have full access to the K SELECT Retailer Portal.\n\n{{infoBox}}\n\nYou can now:\n• Browse wholesale catalogs and place stock orders\n• Download product display guides and marketing tags\n• Access weekly store check tools and inventory reporting\n\n{{ctaButton}}",
+  },
+  hub_welcome_retailer: {
+    description: "Retailer Partner — Welcome & Getting Started Guide",
+    subject: "[K SELECT HUB] Getting Started: Launching K-Beauty in Your Store",
+    body: "Welcome to K SELECT HUB Retailer Network!\n\nHello {{contactName}},\n\nWe are thrilled to partner with {{companyName}} to bring premium, curated K-Beauty products to your customers.\n\nHere are 3 quick steps to maximize your launch:\n1. Review your initial curated assortment on the portal.\n2. Confirm your physical store display setup and POS tags.\n3. Complete your initial stock order for swift US warehouse fulfillment.\n\n{{ctaButton}}\n\nOur retail support team is always here to assist you at {{supportEmail}}.",
+  },
+  hub_password_reset: {
+    description: "Retailer User — Password Reset Instructions",
+    subject: "[K SELECT HUB] Reset Your Password",
+    body: "Password Reset Request\n\nHello {{contactName}},\n\nWe received a request to reset the password for your K SELECT HUB account ({{email}}).\n\nIf you requested this change, click the button below to set a new password:\n\n{{ctaButton}}\n\nIf you did not request a password reset, you can safely ignore this email.",
+  },
+  hub_order_confirmed: {
+    description: "Retailer Partner — Order Confirmation",
+    subject: "[K SELECT HUB] Order Confirmed — {{orderNumber}}",
+    body: "Your order has been received and confirmed.\n\nHello {{contactName}},\n\nThank you for your order. We have received order {{orderNumber}} for {{companyName}} and our US fulfillment center is preparing it for shipment.\n\n{{infoBox}}\n\nYou can track the fulfillment status and download your order invoice in the Retailer Portal.\n\n{{ctaButton}}",
+  },
+  hub_shipment_created: {
+    description: "Retailer Partner — Shipment Dispatched",
+    subject: "[K SELECT HUB] Shipment Created — Order {{orderNumber}} is on its way!",
+    body: "Your shipment is on its way.\n\nHello {{contactName}},\n\nGreat news! Order {{orderNumber}} for {{companyName}} has been packed and dispatched from our warehouse.\n\n{{infoBox}}\n\nTrack your package directly with the carrier or view live updates in your portal:\n\n{{ctaButton}}",
+  },
+  hub_shipment_tracking_update: {
+    description: "Retailer Partner — Tracking & Transit Update",
+    subject: "[K SELECT HUB] Tracking Update: Shipment for Order {{orderNumber}}",
+    body: "Shipment Tracking Update\n\nHello {{contactName}},\n\nHere is the latest transit update for your shipment under Order {{orderNumber}}.\n\n{{infoBox}}\n\nEstimated delivery date: {{dueDate}}\n\n{{ctaButton}}",
+  },
+  hub_order_delivered: {
+    description: "Retailer Partner — Order Delivered Confirmation",
+    subject: "[K SELECT HUB] Package Delivered — Order {{orderNumber}}",
+    body: "Your order has been delivered.\n\nHello {{contactName}},\n\nCarrier records indicate that Order {{orderNumber}} for {{companyName}} has been successfully delivered to your store address.\n\n{{infoBox}}\n\nPlease inspect your shipment. If you have any questions or require support with store merchandising, log in to your portal or contact {{supportEmail}}.\n\n{{ctaButton}}",
+  },
 };
 
 export const SAMPLE_VARIABLES: Record<string, string> = {
-  applicationNumber: "APP-000001",
-  applicationNo: "APP-000001",
-  inquiryNumber: "APP-000001",
-  contactName: "김민지",
-  companyName: "샘플뷰티코리아",
+  applicationNumber: "APP-RET-104921",
+  applicationNo: "APP-RET-104921",
+  inquiryNumber: "APP-RET-104921",
+  contactName: "Sarah Jenkins",
+  companyName: "Luxe Beauty Bar",
   brandName: "ABC Beauty",
   productCount: "3",
-  link: "https://portal.kselectnetwork.com/admin/applications/sample",
-  reasonLine: " 배정 사유: 담당 브랜드 카테고리 일치",
-  requestContent: "성분표 최신본을 첨부해주세요.",
-  dueDate: "2026년 8월 5일",
-  inviteeName: "김샘플",
-  inviteeEmail: "sample@brand.co.kr",
-  submittedDate: "2026년 8월 4일",
-  email: "newstaff@kselectnetwork.com",
+  link: "https://portal.kselecthub.com",
+  invitationLink: "https://portal.kselecthub.com/invite/sample-token",
+  reasonLine: " Territory: Tri-State Area Approved",
+  requestContent: "Please provide a photo of your primary storefront display area and resale certificate.",
+  dueDate: "October 15, 2026",
+  inviteeName: "Sarah Jenkins",
+  inviteeEmail: "sarah@luxebeautybar.com",
+  submittedDate: "September 25, 2026",
+  email: "sarah@luxebeautybar.com",
   tempPassword: "TempPassword123!",
+  orderNumber: "ORD-2026-0891",
+  orderAmount: "$3,450.00",
+  trackingNumber: "1Z9999999999999999",
+  carrier: "UPS Ground",
+  supportEmail: "support@kselectnetwork.com",
+  portalUrl: "https://portal.kselecthub.com",
+  websiteUrl: "https://www.kselecthub.com",
+  notes: "Eligible for re-application after 60 days.",
 };
 
 function render(template: string, variables: Record<string, string>) {
   return template.replace(/\{\{(\w+)\}\}/g, (_match, name) => variables[name] ?? "");
 }
 
-/** 템플릿 키에 따른 영문/한글 배지 라벨 매핑 */
-function getBadgeLabel(key: string): string | undefined {
+/** 템플릿 키에 따른 영문/한글 배지 라벨 매핑 (NETWORK) */
+function getNetworkBadgeLabel(key: string): string | undefined {
   switch (key) {
     case "assignment_assigned":
       return "ASSIGNED · 담당자 배정 완료";
@@ -183,8 +288,44 @@ function getBadgeLabel(key: string): string | undefined {
   }
 }
 
-/** 이메일용 접수정보 및 배정 상세 카드 HTML 조립 (k-select-network-email.html 준수) */
-function buildInfoCardHtml(variables: Record<string, string>) {
+/** 템플릿 키에 따른 영문 배지 라벨 매핑 (HUB) */
+function getHubBadgeLabel(key: string): string | undefined {
+  switch (key) {
+    case "hub_retailer_application_received":
+      return "APPLICATION RECEIVED · RETAIL PARTNER";
+    case "hub_application_under_review":
+      return "UNDER REVIEW · STORE EVALUATION";
+    case "hub_info_request_created":
+      return "ACTION REQUIRED · ADDITIONAL DETAILS";
+    case "hub_application_approved":
+      return "APPROVED · PARTNERSHIP WELCOME";
+    case "hub_application_rejected":
+      return "APPLICATION UPDATE · RETAILER NETWORK";
+    case "hub_retailer_partner_invited":
+      return "INVITATION · RETAILER ONBOARDING";
+    case "hub_retailer_user_invited":
+      return "TEAM INVITE · STORE ACCESS";
+    case "hub_retailer_account_activated":
+      return "ACTIVATED · ACCOUNT READY";
+    case "hub_welcome_retailer":
+      return "WELCOME · GETTING STARTED";
+    case "hub_password_reset":
+      return "SECURITY · PASSWORD RESET";
+    case "hub_order_confirmed":
+      return "ORDER CONFIRMED · IN PREPARATION";
+    case "hub_shipment_created":
+      return "DISPATCHED · OUT FOR DELIVERY";
+    case "hub_shipment_tracking_update":
+      return "TRANSIT UPDATE · EN ROUTE";
+    case "hub_order_delivered":
+      return "DELIVERED · COMPLETED";
+    default:
+      return undefined;
+  }
+}
+
+/** K SELECT NETWORK 이메일용 정보 카드 HTML */
+function buildNetworkInfoCardHtml(variables: Record<string, string>) {
   const rows: { label: string; value: string; isBold?: boolean }[] = [];
   
   const appNo = variables.applicationNo || variables.applicationNumber || variables.inquiryNumber;
@@ -241,13 +382,94 @@ function buildInfoCardHtml(variables: Record<string, string>) {
   `;
 }
 
-/** 이메일용 CTA 버튼 HTML 조립 (k-select-network-email.html 준수) */
-function buildCtaButtonHtml(variables: Record<string, string>) {
+/** K SELECT HUB 이메일용 정보 카드 HTML (Clean luxury retailer aesthetic) */
+function buildHubInfoCardHtml(variables: Record<string, string>) {
+  const rows: { label: string; value: string; isBold?: boolean; highlight?: boolean }[] = [];
+
+  const appNo = variables.applicationNo || variables.applicationNumber || variables.inquiryNumber;
+  if (appNo) {
+    rows.push({ label: "Application No.", value: appNo, isBold: true });
+  }
+
+  const comp = variables.companyName;
+  if (comp) {
+    rows.push({ label: "Store / Company", value: comp });
+  }
+
+  const orderNo = variables.orderNumber;
+  if (orderNo) {
+    rows.push({ label: "Order Number", value: orderNo, isBold: true });
+  }
+
+  const orderAmt = variables.orderAmount;
+  if (orderAmt) {
+    rows.push({ label: "Order Total", value: orderAmt, highlight: true });
+  }
+
+  const carrier = variables.carrier;
+  const tracking = variables.trackingNumber;
+  if (carrier || tracking) {
+    rows.push({
+      label: "Tracking Info",
+      value: [carrier, tracking].filter(Boolean).join(" · "),
+      isBold: true,
+    });
+  }
+
+  const nextStep = variables.nextStep;
+  if (nextStep) {
+    rows.push({ label: "Next Step", value: nextStep });
+  } else if (appNo && variables.key === "hub_retailer_application_received") {
+    rows.push({ label: "Next Step", value: "Store Profile Review · 1–2 Business Days" });
+  }
+
+  if (rows.length === 0) return "";
+
+  let rowsHtml = "";
+  rows.forEach((row, idx) => {
+    if (idx > 0) {
+      rowsHtml += `
+        <tr><td colspan="2" style="height:12px;line-height:12px;font-size:0;">&nbsp;</td></tr>
+        <tr><td colspan="2" style="height:1px;line-height:1px;font-size:0;background:#E4E4E7;">&nbsp;</td></tr>
+        <tr><td colspan="2" style="height:12px;line-height:12px;font-size:0;">&nbsp;</td></tr>
+      `;
+    }
+
+    let valueStyle = "font-size:14px;line-height:22px;mso-line-height-rule:exactly;color:#27272A;text-align:left;";
+    if (row.isBold) {
+      valueStyle = "font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:22px;mso-line-height-rule:exactly;font-weight:700;letter-spacing:0.3px;color:#09090B;text-align:left;";
+    }
+    if (row.highlight) {
+      valueStyle = "font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:22px;mso-line-height-rule:exactly;font-weight:700;color:#ff2b75;text-align:left;";
+    }
+
+    rowsHtml += `
+      <tr>
+        <td valign="top" width="130" style="width:130px;font-family:Arial,Helvetica,sans-serif;font-size:11px;line-height:22px;mso-line-height-rule:exactly;font-weight:700;letter-spacing:1px;color:#71717A;text-transform:uppercase;text-align:left;">${row.label}</td>
+        <td valign="top" style="${valueStyle}">${row.value}</td>
+      </tr>
+    `;
+  });
+
+  return `
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="width:100%;border:1px solid #E4E4E7;background-color:#FAFAFA;border-radius:8px;border-collapse:separate;margin:28px 0 0 0;">
+      <tr>
+        <td style="padding:20px 24px;">
+          <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="width:100%;border-collapse:collapse;">
+            ${rowsHtml}
+          </table>
+        </td>
+      </tr>
+    </table>
+  `;
+}
+
+/** K SELECT NETWORK 이메일용 CTA 버튼 HTML */
+function buildNetworkCtaButtonHtml(variables: Record<string, string>) {
   const siteUrl = publicEnv.NEXT_PUBLIC_SITE_URL || "https://www.kselectnetwork.com";
   let url = variables.portalUrl || variables.applicationUrl || `${siteUrl}/portal`;
   let buttonLabel = variables.buttonLabel || "포털에서 확인하기";
 
-  // If a specific link is provided in variables (e.g. admin detail link), use it
   if (variables.link) {
     url = variables.link;
   }
@@ -302,16 +524,54 @@ function buildCtaButtonHtml(variables: Record<string, string>) {
   `;
 }
 
-/** 본문 텍스트 포맷팅 및 키워드 강조 처리 */
-function formatBodyTextToHtml(text: string) {
+/** K SELECT HUB 이메일용 CTA 버튼 HTML */
+function buildHubCtaButtonHtml(variables: Record<string, string>) {
+  const hubPortalUrl = "https://portal.kselecthub.com";
+  let url = variables.invitationLink || variables.link || variables.portalUrl || hubPortalUrl;
+  let buttonLabel = variables.buttonLabel || "Access Retailer Portal →";
+
+  const key = variables.key;
+  if (key === "hub_retailer_partner_invited") {
+    buttonLabel = "Activate Retailer Account →";
+  } else if (key === "hub_retailer_user_invited") {
+    buttonLabel = "Accept Team Invitation →";
+  } else if (key === "hub_application_approved") {
+    buttonLabel = "Access Retailer Portal →";
+  } else if (key === "hub_info_request_created") {
+    buttonLabel = "Submit Requested Info →";
+  } else if (key === "hub_password_reset") {
+    buttonLabel = "Reset Password →";
+  } else if (
+    key === "hub_order_confirmed" ||
+    key === "hub_shipment_created" ||
+    key === "hub_shipment_tracking_update" ||
+    key === "hub_order_delivered"
+  ) {
+    buttonLabel = "View Order & Tracking Details →";
+  } else if (key === "hub_welcome_retailer" || key === "hub_retailer_account_activated") {
+    buttonLabel = "Open Retailer Portal →";
+  }
+
+  return `
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin:28px auto 0 auto;min-width:240px;">
+      <tr>
+        <td bgcolor="#09090B" align="center" style="padding: 14px 32px; background-color: #09090B; border-radius: 8px;">
+          <a href="${url}" target="_blank" style="display:block;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:16px;mso-line-height-rule:exactly;font-weight:bold;letter-spacing:0.4px;color:#FFFFFF;text-decoration:none;text-align:center;">${buttonLabel}</a>
+        </td>
+      </tr>
+      <tr><td style="height:3px;line-height:3px;font-size:0;background:#ff2b75;border-radius:0 0 4px 4px;">&nbsp;</td></tr>
+    </table>
+  `;
+}
+
+/** 본문 텍스트 포맷팅 및 키워드 강조 처리 (NETWORK) */
+function formatNetworkBodyText(text: string) {
   let html = text
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
+    .replace(/>/g, "&gt;")
+    .replace(/\n/g, "<br/>");
 
-  html = html.replace(/\n/g, "<br/>");
-
-  // 키워드 강조 스타일 매핑 (디자인 가이드 반영)
   html = html.replace(
     /K SELECT NETWORK/g,
     `<strong style="color: #131E2E;">K SELECT NETWORK</strong>`
@@ -328,8 +588,28 @@ function formatBodyTextToHtml(text: string) {
   return html;
 }
 
-/** 통합 글로벌 이메일 HTML 레이아웃 빌드 (k-select-network-email.html 완벽 이식) */
-function buildGlobalLayout(
+/** 본문 텍스트 포맷팅 및 키워드 강조 처리 (HUB) */
+function formatHubBodyText(text: string) {
+  let html = text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/\n/g, "<br/>");
+
+  html = html.replace(
+    /K SELECT HUB/g,
+    `<strong style="color: #09090B;">K SELECT HUB</strong>`
+  );
+  html = html.replace(
+    /90-Day Initial Trial Protection/g,
+    `<span style="color: #ff2b75; font-weight: bold;">90-Day Initial Trial Protection</span>`
+  );
+
+  return html;
+}
+
+/** NETWORK 글로벌 이메일 HTML 레이아웃 빌드 */
+function buildNetworkGlobalLayout(
   subject: string,
   preheader: string,
   badgeHtml: string,
@@ -393,8 +673,92 @@ function buildGlobalLayout(
 </html>`;
 }
 
+/** HUB 글로벌 이메일 HTML 레이아웃 빌드 (Modern Luxury Retailer Layout) */
+function buildHubGlobalLayout(
+  subject: string,
+  preheader: string,
+  badgeHtml: string,
+  headerHtml: string,
+  bodyContentHtml: string,
+  supportHtml: string,
+  footerHtml: string
+) {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="color-scheme" content="light dark" />
+<meta name="supported-color-schemes" content="light dark" />
+<title>${subject} · K SELECT HUB</title>
+<style>
+  body { margin:0; padding:0; background:#F4F4F5; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; }
+  @media only screen and (max-width:620px) {
+    table[width="600"] { width:100% !important; }
+  }
+</style>
+</head>
+<body style="margin:0;padding:0;background:#F4F4F5;">
+<span style="display:none;font-size:1px;color:#F4F4F5;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;">${preheader}</span>
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="width:100%;background:#F4F4F5;margin:0;padding:36px 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+  <tr>
+    <td align="center" style="padding:0 16px;">
+
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="600" style="width:600px;max-width:600px;background:#FFFFFF;border:1px solid #E4E4E7;border-radius:12px;overflow:hidden;box-shadow:0 4px 12px rgba(0,0,0,0.03);">
+
+        <!-- Top Pink Accent Bar -->
+        <tr><td style="height:4px;line-height:4px;font-size:0;background:#ff2b75;">&nbsp;</td></tr>
+
+        <!-- Header Area -->
+        ${headerHtml}
+
+        <tr><td style="padding:0 36px;"><div style="height:1px;line-height:1px;font-size:0;background:#F4F4F5;">&nbsp;</div></td></tr>
+
+        <!-- Inner Content Area -->
+        <tr>
+          <td style="padding:32px 36px 0 36px;">
+            ${badgeHtml}
+            ${bodyContentHtml}
+          </td>
+        </tr>
+
+        <tr><td style="padding:28px 36px 0 36px;"><div style="height:1px;line-height:1px;font-size:0;background:#F4F4F5;">&nbsp;</div></td></tr>
+
+        <!-- Support Area -->
+        ${supportHtml}
+
+      </table>
+
+      <!-- Footer Area -->
+      ${footerHtml}
+
+    </td>
+  </tr>
+</table>
+</body>
+</html>`;
+}
+
 /** 템플릿과 변수들을 조합하여 완벽한 HTML 이메일 정보를 생성하는 범용 헬퍼 */
 export function renderEmailHtml(
+  subjectTemplate: string,
+  bodyTemplate: string,
+  variables: Record<string, string>
+) {
+  const isHub = Boolean(
+    (variables.key && variables.key.startsWith("hub_")) ||
+    variables.scope === "hub" ||
+    subjectTemplate.includes("K SELECT HUB")
+  );
+
+  if (isHub) {
+    return renderHubEmailHtml(subjectTemplate, bodyTemplate, variables);
+  }
+  return renderNetworkEmailHtml(subjectTemplate, bodyTemplate, variables);
+}
+
+/** NETWORK 이메일 렌더러 */
+function renderNetworkEmailHtml(
   subjectTemplate: string,
   bodyTemplate: string,
   variables: Record<string, string>
@@ -413,28 +777,24 @@ export function renderEmailHtml(
     unsubscribeUrl: `${siteUrl}/unsubscribe`,
   };
 
-  // 컴포넌트 HTML 동적 주입 (파셜 구조)
   const appNo = extendedVariables.applicationNo || extendedVariables.applicationNumber || extendedVariables.inquiryNumber || "APP-000001";
   extendedVariables.applicationNo = appNo;
-  extendedVariables.infoBox = buildInfoCardHtml(extendedVariables);
-  extendedVariables.ctaButton = buildCtaButtonHtml(extendedVariables);
+  extendedVariables.infoBox = buildNetworkInfoCardHtml(extendedVariables);
+  extendedVariables.ctaButton = buildNetworkCtaButtonHtml(extendedVariables);
 
   const finalSubject = render(subjectTemplate, extendedVariables);
 
-  // 1. 본문 첫 줄을 메인 제목(Title Slot)으로, 나머지를 본문으로 구분하여 슬롯 파싱
   const bodyLines = bodyTemplate.split("\n");
   const rawTitle = bodyLines[0] || "";
   const rawBodyLines = bodyLines.slice(1).join("\n").trim();
 
   const finalTitle = render(rawTitle, extendedVariables);
-  const formattedTemplate = formatBodyTextToHtml(rawBodyLines);
+  const formattedTemplate = formatNetworkBodyText(rawBodyLines);
   const finalBodyContent = render(formattedTemplate, extendedVariables);
 
-  // HTML 조립용 컴포넌트 생성
   const preheaderText = `신청번호 ${appNo}의 파트너십 알림입니다.`;
-  const badgeLabel = getBadgeLabel(variables.key || "");
+  const badgeLabel = getNetworkBadgeLabel(variables.key || "");
   
-  // Badge HTML
   let badgeHtml = "";
   if (badgeLabel) {
     badgeHtml = `
@@ -448,7 +808,6 @@ export function renderEmailHtml(
     `;
   }
 
-  // Header HTML (절대 경로 이미지)
   const logoUrl = `${publicEnv.NEXT_PUBLIC_SITE_URL}/ksn-symbol.png`;
   const headerHtml = `
     <tr>
@@ -469,14 +828,12 @@ export function renderEmailHtml(
     </tr>
   `;
 
-  // Body Content Area (Title + Paragraphs)
   const bodyContentHtml = `
     <div style="font-size:27px;line-height:38px;mso-line-height-rule:exactly;font-weight:700;color:#131E2E;letter-spacing:-0.5px;text-wrap:pretty;text-align:left;">${finalTitle}</div>
     <div style="height:16px;line-height:16px;font-size:0;">&nbsp;</div>
     <div style="font-size:15px;line-height:27px;mso-line-height-rule:exactly;color:#5A6270;text-align:left;">${finalBodyContent}</div>
   `;
 
-  // Support HTML
   const supportHtml = `
     <tr>
       <td style="padding:24px 40px 36px 40px;">
@@ -490,7 +847,6 @@ export function renderEmailHtml(
     </tr>
   `;
 
-  // Footer HTML
   const privacyUrl = extendedVariables.privacyUrl;
   const unsubscribeUrl = extendedVariables.unsubscribeUrl;
   const footerHtml = `
@@ -507,7 +863,7 @@ export function renderEmailHtml(
     </table>
   `;
 
-  const finalHtml = buildGlobalLayout(
+  const finalHtml = buildNetworkGlobalLayout(
     finalSubject,
     preheaderText,
     badgeHtml,
@@ -517,7 +873,136 @@ export function renderEmailHtml(
     footerHtml
   );
 
-  // Plain Text 폴백 준비 (태그 제거)
+  const rawBodyText = render(bodyTemplate, extendedVariables);
+
+  return {
+    subject: finalSubject,
+    text: rawBodyText.replace(/<[^>]*>/g, ""),
+    html: finalHtml,
+  };
+}
+
+/** HUB 이메일 렌더러 */
+function renderHubEmailHtml(
+  subjectTemplate: string,
+  bodyTemplate: string,
+  variables: Record<string, string>
+) {
+  const hubSiteUrl = "https://www.kselecthub.com";
+  const hubPortalUrl = "https://portal.kselecthub.com";
+  const contactName = variables.contactName || "Retail Partner";
+
+  const extendedVariables: Record<string, string> = {
+    ...variables,
+    contactName,
+    submittedDate: variables.submittedDate || new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }),
+    applicationUrl: hubPortalUrl,
+    portalUrl: variables.portalUrl || hubPortalUrl,
+    websiteUrl: hubSiteUrl,
+    supportEmail: variables.supportEmail || "support@kselectnetwork.com",
+    privacyUrl: `${hubSiteUrl}/privacy`,
+    unsubscribeUrl: `${hubSiteUrl}/unsubscribe`,
+  };
+
+  const appNo = extendedVariables.applicationNo || extendedVariables.applicationNumber || extendedVariables.inquiryNumber || "APP-RET-104921";
+  extendedVariables.applicationNo = appNo;
+  extendedVariables.infoBox = buildHubInfoCardHtml(extendedVariables);
+  extendedVariables.ctaButton = buildHubCtaButtonHtml(extendedVariables);
+
+  const finalSubject = render(subjectTemplate, extendedVariables);
+
+  const bodyLines = bodyTemplate.split("\n");
+  const rawTitle = bodyLines[0] || "";
+  const rawBodyLines = bodyLines.slice(1).join("\n").trim();
+
+  const finalTitle = render(rawTitle, extendedVariables);
+  const formattedTemplate = formatHubBodyText(rawBodyLines);
+  const finalBodyContent = render(formattedTemplate, extendedVariables);
+
+  const preheaderText = `K SELECT HUB notification for ${extendedVariables.companyName || "Retail Partner"}`;
+  const badgeLabel = getHubBadgeLabel(variables.key || "");
+
+  let badgeHtml = "";
+  if (badgeLabel) {
+    badgeHtml = `
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+        <tr>
+          <td valign="middle" style="font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:12px;mso-line-height-rule:exactly;font-weight:bold;color:#ff2b75;padding-right:6px;">●</td>
+          <td valign="middle" style="font-family:Arial,Helvetica,sans-serif;font-size:11px;line-height:13px;mso-line-height-rule:exactly;font-weight:700;letter-spacing:1.8px;color:#18181B;text-transform:uppercase;">${badgeLabel}</td>
+        </tr>
+      </table>
+      <div style="height:14px;line-height:14px;font-size:0;">&nbsp;</div>
+    `;
+  }
+
+  const headerHtml = `
+    <tr>
+      <td style="padding:28px 36px 20px 36px;">
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse:collapse;">
+          <tr>
+            <td valign="middle">
+              <span style="font-family:Arial,Helvetica,sans-serif;font-size:20px;line-height:24px;mso-line-height-rule:exactly;font-weight:900;letter-spacing:-0.3px;color:#09090B;">K SELECT <span style="color:#ff2b75;">HUB</span></span>
+            </td>
+            <td valign="middle" align="right">
+              <span style="font-family:Arial,Helvetica,sans-serif;font-size:10px;line-height:12px;mso-line-height-rule:exactly;font-weight:700;letter-spacing:1.6px;color:#71717A;text-transform:uppercase;">RETAIL PARTNER PLATFORM</span>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  `;
+
+  const bodyContentHtml = `
+    <div style="font-size:24px;line-height:34px;mso-line-height-rule:exactly;font-weight:800;color:#09090B;letter-spacing:-0.4px;text-wrap:pretty;text-align:left;">${finalTitle}</div>
+    <div style="height:14px;line-height:14px;font-size:0;">&nbsp;</div>
+    <div style="font-size:14px;line-height:25px;mso-line-height-rule:exactly;color:#3F3F46;text-align:left;">${finalBodyContent}</div>
+  `;
+
+  const supportHtml = `
+    <tr>
+      <td style="padding:20px 36px 28px 36px; background-color:#FAFAFA;">
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="width:100%;">
+          <tr>
+            <td valign="top" style="font-family:Arial,Helvetica,sans-serif;font-size:10px;line-height:18px;mso-line-height-rule:exactly;font-weight:700;letter-spacing:1.6px;color:#71717A;width:90px;text-align:left;">SUPPORT</td>
+            <td valign="top" style="font-size:12px;line-height:20px;mso-line-height-rule:exactly;color:#52525B;text-align:left;">
+              Email: <a href="mailto:${extendedVariables.supportEmail}" style="color:#09090B;text-decoration:none;font-weight:700;">${extendedVariables.supportEmail}</a> &nbsp;|&nbsp; Portal: <a href="${hubPortalUrl}" target="_blank" style="color:#09090B;text-decoration:none;font-weight:700;">portal.kselecthub.com</a>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  `;
+
+  const privacyUrl = extendedVariables.privacyUrl;
+  const unsubscribeUrl = extendedVariables.unsubscribeUrl;
+  const footerHtml = `
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="600" style="width:600px;max-width:600px;border-collapse:collapse;">
+      <tr>
+        <td align="center" style="padding:22px 20px 8px 20px;">
+          <div style="font-family:Arial,Helvetica,sans-serif;font-size:9px;line-height:12px;mso-line-height-rule:exactly;font-weight:700;letter-spacing:1.8px;color:#71717A;text-transform:uppercase;">CURATED BEAUTY. EFFORTLESS RETAIL.</div>
+          <div style="height:10px;line-height:10px;font-size:0;">&nbsp;</div>
+          <div style="font-size:11px;line-height:18px;mso-line-height-rule:exactly;color:#A1A1AA;text-align:center;">
+            K SELECT HUB · Retail Partner Platform<br/>23B, Roland Avenue, Mount Laurel, New Jersey 08054
+          </div>
+          <div style="height:10px;line-height:10px;font-size:0;">&nbsp;</div>
+          <div style="font-size:11px;line-height:18px;mso-line-height-rule:exactly;text-align:center;">
+            <a href="${privacyUrl}" target="_blank" style="color:#71717A;text-decoration:underline;">Privacy Policy</a> &nbsp;·&nbsp; <a href="${unsubscribeUrl}" target="_blank" style="color:#71717A;text-decoration:underline;">Unsubscribe</a>
+          </div>
+        </td>
+      </tr>
+    </table>
+  `;
+
+  const finalHtml = buildHubGlobalLayout(
+    finalSubject,
+    preheaderText,
+    badgeHtml,
+    headerHtml,
+    bodyContentHtml,
+    supportHtml,
+    footerHtml
+  );
+
   const rawBodyText = render(bodyTemplate, extendedVariables);
 
   return {
@@ -539,8 +1024,9 @@ export async function sendTemplatedEmail(
     .eq("key", key)
     .maybeSingle();
 
-  const subjectTemplate = template?.subject_template ?? DEFAULT_TEMPLATES[key].subject;
-  let bodyTemplate = template?.body_template ?? DEFAULT_TEMPLATES[key].body;
+  const fallback = DEFAULT_TEMPLATES[key];
+  const subjectTemplate = template?.subject_template ?? fallback?.subject ?? "";
+  let bodyTemplate = template?.body_template ?? fallback?.body ?? "";
 
   if (key === "info_request_created" && !variables.dueDate) {
     bodyTemplate = bodyTemplate
@@ -549,7 +1035,6 @@ export async function sendTemplatedEmail(
       .replace("회신 기한인  까지 ", "");
   }
 
-  // 템플릿 키를 variables에 같이 넘겨서 파셜 구조화에 활용
   const { subject, text, html } = renderEmailHtml(subjectTemplate, bodyTemplate, {
     ...variables,
     key,

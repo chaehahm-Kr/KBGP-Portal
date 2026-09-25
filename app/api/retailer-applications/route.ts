@@ -226,13 +226,25 @@ export async function POST(request: Request) {
   }
 
   try {
-    await sendEmail({
-      to: data.email.toLowerCase().trim(),
-      subject: `[K SELECT HUB] Retailer Application Received - ${applicationNumber}`,
-      text: `Hello ${data.contactName},\n\nThank you for applying for partnership with K SELECT HUB.\n\nApplication Number: ${applicationNumber}\nCompany: ${data.companyName}\n\nOur K SELECT team will review your application and contact you regarding next steps.\n\nThank you,\nK SELECT Retail Operations Team`,
+    const { sendTemplatedEmail } = await import("@/lib/notifications/templates");
+    await sendTemplatedEmail("hub_retailer_application_received", data.email.toLowerCase().trim(), {
+      applicationNumber,
+      applicationNo: applicationNumber,
+      contactName: data.contactName,
+      companyName: data.companyName,
+      supportEmail: "support@kselectnetwork.com",
     });
   } catch (emailErr) {
-    console.warn("[POST /api/retailer-applications] Email notification warning:", emailErr);
+    console.warn("[POST /api/retailer-applications] Templated email notification fallback:", emailErr);
+    try {
+      await sendEmail({
+        to: data.email.toLowerCase().trim(),
+        subject: `[K SELECT HUB] Retailer Application Received — ${applicationNumber}`,
+        text: `Hello ${data.contactName},\n\nThank you for applying for partnership with K SELECT HUB.\n\nApplication Number: ${applicationNumber}\nCompany: ${data.companyName}\n\nOur K SELECT team will review your application and contact you regarding next steps.\n\nThank you,\nK SELECT Retail Operations Team`,
+      });
+    } catch (fallbackErr) {
+      console.warn("[POST /api/retailer-applications] Plain email notification warning:", fallbackErr);
+    }
   }
 
   return NextResponse.json(
