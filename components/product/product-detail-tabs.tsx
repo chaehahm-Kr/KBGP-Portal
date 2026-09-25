@@ -1952,10 +1952,11 @@ export function ProductDetailTabs({
                   <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-xs text-zinc-400">₩</span>
                   <input
                     name="priceKrwRetail"
-                    type="number"
+                    type="text"
+                    inputMode="numeric"
                     value={priceKrwRetail}
                     onFocus={(e) => e.target.select()}
-                    onChange={(e) => setPriceKrwRetail(e.target.value)}
+                    onChange={(e) => setPriceKrwRetail(e.target.value.replace(/[^0-9]/g, ""))}
                     placeholder="0"
                     className="block w-full rounded-lg border border-zinc-300 pl-8 pr-3.5 py-2 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-zinc-900 dark:focus:border-white"
                   />
@@ -1968,10 +1969,11 @@ export function ProductDetailTabs({
                   <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-xs text-zinc-400">₩</span>
                   <input
                     name="priceKrwWholesale"
-                    type="number"
+                    type="text"
+                    inputMode="numeric"
                     value={priceKrwWholesale}
                     onFocus={(e) => e.target.select()}
-                    onChange={(e) => setPriceKrwWholesale(e.target.value)}
+                    onChange={(e) => setPriceKrwWholesale(e.target.value.replace(/[^0-9]/g, ""))}
                     placeholder="0"
                     className="block w-full rounded-lg border border-zinc-300 pl-8 pr-3.5 py-2 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-zinc-900 dark:focus:border-white"
                   />
@@ -1984,11 +1986,11 @@ export function ProductDetailTabs({
                   <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-xs text-zinc-400">$</span>
                   <input
                     name="estimatedRetailPrice"
-                    type="number"
-                    step="0.01"
+                    type="text"
+                    inputMode="decimal"
                     value={estimatedRetailPrice}
                     onFocus={(e) => e.target.select()}
-                    onChange={(e) => setEstimatedRetailPrice(e.target.value)}
+                    onChange={(e) => setEstimatedRetailPrice(e.target.value.replace(/[^0-9.]/g, ""))}
                     placeholder="0.00"
                     className="block w-full rounded-lg border border-zinc-300 pl-8 pr-3.5 py-2 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-zinc-900 dark:focus:border-white"
                   />
@@ -2001,11 +2003,11 @@ export function ProductDetailTabs({
                   <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-xs text-zinc-400">$</span>
                   <input
                     name="priceUsdFob"
-                    type="number"
-                    step="0.01"
+                    type="text"
+                    inputMode="decimal"
                     value={priceUsdFobState}
                     onFocus={(e) => e.target.select()}
-                    onChange={(e) => setPriceUsdFobState(e.target.value)}
+                    onChange={(e) => setPriceUsdFobState(e.target.value.replace(/[^0-9.]/g, ""))}
                     placeholder="0.00"
                     className="block w-full rounded-lg border border-zinc-300 pl-8 pr-3.5 py-2 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-zinc-900 dark:focus:border-white"
                   />
@@ -2051,11 +2053,11 @@ export function ProductDetailTabs({
                       <tr key={idx}>
                         <td className="px-4 py-3">
                           <input
-                            type="number"
-                            min="1"
+                            type="text"
+                            inputMode="numeric"
                             value={tier.qty}
                             onFocus={(e) => e.target.select()}
-                            onChange={(e) => updatePriceTier(idx, "qty", e.target.value)}
+                            onChange={(e) => updatePriceTier(idx, "qty", e.target.value.replace(/[^0-9]/g, ""))}
                             placeholder="100"
                             className="block w-full max-w-[200px] rounded-lg border border-zinc-300 px-3 py-1.5 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-indigo-500"
                           />
@@ -2065,12 +2067,11 @@ export function ProductDetailTabs({
                             <div className="relative w-full max-w-[150px]">
                               <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-xs text-zinc-450">$</span>
                               <input
-                                type="number"
-                                step="0.01"
-                                min="0"
+                                type="text"
+                                inputMode="decimal"
                                 value={tier.price}
                                 onFocus={(e) => e.target.select()}
-                                onChange={(e) => updatePriceTier(idx, "price", e.target.value)}
+                                onChange={(e) => updatePriceTier(idx, "price", e.target.value.replace(/[^0-9.]/g, ""))}
                                 placeholder="0.00"
                                 className="block w-full rounded-lg border border-zinc-300 pl-8 pr-3 py-1.5 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-indigo-500"
                               />
@@ -2155,11 +2156,11 @@ export function ProductDetailTabs({
                 <label className="block text-xs font-semibold text-zinc-650 dark:text-zinc-300 mb-1">가로 (Width, cm)</label>
                 <input
                   name="itemWidth"
-                  type="number"
-                  step="0.1"
+                  type="text"
+                  inputMode="decimal"
                   value={itemWidth}
                   onFocus={(e) => e.target.select()}
-                  onChange={(e) => setItemWidth(e.target.value)}
+                  onChange={(e) => setItemWidth(e.target.value.replace(/[^0-9.]/g, ""))}
                   placeholder="0.0"
                   className="block w-full rounded-lg border border-zinc-300 px-3.5 py-1.5 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-zinc-900 dark:focus:border-white"
                 />
@@ -2168,11 +2169,11 @@ export function ProductDetailTabs({
                 <label className="block text-xs font-semibold text-zinc-650 dark:text-zinc-300 mb-1">세로 (Depth, cm)</label>
                 <input
                   name="itemDepth"
-                  type="number"
-                  step="0.1"
+                  type="text"
+                  inputMode="decimal"
                   value={itemDepth}
                   onFocus={(e) => e.target.select()}
-                  onChange={(e) => setItemDepth(e.target.value)}
+                  onChange={(e) => setItemDepth(e.target.value.replace(/[^0-9.]/g, ""))}
                   placeholder="0.0"
                   className="block w-full rounded-lg border border-zinc-300 px-3.5 py-1.5 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-zinc-900 dark:focus:border-white"
                 />
@@ -2181,11 +2182,11 @@ export function ProductDetailTabs({
                 <label className="block text-xs font-semibold text-zinc-650 dark:text-zinc-300 mb-1">높이 (Height, cm)</label>
                 <input
                   name="itemHeight"
-                  type="number"
-                  step="0.1"
+                  type="text"
+                  inputMode="decimal"
                   value={itemHeight}
                   onFocus={(e) => e.target.select()}
-                  onChange={(e) => setItemHeight(e.target.value)}
+                  onChange={(e) => setItemHeight(e.target.value.replace(/[^0-9.]/g, ""))}
                   placeholder="0.0"
                   className="block w-full rounded-lg border border-zinc-300 px-3.5 py-1.5 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-zinc-900 dark:focus:border-white"
                 />
@@ -2194,11 +2195,11 @@ export function ProductDetailTabs({
                 <label className="block text-xs font-semibold text-zinc-650 dark:text-zinc-300 mb-1">무게 (Weight, g)</label>
                 <input
                   name="itemWeight"
-                  type="number"
-                  step="0.1"
+                  type="text"
+                  inputMode="decimal"
                   value={itemWeight}
                   onFocus={(e) => e.target.select()}
-                  onChange={(e) => setItemWeight(e.target.value)}
+                  onChange={(e) => setItemWeight(e.target.value.replace(/[^0-9.]/g, ""))}
                   placeholder="0.0"
                   className="block w-full rounded-lg border border-zinc-300 px-3.5 py-1.5 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-zinc-900 dark:focus:border-white"
                 />
@@ -2231,24 +2232,24 @@ export function ProductDetailTabs({
                     <span className="text-[9px] text-zinc-400 font-semibold block">cm</span>
                     <input
                       name="packageWidth"
-                      type="number"
-                      step="0.1"
+                      type="text"
+                      inputMode="decimal"
                       placeholder="0.0"
                       value={packageWidth}
                       onFocus={(e) => e.target.select()}
-                      onChange={(e) => handleWidthCmChange(e.target.value)}
+                      onChange={(e) => handleWidthCmChange(e.target.value.replace(/[^0-9.]/g, ""))}
                       className="mt-0.5 block w-full rounded border border-zinc-300 bg-white px-2 py-1 text-xs text-zinc-900 outline-none focus:border-zinc-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
                     />
                   </div>
                   <div>
                     <span className="text-[9px] text-zinc-450 dark:text-zinc-500 font-semibold block">inch (자동 계산)</span>
                     <input
-                      type="number"
-                      step="0.01"
+                      type="text"
+                      inputMode="decimal"
                       placeholder="0.00"
                       value={packageWidthInch}
                       onFocus={(e) => e.target.select()}
-                      onChange={(e) => handleWidthInchChange(e.target.value)}
+                      onChange={(e) => handleWidthInchChange(e.target.value.replace(/[^0-9.]/g, ""))}
                       className="mt-0.5 block w-full rounded border border-zinc-300 bg-white px-2 py-1 text-xs text-zinc-900 outline-none focus:border-zinc-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
                     />
                   </div>
@@ -2263,24 +2264,24 @@ export function ProductDetailTabs({
                     <span className="text-[9px] text-zinc-400 font-semibold block">cm</span>
                     <input
                       name="packageDepth"
-                      type="number"
-                      step="0.1"
+                      type="text"
+                      inputMode="decimal"
                       placeholder="0.0"
                       value={packageDepth}
                       onFocus={(e) => e.target.select()}
-                      onChange={(e) => handleDepthCmChange(e.target.value)}
+                      onChange={(e) => handleDepthCmChange(e.target.value.replace(/[^0-9.]/g, ""))}
                       className="mt-0.5 block w-full rounded border border-zinc-300 bg-white px-2 py-1 text-xs text-zinc-900 outline-none focus:border-zinc-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
                     />
                   </div>
                   <div>
                     <span className="text-[9px] text-zinc-450 dark:text-zinc-500 font-semibold block">inch (자동 계산)</span>
                     <input
-                      type="number"
-                      step="0.01"
+                      type="text"
+                      inputMode="decimal"
                       placeholder="0.00"
                       value={packageDepthInch}
                       onFocus={(e) => e.target.select()}
-                      onChange={(e) => handleDepthInchChange(e.target.value)}
+                      onChange={(e) => handleDepthInchChange(e.target.value.replace(/[^0-9.]/g, ""))}
                       className="mt-0.5 block w-full rounded border border-zinc-300 bg-white px-2 py-1 text-xs text-zinc-900 outline-none focus:border-zinc-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
                     />
                   </div>
@@ -2295,24 +2296,24 @@ export function ProductDetailTabs({
                     <span className="text-[9px] text-zinc-400 font-semibold block">cm</span>
                     <input
                       name="packageHeight"
-                      type="number"
-                      step="0.1"
+                      type="text"
+                      inputMode="decimal"
                       placeholder="0.0"
                       value={packageHeight}
                       onFocus={(e) => e.target.select()}
-                      onChange={(e) => handleHeightCmChange(e.target.value)}
+                      onChange={(e) => handleHeightCmChange(e.target.value.replace(/[^0-9.]/g, ""))}
                       className="mt-0.5 block w-full rounded border border-zinc-300 bg-white px-2 py-1 text-xs text-zinc-900 outline-none focus:border-zinc-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
                     />
                   </div>
                   <div>
                     <span className="text-[9px] text-zinc-450 dark:text-zinc-500 font-semibold block">inch (자동 계산)</span>
                     <input
-                      type="number"
-                      step="0.01"
+                      type="text"
+                      inputMode="decimal"
                       placeholder="0.00"
                       value={packageHeightInch}
                       onFocus={(e) => e.target.select()}
-                      onChange={(e) => handleHeightInchChange(e.target.value)}
+                      onChange={(e) => handleHeightInchChange(e.target.value.replace(/[^0-9.]/g, ""))}
                       className="mt-0.5 block w-full rounded border border-zinc-300 bg-white px-2 py-1 text-xs text-zinc-900 outline-none focus:border-zinc-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
                     />
                   </div>
@@ -2327,36 +2328,36 @@ export function ProductDetailTabs({
                     <span className="text-[9px] text-zinc-400 font-semibold block">g</span>
                     <input
                       name="packageWeight"
-                      type="number"
-                      step="0.1"
+                      type="text"
+                      inputMode="decimal"
                       placeholder="0.0"
                       value={packageWeight}
                       onFocus={(e) => e.target.select()}
-                      onChange={(e) => handleWeightGChange(e.target.value)}
+                      onChange={(e) => handleWeightGChange(e.target.value.replace(/[^0-9.]/g, ""))}
                       className="mt-0.5 block w-full rounded border border-zinc-300 bg-white px-1.5 py-1 text-[11px] text-zinc-900 outline-none focus:border-zinc-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
                     />
                   </div>
                   <div>
                     <span className="text-[9px] text-zinc-450 dark:text-zinc-500 font-semibold block">lb (자동)</span>
                     <input
-                      type="number"
-                      step="0.001"
+                      type="text"
+                      inputMode="decimal"
                       placeholder="0.000"
                       value={packageWeightLb}
                       onFocus={(e) => e.target.select()}
-                      onChange={(e) => handleWeightLbChange(e.target.value)}
+                      onChange={(e) => handleWeightLbChange(e.target.value.replace(/[^0-9.]/g, ""))}
                       className="mt-0.5 block w-full rounded border border-zinc-300 bg-white px-1.5 py-1 text-[11px] text-zinc-900 outline-none focus:border-zinc-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
                     />
                   </div>
                   <div>
                     <span className="text-[9px] text-zinc-450 dark:text-zinc-500 font-semibold block">oz (자동)</span>
                     <input
-                      type="number"
-                      step="0.01"
+                      type="text"
+                      inputMode="decimal"
                       placeholder="0.00"
                       value={packageWeightOz}
                       onFocus={(e) => e.target.select()}
-                      onChange={(e) => handleWeightOzChange(e.target.value)}
+                      onChange={(e) => handleWeightOzChange(e.target.value.replace(/[^0-9.]/g, ""))}
                       className="mt-0.5 block w-full rounded border border-zinc-300 bg-white px-1.5 py-1 text-[11px] text-zinc-900 outline-none focus:border-zinc-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
                     />
                   </div>

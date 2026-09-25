@@ -1094,13 +1094,13 @@ export const CategoryAttributeForm = forwardRef<CategoryAttributeFormHandle, Cat
           <div className="flex items-center gap-2">
             <input
               id={`attr-number-input-${attr.code}`}
-              type="number"
-              step="any"
+              type="text"
+              inputMode="decimal"
               placeholder="숫자 입력"
               value={val === "NA" ? "" : (val ?? "")}
               disabled={!isEditable || saving || val === "NA"}
               onFocus={(e) => e.target.select()}
-              onChange={(e) => updateValue(attr.code, e.target.value)}
+              onChange={(e) => updateValue(attr.code, e.target.value.replace(/[^0-9.]/g, ""))}
               className="bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 text-zinc-900 dark:text-zinc-100 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:bg-white dark:focus:bg-zinc-950 focus:border-zinc-900 dark:focus:border-zinc-100 disabled:opacity-60 w-32"
             />
             {attr.inputType === "NUMBER_UNIT" && attr.unitSet && (
@@ -1130,14 +1130,14 @@ export const CategoryAttributeForm = forwardRef<CategoryAttributeFormHandle, Cat
           <div className="flex items-center gap-2">
             <input
               id={`attr-range-min-${attr.code}`}
-              type="number"
-              step="any"
+              type="text"
+              inputMode="decimal"
               placeholder="최소"
               value={val === "NA" ? "" : (Array.isArray(val) ? (val[0] ?? "") : (val ?? ""))}
               disabled={!isEditable || saving || val === "NA"}
               onFocus={(e) => e.target.select()}
               onChange={(e) => {
-                const minVal = e.target.value;
+                const minVal = e.target.value.replace(/[^0-9.]/g, "");
                 const maxVal = Array.isArray(val) ? (val[1] ?? "") : "";
                 updateValue(attr.code, [minVal, maxVal]);
               }}
@@ -1146,14 +1146,14 @@ export const CategoryAttributeForm = forwardRef<CategoryAttributeFormHandle, Cat
             <span className="text-zinc-400 dark:text-zinc-600 font-bold shrink-0">~</span>
             <input
               id={`attr-range-max-${attr.code}`}
-              type="number"
-              step="any"
+              type="text"
+              inputMode="decimal"
               placeholder="최대"
               value={val === "NA" ? "" : (Array.isArray(val) ? (val[1] ?? "") : "")}
               disabled={!isEditable || saving || val === "NA"}
               onFocus={(e) => e.target.select()}
               onChange={(e) => {
-                const maxVal = e.target.value;
+                const maxVal = e.target.value.replace(/[^0-9.]/g, "");
                 const minVal = Array.isArray(val) ? (val[0] ?? "") : (val ?? "");
                 updateValue(attr.code, [minVal, maxVal]);
               }}

@@ -485,12 +485,13 @@ export function ProductForm({ action, brands }: ProductFormProps) {
               <input
                 id="priceKrwRetail"
                 name="priceKrwRetail"
-                type="number"
+                type="text"
+                inputMode="numeric"
                 placeholder="예: 25000"
                 value={priceKrwRetail}
                 onFocus={(e) => e.target.select()}
                 onChange={(e) => {
-                  setPriceKrwRetail(e.target.value);
+                  setPriceKrwRetail(e.target.value.replace(/[^0-9]/g, ""));
                   setFieldErrors((prev) => ({ ...prev, priceKrwRetail: false }));
                 }}
                 className={getInputClass(fieldErrors.priceKrwRetail)}
@@ -504,13 +505,13 @@ export function ProductForm({ action, brands }: ProductFormProps) {
               <input
                 id="priceUsdFob"
                 name="priceUsdFob"
-                type="number"
-                step="0.01"
+                type="text"
+                inputMode="decimal"
                 placeholder="예: 12.50"
                 value={priceUsdFob}
                 onFocus={(e) => e.target.select()}
                 onChange={(e) => {
-                  setPriceUsdFob(e.target.value);
+                  setPriceUsdFob(e.target.value.replace(/[^0-9.]/g, ""));
                   setFieldErrors((prev) => ({ ...prev, priceUsdFob: false }));
                 }}
                 className={getInputClass(fieldErrors.priceUsdFob)}
@@ -609,24 +610,24 @@ export function ProductForm({ action, brands }: ProductFormProps) {
                   <span className="text-[9px] text-zinc-400 font-semibold block">cm</span>
                   <input
                     name="packageWidth"
-                    type="number"
-                    step="0.1"
+                    type="text"
+                    inputMode="decimal"
                     placeholder="0.0"
                     value={packageWidth}
                     onFocus={(e) => e.target.select()}
-                    onChange={(e) => handleWidthCmChange(e.target.value)}
+                    onChange={(e) => handleWidthCmChange(e.target.value.replace(/[^0-9.]/g, ""))}
                     className="mt-0.5 block w-full rounded border border-zinc-300 bg-white px-2 py-1 text-xs text-zinc-900 outline-none focus:border-zinc-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
                   />
                 </div>
                 <div>
                   <span className="text-[9px] text-zinc-450 dark:text-zinc-500 font-semibold block">inch (자동 계산)</span>
                   <input
-                    type="number"
-                    step="0.01"
+                    type="text"
+                    inputMode="decimal"
                     placeholder="0.00"
                     value={packageWidthInch}
                     onFocus={(e) => e.target.select()}
-                    onChange={(e) => handleWidthInchChange(e.target.value)}
+                    onChange={(e) => handleWidthInchChange(e.target.value.replace(/[^0-9.]/g, ""))}
                     className="mt-0.5 block w-full rounded border border-zinc-300 bg-white px-2 py-1 text-xs text-zinc-900 outline-none focus:border-zinc-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
                   />
                 </div>
@@ -641,24 +642,24 @@ export function ProductForm({ action, brands }: ProductFormProps) {
                   <span className="text-[9px] text-zinc-400 font-semibold block">cm</span>
                   <input
                     name="packageDepth"
-                    type="number"
-                    step="0.1"
+                    type="text"
+                    inputMode="decimal"
                     placeholder="0.0"
                     value={packageDepth}
                     onFocus={(e) => e.target.select()}
-                    onChange={(e) => handleDepthCmChange(e.target.value)}
+                    onChange={(e) => handleDepthCmChange(e.target.value.replace(/[^0-9.]/g, ""))}
                     className="mt-0.5 block w-full rounded border border-zinc-300 bg-white px-2 py-1 text-xs text-zinc-900 outline-none focus:border-zinc-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
                   />
                 </div>
                 <div>
                   <span className="text-[9px] text-zinc-450 dark:text-zinc-500 font-semibold block">inch (자동 계산)</span>
                   <input
-                    type="number"
-                    step="0.01"
+                    type="text"
+                    inputMode="decimal"
                     placeholder="0.00"
                     value={packageDepthInch}
                     onFocus={(e) => e.target.select()}
-                    onChange={(e) => handleDepthInchChange(e.target.value)}
+                    onChange={(e) => handleDepthInchChange(e.target.value.replace(/[^0-9.]/g, ""))}
                     className="mt-0.5 block w-full rounded border border-zinc-300 bg-white px-2 py-1 text-xs text-zinc-900 outline-none focus:border-zinc-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
                   />
                 </div>
@@ -673,24 +674,24 @@ export function ProductForm({ action, brands }: ProductFormProps) {
                   <span className="text-[9px] text-zinc-400 font-semibold block">cm</span>
                   <input
                     name="packageHeight"
-                    type="number"
-                    step="0.1"
+                    type="text"
+                    inputMode="decimal"
                     placeholder="0.0"
                     value={packageHeight}
                     onFocus={(e) => e.target.select()}
-                    onChange={(e) => handleHeightCmChange(e.target.value)}
+                    onChange={(e) => handleHeightCmChange(e.target.value.replace(/[^0-9.]/g, ""))}
                     className="mt-0.5 block w-full rounded border border-zinc-300 bg-white px-2 py-1 text-xs text-zinc-900 outline-none focus:border-zinc-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
                   />
                 </div>
                 <div>
                   <span className="text-[9px] text-zinc-450 dark:text-zinc-500 font-semibold block">inch (자동 계산)</span>
                   <input
-                    type="number"
-                    step="0.01"
+                    type="text"
+                    inputMode="decimal"
                     placeholder="0.00"
                     value={packageHeightInch}
                     onFocus={(e) => e.target.select()}
-                    onChange={(e) => handleHeightInchChange(e.target.value)}
+                    onChange={(e) => handleHeightInchChange(e.target.value.replace(/[^0-9.]/g, ""))}
                     className="mt-0.5 block w-full rounded border border-zinc-300 bg-white px-2 py-1 text-xs text-zinc-900 outline-none focus:border-zinc-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
                   />
                 </div>
@@ -705,36 +706,36 @@ export function ProductForm({ action, brands }: ProductFormProps) {
                   <span className="text-[9px] text-zinc-400 font-semibold block">g</span>
                   <input
                     name="packageWeight"
-                    type="number"
-                    step="0.1"
+                    type="text"
+                    inputMode="decimal"
                     placeholder="0.0"
                     value={packageWeight}
                     onFocus={(e) => e.target.select()}
-                    onChange={(e) => handleWeightGChange(e.target.value)}
+                    onChange={(e) => handleWeightGChange(e.target.value.replace(/[^0-9.]/g, ""))}
                     className="mt-0.5 block w-full rounded border border-zinc-300 bg-white px-1.5 py-1 text-[11px] text-zinc-900 outline-none focus:border-zinc-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
                   />
                 </div>
                 <div>
                   <span className="text-[9px] text-zinc-450 dark:text-zinc-500 font-semibold block">lb (자동)</span>
                   <input
-                    type="number"
-                    step="0.001"
+                    type="text"
+                    inputMode="decimal"
                     placeholder="0.000"
                     value={packageWeightLb}
                     onFocus={(e) => e.target.select()}
-                    onChange={(e) => handleWeightLbChange(e.target.value)}
+                    onChange={(e) => handleWeightLbChange(e.target.value.replace(/[^0-9.]/g, ""))}
                     className="mt-0.5 block w-full rounded border border-zinc-300 bg-white px-1.5 py-1 text-[11px] text-zinc-900 outline-none focus:border-zinc-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
                   />
                 </div>
                 <div>
                   <span className="text-[9px] text-zinc-450 dark:text-zinc-500 font-semibold block">oz (자동)</span>
                   <input
-                    type="number"
-                    step="0.01"
+                    type="text"
+                    inputMode="decimal"
                     placeholder="0.00"
                     value={packageWeightOz}
                     onFocus={(e) => e.target.select()}
-                    onChange={(e) => handleWeightOzChange(e.target.value)}
+                    onChange={(e) => handleWeightOzChange(e.target.value.replace(/[^0-9.]/g, ""))}
                     className="mt-0.5 block w-full rounded border border-zinc-300 bg-white px-1.5 py-1 text-[11px] text-zinc-900 outline-none focus:border-zinc-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
                   />
                 </div>
