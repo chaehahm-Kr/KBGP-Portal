@@ -301,20 +301,32 @@ export function RetailerWeeklyCheckStepper({ session }: WeeklyCheckStepperProps)
                     )}
 
                     {/* Historical Context & Movement Semantics */}
-                    <div className="pt-2 flex flex-wrap items-center gap-4 text-xs text-zinc-500 dark:text-zinc-400">
+                    <div className="pt-2 flex flex-wrap items-center gap-3 text-xs text-zinc-500 dark:text-zinc-400">
                       <div>
                         Previous Reported:{" "}
                         <strong className="text-zinc-700 dark:text-zinc-300">
                           {activeItem.previousReportedQty !== null ? `${activeItem.previousReportedQty} units` : "Baseline (Initial count)"}
                         </strong>
                       </div>
+
+                      {Boolean(activeItem.deliveredSincePrevious && activeItem.deliveredSincePrevious > 0) && (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                          <span>📦</span> +{activeItem.deliveredSincePrevious} Delivered
+                        </span>
+                      )}
+
                       {activeItem.previousReportedQty !== null && currentCountState.isCounted && (
                         <div className="text-indigo-600 dark:text-indigo-400 font-semibold">
-                          Provisional Movement:{" "}
+                          Estimated Movement:{" "}
                           <span>
-                            {Math.max(0, activeItem.previousReportedQty - currentCountState.remainingQty)} units
-                          </span>{" "}
-                          <span className="text-[10px] text-zinc-400 font-normal">(Delivery tracking pending)</span>
+                            {Math.max(
+                              0,
+                              activeItem.previousReportedQty +
+                                (activeItem.deliveredSincePrevious || 0) -
+                                currentCountState.remainingQty
+                            )}{" "}
+                            units
+                          </span>
                         </div>
                       )}
                     </div>

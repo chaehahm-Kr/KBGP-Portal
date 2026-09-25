@@ -80,6 +80,7 @@ export function RetailerWeeklyCheckDetailView({ session }: WeeklyCheckDetailView
                 <th className="py-3 px-4">Product</th>
                 <th className="py-3 px-4">SKU</th>
                 <th className="py-3 px-4 text-right">Previous Reported</th>
+                <th className="py-3 px-4 text-right">Confirmed Delivered</th>
                 <th className="py-3 px-4 text-right">Reported Remaining</th>
                 <th className="py-3 px-4 text-right">Estimated Movement</th>
                 <th className="py-3 px-4">Notes</th>
@@ -106,6 +107,15 @@ export function RetailerWeeklyCheckDetailView({ session }: WeeklyCheckDetailView
                   <td className="py-3.5 px-4 font-mono text-zinc-400">{it.sku}</td>
                   <td className="py-3.5 px-4 text-right text-zinc-500">
                     {it.previousReportedQty !== null ? `${it.previousReportedQty} units` : "Baseline"}
+                  </td>
+                  <td className="py-3.5 px-4 text-right text-zinc-500">
+                    {it.deliveredSincePrevious && it.deliveredSincePrevious > 0 ? (
+                      <span className="font-bold text-emerald-600 dark:text-emerald-400">
+                        +{it.deliveredSincePrevious} units
+                      </span>
+                    ) : (
+                      "0 units"
+                    )}
                   </td>
                   <td className="py-3.5 px-4 text-right font-bold text-zinc-900 dark:text-white">
                     {it.reportedRemainingQty} units

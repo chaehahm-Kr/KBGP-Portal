@@ -2,6 +2,7 @@ import "server-only";
 import { verifyRetailerSession } from "@/lib/auth/dal";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { resolveEffectiveSku } from "@/lib/product/types";
+import { getStoreConfirmedDeliveredQty } from "@/lib/retailer/fulfillment-actions";
 
 export interface WeeklyCheckItemState {
   id?: string;
@@ -262,10 +263,19 @@ export async function getOrCreateStoreWeeklyCheck(storeId: string): Promise<Week
         }
 
         // Compute honest movement:
-        // If delivered_since_previous is null and previousReportedQty exists -> provisional movement
+        let deliveredSince: number | null = item.delivered_since_previous ?? null;
+        if (deliveredSince === null && item.previous_reported_qty !== null && existingCheck.status === "draft") {
+          deliveredSince = await getStoreConfirmedDeliveredQty(
+            storeId,
+            item.product_id,
+            null,
+            new Date().toISOString()
+          );
+        }
+
         let movement: number | null = item.estimated_movement ?? null;
         if (movement === null && item.previous_reported_qty !== null && item.is_counted) {
-          const delivered = item.delivered_since_previous ?? 0;
+          const delivered = deliveredSince ?? 0;
           movement = item.previous_reported_qty + delivered - (item.reported_remaining_qty || 0);
         }
 
@@ -279,7 +289,7 @@ export async function getOrCreateStoreWeeklyCheck(storeId: string): Promise<Week
           thumbnailUrl: thumb,
           reportedRemainingQty: item.reported_remaining_qty || 0,
           previousReportedQty: item.previous_reported_qty ?? null,
-          deliveredSincePrevious: item.delivered_since_previous ?? null,
+          deliveredSincePrevious: deliveredSince,
           estimatedMovement: movement,
           isCounted: Boolean(item.is_counted),
           notes: item.notes || null,
@@ -354,6 +364,8 @@ export async function getOrCreateStoreWeeklyCheck(storeId: string): Promise<Week
     .from("retailer_weekly_checks")
     .select(`
       id,
+      submitted_at,
+      report_date,
       retailer_weekly_check_items (
         product_id,
         reported_remaining_qty
@@ -403,20 +415,35 @@ export async function getOrCreateStoreWeeklyCheck(storeId: string): Promise<Week
     .single();
 
   if (checkInsertErr || !newCheck) {
-    console.error("Error creating weekly check draft:", checkInsertErr);
-    throw new Error("Failed to start weekly product check session.");
+    console.error("Error inserting weekly check:", checkInsertErr);
+    return null;
   }
 
-  // Insert Items with NULL delivered_since_previous (Pending Delivery Tracking)
-  const itemsToInsert = candidateProducts.map((p) => ({
-    check_id: newCheck.id,
-    product_id: p.id,
-    reported_remaining_qty: 0,
-    previous_reported_qty: prevQtyMap.get(p.id) ?? null,
-    delivered_since_previous: null,
-    estimated_movement: null,
-    is_counted: false,
-  }));
+  // Insert Items with confirmed delivered_since_previous
+  const prevSubmittedAt = lastSubmittedCheck?.submitted_at || lastSubmittedCheck?.report_date || null;
+  const itemsToInsert = await Promise.all(
+    candidateProducts.map(async (p) => {
+      const prevQty = prevQtyMap.get(p.id) ?? null;
+      let deliveredSince: number | null = null;
+      if (prevQty !== null) {
+        deliveredSince = await getStoreConfirmedDeliveredQty(
+          storeId,
+          p.id,
+          prevSubmittedAt,
+          new Date().toISOString()
+        );
+      }
+      return {
+        check_id: newCheck.id,
+        product_id: p.id,
+        reported_remaining_qty: 0,
+        previous_reported_qty: prevQty,
+        delivered_since_previous: deliveredSince,
+        estimated_movement: null,
+        is_counted: false,
+      };
+    })
+  );
 
   if (itemsToInsert.length > 0) {
     await adminClient.from("retailer_weekly_check_items").insert(itemsToInsert);

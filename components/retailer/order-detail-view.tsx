@@ -218,6 +218,137 @@ export function RetailerOrderDetailView({ order }: OrderDetailViewProps) {
             </div>
           )}
 
+          {/* Fulfillment & Delivery Tracking Section */}
+          <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-5 shadow-xs space-y-4">
+            <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-3">
+              <h2 className="text-xs font-bold uppercase tracking-wider text-zinc-900 dark:text-white flex items-center gap-2">
+                <span>🚚</span>
+                <span>Fulfillment & Delivery Status</span>
+              </h2>
+              {order.fulfillments && order.fulfillments.length > 0 && (
+                <span className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400">
+                  {order.fulfillments.length} {order.fulfillments.length === 1 ? "Shipment" : "Shipments"}
+                </span>
+              )}
+            </div>
+
+            {(!order.fulfillments || order.fulfillments.length === 0) ? (
+              <div className="p-4 rounded-xl bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200/60 dark:border-zinc-800 text-xs text-zinc-500 dark:text-zinc-400 flex items-center gap-3">
+                <span className="text-lg">📦</span>
+                <div>
+                  <p className="font-semibold text-zinc-700 dark:text-zinc-300">
+                    Awaiting Warehouse Shipment Preparation
+                  </p>
+                  <p className="text-[11px] text-zinc-400 mt-0.5">
+                    Carrier tracking numbers and confirmed delivery records will appear here once dispatched.
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {order.fulfillments.map((f, idx) => (
+                  <div
+                    key={f.id}
+                    className="p-4 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50/60 dark:bg-zinc-950/40 space-y-3 text-xs"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-200/60 dark:border-zinc-800 pb-2">
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-zinc-900 dark:text-white">
+                          Shipment #{idx + 1} ({f.fulfillmentNumber})
+                        </span>
+                        <span
+                          className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                            f.status === "delivered"
+                              ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800"
+                              : f.status === "shipped"
+                              ? "bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-400 border border-purple-200 dark:border-purple-800"
+                              : "bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-400 border border-amber-200 dark:border-amber-800"
+                          }`}
+                        >
+                          {f.status}
+                        </span>
+                      </div>
+
+                      <div className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                        {f.shippedAt && (
+                          <span>
+                            Shipped: {new Date(f.shippedAt).toLocaleDateString()}{" "}
+                          </span>
+                        )}
+                        {f.deliveredAt && (
+                          <span className="font-bold text-emerald-600 dark:text-emerald-400 ml-2">
+                            • Delivered: {new Date(f.deliveredAt).toLocaleDateString()}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                      <div>
+                        <span className="text-[10px] uppercase font-bold text-zinc-400 block">Carrier & Tracking</span>
+                        <div className="font-semibold text-zinc-900 dark:text-white mt-0.5">
+                          {f.carrier || "Standard Freight"}
+                          {f.trackingNumber && (
+                            <span className="ml-2 font-mono text-indigo-600 dark:text-indigo-400">
+                              {f.trackingUrl ? (
+                                <a
+                                  href={f.trackingUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="underline hover:text-indigo-500"
+                                >
+                                  {f.trackingNumber} ↗
+                                </a>
+                              ) : (
+                                f.trackingNumber
+                              )}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {f.notes && (
+                        <div>
+                          <span className="text-[10px] uppercase font-bold text-zinc-400 block">Shipment Note</span>
+                          <p className="text-zinc-600 dark:text-zinc-400 mt-0.5">{f.notes}</p>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Shipment Line Items */}
+                    <div className="pt-2 border-t border-zinc-100 dark:border-zinc-800/80">
+                      <div className="text-[10px] uppercase font-bold text-zinc-400 mb-1.5">
+                        Shipped Products in this Package:
+                      </div>
+                      <div className="space-y-1">
+                        {f.items.map((fit) => (
+                          <div
+                            key={fit.id}
+                            className="flex items-center justify-between text-xs py-1 px-2 rounded bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800"
+                          >
+                            <span className="font-medium text-zinc-900 dark:text-white">
+                              {fit.productName} <span className="text-zinc-400 font-mono text-[10px]">({fit.sku})</span>
+                            </span>
+                            <div className="flex items-center gap-2">
+                              <span className="text-zinc-600 dark:text-zinc-300">
+                                Shipped: <strong>{fit.quantityShipped}</strong> units
+                              </span>
+                              {f.status === "delivered" && (
+                                <span className="text-emerald-600 dark:text-emerald-400 font-bold">
+                                  ✓ Delivered: {fit.quantityDelivered} units
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
           {/* Payment Transactions Log (if present) */}
           {order.payments && order.payments.length > 0 && (
             <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-5 shadow-xs space-y-3">
@@ -260,7 +391,7 @@ export function RetailerOrderDetailView({ order }: OrderDetailViewProps) {
 
             <div className="divide-y divide-zinc-100 dark:divide-zinc-800">
               {order.items.map((item) => (
-                <div key={item.id} className="p-4 sm:p-5 flex items-center justify-between gap-4">
+                <div key={item.id} className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div className="space-y-1 min-w-0 flex-1">
                     <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
                       {item.brandName}
@@ -275,9 +406,24 @@ export function RetailerOrderDetailView({ order }: OrderDetailViewProps) {
                       <span>•</span>
                       <span>Case Pack: {item.casePackQty} units</span>
                     </div>
+
+                    {/* Fulfillment Delivery Progress per item */}
+                    <div className="pt-1.5 flex flex-wrap items-center gap-3 text-[11px]">
+                      <span className="text-zinc-600 dark:text-zinc-400">
+                        Ordered: <strong>{item.quantity}</strong>
+                      </span>
+                      <span className="text-zinc-400">•</span>
+                      <span className={(item.quantityShipped || 0) > 0 ? "text-purple-600 dark:text-purple-400 font-medium" : "text-zinc-400"}>
+                        Shipped: <strong>{item.quantityShipped || 0}</strong>
+                      </span>
+                      <span className="text-zinc-400">•</span>
+                      <span className={(item.quantityDelivered || 0) > 0 ? "text-emerald-600 dark:text-emerald-400 font-bold" : "text-zinc-400"}>
+                        Delivered: <strong>{item.quantityDelivered || 0}</strong>
+                      </span>
+                    </div>
                   </div>
 
-                  <div className="text-right shrink-0">
+                  <div className="text-left sm:text-right shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-zinc-100 dark:border-zinc-800">
                     <div className="text-xs text-zinc-500 dark:text-zinc-400">
                       {item.quantity} units @ ${item.unitWholesalePrice.toFixed(2)}
                     </div>

@@ -239,6 +239,168 @@ export async function getAdminRetailerDetail(companyId: string) {
     .eq("company_id", companyId)
     .order("accepted_at", { ascending: false });
 
+  // 6. Fetch Retailer Orders & Fulfillments
+  const { data: rawOrders } = await adminClient
+    .from("retailer_orders")
+    .select(`
+      id,
+      order_number,
+      store_id,
+      order_status,
+      payment_status,
+      payment_method,
+      payment_terms,
+      subtotal_amount,
+      shipping_amount,
+      tax_amount,
+      total_amount,
+      total_skus_count,
+      total_items_count,
+      notes,
+      is_test,
+      created_at,
+      stores (
+        id,
+        name,
+        city,
+        state,
+        address,
+        phone
+      ),
+      retailer_order_items (
+        id,
+        product_id,
+        quantity,
+        unit_wholesale_price,
+        line_total,
+        products (
+          id,
+          name,
+          name_en,
+          letusto_sku,
+          manufacture_sku,
+          brands (
+            name
+          )
+        )
+      )
+    `)
+    .eq("company_id", companyId)
+    .order("created_at", { ascending: false });
+
+  const orderIds = (rawOrders || []).map((o) => o.id);
+  let fulfillmentsByOrderId: Record<string, any[]> = {};
+
+  if (orderIds.length > 0) {
+    const { data: rawFulfillments } = await adminClient
+      .from("retailer_order_fulfillments")
+      .select(`
+        *,
+        retailer_order_fulfillment_items (
+          id,
+          fulfillment_id,
+          order_item_id,
+          product_id,
+          quantity_shipped,
+          quantity_delivered,
+          products (
+            id,
+            name,
+            letusto_sku,
+            manufacture_sku
+          )
+        )
+      `)
+      .in("order_id", orderIds)
+      .order("created_at", { ascending: true });
+
+    (rawFulfillments || []).forEach((f: any) => {
+      if (!fulfillmentsByOrderId[f.order_id]) {
+        fulfillmentsByOrderId[f.order_id] = [];
+      }
+      fulfillmentsByOrderId[f.order_id].push({
+        id: f.id,
+        fulfillmentNumber: f.fulfillment_number,
+        orderId: f.order_id,
+        status: f.status,
+        carrier: f.carrier,
+        trackingNumber: f.tracking_number,
+        trackingUrl: f.tracking_url,
+        shippedAt: f.shipped_at,
+        deliveredAt: f.delivered_at,
+        notes: f.notes,
+        createdAt: f.created_at,
+        items: (f.retailer_order_fulfillment_items || []).map((fit: any) => ({
+          id: fit.id,
+          orderItemId: fit.order_item_id,
+          productId: fit.product_id,
+          sku: fit.products?.letusto_sku || fit.products?.manufacture_sku || "KS-SKU",
+          productName: fit.products?.name || "Product",
+          quantityShipped: Number(fit.quantity_shipped || 0),
+          quantityDelivered: Number(fit.quantity_delivered || 0),
+        })),
+      });
+    });
+  }
+
+  const orders = (rawOrders || []).map((o: any) => {
+    const oFulfillments = fulfillmentsByOrderId[o.id] || [];
+    const items = (o.retailer_order_items || []).map((it: any) => {
+      const p = it.products || {};
+      const sku = p.letusto_sku || p.manufacture_sku || "KS-SKU";
+
+      // Sum quantities shipped/delivered across active fulfillments
+      let qtyShipped = 0;
+      let qtyDelivered = 0;
+      oFulfillments
+        .filter((f) => f.status !== "cancelled")
+        .forEach((f) => {
+          f.items.forEach((fit: any) => {
+            if (fit.orderItemId === it.id) {
+              qtyShipped += fit.quantityShipped;
+              qtyDelivered += fit.quantityDelivered;
+            }
+          });
+        });
+
+      return {
+        id: it.id,
+        productId: it.product_id,
+        productName: p.name || "Product",
+        productNameEn: p.name_en || null,
+        brandName: p.brands?.name || "K SELECT Brand",
+        sku,
+        quantity: Number(it.quantity || 0),
+        unitWholesalePrice: Number(it.unit_wholesale_price || 0),
+        lineTotal: Number(it.line_total || 0),
+        quantityShipped: qtyShipped,
+        quantityDelivered: qtyDelivered,
+      };
+    });
+
+    return {
+      id: o.id,
+      orderNumber: o.order_number,
+      storeId: o.store_id,
+      storeName: o.stores?.name || "Store",
+      orderStatus: o.order_status,
+      paymentStatus: o.payment_status,
+      paymentMethod: o.payment_method,
+      paymentTerms: o.payment_terms || "PREPAID",
+      subtotalAmount: Number(o.subtotal_amount || 0),
+      shippingAmount: Number(o.shipping_amount || 0),
+      taxAmount: Number(o.tax_amount || 0),
+      totalAmount: Number(o.total_amount || 0),
+      totalSkusCount: Number(o.total_skus_count || items.length),
+      totalItemsCount: Number(o.total_items_count || items.reduce((s: number, i: any) => s + i.quantity, 0)),
+      notes: o.notes,
+      isTest: Boolean(o.is_test),
+      createdAt: o.created_at,
+      items,
+      fulfillments: oFulfillments,
+    };
+  });
+
   return {
     company: {
       id: company.id,
@@ -257,6 +419,7 @@ export async function getAdminRetailerDetail(companyId: string) {
     members: activeMembers,
     invitations: invitations || [],
     agreements: agreements || [],
+    orders: orders || [],
   };
 }
 

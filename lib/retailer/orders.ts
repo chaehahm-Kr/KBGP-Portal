@@ -6,6 +6,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { resolveEffectiveSku } from "@/lib/product/types";
 import { getRetailerPaymentEligibility, getOrderPayments } from "@/lib/retailer/payment-actions";
 import { RetailerPaymentMethod, RetailerPaymentRecord } from "@/lib/retailer/payment-types";
+import { getOrderFulfillments } from "@/lib/retailer/fulfillment-actions";
 
 export interface RetailerOrderSummary {
   id: string;
@@ -35,6 +36,8 @@ export interface RetailerOrderItemDetail {
   unitWholesalePrice: number;
   unitMsrp: number | null;
   quantity: number;
+  quantityShipped?: number;
+  quantityDelivered?: number;
   casePackQty: number;
   lineTotal: number;
 }
@@ -53,6 +56,7 @@ export interface RetailerOrderDetail extends RetailerOrderSummary {
   paymentNotes: string | null;
   items: RetailerOrderItemDetail[];
   payments: RetailerPaymentRecord[];
+  fulfillments: import("./fulfillment-types").RetailerFulfillment[];
 }
 
 export interface SubmitOrderPayload {
@@ -676,6 +680,28 @@ export async function getRetailerOrderDetail(
       return null;
     }
 
+    // Fetch payments history
+    const payments = await getOrderPayments(order.id);
+
+    // Fetch fulfillments history
+    const fulfillments = await getOrderFulfillments(order.id);
+
+    // Calculate line-item cumulative shipped and delivered quantities
+    const lineShippedMap = new Map<string, number>();
+    const lineDeliveredMap = new Map<string, number>();
+
+    fulfillments
+      .filter((f) => f.status !== "cancelled")
+      .forEach((f) => {
+        f.items.forEach((it) => {
+          const s = lineShippedMap.get(it.orderItemId) || 0;
+          lineShippedMap.set(it.orderItemId, s + it.quantityShipped);
+
+          const d = lineDeliveredMap.get(it.orderItemId) || 0;
+          lineDeliveredMap.set(it.orderItemId, d + it.quantityDelivered);
+        });
+      });
+
     const rawItems = (order.retailer_order_items as any[]) || [];
     const items: RetailerOrderItemDetail[] = rawItems.map((item) => ({
       id: item.id,
@@ -686,13 +712,12 @@ export async function getRetailerOrderDetail(
       unitWholesalePrice: Number(item.unit_wholesale_price),
       unitMsrp: item.unit_msrp ? Number(item.unit_msrp) : null,
       quantity: item.quantity,
+      quantityShipped: lineShippedMap.get(item.id) || 0,
+      quantityDelivered: lineDeliveredMap.get(item.id) || 0,
       casePackQty: item.case_pack_qty,
       line_total: Number(item.line_total),
       lineTotal: Number(item.line_total),
     }));
-
-    // Fetch payments history
-    const payments = await getOrderPayments(order.id);
 
     return {
       id: order.id,
@@ -724,6 +749,7 @@ export async function getRetailerOrderDetail(
       storeName: (order.stores as any)?.name || "Main Store",
       items,
       payments,
+      fulfillments,
     };
   } catch (err) {
     console.error("getRetailerOrderDetail exception:", err);

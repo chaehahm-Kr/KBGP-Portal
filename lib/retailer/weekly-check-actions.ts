@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { verifyRetailerSession } from "@/lib/auth/dal";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isSalePriceActive } from "@/lib/retailer/store-pricing-types";
+import { getStoreConfirmedDeliveredQty } from "@/lib/retailer/fulfillment-actions";
 
 export async function updateWeeklyCheckItemsAction(
   checkId: string,
@@ -80,6 +81,36 @@ export async function updateWeeklyCheckItemsAction(
       });
     }
 
+    // Fetch previous submitted check for this store to compute delivered_since_previous and estimated_movement
+    let prevSubmittedAt: string | null = null;
+    const prevQtyMap = new Map<string, number>();
+
+    if (isSubmitting) {
+      const { data: lastSubmittedCheck } = await adminClient
+        .from("retailer_weekly_checks")
+        .select(`
+          id,
+          submitted_at,
+          report_date,
+          retailer_weekly_check_items (
+            product_id,
+            reported_remaining_qty
+          )
+        `)
+        .eq("store_id", storeId)
+        .eq("status", "submitted")
+        .neq("id", checkId)
+        .order("submitted_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (lastSubmittedCheck) {
+        prevSubmittedAt = lastSubmittedCheck.submitted_at || lastSubmittedCheck.report_date;
+        const prevItems = (lastSubmittedCheck.retailer_weekly_check_items as any[]) || [];
+        prevItems.forEach((pIt) => prevQtyMap.set(pIt.product_id, pIt.reported_remaining_qty));
+      }
+    }
+
     let totalCounted = 0;
     let totalUnits = 0;
 
@@ -94,8 +125,25 @@ export async function updateWeeklyCheckItemsAction(
       // Calculate snapshot values on submit
       let priceSnapshot: number | null = null;
       let priceBasis: string | null = null;
+      let deliveredSince: number | null = null;
+      let movement: number | null = null;
+      let prevReported: number | null = null;
 
       if (isSubmitting) {
+        if (prevQtyMap.has(it.productId)) {
+          prevReported = prevQtyMap.get(it.productId) ?? null;
+          if (prevReported !== null) {
+            const confirmedDelivered = await getStoreConfirmedDeliveredQty(
+              storeId,
+              it.productId,
+              prevSubmittedAt,
+              new Date().toISOString()
+            );
+            deliveredSince = confirmedDelivered;
+            movement = prevReported + confirmedDelivered - remaining;
+          }
+        }
+
         const priceRow = storePricesMap.get(it.productId);
         const msrp = productMsrpMap.get(it.productId) || 0;
 
@@ -131,9 +179,20 @@ export async function updateWeeklyCheckItemsAction(
         updated_at: new Date().toISOString(),
       };
 
-      if (isSubmitting && priceSnapshot !== null) {
-        updatePayload.retail_price_snapshot = priceSnapshot;
-        updatePayload.retail_price_basis = priceBasis;
+      if (isSubmitting) {
+        if (prevReported !== null) {
+          updatePayload.previous_reported_qty = prevReported;
+        }
+        if (deliveredSince !== null) {
+          updatePayload.delivered_since_previous = deliveredSince;
+        }
+        if (movement !== null) {
+          updatePayload.estimated_movement = movement;
+        }
+        if (priceSnapshot !== null) {
+          updatePayload.retail_price_snapshot = priceSnapshot;
+          updatePayload.retail_price_basis = priceBasis;
+        }
       }
 
       await adminClient
