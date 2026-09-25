@@ -232,7 +232,10 @@ export async function POST(request: Request) {
       applicationNo: applicationNumber,
       contactName: data.contactName,
       companyName: data.companyName,
-      supportEmail: "support@kselectnetwork.com",
+      applicationStatus: "Application Received",
+      nextStep: "Application Review · 1–2 Business Days",
+      supportEmail: "support@kselecthub.com",
+      portalUrl: "https://portal.kselecthub.com",
     });
   } catch (emailErr) {
     console.warn("[POST /api/retailer-applications] Templated email notification fallback:", emailErr);

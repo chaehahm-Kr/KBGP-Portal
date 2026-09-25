@@ -353,19 +353,233 @@ const SCOPE_CATEGORIES: Record<
   ],
 };
 
-const COMMON_VARIABLES = [
-  { tag: "{{contactName}}", label: "담당자명" },
-  { tag: "{{companyName}}", label: "회사/매장명" },
-  { tag: "{{applicationNumber}}", label: "신청번호" },
-  { tag: "{{orderNumber}}", label: "주문번호" },
-  { tag: "{{orderAmount}}", label: "주문금액" },
-  { tag: "{{trackingNumber}}", label: "송장번호" },
-  { tag: "{{carrier}}", label: "택배사" },
-  { tag: "{{dueDate}}", label: "기한/배송일" },
-  { tag: "{{supportEmail}}", label: "고객센터" },
-  { tag: "{{infoBox}}", label: "정보박스 (컴포넌트)" },
-  { tag: "{{ctaButton}}", label: "바로가기 버튼 (컴포넌트)" },
-];
+const TEMPLATE_VARIABLE_CHIPS: Record<string, Array<{ tag: string; label: string }>> = {
+  // === NETWORK ===
+  application_submitted_company: [
+    { tag: "{{contactName}}", label: "담당자명" },
+    { tag: "{{applicationNumber}}", label: "신청번호" },
+    { tag: "{{brandName}}", label: "신청 브랜드" },
+    { tag: "{{infoBox}}", label: "접수 정보 카드" },
+    { tag: "{{ctaButton}}", label: "신청 바로가기 버튼" },
+  ],
+  application_received_internal: [
+    { tag: "{{applicationNumber}}", label: "신청번호" },
+    { tag: "{{companyName}}", label: "회사명" },
+    { tag: "{{productCount}}", label: "신청 제품 수" },
+    { tag: "{{ctaButton}}", label: "심사 바로가기 버튼" },
+  ],
+  assignment_assigned: [
+    { tag: "{{applicationNumber}}", label: "신청번호" },
+    { tag: "{{reasonLine}}", label: "배정 사유" },
+    { tag: "{{ctaButton}}", label: "심사 바로가기 버튼" },
+  ],
+  assignment_unassigned: [
+    { tag: "{{applicationNumber}}", label: "신청번호" },
+    { tag: "{{ctaButton}}", label: "어드민 바로가기 버튼" },
+  ],
+  info_request_created: [
+    { tag: "{{contactName}}", label: "담당자명" },
+    { tag: "{{applicationNumber}}", label: "신청번호" },
+    { tag: "{{requestContent}}", label: "요청 내용" },
+    { tag: "{{dueDate}}", label: "회신 기한" },
+    { tag: "{{ctaButton}}", label: "자료 제출 버튼" },
+  ],
+  portal_signup_request: [
+    { tag: "{{contactName}}", label: "담당자명" },
+    { tag: "{{companyName}}", label: "회사명" },
+    { tag: "{{ctaButton}}", label: "가입 시작 버튼" },
+  ],
+  info_request_replied: [
+    { tag: "{{applicationNumber}}", label: "신청번호" },
+    { tag: "{{companyName}}", label: "회사명" },
+    { tag: "{{ctaButton}}", label: "자료 검토 버튼" },
+  ],
+  review_result_approved: [
+    { tag: "{{contactName}}", label: "담당자명" },
+    { tag: "{{applicationNumber}}", label: "신청번호" },
+    { tag: "{{companyName}}", label: "회사명" },
+    { tag: "{{ctaButton}}", label: "포털 시작 버튼" },
+  ],
+  review_result_partial_approved: [
+    { tag: "{{contactName}}", label: "담당자명" },
+    { tag: "{{applicationNumber}}", label: "신청번호" },
+    { tag: "{{ctaButton}}", label: "결과 확인 버튼" },
+  ],
+  review_result_on_hold: [
+    { tag: "{{contactName}}", label: "담당자명" },
+    { tag: "{{applicationNumber}}", label: "신청번호" },
+    { tag: "{{ctaButton}}", label: "결과 확인 버튼" },
+  ],
+  review_result_rejected: [
+    { tag: "{{contactName}}", label: "담당자명" },
+    { tag: "{{applicationNumber}}", label: "신청번호" },
+    { tag: "{{ctaButton}}", label: "결과 확인 버튼" },
+  ],
+  info_request_due_soon: [
+    { tag: "{{contactName}}", label: "담당자명" },
+    { tag: "{{applicationNumber}}", label: "신청번호" },
+    { tag: "{{dueDate}}", label: "회신 기한" },
+    { tag: "{{ctaButton}}", label: "자료 제출 버튼" },
+  ],
+  info_request_overdue: [
+    { tag: "{{applicationNumber}}", label: "신청번호" },
+    { tag: "{{dueDate}}", label: "초과된 기한" },
+    { tag: "{{ctaButton}}", label: "신청서 확인 버튼" },
+  ],
+  invite_expiring_soon: [
+    { tag: "{{inviteeName}}", label: "초대받은 사람" },
+    { tag: "{{inviteeEmail}}", label: "초대 이메일" },
+    { tag: "{{ctaButton}}", label: "사용자 관리 버튼" },
+  ],
+  inquiry_received_applicant: [
+    { tag: "{{contactName}}", label: "신청자명" },
+    { tag: "{{applicationNumber}}", label: "신청번호" },
+    { tag: "{{brandName}}", label: "브랜드명" },
+    { tag: "{{infoBox}}", label: "접수 정보 카드" },
+    { tag: "{{ctaButton}}", label: "신청 바로가기 버튼" },
+  ],
+  inquiry_received_internal: [
+    { tag: "{{inquiryNumber}}", label: "문의번호" },
+    { tag: "{{companyName}}", label: "회사명" },
+    { tag: "{{productCount}}", label: "제품 수" },
+    { tag: "{{ctaButton}}", label: "문의 확인 버튼" },
+  ],
+  staff_invited: [
+    { tag: "{{contactName}}", label: "직원명" },
+    { tag: "{{email}}", label: "접속 이메일" },
+    { tag: "{{tempPassword}}", label: "임시 비밀번호" },
+    { tag: "{{ctaButton}}", label: "로그인 바로가기 버튼" },
+  ],
+
+  // === HUB ===
+  hub_retailer_application_received: [
+    { tag: "{{contactName}}", label: "Contact Name" },
+    { tag: "{{companyName}}", label: "Company / Store" },
+    { tag: "{{applicationNumber}}", label: "Application No." },
+    { tag: "{{applicationStatus}}", label: "Status" },
+    { tag: "{{nextStep}}", label: "Next Step" },
+    { tag: "{{supportEmail}}", label: "Support Email" },
+    { tag: "{{infoBox}}", label: "Info Box" },
+  ],
+  hub_application_under_review: [
+    { tag: "{{contactName}}", label: "Contact Name" },
+    { tag: "{{companyName}}", label: "Company / Store" },
+    { tag: "{{applicationNumber}}", label: "Application No." },
+    { tag: "{{applicationStatus}}", label: "Status" },
+    { tag: "{{nextStep}}", label: "Next Step" },
+    { tag: "{{infoBox}}", label: "Info Box" },
+    { tag: "{{ctaButton}}", label: "View Status Button" },
+  ],
+  hub_info_request_created: [
+    { tag: "{{contactName}}", label: "Contact Name" },
+    { tag: "{{companyName}}", label: "Company / Store" },
+    { tag: "{{applicationNumber}}", label: "Application No." },
+    { tag: "{{requestContent}}", label: "Requested Details" },
+    { tag: "{{dueDate}}", label: "Due Date" },
+    { tag: "{{infoBox}}", label: "Info Box" },
+    { tag: "{{ctaButton}}", label: "Submit Info Button" },
+  ],
+  hub_application_approved: [
+    { tag: "{{contactName}}", label: "Contact Name" },
+    { tag: "{{companyName}}", label: "Company / Store" },
+    { tag: "{{applicationNumber}}", label: "Application No." },
+    { tag: "{{applicationStatus}}", label: "Status" },
+    { tag: "{{nextStep}}", label: "Next Step" },
+    { tag: "{{infoBox}}", label: "Info Box" },
+    { tag: "{{ctaButton}}", label: "Activate Portal Button" },
+  ],
+  hub_application_rejected: [
+    { tag: "{{contactName}}", label: "Contact Name" },
+    { tag: "{{companyName}}", label: "Company / Store" },
+    { tag: "{{applicationNumber}}", label: "Application No." },
+    { tag: "{{notes}}", label: "Review Notes" },
+    { tag: "{{nextStep}}", label: "Re-apply Info" },
+    { tag: "{{infoBox}}", label: "Info Box" },
+  ],
+  hub_retailer_partner_invited: [
+    { tag: "{{contactName}}", label: "Owner Name" },
+    { tag: "{{companyName}}", label: "Company / Store" },
+    { tag: "{{role}}", label: "Role" },
+    { tag: "{{expirationDate}}", label: "Expiration" },
+    { tag: "{{infoBox}}", label: "Info Box" },
+    { tag: "{{ctaButton}}", label: "Accept Invite Button" },
+    { tag: "{{supportEmail}}", label: "Support Email" },
+  ],
+  hub_retailer_user_invited: [
+    { tag: "{{contactName}}", label: "Team Member Name" },
+    { tag: "{{companyName}}", label: "Company / Store" },
+    { tag: "{{role}}", label: "Role" },
+    { tag: "{{expirationDate}}", label: "Expiration" },
+    { tag: "{{infoBox}}", label: "Info Box" },
+    { tag: "{{ctaButton}}", label: "Accept Invite Button" },
+    { tag: "{{supportEmail}}", label: "Support Email" },
+  ],
+  hub_retailer_account_activated: [
+    { tag: "{{contactName}}", label: "Contact Name" },
+    { tag: "{{companyName}}", label: "Company / Store" },
+    { tag: "{{accountStatus}}", label: "Account Status" },
+    { tag: "{{nextStep}}", label: "Next Step" },
+    { tag: "{{infoBox}}", label: "Info Box" },
+    { tag: "{{ctaButton}}", label: "Open Portal Button" },
+  ],
+  hub_welcome_retailer: [
+    { tag: "{{contactName}}", label: "Contact Name" },
+    { tag: "{{companyName}}", label: "Company / Store" },
+    { tag: "{{accountStatus}}", label: "Account Status" },
+    { tag: "{{nextStep}}", label: "Next Step" },
+    { tag: "{{infoBox}}", label: "Info Box" },
+    { tag: "{{ctaButton}}", label: "Getting Started Button" },
+    { tag: "{{supportEmail}}", label: "Support Email" },
+  ],
+  hub_password_reset: [
+    { tag: "{{contactName}}", label: "User Name" },
+    { tag: "{{email}}", label: "User Email" },
+    { tag: "{{infoBox}}", label: "Security Info Box" },
+    { tag: "{{ctaButton}}", label: "Reset Password Button" },
+  ],
+  hub_order_confirmed: [
+    { tag: "{{contactName}}", label: "Buyer Name" },
+    { tag: "{{companyName}}", label: "Company / Store" },
+    { tag: "{{orderNumber}}", label: "Order Number" },
+    { tag: "{{orderDate}}", label: "Order Date" },
+    { tag: "{{orderAmount}}", label: "Order Total" },
+    { tag: "{{orderStatus}}", label: "Order Status" },
+    { tag: "{{infoBox}}", label: "Order Info Box" },
+    { tag: "{{ctaButton}}", label: "Track Order Button" },
+  ],
+  hub_shipment_created: [
+    { tag: "{{contactName}}", label: "Buyer Name" },
+    { tag: "{{companyName}}", label: "Company / Store" },
+    { tag: "{{orderNumber}}", label: "Order Number" },
+    { tag: "{{carrier}}", label: "Carrier" },
+    { tag: "{{trackingNumber}}", label: "Tracking Number" },
+    { tag: "{{shippedDate}}", label: "Shipped Date" },
+    { tag: "{{shipmentStatus}}", label: "Shipment Status" },
+    { tag: "{{infoBox}}", label: "Shipment Info Box" },
+    { tag: "{{ctaButton}}", label: "Track Package Button" },
+  ],
+  hub_shipment_tracking_update: [
+    { tag: "{{contactName}}", label: "Buyer Name" },
+    { tag: "{{companyName}}", label: "Company / Store" },
+    { tag: "{{orderNumber}}", label: "Order Number" },
+    { tag: "{{carrier}}", label: "Carrier" },
+    { tag: "{{trackingNumber}}", label: "Tracking Number" },
+    { tag: "{{shipmentStatus}}", label: "Transit Status" },
+    { tag: "{{dueDate}}", label: "Est. Delivery Date" },
+    { tag: "{{infoBox}}", label: "Tracking Info Box" },
+    { tag: "{{ctaButton}}", label: "View Tracking Button" },
+  ],
+  hub_order_delivered: [
+    { tag: "{{contactName}}", label: "Buyer Name" },
+    { tag: "{{companyName}}", label: "Company / Store" },
+    { tag: "{{orderNumber}}", label: "Order Number" },
+    { tag: "{{carrier}}", label: "Carrier" },
+    { tag: "{{deliveredDate}}", label: "Delivered Date" },
+    { tag: "{{orderStatus}}", label: "Status" },
+    { tag: "{{infoBox}}", label: "Delivery Info Box" },
+    { tag: "{{ctaButton}}", label: "View Order Details Button" },
+  ],
+};
 
 export function EmailTemplatesWorkspace({
   initialTemplates,
@@ -536,6 +750,12 @@ export function EmailTemplatesWorkspace({
 
   const meta = TEMPLATE_METADATA[selectedKey];
   const categories = SCOPE_CATEGORIES[selectedScope];
+  const availableVariableChips = TEMPLATE_VARIABLE_CHIPS[selectedKey] || [
+    { tag: "{{contactName}}", label: "담당자명" },
+    { tag: "{{companyName}}", label: "회사명" },
+    { tag: "{{infoBox}}", label: "정보 카드" },
+    { tag: "{{ctaButton}}", label: "바로가기 버튼" },
+  ];
 
   return (
     <div className="flex h-[calc(100vh-11rem)] gap-0.5 overflow-hidden text-xs select-none">
@@ -712,19 +932,23 @@ export function EmailTemplatesWorkspace({
             />
           </div>
 
-          {/* Quick Variable Inserter Chips */}
+          {/* Event-Specific Variable Inserter Chips */}
           <div className="space-y-1.5 shrink-0 select-none">
-            <span className="text-[10px] font-bold text-zinc-500 dark:text-zinc-400">사용 가능한 치환 변수 (클릭하여 본문에 삽입):</span>
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-bold text-zinc-600 dark:text-zinc-300">이 템플릿에서 사용 가능한 변수:</span>
+              <span className="text-[9px] text-zinc-400 font-mono">클릭 시 본문에 삽입</span>
+            </div>
             <div className="flex flex-wrap gap-1.5">
-              {COMMON_VARIABLES.map((v) => (
+              {availableVariableChips.map((v) => (
                 <button
                   key={v.tag}
                   type="button"
                   onClick={() => handleInsertVariable(v.tag)}
-                  className="px-2 py-0.5 rounded bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 font-mono text-[10px] border border-zinc-200/60 dark:border-zinc-700/60 transition-colors cursor-pointer"
+                  className="px-2 py-0.8 rounded-md bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-800 dark:text-zinc-200 font-mono text-[10px] border border-zinc-200/80 dark:border-zinc-700/80 transition-colors cursor-pointer flex items-center gap-1"
                   title={`${v.label} 삽입`}
                 >
-                  {v.tag} <span className="font-sans text-[9px] text-zinc-400">({v.label})</span>
+                  <span className="font-bold">{v.tag}</span>
+                  <span className="font-sans text-[9px] text-zinc-400">({v.label})</span>
                 </button>
               ))}
             </div>
@@ -736,7 +960,7 @@ export function EmailTemplatesWorkspace({
               <label className="block font-bold text-zinc-700 dark:text-zinc-300">
                 본문 내용 <span className="font-normal text-zinc-400">(첫 줄은 메인 카드 타이틀로 자동 렌더링됩니다)</span>
               </label>
-              <span className="text-[10px] text-zinc-400 font-mono">{"{{ctaButton}}"} / {"{{infoBox}}"} 지원</span>
+              <span className="text-[10px] text-zinc-400 font-mono">{"{{infoBox}}"} / {"{{ctaButton}}"} 위치 지정 가능</span>
             </div>
             <textarea
               value={body}
@@ -792,7 +1016,7 @@ export function EmailTemplatesWorkspace({
             <span className={`px-1.5 py-0.2 rounded text-[9px] font-bold ${
               selectedScope === "hub" ? "bg-pink-100 text-pink-700" : "bg-blue-100 text-blue-700"
             }`}>
-              {selectedScope === "hub" ? "HUB Design" : "NETWORK Design"}
+              {selectedScope === "hub" ? "HUB Retail Design" : "NETWORK Brand Design"}
             </span>
           </div>
           <span className="text-[9px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/20 px-1.5 py-0.5 rounded flex items-center gap-1">

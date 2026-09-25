@@ -440,13 +440,26 @@ export async function createRetailerInvitation(params: {
   try {
     const { sendTemplatedEmail } = await import("@/lib/notifications/templates");
     const templateKey = role === "owner" ? "hub_retailer_partner_invited" : "hub_retailer_user_invited";
+    const roleLabel =
+      role === "owner"
+        ? "Company Owner"
+        : role === "buyer"
+        ? "Retail Buyer"
+        : role === "store_manager"
+        ? "Store Manager"
+        : role === "accounting"
+        ? "Finance / Accounting"
+        : "Store Employee";
 
     await sendTemplatedEmail(templateKey, normalizedEmail, {
       contactName: name || "Retail Partner",
       companyName: comp.name,
+      role: roleLabel,
+      expirationDate: "7 Days from receipt",
       invitationLink: inviteUrl,
       link: inviteUrl,
-      supportEmail: "support@kselectnetwork.com",
+      supportEmail: "support@kselecthub.com",
+      portalUrl: "https://portal.kselecthub.com",
     });
   } catch (emailErr) {
     console.warn("[createRetailerInvitation] Templated email delivery failed, trying fallback:", emailErr);

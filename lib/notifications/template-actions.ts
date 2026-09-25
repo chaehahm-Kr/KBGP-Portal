@@ -6,7 +6,7 @@ import { requireSuperAdmin } from "@/lib/auth/dal";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   TEMPLATE_KEYS,
-  SAMPLE_VARIABLES,
+  getSampleVariables,
   DEFAULT_TEMPLATES,
   type TemplateKey,
 } from "@/lib/notifications/templates";
@@ -66,10 +66,8 @@ export async function updateEmailTemplate(
 }
 
 /**
- * "발송 테스트" — 예시 변수값(SAMPLE_VARIABLES)으로 렌더링한 실제 메일을 요청한
- * Super Admin 본인 이메일로 보낸다. 폼에서 아직 저장하지 않은 수정 중인 문구를
- * 그대로 테스트할 수 있도록, DB에 먼저 저장하지 않고 subject/body를 formData에서
- * 받아 그 자리에서 렌더링한다(sendTemplatedEmail을 거치지 않는 이유).
+ * "발송 테스트" — 템플릿별 예시 변수값(getSampleVariables(key))으로 렌더링한 실제 메일을 요청한
+ * Super Admin 본인 이메일로 보낸다.
  */
 export async function sendTestEmail(
   key: string,
@@ -98,10 +96,14 @@ export async function sendTestEmail(
   const { renderEmailHtml } = await import("@/lib/notifications/templates");
   const { sendEmail } = await import("@/lib/notifications/email");
 
+  const sampleVars = getSampleVariables(keyResult.data);
   const { subject, text, html } = renderEmailHtml(
     parsed.data.subject,
     parsed.data.body,
-    SAMPLE_VARIABLES
+    {
+      ...sampleVars,
+      key: keyResult.data,
+    }
   );
 
   await sendEmail({
@@ -114,10 +116,6 @@ export async function sendTestEmail(
   return { success: `${session.email}로 테스트 메일을 보냈습니다.` };
 }
 
-function render(template: string, variables: Record<string, string>) {
-  return template.replace(/\{\{(\w+)\}\}/g, (_match, name) => variables[name] ?? "");
-}
-
 /**
  * 실시간 이메일 템플릿 미리보기용 HTML을 렌더링하여 반환합니다.
  */
@@ -128,9 +126,10 @@ export async function getEmailPreviewHtml(
 ): Promise<{ success: boolean; html: string; error?: string }> {
   try {
     await requireSuperAdmin();
-    const { renderEmailHtml } = await import("@/lib/notifications/templates");
+    const { renderEmailHtml, getSampleVariables } = await import("@/lib/notifications/templates");
+    const sampleVars = getSampleVariables(key);
     const { html } = renderEmailHtml(subjectTemplate, bodyTemplate, {
-      ...SAMPLE_VARIABLES,
+      ...sampleVars,
       key,
     });
     return { success: true, html };

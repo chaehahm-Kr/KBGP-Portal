@@ -50,7 +50,7 @@ export type HubTemplateKey = (typeof HUB_TEMPLATE_KEYS)[number];
 export type TemplateKey = (typeof TEMPLATE_KEYS)[number];
 
 /**
- * supabase/migrations 및 기본 템플릿 딕셔너리
+ * Default templates dictionary with clean English copy for HUB and Korean for NETWORK
  */
 export const DEFAULT_TEMPLATES: Record<
   TemplateKey,
@@ -157,7 +157,7 @@ export const DEFAULT_TEMPLATES: Record<
   hub_info_request_created: {
     description: "Retailer Partner — Additional Information Requested",
     subject: "[K SELECT HUB] Action Required: Additional Information for {{applicationNumber}}",
-    body: "Additional information is required for your retailer application.\n\nHello {{contactName}},\n\nTo proceed with your application for {{companyName}}, our team needs a few additional details:\n\n{{requestContent}}\n\nPlease submit the requested information by clicking the button below:\n\n{{ctaButton}}",
+    body: "Additional information is required for your retailer application.\n\nHello {{contactName}},\n\nTo proceed with your application for {{companyName}}, our team needs a few additional details:\n\n{{requestContent}}\n\n{{infoBox}}\n\nPlease submit the requested information by clicking the button below:\n\n{{ctaButton}}",
   },
   hub_application_approved: {
     description: "Retailer Partner — Application Approved",
@@ -167,12 +167,12 @@ export const DEFAULT_TEMPLATES: Record<
   hub_application_rejected: {
     description: "Retailer Partner — Application Not Accepted",
     subject: "[K SELECT HUB] Update on Your Retailer Application — {{applicationNumber}}",
-    body: "Thank you for your interest in K SELECT HUB.\n\nHello {{contactName}},\n\nThank you for taking the time to submit your retail partnership application for {{companyName}}.\n\nAfter careful review of current territory capacity and product distribution availability, we are unable to approve your application at this time.\n\n{{notes}}\n\nWe will keep your store information on file for future expansion opportunities.",
+    body: "Thank you for your interest in K SELECT HUB.\n\nHello {{contactName}},\n\nThank you for taking the time to submit your retail partnership application for {{companyName}}.\n\nAfter careful review of current territory capacity and product distribution availability, we are unable to approve your application at this time.\n\n{{infoBox}}\n\n{{notes}}\n\nWe will keep your store information on file for future expansion opportunities.",
   },
   hub_retailer_partner_invited: {
     description: "Retailer Partner — Invitation to Activate Retailer Account",
     subject: "[K SELECT HUB] You are invited to join K SELECT HUB as {{companyName}}",
-    body: "You have been invited to K SELECT HUB Retailer Portal.\n\nHello {{contactName}},\n\nYou have been invited to set up and manage the official retail account for {{companyName}} on K SELECT HUB.\n\n{{infoBox}}\n\nAs a K SELECT HUB retail partner, you will receive:\n• Direct wholesale access to verified, trending K-Beauty brands\n• 90-Day Initial Trial Protection on eligible opening assortments\n• Turnkey store merchandising kits, product QR guides, and price tags\n• Weekly inventory management and rapid US replenishment\n\nClick the link below to accept your invitation and activate your account (valid for 7 days):\n\n{{ctaButton}}",
+    body: "You have been invited to K SELECT HUB Retailer Portal.\n\nHello {{contactName}},\n\nYou have been invited to set up and manage the official retail account for {{companyName}} on K SELECT HUB.\n\n{{infoBox}}\n\nAs a K SELECT HUB retail partner, you will receive:\n• Direct wholesale access to verified, trending K-Beauty brands\n• 90-Day Initial Trial Protection on eligible opening assortments\n• Turnkey store merchandising kits, product QR guides, and price tags\n• Weekly inventory management and rapid US replenishment\n\nClick the link below to accept your invitation and activate your account:\n\n{{ctaButton}}",
   },
   hub_retailer_user_invited: {
     description: "Retailer Team Member — Team Member Invitation",
@@ -187,12 +187,12 @@ export const DEFAULT_TEMPLATES: Record<
   hub_welcome_retailer: {
     description: "Retailer Partner — Welcome & Getting Started Guide",
     subject: "[K SELECT HUB] Getting Started: Launching K-Beauty in Your Store",
-    body: "Welcome to K SELECT HUB Retailer Network!\n\nHello {{contactName}},\n\nWe are thrilled to partner with {{companyName}} to bring premium, curated K-Beauty products to your customers.\n\nHere are 3 quick steps to maximize your launch:\n1. Review your initial curated assortment on the portal.\n2. Confirm your physical store display setup and POS tags.\n3. Complete your initial stock order for swift US warehouse fulfillment.\n\n{{ctaButton}}\n\nOur retail support team is always here to assist you at {{supportEmail}}.",
+    body: "Welcome to K SELECT HUB Retailer Network!\n\nHello {{contactName}},\n\nWe are thrilled to partner with {{companyName}} to bring premium, curated K-Beauty products to your customers.\n\n{{infoBox}}\n\nHere are 3 quick steps to maximize your launch:\n1. Review your initial curated assortment on the portal.\n2. Confirm your physical store display setup and POS tags.\n3. Complete your initial stock order for swift US warehouse fulfillment.\n\n{{ctaButton}}\n\nOur retail support team is always here to assist you at {{supportEmail}}.",
   },
   hub_password_reset: {
     description: "Retailer User — Password Reset Instructions",
     subject: "[K SELECT HUB] Reset Your Password",
-    body: "Password Reset Request\n\nHello {{contactName}},\n\nWe received a request to reset the password for your K SELECT HUB account ({{email}}).\n\nIf you requested this change, click the button below to set a new password:\n\n{{ctaButton}}\n\nIf you did not request a password reset, you can safely ignore this email.",
+    body: "Password Reset Request\n\nHello {{contactName}},\n\nWe received a request to reset the password for your K SELECT HUB account ({{email}}).\n\n{{infoBox}}\n\nIf you requested this change, click the button below to set a new password:\n\n{{ctaButton}}\n\nIf you did not request a password reset, you can safely ignore this email.",
   },
   hub_order_confirmed: {
     description: "Retailer Partner — Order Confirmation",
@@ -207,7 +207,7 @@ export const DEFAULT_TEMPLATES: Record<
   hub_shipment_tracking_update: {
     description: "Retailer Partner — Tracking & Transit Update",
     subject: "[K SELECT HUB] Tracking Update: Shipment for Order {{orderNumber}}",
-    body: "Shipment Tracking Update\n\nHello {{contactName}},\n\nHere is the latest transit update for your shipment under Order {{orderNumber}}.\n\n{{infoBox}}\n\nEstimated delivery date: {{dueDate}}\n\n{{ctaButton}}",
+    body: "Shipment Tracking Update\n\nHello {{contactName}},\n\nHere is the latest transit update for your shipment under Order {{orderNumber}}.\n\n{{infoBox}}\n\nClick below to view full tracking and logistics history:\n\n{{ctaButton}}",
   },
   hub_order_delivered: {
     description: "Retailer Partner — Order Delivered Confirmation",
@@ -216,33 +216,500 @@ export const DEFAULT_TEMPLATES: Record<
   },
 };
 
-export const SAMPLE_VARIABLES: Record<string, string> = {
-  applicationNumber: "APP-RET-104921",
-  applicationNo: "APP-RET-104921",
-  inquiryNumber: "APP-RET-104921",
-  contactName: "Sarah Jenkins",
-  companyName: "Luxe Beauty Bar",
-  brandName: "ABC Beauty",
-  productCount: "3",
-  link: "https://portal.kselecthub.com",
-  invitationLink: "https://portal.kselecthub.com/invite/sample-token",
-  reasonLine: " Territory: Tri-State Area Approved",
-  requestContent: "Please provide a photo of your primary storefront display area and resale certificate.",
-  dueDate: "October 15, 2026",
-  inviteeName: "Sarah Jenkins",
-  inviteeEmail: "sarah@luxebeautybar.com",
-  submittedDate: "September 25, 2026",
-  email: "sarah@luxebeautybar.com",
-  tempPassword: "TempPassword123!",
-  orderNumber: "ORD-2026-0891",
-  orderAmount: "$3,450.00",
-  trackingNumber: "1Z9999999999999999",
-  carrier: "UPS Ground",
-  supportEmail: "support@kselectnetwork.com",
-  portalUrl: "https://portal.kselecthub.com",
-  websiteUrl: "https://www.kselecthub.com",
-  notes: "Eligible for re-application after 60 days.",
+/**
+ * Template-specific sample variable datasets for exact, context-relevant live preview
+ */
+export const TEMPLATE_SAMPLE_VARIABLES: Record<TemplateKey, Record<string, string>> = {
+  // === NETWORK ===
+  application_submitted_company: {
+    applicationNumber: "APP-000001",
+    applicationNo: "APP-000001",
+    contactName: "김민지",
+    brandName: "ABC Beauty",
+    nextStep: "서류 심사 · 3 영업일 내",
+    portalUrl: "https://portal.kselectnetwork.com",
+    privacyUrl: "https://www.kselectnetwork.com/privacy",
+    unsubscribeUrl: "https://www.kselectnetwork.com/unsubscribe",
+  },
+  application_received_internal: {
+    applicationNumber: "APP-000001",
+    companyName: "샘플뷰티코리아",
+    productCount: "3",
+    portalUrl: "https://admin.kselectnetwork.com",
+  },
+  assignment_assigned: {
+    applicationNumber: "APP-000001",
+    reasonLine: " 배정 사유: 스킨케어 카테고리 심사 담당",
+    portalUrl: "https://admin.kselectnetwork.com",
+  },
+  assignment_unassigned: {
+    applicationNumber: "APP-000001",
+    portalUrl: "https://admin.kselectnetwork.com",
+  },
+  info_request_created: {
+    applicationNumber: "APP-000001",
+    contactName: "김민지",
+    requestContent: "최신 영문 성분표 및 MSDS 서류를 첨부해 주세요.",
+    dueDate: "2026년 10월 15일",
+    portalUrl: "https://portal.kselectnetwork.com",
+  },
+  portal_signup_request: {
+    contactName: "김민지",
+    companyName: "샘플뷰티코리아",
+    portalUrl: "https://portal.kselectnetwork.com/portal/login",
+  },
+  info_request_replied: {
+    applicationNumber: "APP-000001",
+    companyName: "샘플뷰티코리아",
+    portalUrl: "https://admin.kselectnetwork.com",
+  },
+  review_result_approved: {
+    applicationNumber: "APP-000001",
+    contactName: "김민지",
+    companyName: "샘플뷰티코리아",
+    portalUrl: "https://portal.kselectnetwork.com",
+  },
+  review_result_partial_approved: {
+    applicationNumber: "APP-000001",
+    contactName: "김민지",
+    portalUrl: "https://portal.kselectnetwork.com",
+  },
+  review_result_on_hold: {
+    applicationNumber: "APP-000001",
+    contactName: "김민지",
+    portalUrl: "https://portal.kselectnetwork.com",
+  },
+  review_result_rejected: {
+    applicationNumber: "APP-000001",
+    contactName: "김민지",
+    portalUrl: "https://portal.kselectnetwork.com",
+  },
+  info_request_due_soon: {
+    applicationNumber: "APP-000001",
+    contactName: "김민지",
+    dueDate: "2026년 10월 15일",
+    portalUrl: "https://portal.kselectnetwork.com",
+  },
+  info_request_overdue: {
+    applicationNumber: "APP-000001",
+    dueDate: "2026년 10월 15일",
+    portalUrl: "https://admin.kselectnetwork.com",
+  },
+  invite_expiring_soon: {
+    inviteeName: "김샘플",
+    inviteeEmail: "sample@brand.co.kr",
+    portalUrl: "https://portal.kselectnetwork.com",
+  },
+  inquiry_received_applicant: {
+    applicationNumber: "APP-000001",
+    contactName: "김민지",
+    brandName: "ABC Beauty",
+    nextStep: "서류 심사 · 3 영업일 내",
+    portalUrl: "https://portal.kselectnetwork.com",
+  },
+  inquiry_received_internal: {
+    inquiryNumber: "INQ-2026-001",
+    companyName: "샘플뷰티코리아",
+    productCount: "3",
+    portalUrl: "https://admin.kselectnetwork.com",
+  },
+  staff_invited: {
+    contactName: "이관리",
+    email: "admin2@kselectnetwork.com",
+    tempPassword: "TempPassword123!",
+    portalUrl: "https://admin.kselectnetwork.com/admin/login",
+  },
+
+  // === HUB ===
+  hub_retailer_application_received: {
+    contactName: "Sarah Jenkins",
+    companyName: "Luxe Beauty Bar",
+    applicationNumber: "APP-RET-104921",
+    applicationNo: "APP-RET-104921",
+    applicationStatus: "Application Received",
+    nextStep: "Application Review · 1–2 Business Days",
+    supportEmail: "support@kselecthub.com",
+    portalUrl: "https://portal.kselecthub.com",
+  },
+  hub_application_under_review: {
+    contactName: "Sarah Jenkins",
+    companyName: "Luxe Beauty Bar",
+    applicationNumber: "APP-RET-104921",
+    applicationNo: "APP-RET-104921",
+    applicationStatus: "Under Review",
+    nextStep: "Territory & Product Allocation Confirmation",
+    supportEmail: "support@kselecthub.com",
+    portalUrl: "https://portal.kselecthub.com",
+  },
+  hub_info_request_created: {
+    contactName: "Sarah Jenkins",
+    companyName: "Luxe Beauty Bar",
+    applicationNumber: "APP-RET-104921",
+    applicationNo: "APP-RET-104921",
+    requestContent: "Please provide a photo of your primary storefront display area and a copy of your state resale certificate.",
+    dueDate: "October 15, 2026",
+    applicationStatus: "Action Required",
+    supportEmail: "support@kselecthub.com",
+    portalUrl: "https://portal.kselecthub.com",
+  },
+  hub_application_approved: {
+    contactName: "Sarah Jenkins",
+    companyName: "Luxe Beauty Bar",
+    applicationNumber: "APP-RET-104921",
+    applicationNo: "APP-RET-104921",
+    applicationStatus: "Approved · Partnership Welcome",
+    nextStep: "Account Activation & Opening Stock Selection",
+    supportEmail: "support@kselecthub.com",
+    portalUrl: "https://portal.kselecthub.com",
+  },
+  hub_application_rejected: {
+    contactName: "Sarah Jenkins",
+    companyName: "Luxe Beauty Bar",
+    applicationNumber: "APP-RET-104921",
+    applicationNo: "APP-RET-104921",
+    applicationStatus: "Application Not Accepted",
+    notes: "Note: Current retail territory capacity is at full limit for your immediate ZIP code.",
+    nextStep: "Eligible for re-application in 60 days",
+    supportEmail: "support@kselecthub.com",
+    portalUrl: "https://www.kselecthub.com",
+  },
+  hub_retailer_partner_invited: {
+    contactName: "Sarah Jenkins",
+    companyName: "Luxe Beauty Bar",
+    role: "Company Owner",
+    expirationDate: "7 Days from receipt",
+    invitationLink: "https://portal.kselecthub.com/invite/sample-token",
+    link: "https://portal.kselecthub.com/invite/sample-token",
+    supportEmail: "support@kselecthub.com",
+    portalUrl: "https://portal.kselecthub.com",
+  },
+  hub_retailer_user_invited: {
+    contactName: "Michael Chang",
+    companyName: "Luxe Beauty Bar",
+    role: "Store Manager",
+    expirationDate: "7 Days from receipt",
+    invitationLink: "https://portal.kselecthub.com/invite/sample-token",
+    link: "https://portal.kselecthub.com/invite/sample-token",
+    supportEmail: "support@kselecthub.com",
+    portalUrl: "https://portal.kselecthub.com",
+  },
+  hub_retailer_account_activated: {
+    contactName: "Sarah Jenkins",
+    companyName: "Luxe Beauty Bar",
+    accountStatus: "Active · Full Access",
+    nextStep: "Browse Wholesale Catalogs & Place Opening Stock",
+    portalUrl: "https://portal.kselecthub.com",
+    supportEmail: "support@kselecthub.com",
+  },
+  hub_welcome_retailer: {
+    contactName: "Sarah Jenkins",
+    companyName: "Luxe Beauty Bar",
+    accountStatus: "Active Retail Partner",
+    nextStep: "Explore Assortments & Order Opening Stock",
+    portalUrl: "https://portal.kselecthub.com",
+    supportEmail: "support@kselecthub.com",
+  },
+  hub_password_reset: {
+    contactName: "Sarah Jenkins",
+    email: "sarah@luxebeautybar.com",
+    portalUrl: "https://portal.kselecthub.com/retailer/reset-password",
+    link: "https://portal.kselecthub.com/retailer/reset-password",
+    supportEmail: "support@kselecthub.com",
+  },
+  hub_order_confirmed: {
+    contactName: "Sarah Jenkins",
+    companyName: "Luxe Beauty Bar",
+    orderNumber: "ORD-2026-0891",
+    orderDate: "September 25, 2026",
+    orderAmount: "$3,450.00",
+    orderStatus: "Confirmed · In Preparation",
+    portalUrl: "https://portal.kselecthub.com/retailer/orders/ORD-2026-0891",
+    link: "https://portal.kselecthub.com/retailer/orders/ORD-2026-0891",
+    supportEmail: "support@kselecthub.com",
+  },
+  hub_shipment_created: {
+    contactName: "Sarah Jenkins",
+    companyName: "Luxe Beauty Bar",
+    orderNumber: "ORD-2026-0891",
+    carrier: "UPS Ground",
+    trackingNumber: "1Z9999999999999999",
+    shippedDate: "September 25, 2026",
+    shipmentStatus: "Dispatched from US Warehouse",
+    portalUrl: "https://portal.kselecthub.com/retailer/orders/ORD-2026-0891",
+    link: "https://portal.kselecthub.com/retailer/orders/ORD-2026-0891",
+    supportEmail: "support@kselecthub.com",
+  },
+  hub_shipment_tracking_update: {
+    contactName: "Sarah Jenkins",
+    companyName: "Luxe Beauty Bar",
+    orderNumber: "ORD-2026-0891",
+    carrier: "UPS Ground",
+    trackingNumber: "1Z9999999999999999",
+    shipmentStatus: "In Transit · Out for Delivery",
+    dueDate: "October 1, 2026",
+    portalUrl: "https://portal.kselecthub.com/retailer/orders/ORD-2026-0891",
+    link: "https://portal.kselecthub.com/retailer/orders/ORD-2026-0891",
+    supportEmail: "support@kselecthub.com",
+  },
+  hub_order_delivered: {
+    contactName: "Sarah Jenkins",
+    companyName: "Luxe Beauty Bar",
+    orderNumber: "ORD-2026-0891",
+    carrier: "UPS Ground",
+    deliveredDate: "October 1, 2026",
+    orderStatus: "Delivered · Completed",
+    portalUrl: "https://portal.kselecthub.com/retailer/orders/ORD-2026-0891",
+    link: "https://portal.kselecthub.com/retailer/orders/ORD-2026-0891",
+    supportEmail: "support@kselecthub.com",
+  },
 };
+
+/**
+ * Contextual variable chips mapped per template
+ */
+export const TEMPLATE_VARIABLE_CHIPS: Record<TemplateKey, Array<{ tag: string; label: string }>> = {
+  // === NETWORK ===
+  application_submitted_company: [
+    { tag: "{{contactName}}", label: "담당자명" },
+    { tag: "{{applicationNumber}}", label: "신청번호" },
+    { tag: "{{brandName}}", label: "신청 브랜드" },
+    { tag: "{{infoBox}}", label: "접수 정보 카드" },
+    { tag: "{{ctaButton}}", label: "신청 바로가기 버튼" },
+  ],
+  application_received_internal: [
+    { tag: "{{applicationNumber}}", label: "신청번호" },
+    { tag: "{{companyName}}", label: "회사명" },
+    { tag: "{{productCount}}", label: "신청 제품 수" },
+    { tag: "{{ctaButton}}", label: "심사 바로가기 버튼" },
+  ],
+  assignment_assigned: [
+    { tag: "{{applicationNumber}}", label: "신청번호" },
+    { tag: "{{reasonLine}}", label: "배정 사유" },
+    { tag: "{{ctaButton}}", label: "심사 바로가기 버튼" },
+  ],
+  assignment_unassigned: [
+    { tag: "{{applicationNumber}}", label: "신청번호" },
+    { tag: "{{ctaButton}}", label: "어드민 바로가기 버튼" },
+  ],
+  info_request_created: [
+    { tag: "{{contactName}}", label: "담당자명" },
+    { tag: "{{applicationNumber}}", label: "신청번호" },
+    { tag: "{{requestContent}}", label: "요청 내용" },
+    { tag: "{{dueDate}}", label: "회신 기한" },
+    { tag: "{{ctaButton}}", label: "자료 제출 버튼" },
+  ],
+  portal_signup_request: [
+    { tag: "{{contactName}}", label: "담당자명" },
+    { tag: "{{companyName}}", label: "회사명" },
+    { tag: "{{ctaButton}}", label: "가입 시작 버튼" },
+  ],
+  info_request_replied: [
+    { tag: "{{applicationNumber}}", label: "신청번호" },
+    { tag: "{{companyName}}", label: "회사명" },
+    { tag: "{{ctaButton}}", label: "자료 검토 버튼" },
+  ],
+  review_result_approved: [
+    { tag: "{{contactName}}", label: "담당자명" },
+    { tag: "{{applicationNumber}}", label: "신청번호" },
+    { tag: "{{companyName}}", label: "회사명" },
+    { tag: "{{ctaButton}}", label: "포털 시작 버튼" },
+  ],
+  review_result_partial_approved: [
+    { tag: "{{contactName}}", label: "담당자명" },
+    { tag: "{{applicationNumber}}", label: "신청번호" },
+    { tag: "{{ctaButton}}", label: "결과 확인 버튼" },
+  ],
+  review_result_on_hold: [
+    { tag: "{{contactName}}", label: "담당자명" },
+    { tag: "{{applicationNumber}}", label: "신청번호" },
+    { tag: "{{ctaButton}}", label: "결과 확인 버튼" },
+  ],
+  review_result_rejected: [
+    { tag: "{{contactName}}", label: "담당자명" },
+    { tag: "{{applicationNumber}}", label: "신청번호" },
+    { tag: "{{ctaButton}}", label: "결과 확인 버튼" },
+  ],
+  info_request_due_soon: [
+    { tag: "{{contactName}}", label: "담당자명" },
+    { tag: "{{applicationNumber}}", label: "신청번호" },
+    { tag: "{{dueDate}}", label: "회신 기한" },
+    { tag: "{{ctaButton}}", label: "자료 제출 버튼" },
+  ],
+  info_request_overdue: [
+    { tag: "{{applicationNumber}}", label: "신청번호" },
+    { tag: "{{dueDate}}", label: "초과된 기한" },
+    { tag: "{{ctaButton}}", label: "신청서 확인 버튼" },
+  ],
+  invite_expiring_soon: [
+    { tag: "{{inviteeName}}", label: "초대받은 사람" },
+    { tag: "{{inviteeEmail}}", label: "초대 이메일" },
+    { tag: "{{ctaButton}}", label: "사용자 관리 버튼" },
+  ],
+  inquiry_received_applicant: [
+    { tag: "{{contactName}}", label: "신청자명" },
+    { tag: "{{applicationNumber}}", label: "신청번호" },
+    { tag: "{{brandName}}", label: "브랜드명" },
+    { tag: "{{infoBox}}", label: "접수 정보 카드" },
+    { tag: "{{ctaButton}}", label: "신청 바로가기 버튼" },
+  ],
+  inquiry_received_internal: [
+    { tag: "{{inquiryNumber}}", label: "문의번호" },
+    { tag: "{{companyName}}", label: "회사명" },
+    { tag: "{{productCount}}", label: "제품 수" },
+    { tag: "{{ctaButton}}", label: "문의 확인 버튼" },
+  ],
+  staff_invited: [
+    { tag: "{{contactName}}", label: "직원명" },
+    { tag: "{{email}}", label: "접속 이메일" },
+    { tag: "{{tempPassword}}", label: "임시 비밀번호" },
+    { tag: "{{ctaButton}}", label: "로그인 바로가기 버튼" },
+  ],
+
+  // === HUB ===
+  hub_retailer_application_received: [
+    { tag: "{{contactName}}", label: "Contact Name" },
+    { tag: "{{companyName}}", label: "Company / Store" },
+    { tag: "{{applicationNumber}}", label: "Application No." },
+    { tag: "{{applicationStatus}}", label: "Status" },
+    { tag: "{{nextStep}}", label: "Next Step" },
+    { tag: "{{supportEmail}}", label: "Support Email" },
+    { tag: "{{infoBox}}", label: "Info Box" },
+  ],
+  hub_application_under_review: [
+    { tag: "{{contactName}}", label: "Contact Name" },
+    { tag: "{{companyName}}", label: "Company / Store" },
+    { tag: "{{applicationNumber}}", label: "Application No." },
+    { tag: "{{applicationStatus}}", label: "Status" },
+    { tag: "{{nextStep}}", label: "Next Step" },
+    { tag: "{{infoBox}}", label: "Info Box" },
+    { tag: "{{ctaButton}}", label: "View Status Button" },
+  ],
+  hub_info_request_created: [
+    { tag: "{{contactName}}", label: "Contact Name" },
+    { tag: "{{companyName}}", label: "Company / Store" },
+    { tag: "{{applicationNumber}}", label: "Application No." },
+    { tag: "{{requestContent}}", label: "Requested Details" },
+    { tag: "{{dueDate}}", label: "Due Date" },
+    { tag: "{{infoBox}}", label: "Info Box" },
+    { tag: "{{ctaButton}}", label: "Submit Info Button" },
+  ],
+  hub_application_approved: [
+    { tag: "{{contactName}}", label: "Contact Name" },
+    { tag: "{{companyName}}", label: "Company / Store" },
+    { tag: "{{applicationNumber}}", label: "Application No." },
+    { tag: "{{applicationStatus}}", label: "Status" },
+    { tag: "{{nextStep}}", label: "Next Step" },
+    { tag: "{{infoBox}}", label: "Info Box" },
+    { tag: "{{ctaButton}}", label: "Activate Portal Button" },
+  ],
+  hub_application_rejected: [
+    { tag: "{{contactName}}", label: "Contact Name" },
+    { tag: "{{companyName}}", label: "Company / Store" },
+    { tag: "{{applicationNumber}}", label: "Application No." },
+    { tag: "{{notes}}", label: "Review Notes" },
+    { tag: "{{nextStep}}", label: "Re-apply Info" },
+    { tag: "{{infoBox}}", label: "Info Box" },
+  ],
+  hub_retailer_partner_invited: [
+    { tag: "{{contactName}}", label: "Owner Name" },
+    { tag: "{{companyName}}", label: "Company / Store" },
+    { tag: "{{role}}", label: "Role" },
+    { tag: "{{expirationDate}}", label: "Expiration" },
+    { tag: "{{infoBox}}", label: "Info Box" },
+    { tag: "{{ctaButton}}", label: "Accept Invite Button" },
+    { tag: "{{supportEmail}}", label: "Support Email" },
+  ],
+  hub_retailer_user_invited: [
+    { tag: "{{contactName}}", label: "Team Member Name" },
+    { tag: "{{companyName}}", label: "Company / Store" },
+    { tag: "{{role}}", label: "Role" },
+    { tag: "{{expirationDate}}", label: "Expiration" },
+    { tag: "{{infoBox}}", label: "Info Box" },
+    { tag: "{{ctaButton}}", label: "Accept Invite Button" },
+    { tag: "{{supportEmail}}", label: "Support Email" },
+  ],
+  hub_retailer_account_activated: [
+    { tag: "{{contactName}}", label: "Contact Name" },
+    { tag: "{{companyName}}", label: "Company / Store" },
+    { tag: "{{accountStatus}}", label: "Account Status" },
+    { tag: "{{nextStep}}", label: "Next Step" },
+    { tag: "{{infoBox}}", label: "Info Box" },
+    { tag: "{{ctaButton}}", label: "Open Portal Button" },
+  ],
+  hub_welcome_retailer: [
+    { tag: "{{contactName}}", label: "Contact Name" },
+    { tag: "{{companyName}}", label: "Company / Store" },
+    { tag: "{{accountStatus}}", label: "Account Status" },
+    { tag: "{{nextStep}}", label: "Next Step" },
+    { tag: "{{infoBox}}", label: "Info Box" },
+    { tag: "{{ctaButton}}", label: "Getting Started Button" },
+    { tag: "{{supportEmail}}", label: "Support Email" },
+  ],
+  hub_password_reset: [
+    { tag: "{{contactName}}", label: "User Name" },
+    { tag: "{{email}}", label: "User Email" },
+    { tag: "{{infoBox}}", label: "Security Info Box" },
+    { tag: "{{ctaButton}}", label: "Reset Password Button" },
+  ],
+  hub_order_confirmed: [
+    { tag: "{{contactName}}", label: "Buyer Name" },
+    { tag: "{{companyName}}", label: "Company / Store" },
+    { tag: "{{orderNumber}}", label: "Order Number" },
+    { tag: "{{orderDate}}", label: "Order Date" },
+    { tag: "{{orderAmount}}", label: "Order Total" },
+    { tag: "{{orderStatus}}", label: "Order Status" },
+    { tag: "{{infoBox}}", label: "Order Info Box" },
+    { tag: "{{ctaButton}}", label: "Track Order Button" },
+  ],
+  hub_shipment_created: [
+    { tag: "{{contactName}}", label: "Buyer Name" },
+    { tag: "{{companyName}}", label: "Company / Store" },
+    { tag: "{{orderNumber}}", label: "Order Number" },
+    { tag: "{{carrier}}", label: "Carrier" },
+    { tag: "{{trackingNumber}}", label: "Tracking Number" },
+    { tag: "{{shippedDate}}", label: "Shipped Date" },
+    { tag: "{{shipmentStatus}}", label: "Shipment Status" },
+    { tag: "{{infoBox}}", label: "Shipment Info Box" },
+    { tag: "{{ctaButton}}", label: "Track Package Button" },
+  ],
+  hub_shipment_tracking_update: [
+    { tag: "{{contactName}}", label: "Buyer Name" },
+    { tag: "{{companyName}}", label: "Company / Store" },
+    { tag: "{{orderNumber}}", label: "Order Number" },
+    { tag: "{{carrier}}", label: "Carrier" },
+    { tag: "{{trackingNumber}}", label: "Tracking Number" },
+    { tag: "{{shipmentStatus}}", label: "Transit Status" },
+    { tag: "{{dueDate}}", label: "Est. Delivery Date" },
+    { tag: "{{infoBox}}", label: "Tracking Info Box" },
+    { tag: "{{ctaButton}}", label: "View Tracking Button" },
+  ],
+  hub_order_delivered: [
+    { tag: "{{contactName}}", label: "Buyer Name" },
+    { tag: "{{companyName}}", label: "Company / Store" },
+    { tag: "{{orderNumber}}", label: "Order Number" },
+    { tag: "{{carrier}}", label: "Carrier" },
+    { tag: "{{deliveredDate}}", label: "Delivered Date" },
+    { tag: "{{orderStatus}}", label: "Status" },
+    { tag: "{{infoBox}}", label: "Delivery Info Box" },
+    { tag: "{{ctaButton}}", label: "View Order Details Button" },
+  ],
+};
+
+// Global fallback sample variables for backward compatibility
+export const SAMPLE_VARIABLES: Record<string, string> = {
+  ...TEMPLATE_SAMPLE_VARIABLES.hub_retailer_application_received,
+};
+
+export function getSampleVariables(key: string): Record<string, string> {
+  const typedKey = key as TemplateKey;
+  return TEMPLATE_SAMPLE_VARIABLES[typedKey] ?? {
+    contactName: "Sarah Jenkins",
+    companyName: "Luxe Beauty Bar",
+    applicationNumber: "APP-RET-104921",
+    supportEmail: "support@kselecthub.com",
+    portalUrl: "https://portal.kselecthub.com",
+  };
+}
 
 function render(template: string, variables: Record<string, string>) {
   return template.replace(/\{\{(\w+)\}\}/g, (_match, name) => variables[name] ?? "");
@@ -300,7 +767,7 @@ function getHubBadgeLabel(key: string): string | undefined {
     case "hub_application_approved":
       return "APPROVED · PARTNERSHIP WELCOME";
     case "hub_application_rejected":
-      return "APPLICATION UPDATE · RETAILER NETWORK";
+      return "APPLICATION STATUS · UPDATE";
     case "hub_retailer_partner_invited":
       return "INVITATION · RETAILER ONBOARDING";
     case "hub_retailer_user_invited":
@@ -382,45 +849,145 @@ function buildNetworkInfoCardHtml(variables: Record<string, string>) {
   `;
 }
 
-/** K SELECT HUB 이메일용 정보 카드 HTML (Clean luxury retailer aesthetic) */
+/**
+ * K SELECT HUB 이메일용 정보 카드 HTML (Event-Specific & Clean Luxury Aesthetic)
+ */
 function buildHubInfoCardHtml(variables: Record<string, string>) {
+  const key = variables.key || "";
   const rows: { label: string; value: string; isBold?: boolean; highlight?: boolean }[] = [];
 
-  const appNo = variables.applicationNo || variables.applicationNumber || variables.inquiryNumber;
-  if (appNo) {
-    rows.push({ label: "Application No.", value: appNo, isBold: true });
-  }
-
-  const comp = variables.companyName;
-  if (comp) {
-    rows.push({ label: "Store / Company", value: comp });
-  }
-
-  const orderNo = variables.orderNumber;
-  if (orderNo) {
-    rows.push({ label: "Order Number", value: orderNo, isBold: true });
-  }
-
-  const orderAmt = variables.orderAmount;
-  if (orderAmt) {
-    rows.push({ label: "Order Total", value: orderAmt, highlight: true });
-  }
-
-  const carrier = variables.carrier;
-  const tracking = variables.trackingNumber;
-  if (carrier || tracking) {
-    rows.push({
-      label: "Tracking Info",
-      value: [carrier, tracking].filter(Boolean).join(" · "),
-      isBold: true,
-    });
-  }
-
-  const nextStep = variables.nextStep;
-  if (nextStep) {
-    rows.push({ label: "Next Step", value: nextStep });
-  } else if (appNo && variables.key === "hub_retailer_application_received") {
-    rows.push({ label: "Next Step", value: "Store Profile Review · 1–2 Business Days" });
+  if (
+    key === "hub_retailer_application_received" ||
+    key === "hub_application_under_review" ||
+    key === "hub_info_request_created" ||
+    key === "hub_application_approved" ||
+    key === "hub_application_rejected"
+  ) {
+    const appNo = variables.applicationNumber || variables.applicationNo;
+    if (appNo) {
+      rows.push({ label: "Application No.", value: appNo, isBold: true });
+    }
+    if (variables.companyName) {
+      rows.push({ label: "Company", value: variables.companyName });
+    }
+    if (variables.applicationStatus) {
+      rows.push({ label: "Status", value: variables.applicationStatus, isBold: true });
+    }
+    if (variables.dueDate && key === "hub_info_request_created") {
+      rows.push({ label: "Due Date", value: variables.dueDate, highlight: true });
+    }
+    if (variables.nextStep) {
+      rows.push({ label: "Next Step", value: variables.nextStep });
+    }
+  } else if (
+    key === "hub_retailer_partner_invited" ||
+    key === "hub_retailer_user_invited"
+  ) {
+    if (variables.companyName) {
+      rows.push({ label: "Company", value: variables.companyName, isBold: true });
+    }
+    if (variables.contactName) {
+      rows.push({ label: key === "hub_retailer_user_invited" ? "Invitee" : "Primary Contact", value: variables.contactName });
+    }
+    if (variables.role) {
+      rows.push({ label: "Assigned Role", value: variables.role });
+    }
+    if (variables.expirationDate) {
+      rows.push({ label: "Link Validity", value: variables.expirationDate });
+    }
+  } else if (
+    key === "hub_retailer_account_activated" ||
+    key === "hub_welcome_retailer"
+  ) {
+    if (variables.companyName) {
+      rows.push({ label: "Store / Company", value: variables.companyName, isBold: true });
+    }
+    if (variables.accountStatus) {
+      rows.push({ label: "Account Status", value: variables.accountStatus, isBold: true });
+    }
+    if (variables.nextStep) {
+      rows.push({ label: "Next Step", value: variables.nextStep });
+    }
+  } else if (key === "hub_password_reset") {
+    if (variables.email) {
+      rows.push({ label: "Account Email", value: variables.email, isBold: true });
+    }
+    rows.push({ label: "Security Action", value: "Password Reset Request" });
+    rows.push({ label: "Validity", value: "24 Hours" });
+  } else if (key === "hub_order_confirmed") {
+    if (variables.orderNumber) {
+      rows.push({ label: "Order Number", value: variables.orderNumber, isBold: true });
+    }
+    if (variables.companyName) {
+      rows.push({ label: "Store / Company", value: variables.companyName });
+    }
+    if (variables.orderDate) {
+      rows.push({ label: "Order Date", value: variables.orderDate });
+    }
+    if (variables.orderAmount) {
+      rows.push({ label: "Order Total", value: variables.orderAmount, highlight: true });
+    }
+    if (variables.orderStatus) {
+      rows.push({ label: "Status", value: variables.orderStatus, isBold: true });
+    }
+  } else if (key === "hub_shipment_created") {
+    if (variables.orderNumber) {
+      rows.push({ label: "Order Number", value: variables.orderNumber, isBold: true });
+    }
+    if (variables.companyName) {
+      rows.push({ label: "Store / Company", value: variables.companyName });
+    }
+    if (variables.carrier || variables.trackingNumber) {
+      rows.push({
+        label: "Tracking Info",
+        value: [variables.carrier, variables.trackingNumber].filter(Boolean).join(" · "),
+        isBold: true,
+      });
+    }
+    if (variables.shippedDate) {
+      rows.push({ label: "Shipped Date", value: variables.shippedDate });
+    }
+    if (variables.shipmentStatus) {
+      rows.push({ label: "Status", value: variables.shipmentStatus });
+    }
+  } else if (key === "hub_shipment_tracking_update") {
+    if (variables.orderNumber) {
+      rows.push({ label: "Order Number", value: variables.orderNumber, isBold: true });
+    }
+    if (variables.carrier || variables.trackingNumber) {
+      rows.push({
+        label: "Tracking Info",
+        value: [variables.carrier, variables.trackingNumber].filter(Boolean).join(" · "),
+        isBold: true,
+      });
+    }
+    if (variables.shipmentStatus) {
+      rows.push({ label: "Transit Status", value: variables.shipmentStatus, isBold: true });
+    }
+    if (variables.dueDate) {
+      rows.push({ label: "Est. Delivery", value: variables.dueDate, highlight: true });
+    }
+  } else if (key === "hub_order_delivered") {
+    if (variables.orderNumber) {
+      rows.push({ label: "Order Number", value: variables.orderNumber, isBold: true });
+    }
+    if (variables.companyName) {
+      rows.push({ label: "Store / Company", value: variables.companyName });
+    }
+    if (variables.carrier) {
+      rows.push({ label: "Carrier", value: variables.carrier });
+    }
+    if (variables.deliveredDate) {
+      rows.push({ label: "Delivered Date", value: variables.deliveredDate, isBold: true });
+    }
+    if (variables.orderStatus) {
+      rows.push({ label: "Status", value: variables.orderStatus, highlight: true });
+    }
+  } else {
+    // Dynamic fallback for custom keys
+    if (variables.applicationNumber) rows.push({ label: "Application No.", value: variables.applicationNumber, isBold: true });
+    if (variables.orderNumber) rows.push({ label: "Order Number", value: variables.orderNumber, isBold: true });
+    if (variables.companyName) rows.push({ label: "Company", value: variables.companyName });
   }
 
   if (rows.length === 0) return "";
@@ -452,9 +1019,9 @@ function buildHubInfoCardHtml(variables: Record<string, string>) {
   });
 
   return `
-    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="width:100%;border:1px solid #E4E4E7;background-color:#FAFAFA;border-radius:8px;border-collapse:separate;margin:28px 0 0 0;">
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="width:100%;border:1px solid #E4E4E7;background-color:#FAFAFA;border-radius:8px;border-collapse:separate;margin:24px 0 0 0;">
       <tr>
-        <td style="padding:20px 24px;">
+        <td style="padding:18px 22px;">
           <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="width:100%;border-collapse:collapse;">
             ${rowsHtml}
           </table>
@@ -899,7 +1466,7 @@ function renderHubEmailHtml(
     applicationUrl: hubPortalUrl,
     portalUrl: variables.portalUrl || hubPortalUrl,
     websiteUrl: hubSiteUrl,
-    supportEmail: variables.supportEmail || "support@kselectnetwork.com",
+    supportEmail: variables.supportEmail || "support@kselecthub.com",
     privacyUrl: `${hubSiteUrl}/privacy`,
     unsubscribeUrl: `${hubSiteUrl}/unsubscribe`,
   };
