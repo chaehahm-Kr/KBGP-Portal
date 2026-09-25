@@ -16,6 +16,10 @@ type ProductFormProps = {
   brands: { id: string; name: string }[];
 };
 
+const RequiredAsterisk = () => (
+  <span className="text-rose-600 dark:text-rose-400 font-bold ml-0.5" aria-hidden="true">*</span>
+);
+
 export function ProductForm({ action, brands }: ProductFormProps) {
   const router = useRouter();
   const [state, formAction, pending] = useActionState<
@@ -38,7 +42,11 @@ export function ProductForm({ action, brands }: ProductFormProps) {
   const [sellingOffline, setSellingOffline] = useState(false);
   const [salesLink1, setSalesLink1] = useState("");
   const [salesLink2, setSalesLink2] = useState("");
-  
+
+  // Field error state & inline validation message
+  const [fieldErrors, setFieldErrors] = useState<Record<string, boolean>>({});
+  const [validationError, setValidationError] = useState<string | null>(null);
+
   // Dimensions & weight with metric-imperial sync
   const [packageWidth, setPackageWidth] = useState("");
   const [packageWidthInch, setPackageWidthInch] = useState("");
@@ -55,6 +63,10 @@ export function ProductForm({ action, brands }: ProductFormProps) {
 
   const formRef = useRef<HTMLFormElement>(null);
   const listSubmitBtnRef = useRef<HTMLButtonElement>(null);
+
+  const getInputClass = (hasError?: boolean, extraClasses = "") => {
+    return `${inputClass} ${hasError ? "border-rose-500 focus:border-rose-600 ring-1 ring-rose-500/50 bg-rose-50/10 dark:bg-rose-950/20" : ""} ${extraClasses}`.trim();
+  };
 
   // Sync handers
   const handleWidthCmChange = (val: string) => {
@@ -188,20 +200,65 @@ export function ProductForm({ action, brands }: ProductFormProps) {
     salesLink2.trim() !== "";
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
-    if (!upc.trim() && !ean.trim()) {
-      e.preventDefault();
-      alert("UPC 또는 EAN 번호 중 최소 하나는 반드시 입력해야 합니다.");
+    setValidationError(null);
+    setFieldErrors({});
+
+    // 1. Draft Save ("임시 저장 후 나중에 등록"): Skip required validations completely
+    if (submitActionVal === "list") {
       return;
     }
-    if (upc.trim() && ean.trim()) {
-      e.preventDefault();
-      alert("UPC와 EAN 번호는 동시에 입력할 수 없습니다. 둘 중 하나만 입력해 주세요.");
-      return;
+
+    // 2. Final Submit ("제품 등록 및 계속"): Full required validation
+    const errors: Record<string, boolean> = {};
+    let errorMsg: string | null = null;
+
+    if (!brandId) {
+      errors.brandId = true;
+      errorMsg = errorMsg || "브랜드를 선택해주세요.";
     }
+    if (!category) {
+      errors.category = true;
+      errorMsg = errorMsg || "카테고리를 선택해주세요.";
+    }
+    if (!manufactureSku.trim()) {
+      errors.manufactureSku = true;
+      errorMsg = errorMsg || "제조사 SKU를 입력해주세요.";
+    }
+    if (!nameEn.trim()) {
+      errors.nameEn = true;
+      errorMsg = errorMsg || "영문 제품명을 입력해주세요.";
+    }
+    if (!priceKrwRetail || isNaN(Number(priceKrwRetail))) {
+      errors.priceKrwRetail = true;
+      errorMsg = errorMsg || "한국 소비자 판매가를 입력해주세요.";
+    }
+    if (!priceUsdFob || isNaN(Number(priceUsdFob))) {
+      errors.priceUsdFob = true;
+      errorMsg = errorMsg || "미국 수출 FOB 가격을 입력해주세요.";
+    }
+
+    const hasUpc = !!upc.trim();
+    const hasEan = !!ean.trim();
+
+    if (!hasUpc && !hasEan) {
+      errors.upc = true;
+      errors.ean = true;
+      errorMsg = errorMsg || "UPC 또는 EAN 번호 중 하나는 반드시 입력해야 합니다.";
+    } else if (hasUpc && hasEan) {
+      errors.upc = true;
+      errors.ean = true;
+      errorMsg = errorMsg || "UPC와 EAN 번호는 동시에 입력할 수 없습니다. 둘 중 하나만 입력해 주세요.";
+    }
+
     if (sellingOnline && !salesLink1.trim()) {
+      errors.salesLink1 = true;
+      errorMsg = errorMsg || "온라인 판매 중인 경우, 최소 한 개 이상의 온라인 판매 링크(링크 1)를 입력해 주세요.";
+    }
+
+    if (Object.keys(errors).length > 0) {
       e.preventDefault();
-      alert("온라인 판매 중인 경우, 최소 한 개 이상의 온라인 판매 링크(링크 1)를 입력해 주세요.");
-      return;
+      setFieldErrors(errors);
+      setValidationError(errorMsg || "필수 입력 항목을 확인해 주세요.");
     }
   };
 
@@ -221,6 +278,7 @@ export function ProductForm({ action, brands }: ProductFormProps) {
       return;
     }
     setBrandId(selected);
+    setFieldErrors((prev) => ({ ...prev, brandId: false }));
   };
 
   const handleExitClick = () => {
@@ -257,13 +315,14 @@ export function ProductForm({ action, brands }: ProductFormProps) {
         </svg>
       </button>
 
-      {state?.error && (
-        <div className="mb-4 rounded-lg bg-rose-50 p-3 text-xs font-semibold text-rose-700 border border-rose-200 dark:bg-rose-950/30 dark:border-rose-900/40 dark:text-rose-400">
-          {state.error}
+      {(validationError || state?.error) && (
+        <div className="mb-5 rounded-lg bg-rose-50 p-3.5 text-xs font-semibold text-rose-700 border border-rose-200 dark:bg-rose-950/30 dark:border-rose-900/40 dark:text-rose-400 flex items-center gap-2 shadow-xs">
+          <span>⚠️</span>
+          <span>{validationError || state?.error}</span>
         </div>
       )}
 
-      <form ref={formRef} action={formAction} onSubmit={handleSubmit} className="space-y-6 max-w-xl">
+      <form ref={formRef} action={formAction} onSubmit={handleSubmit} noValidate className="space-y-6 max-w-xl">
         {/* Hidden inputs to pass action state */}
         <input type="hidden" name="submitAction" value={submitActionVal} />
 
@@ -276,15 +335,14 @@ export function ProductForm({ action, brands }: ProductFormProps) {
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
               <label htmlFor="brandId" className={labelClass}>
-                브랜드 *
+                브랜드 <RequiredAsterisk />
               </label>
               <select
                 id="brandId"
                 name="brandId"
-                required
                 value={brandId}
                 onChange={handleBrandChange}
-                className={inputClass}
+                className={getInputClass(fieldErrors.brandId)}
               >
                 {brands.map((brand) => (
                   <option key={brand.id} value={brand.id}>
@@ -300,15 +358,17 @@ export function ProductForm({ action, brands }: ProductFormProps) {
 
             <div>
               <label htmlFor="category" className={labelClass}>
-                카테고리 *
+                카테고리 <RequiredAsterisk />
               </label>
               <select
                 id="category"
                 name="category"
-                required
                 value={category}
-                onChange={(e) => setCategory(e.target.value)}
-                className={inputClass}
+                onChange={(e) => {
+                  setCategory(e.target.value);
+                  setFieldErrors((prev) => ({ ...prev, category: false }));
+                }}
+                className={getInputClass(fieldErrors.category)}
               >
                 <option value="">카테고리 선택</option>
                 {(Object.keys(PRODUCT_CATEGORY_LABEL) as ProductCategory[]).map((value) => (
@@ -323,35 +383,39 @@ export function ProductForm({ action, brands }: ProductFormProps) {
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
               <label htmlFor="manufactureSku" className={labelClass}>
-                제조사 SKU (Manufacture SKU) *
+                제조사 SKU (Manufacture SKU) <RequiredAsterisk />
               </label>
               <input
                 id="manufactureSku"
                 name="manufactureSku"
-                required
                 placeholder="예: ABC-123-001"
                 value={manufactureSku}
-                onChange={(e) => setManufactureSku(sanitizeSku(e.target.value))}
+                onChange={(e) => {
+                  setManufactureSku(sanitizeSku(e.target.value));
+                  setFieldErrors((prev) => ({ ...prev, manufactureSku: false }));
+                }}
                 onBlur={(e) => setManufactureSku(trimSkuSeparators(e.target.value))}
-                className={`${inputClass} font-mono`}
+                className={getInputClass(fieldErrors.manufactureSku, "font-mono")}
               />
-              <p className="text-[10px] text-zinc-400 dark:text-zinc-550 mt-1 leading-normal">
+              <p className="text-xs text-zinc-600 dark:text-zinc-300 mt-1.5 leading-relaxed font-medium">
                 ※ 영문 대문자, 숫자, 하이픈(-), 언더스코어(_)만 허용됩니다. (소문자는 자동 대문자 변환, 공백 및 기타 특수문자 제한)
               </p>
             </div>
 
             <div>
               <label htmlFor="nameEn" className={labelClass}>
-                제품명 (영문) *
+                제품명 (영문) <RequiredAsterisk />
               </label>
               <input
                 id="nameEn"
                 name="nameEn"
-                required
                 placeholder="예: Best Sun Block"
                 value={nameEn}
-                onChange={(e) => setNameEn(e.target.value)}
-                className={inputClass}
+                onChange={(e) => {
+                  setNameEn(e.target.value);
+                  setFieldErrors((prev) => ({ ...prev, nameEn: false }));
+                }}
+                className={getInputClass(fieldErrors.nameEn)}
               />
             </div>
           </div>
@@ -366,8 +430,11 @@ export function ProductForm({ action, brands }: ProductFormProps) {
                 name="upc"
                 placeholder="12자리 미국 바코드 규격"
                 value={upc}
-                onChange={(e) => setUpc(e.target.value)}
-                className={`${inputClass} font-mono`}
+                onChange={(e) => {
+                  setUpc(e.target.value);
+                  setFieldErrors((prev) => ({ ...prev, upc: false, ean: false }));
+                }}
+                className={getInputClass(fieldErrors.upc, "font-mono")}
               />
             </div>
             <div>
@@ -379,9 +446,24 @@ export function ProductForm({ action, brands }: ProductFormProps) {
                 name="ean"
                 placeholder="13자리 글로벌 바코드 규격"
                 value={ean}
-                onChange={(e) => setEan(e.target.value)}
-                className={`${inputClass} font-mono`}
+                onChange={(e) => {
+                  setEan(e.target.value);
+                  setFieldErrors((prev) => ({ ...prev, upc: false, ean: false }));
+                }}
+                className={getInputClass(fieldErrors.ean, "font-mono")}
               />
+            </div>
+
+            <div className="sm:col-span-2">
+              <div className="p-3 rounded-lg bg-amber-50/80 dark:bg-amber-950/40 border border-amber-200/80 dark:border-amber-900/60 text-amber-800 dark:text-amber-300 text-xs font-semibold flex items-start gap-2">
+                <span className="shrink-0 text-sm">💡</span>
+                <div>
+                  <p className="font-bold">UPC 또는 EAN 중 하나는 반드시 입력해야 합니다.</p>
+                  <p className="text-[11px] opacity-90 font-normal mt-0.5 leading-relaxed">
+                    미국 시장 바코드(UPC) 또는 글로벌 바코드(EAN) 중 최소 한 가지를 입력해야 정식 제품 등록이 완료됩니다. (두 바코드를 동시에 입력할 수는 없습니다. 임시 저장 시에는 비워둘 수 있습니다.)
+                  </p>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -402,34 +484,38 @@ export function ProductForm({ action, brands }: ProductFormProps) {
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
               <label htmlFor="priceKrwRetail" className={labelClass}>
-                한국 소비자 판매가 (₩, Retail KRW) *
+                한국 소비자 판매가 (₩, Retail KRW) <RequiredAsterisk />
               </label>
               <input
                 id="priceKrwRetail"
                 name="priceKrwRetail"
                 type="number"
-                required
                 placeholder="예: 25000"
                 value={priceKrwRetail}
-                onChange={(e) => setPriceKrwRetail(e.target.value)}
-                className={inputClass}
+                onChange={(e) => {
+                  setPriceKrwRetail(e.target.value);
+                  setFieldErrors((prev) => ({ ...prev, priceKrwRetail: false }));
+                }}
+                className={getInputClass(fieldErrors.priceKrwRetail)}
               />
             </div>
 
             <div>
               <label htmlFor="priceUsdFob" className={labelClass}>
-                미국 수출 FOB 가격 ($, Export USD FOB) *
+                미국 수출 FOB 가격 ($, Export USD FOB) <RequiredAsterisk />
               </label>
               <input
                 id="priceUsdFob"
                 name="priceUsdFob"
                 type="number"
                 step="0.01"
-                required
                 placeholder="예: 12.50"
                 value={priceUsdFob}
-                onChange={(e) => setPriceUsdFob(e.target.value)}
-                className={inputClass}
+                onChange={(e) => {
+                  setPriceUsdFob(e.target.value);
+                  setFieldErrors((prev) => ({ ...prev, priceUsdFob: false }));
+                }}
+                className={getInputClass(fieldErrors.priceUsdFob)}
               />
             </div>
           </div>
@@ -466,17 +552,19 @@ export function ProductForm({ action, brands }: ProductFormProps) {
             <div className="grid gap-4 sm:grid-cols-2 p-3 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50/10 animate-fadeIn">
               <div>
                 <label htmlFor="salesLink1" className={labelClass}>
-                  온라인 판매 링크 1 *
+                  온라인 판매 링크 1 <RequiredAsterisk />
                 </label>
                 <input
                   id="salesLink1"
                   name="salesLink1"
                   type="url"
-                  required={sellingOnline}
                   placeholder="https://example.com/product/1"
                   value={salesLink1}
-                  onChange={(e) => setSalesLink1(e.target.value)}
-                  className={inputClass}
+                  onChange={(e) => {
+                    setSalesLink1(e.target.value);
+                    setFieldErrors((prev) => ({ ...prev, salesLink1: false }));
+                  }}
+                  className={getInputClass(fieldErrors.salesLink1)}
                 />
               </div>
               <div>
@@ -510,7 +598,7 @@ export function ProductForm({ action, brands }: ProductFormProps) {
             </div>
           </h2>
           
-          <p className="text-[10px] text-zinc-400 dark:text-zinc-500 italic leading-normal -mt-2">
+          <p className="text-xs text-zinc-600 dark:text-zinc-300 mt-1.5 leading-relaxed font-medium">
             ※ cm/g 또는 inch/lb/oz 단위 중 편리한 쪽에 입력하시면 반대편 단위의 칸이 실시간으로 소수점 자동 계산됩니다.
           </p>
 

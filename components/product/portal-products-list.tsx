@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import Link from "next/link";
 import { PRODUCT_CATEGORY_LABEL, type ProductCategory } from "@/lib/product/types";
 import { deleteProduct } from "@/lib/product/actions";
+import { useSearchParams } from "next/navigation";
 import {
   SELECTION_STATUS_LABELS,
   SELECTION_STATUS_STYLES,
@@ -46,6 +47,7 @@ interface PortalProductsListProps {
 }
 
 export function PortalProductsList({ initialProducts, hasBrand }: PortalProductsListProps) {
+  const searchParams = useSearchParams();
   const [products, setProducts] = useState<PortalProductItem[]>(initialProducts);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
@@ -56,6 +58,14 @@ export function PortalProductsList({ initialProducts, hasBrand }: PortalProducts
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  React.useEffect(() => {
+    if (searchParams.get("saved") === "draft") {
+      setToastMessage("임시 저장되었습니다. 나중에 이어서 등록할 수 있습니다.");
+      const timer = setTimeout(() => setToastMessage(null), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [searchParams]);
 
   React.useEffect(() => {
     setProducts(initialProducts);

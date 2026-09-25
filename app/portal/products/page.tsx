@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import type { Metadata } from "next";
 import { requireCompanyMembership } from "@/lib/company/dal";
 import { createClient } from "@/lib/supabase/server";
@@ -156,7 +157,9 @@ export default async function ProductsPage() {
 
   return (
     <div className="w-full max-w-7xl">
-      <PortalProductsList initialProducts={resolvedProducts} hasBrand={hasBrand} />
+      <Suspense fallback={<div className="p-8 text-center text-xs text-zinc-500">로딩 중...</div>}>
+        <PortalProductsList initialProducts={resolvedProducts} hasBrand={hasBrand} />
+      </Suspense>
     </div>
   );
 }

@@ -55,20 +55,104 @@ export async function createProduct(
   formData: FormData
 ): Promise<ProductFormState> {
   const { companyId } = await requireCompanyMembership();
+  const submitAction = (formData.get("submitAction") as string) || "continue";
+  const isDraft = submitAction === "list";
 
+  const rawBrandId = (formData.get("brandId") as string)?.trim() || "";
+  const rawManufactureSku = (formData.get("manufactureSku") as string)?.trim() || "";
+  const rawNameEn = (formData.get("nameEn") as string)?.trim() || "";
+  const rawCategory = (formData.get("category") as string)?.trim() || null;
+  const rawPriceKrwRetail = formData.get("priceKrwRetail");
+  const rawPriceUsdFob = formData.get("priceUsdFob");
+  const rawPackageWidth = formData.get("packageWidth");
+  const rawPackageDepth = formData.get("packageDepth");
+  const rawPackageHeight = formData.get("packageHeight");
+  const rawPackageWeight = formData.get("packageWeight");
+  const upc = (formData.get("upc") as string)?.trim() || null;
+  const ean = (formData.get("ean") as string)?.trim() || null;
+
+  const sellingOnline = formData.get("sellingOnline") === "true" || formData.get("sellingOnline") === "on";
+  const sellingOffline = formData.get("sellingOffline") === "true" || formData.get("sellingOffline") === "on";
+  const salesLink1 = formData.get("salesLink1")?.toString().trim() || null;
+  const salesLink2 = formData.get("salesLink2")?.toString().trim() || null;
+
+  const supabase = await createClient();
+
+  if (isDraft) {
+    // DRAFT SAVE PATH: Allow required fields & UPC/EAN to be empty
+    if (!rawBrandId) {
+      return { error: "브랜드를 선택해주세요." };
+    }
+
+    const { data: brand } = await supabase
+      .from("brands")
+      .select("id")
+      .eq("id", rawBrandId)
+      .eq("company_id", companyId)
+      .single();
+
+    if (!brand) {
+      return { error: "선택한 브랜드를 찾을 수 없습니다." };
+    }
+
+    const manufactureSku = rawManufactureSku || `DRAFT-SKU-${Date.now().toString().slice(-6)}`;
+    const nameEn = rawNameEn || "[임시저장] 신규 제품";
+    const category = (["skincare", "hair_scalp", "beauty_tools", "daily_care", "wellness_patch"].includes(rawCategory || "") ? rawCategory : null) as ProductCategory | null;
+    const priceKrwRetail = rawPriceKrwRetail && !isNaN(Number(rawPriceKrwRetail)) ? Number(rawPriceKrwRetail) : null;
+    const priceUsdFob = rawPriceUsdFob && !isNaN(Number(rawPriceUsdFob)) ? Number(rawPriceUsdFob) : null;
+    const packageWidth = rawPackageWidth && !isNaN(Number(rawPackageWidth)) ? Number(rawPackageWidth) : null;
+    const packageDepth = rawPackageDepth && !isNaN(Number(rawPackageDepth)) ? Number(rawPackageDepth) : null;
+    const packageHeight = rawPackageHeight && !isNaN(Number(rawPackageHeight)) ? Number(rawPackageHeight) : null;
+    const packageWeight = rawPackageWeight && !isNaN(Number(rawPackageWeight)) ? Number(rawPackageWeight) : null;
+
+    const { data: product, error: insertError } = await supabase
+      .from("products")
+      .insert({
+        brand_id: brand.id,
+        company_id: companyId,
+        name: nameEn,
+        name_en: rawNameEn || null,
+        category: category,
+        manufacture_sku: manufactureSku,
+        price_krw_retail: priceKrwRetail,
+        price_usd_fob: priceUsdFob,
+        package_width: packageWidth,
+        package_depth: packageDepth,
+        package_height: packageHeight,
+        package_weight: packageWeight,
+        upc,
+        ean,
+        selling_online: sellingOnline,
+        selling_offline: sellingOffline,
+        sales_link_1: salesLink1,
+        sales_link_2: salesLink2,
+      })
+      .select("id")
+      .single();
+
+    if (insertError || !product) {
+      console.error("Draft product insert error:", insertError);
+      return { error: "임시 저장에 실패했습니다. 잠시 후 다시 시도해주세요." };
+    }
+
+    revalidatePath("/portal/products");
+    redirect("/portal/products?saved=draft");
+  }
+
+  // FINAL SUBMIT PATH: Full required validation
   const parsed = productSchema.safeParse({
-    brandId: formData.get("brandId"),
-    manufactureSku: formData.get("manufactureSku"),
-    nameEn: formData.get("nameEn"),
-    category: formData.get("category"),
-    priceKrwRetail: formData.get("priceKrwRetail"),
-    priceUsdFob: formData.get("priceUsdFob"),
-    packageWidth: formData.get("packageWidth"),
-    packageDepth: formData.get("packageDepth"),
-    packageHeight: formData.get("packageHeight"),
-    packageWeight: formData.get("packageWeight"),
-    upc: formData.get("upc"),
-    ean: formData.get("ean"),
+    brandId: rawBrandId,
+    manufactureSku: rawManufactureSku,
+    nameEn: rawNameEn,
+    category: rawCategory,
+    priceKrwRetail: rawPriceKrwRetail,
+    priceUsdFob: rawPriceUsdFob,
+    packageWidth: rawPackageWidth,
+    packageDepth: rawPackageDepth,
+    packageHeight: rawPackageHeight,
+    packageWeight: rawPackageWeight,
+    upc,
+    ean,
   });
 
   if (!parsed.success) {
@@ -76,9 +160,6 @@ export async function createProduct(
   }
 
   // UPC / EAN 상호 배타적 검증
-  const upc = parsed.data.upc || null;
-  const ean = parsed.data.ean || null;
-
   if (!upc && !ean) {
     return { error: "UPC 또는 EAN 번호 중 하나는 반드시 입력해야 합니다." };
   }
@@ -86,16 +167,9 @@ export async function createProduct(
     return { error: "UPC와 EAN 번호는 동시에 입력할 수 없습니다. 둘 중 하나만 입력해 주세요." };
   }
 
-  const sellingOnline = formData.get("sellingOnline") === "true" || formData.get("sellingOnline") === "on";
-  const sellingOffline = formData.get("sellingOffline") === "true" || formData.get("sellingOffline") === "on";
-  const salesLink1 = formData.get("salesLink1")?.toString().trim() || null;
-  const salesLink2 = formData.get("salesLink2")?.toString().trim() || null;
-
   if (sellingOnline && !salesLink1) {
     return { error: "온라인 판매 중인 경우, 최소 한 개 이상의 온라인 판매 링크(링크 1)를 입력해 주세요." };
   }
-
-  const supabase = await createClient();
 
   // 브랜드 소유 확인
   const { data: brand } = await supabase
@@ -140,13 +214,7 @@ export async function createProduct(
   }
 
   revalidatePath("/portal/products");
-  
-  const submitAction = formData.get("submitAction") || "continue";
-  if (submitAction === "list") {
-    redirect("/portal/products");
-  } else {
-    redirect(`/portal/products/${product.id}`);
-  }
+  redirect(`/portal/products/${product.id}`);
 }
 
 export async function addProductImages(productId: string, formData: FormData) {
