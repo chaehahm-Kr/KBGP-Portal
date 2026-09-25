@@ -27,23 +27,34 @@ This correction fix resolves the critical Production issue in the Brand Portal w
    - Preserved explicit `isSaving` state lifecycle (`try ... finally { setIsSaving(false) }`).
    - Ensured save button returns to `변경사항 저장` immediately after save.
 
+## Database & Migration Audit
+- **Migration Files**: N/A
+- **New Production Migration**: None
+- **Schema Change**: None
+
+## Vercel Deployment Audit
+- **Production Deployment**: Ready
+- **Deployment Status**: Live
+
 ## Verification & QA Matrix
 
-| # | Test Item | Result |
-|---|---|---|
-| 1 | Fresh Load Navigation | PASS (Zero dirty flag, `목록으로 돌아가기` & sidebar items navigate immediately) |
-| 2 | Unsaved Changes Guard Modal | PASS (Displays K SELECT modal when real changes exist) |
-| 3 | Modal Cancel Action | PASS (`[계속 편집]` retains page state) |
-| 4 | Modal Confirm Action | PASS (`[저장하지 않고 이동]` navigates to target) |
-| 5 | Post-Save Navigation | PASS (Dirty flag resets to `false`, navigation unlocked) |
-| 6 | Item Spec Validation | PASS (Preserved from `PORT-PROD-NEW-003`) |
-| 7 | Package Spec Validation | PASS (Preserved from `PORT-PROD-NEW-003`) |
-| 8 | Carton Spec Validation | PASS (Preserved from `PORT-PROD-NEW-003`) |
-| 9 | Duplicate Category UI Removal | PASS (Single clean category tree in Product Detail) |
-| 10 | TypeScript 0 Errors | PASS (`npx tsc --noEmit` clean) |
-| 11 | Production Build | PASS (`npm run build` SUCCESS) |
+| # | Test Item | Result | Evidence / Details |
+|---|---|---|---|
+| 1 | Fresh Load `isDirty` | PASS | Evaluates strictly to `false` on mount with 0 edits |
+| 2 | 목록으로 돌아가기 Navigation | PASS | Navigates immediately to product list without delay or modal |
+| 3 | 제품 관리 Sidebar Navigation | PASS | Navigates immediately on fresh load |
+| 4 | 주문 관리 Sidebar Navigation | PASS | Navigates immediately on fresh load |
+| 5 | 정산 관리 Sidebar Navigation | PASS | Navigates immediately on fresh load |
+| 6 | 문의 지원 Sidebar Navigation | PASS | Navigates immediately on fresh load |
+| 7 | 입점 신청 Sidebar Navigation | PASS | Navigates immediately on fresh load |
+| 8 | No Click Capture Listener | PASS | `document` click capture listener is NOT installed when clean |
+| 9 | Real Unsaved Edit Confirmation | PASS | Displays K SELECT confirm modal (`저장되지 않은 변경사항이 있습니다.`) |
+| 10 | Post-Save `isDirty` Reset | PASS | Evaluates strictly to `false` after save completion |
+| 11 | Navigation After Save | PASS | Navigates immediately post-save |
+| 12 | TypeScript Verification | PASS | `npx tsc --noEmit` 0 errors |
+| 13 | Production Build | PASS | `npm run build` SUCCESS |
 
 ## Final Integrity
 - **Local HEAD = origin/main = Vercel Production = Custom Domain Runtime**: YES
-- **Production Supabase Migration Applied & Schema Verified**: N/A (UI / state guard task)
+- **Production Supabase Migration Applied & Schema Verified**: N/A (UI / state guard fix)
 - **Final Status**: `COMPLETED`
