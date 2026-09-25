@@ -155,7 +155,7 @@ export async function adminInviteBrandPartner(payload: {
     .from("applications")
     .insert({
       company_id: companyId,
-      onboarded_company_id: companyId,
+      onboarded_company_id: null,
       application_number: applicationNumber,
       partner_type: "brand",
       entry_mode: "admin_invitation",
@@ -316,7 +316,7 @@ export async function adminInviteRetailerPartner(payload: {
     .from("applications")
     .insert({
       company_id: companyId,
-      onboarded_company_id: companyId,
+      onboarded_company_id: null,
       invitation_id: inviteRes.invitationId,
       application_number: applicationNumber,
       partner_type: "retailer",
@@ -429,7 +429,7 @@ export async function approveAndInviteApplication(
         status: "invitation_sent",
         invitation_id: inviteRes.invitationId,
         company_id: companyId,
-        onboarded_company_id: companyId,
+        onboarded_company_id: null,
         review_notes: reviewerNotes || "Approved & Invited Retailer",
         updated_at: new Date().toISOString(),
       })
@@ -532,7 +532,7 @@ export async function approveAndInviteApplication(
       .update({
         status: "approved",
         company_id: companyId,
-        onboarded_company_id: companyId,
+        onboarded_company_id: null,
         review_notes: reviewerNotes || "Approved & Invited Brand",
         updated_at: new Date().toISOString(),
       })

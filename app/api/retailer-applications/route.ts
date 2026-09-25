@@ -26,7 +26,7 @@ function getCorsHeaders(origin: string | null): Record<string, string> {
 
   return {
     "Access-Control-Allow-Origin": isAllowed ? origin : "https://www.kselecthub.com",
-    "Access-Control-Allow-Methods": "POST, OPTIONS, GET",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type, Authorization, x-requested-with, Accept",
     "Access-Control-Max-Age": "86400",
   };
