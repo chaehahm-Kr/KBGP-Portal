@@ -714,7 +714,12 @@ export async function getAdminPartnerInquiries(): Promise<PartnerInquiryItem[]> 
       .select(`
         *,
         companies ( name ),
-        staff_members:replied_by ( name )
+        staff_members:replied_by ( name ),
+        assigned_staff:assigned_to ( name ),
+        stores:store_id ( id, name ),
+        retailer_orders:related_order_id ( id, order_number ),
+        retailer_order_fulfillments:related_fulfillment_id ( id, fulfillment_number, tracking_number ),
+        products:related_product_id ( id, name, letusto_sku, manufacture_sku )
       `)
       .order("updated_at", { ascending: false });
 
@@ -787,10 +792,11 @@ export async function getAdminPartnerInquiries(): Promise<PartnerInquiryItem[]> 
         }
 
         const repliedStaffName = item.staff_members?.name || undefined;
+        const assignedStaffName = item.assigned_staff?.name || undefined;
         const messages = await getMessagesForInquiry(
           adminSupabase,
           { ...item, attachment_url: attachmentUrl },
-          "파트너사",
+          item.source_type === "retailer" ? "리테일러" : "파트너사",
           repliedStaffName,
           false // isPortal: false -> show admin staff names in Admin
         );
@@ -801,6 +807,11 @@ export async function getAdminPartnerInquiries(): Promise<PartnerInquiryItem[]> 
         const invInfo = item.related_invoice_id ? invMap.get(item.related_invoice_id) : null;
         const poKey = item.related_po_id || invInfo?.poId || null;
         const poInfo = poKey ? poMap.get(poKey) : null;
+
+        const store = item.stores;
+        const rOrder = item.retailer_orders;
+        const rFul = item.retailer_order_fulfillments;
+        const prod = item.products;
 
         return {
           id: item.id,
@@ -814,6 +825,7 @@ export async function getAdminPartnerInquiries(): Promise<PartnerInquiryItem[]> 
           attachment_url: attachmentUrl,
           case_number: item.case_number || null,
           status: normalizeStatus(item.status) as CaseStatus,
+          source_type: (item.source_type || "brand") as "brand" | "retailer",
           reply_content: item.reply_content,
           replied_by: item.replied_by,
           replied_at: item.replied_at,
@@ -835,6 +847,10 @@ export async function getAdminPartnerInquiries(): Promise<PartnerInquiryItem[]> 
           requesterName: requester?.name || null,
           requesterEmail: requester?.email || null,
           repliedStaffName,
+          assigned_team: item.assigned_team || null,
+          assigned_to: item.assigned_to || null,
+          assignedStaffName,
+          // Brand Context
           related_po_id: item.related_po_id || invInfo?.poId || null,
           related_invoice_id: item.related_invoice_id || null,
           related_po_number: poInfo?.poNumber || null,
@@ -844,6 +860,17 @@ export async function getAdminPartnerInquiries(): Promise<PartnerInquiryItem[]> 
           related_po_supplier_name: poInfo?.supplierName || null,
           related_invoice_number: invInfo?.invNumber || null,
           related_ap_number: invInfo?.apNumber || null,
+          // Retailer Context
+          store_id: item.store_id || null,
+          store_name: store?.name || null,
+          related_order_id: item.related_order_id || null,
+          related_order_number: rOrder?.order_number || null,
+          related_fulfillment_id: item.related_fulfillment_id || null,
+          related_fulfillment_number: rFul?.fulfillment_number || null,
+          related_product_id: item.related_product_id || null,
+          related_product_name: prod?.name || null,
+          related_product_sku: prod?.letusto_sku || prod?.manufacture_sku || null,
+          related_protection_id: item.related_protection_id || null,
           messages
         } as PartnerInquiryItem;
       })

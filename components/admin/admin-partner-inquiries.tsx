@@ -8,6 +8,7 @@ import {
   OFFICIAL_STATUS_LABEL,
   OFFICIAL_STATUS_COLOR,
   OFFICIAL_STATUS_EMOJI,
+  ALL_CASE_CATEGORY_LABELS,
 } from "@/lib/inquiry/types";
 import { updateCaseStatus, closeCaseAdmin, answerAndClosePartnerInquiry } from "@/lib/inquiry/actions";
 
@@ -38,6 +39,7 @@ interface AdminPartnerInquiriesProps {
 }
 
 const CATEGORY_LABELS: Record<string, string> = {
+  // Brand
   po_change:   "PO 변경 요청",
   product:     "제품 등록 및 스펙 수정",
   onboarding:  "입점 신청 및 심사 현황",
@@ -45,7 +47,15 @@ const CATEGORY_LABELS: Record<string, string> = {
   translation: "번역 및 전성분표 기재",
   settlement:  "정산 / 인보이스 문의",
   system:      "시스템 오류 제보 및 기능 제안",
-  general:     "기타 일반 문의"
+  // Retailer
+  order_delivery:  "주문 및 배송 문의",
+  product_pricing: "상품 및 공급가 문의",
+  payment_terms:   "결제 / 여신조건 / 인보이스",
+  price_tag_qr:    "가격표 및 QR 출력 문의",
+  weekly_check:    "주간 재고 점검 문의",
+  training:        "직원 교육 및 매뉴얼",
+  portal_tech:     "포털 오류 및 시스템 문의",
+  general:         "기타 일반 문의"
 };
 
 const MSG_TYPE_LABEL: Record<string, { icon: string; label: string; style: string }> = {
@@ -68,6 +78,9 @@ export function AdminPartnerInquiries({
 
   // Detail View Tab: 'conversation' vs 'caselog'
   const [activeTab, setActiveTab] = useState<"conversation" | "caselog">("conversation");
+
+  // Source Filter: 'all' | 'brand' | 'retailer'
+  const [sourceFilter, setSourceFilter] = useState<"all" | "brand" | "retailer">("all");
 
   // Default Multi-Select Statuses: Active 3 Statuses (RECEIVED, UNDER_REVIEW, ACTION_REQUIRED)
   const [selectedStatuses, setSelectedStatuses] = useState<OfficialCaseStatus[]>([
@@ -297,22 +310,33 @@ export function AdminPartnerInquiries({
     const q = searchTerm.toLowerCase().trim();
 
     return inquiries.filter((item) => {
+      // Source Filter check
+      if (sourceFilter === "brand" && item.source_type && item.source_type !== "brand") {
+        return false;
+      }
+      if (sourceFilter === "retailer" && item.source_type !== "retailer") {
+        return false;
+      }
+
       // Rule 8: When Keyword Search is Present -> Search ALL statuses (override status filter)
       if (q) {
-        const matchTitle = item.title.toLowerCase().includes(q);
-        const matchContent = item.content.toLowerCase().includes(q);
+        const matchTitle = item.title?.toLowerCase().includes(q);
+        const matchContent = item.content?.toLowerCase().includes(q);
         const matchCompany = item.companyName?.toLowerCase().includes(q);
         const matchCaseNumber = item.case_number?.toLowerCase().includes(q);
-        const matchMessages = item.messages?.some((m) => m.content.toLowerCase().includes(q));
+        const matchStore = item.store_name?.toLowerCase().includes(q);
+        const matchOrder = item.related_order_number?.toLowerCase().includes(q);
+        const matchProduct = item.related_product_name?.toLowerCase().includes(q) || item.related_product_sku?.toLowerCase().includes(q);
+        const matchMessages = item.messages?.some((m) => m.content?.toLowerCase().includes(q));
 
-        return matchTitle || matchContent || matchCompany || matchCaseNumber || matchMessages;
+        return matchTitle || matchContent || matchCompany || matchCaseNumber || matchStore || matchOrder || matchProduct || matchMessages;
       }
 
       // When NO keyword search -> apply Multi-Select Status Filter
       const norm = getNormalizedStatus(item.status);
       return selectedStatuses.includes(norm);
     });
-  }, [inquiries, selectedStatuses, searchTerm]);
+  }, [inquiries, selectedStatuses, searchTerm, sourceFilter]);
 
   const isClosed = selectedInquiry ? getNormalizedStatus(selectedInquiry.status) === "CLOSED" : false;
 
@@ -324,7 +348,7 @@ export function AdminPartnerInquiries({
           <div>
             <h2 className="text-sm font-bold text-zinc-900 dark:text-white">케이스 관리</h2>
             <p className="text-[10px] text-zinc-400 dark:text-zinc-500 mt-0.5">
-              파트너사 1:1 케이스 접수 및 어드민 케이스 생성/처리 현황입니다.
+              브랜드사 및 소매점 1:1 파트너 케이스 접수 및 처리 현황입니다.
             </p>
           </div>
           <div className="flex items-center gap-3">
@@ -363,15 +387,37 @@ export function AdminPartnerInquiries({
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-5">
         {/* Left: Case List */}
         <div className="lg:col-span-2 space-y-3">
-          {/* Search & Multi-Select Status Filter */}
+          {/* Source Filter Tabs & Search & Multi-Select Status Filter */}
           <div className="space-y-2">
+            {/* Source Segment Filter */}
+            <div className="flex items-center gap-1 rounded-xl bg-zinc-100 p-1 dark:bg-zinc-800/70">
+              {[
+                { id: "all", label: "전체 파트너", count: inquiries.length },
+                { id: "brand", label: "브랜드 (Brand)", count: inquiries.filter((i) => !i.source_type || i.source_type === "brand").length },
+                { id: "retailer", label: "소매점 (Retailer)", count: inquiries.filter((i) => i.source_type === "retailer").length },
+              ].map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setSourceFilter(tab.id as "all" | "brand" | "retailer")}
+                  className={`flex-1 py-1.5 px-2 text-center text-[10px] font-bold rounded-lg transition-all cursor-pointer ${
+                    sourceFilter === tab.id
+                      ? "bg-white text-zinc-900 shadow-2xs dark:bg-zinc-900 dark:text-white"
+                      : "text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white"
+                  }`}
+                >
+                  {tab.label} <span className="opacity-60 text-[9px] font-mono">({tab.count})</span>
+                </button>
+              ))}
+            </div>
+
             <div className="relative">
               <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-zinc-400 text-xs">🔍</span>
               <input
                 type="text"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="케이스 검색 (번호, 제목, 내용, 회사명, 대화)..."
+                placeholder="케이스 검색 (번호, 제목, 매장, 주문, 제품, 회사명)..."
                 className="w-full rounded-xl border border-zinc-200 bg-white py-2 pl-9 pr-3 text-xs outline-none focus:border-zinc-400 dark:border-zinc-800 dark:bg-zinc-900 dark:text-white dark:focus:border-zinc-700 shadow-2xs"
               />
               {searchTerm.trim() && (
@@ -401,7 +447,14 @@ export function AdminPartnerInquiries({
                   { key: "CLOSED", label: "종료됨" },
                 ].map(({ key, label }) => {
                   const isChecked = selectedStatuses.includes(key as OfficialCaseStatus);
-                  const count = inquiries.filter((i) => getNormalizedStatus(i.status) === key).length;
+                  const count = inquiries.filter((i) => {
+                    const matchSource = sourceFilter === "all"
+                      ? true
+                      : sourceFilter === "brand"
+                      ? (!i.source_type || i.source_type === "brand")
+                      : i.source_type === "retailer";
+                    return matchSource && getNormalizedStatus(i.status) === key;
+                  }).length;
 
                   return (
                     <button
@@ -430,6 +483,7 @@ export function AdminPartnerInquiries({
               {filteredInquiries.length > 0 ? (
                 filteredInquiries.map((item) => {
                   const norm = getNormalizedStatus(item.status);
+                  const isRetailer = item.source_type === "retailer";
                   return (
                     <div
                       key={item.id}
@@ -444,7 +498,16 @@ export function AdminPartnerInquiries({
                       }`}
                     >
                       <div className="flex justify-between items-start gap-2 mb-1.5">
-                        <div className="flex items-center gap-1.5 min-w-0">
+                        <div className="flex items-center gap-1.5 min-w-0 flex-wrap">
+                          {isRetailer ? (
+                            <span className="rounded bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-800 px-1.5 py-0.2 text-[9px] font-bold">
+                              소매점
+                            </span>
+                          ) : (
+                            <span className="rounded bg-indigo-50 text-indigo-700 border border-indigo-200 dark:bg-indigo-950/50 dark:text-indigo-300 dark:border-indigo-800 px-1.5 py-0.2 text-[9px] font-bold">
+                              브랜드
+                            </span>
+                          )}
                           <span className="text-[10px]">{OFFICIAL_STATUS_EMOJI[norm]}</span>
                           <span className={`rounded px-1.5 py-0.5 text-[9px] font-bold border ${OFFICIAL_STATUS_COLOR[norm]}`}>
                             {OFFICIAL_STATUS_LABEL[norm].ko}
@@ -460,6 +523,12 @@ export function AdminPartnerInquiries({
                       <p className="text-xs font-bold text-zinc-900 dark:text-white leading-snug truncate">{item.title}</p>
                       <div className="flex items-center gap-1.5 text-[10px] text-zinc-500 dark:text-zinc-400 mt-0.5 font-medium truncate">
                         <span className="font-semibold text-zinc-700 dark:text-zinc-300">{item.companyName}</span>
+                        {item.store_name && (
+                          <>
+                            <span className="text-zinc-300 dark:text-zinc-600">·</span>
+                            <span className="font-medium text-emerald-700 dark:text-emerald-400 truncate">🏪 {item.store_name}</span>
+                          </>
+                        )}
                         {(item.requesterName || item.requesterEmail) && (
                           <>
                             <span className="text-zinc-300 dark:text-zinc-600">·</span>
@@ -471,6 +540,28 @@ export function AdminPartnerInquiries({
                         )}
                       </div>
                       <p className="text-[10px] text-zinc-400 dark:text-zinc-500 mt-0.5 truncate">{item.content}</p>
+
+                      {/* Retailer Specific Context Tags */}
+                      {isRetailer && (item.related_order_number || item.related_fulfillment_number || item.related_product_name) && (
+                        <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[9px] font-mono">
+                          {item.related_order_number && (
+                            <span className="rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 px-1.5 py-0.5 font-bold">
+                              📦 주문 #{item.related_order_number}
+                            </span>
+                          )}
+                          {item.related_fulfillment_number && (
+                            <span className="rounded bg-sky-50 dark:bg-sky-950/40 text-sky-700 dark:text-sky-300 border border-sky-200 dark:border-sky-800 px-1.5 py-0.5 font-bold">
+                              🚚 배송 #{item.related_fulfillment_number}
+                            </span>
+                          )}
+                          {item.related_product_name && (
+                            <span className="rounded bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800 px-1.5 py-0.5 truncate max-w-[160px]">
+                              🏷️ {item.related_product_name}
+                            </span>
+                          )}
+                        </div>
+                      )}
+
                       {(item.related_invoice_number || item.related_ap_number || item.related_invoice_id) && (
                         <div className="mt-1 flex items-center gap-1 text-[9px] font-mono font-medium text-indigo-600 dark:text-indigo-400">
                           <span>🧾</span>
@@ -529,6 +620,18 @@ export function AdminPartnerInquiries({
                     <h3 className="text-sm font-bold text-zinc-900 dark:text-white leading-snug">{selectedInquiry.title}</h3>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1.5 pt-1 text-[11px] text-zinc-600 dark:text-zinc-400">
                       <div className="flex items-center gap-1.5">
+                        <span className="font-semibold text-zinc-400 dark:text-zinc-500 shrink-0">파트너 유형:</span>
+                        {selectedInquiry.source_type === "retailer" ? (
+                          <span className="rounded bg-emerald-50 border border-emerald-200 dark:bg-emerald-950/40 dark:border-emerald-800 px-1.5 py-0.2 text-[9px] font-bold text-emerald-700 dark:text-emerald-300">
+                            소매점 포털 (Retailer)
+                          </span>
+                        ) : (
+                          <span className="rounded bg-indigo-50 border border-indigo-200 dark:bg-indigo-950/40 dark:border-indigo-800 px-1.5 py-0.2 text-[9px] font-bold text-indigo-700 dark:text-indigo-300">
+                            브랜드 포털 (Brand)
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1.5">
                         <span className="font-semibold text-zinc-400 dark:text-zinc-500 shrink-0">회사명:</span>
                         <span className="font-bold text-zinc-800 dark:text-zinc-200 truncate">{selectedInquiry.companyName}</span>
                       </div>
@@ -540,7 +643,7 @@ export function AdminPartnerInquiries({
                           </span>
                         ) : (
                           <span className="rounded bg-zinc-100 dark:bg-zinc-800 px-1.5 py-0.2 text-[9px] font-medium text-zinc-600 dark:text-zinc-400">
-                            파트너 포털 (Portal)
+                            파트너 접수 (Portal)
                           </span>
                         )}
                       </div>
@@ -655,6 +758,63 @@ export function AdminPartnerInquiries({
                         </span>
                       </div>
                     </div>
+                  </div>
+                )}
+
+                {/* Retailer Context & Actions Card */}
+                {selectedInquiry.source_type === "retailer" && (
+                  <div className="p-3.5 rounded-xl border border-emerald-200 bg-emerald-50/60 dark:border-emerald-900/50 dark:bg-emerald-950/30 text-xs space-y-2.5">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 font-bold text-emerald-900 dark:text-emerald-300">
+                      <span className="flex items-center gap-1.5">
+                        <span>🏪</span>
+                        <span>소매점 연계 컨텍스트 (Retailer Context)</span>
+                      </span>
+                      {selectedInquiry.related_order_id && (
+                        <Link
+                          href={`/admin/retailer-orders`}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-bold bg-white dark:bg-zinc-900 border border-emerald-300 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 transition-colors shadow-xs"
+                        >
+                          주문 내역 조회 →
+                        </Link>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px] pt-1">
+                      <div>
+                        <span className="text-zinc-500 dark:text-zinc-400 block text-[10px] font-medium">소속 매장 (Store)</span>
+                        <span className="font-bold text-zinc-900 dark:text-zinc-100 truncate block">
+                          {selectedInquiry.store_name ? `🏪 ${selectedInquiry.store_name}` : "매장 공통 (General)"}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-zinc-500 dark:text-zinc-400 block text-[10px] font-medium">연계 주문 번호 (Order)</span>
+                        <span className="font-mono font-bold text-emerald-700 dark:text-emerald-400">
+                          {selectedInquiry.related_order_number ? `#${selectedInquiry.related_order_number}` : "-"}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-zinc-500 dark:text-zinc-400 block text-[10px] font-medium">배송 번호 (Fulfillment)</span>
+                        <span className="font-mono font-medium text-sky-700 dark:text-sky-300">
+                          {selectedInquiry.related_fulfillment_number ? `#${selectedInquiry.related_fulfillment_number}` : "-"}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-zinc-500 dark:text-zinc-400 block text-[10px] font-medium">연계 상품 (Product)</span>
+                        <span className="font-medium text-zinc-800 dark:text-zinc-200 truncate block">
+                          {selectedInquiry.related_product_name
+                            ? `${selectedInquiry.related_product_name}${selectedInquiry.related_product_sku ? ` (${selectedInquiry.related_product_sku})` : ""}`
+                            : "-"}
+                        </span>
+                      </div>
+                    </div>
+                    {selectedInquiry.related_protection_id && (
+                      <div className="pt-1.5 border-t border-emerald-200/60 dark:border-emerald-800/60 text-[10px] text-emerald-800 dark:text-emerald-300 font-medium flex items-center gap-1.5">
+                        <span>🛡️</span>
+                        <span>90일 초기 시판 보장(Trial Protection) 관련 문의 연계</span>
+                        <Link href="/admin/protection" className="underline font-bold hover:text-emerald-950 dark:hover:text-white">
+                          [보호 리뷰 바로가기]
+                        </Link>
+                      </div>
+                    )}
                   </div>
                 )}
 

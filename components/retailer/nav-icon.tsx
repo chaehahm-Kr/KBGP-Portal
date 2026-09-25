@@ -63,6 +63,23 @@ export function NavIcon({
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
         </svg>
       );
+    case "life-buoy":
+      return (
+        <svg xmlns="http://www.w3.org/2000/svg" className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <circle cx="12" cy="12" r="10" strokeWidth={1.8} />
+          <circle cx="12" cy="12" r="4" strokeWidth={1.8} />
+          <line x1="4.93" y1="4.93" x2="9.17" y2="9.17" strokeWidth={1.8} strokeLinecap="round" />
+          <line x1="14.83" y1="9.17" x2="19.07" y2="4.93" strokeWidth={1.8} strokeLinecap="round" />
+          <line x1="14.83" y1="14.83" x2="19.07" y2="19.07" strokeWidth={1.8} strokeLinecap="round" />
+          <line x1="4.93" y1="19.07" x2="9.17" y2="14.83" strokeWidth={1.8} strokeLinecap="round" />
+        </svg>
+      );
+    case "shield":
+      return (
+        <svg xmlns="http://www.w3.org/2000/svg" className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+        </svg>
+      );
     default:
       return (
         <svg xmlns="http://www.w3.org/2000/svg" className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">

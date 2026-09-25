@@ -68,6 +68,13 @@ export const RETAILER_NAV_ITEMS: NavItem[] = [
     isBottomNav: false,
   },
   {
+    name: "Support",
+    href: "/support",
+    icon: "life-buoy",
+    roles: ["owner", "buyer", "store_manager", "employee", "accounting"],
+    isBottomNav: false,
+  },
+  {
     name: "Account",
     href: "/account",
     icon: "user",
