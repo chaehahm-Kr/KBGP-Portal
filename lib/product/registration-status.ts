@@ -250,7 +250,7 @@ export function evaluateProductRegistrationStatus(
     missingFields.push("단품 포장 패키지 규격");
   }
   if (cartonQty <= 0 || cartonW <= 0 || cartonD <= 0 || cartonH <= 0 || cartonWt <= 0) {
-    missingFields.push("아웃 카톤 규격");
+    missingFields.push("마스터 카톤 규격");
   }
 
   // 8. Barcode (UPC or EAN)

@@ -640,7 +640,7 @@ export function ProductDetailTabs({
     const ch = Number(cartonHeight || 0);
     const cwt = Number(cartonWeight || 0);
     if (!cartonPackQty || cq <= 0 || !cartonWidth || cw <= 0 || !cartonDepth || cd <= 0 || !cartonHeight || ch <= 0 || !cartonWeight || cwt <= 0) {
-      missing.push({ tab: "logistics", field: "아웃 카톤 규격 (입수량/가로/세로/높이/무게)", inputName: "cartonPackQty" });
+      missing.push({ tab: "logistics", field: "마스터 카톤 규격 (입수량/가로/세로/높이/무게)", inputName: "cartonPackQty" });
     }
     
     // Media tab
@@ -775,9 +775,9 @@ export function ProductDetailTabs({
     const packQty = Number(cartonPackQty || 0);
     const weight = Number(cartonWeight || 0);
 
-    if (!cbm || cbm <= 0) missing.push("아웃 카톤 규격 (CBM)");
-    if (!packQty || packQty <= 0) missing.push("아웃 카톤 입수 수량");
-    if (!weight || weight <= 0) missing.push("아웃 카톤 무게");
+    if (!cbm || cbm <= 0) missing.push("마스터 카톤 규격 (CBM)");
+    if (!packQty || packQty <= 0) missing.push("마스터 카톤 입수 수량");
+    if (!weight || weight <= 0) missing.push("마스터 카톤 무게");
 
     return missing;
   };
@@ -2744,7 +2744,7 @@ export function ProductDetailTabs({
                   <span>5. 컨테이너 적재 시뮬레이터 및 저장 정보</span>
                 </h2>
                 <p className="text-xs text-zinc-600 dark:text-zinc-400 font-normal leading-relaxed">
-                  본 시뮬레이터는 입력된 패키지 및 아웃 카톤 규격을 기준으로 한 <strong>이론적 적재 추정치</strong>입니다. 실제 선적 시 발생하는 적재 손실, 적재 방향, 혼적, 빈 공간, 마스터 카톤/팔레트 적재 제약 등은 반영되지 않으므로 참고용으로 활용해 주세요.
+                  본 시뮬레이터는 입력된 패키지 및 마스터 카톤 규격을 기준으로 한 <strong>이론적 적재 추정치</strong>입니다. 실제 선적 시 발생하는 적재 손실, 적재 방향, 혼적, 빈 공간, 마스터 카톤/팔레트 적재 제약 등은 반영되지 않으므로 참고용으로 활용해 주세요.
                 </p>
               </div>
             </div>
@@ -2758,7 +2758,7 @@ export function ProductDetailTabs({
                 <div>
                   <span className="font-bold block text-amber-950 dark:text-amber-100">컨테이너 적재 시뮬레이션을 위한 필수 미입력 항목</span>
                   <p className="text-[11px] mt-0.5 text-amber-800 dark:text-amber-300">
-                    시뮬레이션 자동 계산을 위해 상단 3. 아웃 카톤 규격 섹션에서 <strong>{getMissingContainerSimFields().join(", ")}</strong> 정보를 입력해 주세요.
+                    시뮬레이션 자동 계산을 위해 상단 3. 마스터 카톤 규격 섹션에서 <strong>{getMissingContainerSimFields().join(", ")}</strong> 정보를 입력해 주세요.
                   </p>
                 </div>
               </div>
