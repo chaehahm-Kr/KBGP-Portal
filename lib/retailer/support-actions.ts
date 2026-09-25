@@ -379,7 +379,6 @@ export async function createRetailerSupportInquiryAction(formData: FormData): Pr
     const category = String(formData.get("category") || "general").trim();
     const title = String(formData.get("title") || "").trim();
     const content = String(formData.get("content") || "").trim();
-    const priority = String(formData.get("priority") || "normal").trim();
     const storeId = (formData.get("store_id") as string)?.trim() || null;
     const relatedOrderId = (formData.get("related_order_id") as string)?.trim() || null;
     const relatedProductId = (formData.get("related_product_id") as string)?.trim() || null;
@@ -388,6 +387,43 @@ export async function createRetailerSupportInquiryAction(formData: FormData): Pr
 
     if (!title) return { success: false, error: "Please enter a subject title." };
     if (!content) return { success: false, error: "Please enter your message details." };
+
+    // Validate Store scope authorization if a specific store is selected
+    if (storeId) {
+      const { data: storeCheck } = await adminClient
+        .from("stores")
+        .select("id")
+        .eq("id", storeId)
+        .eq("company_id", companyId)
+        .maybeSingle();
+
+      if (!storeCheck) {
+        return { success: false, error: "Selected store does not belong to your company." };
+      }
+
+      const { data: userRoleRow } = await adminClient
+        .from("retailer_user_roles")
+        .select("role, has_all_stores_access")
+        .eq("user_id", session.userId)
+        .eq("company_id", companyId)
+        .maybeSingle();
+
+      const userRole = userRoleRow?.role || "employee";
+      const hasAllStoresAccess = userRoleRow?.has_all_stores_access ?? (userRole === "owner");
+
+      if (!hasAllStoresAccess && userRole !== "owner" && userRole !== "buyer") {
+        const { data: accessRow } = await adminClient
+          .from("retailer_user_store_access")
+          .select("id")
+          .eq("user_id", session.userId)
+          .eq("store_id", storeId)
+          .maybeSingle();
+
+        if (!accessRow) {
+          return { success: false, error: "You do not have access permissions for the selected store." };
+        }
+      }
+    }
 
     let attachmentPath = null;
     let attachmentFilename = null;
@@ -408,7 +444,7 @@ export async function createRetailerSupportInquiryAction(formData: FormData): Pr
         .upload(path, file, { contentType: validation.detectedMime });
 
       if (uploadError) {
-        console.error("Failed to upload retailer inquiry attachment:", uploadError);
+        console.error("[Retailer Support] Failed to upload retailer inquiry attachment:", uploadError);
         return { success: false, error: "Failed to upload attachment file." };
       }
 
@@ -416,12 +452,11 @@ export async function createRetailerSupportInquiryAction(formData: FormData): Pr
       attachmentFilename = file.name;
     }
 
+    // Insert payload with schema-verified columns
     const insertPayload: any = {
       company_id: companyId,
       created_by: session.userId,
       source_type: "retailer",
-      created_source: "portal",
-      priority,
       category,
       title,
       content,
@@ -442,12 +477,15 @@ export async function createRetailerSupportInquiryAction(formData: FormData): Pr
       .single();
 
     if (insertError || !newInquiry) {
-      console.error("Failed to insert retailer inquiry:", insertError);
-      return { success: false, error: "Failed to create support inquiry. Please try again." };
+      console.error("[Retailer Support] Failed to insert retailer inquiry:", insertError);
+      if (attachmentPath) {
+        await adminClient.storage.from("company-uploads").remove([attachmentPath]);
+      }
+      return { success: false, error: "We couldn't submit your inquiry. Please try again." };
     }
 
     // Insert Initial Message into thread
-    await adminClient.from("partner_inquiry_messages").insert({
+    const { error: msgInsertError } = await adminClient.from("partner_inquiry_messages").insert({
       inquiry_id: newInquiry.id,
       sender_type: "partner",
       sender_id: session.userId,
@@ -458,6 +496,16 @@ export async function createRetailerSupportInquiryAction(formData: FormData): Pr
       message_type: "message",
       is_action_flag: false,
     });
+
+    if (msgInsertError) {
+      console.error("[Retailer Support] Failed to insert initial inquiry message:", msgInsertError);
+      // Clean up inquiry to avoid orphan case
+      await adminClient.from("partner_inquiries").delete().eq("id", newInquiry.id);
+      if (attachmentPath) {
+        await adminClient.storage.from("company-uploads").remove([attachmentPath]);
+      }
+      return { success: false, error: "We couldn't submit your inquiry. Please try again." };
+    }
 
     // Notify Active Admin Staff
     const [{ data: company }, { data: staffMembers }] = await Promise.all([
@@ -482,8 +530,8 @@ export async function createRetailerSupportInquiryAction(formData: FormData): Pr
 
     return { success: true, caseNumber: newInquiry.case_number || "CASE" };
   } catch (err: any) {
-    console.error("createRetailerSupportInquiryAction error:", err);
-    return { success: false, error: err.message || "An unexpected error occurred." };
+    console.error("[Retailer Support] createRetailerSupportInquiryAction unhandled error:", err);
+    return { success: false, error: "We couldn't submit your inquiry. Please try again." };
   }
 }
 

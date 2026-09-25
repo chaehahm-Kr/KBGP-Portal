@@ -640,8 +640,8 @@ export function SupportView({
       {/* New Inquiry Modal */}
       {showNewModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
-          <div className="relative w-full max-w-lg rounded-2xl border border-zinc-200 bg-white p-6 shadow-2xl dark:border-zinc-800 dark:bg-zinc-900 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-start justify-between pb-4 border-b border-zinc-100 dark:border-zinc-800">
+          <div className="relative w-full max-w-2xl rounded-2xl border border-zinc-200 bg-white p-5 sm:p-6 shadow-2xl dark:border-zinc-800 dark:bg-zinc-900 max-h-[92vh] overflow-y-auto">
+            <div className="flex items-start justify-between pb-3 border-b border-zinc-100 dark:border-zinc-800">
               <div>
                 <h3 className="text-base font-bold text-zinc-900 dark:text-white">
                   Create Support Inquiry
@@ -653,31 +653,31 @@ export function SupportView({
               <button
                 type="button"
                 onClick={() => setShowNewModal(false)}
-                className="text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 text-lg cursor-pointer"
+                className="text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 text-lg cursor-pointer p-1 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
               >
                 ✕
               </button>
             </div>
 
-            <form onSubmit={handleCreateInquiry} className="space-y-4 pt-4 text-xs">
+            <form onSubmit={handleCreateInquiry} className="space-y-3 pt-3 text-xs">
               {formError && (
-                <div className="p-3 rounded-lg border border-red-200 bg-red-50 text-xs font-semibold text-red-800 dark:border-red-900/50 dark:bg-red-950/15 dark:text-red-400">
+                <div className="p-2.5 rounded-lg border border-red-200 bg-red-50 text-xs font-semibold text-red-800 dark:border-red-900/50 dark:bg-red-950/15 dark:text-red-400">
                   {formError}
                 </div>
               )}
 
-              {/* Category Selector */}
+              {/* Category Selector (4 cols on desktop, 2 cols on mobile) */}
               <div>
-                <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1.5">
+                <label className="block text-[11px] font-bold text-zinc-700 dark:text-zinc-300 mb-1">
                   Inquiry Category <span className="text-rose-500">*</span>
                 </label>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
                   {RETAILER_CASE_CATEGORIES.map((cat) => (
                     <button
                       key={cat.key}
                       type="button"
                       onClick={() => setNewCategory(cat.key)}
-                      className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+                      className={`p-2 rounded-xl border text-left transition-all cursor-pointer ${
                         newCategory === cat.key
                           ? "border-zinc-900 bg-zinc-900 text-white dark:border-white dark:bg-white dark:text-zinc-900 shadow-2xs"
                           : "border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300"
@@ -685,36 +685,35 @@ export function SupportView({
                     >
                       <div className="flex items-center gap-1.5 font-bold text-[11px]">
                         <span>{cat.icon}</span>
-                        <span>{cat.labelEn}</span>
+                        <span className="truncate">{cat.labelEn}</span>
                       </div>
                     </button>
                   ))}
                 </div>
               </div>
 
-              {/* Store Selector */}
-              {context.stores.length > 0 && (
-                <div>
-                  <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1">
-                    Store
-                  </label>
-                  <select
-                    value={newStoreId}
-                    onChange={(e) => setNewStoreId(e.target.value)}
-                    className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs outline-none focus:border-zinc-400 dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
-                  >
-                    <option value="">Company General</option>
-                    {context.stores.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        🏪 {s.name} ({s.city || "Store"})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
+              {/* Context Links: Store, Order, Product */}
+              <div className={`grid grid-cols-1 ${context.stores.length > 0 ? "sm:grid-cols-3" : "sm:grid-cols-2"} gap-2.5`}>
+                {context.stores.length > 0 && (
+                  <div>
+                    <label className="block text-[11px] font-semibold text-zinc-600 dark:text-zinc-400 mb-1">
+                      Store
+                    </label>
+                    <select
+                      value={newStoreId}
+                      onChange={(e) => setNewStoreId(e.target.value)}
+                      className="w-full rounded-xl border border-zinc-200 bg-white px-2.5 py-1.5 text-xs outline-none focus:border-zinc-400 dark:border-zinc-800 dark:bg-zinc-900 dark:text-white truncate"
+                    >
+                      <option value="">Company General</option>
+                      {context.stores.map((s) => (
+                        <option key={s.id} value={s.id}>
+                          🏪 {s.name} ({s.city || "Store"})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
 
-              {/* Optional Order & Product Context Linkers */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-[11px] font-semibold text-zinc-600 dark:text-zinc-400 mb-1">
                     Related Order <span className="font-normal text-zinc-400">(Optional)</span>
@@ -722,7 +721,7 @@ export function SupportView({
                   <select
                     value={newOrderId}
                     onChange={(e) => setNewOrderId(e.target.value)}
-                    className="w-full rounded-xl border border-zinc-200 bg-white px-2.5 py-1.5 text-xs outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
+                    className="w-full rounded-xl border border-zinc-200 bg-white px-2.5 py-1.5 text-xs outline-none focus:border-zinc-400 dark:border-zinc-800 dark:bg-zinc-900 dark:text-white truncate"
                   >
                     <option value="">None / Not specific</option>
                     {(context.orders || []).map((o) => (
@@ -740,7 +739,7 @@ export function SupportView({
                   <select
                     value={newProductId}
                     onChange={(e) => setNewProductId(e.target.value)}
-                    className="w-full rounded-xl border border-zinc-200 bg-white px-2.5 py-1.5 text-xs outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
+                    className="w-full rounded-xl border border-zinc-200 bg-white px-2.5 py-1.5 text-xs outline-none focus:border-zinc-400 dark:border-zinc-800 dark:bg-zinc-900 dark:text-white truncate"
                   >
                     <option value="">None / Not specific</option>
                     {(context.products || []).map((p) => (
@@ -752,74 +751,76 @@ export function SupportView({
                 </div>
               </div>
 
-              {/* Priority */}
-              <div>
-                <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1">
-                  Priority
-                </label>
-                <div className="flex gap-2">
-                  {[
-                    { id: "normal", label: "Normal" },
-                    { id: "high", label: "⚡ High" },
-                    { id: "urgent", label: "🚨 Urgent" },
-                  ].map((p) => (
-                    <button
-                      key={p.id}
-                      type="button"
-                      onClick={() => setNewPriority(p.id as any)}
-                      className={`flex-1 py-1.5 text-center text-xs font-semibold rounded-lg border transition-all cursor-pointer ${
-                        newPriority === p.id
-                          ? "border-zinc-900 bg-zinc-900 text-white dark:border-white dark:bg-white dark:text-zinc-900"
-                          : "border-zinc-200 text-zinc-600 hover:bg-zinc-50 dark:border-zinc-800 dark:text-zinc-400"
-                      }`}
-                    >
-                      {p.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
               {/* Subject */}
               <div>
-                <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                <label className="block text-[11px] font-bold text-zinc-700 dark:text-zinc-300 mb-1">
                   Subject / Title <span className="text-rose-500">*</span>
                 </label>
                 <input
                   type="text"
                   value={newTitle}
                   onChange={(e) => setNewTitle(e.target.value)}
-                  placeholder="e.g. Question regarding Order #RO-2026-001 delivery status"
-                  className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs outline-none focus:border-zinc-900 dark:border-zinc-800 dark:bg-zinc-900 dark:text-white shadow-2xs"
+                  placeholder="e.g. Question regarding Order delivery status or product inquiry"
+                  className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-1.5 text-xs outline-none focus:border-zinc-900 dark:border-zinc-800 dark:bg-zinc-900 dark:text-white shadow-2xs"
                 />
               </div>
 
               {/* Message Description */}
               <div>
-                <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                <label className="block text-[11px] font-bold text-zinc-700 dark:text-zinc-300 mb-1">
                   Description <span className="text-rose-500">*</span>
                 </label>
                 <textarea
                   value={newContent}
                   onChange={(e) => setNewContent(e.target.value)}
-                  rows={4}
-                  placeholder="Please provide complete details, SKU numbers, or questions so our team can resolve it faster."
-                  className="w-full rounded-xl border border-zinc-200 bg-white p-3 text-xs outline-none focus:border-zinc-900 dark:border-zinc-800 dark:bg-zinc-900 dark:text-white transition-colors resize-none shadow-2xs leading-relaxed"
+                  rows={3}
+                  placeholder="Please provide complete details, SKU numbers, or questions so our team can resolve it promptly."
+                  className="w-full rounded-xl border border-zinc-200 bg-white p-2.5 text-xs outline-none focus:border-zinc-900 dark:border-zinc-800 dark:bg-zinc-900 dark:text-white transition-colors resize-none shadow-2xs leading-relaxed"
                 />
               </div>
 
-              {/* File Attachment */}
-              <div>
-                <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1">
-                  Attachment <span className="font-normal text-zinc-400">(Max 20MB)</span>
-                </label>
-                <input
-                  type="file"
-                  onChange={(e) => setNewFile(e.target.files?.[0] || null)}
-                  className="w-full text-xs text-zinc-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-zinc-100 file:text-zinc-700 hover:file:bg-zinc-200 dark:file:bg-zinc-800 dark:file:text-zinc-300 cursor-pointer"
-                />
+              {/* Priority & Attachment in 2 columns */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-center">
+                <div>
+                  <label className="block text-[11px] font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                    Priority
+                  </label>
+                  <div className="flex gap-1.5">
+                    {[
+                      { id: "normal", label: "Normal" },
+                      { id: "high", label: "⚡ High" },
+                      { id: "urgent", label: "🚨 Urgent" },
+                    ].map((p) => (
+                      <button
+                        key={p.id}
+                        type="button"
+                        onClick={() => setNewPriority(p.id as any)}
+                        className={`flex-1 py-1.5 text-center text-[11px] font-semibold rounded-lg border transition-all cursor-pointer ${
+                          newPriority === p.id
+                            ? "border-zinc-900 bg-zinc-900 text-white dark:border-white dark:bg-white dark:text-zinc-900 shadow-2xs"
+                            : "border-zinc-200 text-zinc-600 hover:bg-zinc-50 dark:border-zinc-800 dark:text-zinc-400"
+                        }`}
+                      >
+                        {p.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                    Attachment <span className="font-normal text-zinc-400">(Max 20MB)</span>
+                  </label>
+                  <input
+                    type="file"
+                    onChange={(e) => setNewFile(e.target.files?.[0] || null)}
+                    className="w-full text-xs text-zinc-500 file:mr-2 file:py-1 file:px-2.5 file:rounded-lg file:border-0 file:text-[11px] file:font-semibold file:bg-zinc-100 file:text-zinc-700 hover:file:bg-zinc-200 dark:file:bg-zinc-800 dark:file:text-zinc-300 cursor-pointer"
+                  />
+                </div>
               </div>
 
-              <div className="flex justify-end gap-2 pt-3 border-t border-zinc-100 dark:border-zinc-800">
+              {/* Actions */}
+              <div className="flex justify-end gap-2 pt-2.5 border-t border-zinc-100 dark:border-zinc-800">
                 <button
                   type="button"
                   onClick={() => setShowNewModal(false)}
