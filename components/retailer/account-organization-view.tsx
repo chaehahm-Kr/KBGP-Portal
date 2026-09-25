@@ -14,6 +14,7 @@ import { TeamManagementView } from "@/components/retailer/team-management-view";
 import { RetailerTeamMember, RetailerInvitationItem } from "@/lib/retailer/onboarding-types";
 import { RetailerAgreementViewItem, RetailerDocumentRecord } from "@/lib/retailer/agreement-actions";
 import { PwaInstallAffordance } from "@/components/retailer/pwa-install-manager";
+import { changeRetailerPasswordAction } from "@/lib/auth/password-actions";
 
 export interface StoreLocationItem {
   id: string;
@@ -119,8 +120,88 @@ export function AccountOrganizationView({
   const [sameAsCompany, setSameAsCompany] = useState(false);
   const [storeError, setStoreError] = useState("");
 
+  // 4. Change Password Modal State (RTP-AUTH-002)
+  const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [passwordError, setPasswordError] = useState("");
+  const [passwordSuccess, setPasswordSuccess] = useState("");
+
   const isOwner = profile.role === "owner";
   const isOwnerOrBuyer = ["owner", "buyer"].includes(profile.role);
+
+  const handleClosePasswordModal = () => {
+    setIsPasswordModalOpen(false);
+    setCurrentPassword("");
+    setNewPassword("");
+    setConfirmPassword("");
+    setShowCurrentPassword(false);
+    setShowNewPassword(false);
+    setShowConfirmPassword(false);
+    setPasswordError("");
+    setPasswordSuccess("");
+  };
+
+  const handleUpdatePassword = (e: React.FormEvent) => {
+    e.preventDefault();
+    setPasswordError("");
+    setPasswordSuccess("");
+
+    if (!currentPassword) {
+      setPasswordError("Please enter your current password.");
+      return;
+    }
+
+    if (!newPassword) {
+      setPasswordError("Please enter a new password.");
+      return;
+    }
+
+    if (!confirmPassword) {
+      setPasswordError("Please confirm your new password.");
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      setPasswordError("New password and confirmation password do not match.");
+      return;
+    }
+
+    if (newPassword === currentPassword) {
+      setPasswordError("New password must be different from your current password.");
+      return;
+    }
+
+    if (newPassword.length < 8 || !/[a-zA-Z]/.test(newPassword) || !/[0-9]/.test(newPassword)) {
+      setPasswordError("Password must be at least 8 characters long and contain both letters and numbers.");
+      return;
+    }
+
+    startTransition(async () => {
+      const res = await changeRetailerPasswordAction({
+        currentPassword,
+        newPassword,
+        confirmPassword,
+      });
+
+      if (!res.success) {
+        setPasswordError(res.error || "Failed to update password.");
+      } else {
+        setPasswordSuccess(res.message || "Your password has been updated successfully.");
+        // Clear sensitive inputs immediately
+        setCurrentPassword("");
+        setNewPassword("");
+        setConfirmPassword("");
+        setTimeout(() => {
+          handleClosePasswordModal();
+        }, 1800);
+      }
+    });
+  };
 
   // Profile Handlers
   const handleSaveProfile = (e: React.FormEvent) => {
@@ -514,7 +595,19 @@ export function AccountOrganizationView({
                 </div>
               </div>
 
-              <div className="pt-3 border-t border-zinc-100 dark:border-zinc-800">
+              <div className="pt-3 border-t border-zinc-100 dark:border-zinc-800 space-y-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleClosePasswordModal();
+                    setIsPasswordModalOpen(true);
+                  }}
+                  className="w-full py-2 px-4 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800/80 hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-800 dark:text-zinc-200 text-xs font-bold transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-2xs"
+                >
+                  <span>🔑</span>
+                  <span>Change Password</span>
+                </button>
+
                 <form action={logoutRetailer}>
                   <button
                     type="submit"
@@ -1358,6 +1451,155 @@ export function AccountOrganizationView({
                   className="rounded-xl bg-zinc-900 px-5 py-2 text-xs font-bold text-white hover:bg-zinc-800 disabled:opacity-40 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-100 cursor-pointer shadow-xs"
                 >
                   {isPending ? "Saving..." : editingStore ? "Update Store" : "Create Store"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 4: Change Password Modal (RTP-AUTH-002) */}
+      {isPasswordModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
+          <div className="relative w-full max-w-md rounded-2xl border border-zinc-200 bg-white p-5 sm:p-6 shadow-2xl dark:border-zinc-800 dark:bg-zinc-900">
+            <div className="flex items-start justify-between pb-3 border-b border-zinc-100 dark:border-zinc-800">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-sm">
+                  🔑
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-zinc-900 dark:text-white">
+                    Change Password
+                  </h3>
+                  <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                    Update your account password for secure login
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={handleClosePasswordModal}
+                className="text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 text-lg cursor-pointer p-1"
+                aria-label="Close change password modal"
+              >
+                ✕
+              </button>
+            </div>
+
+            {passwordError && (
+              <div className="mt-3 p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 dark:bg-rose-950/40 dark:border-rose-900/60 dark:text-rose-300 text-xs flex items-center gap-2">
+                <span>⚠️</span>
+                <span className="font-medium">{passwordError}</span>
+              </div>
+            )}
+
+            {passwordSuccess && (
+              <div className="mt-3 p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 dark:bg-emerald-950/40 dark:border-emerald-900/60 dark:text-emerald-300 text-xs flex items-center gap-2">
+                <span>✅</span>
+                <span className="font-medium">{passwordSuccess}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleUpdatePassword} className="mt-4 space-y-4">
+              {/* Current Password */}
+              <div>
+                <label className="block text-[11px] font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                  Current Password <span className="text-rose-500">*</span>
+                </label>
+                <div className="relative">
+                  <input
+                    type={showCurrentPassword ? "text" : "password"}
+                    value={currentPassword}
+                    onChange={(e) => setCurrentPassword(e.target.value)}
+                    placeholder="Enter your current password"
+                    autoComplete="current-password"
+                    required
+                    className="w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2 text-xs outline-none focus:border-zinc-900 dark:border-zinc-800 dark:bg-zinc-900 dark:text-white pr-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 text-xs p-1 cursor-pointer"
+                    aria-label={showCurrentPassword ? "Hide current password" : "Show current password"}
+                  >
+                    {showCurrentPassword ? "🙈" : "👁️"}
+                  </button>
+                </div>
+              </div>
+
+              {/* New Password */}
+              <div>
+                <label className="block text-[11px] font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                  New Password <span className="text-rose-500">*</span>
+                </label>
+                <div className="relative">
+                  <input
+                    type={showNewPassword ? "text" : "password"}
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    placeholder="Enter at least 8 characters"
+                    autoComplete="new-password"
+                    required
+                    className="w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2 text-xs outline-none focus:border-zinc-900 dark:border-zinc-800 dark:bg-zinc-900 dark:text-white pr-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowNewPassword(!showNewPassword)}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 text-xs p-1 cursor-pointer"
+                    aria-label={showNewPassword ? "Hide new password" : "Show new password"}
+                  >
+                    {showNewPassword ? "🙈" : "👁️"}
+                  </button>
+                </div>
+                <p className="mt-1 text-[10px] text-zinc-400">
+                  Must be at least 8 characters with both letters and numbers.
+                </p>
+              </div>
+
+              {/* Confirm New Password */}
+              <div>
+                <label className="block text-[11px] font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                  Confirm New Password <span className="text-rose-500">*</span>
+                </label>
+                <div className="relative">
+                  <input
+                    type={showConfirmPassword ? "text" : "password"}
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    placeholder="Re-enter your new password"
+                    autoComplete="new-password"
+                    required
+                    className="w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2 text-xs outline-none focus:border-zinc-900 dark:border-zinc-800 dark:bg-zinc-900 dark:text-white pr-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 text-xs p-1 cursor-pointer"
+                    aria-label={showConfirmPassword ? "Hide confirm password" : "Show confirm password"}
+                  >
+                    {showConfirmPassword ? "🙈" : "👁️"}
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-zinc-100 dark:border-zinc-800">
+                <button
+                  type="button"
+                  onClick={handleClosePasswordModal}
+                  disabled={isPending}
+                  className="rounded-xl px-4 py-2 text-xs font-bold text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800 cursor-pointer disabled:opacity-40"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isPending || !!passwordSuccess}
+                  className="rounded-xl bg-zinc-900 px-5 py-2 text-xs font-bold text-white hover:bg-zinc-800 disabled:opacity-40 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-100 cursor-pointer shadow-xs inline-flex items-center gap-2"
+                >
+                  {isPending && (
+                    <span className="inline-block w-3 h-3 border-2 border-white/30 border-t-white dark:border-zinc-900/30 dark:border-t-zinc-900 rounded-full animate-spin" />
+                  )}
+                  <span>{isPending ? "Updating..." : "Update Password"}</span>
                 </button>
               </div>
             </form>

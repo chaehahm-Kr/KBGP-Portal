@@ -9,9 +9,16 @@ import { z } from "zod";
  * 피드백용이고, 최종 강제는 Supabase Auth 자체 설정이 한 번 더 담당한다.
  */
 export const PASSWORD_RULE_DESCRIPTION = "8자 이상, 영문과 숫자를 각각 하나 이상 포함";
+export const PASSWORD_RULE_DESCRIPTION_EN = "At least 8 characters with at least one letter and one number";
 
 export const passwordSchema = z
   .string()
   .min(8, { message: `비밀번호는 ${PASSWORD_RULE_DESCRIPTION}해야 합니다.` })
   .regex(/[a-zA-Z]/, { message: "비밀번호에 영문을 하나 이상 포함해주세요." })
   .regex(/[0-9]/, { message: "비밀번호에 숫자를 하나 이상 포함해주세요." });
+
+export const passwordSchemaEn = z
+  .string()
+  .min(8, { message: `Password must be ${PASSWORD_RULE_DESCRIPTION_EN.toLowerCase()}.` })
+  .regex(/[a-zA-Z]/, { message: "Password must contain at least one letter." })
+  .regex(/[0-9]/, { message: "Password must contain at least one number." });
