@@ -33,6 +33,7 @@ import {
 } from "@/lib/product/actions";
 import { ConfirmForm } from "@/components/common/confirm-form";
 import { AddCertificateForm } from "@/components/product/add-certificate-form";
+import { LogisticsHelpModal, type LogisticsHelpSectionKey } from "@/components/product/logistics-help-modal";
 
 import { type CategoryCompletionResult } from "@/lib/product/attribute-completion";
 import { useUnsavedChangesGuard } from "@/hooks/use-unsaved-changes-guard";
@@ -139,6 +140,14 @@ export function ProductDetailTabs({
 
   const [isParentSku, setIsParentSku] = useState(getInitialParentState());
   const [isChildSku, setIsChildSku] = useState(getInitialChildState());
+
+  const [isLogisticsHelpOpen, setIsLogisticsHelpOpen] = useState(false);
+  const [activeLogisticsHelpSection, setActiveLogisticsHelpSection] = useState<LogisticsHelpSectionKey>("all");
+
+  const openLogisticsHelp = (section: LogisticsHelpSectionKey) => {
+    setActiveLogisticsHelpSection(section);
+    setIsLogisticsHelpOpen(true);
+  };
 
   // Parse lead time value and unit
   const parseLeadTime = (leadTimeStr?: string | null) => {
@@ -2154,16 +2163,32 @@ export function ProductDetailTabs({
         <div className={activeTab === "logistics" ? "space-y-6" : "hidden"}>
           {/* Item */}
           <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 space-y-4">
-            <h2 className="text-sm font-bold text-zinc-900 dark:text-white border-b border-zinc-100 pb-3 dark:border-zinc-850 flex items-center gap-2">
-              <svg className="w-4 h-4 text-indigo-500 shrink-0" viewBox="0 0 64 64" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M28 20V12h8v8" strokeLinecap="round"/>
-                <path d="M24 20h16v32a4 4 0 0 1-4 4H28a4 4 0 0 1-4-4V20z"/>
-                <line x1="32" y1="6" x2="32" y2="12" strokeLinecap="round"/>
-                <path d="M32 20v28" strokeDasharray="3 3"/>
-                <circle cx="32" cy="36" r="3" fill="currentColor"/>
-              </svg>
-              <span>1. 단품 규격 (Item Spec)</span>
-            </h2>
+            <div className="flex flex-col gap-1.5 border-b border-zinc-100 dark:border-zinc-850 pb-3">
+              <div className="flex items-center justify-between">
+                <h2 className="text-sm font-bold text-zinc-900 dark:text-white flex items-center gap-2">
+                  <svg className="w-4 h-4 text-indigo-500 shrink-0" viewBox="0 0 64 64" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M28 20V12h8v8" strokeLinecap="round"/>
+                    <path d="M24 20h16v32a4 4 0 0 1-4 4H28a4 4 0 0 1-4-4V20z"/>
+                    <line x1="32" y1="6" x2="32" y2="12" strokeLinecap="round"/>
+                    <path d="M32 20v28" strokeDasharray="3 3"/>
+                    <circle cx="32" cy="36" r="3" fill="currentColor"/>
+                  </svg>
+                  <span>1. 단품 규격 (Item Spec)</span>
+                  <button
+                    type="button"
+                    onClick={() => openLogisticsHelp("item")}
+                    aria-label="Item Spec 도움말"
+                    title="Item Spec 도움말 보기"
+                    className="flex h-5 w-5 items-center justify-center rounded-full bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800 text-[11px] font-extrabold hover:bg-indigo-100 dark:hover:bg-indigo-900 transition-colors cursor-pointer ml-1 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  >
+                    ?
+                  </button>
+                </h2>
+              </div>
+              <p className="text-sm text-zinc-650 dark:text-zinc-300 font-normal leading-relaxed">
+                제품 자체의 실제 크기와 무게를 입력합니다. 튜브, 병, 용기 등 제품 본체 기준입니다.
+              </p>
+            </div>
             <div className="grid gap-4 grid-cols-2 md:grid-cols-4">
               <div>
                 <label className="block text-xs font-semibold text-zinc-650 dark:text-zinc-300 mb-1">가로 (Width, cm) <span className="text-rose-600 dark:text-rose-400 font-bold ml-0.5">*</span></label>
@@ -2222,20 +2247,31 @@ export function ProductDetailTabs({
 
           {/* Package */}
           <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 space-y-4">
-            <h2 className="text-sm font-bold text-zinc-900 dark:text-white border-b border-zinc-100 pb-3 dark:border-zinc-850 flex flex-col gap-1">
-              <div className="flex items-center gap-2">
-                <svg className="w-4 h-4 text-indigo-500 shrink-0" viewBox="0 0 64 64" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M16 12l16-6 16 6v36l-16 6-16-6V12z"/>
-                  <path d="M16 12l16 6 16-6"/>
-                  <path d="M32 18v38"/>
-                  <path d="M16 22l16 6 16-6" opacity="0.6"/>
-                </svg>
-                <span>2. 단품 포장 패키지 규격 (Package Spec)</span>
+            <div className="flex flex-col gap-1.5 border-b border-zinc-100 dark:border-zinc-850 pb-3">
+              <div className="flex items-center justify-between">
+                <h2 className="text-sm font-bold text-zinc-900 dark:text-white flex items-center gap-2">
+                  <svg className="w-4 h-4 text-indigo-500 shrink-0" viewBox="0 0 64 64" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M16 12l16-6 16 6v36l-16 6-16-6V12z"/>
+                    <path d="M16 12l16 6 16-6"/>
+                    <path d="M32 18v38"/>
+                    <path d="M16 22l16 6 16-6" opacity="0.6"/>
+                  </svg>
+                  <span>2. 단품 포장 패키지 규격 (Package Spec)</span>
+                  <button
+                    type="button"
+                    onClick={() => openLogisticsHelp("package")}
+                    aria-label="Package Spec 도움말"
+                    title="Package Spec 도움말 보기"
+                    className="flex h-5 w-5 items-center justify-center rounded-full bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800 text-[11px] font-extrabold hover:bg-indigo-100 dark:hover:bg-indigo-900 transition-colors cursor-pointer ml-1 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  >
+                    ?
+                  </button>
+                </h2>
               </div>
-              <p className="text-zinc-500 dark:text-zinc-450 text-[10px] font-normal leading-relaxed mt-1">
-                ※ 본 제품이 포장 박스에 포장된 최종 배송 규격을 기재해주세요. 고객에게 발송될 때 박스에 들어가 있거나 포장 완료된 상태의 실 측정 크기(가로/세로/높이)와 무게(g) 정보입니다.
+              <p className="text-sm text-zinc-650 dark:text-zinc-300 font-normal leading-relaxed">
+                제품 1개의 최종 판매 포장 상태의 크기와 무게를 입력합니다. 단상자 등 판매용 포장은 포함하며, 택배·배송용 외부 박스는 포함하지 않습니다.
               </p>
-            </h2>
+            </div>
             <div className="grid gap-4 sm:grid-cols-2 text-xs">
               {/* Width */}
               <div className="space-y-1.5 p-3 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50/20">
@@ -2379,18 +2415,34 @@ export function ProductDetailTabs({
             </div>
           </div>
 
-          {/* Carton */}
+          {/* Master Carton */}
           <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 space-y-4">
-            <h2 className="text-sm font-bold text-zinc-900 dark:text-white border-b border-zinc-100 pb-3 dark:border-zinc-850 flex items-center gap-2">
-              <svg className="w-4 h-4 text-indigo-500 shrink-0" viewBox="0 0 64 64" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M10 18l22-8 22 8v28l-22 8-22-8V18z"/>
-                <path d="M10 18l22 8 22-8"/>
-                <path d="M32 26v28"/>
-                <path d="M32 10l11 4M32 10L21 14" opacity="0.8"/>
-                <path d="M21 21.5l11 4 11-4" strokeDasharray="2 2"/>
-              </svg>
-              <span>3. 아웃 카톤 규격 (Carton Box Specs)</span>
-            </h2>
+            <div className="flex flex-col gap-1.5 border-b border-zinc-100 dark:border-zinc-850 pb-3">
+              <div className="flex items-center justify-between">
+                <h2 className="text-sm font-bold text-zinc-900 dark:text-white flex items-center gap-2">
+                  <svg className="w-4 h-4 text-indigo-500 shrink-0" viewBox="0 0 64 64" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M10 18l22-8 22 8v28l-22 8-22-8V18z"/>
+                    <path d="M10 18l22 8 22-8"/>
+                    <path d="M32 26v28"/>
+                    <path d="M32 10l11 4M32 10L21 14" opacity="0.8"/>
+                    <path d="M21 21.5l11 4 11-4" strokeDasharray="2 2"/>
+                  </svg>
+                  <span>3. 마스터 카톤 규격 (Master Carton Specs)</span>
+                  <button
+                    type="button"
+                    onClick={() => openLogisticsHelp("carton")}
+                    aria-label="Master Carton 도움말"
+                    title="Master Carton 도움말 보기"
+                    className="flex h-5 w-5 items-center justify-center rounded-full bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800 text-[11px] font-extrabold hover:bg-indigo-100 dark:hover:bg-indigo-900 transition-colors cursor-pointer ml-1 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  >
+                    ?
+                  </button>
+                </h2>
+              </div>
+              <p className="text-sm text-zinc-650 dark:text-zinc-300 font-normal leading-relaxed">
+                여러 개의 단품 판매 패키지를 담아 보관·운송하는 카톤의 입수 수량, 크기와 총중량을 입력합니다.
+              </p>
+            </div>
             <div className="grid gap-4 grid-cols-2 md:grid-cols-3 lg:grid-cols-6">
               <div>
                 <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-1">입수 수량 (Qty, 개) <span className="text-rose-600 dark:text-rose-400 font-bold ml-0.5">*</span></label>
@@ -2474,14 +2526,30 @@ export function ProductDetailTabs({
 
           {/* Palette */}
           <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 space-y-4">
-            <h2 className="text-sm font-bold text-zinc-900 dark:text-white border-b border-zinc-100 pb-3 dark:border-zinc-850 flex items-center gap-2">
-              <svg className="w-4 h-4 text-indigo-500 shrink-0" viewBox="0 0 64 64" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M8 50h48v4H8z"/>
-                <path d="M14 50v4M32 50v4M50 50v4"/>
-                <path d="M12 24h18v22H12zm22 6h18v16H34zM20 12h24v12H20z"/>
-              </svg>
-              <span>4. 팔레트 규격 (Palette Specs)</span>
-            </h2>
+            <div className="flex flex-col gap-1.5 border-b border-zinc-100 dark:border-zinc-850 pb-3">
+              <div className="flex items-center justify-between">
+                <h2 className="text-sm font-bold text-zinc-900 dark:text-white flex items-center gap-2">
+                  <svg className="w-4 h-4 text-indigo-500 shrink-0" viewBox="0 0 64 64" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M8 50h48v4H8z"/>
+                    <path d="M14 50v4M32 50v4M50 50v4"/>
+                    <path d="M12 24h18v22H12zm22 6h18v16H34zM20 12h24v12H20z"/>
+                  </svg>
+                  <span>4. 팔레트 규격 (Pallet Specs)</span>
+                  <button
+                    type="button"
+                    onClick={() => openLogisticsHelp("pallet")}
+                    aria-label="Pallet Specs 도움말"
+                    title="Pallet Specs 도움말 보기"
+                    className="flex h-5 w-5 items-center justify-center rounded-full bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800 text-[11px] font-extrabold hover:bg-indigo-100 dark:hover:bg-indigo-900 transition-colors cursor-pointer ml-1 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  >
+                    ?
+                  </button>
+                </h2>
+              </div>
+              <p className="text-sm text-zinc-650 dark:text-zinc-300 font-normal leading-relaxed">
+                여러 마스터 카톤을 팔레트에 적재한 최종 출고 상태의 정보를 입력합니다. 팔레트 자체를 포함한 전체 크기, 총중량, 적재 카톤 수를 기준으로 합니다.
+              </p>
+            </div>
             <div className="grid gap-4 grid-cols-2 md:grid-cols-5 text-xs">
               <div>
                 <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-1">박스수량 (Cartons)</label>
@@ -3089,6 +3157,12 @@ export function ProductDetailTabs({
           {isSaving ? "저장 중..." : "변경사항 저장"}
         </button>
       </div>
+      {/* Logistics Visual Help Modal */}
+      <LogisticsHelpModal
+        isOpen={isLogisticsHelpOpen}
+        onClose={() => setIsLogisticsHelpOpen(false)}
+        initialSection={activeLogisticsHelpSection}
+      />
     </div>
   );
 }
