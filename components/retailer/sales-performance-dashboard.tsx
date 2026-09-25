@@ -179,9 +179,19 @@ export function SalesPerformanceDashboard({ data }: { data: PerformanceDashboard
           </div>
         </div>
 
-        <div className="flex items-center gap-2 text-[11px] text-zinc-600 dark:text-zinc-400">
-          <span className="inline-block w-2 h-2 rounded-full bg-emerald-500"></span>
-          Target: {summary.totalProductsAssorted} SKUs Active
+        <div className="flex items-center gap-3">
+          <Link
+            href="/protection"
+            className="py-1.5 px-3 rounded-xl text-xs font-bold bg-white dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200 border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-700 transition-colors inline-flex items-center gap-1.5 shadow-xs"
+          >
+            <span>🛡️</span>
+            <span>90-Day Protection</span>
+            <span>→</span>
+          </Link>
+          <div className="hidden sm:flex items-center gap-2 text-[11px] text-zinc-600 dark:text-zinc-400">
+            <span className="inline-block w-2 h-2 rounded-full bg-emerald-500"></span>
+            {summary.totalProductsAssorted} SKUs
+          </div>
         </div>
       </div>
 
