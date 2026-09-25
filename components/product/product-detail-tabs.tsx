@@ -46,6 +46,36 @@ import {
   type SalesStatus,
 } from "@/lib/product/registration-status";
 
+const normalizePriceTiers = (tiers: { qty: number | string; price: number | string }[]) => {
+  if (!Array.isArray(tiers)) return [];
+  return tiers
+    .map((t) => ({
+      qty: t.qty !== undefined && t.qty !== null ? String(t.qty).trim() : "",
+      price: t.price !== undefined && t.price !== null ? String(t.price).trim() : "",
+    }))
+    .filter((t) => t.qty !== "" || t.price !== "");
+};
+
+const getInitialPriceTiers = (storedTiers: any) => {
+  const tiers = Array.isArray(storedTiers) ? storedTiers : [];
+  if (tiers.length === 0) {
+    return [
+      { qty: "", price: "" },
+      { qty: "", price: "" },
+    ];
+  }
+  if (tiers.length === 1) {
+    return [
+      { qty: tiers[0].qty !== undefined && tiers[0].qty !== null ? tiers[0].qty : "", price: tiers[0].price !== undefined && tiers[0].price !== null ? tiers[0].price : "" },
+      { qty: "", price: "" },
+    ];
+  }
+  return tiers.map((t: any) => ({
+    qty: t.qty !== undefined && t.qty !== null ? t.qty : "",
+    price: t.price !== undefined && t.price !== null ? t.price : "",
+  }));
+};
+
 interface ProductDetailTabsProps {
   product: Product;
   brandName: string;
@@ -347,10 +377,8 @@ export function ProductDetailTabs({
   // Tiered Pricing State
   const [priceTiers, setPriceTiers] = useState<{ qty: number | string; price: number | string }[]>(() => {
     const additionalInfo = product.price_additional_info as Record<string, any> | null;
-    if (additionalInfo && Array.isArray(additionalInfo.price_tiers)) {
-      return additionalInfo.price_tiers;
-    }
-    return [];
+    const stored = (additionalInfo && Array.isArray(additionalInfo.price_tiers)) ? additionalInfo.price_tiers : [];
+    return getInitialPriceTiers(stored);
   });
 
   // Ingredients File State (Korean)
@@ -509,7 +537,7 @@ export function ProductDetailTabs({
     priceKrwWholesale: product.price_krw_wholesale?.toString() || "",
     estimatedRetailPrice: product.estimated_retail_price?.toString() || "",
     priceUsdFobState: product.price_usd_fob ? product.price_usd_fob.toString() : "",
-    priceTiers: JSON.stringify((product.price_additional_info as any)?.price_tiers || []),
+    priceTiers: JSON.stringify(normalizePriceTiers((product.price_additional_info as any)?.price_tiers || [])),
     itemWidth: product.item_width?.toString() || "",
     itemDepth: product.item_depth?.toString() || "",
     itemHeight: product.item_height?.toString() || "",
@@ -641,6 +669,21 @@ export function ProductDetailTabs({
         message: "온라인 판매 중인 경우, 최소 한 개 이상의 판매 링크(링크 1)를 입력해 주세요." 
       });
     }
+
+    // 4. Tiered Supply Prices validation (partial input check)
+    const hasIncompleteTier = priceTiers.some((tier) => {
+      const q = String(tier.qty ?? "").trim();
+      const p = String(tier.price ?? "").trim();
+      return (q !== "" && p === "") || (q === "" && p !== "");
+    });
+    if (hasIncompleteTier) {
+      errors.push({
+        tab: "price",
+        field: "수량별 B2B 공급 가격",
+        inputName: "priceTiers",
+        message: "수량별 B2B 공급가 항목에서 최소 주문 수량과 구간별 공급 단가를 모두 입력해 주세요."
+      });
+    }
     
     return errors;
   };
@@ -752,9 +795,13 @@ export function ProductDetailTabs({
   };
 
   // Tiered Pricing Helpers
-  const addPriceTier = () => setPriceTiers([...priceTiers, { qty: 100, price: "" }]);
+  const addPriceTier = () => setPriceTiers([...priceTiers, { qty: "", price: "" }]);
   const removePriceTier = (idx: number) => {
-    setPriceTiers(priceTiers.filter((_, i) => i !== idx));
+    const updated = priceTiers.filter((_, i) => i !== idx);
+    while (updated.length < 2) {
+      updated.push({ qty: "", price: "" });
+    }
+    setPriceTiers(updated);
   };
   const updatePriceTier = (idx: number, field: "qty" | "price", val: string | number) => {
     const updated = [...priceTiers];
@@ -794,7 +841,7 @@ export function ProductDetailTabs({
     priceKrwWholesale !== initialSnapshotRef.current.priceKrwWholesale ||
     estimatedRetailPrice !== initialSnapshotRef.current.estimatedRetailPrice ||
     priceUsdFobState !== initialSnapshotRef.current.priceUsdFobState ||
-    JSON.stringify(priceTiers) !== initialSnapshotRef.current.priceTiers
+    JSON.stringify(normalizePriceTiers(priceTiers)) !== initialSnapshotRef.current.priceTiers
   );
 
   const isLogisticsDirty = (
@@ -947,7 +994,8 @@ export function ProductDetailTabs({
         }
       });
 
-      formData.append("priceTiers", JSON.stringify(priceTiers));
+      const validPriceTiers = normalizePriceTiers(priceTiers);
+      formData.append("priceTiers", JSON.stringify(validPriceTiers));
 
       if (categoryAttrRef.current) {
         const catRes = await categoryAttrRef.current.save();
@@ -997,7 +1045,7 @@ export function ProductDetailTabs({
         priceKrwWholesale,
         estimatedRetailPrice,
         priceUsdFobState: priceUsdFobState ? priceUsdFobState.toString() : "",
-        priceTiers: JSON.stringify(priceTiers),
+        priceTiers: JSON.stringify(validPriceTiers),
         itemWidth,
         itemDepth,
         itemHeight,
@@ -2078,84 +2126,78 @@ export function ProductDetailTabs({
               </button>
             </div>
 
-            {priceTiers.length === 0 ? (
-              <div className="border border-dashed border-zinc-200 dark:border-zinc-800 p-8 rounded-lg text-center">
-                <p className="text-xs text-zinc-450 dark:text-zinc-500">등록된 수량별 B2B 공급가가 없습니다. 구간별 공급 단가를 설정하려면 우측 상단의 버튼을 클릭해 주세요.</p>
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-zinc-200 dark:divide-zinc-800 text-xs">
-                  <thead>
-                    <tr>
-                      <th className="px-4 py-2 text-left font-bold text-zinc-500 dark:text-zinc-400">최소 주문 수량 (Quantity, 개 이상)</th>
-                      <th className="px-4 py-2 text-left font-bold text-zinc-500 dark:text-zinc-400">구간별 공급 단가 (Unit Price, $)</th>
-                      <th className="px-4 py-2 text-center font-bold text-zinc-500 dark:text-zinc-400 w-24">작업</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-zinc-150 dark:divide-zinc-850">
-                    {priceTiers.map((tier, idx) => (
-                      <tr key={idx}>
-                        <td className="px-4 py-3">
-                          <input
-                            type="text"
-                            inputMode="numeric"
-                            value={tier.qty}
-                            onFocus={(e) => e.target.select()}
-                            onChange={(e) => updatePriceTier(idx, "qty", e.target.value.replace(/[^0-9]/g, ""))}
-                            placeholder="100"
-                            className="block w-full max-w-[200px] rounded-lg border border-zinc-300 px-3 py-1.5 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-indigo-500"
-                          />
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-3">
-                            <div className="relative w-full max-w-[150px]">
-                              <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-xs text-zinc-450">$</span>
-                              <input
-                                type="text"
-                                inputMode="decimal"
-                                value={tier.price}
-                                onFocus={(e) => e.target.select()}
-                                onChange={(e) => updatePriceTier(idx, "price", e.target.value.replace(/[^0-9.]/g, ""))}
-                                placeholder="0.00"
-                                className="block w-full rounded-lg border border-zinc-300 pl-8 pr-3 py-1.5 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-indigo-500"
-                              />
-                            </div>
-                            {(() => {
-                              const fobNum = Number(priceUsdFobState) || 0;
-                              const tierPriceNum = Number(tier.price) || 0;
-                              if (fobNum > 0 && tierPriceNum > 0) {
-                                const isDiscount = fobNum > tierPriceNum;
-                                return (
-                                  <span className={`inline-flex items-center rounded px-2 py-1 text-[10px] font-bold ${
-                                    isDiscount
-                                      ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400 border border-emerald-150 dark:border-emerald-900"
-                                      : "bg-zinc-50 text-zinc-400 dark:bg-zinc-900 dark:text-zinc-650 border border-zinc-150 dark:border-zinc-800"
-                                  }`}>
-                                    {isDiscount
-                                      ? `${(((fobNum - tierPriceNum) / fobNum) * 100).toFixed(1)}% 할인`
-                                      : "0% 할인"}
-                                  </span>
-                                );
-                              }
-                              return null;
-                            })()}
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-zinc-200 dark:divide-zinc-800 text-xs">
+                <thead>
+                  <tr>
+                    <th className="px-4 py-2 text-left font-bold text-zinc-500 dark:text-zinc-400">최소 주문 수량 (Quantity, 개 이상)</th>
+                    <th className="px-4 py-2 text-left font-bold text-zinc-500 dark:text-zinc-400">구간별 공급 단가 (Unit Price, $)</th>
+                    <th className="px-4 py-2 text-center font-bold text-zinc-500 dark:text-zinc-400 w-24">작업</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-150 dark:divide-zinc-850">
+                  {priceTiers.map((tier, idx) => (
+                    <tr key={idx}>
+                      <td className="px-4 py-3">
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          value={tier.qty}
+                          onFocus={(e) => e.target.select()}
+                          onChange={(e) => updatePriceTier(idx, "qty", e.target.value.replace(/[^0-9]/g, ""))}
+                          placeholder="100"
+                          className="block w-full max-w-[200px] rounded-lg border border-zinc-300 px-3 py-1.5 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-indigo-500"
+                        />
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-3">
+                          <div className="relative w-full max-w-[150px]">
+                            <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-xs text-zinc-450">$</span>
+                            <input
+                              type="text"
+                              inputMode="decimal"
+                              value={tier.price}
+                              onFocus={(e) => e.target.select()}
+                              onChange={(e) => updatePriceTier(idx, "price", e.target.value.replace(/[^0-9.]/g, ""))}
+                              placeholder="0.00"
+                              className="block w-full rounded-lg border border-zinc-300 pl-8 pr-3 py-1.5 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-indigo-500"
+                            />
                           </div>
-                        </td>
-                        <td className="px-4 py-3 text-center">
-                          <button
-                            type="button"
-                            onClick={() => removePriceTier(idx)}
-                            className="text-rose-500 hover:text-rose-700 font-bold px-3 py-1 cursor-pointer transition-colors"
-                          >
-                            제거
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
+                          {(() => {
+                            const fobNum = Number(priceUsdFobState) || 0;
+                            const tierPriceNum = Number(tier.price) || 0;
+                            if (fobNum > 0 && tierPriceNum > 0) {
+                              const isDiscount = fobNum > tierPriceNum;
+                              return (
+                                <span className={`inline-flex items-center rounded px-2 py-1 text-[10px] font-bold ${
+                                  isDiscount
+                                    ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400 border border-emerald-150 dark:border-emerald-900"
+                                    : "bg-zinc-50 text-zinc-400 dark:bg-zinc-900 dark:text-zinc-650 border border-zinc-150 dark:border-zinc-800"
+                                }`}>
+                                  {isDiscount
+                                    ? `${(((fobNum - tierPriceNum) / fobNum) * 100).toFixed(1)}% 할인`
+                                    : "0% 할인"}
+                                </span>
+                              );
+                            }
+                            return null;
+                          })()}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <button
+                          type="button"
+                          onClick={() => removePriceTier(idx)}
+                          className="text-rose-500 hover:text-rose-700 font-bold px-3 py-1 cursor-pointer transition-colors"
+                        >
+                          제거
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
 
