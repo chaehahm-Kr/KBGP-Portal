@@ -32,12 +32,8 @@ export async function getPortalPurchaseOrders() {
         supplier_confirmation_status,
         order_date,
         currency,
-        revision_no,
-        cancellation_status,
         created_at,
         updated_at,
-        confirmed_at,
-        activity_logs,
         lines:purchase_order_lines(
           id,
           qty,
@@ -76,11 +72,8 @@ export async function getPortalPurchaseOrders() {
           supplier_confirmation_status,
           order_date,
           currency,
-          revision_no,
-          cancellation_status,
           created_at,
           updated_at,
-          confirmed_at,
           lines:purchase_order_lines(
             id,
             qty,
@@ -215,7 +208,6 @@ export async function getPortalPurchaseOrders() {
         };
 
         addTimestamp(po.updated_at);
-        addTimestamp(po.confirmed_at);
         addTimestamp(po.created_at);
         addTimestamp(po.order_date);
 
@@ -227,18 +219,12 @@ export async function getPortalPurchaseOrders() {
           addTimestamp(r.updated_at);
           addTimestamp(r.created_at);
         });
-        if (Array.isArray(po.activity_logs)) {
-          po.activity_logs.forEach((log: any) => {
-            addTimestamp(log.created_at);
-            addTimestamp(log.timestamp);
-          });
-        }
 
         const maxTimestamp =
           validTimestamps.length > 0 ? Math.max(...validTimestamps) : Date.now();
         
         let last_status_update =
-          po.updated_at || po.confirmed_at || po.order_date || po.created_at || new Date().toISOString();
+          po.updated_at || po.order_date || po.created_at || new Date().toISOString();
         try {
           last_status_update = new Date(maxTimestamp).toISOString();
         } catch {

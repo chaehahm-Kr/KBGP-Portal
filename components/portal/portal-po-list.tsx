@@ -41,15 +41,46 @@ interface PortalPoListProps {
   pos: PortalPoItem[];
 }
 
+// Operational active default categories (EXCLUDE Completed & Cancelled by default)
+const DEFAULT_ACTIVE_CATEGORIES = [
+  "IN_PRODUCTION",
+  "READY_TO_SHIP",
+  "SHIPPED",
+  "RECEIVING",
+];
+
+const ALL_CATEGORIES = [
+  "IN_PRODUCTION",
+  "READY_TO_SHIP",
+  "SHIPPED",
+  "RECEIVING",
+  "COMPLETED",
+  "CANCELLED",
+];
+
 export function PortalPoList({ pos = [] }: PortalPoListProps) {
   const safePos = Array.isArray(pos) ? pos : [];
-  const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState<string>("ALL");
-  const [fromDate, setFromDate] = useState<string>("");
-  const [toDate, setToDate] = useState<string>("");
+
+  // Initial 90 days date range helper
+  const initialRange = useMemo(() => {
+    const today = new Date();
+    const start = new Date();
+    start.setDate(today.getDate() - 90);
+    const formatYMD = (d: Date) => d.toISOString().split("T")[0];
+    return {
+      from: formatYMD(start),
+      to: formatYMD(today),
+    };
+  }, []);
+
+  const [selectedCategories, setSelectedCategories] = useState<string[]>(DEFAULT_ACTIVE_CATEGORIES);
+  const [fromDate, setFromDate] = useState<string>(initialRange.from);
+  const [toDate, setToDate] = useState<string>(initialRange.to);
+  const [activePreset, setActivePreset] = useState<string>("last_90");
+  const [searchTerm, setSearchTerm] = useState<string>("");
   const [sortBy, setSortBy] = useState<string>("newest");
 
-  // Summary Metrics (Top Strip)
+  // Global KPI Summary Metrics across supplier's POs
   const metrics = useMemo(() => {
     let totalOpen = 0;
     let inProduction = 0;
@@ -85,16 +116,65 @@ export function PortalPoList({ pos = [] }: PortalPoListProps) {
     return { totalOpen, inProduction, readyToShip, receiving, completed };
   }, [safePos]);
 
+  // Status mapping helper: maps overall_status to category key
+  const getStatusCategory = (overallStatus: string): string => {
+    switch (overallStatus) {
+      case "Sent to Supplier":
+      case "Supplier Confirmed":
+      case "In Production":
+      case "Change Requested":
+        return "IN_PRODUCTION";
+      case "Ready to Ship":
+        return "READY_TO_SHIP";
+      case "Shipped":
+      case "Arrived":
+        return "SHIPPED";
+      case "Receiving":
+        return "RECEIVING";
+      case "Completed":
+        return "COMPLETED";
+      case "Cancelled":
+        return "CANCELLED";
+      default:
+        return "IN_PRODUCTION";
+    }
+  };
+
+  // Status Chip Toggle Handler
+  const handleStatusChipClick = (catKey: string) => {
+    if (catKey === "ALL") {
+      setSelectedCategories(ALL_CATEGORIES);
+      return;
+    }
+
+    const isAllCurrentlySelected = selectedCategories.length === ALL_CATEGORIES.length;
+
+    if (isAllCurrentlySelected) {
+      // If currently all selected, clicking a chip isolates that category
+      setSelectedCategories([catKey]);
+    } else {
+      // Toggle category in array
+      if (selectedCategories.includes(catKey)) {
+        const next = selectedCategories.filter((c) => c !== catKey);
+        // Fallback to active defaults if everything is deselected
+        setSelectedCategories(next.length === 0 ? DEFAULT_ACTIVE_CATEGORIES : next);
+      } else {
+        setSelectedCategories([...selectedCategories, catKey]);
+      }
+    }
+  };
+
   // Date Preset Helpers
-  const setPreset = (preset: "this_month" | "last_30" | "last_60" | "all") => {
+  const setPreset = (preset: "this_month" | "last_30" | "last_60" | "last_90" | "all") => {
+    setActivePreset(preset);
     const today = new Date();
+    const formatYMD = (d: Date) => d.toISOString().split("T")[0];
+
     if (preset === "all") {
       setFromDate("");
       setToDate("");
       return;
     }
-
-    const formatYMD = (d: Date) => d.toISOString().split("T")[0];
 
     if (preset === "this_month") {
       const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
@@ -110,43 +190,36 @@ export function PortalPoList({ pos = [] }: PortalPoListProps) {
       start.setDate(today.getDate() - 60);
       setFromDate(formatYMD(start));
       setToDate(formatYMD(today));
+    } else if (preset === "last_90") {
+      const start = new Date();
+      start.setDate(today.getDate() - 90);
+      setFromDate(formatYMD(start));
+      setToDate(formatYMD(today));
     }
   };
 
+  // Reset Filters to Operational Active Defaults
   const handleReset = () => {
+    setSelectedCategories(DEFAULT_ACTIVE_CATEGORIES);
+    setFromDate(initialRange.from);
+    setToDate(initialRange.to);
+    setActivePreset("last_90");
     setSearchTerm("");
-    setStatusFilter("ALL");
-    setFromDate("");
-    setToDate("");
     setSortBy("newest");
   };
 
   // Filter & Sort Logic
   const filteredAndSortedPos = useMemo(() => {
+    const isAllSelected = selectedCategories.length === ALL_CATEGORIES.length;
+
     let result = safePos.filter((po) => {
       if (!po) return false;
+
       // 1. Status Filter
-      if (statusFilter !== "ALL") {
-        const s = po.overall_status || "";
-        if (statusFilter === "IN_PRODUCTION") {
-          if (
-            s !== "Sent to Supplier" &&
-            s !== "Supplier Confirmed" &&
-            s !== "In Production" &&
-            s !== "Change Requested"
-          ) {
-            return false;
-          }
-        } else if (statusFilter === "READY_TO_SHIP") {
-          if (s !== "Ready to Ship") return false;
-        } else if (statusFilter === "SHIPPED") {
-          if (s !== "Shipped" && s !== "Arrived") return false;
-        } else if (statusFilter === "RECEIVING") {
-          if (s !== "Receiving") return false;
-        } else if (statusFilter === "COMPLETED") {
-          if (s !== "Completed") return false;
-        } else if (statusFilter === "CANCELLED") {
-          if (s !== "Cancelled") return false;
+      if (!isAllSelected) {
+        const cat = getStatusCategory(po.overall_status || "");
+        if (!selectedCategories.includes(cat)) {
+          return false;
         }
       }
 
@@ -193,7 +266,7 @@ export function PortalPoList({ pos = [] }: PortalPoListProps) {
     });
 
     return result;
-  }, [safePos, statusFilter, searchTerm, fromDate, toDate, sortBy]);
+  }, [safePos, selectedCategories, searchTerm, fromDate, toDate, sortBy]);
 
   // Formatting Helpers
   const formatDate = (dateStr: string) => {
@@ -306,6 +379,8 @@ export function PortalPoList({ pos = [] }: PortalPoListProps) {
     );
   };
 
+  const isAllCategoriesSelected = selectedCategories.length === ALL_CATEGORIES.length;
+
   return (
     <div className="w-full space-y-6">
       {/* Top Header */}
@@ -315,7 +390,7 @@ export function PortalPoList({ pos = [] }: PortalPoListProps) {
             발주 관리 (Purchase Orders)
           </h1>
           <p className="text-sm text-zinc-500 dark:text-zinc-400">
-            Letusto에서 발행한 발주서(PO) 현황입니다. 품목 및 수량을 검토하고 선적 및 입고 상태를 모니터링하세요.
+            Letusto에서 발행한 발주서(PO) 현황입니다. 기본적으로 최근 90일 이내 진행 중인 4대 운영 상태 발주건이 표시됩니다.
           </p>
         </div>
       </div>
@@ -323,9 +398,10 @@ export function PortalPoList({ pos = [] }: PortalPoListProps) {
       {/* 1. KPI Summary Strip */}
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
         <div
-          onClick={() => setStatusFilter("ALL")}
+          onClick={() => setSelectedCategories(DEFAULT_ACTIVE_CATEGORIES)}
           className={`cursor-pointer p-4 rounded-xl border transition-all ${
-            statusFilter === "ALL"
+            selectedCategories.length === DEFAULT_ACTIVE_CATEGORIES.length &&
+            DEFAULT_ACTIVE_CATEGORIES.every((c) => selectedCategories.includes(c))
               ? "bg-zinc-900 text-white border-zinc-900 shadow-md dark:bg-white dark:text-zinc-950 dark:border-white"
               : "bg-white text-zinc-900 border-zinc-200 hover:border-zinc-300 dark:bg-zinc-900 dark:text-white dark:border-zinc-800"
           }`}
@@ -336,9 +412,9 @@ export function PortalPoList({ pos = [] }: PortalPoListProps) {
         </div>
 
         <div
-          onClick={() => setStatusFilter("IN_PRODUCTION")}
+          onClick={() => setSelectedCategories(["IN_PRODUCTION"])}
           className={`cursor-pointer p-4 rounded-xl border transition-all ${
-            statusFilter === "IN_PRODUCTION"
+            selectedCategories.length === 1 && selectedCategories.includes("IN_PRODUCTION")
               ? "bg-amber-600 text-white border-amber-600 shadow-md dark:bg-amber-500"
               : "bg-white text-zinc-900 border-zinc-200 hover:border-amber-300 dark:bg-zinc-900 dark:text-white dark:border-zinc-800"
           }`}
@@ -355,9 +431,9 @@ export function PortalPoList({ pos = [] }: PortalPoListProps) {
         </div>
 
         <div
-          onClick={() => setStatusFilter("READY_TO_SHIP")}
+          onClick={() => setSelectedCategories(["READY_TO_SHIP"])}
           className={`cursor-pointer p-4 rounded-xl border transition-all ${
-            statusFilter === "READY_TO_SHIP"
+            selectedCategories.length === 1 && selectedCategories.includes("READY_TO_SHIP")
               ? "bg-emerald-600 text-white border-emerald-600 shadow-md dark:bg-emerald-500"
               : "bg-white text-zinc-900 border-zinc-200 hover:border-emerald-300 dark:bg-zinc-900 dark:text-white dark:border-zinc-800"
           }`}
@@ -374,9 +450,9 @@ export function PortalPoList({ pos = [] }: PortalPoListProps) {
         </div>
 
         <div
-          onClick={() => setStatusFilter("RECEIVING")}
+          onClick={() => setSelectedCategories(["RECEIVING"])}
           className={`cursor-pointer p-4 rounded-xl border transition-all ${
-            statusFilter === "RECEIVING"
+            selectedCategories.length === 1 && selectedCategories.includes("RECEIVING")
               ? "bg-purple-600 text-white border-purple-600 shadow-md dark:bg-purple-500"
               : "bg-white text-zinc-900 border-zinc-200 hover:border-purple-300 dark:bg-zinc-900 dark:text-white dark:border-zinc-800"
           }`}
@@ -393,16 +469,21 @@ export function PortalPoList({ pos = [] }: PortalPoListProps) {
         </div>
 
         <div
-          onClick={() => setStatusFilter("COMPLETED")}
+          onClick={() => {
+            setSelectedCategories(["COMPLETED"]);
+            setFromDate("");
+            setToDate("");
+            setActivePreset("all");
+          }}
           className={`cursor-pointer p-4 rounded-xl border transition-all ${
-            statusFilter === "COMPLETED"
+            selectedCategories.length === 1 && selectedCategories.includes("COMPLETED")
               ? "bg-zinc-800 text-white border-zinc-800 shadow-md dark:bg-zinc-200 dark:text-zinc-900"
               : "bg-white text-zinc-900 border-zinc-200 hover:border-zinc-300 dark:bg-zinc-900 dark:text-white dark:border-zinc-800"
           }`}
         >
           <div className="text-xs font-medium opacity-80">입고 종결 (Completed)</div>
           <div className="text-2xl font-bold mt-1">{metrics.completed}</div>
-          <div className="text-[11px] mt-1 opacity-70">재고 반영 완료건</div>
+          <div className="text-[11px] mt-1 opacity-70">전체 완료건 조회</div>
         </div>
       </div>
 
@@ -456,27 +537,40 @@ export function PortalPoList({ pos = [] }: PortalPoListProps) {
             <span className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 mr-1">
               상태:
             </span>
+            <button
+              onClick={() => handleStatusChipClick("ALL")}
+              className={`px-3 py-1 rounded-full text-xs font-medium transition-all ${
+                isAllCategoriesSelected
+                  ? "bg-zinc-900 text-white dark:bg-white dark:text-zinc-950"
+                  : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
+              }`}
+            >
+              전체 (All)
+            </button>
+
             {[
-              { id: "ALL", label: "전체" },
               { id: "IN_PRODUCTION", label: "생산/접수중" },
               { id: "READY_TO_SHIP", label: "선적대기" },
               { id: "SHIPPED", label: "배송중" },
               { id: "RECEIVING", label: "입고검수" },
               { id: "COMPLETED", label: "완료" },
               { id: "CANCELLED", label: "취소" },
-            ].map((chip) => (
-              <button
-                key={chip.id}
-                onClick={() => setStatusFilter(chip.id)}
-                className={`px-3 py-1 rounded-full text-xs font-medium transition-all ${
-                  statusFilter === chip.id
-                    ? "bg-zinc-900 text-white dark:bg-white dark:text-zinc-950"
-                    : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
-                }`}
-              >
-                {chip.label}
-              </button>
-            ))}
+            ].map((chip) => {
+              const isSelected = selectedCategories.includes(chip.id);
+              return (
+                <button
+                  key={chip.id}
+                  onClick={() => handleStatusChipClick(chip.id)}
+                  className={`px-3 py-1 rounded-full text-xs font-medium transition-all ${
+                    isSelected
+                      ? "bg-zinc-900 text-white dark:bg-white dark:text-zinc-950 shadow-sm"
+                      : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700 opacity-70"
+                  }`}
+                >
+                  {chip.label}
+                </button>
+              );
+            })}
           </div>
 
           {/* Date Filter & Presets */}
@@ -487,14 +581,20 @@ export function PortalPoList({ pos = [] }: PortalPoListProps) {
             <input
               type="date"
               value={fromDate}
-              onChange={(e) => setFromDate(e.target.value)}
+              onChange={(e) => {
+                setFromDate(e.target.value);
+                setActivePreset("custom");
+              }}
               className="px-2.5 py-1 rounded-md border border-zinc-200 bg-zinc-50 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
             />
             <span className="text-xs text-zinc-400">~</span>
             <input
               type="date"
               value={toDate}
-              onChange={(e) => setToDate(e.target.value)}
+              onChange={(e) => {
+                setToDate(e.target.value);
+                setActivePreset("custom");
+              }}
               className="px-2.5 py-1 rounded-md border border-zinc-200 bg-zinc-50 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
             />
 
@@ -502,36 +602,62 @@ export function PortalPoList({ pos = [] }: PortalPoListProps) {
             <div className="flex items-center gap-1 ml-1">
               <button
                 onClick={() => setPreset("this_month")}
-                className="px-2 py-1 rounded bg-zinc-100 hover:bg-zinc-200 text-[11px] font-medium text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
+                className={`px-2 py-1 rounded text-[11px] font-medium transition-all ${
+                  activePreset === "this_month"
+                    ? "bg-zinc-900 text-white dark:bg-white dark:text-zinc-950 font-bold"
+                    : "bg-zinc-100 text-zinc-700 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
+                }`}
               >
                 당월
               </button>
               <button
                 onClick={() => setPreset("last_30")}
-                className="px-2 py-1 rounded bg-zinc-100 hover:bg-zinc-200 text-[11px] font-medium text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
+                className={`px-2 py-1 rounded text-[11px] font-medium transition-all ${
+                  activePreset === "last_30"
+                    ? "bg-zinc-900 text-white dark:bg-white dark:text-zinc-950 font-bold"
+                    : "bg-zinc-100 text-zinc-700 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
+                }`}
               >
                 30일
               </button>
               <button
                 onClick={() => setPreset("last_60")}
-                className="px-2 py-1 rounded bg-zinc-100 hover:bg-zinc-200 text-[11px] font-medium text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
+                className={`px-2 py-1 rounded text-[11px] font-medium transition-all ${
+                  activePreset === "last_60"
+                    ? "bg-zinc-900 text-white dark:bg-white dark:text-zinc-950 font-bold"
+                    : "bg-zinc-100 text-zinc-700 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
+                }`}
               >
                 60일
               </button>
+              <button
+                onClick={() => setPreset("last_90")}
+                className={`px-2 py-1 rounded text-[11px] font-medium transition-all ${
+                  activePreset === "last_90"
+                    ? "bg-zinc-900 text-white dark:bg-white dark:text-zinc-950 font-bold"
+                    : "bg-zinc-100 text-zinc-700 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
+                }`}
+              >
+                90일
+              </button>
+              <button
+                onClick={() => setPreset("all")}
+                className={`px-2 py-1 rounded text-[11px] font-medium transition-all ${
+                  activePreset === "all"
+                    ? "bg-zinc-900 text-white dark:bg-white dark:text-zinc-950 font-bold"
+                    : "bg-zinc-100 text-zinc-700 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
+                }`}
+              >
+                전체
+              </button>
             </div>
 
-            {(searchTerm ||
-              statusFilter !== "ALL" ||
-              fromDate ||
-              toDate ||
-              sortBy !== "newest") && (
-              <button
-                onClick={handleReset}
-                className="ml-2 text-xs font-semibold text-rose-600 hover:underline dark:text-rose-400"
-              >
-                초기화
-              </button>
-            )}
+            <button
+              onClick={handleReset}
+              className="ml-2 text-xs font-semibold text-rose-600 hover:underline dark:text-rose-400"
+            >
+              초기화
+            </button>
           </div>
         </div>
       </div>
@@ -540,7 +666,7 @@ export function PortalPoList({ pos = [] }: PortalPoListProps) {
       <div className="rounded-xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-950 overflow-hidden">
         <div className="px-6 py-3 border-b border-zinc-200 bg-zinc-50/50 flex items-center justify-between dark:border-zinc-800 dark:bg-zinc-900/50">
           <div className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
-            총 <span className="font-bold text-zinc-900 dark:text-white">{filteredAndSortedPos.length}</span>건 (전체 {pos.length}건)
+            조회된 발주건: <span className="font-bold text-zinc-900 dark:text-white">{filteredAndSortedPos.length}</span>건 (전체 {safePos.length}건)
           </div>
         </div>
 
@@ -566,7 +692,7 @@ export function PortalPoList({ pos = [] }: PortalPoListProps) {
                     colSpan={9}
                     className="px-6 py-12 text-center text-zinc-500 dark:text-zinc-400"
                   >
-                    {pos.length === 0 ? (
+                    {safePos.length === 0 ? (
                       <div>
                         <p className="font-semibold text-zinc-700 dark:text-zinc-300">
                           등록된 발주서가 없습니다.
@@ -578,13 +704,19 @@ export function PortalPoList({ pos = [] }: PortalPoListProps) {
                     ) : (
                       <div>
                         <p className="font-semibold text-zinc-700 dark:text-zinc-300">
-                          검색/필터 조건에 부합하는 발주서가 없습니다.
+                          선택한 필터 조건(운영 상태 / 조회 기간)에 부합하는 발주서가 없습니다.
+                        </p>
+                        <p className="text-xs mt-1 text-zinc-400">
+                          완료 또는 취소된 이전 발주건을 포함하려면 '상태: 전체' 또는 '조회 기간: 전체'를 선택해보세요.
                         </p>
                         <button
-                          onClick={handleReset}
-                          className="mt-2 text-xs font-semibold text-blue-600 hover:underline dark:text-blue-400"
+                          onClick={() => {
+                            setSelectedCategories(ALL_CATEGORIES);
+                            setPreset("all");
+                          }}
+                          className="mt-3 inline-flex items-center px-3 py-1.5 rounded-lg bg-zinc-900 text-white text-xs font-semibold hover:bg-zinc-800 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-100"
                         >
-                          필터 초기화
+                          전체 상태 & 전체 기간 조회
                         </button>
                       </div>
                     )}
@@ -608,7 +740,7 @@ export function PortalPoList({ pos = [] }: PortalPoListProps) {
                           )}
                         </div>
                         <div className="text-[11px] text-zinc-400 mt-0.5">
-                          {po.total_ordered.toLocaleString()}개 품목 주문
+                          {(po.total_ordered || 0).toLocaleString()}개 품목 주문
                         </div>
                       </td>
 
