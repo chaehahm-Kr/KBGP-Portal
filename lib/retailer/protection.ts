@@ -235,8 +235,14 @@ export async function getRetailerProtections(filters: {
     const protectedQty = row.protected_quantity || 1;
     const sellThroughPercent = Math.min(100, Math.round((estimatedMovement / protectedQty) * 100));
     const dataCoveragePercent = totalStores > 0 ? Math.round((storesReporting / totalStores) * 100) : 100;
+    const isDataComplete = totalStores > 0 ? storesReporting >= totalStores : true;
 
-    // Determine authoritative status
+    // Determine authoritative status:
+    // 1. review_requested: Retailer submitted a review request
+    // 2. threshold_met: sellThroughPercent >= 50% (at any time or after Day 90)
+    // 3. active: today < trial_end_date and sellThroughPercent < 50%
+    // 4. review_available: today >= trial_end_date and sellThroughPercent < 50% and all participating stores reported
+    // 5. needs_review: today >= trial_end_date and sellThroughPercent < 50% and reporting is incomplete
     let computedStatus: ProtectionStatus = row.status as ProtectionStatus;
 
     if (row.status === "review_requested") {
@@ -244,7 +250,7 @@ export async function getRetailerProtections(filters: {
     } else if (sellThroughPercent >= 50) {
       computedStatus = "threshold_met";
     } else if (isPeriodEnded) {
-      if (dataCoveragePercent >= 50) {
+      if (isDataComplete) {
         computedStatus = "review_available";
       } else {
         computedStatus = "needs_review";
@@ -455,6 +461,7 @@ export async function getRetailerProtectionDetail(
   const storesReporting = storeBreakdown.filter((s) => s.reportingStatus === "reported").length;
   const totalStores = Math.max(1, stores.length);
   const dataCoveragePercent = totalStores > 0 ? Math.round((storesReporting / totalStores) * 100) : 100;
+  const isDataComplete = totalStores > 0 ? storesReporting >= totalStores : true;
 
   // Status
   let computedStatus: ProtectionStatus = row.status as ProtectionStatus;
@@ -463,7 +470,7 @@ export async function getRetailerProtectionDetail(
   } else if (sellThroughPercent >= 50) {
     computedStatus = "threshold_met";
   } else if (isPeriodEnded) {
-    if (dataCoveragePercent >= 50) {
+    if (isDataComplete) {
       computedStatus = "review_available";
     } else {
       computedStatus = "needs_review";

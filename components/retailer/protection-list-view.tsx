@@ -86,7 +86,7 @@ export function ProtectionListView({
             </h1>
           </div>
           <p className="text-xs sm:text-sm text-zinc-500 dark:text-zinc-400 mt-1">
-            Guaranteed retail reassurance: New products carried for the first time are protected for 90 days across your company stores.
+            Initial trial reassurance: New products carried for the first time are protected for 90 days across your company stores.
           </p>
         </div>
 
@@ -103,7 +103,7 @@ export function ProtectionListView({
               <span>🛡️ Trial Protection Rules</span>
             </div>
             <h2 className="text-lg sm:text-xl font-black tracking-tight">
-              Risk-Free New Product Assortment Guarantee
+              90-Day New Product Trial Protection
             </h2>
             <p className="text-xs sm:text-sm text-zinc-300 leading-relaxed max-w-2xl">
               When your company trials a new K SELECT product, all store locations are evaluated over a 90-day period. If your company-wide estimated sell-through is below 50% after 90 days, you can request a protection review.
