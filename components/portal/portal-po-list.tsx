@@ -674,7 +674,8 @@ export function PortalPoList({ pos }: PortalPoListProps) {
                       </td>
                     </tr>
                   );
-                })}
+                })
+              )}
             </tbody>
           </table>
         </div>

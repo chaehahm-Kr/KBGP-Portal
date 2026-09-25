@@ -136,17 +136,19 @@ export async function processAgreementPdfGeneration(acceptanceId: string): Promi
       .from("retailer_documents")
       .insert({
         company_id: acceptance.company_id,
-        document_type: "operating_agreement",
+        document_type: "RETAILER_AGREEMENT",
         title: `K SELECT Retailer Operating Agreement (v${version})`,
-        description: `Authoritative executed agreement signed by ${signerName} on ${new Date(acceptance.accepted_at).toLocaleDateString("en-US")}.`,
-        storage_bucket: storageBucket,
-        storage_path: storagePath,
-        filename: pdfFilename,
-        file_size_bytes: pdfBuffer.length,
+        file_name: pdfFilename,
+        file_path: storagePath,
         mime_type: "application/pdf",
+        file_size_bytes: pdfBuffer.length,
         agreement_version: version,
-        acceptance_id: acceptance.id,
-        created_by: acceptance.user_id,
+        agreement_acceptance_id: acceptance.id,
+        signer_name: signerName,
+        signer_email: signerEmail,
+        signer_title: signerTitle,
+        accepted_at: acceptance.accepted_at,
+        status: "active",
       });
 
     // 6. Send delivery email with PDF attachment if signerEmail is present
@@ -182,7 +184,7 @@ export async function processAgreementPdfGeneration(acceptanceId: string): Promi
               </p>
 
               <div style="text-align: center; margin-bottom: 32px;">
-                <a href="https://portal.kselecthub.com/account" style="display: inline-block; background-color: #18181b; color: #ffffff; font-size: 14px; font-weight: 700; text-decoration: none; padding: 14px 28px; border-radius: 12px;">
+                <a href="https://portal.kselecthub.com/account?tab=documents" style="display: inline-block; background-color: #18181b; color: #ffffff; font-size: 14px; font-weight: 700; text-decoration: none; padding: 14px 28px; border-radius: 12px;">
                   Open Retailer Portal Documents →
                 </a>
               </div>
@@ -294,10 +296,10 @@ export async function getRetailerCompanyAgreementsAndDocuments(companyId: string
   const documents: RetailerDocumentRecord[] = [];
   for (const doc of rawDocs || []) {
     let signedUrl: string | null = null;
-    if (doc.storage_path) {
+    if (doc.file_path) {
       const { data: signedData } = await adminClient.storage
-        .from(doc.storage_bucket || "company-uploads")
-        .createSignedUrl(doc.storage_path, 3600);
+        .from("company-uploads")
+        .createSignedUrl(doc.file_path, 3600);
       signedUrl = signedData?.signedUrl || null;
     }
 
@@ -306,10 +308,10 @@ export async function getRetailerCompanyAgreementsAndDocuments(companyId: string
       companyId: doc.company_id,
       documentType: doc.document_type,
       title: doc.title,
-      description: doc.description,
-      storageBucket: doc.storage_bucket,
-      storagePath: doc.storage_path,
-      filename: doc.filename,
+      description: doc.signer_name ? `Signed by ${doc.signer_name}` : doc.file_name,
+      storageBucket: "company-uploads",
+      storagePath: doc.file_path,
+      filename: doc.file_name,
       fileSizeBytes: doc.file_size_bytes,
       mimeType: doc.mime_type,
       agreementVersion: doc.agreement_version,
