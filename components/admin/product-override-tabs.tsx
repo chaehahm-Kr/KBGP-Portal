@@ -1888,10 +1888,32 @@ export function ProductOverrideTabs({
         {/* Price Tab */}
         {activeTab === "price" && (
           <div className="space-y-6">
+            {(product.selection_status === "SELECTED" || (product as any).trading_status === "active") && (
+              <div className="p-4 rounded-xl bg-indigo-50/70 border border-indigo-200 dark:bg-indigo-950/40 dark:border-indigo-900/60 flex items-center justify-between text-xs text-indigo-900 dark:text-indigo-200">
+                <div className="space-y-0.5">
+                  <div className="font-bold text-sm flex items-center gap-1.5">
+                    <span>⚡ Trading Product 실시간 운영 가격 (Live Operational Pricing)</span>
+                  </div>
+                  <p className="text-indigo-700 dark:text-indigo-300">
+                    현재 마켓 거래 중인 실시간 도매가, 프로모션가, MAP/SRP 오버라이드 및 원가 3-Layer는 Trading Product 360° Hub에서 관리됩니다.
+                  </p>
+                </div>
+                <Link
+                  href={`/admin/products/trading/${product.id}`}
+                  className="px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold whitespace-nowrap shadow-sm transition-colors"
+                >
+                  Trading 360° Hub 이동 →
+                </Link>
+              </div>
+            )}
+
             <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 space-y-4">
-              <h3 className="text-xs font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider border-b border-zinc-100 pb-2 dark:border-zinc-800">
-                제품 가격 정보 비교 및 오버라이드
-              </h3>
+              <div className="flex items-center justify-between border-b border-zinc-100 pb-2 dark:border-zinc-800">
+                <h3 className="text-xs font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">
+                  제품 기준/기본 가격 정보 (Default / Master Pricing)
+                </h3>
+                <span className="text-[10px] text-zinc-400 font-semibold uppercase">Catalog Master Reference</span>
+              </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {/* KRW Retail */}

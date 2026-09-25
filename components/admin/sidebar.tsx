@@ -217,6 +217,7 @@ export default function Sidebar({
         { name: "Order Dashboard", href: "/admin/purchasing/dashboard" },
         { name: "PO Requests", href: "/admin/purchasing/requests" },
         { name: "Purchase Orders", href: "/admin/purchasing/orders" },
+        { name: "Landed Cost", href: "/admin/purchasing/landed-cost" },
       ],
     },
     {
@@ -225,7 +226,7 @@ export default function Sidebar({
       subItems: [
         { name: "Supplier Invoices", href: "/admin/finance/invoices" },
         { name: "Payments", href: "/admin/finance/payments" },
-        { name: "Landed Cost", href: "/admin/finance/landed-cost" },
+        { name: "Cost Review (Landed Cost)", href: "/admin/finance/landed-cost" },
       ],
     },
     {
