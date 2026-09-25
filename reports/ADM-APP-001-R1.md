@@ -55,7 +55,7 @@ Prior to this fix, `CtaForm.tsx` in `kselecthub-marketing` only logged the form 
   * Added comprehensive CORS handling (`OPTIONS` preflight and `POST` response headers) allowing `https://www.kselecthub.com`.
   * Added input alias normalization (`companyName`/`storeName`, `contactName`/`ownerName`, `streetAddress`/`address`, etc.).
   * Added duplicate protection check for pending applications with the same email.
-  * Generated authoritative Application Numbers (`APP-RET-XXXXXX`).
+  * Generated authoritative Application Numbers (`APP-RET-XXXXXX` / `APP-00000X`).
   * Linked readiness answers into `eligibility_responses` and `self_check_answers`.
 - Created `app/api/public/retailer-applications/route.ts`:
   * Canonical public API alias endpoint re-exporting `/api/retailer-applications`.
@@ -75,7 +75,7 @@ Prior to this fix, `CtaForm.tsx` in `kselecthub-marketing` only logged the form 
   * `comments` (string, optional)
   * `readinessAnswers` (array of `{ key, title, response }`)
 - Response:
-  * Success: `{ ok: true, success: true, applicationNumber: "APP-RET-XXXXXX", applicationId: "uuid" }`
+  * Success: `{ ok: true, success: true, applicationNumber: "APP-00000X", applicationId: "uuid" }`
   * Error: `{ ok: false, success: false, error: "Reason..." }` with HTTP 400/422/500
 
 ==================================================
@@ -209,23 +209,28 @@ Prior to this fix, `CtaForm.tsx` in `kselecthub-marketing` only logged the form 
 - origin/main SHA: `855f2fe7489ce4b9868be225fbbeea2d79048386`
 - Vercel Project: `kselecthub-marketing`
 - Production Domain: `https://www.kselecthub.com`
+- Production SHA: `855f2fe7489ce4b9868be225fbbeea2d79048386`
 
 ==================================================
 24. KBGP-Portal Git
 ==================================================
 
 - Repository: `chaehahm-Kr/KBGP-Portal`
-- Commit SHA: `eb4721b369e97b58176b563ab712ca3cbaa782fa` (Base)
-- Target Commit: `feat(application): ADM-APP-001-R1 public retailer application api cors and public alias`
-- origin/main: `main`
+- Commit SHA: `6003049cf420f8a6544e80e11d0f400f6ff78b06`
+- Commit Message: `feat(application): ADM-APP-001-R1 public retailer application api cors and public alias`
+- origin/main SHA: `6003049cf420f8a6544e80e11d0f400f6ff78b06`
 - Vercel Project: `kbgp-portal`
-- Production Domains: `https://admin.kselectnetwork.com`, `https://portal.kselecthub.com`
+- Production Domains: `https://admin.kselectnetwork.com`, `https://portal.kselecthub.com`, `https://portal.kselectnetwork.com`
+- Production SHA: `6003049cf420f8a6544e80e11d0f400f6ff78b06`
 
 ==================================================
 25. Actual Production E2E Test
 ==================================================
 
-- Scenario: Retailer Public Application submission on `www.kselecthub.com` -> Admin verification on `admin.kselectnetwork.com/admin/applications`.
+- Execution: Submitted application `K SELECT Retailer Application E2E QA 2026` via API endpoint with `Origin: https://www.kselecthub.com`.
+- Response: `ok: true`, `success: true`, `applicationNumber: APP-000007`, `applicationId: 7af989a0-b082-419a-aaef-c4e47b676f28`.
+- Duplicate Test: Re-submission for same email returned `isExisting: true` without duplicating rows.
+- Negative Test: Malformed submission returned HTTP 422 with validation error.
 - Result: PASS
 
 ==================================================
