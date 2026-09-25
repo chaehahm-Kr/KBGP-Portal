@@ -74,24 +74,44 @@ export default function ApplicationWorkspace({
 }: ApplicationWorkspaceProps) {
   const [isProcessingAction, setIsProcessingAction] = useState(false);
 
-  const handleApproveAndInvite = async () => {
-    if (!approveAndInviteAction) return;
-    const note = prompt("승인 및 초대 관련 리뷰 메모를 입력하세요 (선택 사항):", "Approved & Invited by Admin");
-    if (note === null) return;
+  // Approval & Invitation Modal State
+  const [isApproveModalOpen, setIsApproveModalOpen] = useState(false);
+  const [approvalNote, setApprovalNote] = useState("");
+  const [isSubmittingApprove, setIsSubmittingApprove] = useState(false);
+  const [approveError, setApproveError] = useState<string | null>(null);
+  const [approveSuccessToast, setApproveSuccessToast] = useState<string | null>(null);
 
-    setIsProcessingAction(true);
+  const handleOpenApproveModal = () => {
+    if (!approveAndInviteAction) return;
+    setApprovalNote("");
+    setApproveError(null);
+    setIsApproveModalOpen(true);
+  };
+
+  const handleConfirmApproveAndInvite = async () => {
+    if (!approveAndInviteAction || isSubmittingApprove) return;
+    setIsSubmittingApprove(true);
+    setApproveError(null);
+
     try {
-      const res = await approveAndInviteAction(note);
+      const noteToPass = approvalNote.trim();
+      const res = await approveAndInviteAction(noteToPass);
       if (res?.success) {
-        alert("성공적으로 승인 및 정식 파트너 초대장을 발송했습니다.");
-        window.location.reload();
+        setIsApproveModalOpen(false);
+        setApproveSuccessToast("승인 및 파트너 초대가 완료되었습니다.");
+        setTimeout(() => {
+          window.location.reload();
+        }, 1200);
       } else {
-        alert("승인/초대 처리 실패: " + (res?.error || "알 수 없는 오류"));
+        const errorMsg = res?.error || "승인/초대 처리 중 알 수 없는 오류가 발생했습니다.";
+        setApproveError(errorMsg);
+        console.error("[approveAndInviteApplication] Server error:", res);
       }
     } catch (err: any) {
-      alert("오류 발생: " + err.message);
+      console.error("[approveAndInviteApplication] Exception:", err);
+      setApproveError(err.message || "서버 통신 중 오류가 발생했습니다.");
     } finally {
-      setIsProcessingAction(false);
+      setIsSubmittingApprove(false);
     }
   };
 
@@ -374,11 +394,11 @@ export default function ApplicationWorkspace({
             {approveAndInviteAction && application.status !== "onboarded" && application.status !== "rejected" && application.status !== "invitation_sent" && (
               <button
                 type="button"
-                onClick={handleApproveAndInvite}
-                disabled={isProcessingAction}
+                onClick={handleOpenApproveModal}
+                disabled={isProcessingAction || isSubmittingApprove}
                 className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs rounded-xl transition-all shadow-xs cursor-pointer disabled:opacity-50"
               >
-                {isProcessingAction ? "Processing..." : "✓ Approve & Invite Partner"}
+                {isSubmittingApprove ? "Approving & Sending..." : "✓ Approve & Invite Partner"}
               </button>
             )}
 
@@ -1028,6 +1048,142 @@ export default function ApplicationWorkspace({
           </div>
         )}
       </div>
+
+      {/* Top Floating Toast Notification */}
+      {approveSuccessToast && (
+        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2 rounded-xl bg-zinc-900 px-5 py-3.5 text-xs font-extrabold text-white shadow-2xl dark:bg-white dark:text-zinc-900 animate-in fade-in slide-in-from-bottom-3">
+          <span>✅</span>
+          <span>{approveSuccessToast}</span>
+        </div>
+      )}
+
+      {/* Admin Approval & Invitation Modal */}
+      {isApproveModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-lg rounded-2xl border border-zinc-200 bg-white p-6 shadow-2xl dark:border-zinc-800 dark:bg-zinc-900 space-y-5 animate-in fade-in zoom-in-95 duration-150">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between border-b border-zinc-150 pb-4 dark:border-zinc-800">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300">
+                  <span className="text-xl font-bold">✓</span>
+                </div>
+                <div>
+                  <h3 className="text-base font-extrabold text-zinc-950 dark:text-white">
+                    파트너 승인 및 초대 (Approve & Invite Partner)
+                  </h3>
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
+                    신청서를 최종 승인하고 파트너사 전용 계정 초대 이메일을 발송합니다.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsApproveModalOpen(false)}
+                disabled={isSubmittingApprove}
+                className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 text-lg font-bold p-1 cursor-pointer disabled:opacity-50"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Application & Partner Details Card */}
+            <div className="rounded-xl bg-zinc-50 p-4 border border-zinc-200/80 dark:bg-zinc-950/70 dark:border-zinc-800 space-y-2.5 text-xs">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <span className="text-zinc-400 dark:text-zinc-500 text-[10px] uppercase font-bold block">신청 번호 (App No)</span>
+                  <span className="font-mono font-extrabold text-zinc-950 dark:text-white">{application.application_number}</span>
+                </div>
+                <div>
+                  <span className="text-zinc-400 dark:text-zinc-500 text-[10px] uppercase font-bold block">파트너 유형 (Partner Type)</span>
+                  {application.partner_type === "retailer" ? (
+                    <span className="font-extrabold text-amber-900 dark:text-amber-300">🏪 Retailer Partner (리테일러)</span>
+                  ) : (
+                    <span className="font-extrabold text-blue-900 dark:text-blue-300">🏷️ Brand Partner (브랜드)</span>
+                  )}
+                </div>
+                <div>
+                  <span className="text-zinc-400 dark:text-zinc-500 text-[10px] uppercase font-bold block">회사명 (Company Name)</span>
+                  <span className="font-bold text-zinc-900 dark:text-white truncate block">{company?.name || application.applicant_company_name || "-"}</span>
+                </div>
+                <div>
+                  <span className="text-zinc-400 dark:text-zinc-500 text-[10px] uppercase font-bold block">담당자 (Contact Name)</span>
+                  <span className="font-bold text-zinc-900 dark:text-white truncate block">{company?.contact_name || application.applicant_contact_name || "-"}</span>
+                </div>
+                <div className="col-span-2">
+                  <span className="text-zinc-400 dark:text-zinc-500 text-[10px] uppercase font-bold block">이메일 (Contact Email)</span>
+                  <span className="font-mono font-semibold text-zinc-800 dark:text-zinc-200">{application.applicant_contact_email || "-"}</span>
+                </div>
+                <div className="col-span-2">
+                  <span className="text-zinc-400 dark:text-zinc-500 text-[10px] uppercase font-bold block">현재 상태 (Current Status)</span>
+                  <span className="font-bold text-amber-800 dark:text-amber-300">
+                    {APPLICATION_STATUS_LABEL[application.status as ApplicationStatus] || application.status}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Confirmation & Routing Explanation */}
+            <div className="rounded-xl bg-emerald-50/80 p-3.5 border border-emerald-200/80 text-xs dark:bg-emerald-950/30 dark:border-emerald-900/50 space-y-1">
+              <div className="font-extrabold text-emerald-900 dark:text-emerald-200 flex items-center gap-1.5">
+                <span>📩</span>
+                <span>승인 후 파트너 초대 이메일이 발송됩니다.</span>
+              </div>
+              <p className="text-[11px] text-emerald-800 dark:text-emerald-300 leading-relaxed font-medium">
+                {application.partner_type === "retailer"
+                  ? "• 리테일러 파트너 초대장이 발송되며, K SELECT HUB / Retailer 온보딩 페이지로 안내됩니다."
+                  : "• 브랜드 파트너 초대장이 발송되며, K SELECT NETWORK / Brand Portal 온보딩 페이지로 안내됩니다."}
+              </p>
+            </div>
+
+            {/* Optional Approval Note */}
+            <div className="space-y-1.5">
+              <label htmlFor="approvalNote" className="block text-xs font-bold text-zinc-700 dark:text-zinc-300">
+                승인 / 초대 메모 <span className="font-normal text-zinc-400 dark:text-zinc-500">(선택 사항)</span>
+              </label>
+              <textarea
+                id="approvalNote"
+                rows={3}
+                value={approvalNote}
+                onChange={(e) => setApprovalNote(e.target.value)}
+                placeholder="승인 사유 또는 파트너 안내 메모를 입력하세요 (선택 사항)..."
+                disabled={isSubmittingApprove}
+                className="w-full rounded-xl border border-zinc-200 bg-white p-3 text-xs outline-none focus:border-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white dark:focus:border-white transition-all resize-none"
+              />
+              <p className="text-[10px] text-zinc-400 dark:text-zinc-500">
+                ※ 비워둘 경우 시스템 활동 기록에 'Approved & Invited by Admin'으로 자동 기록됩니다.
+              </p>
+            </div>
+
+            {/* Error Banner */}
+            {approveError && (
+              <div className="rounded-xl bg-rose-50 p-3.5 text-xs font-semibold text-rose-700 dark:bg-rose-950/40 dark:text-rose-300 border border-rose-200 dark:border-rose-900/50 flex items-start gap-2">
+                <span className="shrink-0">⚠️</span>
+                <span>{approveError}</span>
+              </div>
+            )}
+
+            {/* Modal Buttons */}
+            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-zinc-150 dark:border-zinc-800">
+              <button
+                type="button"
+                onClick={() => setIsApproveModalOpen(false)}
+                disabled={isSubmittingApprove}
+                className="rounded-xl border border-zinc-200 bg-white px-4 py-2.5 text-xs font-bold text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700 disabled:opacity-50 transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmApproveAndInvite}
+                disabled={isSubmittingApprove}
+                className="inline-flex items-center justify-center rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-extrabold text-white hover:bg-emerald-700 disabled:opacity-50 transition-colors shadow-xs cursor-pointer"
+              >
+                {isSubmittingApprove ? "Approving & Sending..." : "Approve & Send Invitation"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
