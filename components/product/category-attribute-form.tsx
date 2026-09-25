@@ -191,6 +191,17 @@ export const CategoryAttributeForm = forwardRef<CategoryAttributeFormHandle, Cat
   const [formValues, setFormValues] = useState<Record<string, any>>({});
   const [formTextValues, setFormTextValues] = useState<Record<string, string>>({});
 
+  const formValuesRef = useRef<Record<string, any>>({});
+  const formTextValuesRef = useRef<Record<string, string>>({});
+
+  useEffect(() => {
+    formValuesRef.current = formValues;
+  }, [formValues]);
+
+  useEffect(() => {
+    formTextValuesRef.current = formTextValues;
+  }, [formTextValues]);
+
   const initialSnapshotRef = useRef<{
     categoryCode: string | null;
     formValues: Record<string, any>;
@@ -316,7 +327,26 @@ export const CategoryAttributeForm = forwardRef<CategoryAttributeFormHandle, Cat
     const initialVals: Record<string, any> = {};
     const initialTexts: Record<string, string> = {};
 
+    const currentFormValues = formValuesRef.current;
+    const currentFormTexts = formTextValuesRef.current;
+
     res.attributes.forEach((attr) => {
+      // If user has already entered a value in memory before category change, preserve it!
+      const inMemoryVal = !isInitial ? currentFormValues[attr.code] : undefined;
+      const inMemoryText = !isInitial ? currentFormTexts[attr.code] : undefined;
+
+      const hasInMemoryVal =
+        inMemoryVal !== undefined &&
+        inMemoryVal !== null &&
+        inMemoryVal !== "" &&
+        !(Array.isArray(inMemoryVal) && (inMemoryVal.length === 0 || inMemoryVal.every((v) => v === "" || v === null || v === undefined)));
+
+      if (hasInMemoryVal) {
+        initialVals[attr.code] = inMemoryVal;
+        initialTexts[attr.code] = inMemoryText || "";
+        return;
+      }
+
       // 1) 기존 color_map 연동 처리 (COLOR_FAMILY 속성의 경우)
       if (attr.code === "COLOR_FAMILY" && colorMap) {
         initialVals[attr.code] = colorMap;
@@ -343,6 +373,8 @@ export const CategoryAttributeForm = forwardRef<CategoryAttributeFormHandle, Cat
 
     setFormValues(initialVals);
     setFormTextValues(initialTexts);
+    formValuesRef.current = initialVals;
+    formTextValuesRef.current = initialTexts;
 
     if (isInitial || !initialSnapshotRef.current) {
       initialSnapshotRef.current = {

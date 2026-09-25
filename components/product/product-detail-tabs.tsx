@@ -397,6 +397,85 @@ export function ProductDetailTabs({
   const [ean, setEan] = useState(product.ean || "");
   const [isCatAttrDirty, setIsCatAttrDirty] = useState(false);
 
+  // Pending Product Images Upload Staging State
+  interface PendingImageFile {
+    id: string;
+    file: File;
+    previewUrl: string;
+    formattedSize: string;
+  }
+  const [pendingImages, setPendingImages] = useState<PendingImageFile[]>([]);
+  const [uploadingImages, setUploadingImages] = useState(false);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
+
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    const currentCount = localImages.length + pendingImages.length;
+    const newFilesArray = Array.from(files);
+
+    if (currentCount + newFilesArray.length > 10) {
+      const maxAllowed = 10 - currentCount;
+      if (maxAllowed <= 0) {
+        alert("제품 이미지는 최대 10장까지 등록 가능합니다.");
+        if (fileInputRef.current) fileInputRef.current.value = "";
+        return;
+      }
+      alert(`제품 이미지는 최대 10장까지 등록할 수 있습니다.\n현재 ${currentCount}개 이미지가 등록/대기 중이므로 ${maxAllowed}개만 선택됩니다.`);
+      newFilesArray.splice(maxAllowed);
+    }
+
+    const newPending: PendingImageFile[] = newFilesArray.map((file) => {
+      const previewUrl = URL.createObjectURL(file);
+      const sizeInKb = file.size / 1024;
+      const formattedSize = sizeInKb > 1024 
+        ? `${(sizeInKb / 1024).toFixed(1)} MB` 
+        : `${Math.round(sizeInKb)} KB`;
+      return {
+        id: Math.random().toString(36).substring(2, 9),
+        file,
+        previewUrl,
+        formattedSize,
+      };
+    });
+
+    setPendingImages((prev) => [...prev, ...newPending]);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const handleRemovePendingImage = (id: string) => {
+    setPendingImages((prev) => {
+      const target = prev.find((item) => item.id === id);
+      if (target) {
+        URL.revokeObjectURL(target.previewUrl);
+      }
+      return prev.filter((item) => item.id !== id);
+    });
+  };
+
+  const handleUploadPendingImages = async () => {
+    if (pendingImages.length === 0) return;
+    setUploadingImages(true);
+    setStatusMessage(null);
+    try {
+      const formData = new FormData();
+      pendingImages.forEach((item) => {
+        formData.append("images", item.file);
+      });
+      await addProductImages(product.id, formData);
+
+      pendingImages.forEach((item) => URL.revokeObjectURL(item.previewUrl));
+      setPendingImages([]);
+      setStatusMessage({ type: "success", text: "이미지가 성공적으로 추가되었습니다." });
+      router.refresh();
+    } catch (err: any) {
+      setStatusMessage({ type: "error", text: err.message || "이미지 업로드에 실패했습니다." });
+    } finally {
+      setUploadingImages(false);
+    }
+  };
+
   const initialSnapshotRef = React.useRef({
     nameEn: initialNameEn,
     name: initialName,
@@ -722,7 +801,18 @@ export function ProductDetailTabs({
     c40Cbm !== initialSnapshotRef.current.c40Cbm
   );
 
-  const isAnyDirty = isBasicDirty || isCategoryDirty || isPriceDirty || isLogisticsDirty;
+  const isMediaDirty = pendingImages.length > 0;
+  const isAnyDirty = isBasicDirty || isCategoryDirty || isPriceDirty || isLogisticsDirty || isMediaDirty;
+
+  const handleTabChange = (targetTab: "basic" | "category_attributes" | "price" | "logistics" | "media" | "certs") => {
+    if (pendingImages.length > 0 && activeTab === "media" && targetTab !== "media") {
+      const confirmLeave = window.confirm(
+        "선택한 이미지가 아직 추가되지 않았습니다.\n다른 탭으로 이동하면 선택한 이미지 목록이 취소됩니다. 이동하시겠습니까?"
+      );
+      if (!confirmLeave) return;
+    }
+    setActiveTab(targetTab);
+  };
 
   const saveAllData = async (): Promise<{ success: boolean; error?: string }> => {
     setStatusMessage(null);
@@ -1251,7 +1341,7 @@ export function ProductDetailTabs({
             { id: "category_attributes", label: "카테고리 & 속성", isDirty: isCategoryDirty },
             { id: "price", label: "가격 정보", isDirty: isPriceDirty },
             { id: "logistics", label: "로지스틱스", isDirty: isLogisticsDirty },
-            { id: "media", label: "미디어 (이미지/비디오)", isDirty: false },
+            { id: "media", label: "미디어 (이미지/비디오)", isDirty: isMediaDirty },
             { id: "certs", label: "인허가 & 보증서", isDirty: false }
           ].map((tab) => {
             const missingList = getMissingFieldsList();
@@ -1261,7 +1351,7 @@ export function ProductDetailTabs({
                 key={tab.id}
                 data-tab-id={tab.id}
                 type="button"
-                onClick={() => setActiveTab(tab.id as any)}
+                onClick={() => handleTabChange(tab.id as any)}
                 className={`px-5 py-3 text-xs font-bold whitespace-nowrap border-b-2 transition-all cursor-pointer flex items-center gap-1.5 ${
                   activeTab === tab.id
                     ? "border-zinc-900 text-zinc-900 dark:border-white dark:text-white"
@@ -2651,27 +2741,88 @@ export function ProductDetailTabs({
             </div>
           )}
 
-          {imageRows.length < 10 && (
-            <form
-              action={addProductImages.bind(null, product.id)}
-              className="mt-6 border-t border-zinc-100 dark:border-zinc-850 pt-4 flex flex-col sm:flex-row sm:items-center gap-3"
-            >
+          {/* Staging Area for Selected Pending Files */}
+          {pendingImages.length > 0 && (
+            <div className="mt-4 p-4 rounded-xl border border-indigo-200 bg-indigo-50/40 dark:border-indigo-900/60 dark:bg-indigo-950/20 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-indigo-900 dark:text-indigo-300 flex items-center gap-1.5">
+                  <span>📸</span>
+                  <span>추가 대기 중인 이미지 ({pendingImages.length}개)</span>
+                </span>
+                <span className="text-[10px] text-indigo-650 dark:text-indigo-400 font-medium">
+                  아래 버튼을 눌러야 실제 서버에 저장 및 추가됩니다.
+                </span>
+              </div>
+
+              <div className="flex flex-wrap gap-3 pt-1">
+                {pendingImages.map((img) => (
+                  <div
+                    key={img.id}
+                    className="relative group border border-indigo-200 dark:border-indigo-800 rounded-lg p-1.5 bg-white dark:bg-zinc-900 shadow-sm w-28 text-center"
+                  >
+                    <img
+                      src={img.previewUrl}
+                      alt={img.file.name}
+                      className="h-24 w-full rounded-md object-cover"
+                    />
+                    <p className="mt-1 text-[10px] font-bold text-zinc-700 dark:text-zinc-300 truncate px-0.5" title={img.file.name}>
+                      {img.file.name}
+                    </p>
+                    <p className="text-[9px] text-zinc-400 font-mono">
+                      {img.formattedSize}
+                    </p>
+
+                    <button
+                      type="button"
+                      onClick={() => handleRemovePendingImage(img.id)}
+                      className="absolute -top-2 -right-2 rounded-full bg-rose-600 hover:bg-rose-700 text-white w-5 h-5 text-[11px] font-bold flex items-center justify-center shadow-md cursor-pointer transition-transform hover:scale-110"
+                      title="선택 목록에서 제외"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+              </div>
+
+              <div className="pt-2 flex items-center justify-between border-t border-indigo-100 dark:border-indigo-900/40">
+                <span className="text-[11px] text-indigo-700 dark:text-indigo-300">
+                  선택한 {pendingImages.length}개의 이미지를 서버로 업로드합니다.
+                </span>
+                <button
+                  type="button"
+                  onClick={handleUploadPendingImages}
+                  disabled={uploadingImages}
+                  className="rounded-lg bg-indigo-650 hover:bg-indigo-700 text-white px-4 py-2 text-xs font-bold transition-all shadow cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+                >
+                  {uploadingImages ? (
+                    <span>업로드 중...</span>
+                  ) : (
+                    <span>선택한 이미지 {pendingImages.length}개 추가</span>
+                  )}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {localImages.length + pendingImages.length < 10 && (
+            <div className="mt-6 border-t border-zinc-100 dark:border-zinc-850 pt-4 flex flex-col sm:flex-row sm:items-center gap-3">
               <div className="flex-1">
+                <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                  컴퓨터에서 이미지 선택 (다중 선택 가능)
+                </label>
                 <input
-                  name="images"
+                  ref={fileInputRef}
                   type="file"
                   accept="image/jpeg,image/png,image/webp"
                   multiple
-                  className="block text-xs text-zinc-500 dark:text-zinc-400 file:mr-4 file:py-1.5 file:px-3.5 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-zinc-100 file:text-zinc-700 dark:file:bg-zinc-800 dark:file:text-zinc-300 hover:file:bg-zinc-200 dark:hover:file:bg-zinc-750 cursor-pointer"
+                  onChange={handleImageSelect}
+                  className="block w-full text-xs text-zinc-500 dark:text-zinc-400 file:mr-4 file:py-1.5 file:px-3.5 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-zinc-100 file:text-zinc-700 dark:file:bg-zinc-800 dark:file:text-zinc-300 hover:file:bg-zinc-200 dark:hover:file:bg-zinc-750 cursor-pointer"
                 />
               </div>
-              <button
-                type="submit"
-                className="rounded-lg border border-zinc-300 px-4 py-2 text-xs font-bold text-zinc-700 hover:bg-zinc-50 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-850 cursor-pointer"
-              >
-                이미지 추가
-              </button>
-            </form>
+              <div className="text-[11px] text-zinc-400 self-end pb-1.5 font-medium">
+                (등록 가능: <strong className="text-zinc-700 dark:text-zinc-300 font-mono">{10 - localImages.length - pendingImages.length}</strong>장 남음)
+              </div>
+            </div>
           )}
         </div>
 

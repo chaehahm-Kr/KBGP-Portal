@@ -313,7 +313,11 @@ export function PortalProductsList({ initialProducts, hasBrand }: PortalProducts
                       >
                         {product.display_name}
                       </Link>
-                      {product.category_completion?.warningLabel ? (
+                      {product.category_completion?.status === "COMPLETE" ? (
+                        <span className="inline-flex items-center w-fit rounded-md bg-emerald-50 text-emerald-700 dark:bg-emerald-950/20 dark:text-emerald-400 px-2 py-0.5 text-[9px] font-bold border border-emerald-200 dark:border-emerald-900/50">
+                          ✓ 속성 완료 (100%)
+                        </span>
+                      ) : product.category_completion?.warningLabel ? (
                         <Link
                           href={`/portal/products/${product.id}?tab=category_attributes${
                             product.category_completion.missingRequiredAttributes?.[0]?.code
