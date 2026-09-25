@@ -1570,15 +1570,12 @@ export async function adminCreateProduct(
     return { error: parsed.error.issues[0]?.message ?? "입력값을 확인해주세요." };
   }
 
-  // UPC / EAN 상호 배타적 검증
+  // UPC / EAN 최소 1개 필수 검증
   const upc = parsed.data.upc || null;
   const ean = parsed.data.ean || null;
 
   if (!upc && !ean) {
     return { error: "UPC 또는 EAN 번호 중 하나는 반드시 입력해야 합니다." };
-  }
-  if (upc && ean) {
-    return { error: "UPC와 EAN 번호는 동시에 입력할 수 없습니다. 둘 중 하나만 입력해 주세요." };
   }
 
   const sellingOnline = formData.get("sellingOnline") === "true" || formData.get("sellingOnline") === "on";

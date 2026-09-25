@@ -205,10 +205,6 @@ export function AdminProductCreateForm({ companies, brands }: AdminProductCreate
       alert("UPC 또는 EAN 번호 중 최소 하나는 반드시 입력해야 합니다.");
       return;
     }
-    if (upc.trim() && ean.trim()) {
-      alert("UPC와 EAN 번호는 동시에 입력할 수 없습니다. 둘 중 하나만 입력해 주세요.");
-      return;
-    }
     if (sellingOnline && !salesLink1.trim()) {
       alert("온라인 판매 중인 경우, 최소 한 개 이상의 온라인 판매 링크(링크 1)를 입력해 주세요.");
       return;
@@ -373,7 +369,7 @@ export function AdminProductCreateForm({ companies, brands }: AdminProductCreate
           </div>
         </div>
         <p className="text-[10px] text-zinc-400 dark:text-zinc-500 italic">
-          ※ UPC 또는 EAN 번호 중 최소 하나는 입력되어야 하며, 두 값을 동시에 등록할 수 없습니다.
+          ※ UPC 또는 EAN 번호 중 최소 하나는 입력되어야 하며, 두 값을 동시에 등록할 수 있습니다.
         </p>
       </div>
 

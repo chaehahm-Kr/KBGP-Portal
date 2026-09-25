@@ -6,7 +6,7 @@ import { getSignedFileUrl } from "@/lib/files/storage";
 import { PortalProductsList } from "@/components/product/portal-products-list";
 import { getBatchProductCategoryCompletions } from "@/lib/product/attribute-completion";
 import { evaluateProductRegistrationStatus } from "@/lib/product/registration-status";
-import { resolveEffectiveSku } from "@/lib/product/types";
+import { resolveEffectiveSku, cleanPlaceholderName } from "@/lib/product/types";
 
 export const metadata: Metadata = {
   title: "제품 관리 | 파트너 포털",
@@ -110,10 +110,15 @@ export default async function ProductsPage() {
           categoryCompletion: catCompletion,
         });
 
+        const cleanName = cleanPlaceholderName(adminOverrides.name_en) ||
+                          cleanPlaceholderName(p.name_en) ||
+                          cleanPlaceholderName(adminOverrides.name) ||
+                          cleanPlaceholderName(p.name);
+
         return {
           id: p.id,
           name: p.name,
-          display_name: adminOverrides.name_en || p.name_en || adminOverrides.name || p.name,
+          display_name: cleanName || "(제품명 미입력 Draft)",
           letusto_sku: effectiveLetustoSku,
           manufacture_sku: effectiveManufactureSku,
           category: p.category,

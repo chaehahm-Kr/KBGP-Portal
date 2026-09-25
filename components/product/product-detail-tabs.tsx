@@ -15,7 +15,9 @@ import {
   type CertificateType,
   sanitizeSku,
   trimSkuSeparators,
-  resolveEffectiveSku
+  resolveEffectiveSku,
+  cleanPlaceholderName,
+  cleanPlaceholderSku
 } from "@/lib/product/types";
 import { 
   updateProduct, 
@@ -373,9 +375,11 @@ export function ProductDetailTabs({
   }, [imageRows, imageUrls]);
 
   // Required Fields States for reactive validation
-  const initialManufactureSku = (effectiveManufactureSku || "").startsWith("DRAFT-SKU-") ? "" : (effectiveManufactureSku || "");
-  const [nameEn, setNameEn] = useState(product.name_en || "");
-  const [name, setName] = useState(product.name || "");
+  const initialManufactureSku = cleanPlaceholderSku(effectiveManufactureSku) || "";
+  const initialNameEn = cleanPlaceholderName(product.name_en) || "";
+  const initialName = cleanPlaceholderName(product.name) || "";
+  const [nameEn, setNameEn] = useState(initialNameEn);
+  const [name, setName] = useState(initialName);
   const [manufactureSku, setManufactureSku] = useState(initialManufactureSku);
   const [brandId, setBrandId] = useState(product.brand_id || "");
   const [category, setCategory] = useState(product.category || "");
@@ -394,8 +398,8 @@ export function ProductDetailTabs({
   const [isCatAttrDirty, setIsCatAttrDirty] = useState(false);
 
   const initialSnapshotRef = React.useRef({
-    nameEn: product.name_en || "",
-    name: product.name || "",
+    nameEn: initialNameEn,
+    name: initialName,
     manufactureSku: initialManufactureSku,
     brandId: product.brand_id || "",
     category: product.category || "",
@@ -460,8 +464,6 @@ export function ProductDetailTabs({
     const hasEan = !!ean.trim();
     if (!hasUpc && !hasEan) {
       missing.push({ tab: "basic", field: "식별 바코드 (UPC 또는 EAN 중 최소 하나 필수)", inputName: "upc" });
-    } else if (hasUpc && hasEan) {
-      missing.push({ tab: "basic", field: "식별 바코드 (UPC와 EAN은 동시에 입력할 수 없습니다)", inputName: "upc" });
     }
     
     if (sellingOnline && !salesLink1.trim()) {
@@ -515,19 +517,10 @@ export function ProductDetailTabs({
   const getCriticalErrors = () => {
     const errors = [];
     
-    // 1. Barcode conflict (both entered)
     const hasUpc = !!upc.trim();
     const hasEan = !!ean.trim();
-    if (hasUpc && hasEan) {
-      errors.push({ 
-        tab: "basic", 
-        field: "식별 바코드", 
-        inputName: "upc", 
-        message: "미국 바코드(UPC)와 유럽 바코드(EAN)는 동시에 입력할 수 없습니다. 하나만 입력해 주세요." 
-      });
-    }
     
-    // 2. Barcode missing (both empty)
+    // 1. Barcode missing (both empty)
     if (!hasUpc && !hasEan) {
       errors.push({ 
         tab: "basic", 

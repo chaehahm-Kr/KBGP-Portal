@@ -142,21 +142,43 @@ export function trimSkuSeparators(val: string): string {
   return val.replace(/^[\-_]+|[\-_]+$/g, "");
 }
 
+export function isDraftPlaceholderSku(sku?: string | null): boolean {
+  if (!sku) return false;
+  return sku.trim().startsWith("DRAFT-SKU-");
+}
+
+export function isDraftPlaceholderName(name?: string | null): boolean {
+  if (!name) return false;
+  const trimmed = name.trim();
+  return trimmed === "[임시저장] 신규 제품" || trimmed.startsWith("[임시저장]");
+}
+
+export function cleanPlaceholderSku(sku?: string | null): string | null {
+  if (!sku || isDraftPlaceholderSku(sku)) return null;
+  return sku.trim();
+}
+
+export function cleanPlaceholderName(name?: string | null): string | null {
+  if (!name || isDraftPlaceholderName(name)) return null;
+  return name.trim();
+}
+
 /**
  * Single Source of Truth helper for resolving effective SKU:
- * Effective Value = Admin Override (if non-empty string) ?? Product Base Value (if non-empty string) ?? null
+ * Effective Value = Admin Override (if non-empty string and not draft placeholder) ?? Product Base Value (if non-empty string and not draft placeholder) ?? null
  */
 export function resolveEffectiveSku(
   overrideValue?: string | null,
   baseValue?: string | null
 ): string | null {
-  if (overrideValue && typeof overrideValue === "string" && overrideValue.trim() !== "") {
+  if (overrideValue && typeof overrideValue === "string" && overrideValue.trim() !== "" && !isDraftPlaceholderSku(overrideValue)) {
     return overrideValue.trim();
   }
-  if (baseValue && typeof baseValue === "string" && baseValue.trim() !== "") {
+  if (baseValue && typeof baseValue === "string" && baseValue.trim() !== "" && !isDraftPlaceholderSku(baseValue)) {
     return baseValue.trim();
   }
   return null;
 }
+
 
 

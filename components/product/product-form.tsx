@@ -244,10 +244,6 @@ export function ProductForm({ action, brands }: ProductFormProps) {
       errors.upc = true;
       errors.ean = true;
       errorMsg = errorMsg || "UPC 또는 EAN 번호 중 하나는 반드시 입력해야 합니다.";
-    } else if (hasUpc && hasEan) {
-      errors.upc = true;
-      errors.ean = true;
-      errorMsg = errorMsg || "UPC와 EAN 번호는 동시에 입력할 수 없습니다. 둘 중 하나만 입력해 주세요.";
     }
 
     if (sellingOnline && !salesLink1.trim()) {
@@ -460,7 +456,7 @@ export function ProductForm({ action, brands }: ProductFormProps) {
                 <div>
                   <p className="font-bold">UPC 또는 EAN 중 하나는 반드시 입력해야 합니다.</p>
                   <p className="text-[11px] opacity-90 font-normal mt-0.5 leading-relaxed">
-                    미국 시장 바코드(UPC) 또는 글로벌 바코드(EAN) 중 최소 한 가지를 입력해야 정식 제품 등록이 완료됩니다. (두 바코드를 동시에 입력할 수는 없습니다. 임시 저장 시에는 비워둘 수 있습니다.)
+                    미국 시장 바코드(UPC) 또는 글로벌 바코드(EAN) 중 최소 한 가지를 입력해야 정식 제품 등록이 완료됩니다. (둘 다 입력하는 것도 가능하며, 임시 저장 시에는 비워둘 수 있습니다.)
                   </p>
                 </div>
               </div>

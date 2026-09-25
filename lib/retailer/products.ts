@@ -1,7 +1,8 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { verifyRetailerSession } from "@/lib/auth/dal";
-import { resolveEffectiveSku } from "@/lib/product/types";
+import { resolveEffectiveSku, isDraftPlaceholderName, isDraftPlaceholderSku } from "@/lib/product/types";
+import { evaluateProductRegistrationStatus } from "@/lib/product/registration-status";
 
 export interface RetailerProductSummary {
   id: string;
@@ -112,6 +113,14 @@ export async function getRetailerProducts(
       origin,
       volume,
       carton_pack_qty,
+      package_width,
+      package_depth,
+      package_height,
+      package_weight,
+      upc,
+      ean,
+      selling_online,
+      sales_link_1,
       brands (
         id,
         name
@@ -139,11 +148,39 @@ export async function getRetailerProducts(
     };
   }
 
-  // 2. Filter out soft-deleted or non-active products
+  // 2. Filter out soft-deleted, discontinued, or incomplete Draft products
   const activeProducts = rawProducts.filter((p) => {
     const info = (p.price_additional_info as any) || {};
     if (info.deleted_at || (p as any).deleted_at) return false;
     if (p.status === "discontinued") return false;
+
+    // Isolate Draft technical placeholders & incomplete drafts from Retailer catalog
+    if (isDraftPlaceholderName(p.name) || isDraftPlaceholderSku(p.manufacture_sku)) return false;
+
+    const regEval = evaluateProductRegistrationStatus({
+      id: p.id,
+      name: p.name,
+      name_en: p.name_en,
+      brand_id: p.brand_id,
+      category_code: p.category_code,
+      manufacture_sku: p.manufacture_sku,
+      origin: p.origin,
+      price_krw_retail: p.price_krw_retail,
+      price_usd_fob: p.price_usd_fob,
+      package_width: p.package_width,
+      package_depth: p.package_depth,
+      package_height: p.package_height,
+      package_weight: p.package_weight,
+      upc: (p as any).upc,
+      ean: (p as any).ean,
+      selling_online: (p as any).selling_online,
+      sales_link_1: (p as any).sales_link_1,
+      deleted_at: info.deleted_at || (p as any).deleted_at,
+      hasImages: Array.isArray(p.product_images) && p.product_images.length > 0,
+    });
+
+    if (regEval.isDraft) return false;
+
     return true;
   });
 
