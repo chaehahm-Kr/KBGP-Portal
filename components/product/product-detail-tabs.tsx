@@ -357,14 +357,18 @@ export function ProductDetailTabs({
   const [paletteHeight, setPaletteHeight] = useState(product.palette_height?.toString() || "");
   const [paletteWeight, setPaletteWeight] = useState(product.palette_weight?.toString() || "");
 
-  // Override Container Loading states
+  // Override Container Loading states (20FT, 40FT, 40HQ)
   const [c20Qty, setC20Qty] = useState(product.container_20ft_qty?.toString() || "");
   const [c20Weight, setC20Weight] = useState(product.container_20ft_weight?.toString() || "");
   const [c20Cbm, setC20Cbm] = useState(product.container_20ft_cbm?.toString() || "");
 
-  const [c40Qty, setC40Qty] = useState(product.container_40fthc_qty?.toString() || "");
-  const [c40Weight, setC40Weight] = useState(product.container_40fthc_weight?.toString() || "");
-  const [c40Cbm, setC40Cbm] = useState(product.container_40fthc_cbm?.toString() || "");
+  const [c40Qty, setC40Qty] = useState((product.price_additional_info as any)?.container_40ft_qty?.toString() || "");
+  const [c40Weight, setC40Weight] = useState((product.price_additional_info as any)?.container_40ft_weight?.toString() || "");
+  const [c40Cbm, setC40Cbm] = useState((product.price_additional_info as any)?.container_40ft_cbm?.toString() || "");
+
+  const [c40hqQty, setC40hqQty] = useState(product.container_40fthc_qty?.toString() || "");
+  const [c40hqWeight, setC40hqWeight] = useState(product.container_40fthc_weight?.toString() || "");
+  const [c40hqCbm, setC40hqCbm] = useState(product.container_40fthc_cbm?.toString() || "");
 
   // FOB price state for dynamic discount calculations
   const [priceUsdFobState, setPriceUsdFobState] = useState<number | string>(product.price_usd_fob ? product.price_usd_fob.toString() : "");
@@ -559,9 +563,12 @@ export function ProductDetailTabs({
     c20Qty: product.container_20ft_qty?.toString() || "",
     c20Weight: product.container_20ft_weight?.toString() || "",
     c20Cbm: product.container_20ft_cbm?.toString() || "",
-    c40Qty: product.container_40fthc_qty?.toString() || "",
-    c40Weight: product.container_40fthc_weight?.toString() || "",
-    c40Cbm: product.container_40fthc_cbm?.toString() || ""
+    c40Qty: (product.price_additional_info as any)?.container_40ft_qty?.toString() || "",
+    c40Weight: (product.price_additional_info as any)?.container_40ft_weight?.toString() || "",
+    c40Cbm: (product.price_additional_info as any)?.container_40ft_cbm?.toString() || "",
+    c40hqQty: product.container_40fthc_qty?.toString() || "",
+    c40hqWeight: product.container_40fthc_weight?.toString() || "",
+    c40hqCbm: product.container_40fthc_cbm?.toString() || ""
   });
 
   const getMissingFieldsList = () => {
@@ -761,26 +768,73 @@ export function ProductDetailTabs({
     }
   }, [cartonWidth, cartonDepth, cartonHeight]);
 
-  // Handle dynamic simulation based on CBM and Carton Weight
-  const simulate20ftQty = cartonCbm ? Math.floor(28 / Number(cartonCbm)) : 0;
-  const simulate20ftWeight = simulate20ftQty && cartonWeight ? (simulate20ftQty * Number(cartonWeight)).toFixed(2) : "0";
-  const simulate20ftCbm = simulate20ftQty && cartonCbm ? (simulate20ftQty * Number(cartonCbm)).toFixed(3) : "0";
+  // Helper to detect missing fields required for container simulation
+  const getMissingContainerSimFields = () => {
+    const missing = [];
+    const cbm = Number(cartonCbm || 0);
+    const packQty = Number(cartonPackQty || 0);
+    const weight = Number(cartonWeight || 0);
 
-  const simulate40ftQty = cartonCbm ? Math.floor(76 / Number(cartonCbm)) : 0;
-  const simulate40ftWeight = simulate40ftQty && cartonWeight ? (simulate40ftQty * Number(cartonWeight)).toFixed(2) : "0";
-  const simulate40ftCbm = simulate40ftQty && cartonCbm ? (simulate40ftQty * Number(cartonCbm)).toFixed(3) : "0";
+    if (!cbm || cbm <= 0) missing.push("아웃 카톤 규격 (CBM)");
+    if (!packQty || packQty <= 0) missing.push("아웃 카톤 입수 수량");
+    if (!weight || weight <= 0) missing.push("아웃 카톤 무게");
 
-  // Quick helper to fill simulation values into Container fields
+    return missing;
+  };
+
+  // Dynamic Container Simulator Calculation (20FT=28 CBM, 40FT=58 CBM, 40HQ=68 CBM)
+  const computeContainerSim = (maxCbm: number) => {
+    const cbm = Number(cartonCbm || 0);
+    const packQty = Number(cartonPackQty || 0);
+    const weight = Number(cartonWeight || 0);
+
+    if (!cbm || cbm <= 0) {
+      return {
+        isValid: false,
+        cartons: 0,
+        products: 0,
+        totalWeight: "0",
+        totalCbm: "0",
+        maxCbm,
+      };
+    }
+
+    const cartons = Math.floor(maxCbm / cbm);
+    const products = packQty > 0 ? cartons * packQty : 0;
+    const totalWeight = weight > 0 ? (cartons * weight).toFixed(2) : "0";
+    const totalCbm = (cartons * cbm).toFixed(3);
+
+    return {
+      isValid: true,
+      cartons,
+      products,
+      totalWeight,
+      totalCbm,
+      maxCbm,
+    };
+  };
+
+  const sim20FT = computeContainerSim(28);
+  const sim40FT = computeContainerSim(58);
+  const sim40HQ = computeContainerSim(68);
+
+  // Quick helper to fill simulation values into Container manual input fields
   const apply20ftSimulation = () => {
-    setC20Qty(simulate20ftQty.toString());
-    setC20Weight(simulate20ftWeight);
-    setC20Cbm(simulate20ftCbm);
+    setC20Qty(sim20FT.cartons.toString());
+    setC20Weight(sim20FT.totalWeight);
+    setC20Cbm(sim20FT.totalCbm);
   };
 
   const apply40ftSimulation = () => {
-    setC40Qty(simulate40ftQty.toString());
-    setC40Weight(simulate40ftWeight);
-    setC40Cbm(simulate40ftCbm);
+    setC40Qty(sim40FT.cartons.toString());
+    setC40Weight(sim40FT.totalWeight);
+    setC40Cbm(sim40FT.totalCbm);
+  };
+
+  const apply40hqSimulation = () => {
+    setC40hqQty(sim40HQ.cartons.toString());
+    setC40hqWeight(sim40HQ.totalWeight);
+    setC40hqCbm(sim40HQ.totalCbm);
   };
 
   const addBullet = () => setBullets([...bullets, ""]);
@@ -868,7 +922,10 @@ export function ProductDetailTabs({
     c20Cbm !== initialSnapshotRef.current.c20Cbm ||
     c40Qty !== initialSnapshotRef.current.c40Qty ||
     c40Weight !== initialSnapshotRef.current.c40Weight ||
-    c40Cbm !== initialSnapshotRef.current.c40Cbm
+    c40Cbm !== initialSnapshotRef.current.c40Cbm ||
+    c40hqQty !== initialSnapshotRef.current.c40hqQty ||
+    c40hqWeight !== initialSnapshotRef.current.c40hqWeight ||
+    c40hqCbm !== initialSnapshotRef.current.c40hqCbm
   );
 
   const isMediaDirty = pendingImages.length > 0;
@@ -976,9 +1033,12 @@ export function ProductDetailTabs({
       formData.set("container20ftQty", c20Qty);
       formData.set("container20ftWeight", c20Weight);
       formData.set("container20ftCbm", c20Cbm);
-      formData.set("container40fthcQty", c40Qty);
-      formData.set("container40fthcWeight", c40Weight);
-      formData.set("container40fthcCbm", c40Cbm);
+      formData.set("container40ftQty", c40Qty);
+      formData.set("container40ftWeight", c40Weight);
+      formData.set("container40ftCbm", c40Cbm);
+      formData.set("container40fthcQty", c40hqQty);
+      formData.set("container40fthcWeight", c40hqWeight);
+      formData.set("container40fthcCbm", c40hqCbm);
 
       if (leadTimeValue.trim()) {
         formData.set("leadTime", `${leadTimeValue.trim()} ${leadTimeUnit}`);
@@ -1069,7 +1129,10 @@ export function ProductDetailTabs({
         c20Cbm,
         c40Qty,
         c40Weight,
-        c40Cbm
+        c40Cbm,
+        c40hqQty,
+        c40hqWeight,
+        c40hqCbm
       };
       setIsCatAttrDirty(false);
 
@@ -2662,8 +2725,8 @@ export function ProductDetailTabs({
 
           {/* Container Simulation & Overrides */}
           <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 space-y-6">
-            <div className="flex flex-col md:flex-row gap-6 items-center border-b border-zinc-100 dark:border-zinc-850 pb-3">
-              <div className="flex-1">
+            <div className="flex flex-col md:flex-row gap-6 items-start justify-between border-b border-zinc-100 dark:border-zinc-850 pb-4">
+              <div className="space-y-1.5 flex-1">
                 <h2 className="text-sm font-bold text-zinc-900 dark:text-white flex items-center gap-2">
                   <svg className="w-6 h-4 text-indigo-500 shrink-0" viewBox="0 0 80 40" fill="none" stroke="currentColor" strokeWidth="2">
                     <path d="M8 15l20-6 44 6v18l-40 6-24-6V15z"/>
@@ -2674,55 +2737,87 @@ export function ProductDetailTabs({
                   </svg>
                   <span>5. 컨테이너 적재 시뮬레이터 및 저장 정보</span>
                 </h2>
-                <p className="text-[10px] text-zinc-400 dark:text-zinc-500 mt-1">포장 규격을 기준으로 선적 컨테이너당 적재 가능량을 가상 계산해 볼 수 있습니다.</p>
-              </div>
-              <div className="shrink-0">
-                <svg className="w-20 h-10 text-indigo-500 dark:text-indigo-400" viewBox="0 0 80 40" fill="none" stroke="currentColor" strokeWidth="1.5">
-                  <path d="M8 15l20-6 44 6v18l-40 6-24-6V15z"/>
-                  <path d="M8 15l20 6 44-6"/>
-                  <path d="M28 21v18"/>
-                  <path d="M13 16.5v16.5M18 18v16M23 19.5v15.5" opacity="0.6"/>
-                  <path d="M36 20v17M44 19v15M52 18v13M60 17v11" opacity="0.6"/>
-                </svg>
+                <p className="text-xs text-zinc-600 dark:text-zinc-400 font-normal leading-relaxed">
+                  본 시뮬레이터는 입력된 패키지 및 아웃 카톤 규격을 기준으로 한 <strong>이론적 적재 추정치</strong>입니다. 실제 선적 시 발생하는 적재 손실, 적재 방향, 혼적, 빈 공간, 마스터 카톤/팔레트 적재 제약 등은 반영되지 않으므로 참고용으로 활용해 주세요.
+                </p>
               </div>
             </div>
-            
-            <div className="grid gap-6 md:grid-cols-2">
-              {/* 20ft Container */}
-              <div className="p-4 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50/30 dark:bg-zinc-950/20 space-y-4">
-                <div className="flex justify-between items-center border-b border-zinc-200 dark:border-zinc-850 pb-2">
-                  <span className="font-extrabold text-xs text-zinc-800 dark:text-white">20ft Container (기본 규격 28 CBM)</span>
-                  <button
-                    type="button"
-                    onClick={apply20ftSimulation}
-                    className="rounded bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950 dark:hover:bg-indigo-900 text-indigo-700 dark:text-indigo-300 font-bold text-[10px] px-2 py-0.5 cursor-pointer"
-                  >
-                    시뮬레이션 값 적용
-                  </button>
+
+            {/* Missing specs guidance banner */}
+            {getMissingContainerSimFields().length > 0 && (
+              <div className="p-3.5 rounded-lg border border-amber-200 dark:border-amber-900/60 bg-amber-50/60 dark:bg-amber-950/30 text-xs text-amber-900 dark:text-amber-200 flex items-start gap-2.5">
+                <svg className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+                <div>
+                  <span className="font-bold block text-amber-950 dark:text-amber-100">컨테이너 적재 시뮬레이션을 위한 필수 미입력 항목</span>
+                  <p className="text-[11px] mt-0.5 text-amber-800 dark:text-amber-300">
+                    시뮬레이션 자동 계산을 위해 상단 3. 아웃 카톤 규격 섹션에서 <strong>{getMissingContainerSimFields().join(", ")}</strong> 정보를 입력해 주세요.
+                  </p>
                 </div>
-                
-                {/* Simulator output */}
-                <div className="grid grid-cols-3 gap-2 bg-white dark:bg-zinc-950 p-2.5 rounded-lg border border-zinc-100 dark:border-zinc-900 text-center">
-                  <div>
-                    <p className="text-[10px] text-zinc-400">예상 적재 수량</p>
-                    <p className="text-xs font-extrabold font-mono text-zinc-800 dark:text-white mt-0.5">{simulate20ftQty} 카톤</p>
+              </div>
+            )}
+            
+            <div className="grid gap-6 md:grid-cols-3">
+              {/* 20FT Container */}
+              <div className="p-4 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50/30 dark:bg-zinc-950/20 space-y-4 flex flex-col justify-between">
+                <div>
+                  <div className="flex justify-between items-center border-b border-zinc-200 dark:border-zinc-850 pb-2 mb-3">
+                    <div>
+                      <span className="font-extrabold text-xs text-zinc-900 dark:text-white block">20FT Container</span>
+                      <span className="text-[10px] text-zinc-450 dark:text-zinc-500 font-semibold">최대 28 CBM</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={apply20ftSimulation}
+                      disabled={!sim20FT.isValid}
+                      className="rounded bg-indigo-50 hover:bg-indigo-100 disabled:opacity-50 disabled:cursor-not-allowed dark:bg-indigo-950 dark:hover:bg-indigo-900 text-indigo-700 dark:text-indigo-300 font-bold text-[10px] px-2 py-1 cursor-pointer transition-colors"
+                    >
+                      시뮬레이션 값 적용
+                    </button>
                   </div>
-                  <div>
-                    <p className="text-[10px] text-zinc-400">예상 총 중량</p>
-                    <p className="text-xs font-extrabold font-mono text-zinc-800 dark:text-white mt-0.5">{simulate20ftWeight} kg</p>
-                  </div>
-                  <div>
-                    <p className="text-[10px] text-zinc-400">예상 총 CBM</p>
-                    <p className="text-xs font-extrabold font-mono text-zinc-800 dark:text-white mt-0.5">{simulate20ftCbm} CBM</p>
+                  
+                  {/* Simulator output */}
+                  <div className="space-y-2 bg-white dark:bg-zinc-950 p-3 rounded-lg border border-zinc-200/80 dark:border-zinc-900 text-xs">
+                    <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-900 pb-1.5">
+                      <span className="text-[11px] font-bold text-zinc-600 dark:text-zinc-400">예상 상품 수량</span>
+                      <span className="font-extrabold font-mono text-indigo-650 dark:text-indigo-400 text-xs">
+                        {sim20FT.isValid ? `${sim20FT.products.toLocaleString()} 개` : "-"}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-900 pb-1.5">
+                      <span className="text-[11px] font-bold text-zinc-600 dark:text-zinc-400">예상 카톤 수량</span>
+                      <span className="font-extrabold font-mono text-zinc-800 dark:text-zinc-200 text-xs">
+                        {sim20FT.isValid ? `${sim20FT.cartons.toLocaleString()} 카톤` : "-"}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-900 pb-1.5">
+                      <span className="text-[11px] text-zinc-500 dark:text-zinc-400">예상 총 중량</span>
+                      <span className="font-bold font-mono text-zinc-800 dark:text-zinc-200 text-xs">
+                        {sim20FT.isValid ? `${sim20FT.totalWeight} kg` : "-"}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-900 pb-1.5">
+                      <span className="text-[11px] text-zinc-500 dark:text-zinc-400">예상 총 CBM</span>
+                      <span className="font-bold font-mono text-zinc-800 dark:text-zinc-200 text-xs">
+                        {sim20FT.isValid ? `${sim20FT.totalCbm} CBM` : "-"}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between pt-0.5">
+                      <span className="text-[10px] text-zinc-450 dark:text-zinc-500">컨테이너 최대 CBM</span>
+                      <span className="font-semibold text-[11px] text-zinc-600 dark:text-zinc-400">
+                        28 CBM
+                      </span>
+                    </div>
                   </div>
                 </div>
 
                 {/* Overrides Input */}
-                <div className="space-y-3">
+                <div className="space-y-2 mt-4 pt-3 border-t border-zinc-200 dark:border-zinc-850">
                   <p className="text-[10px] font-bold text-zinc-500">실제 최종 입력값 (수정 및 저장 가능):</p>
-                  <div className="grid grid-cols-3 gap-2">
+                  <div className="grid grid-cols-3 gap-1.5">
                     <div>
-                      <label className="block text-[10px] text-zinc-650 mb-0.5">수량 (카톤수)</label>
+                      <label className="block text-[9px] text-zinc-500 mb-0.5">수량(카톤)</label>
                       <input
                         name="container20ftQty"
                         type="number"
@@ -2730,11 +2825,11 @@ export function ProductDetailTabs({
                         onFocus={(e) => e.target.select()}
                         onChange={(e) => setC20Qty(e.target.value)}
                         placeholder="0"
-                        className="block w-full text-center rounded border border-zinc-300 py-1 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none"
+                        className="block w-full text-center rounded border border-zinc-300 py-1 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-indigo-500"
                       />
                     </div>
                     <div>
-                      <label className="block text-[10px] text-zinc-650 mb-0.5">중량 (kg)</label>
+                      <label className="block text-[9px] text-zinc-500 mb-0.5">중량(kg)</label>
                       <input
                         name="container20ftWeight"
                         type="number"
@@ -2743,11 +2838,11 @@ export function ProductDetailTabs({
                         onFocus={(e) => e.target.select()}
                         onChange={(e) => setC20Weight(e.target.value)}
                         placeholder="0.00"
-                        className="block w-full text-center rounded border border-zinc-300 py-1 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none"
+                        className="block w-full text-center rounded border border-zinc-300 py-1 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-indigo-500"
                       />
                     </div>
                     <div>
-                      <label className="block text-[10px] text-zinc-650 mb-0.5">총 CBM</label>
+                      <label className="block text-[9px] text-zinc-500 mb-0.5">총 CBM</label>
                       <input
                         name="container20ftCbm"
                         type="number"
@@ -2756,82 +2851,205 @@ export function ProductDetailTabs({
                         onFocus={(e) => e.target.select()}
                         onChange={(e) => setC20Cbm(e.target.value)}
                         placeholder="0.000"
-                        className="block w-full text-center rounded border border-zinc-300 py-1 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none"
+                        className="block w-full text-center rounded border border-zinc-300 py-1 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-indigo-500"
                       />
                     </div>
                   </div>
                 </div>
               </div>
 
-              {/* 40ft HC Container */}
-              <div className="p-4 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50/30 dark:bg-zinc-950/20 space-y-4">
-                <div className="flex justify-between items-center border-b border-zinc-200 dark:border-zinc-850 pb-2">
-                  <span className="font-extrabold text-xs text-zinc-800 dark:text-white">40ft HC Container (기본 규격 76 CBM)</span>
-                  <button
-                    type="button"
-                    onClick={apply40ftSimulation}
-                    className="rounded bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950 dark:hover:bg-indigo-900 text-indigo-700 dark:text-indigo-300 font-bold text-[10px] px-2 py-0.5 cursor-pointer"
-                  >
-                    시뮬레이션 값 적용
-                  </button>
-                </div>
-                
-                {/* Simulator output */}
-                <div className="grid grid-cols-3 gap-2 bg-white dark:bg-zinc-950 p-2.5 rounded-lg border border-zinc-100 dark:border-zinc-900 text-center">
-                  <div>
-                    <p className="text-[10px] text-zinc-400">예상 적재 수량</p>
-                    <p className="text-xs font-extrabold font-mono text-zinc-800 dark:text-white mt-0.5">{simulate40ftQty} 카톤</p>
+              {/* 40FT Container */}
+              <div className="p-4 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50/30 dark:bg-zinc-950/20 space-y-4 flex flex-col justify-between">
+                <div>
+                  <div className="flex justify-between items-center border-b border-zinc-200 dark:border-zinc-850 pb-2 mb-3">
+                    <div>
+                      <span className="font-extrabold text-xs text-zinc-900 dark:text-white block">40FT Container</span>
+                      <span className="text-[10px] text-zinc-450 dark:text-zinc-500 font-semibold">최대 58 CBM</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={apply40ftSimulation}
+                      disabled={!sim40FT.isValid}
+                      className="rounded bg-indigo-50 hover:bg-indigo-100 disabled:opacity-50 disabled:cursor-not-allowed dark:bg-indigo-950 dark:hover:bg-indigo-900 text-indigo-700 dark:text-indigo-300 font-bold text-[10px] px-2 py-1 cursor-pointer transition-colors"
+                    >
+                      시뮬레이션 값 적용
+                    </button>
                   </div>
-                  <div>
-                    <p className="text-[10px] text-zinc-400">예상 총 중량</p>
-                    <p className="text-xs font-extrabold font-mono text-zinc-800 dark:text-white mt-0.5">{simulate40ftWeight} kg</p>
-                  </div>
-                  <div>
-                    <p className="text-[10px] text-zinc-400">예상 총 CBM</p>
-                    <p className="text-xs font-extrabold font-mono text-zinc-800 dark:text-white mt-0.5">{simulate40ftCbm} CBM</p>
+                  
+                  {/* Simulator output */}
+                  <div className="space-y-2 bg-white dark:bg-zinc-950 p-3 rounded-lg border border-zinc-200/80 dark:border-zinc-900 text-xs">
+                    <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-900 pb-1.5">
+                      <span className="text-[11px] font-bold text-zinc-600 dark:text-zinc-400">예상 상품 수량</span>
+                      <span className="font-extrabold font-mono text-indigo-650 dark:text-indigo-400 text-xs">
+                        {sim40FT.isValid ? `${sim40FT.products.toLocaleString()} 개` : "-"}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-900 pb-1.5">
+                      <span className="text-[11px] font-bold text-zinc-600 dark:text-zinc-400">예상 카톤 수량</span>
+                      <span className="font-extrabold font-mono text-zinc-800 dark:text-zinc-200 text-xs">
+                        {sim40FT.isValid ? `${sim40FT.cartons.toLocaleString()} 카톤` : "-"}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-900 pb-1.5">
+                      <span className="text-[11px] text-zinc-500 dark:text-zinc-400">예상 총 중량</span>
+                      <span className="font-bold font-mono text-zinc-800 dark:text-zinc-200 text-xs">
+                        {sim40FT.isValid ? `${sim40FT.totalWeight} kg` : "-"}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-900 pb-1.5">
+                      <span className="text-[11px] text-zinc-500 dark:text-zinc-400">예상 총 CBM</span>
+                      <span className="font-bold font-mono text-zinc-800 dark:text-zinc-200 text-xs">
+                        {sim40FT.isValid ? `${sim40FT.totalCbm} CBM` : "-"}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between pt-0.5">
+                      <span className="text-[10px] text-zinc-450 dark:text-zinc-500">컨테이너 최대 CBM</span>
+                      <span className="font-semibold text-[11px] text-zinc-600 dark:text-zinc-400">
+                        58 CBM
+                      </span>
+                    </div>
                   </div>
                 </div>
 
                 {/* Overrides Input */}
-                <div className="space-y-3">
+                <div className="space-y-2 mt-4 pt-3 border-t border-zinc-200 dark:border-zinc-850">
                   <p className="text-[10px] font-bold text-zinc-500">실제 최종 입력값 (수정 및 저장 가능):</p>
-                  <div className="grid grid-cols-3 gap-2">
+                  <div className="grid grid-cols-3 gap-1.5">
                     <div>
-                      <label className="block text-[10px] text-zinc-650 mb-0.5">수량 (카톤수)</label>
+                      <label className="block text-[9px] text-zinc-500 mb-0.5">수량(카톤)</label>
                       <input
-                        name="container40fthcQty"
+                        name="container40ftQty"
                         type="number"
                         value={c40Qty}
                         onFocus={(e) => e.target.select()}
                         onChange={(e) => setC40Qty(e.target.value)}
                         placeholder="0"
-                        className="block w-full text-center rounded border border-zinc-300 py-1 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none"
+                        className="block w-full text-center rounded border border-zinc-300 py-1 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-indigo-500"
                       />
                     </div>
                     <div>
-                      <label className="block text-[10px] text-zinc-650 mb-0.5">중량 (kg)</label>
+                      <label className="block text-[9px] text-zinc-500 mb-0.5">중량(kg)</label>
                       <input
-                        name="container40fthcWeight"
+                        name="container40ftWeight"
                         type="number"
                         step="0.01"
                         value={c40Weight}
                         onFocus={(e) => e.target.select()}
                         onChange={(e) => setC40Weight(e.target.value)}
                         placeholder="0.00"
-                        className="block w-full text-center rounded border border-zinc-300 py-1 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none"
+                        className="block w-full text-center rounded border border-zinc-300 py-1 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-indigo-500"
                       />
                     </div>
                     <div>
-                      <label className="block text-[10px] text-zinc-650 mb-0.5">총 CBM</label>
+                      <label className="block text-[9px] text-zinc-500 mb-0.5">총 CBM</label>
                       <input
-                        name="container40fthcCbm"
+                        name="container40ftCbm"
                         type="number"
                         step="0.001"
                         value={c40Cbm}
                         onFocus={(e) => e.target.select()}
                         onChange={(e) => setC40Cbm(e.target.value)}
                         placeholder="0.000"
-                        className="block w-full text-center rounded border border-zinc-300 py-1 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none"
+                        className="block w-full text-center rounded border border-zinc-300 py-1 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-indigo-500"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* 40HQ Container */}
+              <div className="p-4 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50/30 dark:bg-zinc-950/20 space-y-4 flex flex-col justify-between">
+                <div>
+                  <div className="flex justify-between items-center border-b border-zinc-200 dark:border-zinc-850 pb-2 mb-3">
+                    <div>
+                      <span className="font-extrabold text-xs text-zinc-900 dark:text-white block">40HQ Container</span>
+                      <span className="text-[10px] text-zinc-450 dark:text-zinc-500 font-semibold">최대 68 CBM</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={apply40hqSimulation}
+                      disabled={!sim40HQ.isValid}
+                      className="rounded bg-indigo-50 hover:bg-indigo-100 disabled:opacity-50 disabled:cursor-not-allowed dark:bg-indigo-950 dark:hover:bg-indigo-900 text-indigo-700 dark:text-indigo-300 font-bold text-[10px] px-2 py-1 cursor-pointer transition-colors"
+                    >
+                      시뮬레이션 값 적용
+                    </button>
+                  </div>
+                  
+                  {/* Simulator output */}
+                  <div className="space-y-2 bg-white dark:bg-zinc-950 p-3 rounded-lg border border-zinc-200/80 dark:border-zinc-900 text-xs">
+                    <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-900 pb-1.5">
+                      <span className="text-[11px] font-bold text-zinc-600 dark:text-zinc-400">예상 상품 수량</span>
+                      <span className="font-extrabold font-mono text-indigo-650 dark:text-indigo-400 text-xs">
+                        {sim40HQ.isValid ? `${sim40HQ.products.toLocaleString()} 개` : "-"}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-900 pb-1.5">
+                      <span className="text-[11px] font-bold text-zinc-600 dark:text-zinc-400">예상 카톤 수량</span>
+                      <span className="font-extrabold font-mono text-zinc-800 dark:text-zinc-200 text-xs">
+                        {sim40HQ.isValid ? `${sim40HQ.cartons.toLocaleString()} 카톤` : "-"}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-900 pb-1.5">
+                      <span className="text-[11px] text-zinc-500 dark:text-zinc-400">예상 총 중량</span>
+                      <span className="font-bold font-mono text-zinc-800 dark:text-zinc-200 text-xs">
+                        {sim40HQ.isValid ? `${sim40HQ.totalWeight} kg` : "-"}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-900 pb-1.5">
+                      <span className="text-[11px] text-zinc-500 dark:text-zinc-400">예상 총 CBM</span>
+                      <span className="font-bold font-mono text-zinc-800 dark:text-zinc-200 text-xs">
+                        {sim40HQ.isValid ? `${sim40HQ.totalCbm} CBM` : "-"}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between pt-0.5">
+                      <span className="text-[10px] text-zinc-450 dark:text-zinc-500">컨테이너 최대 CBM</span>
+                      <span className="font-semibold text-[11px] text-zinc-600 dark:text-zinc-400">
+                        68 CBM
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Overrides Input */}
+                <div className="space-y-2 mt-4 pt-3 border-t border-zinc-200 dark:border-zinc-850">
+                  <p className="text-[10px] font-bold text-zinc-500">실제 최종 입력값 (수정 및 저장 가능):</p>
+                  <div className="grid grid-cols-3 gap-1.5">
+                    <div>
+                      <label className="block text-[9px] text-zinc-500 mb-0.5">수량(카톤)</label>
+                      <input
+                        name="container40fthcQty"
+                        type="number"
+                        value={c40hqQty}
+                        onFocus={(e) => e.target.select()}
+                        onChange={(e) => setC40hqQty(e.target.value)}
+                        placeholder="0"
+                        className="block w-full text-center rounded border border-zinc-300 py-1 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-indigo-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[9px] text-zinc-500 mb-0.5">중량(kg)</label>
+                      <input
+                        name="container40fthcWeight"
+                        type="number"
+                        step="0.01"
+                        value={c40hqWeight}
+                        onFocus={(e) => e.target.select()}
+                        onChange={(e) => setC40hqWeight(e.target.value)}
+                        placeholder="0.00"
+                        className="block w-full text-center rounded border border-zinc-300 py-1 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-indigo-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[9px] text-zinc-500 mb-0.5">총 CBM</label>
+                      <input
+                        name="container40fthcCbm"
+                        type="number"
+                        step="0.001"
+                        value={c40hqCbm}
+                        onFocus={(e) => e.target.select()}
+                        onChange={(e) => setC40hqCbm(e.target.value)}
+                        placeholder="0.000"
+                        className="block w-full text-center rounded border border-zinc-300 py-1 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-indigo-500"
                       />
                     </div>
                   </div>

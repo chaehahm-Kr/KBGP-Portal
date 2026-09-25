@@ -494,6 +494,10 @@ const productUpdateSchema = z.object({
   container20ftWeight: z.string().trim().nullable().optional().transform((v) => (v ? Number(v) : null)),
   container20ftCbm: z.string().trim().nullable().optional().transform((v) => (v ? Number(v) : null)),
 
+  container40ftQty: z.string().trim().nullable().optional().transform((v) => (v ? Number(v) : null)),
+  container40ftWeight: z.string().trim().nullable().optional().transform((v) => (v ? Number(v) : null)),
+  container40ftCbm: z.string().trim().nullable().optional().transform((v) => (v ? Number(v) : null)),
+
   container40fthcQty: z.string().trim().nullable().optional().transform((v) => (v ? Number(v) : null)),
   container40fthcWeight: z.string().trim().nullable().optional().transform((v) => (v ? Number(v) : null)),
   container40fthcCbm: z.string().trim().nullable().optional().transform((v) => (v ? Number(v) : null)),
@@ -567,6 +571,10 @@ export async function updateProduct(
     container20ftWeight: formData.get("container20ftWeight") || null,
     container20ftCbm: formData.get("container20ftCbm") || null,
 
+    container40ftQty: formData.get("container40ftQty") || null,
+    container40ftWeight: formData.get("container40ftWeight") || null,
+    container40ftCbm: formData.get("container40ftCbm") || null,
+
     container40fthcQty: formData.get("container40fthcQty") || null,
     container40fthcWeight: formData.get("container40fthcWeight") || null,
     container40fthcCbm: formData.get("container40fthcCbm") || null,
@@ -621,6 +629,9 @@ export async function updateProduct(
     ...existingMeta,
     price_tiers: parsedPriceTiers,
     tiered_prices: parsedPriceTiers,
+    container_40ft_qty: parsed.data.container40ftQty,
+    container_40ft_weight: parsed.data.container40ftWeight,
+    container_40ft_cbm: parsed.data.container40ftCbm,
   };
 
   const effectiveLetustoSku = parsed.data.letustoSku && parsed.data.letustoSku.trim() !== ""
