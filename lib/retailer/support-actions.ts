@@ -426,8 +426,6 @@ export async function createRetailerSupportInquiryAction(formData: FormData): Pr
       attachment_filename: attachmentFilename,
       status: "open",
       is_action_required: false,
-      created_source: "portal",
-      priority: "normal",
       store_id: storeId,
       related_order_id: relatedOrderId,
       related_product_id: relatedProductId,

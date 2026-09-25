@@ -46,6 +46,17 @@
 
 ---
 
-## 4. Local QA Results
+## 4. Local QA & Production Database Verification Results
 - `npm.cmd exec tsc -- --noEmit`: 0 errors (PASS)
 - `npm run build`: Production Build PASS (PASS)
+- `0109 Production Applied`: YES (Executed in Supabase SQL Editor for `shzfrppdobpmrstcjfqu`)
+- `Production Schema Verified`: YES (Verified `source_type`, `store_id`, `related_order_id`, `related_fulfillment_id`, `related_product_id`, `related_protection_id`, `assigned_team`, `assigned_to` on `partner_inquiries`)
+- `Manual SQL Action Remaining`: NO
+
+---
+
+## 5. Production Flow & Integration Verification
+1. **Brand & Retailer Shared Engine**: Both portals utilize the unified `partner_inquiries` table and sequence. Existing brand cases are preserved with `source_type = 'brand'`.
+2. **Retailer Support Flow**: Retailer can create cases with category and contextual Store, Order, Product metadata, view thread messages, reply, and view closed audit states.
+3. **Unified Admin Flow**: Admin navigates to `/admin/partner-inquiries`, filters by Source (`All` / `Brand` / `Retailer`), views retailer context cards, replies with action flags, or closes cases.
+4. **Security & RLS**: Strict tenant and company-level isolation ensures no cross-company or cross-portal leakage.
