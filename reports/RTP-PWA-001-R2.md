@@ -7,7 +7,7 @@
 
 ---
 
-## 1. `scripts/` Audit & Inventory
+## 1. `scripts/` Audit
 Every file in the `scripts/` directory was audited and classified:
 
 | File | Type | Classification | Purpose |
@@ -36,7 +36,7 @@ All scripts are standalone Node.js utilities that execute outside the Next.js ru
 - Because `tsconfig.json` had `"incremental": true`, TypeScript's root `.tsbuildinfo` cache retained a reference to the untracked/deleted `.ts` file.
 - When `tsc --noEmit` was executed in `RTP-PWA-001-R1`, TypeScript reported:
   `error TS6053: File '.../scripts/qa-verify-rtp-agr-001.ts' not found.`
-- To resolve this cleanly without weakening project-wide type coverage, the root stale build cache was purged, and `scripts/` was audited for genuine type errors.
+- Purging the stale root `.tsbuildinfo` cache resolved the issue cleanly without requiring any directory-wide exclusions.
 
 ---
 
@@ -84,28 +84,55 @@ All scripts are standalone Node.js utilities that execute outside the Next.js ru
 
 ---
 
-## 4. TypeScript Coverage & Build QA
+## 4. TypeScript Coverage Clarification
 - **Main Application TypeScript:** **PASS** (`npx tsc --noEmit` → 0 errors with `scripts/` fully included).
-- **Scripts Type Safety:** **PASS** (All `.js` scripts pass compilation under `"allowJs": true`).
-- **Production Build:** **PASS** (`npm run build` → SUCCESS).
+- **Scripts Compilation Compatibility:** **PASS**
+  - `scripts/` is included in the project again.
+  - No stale or deleted TypeScript file references remain.
+  - Project TypeScript compilation and production build succeed completely.
+  - `tsconfig.json` enables `"allowJs": true` but does NOT enable `"checkJs": true`. Standalone JavaScript utilities in `scripts/` are compilation-compatible with the build but are not subject to strict static type checking.
 
 ---
 
-## 5. Regression Audit
-- **PWA Features:** No regression (`/manifest.webmanifest`, icons, standalone configuration, clean routing).
-- **Admin Portal (`admin.kselectnetwork.com`):** No regression.
-- **Brand Portal (`portal.kselectnetwork.com`):** No regression.
-- **Retailer Portal (`portal.kselecthub.com`):** No regression.
+## 5. Build QA
+- **TypeScript Check:** `npx tsc --noEmit` → PASS (0 errors)
+- **Production Build:** `npm run build` → PASS (Exit Code 0)
+- **Manifest Route:** `○ /manifest.webmanifest` generated statically without errors.
 
 ---
 
-## 6. Physical Device Test Status
+## 6. Regression
+- **PWA Features:** **PASS** (No regression: `/manifest.webmanifest`, icons, standalone configuration, clean routing).
+- **Admin Portal (`admin.kselectnetwork.com`):** **PASS** (No regression).
+- **Brand Portal (`portal.kselectnetwork.com`):** **PASS** (No regression).
+- **Retailer Portal (`portal.kselecthub.com`):** **PASS** (No regression).
+
+---
+
+## 7. Production SHA
+- **Commit SHA:** `eccfe2fddb3d7f708c5e4fe30bcb2b2aaaecab77`
+- **Commit Message:** `fix(core): RTP-PWA-001-R2 restore tsconfig scripts coverage & audit`
+- **origin/main SHA:** `eccfe2fddb3d7f708c5e4fe30bcb2b2aaaecab77`
+- **Vercel Production Deployment:** `https://kbgp-portal-hwgcw6cz1-letusto.vercel.app`
+- **Local HEAD = origin/main = Vercel Production = Custom Domain Runtime:** **YES**
+- **Database Migration:** N/A (No schema changes)
+
+---
+
+## 8. Remaining Physical Pilot Tests
 - **Android Physical Install:** NOT EXECUTED — Pilot Device Test Required (Future on-site physical store verification).
 - **iOS Home Screen:** NOT EXECUTED — Pilot Device Test Required (Future on-site physical store verification).
 - **Physical QR Camera:** NOT EXECUTED — Pilot Device Test Required (Future on-site physical store verification).
 
 ---
 
-## 7. Git & Production Integrity
-- **Local HEAD = origin/main = Vercel Production = Custom Domain Runtime:** YES
-- **Database Migration:** N/A (No schema changes)
+## 9. One-Click Report Workflow Verification
+- **Saved Repository Report:** `reports/RTP-PWA-001-R2.md`
+- **One-Click Antigravity Output:** Exactly one copy-ready Markdown code block at the end of response.
+- **Path Standard:** Clean repository-relative file paths used throughout. No IDE-specific or `file:///` URLs.
+- **Workflow Invariant:** Every future K SELECT development task will conclude with this single copy-ready Markdown block.
+
+---
+
+## Final Status
+COMPLETE
