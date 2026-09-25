@@ -290,16 +290,21 @@ export function PortalPoList({ pos = [] }: PortalPoListProps) {
   };
 
   const getOverallStatusBadge = (overallStatus: string) => {
-    const label = OVERALL_STATUS_LABELS[overallStatus] || overallStatus || "기타";
+    const fullLabel = OVERALL_STATUS_LABELS[overallStatus] || overallStatus || "기타";
     const colorClasses =
       OVERALL_STATUS_COLORS[overallStatus] ||
       "bg-zinc-100 text-zinc-700 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:border-zinc-700";
 
+    const match = fullLabel.match(/^([^(]+)(?:\(([^)]+)\))?/);
+    const koText = match ? match[1].trim() : fullLabel;
+    const enText = match && match[2] ? match[2].trim() : "";
+
     return (
       <span
-        className={`inline-flex items-center rounded-md px-2.5 py-1 text-xs font-semibold border ${colorClasses}`}
+        className={`inline-flex flex-col items-start rounded-md px-2.5 py-1 text-xs font-semibold border ${colorClasses} leading-tight`}
       >
-        {label}
+        <span>{koText}</span>
+        {enText && <span className="text-[10px] font-normal opacity-80">{enText}</span>}
       </span>
     );
   };
@@ -309,26 +314,30 @@ export function PortalPoList({ pos = [] }: PortalPoListProps) {
       case "PENDING":
       case "UNCONFIRMED":
         return (
-          <span className="inline-flex items-center rounded-md bg-amber-50 px-2 py-1 text-xs font-medium text-amber-800 ring-1 ring-inset ring-amber-650/10 dark:bg-amber-950/60 dark:text-amber-300 dark:ring-amber-800">
-            확인 대기
+          <span className="inline-flex flex-col items-start rounded-md bg-amber-50 px-2 py-1 text-xs font-medium text-amber-800 ring-1 ring-inset ring-amber-650/10 dark:bg-amber-950/60 dark:text-amber-300 dark:ring-amber-800 leading-tight">
+            <span>확인 대기</span>
+            <span className="text-[10px] font-normal opacity-75">Pending</span>
           </span>
         );
       case "CHANGE_REQUESTED":
         return (
-          <span className="inline-flex items-center rounded-md bg-indigo-50 px-2 py-1 text-xs font-medium text-indigo-700 ring-1 ring-inset ring-indigo-700/10 dark:bg-indigo-950/60 dark:text-indigo-300 dark:ring-indigo-800">
-            변경 제안됨
+          <span className="inline-flex flex-col items-start rounded-md bg-indigo-50 px-2 py-1 text-xs font-medium text-indigo-700 ring-1 ring-inset ring-indigo-700/10 dark:bg-indigo-950/60 dark:text-indigo-300 dark:ring-indigo-800 leading-tight">
+            <span>변경 제안됨</span>
+            <span className="text-[10px] font-normal opacity-75">Change Proposed</span>
           </span>
         );
       case "CONFIRMED":
         return (
-          <span className="inline-flex items-center rounded-md bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-700 ring-1 ring-inset ring-emerald-600/20 dark:bg-emerald-950/60 dark:text-emerald-300 dark:ring-emerald-800">
-            수락/확인 완료
+          <span className="inline-flex flex-col items-start rounded-md bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-700 ring-1 ring-inset ring-emerald-600/20 dark:bg-emerald-950/60 dark:text-emerald-300 dark:ring-emerald-800 leading-tight">
+            <span>수락/확인 완료</span>
+            <span className="text-[10px] font-normal opacity-75">Confirmed</span>
           </span>
         );
       case "REJECTED":
         return (
-          <span className="inline-flex items-center rounded-md bg-rose-50 px-2 py-1 text-xs font-medium text-rose-700 ring-1 ring-inset ring-rose-600/20 dark:bg-rose-950/60 dark:text-rose-300 dark:ring-rose-800">
-            거절됨
+          <span className="inline-flex flex-col items-start rounded-md bg-rose-50 px-2 py-1 text-xs font-medium text-rose-700 ring-1 ring-inset ring-rose-600/20 dark:bg-rose-950/60 dark:text-rose-300 dark:ring-rose-800 leading-tight">
+            <span>거절됨</span>
+            <span className="text-[10px] font-normal opacity-75">Rejected</span>
           </span>
         );
       default:
@@ -681,23 +690,22 @@ export function PortalPoList({ pos = [] }: PortalPoListProps) {
           <table className="w-full text-left border-collapse text-sm">
             <thead>
               <tr className="border-b border-zinc-200 bg-zinc-50 text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400">
-                <th className="px-6 py-4 whitespace-nowrap">발주 번호</th>
-                <th className="px-6 py-4">상품 요약</th>
-                <th className="px-6 py-4 text-right whitespace-nowrap">수량</th>
-                <th className="px-6 py-4 whitespace-nowrap">발주 일자</th>
-                <th className="px-6 py-4 whitespace-nowrap">경과 일수</th>
-                <th className="px-6 py-4 whitespace-nowrap">진행 상태</th>
-                <th className="px-6 py-4 whitespace-nowrap">최근 상태 변경</th>
-                <th className="px-6 py-4 whitespace-nowrap">공급사 확인</th>
-                <th className="px-6 py-4 text-right whitespace-nowrap">발주 금액</th>
-                <th className="px-6 py-4 text-center whitespace-nowrap">작업</th>
+                <th className="px-4 py-3.5 whitespace-nowrap">발주 번호</th>
+                <th className="px-4 py-3.5">상품 요약</th>
+                <th className="px-4 py-3.5 text-right whitespace-nowrap">수량</th>
+                <th className="px-4 py-3.5 whitespace-nowrap">발주일 / 경과</th>
+                <th className="px-4 py-3.5 whitespace-nowrap">진행 상태</th>
+                <th className="px-4 py-3.5 whitespace-nowrap">최근 상태 변경</th>
+                <th className="px-4 py-3.5 whitespace-nowrap">공급사 확인</th>
+                <th className="px-4 py-3.5 text-right whitespace-nowrap">발주 금액</th>
+                <th className="px-4 py-3.5 text-center whitespace-nowrap">작업</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">
               {filteredAndSortedPos.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={10}
+                    colSpan={9}
                     className="px-6 py-12 text-center text-zinc-500 dark:text-zinc-400"
                   >
                     {safePos.length === 0 ? (
@@ -737,10 +745,15 @@ export function PortalPoList({ pos = [] }: PortalPoListProps) {
                       key={po.id}
                       className="hover:bg-zinc-50 dark:hover:bg-zinc-900/60 transition-colors"
                     >
-                      {/* PO Number & Revision */}
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="font-mono font-medium text-zinc-950 dark:text-white flex items-center gap-1.5 whitespace-nowrap break-normal">
-                          <span>{po.po_number}</span>
+                      {/* PO Number & Revision (Clickable link) */}
+                      <td className="px-4 py-3.5 whitespace-nowrap">
+                        <div className="font-mono font-medium flex items-center gap-1.5 whitespace-nowrap break-normal">
+                          <Link
+                            href={`/portal/orders/purchase-orders/${po.id}`}
+                            className="text-zinc-950 dark:text-white hover:text-blue-600 dark:hover:text-blue-400 hover:underline transition-colors font-bold"
+                          >
+                            {po.po_number}
+                          </Link>
                           {po.revision_no > 1 && (
                             <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-900/60 dark:text-amber-300">
                               REV {po.revision_no}
@@ -750,7 +763,7 @@ export function PortalPoList({ pos = [] }: PortalPoListProps) {
                       </td>
 
                       {/* Product Summary */}
-                      <td className="px-6 py-4 max-w-xs">
+                      <td className="px-4 py-3.5 max-w-xs">
                         <div
                           className="font-medium text-zinc-900 dark:text-white truncate"
                           title={po.primary_product_name}
@@ -770,37 +783,37 @@ export function PortalPoList({ pos = [] }: PortalPoListProps) {
                       </td>
 
                       {/* Total Ordered Quantity */}
-                      <td className="px-6 py-4 text-right font-semibold text-zinc-900 dark:text-white font-mono whitespace-nowrap">
+                      <td className="px-4 py-3.5 text-right font-semibold text-zinc-900 dark:text-white font-mono whitespace-nowrap">
                         {(po.total_ordered || 0).toLocaleString()}
                       </td>
 
-                      {/* Order Date */}
-                      <td className="px-6 py-4 text-zinc-600 dark:text-zinc-400 whitespace-nowrap">
-                        {formatDate(po.order_date)}
-                      </td>
-
-                      {/* Aging Badge */}
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        {getAgingBadge(po)}
+                      {/* Merged Order Date + Aging Badge */}
+                      <td className="px-4 py-3.5 whitespace-nowrap">
+                        <div className="text-xs text-zinc-700 dark:text-zinc-300 font-medium">
+                          {formatDate(po.order_date)}
+                        </div>
+                        <div className="mt-1">
+                          {getAgingBadge(po)}
+                        </div>
                       </td>
 
                       {/* Overall Status */}
-                      <td className="px-6 py-4 whitespace-nowrap">
+                      <td className="px-4 py-3.5 whitespace-nowrap">
                         {getOverallStatusBadge(po.overall_status)}
                       </td>
 
                       {/* Last Status Update */}
-                      <td className="px-6 py-4 text-xs text-zinc-500 dark:text-zinc-400 whitespace-nowrap">
+                      <td className="px-4 py-3.5 text-xs text-zinc-500 dark:text-zinc-400 whitespace-nowrap">
                         {formatEasternDateTime(po.last_status_update)}
                       </td>
 
                       {/* Supplier Confirmation */}
-                      <td className="px-6 py-4 whitespace-nowrap">
+                      <td className="px-4 py-3.5 whitespace-nowrap">
                         {getConfirmationBadge(po.supplier_confirmation_status)}
                       </td>
 
                       {/* PO Amount */}
-                      <td className="px-6 py-4 text-right whitespace-nowrap">
+                      <td className="px-4 py-3.5 text-right whitespace-nowrap">
                         <div className="font-bold text-zinc-950 dark:text-white font-mono">
                           {formatCurrency(po.total_amount, po.currency || "USD")}
                         </div>
@@ -810,7 +823,7 @@ export function PortalPoList({ pos = [] }: PortalPoListProps) {
                       </td>
 
                       {/* Action Button */}
-                      <td className="px-6 py-4 text-center whitespace-nowrap">
+                      <td className="px-4 py-3.5 text-center whitespace-nowrap">
                         <Link
                           href={`/portal/orders/purchase-orders/${po.id}`}
                           className="inline-flex items-center rounded-lg bg-white px-3 py-1.5 text-xs font-semibold text-zinc-900 shadow-sm ring-1 ring-inset ring-zinc-300 hover:bg-zinc-50 dark:bg-zinc-900 dark:text-white dark:ring-zinc-700 dark:hover:bg-zinc-800 transition-all"
