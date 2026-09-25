@@ -51,6 +51,7 @@ interface InventoryBalanceItem {
   warehouse_id: string;
   qty_on_hand: number;
   qty_hold: number;
+  qty_damaged: number;
   available: number;
   created_at: string;
   updated_at: string;
@@ -66,8 +67,10 @@ interface InventoryMovementItem {
   type: "OPENING_BALANCE" | "MANUAL_ADJUSTMENT" | "RECEIVING" | "SHIPMENT" | "TRANSFER";
   qty_change: number;
   qty_hold_change: number;
+  qty_damaged_change: number;
   balance_on_hand_after: number;
   balance_hold_after: number;
+  balance_damaged_after: number;
   reason: string | null;
   note: string | null;
   reference_type?: string | null;
@@ -125,7 +128,8 @@ export function TradingProductDetail({
   // Aggregate inventory totals
   const totalOnHand = initialBalances.reduce((sum, b) => sum + b.qty_on_hand, 0);
   const totalHold = initialBalances.reduce((sum, b) => sum + b.qty_hold, 0);
-  const totalAvailable = totalOnHand - totalHold;
+  const totalDamaged = initialBalances.reduce((sum, b) => sum + (b.qty_damaged || 0), 0);
+  const totalAvailable = Math.max(0, totalOnHand - totalHold - totalDamaged);
 
   // Modals state
   const [isOpeningModalOpen, setIsOpeningModalOpen] = useState(false);
@@ -355,8 +359,8 @@ export function TradingProductDetail({
               </div>
             </div>
 
-            {/* Total Balance Stats Card */}
-            <div className="grid grid-cols-3 gap-4 p-4 rounded-xl bg-zinc-50 dark:bg-zinc-950 border border-zinc-100 dark:border-zinc-900 text-center">
+            {/* Total Balance Stats Card (4 distinct metrics) */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 p-4 rounded-xl bg-zinc-50 dark:bg-zinc-950 border border-zinc-100 dark:border-zinc-900 text-center">
               <div>
                 <span className="text-[10px] font-bold text-zinc-450 dark:text-zinc-500 uppercase block mb-1">Total On Hand (실재고)</span>
                 <span className="text-lg font-bold text-zinc-900 dark:text-white">{totalOnHand}</span>
@@ -368,6 +372,10 @@ export function TradingProductDetail({
               <div>
                 <span className="text-[10px] font-bold text-zinc-450 dark:text-zinc-500 uppercase block mb-1">On Hold (보류재고)</span>
                 <span className="text-lg font-bold text-rose-500 dark:text-rose-400">{totalHold}</span>
+              </div>
+              <div>
+                <span className="text-[10px] font-bold text-zinc-450 dark:text-zinc-500 uppercase block mb-1">Damaged (불량재고)</span>
+                <span className="text-lg font-bold text-amber-600 dark:text-amber-400">{totalDamaged}</span>
               </div>
             </div>
 
@@ -387,6 +395,7 @@ export function TradingProductDetail({
                       <th className="px-4 py-2.5">창고 코드</th>
                       <th className="px-4 py-2.5">물류창고명</th>
                       <th className="px-4 py-2.5 text-right">실재고 (On Hand)</th>
+                      <th className="px-4 py-2.5 text-right">불량재고 (Damaged)</th>
                       <th className="px-4 py-2.5 text-right">보류재고 (Hold)</th>
                       <th className="px-4 py-2.5 text-right">가용재고 (Available)</th>
                       <th className="px-4 py-2.5 text-right">최종 업데이트</th>
@@ -398,6 +407,7 @@ export function TradingProductDetail({
                         <td className="px-4 py-3 font-mono font-bold text-zinc-900 dark:text-white">[{b.warehouse_code}]</td>
                         <td className="px-4 py-3 font-medium text-zinc-800 dark:text-zinc-300">{b.warehouse_name}</td>
                         <td className="px-4 py-3 text-right font-semibold text-zinc-900 dark:text-white">{b.qty_on_hand}</td>
+                        <td className="px-4 py-3 text-right font-semibold text-amber-600 dark:text-amber-400">{b.qty_damaged || 0}</td>
                         <td className="px-4 py-3 text-right font-semibold text-rose-500 dark:text-rose-455">{b.qty_hold}</td>
                         <td className="px-4 py-3 text-right font-bold text-emerald-600 dark:text-emerald-400">{b.available}</td>
                         <td className="px-4 py-3 text-right text-zinc-400 dark:text-zinc-600 font-mono text-[10px]">
@@ -426,8 +436,10 @@ export function TradingProductDetail({
                       <th className="px-4 py-2.5">처리 일시</th>
                       <th className="px-4 py-2.5">변동 유형</th>
                       <th className="px-4 py-2.5 text-right">실재고 변동</th>
-                      <th className="px-4 py-2.5 text-right">보류재고 변동</th>
+                      <th className="px-4 py-2.5 text-right">불량 변동</th>
+                      <th className="px-4 py-2.5 text-right">보류 변동</th>
                       <th className="px-4 py-2.5 text-right">처리 후 실재고</th>
+                      <th className="px-4 py-2.5 text-right">처리 후 불량</th>
                       <th className="px-4 py-2.5 text-right">처리 후 보류</th>
                       <th className="px-4 py-2.5">사유 / 비고</th>
                       <th className="px-4 py-2.5">작업자</th>
@@ -452,6 +464,15 @@ export function TradingProductDetail({
                           )}
                         </td>
                         <td className="px-4 py-3 text-right font-mono font-bold whitespace-nowrap">
+                          {(m.qty_damaged_change || 0) > 0 ? (
+                            <span className="text-amber-600">+{m.qty_damaged_change}</span>
+                          ) : (m.qty_damaged_change || 0) < 0 ? (
+                            <span className="text-emerald-500">{m.qty_damaged_change}</span>
+                          ) : (
+                            <span className="text-zinc-400">0</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-right font-mono font-bold whitespace-nowrap">
                           {m.qty_hold_change > 0 ? (
                             <span className="text-rose-600">+{m.qty_hold_change}</span>
                           ) : m.qty_hold_change < 0 ? (
@@ -461,6 +482,7 @@ export function TradingProductDetail({
                           )}
                         </td>
                         <td className="px-4 py-3 text-right font-mono text-zinc-600 dark:text-zinc-400 font-semibold">{m.balance_on_hand_after}</td>
+                        <td className="px-4 py-3 text-right font-mono text-amber-600 dark:text-amber-400 font-semibold">{m.balance_damaged_after || 0}</td>
                         <td className="px-4 py-3 text-right font-mono text-rose-500 dark:text-rose-455 font-semibold">{m.balance_hold_after}</td>
                         <td className="px-4 py-3 max-w-[150px] truncate text-zinc-650 dark:text-zinc-400" title={m.note || ""}>
                           {m.reason ? `[${m.reason}] ` : ""}

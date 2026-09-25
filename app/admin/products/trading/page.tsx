@@ -60,14 +60,16 @@ export default async function AdminTradingProductsPage() {
   // 6. Fetch all inventory balances to compute sum totals per product
   const { data: allBalances } = await supabase
     .from("inventory_balances")
-    .select("product_id, qty_on_hand, qty_hold");
+    .select("product_id, qty_on_hand, qty_hold, qty_damaged");
 
   const onHandByProduct = new Map<string, number>();
   const holdByProduct = new Map<string, number>();
+  const damagedByProduct = new Map<string, number>();
 
-  (allBalances ?? []).forEach((b) => {
-    onHandByProduct.set(b.product_id, (onHandByProduct.get(b.product_id) || 0) + b.qty_on_hand);
-    holdByProduct.set(b.product_id, (holdByProduct.get(b.product_id) || 0) + b.qty_hold);
+  (allBalances ?? []).forEach((b: any) => {
+    onHandByProduct.set(b.product_id, (onHandByProduct.get(b.product_id) || 0) + Number(b.qty_on_hand || 0));
+    holdByProduct.set(b.product_id, (holdByProduct.get(b.product_id) || 0) + Number(b.qty_hold || 0));
+    damagedByProduct.set(b.product_id, (damagedByProduct.get(b.product_id) || 0) + Number(b.qty_damaged || 0));
   });
 
   const resolvedProducts = await Promise.all(
@@ -89,7 +91,8 @@ export default async function AdminTradingProductsPage() {
 
       const totalOnHand = onHandByProduct.get(p.id) || 0;
       const totalHold = holdByProduct.get(p.id) || 0;
-      const totalAvailable = totalOnHand - totalHold;
+      const totalDamaged = damagedByProduct.get(p.id) || 0;
+      const totalAvailable = Math.max(0, totalOnHand - totalHold - totalDamaged);
 
       return {
         id: p.id,
@@ -112,6 +115,8 @@ export default async function AdminTradingProductsPage() {
         category_code: p.category_code || null,
         category_full_path: p.category_code ? getCategoryFullPath(p.category_code) : null,
         qty_on_hand: totalOnHand,
+        qty_hold: totalHold,
+        qty_damaged: totalDamaged,
         qty_available: totalAvailable,
       };
     })

@@ -232,6 +232,7 @@ export function InventoryOverviewList({
   const totalSkus = filteredItems.length;
   const totalOnHand = filteredItems.reduce((sum, i) => sum + i.qty_on_hand, 0);
   const totalHold = filteredItems.reduce((sum, i) => sum + i.qty_hold, 0);
+  const totalDamaged = filteredItems.reduce((sum, i) => sum + (i.qty_damaged || 0), 0);
   const totalAvailable = filteredItems.reduce((sum, i) => sum + i.available, 0);
   const totalIncoming = filteredItems.reduce((sum, i) => sum + i.incoming, 0);
 
@@ -256,7 +257,7 @@ export function InventoryOverviewList({
       )}
 
       {/* KPI Stat Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
           <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider block mb-1">
             총 운영 품목 (SKU)
@@ -304,8 +305,20 @@ export function InventoryOverviewList({
         </div>
 
         <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+          <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider block mb-1">
+            불량 재고 (Damaged)
+          </span>
+          <div className="flex items-baseline gap-1.5">
+            <span className="text-xl font-bold font-mono text-amber-600 dark:text-amber-400">
+              {totalDamaged.toLocaleString()}
+            </span>
+            <span className="text-xs text-amber-600/70">PCS</span>
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
           <span className="text-[10px] font-bold text-rose-500 dark:text-rose-400 uppercase tracking-wider block mb-1">
-            보류/불량 (Hold)
+            보류 재고 (Hold)
           </span>
           <div className="flex items-baseline gap-1.5">
             <span className="text-xl font-bold font-mono text-rose-500 dark:text-rose-400">
@@ -448,6 +461,7 @@ export function InventoryOverviewList({
                 <th className="px-4 py-3.5 whitespace-nowrap">제품명</th>
                 <th className="px-4 py-3.5 whitespace-nowrap">회사 / 브랜드</th>
                 <th className="px-4 py-3.5 whitespace-nowrap text-right">보유재고</th>
+                <th className="px-4 py-3.5 whitespace-nowrap text-right">불량</th>
                 <th className="px-4 py-3.5 whitespace-nowrap text-right">보류</th>
                 <th className="px-4 py-3.5 whitespace-nowrap text-right">가용재고</th>
                 <th className="px-4 py-3.5 whitespace-nowrap text-right">입고예정</th>
@@ -540,6 +554,11 @@ export function InventoryOverviewList({
                         {item.qty_on_hand.toLocaleString()}
                       </td>
 
+                      {/* Damaged */}
+                      <td className="px-4 py-3.5 align-middle text-right font-mono font-bold text-amber-600 dark:text-amber-400">
+                        {item.qty_damaged > 0 ? item.qty_damaged.toLocaleString() : "-"}
+                      </td>
+
                       {/* Hold */}
                       <td className="px-4 py-3.5 align-middle text-right font-mono font-bold text-rose-500 dark:text-rose-400">
                         {item.qty_hold > 0 ? item.qty_hold.toLocaleString() : "-"}
@@ -628,6 +647,7 @@ export function InventoryOverviewList({
                                       <th className="px-4 py-2">창고 코드</th>
                                       <th className="px-4 py-2">창고 상태</th>
                                       <th className="px-4 py-2 text-right">실재고 (On Hand)</th>
+                                      <th className="px-4 py-2 text-right">불량 (Damaged)</th>
                                       <th className="px-4 py-2 text-right">보류 (Hold)</th>
                                       <th className="px-4 py-2 text-right">가용 (Available)</th>
                                       <th className="px-4 py-2 text-right">최근 변동일</th>
@@ -650,6 +670,9 @@ export function InventoryOverviewList({
                                         </td>
                                         <td className="px-4 py-2.5 text-right font-mono font-bold text-zinc-900 dark:text-white">
                                           {wh.qty_on_hand.toLocaleString()}
+                                        </td>
+                                        <td className="px-4 py-2.5 text-right font-mono font-bold text-amber-600 dark:text-amber-400">
+                                          {(wh.qty_damaged || 0) > 0 ? (wh.qty_damaged || 0).toLocaleString() : "-"}
                                         </td>
                                         <td className="px-4 py-2.5 text-right font-mono font-bold text-rose-500 dark:text-rose-400">
                                           {wh.qty_hold > 0 ? wh.qty_hold.toLocaleString() : "-"}

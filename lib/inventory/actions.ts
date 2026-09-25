@@ -11,6 +11,7 @@ export interface InventoryBalanceItem {
   warehouse_id: string;
   qty_on_hand: number;
   qty_hold: number;
+  qty_damaged: number;
   available: number;
   created_at: string;
   updated_at: string;
@@ -26,8 +27,10 @@ export interface InventoryMovementItem {
   type: "OPENING_BALANCE" | "MANUAL_ADJUSTMENT" | "RECEIVING" | "SHIPMENT" | "TRANSFER";
   qty_change: number;
   qty_hold_change: number;
+  qty_damaged_change: number;
   balance_on_hand_after: number;
   balance_hold_after: number;
+  balance_damaged_after: number;
   reason: string | null;
   note: string | null;
   created_by: string | null;
@@ -43,6 +46,7 @@ export interface WarehouseBalanceDetail {
   warehouse_status: string;
   qty_on_hand: number;
   qty_hold: number;
+  qty_damaged: number;
   available: number;
   last_activity: string;
 }
@@ -69,6 +73,7 @@ export interface InventoryOverviewItem {
   selection_status: string;
   qty_on_hand: number;
   qty_hold: number;
+  qty_damaged: number;
   available: number;
   incoming: number;
   last_activity: string;
@@ -145,7 +150,7 @@ export async function getInventoryOverview(): Promise<InventoryOverviewItem[]> {
   const { data: balances, error: bErr } = await supabase
     .from("inventory_balances")
     .select(`
-      id, product_id, warehouse_id, qty_on_hand, qty_hold, updated_at,
+      id, product_id, warehouse_id, qty_on_hand, qty_hold, qty_damaged, updated_at,
       warehouses:warehouse_id (name, code, status)
     `);
 
@@ -174,7 +179,8 @@ export async function getInventoryOverview(): Promise<InventoryOverviewItem[]> {
 
     const totalOnHand = prodBalances.reduce((sum, b) => sum + Number(b.qty_on_hand || 0), 0);
     const totalHold = prodBalances.reduce((sum, b) => sum + Number(b.qty_hold || 0), 0);
-    const totalAvailable = totalOnHand - totalHold;
+    const totalDamaged = prodBalances.reduce((sum, b) => sum + Number(b.qty_damaged || 0), 0);
+    const totalAvailable = Math.max(0, totalOnHand - totalHold - totalDamaged);
     const incomingQty = incomingMap.get(p.id) || 0;
 
     let latestActivity = p.updated_at || p.created_at;
@@ -183,15 +189,19 @@ export async function getInventoryOverview(): Promise<InventoryOverviewItem[]> {
       if (b.updated_at && b.updated_at > latestActivity) {
         latestActivity = b.updated_at;
       }
+      const onHand = Number(b.qty_on_hand || 0);
+      const hold = Number(b.qty_hold || 0);
+      const damaged = Number(b.qty_damaged || 0);
       return {
         id: b.id,
         warehouse_id: b.warehouse_id,
         warehouse_name: wh.name || "(미지정 창고)",
         warehouse_code: wh.code || "-",
         warehouse_status: wh.status || "-",
-        qty_on_hand: Number(b.qty_on_hand || 0),
-        qty_hold: Number(b.qty_hold || 0),
-        available: Number(b.qty_on_hand || 0) - Number(b.qty_hold || 0),
+        qty_on_hand: onHand,
+        qty_hold: hold,
+        qty_damaged: damaged,
+        available: Math.max(0, onHand - hold - damaged),
         last_activity: b.updated_at || "-",
       };
     });
@@ -217,6 +227,7 @@ export async function getInventoryOverview(): Promise<InventoryOverviewItem[]> {
       selection_status: p.selection_status || "UNREVIEWED",
       qty_on_hand: totalOnHand,
       qty_hold: totalHold,
+      qty_damaged: totalDamaged,
       available: totalAvailable,
       incoming: incomingQty,
       last_activity: latestActivity,
@@ -247,33 +258,39 @@ export async function getProductInventory(productId: string) {
   const { data: balances, error: bErr } = await supabase
     .from("inventory_balances")
     .select(`
-      id, product_id, warehouse_id, qty_on_hand, qty_hold, created_at, updated_at,
+      id, product_id, warehouse_id, qty_on_hand, qty_hold, qty_damaged, created_at, updated_at,
       warehouses:warehouse_id (name, code, status)
     `)
     .eq("product_id", productId);
 
   if (bErr) throw new Error(`Failed to fetch product inventory: ${bErr.message}`);
 
-  const formattedBalances: InventoryBalanceItem[] = (balances ?? []).map((b: any) => ({
-    id: b.id,
-    product_id: b.product_id,
-    warehouse_id: b.warehouse_id,
-    qty_on_hand: b.qty_on_hand,
-    qty_hold: b.qty_hold,
-    available: b.qty_on_hand - b.qty_hold,
-    created_at: b.created_at,
-    updated_at: b.updated_at,
-    warehouse_name: b.warehouses?.name || "",
-    warehouse_code: b.warehouses?.code || "",
-    warehouse_status: b.warehouses?.status || "",
-  }));
+  const formattedBalances: InventoryBalanceItem[] = (balances ?? []).map((b: any) => {
+    const onHand = Number(b.qty_on_hand || 0);
+    const hold = Number(b.qty_hold || 0);
+    const damaged = Number(b.qty_damaged || 0);
+    return {
+      id: b.id,
+      product_id: b.product_id,
+      warehouse_id: b.warehouse_id,
+      qty_on_hand: onHand,
+      qty_hold: hold,
+      qty_damaged: damaged,
+      available: Math.max(0, onHand - hold - damaged),
+      created_at: b.created_at,
+      updated_at: b.updated_at,
+      warehouse_name: b.warehouses?.name || "",
+      warehouse_code: b.warehouses?.code || "",
+      warehouse_status: b.warehouses?.status || "",
+    };
+  });
 
   // 3. Fetch movements with user profile names for auditing
   const { data: movements, error: mErr } = await supabase
     .from("inventory_movements")
     .select(`
-      id, product_id, warehouse_id, type, qty_change, qty_hold_change, 
-      balance_on_hand_after, balance_hold_after, reason, note, reference_type, reference_id, created_by, created_at,
+      id, product_id, warehouse_id, type, qty_change, qty_hold_change, qty_damaged_change,
+      balance_on_hand_after, balance_hold_after, balance_damaged_after, reason, note, reference_type, reference_id, created_by, created_at,
       profiles:created_by (full_name:display_name)
     `)
     .eq("product_id", productId)
@@ -287,9 +304,11 @@ export async function getProductInventory(productId: string) {
     warehouse_id: m.warehouse_id,
     type: m.type,
     qty_change: m.qty_change,
-    qty_hold_change: m.qty_hold_change,
+    qty_hold_change: m.qty_hold_change || 0,
+    qty_damaged_change: m.qty_damaged_change || 0,
     balance_on_hand_after: m.balance_on_hand_after,
-    balance_hold_after: m.balance_hold_after,
+    balance_hold_after: m.balance_hold_after || 0,
+    balance_damaged_after: m.balance_damaged_after || 0,
     reason: m.reason,
     note: m.note,
     reference_type: m.reference_type,
