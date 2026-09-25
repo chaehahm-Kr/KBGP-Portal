@@ -193,7 +193,6 @@ export function SupportView({
               <h1 className="text-lg font-bold text-zinc-900 dark:text-white">
                 Retailer Support & Inquiries
               </h1>
-              <span className="text-xs text-zinc-400 font-medium">소매점 1:1 지원 센터</span>
             </div>
             <p className="text-xs text-zinc-500 dark:text-zinc-400">
               Get assistance with orders, shipping, pricing, shelf tags, weekly reporting, or technical questions.
@@ -207,7 +206,7 @@ export function SupportView({
               className="inline-flex items-center justify-center gap-2 rounded-xl bg-zinc-900 px-4 py-2.5 text-xs font-bold text-white shadow-xs hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-100 transition-colors cursor-pointer"
             >
               <span>+</span>
-              <span>New Inquiry (새 문의)</span>
+              <span>New Inquiry</span>
             </button>
           </div>
         </div>
@@ -290,7 +289,7 @@ export function SupportView({
                   onChange={(e) => setStoreFilter(e.target.value)}
                   className="w-full rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-xs text-zinc-700 outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300"
                 >
-                  <option value="ALL">All Stores (전체 매장)</option>
+                  <option value="ALL">All Stores</option>
                   {context.stores.map((s) => (
                     <option key={s.id} value={s.id}>
                       🏪 {s.name}
@@ -415,8 +414,7 @@ export function SupportView({
                         className={`rounded px-2 py-0.5 text-[10px] font-bold border ${OFFICIAL_STATUS_COLOR[getNormalizedStatus(selectedInquiry.status)]}`}
                       >
                         {OFFICIAL_STATUS_EMOJI[getNormalizedStatus(selectedInquiry.status)]}{" "}
-                        {OFFICIAL_STATUS_LABEL[getNormalizedStatus(selectedInquiry.status)].en} (
-                        {OFFICIAL_STATUS_LABEL[getNormalizedStatus(selectedInquiry.status)].ko})
+                        {OFFICIAL_STATUS_LABEL[getNormalizedStatus(selectedInquiry.status)].en}
                       </span>
                       <span className="rounded bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 text-[10px] font-semibold text-zinc-700 dark:text-zinc-300">
                         {ALL_CASE_CATEGORY_LABELS[selectedInquiry.category]?.en || selectedInquiry.category}
@@ -432,17 +430,17 @@ export function SupportView({
                 {/* Metadata Grid */}
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-2 text-[11px] text-zinc-600 dark:text-zinc-400 border-t border-zinc-100 dark:border-zinc-800">
                   <div>
-                    <span className="text-zinc-400 block text-[10px]">Store (매장)</span>
+                    <span className="text-zinc-400 block text-[10px]">Store</span>
                     <span className="font-semibold text-zinc-800 dark:text-zinc-200">
                       {selectedInquiry.store_name ? `🏪 ${selectedInquiry.store_name}` : "Company General"}
                     </span>
                   </div>
                   <div>
-                    <span className="text-zinc-400 block text-[10px]">Created (접수일자)</span>
+                    <span className="text-zinc-400 block text-[10px]">Created</span>
                     <span>{formatDate(selectedInquiry.created_at)}</span>
                   </div>
                   <div>
-                    <span className="text-zinc-400 block text-[10px]">Priority (우선순위)</span>
+                    <span className="text-zinc-400 block text-[10px]">Priority</span>
                     <span className="font-bold text-zinc-800 dark:text-zinc-200 uppercase text-[10px]">
                       {selectedInquiry.priority || "Normal"}
                     </span>
@@ -453,7 +451,7 @@ export function SupportView({
                 {(selectedInquiry.related_order_number || selectedInquiry.related_product_name || selectedInquiry.related_protection_id) && (
                   <div className="p-3 rounded-xl bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200/80 dark:border-zinc-700/60 text-xs space-y-1.5">
                     <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider block">
-                      Linked Context (연계 정보)
+                      Linked Context
                     </span>
                     <div className="flex flex-wrap items-center gap-3 text-[11px]">
                       {selectedInquiry.related_order_number && (
@@ -585,7 +583,7 @@ export function SupportView({
                 ) : (
                   <form onSubmit={handleSendReply} className="space-y-3">
                     <h4 className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">
-                      Send Reply to Support Team (답변 작성)
+                      Send Reply to Support Team
                     </h4>
 
                     {replyError && (
@@ -608,7 +606,7 @@ export function SupportView({
                           <span>📎 Attach File (Max 20MB)</span>
                           <input
                             type="file"
-                            onChange={(e) => setNewFile(e.target.files?.[0] || null)}
+                            onChange={(e) => setReplyFile(e.target.files?.[0] || null)}
                             className="hidden"
                           />
                         </label>
@@ -646,7 +644,7 @@ export function SupportView({
             <div className="flex items-start justify-between pb-4 border-b border-zinc-100 dark:border-zinc-800">
               <div>
                 <h3 className="text-base font-bold text-zinc-900 dark:text-white">
-                  Create Support Inquiry (새 문의 작성)
+                  Create Support Inquiry
                 </h3>
                 <p className="text-xs text-zinc-400 mt-0.5">
                   Select a category and provide details so our team can assist you promptly.
@@ -671,7 +669,7 @@ export function SupportView({
               {/* Category Selector */}
               <div>
                 <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1.5">
-                  Inquiry Category (문의 유형) <span className="text-rose-500">*</span>
+                  Inquiry Category <span className="text-rose-500">*</span>
                 </label>
                 <div className="grid grid-cols-2 gap-2">
                   {RETAILER_CASE_CATEGORIES.map((cat) => (
@@ -689,9 +687,6 @@ export function SupportView({
                         <span>{cat.icon}</span>
                         <span>{cat.labelEn}</span>
                       </div>
-                      <p className={`text-[10px] mt-0.5 opacity-75 truncate`}>
-                        {cat.labelKo}
-                      </p>
                     </button>
                   ))}
                 </div>
@@ -701,14 +696,14 @@ export function SupportView({
               {context.stores.length > 0 && (
                 <div>
                   <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1">
-                    Store (매장)
+                    Store
                   </label>
                   <select
                     value={newStoreId}
                     onChange={(e) => setNewStoreId(e.target.value)}
                     className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs outline-none focus:border-zinc-400 dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
                   >
-                    <option value="">Company General (매장 공통)</option>
+                    <option value="">Company General</option>
                     {context.stores.map((s) => (
                       <option key={s.id} value={s.id}>
                         🏪 {s.name} ({s.city || "Store"})
@@ -722,7 +717,7 @@ export function SupportView({
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-[11px] font-semibold text-zinc-600 dark:text-zinc-400 mb-1">
-                    Related Order (연계 주문 - 선택)
+                    Related Order <span className="font-normal text-zinc-400">(Optional)</span>
                   </label>
                   <select
                     value={newOrderId}
@@ -740,7 +735,7 @@ export function SupportView({
 
                 <div>
                   <label className="block text-[11px] font-semibold text-zinc-600 dark:text-zinc-400 mb-1">
-                    Related Product (연계 상품 - 선택)
+                    Related Product <span className="font-normal text-zinc-400">(Optional)</span>
                   </label>
                   <select
                     value={newProductId}
@@ -760,13 +755,13 @@ export function SupportView({
               {/* Priority */}
               <div>
                 <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1">
-                  Priority (우선순위)
+                  Priority
                 </label>
                 <div className="flex gap-2">
                   {[
-                    { id: "normal", label: "Normal (일반)" },
-                    { id: "high", label: "⚡ High (높음)" },
-                    { id: "urgent", label: "🚨 Urgent (긴급)" },
+                    { id: "normal", label: "Normal" },
+                    { id: "high", label: "⚡ High" },
+                    { id: "urgent", label: "🚨 Urgent" },
                   ].map((p) => (
                     <button
                       key={p.id}
@@ -787,7 +782,7 @@ export function SupportView({
               {/* Subject */}
               <div>
                 <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1">
-                  Subject / Title (제목) <span className="text-rose-500">*</span>
+                  Subject / Title <span className="text-rose-500">*</span>
                 </label>
                 <input
                   type="text"
@@ -801,7 +796,7 @@ export function SupportView({
               {/* Message Description */}
               <div>
                 <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1">
-                  Description (상세 내용) <span className="text-rose-500">*</span>
+                  Description <span className="text-rose-500">*</span>
                 </label>
                 <textarea
                   value={newContent}
@@ -815,7 +810,7 @@ export function SupportView({
               {/* File Attachment */}
               <div>
                 <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1">
-                  Attachment (첨부 파일 - 최대 20MB)
+                  Attachment <span className="font-normal text-zinc-400">(Max 20MB)</span>
                 </label>
                 <input
                   type="file"
@@ -837,7 +832,7 @@ export function SupportView({
                   disabled={isPending || !newTitle.trim() || !newContent.trim()}
                   className="rounded-xl bg-zinc-900 px-5 py-2 text-xs font-bold text-white hover:bg-zinc-800 disabled:opacity-40 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-100 transition-colors cursor-pointer shadow-xs"
                 >
-                  {isPending ? "Submitting..." : "Submit Inquiry (문의 등록)"}
+                  {isPending ? "Submitting..." : "Submit Inquiry"}
                 </button>
               </div>
             </form>

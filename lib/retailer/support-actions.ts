@@ -379,6 +379,7 @@ export async function createRetailerSupportInquiryAction(formData: FormData): Pr
     const category = String(formData.get("category") || "general").trim();
     const title = String(formData.get("title") || "").trim();
     const content = String(formData.get("content") || "").trim();
+    const priority = String(formData.get("priority") || "normal").trim();
     const storeId = (formData.get("store_id") as string)?.trim() || null;
     const relatedOrderId = (formData.get("related_order_id") as string)?.trim() || null;
     const relatedProductId = (formData.get("related_product_id") as string)?.trim() || null;
@@ -419,6 +420,8 @@ export async function createRetailerSupportInquiryAction(formData: FormData): Pr
       company_id: companyId,
       created_by: session.userId,
       source_type: "retailer",
+      created_source: "portal",
+      priority,
       category,
       title,
       content,
