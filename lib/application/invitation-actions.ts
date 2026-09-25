@@ -96,6 +96,7 @@ export async function adminInviteBrandPartner(payload: {
       .from("companies")
       .insert({
         name: payload.companyName.trim(),
+        business_registration_number: "PENDING",
         country: "대한민국",
         status: "active",
         contact_name: payload.contactName.trim(),
@@ -276,6 +277,7 @@ export async function adminInviteRetailerPartner(payload: {
       .from("companies")
       .insert({
         name: payload.companyName.trim(),
+        business_registration_number: "PENDING",
         country: "USA",
         status: "active",
         contact_name: payload.contactName.trim(),
@@ -395,6 +397,7 @@ export async function approveAndInviteApplication(
         .from("companies")
         .insert({
           name: compName,
+          business_registration_number: "PENDING",
           country: "USA",
           status: "active",
           contact_name: nameToUse,
@@ -461,6 +464,7 @@ export async function approveAndInviteApplication(
         .from("companies")
         .insert({
           name: compName,
+          business_registration_number: "PENDING",
           country: "대한민국",
           status: "active",
           contact_name: nameToUse,

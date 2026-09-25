@@ -473,40 +473,66 @@ export default function ApplicationWorkspace({
         {activeTab === "overview" && (
           <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
             <div className="md:col-span-2 space-y-6">
-              {/* Company Summary */}
-              <div className="rounded-lg border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900">
-                <h3 className="text-xs font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider mb-2">Company Summary</h3>
-                <div className="text-sm text-zinc-800 dark:text-zinc-200 space-y-2">
-                  <p>국가: {company?.country}</p>
-                  <p>사업자등록번호: {company?.business_registration_number}</p>
+              {/* Company & Application Summary */}
+              <div className="rounded-lg border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900 space-y-3">
+                <h3 className="text-xs font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">
+                  {application.partner_type === "retailer" ? "Retailer Company & Contact Profile" : "Brand Company Profile"}
+                </h3>
+                <div className="text-xs text-zinc-800 dark:text-zinc-200 space-y-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <p>
+                      <span className="text-zinc-400 dark:text-zinc-500">회사명:</span>{" "}
+                      <span className="font-bold">{company?.name || application.applicant_company_name || "-"}</span>
+                    </p>
+                    <p>
+                      <span className="text-zinc-400 dark:text-zinc-500">주 담당자:</span>{" "}
+                      <span className="font-semibold">{company?.contact_name || application.applicant_contact_name || "-"}</span>
+                    </p>
+                    <p>
+                      <span className="text-zinc-400 dark:text-zinc-500">이메일:</span>{" "}
+                      <span className="font-mono">{application.applicant_contact_email || parsedMeta.contacts?.[0]?.email || "-"}</span>
+                    </p>
+                    <p>
+                      <span className="text-zinc-400 dark:text-zinc-500">연락처:</span>{" "}
+                      <span className="font-mono">{application.applicant_contact_phone || company?.contact_phone || "-"}</span>
+                    </p>
+                    {application.applicant_address && (
+                      <p className="sm:col-span-2">
+                        <span className="text-zinc-400 dark:text-zinc-500">사업장 주소:</span>{" "}
+                        <span className="font-semibold">
+                          {typeof application.applicant_address === "string"
+                            ? application.applicant_address
+                            : `${application.applicant_address.street || ""} ${application.applicant_address.city || ""} ${application.applicant_address.state || ""} ${application.applicant_address.zip || ""}`.trim() || "-"}
+                        </span>
+                      </p>
+                    )}
+                  </div>
+                  {application.motivation_note && (
+                    <div className="mt-3 p-3 bg-zinc-50 dark:bg-zinc-950 rounded-lg border border-zinc-200 dark:border-zinc-800">
+                      <span className="block text-[10px] font-bold text-zinc-400 dark:text-zinc-500 mb-1">
+                        신청 메모 / 시뮬레이터 연동
+                      </span>
+                      <p className="text-xs text-zinc-700 dark:text-zinc-300 whitespace-pre-wrap">
+                        {application.motivation_note}
+                      </p>
+                    </div>
+                  )}
                   {(() => {
-                    const allowedKeys = [
-                      "stable_supply",
-                      "us_regulatory_compliance",
-                      "initial_test_quantity",
-                      "north_america_distribution",
-                      "joint_marketing",
-                      "sales_content_support",
-                    ];
-                    const defaultEligibility = allowedKeys.map((key, index) => {
-                      const isChecked = (application.self_check_answers as boolean[] | null)?.[index] ?? true;
-                      return {
-                        itemKey: key,
-                        response: isChecked ? "available" : "discussion_required",
-                      };
-                    });
-                    const list = application.eligibility_responses
+                    const list = Array.isArray(application.eligibility_responses)
                       ? (application.eligibility_responses as any[])
-                      : defaultEligibility;
+                      : [];
+                    if (list.length === 0) return null;
+                    const readyCount = list.filter((r) => r.response === "available" || r.response === "ready").length;
+                    const discussCount = list.filter((r) => r.response === "discussion_required" || r.response === "discuss").length;
                     return (
-                      <p className="text-xs text-zinc-555 dark:text-zinc-400">
-                        준비 사항:{" "}
-                        <span className="font-semibold text-emerald-650 dark:text-emerald-400">
-                          진행 가능 {list.filter((r) => r.response === "available").length}
+                      <p className="text-xs text-zinc-500 dark:text-zinc-400 pt-1">
+                        운영 준비 사항:{" "}
+                        <span className="font-bold text-emerald-600 dark:text-emerald-400">
+                          진행 가능 (Ready) {readyCount}
                         </span>
                         {" · "}
-                        <span className="font-semibold text-amber-600 dark:text-amber-400">
-                          협의 필요 {list.filter((r) => r.response === "discussion_required").length}
+                        <span className="font-bold text-amber-600 dark:text-amber-400">
+                          협의 필요 (Discuss) {discussCount}
                         </span>
                       </p>
                     );
@@ -751,28 +777,19 @@ export default function ApplicationWorkspace({
           <div className="space-y-6">
             {/* 준비 사항 카드 */}
             <div className="rounded-lg border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900 space-y-4">
-              <h2 className="text-sm font-bold text-zinc-900 dark:text-white">준비 사항 (Readiness)</h2>
+              <h2 className="text-sm font-bold text-zinc-900 dark:text-white">
+                {application.partner_type === "retailer" ? "리테일러 런칭 준비 사항 (Launch Readiness)" : "브랜드 입점 준비 사항 (Brand Readiness)"}
+              </h2>
               {(() => {
-                const allowedKeys = [
-                  "stable_supply",
-                  "us_regulatory_compliance",
-                  "initial_test_quantity",
-                  "north_america_distribution",
-                  "joint_marketing",
-                  "sales_content_support",
-                ];
-                const defaultEligibility = allowedKeys.map((key, index) => {
-                  const isChecked = (application.self_check_answers as boolean[] | null)?.[index] ?? true;
-                  return {
-                    itemKey: key,
-                    response: isChecked ? "available" : "discussion_required",
-                  };
-                });
-                const finalResponses = application.eligibility_responses
-                  ? (application.eligibility_responses as { itemKey: string; response: string }[])
-                  : defaultEligibility;
+                const finalResponses = Array.isArray(application.eligibility_responses)
+                  ? (application.eligibility_responses as any[])
+                  : [];
 
                 const READINESS_ITEMS: Record<string, string> = {
+                  kbeauty_space: "전용 K-Beauty 진열 공간 확보 (Dedicated K-Beauty Space)",
+                  staff_education: "스태프 제품 교육 및 루틴 숙지 (Staff Product Education)",
+                  weekly_sync: "주간 재고 실사 및 리오더 협력 (Weekly Inventory Sync)",
+                  category_mindset: "카테고리 파트너십 및 가격 준수 (Category Partnership Mindset)",
                   stable_supply: "안정적인 생산 및 공급망 확보",
                   us_regulatory_compliance: "미국 화장품 규제(MoCRA) 준수 및 FDA 등록 준비",
                   initial_test_quantity: "초기 파트너십 테스트 물량 공급 의향",
@@ -781,13 +798,19 @@ export default function ApplicationWorkspace({
                   sales_content_support: "상세 페이지 및 현지화 마케팅 콘텐츠 지원",
                 };
 
+                if (finalResponses.length === 0) {
+                  return <p className="text-xs text-zinc-400">등록된 준비 사항 데이터가 없습니다.</p>;
+                }
+
                 return (
                   <ul className="space-y-2 text-xs">
-                    {finalResponses.map((item) => {
-                      const isAvailable = item.response === "available";
+                    {finalResponses.map((item, idx) => {
+                      const itemKey = item.itemKey || item.key || `item_${idx}`;
+                      const itemTitle = item.title || READINESS_ITEMS[itemKey] || itemKey;
+                      const isAvailable = item.response === "available" || item.response === "ready";
                       return (
                         <li
-                          key={item.itemKey}
+                          key={itemKey}
                           className={`flex items-start gap-3 rounded-lg border p-3.5 transition-all ${
                             isAvailable
                               ? "bg-emerald-50/50 border-emerald-100 text-emerald-800 dark:bg-emerald-950/15 dark:border-emerald-900/40 dark:text-emerald-350"
@@ -799,7 +822,7 @@ export default function ApplicationWorkspace({
                           </span>
                           <div className="flex-1 self-center flex items-center justify-between gap-4">
                             <span className="font-bold text-zinc-900 dark:text-zinc-200">
-                              {READINESS_ITEMS[item.itemKey] || item.itemKey}
+                              {itemTitle}
                             </span>
                             <span
                               className={`rounded px-2.5 py-0.5 text-[10px] font-extrabold tracking-wide uppercase ${
@@ -808,7 +831,7 @@ export default function ApplicationWorkspace({
                                   : "bg-amber-100/80 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300"
                               }`}
                             >
-                              {isAvailable ? "진행 가능" : "협의 필요"}
+                              {isAvailable ? "진행 가능 (Ready)" : "협의 필요 (Discuss)"}
                             </span>
                           </div>
                         </li>
