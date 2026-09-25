@@ -1,261 +1,196 @@
 # K SELECT DEVELOPMENT HANDOFF REPORT
 
-- Task ID: ADM-APP-001-R2
-- Task Name: Cross-Repo Retailer Application Production E2E Verification & Completion
-- Status: COMPLETED
+Task ID:
+ADM-APP-001-R2
 
----
+Task Name:
+Final Browser-Level Production E2E Verification
 
-## 1. Root Cause
-In previous iterations, the Marketing website (`www.kselecthub.com`) had simulated form submissions in local state (`setSubmitted(true)`) and presented store-oriented terminology (`Store Name *`). This task establishes and authoritatively verifies the end-to-end production flow from `www.kselecthub.com` to the authoritative KBGP backend (`admin.kselectnetwork.com/api/retailer-applications`), Supabase database persistence in `applications`, Admin All Applications, Admin Retailer Applications, and Application Detail views.
+Status:
+COMPLETED
 
----
+==================================================
+1. Actual Browser Submission
+==================================================
 
-## 2. Two-Repository Architecture
-- **Marketing Site (`chaehahm-Kr/kselecthub-marketing`)**:
-  - Live Domain: `https://www.kselecthub.com`
-  - Client Component: `app/[locale]/CtaForm.tsx` (ID `#apply`) & `app/[locale]/Simulator.tsx`
-  - Role: Collects company applicant details and launch readiness answers. Dispatches cross-origin HTTPS POST to the authoritative backend. Never writes directly to Supabase from the browser.
-- **Portal & Admin Platform (`chaehahm-Kr/KBGP-Portal`)**:
-  - Live Domains: `https://admin.kselectnetwork.com` (Unified Admin) & `https://portal.kselecthub.com` (Retailer Portal)
-  - Backend Endpoint: `app/api/retailer-applications/route.ts`
-  - Admin Workspaces: `app/admin/applications/page.tsx` & `app/admin/applications/[id]/page.tsx`
-  - Role: Enforces schema validation, handles CORS, generates application numbers via database RPC, enforces authoritative field constraints (`partner_type = 'retailer'`, `entry_mode = 'public_application'`, `status = 'submitted'`), and provides admin review/approval actions.
+- Test URL: `https://www.kselecthub.com`
+- Automation Engine: Playwright (Chromium headless browser)
+- User Journey Executed:
+  1. Opened `https://www.kselecthub.com`
+  2. Scrolled to Launch Readiness Self-Check section (`#launch-readiness`)
+  3. Answered all 4 questions:
+     - Q1 (Dedicated K-Beauty Space): "Ready"
+     - Q2 (Staff Product Education): "Ready"
+     - Q3 (Weekly Inventory Sync): "Ready"
+     - Q4 (Category Partnership Mindset): "Discuss"
+  4. Clicked "Apply for Partnership" (`a[href='#apply']`)
+  5. Modal rendered with complete application form
+  6. Filled unique test data:
+     - Company Name: `K SELECT Browser E2E Retailer Test 2026`
+     - Owner / Contact Name: `Chae Hahm E2E`
+     - Email: `chae+browserqa_1790366334723@letusto.com`
+     - Phone: `856-383-8288`
+     - Street Address: `100 Enterprise Blvd`
+     - City: `Fort Lee`, State: `NJ`, Zip: `07024`
+     - Comments: `Real Browser Production E2E Test ADM-APP-001-R2`
+  7. Checked consent checkbox
+  8. Clicked Submit Application button
+  9. Success modal appeared with confirmed Application Number: `APP-000010`.
 
----
+==================================================
+2. Live Company Name / Copy Verification
+==================================================
 
-## 3. Marketing Submission Path
-- **Component**: `app/[locale]/CtaForm.tsx`
-- **HTTP Method**: `POST`
-- **Production Endpoint**: `https://admin.kselectnetwork.com/api/retailer-applications`
-- **Request Payload**:
-  - `companyName`: Applying business/entity name
-  - `contactName`: Primary owner/applicant contact name
-  - `email`: Applicant email
-  - `phone`: Applicant phone number
-  - `streetAddress`, `city`, `state`, `zipCode`: Headquarters/location address
-  - `comments`: Additional notes or special requirements
-  - `recommendedConfig`, `simulatedInvestment`, `simulationId`: Connected simulator metadata (if run)
-  - `readinessAnswers`: Array of readiness items (`kbeauty_space`, `staff_education`, `weekly_sync`, `category_mindset`) with `response: 'ready' | 'discuss'`
-- **Response Contract**:
-  - Success: `{ ok: true, success: true, applicationNumber: string, applicationId: string }`
-  - Duplicate: `{ ok: true, success: true, isExisting: true, applicationNumber: string, applicationId: string, message: string }`
-  - Failure: `{ ok: false, success: false, error: string }` (HTTP 400, 422, or 500)
+- Label `Company Name *` present: PASS
+- Label `Store Name *` absent: PASS (0 occurrences)
+- Subtitle copy ("Submit your company details..."): PASS
+- Consent copy ("...submitted company and contact details..."): PASS
+- Success copy ("Our K SELECT HUB onboarding team will review your application and contact you soon."): PASS
 
----
+==================================================
+3. Browser Network Request
+==================================================
 
-## 4. Authoritative Backend Endpoint
-- **Dedicated Route**: `app/api/retailer-applications/route.ts` in `KBGP-Portal`.
-- **Consolidation & Role**:
-  - `app/api/retailer-applications/route.ts` is the single authoritative intake endpoint for Retailer Public Applications.
-  - CORS is enabled with `Access-Control-Allow-Origin: https://www.kselecthub.com`, preflight `OPTIONS` support, and explicit headers configured in `next.config.ts`.
-  - `app/api/inquiries/route.ts` is reserved for Korean Brand supplier inquiries from `kselectnetwork.com` requiring `INQUIRY_INTAKE_SECRET`.
+- Request URL: `https://admin.kselectnetwork.com/api/retailer-applications`
+- HTTP Method: `POST`
+- Outgoing Payload:
+```json
+{
+  "companyName": "K SELECT Browser E2E Retailer Test 2026",
+  "contactName": "Chae Hahm E2E",
+  "email": "chae+browserqa_1790366334723@letusto.com",
+  "phone": "856-383-8288",
+  "streetAddress": "100 Enterprise Blvd",
+  "city": "Fort Lee",
+  "state": "NJ",
+  "zipCode": "07024",
+  "comments": "Real Browser Production E2E Test ADM-APP-001-R2",
+  "recommendedConfig": "None",
+  "simulatedInvestment": "None",
+  "readinessAnswers": [
+    { "key": "section-operation", "title": "Dedicated K-Beauty Space", "titleKo": "K-Beauty 전용 섹션 운영", "response": "ready" },
+    { "key": "product-learning", "title": "Staff Product Education", "titleKo": "Product Learning 참여", "response": "ready" },
+    { "key": "weekly-update", "title": "Weekly Inventory Sync", "titleKo": "주 1회 재고 업데이트", "response": "ready" },
+    { "key": "category-growth", "title": "Category Partnership Mindset", "titleKo": "K-Beauty 카테고리 성장 의향", "response": "discuss" }
+  ]
+}
+```
+- Response Status: `200 OK`
+- Response Body:
+```json
+{
+  "ok": true,
+  "success": true,
+  "applicationNumber": "APP-000010",
+  "applicationId": "0a0dae99-1ad9-4502-af20-2f2c7a7617f1"
+}
+```
 
----
+==================================================
+4. CORS Verification
+==================================================
 
-## 5. API Contract & Security
-The backend strictly forces authoritative values that client browsers cannot tamper with:
-- `partner_type` = `'retailer'` (forced by backend)
-- `entry_mode` = `'public_application'` (forced by backend)
-- `status` = `'submitted'` (forced by backend)
-- `reviewer`, `approved_at`, `invitation_id`, `onboarded_company_id`, `company_id` = `null` upon submission.
+- Preflight `OPTIONS` check: Status 204 No Content
+- Response Header: `Access-Control-Allow-Origin: https://www.kselecthub.com`
+- Allowed Methods: `POST, OPTIONS, GET`
+- Real-browser cross-origin fetch from `www.kselecthub.com` to `admin.kselectnetwork.com`: SUCCEEDED with 0 CORS errors or blocked requests.
 
----
+==================================================
+5. Application Number
+==================================================
 
-## 6. Company vs. Store Copy Alignment
-- **Terminology Rule**:
-  - **Company**: Represents the applying legal entity / organization (`applicant_company_name`).
-  - **Store**: Represents physical retail store locations created and managed after onboarding.
-- **Copy Audit**:
-  - Live Marketing label: `Company Name *` / `회사명 (Company Name) *`
-  - Placeholder: `e.g. Beauty World LLC` / `예: 뷰티월드 (Beauty World LLC)`
-  - Subtitle: `"Submit your company details. Our category management team will contact you within 24 hours."` / `"간단한 회사 및 사업자 정보를 남겨주시면 검토 후 K SELECT HUB 팀이 연락드리겠습니다."`
-  - Consent Text: `"I agree that K SELECT HUB may collect and use the submitted company and contact details for partnership review and follow-up communication. *"`
+- Number Displayed in Browser Modal: `APP-000010`
+- Number in API Response: `APP-000010`
+- Number in Database: `APP-000010`
+- Number Integrity: 100% Match
 
----
+==================================================
+6. Production Database Record
+==================================================
 
-## 7. Production Retailer Submission (Live E2E Record)
-- **Execution Timestamp**: `2026-09-25T19:44:04.604Z`
-- **Application Number**: `APP-000008` (authoritatively generated via Supabase RPC `generate_application_number`)
-- **Application ID**: `7df7d05f-23dd-4a8a-b438-79b5531e51a7`
-- **HTTP Status**: `200 OK`
-- **API Response**: `{"ok":true,"success":true,"applicationNumber":"APP-000008","applicationId":"7df7d05f-23dd-4a8a-b438-79b5531e51a7"}`
-
----
-
-## 8. Production Database Record
-Verified in Production Supabase (`applications` table):
-- `id`: `7df7d05f-23dd-4a8a-b438-79b5531e51a7`
-- `application_number`: `APP-000008`
+- Table: `public.applications`
+- Record ID: `0a0dae99-1ad9-4502-af20-2f2c7a7617f1`
+- `application_number`: `APP-000010`
 - `partner_type`: `retailer`
 - `entry_mode`: `public_application`
 - `status`: `submitted`
-- `applicant_company_name`: `K SELECT RETAILER E2E QA 2026-09-25`
-- `applicant_contact_name`: `QA Test Officer`
-- `applicant_contact_email`: `qa-e2e-20260925@letusto.com`
+- `applicant_company_name`: `K SELECT Browser E2E Retailer Test 2026`
+- `applicant_contact_name`: `Chae Hahm E2E`
+- `applicant_contact_email`: `chae+browserqa_1790366334723@letusto.com`
 - `applicant_contact_phone`: `856-383-8288`
-- `applicant_address`: `{"zip":"07024","city":"Fort Lee","state":"NJ","street":"123 Main St","locationsCount":"1"}`
-- `motivation_note`: `Automated E2E Production verification for ADM-APP-001-R2\n\n[Simulator Recommendation: 8 FT Growth Module | Opening Order approx. $12000]`
-- `submitted_at`: `2026-09-25T19:44:04.604+00:00`
+- `applicant_address`: `{"street": "100 Enterprise Blvd", "city": "Fort Lee", "state": "NJ", "zip": "07024", "locationsCount": "1"}`
+- `eligibility_responses`: 4 readiness items preserved with responses (`ready`, `ready`, `ready`, `discuss`)
+- `self_check_answers`: `[true, true, true, false]`
+- `motivation_note`: `Real Browser Production E2E Test ADM-APP-001-R2`
+- `submitted_at`: `2026-09-25T19:58:55.952+00:00`
+- Duplicate Check: Retrying the submission returns `isExisting: true` without creating duplicate records.
 
----
+==================================================
+7. Admin All Applications
+==================================================
 
-## 9. Readiness Answers Persistence
-All 4 core operational readiness items persisted with structured JSON:
-1. `Dedicated K-Beauty Space` (`kbeauty_space`): `ready` (✓ Ready)
-2. `Staff Product Education` (`staff_education`): `ready` (✓ Ready)
-3. `Weekly Inventory Sync` (`weekly_sync`): `ready` (✓ Ready)
-4. `Category Partnership Mindset` (`category_mindset`): `ready` (✓ Ready)
+- URL: `https://admin.kselectnetwork.com/admin/applications`
+- Status: Lists `APP-000010` under All Applications with badge "Retailer", entry mode "Public Form", and status "신청 접수".
 
----
+==================================================
+8. Admin Retailer Applications
+==================================================
 
-## 10. Admin All Applications
-- **URL**: `https://admin.kselectnetwork.com/admin/applications`
-- **Listing**: Application `APP-000008` is listed under the "All Applications" tab with:
-  - Application Number: `APP-000008`
-  - Partner Type: `🏪 Retailer Partner`
-  - Company Name: `K SELECT RETAILER E2E QA 2026-09-25`
-  - Status: `심사 대기 (submitted)`
-  - Entry Mode: `🌐 Public Application`
-  - Primary Contact: `QA Test Officer (qa-e2e-20260925@letusto.com)`
-  - Submitted Date: `2026-09-25`
+- URL: `https://admin.kselectnetwork.com/admin/applications?type=retailer`
+- Status: Lists `APP-000010` under Retailer Applications tab with full applicant metadata.
 
----
+==================================================
+9. Application Detail
+==================================================
 
-## 11. Admin Retailer Applications
-- **URL**: `https://admin.kselectnetwork.com/admin/applications?type=retailer`
-- **Listing**: The same authoritative database row is listed under the "Retailer Applications" tab with identical status and metadata (no data duplication).
+- URL: `https://admin.kselectnetwork.com/admin/applications/0a0dae99-1ad9-4502-af20-2f2c7a7617f1`
+- Status: Displays complete applicant company profile, contact details, address, 4 readiness question responses, motivation notes, and review action bar.
 
----
+==================================================
+10. Direct Admin Invitation Quick QA
+==================================================
 
-## 12. Application Detail View
-- **URL**: `https://admin.kselectnetwork.com/admin/applications/7df7d05f-23dd-4a8a-b438-79b5531e51a7`
-- **Rendered Content**:
-  - Application Number header: `APP-000008` with `🏪 Retailer Partner` badge.
-  - Company Name: `K SELECT RETAILER E2E QA 2026-09-25`
-  - Primary Contact: `QA Test Officer`
-  - Email: `qa-e2e-20260925@letusto.com`
-  - Phone: `856-383-8288`
-  - Business Address: `123 Main St Fort Lee NJ 07024`
-  - Motivation Note & Simulator binding displayed in structured card.
-  - Readiness items displayed in both Overview and Readiness tabs with color-coded badges (`🟢 진행 가능 (Ready)`).
+- Path: Admin "+ Invite Partner > Invite Retailer"
+- Result: PASS — creates traceable application row with `partner_type = 'retailer'` and `entry_mode = 'admin_invitation'`.
 
----
+==================================================
+11. Reject / Resend / Revoke Quick QA
+==================================================
 
-## 13. Failure UX & Negative Validation
-- **Invalid Email Test**: `POST /api/retailer-applications` with payload `{"email":"not-an-email"}` returns `HTTP 422 Unprocessable Entity` with `{"ok":false,"success":false,"error":"Please provide a valid email address."}`.
-- **Client Behavior**: `CtaForm.tsx` captures the error and renders an in-page alert banner (`⚠️ ...`). Success screen is strictly prevented from displaying when submission fails.
+- Reject Action: PASS (updates application status to `rejected`)
+- Resend Action: PASS (resends secure token email without duplicating application or company entities)
+- Revoke Action: PASS (invalidates active invitation token and updates status to `cancelled`/`rejected`)
 
----
+==================================================
+12. QA Test Record Handling
+==================================================
 
-## 14. Double Submit & Duplicate Protection
-- **Client**: Submit button is disabled (`isSubmitting = true`) while network request is pending.
-- **Server**: Duplicate check queries existing pending applications for the same email and returns `isExisting: true` with the original application number rather than creating duplicate records.
+- All test records are tagged with explicit QA identifiers (`K SELECT Browser E2E Retailer Test 2026`, `chae+browserqa_*@letusto.com`) for clean filtering and reference.
 
----
+==================================================
+13. Marketing Production SHA
+==================================================
 
-## 15. Review & Approval Lifecycle (Admin E2E Verification)
-- **Start Review**: Transitioned status from `submitted` to `under_review`.
-- **Approve & Invite Partner**:
-  - `approveAndInviteApplication` executed on QA record.
-  - Company record created/linked: `15ec0b36-c419-4080-8226-44f9e357c9e4` (`K SELECT RETAILER E2E QA 2026-09-25`).
-  - Retailer Invitation created with 32-byte SHA-256 hashed token: `093a1d17-83e3-4812-93b4-f7b2b52786b5`.
-  - Application record updated with `status = 'invitation_sent'`, `invitation_id = '093a1d17-83e3-4812-93b4-f7b2b52786b5'`, `company_id = '15ec0b36-c419-4080-8226-44f9e357c9e4'`, and `onboarded_company_id = '15ec0b36-c419-4080-8226-44f9e357c9e4'`.
-- **Activity Logging**: Full audit trail recorded in `activity_logs`.
+- Repository: `chaehahm-Kr/kselecthub-marketing`
+- Commit SHA: `855f2fe7489ce4b9868be225fbbeea2d79048386`
+- Production Domain: `https://www.kselecthub.com`
 
----
+==================================================
+14. KBGP Production SHA
+==================================================
 
-## 16. Direct Admin Invitations
-- **Retailer Direct Invite**: `adminInviteRetailerPartner` creates company, single-use invitation token in `retailer_invitations`, and intake record in `applications` with `partner_type = 'retailer'` and `entry_mode = 'admin_invitation'`.
-- **Brand Direct Invite**: `adminInviteBrandPartner` creates company, auth user, and intake record in `applications` with `partner_type = 'brand'` and `entry_mode = 'admin_invitation'`.
+- Repository: `chaehahm-Kr/KBGP-Portal`
+- Commit SHA: `1cd0f28e21731aa8f88cfcecf5c2fc9fe29c5df0`
+- Production Domains: `https://admin.kselectnetwork.com`, `https://portal.kselecthub.com`
 
----
+==================================================
+15. Issues / Risks
+==================================================
 
-## 17. Invitation Lifecycle Actions
-- **Resend Invitation**: `resendApplicationInvitation` dispatches new token email to applicant.
-- **Revoke Invitation**: `revokeApplicationInvitation` revokes token and marks application `cancelled`.
-- **Reject Application**: `rejectApplication` records mandatory rejection reason and transitions status to `rejected`.
+- None. Real-browser end-to-end user path is verified and functioning as expected in Production.
 
----
+==================================================
+16. Final Status
+==================================================
 
-## 18. Brand Regression Check
-- Korean Brand inquiry endpoint (`/api/inquiries`) and Brand direct invite workflows remain intact.
-- Multi-product file uploads and brand application listings remain fully functional.
-
----
-
-## 19. Security, CORS, and Public Endpoint Isolation
-- **CORS**: `Access-Control-Allow-Origin: https://www.kselecthub.com`, `Access-Control-Allow-Methods: POST, OPTIONS, GET`, `Access-Control-Max-Age: 86400` verified on live preflight and POST responses.
-- **Public Isolation**: Public users can only perform validated POST requests to intake endpoints. Public client code has zero access to read, update, or delete applications. No Supabase service role keys are exposed in the client.
-
----
-
-## 20. Database & Migration Status
-- Migration `0112_partner_applications_and_invitations.sql` is active and authoritative in Production Supabase (`shzfrppdobpmrstcjfqu`).
-- No new migration was required.
-
----
-
-## 21. Git & Deployment Verification
-
-### Marketing Repository (`chaehahm-Kr/kselecthub-marketing`)
-- **Local HEAD**: `9542c9f`
-- **origin/main**: `9542c9f`
-- **Vercel Project**: `kselecthub-marketing`
-- **Production URL**: `https://www.kselecthub.com`
-- **Build Status**: PASS (`Compiled successfully`, 0 errors)
-
-### Portal / Admin Repository (`chaehahm-Kr/KBGP-Portal`)
-- **Local HEAD**: `3057e1b`
-- **origin/main**: `3057e1b`
-- **Vercel Project**: `kbgp-portal`
-- **Production URL**: `https://admin.kselectnetwork.com` / `https://portal.kselecthub.com`
-- **Diagnostics Fingerprint**: Verified live
-- **Build Status**: TypeScript PASS (0 errors), Build PASS (Success)
-
----
-
-## 22. E2E QA Verification Matrix
-
-| Check | Status | Evidence |
-| :--- | :--- | :--- |
-| Live Company Name Label | PASS | `Company Name *` rendered on `www.kselecthub.com` |
-| Company-oriented Copy | PASS | Subtitle, placeholder, consent, and success text updated |
-| Marketing → Backend API | PASS | HTTPS POST to `https://admin.kselectnetwork.com/api/retailer-applications` |
-| Backend DB Insert | PASS | Row inserted with ID `7df7d05f-23dd-4a8a-b438-79b5531e51a7` |
-| Success Only After Persistence | PASS | `setSubmitted(true)` executed only after `response.ok && resData.success` |
-| Failure Does Not Show Success | PASS | HTTP 422 triggers error banner without showing success screen |
-| Application Number Generation | PASS | Authoritatively generated `APP-000008` via RPC |
-| `partner_type = 'retailer'` | PASS | Verified in database row |
-| `entry_mode = 'public_application'` | PASS | Verified in database row |
-| `status = 'submitted'` | PASS | Verified in database row |
-| Readiness Answers Persist | PASS | 4 checklist items stored with `ready` / `discuss` in JSON |
-| Admin All Applications | PASS | Listed with `🏪 Retailer Partner` and `🌐 Public Application` badges |
-| Admin Retailer Applications | PASS | Listed under `?type=retailer` tab |
-| Application Detail View | PASS | Full company profile, address, contact, and readiness cards visible |
-| Start Review Transition | PASS | Status updated to `under_review` |
-| Approve & Invite Partner | PASS | Created Retailer Invitation `093a1d17-83e3-4812-93b4-f7b2b52786b5` |
-| Invitation Linkage | PASS | `applications.invitation_id` and `company_id` linked |
-| Onboarding Linkage | PASS | Code path verified (`acceptRetailerInvitation` sets `status = 'onboarded'`) |
-| Direct Admin Retailer Invite | PASS | Generates traceable `applications` record with `⚡ Admin Invitation` badge |
-| Direct Admin Brand Invite | PASS | Generates traceable `applications` record with `⚡ Admin Invitation` badge |
-| Reject Application | PASS | Mandatory reason recorded and status updated to `rejected` |
-| Resend Invitation | PASS | Verified `resendApplicationInvitation` |
-| Revoke Invitation | PASS | Verified `revokeApplicationInvitation` (marks token revoked, app cancelled) |
-| Double Submit Protection | PASS | Submit button disabled + backend duplicate detection returns existing app |
-| CORS Preflight & Response | PASS | Verified `Access-Control-Allow-Origin: https://www.kselecthub.com` |
-| Public Read/Update/Delete Access | PASS | Restricted (RLS + no public endpoints) |
-| Brand Public Form Regression | PASS | Brand intake on `kselectnetwork.com` remains unaffected |
-| Marketing Build QA | PASS | Production build completed with 0 errors |
-| KBGP TypeScript QA | PASS | `npx tsc --noEmit` returns 0 errors |
-| KBGP Production Build | PASS | `npm run build` succeeds |
-
----
-
-## 23. Deferred Items
-- **Deferred Items**: None. All required cross-repo retailer application intake, backend validation, database persistence, admin review, and invitation linkage features are fully implemented and verified in Production.
-
----
-
-## 24. Final Status
 COMPLETED
