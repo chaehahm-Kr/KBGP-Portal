@@ -37,6 +37,7 @@ const AREAS: { prefix: string; login: string; publicPaths: string[] }[] = [
       "/retailer/login",
       "/retailer/signup",
       "/retailer/reset-password",
+      "/retailer/invite",
       "/retailer/invite/accept",
     ],
   },
@@ -226,6 +227,7 @@ export async function updateSession(request: NextRequest) {
       "/login",
       "/signup",
       "/reset-password",
+      "/invite",
       "/invite/accept",
     ].some((p) => pathname === p || pathname.startsWith(`${p}/`));
 
