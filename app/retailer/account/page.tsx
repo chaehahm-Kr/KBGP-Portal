@@ -18,7 +18,14 @@ interface RetailerAccountPageProps {
 
 export default async function RetailerAccountPage({ searchParams }: RetailerAccountPageProps) {
   const { tab } = await searchParams;
-  const currentTab = tab === "team" ? "team" : tab === "documents" ? "documents" : "overview";
+  const currentTab =
+    tab === "organization" || tab === "company"
+      ? "organization"
+      : tab === "team"
+      ? "team"
+      : tab === "documents"
+      ? "documents"
+      : "account";
 
   const session = await verifyRetailerSession();
   const adminClient = createAdminClient();
