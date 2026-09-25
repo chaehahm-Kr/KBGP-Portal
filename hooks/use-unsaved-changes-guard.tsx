@@ -64,56 +64,7 @@ export function useUnsavedChangesGuard({ isDirty, onSave }: UseUnsavedChangesGua
     };
   }, [isDirty]);
 
-  // 3. Link click interception (Sidebar, Breadcrumb, Product list, Navigation anchors)
-  useEffect(() => {
-    if (!isDirty) return;
 
-    const handleClickCapture = (e: MouseEvent) => {
-      if (bypassGuardRef.current) return;
-
-      const target = e.target as HTMLElement | null;
-      if (!target) return;
-
-      const anchor = target.closest("a") as HTMLAnchorElement | null;
-      if (!anchor) return;
-
-      // Ignore if user opened in new tab/window, clicked download, or javascript/mailto/tel links
-      if (anchor.target && anchor.target !== "_self") return;
-      if (anchor.hasAttribute("download")) return;
-      if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
-
-      const rawHref = anchor.getAttribute("href");
-      if (!rawHref) return;
-      if (rawHref.startsWith("#") || rawHref.startsWith("javascript:") || rawHref.startsWith("mailto:") || rawHref.startsWith("tel:")) {
-        return;
-      }
-
-      try {
-        const targetUrl = new URL(anchor.href, window.location.href);
-        const currentUrl = new URL(window.location.href);
-
-        // If it's on the same page with only hash changing, ignore
-        if (targetUrl.origin === currentUrl.origin && targetUrl.pathname === currentUrl.pathname && targetUrl.search === currentUrl.search) {
-          return;
-        }
-
-        // Intercept navigation
-        e.preventDefault();
-        e.stopPropagation();
-
-        setPendingNav({ type: "url", url: anchor.href });
-        setSaveError(null);
-        setIsModalOpen(true);
-      } catch {
-        // Ignore malformed URLs
-      }
-    };
-
-    document.addEventListener("click", handleClickCapture, true);
-    return () => {
-      document.removeEventListener("click", handleClickCapture, true);
-    };
-  }, [isDirty]);
 
   // Reset bypass guard flag when isDirty is false
   useEffect(() => {

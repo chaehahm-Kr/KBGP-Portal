@@ -1155,7 +1155,7 @@ export function ProductDetailTabs({
     }
   };
 
-  const { guardModalNode } = useUnsavedChangesGuard({
+  const { guardModalNode, confirmNavigation } = useUnsavedChangesGuard({
     isDirty: isAnyDirty,
     onSave: async () => {
       return await saveAllData();
@@ -1474,6 +1474,12 @@ export function ProductDetailTabs({
             )}
             <Link
               href="/portal/products"
+              onClick={(e) => {
+                if (isAnyDirty) {
+                  e.preventDefault();
+                  confirmNavigation("/portal/products");
+                }
+              }}
               className="w-full sm:w-auto text-center rounded-lg border border-zinc-300 bg-white hover:bg-zinc-50 px-5 py-2.5 text-xs font-bold text-zinc-700 transition-all dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-300 dark:hover:bg-zinc-900 cursor-pointer"
             >
               목록으로 돌아가기

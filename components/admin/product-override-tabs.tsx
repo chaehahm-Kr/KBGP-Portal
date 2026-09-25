@@ -1200,7 +1200,7 @@ export function ProductOverrideTabs({
     });
   };
 
-  const { guardModalNode } = useUnsavedChangesGuard({
+  const { guardModalNode, confirmNavigation } = useUnsavedChangesGuard({
     isDirty: isAnyDirty,
     onSave: handleSave,
   });
@@ -1214,6 +1214,12 @@ export function ProductOverrideTabs({
         <div className="flex items-center gap-3">
           <Link
             href="/admin/products"
+            onClick={(e) => {
+              if (isAnyDirty) {
+                e.preventDefault();
+                confirmNavigation("/admin/products");
+              }
+            }}
             className="text-xs font-bold text-zinc-550 hover:underline flex items-center gap-1 dark:text-zinc-400"
           >
             ← 전체 제품 목록으로 돌아가기
