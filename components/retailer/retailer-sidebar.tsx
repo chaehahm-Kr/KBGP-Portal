@@ -2,6 +2,7 @@
 
 import React from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { getNavItemsForRole } from "@/lib/retailer/navigation";
 import { NavIcon } from "@/components/retailer/nav-icon";
@@ -26,9 +27,16 @@ export function RetailerSidebar({
     <aside className="hidden lg:flex lg:w-64 lg:flex-col shrink-0 border-r border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 min-h-screen">
       {/* Brand & Store Header */}
       <div className="h-16 px-6 border-b border-zinc-200 dark:border-zinc-800/80 flex items-center justify-between">
-        <Link href="/" className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-lg bg-zinc-900 dark:bg-white text-white dark:text-zinc-950 flex items-center justify-center font-black text-sm shadow-sm">
-            K
+        <Link href="/" className="flex items-center gap-3">
+          <div className="relative w-8 h-8 rounded-lg overflow-hidden shrink-0 shadow-sm border border-zinc-200 dark:border-zinc-800 bg-black flex items-center justify-center">
+            <Image
+              src="/retailer-brand-mark.jpg"
+              alt="K SELECT HUB"
+              width={32}
+              height={32}
+              className="w-full h-full object-cover"
+              priority
+            />
           </div>
           <div>
             <span className="font-bold text-sm tracking-tight text-zinc-900 dark:text-white block">

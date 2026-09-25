@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { ThemeToggle } from "@/components/retailer/theme-toggle";
 import { logoutRetailer } from "@/lib/auth/actions";
 import { NavIcon } from "@/components/retailer/nav-icon";
@@ -50,8 +51,15 @@ export function RetailerHeader({
 
           {/* Mobile Logo */}
           <Link href="/" className="flex items-center gap-2 lg:hidden">
-            <div className="w-7 h-7 rounded-md bg-zinc-900 dark:bg-white text-white dark:text-zinc-950 flex items-center justify-center font-black text-xs">
-              K
+            <div className="relative w-7 h-7 rounded-md overflow-hidden shrink-0 shadow-xs border border-zinc-200 dark:border-zinc-800 bg-black flex items-center justify-center">
+              <Image
+                src="/retailer-brand-mark.jpg"
+                alt="K SELECT HUB"
+                width={28}
+                height={28}
+                className="w-full h-full object-cover"
+                priority
+              />
             </div>
             <span className="font-bold text-xs tracking-tight text-zinc-900 dark:text-white">
               K SELECT HUB
@@ -189,13 +197,24 @@ export function RetailerHeader({
           <div className="relative w-72 max-w-[85vw] bg-white dark:bg-zinc-950 border-r border-zinc-200 dark:border-zinc-800 flex flex-col h-full z-50 shadow-2xl">
             {/* Drawer Header */}
             <div className="h-16 px-5 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg bg-zinc-900 dark:bg-white text-white dark:text-zinc-950 flex items-center justify-center font-black text-sm">
-                  K
+              <div className="flex items-center gap-2.5">
+                <div className="relative w-8 h-8 rounded-lg overflow-hidden shrink-0 shadow-sm border border-zinc-200 dark:border-zinc-800 bg-black flex items-center justify-center">
+                  <Image
+                    src="/retailer-brand-mark.jpg"
+                    alt="K SELECT HUB"
+                    width={32}
+                    height={32}
+                    className="w-full h-full object-cover"
+                  />
                 </div>
-                <span className="font-bold text-sm text-zinc-900 dark:text-white">
-                  K SELECT HUB
-                </span>
+                <div>
+                  <span className="font-bold text-sm text-zinc-900 dark:text-white block">
+                    K SELECT HUB
+                  </span>
+                  <span className="text-[10px] font-semibold text-zinc-600 dark:text-zinc-400 block tracking-wider uppercase">
+                    Retailer Portal
+                  </span>
+                </div>
               </div>
               <button
                 type="button"

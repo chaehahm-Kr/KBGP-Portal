@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Image from "next/image";
 import { RetailerLoginForm } from "@/components/auth/retailer-login-form";
 import { loginRetailer } from "@/lib/auth/actions";
 
@@ -20,8 +21,15 @@ export default async function RetailerLoginPage({
       {/* K SELECT Hub Identity Header */}
       <div className="flex flex-col items-center justify-center text-center space-y-3">
         <div className="flex items-center gap-2.5">
-          <div className="w-9 h-9 bg-white rounded-lg flex items-center justify-center shadow-md">
-            <span className="text-zinc-950 text-base font-black tracking-tighter">K</span>
+          <div className="relative w-9 h-9 rounded-lg overflow-hidden shadow-md border border-zinc-800/60 bg-black flex items-center justify-center">
+            <Image
+              src="/retailer-brand-mark.jpg"
+              alt="K SELECT HUB"
+              width={36}
+              height={36}
+              className="w-full h-full object-cover"
+              priority
+            />
           </div>
           <span className="text-lg font-bold text-white tracking-wide">
             K SELECT HUB
