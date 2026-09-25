@@ -593,13 +593,18 @@ export async function createRetailerStoreAction(
   companyId: string,
   payload: {
     name: string;
+    storeCode?: string;
     city?: string;
     state?: string;
+    zip?: string;
     address?: string;
     phone?: string;
+    email?: string;
+    managerName?: string;
+    managerPhone?: string;
   }
 ) {
-  await verifyAdminSession();
+  const adminSession = await verifyAdminSession();
   const adminClient = createAdminClient();
 
   const { data, error } = await adminClient
@@ -607,10 +612,15 @@ export async function createRetailerStoreAction(
     .insert({
       company_id: companyId,
       name: payload.name.trim(),
+      store_code: payload.storeCode?.trim() || null,
       city: payload.city?.trim() || null,
       state: payload.state?.trim() || null,
+      zip: payload.zip?.trim() || null,
       address: payload.address?.trim() || null,
       phone: payload.phone?.trim() || null,
+      email: payload.email?.trim() || null,
+      manager_name: payload.managerName?.trim() || null,
+      manager_phone: payload.managerPhone?.trim() || null,
       status: "active",
       type: "Independent Beauty Supply",
     })
@@ -622,7 +632,415 @@ export async function createRetailerStoreAction(
     return { success: false, error: error.message };
   }
 
+  try {
+    await adminClient.from("retailer_organization_audit_logs").insert({
+      company_id: companyId,
+      entity_type: "store",
+      entity_id: data.id,
+      action: "admin_create_store",
+      actor_id: adminSession.userId,
+      actor_type: "admin",
+      new_data: payload,
+    });
+  } catch (e) {
+    // Graceful audit log fallback
+  }
+
   revalidatePath(`/admin/retailers/${companyId}`);
   revalidatePath("/admin/stores");
+  revalidatePath("/account");
+  revalidatePath("/retailer/account");
   return { success: true, store: data };
+}
+
+export async function adminUpdateRetailerCompanyAction(
+  companyId: string,
+  payload: {
+    name?: string;
+    businessRegistrationNumber?: string;
+    country?: string;
+    contactName?: string;
+    contactPhone?: string;
+    contactEmail?: string;
+    address?: string;
+    city?: string;
+    state?: string;
+    zip?: string;
+    status?: string;
+  }
+) {
+  const adminSession = await verifyAdminSession();
+  const adminClient = createAdminClient();
+
+  // 1. Fetch current data for audit log
+  const { data: oldComp } = await adminClient
+    .from("companies")
+    .select("name, business_registration_number, country, contact_name, contact_phone, status")
+    .eq("id", companyId)
+    .single();
+
+  // 2. Update companies table
+  const compUpdates: any = { updated_at: new Date().toISOString() };
+  if (payload.name !== undefined && payload.name.trim()) compUpdates.name = payload.name.trim();
+  if (payload.businessRegistrationNumber !== undefined)
+    compUpdates.business_registration_number = payload.businessRegistrationNumber.trim();
+  if (payload.country !== undefined) compUpdates.country = payload.country.trim();
+  if (payload.contactName !== undefined) compUpdates.contact_name = payload.contactName.trim() || null;
+  if (payload.contactPhone !== undefined) compUpdates.contact_phone = payload.contactPhone.trim() || null;
+  if (payload.status !== undefined) compUpdates.status = payload.status === "archived" ? "inactive" : payload.status;
+
+  const { error: compError } = await adminClient
+    .from("companies")
+    .update(compUpdates)
+    .eq("id", companyId);
+
+  if (compError) {
+    return { success: false, error: compError.message };
+  }
+
+  // 3. Update retailer_profiles table (billing/contact & status)
+  const profUpdates: any = { updated_at: new Date().toISOString() };
+  if (payload.contactName !== undefined) profUpdates.billing_contact_name = payload.contactName.trim() || null;
+  if (payload.contactEmail !== undefined) profUpdates.billing_contact_email = payload.contactEmail.trim() || null;
+  if (payload.contactPhone !== undefined) profUpdates.billing_contact_phone = payload.contactPhone.trim() || null;
+  if (payload.address !== undefined) profUpdates.billing_address = payload.address.trim() || null;
+  if (payload.city !== undefined) profUpdates.billing_city = payload.city.trim() || null;
+  if (payload.state !== undefined) profUpdates.billing_state = payload.state.trim() || null;
+  if (payload.zip !== undefined) profUpdates.billing_zip = payload.zip.trim() || null;
+  if (payload.status !== undefined) profUpdates.status = payload.status;
+
+  await adminClient
+    .from("retailer_profiles")
+    .update(profUpdates)
+    .eq("company_id", companyId);
+
+  try {
+    await adminClient.from("retailer_organization_audit_logs").insert({
+      company_id: companyId,
+      entity_type: "company",
+      entity_id: companyId,
+      action: "admin_update_company",
+      actor_id: adminSession.userId,
+      actor_type: "admin",
+      old_data: oldComp,
+      new_data: payload,
+    });
+  } catch (e) {
+    // Graceful audit log fallback
+  }
+
+  revalidatePath(`/admin/retailers/${companyId}`);
+  revalidatePath("/admin/retailers");
+  revalidatePath("/account");
+  revalidatePath("/retailer/account");
+
+  return { success: true };
+}
+
+export async function adminUpdateRetailerStoreAction(
+  companyId: string,
+  storeId: string,
+  payload: {
+    name: string;
+    storeCode?: string;
+    city?: string;
+    state?: string;
+    zip?: string;
+    address?: string;
+    phone?: string;
+    email?: string;
+    managerName?: string;
+    managerPhone?: string;
+  }
+) {
+  const adminSession = await verifyAdminSession();
+  const adminClient = createAdminClient();
+
+  const { data: oldStore } = await adminClient
+    .from("stores")
+    .select("*")
+    .eq("id", storeId)
+    .eq("company_id", companyId)
+    .maybeSingle();
+
+  if (!oldStore) {
+    return { success: false, error: "Store not found." };
+  }
+
+  const { error } = await adminClient
+    .from("stores")
+    .update({
+      name: payload.name.trim(),
+      store_code: payload.storeCode?.trim() || null,
+      city: payload.city?.trim() || null,
+      state: payload.state?.trim() || null,
+      zip: payload.zip?.trim() || null,
+      address: payload.address?.trim() || null,
+      phone: payload.phone?.trim() || null,
+      email: payload.email?.trim() || null,
+      manager_name: payload.managerName?.trim() || null,
+      manager_phone: payload.managerPhone?.trim() || null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", storeId)
+    .eq("company_id", companyId);
+
+  if (error) {
+    return { success: false, error: error.message };
+  }
+
+  try {
+    await adminClient.from("retailer_organization_audit_logs").insert({
+      company_id: companyId,
+      entity_type: "store",
+      entity_id: storeId,
+      action: "admin_update_store",
+      actor_id: adminSession.userId,
+      actor_type: "admin",
+      old_data: oldStore,
+      new_data: payload,
+    });
+  } catch (e) {
+    // Graceful audit log fallback
+  }
+
+  revalidatePath(`/admin/retailers/${companyId}`);
+  revalidatePath("/admin/stores");
+  revalidatePath("/account");
+  revalidatePath("/retailer/account");
+
+  return { success: true };
+}
+
+export async function adminSetRetailerStoreStatusAction(
+  companyId: string,
+  storeId: string,
+  status: "active" | "inactive" | "closed"
+) {
+  const adminSession = await verifyAdminSession();
+  const adminClient = createAdminClient();
+
+  const { error } = await adminClient
+    .from("stores")
+    .update({
+      status,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", storeId)
+    .eq("company_id", companyId);
+
+  if (error) {
+    return { success: false, error: error.message };
+  }
+
+  try {
+    await adminClient.from("retailer_organization_audit_logs").insert({
+      company_id: companyId,
+      entity_type: "store",
+      entity_id: storeId,
+      action: `admin_store_status_${status}`,
+      actor_id: adminSession.userId,
+      actor_type: "admin",
+      new_data: { status },
+    });
+  } catch (e) {
+    // Graceful audit log fallback
+  }
+
+  revalidatePath(`/admin/retailers/${companyId}`);
+  revalidatePath("/admin/stores");
+  revalidatePath("/account");
+  revalidatePath("/retailer/account");
+
+  return { success: true };
+}
+
+export async function adminUpdateRetailerUserRoleAction(
+  companyId: string,
+  userId: string,
+  payload: {
+    role: RetailerRole;
+    hasAllStoresAccess?: boolean;
+    storeIds?: string[];
+  }
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const adminSession = await verifyAdminSession();
+    const adminClient = createAdminClient();
+
+    const isOwnerOrBuyer = ["owner", "buyer"].includes(payload.role);
+    const hasAllStores = payload.hasAllStoresAccess ?? (payload.role === "owner");
+
+    // Upsert role
+    await adminClient
+      .from("retailer_user_roles")
+      .upsert({
+        user_id: userId,
+        company_id: companyId,
+        role: payload.role,
+        has_all_stores_access: hasAllStores,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: "user_id,role" });
+
+    // Clear obsolete roles
+    await adminClient
+      .from("retailer_user_roles")
+      .delete()
+      .eq("user_id", userId)
+      .eq("company_id", companyId)
+      .neq("role", payload.role);
+
+    // Update company_users role mapping
+    await adminClient
+      .from("company_users")
+      .update({
+        company_role: isOwnerOrBuyer ? "company_admin" : "company_staff",
+      })
+      .eq("id", userId);
+
+    // Sync store access
+    await adminClient
+      .from("retailer_user_store_access")
+      .delete()
+      .eq("user_id", userId)
+      .eq("company_id", companyId);
+
+    if (!hasAllStores && payload.storeIds && payload.storeIds.length > 0) {
+      const inserts = payload.storeIds.map((sId) => ({
+        user_id: userId,
+        store_id: sId,
+        company_id: companyId,
+        can_submit_checks: true,
+        can_print_tags: true,
+      }));
+      await adminClient.from("retailer_user_store_access").insert(inserts);
+    }
+
+    try {
+      await adminClient.from("retailer_organization_audit_logs").insert({
+        company_id: companyId,
+        entity_type: "role",
+        entity_id: userId,
+        action: "admin_change_user_role",
+        actor_id: adminSession.userId,
+        actor_type: "admin",
+        new_data: payload,
+      });
+    } catch (e) {
+      // Graceful audit log fallback
+    }
+
+    revalidatePath(`/admin/retailers/${companyId}`);
+    revalidatePath("/account");
+    revalidatePath("/retailer/account");
+
+    return { success: true };
+  } catch (err: any) {
+    console.error("Error in adminUpdateRetailerUserRoleAction:", err);
+    return { success: false, error: err.message || "Failed to update role." };
+  }
+}
+
+export async function adminUpdateRetailerUserStoreAccessAction(
+  companyId: string,
+  userId: string,
+  payload: {
+    hasAllStoresAccess: boolean;
+    storeIds?: string[];
+  }
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const adminSession = await verifyAdminSession();
+    const adminClient = createAdminClient();
+
+    await adminClient
+      .from("retailer_user_roles")
+      .update({
+        has_all_stores_access: payload.hasAllStoresAccess,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("user_id", userId)
+      .eq("company_id", companyId);
+
+    await adminClient
+      .from("retailer_user_store_access")
+      .delete()
+      .eq("user_id", userId)
+      .eq("company_id", companyId);
+
+    if (!payload.hasAllStoresAccess && payload.storeIds && payload.storeIds.length > 0) {
+      const inserts = payload.storeIds.map((sId) => ({
+        user_id: userId,
+        store_id: sId,
+        company_id: companyId,
+        can_submit_checks: true,
+        can_print_tags: true,
+      }));
+      await adminClient.from("retailer_user_store_access").insert(inserts);
+    }
+
+    try {
+      await adminClient.from("retailer_organization_audit_logs").insert({
+        company_id: companyId,
+        entity_type: "store_access",
+        entity_id: userId,
+        action: "admin_change_store_access",
+        actor_id: adminSession.userId,
+        actor_type: "admin",
+        new_data: payload,
+      });
+    } catch (e) {
+      // Graceful audit log fallback
+    }
+
+    revalidatePath(`/admin/retailers/${companyId}`);
+    revalidatePath("/account");
+    revalidatePath("/retailer/account");
+
+    return { success: true };
+  } catch (err: any) {
+    console.error("Error in adminUpdateRetailerUserStoreAccessAction:", err);
+    return { success: false, error: err.message || "Failed to update store access." };
+  }
+}
+
+export async function adminSetRetailerUserStatusAction(
+  companyId: string,
+  userId: string,
+  status: "active" | "suspended"
+) {
+  const adminSession = await verifyAdminSession();
+  const adminClient = createAdminClient();
+
+  const { error } = await adminClient
+    .from("company_users")
+    .update({
+      status,
+    })
+    .eq("id", userId)
+    .eq("company_id", companyId);
+
+  if (error) {
+    return { success: false, error: error.message };
+  }
+
+  try {
+    await adminClient.from("retailer_organization_audit_logs").insert({
+      company_id: companyId,
+      entity_type: "user",
+      entity_id: userId,
+      action: `admin_user_status_${status}`,
+      actor_id: adminSession.userId,
+      actor_type: "admin",
+      new_data: { status },
+    });
+  } catch (e) {
+    // Graceful audit log fallback
+  }
+
+  revalidatePath(`/admin/retailers/${companyId}`);
+  revalidatePath("/account");
+  revalidatePath("/retailer/account");
+
+  return { success: true };
 }

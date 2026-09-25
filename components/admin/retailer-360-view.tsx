@@ -11,6 +11,12 @@ import {
   updateRetailerTermsAction,
   createRetailerStoreAction,
   adminInviteRetailerUserAction,
+  adminUpdateRetailerCompanyAction,
+  adminUpdateRetailerStoreAction,
+  adminSetRetailerStoreStatusAction,
+  adminUpdateRetailerUserRoleAction,
+  adminUpdateRetailerUserStoreAccessAction,
+  adminSetRetailerUserStatusAction,
 } from "@/lib/retailer/admin-retailer-actions";
 import {
   resendTeamInvitationAction,
@@ -22,6 +28,7 @@ import {
   adminConfirmFulfillmentDeliveryAction,
 } from "@/lib/retailer/fulfillment-actions";
 import { RetailerRole } from "@/lib/retailer/onboarding-types";
+import { Retailer360MemberItem } from "@/lib/retailer/admin-retailer-360";
 
 interface Retailer360ViewProps {
   data: Retailer360Data;
@@ -71,14 +78,49 @@ export function Retailer360View({ data }: Retailer360ViewProps) {
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [saveError, setSaveError] = useState("");
 
+  // Company Edit State
+  const [showCompanyModal, setShowCompanyModal] = useState(false);
+  const [editCompName, setEditCompName] = useState(data.company.name);
+  const [editCompRegNo, setEditCompRegNo] = useState(data.company.businessRegistrationNumber || "");
+  const [editCompCountry, setEditCompCountry] = useState(data.company.country || "US");
+  const [editCompContactName, setEditCompContactName] = useState(data.profile?.billing_contact_name || "");
+  const [editCompContactPhone, setEditCompContactPhone] = useState(data.profile?.billing_contact_phone || "");
+  const [editCompContactEmail, setEditCompContactEmail] = useState(data.profile?.billing_contact_email || "");
+  const [editCompAddress, setEditCompAddress] = useState(data.profile?.billing_address || "");
+  const [editCompCity, setEditCompCity] = useState(data.profile?.billing_city || "");
+  const [editCompState, setEditCompState] = useState(data.profile?.billing_state || "");
+  const [editCompZip, setEditCompZip] = useState(data.profile?.billing_zip || "");
+  const [editCompStatus, setEditCompStatus] = useState(data.profile?.status || "active");
+  const [compModalError, setCompModalError] = useState("");
+
   // Store Management State
   const [showAddStoreModal, setShowAddStoreModal] = useState(false);
   const [newStoreName, setNewStoreName] = useState("");
+  const [newStoreCode, setNewStoreCode] = useState("");
   const [newStoreCity, setNewStoreCity] = useState("");
   const [newStoreState, setNewStoreState] = useState("");
+  const [newStoreZip, setNewStoreZip] = useState("");
   const [newStoreAddress, setNewStoreAddress] = useState("");
   const [newStorePhone, setNewStorePhone] = useState("");
+  const [newStoreEmail, setNewStoreEmail] = useState("");
+  const [newStoreManagerName, setNewStoreManagerName] = useState("");
+  const [newStoreManagerPhone, setNewStoreManagerPhone] = useState("");
   const [storeError, setStoreError] = useState("");
+
+  // Store Edit State
+  const [showEditStoreModal, setShowEditStoreModal] = useState(false);
+  const [editingStore, setEditingStore] = useState<Retailer360StoreItem | null>(null);
+  const [editStoreName, setEditStoreName] = useState("");
+  const [editStoreCode, setEditStoreCode] = useState("");
+  const [editStoreAddress, setEditStoreAddress] = useState("");
+  const [editStoreCity, setEditStoreCity] = useState("");
+  const [editStoreState, setEditStoreState] = useState("");
+  const [editStoreZip, setEditStoreZip] = useState("");
+  const [editStorePhone, setEditStorePhone] = useState("");
+  const [editStoreEmail, setEditStoreEmail] = useState("");
+  const [editStoreManagerName, setEditStoreManagerName] = useState("");
+  const [editStoreManagerPhone, setEditStoreManagerPhone] = useState("");
+  const [editStoreError, setEditStoreError] = useState("");
 
   // User Invite State
   const [showInviteModal, setShowInviteModal] = useState(false);
@@ -88,6 +130,21 @@ export function Retailer360View({ data }: Retailer360ViewProps) {
   const [inviteAllStores, setInviteAllStores] = useState(true);
   const [inviteStoreIds, setInviteStoreIds] = useState<string[]>([]);
   const [inviteError, setInviteError] = useState("");
+
+  // User Role State
+  const [showRoleModal, setShowRoleModal] = useState(false);
+  const [roleMember, setRoleMember] = useState<Retailer360MemberItem | null>(null);
+  const [userRole, setUserRole] = useState<RetailerRole>("employee");
+  const [userRoleAllStores, setUserRoleAllStores] = useState(true);
+  const [userRoleStoreIds, setUserRoleStoreIds] = useState<string[]>([]);
+  const [roleModalError, setRoleModalError] = useState("");
+
+  // User Store Access State
+  const [showAccessModal, setShowAccessModal] = useState(false);
+  const [accessMember, setAccessMember] = useState<Retailer360MemberItem | null>(null);
+  const [accessAllStores, setAccessAllStores] = useState(true);
+  const [accessStoreIds, setAccessStoreIds] = useState<string[]>([]);
+  const [accessModalError, setAccessModalError] = useState("");
 
   // Order Fulfillment Modal State
   const [fulfillmentModalOrder, setFulfillmentModalOrder] = useState<Retailer360OrderItem | null>(null);
@@ -135,6 +192,197 @@ export function Retailer360View({ data }: Retailer360ViewProps) {
         setTimeout(() => setSaveSuccess(false), 3000);
       } else {
         setSaveError(res.error || "Failed to update commercial terms.");
+      }
+    });
+  };
+
+  const handleSaveCompanySubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setCompModalError("");
+
+    if (!editCompName.trim()) {
+      setCompModalError("Company name is required.");
+      return;
+    }
+
+    startTransition(async () => {
+      const res = await adminUpdateRetailerCompanyAction(data.company.id, {
+        name: editCompName.trim(),
+        businessRegistrationNumber: editCompRegNo.trim() || undefined,
+        country: editCompCountry.trim() || "US",
+        contactName: editCompContactName.trim() || undefined,
+        contactPhone: editCompContactPhone.trim() || undefined,
+        contactEmail: editCompContactEmail.trim() || undefined,
+        address: editCompAddress.trim() || undefined,
+        city: editCompCity.trim() || undefined,
+        state: editCompState.trim() || undefined,
+        zip: editCompZip.trim() || undefined,
+        status: editCompStatus,
+      });
+
+      if (res.success) {
+        setShowCompanyModal(false);
+        window.location.reload();
+      } else {
+        setCompModalError(res.error || "Failed to update company.");
+      }
+    });
+  };
+
+  const handleOpenEditStoreModal = (st: Retailer360StoreItem) => {
+    setEditingStore(st);
+    setEditStoreName(st.name);
+    setEditStoreCode(st.storeCode || "");
+    setEditStoreAddress(st.address || "");
+    setEditStoreCity(st.city || "");
+    setEditStoreState(st.state || "");
+    setEditStoreZip(st.zip || "");
+    setEditStorePhone(st.phone || "");
+    setEditStoreEmail(st.email || "");
+    setEditStoreManagerName(st.managerName || "");
+    setEditStoreManagerPhone(st.managerPhone || "");
+    setEditStoreError("");
+    setShowEditStoreModal(true);
+  };
+
+  const handleSaveEditStoreSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingStore) return;
+    setEditStoreError("");
+
+    if (!editStoreName.trim()) {
+      setEditStoreError("Store name is required.");
+      return;
+    }
+
+    startTransition(async () => {
+      const res = await adminUpdateRetailerStoreAction(data.company.id, editingStore.id, {
+        name: editStoreName.trim(),
+        storeCode: editStoreCode.trim() || undefined,
+        address: editStoreAddress.trim() || undefined,
+        city: editStoreCity.trim() || undefined,
+        state: editStoreState.trim() || undefined,
+        zip: editStoreZip.trim() || undefined,
+        phone: editStorePhone.trim() || undefined,
+        email: editStoreEmail.trim() || undefined,
+        managerName: editStoreManagerName.trim() || undefined,
+        managerPhone: editStoreManagerPhone.trim() || undefined,
+      });
+
+      if (res.success) {
+        setShowEditStoreModal(false);
+        window.location.reload();
+      } else {
+        setEditStoreError(res.error || "Failed to update store.");
+      }
+    });
+  };
+
+  const handleToggleStoreStatus = (st: Retailer360StoreItem) => {
+    const isCurrentlyActive = st.status === "active";
+    const nextStatus = isCurrentlyActive ? "inactive" : "active";
+
+    const promptText = isCurrentlyActive
+      ? `Deactivate store "${st.name}"?\n\nHistorical transactions, orders, and weekly count records will remain preserved.`
+      : `Reactivate store "${st.name}"?`;
+
+    if (!confirm(promptText)) return;
+
+    startTransition(async () => {
+      const res = await adminSetRetailerStoreStatusAction(data.company.id, st.id, nextStatus);
+      if (res.success) {
+        window.location.reload();
+      } else {
+        alert(res.error || "Failed to update store status.");
+      }
+    });
+  };
+
+  const handleOpenRoleModal = (member: Retailer360MemberItem) => {
+    setRoleMember(member);
+    setUserRole(member.role);
+    setUserRoleAllStores(member.hasAllStoresAccess);
+    setUserRoleStoreIds(member.assignedStores.map((s) => s.id));
+    setRoleModalError("");
+    setShowRoleModal(true);
+  };
+
+  const handleSaveUserRoleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!roleMember) return;
+    setRoleModalError("");
+
+    startTransition(async () => {
+      const res = await adminUpdateRetailerUserRoleAction(data.company.id, roleMember.userId, {
+        role: userRole,
+        hasAllStoresAccess: userRoleAllStores,
+        storeIds: userRoleAllStores ? undefined : userRoleStoreIds,
+      });
+
+      if (res.success) {
+        setShowRoleModal(false);
+        window.location.reload();
+      } else {
+        setRoleModalError(res.error || "Failed to update user role.");
+      }
+    });
+  };
+
+  const handleOpenAccessModal = (member: Retailer360MemberItem) => {
+    setAccessMember(member);
+    setAccessAllStores(member.hasAllStoresAccess);
+    setAccessStoreIds(member.assignedStores.map((s) => s.id));
+    setAccessModalError("");
+    setShowAccessModal(true);
+  };
+
+  const handleToggleAccessStore = (storeId: string) => {
+    setAccessStoreIds((prev) =>
+      prev.includes(storeId) ? prev.filter((id) => id !== storeId) : [...prev, storeId]
+    );
+  };
+
+  const handleSaveUserAccessSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!accessMember) return;
+    setAccessModalError("");
+
+    if (!accessAllStores && accessStoreIds.length === 0) {
+      setAccessModalError("Please select at least one assigned store.");
+      return;
+    }
+
+    startTransition(async () => {
+      const res = await adminUpdateRetailerUserStoreAccessAction(data.company.id, accessMember.userId, {
+        hasAllStoresAccess: accessAllStores,
+        storeIds: accessAllStores ? undefined : accessStoreIds,
+      });
+
+      if (res.success) {
+        setShowAccessModal(false);
+        window.location.reload();
+      } else {
+        setAccessModalError(res.error || "Failed to update store access.");
+      }
+    });
+  };
+
+  const handleToggleUserStatus = (member: Retailer360MemberItem) => {
+    const isCurrentlyActive = (member.status || "active").toLowerCase() === "active";
+    const nextStatus = isCurrentlyActive ? "suspended" : "active";
+
+    const promptText = isCurrentlyActive
+      ? `Disable user account for ${member.displayName || member.email}?\n\nThey will be blocked from logging in. Historical records remain preserved.`
+      : `Reactivate user account for ${member.displayName || member.email}?`;
+
+    if (!confirm(promptText)) return;
+
+    startTransition(async () => {
+      const res = await adminSetRetailerUserStatusAction(data.company.id, member.userId, nextStatus);
+      if (res.success) {
+        window.location.reload();
+      } else {
+        alert(res.error || "Failed to update user status.");
       }
     });
   };
@@ -284,6 +532,13 @@ export function Retailer360View({ data }: Retailer360ViewProps) {
         </div>
 
         <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setShowCompanyModal(true)}
+            className="rounded-xl border border-zinc-200 bg-white px-3 py-1.5 text-xs font-bold text-zinc-700 hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300 transition-colors shadow-2xs cursor-pointer"
+          >
+            ✏️ Edit Organization
+          </button>
           <button
             type="button"
             onClick={() => {
@@ -780,45 +1035,84 @@ export function Retailer360View({ data }: Retailer360ViewProps) {
               <thead className="border-b border-zinc-200 bg-zinc-50/70 text-[10px] font-bold text-zinc-500 uppercase tracking-wider dark:border-zinc-800 dark:bg-zinc-950/40">
                 <tr>
                   <th className="py-3 px-4">Store Name</th>
+                  <th className="py-3 px-4">Code</th>
                   <th className="py-3 px-4">Location</th>
-                  <th className="py-3 px-4">Phone</th>
+                  <th className="py-3 px-4">Contact</th>
                   <th className="py-3 px-4">Assigned Staff</th>
-                  <th className="py-3 px-4">Weekly Check Status</th>
+                  <th className="py-3 px-4">Weekly Check</th>
                   <th className="py-3 px-4">Status</th>
+                  <th className="py-3 px-4 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
-                {data.stores.map((store) => (
-                  <tr key={store.id} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-800/20">
-                    <td className="py-3 px-4 font-bold text-zinc-900 dark:text-white">
-                      🏪 {store.name}
-                    </td>
-                    <td className="py-3 px-4 text-zinc-600 dark:text-zinc-400">
-                      {store.city ? `${store.city}, ${store.state || ""}` : store.address || "-"}
-                    </td>
-                    <td className="py-3 px-4 font-mono text-zinc-500">
-                      {store.phone || "-"}
-                    </td>
-                    <td className="py-3 px-4 text-zinc-700 dark:text-zinc-300">
-                      👥 {store.assignedUsersCount} users
-                    </td>
-                    <td className="py-3 px-4">
-                      {store.latestWeeklyCheckDate ? (
-                        <div className="text-[11px]">
-                          <span className="text-emerald-600 font-semibold">Submitted</span>
-                          <span className="text-zinc-400 ml-1.5 font-mono">({formatDate(store.latestWeeklyCheckDate)})</span>
+                {data.stores.map((store) => {
+                  const isActive = (store.status || "active").toLowerCase() === "active";
+                  return (
+                    <tr key={store.id} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-800/20">
+                      <td className="py-3 px-4 font-bold text-zinc-900 dark:text-white">
+                        🏪 {store.name}
+                      </td>
+                      <td className="py-3 px-4 font-mono text-[11px] text-zinc-500">
+                        {store.storeCode || "-"}
+                      </td>
+                      <td className="py-3 px-4 text-zinc-600 dark:text-zinc-400">
+                        {store.city ? `${store.city}, ${store.state || ""}` : store.address || "-"}
+                      </td>
+                      <td className="py-3 px-4 text-zinc-600 dark:text-zinc-400 text-[11px]">
+                        <div>{store.phone || "-"}</div>
+                        {store.managerName && (
+                          <div className="text-[10px] text-zinc-400">Mgr: {store.managerName}</div>
+                        )}
+                      </td>
+                      <td className="py-3 px-4 text-zinc-700 dark:text-zinc-300">
+                        👥 {store.assignedUsersCount} users
+                      </td>
+                      <td className="py-3 px-4">
+                        {store.latestWeeklyCheckDate ? (
+                          <div className="text-[11px]">
+                            <span className="text-emerald-600 font-semibold">Submitted</span>
+                            <span className="text-zinc-400 ml-1.5 font-mono">({formatDate(store.latestWeeklyCheckDate)})</span>
+                          </div>
+                        ) : (
+                          <span className="text-amber-600 font-medium text-[11px]">No check submitted</span>
+                        )}
+                      </td>
+                      <td className="py-3 px-4">
+                        <span
+                          className={`rounded-full px-2 py-0.5 text-[9px] font-bold border ${
+                            isActive
+                              ? "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300"
+                              : "bg-zinc-100 text-zinc-600 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-400"
+                          }`}
+                        >
+                          {store.status}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 text-right">
+                        <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => handleOpenEditStoreModal(store)}
+                            className="px-2.5 py-1 rounded-lg border border-zinc-200 bg-white text-[10px] font-bold text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 cursor-pointer shadow-2xs"
+                          >
+                            ✏️ Edit
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleToggleStoreStatus(store)}
+                            className={`px-2 py-1 rounded-lg border text-[10px] font-bold cursor-pointer transition-colors shadow-2xs ${
+                              isActive
+                                ? "border-rose-200 text-rose-600 hover:bg-rose-50 dark:border-rose-900/50 dark:text-rose-400"
+                                : "border-emerald-200 text-emerald-600 hover:bg-emerald-50 dark:border-emerald-900/50 dark:text-emerald-400"
+                            }`}
+                          >
+                            {isActive ? "Deactivate" : "Reactivate"}
+                          </button>
                         </div>
-                      ) : (
-                        <span className="text-amber-600 font-medium text-[11px]">No check submitted</span>
-                      )}
-                    </td>
-                    <td className="py-3 px-4">
-                      <span className="rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 text-[9px] font-bold">
-                        {store.status}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -848,41 +1142,86 @@ export function Retailer360View({ data }: Retailer360ViewProps) {
                   <th className="py-3 px-4">Name / Email</th>
                   <th className="py-3 px-4">Role</th>
                   <th className="py-3 px-4">Store Access</th>
+                  <th className="py-3 px-4">Status</th>
                   <th className="py-3 px-4">Joined Date</th>
+                  <th className="py-3 px-4 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
-                {data.members.map((member) => (
-                  <tr key={member.userId} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-800/20">
-                    <td className="py-3 px-4">
-                      <div className="font-bold text-zinc-900 dark:text-white">
-                        {member.displayName || "Retailer User"}
-                      </div>
-                      <div className="text-[11px] font-mono text-zinc-400">
-                        {member.email}
-                      </div>
-                    </td>
-                    <td className="py-3 px-4">
-                      <span className="rounded bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 text-[10px] font-bold uppercase text-zinc-700 dark:text-zinc-300">
-                        {member.role}
-                      </span>
-                    </td>
-                    <td className="py-3 px-4 text-zinc-600 dark:text-zinc-400 text-[11px]">
-                      {member.hasAllStoresAccess ? (
-                        <span className="text-emerald-700 dark:text-emerald-400 font-semibold">
-                          🏪 All Stores ({data.stores.length})
+                {data.members.map((member) => {
+                  const isUserActive = (member.status || "active").toLowerCase() === "active";
+                  return (
+                    <tr key={member.userId} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-800/20">
+                      <td className="py-3 px-4">
+                        <div className="font-bold text-zinc-900 dark:text-white">
+                          {member.displayName || "Retailer User"}
+                        </div>
+                        <div className="text-[11px] font-mono text-zinc-400">
+                          {member.email}
+                        </div>
+                      </td>
+                      <td className="py-3 px-4">
+                        <span className="rounded bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 text-[10px] font-bold uppercase text-zinc-700 dark:text-zinc-300">
+                          {member.role}
                         </span>
-                      ) : (
-                        <span>
-                          {member.assignedStores.map((s) => s.name).join(", ") || "No store assigned"}
+                      </td>
+                      <td className="py-3 px-4 text-zinc-600 dark:text-zinc-400 text-[11px]">
+                        {member.hasAllStoresAccess ? (
+                          <span className="text-emerald-700 dark:text-emerald-400 font-semibold">
+                            🏪 All Stores ({data.stores.length})
+                          </span>
+                        ) : (
+                          <span>
+                            {member.assignedStores.map((s) => s.name).join(", ") || "No store assigned"}
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-3 px-4">
+                        <span
+                          className={`rounded-full px-2 py-0.5 text-[9px] font-bold border ${
+                            isUserActive
+                              ? "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300"
+                              : "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300"
+                          }`}
+                        >
+                          {member.status || "active"}
                         </span>
-                      )}
-                    </td>
-                    <td className="py-3 px-4 text-zinc-500 font-mono text-[11px]">
-                      {formatDate(member.joinedAt)}
-                    </td>
-                  </tr>
-                ))}
+                      </td>
+                      <td className="py-3 px-4 text-zinc-500 font-mono text-[11px]">
+                        {formatDate(member.joinedAt)}
+                      </td>
+                      <td className="py-3 px-4 text-right">
+                        <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => handleOpenRoleModal(member)}
+                            className="px-2.5 py-1 rounded-lg border border-zinc-200 bg-white text-[10px] font-bold text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 cursor-pointer shadow-2xs"
+                          >
+                            Role
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleOpenAccessModal(member)}
+                            className="px-2.5 py-1 rounded-lg border border-zinc-200 bg-white text-[10px] font-bold text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 cursor-pointer shadow-2xs"
+                          >
+                            Stores
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleToggleUserStatus(member)}
+                            className={`px-2 py-1 rounded-lg border text-[10px] font-bold cursor-pointer transition-colors shadow-2xs ${
+                              isUserActive
+                                ? "border-rose-200 text-rose-600 hover:bg-rose-50 dark:border-rose-900/50 dark:text-rose-400"
+                                : "border-emerald-200 text-emerald-600 hover:bg-emerald-50 dark:border-emerald-900/50 dark:text-emerald-400"
+                            }`}
+                          >
+                            {isUserActive ? "Disable" : "Enable"}
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -1924,6 +2263,540 @@ export function Retailer360View({ data }: Retailer360ViewProps) {
                   className="rounded-xl bg-zinc-900 px-5 py-2 text-xs font-bold text-white hover:bg-zinc-800 disabled:opacity-40 cursor-pointer shadow-xs"
                 >
                   {isPending ? "Creating..." : "Confirm & Dispatch Package"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: EDIT COMPANY INFO */}
+      {showCompanyModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-lg rounded-2xl border border-zinc-200 bg-white p-6 shadow-2xl dark:border-zinc-800 dark:bg-zinc-900 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between pb-4 border-b border-zinc-100 dark:border-zinc-800">
+              <div>
+                <h3 className="text-base font-bold text-zinc-900 dark:text-white">
+                  Edit Retailer Organization Information
+                </h3>
+                <p className="text-xs text-zinc-400">
+                  Supervisory edit of legal identity, registration, contact & status
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowCompanyModal(false)}
+                className="text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 text-lg cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveCompanySubmit} className="space-y-4 pt-4 text-xs">
+              {compModalError && (
+                <div className="p-3 rounded-lg border border-red-200 bg-red-50 text-xs font-semibold text-red-800">
+                  {compModalError}
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="col-span-2">
+                  <label className="block font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                    Company Legal Name <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={editCompName}
+                    onChange={(e) => setEditCompName(e.target.value)}
+                    className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                    Business / Tax ID
+                  </label>
+                  <input
+                    type="text"
+                    value={editCompRegNo}
+                    onChange={(e) => setEditCompRegNo(e.target.value)}
+                    placeholder="XX-XXXXXXX"
+                    className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-white font-mono"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                    Organization Status
+                  </label>
+                  <select
+                    value={editCompStatus}
+                    onChange={(e) => setEditCompStatus(e.target.value)}
+                    className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
+                  >
+                    <option value="active">Active</option>
+                    <option value="pilot">Pilot</option>
+                    <option value="suspended">Suspended</option>
+                    <option value="archived">Archived</option>
+                  </select>
+                </div>
+
+                <div className="col-span-2">
+                  <label className="block font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                    Billing / HQ Address
+                  </label>
+                  <input
+                    type="text"
+                    value={editCompAddress}
+                    onChange={(e) => setEditCompAddress(e.target.value)}
+                    placeholder="123 Main St, Suite 100"
+                    className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                    City
+                  </label>
+                  <input
+                    type="text"
+                    value={editCompCity}
+                    onChange={(e) => setEditCompCity(e.target.value)}
+                    className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                    State / Province
+                  </label>
+                  <input
+                    type="text"
+                    value={editCompState}
+                    onChange={(e) => setEditCompState(e.target.value)}
+                    className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                    Postal / ZIP Code
+                  </label>
+                  <input
+                    type="text"
+                    value={editCompZip}
+                    onChange={(e) => setEditCompZip(e.target.value)}
+                    className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                    Primary Contact Name
+                  </label>
+                  <input
+                    type="text"
+                    value={editCompContactName}
+                    onChange={(e) => setEditCompContactName(e.target.value)}
+                    placeholder="Contact person"
+                    className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                    Phone Number
+                  </label>
+                  <input
+                    type="text"
+                    value={editCompContactPhone}
+                    onChange={(e) => setEditCompContactPhone(e.target.value)}
+                    className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
+                  />
+                </div>
+
+                <div className="col-span-2">
+                  <label className="block font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                    Contact Email Address
+                  </label>
+                  <input
+                    type="email"
+                    value={editCompContactEmail}
+                    onChange={(e) => setEditCompContactEmail(e.target.value)}
+                    className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-zinc-100 dark:border-zinc-800">
+                <button
+                  type="button"
+                  onClick={() => setShowCompanyModal(false)}
+                  className="rounded-xl px-4 py-2 text-xs font-bold text-zinc-600 hover:bg-zinc-100 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isPending || !editCompName.trim()}
+                  className="rounded-xl bg-zinc-900 px-5 py-2 text-xs font-bold text-white hover:bg-zinc-800 disabled:opacity-40 cursor-pointer shadow-xs"
+                >
+                  {isPending ? "Saving..." : "Save Company Changes"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: EDIT STORE LOCATION */}
+      {showEditStoreModal && editingStore && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-lg rounded-2xl border border-zinc-200 bg-white p-6 shadow-2xl dark:border-zinc-800 dark:bg-zinc-900 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between pb-4 border-b border-zinc-100 dark:border-zinc-800">
+              <div>
+                <h3 className="text-base font-bold text-zinc-900 dark:text-white">
+                  Edit Store Location
+                </h3>
+                <p className="text-xs text-zinc-400">
+                  Update location details, manager contact, or store code
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowEditStoreModal(false)}
+                className="text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 text-lg cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEditStoreSubmit} className="space-y-4 pt-4 text-xs">
+              {editStoreError && (
+                <div className="p-3 rounded-lg border border-red-200 bg-red-50 text-xs font-semibold text-red-800">
+                  {editStoreError}
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="col-span-2">
+                  <label className="block font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                    Store Name <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={editStoreName}
+                    onChange={(e) => setEditStoreName(e.target.value)}
+                    className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                    Store Code
+                  </label>
+                  <input
+                    type="text"
+                    value={editStoreCode}
+                    onChange={(e) => setEditStoreCode(e.target.value)}
+                    placeholder="e.g. STR-001"
+                    className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-white font-mono"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                    Store Phone
+                  </label>
+                  <input
+                    type="text"
+                    value={editStorePhone}
+                    onChange={(e) => setEditStorePhone(e.target.value)}
+                    className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
+                  />
+                </div>
+
+                <div className="col-span-2">
+                  <label className="block font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                    Physical Address
+                  </label>
+                  <input
+                    type="text"
+                    value={editStoreAddress}
+                    onChange={(e) => setEditStoreAddress(e.target.value)}
+                    placeholder="123 Retailer Way"
+                    className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                    City
+                  </label>
+                  <input
+                    type="text"
+                    value={editStoreCity}
+                    onChange={(e) => setEditStoreCity(e.target.value)}
+                    className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                    State
+                  </label>
+                  <input
+                    type="text"
+                    value={editStoreState}
+                    onChange={(e) => setEditStoreState(e.target.value)}
+                    className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                    Postal / ZIP Code
+                  </label>
+                  <input
+                    type="text"
+                    value={editStoreZip}
+                    onChange={(e) => setEditStoreZip(e.target.value)}
+                    className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                    Store Email
+                  </label>
+                  <input
+                    type="email"
+                    value={editStoreEmail}
+                    onChange={(e) => setEditStoreEmail(e.target.value)}
+                    className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                    Manager Name
+                  </label>
+                  <input
+                    type="text"
+                    value={editStoreManagerName}
+                    onChange={(e) => setEditStoreManagerName(e.target.value)}
+                    placeholder="Store Manager"
+                    className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                    Manager Phone
+                  </label>
+                  <input
+                    type="text"
+                    value={editStoreManagerPhone}
+                    onChange={(e) => setEditStoreManagerPhone(e.target.value)}
+                    placeholder="Direct cell"
+                    className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-zinc-100 dark:border-zinc-800">
+                <button
+                  type="button"
+                  onClick={() => setShowEditStoreModal(false)}
+                  className="rounded-xl px-4 py-2 text-xs font-bold text-zinc-600 hover:bg-zinc-100 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isPending || !editStoreName.trim()}
+                  className="rounded-xl bg-zinc-900 px-5 py-2 text-xs font-bold text-white hover:bg-zinc-800 disabled:opacity-40 cursor-pointer shadow-xs"
+                >
+                  {isPending ? "Saving..." : "Save Store Changes"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: CHANGE USER ROLE */}
+      {showRoleModal && roleMember && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-md rounded-2xl border border-zinc-200 bg-white p-6 shadow-2xl dark:border-zinc-800 dark:bg-zinc-900">
+            <div className="flex items-center justify-between pb-4 border-b border-zinc-100 dark:border-zinc-800">
+              <div>
+                <h3 className="text-base font-bold text-zinc-900 dark:text-white">
+                  Change Team Member Role
+                </h3>
+                <p className="text-xs text-zinc-400">
+                  {roleMember.displayName || roleMember.email}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowRoleModal(false)}
+                className="text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 text-lg cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveUserRoleSubmit} className="space-y-4 pt-4 text-xs">
+              {roleModalError && (
+                <div className="p-3 rounded-lg border border-red-200 bg-red-50 text-xs font-semibold text-red-800">
+                  {roleModalError}
+                </div>
+              )}
+
+              <div>
+                <label className="block font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                  Retailer Organization Role
+                </label>
+                <select
+                  value={userRole}
+                  onChange={(e) => {
+                    const nextRole = e.target.value as RetailerRole;
+                    setUserRole(nextRole);
+                    if (nextRole === "owner" || nextRole === "accounting") {
+                      setUserRoleAllStores(true);
+                    }
+                  }}
+                  className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
+                >
+                  <option value="owner">Owner (Full Company Control)</option>
+                  <option value="buyer">Buyer (Product Catalog & Ordering)</option>
+                  <option value="store_manager">Store Manager (Store Inventory & Check)</option>
+                  <option value="employee">Employee (Training & Tag Printing)</option>
+                  <option value="accounting">Accounting (Invoicing & Terms)</option>
+                </select>
+              </div>
+
+              <div className="p-3 rounded-xl bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200/80 dark:border-zinc-700/60 text-[11px] text-zinc-500">
+                {userRole === "owner" && "Owner has full supervisory control over all stores, commercial settings, and staff."}
+                {userRole === "buyer" && "Buyer can place wholesale orders, review catalog, and manage inventory protection."}
+                {userRole === "store_manager" && "Store Manager submits weekly inventory checks and views store analytics."}
+                {userRole === "employee" && "Employee accesses training guides and product price tags."}
+                {userRole === "accounting" && "Accounting handles net terms, invoices, and bank settlements."}
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-zinc-100 dark:border-zinc-800">
+                <button
+                  type="button"
+                  onClick={() => setShowRoleModal(false)}
+                  className="rounded-xl px-4 py-2 text-xs font-bold text-zinc-600 hover:bg-zinc-100 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isPending}
+                  className="rounded-xl bg-zinc-900 px-5 py-2 text-xs font-bold text-white hover:bg-zinc-800 disabled:opacity-40 cursor-pointer shadow-xs"
+                >
+                  {isPending ? "Saving..." : "Update Role"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: ASSIGN STORE ACCESS */}
+      {showAccessModal && accessMember && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-md rounded-2xl border border-zinc-200 bg-white p-6 shadow-2xl dark:border-zinc-800 dark:bg-zinc-900 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between pb-4 border-b border-zinc-100 dark:border-zinc-800">
+              <div>
+                <h3 className="text-base font-bold text-zinc-900 dark:text-white">
+                  Assign Store Locations
+                </h3>
+                <p className="text-xs text-zinc-400">
+                  {accessMember.displayName || accessMember.email} ({accessMember.role})
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowAccessModal(false)}
+                className="text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 text-lg cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveUserAccessSubmit} className="space-y-4 pt-4 text-xs">
+              {accessModalError && (
+                <div className="p-3 rounded-lg border border-red-200 bg-red-50 text-xs font-semibold text-red-800">
+                  {accessModalError}
+                </div>
+              )}
+
+              <div>
+                <label className="flex items-center gap-2 p-3 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800/40 cursor-pointer font-bold">
+                  <input
+                    type="checkbox"
+                    checked={accessAllStores}
+                    onChange={(e) => setAccessAllStores(e.target.checked)}
+                    className="rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900"
+                  />
+                  <span>All Store Locations (Current & Future)</span>
+                </label>
+              </div>
+
+              {!accessAllStores && (
+                <div className="space-y-2">
+                  <label className="block font-bold text-zinc-700 dark:text-zinc-300">
+                    Select Specific Stores ({accessStoreIds.length} selected)
+                  </label>
+                  <div className="max-h-60 overflow-y-auto rounded-xl border border-zinc-200 dark:border-zinc-800 divide-y divide-zinc-100 dark:divide-zinc-800">
+                    {data.stores.map((st) => {
+                      const checked = accessStoreIds.includes(st.id);
+                      return (
+                        <label
+                          key={st.id}
+                          className="p-3 flex items-center gap-3 hover:bg-zinc-50 dark:hover:bg-zinc-800/30 cursor-pointer text-xs"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => handleToggleAccessStore(st.id)}
+                            className="rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <span className="font-semibold text-zinc-900 dark:text-white block">
+                              🏪 {st.name}
+                            </span>
+                            <span className="text-[10px] text-zinc-400">
+                              {st.city ? `${st.city}, ${st.state || ""}` : st.address || "No address"}
+                            </span>
+                          </div>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-zinc-100 dark:border-zinc-800">
+                <button
+                  type="button"
+                  onClick={() => setShowAccessModal(false)}
+                  className="rounded-xl px-4 py-2 text-xs font-bold text-zinc-600 hover:bg-zinc-100 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isPending}
+                  className="rounded-xl bg-zinc-900 px-5 py-2 text-xs font-bold text-white hover:bg-zinc-800 disabled:opacity-40 cursor-pointer shadow-xs"
+                >
+                  {isPending ? "Saving..." : "Save Store Access"}
                 </button>
               </div>
             </form>

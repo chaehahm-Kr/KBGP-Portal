@@ -65,10 +65,15 @@ export interface Retailer360OverviewMetrics {
 export interface Retailer360StoreItem {
   id: string;
   name: string;
+  storeCode?: string | null;
   city?: string | null;
   state?: string | null;
+  zip?: string | null;
   address?: string | null;
   phone?: string | null;
+  email?: string | null;
+  managerName?: string | null;
+  managerPhone?: string | null;
   status: string;
   assignedUsersCount: number;
   assortmentCount: number;
@@ -82,6 +87,7 @@ export interface Retailer360MemberItem {
   email: string;
   displayName: string;
   role: RetailerRole;
+  status: string;
   hasAllStoresAccess: boolean;
   assignedStores: Array<{ id: string; name: string }>;
   joinedAt: string;
@@ -378,10 +384,13 @@ export async function getAdminRetailer360Data(companyId: string): Promise<Retail
   const { data: companyUsers } = await adminClient
     .from("company_users")
     .select(`
-      user_id,
+      id,
       company_role,
+      status,
+      name,
+      phone,
       created_at,
-      profiles:user_id (
+      profiles:id (
         id,
         email,
         display_name,
@@ -390,7 +399,7 @@ export async function getAdminRetailer360Data(companyId: string): Promise<Retail
     `)
     .eq("company_id", companyId);
 
-  const userIds = (companyUsers || []).map((cu) => cu.user_id);
+  const userIds = (companyUsers || []).map((cu: any) => cu.id);
   let userRolesMap: Record<string, any> = {};
   let userStoresMap: Record<string, any[]> = {};
   let storeUserCountMap: Record<string, number> = {};
@@ -423,15 +432,16 @@ export async function getAdminRetailer360Data(companyId: string): Promise<Retail
 
   const members: Retailer360MemberItem[] = (companyUsers || []).map((cu: any) => {
     const prof = cu.profiles;
-    const r = userRolesMap[cu.user_id];
+    const r = userRolesMap[cu.id];
     const isOwner = r?.role === "owner" || cu.company_role === "owner";
     return {
-      userId: cu.user_id,
+      userId: cu.id,
       email: prof?.email || "Unknown",
-      displayName: prof?.display_name || "",
+      displayName: prof?.display_name || cu.name || "",
       role: (r?.role || cu.company_role || "employee") as RetailerRole,
+      status: cu.status || "active",
       hasAllStoresAccess: isOwner || Boolean(r?.has_all_stores_access),
-      assignedStores: isOwner ? stores.map((s) => ({ id: s.id, name: s.name })) : userStoresMap[cu.user_id] || [],
+      assignedStores: isOwner ? stores.map((s) => ({ id: s.id, name: s.name })) : userStoresMap[cu.id] || [],
       joinedAt: cu.created_at,
     };
   });
@@ -1073,10 +1083,15 @@ export async function getAdminRetailer360Data(companyId: string): Promise<Retail
     return {
       id: s.id,
       name: s.name,
+      storeCode: s.store_code || null,
       city: s.city,
       state: s.state,
+      zip: s.zip || null,
       address: s.address,
       phone: s.phone,
+      email: s.email || null,
+      managerName: s.manager_name || null,
+      managerPhone: s.manager_phone || null,
       status: s.status || "active",
       assignedUsersCount: storeUserCountMap[s.id] || 0,
       assortmentCount: productsCatalog.length,
