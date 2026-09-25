@@ -543,6 +543,169 @@ export function TradingProductDetail({
     return rows;
   }, [historyLogs]);
 
+  // Pricing Tab Filter State
+  const [pricingFilterType, setPricingFilterType] = useState<"ALL" | "PRICING" | "PROMOTION">("ALL");
+  const [pricingFilterDays, setPricingFilterDays] = useState<"ALL" | "30" | "90">("ALL");
+
+  // Chronological Pricing & Promotion Timeline Memo
+  const pricingTimeline = useMemo(() => {
+    const events: any[] = [];
+
+    (historyLogs || []).forEach((log: any) => {
+      if (["PRICING", "PROMOTION"].includes(log.change_type)) {
+        const createdDate = new Date(log.created_at);
+        const dateStr = createdDate.toLocaleString("ko-KR", {
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+          hour: "2-digit",
+          minute: "2-digit",
+        });
+        const timestamp = createdDate.getTime();
+        const user = log.creator?.full_name || "Admin";
+        const reason = log.reason || log.after_value?.note || "Operational change";
+
+        const before = log.before_value || {};
+        const after = log.after_value || {};
+
+        const effectiveCost = after.effective_landed_cost ?? before.effective_landed_cost ?? product.effectiveLandedCost;
+
+        let eventTitle = "Pricing Event";
+        let eventBadgeColor = "bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 border-zinc-200 dark:border-zinc-700";
+
+        if (log.change_type === "PRICING") {
+          const oldW = before.wholesale_price;
+          const newW = after.wholesale_price;
+          const oldM = before.map_price;
+          const newM = after.map_price;
+          const oldS = before.srp_price;
+          const newS = after.srp_price;
+
+          if (oldW !== undefined && oldW !== null && newW !== undefined && newW !== null && Number(oldW) !== Number(newW)) {
+            eventTitle = "도매가 변경 (Wholesale Price Changed)";
+            eventBadgeColor = "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800";
+          } else if (oldM !== undefined && oldM !== null && newM !== undefined && newM !== null && Number(oldM) !== Number(newM)) {
+            eventTitle = "MAP 변경 (MAP Changed)";
+            eventBadgeColor = "bg-blue-100 text-blue-800 dark:bg-blue-950/50 dark:text-blue-300 border-blue-200 dark:border-blue-800";
+          } else if (oldS !== undefined && oldS !== null && newS !== undefined && newS !== null && Number(oldS) !== Number(newS)) {
+            eventTitle = "SRP 변경 (SRP Changed)";
+            eventBadgeColor = "bg-indigo-100 text-indigo-800 dark:bg-indigo-950/50 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800";
+          } else {
+            eventTitle = "가격 정책 설정 (Pricing Policy Updated)";
+            eventBadgeColor = "bg-zinc-100 text-zinc-800 dark:bg-zinc-800 dark:text-zinc-200 border-zinc-200 dark:border-zinc-700";
+          }
+        } else if (log.change_type === "PROMOTION") {
+          const oldPromo = before.promo_wholesale_price;
+          const newPromo = after.promo_wholesale_price;
+
+          if ((oldPromo === null || oldPromo === undefined) && newPromo !== null && newPromo !== undefined) {
+            eventTitle = "프로모션 등록 (Promotion Created)";
+            eventBadgeColor = "bg-amber-100 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300 border-amber-200 dark:border-amber-800";
+          } else if (newPromo === null || newPromo === undefined) {
+            eventTitle = "프로모션 종료 (Promotion Ended)";
+            eventBadgeColor = "bg-rose-100 text-rose-800 dark:bg-rose-950/50 dark:text-rose-300 border-rose-200 dark:border-rose-800";
+          } else {
+            eventTitle = "프로모션 수정 (Promotion Updated)";
+            eventBadgeColor = "bg-amber-100 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300 border-amber-200 dark:border-amber-800";
+          }
+        }
+
+        const oldW = before.wholesale_price !== undefined && before.wholesale_price !== null ? Number(before.wholesale_price) : null;
+        const newW = after.wholesale_price !== undefined && after.wholesale_price !== null ? Number(after.wholesale_price) : product.operationalWholesale;
+
+        const oldM = before.map_price !== undefined && before.map_price !== null ? Number(before.map_price) : null;
+        const newM = after.map_price !== undefined && after.map_price !== null ? Number(after.map_price) : product.mapPrice;
+
+        const oldS = before.srp_price !== undefined && before.srp_price !== null ? Number(before.srp_price) : null;
+        const newS = after.srp_price !== undefined && after.srp_price !== null ? Number(after.srp_price) : product.srpPrice;
+
+        const oldPromo = before.promo_wholesale_price !== undefined && before.promo_wholesale_price !== null ? Number(before.promo_wholesale_price) : null;
+        const newPromo = after.promo_wholesale_price !== undefined && after.promo_wholesale_price !== null ? Number(after.promo_wholesale_price) : null;
+
+        // Our Margin
+        const oldOurMarginPct = oldW && oldW > 0 ? ((oldW - effectiveCost) / oldW) * 100 : null;
+        const newOurMarginPct = newW > 0 ? ((newW - effectiveCost) / newW) * 100 : null;
+        const ourMarginDiffPts = (oldOurMarginPct !== null && newOurMarginPct !== null) ? (newOurMarginPct - oldOurMarginPct) : null;
+
+        // Retailer Margin
+        const oldRetailerMarginPct = oldS && oldS > 0 && oldW && oldW > 0 ? ((oldS - oldW) / oldS) * 100 : null;
+        const newRetailerMarginPct = newS > 0 && newW > 0 ? ((newS - newW) / newS) * 100 : null;
+
+        // Promo Discount % & Promo Margins
+        let promoDiscountPct: number | null = null;
+        let promoLabel: string | null = null;
+        let promoOurMarginPct: number | null = null;
+        let promoRetailerMarginPct: number | null = null;
+
+        if (log.change_type === "PROMOTION" && newPromo !== null && newPromo > 0) {
+          const baseW = product.operationalWholesale;
+          promoDiscountPct = baseW > 0 ? ((newPromo - baseW) / baseW) * 100 : 0;
+          promoLabel = promoDiscountPct < 0 ? `Discount ${Math.abs(promoDiscountPct).toFixed(1)}%` : `Increase +${promoDiscountPct.toFixed(1)}%`;
+          promoOurMarginPct = ((newPromo - effectiveCost) / newPromo) * 100;
+          promoRetailerMarginPct = newS > 0 ? ((newS - newPromo) / newS) * 100 : null;
+        }
+
+        events.push({
+          id: log.id,
+          date: dateStr,
+          timestamp,
+          changeType: log.change_type,
+          eventTitle,
+          eventBadgeColor,
+          user,
+          reason,
+          effectiveCost,
+          // Before/After values
+          oldW,
+          newW,
+          isWholesaleChanged: oldW !== null && oldW !== newW,
+          oldM,
+          newM,
+          isMapChanged: oldM !== null && oldM !== newM,
+          oldS,
+          newS,
+          isSrpChanged: oldS !== null && oldS !== newS,
+          oldPromo,
+          newPromo,
+          isPromoChanged: oldPromo !== newPromo,
+          promoStartDate: after.promo_start_date || before.promo_start_date || null,
+          promoEndDate: after.promo_end_date || before.promo_end_date || null,
+          promoDiscountPct,
+          promoLabel,
+          promoOurMarginPct,
+          promoRetailerMarginPct,
+          // Calculated Margins
+          oldOurMarginPct,
+          newOurMarginPct,
+          ourMarginDiffPts,
+          oldRetailerMarginPct,
+          newRetailerMarginPct,
+        });
+      }
+    });
+
+    return events.sort((a, b) => b.timestamp - a.timestamp);
+  }, [historyLogs, product]);
+
+  // Filtered Pricing Timeline Memo
+  const filteredPricingTimeline = useMemo(() => {
+    let list = pricingTimeline;
+
+    if (pricingFilterType === "PRICING") {
+      list = list.filter((e) => e.changeType === "PRICING");
+    } else if (pricingFilterType === "PROMOTION") {
+      list = list.filter((e) => e.changeType === "PROMOTION");
+    }
+
+    if (pricingFilterDays !== "ALL") {
+      const cutoffDays = parseInt(pricingFilterDays);
+      const cutoffTimestamp = Date.now() - cutoffDays * 24 * 60 * 60 * 1000;
+      list = list.filter((e) => e.timestamp >= cutoffTimestamp);
+    }
+
+    return list;
+  }, [pricingTimeline, pricingFilterType, pricingFilterDays]);
+
   // Compute active operational alerts
   const activeAlerts = useMemo(() => {
     const alerts = [];
@@ -1235,33 +1398,336 @@ export function TradingProductDetail({
             </div>
           )}
 
-          {/* TAB 4: PRICING & PROMOTIONS */}
+          {/* TAB 4: PRICING & PROMOTIONS TIMELINE */}
           {activeTab === "pricing" && (
-            <div className="space-y-4">
-              <h3 className="text-sm font-bold text-zinc-900 dark:text-white">
-                상업용 도매가 및 프로모션 정책
-              </h3>
+            <div className="space-y-5">
+              {/* 1. Current Active Policy Section */}
+              <div className="p-4 rounded-xl bg-gradient-to-r from-zinc-50 to-indigo-50/30 dark:from-zinc-950 dark:to-indigo-950/20 border border-zinc-200 dark:border-zinc-800 space-y-3 shadow-sm">
+                <div className="flex items-center justify-between border-b border-zinc-200/60 dark:border-zinc-800 pb-2">
+                  <span className="text-xs font-bold text-zinc-600 dark:text-zinc-300 uppercase tracking-wider flex items-center gap-1.5">
+                    <span>🏷️ 현재 활성 상업 도매 정책 (Current Active Policy)</span>
+                  </span>
+                  <span className="text-[11px] font-semibold text-indigo-600 dark:text-indigo-400">
+                    Source: {product.hasPricingOverride ? "Trading Operational Override" : "Product Catalog Default"}
+                  </span>
+                </div>
 
-              <div className="p-4 rounded-lg bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 space-y-3">
-                <span className="text-[10px] font-bold text-zinc-400 uppercase">현재 활성 도매 정책 (Active Policy)</span>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs font-mono">
-                  <div>
-                    <span className="text-[10px] text-zinc-400 block font-sans">Operational Wholesale:</span>
-                    <strong className="text-sm text-zinc-900 dark:text-white">${product.operationalWholesale.toFixed(2)}</strong>
+                <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3 text-xs">
+                  <div className="p-2.5 rounded-lg bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800">
+                    <span className="text-[10px] font-bold text-zinc-400 block uppercase">Wholesale Price</span>
+                    <strong className="text-sm font-extrabold text-zinc-900 dark:text-white">${product.operationalWholesale.toFixed(2)}</strong>
                   </div>
-                  <div>
-                    <span className="text-[10px] text-zinc-400 block font-sans">Promo Wholesale:</span>
-                    <strong className="text-sm text-amber-600">{product.promoWholesale ? `$${product.promoWholesale.toFixed(2)}` : "없음"}</strong>
+
+                  <div className="p-2.5 rounded-lg bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800">
+                    <span className="text-[10px] font-bold text-amber-600 block uppercase">Promo Wholesale</span>
+                    <strong className="text-sm font-extrabold text-amber-600 dark:text-amber-400">
+                      {product.promoWholesale ? `$${product.promoWholesale.toFixed(2)}` : "없음"}
+                    </strong>
                   </div>
-                  <div>
-                    <span className="text-[10px] text-zinc-400 block font-sans">MAP:</span>
-                    <strong className="text-sm text-zinc-900 dark:text-white">${product.mapPrice.toFixed(2)}</strong>
+
+                  <div className="p-2.5 rounded-lg bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800">
+                    <span className="text-[10px] font-bold text-zinc-400 block uppercase">MAP</span>
+                    <strong className="text-sm font-bold text-zinc-800 dark:text-zinc-200">${product.mapPrice.toFixed(2)}</strong>
                   </div>
-                  <div>
-                    <span className="text-[10px] text-zinc-400 block font-sans">SRP:</span>
-                    <strong className="text-sm text-zinc-900 dark:text-white">${product.srpPrice.toFixed(2)}</strong>
+
+                  <div className="p-2.5 rounded-lg bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800">
+                    <span className="text-[10px] font-bold text-zinc-400 block uppercase">SRP</span>
+                    <strong className="text-sm font-bold text-zinc-800 dark:text-zinc-200">${product.srpPrice.toFixed(2)}</strong>
+                  </div>
+
+                  <div className="p-2.5 rounded-lg bg-indigo-50/80 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-900/40">
+                    <span className="text-[10px] font-bold text-indigo-700 dark:text-indigo-400 block uppercase">Effective Cost</span>
+                    <strong className="text-sm font-extrabold text-indigo-900 dark:text-indigo-200">${product.effectiveLandedCost.toFixed(2)}</strong>
+                  </div>
+
+                  <div className="p-2.5 rounded-lg bg-emerald-50/80 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900/40">
+                    <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400 block uppercase">Our Margin</span>
+                    <strong className="text-sm font-extrabold text-emerald-800 dark:text-emerald-300">
+                      {product.ourMarginPercent.toFixed(1)}% <span className="text-[10px] font-normal">(${product.ourMarginUsd.toFixed(2)})</span>
+                    </strong>
+                  </div>
+
+                  <div className="p-2.5 rounded-lg bg-blue-50/80 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900/40">
+                    <span className="text-[10px] font-bold text-blue-700 dark:text-blue-400 block uppercase">Retailer Margin</span>
+                    <strong className="text-sm font-extrabold text-blue-800 dark:text-blue-300">
+                      {product.retailerMarginPercent.toFixed(1)}% <span className="text-[10px] font-normal">(${product.retailerMarginUsd.toFixed(2)})</span>
+                    </strong>
                   </div>
                 </div>
+              </div>
+
+              {/* 2. Chronological Pricing & Promotion History Timeline */}
+              <div className="space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-zinc-200 dark:border-zinc-800 pb-2">
+                  <div>
+                    <h3 className="text-sm font-bold text-zinc-900 dark:text-white flex items-center gap-2">
+                      <span>📈 가격 및 프로모션 히스토리 타임라인 (Commercial Pricing Timeline)</span>
+                      <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400">
+                        {filteredPricingTimeline.length}건
+                      </span>
+                    </h3>
+                    <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5">
+                      도매가, MAP, SRP 및 프로모션 변경 이력과 당시 수입원가 기준 마진 변동 추이를 기록합니다.
+                    </p>
+                  </div>
+
+                  {/* Lightweight Filter Controls */}
+                  <div className="flex items-center gap-2 text-xs">
+                    <div className="flex items-center rounded-lg border border-zinc-200 dark:border-zinc-800 p-0.5 bg-zinc-50 dark:bg-zinc-900">
+                      <button
+                        type="button"
+                        onClick={() => setPricingFilterType("ALL")}
+                        className={`px-2.5 py-1 text-[11px] font-semibold rounded-md transition-colors ${
+                          pricingFilterType === "ALL"
+                            ? "bg-white text-zinc-900 dark:bg-zinc-800 dark:text-white shadow-sm"
+                            : "text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white"
+                        }`}
+                      >
+                        전체
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPricingFilterType("PRICING")}
+                        className={`px-2.5 py-1 text-[11px] font-semibold rounded-md transition-colors ${
+                          pricingFilterType === "PRICING"
+                            ? "bg-white text-zinc-900 dark:bg-zinc-800 dark:text-white shadow-sm"
+                            : "text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white"
+                        }`}
+                      >
+                        가격 정책 변경
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPricingFilterType("PROMOTION")}
+                        className={`px-2.5 py-1 text-[11px] font-semibold rounded-md transition-colors ${
+                          pricingFilterType === "PROMOTION"
+                            ? "bg-white text-zinc-900 dark:bg-zinc-800 dark:text-white shadow-sm"
+                            : "text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white"
+                        }`}
+                      >
+                        프로모션
+                      </button>
+                    </div>
+
+                    <div className="flex items-center rounded-lg border border-zinc-200 dark:border-zinc-800 p-0.5 bg-zinc-50 dark:bg-zinc-900">
+                      <button
+                        type="button"
+                        onClick={() => setPricingFilterDays("ALL")}
+                        className={`px-2 py-1 text-[11px] font-semibold rounded-md transition-colors ${
+                          pricingFilterDays === "ALL"
+                            ? "bg-white text-zinc-900 dark:bg-zinc-800 dark:text-white shadow-sm"
+                            : "text-zinc-500 hover:text-zinc-900 dark:text-zinc-400"
+                        }`}
+                      >
+                        전체 기간
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPricingFilterDays("30")}
+                        className={`px-2 py-1 text-[11px] font-semibold rounded-md transition-colors ${
+                          pricingFilterDays === "30"
+                            ? "bg-white text-zinc-900 dark:bg-zinc-800 dark:text-white shadow-sm"
+                            : "text-zinc-500 hover:text-zinc-900 dark:text-zinc-400"
+                        }`}
+                      >
+                        30일
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPricingFilterDays("90")}
+                        className={`px-2 py-1 text-[11px] font-semibold rounded-md transition-colors ${
+                          pricingFilterDays === "90"
+                            ? "bg-white text-zinc-900 dark:bg-zinc-800 dark:text-white shadow-sm"
+                            : "text-zinc-500 hover:text-zinc-900 dark:text-zinc-400"
+                        }`}
+                      >
+                        90일
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {filteredPricingTimeline.length === 0 ? (
+                  <div className="p-8 text-center text-xs text-zinc-400 border border-dashed border-zinc-200 dark:border-zinc-800 rounded-lg">
+                    기록된 상업 가격 변경 또는 프로모션 이력이 없습니다.
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto rounded-xl border border-zinc-200 dark:border-zinc-800 shadow-sm bg-white dark:bg-zinc-900">
+                    <table className="w-full text-left text-xs text-zinc-600 dark:text-zinc-300">
+                      <thead className="bg-zinc-50 text-[10px] uppercase font-bold text-zinc-400 dark:bg-zinc-950 border-b border-zinc-200 dark:border-zinc-800">
+                        <tr>
+                          <th className="py-3 px-3.5">일시 및 이벤트</th>
+                          <th className="py-3 px-3 text-right">Operational Wholesale</th>
+                          <th className="py-3 px-3 text-right">Promo Wholesale</th>
+                          <th className="py-3 px-3 text-right">MAP</th>
+                          <th className="py-3 px-3 text-right">SRP</th>
+                          <th className="py-3 px-3 text-right">Cost Basis</th>
+                          <th className="py-3 px-3 text-right">Our Margin</th>
+                          <th className="py-3 px-3 text-right">Retailer Margin</th>
+                          <th className="py-3 px-3.5">사유 및 작성자</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
+                        {filteredPricingTimeline.map((item) => (
+                          <tr key={item.id} className="hover:bg-zinc-50/70 dark:hover:bg-zinc-950/60 transition-colors">
+                            {/* Column 1: Date & Event Type Badge */}
+                            <td className="py-3 px-3.5 space-y-1">
+                              <span className="font-mono text-[11px] text-zinc-500 block">{item.date}</span>
+                              <span className={`inline-block px-2 py-0.5 text-[10px] font-bold rounded border ${item.eventBadgeColor}`}>
+                                {item.eventTitle}
+                              </span>
+                            </td>
+
+                            {/* Column 2: Operational Wholesale */}
+                            <td className="py-3 px-3 text-right font-mono">
+                              {item.isWholesaleChanged ? (
+                                <div>
+                                  <span className="text-zinc-400 text-[10px] block line-through">
+                                    ${item.oldW?.toFixed(2)}
+                                  </span>
+                                  <strong className="text-emerald-600 dark:text-emerald-400 font-extrabold text-xs">
+                                    ${item.newW.toFixed(2)}
+                                  </strong>
+                                </div>
+                              ) : (
+                                <span className="text-zinc-400">—</span>
+                              )}
+                            </td>
+
+                            {/* Column 3: Promo Wholesale */}
+                            <td className="py-3 px-3 text-right font-mono">
+                              {item.changeType === "PROMOTION" && item.newPromo !== null ? (
+                                <div>
+                                  <strong className="text-amber-600 dark:text-amber-400 font-extrabold text-xs block">
+                                    ${item.newPromo.toFixed(2)}
+                                  </strong>
+                                  {item.promoLabel && (
+                                    <span className="inline-block mt-0.5 px-1.5 py-0.2 text-[9px] font-bold rounded bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+                                      {item.promoLabel}
+                                    </span>
+                                  )}
+                                  {item.promoStartDate && item.promoEndDate && (
+                                    <span className="text-[9px] text-zinc-400 block font-sans mt-0.5">
+                                      {item.promoStartDate} ~ {item.promoEndDate}
+                                    </span>
+                                  )}
+                                </div>
+                              ) : item.isPromoChanged && item.newPromo === null ? (
+                                <span className="text-xs font-bold text-rose-500">해제됨</span>
+                              ) : (
+                                <span className="text-zinc-400">—</span>
+                              )}
+                            </td>
+
+                            {/* Column 4: MAP */}
+                            <td className="py-3 px-3 text-right font-mono">
+                              {item.isMapChanged ? (
+                                <div>
+                                  <span className="text-zinc-400 text-[10px] block line-through">
+                                    {item.oldM !== null ? `$${item.oldM.toFixed(2)}` : "-"}
+                                  </span>
+                                  <strong className="text-zinc-800 dark:text-zinc-200 font-bold">
+                                    ${item.newM.toFixed(2)}
+                                  </strong>
+                                </div>
+                              ) : (
+                                <span className="text-zinc-400">—</span>
+                              )}
+                            </td>
+
+                            {/* Column 5: SRP */}
+                            <td className="py-3 px-3 text-right font-mono">
+                              {item.isSrpChanged ? (
+                                <div>
+                                  <span className="text-zinc-400 text-[10px] block line-through">
+                                    {item.oldS !== null ? `$${item.oldS.toFixed(2)}` : "-"}
+                                  </span>
+                                  <strong className="text-zinc-800 dark:text-zinc-200 font-bold">
+                                    ${item.newS.toFixed(2)}
+                                  </strong>
+                                </div>
+                              ) : (
+                                <span className="text-zinc-400">—</span>
+                              )}
+                            </td>
+
+                            {/* Column 6: Cost Basis (Effective Landed Cost at time) */}
+                            <td className="py-3 px-3 text-right font-mono font-bold text-indigo-600 dark:text-indigo-400">
+                              ${item.effectiveCost.toFixed(2)}
+                            </td>
+
+                            {/* Column 7: Our Margin Impact */}
+                            <td className="py-3 px-3 text-right font-mono">
+                              {item.changeType === "PROMOTION" && item.promoOurMarginPct !== null ? (
+                                <div>
+                                  <strong className={`text-xs font-extrabold ${item.promoOurMarginPct <= 0 ? 'text-rose-600' : 'text-amber-600 dark:text-amber-400'}`}>
+                                    {item.promoOurMarginPct.toFixed(1)}%
+                                  </strong>
+                                  <span className="text-[9px] text-zinc-400 block font-sans">Promo Margin</span>
+                                </div>
+                              ) : item.isWholesaleChanged && item.oldOurMarginPct !== null && item.newOurMarginPct !== null ? (
+                                <div>
+                                  <span className="text-zinc-400 text-[10px] block line-through">
+                                    {item.oldOurMarginPct.toFixed(1)}%
+                                  </span>
+                                  <strong className={`text-xs font-extrabold ${item.newOurMarginPct <= 0 ? 'text-rose-600' : 'text-emerald-600 dark:text-emerald-400'}`}>
+                                    {item.newOurMarginPct.toFixed(1)}%
+                                  </strong>
+                                  {item.ourMarginDiffPts !== null && (
+                                    <span className={`text-[10px] font-bold block ${item.ourMarginDiffPts >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                      {item.ourMarginDiffPts >= 0 ? `+${item.ourMarginDiffPts.toFixed(1)}%p` : `${item.ourMarginDiffPts.toFixed(1)}%p`}
+                                    </span>
+                                  )}
+                                </div>
+                              ) : (
+                                <strong className={`text-xs font-bold ${item.newOurMarginPct && item.newOurMarginPct <= 0 ? 'text-rose-600' : 'text-zinc-800 dark:text-zinc-200'}`}>
+                                  {item.newOurMarginPct !== null ? `${item.newOurMarginPct.toFixed(1)}%` : "-"}
+                                </strong>
+                              )}
+                            </td>
+
+                            {/* Column 8: Retailer Margin */}
+                            <td className="py-3 px-3 text-right font-mono">
+                              {item.changeType === "PROMOTION" && item.promoRetailerMarginPct !== null ? (
+                                <div>
+                                  <strong className="text-xs font-bold text-blue-600 dark:text-blue-400">
+                                    {item.promoRetailerMarginPct.toFixed(1)}%
+                                  </strong>
+                                  <span className="text-[9px] text-zinc-400 block font-sans">Promo Retailer</span>
+                                </div>
+                              ) : (item.isWholesaleChanged || item.isSrpChanged) && item.oldRetailerMarginPct !== null && item.newRetailerMarginPct !== null ? (
+                                <div>
+                                  <span className="text-zinc-400 text-[10px] block line-through">
+                                    {item.oldRetailerMarginPct.toFixed(1)}%
+                                  </span>
+                                  <strong className="text-xs font-bold text-blue-600 dark:text-blue-400">
+                                    {item.newRetailerMarginPct.toFixed(1)}%
+                                  </strong>
+                                </div>
+                              ) : item.newRetailerMarginPct !== null ? (
+                                <span className="text-xs font-bold text-zinc-800 dark:text-zinc-200">
+                                  {item.newRetailerMarginPct.toFixed(1)}%
+                                </span>
+                              ) : (
+                                <span className="text-zinc-400">—</span>
+                              )}
+                            </td>
+
+                            {/* Column 9: Reason & User */}
+                            <td className="py-3 px-3.5 space-y-0.5">
+                              <p className="text-xs text-zinc-800 dark:text-zinc-200 font-medium line-clamp-2">
+                                {item.reason}
+                              </p>
+                              <span className="text-[10px] text-zinc-400 font-semibold block">
+                                by {item.user}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
             </div>
           )}

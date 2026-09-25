@@ -471,7 +471,7 @@ export async function updateTradingPricing(productId: string, input: UpdateTradi
 
   const { data: currentProd } = await supabase
     .from("products")
-    .select("price_additional_info, trading_wholesale_price, trading_map_price, trading_srp_price")
+    .select("price_additional_info, trading_wholesale_price, trading_map_price, trading_srp_price, override_landed_cost")
     .eq("id", productId)
     .single();
 
@@ -481,16 +481,23 @@ export async function updateTradingPricing(productId: string, input: UpdateTradi
   const currentOverrides = priceAddInfo.trading_overrides || {};
   const currentHistory = priceAddInfo.trading_history || [];
 
+  const costSummary = await getProductCostSummary(productId);
+  const baseCost = costSummary?.latestLandedCost || 0;
+  const overrideCost = (currentProd as any).override_landed_cost ?? currentOverrides.override_landed_cost ?? null;
+  const effectiveCost = overrideCost !== null && overrideCost > 0 ? Number(overrideCost) : baseCost;
+
   const beforeVal = {
     wholesale_price: (currentProd as any).trading_wholesale_price ?? currentOverrides.wholesale_price ?? null,
     map_price: (currentProd as any).trading_map_price ?? currentOverrides.map_price ?? null,
     srp_price: (currentProd as any).trading_srp_price ?? currentOverrides.srp_price ?? null,
+    effective_landed_cost: effectiveCost,
   };
 
   const afterVal = {
     wholesale_price: wholesale,
     map_price: map,
     srp_price: srp,
+    effective_landed_cost: effectiveCost,
     note,
   };
 
@@ -589,7 +596,7 @@ export async function updateTradingPromotion(productId: string, input: UpdateTra
 
   const { data: currentProd } = await supabase
     .from("products")
-    .select("price_additional_info, trading_promo_wholesale_price")
+    .select("price_additional_info, trading_promo_wholesale_price, override_landed_cost")
     .eq("id", productId)
     .single();
 
@@ -599,16 +606,23 @@ export async function updateTradingPromotion(productId: string, input: UpdateTra
   const currentOverrides = priceAddInfo.trading_overrides || {};
   const currentHistory = priceAddInfo.trading_history || [];
 
+  const costSummary = await getProductCostSummary(productId);
+  const baseCost = costSummary?.latestLandedCost || 0;
+  const overrideCost = (currentProd as any).override_landed_cost ?? currentOverrides.override_landed_cost ?? null;
+  const effectiveCost = overrideCost !== null && overrideCost > 0 ? Number(overrideCost) : baseCost;
+
   const beforeVal = {
     promo_wholesale_price: (currentProd as any).trading_promo_wholesale_price ?? currentOverrides.promo_wholesale_price ?? null,
     promo_start_date: currentOverrides.promo_start_date ?? null,
     promo_end_date: currentOverrides.promo_end_date ?? null,
+    effective_landed_cost: effectiveCost,
   };
 
   const afterVal = {
     promo_wholesale_price: promoWholesale,
     promo_start_date: startDate,
     promo_end_date: endDate,
+    effective_landed_cost: effectiveCost,
     note,
   };
 
