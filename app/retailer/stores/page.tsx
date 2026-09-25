@@ -74,8 +74,14 @@ export default async function RetailerStoresPage() {
       </div>
 
       {/* Info Box */}
-      <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/30 p-5 text-xs text-zinc-500 dark:text-zinc-400">
-        Branch addition and store employee invite management will be available in upcoming feature rollout.
+      <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/30 p-5 text-xs text-zinc-500 dark:text-zinc-400 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <span>To add new stores, update store addresses, or manage assigned staff, visit the Organization Settings.</span>
+        <Link
+          href="/account?tab=organization"
+          className="px-3.5 py-1.5 rounded-lg bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 font-bold text-xs hover:bg-zinc-800 dark:hover:bg-zinc-100 transition-colors shrink-0 inline-flex items-center gap-1 self-start sm:self-auto"
+        >
+          <span>🏢 Manage Stores in Account</span>
+        </Link>
       </div>
     </div>
   );

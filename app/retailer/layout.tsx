@@ -1,5 +1,5 @@
 import React from "react";
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { RetailerSidebar } from "@/components/retailer/retailer-sidebar";
@@ -13,17 +13,37 @@ export const metadata: Metadata = {
   title: "K SELECT HUB - Retailer Portal",
   description: "Official B2B Retailer & Store Operations Portal for K SELECT HUB",
   manifest: "/manifest.webmanifest",
+  applicationName: "K SELECT HUB",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "K SELECT HUB",
+  },
   icons: {
     icon: [
       { url: "/hub-favicon.ico", sizes: "32x32", type: "image/x-icon" },
-      { url: "/hub-favicon.ico", sizes: "any" },
+      { url: "/hub-icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/hub-icon-512.png", sizes: "512x512", type: "image/png" },
       { url: "/hub-icon.png", type: "image/png" },
     ],
     shortcut: ["/hub-favicon.ico"],
     apple: [
+      { url: "/hub-apple-touch-icon.png", sizes: "180x180", type: "image/png" },
       { url: "/hub-icon.png", sizes: "180x180", type: "image/png" },
     ],
   },
+};
+
+export const viewport: Viewport = {
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#ffffff" },
+    { media: "(prefers-color-scheme: dark)", color: "#09090b" },
+  ],
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+  viewportFit: "cover",
 };
 
 export default async function RetailerLayout({

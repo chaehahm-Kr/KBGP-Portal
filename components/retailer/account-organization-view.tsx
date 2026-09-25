@@ -13,6 +13,7 @@ import {
 import { TeamManagementView } from "@/components/retailer/team-management-view";
 import { RetailerTeamMember, RetailerInvitationItem } from "@/lib/retailer/onboarding-types";
 import { RetailerAgreementViewItem, RetailerDocumentRecord } from "@/lib/retailer/agreement-actions";
+import { PwaInstallAffordance } from "@/components/retailer/pwa-install-manager";
 
 export interface StoreLocationItem {
   id: string;
@@ -526,6 +527,9 @@ export function AccountOrganizationView({
               </div>
             </div>
           </div>
+
+          {/* PWA Mobile & Pilot Store App Readiness Card */}
+          <PwaInstallAffordance variant="account" />
         </div>
       )}
 

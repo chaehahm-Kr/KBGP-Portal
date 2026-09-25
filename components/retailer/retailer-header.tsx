@@ -10,6 +10,7 @@ import { getNavItemsForRole } from "@/lib/retailer/navigation";
 import { usePathname } from "next/navigation";
 
 import { useCart } from "@/components/retailer/cart-context";
+import { PwaInstallAffordance } from "@/components/retailer/pwa-install-manager";
 
 interface RetailerHeaderProps {
   userName: string;
@@ -271,6 +272,7 @@ export function RetailerHeader({
 
             {/* Drawer Footer */}
             <div className="p-4 border-t border-zinc-200 dark:border-zinc-800 space-y-3">
+              <PwaInstallAffordance variant="drawer" />
               <ThemeToggle variant="buttons" />
               <form action={logoutRetailer}>
                 <button
