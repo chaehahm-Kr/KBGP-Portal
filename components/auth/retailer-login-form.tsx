@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useState, useEffect } from "react";
+import Link from "next/link";
 import type { LoginFormState } from "@/lib/auth/actions";
 
 type RetailerLoginFormProps = {
@@ -67,12 +68,20 @@ export function RetailerLoginForm({ action }: RetailerLoginFormProps) {
         </div>
 
         <div>
-          <label
-            htmlFor="password"
-            className="block text-xs font-semibold uppercase tracking-wider text-zinc-300"
-          >
-            Password
-          </label>
+          <div className="flex items-center justify-between">
+            <label
+              htmlFor="password"
+              className="block text-xs font-semibold uppercase tracking-wider text-zinc-300"
+            >
+              Password
+            </label>
+            <Link
+              href="/forgot-password"
+              className="text-xs font-semibold text-zinc-400 hover:text-white transition-colors"
+            >
+              Forgot Password?
+            </Link>
+          </div>
           <div className="relative mt-1.5">
             <input
               id="password"

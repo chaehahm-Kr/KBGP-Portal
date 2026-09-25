@@ -36,6 +36,7 @@ const AREAS: { prefix: string; login: string; publicPaths: string[] }[] = [
     publicPaths: [
       "/retailer/login",
       "/retailer/signup",
+      "/retailer/forgot-password",
       "/retailer/reset-password",
       "/retailer/invite",
       "/retailer/invite/accept",
@@ -225,6 +226,7 @@ export async function updateSession(request: NextRequest) {
     const isPublicRetailerPath = [
       "/login",
       "/signup",
+      "/forgot-password",
       "/reset-password",
       "/invite",
       "/invite/accept",

@@ -203,3 +203,116 @@ export async function completeAdminPasswordResetActivation() {
       .eq("id", user.id);
   }
 }
+
+/**
+ * RTP-AUTH-003: Retailer Forgot Password Request Server Action.
+ * 
+ * Generates secure recovery link pointing to https://portal.kselecthub.com/reset-password
+ * and delivers an English branded notification email via Resend.
+ * Always returns a neutral message to prevent user enumeration.
+ */
+export async function requestRetailerPasswordReset(
+  _prevState: ResetRequestState,
+  formData: FormData
+): Promise<ResetRequestState> {
+  const email = formData.get("email");
+
+  if (typeof email === "string" && email) {
+    const emailStr = email.trim().toLowerCase();
+    const adminClient = createAdminClient();
+
+    // 1. Verify if the account exists as a retailer user
+    const { data: profile } = await adminClient
+      .from("profiles")
+      .select("id, role")
+      .eq("email", emailStr)
+      .eq("role", "retailer")
+      .maybeSingle();
+
+    if (profile) {
+      // Get canonical Retailer site URL dynamically from headers
+      const headersList = await headers();
+      const host = headersList.get("host") || "portal.kselecthub.com";
+      const isLocal = host.includes("localhost") || host.includes("127.0.0.1");
+      const siteUrl = isLocal ? `http://${host}` : "https://portal.kselecthub.com";
+      const targetRedirect = `${siteUrl}/reset-password`;
+
+      // 2. Generate Supabase recovery link
+      const { data, error } = await adminClient.auth.admin.generateLink({
+        type: "recovery",
+        email: emailStr,
+        options: {
+          redirectTo: targetRedirect,
+        },
+      });
+
+      if (!error && data?.properties?.action_link) {
+        let actionLink = data.properties.action_link;
+        try {
+          const parsedUrl = new URL(actionLink);
+          parsedUrl.searchParams.set("redirect_to", targetRedirect);
+          actionLink = parsedUrl.toString();
+        } catch {}
+
+        // Render English branded email HTML
+        const subjectTemplate = "[K SELECT HUB] Password Reset Request";
+        const bodyTemplate = `Password Reset Request
+
+Hello,
+
+We received a request to reset your password for your K SELECT Retailer Portal account.
+Click the button below to set a new password. This link is valid for 30 minutes.
+
+{{ctaButton}}
+
+If you did not request a password reset, you can safely ignore this email.`;
+
+        const { subject, text, html } = renderEmailHtml(subjectTemplate, bodyTemplate, {
+          link: actionLink,
+          buttonLabel: "Reset Password",
+          key: "password_reset",
+        });
+
+        // Send the email via Resend
+        await sendEmail({
+          to: emailStr,
+          subject,
+          text,
+          html,
+        });
+      } else {
+        console.error("[requestRetailerPasswordReset] Failed to generate recovery link:", error?.message);
+      }
+    } else {
+      console.warn(`[requestRetailerPasswordReset] Ignored request for unverified retailer email: ${emailStr}`);
+    }
+  }
+
+  // Security: Always return neutral success message to prevent user enumeration
+  return {
+    message:
+      "If an account exists for this email, password reset instructions have been sent.",
+  };
+}
+
+/**
+ * Marks invited retailer account as active after password reset / setup.
+ */
+export async function completeRetailerPasswordResetActivation() {
+  const { createClient } = await import("@/lib/supabase/server");
+  const { createAdminClient } = await import("@/lib/supabase/admin");
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (user) {
+    const admin = createAdminClient();
+    await admin
+      .from("company_users")
+      .update({ status: "active", joined_at: new Date().toISOString() })
+      .eq("id", user.id)
+      .eq("status", "invited");
+  }
+}

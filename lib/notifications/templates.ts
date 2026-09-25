@@ -245,7 +245,7 @@ function buildInfoCardHtml(variables: Record<string, string>) {
 function buildCtaButtonHtml(variables: Record<string, string>) {
   const siteUrl = publicEnv.NEXT_PUBLIC_SITE_URL || "https://www.kselectnetwork.com";
   let url = variables.portalUrl || variables.applicationUrl || `${siteUrl}/portal`;
-  let buttonLabel = "포털에서 확인하기";
+  let buttonLabel = variables.buttonLabel || "포털에서 확인하기";
 
   // If a specific link is provided in variables (e.g. admin detail link), use it
   if (variables.link) {
