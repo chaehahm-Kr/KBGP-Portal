@@ -285,6 +285,15 @@ export default function PortalHeader({
               
               <div className="p-1 border-b border-zinc-100 dark:border-zinc-900 space-y-0.5">
                 <Link
+                  href="/portal/account"
+                  onClick={() => setIsProfileOpen(false)}
+                  className="flex w-full items-center gap-2 rounded px-3 py-1.5 text-left text-xs font-semibold text-zinc-900 hover:bg-zinc-50 dark:text-zinc-100 dark:hover:bg-zinc-900"
+                >
+                  <span className="text-xs">👤</span>
+                  내 계정 (My Account)
+                </Link>
+
+                <Link
                   href="/portal/company/info"
                   onClick={() => setIsProfileOpen(false)}
                   className="flex w-full items-center gap-2 rounded px-3 py-1.5 text-left text-xs text-zinc-700 hover:bg-zinc-50 dark:text-zinc-300 dark:hover:bg-zinc-900"

@@ -46,7 +46,11 @@ export default function PortalSidebar({
   });
 
   const [isSettingsOpen, setIsSettingsOpen] = useState(() => {
-    return pathname.startsWith("/portal/company/") || pathname.startsWith("/portal/brands");
+    return (
+      pathname.startsWith("/portal/company/") ||
+      pathname.startsWith("/portal/brands") ||
+      pathname.startsWith("/portal/account")
+    );
   });
 
   const menuItems: MenuItem[] = [
@@ -69,6 +73,7 @@ export default function PortalSidebar({
     { name: "회사 정보", href: "/portal/company/info" },
     { name: "브랜드 관리", href: "/portal/brands" },
     ...(isCompanyAdmin ? [{ name: "사용자 관리", href: "/portal/company/users" }] : []),
+    { name: "내 계정", href: "/portal/account" },
   ];
 
   return (
@@ -190,7 +195,7 @@ export default function PortalSidebar({
           <Link
             href="/portal/company/info"
             className={`flex h-10 w-full items-center justify-center rounded-md text-sm font-medium transition-colors ${
-              pathname.startsWith("/portal/company/") || pathname.startsWith("/portal/brands")
+              pathname.startsWith("/portal/company/") || pathname.startsWith("/portal/brands") || pathname.startsWith("/portal/account")
                 ? "bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-white"
                 : "text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-900 dark:hover:text-white"
             }`}
@@ -203,7 +208,7 @@ export default function PortalSidebar({
             <button
               onClick={() => setIsSettingsOpen(!isSettingsOpen)}
               className={`flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-semibold transition-colors cursor-pointer ${
-                pathname.startsWith("/portal/company/") || pathname.startsWith("/portal/brands")
+                pathname.startsWith("/portal/company/") || pathname.startsWith("/portal/brands") || pathname.startsWith("/portal/account")
                   ? "text-zinc-900 dark:text-white"
                   : "text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-900 dark:hover:text-white"
               }`}

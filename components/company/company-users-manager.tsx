@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useTransition } from "react";
+import Link from "next/link";
 import {
   updateCompanyUser,
   reinviteCompanyUser,
@@ -335,6 +336,11 @@ export function CompanyUsersManager({ initialUsers, currentUserId }: CompanyUser
                     <td className="px-6 py-4">
                       <div className="font-semibold text-zinc-900 dark:text-zinc-100 flex items-center gap-1.5 flex-wrap">
                         <span>{row.name || "(이름 미입력)"}</span>
+                        {row.id === currentUserId && (
+                          <span className="inline-block rounded bg-zinc-900 text-white dark:bg-white dark:text-zinc-900 px-1.5 py-0.5 text-[9px] font-bold">
+                            본인
+                          </span>
+                        )}
                         {isOwner && (
                           <span className="inline-block rounded bg-amber-50 text-amber-700 px-1.5 py-0.5 text-[9px] font-bold border border-amber-200 dark:bg-amber-950/70 dark:text-amber-300 dark:border-amber-800">
                             최초 관리자
@@ -407,6 +413,17 @@ export function CompanyUsersManager({ initialUsers, currentUserId }: CompanyUser
                       </span>
                     </td>
                     <td className="px-6 py-4 text-right space-x-2 whitespace-nowrap">
+                      {row.id === currentUserId && (
+                        <>
+                          <Link
+                            href="/portal/account"
+                            className="font-semibold text-indigo-600 hover:text-indigo-700 hover:underline dark:text-indigo-400 dark:hover:text-indigo-300 inline-flex items-center gap-1"
+                          >
+                            <span>내 계정 관리</span>
+                          </Link>
+                          <span className="text-zinc-300 dark:text-zinc-700">|</span>
+                        </>
+                      )}
                       {row.status === "invited" ? (
                         <>
                           <button
@@ -499,6 +516,22 @@ export function CompanyUsersManager({ initialUsers, currentUserId }: CompanyUser
 
             {/* Modal Body */}
             <div className="p-6 space-y-6 overflow-y-auto flex-1">
+              {editingUser.id === currentUserId && (
+                <div className="p-3 bg-indigo-50/70 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800 rounded-xl text-xs text-indigo-900 dark:text-indigo-200 flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <span>💡</span>
+                    <span>본인의 프로필 및 비밀번호 변경은 <strong>내 계정</strong> 메뉴에서도 직접 관리하실 수 있습니다.</span>
+                  </div>
+                  <Link
+                    href="/portal/account"
+                    onClick={() => setEditingUser(null)}
+                    className="font-bold underline hover:opacity-80 shrink-0 text-indigo-700 dark:text-indigo-300"
+                  >
+                    내 계정 바로가기 →
+                  </Link>
+                </div>
+              )}
+
               {/* Section 1: 기본 정보 */}
               <div className="space-y-4">
                 <div className="flex items-center gap-2 border-b border-zinc-100 dark:border-zinc-800 pb-2">
