@@ -155,6 +155,8 @@ export default async function AdminProductsPage() {
           sales_status: p.sales_status || "PREPARING",
           category_code: p.category_code || null,
           category_full_path: p.category_code ? getCategoryFullPath(p.category_code) : null,
+          completeness_rate: catCompletion?.completionPercent ?? 0,
+          category_completion: catCompletion,
         };
       } catch (prodErr) {
         console.error("Error resolving product for admin list:", p?.id, prodErr);
@@ -185,6 +187,8 @@ export default async function AdminProductsPage() {
           sales_status: p?.sales_status || "PREPARING",
           category_code: p?.category_code || null,
           category_full_path: null,
+          completeness_rate: 0,
+          category_completion: null,
         };
       }
     })

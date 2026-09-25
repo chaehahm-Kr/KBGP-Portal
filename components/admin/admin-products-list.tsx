@@ -29,6 +29,14 @@ interface AdminProductItem {
   category_code?: string | null;
   category_full_path?: string | null;
   completeness_rate?: number;
+  missing_fields?: string[];
+  category_completion?: {
+    categoryComplete: boolean;
+    requiredAttributesComplete: boolean;
+    missingRequiredAttributes?: { code: string; nameKo: string }[];
+    completionPercent?: number;
+    warningLabel?: string | null;
+  } | null;
   updated_at?: string | null;
   last_updated_by_name?: string | null;
   last_updated_source?: string | null;
@@ -552,6 +560,7 @@ export function AdminProductsList({ initialProducts }: AdminProductsListProps) {
                 <th className="px-5 py-3.5 whitespace-nowrap">제품명</th>
                 <th className="px-5 py-3.5 whitespace-nowrap">회사명</th>
                 <th className="px-5 py-3.5 whitespace-nowrap">브랜드</th>
+                <th className="px-5 py-3.5 whitespace-nowrap">속성 완성도</th>
                 <th className="px-5 py-3.5 whitespace-nowrap">등록 상태</th>
                 <th className="px-5 py-3.5 whitespace-nowrap">선정 상태</th>
                 <th className="px-5 py-3.5 whitespace-nowrap">판매 상태</th>
@@ -563,6 +572,7 @@ export function AdminProductsList({ initialProducts }: AdminProductsListProps) {
               {filteredProducts.map((product) => {
                 const isSelected = product.selection_status === "SELECTED";
                 const isChecked = selectedIds.has(product.id);
+                const percent = product.category_completion?.completionPercent ?? product.completeness_rate ?? 0;
                 return (
                   <tr
                     key={product.id}
@@ -626,7 +636,7 @@ export function AdminProductsList({ initialProducts }: AdminProductsListProps) {
                           </span>
                         ) : (
                           <Link
-                            href={`/admin/products/${product.id}?tab=category`}
+                            href={`/admin/products/${product.id}?tab=category_attributes`}
                             className="inline-flex items-center w-fit rounded bg-amber-500/10 hover:bg-amber-500/20 dark:bg-amber-950/30 dark:hover:bg-amber-950/50 px-2 py-0.5 text-[9px] font-bold text-amber-600 dark:text-amber-400 border border-amber-500/20 animate-pulse transition-colors cursor-pointer"
                           >
                             ⚠️ 카테고리 재분류 필요
@@ -655,6 +665,31 @@ export function AdminProductsList({ initialProducts }: AdminProductsListProps) {
                       </Link>
                     </td>
 
+                    {/* 속성 완성도 Column */}
+                    <td className="px-5 py-4 align-middle whitespace-nowrap">
+                      <div className="flex items-center gap-2">
+                        <div className="w-14 bg-zinc-200 dark:bg-zinc-800 rounded-full h-2 overflow-hidden">
+                          <div
+                            className={`h-full rounded-full transition-all ${
+                              percent === 100
+                                ? "bg-emerald-500"
+                                : percent >= 50
+                                ? "bg-indigo-500"
+                                : "bg-amber-500"
+                            }`}
+                            style={{ width: `${percent}%` }}
+                          />
+                        </div>
+                        <span className={`text-xs font-bold font-mono ${
+                          percent === 100
+                            ? "text-emerald-700 dark:text-emerald-400"
+                            : "text-zinc-700 dark:text-zinc-300"
+                        }`}>
+                          {percent}%
+                        </span>
+                      </div>
+                    </td>
+
                     {/* ① 제품 등록 상태 배지 */}
                     <td className="px-5 py-4 align-middle">
                       {product.deleted_at ? (
@@ -662,9 +697,19 @@ export function AdminProductsList({ initialProducts }: AdminProductsListProps) {
                           Deleted (삭제됨)
                         </span>
                       ) : product.is_draft ? (
-                        <span className="inline-flex items-center rounded bg-amber-50 text-amber-700 dark:bg-amber-950/20 dark:text-amber-400 px-2 py-0.5 text-[10px] font-bold border border-amber-200 dark:border-amber-900/50 whitespace-nowrap">
-                          Draft (보완 대기)
-                        </span>
+                        <div className="space-y-1">
+                          <span className="inline-flex items-center rounded bg-amber-50 text-amber-700 dark:bg-amber-950/20 dark:text-amber-400 px-2 py-0.5 text-[10px] font-bold border border-amber-200 dark:border-amber-900/50 whitespace-nowrap">
+                            Draft (보완 대기)
+                          </span>
+                          {product.missing_fields && product.missing_fields.length > 0 && (
+                            <div className="text-[9px] text-amber-700 dark:text-amber-400 leading-tight max-w-[140px]">
+                              <span className="font-semibold block">* 누락 항목:</span>
+                              <span className="block truncate" title={product.missing_fields.join(", ")}>
+                                {product.missing_fields.join(", ")}
+                              </span>
+                            </div>
+                          )}
+                        </div>
                       ) : (
                         <span className="inline-flex items-center rounded bg-emerald-50 text-emerald-700 dark:bg-emerald-950/20 dark:text-emerald-400 px-2 py-0.5 text-[10px] font-bold border border-emerald-250 dark:border-emerald-900/50 whitespace-nowrap">
                           Complete (등록 완료)
