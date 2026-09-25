@@ -41,7 +41,8 @@ interface PortalPoListProps {
   pos: PortalPoItem[];
 }
 
-export function PortalPoList({ pos }: PortalPoListProps) {
+export function PortalPoList({ pos = [] }: PortalPoListProps) {
+  const safePos = Array.isArray(pos) ? pos : [];
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("ALL");
   const [fromDate, setFromDate] = useState<string>("");
@@ -56,8 +57,8 @@ export function PortalPoList({ pos }: PortalPoListProps) {
     let receiving = 0;
     let completed = 0;
 
-    pos.forEach((po) => {
-      const status = po.overall_status;
+    safePos.forEach((po) => {
+      const status = po?.overall_status || "";
       if (status === "Completed") {
         completed++;
       } else if (status !== "Cancelled") {
@@ -82,7 +83,7 @@ export function PortalPoList({ pos }: PortalPoListProps) {
     });
 
     return { totalOpen, inProduction, readyToShip, receiving, completed };
-  }, [pos]);
+  }, [safePos]);
 
   // Date Preset Helpers
   const setPreset = (preset: "this_month" | "last_30" | "last_60" | "all") => {
@@ -122,10 +123,11 @@ export function PortalPoList({ pos }: PortalPoListProps) {
 
   // Filter & Sort Logic
   const filteredAndSortedPos = useMemo(() => {
-    let result = pos.filter((po) => {
+    let result = safePos.filter((po) => {
+      if (!po) return false;
       // 1. Status Filter
       if (statusFilter !== "ALL") {
-        const s = po.overall_status;
+        const s = po.overall_status || "";
         if (statusFilter === "IN_PRODUCTION") {
           if (
             s !== "Sent to Supplier" &&
@@ -151,13 +153,15 @@ export function PortalPoList({ pos }: PortalPoListProps) {
       // 2. Search Keyword Filter
       if (searchTerm.trim()) {
         const term = searchTerm.trim().toLowerCase();
-        if (!po.search_keywords.includes(term)) {
+        const keywords = po.search_keywords || "";
+        if (!keywords.includes(term)) {
           return false;
         }
       }
 
       // 3. Date Range Filter (based on order_date or created_at)
-      const orderDateStr = (po.order_date || po.created_at || "").split("T")[0];
+      const rawDateStr = po.order_date || po.created_at || "";
+      const orderDateStr = rawDateStr.split("T")[0];
       if (fromDate && orderDateStr < fromDate) return false;
       if (toDate && orderDateStr > toDate) return false;
 
@@ -166,45 +170,45 @@ export function PortalPoList({ pos }: PortalPoListProps) {
 
     // Sort
     result.sort((a, b) => {
+      const getTimestamp = (val: any) => {
+        if (!val) return 0;
+        const t = new Date(val).getTime();
+        return isNaN(t) ? 0 : t;
+      };
+
       if (sortBy === "oldest") {
-        return (
-          new Date(a.order_date || a.created_at).getTime() -
-          new Date(b.order_date || b.created_at).getTime()
-        );
+        return getTimestamp(a.order_date || a.created_at) - getTimestamp(b.order_date || b.created_at);
       }
       if (sortBy === "amount_desc") {
-        return b.total_amount - a.total_amount;
+        return (Number(b.total_amount) || 0) - (Number(a.total_amount) || 0);
       }
       if (sortBy === "aging_desc") {
-        return b.elapsed_days - a.elapsed_days;
+        return (Number(b.elapsed_days) || 0) - (Number(a.elapsed_days) || 0);
       }
       if (sortBy === "updated_desc") {
-        return (
-          new Date(b.last_status_update).getTime() -
-          new Date(a.last_status_update).getTime()
-        );
+        return getTimestamp(b.last_status_update) - getTimestamp(a.last_status_update);
       }
       // default: newest
-      return (
-        new Date(b.order_date || b.created_at).getTime() -
-        new Date(a.order_date || a.created_at).getTime()
-      );
+      return getTimestamp(b.order_date || b.created_at) - getTimestamp(a.order_date || a.created_at);
     });
 
     return result;
-  }, [pos, statusFilter, searchTerm, fromDate, toDate, sortBy]);
+  }, [safePos, statusFilter, searchTerm, fromDate, toDate, sortBy]);
 
   // Formatting Helpers
   const formatDate = (dateStr: string) => {
     if (!dateStr) return "-";
-    return new Date(dateStr).toLocaleDateString("ko-KR", {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return "-";
+    return d.toLocaleDateString("ko-KR", {
       year: "numeric",
       month: "2-digit",
       day: "2-digit",
     });
   };
 
-  const formatCurrency = (amount: number, currencyCode: string = "USD") => {
+  const formatCurrency = (amount: number | null | undefined, currencyCode: string = "USD") => {
+    if (amount === null || amount === undefined || isNaN(amount)) return "—";
     const symbol = currencyCode === "KRW" ? "₩" : "$";
     return `${symbol}${amount.toLocaleString(undefined, {
       minimumFractionDigits: currencyCode === "KRW" ? 0 : 2,

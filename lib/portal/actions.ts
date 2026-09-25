@@ -14,53 +14,15 @@ import { formatEasternDateTime } from "@/lib/utils/timezone";
  * DRAFT and APPROVED are strictly hidden.
  */
 export async function getPortalPurchaseOrders() {
-  const { companyId } = await requireCompanyMembership();
-  const supabase = await createClient();
+  try {
+    const { companyId } = await requireCompanyMembership();
+    const supabase = await createClient();
+    const adminSupabase = createAdminClient();
 
-  let data: any[] | null = null;
+    let pos: any[] | null = null;
 
-  // Primary attempt: query purchase_orders directly including 0093 extended columns and status relations
-  const primaryRes = await supabase
-    .from("purchase_orders")
-    .select(`
-      id,
-      po_number,
-      po_status,
-      fulfillment_status,
-      supplier_confirmation_status,
-      order_date,
-      currency,
-      revision_no,
-      cancellation_status,
-      created_at,
-      updated_at,
-      confirmed_at,
-      activity_logs,
-      lines:purchase_order_lines(
-        id,
-        qty,
-        confirmed_qty,
-        unit_cost,
-        product:products(
-          id,
-          name,
-          letusto_sku,
-          manufacture_sku
-        )
-      ),
-      shipments:inbound_shipments(id, status, updated_at, created_at),
-      receivings:receivings(id, status, updated_at, created_at)
-    `)
-    .eq("supplier_id", companyId)
-    .notIn("po_status", ["DRAFT", "APPROVED"])
-    .order("created_at", { ascending: false });
-
-  if (!primaryRes.error) {
-    data = primaryRes.data;
-  } else {
-    console.warn("Primary purchase_orders query warning (trying fallback):", primaryRes.error);
-    // Fallback attempt: query purchase_orders without 0093 columns
-    const fallbackRes = await supabase
+    // Primary attempt: query purchase_orders directly with extended snapshot columns and relations
+    const primaryRes = await supabase
       .from("purchase_orders")
       .select(`
         id,
@@ -70,14 +32,21 @@ export async function getPortalPurchaseOrders() {
         supplier_confirmation_status,
         order_date,
         currency,
+        revision_no,
+        cancellation_status,
         created_at,
         updated_at,
         confirmed_at,
+        activity_logs,
         lines:purchase_order_lines(
           id,
           qty,
           confirmed_qty,
           unit_cost,
+          product_name_snapshot,
+          letusto_sku_snapshot,
+          manufacture_sku_snapshot,
+          product_id,
           product:products(
             id,
             name,
@@ -92,112 +61,227 @@ export async function getPortalPurchaseOrders() {
       .notIn("po_status", ["DRAFT", "APPROVED"])
       .order("created_at", { ascending: false });
 
-    if (fallbackRes.error) {
-      console.error("Failed to fetch portal purchase orders:", fallbackRes.error);
-      throw new Error("발주서 목록을 불러오지 못했습니다.");
-    }
-    data = fallbackRes.data;
-  }
+    if (!primaryRes.error && primaryRes.data) {
+      pos = primaryRes.data;
+    } else {
+      console.warn("Primary purchase_orders query warning (attempting simplified fallback):", primaryRes.error);
+      // Fallback attempt: query purchase_orders without nested relation joins that may cause PostgREST schema errors
+      const fallbackRes = await supabase
+        .from("purchase_orders")
+        .select(`
+          id,
+          po_number,
+          po_status,
+          fulfillment_status,
+          supplier_confirmation_status,
+          order_date,
+          currency,
+          revision_no,
+          cancellation_status,
+          created_at,
+          updated_at,
+          confirmed_at,
+          lines:purchase_order_lines(
+            id,
+            qty,
+            confirmed_qty,
+            unit_cost,
+            product_name_snapshot,
+            letusto_sku_snapshot,
+            manufacture_sku_snapshot
+          )
+        `)
+        .eq("supplier_id", companyId)
+        .notIn("po_status", ["DRAFT", "APPROVED"])
+        .order("created_at", { ascending: false });
 
-  const { getOverallStatus } = await import("@/lib/purchase-order/status-helper");
-
-  // Double guard: strictly filter out DRAFT and APPROVED, compute canonical overall_status, amount, aging and sanitize defaults
-  const safeList = (data ?? [])
-    .filter((po: any) => po.po_status !== "DRAFT" && po.po_status !== "APPROVED")
-    .map((po: any) => {
-      const lines = po.lines || [];
-      const shipments = po.shipments || [];
-      const receivings = po.receivings || [];
-
-      const overall_status = getOverallStatus(po, shipments, receivings);
-
-      // Amount calculation using PO line historical unit_cost
-      const total_amount = lines.reduce(
-        (sum: number, l: any) => sum + (Number(l.qty) || 0) * (Number(l.unit_cost) || 0),
-        0
-      );
-
-      // Total Qty & Confirmed Qty
-      const total_ordered = lines.reduce((sum: number, l: any) => sum + (Number(l.qty) || 0), 0);
-      const isAllConfirmed =
-        lines.length > 0 &&
-        lines.every((l: any) => l.confirmed_qty !== null && l.confirmed_qty !== undefined);
-      const total_confirmed = isAllConfirmed
-        ? lines.reduce((sum: number, l: any) => sum + (Number(l.confirmed_qty) || 0), 0)
-        : null;
-
-      // Primary product summary info
-      const primaryLine = lines[0] || null;
-      const primaryProductName = primaryLine?.product?.name || "(상품 미지정)";
-      const primarySku =
-        primaryLine?.product?.letusto_sku || primaryLine?.product?.manufacture_sku || "-";
-      const extraItemCount = Math.max(0, lines.length - 1);
-
-      // Search keywords aggregation
-      const searchKeywords = [
-        po.po_number,
-        ...lines.map((l: any) => l.product?.name),
-        ...lines.map((l: any) => l.product?.letusto_sku),
-        ...lines.map((l: any) => l.product?.manufacture_sku),
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
-
-      // Latest status update timestamp calculation
-      const timestamps: number[] = [];
-      if (po.updated_at) timestamps.push(new Date(po.updated_at).getTime());
-      if (po.confirmed_at) timestamps.push(new Date(po.confirmed_at).getTime());
-      if (po.created_at) timestamps.push(new Date(po.created_at).getTime());
-      shipments.forEach((s: any) => {
-        if (s.updated_at) timestamps.push(new Date(s.updated_at).getTime());
-        if (s.created_at) timestamps.push(new Date(s.created_at).getTime());
-      });
-      receivings.forEach((r: any) => {
-        if (r.updated_at) timestamps.push(new Date(r.updated_at).getTime());
-        if (r.created_at) timestamps.push(new Date(r.created_at).getTime());
-      });
-      if (Array.isArray(po.activity_logs)) {
-        po.activity_logs.forEach((log: any) => {
-          if (log.created_at) timestamps.push(new Date(log.created_at).getTime());
-          if (log.timestamp) timestamps.push(new Date(log.timestamp).getTime());
-        });
+      if (fallbackRes.error) {
+        console.error("Fallback purchase_orders query error:", fallbackRes.error);
+        return [];
       }
-      const maxTimestamp =
-        timestamps.length > 0
-          ? Math.max(...timestamps)
-          : new Date(po.created_at || Date.now()).getTime();
-      const last_status_update = new Date(maxTimestamp).toISOString();
+      pos = fallbackRes.data;
+    }
 
-      // Aging / Elapsed Days calculation
-      const orderTime = new Date(po.order_date || po.created_at).getTime();
-      const isFinished = overall_status === "Completed" || overall_status === "Cancelled";
-      const endTime = isFinished ? maxTimestamp : Date.now();
-      const elapsedDays = Math.max(0, Math.floor((endTime - orderTime) / (1000 * 60 * 60 * 24)));
+    if (!pos || !Array.isArray(pos)) {
+      return [];
+    }
 
-      return {
-        ...po,
-        supplier_confirmation_status: po.supplier_confirmation_status || "UNCONFIRMED",
-        overall_status,
-        revision_no: po.revision_no ?? 1,
-        cancellation_status: po.cancellation_status || "NONE",
-        lines,
-        shipments,
-        receivings,
-        total_amount,
-        total_ordered,
-        total_confirmed,
-        primary_product_name: primaryProductName,
-        primary_sku: primarySku,
-        extra_item_count: extraItemCount,
-        search_keywords: searchKeywords,
-        last_status_update,
-        elapsed_days: elapsedDays,
-        is_finished: isFinished,
-      };
-    });
+    // Batch fetch shipments and receivings via admin client to bypass any PostgREST RLS / relation naming issues
+    const poIds = pos.map((p: any) => p.id).filter(Boolean);
+    const shipmentsMap = new Map<string, any[]>();
+    const receivingsMap = new Map<string, any[]>();
 
-  return safeList;
+    if (poIds.length > 0) {
+      try {
+        const { data: allShipments } = await adminSupabase
+          .from("inbound_shipments")
+          .select("id, purchase_order_id, status, updated_at, created_at")
+          .in("purchase_order_id", poIds);
+
+        if (allShipments) {
+          allShipments.forEach((s: any) => {
+            const list = shipmentsMap.get(s.purchase_order_id) || [];
+            list.push(s);
+            shipmentsMap.set(s.purchase_order_id, list);
+          });
+        }
+      } catch (sErr) {
+        console.warn("Batch shipments fetch warning:", sErr);
+      }
+
+      try {
+        const { data: allReceivings } = await adminSupabase
+          .from("receivings")
+          .select("id, purchase_order_id, status, updated_at, created_at")
+          .in("purchase_order_id", poIds);
+
+        if (allReceivings) {
+          allReceivings.forEach((r: any) => {
+            const list = receivingsMap.get(r.purchase_order_id) || [];
+            list.push(r);
+            receivingsMap.set(r.purchase_order_id, list);
+          });
+        }
+      } catch (rErr) {
+        console.warn("Batch receivings fetch warning:", rErr);
+      }
+    }
+
+    const { getOverallStatus } = await import("@/lib/purchase-order/status-helper");
+
+    // Double guard: strictly filter out DRAFT and APPROVED, compute canonical overall_status, amount, aging and sanitize defaults
+    const safeList = pos
+      .filter((po: any) => po && po.po_status !== "DRAFT" && po.po_status !== "APPROVED")
+      .map((po: any) => {
+        const lines = Array.isArray(po.lines) ? po.lines : [];
+        const shipments =
+          Array.isArray(po.shipments) && po.shipments.length > 0
+            ? po.shipments
+            : shipmentsMap.get(po.id) || [];
+        const receivings =
+          Array.isArray(po.receivings) && po.receivings.length > 0
+            ? po.receivings
+            : receivingsMap.get(po.id) || [];
+
+        const overall_status = getOverallStatus(po, shipments, receivings);
+
+        // Amount calculation using PO line historical unit_cost with null safety
+        const total_amount = lines.reduce(
+          (sum: number, l: any) => sum + (Number(l.qty) || 0) * (Number(l.unit_cost) || 0),
+          0
+        );
+
+        // Total Qty & Confirmed Qty
+        const total_ordered = lines.reduce((sum: number, l: any) => sum + (Number(l.qty) || 0), 0);
+        const isAllConfirmed =
+          lines.length > 0 &&
+          lines.every((l: any) => l.confirmed_qty !== null && l.confirmed_qty !== undefined);
+        const total_confirmed = isAllConfirmed
+          ? lines.reduce((sum: number, l: any) => sum + (Number(l.confirmed_qty) || 0), 0)
+          : null;
+
+        // Primary product summary info (snapshots take precedence over nested product object)
+        const primaryLine = lines[0] || null;
+        const primaryProductName =
+          primaryLine?.product_name_snapshot ||
+          primaryLine?.product?.name ||
+          primaryLine?.product_name ||
+          "(상품 미지정)";
+        const primarySku =
+          primaryLine?.letusto_sku_snapshot ||
+          primaryLine?.manufacture_sku_snapshot ||
+          primaryLine?.product?.letusto_sku ||
+          primaryLine?.product?.manufacture_sku ||
+          "-";
+        const extraItemCount = Math.max(0, lines.length - 1);
+
+        // Search keywords aggregation (null-safe)
+        const searchKeywords = [
+          po.po_number,
+          ...lines.map((l: any) => l.product_name_snapshot || l.product?.name),
+          ...lines.map((l: any) => l.letusto_sku_snapshot || l.product?.letusto_sku),
+          ...lines.map((l: any) => l.manufacture_sku_snapshot || l.product?.manufacture_sku),
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+
+        // Valid timestamp gathering (guarantees no NaN in Math.max)
+        const validTimestamps: number[] = [];
+        const addTimestamp = (val: any) => {
+          if (!val) return;
+          const t = new Date(val).getTime();
+          if (!isNaN(t) && t > 0) validTimestamps.push(t);
+        };
+
+        addTimestamp(po.updated_at);
+        addTimestamp(po.confirmed_at);
+        addTimestamp(po.created_at);
+        addTimestamp(po.order_date);
+
+        shipments.forEach((s: any) => {
+          addTimestamp(s.updated_at);
+          addTimestamp(s.created_at);
+        });
+        receivings.forEach((r: any) => {
+          addTimestamp(r.updated_at);
+          addTimestamp(r.created_at);
+        });
+        if (Array.isArray(po.activity_logs)) {
+          po.activity_logs.forEach((log: any) => {
+            addTimestamp(log.created_at);
+            addTimestamp(log.timestamp);
+          });
+        }
+
+        const maxTimestamp =
+          validTimestamps.length > 0 ? Math.max(...validTimestamps) : Date.now();
+        
+        let last_status_update =
+          po.updated_at || po.confirmed_at || po.order_date || po.created_at || new Date().toISOString();
+        try {
+          last_status_update = new Date(maxTimestamp).toISOString();
+        } catch {
+          // Fallback if toISOString fails
+        }
+
+        // Aging / Elapsed Days calculation with safe date parsing
+        const rawOrderDate = po.order_date || po.created_at;
+        const parsedOrderTime = rawOrderDate ? new Date(rawOrderDate).getTime() : NaN;
+        const orderTime =
+          !isNaN(parsedOrderTime) && parsedOrderTime > 0 ? parsedOrderTime : maxTimestamp;
+
+        const isFinished = overall_status === "Completed" || overall_status === "Cancelled";
+        const endTime = isFinished ? maxTimestamp : Date.now();
+        const elapsedDays = Math.max(0, Math.floor((endTime - orderTime) / (1000 * 60 * 60 * 24)));
+
+        return {
+          ...po,
+          supplier_confirmation_status: po.supplier_confirmation_status || "UNCONFIRMED",
+          overall_status,
+          revision_no: po.revision_no ?? 1,
+          cancellation_status: po.cancellation_status || "NONE",
+          lines,
+          shipments,
+          receivings,
+          total_amount: isNaN(total_amount) ? 0 : total_amount,
+          total_ordered: isNaN(total_ordered) ? 0 : total_ordered,
+          total_confirmed,
+          primary_product_name: primaryProductName,
+          primary_sku: primarySku,
+          extra_item_count: extraItemCount,
+          search_keywords: searchKeywords,
+          last_status_update,
+          elapsed_days: isNaN(elapsedDays) ? 0 : elapsedDays,
+          is_finished: isFinished,
+        };
+      });
+
+    return safeList;
+  } catch (err) {
+    console.error("CRITICAL: getPortalPurchaseOrders unexpected error caught:", err);
+    return []; // Return empty list to prevent Server Component render crash
+  }
 }
 
 /**
