@@ -443,8 +443,12 @@ export const CategoryAttributeForm = forwardRef<CategoryAttributeFormHandle, Cat
 
   // Dirty state checker comparing current values against initial snapshot
   const checkIsDirty = useCallback((): boolean => {
-    if (!initialSnapshotRef.current) return false;
-    const currentCatCode = finalCat ? finalCat.code : null;
+    if (!initialSnapshotRef.current || loading || !hasInitialized) return false;
+    const currentCatCode = finalCat
+      ? finalCat.code
+      : selectedCat1 || selectedCat2 || selectedCat3
+      ? null
+      : initialCategoryCode;
     if (currentCatCode !== initialSnapshotRef.current.categoryCode) {
       return true;
     }
