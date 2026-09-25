@@ -42,6 +42,7 @@ export default async function AdminTradingProductDetailPage({
         receivingHistory={data.receivingHistory}
         costSummary={data.costSummary}
         historyLogs={data.historyLogs}
+        inboundSummary={data.inboundSummary}
       />
     </div>
   );

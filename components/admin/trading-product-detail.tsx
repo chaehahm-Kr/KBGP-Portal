@@ -117,6 +117,13 @@ interface InventoryMovementItem {
   creator_name?: string;
 }
 
+interface InboundSummaryItem {
+  incomingQty: number;
+  openInboundCount: number;
+  nextEta: string | null;
+  destinationWarehouseName: string | null;
+}
+
 interface TradingProductDetailProps {
   product: ResolvedTradingProduct;
   initialBalances: InventoryBalanceItem[];
@@ -127,6 +134,7 @@ interface TradingProductDetailProps {
   receivingHistory?: any[];
   costSummary?: any;
   historyLogs?: any[];
+  inboundSummary?: InboundSummaryItem;
 }
 
 const SALES_COLORS: Record<string, string> = {
@@ -196,6 +204,12 @@ export function TradingProductDetail({
   receivingHistory = [],
   costSummary = null,
   historyLogs = [],
+  inboundSummary = {
+    incomingQty: 0,
+    openInboundCount: 0,
+    nextEta: null,
+    destinationWarehouseName: null,
+  },
 }: TradingProductDetailProps) {
   const router = useRouter();
 
@@ -204,16 +218,6 @@ export function TradingProductDetail({
   const totalHold = initialBalances.reduce((sum, b) => sum + b.qty_hold, 0);
   const totalDamaged = initialBalances.reduce((sum, b) => sum + (b.qty_damaged || 0), 0);
   const totalAvailable = Math.max(0, totalOnHand - totalHold - totalDamaged);
-
-  // Incoming Qty calculation
-  const totalIncoming = poHistory.reduce((sum, po) => {
-    if (["IN_PRODUCTION", "READY_TO_SHIP", "SHIPPED"].includes(po.purchase_orders?.po_status)) {
-      return sum + (po.qty || 0);
-    }
-    return sum;
-  }, 0);
-
-  const lastReceivingDate = receivingHistory.length > 0 ? receivingHistory[0].created_at : null;
 
   // Active Tab for Lower Full-Width Section
   const [activeTab, setActiveTab] = useState<"inventory" | "po" | "cost" | "pricing" | "sales" | "audit">("inventory");
@@ -408,7 +412,6 @@ export function TradingProductDetail({
   const combinedCostTimeline = useMemo(() => {
     const events: any[] = [];
 
-    // 1. Add System Landed Cost History
     if (costSummary?.history) {
       costSummary.history.forEach((h: any) => {
         events.push({
@@ -429,7 +432,6 @@ export function TradingProductDetail({
       });
     }
 
-    // 2. Add Manual Cost Override History from Audit logs
     historyLogs.forEach((log: any) => {
       if (log.change_type === "COST_OVERRIDE") {
         const after = log.after_value || {};
@@ -474,10 +476,7 @@ export function TradingProductDetail({
       const beforeObj = log.before_value || {};
       const afterObj = log.after_value || {};
 
-      // Get all unique keys between before and after objects
       const allKeys = Array.from(new Set([...Object.keys(beforeObj), ...Object.keys(afterObj)]));
-
-      // Filter out internal non-display keys
       const displayKeys = allKeys.filter(k => !["updated_at", "updated_by", "id"].includes(k));
 
       if (displayKeys.length === 0) {
@@ -570,8 +569,8 @@ export function TradingProductDetail({
 
   return (
     <div className="space-y-6">
-      {/* Top Navigation & Action Toolbar */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-zinc-200 dark:border-zinc-800 pb-4">
+      {/* 1. CLEAN TOP GLOBAL HEADER (NAVIGATION & PRODUCT TITLE ONLY - NO DUPLICATE OPERATIONAL CTAS) */}
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between border-b border-zinc-200 dark:border-zinc-800 pb-4">
         <div>
           <div className="flex items-center gap-2 text-xs text-zinc-500 mb-1">
             <Link
@@ -597,43 +596,27 @@ export function TradingProductDetail({
             </span>
           </div>
         </div>
-
-        {/* Action Toolbar */}
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            onClick={() => setIsPricingModalOpen(true)}
-            className="px-3 py-1.5 text-xs font-semibold rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-700 shadow-sm transition-colors"
-          >
-            도매가 설정
-          </button>
-          <button
-            onClick={() => setIsPromoModalOpen(true)}
-            className="px-3 py-1.5 text-xs font-semibold rounded-md border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 hover:bg-amber-100 shadow-sm transition-colors"
-          >
-            + 프로모션 등록
-          </button>
-          <button
-            onClick={() => setIsCostOverrideModalOpen(true)}
-            className="px-3 py-1.5 text-xs font-semibold rounded-md border border-indigo-300 dark:border-indigo-800 bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 shadow-sm transition-colors"
-          >
-            원가 오버라이드
-          </button>
-          <Link
-            href={`/admin/products/${product.id}`}
-            className="px-3 py-1.5 text-xs font-semibold rounded-md border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-colors"
-          >
-            Catalog Master 보기
-          </Link>
-        </div>
       </div>
 
-      {/* 1. TOP OPERATIONAL SNAPSHOT AREA (FULL-WIDTH RESPONSIVE CARDS) */}
+      {/* 2. TOP OPERATIONAL SNAPSHOT AREA (FULL-WIDTH RESPONSIVE GRID CARDS) */}
       <div className="space-y-4">
         {/* ROW 1: Product Summary, Inventory Snapshot, Cost Snapshot */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
           
-          {/* A. Product Summary Card */}
+          {/* A. Product Summary Card (with Catalog Master Reference Button) */}
           <div className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 flex flex-col justify-between space-y-4">
+            <div className="flex items-start justify-between border-b border-zinc-100 dark:border-zinc-800 pb-2">
+              <h3 className="text-xs font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">
+                제품 식별 요약 (Product Identity)
+              </h3>
+              <Link
+                href={`/admin/products/${product.id}`}
+                className="text-[11px] font-semibold text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white underline transition-colors"
+              >
+                Catalog Master View →
+              </Link>
+            </div>
+
             <div className="flex items-start gap-3.5">
               <div className="w-16 h-16 rounded-lg border border-zinc-200 dark:border-zinc-800 overflow-hidden bg-zinc-50 dark:bg-zinc-950 flex-shrink-0 flex items-center justify-center">
                 {product.photoUrl ? (
@@ -669,17 +652,29 @@ export function TradingProductDetail({
             </div>
           </div>
 
-          {/* B. Inventory Snapshot Card */}
+          {/* B. Inventory Snapshot Card (with Inbound Mini Panel) */}
           <div className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 flex flex-col justify-between space-y-4">
             <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-2">
               <h3 className="text-xs font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">
                 실시간 재고 스냅샷 (Inventory Snapshot)
               </h3>
-              <span className="text-[10px] text-emerald-600 font-bold bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded border border-emerald-200 dark:border-emerald-900/50">
-                Parity Verified
-              </span>
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={() => setIsOpeningModalOpen(true)}
+                  className="px-2 py-0.5 text-[10px] font-bold rounded bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 text-zinc-700 dark:text-zinc-300 transition-colors"
+                >
+                  + 기초 재고
+                </button>
+                <button
+                  onClick={() => setIsAdjustmentModalOpen(true)}
+                  className="px-2 py-0.5 text-[10px] font-bold rounded bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 text-zinc-700 dark:text-zinc-300 transition-colors"
+                >
+                  수동 조정
+                </button>
+              </div>
             </div>
 
+            {/* Main Physical Stock KPIs */}
             <div className="grid grid-cols-2 gap-2.5">
               <div className="p-2.5 rounded-lg bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200/70 dark:border-emerald-900/50">
                 <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400 block uppercase">Available (판매가능)</span>
@@ -699,25 +694,71 @@ export function TradingProductDetail({
               </div>
             </div>
 
-            <div className="text-[10px] text-zinc-500 dark:text-zinc-400 bg-zinc-50 dark:bg-zinc-950/50 p-1.5 rounded border border-zinc-150 dark:border-zinc-850 flex items-center justify-between">
-              <span>Formula: Available = On Hand - Damaged - Hold</span>
-              <span>Incoming: <strong>{totalIncoming} EA</strong></span>
+            {/* ENHANCED CANONICAL INBOUND MINI PANEL (Section 5 & 9) */}
+            <div className="p-2.5 rounded-lg bg-indigo-50/60 dark:bg-indigo-950/30 border border-indigo-200/60 dark:border-indigo-900/40 space-y-1.5 text-xs">
+              <div className="flex items-center justify-between border-b border-indigo-100 dark:border-indigo-900/40 pb-1">
+                <span className="text-[10px] font-bold text-indigo-700 dark:text-indigo-400 uppercase flex items-center gap-1">
+                  <span>🚢 Canonical Inbound Snapshot (입고 예정)</span>
+                </span>
+                <button
+                  onClick={() => setActiveTab("po")}
+                  className="text-[10px] font-bold text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 underline"
+                >
+                  View Open Inbound →
+                </button>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 text-[11px]">
+                <div>
+                  <span className="text-zinc-500 dark:text-zinc-400 text-[10px] block">Incoming Qty:</span>
+                  <strong className="text-indigo-900 dark:text-indigo-200 font-bold text-xs">
+                    {inboundSummary.incomingQty.toLocaleString()} EA
+                  </strong>
+                </div>
+                <div>
+                  <span className="text-zinc-500 dark:text-zinc-400 text-[10px] block">Open Inbound:</span>
+                  <strong className="text-zinc-800 dark:text-zinc-200 font-bold">
+                    {inboundSummary.openInboundCount}건
+                  </strong>
+                </div>
+                <div>
+                  <span className="text-zinc-500 dark:text-zinc-400 text-[10px] block">Next ETA:</span>
+                  <strong className="text-zinc-800 dark:text-zinc-200 font-mono">
+                    {inboundSummary.nextEta || "-"}
+                  </strong>
+                </div>
+                <div>
+                  <span className="text-zinc-500 dark:text-zinc-400 text-[10px] block">Destination:</span>
+                  <strong className="text-zinc-800 dark:text-zinc-200 truncate block">
+                    {inboundSummary.destinationWarehouseName || "-"}
+                  </strong>
+                </div>
+              </div>
             </div>
           </div>
 
-          {/* C. Cost Snapshot Card (3-Layer Landed Cost Model) */}
+          {/* C. Cost Snapshot Card (with Contextual Cost Override Actions) */}
           <div className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 flex flex-col justify-between space-y-4">
             <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-2">
               <h3 className="text-xs font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">
                 3-Layer 원가 스냅샷 (Cost Snapshot)
               </h3>
-              {product.hasCostOverride ? (
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-indigo-100 text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
-                  Manual Override Active
-                </span>
-              ) : (
-                <span className="text-[10px] text-zinc-400 font-semibold uppercase">System Landed</span>
-              )}
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={() => setIsCostOverrideModalOpen(true)}
+                  className="px-2 py-0.5 text-[10px] font-bold rounded bg-indigo-600 hover:bg-indigo-700 text-white transition-colors"
+                >
+                  {product.hasCostOverride ? "Edit Override" : "Override Cost"}
+                </button>
+                {product.hasCostOverride && (
+                  <button
+                    onClick={handleClearCostOverride}
+                    className="px-2 py-0.5 text-[10px] font-bold rounded bg-rose-50 text-rose-600 dark:bg-rose-950/40 dark:text-rose-300 border border-rose-200 dark:border-rose-900/50 hover:bg-rose-100 transition-colors"
+                  >
+                    해제
+                  </button>
+                )}
+              </div>
             </div>
 
             <div className="p-3 rounded-lg bg-indigo-50/60 dark:bg-indigo-950/30 border border-indigo-200 dark:border-indigo-900/50 space-y-1">
@@ -751,6 +792,15 @@ export function TradingProductDetail({
                 </span>
               </div>
             </div>
+
+            <div className="flex justify-end pt-1">
+              <Link
+                href="/admin/purchasing/landed-cost"
+                className="text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 hover:underline"
+              >
+                View Landed Cost Cases →
+              </Link>
+            </div>
           </div>
 
         </div>
@@ -758,25 +808,25 @@ export function TradingProductDetail({
         {/* ROW 2: Pricing & Margin Snapshot, Operational Alerts */}
         <div className="grid grid-cols-1 md:grid-cols-12 gap-5">
           
-          {/* D. Pricing & Margin Snapshot Card (col-span-8) */}
+          {/* D. Pricing & Margin Snapshot Card (with Contextual Pricing Actions - col-span-8) */}
           <div className="md:col-span-8 rounded-xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 space-y-4">
             <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-2">
               <h3 className="text-xs font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">
                 가격 및 마진 스냅샷 (Pricing & Margin Snapshot)
               </h3>
               <div className="flex items-center gap-2">
-                {product.isPromoActive && (
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
-                    PROMO ACTIVE
-                  </span>
-                )}
-                {product.hasPricingOverride ? (
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-indigo-100 text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
-                    Trading Override
-                  </span>
-                ) : (
-                  <span className="text-[10px] text-zinc-400 font-semibold uppercase">Catalog Default</span>
-                )}
+                <button
+                  onClick={() => setIsPricingModalOpen(true)}
+                  className="px-2.5 py-1 text-xs font-semibold rounded bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 hover:bg-zinc-800 transition-colors shadow-sm"
+                >
+                  도매가 설정
+                </button>
+                <button
+                  onClick={() => setIsPromoModalOpen(true)}
+                  className="px-2.5 py-1 text-xs font-semibold rounded bg-amber-500 text-white hover:bg-amber-600 transition-colors shadow-sm"
+                >
+                  + 프로모션 등록
+                </button>
               </div>
             </div>
 
@@ -852,10 +902,10 @@ export function TradingProductDetail({
         </div>
       </div>
 
-      {/* 2. LOWER FULL-WIDTH HISTORY AREA (BILINGUAL 6-TAB HEADER WITH ZERO SCROLLBAR) */}
+      {/* 3. LOWER FULL-WIDTH HISTORY AREA (BILINGUAL 6-TAB HEADER WITH ZERO SCROLLBAR) */}
       <div className="rounded-xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900 overflow-hidden">
         
-        {/* Full-Width Tab Header: Grid 6 cols without horizontal scrollbar */}
+        {/* Full-Width Tab Header */}
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950">
           {[
             { id: "inventory", en: "Inventory", ko: "재고 변동" },

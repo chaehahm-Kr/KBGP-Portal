@@ -119,7 +119,7 @@ export async function getTradingProductDetailData(productId: string) {
     .from("purchase_order_lines")
     .select(`
       id, qty, unit_cost, created_at,
-      purchase_orders!inner(id, po_number, order_date, po_status, supplier_id, companies:supplier_id(name))
+      purchase_orders!inner(id, po_number, order_date, po_status, fulfillment_status, supplier_id, companies:supplier_id(name))
     `)
     .eq("product_id", productId)
     .order("created_at", { ascending: false });
@@ -143,6 +143,125 @@ export async function getTradingProductDetailData(productId: string) {
     `)
     .eq("product_id", productId)
     .order("created_at", { ascending: false });
+
+  // CANONICAL INBOUND CALCULATION LOGIC (Section 5, 6, 7 & 8)
+  // 1. Fetch active shipments for this product where status NOT IN ('CANCELLED', 'COMPLETED')
+  const { data: openShipmentLines } = await adminSupabase
+    .from("inbound_shipment_lines")
+    .select(`
+      id, shipped_qty, product_id, inbound_shipment_id, purchase_order_line_id,
+      inbound_shipments!inner(
+        id, shipment_number, status, eta, destination_warehouse_id,
+        warehouses:destination_warehouse_id(name, code)
+      )
+    `)
+    .eq("product_id", productId)
+    .not("inbound_shipments.status", "in", '("CANCELLED", "COMPLETED")');
+
+  const openShipmentLineIds = (openShipmentLines ?? []).map(sl => sl.id);
+
+  let finalizedReceivedByShipmentLine: Record<string, number> = {};
+  if (openShipmentLineIds.length > 0) {
+    const { data: recLines } = await adminSupabase
+      .from("receiving_lines")
+      .select(`
+        inbound_shipment_line_id, received_qty,
+        receivings!inner(status)
+      `)
+      .in("inbound_shipment_line_id", openShipmentLineIds)
+      .eq("receivings.status", "FINALIZED");
+
+    (recLines ?? []).forEach(rl => {
+      const lid = rl.inbound_shipment_line_id;
+      if (lid) {
+        finalizedReceivedByShipmentLine[lid] = (finalizedReceivedByShipmentLine[lid] || 0) + Number(rl.received_qty);
+      }
+    });
+  }
+
+  let totalIncomingFromShipments = 0;
+  const activeInboundShipmentIds = new Set<string>();
+  const etas: { eta: string; warehouseName: string; warehouseCode: string }[] = [];
+
+  (openShipmentLines ?? []).forEach((sl: any) => {
+    const shipment = Array.isArray(sl.inbound_shipments) ? sl.inbound_shipments[0] : sl.inbound_shipments;
+    if (!shipment) return;
+
+    const shipped = Number(sl.shipped_qty || 0);
+    const finalizedRec = finalizedReceivedByShipmentLine[sl.id] || 0;
+    const remaining = Math.max(0, shipped - finalizedRec);
+
+    if (shipment.status !== "RECEIVED" || remaining > 0) {
+      totalIncomingFromShipments += remaining;
+      activeInboundShipmentIds.add(shipment.id);
+
+      if (shipment.eta) {
+        const wh = Array.isArray(shipment.warehouses) ? shipment.warehouses[0] : shipment.warehouses;
+        etas.push({
+          eta: shipment.eta,
+          warehouseName: wh?.name || "-",
+          warehouseCode: wh?.code || "-",
+        });
+      }
+    }
+  });
+
+  // 2. Fetch active PO lines where po_status NOT IN ('DRAFT', 'CANCELLED') and fulfillment_status != 'COMPLETED'
+  const { data: openPoLines } = await adminSupabase
+    .from("purchase_order_lines")
+    .select(`
+      id, qty, product_id, purchase_order_id,
+      purchase_orders!inner(id, po_number, po_status, fulfillment_status, order_date, eta)
+    `)
+    .eq("product_id", productId)
+    .not("purchase_orders.po_status", "in", '("DRAFT", "CANCELLED")')
+    .not("purchase_orders.fulfillment_status", "eq", "COMPLETED");
+
+  let totalIncomingFromPos = 0;
+  const activePoIds = new Set<string>();
+
+  for (const pol of ((openPoLines as any[]) ?? [])) {
+    const po = Array.isArray(pol.purchase_orders) ? pol.purchase_orders[0] : pol.purchase_orders;
+    if (!po) continue;
+
+    const poQty = Number(pol.qty || 0);
+
+    const { data: shippedForPo } = await adminSupabase
+      .from("inbound_shipment_lines")
+      .select("shipped_qty, inbound_shipment_id, inbound_shipments!inner(status)")
+      .eq("purchase_order_line_id", pol.id)
+      .not("inbound_shipments.status", "eq", "CANCELLED");
+
+    const totalShipped = (shippedForPo ?? []).reduce((sum: number, s: any) => sum + Number(s.shipped_qty || 0), 0);
+    const unshipped = Math.max(0, poQty - totalShipped);
+
+    if (unshipped > 0) {
+      totalIncomingFromPos += unshipped;
+      activePoIds.add(po.id);
+
+      if (po.eta) {
+        etas.push({
+          eta: po.eta,
+          warehouseName: "-",
+          warehouseCode: "-",
+        });
+      }
+    }
+  }
+
+  const totalIncomingQty = totalIncomingFromShipments + totalIncomingFromPos;
+  const openInboundCount = activeInboundShipmentIds.size + activePoIds.size;
+
+  etas.sort((a, b) => new Date(a.eta).getTime() - new Date(b.eta).getTime());
+  const nextEta = etas.length > 0 ? etas[0].eta : null;
+  const nextEtaWarehouse = etas.length > 0 && etas[0].warehouseName !== "-" ? etas[0].warehouseName : null;
+
+  const inboundSummary = {
+    incomingQty: totalIncomingQty,
+    openInboundCount,
+    nextEta,
+    destinationWarehouseName: nextEtaWarehouse,
+  };
 
   // Fetch Cost Summary
   const costSummary = await getProductCostSummary(productId);
@@ -170,7 +289,6 @@ export async function getTradingProductDetailData(productId: string) {
   // Cost Snapshot
   const baseLandedCost = costSummary?.latestLandedCost || 0;
 
-  // Read override cost from DB direct column or priceAddInfo fallback
   const directOverrideCost = (product as any).override_landed_cost !== undefined ? (product as any).override_landed_cost : undefined;
   const jsonOverrideCost = tradingOverrides.override_landed_cost;
   
@@ -227,14 +345,12 @@ export async function getTradingProductDetailData(productId: string) {
   const pricingNote = (product as any).trading_pricing_note || tradingOverrides.pricing_note || null;
   const isPricingActive = (product as any).trading_pricing_active !== undefined ? (product as any).trading_pricing_active : (tradingOverrides.is_active ?? true);
 
-  // Check if promo is currently active
   const now = new Date();
   const isPromoActive = promoWholesale !== null && promoWholesale > 0 && (
     (!promoStartDate || new Date(promoStartDate) <= now) &&
     (!promoEndDate || new Date(promoEndDate) >= now)
   );
 
-  // Calculate Margins
   const effectiveWholesale = isPromoActive ? promoWholesale : operationalWholesale;
 
   const ourMarginUsd = effectiveWholesale - effectiveLandedCost;
@@ -328,6 +444,7 @@ export async function getTradingProductDetailData(productId: string) {
     receivingHistory: receivingHistory || [],
     costSummary,
     historyLogs,
+    inboundSummary,
   };
 }
 
@@ -410,7 +527,7 @@ export async function updateTradingPricing(productId: string, input: UpdateTradi
     updatePayload.trading_srp_price = srp;
     updatePayload.trading_pricing_note = note;
   } catch {
-    // Ignore if column missing
+    // Ignore
   }
 
   const { error } = await supabase
@@ -437,7 +554,7 @@ export async function updateTradingPricing(productId: string, input: UpdateTradi
       created_by: userId,
     });
   } catch {
-    // Ignore audit table error
+    // Ignore
   }
 
   revalidatePath(`/admin/products/trading/${productId}`);
