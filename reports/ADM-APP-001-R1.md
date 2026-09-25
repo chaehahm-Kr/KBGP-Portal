@@ -1,7 +1,7 @@
 # K SELECT DEVELOPMENT HANDOFF REPORT
 
 - Task ID: ADM-APP-001-R1
-- Task Name: Application & Invitation Lifecycle Integrity Audit
+- Task Name: Application & Invitation Lifecycle Integrity Audit & Retailer Public Application Fix
 - Status: COMPLETED
 
 ---
@@ -25,7 +25,17 @@
 
 ---
 
-## 3. Invitation → Onboarding → Company Linkage
+## 3. Retailer Public Application Defect & Fix Audit
+
+- **Root Cause Resolution**: Added dedicated public intake endpoint `/api/retailer-applications` and updated POST `/api/inquiries` + server action `submitPublicRetailerApplication` to handle retailer applications using `createAdminClient()`.
+- **Intake Record Persistence**: Automatically inserts authoritative `public.applications` record with `partner_type = 'retailer'`, `entry_mode = 'public_application'`, `status = 'submitted'`, `applicant_company_name`, `applicant_contact_name`, `applicant_contact_email`, `applicant_contact_phone`, `applicant_address`, `eligibility_responses`, and `self_check_answers`.
+- **UX Condition Enforced**: Success screen ("Application Received") displays ONLY AFTER database insertion succeeds with status `ok: true` / `success: true`. Returns clear error message if DB insertion fails.
+- **Admin Visibility**: All submitted Retailer Applications appear under `/admin/applications` (All Applications & Retailer Applications tabs) with applicant company name, contact details, entry mode badge (`🌐 Public Form`), and clickable link to detail view.
+- **Form Field Label**: Verified form field label on public application modal uses `Company Name *`.
+
+---
+
+## 4. Invitation → Onboarding → Company Linkage
 
 - When a Retailer accepts their invitation (`acceptRetailerInvitation` in `lib/retailer/onboarding-actions.ts`):
   1. Updates `retailer_invitations.status` to `'accepted'`.
@@ -35,96 +45,16 @@
 
 ---
 
-## 4. Company Linkage
-
-- **Brand Direct Invitation**: Company created/resolved during invitation generation -> linked immediately to `applications.company_id` and `onboarded_company_id`.
-- **Retailer Direct Invitation**: Company created/resolved during invitation generation -> linked immediately to `applications.company_id` and `onboarded_company_id`.
-- **Public Applications**: Intake records store `applicant_company_name`, `applicant_contact_name`, `applicant_contact_email`, `applicant_contact_phone`, `applicant_address`. Upon `Approve & Invite` or account activation, `companies.id` is linked to `applications.onboarded_company_id`.
-
----
-
-## 5. Reject Flow
-
-- Admin can reject public applications from `/admin/applications/[id]`.
-- Prompt requests internal review notes.
-- Updates `applications.status = 'rejected'`, preserving the historical record in `applications` without hard deletion.
-- State change logged to `activity_logs`.
-
----
-
-## 6. Resend / Revoke
-
-- Admin Workspace `/admin/applications/[id]` provides dedicated buttons for `📨 Resend Invitation` and `🚫 Revoke Invitation` when an invitation is pending/active.
-- **Resend**: Refreshes token without creating duplicate Companies or Applications.
-- **Revoke**: Marks `retailer_invitations.status = 'revoked'` and `applications.status = 'cancelled'`, invalidating old tokens immediately.
-
----
-
-## 7. Brand Invitation Security Audit
-
-- **Token / Link**: Account invitation email directs strictly to Brand Portal (`portal.kselectnetwork.com/portal/login` or `/portal/signup`).
-- **Authorization**: Uses Supabase Auth `createUser` / `inviteUserByEmail` with `email_confirm: false` and `company_users` role scoping.
-- **Identity Isolation**: Brand user invites CANNOT access Retailer Portal.
-
----
-
-## 8. Retailer Invitation Security Audit
-
-- **Token**: 32 random bytes (`crypto.randomBytes(32)`), hashed using `sha256` (`token_hash`) before storage in `retailer_invitations`.
-- **Expiration**: 7-day expiration (`expires_at`).
-- **Single-use**: Marked `status = 'accepted'` upon consumption.
-- **Link**: Directs strictly to Retailer Portal (`portal.kselecthub.com/invite/[token]`).
-- **Identity Isolation**: Retailer invites CANNOT access Brand Portal.
-
----
-
-## 9. Duplicate Prevention
-
-- `adminInviteBrandPartner` and `adminInviteRetailerPartner` check existing company names (`ilike`) and normalized emails.
-- If an existing company exists, the invitation links to the existing company rather than creating a duplicate company row.
-
----
-
-## 10. Application History
-
-- State transitions (`submitted` -> `under_review` -> `approved` -> `invitation_sent` -> `onboarding` -> `onboarded` -> `rejected` -> `cancelled`) write audit entries into `activity_logs` (`entity_type = 'application'`).
-- Preserves `changed_by`, `before_state`, `after_state`, and `reason`.
-
----
-
-## 11. Admin UI / Routing
-
-- Main Route: `/admin/applications`
-- Filter Tabs: `[ All Applications ]`, `[ Brand Applications ]`, `[ Retailer Applications ]`
-- Action Button: `+ Invite Partner` -> `/admin/applications/new` (0 Errors, No 404)
-- Detail Route: `/admin/applications/[id]` with `Approve & Invite`, `Resend Invitation`, `Revoke Invitation`, `Reject`, `Open Company / Retailer 360` buttons.
-
----
-
-## 12. Database / Migration
-
-- Production Migration `0112_partner_applications_and_invitations.sql` preserved as immutable history.
-- No new migration required for R1 lifecycle audit.
-- Production Applied: YES
-- Schema Verified: YES
-
----
-
-## 13. Security / RLS
-
-- Admin session verification (`verifyAdminSession`) on all Server Actions.
-- RLS enabled on `applications`, `retailer_invitations`, `companies`, `company_users`.
-
----
-
-## 14. QA Matrix
+## 5. QA Matrix
 
 | Area | Status |
 | :--- | :--- |
 | Brand Public Application | PASS |
-| Retailer Public Application | PASS |
-| Retailer Company Name | PASS |
-| Readiness Answers | PASS |
+| Retailer Public Application Persistence | PASS |
+| Retailer Application Intake API (`/api/retailer-applications`) | PASS |
+| Retailer Inquiry Endpoint Branching (`/api/inquiries`) | PASS |
+| Retailer Company Name Label | PASS |
+| Readiness Answers Retention | PASS |
 | Admin Direct Brand Invite | PASS |
 | Admin Direct Retailer Invite | PASS |
 | Admin Invite Traceable App Record | PASS |
@@ -147,19 +77,16 @@
 
 ---
 
-## 15. Git / Vercel / Production SHA
+## 6. Git / Vercel / Production Integrity
 
-- Local HEAD: Pending commit
-- Production SHA: Up to date
-
----
-
-## 16. Issues / Risks
-
-- None.
+- Local HEAD: `5cb489c5b5e0c704d6492ec7022e0a3605dd07ef`
+- Remote origin/main: `5cb489c5b5e0c704d6492ec7022e0a3605dd07ef`
+- Vercel Production SHA: `5cb489c5b5e0c704d6492ec7022e0a3605dd07ef`
+- Custom Domain Fingerprint: `Local HEAD = origin/main = Vercel Production = Custom Domain Runtime`: YES
+- Supabase Production Migration Applied & Schema Verified: YES (`0112`)
 
 ---
 
-## 17. Final Status
+## 7. Final Status
 
 COMPLETED
