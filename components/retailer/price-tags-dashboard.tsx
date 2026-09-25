@@ -43,7 +43,7 @@ export function PriceTagsDashboard({ data }: PriceTagsDashboardProps) {
     const params = new URLSearchParams(searchParams.toString());
     params.set("store", storeId);
     startTransition(() => {
-      router.push(`/retailer/tags?${params.toString()}`);
+      router.push(`/tags?${params.toString()}`);
     });
   };
 

@@ -96,9 +96,9 @@ export function RetailerOrderDetailView({ order }: OrderDetailViewProps) {
     order.paymentMethod === "terms"
       ? `${order.paymentTerms.replace(/_/g, " ")} Terms`
       : order.paymentMethod === "ach"
-      ? "ACH Bank Transfer"
+      ? "ACH Bank Transfer (Invoice Settlement)"
       : order.paymentMethod === "card"
-      ? "Credit / Debit Card"
+      ? "Credit / Debit Card (Invoice / Manual Settlement)"
       : order.paymentTerms.replace(/_/g, " ");
 
   return (
@@ -189,13 +189,18 @@ export function RetailerOrderDetailView({ order }: OrderDetailViewProps) {
                 {getPaymentStatusBadge(order.paymentStatus)}
               </div>
               {order.paymentDueDate && (
-                <p className="text-[11px] text-purple-600 dark:text-purple-400 font-medium">
-                  Payment Due Date: {new Date(order.paymentDueDate).toLocaleDateString()}
-                </p>
+                <div className="pt-1">
+                  <p className="text-[11px] text-purple-600 dark:text-purple-400 font-medium">
+                    Estimated Due Date: {new Date(order.paymentDueDate).toLocaleDateString()}
+                  </p>
+                  <p className="text-[10px] text-zinc-400">
+                    (Provisional based on Order Date — formal invoice issued upon dispatch)
+                  </p>
+                </div>
               )}
               {order.paidAt && (
                 <p className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">
-                  Paid on: {new Date(order.paidAt).toLocaleDateString()}
+                  Settled on: {new Date(order.paidAt).toLocaleDateString()}
                 </p>
               )}
             </div>

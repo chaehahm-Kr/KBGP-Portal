@@ -33,7 +33,7 @@ export function SalesPerformanceDashboard({ data }: { data: PerformanceDashboard
     const params = new URLSearchParams(searchParams.toString());
     params.set("period", period);
     startTransition(() => {
-      router.push(`/retailer/sales?${params.toString()}`);
+      router.push(`/sales?${params.toString()}`);
     });
   };
 
@@ -41,7 +41,7 @@ export function SalesPerformanceDashboard({ data }: { data: PerformanceDashboard
     const params = new URLSearchParams(searchParams.toString());
     params.set("store", storeId);
     startTransition(() => {
-      router.push(`/retailer/sales?${params.toString()}`);
+      router.push(`/sales?${params.toString()}`);
     });
   };
 
@@ -320,7 +320,7 @@ export function SalesPerformanceDashboard({ data }: { data: PerformanceDashboard
           </p>
           <div className="pt-2">
             <Link
-              href="/retailer/check"
+              href="/check"
               className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold bg-purple-600 text-white hover:bg-purple-700 transition-colors shadow-sm"
             >
               Go to Weekly Check Stepper →
@@ -358,7 +358,7 @@ export function SalesPerformanceDashboard({ data }: { data: PerformanceDashboard
                       {/* Product Name & Brand */}
                       <td className="py-3.5 pl-4 pr-3">
                         <Link
-                          href={`/retailer/sales/${p.productId}`}
+                          href={`/sales/${p.productId}`}
                           className="flex items-center gap-3 group-hover:opacity-90"
                         >
                           <div className="w-10 h-10 rounded-xl bg-zinc-100 dark:bg-zinc-800 relative overflow-hidden flex-shrink-0 border border-zinc-200 dark:border-zinc-700/60">
@@ -511,7 +511,7 @@ export function SalesPerformanceDashboard({ data }: { data: PerformanceDashboard
                   </div>
                   <div className="min-w-0 flex-1">
                     <Link
-                      href={`/retailer/sales/${p.productId}`}
+                      href={`/sales/${p.productId}`}
                       className="font-bold text-sm text-zinc-900 dark:text-white block hover:text-purple-600 dark:hover:text-purple-400 truncate"
                     >
                       {p.productName}
@@ -568,7 +568,7 @@ export function SalesPerformanceDashboard({ data }: { data: PerformanceDashboard
 
                   <div className="flex items-center gap-2">
                     <Link
-                      href={`/retailer/sales/${p.productId}`}
+                      href={`/sales/${p.productId}`}
                       className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200"
                     >
                       Breakdown →

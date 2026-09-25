@@ -41,6 +41,10 @@ export async function getRetailerPaymentEligibility(
   const termsStatus = (profile?.terms_status || "pending") as RetailerTermsStatus;
   const creditLimit = Number(profile?.credit_limit || 0);
 
+  // In this foundation phase, live PG/Stripe/Plaid integration is not yet connected
+  const isCardProviderConfigured = false;
+  const isAchProviderConfigured = false;
+
   const availableMethods: RetailerPaymentEligibility["availableMethods"] = [];
 
   // Card Option
@@ -48,8 +52,11 @@ export async function getRetailerPaymentEligibility(
     availableMethods.push({
       id: "card",
       label: "Credit / Debit Card",
-      description: "Pay securely via corporate credit/debit card (Prepaid)",
-      badge: "Prepaid",
+      description: isCardProviderConfigured
+        ? "Pay securely via corporate credit/debit card."
+        : "Online card gateway setup pending — order placed as Unpaid for manual invoice / card settlement.",
+      badge: isCardProviderConfigured ? "Prepaid" : "Setup Pending",
+      providerConfigured: isCardProviderConfigured,
     });
   }
 
@@ -58,8 +65,11 @@ export async function getRetailerPaymentEligibility(
     availableMethods.push({
       id: "ach",
       label: "ACH Direct Bank Transfer",
-      description: "Direct bank debit / ACH invoice settlement",
-      badge: "Prepaid",
+      description: isAchProviderConfigured
+        ? "Direct bank debit / ACH invoice settlement."
+        : "Online direct debit setup pending — order placed as Unpaid for bank transfer / invoice settlement.",
+      badge: isAchProviderConfigured ? "Prepaid" : "Setup Pending",
+      providerConfigured: isAchProviderConfigured,
     });
   }
 
@@ -72,14 +82,16 @@ export async function getRetailerPaymentEligibility(
       net60: "Net 60 Days",
     };
     const termsLabel = termsDisplayMap[approvedTerms] || approvedTerms.toUpperCase();
+    const days = approvedTerms.replace("net", "");
 
     availableMethods.push({
       id: "terms",
       label: `${termsLabel} Terms`,
-      description: `Approved B2B credit line. Invoice payment due within ${approvedTerms.replace("net", "")} days of order dispatch.`,
-      badge: "Approved Credit",
+      description: `Approved B2B credit terms. Estimated due date: Order Date + ${days} Days (Provisional — formal commercial invoice issued upon order dispatch).`,
+      badge: "Approved Terms",
       isTerms: true,
       termsLabel,
+      providerConfigured: true,
     });
   }
 
@@ -90,6 +102,8 @@ export async function getRetailerPaymentEligibility(
     approvedTerms,
     termsStatus,
     creditLimit,
+    isCardProviderConfigured,
+    isAchProviderConfigured,
     availableMethods,
   };
 }

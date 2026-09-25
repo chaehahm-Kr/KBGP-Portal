@@ -45,7 +45,7 @@ export function ProductPerformanceDetailView({ product, userRole }: ProductPerfo
       {/* Navigation Breadcrumb */}
       <div className="flex items-center justify-between gap-4">
         <Link
-          href="/retailer/sales"
+          href="/sales"
           className="inline-flex items-center gap-1.5 text-xs font-bold text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors"
         >
           ← Back to Performance Dashboard

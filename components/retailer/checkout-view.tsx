@@ -145,18 +145,18 @@ export function RetailerCheckoutView({
             )}
             <div className="flex justify-between border-b border-zinc-100 dark:border-zinc-800 pb-2">
               <span className="text-zinc-500">Payment Arrangement:</span>
-              <span className="font-semibold text-zinc-900 dark:text-white capitalize">
+              <span className="font-semibold text-zinc-900 dark:text-white">
                 {isTerms
-                  ? `${submittedOrder.termsLabel || "Net Terms"} (Formal Invoice Arranged)`
+                  ? `${submittedOrder.termsLabel || "Net Terms"} (Commercial Invoice upon Dispatch)`
                   : submittedOrder.paymentMethod === "ach"
-                  ? "ACH Bank Transfer (Invoice Settlement)"
-                  : "Credit / Debit Card (Prepaid Settlement)"}
+                  ? "ACH Bank Transfer (Invoice / Manual Settlement)"
+                  : "Credit / Debit Card (Manual / Invoice Settlement)"}
               </span>
             </div>
             <div className="flex justify-between border-b border-zinc-100 dark:border-zinc-800 pb-2">
               <span className="text-zinc-500">Payment Status:</span>
               <span className="font-bold text-amber-600 dark:text-amber-400">
-                Unpaid (Pending Dispatch & Fulfillment)
+                Unpaid (Order Recorded — Pending Dispatch & Fulfillment)
               </span>
             </div>
             <div className="flex justify-between items-baseline pt-1">
@@ -363,17 +363,35 @@ export function RetailerCheckoutView({
 
             {/* Credit Limit & Terms Notice */}
             {selectedPaymentMethod === "terms" && (
-              <div className="mt-3 p-3.5 rounded-xl bg-purple-50/70 dark:bg-purple-950/30 border border-purple-200/80 dark:border-purple-800/60 text-xs space-y-1.5">
+              <div className="mt-3 p-3.5 rounded-xl bg-purple-50/70 dark:bg-purple-950/30 border border-purple-200/80 dark:border-purple-800/60 text-xs space-y-2">
                 <div className="flex items-center justify-between font-bold text-purple-900 dark:text-purple-200">
-                  <span>🏢 Account Credit Line</span>
+                  <span>🏢 Approved Credit Limit</span>
                   <span>
                     {paymentEligibility.creditLimit > 0
                       ? `$${paymentEligibility.creditLimit.toLocaleString()} USD`
-                      : "Uncapped Authorized Credit"}
+                      : "Authorized Open Terms"}
                   </span>
                 </div>
-                <p className="text-[11px] text-purple-700 dark:text-purple-300 leading-relaxed">
-                  No upfront charge at checkout. A formal commercial invoice will be issued upon dispatch with payment due according to your {currentMethodObj?.termsLabel || "Net Terms"}.
+                <div className="text-[11px] text-purple-800 dark:text-purple-300 space-y-1 leading-relaxed">
+                  <p>
+                    <strong>Estimated Due Date:</strong> Order Date + {paymentEligibility.approvedTerms.replace("net", "")} Days (Provisional).
+                  </p>
+                  <p className="text-purple-700/80 dark:text-purple-300/80">
+                    No upfront charge. An authoritative commercial invoice will be issued upon dispatch with payment due according to your approved terms. Total credit exposure is subject to commercial review and outstanding invoice settlement.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Provider Notice for Card / ACH */}
+            {selectedPaymentMethod !== "terms" && !currentMethodObj?.providerConfigured && (
+              <div className="mt-3 p-3.5 rounded-xl bg-amber-50/80 dark:bg-amber-950/30 border border-amber-200/80 dark:border-amber-800/60 text-xs space-y-1">
+                <div className="font-bold text-amber-900 dark:text-amber-200 flex items-center gap-1.5">
+                  <span>ℹ️</span>
+                  <span>Online Payment Processing Setup Pending</span>
+                </div>
+                <p className="text-[11px] text-amber-800 dark:text-amber-300 leading-relaxed">
+                  Direct online payment gateway integration is currently in setup phase. Submitting this order will record your purchase order with <strong>Unpaid</strong> payment status, and our billing team will issue an invoice for settlement.
                 </p>
               </div>
             )}

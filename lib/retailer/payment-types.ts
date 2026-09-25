@@ -19,6 +19,8 @@ export interface RetailerPaymentEligibility {
   approvedTerms: RetailerApprovedTerms;
   termsStatus: RetailerTermsStatus;
   creditLimit: number;
+  isCardProviderConfigured: boolean;
+  isAchProviderConfigured: boolean;
   availableMethods: Array<{
     id: RetailerPaymentMethod;
     label: string;
@@ -26,6 +28,7 @@ export interface RetailerPaymentEligibility {
     badge?: string;
     isTerms?: boolean;
     termsLabel?: string;
+    providerConfigured: boolean;
   }>;
 }
 
