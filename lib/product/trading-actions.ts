@@ -147,12 +147,12 @@ export async function getTradingProductDetailData(productId: string) {
   // Fetch Cost Summary
   const costSummary = await getProductCostSummary(productId);
 
-  // Fetch History / Change log entries
+  // Fetch History / Change log entries with creator details
   let historyLogs: any[] = [];
   try {
     const { data: dbLogs } = await adminSupabase
       .from("trading_product_history")
-      .select("*")
+      .select("*, creator:profiles!created_by(full_name:display_name)")
       .eq("product_id", productId)
       .order("created_at", { ascending: false });
     
@@ -180,6 +180,7 @@ export async function getTradingProductDetailData(productId: string) {
 
   const overrideReason = (product as any).override_landed_cost_reason || tradingOverrides.override_landed_cost_reason || null;
   const overrideUpdatedAt = (product as any).override_landed_cost_updated_at || tradingOverrides.override_landed_cost_updated_at || null;
+  const overrideUpdatedBy = (product as any).override_landed_cost_updated_by || tradingOverrides.override_landed_cost_updated_by || null;
 
   const effectiveLandedCost = overrideLandedCost !== null && overrideLandedCost > 0
     ? overrideLandedCost
@@ -302,6 +303,7 @@ export async function getTradingProductDetailData(productId: string) {
     overrideLandedCost,
     overrideReason,
     overrideUpdatedAt,
+    overrideUpdatedBy,
     effectiveLandedCost,
     hasCostOverride: overrideLandedCost !== null && overrideLandedCost > 0,
 
@@ -343,7 +345,6 @@ export async function updateTradingPricing(productId: string, input: UpdateTradi
   const note = input.note || null;
   const reason = input.reason || "Operational pricing updated";
 
-  // Get current product
   const { data: currentProd } = await supabase
     .from("products")
     .select("price_additional_info, trading_wholesale_price, trading_map_price, trading_srp_price")
@@ -399,7 +400,6 @@ export async function updateTradingPricing(productId: string, input: UpdateTradi
     trading_history: updatedHistory,
   };
 
-  // Build update object attempting both direct columns & JSONB fallback
   const updatePayload: any = {
     price_additional_info: updatedPriceAddInfo,
   };
@@ -410,7 +410,7 @@ export async function updateTradingPricing(productId: string, input: UpdateTradi
     updatePayload.trading_srp_price = srp;
     updatePayload.trading_pricing_note = note;
   } catch {
-    // Ignore if column doesn't exist
+    // Ignore if column missing
   }
 
   const { error } = await supabase
@@ -419,7 +419,6 @@ export async function updateTradingPricing(productId: string, input: UpdateTradi
     .eq("id", productId);
 
   if (error) {
-    // If direct column update fails due to schema mismatch, fall back to updating JSONB only
     const { error: fallbackErr } = await supabase
       .from("products")
       .update({ price_additional_info: updatedPriceAddInfo })
@@ -427,7 +426,6 @@ export async function updateTradingPricing(productId: string, input: UpdateTradi
     if (fallbackErr) throw new Error(`도매가 업데이트 실패: ${fallbackErr.message}`);
   }
 
-  // Attempt insert into audit table if present
   try {
     await supabase.from("trading_product_history").insert({
       product_id: productId,
@@ -529,7 +527,7 @@ export async function updateTradingPromotion(productId: string, input: UpdateTra
     updatePayload.trading_promo_start_date = startDate;
     updatePayload.trading_promo_end_date = endDate;
   } catch {
-    // Ignore direct column if missing
+    // Ignore
   }
 
   const { error } = await supabase
@@ -556,7 +554,7 @@ export async function updateTradingPromotion(productId: string, input: UpdateTra
       created_by: userId,
     });
   } catch {
-    // Ignore audit table error
+    // Ignore
   }
 
   revalidatePath(`/admin/products/trading/${productId}`);
@@ -641,7 +639,7 @@ export async function updateTradingCostOverride(productId: string, input: Update
     updatePayload.override_landed_cost_updated_at = new Date().toISOString();
     updatePayload.override_landed_cost_updated_by = userId;
   } catch {
-    // Ignore if column missing
+    // Ignore
   }
 
   const { error } = await supabase
@@ -668,7 +666,7 @@ export async function updateTradingCostOverride(productId: string, input: Update
       created_by: userId,
     });
   } catch {
-    // Ignore audit table error
+    // Ignore
   }
 
   revalidatePath(`/admin/products/trading/${productId}`);
