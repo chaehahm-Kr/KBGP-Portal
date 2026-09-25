@@ -201,12 +201,12 @@ export function evaluateProductRegistrationStatus(
   }
 
   // 3. Name (English / Display)
-  if (!effectiveNameEn) {
+  if (!effectiveNameEn || effectiveNameEn === "[임시저장] 신규 제품") {
     missingFields.push("영문 제품명");
   }
 
   // 4. Manufacture SKU
-  if (!effectiveManufactureSku) {
+  if (!effectiveManufactureSku || effectiveManufactureSku.startsWith("DRAFT-SKU-")) {
     missingFields.push("제조사 SKU");
   }
 

@@ -373,9 +373,10 @@ export function ProductDetailTabs({
   }, [imageRows, imageUrls]);
 
   // Required Fields States for reactive validation
+  const initialManufactureSku = (effectiveManufactureSku || "").startsWith("DRAFT-SKU-") ? "" : (effectiveManufactureSku || "");
   const [nameEn, setNameEn] = useState(product.name_en || "");
   const [name, setName] = useState(product.name || "");
-  const [manufactureSku, setManufactureSku] = useState(effectiveManufactureSku || "");
+  const [manufactureSku, setManufactureSku] = useState(initialManufactureSku);
   const [brandId, setBrandId] = useState(product.brand_id || "");
   const [category, setCategory] = useState(product.category || "");
   const [volume, setVolume] = useState(product.volume || "");
@@ -395,7 +396,7 @@ export function ProductDetailTabs({
   const initialSnapshotRef = React.useRef({
     nameEn: product.name_en || "",
     name: product.name || "",
-    manufactureSku: effectiveManufactureSku || "",
+    manufactureSku: initialManufactureSku,
     brandId: product.brand_id || "",
     category: product.category || "",
     volume: product.volume || "",
