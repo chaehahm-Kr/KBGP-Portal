@@ -56,9 +56,11 @@ Update the Retailer Portal brand mark shown in the top-left application shell ac
 ---
 
 ## 5. Production Deployment
-- **Commit SHA**: [Auto-generated on commit]
+- **Commit SHA**: `d4edf8c5b3dfff971997007e653f612cad8255d7`
 - **Target URL**: `https://portal.kselecthub.com`
-- **Domain Verification**: Custom domains serving latest production deployment
+- **Vercel Production Deployment**: `kbgp-portal-ekjn61jzm-letusto.vercel.app`
+- **Domain Verification**: `https://portal.kselecthub.com`, `https://portal.kselectnetwork.com`
+- **Fingerprint**: `Local HEAD = origin/main = Vercel Production = Custom Domain Runtime` (YES)
 
 ---
 
