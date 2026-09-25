@@ -26,7 +26,7 @@ export interface UpdateTradingPromotionInput {
 
 export interface UpdateTradingCostOverrideInput {
   override_cost: number | null;
-  reason: string;
+  reason?: string | null;
 }
 
 export async function getTradingProductDetailData(productId: string) {
@@ -85,17 +85,22 @@ export async function getTradingProductDetailData(productId: string) {
     .from("product_images")
     .select("storage_path")
     .eq("product_id", productId)
-    .order("position", { ascending: true })
-    .limit(1);
+    .order("position", { ascending: true });
 
-  let photoUrl: string | null = null;
-  if (images && images.length > 0 && images[0].storage_path) {
-    try {
-      photoUrl = await getSignedFileUrl(images[0].storage_path);
-    } catch {
-      // Ignore URL error
+  const photoUrls: string[] = [];
+  if (images && images.length > 0) {
+    for (const img of images) {
+      if (img.storage_path) {
+        try {
+          const url = await getSignedFileUrl(img.storage_path);
+          if (url) photoUrls.push(url);
+        } catch {
+          // Ignore URL error for individual image
+        }
+      }
     }
   }
+  const photoUrl: string | null = photoUrls.length > 0 ? photoUrls[0] : null;
 
   const priceAddInfo = (product.price_additional_info as any) || {};
   const adminOverrides = priceAddInfo.admin_overrides || {};
@@ -379,6 +384,8 @@ export async function getTradingProductDetailData(productId: string) {
     companyName: company?.name || "(미지정 회사)",
     brandName: brand?.name || "(미지정 브랜드)",
     photoUrl,
+    photoUrls,
+    upc: product.upc || product.ean || adminOverrides.upc || null,
     selection_status: product.selection_status,
     sales_status: product.sales_status,
     trading_status:
@@ -683,9 +690,7 @@ export async function updateTradingCostOverride(productId: string, input: Update
   const { userId } = await verifyAdminSession();
   const supabase = createAdminClient();
 
-  if (!input.reason || input.reason.trim().length === 0) {
-    throw new Error("수입원가 오버라이드 사유(Reason)를 반드시 입력해야 합니다.");
-  }
+  const reason = input.reason?.trim() || "Cost override updated";
 
   const overrideCost = input.override_cost !== null && input.override_cost !== undefined
     ? Number(input.override_cost)
@@ -714,14 +719,14 @@ export async function updateTradingCostOverride(productId: string, input: Update
 
   const afterVal = {
     override_landed_cost: overrideCost,
-    reason: input.reason,
+    reason: reason,
     updated_at: new Date().toISOString(),
   };
 
   const updatedOverrides = {
     ...currentOverrides,
     override_landed_cost: overrideCost,
-    override_landed_cost_reason: input.reason,
+    override_landed_cost_reason: reason,
     override_landed_cost_updated_at: new Date().toISOString(),
     override_landed_cost_updated_by: userId,
   };

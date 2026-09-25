@@ -43,6 +43,8 @@ interface ResolvedTradingProduct {
   companyName: string;
   brandName: string;
   photoUrl: string | null;
+  photoUrls?: string[];
+  upc?: string | null;
   selection_status: string;
   sales_status: string;
   trading_status: string;
@@ -271,6 +273,31 @@ export function TradingProductDetail({
   const [costOverrideError, setCostOverrideError] = useState("");
   const [isCostSubmitting, setIsCostSubmitting] = useState(false);
 
+  // Lightbox state
+  const [isLightboxOpen, setIsLightboxOpen] = useState(false);
+  const [lightboxIndex, setLightboxIndex] = useState(0);
+
+  const photoUrls = useMemo(() => {
+    if (product.photoUrls && product.photoUrls.length > 0) return product.photoUrls;
+    if (product.photoUrl) return [product.photoUrl];
+    return [];
+  }, [product.photoUrls, product.photoUrl]);
+
+  React.useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (!isLightboxOpen) return;
+      if (e.key === "Escape") {
+        setIsLightboxOpen(false);
+      } else if (e.key === "ArrowLeft") {
+        setLightboxIndex((prev) => (prev > 0 ? prev - 1 : photoUrls.length - 1));
+      } else if (e.key === "ArrowRight") {
+        setLightboxIndex((prev) => (prev < photoUrls.length - 1 ? prev + 1 : 0));
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isLightboxOpen, photoUrls.length]);
+
   // Handlers
   const handleOpenSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -351,6 +378,12 @@ export function TradingProductDetail({
   const handlePromoSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setPromoError("");
+
+    if (editPromoStart && editPromoEnd && new Date(editPromoEnd) < new Date(editPromoStart)) {
+      setPromoError("종료일은 시작일보다 빠를 수 없습니다.");
+      return;
+    }
+
     setIsPromoSubmitting(true);
     try {
       const promoPrice = editPromoPrice ? parseFloat(editPromoPrice) : null;
@@ -379,14 +412,11 @@ export function TradingProductDetail({
     setCostOverrideError("");
     setIsCostSubmitting(true);
     try {
-      if (!editCostReason || editCostReason.trim().length === 0) {
-        throw new Error("수입원가 오버라이드 변경 사유를 입력해야 합니다.");
-      }
       const overrideVal = editCostOverride ? parseFloat(editCostOverride) : null;
 
       await updateTradingCostOverride(product.id, {
         override_cost: overrideVal,
-        reason: editCostReason,
+        reason: editCostReason || "Manual cost override updated",
       });
 
       setIsCostOverrideModalOpen(false);
@@ -603,7 +633,7 @@ export function TradingProductDetail({
         {/* ROW 1: Product Summary, Inventory Snapshot, Cost Snapshot */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
           
-          {/* A. Product Summary Card (with Catalog Master Reference Button) */}
+          {/* A. Product Summary Card (Product Identity) */}
           <div className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 flex flex-col justify-between space-y-4">
             <div className="flex items-start justify-between border-b border-zinc-100 dark:border-zinc-800 pb-2">
               <h3 className="text-xs font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">
@@ -617,37 +647,82 @@ export function TradingProductDetail({
               </Link>
             </div>
 
-            <div className="flex items-start gap-3.5">
-              <div className="w-16 h-16 rounded-lg border border-zinc-200 dark:border-zinc-800 overflow-hidden bg-zinc-50 dark:bg-zinc-950 flex-shrink-0 flex items-center justify-center">
+            <div className="flex flex-col sm:flex-row items-start gap-4">
+              <div
+                onClick={() => {
+                  if (photoUrls.length > 0) {
+                    setLightboxIndex(0);
+                    setIsLightboxOpen(true);
+                  }
+                }}
+                className={`w-32 h-32 md:w-36 md:h-36 rounded-xl border border-zinc-200 dark:border-zinc-800 overflow-hidden bg-zinc-50 dark:bg-zinc-950 flex-shrink-0 flex items-center justify-center relative group shadow-sm ${
+                  photoUrls.length > 0 ? "cursor-pointer hover:border-zinc-400 dark:hover:border-zinc-600 transition-all" : ""
+                }`}
+              >
                 {product.photoUrl ? (
-                  <img src={product.photoUrl} alt={product.name} className="w-full h-full object-cover" />
+                  <>
+                    <img src={product.photoUrl} alt={product.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center text-white text-[10px] font-bold gap-0.5">
+                      <span>🔍 Enlarge</span>
+                      {photoUrls.length > 1 && <span>({photoUrls.length} images)</span>}
+                    </div>
+                  </>
                 ) : (
                   <span className="text-[10px] text-zinc-400 font-bold">NO IMAGE</span>
                 )}
               </div>
-              <div className="min-w-0 flex-1">
-                <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">
-                  {product.brandName} • {product.companyName}
-                </span>
-                <h2 className="text-sm font-bold text-zinc-900 dark:text-white truncate">
+
+              <div className="min-w-0 flex-1 space-y-1">
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider bg-indigo-50 dark:bg-indigo-950/40 px-2 py-0.5 rounded border border-indigo-200/60 dark:border-indigo-900/40">
+                    {product.brandName}
+                  </span>
+                  <span className="text-[10px] text-zinc-400 font-medium">| {product.companyName}</span>
+                </div>
+
+                <h2 className="text-sm font-bold text-zinc-900 dark:text-white leading-snug">
                   {product.name}
                 </h2>
-                {product.category_full_path && (
-                  <p className="text-[11px] text-zinc-500 dark:text-zinc-400 truncate mt-0.5">
-                    {product.category_full_path}
+
+                {product.display_name && product.display_name !== product.name && (
+                  <p className="text-[11px] text-zinc-500 dark:text-zinc-400 font-medium italic">
+                    {product.display_name}
                   </p>
                 )}
+
+                {product.category_full_path && (
+                  <p className="text-[11px] text-zinc-500 dark:text-zinc-400 truncate">
+                    📂 {product.category_full_path}
+                  </p>
+                )}
+
+                <div className="flex items-center gap-1.5 pt-1">
+                  <span
+                    className={`px-2 py-0.5 text-[10px] font-semibold rounded-full border ${
+                      SALES_COLORS[product.sales_status] || SALES_COLORS.PREPARING
+                    }`}
+                  >
+                    Sales: {SALES_LABELS[product.sales_status] || product.sales_status}
+                  </span>
+                  <span className="px-2 py-0.5 text-[10px] font-semibold rounded-full border bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 border-zinc-200 dark:border-zinc-700">
+                    Trading: {product.trading_status.toUpperCase()}
+                  </span>
+                </div>
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-2 text-xs border-t border-zinc-100 dark:border-zinc-800 pt-3">
+            <div className="grid grid-cols-3 gap-2 text-xs border-t border-zinc-100 dark:border-zinc-800 pt-3">
               <div>
                 <span className="text-[10px] font-bold text-zinc-400 block uppercase">Letusto SKU</span>
-                <span className="font-mono text-zinc-900 dark:text-zinc-200 font-semibold">{product.letusto_sku || "-"}</span>
+                <span className="font-mono text-zinc-900 dark:text-zinc-200 font-semibold text-[11px]">{product.letusto_sku || "-"}</span>
               </div>
               <div>
                 <span className="text-[10px] font-bold text-zinc-400 block uppercase">제조사 SKU</span>
-                <span className="font-mono text-zinc-900 dark:text-zinc-200 font-semibold">{product.manufacture_sku || "-"}</span>
+                <span className="font-mono text-zinc-900 dark:text-zinc-200 font-semibold text-[11px]">{product.manufacture_sku || "-"}</span>
+              </div>
+              <div>
+                <span className="text-[10px] font-bold text-zinc-400 block uppercase">UPC / Barcode</span>
+                <span className="font-mono text-zinc-900 dark:text-zinc-200 font-semibold text-[11px]">{product.upc || "-"}</span>
               </div>
             </div>
           </div>
@@ -1289,70 +1364,172 @@ export function TradingProductDetail({
       {/* MODAL 1: EDIT PRICING */}
       {isPricingModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 space-y-4">
-            <h3 className="text-base font-bold text-zinc-900 dark:text-white">
-              Trading Product 도매가 / MAP / SRP 수정
-            </h3>
-            {pricingError && <p className="text-xs text-rose-600">{pricingError}</p>}
-            <form onSubmit={handlePricingSubmit} className="space-y-3 text-xs">
+          <div className="w-full max-w-lg rounded-xl bg-white p-6 shadow-xl dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 space-y-4">
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-zinc-200 dark:border-zinc-800 pb-3">
               <div>
-                <label className="font-bold text-zinc-700 dark:text-zinc-300">Operational Wholesale Price ($USD) *</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={editWholesale}
-                  onChange={(e) => setEditWholesale(e.target.value)}
-                  required
-                  className="w-full mt-1 p-2 rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 font-bold"
-                />
+                <h3 className="text-base font-bold text-zinc-900 dark:text-white">
+                  운영 도매가 및 가격 정책 설정 (Pricing Policy Edit)
+                </h3>
+                <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
+                  운영 도매가, MAP, SRP 기준 가격을 변경합니다.
+                </p>
               </div>
-              <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setIsPricingModalOpen(false)}
+                className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 text-lg font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Current State */}
+            <div className="grid grid-cols-4 gap-2 p-3 rounded-lg bg-zinc-50 dark:bg-zinc-950/60 border border-zinc-200 dark:border-zinc-800 text-xs">
+              <div>
+                <span className="text-[10px] font-bold text-zinc-400 block uppercase">Current Wholesale</span>
+                <strong className="text-zinc-800 dark:text-zinc-200">${product.operationalWholesale.toFixed(2)}</strong>
+              </div>
+              <div>
+                <span className="text-[10px] font-bold text-zinc-400 block uppercase">Current MAP</span>
+                <strong className="text-zinc-800 dark:text-zinc-200">${product.mapPrice.toFixed(2)}</strong>
+              </div>
+              <div>
+                <span className="text-[10px] font-bold text-zinc-400 block uppercase">Current SRP</span>
+                <strong className="text-zinc-800 dark:text-zinc-200">${product.srpPrice.toFixed(2)}</strong>
+              </div>
+              <div>
+                <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 block uppercase">Effective Cost</span>
+                <strong className="text-indigo-900 dark:text-indigo-200 font-bold">${product.effectiveLandedCost.toFixed(2)}</strong>
+              </div>
+            </div>
+
+            {pricingError && <p className="text-xs text-rose-600 font-semibold">{pricingError}</p>}
+
+            <form onSubmit={handlePricingSubmit} className="space-y-4 text-xs">
+              {/* Editable Inputs */}
+              <div className="grid grid-cols-3 gap-3">
                 <div>
-                  <label className="font-bold text-zinc-700 dark:text-zinc-300">MAP ($USD)</label>
+                  <label className="font-bold text-zinc-800 dark:text-zinc-200 block mb-1">New Wholesale ($USD) *</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={editWholesale}
+                    onChange={(e) => setEditWholesale(e.target.value)}
+                    required
+                    className="w-full p-2.5 rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 font-bold text-sm text-zinc-900 dark:text-white"
+                  />
+                </div>
+                <div>
+                  <label className="font-semibold text-zinc-700 dark:text-zinc-300 block mb-1">MAP ($USD)</label>
                   <input
                     type="number"
                     step="0.01"
                     value={editMap}
                     onChange={(e) => setEditMap(e.target.value)}
-                    className="w-full mt-1 p-2 rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950"
+                    className="w-full p-2.5 rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-xs text-zinc-900 dark:text-white"
                   />
                 </div>
                 <div>
-                  <label className="font-bold text-zinc-700 dark:text-zinc-300">SRP ($USD)</label>
+                  <label className="font-semibold text-zinc-700 dark:text-zinc-300 block mb-1">SRP ($USD)</label>
                   <input
                     type="number"
                     step="0.01"
                     value={editSrp}
                     onChange={(e) => setEditSrp(e.target.value)}
-                    className="w-full mt-1 p-2 rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950"
+                    className="w-full p-2.5 rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-xs text-zinc-900 dark:text-white"
                   />
                 </div>
               </div>
+
+              {/* Live Impact Preview */}
+              {(() => {
+                const newW = parseFloat(editWholesale);
+                const newS = parseFloat(editSrp);
+                const newM = parseFloat(editMap);
+
+                if (isNaN(newW) || newW <= 0) return null;
+
+                const newOurMarginUsd = newW - product.effectiveLandedCost;
+                const newOurMarginPct = newW > 0 ? (newOurMarginUsd / newW) * 100 : 0;
+                const marginChangePts = newOurMarginPct - product.baseOurMarginPercent;
+
+                const newRetailerMarginUsd = !isNaN(newS) && newS > 0 ? newS - newW : 0;
+                const newRetailerMarginPct = !isNaN(newS) && newS > 0 ? (newRetailerMarginUsd / newS) * 100 : 0;
+
+                return (
+                  <div className="space-y-2">
+                    <div className="p-3 rounded-lg bg-zinc-100 dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700 space-y-2 text-xs">
+                      <div className="flex items-center justify-between text-[11px] font-bold text-zinc-800 dark:text-zinc-200">
+                        <span>Live Pricing Impact Preview (Current → New → Impact)</span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3 text-xs">
+                        <div className="p-2 rounded bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900/40">
+                          <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400 block uppercase">New Our Margin</span>
+                          <strong className={`text-xs font-extrabold ${newOurMarginUsd <= 0 ? 'text-rose-600' : 'text-emerald-800 dark:text-emerald-300'}`}>
+                            ${newOurMarginUsd.toFixed(2)} ({newOurMarginPct.toFixed(1)}%)
+                          </strong>
+                          <span className="text-[10px] text-zinc-500 block mt-0.5">
+                            Margin Change: {marginChangePts >= 0 ? `+${marginChangePts.toFixed(1)}%p` : `${marginChangePts.toFixed(1)}%p`}
+                          </span>
+                        </div>
+
+                        <div className="p-2 rounded bg-blue-50/70 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900/40">
+                          <span className="text-[10px] font-bold text-blue-700 dark:text-blue-400 block uppercase">New Retailer Margin</span>
+                          <strong className="text-xs font-extrabold text-blue-800 dark:text-blue-300">
+                            ${newRetailerMarginUsd.toFixed(2)} ({newRetailerMarginPct.toFixed(1)}%)
+                          </strong>
+                          <span className="text-[10px] text-zinc-500 block mt-0.5">
+                            SRP (${!isNaN(newS) ? newS.toFixed(2) : '0.00'}) 기준
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Validation Warnings */}
+                    {newW <= product.effectiveLandedCost && (
+                      <div className="p-2 rounded bg-rose-50 border border-rose-200 text-rose-700 text-[11px] font-medium">
+                        ⚠️ <strong>주의:</strong> 입력한 도매가가 적용 수입원가(${product.effectiveLandedCost.toFixed(2)}) 이하입니다. (자사 마진 0% 이하)
+                      </div>
+                    )}
+                    {!isNaN(newM) && !isNaN(newS) && newM > newS && newS > 0 && (
+                      <div className="p-2 rounded bg-amber-50 border border-amber-200 text-amber-700 text-[11px] font-medium">
+                        ⚠️ <strong>주의:</strong> MAP(최저준수가격)가 SRP(권장소비자가)보다 큽니다.
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+
+              {/* Optional Reason */}
               <div>
-                <label className="font-bold text-zinc-700 dark:text-zinc-300">변경 사유 (Reason) *</label>
+                <label className="font-semibold text-zinc-700 dark:text-zinc-300 block mb-1">
+                  Pricing Reason <span className="text-zinc-400 font-normal">(Optional)</span>
+                </label>
                 <input
                   type="text"
                   value={editPricingReason}
                   onChange={(e) => setEditPricingReason(e.target.value)}
-                  placeholder="예: 리테일 도매 정책 조정"
-                  required
-                  className="w-full mt-1 p-2 rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950"
+                  placeholder="Optional pricing change note"
+                  className="w-full p-2 rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-xs text-zinc-900 dark:text-white"
                 />
               </div>
-              <div className="flex justify-end gap-2 pt-2">
+
+              {/* Action Buttons */}
+              <div className="flex justify-end gap-2 pt-2 border-t border-zinc-100 dark:border-zinc-800">
                 <button
                   type="button"
                   onClick={() => setIsPricingModalOpen(false)}
-                  className="px-3 py-1.5 rounded border border-zinc-300 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300"
+                  className="px-3.5 py-1.5 rounded border border-zinc-300 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 transition-colors"
                 >
                   취소
                 </button>
                 <button
                   type="submit"
                   disabled={isPricingSubmitting}
-                  className="px-3 py-1.5 rounded bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 font-bold"
+                  className="px-4 py-1.5 rounded bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 font-bold transition-colors"
                 >
-                  {isPricingSubmitting ? "저장 중..." : "도매가 적용"}
+                  {isPricingSubmitting ? "적용 중..." : "Apply Pricing"}
                 </button>
               </div>
             </form>
@@ -1363,68 +1540,160 @@ export function TradingProductDetail({
       {/* MODAL 2: ADD PROMOTION */}
       {isPromoModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 space-y-4">
-            <h3 className="text-base font-bold text-zinc-900 dark:text-white">
-              프로모션 도매가 등록
-            </h3>
-            {promoError && <p className="text-xs text-rose-600">{promoError}</p>}
-            <form onSubmit={handlePromoSubmit} className="space-y-3 text-xs">
+          <div className="w-full max-w-lg rounded-xl bg-white p-6 shadow-xl dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 space-y-4">
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-zinc-200 dark:border-zinc-800 pb-3">
               <div>
-                <label className="font-bold text-zinc-700 dark:text-zinc-300">Promotional Wholesale Price ($USD)</label>
+                <h3 className="text-base font-bold text-zinc-900 dark:text-white">
+                  프로모션 도매가 설정 (Promotion Setup)
+                </h3>
+                <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
+                  한시적 프로모션 공급가 및 기간을 지정합니다.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsPromoModalOpen(false)}
+                className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 text-lg font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Current State Context */}
+            <div className="grid grid-cols-4 gap-2 p-3 rounded-lg bg-zinc-50 dark:bg-zinc-950/60 border border-zinc-200 dark:border-zinc-800 text-xs">
+              <div>
+                <span className="text-[10px] font-bold text-zinc-400 block uppercase">Current Wholesale</span>
+                <strong className="text-zinc-800 dark:text-zinc-200">${product.operationalWholesale.toFixed(2)}</strong>
+              </div>
+              <div>
+                <span className="text-[10px] font-bold text-zinc-400 block uppercase">Current MAP</span>
+                <strong className="text-zinc-800 dark:text-zinc-200">${product.mapPrice.toFixed(2)}</strong>
+              </div>
+              <div>
+                <span className="text-[10px] font-bold text-zinc-400 block uppercase">Current SRP</span>
+                <strong className="text-zinc-800 dark:text-zinc-200">${product.srpPrice.toFixed(2)}</strong>
+              </div>
+              <div>
+                <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 block uppercase">Effective Cost</span>
+                <strong className="text-indigo-900 dark:text-indigo-200 font-bold">${product.effectiveLandedCost.toFixed(2)}</strong>
+              </div>
+            </div>
+
+            {promoError && <p className="text-xs text-rose-600 font-semibold">{promoError}</p>}
+
+            <form onSubmit={handlePromoSubmit} className="space-y-4 text-xs">
+              {/* Editable Inputs */}
+              <div>
+                <label className="font-bold text-zinc-800 dark:text-zinc-200 block mb-1">
+                  Promotional Wholesale Price ($USD)
+                </label>
                 <input
                   type="number"
                   step="0.01"
                   value={editPromoPrice}
                   onChange={(e) => setEditPromoPrice(e.target.value)}
-                  placeholder="비워둘 경우 프로모션 해제"
-                  className="w-full mt-1 p-2 rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950"
+                  placeholder="Leave empty to clear active promotion"
+                  className="w-full p-2.5 rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 font-bold text-sm text-zinc-900 dark:text-white"
                 />
               </div>
-              <div className="grid grid-cols-2 gap-2">
+
+              {/* Live Calculation Preview */}
+              {(() => {
+                const promoPrice = parseFloat(editPromoPrice);
+                if (isNaN(promoPrice) || promoPrice <= 0) return null;
+
+                const diffUsd = promoPrice - product.operationalWholesale;
+                const changePct = product.operationalWholesale > 0 ? (diffUsd / product.operationalWholesale) * 100 : 0;
+                const ourMarginUsd = promoPrice - product.effectiveLandedCost;
+                const ourMarginPct = promoPrice > 0 ? (ourMarginUsd / promoPrice) * 100 : 0;
+                const retailerMarginUsd = product.srpPrice - promoPrice;
+                const retailerMarginPct = product.srpPrice > 0 ? (retailerMarginUsd / product.srpPrice) * 100 : 0;
+
+                return (
+                  <div className="p-3 rounded-lg bg-amber-50/70 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/50 space-y-2 text-xs">
+                    <div className="flex items-center justify-between text-[11px] font-bold text-amber-800 dark:text-amber-300">
+                      <span>Live Impact Preview (프로모션 마진 및 할인율 계산)</span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2 text-xs">
+                      <div>
+                        <span className="text-[10px] text-zinc-500 block">Wholesale Change</span>
+                        <strong className={`text-xs font-bold ${diffUsd < 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                          {diffUsd < 0 ? `-$${Math.abs(diffUsd).toFixed(2)} (${changePct.toFixed(1)}%)` : `+$${diffUsd.toFixed(2)} (+${changePct.toFixed(1)}%)`}
+                        </strong>
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-zinc-500 block">Our Margin ($ / %)</span>
+                        <strong className={`text-xs font-bold ${ourMarginUsd < 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                          ${ourMarginUsd.toFixed(2)} ({ourMarginPct.toFixed(1)}%)
+                        </strong>
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-zinc-500 block">Retailer Margin ($ / %)</span>
+                        <strong className="text-xs font-bold text-blue-600">
+                          ${retailerMarginUsd.toFixed(2)} ({retailerMarginPct.toFixed(1)}%)
+                        </strong>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Date Pickers */}
+              <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="font-bold text-zinc-700 dark:text-zinc-300">시작일</label>
+                  <label className="font-semibold text-zinc-700 dark:text-zinc-300 block mb-1">시작일 (Start Date)</label>
                   <input
                     type="date"
                     value={editPromoStart}
                     onChange={(e) => setEditPromoStart(e.target.value)}
-                    className="w-full mt-1 p-2 rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950"
+                    className="w-full p-2 rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-xs text-zinc-900 dark:text-white"
                   />
                 </div>
                 <div>
-                  <label className="font-bold text-zinc-700 dark:text-zinc-300">종료일</label>
+                  <label className="font-semibold text-zinc-700 dark:text-zinc-300 block mb-1">종료일 (End Date)</label>
                   <input
                     type="date"
                     value={editPromoEnd}
                     onChange={(e) => setEditPromoEnd(e.target.value)}
-                    className="w-full mt-1 p-2 rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950"
+                    className="w-full p-2 rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-xs text-zinc-900 dark:text-white"
                   />
                 </div>
               </div>
+
+              {editPromoStart && editPromoEnd && new Date(editPromoEnd) < new Date(editPromoStart) && (
+                <p className="text-xs font-semibold text-rose-600">⚠️ 종료일은 시작일보다 빠를 수 없습니다.</p>
+              )}
+
+              {/* Optional Reason */}
               <div>
-                <label className="font-bold text-zinc-700 dark:text-zinc-300">프로모션 사유 *</label>
+                <label className="font-semibold text-zinc-700 dark:text-zinc-300 block mb-1">
+                  Promotion Reason <span className="text-zinc-400 font-normal">(Optional)</span>
+                </label>
                 <input
                   type="text"
                   value={editPromoReason}
                   onChange={(e) => setEditPromoReason(e.target.value)}
-                  placeholder="예: Q4 블랙프라이데이 할인"
-                  required
-                  className="w-full mt-1 p-2 rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950"
+                  placeholder="Optional promotion note"
+                  className="w-full p-2 rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-xs text-zinc-900 dark:text-white"
                 />
               </div>
-              <div className="flex justify-end gap-2 pt-2">
+
+              {/* Action Buttons */}
+              <div className="flex justify-end gap-2 pt-2 border-t border-zinc-100 dark:border-zinc-800">
                 <button
                   type="button"
                   onClick={() => setIsPromoModalOpen(false)}
-                  className="px-3 py-1.5 rounded border border-zinc-300 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300"
+                  className="px-3.5 py-1.5 rounded border border-zinc-300 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 transition-colors"
                 >
                   취소
                 </button>
                 <button
                   type="submit"
-                  disabled={isPromoSubmitting}
-                  className="px-3 py-1.5 rounded bg-amber-600 text-white font-bold"
+                  disabled={isPromoSubmitting || (!!editPromoStart && !!editPromoEnd && new Date(editPromoEnd) < new Date(editPromoStart))}
+                  className="px-4 py-1.5 rounded bg-amber-600 hover:bg-amber-700 text-white font-bold transition-colors disabled:opacity-50"
                 >
-                  {isPromoSubmitting ? "저장 중..." : "프로모션 저장"}
+                  {isPromoSubmitting ? "저장 중..." : "Save Promotion"}
                 </button>
               </div>
             </form>
@@ -1435,51 +1704,127 @@ export function TradingProductDetail({
       {/* MODAL 3: COST OVERRIDE */}
       {isCostOverrideModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 space-y-4">
-            <h3 className="text-base font-bold text-zinc-900 dark:text-white">
-              수입원가 수동 오버라이드 (Manual Landed Cost Override)
-            </h3>
-            <p className="text-xs text-zinc-500">
-              현재 시스템 원가(Base Landed Cost): <strong>${product.baseLandedCost.toFixed(2)}</strong>
-            </p>
-            {costOverrideError && <p className="text-xs text-rose-600">{costOverrideError}</p>}
-            <form onSubmit={handleCostOverrideSubmit} className="space-y-3 text-xs">
+          <div className="w-full max-w-lg rounded-xl bg-white p-6 shadow-xl dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 space-y-5">
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-zinc-200 dark:border-zinc-800 pb-3">
               <div>
-                <label className="font-bold text-zinc-700 dark:text-zinc-300">오버라이드 적용 원가 ($USD) *</label>
+                <h3 className="text-base font-bold text-zinc-900 dark:text-white">
+                  수입원가 수동 오버라이드 (Manual Landed Cost Override)
+                </h3>
+                <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
+                  실제 운영 수입원가를 수동으로 지정하거나 갱신합니다.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsCostOverrideModalOpen(false)}
+                className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 text-lg font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Current State */}
+            <div className="grid grid-cols-3 gap-3 p-3 rounded-lg bg-zinc-50 dark:bg-zinc-950/60 border border-zinc-200 dark:border-zinc-800 text-xs">
+              <div>
+                <span className="text-[10px] font-bold text-zinc-400 block uppercase">Base Landed Cost</span>
+                <strong className="text-zinc-800 dark:text-zinc-200">${product.baseLandedCost.toFixed(2)}</strong>
+              </div>
+              <div>
+                <span className="text-[10px] font-bold text-zinc-400 block uppercase">Current Override</span>
+                <strong className="text-zinc-800 dark:text-zinc-200">
+                  {product.overrideLandedCost !== null ? `$${product.overrideLandedCost.toFixed(2)}` : "None"}
+                </strong>
+              </div>
+              <div>
+                <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 block uppercase">Current Effective</span>
+                <strong className="text-indigo-900 dark:text-indigo-200 font-bold">${product.effectiveLandedCost.toFixed(2)}</strong>
+              </div>
+            </div>
+
+            {costOverrideError && <p className="text-xs text-rose-600 font-semibold">{costOverrideError}</p>}
+
+            <form onSubmit={handleCostOverrideSubmit} className="space-y-4 text-xs">
+              {/* Editable Input */}
+              <div>
+                <label className="font-bold text-zinc-800 dark:text-zinc-200 block mb-1">
+                  New Override Cost ($USD) *
+                </label>
                 <input
                   type="number"
                   step="0.01"
                   value={editCostOverride}
                   onChange={(e) => setEditCostOverride(e.target.value)}
-                  required
-                  className="w-full mt-1 p-2 rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 font-bold"
+                  placeholder="e.g. 4.25"
+                  className="w-full p-2.5 rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 font-bold text-sm text-zinc-900 dark:text-white"
                 />
               </div>
+
+              {/* Live Impact Preview */}
+              {(() => {
+                const parsedVal = parseFloat(editCostOverride);
+                const newEffective = !isNaN(parsedVal) && parsedVal > 0 ? parsedVal : product.baseLandedCost;
+                const diffUsd = newEffective - product.effectiveLandedCost;
+                const diffPct = product.effectiveLandedCost > 0 ? (diffUsd / product.effectiveLandedCost) * 100 : 0;
+
+                return (
+                  <div className="p-3 rounded-lg bg-indigo-50/70 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-900/50 space-y-1 text-xs">
+                    <div className="flex items-center justify-between text-[11px] font-bold text-indigo-800 dark:text-indigo-300">
+                      <span>Live Impact Preview (실시간 변경 적용 영향)</span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2 pt-1 text-xs">
+                      <div>
+                        <span className="text-[10px] text-zinc-500 dark:text-zinc-400 block">New Effective Cost</span>
+                        <strong className="text-indigo-900 dark:text-indigo-200 text-sm font-extrabold">
+                          ${newEffective.toFixed(2)}
+                        </strong>
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-zinc-500 dark:text-zinc-400 block">Difference ($)</span>
+                        <strong className={`text-xs font-bold ${diffUsd > 0 ? 'text-rose-600' : diffUsd < 0 ? 'text-emerald-600' : 'text-zinc-600'}`}>
+                          {diffUsd > 0 ? `+$${diffUsd.toFixed(2)}` : diffUsd < 0 ? `-$${Math.abs(diffUsd).toFixed(2)}` : '$0.00'}
+                        </strong>
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-zinc-500 dark:text-zinc-400 block">Difference (%)</span>
+                        <strong className={`text-xs font-bold ${diffPct > 0 ? 'text-rose-600' : diffPct < 0 ? 'text-emerald-600' : 'text-zinc-600'}`}>
+                          {diffPct > 0 ? `+${diffPct.toFixed(1)}%` : `${diffPct.toFixed(1)}%`}
+                        </strong>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Optional Reason Note */}
               <div>
-                <label className="font-bold text-zinc-700 dark:text-zinc-300">오버라이드 변경 사유 (Reason) *</label>
+                <label className="font-semibold text-zinc-700 dark:text-zinc-300 block mb-1">
+                  Override Reason <span className="text-zinc-400 font-normal">(Optional)</span>
+                </label>
                 <textarea
                   value={editCostReason}
                   onChange={(e) => setEditCostReason(e.target.value)}
-                  required
-                  rows={3}
-                  placeholder="원가 오버라이드 사유를 입력하세요 (예: 관세 환급 반영 또는 특별 부대비용 보정)"
-                  className="w-full mt-1 p-2 rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950"
+                  rows={2}
+                  placeholder="Optional note for this override"
+                  className="w-full p-2 rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-xs text-zinc-900 dark:text-white"
                 />
               </div>
-              <div className="flex justify-end gap-2 pt-2">
+
+              {/* Action Buttons */}
+              <div className="flex justify-end gap-2 pt-2 border-t border-zinc-100 dark:border-zinc-800">
                 <button
                   type="button"
                   onClick={() => setIsCostOverrideModalOpen(false)}
-                  className="px-3 py-1.5 rounded border border-zinc-300 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300"
+                  className="px-3.5 py-1.5 rounded border border-zinc-300 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 transition-colors"
                 >
                   취소
                 </button>
                 <button
                   type="submit"
                   disabled={isCostSubmitting}
-                  className="px-3 py-1.5 rounded bg-indigo-600 text-white font-bold"
+                  className="px-4 py-1.5 rounded bg-indigo-600 hover:bg-indigo-700 text-white font-bold transition-colors"
                 >
-                  {isCostSubmitting ? "저장 중..." : "오버라이드 저장"}
+                  {isCostSubmitting ? "저장 중..." : product.hasCostOverride ? "Update Override" : "Save Override"}
                 </button>
               </div>
             </form>
@@ -1629,6 +1974,77 @@ export function TradingProductDetail({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 6: PRODUCT IMAGE LIGHTBOX */}
+      {isLightboxOpen && photoUrls.length > 0 && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
+          onClick={() => setIsLightboxOpen(false)}
+        >
+          <div
+            className="relative max-w-4xl w-full max-h-[90vh] flex flex-col items-center justify-center p-2"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Close button */}
+            <button
+              onClick={() => setIsLightboxOpen(false)}
+              className="absolute top-2 right-2 z-10 rounded-full bg-black/60 text-white p-2 hover:bg-black/90 transition-colors"
+              title="Close (ESC)"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+
+            {/* Main Image Container */}
+            <div className="relative flex items-center justify-center max-h-[75vh] w-full overflow-hidden rounded-xl bg-zinc-950/80 p-2 border border-zinc-800">
+              <img
+                src={photoUrls[lightboxIndex]}
+                alt={`${product.name} ${lightboxIndex + 1}`}
+                className="max-h-[72vh] max-w-full object-contain rounded-lg shadow-2xl"
+              />
+
+              {/* Navigation Controls */}
+              {photoUrls.length > 1 && (
+                <>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setLightboxIndex((prev) => (prev > 0 ? prev - 1 : photoUrls.length - 1));
+                    }}
+                    className="absolute left-3 top-1/2 -translate-y-1/2 rounded-full bg-black/70 hover:bg-black text-white p-3 transition-colors shadow-lg font-bold"
+                    title="Previous (Left Arrow)"
+                  >
+                    ❮
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setLightboxIndex((prev) => (prev < photoUrls.length - 1 ? prev + 1 : 0));
+                    }}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full bg-black/70 hover:bg-black text-white p-3 transition-colors shadow-lg font-bold"
+                    title="Next (Right Arrow)"
+                  >
+                    ❯
+                  </button>
+                </>
+              )}
+            </div>
+
+            {/* Image Counter & Product Name */}
+            <div className="mt-3 flex items-center gap-3">
+              <span className="text-xs font-semibold text-zinc-200 truncate max-w-md">
+                {product.name}
+              </span>
+              {photoUrls.length > 1 && (
+                <span className="text-xs font-mono font-bold text-white bg-zinc-800/90 px-3 py-0.5 rounded-full border border-zinc-700">
+                  {lightboxIndex + 1} / {photoUrls.length}
+                </span>
+              )}
+            </div>
           </div>
         </div>
       )}
