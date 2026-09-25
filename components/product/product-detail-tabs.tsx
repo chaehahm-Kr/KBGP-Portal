@@ -78,6 +78,7 @@ export function ProductDetailTabs({
   const isDeleted = Boolean(product.deleted_at || (product.price_additional_info as any)?.deleted_at);
   const [activeTab, setActiveTab] = useState<"basic" | "category_attributes" | "price" | "logistics" | "media" | "certs">("basic");
   const [isPending, startTransition] = useTransition();
+  const [isSaving, setIsSaving] = useState(false);
   const [statusMessage, setStatusMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [categoryCompletion, setCategoryCompletion] = useState<CategoryCompletionResult | null>(initialCategoryCompletion || null);
   const categoryAttrRef = React.useRef<CategoryAttributeFormHandle>(null);
@@ -828,115 +829,117 @@ export function ProductDetailTabs({
   };
 
   const saveAllData = async (): Promise<{ success: boolean; error?: string }> => {
+    if (isSaving) return { success: false, error: "저장 중입니다." };
+    setIsSaving(true);
     setStatusMessage(null);
 
-    const criticalErrors = getCriticalErrors();
-    if (criticalErrors.length > 0) {
-      const firstError = criticalErrors[0];
-      setActiveTab(firstError.tab as any);
-      
-      setTimeout(() => {
-        const inputElement = document.getElementsByName(firstError.inputName)[0] as HTMLInputElement | undefined;
-        if (inputElement) {
-          inputElement.focus();
-          if (inputElement.select) inputElement.select();
-        }
-      }, 80);
+    try {
+      const criticalErrors = getCriticalErrors();
+      if (criticalErrors.length > 0) {
+        const firstError = criticalErrors[0];
+        setActiveTab(firstError.tab as any);
+        
+        setTimeout(() => {
+          const inputElement = document.getElementsByName(firstError.inputName)[0] as HTMLInputElement | undefined;
+          if (inputElement) {
+            inputElement.focus();
+            if (inputElement.select) inputElement.select();
+          }
+        }, 80);
 
-      const errorMsg = firstError.message;
-      setStatusMessage({ 
-        type: "error", 
-        text: errorMsg
-      });
-      window.scrollTo({ top: 0, behavior: "smooth" });
-      return { success: false, error: errorMsg };
-    }
-
-    // 2. Validate category & dynamic attributes if category form ref is present
-    if (categoryAttrRef.current) {
-      const catValidation = categoryAttrRef.current.validate();
-      if (!catValidation.isValid) {
-        setActiveTab("category_attributes");
-        const errText = `카테고리 필수 입력 속성이 누락되었습니다: ${catValidation.missingRequired.join(", ")}`;
-        setStatusMessage({
-          type: "error",
-          text: errText,
+        const errorMsg = firstError.message;
+        setStatusMessage({ 
+          type: "error", 
+          text: errorMsg
         });
         window.scrollTo({ top: 0, behavior: "smooth" });
-        return { success: false, error: errText };
+        return { success: false, error: errorMsg };
       }
-    }
 
-    const formData = new FormData();
-    formData.set("sellingOnline", sellingOnline ? "true" : "false");
-    formData.set("sellingOffline", sellingOffline ? "true" : "false");
-    formData.set("salesLink1", salesLink1.trim());
-    formData.set("salesLink2", salesLink2.trim());
-    formData.set("nameEn", nameEn.trim());
-    formData.set("name", name.trim());
-    formData.set("manufactureSku", trimSkuSeparators(manufactureSku));
-    formData.set("brandId", brandId);
-    formData.set("category", category);
-    formData.set("volume", volume.trim());
-    formData.set("origin", origin);
-    formData.set("color", color.trim());
-    formData.set("colorMap", colorMap);
-    formData.set("description", description.trim());
-    formData.set("ingredientsText", ingredientsText.trim());
-    formData.set("parentSku", isParentSku ? "Y" : "");
-    formData.set("childSku", isChildSku ? "Y" : "");
-    formData.set("letustoSku", effectiveLetustoSku || product.letusto_sku || "");
-    formData.set("upc", upc.trim());
-    formData.set("ean", ean.trim());
-    formData.set("priceKrwRetail", priceKrwRetail.trim());
-    formData.set("priceKrwWholesale", priceKrwWholesale.trim());
-    formData.set("estimatedRetailPrice", estimatedRetailPrice.trim());
-    formData.set("priceUsdFob", priceUsdFobState ? priceUsdFobState.toString() : "");
-
-    // Logistics fields
-    formData.set("itemWidth", itemWidth);
-    formData.set("itemDepth", itemDepth);
-    formData.set("itemHeight", itemHeight);
-    formData.set("itemWeight", itemWeight);
-    formData.set("packageWidth", packageWidth);
-    formData.set("packageDepth", packageDepth);
-    formData.set("packageHeight", packageHeight);
-    formData.set("packageWeight", packageWeight);
-    formData.set("cartonPackQty", cartonPackQty);
-    formData.set("cartonWidth", cartonWidth);
-    formData.set("cartonDepth", cartonDepth);
-    formData.set("cartonHeight", cartonHeight);
-    formData.set("cartonWeight", cartonWeight);
-    formData.set("cartonCbm", cartonCbm);
-    formData.set("paletteCartonQty", paletteCartonQty);
-    formData.set("paletteWidth", paletteWidth);
-    formData.set("paletteDepth", paletteDepth);
-    formData.set("paletteHeight", paletteHeight);
-    formData.set("paletteWeight", paletteWeight);
-    formData.set("container20ftQty", c20Qty);
-    formData.set("container20ftWeight", c20Weight);
-    formData.set("container20ftCbm", c20Cbm);
-    formData.set("container40fthcQty", c40Qty);
-    formData.set("container40fthcWeight", c40Weight);
-    formData.set("container40fthcCbm", c40Cbm);
-
-    if (leadTimeValue.trim()) {
-      formData.set("leadTime", `${leadTimeValue.trim()} ${leadTimeUnit}`);
-    } else {
-      formData.set("leadTime", "");
-    }
-    formData.set("leadTimeValue", leadTimeValue.trim());
-    formData.set("leadTimeUnit", leadTimeUnit);
-
-    bullets.forEach((b) => {
-      if (b.trim()) {
-        formData.append("bulletPoints", b.trim());
+      // 2. Validate category & dynamic attributes if category form ref is present
+      if (categoryAttrRef.current) {
+        const catValidation = categoryAttrRef.current.validate();
+        if (!catValidation.isValid) {
+          setActiveTab("category_attributes");
+          const errText = `카테고리 필수 입력 속성이 누락되었습니다: ${catValidation.missingRequired.join(", ")}`;
+          setStatusMessage({
+            type: "error",
+            text: errText,
+          });
+          window.scrollTo({ top: 0, behavior: "smooth" });
+          return { success: false, error: errText };
+        }
       }
-    });
 
-    formData.append("priceTiers", JSON.stringify(priceTiers));
+      const formData = new FormData();
+      formData.set("sellingOnline", sellingOnline ? "true" : "false");
+      formData.set("sellingOffline", sellingOffline ? "true" : "false");
+      formData.set("salesLink1", salesLink1.trim());
+      formData.set("salesLink2", salesLink2.trim());
+      formData.set("nameEn", nameEn.trim());
+      formData.set("name", name.trim());
+      formData.set("manufactureSku", trimSkuSeparators(manufactureSku));
+      formData.set("brandId", brandId);
+      formData.set("category", category);
+      formData.set("volume", volume.trim());
+      formData.set("origin", origin);
+      formData.set("color", color.trim());
+      formData.set("colorMap", colorMap);
+      formData.set("description", description.trim());
+      formData.set("ingredientsText", ingredientsText.trim());
+      formData.set("parentSku", isParentSku ? "Y" : "");
+      formData.set("childSku", isChildSku ? "Y" : "");
+      formData.set("letustoSku", effectiveLetustoSku || product.letusto_sku || "");
+      formData.set("upc", upc.trim());
+      formData.set("ean", ean.trim());
+      formData.set("priceKrwRetail", priceKrwRetail.trim());
+      formData.set("priceKrwWholesale", priceKrwWholesale.trim());
+      formData.set("estimatedRetailPrice", estimatedRetailPrice.trim());
+      formData.set("priceUsdFob", priceUsdFobState ? priceUsdFobState.toString() : "");
 
-    try {
+      // Logistics fields
+      formData.set("itemWidth", itemWidth);
+      formData.set("itemDepth", itemDepth);
+      formData.set("itemHeight", itemHeight);
+      formData.set("itemWeight", itemWeight);
+      formData.set("packageWidth", packageWidth);
+      formData.set("packageDepth", packageDepth);
+      formData.set("packageHeight", packageHeight);
+      formData.set("packageWeight", packageWeight);
+      formData.set("cartonPackQty", cartonPackQty);
+      formData.set("cartonWidth", cartonWidth);
+      formData.set("cartonDepth", cartonDepth);
+      formData.set("cartonHeight", cartonHeight);
+      formData.set("cartonWeight", cartonWeight);
+      formData.set("cartonCbm", cartonCbm);
+      formData.set("paletteCartonQty", paletteCartonQty);
+      formData.set("paletteWidth", paletteWidth);
+      formData.set("paletteDepth", paletteDepth);
+      formData.set("paletteHeight", paletteHeight);
+      formData.set("paletteWeight", paletteWeight);
+      formData.set("container20ftQty", c20Qty);
+      formData.set("container20ftWeight", c20Weight);
+      formData.set("container20ftCbm", c20Cbm);
+      formData.set("container40fthcQty", c40Qty);
+      formData.set("container40fthcWeight", c40Weight);
+      formData.set("container40fthcCbm", c40Cbm);
+
+      if (leadTimeValue.trim()) {
+        formData.set("leadTime", `${leadTimeValue.trim()} ${leadTimeUnit}`);
+      } else {
+        formData.set("leadTime", "");
+      }
+      formData.set("leadTimeValue", leadTimeValue.trim());
+      formData.set("leadTimeUnit", leadTimeUnit);
+
+      bullets.forEach((b) => {
+        if (b.trim()) {
+          formData.append("bulletPoints", b.trim());
+        }
+      });
+
+      formData.append("priceTiers", JSON.stringify(priceTiers));
+
       if (categoryAttrRef.current) {
         const catRes = await categoryAttrRef.current.save();
         if (!catRes.success) {
@@ -1014,7 +1017,9 @@ export function ProductDetailTabs({
       setIsCatAttrDirty(false);
 
       setStatusMessage({ type: "success", text: "변경사항이 성공적으로 저장되었습니다." });
-      router.refresh();
+      startTransition(() => {
+        router.refresh();
+      });
       window.scrollTo({ top: 0, behavior: "smooth" });
       return { success: true };
     } catch (err: any) {
@@ -1025,35 +1030,26 @@ export function ProductDetailTabs({
       });
       window.scrollTo({ top: 0, behavior: "smooth" });
       return { success: false, error: errMsg };
+    } finally {
+      setIsSaving(false);
     }
   };
 
   const { guardModalNode } = useUnsavedChangesGuard({
     isDirty: isAnyDirty,
     onSave: async () => {
-      let res: { success: boolean; error?: string } = { success: false };
-      await new Promise<void>((resolve) => {
-        startTransition(async () => {
-          res = await saveAllData();
-          resolve();
-        });
-      });
-      return res;
+      return await saveAllData();
     },
   });
 
-  const handleSaveClick = (e?: React.MouseEvent) => {
+  const handleSaveClick = async (e?: React.MouseEvent) => {
     if (e) e.preventDefault();
-    startTransition(async () => {
-      await saveAllData();
-    });
+    await saveAllData();
   };
 
-  const handleMainFormSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+  const handleMainFormSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    startTransition(async () => {
-      await saveAllData();
-    });
+    await saveAllData();
   };
 
   const handleIngredientsFileSubmitKo = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1365,10 +1361,10 @@ export function ProductDetailTabs({
             <button
               type="button"
               onClick={handleSaveClick}
-              disabled={isPending}
+              disabled={isSaving}
               className="w-full sm:w-auto text-center rounded-lg bg-zinc-900 hover:bg-zinc-850 px-5 py-2.5 text-xs font-bold text-white transition-all shadow dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-100 cursor-pointer disabled:opacity-50"
             >
-              {isPending ? "저장 중..." : "변경사항 저장"}
+              {isSaving ? "저장 중..." : "변경사항 저장"}
             </button>
           </div>
         </div>
@@ -3087,10 +3083,10 @@ export function ProductDetailTabs({
         <button
           type="button"
           onClick={handleSaveClick}
-          disabled={isPending}
+          disabled={isSaving}
           className="rounded bg-zinc-950 px-6 py-2.5 text-xs font-bold text-white hover:bg-zinc-800 disabled:opacity-50 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-100 transition-colors shadow-md cursor-pointer flex items-center gap-1.5"
         >
-          {isPending ? "저장 중..." : "변경사항 저장"}
+          {isSaving ? "저장 중..." : "변경사항 저장"}
         </button>
       </div>
     </div>

@@ -66,8 +66,10 @@ export function useUnsavedChangesGuard({ isDirty, onSave }: UseUnsavedChangesGua
 
   // 3. Link click interception (Sidebar, Breadcrumb, Product list, Navigation anchors)
   useEffect(() => {
+    if (!isDirty) return;
+
     const handleClickCapture = (e: MouseEvent) => {
-      if (!isDirty || bypassGuardRef.current) return;
+      if (bypassGuardRef.current) return;
 
       const target = e.target as HTMLElement | null;
       if (!target) return;

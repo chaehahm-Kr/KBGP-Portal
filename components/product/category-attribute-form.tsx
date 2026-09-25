@@ -452,10 +452,19 @@ export const CategoryAttributeForm = forwardRef<CategoryAttributeFormHandle, Cat
     const initVals = initialSnapshotRef.current.formValues;
     const initTexts = initialSnapshotRef.current.formTextValues;
 
+    const normalize = (val: any) => {
+      if (val === null || val === undefined || val === "") return "";
+      if (Array.isArray(val)) {
+        if (val.length === 0 || val.every((x) => x === "" || x === null || x === undefined)) return "";
+        return val.map((x) => (x === null || x === undefined ? "" : x));
+      }
+      return val;
+    };
+
     for (const attr of attributes) {
-      const initV = initVals[attr.code];
-      const currV = formValues[attr.code];
-      if (JSON.stringify(initV ?? null) !== JSON.stringify(currV ?? null)) {
+      const initV = normalize(initVals[attr.code]);
+      const currV = normalize(formValues[attr.code]);
+      if (JSON.stringify(initV) !== JSON.stringify(currV)) {
         return true;
       }
       const initT = (initTexts[attr.code] || "").trim();
