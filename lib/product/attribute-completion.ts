@@ -18,6 +18,7 @@ export interface CategoryCompletionResult {
  */
 export function isAttributeValueFilled(inputType: string, val: any): boolean {
   if (val === null || val === undefined) return false;
+  if (val === "NA" || val === "UNKNOWN") return true;
   if (typeof val === "string") return val.trim() !== "";
   if (typeof val === "number") return !isNaN(val);
   if (typeof val === "boolean") return true;
@@ -35,7 +36,7 @@ export function isAttributeValueFilled(inputType: string, val: any): boolean {
 
 /**
  * Unified Source of Truth for Product Category & Required Attribute Completion.
- * Used identically across Product List, Product Detail, and Admin.
+ * Used identically across Product List, Product Detail Header, and Category & Attributes Tab.
  */
 export async function getProductCategoryCompletion(
   productId: string,
@@ -44,7 +45,7 @@ export async function getProductCategoryCompletion(
 ): Promise<CategoryCompletionResult> {
   const supabase = customClient || (await createClient());
 
-  // 1. Verify Category Completeness
+  // 1. Verify Category Completeness (must exist, be active, and be a leaf/is_final category)
   let categoryComplete = false;
   if (categoryCode && categoryCode.trim() !== "") {
     const { data: cat } = await supabase
@@ -59,18 +60,24 @@ export async function getProductCategoryCompletion(
     }
   }
 
-  // 2. Fetch Required Attributes for Category
-  // 2.1 Common Required Attributes
-  const { data: commonRequiredAttrs } = await supabase
+  // 2. Fetch Common Active Brand-Editable Attributes
+  const { data: commonAttrsData } = await supabase
     .from("attributes")
     .select("code, name_ko, input_type, is_required, brand_editable, admin_only, is_active")
     .eq("scope", "COMMON")
-    .eq("is_required", true)
     .eq("is_active", true)
     .eq("brand_editable", true)
     .eq("admin_only", false);
 
-  let profileRequiredAttrs: any[] = [];
+  const commonAttrs = (commonAttrsData || []).map((a: any) => ({
+    code: a.code,
+    nameKo: a.name_ko,
+    inputType: a.input_type,
+    isRequired: Boolean(a.is_required),
+  }));
+
+  // 3. Fetch Category Profile Attributes (if category is set)
+  let profileAttrs: { code: string; nameKo: string; inputType: string; isRequired: boolean }[] = [];
   if (categoryCode) {
     const { data: mapping } = await supabase
       .from("category_profile_mappings")
@@ -82,19 +89,29 @@ export async function getProductCategoryCompletion(
     if (mapping?.profile_code) {
       const { data: pAttrs } = await supabase
         .from("profile_attributes")
-        .select("attribute_code, attributes(code, name_ko, input_type, is_required, brand_editable, admin_only, is_active)")
+        .select("attribute_code, is_required_override, attributes(code, name_ko, input_type, is_required, brand_editable, admin_only, is_active)")
         .eq("profile_code", mapping.profile_code)
         .eq("is_active", true);
 
-      profileRequiredAttrs = (pAttrs || [])
-        .map((pa: any) => pa.attributes)
-        .filter((attr: any) => attr && attr.is_required && attr.is_active && attr.brand_editable && !attr.admin_only);
+      (pAttrs || []).forEach((pa: any) => {
+        if (pa.attributes && pa.attributes.is_active && pa.attributes.brand_editable && !pa.attributes.admin_only) {
+          profileAttrs.push({
+            code: pa.attributes.code,
+            nameKo: pa.attributes.name_ko,
+            inputType: pa.attributes.input_type,
+            isRequired: Boolean(pa.is_required_override || pa.attributes.is_required),
+          });
+        }
+      });
     }
   }
 
-  const allRequired = [...(commonRequiredAttrs || []), ...profileRequiredAttrs];
+  // Combine unique category attributes (prevent common duplication)
+  const commonCodes = new Set(commonAttrs.map((a: any) => a.code));
+  const uniqueProfileAttrs = profileAttrs.filter((a) => !commonCodes.has(a.code));
+  const allCategoryAttrs = [...commonAttrs, ...uniqueProfileAttrs];
 
-  // 3. Fetch Product's Saved Attribute Values
+  // 4. Fetch Product's Saved Attribute Values
   const { data: savedValues } = await supabase
     .from("product_attribute_values")
     .select("attribute_code, value_json")
@@ -105,24 +122,33 @@ export async function getProductCategoryCompletion(
     savedMap.set(row.attribute_code, row.value_json);
   });
 
-  // 4. Determine Missing Required Attributes
+  // 5. Calculate Filled Count and Missing Required Attributes
   const missingRequiredAttributes: { code: string; nameKo: string }[] = [];
-  allRequired.forEach((attr) => {
+  let filledCount = 0;
+
+  allCategoryAttrs.forEach((attr) => {
     const val = savedMap.get(attr.code);
-    if (!isAttributeValueFilled(attr.input_type, val)) {
+    const filled = isAttributeValueFilled(attr.inputType, val);
+    if (filled) {
+      filledCount++;
+    }
+    if (attr.isRequired && !filled) {
       missingRequiredAttributes.push({
         code: attr.code,
-        nameKo: attr.name_ko,
+        nameKo: attr.nameKo,
       });
     }
   });
 
   const requiredAttributesComplete = missingRequiredAttributes.length === 0;
-  const totalRequiredCount = allRequired.length;
-  const filledRequiredCount = totalRequiredCount - missingRequiredAttributes.length;
-  const completionPercent = totalRequiredCount === 0 ? 100 : Math.round((filledRequiredCount / totalRequiredCount) * 100);
+  const totalAttrCount = allCategoryAttrs.length;
 
-  // 5. Determine Unified Status and Warning Label
+  // NO FALLBACK TO 100%! Safe fallback to 0% if totalAttrCount === 0 or categoryCode missing
+  const completionPercent = (totalAttrCount === 0 || !categoryCode)
+    ? 0
+    : Math.round((filledCount / totalAttrCount) * 100);
+
+  // 6. Determine Unified Status and Warning Label
   let status: CategoryCompletionResult["status"] = "COMPLETE";
   let warningLabel: string | null = null;
   let warningType: CategoryCompletionResult["warningType"] = "none";
@@ -155,14 +181,14 @@ export async function getProductCategoryCompletion(
     status,
     warningLabel,
     warningType,
-    totalRequiredCount,
-    filledRequiredCount,
+    totalRequiredCount: totalAttrCount,
+    filledRequiredCount: filledCount,
     completionPercent,
   };
 }
 
 /**
- * Batch version to evaluate multiple products efficiently for Product List.
+ * Batch version to evaluate multiple products efficiently for Product List without N+1 queries.
  */
 export async function getBatchProductCategoryCompletions(
   products: { id: string; category_code: string | null }[],
@@ -186,17 +212,24 @@ export async function getBatchProductCategoryCompletions(
 
   const finalCats = new Set((catData || []).filter((c: any) => c.is_final).map((c: any) => c.code));
 
-  // 2. Fetch Common required attributes
-  const { data: commonAttrs } = await supabase
+  // 2. Fetch Common Active Brand-Editable Attributes
+  const { data: commonAttrsData } = await supabase
     .from("attributes")
     .select("code, name_ko, input_type, is_required, brand_editable, admin_only, is_active")
     .eq("scope", "COMMON")
-    .eq("is_required", true)
     .eq("is_active", true)
     .eq("brand_editable", true)
     .eq("admin_only", false);
 
-  // 3. Fetch Category -> Profile -> Attributes mapping
+  const commonAttrs = (commonAttrsData || []).map((a: any) => ({
+    code: a.code,
+    nameKo: a.name_ko,
+    inputType: a.input_type,
+    isRequired: Boolean(a.is_required),
+  }));
+  const commonCodes = new Set(commonAttrs.map((a: any) => a.code));
+
+  // 3. Fetch Category -> Profile -> Attributes mappings
   const { data: mappings } = categoryCodes.length > 0
     ? await supabase
         .from("category_profile_mappings")
@@ -212,17 +245,22 @@ export async function getBatchProductCategoryCompletions(
   const { data: pAttrs } = profileCodes.length > 0
     ? await supabase
         .from("profile_attributes")
-        .select("profile_code, attribute_code, attributes(code, name_ko, input_type, is_required, brand_editable, admin_only, is_active)")
+        .select("profile_code, attribute_code, is_required_override, attributes(code, name_ko, input_type, is_required, brand_editable, admin_only, is_active)")
         .in("profile_code", profileCodes)
         .eq("is_active", true)
     : { data: [] };
 
-  const profileRequiredMap = new Map<string, any[]>();
+  const profileAttrsMap = new Map<string, { code: string; nameKo: string; inputType: string; isRequired: boolean }[]>();
   (pAttrs || []).forEach((pa: any) => {
-    if (pa.attributes && pa.attributes.is_required && pa.attributes.is_active && pa.attributes.brand_editable && !pa.attributes.admin_only) {
-      const list = profileRequiredMap.get(pa.profile_code) || [];
-      list.push(pa.attributes);
-      profileRequiredMap.set(pa.profile_code, list);
+    if (pa.attributes && pa.attributes.is_active && pa.attributes.brand_editable && !pa.attributes.admin_only) {
+      const list = profileAttrsMap.get(pa.profile_code) || [];
+      list.push({
+        code: pa.attributes.code,
+        nameKo: pa.attributes.name_ko,
+        inputType: pa.attributes.input_type,
+        isRequired: Boolean(pa.is_required_override || pa.attributes.is_required),
+      });
+      profileAttrsMap.set(pa.profile_code, list);
     }
   });
 
@@ -246,23 +284,32 @@ export async function getBatchProductCategoryCompletions(
   products.forEach((p) => {
     const categoryComplete = Boolean(p.category_code && finalCats.has(p.category_code));
     const profileCode = p.category_code ? catToProfile.get(p.category_code) : null;
-    const profileRequired = profileCode ? profileRequiredMap.get(profileCode) || [] : [];
-    const allRequired = [...(commonAttrs || []), ...profileRequired];
+    const profileAttrs = profileCode ? profileAttrsMap.get(profileCode) || [] : [];
+    const uniqueProfileAttrs = profileAttrs.filter((a) => !commonCodes.has(a.code));
+    const allCategoryAttrs = [...commonAttrs, ...uniqueProfileAttrs];
 
     const savedMap = productValuesMap.get(p.id) || new Map<string, any>();
     const missing: { code: string; nameKo: string }[] = [];
+    let filledCount = 0;
 
-    allRequired.forEach((attr) => {
+    allCategoryAttrs.forEach((attr) => {
       const val = savedMap.get(attr.code);
-      if (!isAttributeValueFilled(attr.input_type, val)) {
-        missing.push({ code: attr.code, nameKo: attr.name_ko });
+      const filled = isAttributeValueFilled(attr.inputType, val);
+      if (filled) {
+        filledCount++;
+      }
+      if (attr.isRequired && !filled) {
+        missing.push({ code: attr.code, nameKo: attr.nameKo });
       }
     });
 
     const requiredAttributesComplete = missing.length === 0;
-    const totalRequiredCount = allRequired.length;
-    const filledRequiredCount = totalRequiredCount - missing.length;
-    const completionPercent = totalRequiredCount === 0 ? 100 : Math.round((filledRequiredCount / totalRequiredCount) * 100);
+    const totalAttrCount = allCategoryAttrs.length;
+
+    // NO FALLBACK TO 100%! Safe fallback to 0% if totalAttrCount === 0 or category_code missing
+    const completionPercent = (totalAttrCount === 0 || !p.category_code)
+      ? 0
+      : Math.round((filledCount / totalAttrCount) * 100);
 
     let status: CategoryCompletionResult["status"] = "COMPLETE";
     let warningLabel: string | null = null;
@@ -296,8 +343,8 @@ export async function getBatchProductCategoryCompletions(
       status,
       warningLabel,
       warningType,
-      totalRequiredCount,
-      filledRequiredCount,
+      totalRequiredCount: totalAttrCount,
+      filledRequiredCount: filledCount,
       completionPercent,
     });
   });

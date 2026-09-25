@@ -79,11 +79,7 @@ export function ProductDetailTabs({
   const [activeTab, setActiveTab] = useState<"basic" | "category_attributes" | "price" | "logistics" | "media" | "certs">("basic");
   const [isPending, startTransition] = useTransition();
   const [statusMessage, setStatusMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
-  const [categoryCompletion, setCategoryCompletion] = useState<{
-    categoryComplete: boolean;
-    requiredAttributesComplete: boolean;
-    missingRequiredAttributes: { code: string; nameKo: string }[];
-  } | null>(initialCategoryCompletion || null);
+  const [categoryCompletion, setCategoryCompletion] = useState<CategoryCompletionResult | null>(initialCategoryCompletion || null);
   const categoryAttrRef = React.useRef<CategoryAttributeFormHandle>(null);
 
   // Sync activeTab from URL search params (?tab=...) or hash (#attr-...)
@@ -1306,6 +1302,32 @@ export function ProductDetailTabs({
                     );
                   })()}
                 </div>
+
+                <span className="text-zinc-300 dark:text-zinc-700">•</span>
+
+                {/* 4. Attribute Completion Badge */}
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[11px] font-bold text-zinc-500 dark:text-zinc-400">속성 완성도:</span>
+                  {(() => {
+                    const percent = categoryCompletion?.completionPercent ?? initialCategoryCompletion?.completionPercent ?? 0;
+                    const is100 = percent === 100;
+                    const isHalf = percent >= 50;
+                    return (
+                      <span
+                        className={`inline-flex items-center gap-1 rounded px-2 py-0.5 text-[10px] font-bold border whitespace-nowrap font-mono ${
+                          is100
+                            ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/20 dark:text-emerald-400 border-emerald-200 dark:border-emerald-900/50"
+                            : isHalf
+                            ? "bg-indigo-50 text-indigo-700 dark:bg-indigo-950/20 dark:text-indigo-400 border-indigo-200 dark:border-indigo-900/50"
+                            : "bg-amber-50 text-amber-700 dark:bg-amber-950/20 dark:text-amber-400 border-amber-200 dark:border-amber-900/50"
+                        }`}
+                        title="카테고리 필수/권장 속성 입력 완성도"
+                      >
+                        {percent}%
+                      </span>
+                    );
+                  })()}
+                </div>
               </div>
             </div>
           </div>
@@ -1932,7 +1954,7 @@ export function ProductDetailTabs({
             volume={volume || null}
             colorMap={colorMap || null}
             isAdmin={false}
-            onCompletionChange={setCategoryCompletion}
+            onCompletionChange={(status) => setCategoryCompletion((prev) => (prev ? { ...prev, ...status } : (status as any)))}
             onDirtyChange={setIsCatAttrDirty}
           />
         </div>
@@ -2131,7 +2153,7 @@ export function ProductDetailTabs({
             volume={product.volume || null}
             colorMap={product.color_map || null}
             isAdmin={false}
-            onCompletionChange={setCategoryCompletion}
+            onCompletionChange={(status) => setCategoryCompletion((prev) => (prev ? { ...prev, ...status } : (status as any)))}
             onDirtyChange={setIsCatAttrDirty}
           />
         </div>

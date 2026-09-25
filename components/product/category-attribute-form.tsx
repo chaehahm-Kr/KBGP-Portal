@@ -92,6 +92,7 @@ export interface CategoryCompletionStatus {
   categoryComplete: boolean;
   requiredAttributesComplete: boolean;
   missingRequiredAttributes: { code: string; nameKo: string }[];
+  completionPercent?: number;
 }
 
 export interface CategoryAttributeFormHandle {
@@ -510,6 +511,21 @@ export const CategoryAttributeForm = forwardRef<CategoryAttributeFormHandle, Cat
     return val !== null && val !== undefined && String(val).trim() !== "";
   };
 
+  // 완성도 계산 (지정된 속성 중 값이 채워진 비율)
+  const calculateCompleteness = useCallback(() => {
+    if (attributes.length === 0 || !isFinalCategorySelected) return 0;
+    let filled = 0;
+    attributes.forEach((attr) => {
+      const val = formValues[attr.code];
+      if (isAttributeValueFilled(attr, val)) {
+        filled++;
+      }
+    });
+    return Math.round((filled / attributes.length) * 100);
+  }, [attributes, formValues, isFinalCategorySelected]);
+
+  const completeness = calculateCompleteness();
+
   // Sync completion state to parent component (e.g. ProductDetailTabs tab indicator & missing warning)
   useEffect(() => {
     if (!onCompletionChange) return;
@@ -532,8 +548,9 @@ export const CategoryAttributeForm = forwardRef<CategoryAttributeFormHandle, Cat
       categoryComplete: isCategoryComplete,
       requiredAttributesComplete: isReqComplete,
       missingRequiredAttributes: missing,
+      completionPercent: completeness,
     });
-  }, [isFinalCategorySelected, attributes, formValues, isAdmin, onCompletionChange]);
+  }, [isFinalCategorySelected, attributes, formValues, isAdmin, onCompletionChange, completeness]);
 
   // 내부 공통 유효성 검사
   const validateInternal = () => {
@@ -642,19 +659,6 @@ export const CategoryAttributeForm = forwardRef<CategoryAttributeFormHandle, Cat
     });
   };
 
-  // 완성도 계산 (지정된 속성 중 값이 채워진 비율)
-  const calculateCompleteness = () => {
-    if (attributes.length === 0) return 100;
-    let filled = 0;
-    attributes.forEach((attr) => {
-      const val = formValues[attr.code];
-      if (isAttributeValueFilled(attr, val)) {
-        filled++;
-      }
-    });
-    return Math.round((filled / attributes.length) * 100);
-  };
-
   // 미진행 속성 목록 반환 (실무자가 어떤 항목이 누락되었는지 인지하고 바로 이동하도록 지원)
   const getUnfilledAttributes = () => {
     const unfilled: { code: string; nameKo: string; isRequired: boolean }[] = [];
@@ -682,8 +686,6 @@ export const CategoryAttributeForm = forwardRef<CategoryAttributeFormHandle, Cat
       </div>
     );
   }
-
-  const completeness = calculateCompleteness();
 
   return (
     <div className="flex flex-col gap-8 text-zinc-800 dark:text-zinc-200">
