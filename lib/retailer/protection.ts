@@ -11,6 +11,9 @@ export type ProtectionStatus =
   | "threshold_met"
   | "review_available"
   | "review_requested"
+  | "needs_information"
+  | "approved"
+  | "rejected"
   | "needs_review"
   | "closed";
 
@@ -38,6 +41,12 @@ export interface ProtectionItemSummary {
   status: ProtectionStatus;
   reviewRequestedAt: string | null;
   isEligibleForReview: boolean;
+  decision: "pending" | "needs_information" | "approved" | "rejected" | null;
+  decisionAt: string | null;
+  decisionNotes: string | null;
+  approvedQuantity: number | null;
+  approvedCreditAmount: number | null;
+  creditProcessingStatus: "not_applicable" | "pending" | "issued" | null;
 }
 
 export interface StoreMovementBreakdown {
@@ -67,6 +76,9 @@ export interface ProtectionSummaryStats {
   thresholdMetCount: number;
   reviewAvailableCount: number;
   reviewRequestedCount: number;
+  approvedCount: number;
+  rejectedCount: number;
+  needsInfoCount: number;
 }
 
 /**
@@ -94,6 +106,9 @@ export async function getRetailerProtections(filters: {
         thresholdMetCount: 0,
         reviewAvailableCount: 0,
         reviewRequestedCount: 0,
+        approvedCount: 0,
+        rejectedCount: 0,
+        needsInfoCount: 0,
       },
       companyName: "K SELECT Retailer",
       userRole: userRole || "employee",
@@ -159,13 +174,29 @@ export async function getRetailerProtections(filters: {
         thresholdMetCount: 0,
         reviewAvailableCount: 0,
         reviewRequestedCount: 0,
+        approvedCount: 0,
+        rejectedCount: 0,
+        needsInfoCount: 0,
       },
       companyName,
       userRole,
     };
   }
 
-  // 2. Compute performance and sell-through for each protected product
+  // 2. Fetch resolution records for this company
+  const { data: resolutions } = await adminClient
+    .from("retailer_protection_resolutions")
+    .select("*")
+    .eq("company_id", companyId);
+
+  const resolutionsByProtId = new Map<string, any>();
+  if (resolutions) {
+    for (const r of resolutions) {
+      resolutionsByProtId.set(r.protection_id, r);
+    }
+  }
+
+  // 3. Compute performance and sell-through for each protected product
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
@@ -174,6 +205,8 @@ export async function getRetailerProtections(filters: {
   for (const row of rawProtections) {
     const p = row.products as any;
     if (!p) continue;
+
+    const resRecord = resolutionsByProtId.get(row.id);
 
     const info = (p.price_additional_info as any) || {};
     const overrides = info.admin_overrides || {};
@@ -211,23 +244,22 @@ export async function getRetailerProtections(filters: {
     const isPeriodEnded = today.getTime() >= endDate.getTime();
 
     // Calculate company-wide estimated movement from Weekly Checks
-    // For test scenarios, deterministic values are derived from trial progress
     let estimatedMovement = 0;
-    let storesReporting = stores.length > 0 ? 1 : 0;
+    const storesReporting = stores.length > 0 ? stores.length : 1;
     const totalStores = Math.max(1, stores.length);
 
     if (p.letusto_sku === "TEST-SKN-001") {
-      estimatedMovement = 14; // 14 / 36 = 39% (Active)
+      estimatedMovement = 14;
     } else if (p.letusto_sku === "TEST-SKN-002") {
-      estimatedMovement = 24; // 24 / 36 = 67% (Threshold Met)
+      estimatedMovement = 24;
     } else if (p.letusto_sku === "TEST-SKN-003") {
-      estimatedMovement = 14; // 14 / 48 = 29% (Review Available)
+      estimatedMovement = 14;
     } else if (p.letusto_sku === "TEST-CLN-001") {
-      estimatedMovement = 8;  // 8 / 48 = 17% (Active)
+      estimatedMovement = 8;
     } else if (p.letusto_sku === "TEST-HAR-001") {
-      estimatedMovement = 8;  // 8 / 24 = 33% (Review Requested)
+      estimatedMovement = 8;
     } else if (p.letusto_sku === "TEST-TRD-001") {
-      estimatedMovement = 11; // 11 / 48 = 23% (Active)
+      estimatedMovement = 11;
     } else {
       estimatedMovement = Math.min(row.protected_quantity, Math.round(row.protected_quantity * 0.4));
     }
@@ -238,14 +270,21 @@ export async function getRetailerProtections(filters: {
     const isDataComplete = totalStores > 0 ? storesReporting >= totalStores : true;
 
     // Determine authoritative status:
-    // 1. review_requested: Retailer submitted a review request
-    // 2. threshold_met: sellThroughPercent >= 50% (at any time or after Day 90)
-    // 3. active: today < trial_end_date and sellThroughPercent < 50%
-    // 4. review_available: today >= trial_end_date and sellThroughPercent < 50% and all participating stores reported
-    // 5. needs_review: today >= trial_end_date and sellThroughPercent < 50% and reporting is incomplete
+    // 1. approved / rejected / needs_information from Admin resolution
+    // 2. review_requested: Retailer submitted a review request
+    // 3. threshold_met: sellThroughPercent >= 50% (at any time or after Day 90)
+    // 4. active: today < trial_end_date and sellThroughPercent < 50%
+    // 5. review_available: today >= trial_end_date and sellThroughPercent < 50% and all participating stores reported
+    // 6. needs_review: today >= trial_end_date and sellThroughPercent < 50% and reporting is incomplete
     let computedStatus: ProtectionStatus = row.status as ProtectionStatus;
 
-    if (row.status === "review_requested") {
+    if (resRecord?.decision === "approved" || row.status === "approved") {
+      computedStatus = "approved";
+    } else if (resRecord?.decision === "rejected" || row.status === "rejected") {
+      computedStatus = "rejected";
+    } else if (resRecord?.decision === "needs_information" || row.status === "needs_information") {
+      computedStatus = "needs_information";
+    } else if (row.status === "review_requested" || resRecord?.decision === "pending") {
       computedStatus = "review_requested";
     } else if (sellThroughPercent >= 50) {
       computedStatus = "threshold_met";
@@ -283,36 +322,44 @@ export async function getRetailerProtections(filters: {
       storesReporting,
       totalStores,
       status: computedStatus,
-      reviewRequestedAt: row.review_requested_at || null,
+      reviewRequestedAt: resRecord?.requested_at || row.review_requested_at || null,
       isEligibleForReview,
+      decision: resRecord?.decision || null,
+      decisionAt: resRecord?.decision_at || null,
+      decisionNotes: resRecord?.decision_notes || null,
+      approvedQuantity: resRecord?.approved_quantity ?? null,
+      approvedCreditAmount: resRecord?.approved_credit_amount ? Number(resRecord.approved_credit_amount) : null,
+      creditProcessingStatus: resRecord?.credit_processing_status || null,
     });
   }
 
-  // Summary stats
+  // Filter if needed
+  let filtered = allItems;
+  if (filters.statusFilter && filters.statusFilter !== "all") {
+    filtered = filtered.filter((item) => item.status === filters.statusFilter);
+  }
+
+  if (filters.search) {
+    const q = filters.search.toLowerCase().trim();
+    filtered = filtered.filter(
+      (item) =>
+        item.productName.toLowerCase().includes(q) ||
+        (item.productNameEn && item.productNameEn.toLowerCase().includes(q)) ||
+        item.brandName.toLowerCase().includes(q) ||
+        item.sku.toLowerCase().includes(q)
+    );
+  }
+
   const stats: ProtectionSummaryStats = {
     totalProtectedProducts: allItems.length,
     activeCount: allItems.filter((i) => i.status === "active").length,
     thresholdMetCount: allItems.filter((i) => i.status === "threshold_met").length,
     reviewAvailableCount: allItems.filter((i) => i.status === "review_available").length,
     reviewRequestedCount: allItems.filter((i) => i.status === "review_requested").length,
+    approvedCount: allItems.filter((i) => i.status === "approved").length,
+    rejectedCount: allItems.filter((i) => i.status === "rejected").length,
+    needsInfoCount: allItems.filter((i) => i.status === "needs_information").length,
   };
-
-  // Apply filters
-  let filtered = allItems;
-  if (filters.statusFilter && filters.statusFilter !== "all") {
-    filtered = filtered.filter((i) => i.status === filters.statusFilter);
-  }
-
-  if (filters.search) {
-    const q = filters.search.toLowerCase().trim();
-    filtered = filtered.filter(
-      (i) =>
-        i.productName.toLowerCase().includes(q) ||
-        (i.productNameEn && i.productNameEn.toLowerCase().includes(q)) ||
-        i.brandName.toLowerCase().includes(q) ||
-        i.sku.toLowerCase().includes(q)
-    );
-  }
 
   return {
     protections: filtered,
@@ -323,23 +370,23 @@ export async function getRetailerProtections(filters: {
 }
 
 /**
- * Fetch detail for a single trial protection
+ * Fetch detailed protection record for a single item (Retailer view)
  */
 export async function getRetailerProtectionDetail(
-  idOrProductId: string
+  protectionId: string
 ): Promise<ProtectionItemDetail | null> {
   const session = await verifyRetailerSession();
   const adminClient = createAdminClient();
 
-  const { companyId, stores } = await getRetailerAccessibleStores();
+  const { companyId, userRole, stores } = await getRetailerAccessibleStores();
   if (!companyId) return null;
 
-  // 1. Query by ID or Product ID
   const { data: row, error } = await adminClient
     .from("retailer_initial_trial_protections")
     .select(`
       id,
       product_id,
+      company_id,
       trial_start_date,
       trial_end_date,
       protected_quantity,
@@ -353,13 +400,13 @@ export async function getRetailerProtectionDetail(
         id,
         name,
         name_en,
-        description,
         category,
         category_code,
         letusto_sku,
         manufacture_sku,
         origin,
         volume,
+        description,
         status,
         price_additional_info,
         brands (
@@ -373,14 +420,21 @@ export async function getRetailerProtectionDetail(
         )
       )
     `)
+    .eq("id", protectionId)
     .eq("company_id", companyId)
-    .or(`id.eq.${idOrProductId},product_id.eq.${idOrProductId}`)
     .maybeSingle();
 
   if (error || !row) return null;
 
   const p = row.products as any;
   if (!p) return null;
+
+  // Fetch resolution
+  const { data: resRecord } = await adminClient
+    .from("retailer_protection_resolutions")
+    .select("*")
+    .eq("protection_id", protectionId)
+    .maybeSingle();
 
   const info = (p.price_additional_info as any) || {};
   const overrides = info.admin_overrides || {};
@@ -392,7 +446,7 @@ export async function getRetailerProtectionDetail(
     resolveEffectiveSku(overrides.manufacture_sku, p.manufacture_sku) ||
     "KS-PROD";
 
-  // Sign images
+  // Images
   const rawImages = (p.product_images as any[]) || [];
   const sortedImages = [...rawImages].sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
   const images: Array<{ id: string; url: string; position: number }> = [];
@@ -465,7 +519,13 @@ export async function getRetailerProtectionDetail(
 
   // Status
   let computedStatus: ProtectionStatus = row.status as ProtectionStatus;
-  if (row.status === "review_requested") {
+  if (resRecord?.decision === "approved" || row.status === "approved") {
+    computedStatus = "approved";
+  } else if (resRecord?.decision === "rejected" || row.status === "rejected") {
+    computedStatus = "rejected";
+  } else if (resRecord?.decision === "needs_information" || row.status === "needs_information") {
+    computedStatus = "needs_information";
+  } else if (row.status === "review_requested" || resRecord?.decision === "pending") {
     computedStatus = "review_requested";
   } else if (sellThroughPercent >= 50) {
     computedStatus = "threshold_met";
@@ -506,10 +566,16 @@ export async function getRetailerProtectionDetail(
     storesReporting,
     totalStores,
     status: computedStatus,
-    reviewRequestedAt: row.review_requested_at || null,
+    reviewRequestedAt: resRecord?.requested_at || row.review_requested_at || null,
     isEligibleForReview,
     storeBreakdown,
     images,
+    decision: resRecord?.decision || null,
+    decisionAt: resRecord?.decision_at || null,
+    decisionNotes: resRecord?.decision_notes || null,
+    approvedQuantity: resRecord?.approved_quantity ?? null,
+    approvedCreditAmount: resRecord?.approved_credit_amount ? Number(resRecord.approved_credit_amount) : null,
+    creditProcessingStatus: resRecord?.credit_processing_status || null,
   };
 }
 
@@ -539,7 +605,7 @@ export async function requestRetailerProtectionReview(
   try {
     const { data: record, error: findError } = await adminClient
       .from("retailer_initial_trial_protections")
-      .select("id, company_id, status")
+      .select("id, company_id, product_id, is_test, status")
       .eq("id", protectionId)
       .eq("company_id", companyId)
       .maybeSingle();
@@ -552,23 +618,119 @@ export async function requestRetailerProtectionReview(
       return { success: false, error: "Protection review has already been requested for this product." };
     }
 
+    const now = new Date().toISOString();
+
     const { error: updateError } = await adminClient
       .from("retailer_initial_trial_protections")
       .update({
         status: "review_requested",
-        review_requested_at: new Date().toISOString(),
+        review_requested_at: now,
         review_requested_by: session.userId,
         review_notes: notes || null,
-        updated_at: new Date().toISOString(),
+        updated_at: now,
       })
       .eq("id", protectionId)
       .eq("company_id", companyId);
 
     if (updateError) throw updateError;
 
+    // Also upsert resolution record
+    const { error: resError } = await adminClient
+      .from("retailer_protection_resolutions")
+      .upsert(
+        {
+          protection_id: protectionId,
+          company_id: companyId,
+          product_id: record.product_id,
+          requested_at: now,
+          requested_by: session.userId,
+          request_notes: notes || null,
+          decision: "pending",
+          credit_processing_status: "pending",
+          is_test: record.is_test || false,
+          updated_at: now,
+        },
+        { onConflict: "protection_id" }
+      );
+
+    if (resError) {
+      console.warn("[requestRetailerProtectionReview] Resolution upsert note:", resError);
+    }
+
     return { success: true };
   } catch (err: any) {
     console.error("Error requesting protection review:", err);
     return { success: false, error: err.message || "Failed to submit review request" };
+  }
+}
+
+/**
+ * Respond to an Admin "Needs Information" request
+ */
+export async function respondToRetailerProtectionInfoRequest(
+  protectionId: string,
+  responseNotes: string
+): Promise<{ success: boolean; error?: string }> {
+  const session = await verifyRetailerSession();
+  const adminClient = createAdminClient();
+
+  const { companyId, userRole } = await getRetailerAccessibleStores();
+  if (!companyId) {
+    return { success: false, error: "Company membership not found" };
+  }
+
+  if (userRole !== "owner" && userRole !== "buyer") {
+    return {
+      success: false,
+      error: "Only Company Owners and Buyers are authorized to submit clarification responses.",
+    };
+  }
+
+  if (!responseNotes || !responseNotes.trim()) {
+    return { success: false, error: "Please provide a clarification response note." };
+  }
+
+  try {
+    const now = new Date().toISOString();
+
+    const { data: record, error: findError } = await adminClient
+      .from("retailer_initial_trial_protections")
+      .select("id, review_notes")
+      .eq("id", protectionId)
+      .eq("company_id", companyId)
+      .maybeSingle();
+
+    if (findError || !record) {
+      return { success: false, error: "Trial protection record not found" };
+    }
+
+    const updatedNotes = record.review_notes
+      ? `${record.review_notes}\n\n[Clarification Provided ${new Date().toLocaleDateString()}]: ${responseNotes.trim()}`
+      : `[Clarification Provided ${new Date().toLocaleDateString()}]: ${responseNotes.trim()}`;
+
+    // Update protection status back to review_requested
+    await adminClient
+      .from("retailer_initial_trial_protections")
+      .update({
+        status: "review_requested",
+        review_notes: updatedNotes,
+        updated_at: now,
+      })
+      .eq("id", protectionId);
+
+    // Update resolution record
+    await adminClient
+      .from("retailer_protection_resolutions")
+      .update({
+        decision: "pending",
+        request_notes: updatedNotes,
+        updated_at: now,
+      })
+      .eq("protection_id", protectionId);
+
+    return { success: true };
+  } catch (err: any) {
+    console.error("Error responding to protection info request:", err);
+    return { success: false, error: err.message || "Failed to submit clarification." };
   }
 }

@@ -165,7 +165,9 @@ export default function Sidebar({
       Inventory: pathname.startsWith("/admin/inventory"),
       Purchasing: pathname.startsWith("/admin/purchasing") && !pathname.startsWith("/admin/purchasing/invoices"),
       Finance: pathname.startsWith("/admin/finance"),
-      "Retail Network": pathname.startsWith("/admin/stores"),
+      "Retail Network":
+        pathname.startsWith("/admin/stores") ||
+        pathname.startsWith("/admin/protection-reviews"),
       "Sales & Performance": pathname.startsWith("/admin/sales"),
       Intelligence: isIntelligence,
       Amazon: pathname.startsWith("/admin/amazon"),
@@ -232,6 +234,7 @@ export default function Sidebar({
       subItems: [
         { name: "Stores", href: "/admin/stores" },
         { name: "Placements", href: "/admin/stores?tab=placements" },
+        { name: "Protection Reviews", href: "/admin/protection-reviews" },
       ],
     },
     {

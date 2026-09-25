@@ -4,7 +4,10 @@ import React, { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ProtectionItemDetail } from "@/lib/retailer/protection";
-import { requestProtectionReviewAction } from "@/app/retailer/protection/actions";
+import {
+  requestProtectionReviewAction,
+  respondToProtectionInfoAction,
+} from "@/app/retailer/protection/actions";
 
 interface ProtectionDetailViewProps {
   protection: ProtectionItemDetail;
@@ -19,6 +22,8 @@ export function ProtectionDetailView({
   const [isPending, startTransition] = useTransition();
   const [showNotesInput, setShowNotesInput] = useState(false);
   const [reviewNotes, setReviewNotes] = useState("");
+  const [showClarificationInput, setShowClarificationInput] = useState(false);
+  const [clarificationNotes, setClarificationNotes] = useState("");
   const [currentStatus, setCurrentStatus] = useState(protection.status);
 
   const handleRequestReview = () => {
@@ -30,6 +35,23 @@ export function ProtectionDetailView({
         router.refresh();
       } else {
         alert(res.error || "Failed to submit protection review request");
+      }
+    });
+  };
+
+  const handleRespondClarification = () => {
+    if (!clarificationNotes.trim()) {
+      alert("Please enter a clarification note.");
+      return;
+    }
+    startTransition(async () => {
+      const res = await respondToProtectionInfoAction(protection.id, clarificationNotes);
+      if (res.success) {
+        setCurrentStatus("review_requested");
+        setShowClarificationInput(false);
+        router.refresh();
+      } else {
+        alert(res.error || "Failed to submit clarification");
       }
     });
   };
@@ -57,7 +79,13 @@ export function ProtectionDetailView({
       {/* Status Alert Banner */}
       <div
         className={`rounded-3xl p-6 border transition-all space-y-4 shadow-sm ${
-          currentStatus === "threshold_met"
+          currentStatus === "approved"
+            ? "bg-emerald-50 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-800 text-emerald-950 dark:text-emerald-200"
+            : currentStatus === "rejected"
+            ? "bg-zinc-100 dark:bg-zinc-900 border-zinc-300 dark:border-zinc-700 text-zinc-900 dark:text-zinc-200"
+            : currentStatus === "needs_information"
+            ? "bg-blue-50 dark:bg-blue-950/40 border-blue-300 dark:border-blue-800 text-blue-950 dark:text-blue-200"
+            : currentStatus === "threshold_met"
             ? "bg-emerald-50 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-800 text-emerald-950 dark:text-emerald-200"
             : currentStatus === "review_available"
             ? "bg-amber-50 dark:bg-amber-950/40 border-amber-300 dark:border-amber-800 text-amber-950 dark:text-amber-200"
@@ -70,7 +98,13 @@ export function ProtectionDetailView({
           <div className="flex items-center gap-3">
             <div
               className={`w-12 h-12 rounded-2xl flex items-center justify-center text-xl font-black shrink-0 ${
-                currentStatus === "threshold_met"
+                currentStatus === "approved"
+                  ? "bg-emerald-600 text-white"
+                  : currentStatus === "rejected"
+                  ? "bg-zinc-700 text-white"
+                  : currentStatus === "needs_information"
+                  ? "bg-blue-600 text-white"
+                  : currentStatus === "threshold_met"
                   ? "bg-emerald-500 text-white"
                   : currentStatus === "review_available"
                   ? "bg-amber-500 text-white"
@@ -79,7 +113,13 @@ export function ProtectionDetailView({
                   : "bg-blue-600 text-white"
               }`}
             >
-              {currentStatus === "threshold_met"
+              {currentStatus === "approved"
+                ? "✓"
+                : currentStatus === "rejected"
+                ? "✕"
+                : currentStatus === "needs_information"
+                ? "💬"
+                : currentStatus === "threshold_met"
                 ? "✓"
                 : currentStatus === "review_available"
                 ? "⚠️"
@@ -89,7 +129,13 @@ export function ProtectionDetailView({
             </div>
             <div>
               <h2 className="text-base sm:text-lg font-black">
-                {currentStatus === "threshold_met"
+                {currentStatus === "approved"
+                  ? "Protection Review Approved"
+                  : currentStatus === "rejected"
+                  ? "Protection Review Not Approved"
+                  : currentStatus === "needs_information"
+                  ? "Additional Information Requested"
+                  : currentStatus === "threshold_met"
                   ? "Protection Threshold Met!"
                   : currentStatus === "review_available"
                   ? "90-Day Period Ended — Review Available"
@@ -98,7 +144,13 @@ export function ProtectionDetailView({
                   : "Active 90-Day Initial Trial"}
               </h2>
               <p className="text-xs sm:text-sm opacity-90 leading-relaxed">
-                {currentStatus === "threshold_met"
+                {currentStatus === "approved"
+                  ? "K SELECT Operations has approved your trial protection review. Credit processing remains pending until formal issuance."
+                  : currentStatus === "rejected"
+                  ? "K SELECT Operations has reviewed this trial. See resolution details below."
+                  : currentStatus === "needs_information"
+                  ? "K SELECT Operations has requested additional clarification or store count verification before concluding the review."
+                  : currentStatus === "threshold_met"
                   ? `Company-wide estimated sell-through reached ${protection.sellThroughPercent}%, safely exceeding the 50% program threshold.`
                   : currentStatus === "review_available"
                   ? `Estimated sell-through (${protection.sellThroughPercent}%) is below 50% after the 90-day trial. You are eligible to submit a K SELECT Protection Review.`
@@ -126,9 +178,63 @@ export function ProtectionDetailView({
               )}
             </div>
           )}
+
+          {currentStatus === "needs_information" && !showClarificationInput && isAuthorized && (
+            <div className="shrink-0">
+              <button
+                type="button"
+                onClick={() => setShowClarificationInput(true)}
+                className="w-full sm:w-auto px-5 py-2.5 rounded-xl text-xs font-black bg-blue-600 hover:bg-blue-700 text-white shadow-md shadow-blue-600/20 flex items-center justify-center gap-2 transition-transform active:scale-95 cursor-pointer"
+              >
+                <span>💬 Submit Clarification Response</span>
+              </button>
+            </div>
+          )}
         </div>
 
-        {/* Notes submission box */}
+        {/* Approved Detail Strip */}
+        {currentStatus === "approved" && (
+          <div className="pt-3 border-t border-emerald-200 dark:border-emerald-800/60 flex flex-wrap items-center gap-4 text-xs">
+            {protection.approvedQuantity !== null && (
+              <div>
+                <span className="font-semibold text-emerald-800 dark:text-emerald-300">
+                  Approved Protection Qty:
+                </span>{" "}
+                <span className="font-black text-emerald-950 dark:text-emerald-100">
+                  {protection.approvedQuantity} units
+                </span>
+              </div>
+            )}
+            {protection.approvedCreditAmount !== null && (
+              <div>
+                <span className="font-semibold text-emerald-800 dark:text-emerald-300">
+                  Approved Credit Amount:
+                </span>{" "}
+                <span className="font-black text-emerald-950 dark:text-emerald-100">
+                  ${protection.approvedCreditAmount.toFixed(2)}
+                </span>
+              </div>
+            )}
+            <div className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md bg-emerald-200/60 dark:bg-emerald-900/60 font-bold">
+              <span>Credit Processing:</span>
+              <span>Pending</span>
+            </div>
+          </div>
+        )}
+
+        {/* Admin Decision Notes Display */}
+        {protection.decisionNotes && (
+          <div className="pt-3 border-t border-zinc-200 dark:border-zinc-800 text-xs">
+            <span className="font-bold opacity-80 block mb-1">
+              Admin Resolution Note:
+            </span>
+            <p className="opacity-90 leading-relaxed whitespace-pre-wrap">
+              {protection.decisionNotes}
+            </p>
+          </div>
+        )}
+
+        {/* Review Notes submission box */}
         {showNotesInput && (
           <div className="pt-4 border-t border-amber-200 dark:border-amber-800/60 space-y-3">
             <label className="text-xs font-bold text-amber-900 dark:text-amber-200 block">
@@ -154,6 +260,39 @@ export function ProtectionDetailView({
                 type="button"
                 onClick={() => setShowNotesInput(false)}
                 className="px-3 py-2 rounded-xl text-xs font-bold text-zinc-600 dark:text-zinc-400 hover:bg-amber-100 dark:hover:bg-amber-900/60"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Clarification Response Box */}
+        {showClarificationInput && (
+          <div className="pt-4 border-t border-blue-200 dark:border-blue-800/60 space-y-3">
+            <label className="text-xs font-bold text-blue-900 dark:text-blue-200 block">
+              Provide Requested Clarification or Store Verification:
+            </label>
+            <textarea
+              value={clarificationNotes}
+              onChange={(e) => setClarificationNotes(e.target.value)}
+              placeholder="e.g. Physical inventory count verified across all shelves as requested..."
+              rows={3}
+              className="w-full rounded-xl border border-blue-300 dark:border-blue-700 bg-white dark:bg-zinc-900 p-3 text-xs text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                disabled={isPending}
+                onClick={handleRespondClarification}
+                className="px-4 py-2 rounded-xl text-xs font-black bg-blue-600 hover:bg-blue-700 text-white shadow-sm disabled:opacity-60 cursor-pointer"
+              >
+                {isPending ? "Submitting..." : "Send Clarification Response"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowClarificationInput(false)}
+                className="px-3 py-2 rounded-xl text-xs font-bold text-zinc-600 dark:text-zinc-400 hover:bg-blue-100 dark:hover:bg-blue-900/60"
               >
                 Cancel
               </button>
