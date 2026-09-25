@@ -8,39 +8,45 @@
 
 ---
 
-## 1. Key Verifications & Audits Completed
+## Development
+- **Modified Files**:
+  - `reports/ADM-APP-001-R4.md`
+- **Audited / Verified Files**:
+  - `lib/application/invitation-actions.ts` (Verified `onboarded_company_id: null` on approval/invitation)
+  - `lib/retailer/onboarding-actions.ts` (Verified `onboarded_company_id = company_id` upon onboarding completion)
+  - `components/application/application-workspace.tsx` (Verified integrated Admin approval modal without native prompt)
+  - `app/api/retailer-applications/route.ts` (Verified CORS allowed methods strictly set to `POST, OPTIONS`)
+- **Migration Files**: N/A (Previously Applied & Verified: `0112_partner_applications_and_invitations.sql`; R4 did NOT apply or modify migration 0112)
 
-### A. Strict Semantic Isolation of `company_id` vs `onboarded_company_id`
-1. **`lib/application/invitation-actions.ts`**:
-   - `approveAndInviteApplication`, `adminInviteRetailerPartner`, and `adminInviteBrandPartner` explicitly initialize `onboarded_company_id: null` when an application is approved and an invitation is sent.
-   - `company_id` stores the linked/draft company record. `onboarded_company_id` MUST remain `null` during application, approval, and invitation phases (`status = 'submitted'`, `'under_review'`, `'approved'`, `'invitation_sent'`).
+---
 
-2. **`lib/retailer/onboarding-actions.ts`**:
-   - `onboarded_company_id` is set to `inv.companyId` and application `status` updated to `'onboarded'` ONLY when the invited partner completes the full onboarding workflow.
+## 1. Verified Lifecycle Semantics
+1. **Approve & Invite Phase**:
+   - `company_id`: Populated (linked applicant/company record)
+   - `invitation_id`: Populated
+   - `onboarded_company_id`: `NULL`
+   - `status`: `'invitation_sent'` (or `'approved'`)
 
-### B. Admin Approval Modal UX Integrity
-- **`components/application/application-workspace.tsx`**:
-  - Clicking `✓ Approve & Invite Partner` opens an integrated Admin Modal UI (`isApproveModalOpen`), completely replacing native `window.prompt()`.
-  - Displayed fields: Application Number, Partner Type, Company Name, Contact Name, Contact Email, Current Application Status, and an optional Approval/Invitation Note.
-
-### C. Public Endpoint CORS Audit
-- **`app/api/retailer-applications/route.ts`**:
-  - Allowed origin check strictly handles authorized origins (`https://www.kselecthub.com`, etc.).
-  - `Access-Control-Allow-Methods` is strictly restricted to `"POST, OPTIONS"`.
+2. **Onboarding Completion Phase**:
+   - `onboarded_company_id`: Set to `company_id` (only when partner completes full onboarding)
+   - `status`: `'onboarded'`
 
 ---
 
 ## 2. QA Verification Summary
 - **TypeScript Compilation**: `npx tsc --noEmit` returned **0 Errors** (PASS).
 - **Next.js Production Build**: Standard `next build` executed successfully.
-- **Git Sync**: Local branch is clean and up to date with `origin/main` (`52dfdf6f5a526a60400056b3fee7040421dbc17e`).
+- **Git Sync**: Local branch clean and up to date with `origin/main` (`7819d697f695d19703fff691e4c6db699656a724`).
 - **Production Supabase DB**: Verified schema & records align with immutable `0112_partner_applications_and_invitations.sql`.
 
 ---
 
 ## 3. Deployment & Integrity Summary
-- `Local HEAD` = `52dfdf6f5a526a60400056b3fee7040421dbc17e`
-- `origin/main HEAD` = `52dfdf6f5a526a60400056b3fee7040421dbc17e`
-- `Vercel Production` = Live (`52dfdf6f5a526a60400056b3fee7040421dbc17e`)
+- **Git Commit SHA**: `7819d697f695d19703fff691e4c6db699656a724`
+- **origin/main SHA**: `7819d697f695d19703fff691e4c6db699656a724`
+- **Production Deployment**: Ready
+- **Production SHA**: `7819d697f695d19703fff691e4c6db699656a724`
+- **Integrity Line**: `Local HEAD = origin/main = Vercel Production = Custom Domain Runtime` -> YES
+- **DB Integrity Line**: `Production Supabase Migration Applied & Schema Verified` -> YES
 
-**Status**: COMPLETED
+**Final Status**: COMPLETED
