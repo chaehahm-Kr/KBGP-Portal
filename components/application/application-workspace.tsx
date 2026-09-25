@@ -38,6 +38,8 @@ interface ApplicationWorkspaceProps {
   noteDeleteAction: any;
   infoRequestAction: any;
   deleteAction?: any;
+  approveAndInviteAction?: any;
+  rejectAppAction?: any;
 }
 
 export default function ApplicationWorkspace({
@@ -62,8 +64,53 @@ export default function ApplicationWorkspace({
   noteAddAction,
   noteDeleteAction,
   infoRequestAction,
-  deleteAction
+  deleteAction,
+  approveAndInviteAction,
+  rejectAppAction,
 }: ApplicationWorkspaceProps) {
+  const [isProcessingAction, setIsProcessingAction] = useState(false);
+
+  const handleApproveAndInvite = async () => {
+    if (!approveAndInviteAction) return;
+    const note = prompt("승인 및 초대 관련 리뷰 메모를 입력하세요 (선택 사항):", "Approved & Invited by Admin");
+    if (note === null) return; // User cancelled
+
+    setIsProcessingAction(true);
+    try {
+      const res = await approveAndInviteAction(note);
+      if (res?.success) {
+        alert("성공적으로 승인 및 정식 파트너 초대장을 발송했습니다.");
+        window.location.reload();
+      } else {
+        alert("승인/초대 처리 실패: " + (res?.error || "알 수 없는 오류"));
+      }
+    } catch (err: any) {
+      alert("오류 발생: " + err.message);
+    } finally {
+      setIsProcessingAction(false);
+    }
+  };
+
+  const handleRejectApp = async () => {
+    if (!rejectAppAction) return;
+    const reason = prompt("신청서 반려 사유를 입력하세요 (필수):");
+    if (!reason || !reason.trim()) return;
+
+    setIsProcessingAction(true);
+    try {
+      const res = await rejectAppAction(reason.trim());
+      if (res?.success) {
+        alert("신청서가 반려 처리되었습니다.");
+        window.location.reload();
+      } else {
+        alert("반려 처리 실패: " + (res?.error || "알 수 없는 오류"));
+      }
+    } catch (err: any) {
+      alert("오류 발생: " + err.message);
+    } finally {
+      setIsProcessingAction(false);
+    }
+  };
   const [activeTab, setActiveTab] = useState<
     "overview" | "company" | "products" | "documents" | "review" | "communication" | "activity"
   >("overview");
@@ -232,34 +279,94 @@ export default function ApplicationWorkspace({
   return (
     <div className="space-y-6">
       {/* Top Header Card */}
-      <div className="rounded-lg border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+      <div className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-xs dark:border-zinc-800 dark:bg-zinc-900">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <div className="space-y-1">
-            <div className="flex items-center gap-2">
-              <span className="text-lg font-bold text-zinc-950 dark:text-white">
+          <div className="space-y-1.5">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xl font-mono font-extrabold text-zinc-950 dark:text-white">
                 {application.application_number}
               </span>
-              <span className="inline-block rounded bg-amber-50 px-2 py-0.5 text-xs font-bold text-amber-700 dark:bg-amber-950 dark:text-amber-300">
-                {APPLICATION_STATUS_LABEL[application.status as ApplicationStatus]}
+              <span className="inline-block rounded-md px-2.5 py-0.5 text-xs font-bold bg-amber-50 text-amber-800 border border-amber-200 dark:bg-amber-950/50 dark:text-amber-300">
+                {APPLICATION_STATUS_LABEL[application.status as ApplicationStatus] || application.status}
               </span>
+
+              {/* Partner Type Badge */}
+              {application.partner_type === "retailer" ? (
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-xs font-bold bg-amber-100 text-amber-900 border border-amber-300 dark:bg-amber-950 dark:text-amber-200">
+                  🏪 Retailer Partner
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-xs font-bold bg-blue-100 text-blue-900 border border-blue-300 dark:bg-blue-950 dark:text-blue-200">
+                  🏷️ Brand Partner
+                </span>
+              )}
+
+              {/* Entry Mode Badge */}
+              {application.entry_mode === "admin_invitation" ? (
+                <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-bold bg-purple-100 text-purple-900 border border-purple-300 dark:bg-purple-950 dark:text-purple-200">
+                  ⚡ Admin Invitation
+                </span>
+              ) : (
+                <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
+                  🌐 Public Application
+                </span>
+              )}
             </div>
-            <p className="text-xs text-zinc-500 dark:text-zinc-400">
-              회사명: <span className="font-semibold text-zinc-800 dark:text-zinc-200">{company?.name}</span> · 
-              제출일: {application.submitted_at ? new Date(application.submitted_at).toLocaleDateString() : "-"}
+
+            <p className="text-xs text-zinc-600 dark:text-zinc-400">
+              Company Name: <span className="font-bold text-zinc-950 dark:text-white">{company?.name || application.applicant_company_name || "-"}</span> · 
+              Contact: <span className="font-semibold text-zinc-800 dark:text-zinc-200">{company?.contact_name || application.applicant_contact_name || "-"} ({application.applicant_contact_email || "-"})</span> · 
+              Submitted: {application.submitted_at ? new Date(application.submitted_at).toLocaleDateString() : "-"}
             </p>
           </div>
 
-          <div className="flex flex-wrap gap-4 items-center">
-            <span className="text-xs text-zinc-500 dark:text-zinc-400 self-center mr-2">
-              담당 심사원: <span className="font-bold text-zinc-800 dark:text-zinc-200">{currentAssignment ? staffNameById.get(currentAssignment.staff_id) : "미배정"}</span>
+          {/* Action Buttons */}
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs text-zinc-500 dark:text-zinc-400 mr-2">
+              Reviewer: <span className="font-bold text-zinc-800 dark:text-zinc-200">{currentAssignment ? staffNameById.get(currentAssignment.staff_id) : "Unassigned"}</span>
             </span>
+
+            {/* Action 1: Approve & Invite */}
+            {approveAndInviteAction && application.status !== "onboarded" && application.status !== "rejected" && (
+              <button
+                type="button"
+                onClick={handleApproveAndInvite}
+                disabled={isProcessingAction}
+                className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs rounded-xl transition-all shadow-xs cursor-pointer disabled:opacity-50"
+              >
+                {isProcessingAction ? "Processing..." : "✓ Approve & Invite Partner"}
+              </button>
+            )}
+
+            {/* Action 2: Reject */}
+            {rejectAppAction && application.status !== "rejected" && application.status !== "onboarded" && (
+              <button
+                type="button"
+                onClick={handleRejectApp}
+                disabled={isProcessingAction}
+                className="px-3.5 py-2 bg-amber-600 hover:bg-amber-700 text-white font-extrabold text-xs rounded-xl transition-all shadow-xs cursor-pointer disabled:opacity-50"
+              >
+                ✕ Reject Application
+              </button>
+            )}
+
+            {/* Open Company / Retailer 360 link if onboarded / linked */}
+            {(company?.id || application.onboarded_company_id) && (
+              <Link
+                href={application.partner_type === "retailer" ? `/admin/retailers/${company?.id || application.onboarded_company_id}` : `/admin/companies/${company?.id || application.onboarded_company_id}`}
+                className="px-3.5 py-2 bg-zinc-900 hover:bg-zinc-800 text-white font-bold text-xs rounded-xl transition-all shadow-xs dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-100"
+              >
+                {application.partner_type === "retailer" ? "Open Retailer 360 →" : "Open Company →"}
+              </Link>
+            )}
+
             {canDelete && (
               <button
                 onClick={handleDeleteApplication}
                 disabled={isDeleting}
-                className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-xs rounded transition-colors cursor-pointer disabled:opacity-50"
+                className="px-3 py-2 bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-xs rounded-xl transition-colors cursor-pointer disabled:opacity-50"
               >
-                {isDeleting ? "삭제 중..." : "🗑️ 신청서 삭제"}
+                {isDeleting ? "Deleting..." : "🗑️ Delete"}
               </button>
             )}
           </div>

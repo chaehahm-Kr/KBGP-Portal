@@ -1,3 +1,6 @@
+export type ApplicationPartnerType = "brand" | "retailer";
+export type ApplicationEntryMode = "public_application" | "admin_invitation";
+
 export type ApplicationStatus =
   | "draft"
   | "submitted"
@@ -7,25 +10,40 @@ export type ApplicationStatus =
   | "re_review"
   | "partial_approved"
   | "approved"
+  | "invitation_sent"
+  | "onboarding"
+  | "onboarded"
   | "on_hold"
   | "rejected"
   | "cancelled"
   | "deleted";
 
-// 06_상태값정의.md 1번 신청 상태값
 export const APPLICATION_STATUS_LABEL: Record<ApplicationStatus, string> = {
   draft: "임시저장",
-  submitted: "제출됨",
+  submitted: "제출됨 / 접수",
   assigned: "배정됨",
   under_review: "심사중",
   info_requested: "추가자료요청",
   re_review: "재검토중",
   partial_approved: "부분승인",
-  approved: "승인",
+  approved: "승인됨",
+  invitation_sent: "초대장 발송",
+  onboarding: "온보딩 진행중",
+  onboarded: "온보딩 완료",
   on_hold: "보류",
-  rejected: "반려",
+  rejected: "반려됨",
   cancelled: "취소",
   deleted: "삭제",
+};
+
+export const PARTNER_TYPE_LABEL: Record<ApplicationPartnerType, { ko: string; en: string }> = {
+  brand: { ko: "브랜드 파트너", en: "Brand Partner" },
+  retailer: { ko: "리테일러 파트너", en: "Retailer Partner" },
+};
+
+export const ENTRY_MODE_LABEL: Record<ApplicationEntryMode, { ko: string; en: string }> = {
+  public_application: { ko: "공개 신청", en: "Public Application" },
+  admin_invitation: { ko: "어드민 직접 초대", en: "Admin Invitation" },
 };
 
 export type ApplicationProductReviewStatus =
@@ -36,7 +54,6 @@ export type ApplicationProductReviewStatus =
   | "on_hold"
   | "rejected";
 
-// 06_상태값정의.md 2번 제품 심사 상태값
 export const REVIEW_STATUS_LABEL: Record<ApplicationProductReviewStatus, string> = {
   pending: "검토대기",
   reviewing: "검토중",
@@ -46,8 +63,6 @@ export const REVIEW_STATUS_LABEL: Record<ApplicationProductReviewStatus, string>
   rejected: "반려",
 };
 
-// 마케팅 사이트 자가진단 6문항과 동일(web/lib/content.ts eligibilityConditions).
-// 08_주요화면과AC.md 화면 5: "참여 조건 자가진단 6개 항목 재확인 체크".
 export const SELF_CHECK_ITEMS = [
   "리오더에도 안정적으로 재생산 · 공급이 가능한 생산 캐파를 갖추고 있습니다",
   "미국 상표권을 등록했거나 진행할 의지가 있고, 성분 · 라벨링 인증에 대응할 수 있습니다",

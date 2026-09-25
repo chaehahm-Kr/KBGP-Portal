@@ -12,6 +12,10 @@ import {
 } from "@/lib/application/review-note-actions";
 import { getSignedFileUrl } from "@/lib/files/storage";
 import { deleteApplicationAction } from "@/lib/application/actions";
+import {
+  approveAndInviteApplication,
+  rejectApplication,
+} from "@/lib/application/invitation-actions";
 import ApplicationWorkspace from "@/components/application/application-workspace";
 
 export const metadata: Metadata = {
@@ -30,7 +34,7 @@ export default async function AdminApplicationDetailPage({
   const { data: application } = await supabase
     .from("applications")
     .select(
-      "id, application_number, status, company_id, motivation_note, self_check_answers, eligibility_responses, submitted_at"
+      "id, application_number, partner_type, entry_mode, status, company_id, onboarded_company_id, invitation_id, applicant_company_name, applicant_contact_name, applicant_contact_email, applicant_contact_phone, applicant_address, review_notes, motivation_note, self_check_answers, eligibility_responses, submitted_at, created_at"
     )
     .eq("id", id)
     .single();
@@ -39,17 +43,25 @@ export default async function AdminApplicationDetailPage({
     notFound();
   }
 
-  const { data: company } = await supabase
-    .from("companies")
-    .select("id, name, business_registration_number, country, intro, contact_name, contact_phone")
-    .eq("id", application.company_id)
-    .single();
+  let company: any = null;
+  if (application.company_id) {
+    const { data: cData } = await supabase
+      .from("companies")
+      .select("id, name, business_registration_number, country, intro, contact_name, contact_phone")
+      .eq("id", application.company_id)
+      .maybeSingle();
+    company = cData;
+  }
 
-  const { data: companyUsers } = await supabase
-    .from("company_users")
-    .select("id, name, email, status, company_role, title, position, phone, is_primary, permissions, invited_at")
-    .eq("company_id", application.company_id)
-    .order("created_at", { ascending: true });
+  let companyUsers: any[] = [];
+  if (application.company_id) {
+    const { data: cuData } = await supabase
+      .from("company_users")
+      .select("id, name, email, status, company_role, title, position, phone, is_primary, permissions, invited_at")
+      .eq("company_id", application.company_id)
+      .order("created_at", { ascending: true });
+    companyUsers = cuData ?? [];
+  }
 
   const { data: links } = await supabase
     .from("application_products")
@@ -126,7 +138,7 @@ export default async function AdminApplicationDetailPage({
     <ApplicationWorkspace
       application={application}
       company={company}
-      companyUsers={companyUsers ?? []}
+      companyUsers={companyUsers}
       linkRows={linkRows}
       productNameById={productNameById}
       infoRequestRows={infoRequestRows}
@@ -150,6 +162,8 @@ export default async function AdminApplicationDetailPage({
       noteDeleteAction={deleteReviewNote}
       infoRequestAction={createInfoRequest.bind(null, id)}
       deleteAction={deleteApplicationAction}
+      approveAndInviteAction={approveAndInviteApplication.bind(null, id)}
+      rejectAppAction={rejectApplication.bind(null, id)}
     />
   );
 }
