@@ -316,6 +316,21 @@ export function RetailerProductDetailView({ product }: ProductDetailViewProps) {
                     </Link>
                   )}
                 </div>
+
+                {/* Product Training Link */}
+                <div className="pt-3 border-t border-zinc-200/80 dark:border-zinc-800/80 flex items-center justify-between gap-3">
+                  <span className="text-xs text-zinc-500 dark:text-zinc-400">
+                    Store staff selling guide & benefits:
+                  </span>
+                  <Link
+                    href={`/training/${product.id}`}
+                    className="py-2 px-3.5 rounded-xl text-xs font-bold bg-blue-50 dark:bg-blue-950/80 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800 hover:bg-blue-100 dark:hover:bg-blue-900 transition-colors inline-flex items-center gap-1.5 shrink-0"
+                  >
+                    <span>🎓</span>
+                    <span>Product Training</span>
+                    <span>→</span>
+                  </Link>
+                </div>
               </div>
             ) : (
               <div className="pt-2 p-4 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-center space-y-1">

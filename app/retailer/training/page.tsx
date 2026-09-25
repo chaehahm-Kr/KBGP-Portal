@@ -1,49 +1,37 @@
 import React from "react";
-import Link from "next/link";
 import { verifyRetailerSession } from "@/lib/auth/dal";
+import { getRetailerTrainingProducts } from "@/lib/retailer/training";
+import { TrainingListView } from "@/components/retailer/training-list-view";
 
 export const dynamic = "force-dynamic";
 
-export default async function RetailerTrainingPage() {
+interface RetailerTrainingPageProps {
+  searchParams: Promise<{
+    storeId?: string;
+    q?: string;
+    status?: "all" | "completed" | "not_completed";
+  }>;
+}
+
+export default async function RetailerTrainingPage({
+  searchParams,
+}: RetailerTrainingPageProps) {
   await verifyRetailerSession();
+  const { storeId, q, status } = await searchParams;
+
+  const data = await getRetailerTrainingProducts({
+    storeId,
+    search: q,
+    statusFilter: status,
+  });
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-zinc-200 dark:border-zinc-800 pb-5">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-zinc-900 dark:text-white tracking-tight">
-            Product Training & Brand Guides
-          </h1>
-          <p className="text-xs sm:text-sm text-zinc-500 dark:text-zinc-400 mt-1">
-            Access product selling points, brand training materials, and store staff guidance.
-          </p>
-        </div>
-      </div>
-
-      {/* Placeholder State */}
-      <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/60 p-8 sm:p-12 text-center space-y-4 shadow-sm">
-        <div className="w-14 h-14 rounded-2xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 mx-auto flex items-center justify-center text-2xl font-bold">
-          🎓
-        </div>
-        <div className="max-w-md mx-auto space-y-1.5">
-          <h2 className="text-base font-bold text-zinc-900 dark:text-white">
-            Brand Training Modules
-          </h2>
-          <p className="text-xs text-zinc-500 dark:text-zinc-400 leading-relaxed">
-            Curated brand education videos, key ingredient cheat-sheets, and recommended customer talk-tracks will be released in an upcoming update.
-          </p>
-        </div>
-
-        <div className="pt-2">
-          <Link
-            href="/"
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors"
-          >
-            ← Back to Home
-          </Link>
-        </div>
-      </div>
-    </div>
+    <TrainingListView
+      products={data.products}
+      stats={data.stats}
+      stores={data.stores}
+      selectedStoreId={data.selectedStoreId}
+      userRole={data.userRole}
+    />
   );
 }

@@ -78,6 +78,16 @@ export default async function RetailerHomePage() {
     // Non-blocking fallback
   }
 
+  // 6. Fetch Product Training stats for current user
+  let trainingStats = { totalCount: 0, completedCount: 0, percent: 0 };
+  try {
+    const { getRetailerTrainingProducts } = await import("@/lib/retailer/training");
+    const trData = await getRetailerTrainingProducts();
+    trainingStats = trData.stats;
+  } catch {
+    // Non-blocking fallback
+  }
+
   return (
     <div className="space-y-8">
       {/* Welcome Banner */}
@@ -276,15 +286,22 @@ export default async function RetailerHomePage() {
             href="/training"
             className="group rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-5 shadow-sm hover:border-zinc-400 dark:hover:border-zinc-600 transition-all space-y-3"
           >
-            <div className="w-10 h-10 rounded-lg bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 flex items-center justify-center font-bold text-lg group-hover:scale-105 transition-transform">
-              🎓
+            <div className="flex items-center justify-between">
+              <div className="w-10 h-10 rounded-lg bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 flex items-center justify-center font-bold text-lg group-hover:scale-105 transition-transform">
+                🎓
+              </div>
+              {trainingStats.totalCount > 0 && (
+                <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-900">
+                  {trainingStats.completedCount}/{trainingStats.totalCount} Completed ({trainingStats.percent}%)
+                </span>
+              )}
             </div>
             <div>
               <h3 className="text-sm font-bold text-zinc-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
                 Product Training & Guides
               </h3>
               <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1 leading-relaxed">
-                Access product selling points, brand training videos, and customer FAQ cheat-sheets.
+                Access product selling points, customer talk-tracks, and usage cheat-sheets for your store.
               </p>
             </div>
           </Link>

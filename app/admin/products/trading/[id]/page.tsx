@@ -35,8 +35,14 @@ export default async function AdminTradingProductDetailPage({
     .eq("id", id)
     .maybeSingle();
 
-  // If the product doesn't exist or is not a trading product, return not found
-  if (!product || product.trading_status === "inactive") {
+  // A product is eligible for Trading 360° Management if it is explicitly SELECTED for trading, or its trading_status is active/historical.
+  const isTradingEligible =
+    product &&
+    (product.selection_status === "SELECTED" ||
+      product.trading_status === "active" ||
+      product.trading_status === "historical");
+
+  if (!isTradingEligible) {
     notFound();
   }
 
@@ -108,7 +114,12 @@ export default async function AdminTradingProductDetailPage({
     photoUrl,
     selection_status: product.selection_status,
     sales_status: product.sales_status,
-    trading_status: product.trading_status,
+    trading_status:
+      product.trading_status === "active" || product.trading_status === "historical"
+        ? product.trading_status
+        : product.selection_status === "SELECTED"
+        ? "active"
+        : "inactive",
     category_code: product.category_code || null,
     category_full_path: categoryFullPath,
     price_usd_fob: adminOverrides.price_usd_fob !== undefined ? parseFloat(adminOverrides.price_usd_fob) : (product.price_usd_fob || 0),
