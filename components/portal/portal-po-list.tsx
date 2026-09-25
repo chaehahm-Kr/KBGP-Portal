@@ -358,17 +358,24 @@ export function PortalPoList({ pos = [] }: PortalPoListProps) {
     }
 
     // Active PO aging badges
-    if (days <= 7) {
+    if (days <= 14) {
       return (
         <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium bg-slate-100 text-slate-700 border border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700">
           {days}일 경과
         </span>
       );
     }
-    if (days <= 14) {
+    if (days <= 30) {
       return (
-        <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800">
-          ⏳ {days}일 경과
+        <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-950/60 dark:text-blue-300 dark:border-blue-800">
+          {days}일 경과
+        </span>
+      );
+    }
+    if (days <= 44) {
+      return (
+        <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800">
+          {days}일 경과
         </span>
       );
     }
@@ -674,22 +681,23 @@ export function PortalPoList({ pos = [] }: PortalPoListProps) {
           <table className="w-full text-left border-collapse text-sm">
             <thead>
               <tr className="border-b border-zinc-200 bg-zinc-50 text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400">
-                <th className="px-6 py-4">발주 번호</th>
+                <th className="px-6 py-4 whitespace-nowrap">발주 번호</th>
                 <th className="px-6 py-4">상품 요약</th>
-                <th className="px-6 py-4">발주 일자</th>
-                <th className="px-6 py-4">경과 일수</th>
-                <th className="px-6 py-4">진행 상태</th>
-                <th className="px-6 py-4">최근 상태 변경</th>
-                <th className="px-6 py-4">공급사 확인</th>
-                <th className="px-6 py-4 text-right">발주 금액</th>
-                <th className="px-6 py-4 text-center">작업</th>
+                <th className="px-6 py-4 text-right whitespace-nowrap">수량</th>
+                <th className="px-6 py-4 whitespace-nowrap">발주 일자</th>
+                <th className="px-6 py-4 whitespace-nowrap">경과 일수</th>
+                <th className="px-6 py-4 whitespace-nowrap">진행 상태</th>
+                <th className="px-6 py-4 whitespace-nowrap">최근 상태 변경</th>
+                <th className="px-6 py-4 whitespace-nowrap">공급사 확인</th>
+                <th className="px-6 py-4 text-right whitespace-nowrap">발주 금액</th>
+                <th className="px-6 py-4 text-center whitespace-nowrap">작업</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">
               {filteredAndSortedPos.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={9}
+                    colSpan={10}
                     className="px-6 py-12 text-center text-zinc-500 dark:text-zinc-400"
                   >
                     {safePos.length === 0 ? (
@@ -730,17 +738,14 @@ export function PortalPoList({ pos = [] }: PortalPoListProps) {
                       className="hover:bg-zinc-50 dark:hover:bg-zinc-900/60 transition-colors"
                     >
                       {/* PO Number & Revision */}
-                      <td className="px-6 py-4">
-                        <div className="font-mono font-medium text-zinc-950 dark:text-white flex items-center gap-1.5">
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="font-mono font-medium text-zinc-950 dark:text-white flex items-center gap-1.5 whitespace-nowrap break-normal">
                           <span>{po.po_number}</span>
                           {po.revision_no > 1 && (
                             <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-900/60 dark:text-amber-300">
                               REV {po.revision_no}
                             </span>
                           )}
-                        </div>
-                        <div className="text-[11px] text-zinc-400 mt-0.5">
-                          {(po.total_ordered || 0).toLocaleString()}개 품목 주문
                         </div>
                       </td>
 
@@ -762,6 +767,11 @@ export function PortalPoList({ pos = [] }: PortalPoListProps) {
                             </span>
                           )}
                         </div>
+                      </td>
+
+                      {/* Total Ordered Quantity */}
+                      <td className="px-6 py-4 text-right font-semibold text-zinc-900 dark:text-white font-mono whitespace-nowrap">
+                        {(po.total_ordered || 0).toLocaleString()}
                       </td>
 
                       {/* Order Date */}
