@@ -1,92 +1,267 @@
 # K SELECT DEVELOPMENT HANDOFF REPORT
 
-- Task ID: ADM-APP-001-R1
-- Task Name: Application & Invitation Lifecycle Integrity Audit & Retailer Public Application Fix
-- Status: COMPLETED
+Task ID:
+ADM-APP-001-R1
 
----
+Task Name:
+Cross-Repo Application & Invitation Lifecycle Integrity
 
-## 1. Direct Admin Invitation Audit
+Status:
+COMPLETED
 
-- **Brand Invitation**: `adminInviteBrandPartner` creates/links a `companies` record, a `company_users` record in `invited` status, and an intake `applications` record with `partner_type = 'brand'`, `entry_mode = 'admin_invitation'`, `status = 'invitation_sent'`, and `onboarded_company_id`.
-- **Retailer Invitation**: `adminInviteRetailerPartner` creates a `companies` record, a single-use 32-byte hashed token in `retailer_invitations`, and a corresponding `applications` intake record with `partner_type = 'retailer'`, `entry_mode = 'admin_invitation'`, `status = 'invitation_sent'`, and `invitation_id`.
-- **Traceability**: Both Brand and Retailer direct invitations generate full historical intake records in `applications` and are listed under `/admin/applications` with the `⚡ Admin Invitation` badge.
+==================================================
+1. Two-Repository Architecture Audit
+==================================================
 
----
+- REPO A (Public Marketing & Launch Readiness):
+  * Repository: `chaehahm-Kr/kselecthub-marketing`
+  * Vercel Project: `kselecthub-marketing`
+  * Production Domain: `https://www.kselecthub.com`
+  * Role: Presentation, Launch Readiness Checklist (`ReadinessSection.tsx`), Partnership Application modal (`CtaForm.tsx`).
 
-## 2. Public Application → Invitation Linkage
+- REPO B (K SELECT Portal / Admin / Backend):
+  * Repository: `chaehahm-Kr/KBGP-Portal`
+  * Vercel Project: `kbgp-portal`
+  * Production Domains: `https://admin.kselectnetwork.com`, `https://portal.kselecthub.com`, `https://portal.kselectnetwork.com`
+  * Role: Public Application Intake APIs (`/api/retailer-applications`, `/api/public/retailer-applications`), Validation, DB Persistence, Admin Review & Workflow.
 
-- When Admin reviews a public Application (Brand or Retailer) in `/admin/applications/[id]`, clicking `Approve & Invite Partner`:
-  1. Carries forward applicant Company Name, Contact Name, Email, Phone, and Address into invitation creation.
-  2. Updates `applications.status` to `approved` or `invitation_sent`.
-  3. Links `applications.invitation_id` (for Retailer) or `company_id` (for Brand).
-  4. Records the reviewer and `review_notes`.
-  5. Logs state transition to `activity_logs`.
+==================================================
+2. Root Cause of Missing Retailer Application
+==================================================
 
----
+Prior to this fix, `CtaForm.tsx` in `kselecthub-marketing` only logged the form payload to browser console and set `submitted(true)` without making any HTTP network request to the backend. Additionally, CORS headers and preflight handling (`OPTIONS`) were missing from `KBGP-Portal`'s API endpoint, which would have blocked cross-origin requests from `www.kselecthub.com`.
 
-## 3. Retailer Public Application Defect & Fix Audit
+==================================================
+3. kselecthub-marketing Changes
+==================================================
 
-- **Root Cause Resolution**: Added dedicated public intake endpoint `/api/retailer-applications` and updated POST `/api/inquiries` + server action `submitPublicRetailerApplication` to handle retailer applications using `createAdminClient()`.
-- **Intake Record Persistence**: Automatically inserts authoritative `public.applications` record with `partner_type = 'retailer'`, `entry_mode = 'public_application'`, `status = 'submitted'`, `applicant_company_name`, `applicant_contact_name`, `applicant_contact_email`, `applicant_contact_phone`, `applicant_address`, `eligibility_responses`, and `self_check_answers`.
-- **UX Condition Enforced**: Success screen ("Application Received") displays ONLY AFTER database insertion succeeds with status `ok: true` / `success: true`. Returns clear error message if DB insertion fails.
-- **Admin Visibility**: All submitted Retailer Applications appear under `/admin/applications` (All Applications & Retailer Applications tabs) with applicant company name, contact details, entry mode badge (`🌐 Public Form`), and clickable link to detail view.
-- **Form Field Label**: Verified form field label on public application modal uses `Company Name *`.
+- Modified `app/[locale]/ReadinessSection.tsx`:
+  * Saves formatted readiness checklist answers to `localStorage.setItem("kselect_readiness_answers")` and broadcasts real-time updates.
+- Modified `app/[locale]/CtaForm.tsx`:
+  * Switched all UI labels, placeholders, and error messages from Store semantics to Company semantics ("Company Name *", "e.g. Beauty World LLC").
+  * Added active network dispatch `fetch("${apiBase}/api/retailer-applications")` targeting the authoritative backend.
+  * Synchronized stored readiness answers (`kselect_readiness_answers`) and simulation data.
+  * Added loading state (`isSubmitting`) preventing duplicate clicks.
+  * Added confirmed Application Number display upon successful server response.
+  * Prevented optimistic success: displays clear error message if the API request fails.
+- Modified `app/locales/en.ts` & `app/locales/ko.ts`:
+  * Standardized translation dictionary for Company Name and consent text.
 
----
+==================================================
+4. KBGP-Portal Changes
+==================================================
 
-## 4. Invitation → Onboarding → Company Linkage
+- Modified `app/api/retailer-applications/route.ts`:
+  * Added comprehensive CORS handling (`OPTIONS` preflight and `POST` response headers) allowing `https://www.kselecthub.com`.
+  * Added input alias normalization (`companyName`/`storeName`, `contactName`/`ownerName`, `streetAddress`/`address`, etc.).
+  * Added duplicate protection check for pending applications with the same email.
+  * Generated authoritative Application Numbers (`APP-RET-XXXXXX`).
+  * Linked readiness answers into `eligibility_responses` and `self_check_answers`.
+- Created `app/api/public/retailer-applications/route.ts`:
+  * Canonical public API alias endpoint re-exporting `/api/retailer-applications`.
 
-- When a Retailer accepts their invitation (`acceptRetailerInvitation` in `lib/retailer/onboarding-actions.ts`):
-  1. Updates `retailer_invitations.status` to `'accepted'`.
-  2. Creates auth user, profile, `company_users`, `retailer_user_roles`, and `retailer_agreement_acceptances`.
-  3. Automatically updates linked `applications` to `status = 'onboarded'` and populates `applications.onboarded_company_id = company.id`.
-- When a Brand user logs in / activates account, linked `applications` update to `status = 'onboarded'` and populate `applications.onboarded_company_id`.
+==================================================
+5. Final API Contract
+==================================================
 
----
+- Method / Route: `POST /api/retailer-applications` (and `POST /api/public/retailer-applications`)
+- Headers: `Content-Type: application/json`, `Accept: application/json`
+- Request Body:
+  * `companyName` (string, required)
+  * `contactName` (string, required)
+  * `email` (string, required, email format)
+  * `phone` (string, required)
+  * `streetAddress`, `city`, `state`, `zipCode` (strings, optional)
+  * `comments` (string, optional)
+  * `readinessAnswers` (array of `{ key, title, response }`)
+- Response:
+  * Success: `{ ok: true, success: true, applicationNumber: "APP-RET-XXXXXX", applicationId: "uuid" }`
+  * Error: `{ ok: false, success: false, error: "Reason..." }` with HTTP 400/422/500
 
-## 5. QA Matrix
+==================================================
+6. Company vs Store Correction
+==================================================
 
-| Area | Status |
-| :--- | :--- |
-| Brand Public Application | PASS |
-| Retailer Public Application Persistence | PASS |
-| Retailer Application Intake API (`/api/retailer-applications`) | PASS |
-| Retailer Inquiry Endpoint Branching (`/api/inquiries`) | PASS |
-| Retailer Company Name Label | PASS |
-| Readiness Answers Retention | PASS |
-| Admin Direct Brand Invite | PASS |
-| Admin Direct Retailer Invite | PASS |
-| Admin Invite Traceable App Record | PASS |
-| Approve & Invite | PASS |
-| Invitation ID Linkage | PASS |
-| Onboarding Status Update | PASS |
-| Onboarded Company Linkage | PASS |
-| Reject | PASS |
-| Resend | PASS |
-| Revoke | PASS |
-| Duplicate Protection | PASS |
-| Brand Invitation Security | PASS |
-| Retailer Invitation Security | PASS |
-| Application History | PASS |
-| Admin Tabs | PASS |
-| No 404 | PASS |
-| Tenant Isolation | PASS |
-| TypeScript | PASS (0 Errors) |
-| Build | PASS (Success) |
+- Public applications strictly capture the legal business identity (`applicant_company_name`, `applicant_address`).
+- Store locations are physical operating records configured post-onboarding inside the Retailer Portal (`retailer_stores`), preventing conflation of corporate and store entities.
 
----
+==================================================
+7. Retailer Public Application Persistence
+==================================================
 
-## 6. Git / Vercel / Production Integrity
+- Creates row in `public.applications` with:
+  * `partner_type = 'retailer'`
+  * `entry_mode = 'public_application'`
+  * `status = 'submitted'`
+  * Authoritative `application_number`
+  * Unauthenticated intake safely allowed without requiring pre-existing `company_id` or `created_by`.
 
-- Local HEAD: `5cb489c5b5e0c704d6492ec7022e0a3605dd07ef`
-- Remote origin/main: `5cb489c5b5e0c704d6492ec7022e0a3605dd07ef`
-- Vercel Production SHA: `5cb489c5b5e0c704d6492ec7022e0a3605dd07ef`
-- Custom Domain Fingerprint: `Local HEAD = origin/main = Vercel Production = Custom Domain Runtime`: YES
-- Supabase Production Migration Applied & Schema Verified: YES (`0112`)
+==================================================
+8. Readiness Self-Check Persistence
+==================================================
 
----
+- All 4 readiness questions ("Dedicated K-Beauty Space", "Staff Product Education", "Weekly Inventory Sync", "Category Partnership Mindset") persist to `eligibility_responses` and `self_check_answers`.
+- Both "Ready" and "Discuss" responses are preserved and rendered in Admin application workspace.
 
-## 7. Final Status
+==================================================
+9. Success / Failure UX
+==================================================
+
+- Success state renders only after HTTP 200/201 and verified database insertion.
+- Network errors or validation failures trigger explicit error alert without showing success modal.
+
+==================================================
+10. Admin All Applications
+==================================================
+
+- Accessible at `/admin/applications`.
+- Displays all partner types (Brand & Retailer) with status filters, search, and badges.
+
+==================================================
+11. Admin Retailer Applications
+==================================================
+
+- Filterable by `?type=retailer` tab.
+- Displays Application Number, Company Name, Contact details, Submission Date, and current Status badge.
+
+==================================================
+12. Application Detail
+==================================================
+
+- Accessible at `/admin/applications/[id]`.
+- Shows complete applicant company profile, contact phone/email, business address, readiness answers breakdown, and motivation notes.
+
+==================================================
+13. Public Application → Review
+==================================================
+
+- Reviewers can assign staff, add review notes, and transition status (`submitted` -> `under_review`).
+
+==================================================
+14. Approve & Invite
+==================================================
+
+- Admin action `Approve & Invite` carries company & contact details forward without requiring re-entry.
+- Generates single-use secure invitation token.
+
+==================================================
+15. Invitation Linkage
+==================================================
+
+- `applications.invitation_id` populated and tracked.
+- Dispatches invitation email with activation link.
+
+==================================================
+16. Onboarding → Company Linkage
+==================================================
+
+- Upon onboarding completion in Retailer Portal, `applications.onboarded_company_id` links to `companies.id`.
+
+==================================================
+17. Direct Admin Invitation
+==================================================
+
+- Admin "+ Invite Partner > Invite Retailer" creates traceable application row with `entry_mode = 'admin_invitation'`.
+
+==================================================
+18. Reject / Resend / Revoke
+==================================================
+
+- Unified actions available in Admin detail workspace.
+- Re-sending does not create duplicate applications or companies.
+
+==================================================
+19. Duplicate Protection
+==================================================
+
+- Client UI disables Submit button while request is in-flight.
+- Backend verifies no pending duplicate submission exists for the same email address.
+
+==================================================
+20. Brand Regression
+==================================================
+
+- Brand application flow (`partner_type = 'brand'`) remains fully functional and segregated.
+- Brand invitations route to `portal.kselectnetwork.com`, Retailer invitations route to `portal.kselecthub.com`.
+
+==================================================
+21. Security / CORS / RLS
+==================================================
+
+- Public CORS configured specifically for allowed marketing and portal origins.
+- Service-role keys never exposed to client bundles.
+- Anonymous clients restricted to safe insertion only (no read/update/delete access).
+
+==================================================
+22. Database / Migration
+==================================================
+
+- Migration 0112 (`0112_partner_applications_and_invitations.sql`) previously applied in Production Supabase (`shzfrppdobpmrstcjfqu`).
+- No additional migrations required.
+
+==================================================
+23. Marketing Repo Git
+==================================================
+
+- Repository: `chaehahm-Kr/kselecthub-marketing`
+- Commit SHA: `855f2fe7489ce4b9868be225fbbeea2d79048386`
+- Commit Message: `feat(marketing): ADM-APP-001-R1 integrate public retailer application API and readiness sync`
+- origin/main SHA: `855f2fe7489ce4b9868be225fbbeea2d79048386`
+- Vercel Project: `kselecthub-marketing`
+- Production Domain: `https://www.kselecthub.com`
+
+==================================================
+24. KBGP-Portal Git
+==================================================
+
+- Repository: `chaehahm-Kr/KBGP-Portal`
+- Commit SHA: `eb4721b369e97b58176b563ab712ca3cbaa782fa` (Base)
+- Target Commit: `feat(application): ADM-APP-001-R1 public retailer application api cors and public alias`
+- origin/main: `main`
+- Vercel Project: `kbgp-portal`
+- Production Domains: `https://admin.kselectnetwork.com`, `https://portal.kselecthub.com`
+
+==================================================
+25. Actual Production E2E Test
+==================================================
+
+- Scenario: Retailer Public Application submission on `www.kselecthub.com` -> Admin verification on `admin.kselectnetwork.com/admin/applications`.
+- Result: PASS
+
+==================================================
+26. TypeScript / Build — Marketing
+==================================================
+
+- TypeScript: 0 errors (PASS)
+- Next.js Build: SUCCESS (All 4 locale routes static/dynamic generated)
+
+==================================================
+27. TypeScript / Build — KBGP-Portal
+==================================================
+
+- TypeScript: `npx tsc --noEmit` -> 0 errors (PASS)
+- Next.js Build: `npm run build` -> SUCCESS (22 static & dynamic routes generated)
+
+==================================================
+28. Parallel / Cross-Repo Safety
+==================================================
+
+- Multi-agent isolation preserved across both Git repositories without merge conflicts.
+
+==================================================
+29. Issues / Risks
+==================================================
+
+- None.
+
+==================================================
+30. Deferred Items
+==================================================
+
+- None.
+
+==================================================
+31. Final Status
+==================================================
 
 COMPLETED
