@@ -495,166 +495,265 @@ export function Retailer360View({ data }: Retailer360ViewProps) {
       {/* TAB 1: OVERVIEW */}
       {activeTab === "overview" && (
         <div className="space-y-6">
+          {/* Test Orders Warning if any */}
+          {data.metrics.testOrdersCount > 0 && (
+            <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-3 text-xs text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-300 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span>⚠️</span>
+                <span>
+                  <strong>{data.metrics.testOrdersCount} Test Order(s) Detected:</strong> Test orders are tracked separately and excluded from aggregate commercial revenue metrics.
+                </span>
+              </div>
+            </div>
+          )}
+
           {/* Real Metrics Grid */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
             <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-2xs dark:border-zinc-800 dark:bg-zinc-900">
-              <span className="text-[11px] font-semibold text-zinc-400 block">Active Stores</span>
+              <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Submitted Order Value</span>
+              <p className="text-xl font-black text-zinc-900 dark:text-white mt-1 font-mono">
+                {formatCurrency(data.metrics.submittedOrderValue)}
+              </p>
+              <span className="text-[9px] text-zinc-400 mt-0.5 block leading-tight">
+                {data.metrics.submittedOrdersCount} orders (Gross, not settled revenue)
+              </span>
+            </div>
+
+            <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-2xs dark:border-zinc-800 dark:bg-zinc-900">
+              <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Est. Unpaid Order Value</span>
+              <p className={`text-xl font-black mt-1 font-mono ${data.metrics.estimatedUnpaidOrderValue > 0 ? "text-amber-600" : "text-zinc-900 dark:text-white"}`}>
+                {formatCurrency(data.metrics.estimatedUnpaidOrderValue)}
+              </p>
+              <span className="text-[9px] text-zinc-400 mt-0.5 block leading-tight">
+                Pending/unpaid orders (Not an A/R ledger)
+              </span>
+            </div>
+
+            <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-2xs dark:border-zinc-800 dark:bg-zinc-900">
+              <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Delivered Units</span>
+              <p className="text-xl font-black text-emerald-600 dark:text-emerald-400 mt-1">
+                {data.metrics.totalDeliveredUnits.toLocaleString()}
+              </p>
+              <span className="text-[9px] text-zinc-400 mt-0.5 block leading-tight">
+                Confirmed delivered quantity
+              </span>
+            </div>
+
+            <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-2xs dark:border-zinc-800 dark:bg-zinc-900">
+              <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Active Stores</span>
               <p className="text-xl font-black text-zinc-900 dark:text-white mt-1">
                 {data.metrics.totalStoresCount}
               </p>
-              <span className="text-[10px] text-zinc-500 mt-0.5 block">
-                Assortment: {data.performance.products.length} Products
+              <span className="text-[9px] text-zinc-400 mt-0.5 block leading-tight">
+                Assortment: {data.performance.products.length} SKUs
               </span>
             </div>
 
             <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-2xs dark:border-zinc-800 dark:bg-zinc-900">
-              <span className="text-[11px] font-semibold text-zinc-400 block">Orders in Pipeline</span>
-              <p className="text-xl font-black text-zinc-900 dark:text-white mt-1">
-                {data.metrics.openOrdersCount}
-              </p>
-              <span className="text-[10px] text-rose-600 font-bold mt-0.5 block">
-                {data.metrics.ordersAwaitingFulfillmentCount} Awaiting Fulfillment
-              </span>
-            </div>
-
-            <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-2xs dark:border-zinc-800 dark:bg-zinc-900">
-              <span className="text-[11px] font-semibold text-zinc-400 block">Reporting Coverage</span>
+              <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Weekly Coverage</span>
               <p className="text-xl font-black text-emerald-600 dark:text-emerald-400 mt-1">
                 {data.metrics.reportingCoveragePercent}%
               </p>
-              <span className="text-[10px] text-zinc-500 mt-0.5 block">
+              <span className="text-[9px] text-zinc-400 mt-0.5 block leading-tight">
                 {data.performance.reportingStores} of {data.performance.totalStores} stores reporting
               </span>
             </div>
 
             <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-2xs dark:border-zinc-800 dark:bg-zinc-900">
-              <span className="text-[11px] font-semibold text-zinc-400 block">Reorder Signals</span>
+              <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Reorder Signals</span>
               <p className="text-xl font-black text-amber-600 mt-1">
                 {data.metrics.productsNeedingReorderCount}
               </p>
-              <span className="text-[10px] text-zinc-500 mt-0.5 block">
+              <span className="text-[9px] text-zinc-400 mt-0.5 block leading-tight">
                 SKUs with weeks of supply &lt; 2
               </span>
             </div>
           </div>
 
           {/* Quick Snapshot Cards */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-4 gap-6">
             {/* Commercial Terms Summary */}
-            <div className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-2xs dark:border-zinc-800 dark:bg-zinc-900 space-y-3">
-              <div className="flex items-center justify-between pb-2 border-b border-zinc-100 dark:border-zinc-800">
-                <span className="text-xs font-bold text-zinc-900 dark:text-white flex items-center gap-1.5">
-                  <span>💳</span> Commercial Terms
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setActiveTab("payments")}
-                  className="text-[10px] font-bold text-indigo-600 hover:underline cursor-pointer"
-                >
-                  Edit Terms →
-                </button>
+            <div className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-2xs dark:border-zinc-800 dark:bg-zinc-900 space-y-3 flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between pb-2 border-b border-zinc-100 dark:border-zinc-800">
+                  <span className="text-xs font-bold text-zinc-900 dark:text-white flex items-center gap-1.5">
+                    <span>💳</span> Commercial Terms
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab("payments")}
+                    className="text-[10px] font-bold text-indigo-600 hover:underline cursor-pointer"
+                  >
+                    Edit Terms →
+                  </button>
+                </div>
+
+                <div className="space-y-2 text-xs pt-2">
+                  <div className="flex justify-between">
+                    <span className="text-zinc-400">Approved Terms:</span>
+                    <span className="font-bold text-zinc-900 dark:text-white">
+                      {data.profile.approved_terms || "PREPAID_CARD"}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-zinc-400">Approved Credit Limit:</span>
+                    <span className="font-mono font-bold text-zinc-900 dark:text-white">
+                      {formatCurrency(data.profile.credit_limit)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-zinc-400">Terms Capacity:</span>
+                    <span className="text-zinc-500 font-medium text-[11px] text-right">
+                      Subject to commercial review
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-zinc-400">Card / ACH Ready:</span>
+                    <span className="font-semibold text-zinc-800 dark:text-zinc-200">
+                      Card: {data.profile.payment_method_card_enabled ? "Yes" : "No"} · ACH: {data.profile.payment_method_ach_enabled ? "Yes" : "No"}
+                    </span>
+                  </div>
+                </div>
               </div>
 
-              <div className="space-y-2 text-xs">
-                <div className="flex justify-between">
-                  <span className="text-zinc-400">Approved Terms:</span>
-                  <span className="font-bold text-zinc-900 dark:text-white">
-                    {data.profile.approved_terms || "PREPAID_CARD"}
+              <p className="text-[10px] text-zinc-400 pt-2 border-t border-zinc-100 dark:border-zinc-800">
+                Credit terms are policy approvals. Real-time drawdowns are verified per order.
+              </p>
+            </div>
+
+            {/* Order Payment Breakdown */}
+            <div className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-2xs dark:border-zinc-800 dark:bg-zinc-900 space-y-3 flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between pb-2 border-b border-zinc-100 dark:border-zinc-800">
+                  <span className="text-xs font-bold text-zinc-900 dark:text-white flex items-center gap-1.5">
+                    <span>📑</span> Order Payment Status
                   </span>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab("orders")}
+                    className="text-[10px] font-bold text-indigo-600 hover:underline cursor-pointer"
+                  >
+                    View Orders →
+                  </button>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-zinc-400">Credit Limit:</span>
-                  <span className="font-mono font-bold text-zinc-900 dark:text-white">
-                    {formatCurrency(data.profile.credit_limit)}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-zinc-400">Card Enabled:</span>
-                  <span className={data.profile.payment_method_card_enabled ? "text-emerald-600 font-bold" : "text-zinc-400"}>
-                    {data.profile.payment_method_card_enabled ? "Yes" : "No"}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-zinc-400">ACH Enabled:</span>
-                  <span className={data.profile.payment_method_ach_enabled ? "text-emerald-600 font-bold" : "text-zinc-400"}>
-                    {data.profile.payment_method_ach_enabled ? "Yes" : "No"}
-                  </span>
+
+                <div className="space-y-2 text-xs pt-2">
+                  <div className="flex justify-between">
+                    <span className="text-zinc-400">Paid Orders:</span>
+                    <span className="font-mono font-bold text-emerald-600">
+                      {formatCurrency(data.metrics.paymentBreakdown.paidAmount)} ({data.metrics.paymentBreakdown.paidCount})
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-zinc-400">Pending / Processing:</span>
+                    <span className="font-mono font-medium text-amber-600">
+                      {formatCurrency(data.metrics.paymentBreakdown.pendingAmount)} ({data.metrics.paymentBreakdown.pendingCount})
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-zinc-400">Unpaid (Net Terms):</span>
+                    <span className="font-mono font-medium text-zinc-800 dark:text-zinc-200">
+                      {formatCurrency(data.metrics.paymentBreakdown.unpaidAmount)} ({data.metrics.paymentBreakdown.unpaidCount})
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-zinc-400">Failed / Declined:</span>
+                    <span className="font-mono font-medium text-rose-600">
+                      {formatCurrency(data.metrics.paymentBreakdown.failedAmount)} ({data.metrics.paymentBreakdown.failedCount})
+                    </span>
+                  </div>
                 </div>
               </div>
+
+              <p className="text-[10px] text-zinc-400 pt-2 border-t border-zinc-100 dark:border-zinc-800">
+                Derived directly from order records. Authoritative bank settlement ledger pending.
+              </p>
             </div>
 
             {/* Performance Quick Summary */}
-            <div className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-2xs dark:border-zinc-800 dark:bg-zinc-900 space-y-3">
-              <div className="flex items-center justify-between pb-2 border-b border-zinc-100 dark:border-zinc-800">
-                <span className="text-xs font-bold text-zinc-900 dark:text-white flex items-center gap-1.5">
-                  <span>📈</span> Performance (Est. Movement)
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setActiveTab("performance")}
-                  className="text-[10px] font-bold text-indigo-600 hover:underline cursor-pointer"
-                >
-                  View Details →
-                </button>
+            <div className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-2xs dark:border-zinc-800 dark:bg-zinc-900 space-y-3 flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between pb-2 border-b border-zinc-100 dark:border-zinc-800">
+                  <span className="text-xs font-bold text-zinc-900 dark:text-white flex items-center gap-1.5">
+                    <span>📈</span> Sell-Through & Movement
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab("performance")}
+                    className="text-[10px] font-bold text-indigo-600 hover:underline cursor-pointer"
+                  >
+                    View Details →
+                  </button>
+                </div>
+
+                <div className="space-y-2 text-xs pt-2">
+                  <div className="flex justify-between">
+                    <span className="text-zinc-400">Total Units Movement:</span>
+                    <span className="font-bold text-zinc-900 dark:text-white">
+                      {data.performance.estimatedMovement.toLocaleString()} units
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-zinc-400">Estimated Retail Sales:</span>
+                    <span className="font-bold text-emerald-600">
+                      {formatCurrency(data.performance.estimatedRetailSales)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-zinc-400">Estimated Gross Margin:</span>
+                    <span className="font-bold text-zinc-900 dark:text-white">
+                      {data.performance.estimatedGrossMargin}%
+                    </span>
+                  </div>
+                </div>
               </div>
 
-              <div className="space-y-2 text-xs">
-                <div className="flex justify-between">
-                  <span className="text-zinc-400">Total Units Movement:</span>
-                  <span className="font-bold text-zinc-900 dark:text-white">
-                    {data.performance.estimatedMovement.toLocaleString()} units
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-zinc-400">Estimated Retail Sales:</span>
-                  <span className="font-bold text-emerald-600">
-                    {formatCurrency(data.performance.estimatedRetailSales)}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-zinc-400">Estimated Gross Margin:</span>
-                  <span className="font-bold text-zinc-900 dark:text-white">
-                    {data.performance.estimatedGrossMargin}%
-                  </span>
-                </div>
-              </div>
+              <p className="text-[10px] text-zinc-400 pt-2 border-t border-zinc-100 dark:border-zinc-800">
+                Calculated from store weekly check inventory count reports.
+              </p>
             </div>
 
             {/* 90-Day Protection & Cases Summary */}
-            <div className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-2xs dark:border-zinc-800 dark:bg-zinc-900 space-y-3">
-              <div className="flex items-center justify-between pb-2 border-b border-zinc-100 dark:border-zinc-800">
-                <span className="text-xs font-bold text-zinc-900 dark:text-white flex items-center gap-1.5">
-                  <span>🛡️</span> Protection & Support
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setActiveTab("protection")}
-                  className="text-[10px] font-bold text-indigo-600 hover:underline cursor-pointer"
-                >
-                  Manage →
-                </button>
+            <div className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-2xs dark:border-zinc-800 dark:bg-zinc-900 space-y-3 flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between pb-2 border-b border-zinc-100 dark:border-zinc-800">
+                  <span className="text-xs font-bold text-zinc-900 dark:text-white flex items-center gap-1.5">
+                    <span>🛡️</span> Protection & Support
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab("protection")}
+                    className="text-[10px] font-bold text-indigo-600 hover:underline cursor-pointer"
+                  >
+                    Manage →
+                  </button>
+                </div>
+
+                <div className="space-y-2 text-xs pt-2">
+                  <div className="flex justify-between">
+                    <span className="text-zinc-400">Active 90-Day Trials:</span>
+                    <span className="font-bold text-zinc-900 dark:text-white">
+                      {data.metrics.activeProtectionTrialsCount} products
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-zinc-400">Reviews Pending Action:</span>
+                    <span className={data.metrics.protectionReviewsActionCount > 0 ? "text-rose-600 font-bold" : "text-zinc-400"}>
+                      {data.metrics.protectionReviewsActionCount}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-zinc-400">Support Tickets Open:</span>
+                    <span className={data.metrics.openSupportCasesCount > 0 ? "text-amber-600 font-bold" : "text-zinc-400"}>
+                      {data.metrics.openSupportCasesCount}
+                    </span>
+                  </div>
+                </div>
               </div>
 
-              <div className="space-y-2 text-xs">
-                <div className="flex justify-between">
-                  <span className="text-zinc-400">Active 90-Day Trials:</span>
-                  <span className="font-bold text-zinc-900 dark:text-white">
-                    {data.metrics.activeProtectionTrialsCount} products
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-zinc-400">Reviews Pending Action:</span>
-                  <span className={data.metrics.protectionReviewsActionCount > 0 ? "text-rose-600 font-bold" : "text-zinc-400"}>
-                    {data.metrics.protectionReviewsActionCount}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-zinc-400">Support Tickets Open:</span>
-                  <span className={data.metrics.openSupportCasesCount > 0 ? "text-amber-600 font-bold" : "text-zinc-400"}>
-                    {data.metrics.openSupportCasesCount}
-                  </span>
-                </div>
-              </div>
+              <p className="text-[10px] text-zinc-400 pt-2 border-t border-zinc-100 dark:border-zinc-800">
+                Guaranteed inventory protection & shared partner case tickets.
+              </p>
             </div>
           </div>
         </div>

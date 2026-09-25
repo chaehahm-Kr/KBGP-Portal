@@ -23,6 +23,17 @@ export interface NeedsAttentionItem {
   badge: string;
 }
 
+export interface Retailer360PaymentBreakdown {
+  paidCount: number;
+  paidAmount: number;
+  pendingCount: number;
+  pendingAmount: number;
+  unpaidCount: number;
+  unpaidAmount: number;
+  failedCount: number;
+  failedAmount: number;
+}
+
 export interface Retailer360OverviewMetrics {
   retailerStatus: string;
   totalStoresCount: number;
@@ -30,9 +41,19 @@ export interface Retailer360OverviewMetrics {
   pendingInvitesCount: number;
   openOrdersCount: number;
   ordersAwaitingFulfillmentCount: number;
+  totalDeliveredUnits: number;
+  // Financial KPI Semantics (Order-derived, not an A/R ledger)
+  submittedOrderValue: number;
+  submittedOrdersCount: number;
+  estimatedUnpaidOrderValue: number;
+  paidOrderValue: number;
+  paymentBreakdown: Retailer360PaymentBreakdown;
+  testOrdersCount: number;
+  // Commercial Terms
   termsStatus: string;
   approvedTerms: string;
   creditLimit: number;
+  // Operational metrics
   reportingCoveragePercent: number;
   productsNeedingReorderCount: number;
   trainingCompletionPercent: number;
@@ -1065,8 +1086,64 @@ export async function getAdminRetailer360Data(companyId: string): Promise<Retail
     };
   });
 
-  // 12. Aggregate Overview Real Metrics
+  // 12. Aggregate Overview Real Metrics & Financial KPIs
   const activeProtectionsCount = protections.filter((p) => p.status === "active").length;
+
+  // Real business orders (exclude cancelled & test orders from real business revenue metrics)
+  const nonCancelledOrders = orders.filter((o) => o.orderStatus !== "cancelled");
+  const businessOrders = nonCancelledOrders.filter((o) => !o.isTest);
+  const testOrders = orders.filter((o) => o.isTest);
+
+  let submittedOrderValue = 0;
+  let paidOrderValue = 0;
+  let estimatedUnpaidOrderValue = 0;
+
+  const paymentBreakdown: Retailer360PaymentBreakdown = {
+    paidCount: 0,
+    paidAmount: 0,
+    pendingCount: 0,
+    pendingAmount: 0,
+    unpaidCount: 0,
+    unpaidAmount: 0,
+    failedCount: 0,
+    failedAmount: 0,
+  };
+
+  businessOrders.forEach((o) => {
+    submittedOrderValue += o.totalAmount;
+
+    const pStatus = (o.paymentStatus || "").toLowerCase();
+    if (pStatus === "paid" || pStatus === "settled" || pStatus === "completed") {
+      paidOrderValue += o.totalAmount;
+      paymentBreakdown.paidCount += 1;
+      paymentBreakdown.paidAmount += o.totalAmount;
+    } else if (pStatus === "pending" || pStatus === "processing" || pStatus === "authorized") {
+      estimatedUnpaidOrderValue += o.totalAmount;
+      paymentBreakdown.pendingCount += 1;
+      paymentBreakdown.pendingAmount += o.totalAmount;
+    } else if (pStatus === "failed" || pStatus === "declined") {
+      estimatedUnpaidOrderValue += o.totalAmount;
+      paymentBreakdown.failedCount += 1;
+      paymentBreakdown.failedAmount += o.totalAmount;
+    } else {
+      // Default / Net Terms / Unpaid
+      estimatedUnpaidOrderValue += o.totalAmount;
+      paymentBreakdown.unpaidCount += 1;
+      paymentBreakdown.unpaidAmount += o.totalAmount;
+    }
+  });
+
+  // Calculate total delivered units from fulfillment items
+  let totalDeliveredUnits = 0;
+  orders.forEach((o) => {
+    o.fulfillments.forEach((f) => {
+      if (f.status !== "cancelled") {
+        f.items.forEach((fit) => {
+          totalDeliveredUnits += fit.quantityDelivered;
+        });
+      }
+    });
+  });
 
   const metrics: Retailer360OverviewMetrics = {
     retailerStatus: profile.status || company.status || "active",
@@ -1075,6 +1152,22 @@ export async function getAdminRetailer360Data(companyId: string): Promise<Retail
     pendingInvitesCount: invitations.filter((i) => i.status === "pending").length,
     openOrdersCount: orders.filter((o) => o.orderStatus !== "delivered" && o.orderStatus !== "cancelled").length,
     ordersAwaitingFulfillmentCount: pendingOrders.length,
+    totalDeliveredUnits,
+    submittedOrderValue: Math.round(submittedOrderValue * 100) / 100,
+    submittedOrdersCount: businessOrders.length,
+    estimatedUnpaidOrderValue: Math.round(estimatedUnpaidOrderValue * 100) / 100,
+    paidOrderValue: Math.round(paidOrderValue * 100) / 100,
+    paymentBreakdown: {
+      paidCount: paymentBreakdown.paidCount,
+      paidAmount: Math.round(paymentBreakdown.paidAmount * 100) / 100,
+      pendingCount: paymentBreakdown.pendingCount,
+      pendingAmount: Math.round(paymentBreakdown.pendingAmount * 100) / 100,
+      unpaidCount: paymentBreakdown.unpaidCount,
+      unpaidAmount: Math.round(paymentBreakdown.unpaidAmount * 100) / 100,
+      failedCount: paymentBreakdown.failedCount,
+      failedAmount: Math.round(paymentBreakdown.failedAmount * 100) / 100,
+    },
+    testOrdersCount: testOrders.length,
     termsStatus: profile.terms_status || (profile.terms_enabled ? "active" : "prepaid"),
     approvedTerms: profile.approved_terms || profile.payment_terms || "PREPAID_CARD",
     creditLimit: Number(profile.credit_limit || 0),
