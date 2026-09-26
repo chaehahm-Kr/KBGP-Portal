@@ -21,13 +21,18 @@ export function useUnsavedChangesGuard({ isDirty, onSave }: UseUnsavedChangesGua
   const [pendingNav, setPendingNav] = useState<PendingNavigation | null>(null);
 
   const bypassGuardRef = useRef(false);
+  const isDirtyRef = useRef(isDirty);
+  isDirtyRef.current = isDirty;
+
   const onSaveRef = useRef(onSave);
   onSaveRef.current = onSave;
+
+  const dummyStatePushedRef = useRef(false);
 
   // 1. Native beforeunload protection (Page refresh / Tab close / Window close)
   useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      if (isDirty && !bypassGuardRef.current) {
+      if (isDirtyRef.current && !bypassGuardRef.current) {
         e.preventDefault();
         e.returnValue = "";
         return "";
@@ -38,22 +43,46 @@ export function useUnsavedChangesGuard({ isDirty, onSave }: UseUnsavedChangesGua
     return () => {
       window.removeEventListener("beforeunload", handleBeforeUnload);
     };
-  }, [isDirty]);
+  }, []);
 
   // 2. Browser Back / Forward button (popstate)
   useEffect(() => {
-    if (!isDirty) return;
+    if (!isDirty) {
+      dummyStatePushedRef.current = false;
+      return;
+    }
 
-    // Push a dummy entry so we can catch popstate when user presses Back
-    window.history.pushState({ unsavedChangesGuard: true }, "", window.location.href);
+    // Safely push dummy state while preserving Next.js internal router state tree
+    if (!dummyStatePushedRef.current) {
+      try {
+        const currentState = window.history.state;
+        const guardedState =
+          typeof currentState === "object" && currentState !== null
+            ? { ...currentState, __unsavedGuard: true }
+            : { __unsavedGuard: true };
+        window.history.pushState(guardedState, "", window.location.href);
+        dummyStatePushedRef.current = true;
+      } catch (err) {
+        console.warn("Failed to push history state for unsaved changes guard:", err);
+      }
+    }
 
-    const handlePopState = (e: PopStateEvent) => {
+    const handlePopState = () => {
       if (bypassGuardRef.current) return;
 
-      if (isDirty) {
-        // Re-push state so user doesn't immediately leave
-        window.history.pushState({ unsavedChangesGuard: true }, "", window.location.href);
+      if (isDirtyRef.current) {
+        try {
+          const currentState = window.history.state;
+          const guardedState =
+            typeof currentState === "object" && currentState !== null
+              ? { ...currentState, __unsavedGuard: true }
+              : { __unsavedGuard: true };
+          window.history.pushState(guardedState, "", window.location.href);
+        } catch {
+          // Ignore
+        }
         setPendingNav({ type: "back" });
+        setSaveError(null);
         setIsModalOpen(true);
       }
     };
@@ -64,38 +93,93 @@ export function useUnsavedChangesGuard({ isDirty, onSave }: UseUnsavedChangesGua
     };
   }, [isDirty]);
 
-
-
-  // Reset bypass guard flag when isDirty is false
+  // 3. Link click interception (Sidebar, Breadcrumbs, Navigation links)
   useEffect(() => {
-    if (!isDirty) {
-      bypassGuardRef.current = false;
-    }
-  }, [isDirty]);
+    const handleClickCapture = (e: MouseEvent) => {
+      if (!isDirtyRef.current || bypassGuardRef.current) return;
+
+      const target = e.target as HTMLElement | null;
+      if (!target) return;
+
+      const anchor = target.closest("a") as HTMLAnchorElement | null;
+      if (!anchor) return;
+
+      // Ignore external tabs, downloads, and keyboard modifiers
+      if (anchor.target && anchor.target !== "_self") return;
+      if (anchor.hasAttribute("download")) return;
+      if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+
+      const rawHref = anchor.getAttribute("href");
+      if (!rawHref) return;
+      if (
+        rawHref.startsWith("#") ||
+        rawHref.startsWith("javascript:") ||
+        rawHref.startsWith("mailto:") ||
+        rawHref.startsWith("tel:")
+      ) {
+        return;
+      }
+
+      try {
+        const targetUrl = new URL(anchor.href, window.location.href);
+        const currentUrl = new URL(window.location.href);
+
+        // Ignore hash jumps or same URL
+        if (
+          targetUrl.origin === currentUrl.origin &&
+          targetUrl.pathname === currentUrl.pathname &&
+          targetUrl.search === currentUrl.search
+        ) {
+          return;
+        }
+
+        // Intercept navigation
+        e.preventDefault();
+        e.stopPropagation();
+
+        setPendingNav({ type: "url", url: anchor.href });
+        setSaveError(null);
+        setIsModalOpen(true);
+      } catch {
+        // Ignore malformed URLs
+      }
+    };
+
+    document.addEventListener("click", handleClickCapture, true);
+    return () => {
+      document.removeEventListener("click", handleClickCapture, true);
+    };
+  }, []);
 
   // Execute pending navigation
-  const executeNavigation = useCallback((nav: PendingNavigation) => {
-    bypassGuardRef.current = true;
-    setIsModalOpen(false);
+  const executeNavigation = useCallback(
+    (nav: PendingNavigation) => {
+      bypassGuardRef.current = true;
+      setIsModalOpen(false);
 
-    if (nav.type === "back") {
-      // Go back twice because we pushed 1 dummy state
-      window.history.go(-2);
-    } else if (nav.type === "url") {
-      try {
-        const targetUrl = new URL(nav.url, window.location.href);
-        if (targetUrl.origin === window.location.origin) {
-          router.push(targetUrl.pathname + targetUrl.search + targetUrl.hash);
+      if (nav.type === "back") {
+        if (dummyStatePushedRef.current) {
+          window.history.go(-2);
         } else {
-          window.location.href = nav.url;
+          window.history.back();
         }
-      } catch {
-        router.push(nav.url);
+      } else if (nav.type === "url") {
+        try {
+          const targetUrl = new URL(nav.url, window.location.href);
+          if (targetUrl.origin === window.location.origin) {
+            router.push(targetUrl.pathname + targetUrl.search + targetUrl.hash);
+          } else {
+            window.location.href = nav.url;
+          }
+        } catch {
+          router.push(nav.url);
+        }
+      } else if (nav.type === "custom") {
+        nav.action();
       }
-    } else if (nav.type === "custom") {
-      nav.action();
-    }
-  }, [router]);
+    },
+    [router]
+  );
 
   // Modal Action 1: 계속 수정
   const handleContinueEditing = useCallback(() => {
@@ -146,7 +230,7 @@ export function useUnsavedChangesGuard({ isDirty, onSave }: UseUnsavedChangesGua
   // Manual navigation helper (e.g., custom buttons that navigate via router.push)
   const confirmNavigation = useCallback(
     (target: string | (() => void)) => {
-      if (!isDirty) {
+      if (!isDirtyRef.current) {
         if (typeof target === "string") {
           try {
             const targetUrl = new URL(target, window.location.href);
@@ -172,7 +256,7 @@ export function useUnsavedChangesGuard({ isDirty, onSave }: UseUnsavedChangesGua
       setSaveError(null);
       setIsModalOpen(true);
     },
-    [isDirty, router]
+    [router]
   );
 
   const bypassGuardAndNavigate = useCallback(

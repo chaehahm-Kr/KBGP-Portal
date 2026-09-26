@@ -222,34 +222,49 @@ export async function addProductImages(productId: string, formData: FormData) {
     .getAll("images")
     .filter((f): f is File => f instanceof File && f.size > 0);
 
+  if (images.length === 0) {
+    throw new Error("업로드할 이미지가 선택되지 않았습니다.");
+  }
+
   const { count } = await supabase
     .from("product_images")
     .select("id", { count: "exact", head: true })
     .eq("product_id", productId);
 
   if ((count ?? 0) + images.length > MAX_IMAGES) {
-    throw new Error(`제품 이미지는 최대 ${MAX_IMAGES}장까지 첨부할 수 있습니다.`);
+    throw new Error(`제품 이미지는 최대 ${MAX_IMAGES}장까지 첨부할 수 있습니다. (현재 ${count ?? 0}장 등록됨)`);
   }
 
   let uploadedCount = 0;
   for (const [i, image] of images.entries()) {
     const validation = await validateUploadedFile(image, ["image"]);
-    if (!validation.ok) continue;
+    if (!validation.ok) {
+      throw new Error(`[${image.name}] ${validation.error}`);
+    }
     const path = `${companyId}/products/${productId}/images/${crypto.randomUUID()}.${extensionFor(
       validation.detectedMime
     )}`;
     const { error: uploadError } = await supabase.storage
       .from("company-uploads")
       .upload(path, image, { contentType: validation.detectedMime });
-    if (!uploadError) {
-      await supabase.from("product_images").insert({
-        product_id: productId,
-        company_id: companyId,
-        storage_path: path,
-        position: (count ?? 0) + i,
-      });
-      uploadedCount++;
+    if (uploadError) {
+      console.error("Storage upload error for image:", image.name, uploadError);
+      throw new Error(`[${image.name}] 스토리지 업로드 실패: ${uploadError.message}`);
     }
+
+    const { error: insertError } = await supabase.from("product_images").insert({
+      product_id: productId,
+      company_id: companyId,
+      storage_path: path,
+      position: (count ?? 0) + i,
+    });
+
+    if (insertError) {
+      console.error("DB insert error for product_images:", insertError);
+      throw new Error(`[${image.name}] 데이터베이스 등록 실패: ${insertError.message}`);
+    }
+
+    uploadedCount++;
   }
 
   if (uploadedCount > 0) {
