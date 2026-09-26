@@ -52,3 +52,28 @@
   - View Signed URL: HTTP status 200, valid PDF header.
   - Download Signed URL: HTTP status 200, `Content-Disposition: attachment; filename=K_SELECT_Agreement_KSN-AGR-2026-000001.pdf`.
   - Tenant Isolation: Unauthorized user access returns `해당 계약서에 접근할 권한이 없습니다.`.
+
+## R5 Fix Summary: Executed Agreement Signed URL Production User Fix & Controlled Test Reset
+- **Task ID**: `PORT-AGR-001-R5`
+- **Task Name**: Executed Agreement Signed URL Production User Fix & Controlled Test Reset
+- **Root Cause Discovered**:
+  - `getSignedExecutedPdfUrlAction()` in `lib/agreement/actions.ts` previously called `getSignedFileUrl()` in `lib/files/storage.ts`, which instantiated `const supabase = await createClient();` (the standard user/anon client).
+  - Because `company-uploads` is a **Private Storage Bucket**, Supabase Storage RLS enforces access controls on `storage.objects`. Standard user sessions lack direct RLS permissions to sign objects in private buckets, causing `createSignedUrl()` to return `StorageApiError: Object not found`.
+  - Consequently, `getSignedFileUrl()` returned `null`, triggering the user-facing error: `"서명된 다운로드 URL을 생성할 수 없습니다."`.
+- **Architectural Solution**:
+  1. `getSignedExecutedPdfUrlAction()` performs strict server-side authentication (`supabase.auth.getUser()`) and tenant authorization (`company_users.id = user.id AND status = 'active'` OR `staff_members`).
+  2. AFTER server-side authorization passes, `getSignedExecutedPdfUrlAction()` uses `createAdminClient()` (`admin.storage.from("company-uploads").createSignedUrl(targetPath, 3600, options)`) on the server to generate short-lived signed URLs securely.
+  3. Added structured error logging (`[Auth Security Audit] [SIGNED_URL_CREATION_FAILED]`, `[AGREEMENT_COMPANY_MISMATCH]`).
+- **Empirical Proof & Verification**:
+  - Verified with real user session `account@letusto.com` (`ae811579-4b8e-4cc6-aae7-deab0635e814`):
+    - View URL: Generated HTTP 200 signed URL (`https://shzfrppdobpmrstcjfqu.supabase.co/storage/v1/object/sign/company-uploads/...`).
+    - Download URL: Generated HTTP 200 signed URL with header `Content-Disposition: attachment; filename=K_SELECT_Agreement_KSN-AGR-2026-000001.pdf`.
+    - Tenant Isolation: Unauthorized user returns `해당 계약서에 접근할 권한이 없습니다.`.
+- **Controlled Test Reset for Brands Global Inc.**:
+  - Reset Agreement state for `Brands Global Inc.` (`4c845ae8-b93b-4db2-858f-bda3252e8167`):
+    - Deleted test recipient records from `company_agreement_recipients`.
+    - Deleted test audit logs from `agreement_audit_logs`.
+    - Removed test executed PDF from private storage (`agreements/4c845ae8-b93b-4db2-858f-bda3252e8167/KSN-AGR-2026-000001.pdf`).
+    - Reset `company_agreements` row status to `pending` with cleared signature metadata.
+    - Preserved Agreement Template v1.0, company profile, products, users, applications, and all other company data.
+  - Final Status: **Pending / 계약 서명 필요** (Ready for User E2E Test).

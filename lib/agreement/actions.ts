@@ -662,10 +662,21 @@ export async function getSignedExecutedPdfUrlAction(
       ? { download: options.downloadFilename }
       : undefined;
 
-    const url = await getSignedFileUrl(targetPath, 3600, "company-uploads", downloadOpt);
-    if (!url) return { url: null, error: "서명된 다운로드 URL을 생성할 수 없습니다." };
-    return { url };
+    // Use admin storage client on the server AFTER user authorization check
+    const { data: signed, error: signErr } = await admin.storage
+      .from("company-uploads")
+      .createSignedUrl(targetPath, 3600, downloadOpt);
+
+    if (signErr || !signed?.signedUrl) {
+      console.error(
+        `[Auth Security Audit] [SIGNED_URL_CREATION_FAILED] Path: ${targetPath}, Error: ${signErr?.message || "empty"}`
+      );
+      return { url: null, error: "서명된 다운로드 URL을 생성할 수 없습니다." };
+    }
+
+    return { url: signed.signedUrl };
   } catch (err: any) {
+    console.error(`[Auth Security Audit] [SIGNED_URL_EXCEPTION] Path: ${targetPath}, Error: ${err?.message}`);
     return { url: null, error: err.message || "PDF URL 생성 중 오류가 발생했습니다." };
   }
 }
