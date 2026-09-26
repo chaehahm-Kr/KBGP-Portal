@@ -10,7 +10,6 @@ export interface UseUnsavedChangesGuardOptions {
 
 type PendingNavigation =
   | { type: "url"; url: string }
-  | { type: "back" }
   | { type: "custom"; action: () => void };
 
 export function useUnsavedChangesGuard({ isDirty, onSave }: UseUnsavedChangesGuardOptions) {
@@ -20,19 +19,16 @@ export function useUnsavedChangesGuard({ isDirty, onSave }: UseUnsavedChangesGua
   const [saveError, setSaveError] = useState<string | null>(null);
   const [pendingNav, setPendingNav] = useState<PendingNavigation | null>(null);
 
-  const bypassGuardRef = useRef(false);
   const isDirtyRef = useRef(isDirty);
   isDirtyRef.current = isDirty;
 
   const onSaveRef = useRef(onSave);
   onSaveRef.current = onSave;
 
-  const dummyStatePushedRef = useRef(false);
-
-  // 1. Native beforeunload protection (Page refresh / Tab close / Window close)
+  // 1. Native beforeunload protection (Page refresh / Tab close / Window close only)
   useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      if (isDirtyRef.current && !bypassGuardRef.current) {
+      if (isDirtyRef.current) {
         e.preventDefault();
         e.returnValue = "";
         return "";
@@ -45,125 +41,43 @@ export function useUnsavedChangesGuard({ isDirty, onSave }: UseUnsavedChangesGua
     };
   }, []);
 
-  // 2. Browser Back / Forward button (popstate)
-  useEffect(() => {
-    if (!isDirty) {
-      dummyStatePushedRef.current = false;
-      return;
-    }
-
-    // Safely push dummy state while preserving Next.js internal router state tree
-    if (!dummyStatePushedRef.current) {
-      try {
-        const currentState = window.history.state;
-        const guardedState =
-          typeof currentState === "object" && currentState !== null
-            ? { ...currentState, __unsavedGuard: true }
-            : { __unsavedGuard: true };
-        window.history.pushState(guardedState, "", window.location.href);
-        dummyStatePushedRef.current = true;
-      } catch (err) {
-        console.warn("Failed to push history state for unsaved changes guard:", err);
-      }
-    }
-
-    const handlePopState = () => {
-      if (bypassGuardRef.current) return;
-
-      if (isDirtyRef.current) {
-        try {
-          const currentState = window.history.state;
-          const guardedState =
-            typeof currentState === "object" && currentState !== null
-              ? { ...currentState, __unsavedGuard: true }
-              : { __unsavedGuard: true };
-          window.history.pushState(guardedState, "", window.location.href);
-        } catch {
-          // Ignore
+  // 2. Explicit Navigation Helper (e.g., clicking "Back to List" button)
+  const confirmNavigation = useCallback(
+    (target: string | (() => void)) => {
+      if (!isDirtyRef.current) {
+        if (typeof target === "string") {
+          try {
+            const targetUrl = new URL(target, window.location.href);
+            if (targetUrl.origin === window.location.origin) {
+              router.push(targetUrl.pathname + targetUrl.search + targetUrl.hash);
+            } else {
+              window.location.href = target;
+            }
+          } catch {
+            router.push(target);
+          }
+        } else {
+          target();
         }
-        setPendingNav({ type: "back" });
-        setSaveError(null);
-        setIsModalOpen(true);
-      }
-    };
-
-    window.addEventListener("popstate", handlePopState);
-    return () => {
-      window.removeEventListener("popstate", handlePopState);
-    };
-  }, [isDirty]);
-
-  // 3. Link click interception (Sidebar, Breadcrumbs, Navigation links)
-  useEffect(() => {
-    const handleClickCapture = (e: MouseEvent) => {
-      if (!isDirtyRef.current || bypassGuardRef.current) return;
-
-      const target = e.target as HTMLElement | null;
-      if (!target) return;
-
-      const anchor = target.closest("a") as HTMLAnchorElement | null;
-      if (!anchor) return;
-
-      // Ignore external tabs, downloads, and keyboard modifiers
-      if (anchor.target && anchor.target !== "_self") return;
-      if (anchor.hasAttribute("download")) return;
-      if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
-
-      const rawHref = anchor.getAttribute("href");
-      if (!rawHref) return;
-      if (
-        rawHref.startsWith("#") ||
-        rawHref.startsWith("javascript:") ||
-        rawHref.startsWith("mailto:") ||
-        rawHref.startsWith("tel:")
-      ) {
         return;
       }
 
-      try {
-        const targetUrl = new URL(anchor.href, window.location.href);
-        const currentUrl = new URL(window.location.href);
-
-        // Ignore hash jumps or same URL
-        if (
-          targetUrl.origin === currentUrl.origin &&
-          targetUrl.pathname === currentUrl.pathname &&
-          targetUrl.search === currentUrl.search
-        ) {
-          return;
-        }
-
-        // Intercept navigation
-        e.preventDefault();
-        e.stopPropagation();
-
-        setPendingNav({ type: "url", url: anchor.href });
-        setSaveError(null);
-        setIsModalOpen(true);
-      } catch {
-        // Ignore malformed URLs
+      if (typeof target === "string") {
+        setPendingNav({ type: "url", url: target });
+      } else {
+        setPendingNav({ type: "custom", action: target });
       }
-    };
+      setSaveError(null);
+      setIsModalOpen(true);
+    },
+    [router]
+  );
 
-    document.addEventListener("click", handleClickCapture, true);
-    return () => {
-      document.removeEventListener("click", handleClickCapture, true);
-    };
-  }, []);
-
-  // Execute pending navigation
   const executeNavigation = useCallback(
     (nav: PendingNavigation) => {
-      bypassGuardRef.current = true;
       setIsModalOpen(false);
 
-      if (nav.type === "back") {
-        if (dummyStatePushedRef.current) {
-          window.history.go(-2);
-        } else {
-          window.history.back();
-        }
-      } else if (nav.type === "url") {
+      if (nav.type === "url") {
         try {
           const targetUrl = new URL(nav.url, window.location.href);
           if (targetUrl.origin === window.location.origin) {
@@ -172,7 +86,7 @@ export function useUnsavedChangesGuard({ isDirty, onSave }: UseUnsavedChangesGua
             window.location.href = nav.url;
           }
         } catch {
-          router.push(nav.url);
+          window.location.href = nav.url;
         }
       } else if (nav.type === "custom") {
         nav.action();
@@ -218,7 +132,6 @@ export function useUnsavedChangesGuard({ isDirty, onSave }: UseUnsavedChangesGua
           setIsModalOpen(false);
         }
       } else {
-        // Save failed: abort navigation and show error
         setSaveError(result.error || "저장할 수 없는 항목이 있습니다. 입력 내용을 확인해주세요.");
       }
     } catch (err: any) {
@@ -227,41 +140,8 @@ export function useUnsavedChangesGuard({ isDirty, onSave }: UseUnsavedChangesGua
     }
   }, [pendingNav, executeNavigation]);
 
-  // Manual navigation helper (e.g., custom buttons that navigate via router.push)
-  const confirmNavigation = useCallback(
-    (target: string | (() => void)) => {
-      if (!isDirtyRef.current) {
-        if (typeof target === "string") {
-          try {
-            const targetUrl = new URL(target, window.location.href);
-            if (targetUrl.origin === window.location.origin) {
-              router.push(targetUrl.pathname + targetUrl.search + targetUrl.hash);
-            } else {
-              window.location.href = target;
-            }
-          } catch {
-            router.push(target);
-          }
-        } else {
-          target();
-        }
-        return;
-      }
-
-      if (typeof target === "string") {
-        setPendingNav({ type: "url", url: target });
-      } else {
-        setPendingNav({ type: "custom", action: target });
-      }
-      setSaveError(null);
-      setIsModalOpen(true);
-    },
-    [router]
-  );
-
   const bypassGuardAndNavigate = useCallback(
     (url: string) => {
-      bypassGuardRef.current = true;
       try {
         const targetUrl = new URL(url, window.location.href);
         if (targetUrl.origin === window.location.origin) {
@@ -276,7 +156,7 @@ export function useUnsavedChangesGuard({ isDirty, onSave }: UseUnsavedChangesGua
     [router]
   );
 
-  // Render modal component
+  // Render modal component for explicit confirmNavigation actions
   const guardModalNode = isModalOpen ? (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm animate-fadeIn">
       <div className="w-full max-w-md rounded-2xl border border-zinc-200 bg-white p-6 shadow-2xl dark:border-zinc-800 dark:bg-zinc-900 space-y-5">
