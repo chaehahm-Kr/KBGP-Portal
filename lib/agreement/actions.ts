@@ -14,7 +14,8 @@ import type {
 } from "@/lib/agreement/types";
 
 export interface SignAgreementInput {
-  companyAgreementId: string;
+  companyAgreementId?: string;
+  companyId?: string;
   signerName: string;
   signerTitle: string;
   signerEmail: string;
@@ -162,7 +163,7 @@ export async function signCompanyAgreementAction(input: SignAgreementInput): Pro
 
   const admin = createAdminClient();
 
-  // 1. Fetch agreement & company with robust fallback
+  // 1. Fetch agreement & company with robust multi-tier fallback
   let ca: any = null;
   if (input.companyAgreementId) {
     const { data: fetchCa } = await admin
@@ -174,7 +175,22 @@ export async function signCompanyAgreementAction(input: SignAgreementInput): Pro
     ca = fetchCa;
   }
 
-  // Fallback: lookup user's company agreement if ID was not found or not passed
+  const targetCompanyId = input.companyId || ca?.company_id;
+
+  // Fallback 1: lookup by companyId if ca wasn't found by companyAgreementId
+  if (!ca && targetCompanyId) {
+    const { data: companyCa } = await admin
+      .from("company_agreements")
+      .select("*, companies(id, name, address, address_detail, representative_name, city, state, country, zip_code)")
+      .eq("company_id", targetCompanyId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    ca = companyCa;
+  }
+
+  // Fallback 2: lookup user's company via company_users if targetCompanyId wasn't passed
   if (!ca) {
     const { data: cu } = await supabase
       .from("company_users")
@@ -193,6 +209,33 @@ export async function signCompanyAgreementAction(input: SignAgreementInput): Pro
         .maybeSingle();
 
       ca = userCa;
+    }
+  }
+
+  // Fallback 3: If NO agreement record exists yet for the target company, auto-initialize a pending record right now!
+  const finalCompId = targetCompanyId || ca?.company_id;
+  if (!ca && finalCompId) {
+    const { data: tmpl } = await admin
+      .from("agreement_templates")
+      .select("id, version")
+      .eq("status", "active")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .single();
+
+    if (tmpl) {
+      const { data: newCa } = await admin
+        .from("company_agreements")
+        .insert({
+          company_id: finalCompId,
+          template_id: tmpl.id,
+          version: tmpl.version || "1.0",
+          status: "pending",
+        })
+        .select("*, companies(id, name, address, address_detail, representative_name, city, state, country, zip_code)")
+        .single();
+
+      ca = newCa;
     }
   }
 

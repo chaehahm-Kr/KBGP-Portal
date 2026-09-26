@@ -23,14 +23,15 @@ interface PortalSupportViewProps {
 }
 
 const CATEGORY_LABELS: Record<string, string> = {
-  po_change:   "PO 변경 요청",
-  product:     "제품 등록 및 스펙 수정",
-  onboarding:  "입점 신청 및 심사 현황",
-  logistics:   "물류 공급 및 패키징",
-  translation: "번역 및 전성분표 기재",
-  settlement:  "정산 / 인보이스 문의",
-  system:      "시스템 오류 제보 및 기능 제안",
-  general:     "기타 일반 문의"
+  agreement_change: "계약 변경 및 서명 문의",
+  onboarding:       "입점 신청 및 심사 현황",
+  po_change:        "PO 변경 요청",
+  product:          "제품 등록 및 스펙 수정",
+  logistics:        "물류 공급 및 패키징",
+  translation:      "번역 및 전성분표 기재",
+  settlement:       "정산 / 인보이스 문의",
+  system:           "시스템 오류 제보 및 기능 제안",
+  general:          "기타 일반 문의"
 };
 
 const MSG_TYPE_META: Record<string, { icon: string; style: string }> = {
@@ -103,8 +104,34 @@ export function PortalSupportView({ initialInquiries, createAction }: PortalSupp
       }
     }
 
-    // 2. If PO Change Request requested
-    const isPoChangeRequested = categoryParam === "po_change" || (poIdParam && !invoiceIdParam);
+    // 2. If Agreement Inquiry requested
+    const agreementIdParam = searchParams.get("agreement_id") || searchParams.get("agreementId");
+    const agreementVersionParam = searchParams.get("agreement_version") || searchParams.get("agreementVersion");
+    const agreementStatusParam = searchParams.get("agreement_status") || searchParams.get("agreementStatus");
+
+    if (categoryParam === "agreement_change") {
+      setIsWriteOpen(true);
+      setSelectedInquiry(null);
+      setCategory("agreement_change");
+      const agrLabel = agreementIdParam ? `[${agreementIdParam}] ` : "";
+      setTitle(`${agrLabel}브랜드 공급 기본계약서 관련 문의`);
+      setContent(
+`기본계약서 관련 문의사항을 작성해 주세요.
+
+회사명: ${companyNameParam || "-"}
+계약 ID: ${agreementIdParam || "-"}
+계약 버전: ${agreementVersionParam || "1.0"}
+계약 상태: ${agreementStatusParam || "-"}
+신청 출처: 기본계약서 서명 위저드 (Agreement Signing Wizard)
+
+문의 내용을 상세히 기술해 주시면 빠르게 답변해 드리겠습니다.
+`
+      );
+      return;
+    }
+
+    // 3. If PO Change Request requested
+    const isPoChangeRequested = categoryParam === "po_change" || (poIdParam && !invoiceIdParam && categoryParam !== "agreement_change" && categoryParam !== "onboarding");
     if (isPoChangeRequested) {
       setIsWriteOpen(true);
       setSelectedInquiry(null);

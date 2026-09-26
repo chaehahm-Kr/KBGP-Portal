@@ -117,7 +117,8 @@ export function AgreementSigningModal({
     setIsSubmitting(true);
     try {
       const res = await signCompanyAgreementAction({
-        companyAgreementId: agreement.id,
+        companyAgreementId: agreement?.id,
+        companyId: companyInfo.id,
         signerName: signerName.trim(),
         signerTitle: signerTitle.trim(),
         signerEmail: signerEmail.trim() || userEmail,
@@ -321,10 +322,10 @@ export function AgreementSigningModal({
                   </p>
 
                   {/* Clarified Notice for Step 1 Corrections */}
-                  <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-3.5 dark:border-amber-900/60 dark:bg-amber-950/30 flex items-start gap-3">
-                    <span className="text-amber-700 dark:text-amber-400 text-sm font-bold">💡</span>
-                    <div className="text-xs text-amber-900 dark:text-amber-200 leading-relaxed space-y-1.5 flex-1">
-                      <p className="font-bold">
+                  <div className="rounded-xl border border-zinc-200 bg-zinc-50/80 p-3.5 dark:border-zinc-800 dark:bg-zinc-900/60 flex items-start gap-3">
+                    <span className="text-zinc-500 dark:text-zinc-400 text-sm">💡</span>
+                    <div className="text-xs text-zinc-700 dark:text-zinc-300 leading-relaxed space-y-1.5 flex-1">
+                      <p className="font-semibold">
                         회사 정보 또는 담당자 정보가 정확하지 않은 경우 계약 진행 전에 수정해 주세요.
                       </p>
                       <div className="flex items-center gap-2 pt-1 flex-wrap">
@@ -333,7 +334,7 @@ export function AgreementSigningModal({
                           onClick={() => {
                             window.open("/portal/company/info?tab=basic", "_blank");
                           }}
-                          className="inline-flex items-center gap-1 rounded-md bg-white px-2.5 py-1 text-[11px] font-bold text-amber-900 border border-amber-300 shadow-2xs hover:bg-amber-100 dark:bg-zinc-800 dark:text-amber-300 dark:border-amber-800 transition-colors cursor-pointer"
+                          className="inline-flex items-center gap-1 rounded-md bg-white px-2.5 py-1 text-[11px] font-bold text-zinc-800 border border-zinc-300 shadow-2xs hover:bg-zinc-100 dark:bg-zinc-800 dark:text-zinc-200 dark:border-zinc-700 transition-colors cursor-pointer"
                         >
                           ⚙️ 회사 정보 수정 ↗
                         </button>
@@ -343,7 +344,7 @@ export function AgreementSigningModal({
                           onClick={() => {
                             window.open("/portal/account", "_blank");
                           }}
-                          className="inline-flex items-center gap-1 rounded-md bg-white px-2.5 py-1 text-[11px] font-bold text-amber-900 border border-amber-300 shadow-2xs hover:bg-amber-100 dark:bg-zinc-800 dark:text-amber-300 dark:border-amber-800 transition-colors cursor-pointer"
+                          className="inline-flex items-center gap-1 rounded-md bg-white px-2.5 py-1 text-[11px] font-bold text-zinc-800 border border-zinc-300 shadow-2xs hover:bg-zinc-100 dark:bg-zinc-800 dark:text-zinc-200 dark:border-zinc-700 transition-colors cursor-pointer"
                         >
                           👤 내 정보 수정 ↗
                         </button>
@@ -532,7 +533,7 @@ export function AgreementSigningModal({
                 </div>
               )}
 
-              {/* STEP 3: Agreement Review & Inquiry Guidance */}
+              {/* STEP 3: Agreement Review & Low-Emphasis Guidance */}
               {step === 3 && (
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
@@ -552,37 +553,38 @@ export function AgreementSigningModal({
                     전자서명 전 계약서 전문(28개 조항)을 충분히 숙지해 주세요.
                   </p>
 
-                  {/* Clean Inquiry Guidance Box (Requirement 6) */}
-                  <div className="rounded-xl border border-blue-200 bg-blue-50/70 p-3.5 dark:border-blue-900/50 dark:bg-blue-950/30 flex items-start gap-3">
-                    <span className="text-blue-600 dark:text-blue-400 text-sm font-bold">ℹ️</span>
-                    <div className="text-xs text-blue-900 dark:text-blue-200 leading-relaxed space-y-1 flex-1">
-                      <p className="font-bold">
-                        계약 내용에 문의사항이 있는 경우 계약을 완료하기 전에 ‘문의 지원’ 메뉴를 통해 문의해 주세요.
-                      </p>
-                      <p className="text-[11px] text-blue-800 dark:text-blue-300">
-                        계약서 내용은 전자서명 과정에서 직접 수정할 수 없습니다.
-                      </p>
-                      <div className="pt-1">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            window.open("/portal/support?new=1&category=agreement_change", "_blank");
-                          }}
-                          className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-700 underline hover:text-blue-900 dark:text-blue-300 dark:hover:text-blue-100 cursor-pointer"
-                        >
-                          문의 지원 바로가기 ↗
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-
                   {/* Embedded PDF Viewer / Scroll Frame */}
-                  <div className="h-[320px] w-full rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-950 overflow-hidden shadow-inner">
+                  <div className="h-[340px] w-full rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-950 overflow-hidden shadow-inner">
                     <iframe
                       src="/agreements/template_v1.pdf#toolbar=0"
                       className="w-full h-full border-none"
                       title="Agreement Template Preview"
                     />
+                  </div>
+
+                  {/* Low-Emphasis Informational Text at Bottom of Step 3 (Requirement 1) */}
+                  <div className="pt-2 text-xs text-zinc-500 dark:text-zinc-400 leading-relaxed space-y-1">
+                    <p>
+                      • 계약 내용에 문의사항이 있는 경우 계약을 완료하기 전에{" "}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          window.open(
+                            `/portal/support?new=1&category=agreement_change&company_name=${encodeURIComponent(
+                              companyInfo.name
+                            )}&agreement_id=${encodeURIComponent(agreement?.agreement_id || "")}`,
+                            "_blank"
+                          );
+                        }}
+                        className="text-indigo-600 dark:text-indigo-400 underline font-semibold hover:text-indigo-800 cursor-pointer"
+                      >
+                        문의 지원
+                      </button>{" "}
+                      메뉴를 통해 문의해 주세요.
+                    </p>
+                    <p className="text-[11px] text-zinc-400 dark:text-zinc-500">
+                      • 계약서 내용은 전자서명 과정에서 직접 수정할 수 없습니다.
+                    </p>
                   </div>
                 </div>
               )}
@@ -593,20 +595,6 @@ export function AgreementSigningModal({
                   <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">
                     Step 4: 전자서명 확인 및 최종 체결
                   </h3>
-
-                  {/* Clean Inquiry Guidance Notice */}
-                  <div className="rounded-xl border border-blue-200 bg-blue-50/60 p-3 dark:border-blue-900/40 dark:bg-blue-950/20 text-xs text-blue-900 dark:text-blue-200 flex items-center justify-between">
-                    <span>계약 내용 문의는 완료 전 <strong>문의 지원</strong> 메뉴를 이용해 주세요.</span>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        window.open("/portal/support?new=1&category=agreement_change", "_blank");
-                      }}
-                      className="text-[11px] font-bold text-blue-700 underline dark:text-blue-300 cursor-pointer ml-2"
-                    >
-                      문의 지원 ↗
-                    </button>
-                  </div>
 
                   {/* Signature Preview Card */}
                   <div className="rounded-xl border border-zinc-200 bg-zinc-50/80 p-4 dark:border-zinc-800 dark:bg-zinc-900/80 space-y-3">
