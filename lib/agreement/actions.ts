@@ -26,6 +26,38 @@ export interface SignAgreementInput {
 }
 
 /**
+ * Helper to parse company metadata (address, representativeName) from companies.intro.
+ * Fixes column mismatch since companies table stores address/contacts in intro metadata JSON.
+ */
+function parseCompanyMetadata(comp: any): {
+  id: string;
+  name: string;
+  address: string;
+  representativeName: string;
+} {
+  let fullAddress = "";
+  let representativeName = comp?.contact_name || "";
+
+  if (comp?.intro && typeof comp.intro === "string" && comp.intro.startsWith("__COMPANY_METADATA__:")) {
+    try {
+      const parsed = JSON.parse(comp.intro.substring("__COMPANY_METADATA__:".length));
+      fullAddress = parsed.address || [parsed.address_1, parsed.address_2, parsed.city, parsed.state, parsed.zip_code].filter(Boolean).join(" ").trim();
+      if (parsed.contacts && Array.isArray(parsed.contacts)) {
+        const primary = parsed.contacts.find((c: any) => c.isPrimary) || parsed.contacts[0];
+        if (primary?.name) representativeName = primary.name;
+      }
+    } catch (e) {}
+  }
+
+  return {
+    id: comp?.id || "",
+    name: comp?.name || "",
+    address: fullAddress || comp?.country || "",
+    representativeName,
+  };
+}
+
+/**
  * Validates email format server-side.
  */
 function isValidEmail(email: string): boolean {
@@ -62,28 +94,26 @@ export async function getCompanyAgreement(companyIdInput?: string): Promise<{
     return { agreement: null, companyInfo: { id: "", name: "" }, error: "소속 회사 정보를 찾을 수 없습니다." };
   }
 
-  // Fetch Company Info
+  // Fetch Company Info (Using actual existing columns on companies table)
   const admin = createAdminClient();
-  const { data: comp } = await admin
+  const { data: comp, error: compErr } = await admin
     .from("companies")
-    .select("id, name, address, address_detail, representative_name, city, state, country, zip_code")
+    .select("id, name, country, contact_name, contact_phone, intro")
     .eq("id", targetCompanyId)
     .single();
 
-  const fullAddress = [
-    comp?.address,
-    comp?.address_detail,
-    comp?.city,
-    comp?.state,
-    comp?.country,
-    comp?.zip_code
-  ].filter(Boolean).join(" ").trim();
+  if (compErr || !comp) {
+    console.error("[getCompanyAgreement] Company fetch error:", compErr);
+    return { agreement: null, companyInfo: { id: targetCompanyId, name: "" }, error: "회사 정보를 불러올 수 없습니다." };
+  }
+
+  const compMeta = parseCompanyMetadata(comp);
 
   const companyInfo = {
     id: targetCompanyId,
-    name: comp?.name || "",
-    address: fullAddress || null,
-    representativeName: comp?.representative_name || null,
+    name: compMeta.name,
+    address: compMeta.address || null,
+    representativeName: compMeta.representativeName || null,
   };
 
   // Fetch existing Company Agreement
@@ -163,16 +193,19 @@ export async function signCompanyAgreementAction(input: SignAgreementInput): Pro
 
   const admin = createAdminClient();
 
-  // 1. Fetch agreement & company with robust multi-tier fallback
+  // 1. Fetch agreement & company with clean PostgREST select query (using existing companies columns)
   let ca: any = null;
+  let fetchErr: any = null;
+
   if (input.companyAgreementId) {
-    const { data: fetchCa } = await admin
+    const { data: fetchCa, error: err } = await admin
       .from("company_agreements")
-      .select("*, companies(id, name, address, address_detail, representative_name, city, state, country, zip_code)")
+      .select("*, companies(id, name, country, contact_name, contact_phone, intro)")
       .eq("id", input.companyAgreementId)
       .maybeSingle();
 
     ca = fetchCa;
+    fetchErr = err;
   }
 
   const targetCompanyId = input.companyId || ca?.company_id;
@@ -181,7 +214,7 @@ export async function signCompanyAgreementAction(input: SignAgreementInput): Pro
   if (!ca && targetCompanyId) {
     const { data: companyCa } = await admin
       .from("company_agreements")
-      .select("*, companies(id, name, address, address_detail, representative_name, city, state, country, zip_code)")
+      .select("*, companies(id, name, country, contact_name, contact_phone, intro)")
       .eq("company_id", targetCompanyId)
       .order("created_at", { ascending: false })
       .limit(1)
@@ -202,7 +235,7 @@ export async function signCompanyAgreementAction(input: SignAgreementInput): Pro
     if (cu?.company_id) {
       const { data: userCa } = await admin
         .from("company_agreements")
-        .select("*, companies(id, name, address, address_detail, representative_name, city, state, country, zip_code)")
+        .select("*, companies(id, name, country, contact_name, contact_phone, intro)")
         .eq("company_id", cu.company_id)
         .order("created_at", { ascending: false })
         .limit(1)
@@ -232,7 +265,7 @@ export async function signCompanyAgreementAction(input: SignAgreementInput): Pro
           version: tmpl.version || "1.0",
           status: "pending",
         })
-        .select("*, companies(id, name, address, address_detail, representative_name, city, state, country, zip_code)")
+        .select("*, companies(id, name, country, contact_name, contact_phone, intro)")
         .single();
 
       ca = newCa;
@@ -240,44 +273,27 @@ export async function signCompanyAgreementAction(input: SignAgreementInput): Pro
   }
 
   if (!ca) {
+    console.error("[signCompanyAgreementAction] Failed to resolve agreement. fetchErr:", fetchErr, "input:", input);
     return { success: false, error: "계약서 정보를 찾을 수 없습니다. 소속 회사 정보를 다시 확인해 주세요." };
   }
 
+  const compMeta = parseCompanyMetadata(ca.companies);
+
   // Idempotency: If already Active, return success directly
   if (ca.status === "active" && ca.final_pdf_path) {
-    const comp = ca.companies || {};
-    const fullAddress = [
-      comp?.address,
-      comp?.address_detail,
-      comp?.city,
-      comp?.state,
-      comp?.country,
-      comp?.zip_code
-    ].filter(Boolean).join(" ").trim();
-
     return {
       success: true,
       agreement: {
         ...ca,
-        companyName: comp.name,
-        companyAddress: fullAddress,
-        representativeName: comp.representative_name,
+        companyName: compMeta.name,
+        companyAddress: compMeta.address,
+        representativeName: compMeta.representativeName,
       },
     };
   }
 
-  const comp = (ca as any).companies;
-  const fullAddress = [
-    comp?.address,
-    comp?.address_detail,
-    comp?.city,
-    comp?.state,
-    comp?.country,
-    comp?.zip_code
-  ].filter(Boolean).join(" ").trim();
-
   // Prerequisite Check: Company Name & Company Address
-  if (!comp?.name || !fullAddress) {
+  if (!compMeta.name || !compMeta.address) {
     return {
       success: false,
       error: "계약서를 진행하려면 회사명과 회사 주소를 먼저 입력해 주세요.",
@@ -348,9 +364,9 @@ export async function signCompanyAgreementAction(input: SignAgreementInput): Pro
   const { pdfBuffer, pdfHash } = await generateExecutedAgreementPdf({
     agreementId: ca.agreement_id,
     version: ca.version || "1.0",
-    companyName: comp.name,
-    companyAddress: fullAddress,
-    representativeName: comp.representative_name,
+    companyName: compMeta.name,
+    companyAddress: compMeta.address,
+    representativeName: compMeta.representativeName,
     signerName: input.signerName.trim(),
     signerTitle: input.signerTitle.trim(),
     signerEmail: signerEmailClean,
@@ -367,6 +383,7 @@ export async function signCompanyAgreementAction(input: SignAgreementInput): Pro
     });
 
   if (uploadErr) {
+    console.error("[signCompanyAgreementAction] Storage upload error:", uploadErr);
     return {
       success: false,
       error: `전자서명 PDF 생성 및 저장 중 오류가 발생했습니다: ${uploadErr.message}`,
@@ -400,6 +417,7 @@ export async function signCompanyAgreementAction(input: SignAgreementInput): Pro
     .single();
 
   if (updateErr || !updatedCa) {
+    console.error("[signCompanyAgreementAction] DB update error:", updateErr);
     return {
       success: false,
       error: `계약 상태 업데이트에 실패했습니다: ${updateErr?.message || "알 수 없는 오류"}`,
@@ -459,8 +477,8 @@ export async function signCompanyAgreementAction(input: SignAgreementInput): Pro
     try {
       await sendEmail({
         to: r.recipient_email,
-        subject: `[K SELECT NETWORK] ${comp.name} 브랜드 공급 및 유통 기본계약서 체결 완료 (${ca.agreement_id})`,
-        text: `안녕하세요 ${r.recipient_name}님 (${r.recipient_title}),\n\n${comp.name}의 K SELECT NETWORK 브랜드 공급·미국 유통 및 플랫폼 이용 기본계약서 (v${ca.version || "1.0"}, ${ca.agreement_id}) 전자서명이 완료되었습니다.\n\n체결 일자: ${executedDateStr}\n계약 ID: ${ca.agreement_id}\n문서 해시 (SHA-256): ${pdfHash}\n\n감사합니다.\nK SELECT NETWORK 드림`,
+        subject: `[K SELECT NETWORK] ${compMeta.name} 브랜드 공급 및 유통 기본계약서 체결 완료 (${ca.agreement_id})`,
+        text: `안녕하세요 ${r.recipient_name}님 (${r.recipient_title}),\n\n${compMeta.name}의 K SELECT NETWORK 브랜드 공급·미국 유통 및 플랫폼 이용 기본계약서 (v${ca.version || "1.0"}, ${ca.agreement_id}) 전자서명이 완료되었습니다.\n\n체결 일자: ${executedDateStr}\n계약 ID: ${ca.agreement_id}\n문서 해시 (SHA-256): ${pdfHash}\n\n감사합니다.\nK SELECT NETWORK 드림`,
       });
     } catch (emailErr) {
       console.error(`[Agreement Email Send Error] recipient=${r.recipient_email}`, emailErr);
@@ -491,9 +509,9 @@ export async function signCompanyAgreementAction(input: SignAgreementInput): Pro
     recipientCount: recipientsToRecord.length,
     agreement: {
       ...updatedCa,
-      companyName: comp.name,
-      companyAddress: fullAddress,
-      representativeName: comp.representative_name,
+      companyName: compMeta.name,
+      companyAddress: compMeta.address,
+      representativeName: compMeta.representativeName,
     },
   };
 }
@@ -604,7 +622,7 @@ export async function adminListCompanyAgreementsAction(companyIdFilter?: string)
   const admin = createAdminClient();
   let query = admin
     .from("company_agreements")
-    .select("*, companies(name, address, address_detail, representative_name, city, state, country, zip_code)")
+    .select("*, companies(id, name, country, contact_name, contact_phone, intro)")
     .order("created_at", { ascending: false });
 
   if (companyIdFilter) {
@@ -615,21 +633,13 @@ export async function adminListCompanyAgreementsAction(companyIdFilter?: string)
   if (error) return { agreements: [], error: error.message };
 
   const formatted: CompanyAgreementItem[] = (data || []).map((ca: any) => {
-    const comp = ca.companies;
-    const fullAddress = [
-      comp?.address,
-      comp?.address_detail,
-      comp?.city,
-      comp?.state,
-      comp?.country,
-      comp?.zip_code
-    ].filter(Boolean).join(" ").trim();
+    const compMeta = parseCompanyMetadata(ca.companies);
 
     return {
       ...ca,
-      companyName: comp?.name || "-",
-      companyAddress: fullAddress || "-",
-      representativeName: comp?.representative_name || "-",
+      companyName: compMeta.name || "-",
+      companyAddress: compMeta.address || "-",
+      representativeName: compMeta.representativeName || "-",
     };
   });
 
