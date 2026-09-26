@@ -485,10 +485,10 @@ export const CategoryAttributeForm = forwardRef<CategoryAttributeFormHandle, Cat
   }, [selectedCat1, selectedCat2, selectedCat3, initialCategoryCode, attributes, formValues, formTextValues, loading, hasInitialized]);
 
   useEffect(() => {
-    if (onDirtyChange && hasInitialized) {
+    if (onDirtyChange && hasInitialized && !loading) {
       onDirtyChange(checkIsDirty());
     }
-  }, [checkIsDirty, onDirtyChange, hasInitialized]);
+  }, [checkIsDirty, onDirtyChange, hasInitialized, loading]);
 
   const formatUnit = (unit: string | null) => {
     if (!unit) return "";
@@ -546,6 +546,7 @@ export const CategoryAttributeForm = forwardRef<CategoryAttributeFormHandle, Cat
   // Sync completion state to parent component (e.g. ProductDetailTabs tab indicator & missing warning)
   useEffect(() => {
     if (!onCompletionChange) return;
+    if (!hasInitialized || loading) return;
     const isCategoryComplete = Boolean(isFinalCategorySelected);
     const missing: { code: string; nameKo: string }[] = [];
     if (isCategoryComplete) {
@@ -567,7 +568,7 @@ export const CategoryAttributeForm = forwardRef<CategoryAttributeFormHandle, Cat
       missingRequiredAttributes: missing,
       completionPercent: completeness,
     });
-  }, [isFinalCategorySelected, attributes, formValues, isAdmin, onCompletionChange, completeness]);
+  }, [isFinalCategorySelected, attributes, formValues, isAdmin, onCompletionChange, completeness, hasInitialized, loading]);
 
   // 내부 공통 유효성 검사
   const validateInternal = () => {

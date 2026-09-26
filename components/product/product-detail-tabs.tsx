@@ -381,7 +381,9 @@ export function ProductDetailTabs({
   // Tiered Pricing State
   const [priceTiers, setPriceTiers] = useState<{ qty: number | string; price: number | string }[]>(() => {
     const additionalInfo = product.price_additional_info as Record<string, any> | null;
-    const stored = (additionalInfo && Array.isArray(additionalInfo.price_tiers)) ? additionalInfo.price_tiers : [];
+    const stored = (additionalInfo && Array.isArray(additionalInfo.price_tiers))
+      ? additionalInfo.price_tiers
+      : (additionalInfo && Array.isArray((additionalInfo as any).tiered_prices) ? (additionalInfo as any).tiered_prices : []);
     return getInitialPriceTiers(stored);
   });
 
@@ -603,7 +605,9 @@ export function ProductDetailTabs({
     priceKrwWholesale: product.price_krw_wholesale?.toString() || "",
     estimatedRetailPrice: product.estimated_retail_price?.toString() || "",
     priceUsdFobState: product.price_usd_fob ? product.price_usd_fob.toString() : "",
-    priceTiers: JSON.stringify(normalizePriceTiers((product.price_additional_info as any)?.price_tiers || [])),
+    priceTiers: JSON.stringify(normalizePriceTiers(
+      (product.price_additional_info as any)?.price_tiers || (product.price_additional_info as any)?.tiered_prices || []
+    )),
     itemWidth: product.item_width?.toString() || "",
     itemDepth: product.item_depth?.toString() || "",
     itemHeight: product.item_height?.toString() || "",
