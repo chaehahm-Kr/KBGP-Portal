@@ -17,7 +17,13 @@ import {
   trimSkuSeparators,
   resolveEffectiveSku,
   cleanPlaceholderName,
-  cleanPlaceholderSku
+  cleanPlaceholderSku,
+  VOLUME_UNITS,
+  type VolumeUnit,
+  type LeadTimeUnit,
+  parseVolume,
+  formatVolume,
+  parseLeadTime
 } from "@/lib/product/types";
 import { 
   updateProduct, 
@@ -198,22 +204,8 @@ export function ProductDetailTabs({
     setIsLogisticsHelpOpen(true);
   };
 
-  // Parse lead time value and unit
-  const parseLeadTime = (leadTimeStr?: string | null) => {
-    if (!leadTimeStr) return { value: "", unit: "주" };
-    const match = leadTimeStr.trim().match(/^(\d+)\s*(일|주|개월|days|weeks|months|day|week|month)?$/i);
-    if (match) {
-      const val = match[1];
-      let unit = match[2] || "주";
-      if (unit.toLowerCase().startsWith("day") || unit === "일") unit = "일";
-      else if (unit.toLowerCase().startsWith("week") || unit === "주") unit = "주";
-      else if (unit.toLowerCase().startsWith("month") || unit === "개월") unit = "개월";
-      return { value: val, unit };
-    }
-    return { value: leadTimeStr, unit: "주" };
-  };
-
   const parsedLeadTime = parseLeadTime(product.lead_time);
+  const parsedVolume = parseVolume(product.volume);
 
   // Dynamic Bullet Points State
   const [bullets, setBullets] = useState<string[]>(
@@ -442,10 +434,11 @@ export function ProductDetailTabs({
   const [manufactureSku, setManufactureSku] = useState(initialManufactureSku);
   const [brandId, setBrandId] = useState(product.brand_id || "");
   const [category, setCategory] = useState(product.category || "");
-  const [volume, setVolume] = useState(product.volume || "");
+  const [volumeValue, setVolumeValue] = useState(parsedVolume.value || "");
+  const [volumeUnit, setVolumeUnit] = useState<VolumeUnit>(parsedVolume.unit || "ml");
   const [origin, setOrigin] = useState(product.origin || "");
   const [leadTimeValue, setLeadTimeValue] = useState(parsedLeadTime.value || "");
-  const [leadTimeUnit, setLeadTimeUnit] = useState(parsedLeadTime.unit || "주");
+  const [leadTimeUnit, setLeadTimeUnit] = useState(parsedLeadTime.unit || "일");
   const [color, setColor] = useState(product.color || "");
   const [colorMap, setColorMap] = useState(product.color_map || "");
   const [description, setDescription] = useState(product.description || "");
@@ -603,10 +596,11 @@ export function ProductDetailTabs({
     manufactureSku: initialManufactureSku,
     brandId: product.brand_id || "",
     category: product.category || "",
-    volume: product.volume || "",
+    volumeValue: parsedVolume.value || "",
+    volumeUnit: parsedVolume.unit || "ml",
     origin: product.origin || "",
     leadTimeValue: parsedLeadTime.value || "",
-    leadTimeUnit: parsedLeadTime.unit || "주",
+    leadTimeUnit: parsedLeadTime.unit || "일",
     color: product.color || "",
     colorMap: product.color_map || "",
     description: product.description || "",
@@ -954,7 +948,8 @@ export function ProductDetailTabs({
     manufactureSku !== initialSnapshotRef.current.manufactureSku ||
     brandId !== initialSnapshotRef.current.brandId ||
     category !== initialSnapshotRef.current.category ||
-    volume !== initialSnapshotRef.current.volume ||
+    volumeValue !== initialSnapshotRef.current.volumeValue ||
+    volumeUnit !== initialSnapshotRef.current.volumeUnit ||
     origin !== initialSnapshotRef.current.origin ||
     leadTimeValue !== initialSnapshotRef.current.leadTimeValue ||
     leadTimeUnit !== initialSnapshotRef.current.leadTimeUnit ||
@@ -1079,7 +1074,7 @@ export function ProductDetailTabs({
       formData.set("manufactureSku", trimSkuSeparators(manufactureSku));
       formData.set("brandId", brandId);
       formData.set("category", category);
-      formData.set("volume", volume.trim());
+      formData.set("volume", formatVolume(volumeValue, volumeUnit));
       formData.set("origin", origin);
       formData.set("color", color.trim());
       formData.set("colorMap", colorMap);
@@ -1169,7 +1164,8 @@ export function ProductDetailTabs({
         manufactureSku,
         brandId,
         category,
-        volume,
+        volumeValue,
+        volumeUnit,
         origin,
         leadTimeValue,
         leadTimeUnit,
@@ -1715,14 +1711,29 @@ export function ProductDetailTabs({
 
               <div>
                 <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1.5">규격/용량 (Volume)</label>
-                <input
-                  name="volume"
-                  type="text"
-                  value={volume}
-                  onChange={(e) => setVolume(e.target.value)}
-                  placeholder="예: 50ml, 120g"
-                  className="block w-full rounded-lg border border-zinc-300 px-3.5 py-2 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-zinc-900 dark:focus:border-white"
-                />
+                <div className="flex gap-2">
+                  <input
+                    name="volumeValue"
+                    type="text"
+                    inputMode={volumeUnit === "Other" ? "text" : "decimal"}
+                    value={volumeValue}
+                    onChange={(e) => setVolumeValue(e.target.value)}
+                    placeholder={volumeUnit === "Other" ? "직접 입력 (예: 60 pads)" : "숫자/값 입력 (예: 250, 50)"}
+                    className="block w-2/3 rounded-lg border border-zinc-300 px-3.5 py-2 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-zinc-900 dark:focus:border-white"
+                  />
+                  <select
+                    name="volumeUnit"
+                    value={volumeUnit}
+                    onChange={(e) => setVolumeUnit(e.target.value as VolumeUnit)}
+                    className="block w-1/3 rounded-lg border border-zinc-300 px-3.5 py-2 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-zinc-900 dark:focus:border-white"
+                  >
+                    {VOLUME_UNITS.map((u) => (
+                      <option key={u.value} value={u.value}>
+                        {u.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
 
               <div>
@@ -1771,7 +1782,7 @@ export function ProductDetailTabs({
                   <select
                     name="leadTimeUnit"
                     value={leadTimeUnit}
-                    onChange={(e) => setLeadTimeUnit(e.target.value)}
+                    onChange={(e) => setLeadTimeUnit(e.target.value as LeadTimeUnit)}
                     className="block w-1/3 rounded-lg border border-zinc-300 px-3.5 py-2 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-zinc-900 dark:focus:border-white"
                   >
                     <option value="일">일 (Days)</option>
@@ -2170,7 +2181,7 @@ export function ProductDetailTabs({
             manufactureSku={manufactureSku || null}
             letustoSku={effectiveLetustoSku || null}
             origin={origin || null}
-            volume={volume || null}
+            volume={formatVolume(volumeValue, volumeUnit) || null}
             colorMap={colorMap || null}
             isAdmin={false}
             onCompletionChange={handleCompletionChange}

@@ -11,7 +11,13 @@ import {
   CERTIFICATE_TYPE_LABEL,
   type CertificateType,
   sanitizeSku,
-  trimSkuSeparators
+  trimSkuSeparators,
+  VOLUME_UNITS,
+  type VolumeUnit,
+  type LeadTimeUnit,
+  parseVolume,
+  formatVolume,
+  parseLeadTime
 } from "@/lib/product/types";
 import { 
   adminUpdateProductOverrides, 
@@ -534,24 +540,11 @@ export function ProductOverrideTabs({
   const [ovNameEn, setOvNameEn] = useState(overrides.name_en || "");
   const [ovBrandId, setOvBrandId] = useState(product.brand_id);
   const [ovCategory, setOvCategory] = useState(overrides.category || "");
-  const [ovVolume, setOvVolume] = useState(overrides.volume || "");
+  const parsedOverrideVolume = parseVolume(overrides.volume);
+  const [ovVolumeValue, setOvVolumeValue] = useState(parsedOverrideVolume.value);
+  const [ovVolumeUnit, setOvVolumeUnit] = useState<VolumeUnit>(overrides.volume ? parsedOverrideVolume.unit : "ml");
   const [ovOrigin, setOvOrigin] = useState(overrides.origin || "");
   
-  // Parse lead time value and unit for overrides
-  const parseLeadTime = (leadTimeStr?: string | null) => {
-    if (!leadTimeStr) return { value: "", unit: "주" };
-    const match = leadTimeStr.trim().match(/^(\d+)\s*(일|주|개월|days|weeks|months|day|week|month)?$/i);
-    if (match) {
-      const val = match[1];
-      let unit = match[2] || "주";
-      if (unit.toLowerCase().startsWith("day") || unit === "일") unit = "일";
-      else if (unit.toLowerCase().startsWith("week") || unit === "주") unit = "주";
-      else if (unit.toLowerCase().startsWith("month") || unit === "개월") unit = "개월";
-      return { value: val, unit };
-    }
-    return { value: leadTimeStr, unit: "주" };
-  };
-
   const parsedOverrideLeadTime = parseLeadTime(overrides.lead_time);
   const [ovLeadTimeValue, setOvLeadTimeValue] = useState(parsedOverrideLeadTime.value);
   const [ovLeadTimeUnit, setOvLeadTimeUnit] = useState(parsedOverrideLeadTime.unit);
@@ -1029,7 +1022,8 @@ export function ProductOverrideTabs({
     if (ovNameEn !== (overrides.name_en || "")) return true;
     if (ovBrandId !== product.brand_id) return true;
     if (ovCategory !== (overrides.category || "")) return true;
-    if (ovVolume !== (overrides.volume || "")) return true;
+    if (ovVolumeValue !== parsedOverrideVolume.value) return true;
+    if (ovVolumeUnit !== parsedOverrideVolume.unit) return true;
     if (ovOrigin !== (overrides.origin || "")) return true;
     if (ovLeadTimeValue !== parsedOverrideLeadTime.value) return true;
     if (ovLeadTimeUnit !== parsedOverrideLeadTime.unit) return true;
@@ -1054,7 +1048,8 @@ export function ProductOverrideTabs({
     ovNameEn, overrides.name_en,
     ovBrandId, product.brand_id,
     ovCategory, overrides.category,
-    ovVolume, overrides.volume,
+    ovVolumeValue, parsedOverrideVolume.value,
+    ovVolumeUnit, parsedOverrideVolume.unit,
     ovOrigin, overrides.origin,
     ovLeadTimeValue, parsedOverrideLeadTime.value,
     ovLeadTimeUnit, parsedOverrideLeadTime.unit,
@@ -1232,7 +1227,11 @@ export function ProductOverrideTabs({
       addString("name_en", ovNameEn);
       payload.brand_id = ovBrandId;
       addString("category", ovCategory);
-      addString("volume", ovVolume);
+      if (ovVolumeValue.trim() !== "") {
+        payload["volume"] = formatVolume(ovVolumeValue, ovVolumeUnit);
+      } else {
+        payload["volume"] = null;
+      }
       addString("origin", ovOrigin);
       if (ovLeadTimeValue.trim() !== "") {
         payload["lead_time"] = `${ovLeadTimeValue.trim()} ${ovLeadTimeUnit}`;
@@ -1898,13 +1897,27 @@ export function ProductOverrideTabs({
                       <span className="text-[8px] font-bold text-zinc-400 block mb-0.5 uppercase">포털 원본</span>
                       {product.volume || "-"}
                     </div>
-                    <input
-                      type="text"
-                      value={ovVolume}
-                      onChange={(e) => setOvVolume(e.target.value)}
-                      placeholder="예: 50ml, 120g"
-                      className="w-full rounded border border-zinc-200 p-2 text-xs text-zinc-900 bg-white dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:border-zinc-950 outline-none"
-                    />
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        inputMode={ovVolumeUnit === "Other" ? "text" : "decimal"}
+                        value={ovVolumeValue}
+                        onChange={(e) => setOvVolumeValue(e.target.value)}
+                        placeholder={ovVolumeUnit === "Other" ? "직접 입력 (예: 60 pads)" : "숫자/값 입력 (예: 250, 50)"}
+                        className="w-2/3 rounded border border-zinc-200 p-2 text-xs text-zinc-900 bg-white dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:border-zinc-950 outline-none"
+                      />
+                      <select
+                        value={ovVolumeUnit}
+                        onChange={(e) => setOvVolumeUnit(e.target.value as VolumeUnit)}
+                        className="w-1/3 rounded border border-zinc-200 p-2 text-xs text-zinc-900 bg-white dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:border-zinc-950 outline-none"
+                      >
+                        {VOLUME_UNITS.map((u) => (
+                          <option key={u.value} value={u.value}>
+                            {u.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
                   </div>
                 </div>
 
@@ -1967,7 +1980,7 @@ export function ProductOverrideTabs({
                       />
                       <select
                         value={ovLeadTimeUnit}
-                        onChange={(e) => setOvLeadTimeUnit(e.target.value)}
+                        onChange={(e) => setOvLeadTimeUnit(e.target.value as "일" | "주" | "개월")}
                         className="w-1/3 rounded border border-zinc-200 p-2 text-xs text-zinc-900 bg-white dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:border-zinc-950 outline-none"
                       >
                         <option value="일">일</option>
@@ -2160,7 +2173,7 @@ export function ProductOverrideTabs({
             manufactureSku={ovManufactureSku || product.manufacture_sku || null}
             letustoSku={ovLetustoSku || product.letusto_sku || null}
             origin={ovOrigin || product.origin || null}
-            volume={ovVolume || product.volume || null}
+            volume={formatVolume(ovVolumeValue, ovVolumeUnit) || product.volume || null}
             colorMap={ovColorMap || product.color_map || null}
             isAdmin={true}
             onDirtyChange={handleCatAttrDirtyChange}
