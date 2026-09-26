@@ -2800,8 +2800,8 @@ export function ProductOverrideTabs({
                 </div>
                 {/* Height */}
                 <div className="space-y-1">
-                  <label className="font-bold text-zinc-600 dark:text-zinc-450 block">높이 (Height, cm)</label>
-                  <div className="p-1 rounded bg-zinc-50 text-[10px] text-zinc-450 dark:text-zinc-500 font-mono text-center">원본: {product.carton_height || 0}</div>
+                  <label className="font-bold text-zinc-600 dark:text-zinc-455 block">높이 (Height, cm)</label>
+                  <div className="p-1 rounded bg-zinc-50 text-[10px] text-zinc-400 dark:bg-zinc-950/20 font-mono text-center">원본: {product.carton_height || 0}</div>
                   <input type="number" step="0.1" placeholder={product.carton_height?.toString() || "0"} value={ovCartonHeight} onChange={(e) => setOvCartonHeight(e.target.value)} className="w-full rounded border border-zinc-200 p-1.5 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white outline-none" />
                 </div>
                 {/* Weight */}
