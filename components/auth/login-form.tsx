@@ -21,6 +21,11 @@ export function LoginForm({ action, heading, description }: LoginFormProps) {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
+    try {
+      localStorage.removeItem("portal_last_activity_at");
+      localStorage.removeItem("portal_logout_event");
+    } catch {}
+
     const hash = window.location.hash;
     const search = window.location.search;
     const pathname = window.location.pathname;
@@ -54,12 +59,21 @@ export function LoginForm({ action, heading, description }: LoginFormProps) {
     }
   }, []);
 
+  const handleFormSubmit = () => {
+    if (typeof window !== "undefined") {
+      try {
+        localStorage.setItem("portal_last_activity_at", String(Date.now()));
+        localStorage.removeItem("portal_logout_event");
+      } catch {}
+    }
+  };
+
   return (
     <div className="w-full max-w-sm">
       {heading && <h1 className="text-xl font-semibold text-zinc-900 dark:text-white">{heading}</h1>}
       {description && <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">{description}</p>}
 
-      <form action={formAction} className="mt-8 space-y-4">
+      <form action={formAction} onSubmit={handleFormSubmit} className="mt-8 space-y-4">
         <div>
           <label
             htmlFor="email"

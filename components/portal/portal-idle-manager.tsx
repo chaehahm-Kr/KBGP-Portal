@@ -25,12 +25,15 @@ export function PortalIdleManager() {
     isLoggingOutRef.current = true;
 
     try {
-      // Notify other tabs
+      // Notify other tabs and purge activity timestamp
       if (typeof window !== "undefined") {
-        localStorage.setItem(STORAGE_LOGOUT_KEY, String(Date.now()));
-        if (channelRef.current) {
-          channelRef.current.postMessage({ type: "LOGOUT" });
-        }
+        try {
+          localStorage.removeItem(STORAGE_ACTIVITY_KEY);
+          localStorage.setItem(STORAGE_LOGOUT_KEY, String(Date.now()));
+          if (channelRef.current) {
+            channelRef.current.postMessage({ type: "LOGOUT" });
+          }
+        } catch {}
       }
 
       const supabase = createClient();
@@ -68,14 +71,18 @@ export function PortalIdleManager() {
   useEffect(() => {
     if (typeof window === "undefined") return;
 
-    // Initialize last activity from storage or now
+    // Initialize last activity safely: if missing, future, or already expired, initialize to now
+    const now = Date.now();
     const stored = localStorage.getItem(STORAGE_ACTIVITY_KEY);
     const num = stored ? Number(stored) : NaN;
-    const initialTime = !isNaN(num) && num > 0 ? num : Date.now();
+    const isFresh = !isNaN(num) && num > 0 && num <= now && now - num < IDLE_TIMEOUT_MS;
+    const initialTime = isFresh ? num : now;
     lastActivityRef.current = initialTime;
-    if (isNaN(num) || num <= 0) {
+    
+    try {
       localStorage.setItem(STORAGE_ACTIVITY_KEY, String(initialTime));
-    }
+      localStorage.removeItem(STORAGE_LOGOUT_KEY);
+    } catch {}
 
     // Setup BroadcastChannel for modern multi-tab sync
     if (typeof BroadcastChannel !== "undefined") {
@@ -100,7 +107,7 @@ export function PortalIdleManager() {
     const handleStorage = (e: StorageEvent) => {
       if (e.key === STORAGE_ACTIVITY_KEY && e.newValue) {
         const remoteTime = Number(e.newValue);
-        if (remoteTime > lastActivityRef.current) {
+        if (!isNaN(remoteTime) && remoteTime > lastActivityRef.current && remoteTime <= Date.now()) {
           lastActivityRef.current = remoteTime;
           setShowWarning(false);
         }
@@ -139,17 +146,17 @@ export function PortalIdleManager() {
     const interval = setInterval(() => {
       if (isLoggingOutRef.current) return;
 
-      // Check storage for latest activity across tabs or manual override
+      const currentNow = Date.now();
+      // Check storage for latest activity across tabs
       const currentStored = localStorage.getItem(STORAGE_ACTIVITY_KEY);
       if (currentStored) {
         const val = Number(currentStored);
-        if (!isNaN(val) && val > 0) {
+        if (!isNaN(val) && val > 0 && val <= currentNow && val > lastActivityRef.current) {
           lastActivityRef.current = val;
         }
       }
 
-      const now = Date.now();
-      const elapsed = now - lastActivityRef.current;
+      const elapsed = currentNow - lastActivityRef.current;
 
       if (elapsed >= IDLE_TIMEOUT_MS) {
         handleAutoLogout(false);
