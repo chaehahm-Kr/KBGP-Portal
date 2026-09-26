@@ -1000,6 +1000,10 @@ export function ProductOverrideTabs({
   const categoryAttrRef = useRef<CategoryAttributeFormHandle>(null);
   const [isCatAttrDirty, setIsCatAttrDirty] = useState(false);
 
+  const handleCatAttrDirtyChange = useCallback((isDirty: boolean) => {
+    setIsCatAttrDirty((prev) => (prev === isDirty ? prev : isDirty));
+  }, []);
+
   // Baseline initial state snapshots for dirty comparison
   const initialBullets = useMemo(() => {
     return overrides.bullet_points && overrides.bullet_points.length > 0
@@ -1355,18 +1359,13 @@ export function ProductOverrideTabs({
       {/* Back button and breadcrumb (Sticky float header) */}
       <div className="sticky top-0 z-30 bg-zinc-50/90 dark:bg-zinc-950/90 backdrop-blur-md py-4 border-b border-zinc-200/50 dark:border-zinc-800/50 flex items-center justify-between transition-colors mb-2">
         <div className="flex items-center gap-3">
-          <Link
-            href="/admin/products"
-            onClick={(e) => {
-              if (isAnyDirty) {
-                e.preventDefault();
-                confirmNavigation("/admin/products");
-              }
-            }}
-            className="text-xs font-bold text-zinc-550 hover:underline flex items-center gap-1 dark:text-zinc-400"
+          <button
+            type="button"
+            onClick={() => confirmNavigation("/admin/products")}
+            className="text-xs font-bold text-zinc-550 hover:underline flex items-center gap-1 dark:text-zinc-400 cursor-pointer bg-transparent border-none p-0"
           >
             ← 전체 제품 목록으로 돌아가기
-          </Link>
+          </button>
           {isAnyDirty && (
             <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400 border border-amber-200 dark:border-amber-800/80">
               <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
@@ -2164,7 +2163,7 @@ export function ProductOverrideTabs({
             volume={ovVolume || product.volume || null}
             colorMap={ovColorMap || product.color_map || null}
             isAdmin={true}
-            onDirtyChange={setIsCatAttrDirty}
+            onDirtyChange={handleCatAttrDirtyChange}
           />
         </div>
 

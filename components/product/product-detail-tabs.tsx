@@ -114,6 +114,25 @@ export function ProductDetailTabs({
   const [categoryCompletion, setCategoryCompletion] = useState<CategoryCompletionResult | null>(initialCategoryCompletion || null);
   const categoryAttrRef = React.useRef<CategoryAttributeFormHandle>(null);
 
+  const handleCompletionChange = React.useCallback((status: any) => {
+    setCategoryCompletion((prev) => {
+      if (
+        prev &&
+        prev.categoryComplete === status.categoryComplete &&
+        prev.requiredAttributesComplete === status.requiredAttributesComplete &&
+        prev.completionPercent === status.completionPercent &&
+        JSON.stringify(prev.missingRequiredAttributes) === JSON.stringify(status.missingRequiredAttributes)
+      ) {
+        return prev;
+      }
+      return prev ? { ...prev, ...status } : status;
+    });
+  }, []);
+
+  const handleCatAttrDirtyChange = React.useCallback((isDirty: boolean) => {
+    setIsCatAttrDirty((prev) => (prev === isDirty ? prev : isDirty));
+  }, []);
+
   // Sync activeTab from URL search params (?tab=...) or hash (#attr-...)
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -1538,18 +1557,13 @@ export function ProductDetailTabs({
                 <span>저장되지 않은 변경사항이 있습니다.</span>
               </span>
             )}
-            <Link
-              href="/portal/products"
-              onClick={(e) => {
-                if (isAnyDirty) {
-                  e.preventDefault();
-                  confirmNavigation("/portal/products");
-                }
-              }}
+            <button
+              type="button"
+              onClick={() => confirmNavigation("/portal/products")}
               className="w-full sm:w-auto text-center rounded-lg border border-zinc-300 bg-white hover:bg-zinc-50 px-5 py-2.5 text-xs font-bold text-zinc-700 transition-all dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-300 dark:hover:bg-zinc-900 cursor-pointer"
             >
               목록으로 돌아가기
-            </Link>
+            </button>
             <button
               type="button"
               onClick={handleSaveClick}
@@ -2159,8 +2173,8 @@ export function ProductDetailTabs({
             volume={volume || null}
             colorMap={colorMap || null}
             isAdmin={false}
-            onCompletionChange={(status) => setCategoryCompletion((prev) => (prev ? { ...prev, ...status } : (status as any)))}
-            onDirtyChange={setIsCatAttrDirty}
+            onCompletionChange={handleCompletionChange}
+            onDirtyChange={handleCatAttrDirtyChange}
           />
         </div>
 

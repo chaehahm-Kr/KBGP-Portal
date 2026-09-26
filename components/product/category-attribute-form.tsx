@@ -194,6 +194,18 @@ export const CategoryAttributeForm = forwardRef<CategoryAttributeFormHandle, Cat
 
   const formValuesRef = useRef<Record<string, any>>({});
   const formTextValuesRef = useRef<Record<string, string>>({});
+  const onCompletionChangeRef = useRef(onCompletionChange);
+  const onDirtyChangeRef = useRef(onDirtyChange);
+  const lastEmittedCompletionRef = useRef<string>("");
+  const lastEmittedDirtyRef = useRef<boolean | null>(null);
+
+  useEffect(() => {
+    onCompletionChangeRef.current = onCompletionChange;
+  }, [onCompletionChange]);
+
+  useEffect(() => {
+    onDirtyChangeRef.current = onDirtyChange;
+  }, [onDirtyChange]);
 
   useEffect(() => {
     formValuesRef.current = formValues;
@@ -485,10 +497,15 @@ export const CategoryAttributeForm = forwardRef<CategoryAttributeFormHandle, Cat
   }, [selectedCat1, selectedCat2, selectedCat3, initialCategoryCode, attributes, formValues, formTextValues, loading, hasInitialized]);
 
   useEffect(() => {
-    if (onDirtyChange && hasInitialized && !loading) {
-      onDirtyChange(checkIsDirty());
+    if (!hasInitialized || loading) return;
+    const isDirty = checkIsDirty();
+    if (lastEmittedDirtyRef.current !== isDirty) {
+      lastEmittedDirtyRef.current = isDirty;
+      if (onDirtyChangeRef.current) {
+        onDirtyChangeRef.current(isDirty);
+      }
     }
-  }, [checkIsDirty, onDirtyChange, hasInitialized, loading]);
+  }, [checkIsDirty, hasInitialized, loading]);
 
   const formatUnit = (unit: string | null) => {
     if (!unit) return "";
@@ -545,8 +562,9 @@ export const CategoryAttributeForm = forwardRef<CategoryAttributeFormHandle, Cat
 
   // Sync completion state to parent component (e.g. ProductDetailTabs tab indicator & missing warning)
   useEffect(() => {
-    if (!onCompletionChange) return;
     if (!hasInitialized || loading) return;
+    if (!onCompletionChangeRef.current) return;
+
     const isCategoryComplete = Boolean(isFinalCategorySelected);
     const missing: { code: string; nameKo: string }[] = [];
     if (isCategoryComplete) {
@@ -562,13 +580,20 @@ export const CategoryAttributeForm = forwardRef<CategoryAttributeFormHandle, Cat
       });
     }
     const isReqComplete = isCategoryComplete && missing.length === 0;
-    onCompletionChange({
+
+    const statusObj = {
       categoryComplete: isCategoryComplete,
       requiredAttributesComplete: isReqComplete,
       missingRequiredAttributes: missing,
       completionPercent: completeness,
-    });
-  }, [isFinalCategorySelected, attributes, formValues, isAdmin, onCompletionChange, completeness, hasInitialized, loading]);
+    };
+
+    const serialized = JSON.stringify(statusObj);
+    if (lastEmittedCompletionRef.current !== serialized) {
+      lastEmittedCompletionRef.current = serialized;
+      onCompletionChangeRef.current(statusObj);
+    }
+  }, [isFinalCategorySelected, attributes, formValues, isAdmin, completeness, hasInitialized, loading]);
 
   // 내부 공통 유효성 검사
   const validateInternal = () => {
