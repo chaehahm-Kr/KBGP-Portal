@@ -214,79 +214,163 @@ export async function createProduct(
   redirect(`/portal/products/${product.id}`);
 }
 
-export async function addProductImages(productId: string, formData: FormData) {
-  const { companyId } = await requireCompanyMembership();
-  const supabase = await createClient();
+export interface ImageUploadItemResult {
+  fileName: string;
+  success: boolean;
+  error?: string;
+}
 
-  const images = formData
-    .getAll("images")
-    .filter((f): f is File => f instanceof File && f.size > 0);
+export interface ImageUploadResponse {
+  success: boolean;
+  uploadedCount: number;
+  results: ImageUploadItemResult[];
+  error?: string;
+}
 
-  if (images.length === 0) {
-    throw new Error("업로드할 이미지가 선택되지 않았습니다.");
-  }
+export async function addProductImages(productId: string, formData: FormData): Promise<ImageUploadResponse> {
+  try {
+    const { companyId } = await requireCompanyMembership();
+    const supabase = await createClient();
 
-  const { count } = await supabase
-    .from("product_images")
-    .select("id", { count: "exact", head: true })
-    .eq("product_id", productId);
+    const images = formData
+      .getAll("images")
+      .filter((f): f is File => f instanceof File && f.size > 0);
 
-  if ((count ?? 0) + images.length > MAX_IMAGES) {
-    throw new Error(`제품 이미지는 최대 ${MAX_IMAGES}장까지 첨부할 수 있습니다. (현재 ${count ?? 0}장 등록됨)`);
-  }
-
-  let uploadedCount = 0;
-  for (const [i, image] of images.entries()) {
-    const validation = await validateUploadedFile(image, ["image"]);
-    if (!validation.ok) {
-      throw new Error(`[${image.name}] ${validation.error}`);
-    }
-    const path = `${companyId}/products/${productId}/images/${crypto.randomUUID()}.${extensionFor(
-      validation.detectedMime
-    )}`;
-    const { error: uploadError } = await supabase.storage
-      .from("company-uploads")
-      .upload(path, image, { contentType: validation.detectedMime });
-    if (uploadError) {
-      console.error("Storage upload error for image:", image.name, uploadError);
-      throw new Error(`[${image.name}] 스토리지 업로드 실패: ${uploadError.message}`);
+    if (images.length === 0) {
+      return {
+        success: false,
+        uploadedCount: 0,
+        results: [],
+        error: "업로드할 이미지가 선택되지 않았습니다.",
+      };
     }
 
-    const { error: insertError } = await supabase.from("product_images").insert({
-      product_id: productId,
-      company_id: companyId,
-      storage_path: path,
-      position: (count ?? 0) + i,
-    });
+    const { count } = await supabase
+      .from("product_images")
+      .select("id", { count: "exact", head: true })
+      .eq("product_id", productId);
 
-    if (insertError) {
-      console.error("DB insert error for product_images:", insertError);
-      throw new Error(`[${image.name}] 데이터베이스 등록 실패: ${insertError.message}`);
+    const currentCount = count ?? 0;
+    if (currentCount + images.length > MAX_IMAGES) {
+      return {
+        success: false,
+        uploadedCount: 0,
+        results: images.map((img) => ({
+          fileName: img.name,
+          success: false,
+          error: `최대 ${MAX_IMAGES}장 등록 한도를 초과했습니다. (현재 ${currentCount}장 등록됨)`,
+        })),
+        error: `제품 이미지는 최대 ${MAX_IMAGES}장까지 첨부할 수 있습니다. (현재 ${currentCount}장 등록됨)`,
+      };
     }
 
-    uploadedCount++;
-  }
+    let uploadedCount = 0;
+    const results: ImageUploadItemResult[] = [];
 
-  if (uploadedCount > 0) {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      const { data: profile } = user ? await supabase.from("profiles").select("display_name").eq("id", user.id).maybeSingle() : { data: null };
-      const { data: company } = await supabase.from("companies").select("name").eq("id", companyId).maybeSingle();
-      await recordProductChangeLog({
-        productId,
-        userId: user?.id,
-        userName: profile?.display_name || user?.email || "Brand User",
-        userEmail: user?.email,
-        source: "BRAND_PORTAL",
-        companyName: company?.name || "Brand Portal",
-        section: "미디어",
-        actionType: "CREATE",
-        summary: `제품 이미지 ${uploadedCount}장 추가`,
+    for (const [i, image] of images.entries()) {
+      if (image.size > 10 * 1024 * 1024) {
+        results.push({
+          fileName: image.name,
+          success: false,
+          error: "파일 크기가 허용 한도(10MB)를 초과했습니다.",
+        });
+        continue;
+      }
+
+      const validation = await validateUploadedFile(image, ["image"]);
+      if (!validation.ok) {
+        results.push({
+          fileName: image.name,
+          success: false,
+          error: validation.error || "지원하지 않는 파일 형식입니다. (JPG, PNG, WEBP만 가능)",
+        });
+        continue;
+      }
+
+      const path = `${companyId}/products/${productId}/images/${crypto.randomUUID()}.${extensionFor(
+        validation.detectedMime
+      )}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from("company-uploads")
+        .upload(path, image, { contentType: validation.detectedMime });
+
+      if (uploadError) {
+        console.error("Storage upload error for image:", image.name, uploadError);
+        results.push({
+          fileName: image.name,
+          success: false,
+          error: "스토리지 파일 업로드에 실패했습니다. 잠시 후 다시 시도해주세요.",
+        });
+        continue;
+      }
+
+      const { error: insertError } = await supabase.from("product_images").insert({
+        product_id: productId,
+        company_id: companyId,
+        storage_path: path,
+        position: currentCount + uploadedCount,
       });
-    } catch (e) {}
-  }
 
-  revalidatePath(`/portal/products/${productId}`);
+      if (insertError) {
+        console.error("DB insert error for product_images:", insertError);
+        results.push({
+          fileName: image.name,
+          success: false,
+          error: "이미지 정보 데이터베이스 등록에 실패했습니다.",
+        });
+        continue;
+      }
+
+      results.push({
+        fileName: image.name,
+        success: true,
+      });
+      uploadedCount++;
+    }
+
+    if (uploadedCount > 0) {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        const { data: profile } = user ? await supabase.from("profiles").select("display_name").eq("id", user.id).maybeSingle() : { data: null };
+        const { data: company } = await supabase.from("companies").select("name").eq("id", companyId).maybeSingle();
+        await recordProductChangeLog({
+          productId,
+          userId: user?.id,
+          userName: profile?.display_name || user?.email || "Brand User",
+          userEmail: user?.email,
+          source: "BRAND_PORTAL",
+          companyName: company?.name || "Brand Portal",
+          section: "미디어",
+          actionType: "CREATE",
+          summary: `제품 이미지 ${uploadedCount}장 추가`,
+        });
+      } catch (e) {}
+    }
+
+    revalidatePath(`/portal/products/${productId}`);
+    revalidatePath(`/admin/products/${productId}`);
+
+    const allSucceeded = uploadedCount === images.length;
+    return {
+      success: uploadedCount > 0,
+      uploadedCount,
+      results,
+      error: !allSucceeded
+        ? (uploadedCount === 0
+            ? "모든 이미지 업로드에 실패했습니다."
+            : `${images.length - uploadedCount}개 이미지 업로드에 실패했습니다.`)
+        : undefined,
+    };
+  } catch (err: any) {
+    console.error("Unexpected error in addProductImages:", err);
+    return {
+      success: false,
+      uploadedCount: 0,
+      results: [],
+      error: err.message || "이미지 업로드 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.",
+    };
+  }
 }
 
 export async function removeProductImage(productId: string, imageId: string) {

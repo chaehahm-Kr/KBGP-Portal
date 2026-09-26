@@ -66,13 +66,40 @@ export async function adminUpdateProductOverrides(
   }
 
   // Merge the new overrides into existing admin_overrides
-  const updatedMeta = {
+  const updatedMeta: Record<string, any> = {
     ...currentMeta,
     admin_overrides: {
       ...currentOverrides,
       ...cleanOverrides,
     },
   };
+
+  // Extract canonical price_tiers if provided
+  const rawPriceTiers = cleanOverrides.canonical_price_tiers !== undefined
+    ? cleanOverrides.canonical_price_tiers
+    : cleanOverrides.price_tiers;
+
+  if (Array.isArray(rawPriceTiers)) {
+    const validTiers = rawPriceTiers
+      .map((t: any) => ({
+        qty: Number(t.qty || 0),
+        price: Number(t.price || 0),
+      }))
+      .filter((t: any) => t.qty > 0 && t.price >= 0)
+      .sort((a: any, b: any) => a.qty - b.qty);
+
+    // Deduplicate MOQ preserving the latest specified price
+    const uniqueMap = new Map<number, number>();
+    validTiers.forEach((t) => uniqueMap.set(t.qty, t.price));
+    const sortedUniqueTiers = Array.from(uniqueMap.entries())
+      .map(([qty, price]) => ({ qty, price }))
+      .sort((a, b) => a.qty - b.qty);
+
+    updatedMeta.price_tiers = sortedUniqueTiers;
+    updatedMeta.tiered_prices = sortedUniqueTiers;
+    delete updatedMeta.admin_overrides.canonical_price_tiers;
+    delete updatedMeta.admin_overrides.price_tiers;
+  }
 
   const updateData: Record<string, any> = {
     price_additional_info: updatedMeta,
@@ -103,11 +130,13 @@ export async function adminUpdateProductOverrides(
   const beforeMerged: Record<string, any> = {
     ...product,
     ...currentOverrides,
+    price_tiers: currentMeta.price_tiers || currentMeta.tiered_prices || [],
   };
   const afterMerged: Record<string, any> = {
     ...product,
     ...currentOverrides,
     ...overrides,
+    price_tiers: updatedMeta.price_tiers || [],
   };
   if (letustoSku !== undefined) afterMerged.letusto_sku = updateData.letusto_sku;
   if (brandId !== undefined) afterMerged.brand_id = updateData.brand_id;
@@ -981,73 +1010,182 @@ function extensionFor(mime: string) {
   return "jpg";
 }
 
-export async function adminAddProductImages(productId: string, formData: FormData) {
-  await verifyAdminSession();
-  const supabase = createAdminClient();
+export interface ImageUploadItemResult {
+  fileName: string;
+  success: boolean;
+  error?: string;
+}
 
-  const { data: prod } = await supabase
-    .from("products")
-    .select("company_id")
-    .eq("id", productId)
-    .single();
-  const companyId = prod?.company_id;
-  if (!companyId) throw new Error("제품의 회사 정보를 찾을 수 없습니다.");
+export interface ImageUploadResponse {
+  success: boolean;
+  uploadedCount: number;
+  results: ImageUploadItemResult[];
+  error?: string;
+}
 
-  const images = formData
-    .getAll("images")
-    .filter((f): f is File => f instanceof File && f.size > 0);
+export async function adminAddProductImages(productId: string, formData: FormData): Promise<ImageUploadResponse> {
+  try {
+    const session = await verifyAdminSession();
+    const supabase = createAdminClient();
 
-  const { count } = await supabase
-    .from("product_images")
-    .select("id", { count: "exact", head: true })
-    .eq("product_id", productId);
+    const { data: prod } = await supabase
+      .from("products")
+      .select("company_id")
+      .eq("id", productId)
+      .single();
+    const companyId = prod?.company_id;
+    if (!companyId) {
+      return {
+        success: false,
+        uploadedCount: 0,
+        results: [],
+        error: "제품의 회사 정보를 찾을 수 없습니다.",
+      };
+    }
 
-  let uploadedCount = 0;
-  for (const [i, image] of images.entries()) {
-    const validation = await validateUploadedFile(image, ["image"]);
-    if (!validation.ok) continue;
-    const path = `${companyId}/products/${productId}/images/${crypto.randomUUID()}.${extensionFor(
-      validation.detectedMime
-    )}`;
-    const { error: uploadError } = await supabase.storage
-      .from("company-uploads")
-      .upload(path, image, { contentType: validation.detectedMime });
-    if (!uploadError) {
-      await supabase.from("product_images").insert({
+    const images = formData
+      .getAll("images")
+      .filter((f): f is File => f instanceof File && f.size > 0);
+
+    if (images.length === 0) {
+      return {
+        success: false,
+        uploadedCount: 0,
+        results: [],
+        error: "업로드할 이미지가 선택되지 않았습니다.",
+      };
+    }
+
+    const { count } = await supabase
+      .from("product_images")
+      .select("id", { count: "exact", head: true })
+      .eq("product_id", productId);
+
+    const currentCount = count ?? 0;
+    if (currentCount + images.length > 10) {
+      return {
+        success: false,
+        uploadedCount: 0,
+        results: images.map((img) => ({
+          fileName: img.name,
+          success: false,
+          error: `최대 10장 등록 한도를 초과했습니다. (현재 ${currentCount}장 등록됨)`,
+        })),
+        error: `제품 이미지는 최대 10장까지 등록할 수 있습니다. (현재 ${currentCount}장 등록됨)`,
+      };
+    }
+
+    let uploadedCount = 0;
+    const results: ImageUploadItemResult[] = [];
+
+    for (const [i, image] of images.entries()) {
+      if (image.size > 10 * 1024 * 1024) {
+        results.push({
+          fileName: image.name,
+          success: false,
+          error: "파일 크기가 허용 한도(10MB)를 초과했습니다.",
+        });
+        continue;
+      }
+
+      const validation = await validateUploadedFile(image, ["image"]);
+      if (!validation.ok) {
+        results.push({
+          fileName: image.name,
+          success: false,
+          error: validation.error || "지원하지 않는 파일 형식입니다. (JPG, PNG, WEBP만 가능)",
+        });
+        continue;
+      }
+
+      const path = `${companyId}/products/${productId}/images/${crypto.randomUUID()}.${extensionFor(
+        validation.detectedMime
+      )}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from("company-uploads")
+        .upload(path, image, { contentType: validation.detectedMime });
+
+      if (uploadError) {
+        console.error("Storage upload error for image (Admin):", image.name, uploadError);
+        results.push({
+          fileName: image.name,
+          success: false,
+          error: "스토리지 파일 업로드에 실패했습니다. 잠시 후 다시 시도해주세요.",
+        });
+        continue;
+      }
+
+      const { error: insertError } = await supabase.from("product_images").insert({
         product_id: productId,
         company_id: companyId,
         storage_path: path,
-        position: (count ?? 0) + i,
+        position: currentCount + uploadedCount,
+      });
+
+      if (insertError) {
+        console.error("DB insert error for product_images (Admin):", insertError);
+        results.push({
+          fileName: image.name,
+          success: false,
+          error: "이미지 정보 데이터베이스 저장에 실패했습니다.",
+        });
+        continue;
+      }
+
+      results.push({
+        fileName: image.name,
+        success: true,
       });
       uploadedCount++;
     }
+
+    if (uploadedCount > 0) {
+      try {
+        let adminName = "Admin";
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("display_name")
+          .eq("id", session.userId)
+          .maybeSingle();
+        if (profile?.display_name) adminName = profile.display_name;
+
+        await recordProductChangeLog({
+          productId,
+          userId: session.userId,
+          userName: adminName,
+          source: "ADMIN",
+          companyName: "Letusto Admin",
+          section: "미디어",
+          actionType: "CREATE",
+          summary: `관리자 제품 이미지 ${uploadedCount}장 추가`,
+        });
+      } catch (e) {}
+    }
+
+    revalidatePath(`/admin/products/${productId}`);
+    revalidatePath(`/portal/products/${productId}`);
+
+    const allSucceeded = uploadedCount === images.length;
+    return {
+      success: uploadedCount > 0,
+      uploadedCount,
+      results,
+      error: !allSucceeded
+        ? (uploadedCount === 0
+            ? "모든 이미지 업로드에 실패했습니다."
+            : `${images.length - uploadedCount}개 이미지 업로드에 실패했습니다.`)
+        : undefined,
+    };
+  } catch (err: any) {
+    console.error("Unexpected error in adminAddProductImages:", err);
+    return {
+      success: false,
+      uploadedCount: 0,
+      results: [],
+      error: err.message || "이미지 업로드 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.",
+    };
   }
-
-  if (uploadedCount > 0) {
-    try {
-      const session = await verifyAdminSession();
-      let adminName = "Admin";
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("display_name")
-        .eq("id", session.userId)
-        .maybeSingle();
-      if (profile?.display_name) adminName = profile.display_name;
-
-      await recordProductChangeLog({
-        productId,
-        userId: session.userId,
-        userName: adminName,
-        source: "ADMIN",
-        companyName: "Letusto Admin",
-        section: "미디어",
-        actionType: "CREATE",
-        summary: `관리자 제품 이미지 ${uploadedCount}장 추가`,
-      });
-    } catch (e) {}
-  }
-
-  revalidatePath(`/admin/products/${productId}`);
 }
 
 export async function adminRemoveProductImage(productId: string, imageId: string) {

@@ -95,6 +95,8 @@ export const PRODUCT_AUDIT_FIELD_DEFINITIONS: Record<
   priceKrwWholesale: { label: "한국 공급/도매가 (KRW)", section: "가격 정보", type: "currency_krw" },
   price_usd_fob: { label: "미국 수출 FOB 공급가 (USD)", section: "가격 정보", type: "currency_usd" },
   priceUsdFob: { label: "미국 수출 FOB 공급가 (USD)", section: "가격 정보", type: "currency_usd" },
+  price_tiers: { label: "수량별 B2B 공급 가격", section: "가격 정보" },
+  priceTiers: { label: "수량별 B2B 공급 가격", section: "가격 정보" },
   estimated_retail_price: { label: "예상 소비자가 (KRW)", section: "가격 정보", type: "currency_krw" },
   estimatedRetailPrice: { label: "예상 소비자가 (KRW)", section: "가격 정보", type: "currency_krw" },
 
@@ -184,6 +186,9 @@ export function formatAuditValue(val: any, type?: string): string {
 
   if (Array.isArray(val)) {
     if (val.length === 0) return "(비어 있음)";
+    if (val[0] && typeof val[0] === "object" && ("qty" in val[0] || "price" in val[0])) {
+      return val.map((t: any) => `${Number(t.qty || 0).toLocaleString()}개+: $${Number(t.price || 0).toFixed(2)}`).join(" / ");
+    }
     return val.join(", ");
   }
 
