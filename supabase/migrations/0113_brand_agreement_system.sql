@@ -136,15 +136,8 @@ CREATE POLICY "Admins can manage agreement templates"
   ON public.agreement_templates FOR ALL
   TO authenticated
   USING (
-    EXISTS (
-      SELECT 1 FROM public.company_users cu
-      WHERE cu.user_id = auth.uid() AND cu.role IN ('ADMIN', 'SUPERADMIN', 'STAFF', 'OWNER')
-    )
-    OR
-    EXISTS (
-      SELECT 1 FROM public.staff_profiles sp
-      WHERE sp.user_id = auth.uid()
-    )
+    public.auth_is_admin()
+    OR auth.role() = 'service_role'
   );
 
 -- Company Agreements
@@ -154,12 +147,10 @@ CREATE POLICY "Users can view own company agreements"
   TO authenticated
   USING (
     company_id IN (
-      SELECT cu.company_id FROM public.company_users cu WHERE cu.user_id = auth.uid()
+      SELECT company_id FROM public.company_users WHERE id = auth.uid()
     )
-    OR
-    EXISTS (
-      SELECT 1 FROM public.staff_profiles sp WHERE sp.user_id = auth.uid()
-    )
+    OR public.auth_is_admin()
+    OR auth.role() = 'service_role'
   );
 
 DROP POLICY IF EXISTS "Users can insert/update own company agreements" ON public.company_agreements;
@@ -168,12 +159,10 @@ CREATE POLICY "Users can insert/update own company agreements"
   TO authenticated
   USING (
     company_id IN (
-      SELECT cu.company_id FROM public.company_users cu WHERE cu.user_id = auth.uid()
+      SELECT company_id FROM public.company_users WHERE id = auth.uid()
     )
-    OR
-    EXISTS (
-      SELECT 1 FROM public.staff_profiles sp WHERE sp.user_id = auth.uid()
-    )
+    OR public.auth_is_admin()
+    OR auth.role() = 'service_role'
   );
 
 -- Audit Logs
@@ -185,13 +174,11 @@ CREATE POLICY "Users can view own agreement audit logs"
     company_agreement_id IN (
       SELECT ca.id FROM public.company_agreements ca
       WHERE ca.company_id IN (
-        SELECT cu.company_id FROM public.company_users cu WHERE cu.user_id = auth.uid()
+        SELECT company_id FROM public.company_users WHERE id = auth.uid()
       )
     )
-    OR
-    EXISTS (
-      SELECT 1 FROM public.staff_profiles sp WHERE sp.user_id = auth.uid()
-    )
+    OR public.auth_is_admin()
+    OR auth.role() = 'service_role'
   );
 
 DROP POLICY IF EXISTS "Users can insert agreement audit logs" ON public.agreement_audit_logs;
