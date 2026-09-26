@@ -258,17 +258,17 @@ export function PortalProductsList({ initialProducts, hasBrand }: PortalProducts
           <table className="w-full text-left border-collapse text-xs">
             <thead>
               <tr className="border-b border-zinc-200 bg-zinc-50/50 text-zinc-500 font-bold dark:border-zinc-800 dark:bg-zinc-900/50">
-                <th className="px-4 py-3.5 w-14">사진</th>
-                <th className="px-4 py-3.5">Letusto SKU</th>
-                <th className="px-4 py-3.5">제조사 SKU</th>
-                <th className="px-4 py-3.5">제품명</th>
-                <th className="px-4 py-3.5">브랜드</th>
-                <th className="px-4 py-3.5">카테고리</th>
-                <th className="px-4 py-3.5 whitespace-nowrap">속성 완성도</th>
-                <th className="px-4 py-3.5 whitespace-nowrap">등록 상태</th>
-                <th className="px-4 py-3.5 whitespace-nowrap">선정 상태</th>
-                <th className="px-4 py-3.5 whitespace-nowrap">판매 상태</th>
-                <th className="px-4 py-3.5 text-right">관리</th>
+                <th className="px-2.5 py-3 w-12 text-center">사진</th>
+                <th className="px-2.5 py-3 whitespace-nowrap">Letusto SKU</th>
+                <th className="px-2.5 py-3 whitespace-nowrap">제조사 SKU</th>
+                <th className="px-3 py-3 min-w-[280px] md:min-w-[340px]">제품명</th>
+                <th className="px-2.5 py-3 whitespace-nowrap">브랜드</th>
+                <th className="px-2.5 py-3 max-w-[100px] text-center">카테고리</th>
+                <th className="px-2.5 py-3 whitespace-nowrap min-w-[105px]">속성 완성도</th>
+                <th className="px-2.5 py-3 min-w-[120px] max-w-[160px]">등록 상태</th>
+                <th className="px-2 py-3 whitespace-nowrap text-center">선정 상태</th>
+                <th className="px-2 py-3 whitespace-nowrap text-center">판매 상태</th>
+                <th className="pl-2 pr-4 py-3 text-right whitespace-nowrap min-w-[125px]">관리</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-200 text-xs dark:divide-zinc-800/80">
@@ -278,9 +278,9 @@ export function PortalProductsList({ initialProducts, hasBrand }: PortalProducts
                   className="hover:bg-zinc-50/50 dark:hover:bg-zinc-850/20 transition-colors"
                 >
                   {/* Thumbnail */}
-                  <td className="px-4 py-4">
+                  <td className="px-2.5 py-3">
                     {product.photoUrl ? (
-                       <div className="h-12 w-12 rounded-md bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 flex items-center justify-center p-1 shadow-sm overflow-hidden">
+                      <div className="h-10 w-10 mx-auto rounded-md bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 flex items-center justify-center p-0.5 shadow-sm overflow-hidden">
                         <img
                           src={product.photoUrl}
                           alt={product.display_name}
@@ -288,56 +288,55 @@ export function PortalProductsList({ initialProducts, hasBrand }: PortalProducts
                         />
                       </div>
                     ) : (
-                      <div className="h-12 w-12 rounded-md bg-zinc-100 flex items-center justify-center text-zinc-400 dark:bg-zinc-800 text-[10px] font-bold border border-dashed border-zinc-200 dark:border-zinc-700">
+                      <div className="h-10 w-10 mx-auto rounded-md bg-zinc-100 flex items-center justify-center text-zinc-400 dark:bg-zinc-800 text-[9px] font-bold border border-dashed border-zinc-200 dark:border-zinc-700">
                         No Pic
                       </div>
                     )}
                   </td>
 
                   {/* Letusto SKU */}
-                  <td className="px-4 py-4 font-mono font-bold text-zinc-950 dark:text-white whitespace-nowrap">
+                  <td className="px-2.5 py-3 font-mono font-bold text-[11px] text-zinc-950 dark:text-white whitespace-nowrap">
                     {product.letusto_sku || (
-                      <span className="text-zinc-350 dark:text-zinc-600 italic font-sans font-normal">지정 대기 중</span>
+                      <span className="text-zinc-350 dark:text-zinc-600 italic font-sans font-normal text-[10px]">지정 대기 중</span>
                     )}
                   </td>
 
                   {/* Manufacture SKU */}
-                  <td className="px-4 py-4 text-zinc-700 dark:text-zinc-300 font-mono font-semibold whitespace-nowrap">
+                  <td className="px-2.5 py-3 text-zinc-700 dark:text-zinc-300 font-mono font-semibold text-[11px] whitespace-nowrap">
                     {product.manufacture_sku || (
-                      <span className="text-zinc-350 dark:text-zinc-500 italic">미입력</span>
+                      <span className="text-zinc-350 dark:text-zinc-500 italic text-[10px]">미입력</span>
                     )}
                   </td>
 
-                  {/* Product Name */}
-                  <td className="px-4 py-4 font-bold text-zinc-900 dark:text-white">
-                    <div className="flex flex-col gap-1">
-                      <Link
-                        href={`/portal/products/${product.id}`}
-                        className="hover:underline hover:text-indigo-650 block text-sm"
-                      >
-                        {product.display_name}
-                      </Link>
-                    </div>
+                  {/* Product Name (Priority Expanded Column) */}
+                  <td className="px-3 py-3 font-bold text-zinc-900 dark:text-white min-w-[280px] md:min-w-[340px]">
+                    <Link
+                      href={`/portal/products/${product.id}`}
+                      className="hover:underline hover:text-indigo-650 block text-xs md:text-sm font-bold leading-snug line-clamp-2"
+                      title={product.display_name}
+                    >
+                      {product.display_name}
+                    </Link>
                   </td>
 
                   {/* Brand */}
-                  <td className="px-4 py-4 text-zinc-600 dark:text-zinc-300 font-medium whitespace-nowrap">
+                  <td className="px-2.5 py-3 text-zinc-600 dark:text-zinc-300 font-medium text-xs whitespace-nowrap max-w-[110px] truncate" title={product.brandName}>
                     {product.brandName}
                   </td>
 
-                  {/* Category */}
-                  <td className="px-4 py-4 whitespace-nowrap">
-                    <span className="inline-flex items-center rounded-full bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 text-[10px] font-semibold text-zinc-700 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700">
+                  {/* Category (Compact, wraps up to 2 lines if needed) */}
+                  <td className="px-2.5 py-3 text-center max-w-[100px]">
+                    <span className="inline-block rounded bg-zinc-100 dark:bg-zinc-800 px-1.5 py-0.5 text-[10px] font-semibold text-zinc-700 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700 leading-tight break-words text-center">
                       {PRODUCT_CATEGORY_LABEL[product.category as ProductCategory] || product.category}
                     </span>
                   </td>
 
-                  {/* Attribute Completion Fixed Column */}
-                  <td className="px-4 py-4 whitespace-nowrap">
+                  {/* Attribute Completion (Compact progress + % on line 1, warning on line 2) */}
+                  <td className="px-2.5 py-3 min-w-[105px]">
                     {product.category_completion ? (
-                      <div className="flex flex-col gap-1">
-                        <div className="flex items-center gap-2">
-                          <div className="w-16 bg-zinc-200 dark:bg-zinc-800 rounded-full h-2 overflow-hidden">
+                      <div className="flex flex-col gap-0.5">
+                        <div className="flex items-center gap-1.5">
+                          <div className="w-12 bg-zinc-200 dark:bg-zinc-800 rounded-full h-1.5 overflow-hidden">
                             <div
                               className={`h-full rounded-full transition-all ${
                                 product.category_completion.completionPercent === 100
@@ -349,7 +348,7 @@ export function PortalProductsList({ initialProducts, hasBrand }: PortalProducts
                               style={{ width: `${product.category_completion.completionPercent ?? 0}%` }}
                             />
                           </div>
-                          <span className={`text-xs font-bold font-mono ${
+                          <span className={`text-[11px] font-bold font-mono ${
                             product.category_completion.completionPercent === 100
                               ? "text-emerald-700 dark:text-emerald-400"
                               : "text-zinc-700 dark:text-zinc-300"
@@ -364,7 +363,8 @@ export function PortalProductsList({ initialProducts, hasBrand }: PortalProducts
                                 ? `#attr-${product.category_completion.missingRequiredAttributes[0].code}`
                                 : ""
                             }`}
-                            className="text-[9px] text-amber-600 dark:text-amber-400 font-semibold hover:underline"
+                            className="text-[9px] text-amber-600 dark:text-amber-400 font-semibold hover:underline leading-tight block line-clamp-2"
+                            title={product.category_completion.warningLabel}
                           >
                             ⚠️ {product.category_completion.warningLabel}
                           </Link>
@@ -375,33 +375,33 @@ export function PortalProductsList({ initialProducts, hasBrand }: PortalProducts
                     )}
                   </td>
 
-                  {/* 1. Registration Status Badge */}
-                  <td className="px-4 py-4">
+                  {/* Registration Status Badge */}
+                  <td className="px-2.5 py-3 min-w-[120px] max-w-[160px]">
                     {product.deleted_at ? (
-                      <span className="inline-flex items-center rounded bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400 px-2 py-0.5 text-[10px] font-bold border border-zinc-200 dark:border-zinc-700 whitespace-nowrap">
+                      <span className="inline-flex items-center rounded bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400 px-1.5 py-0.5 text-[10px] font-bold border border-zinc-200 dark:border-zinc-700 whitespace-nowrap">
                         Deleted (삭제됨)
                       </span>
                     ) : product.is_draft ? (
-                      <div className="space-y-1">
-                        <span className="inline-flex items-center rounded bg-rose-50 text-rose-700 dark:bg-rose-950/20 dark:text-rose-400 px-2 py-0.5 text-[10px] font-bold border border-rose-200 dark:border-rose-900/50 whitespace-nowrap">
+                      <div className="space-y-0.5">
+                        <span className="inline-flex items-center rounded bg-rose-50 text-rose-700 dark:bg-rose-950/20 dark:text-rose-400 px-1.5 py-0.5 text-[10px] font-bold border border-rose-200 dark:border-rose-900/50 whitespace-nowrap">
                           Draft (보완 대기)
                         </span>
                         {product.missing_fields && product.missing_fields.length > 0 && (
-                          <div className="text-[9px] text-rose-600 dark:text-rose-400 leading-tight max-w-[140px]">
-                            <span className="font-semibold block">* 누락 항목:</span>
-                            <span className="block">{product.missing_fields.join(", ")}</span>
+                          <div className="text-[9px] text-rose-600 dark:text-rose-400 leading-tight line-clamp-2">
+                            <span className="font-semibold">* 누락: </span>
+                            <span>{product.missing_fields.join(", ")}</span>
                           </div>
                         )}
                       </div>
                     ) : (
-                      <span className="inline-flex items-center rounded bg-emerald-50 text-emerald-700 dark:bg-emerald-950/20 dark:text-emerald-400 px-2 py-0.5 text-[10px] font-bold border border-emerald-200 dark:border-emerald-900/50 whitespace-nowrap">
+                      <span className="inline-flex items-center rounded bg-emerald-50 text-emerald-700 dark:bg-emerald-950/20 dark:text-emerald-400 px-1.5 py-0.5 text-[10px] font-bold border border-emerald-200 dark:border-emerald-900/50 whitespace-nowrap">
                         등록 완료
                       </span>
                     )}
                   </td>
 
-                  {/* 2. Selection Status Badge (Read Only) */}
-                  <td className="px-4 py-4 whitespace-nowrap">
+                  {/* Selection Status Badge */}
+                  <td className="px-2 py-3 text-center whitespace-nowrap">
                     {(() => {
                       const selKey = (product.selection_status || "UNREVIEWED") as SelectionStatus;
                       const label = SELECTION_STATUS_LABELS[selKey] || product.selection_status;
@@ -412,7 +412,7 @@ export function PortalProductsList({ initialProducts, hasBrand }: PortalProducts
                       };
                       return (
                         <span
-                          className={`inline-flex items-center rounded px-2 py-0.5 text-[10px] font-bold border ${style.bg} ${style.text} ${style.border}`}
+                          className={`inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-bold border ${style.bg} ${style.text} ${style.border}`}
                           title="어드민 검토 상태"
                         >
                           {label}
@@ -421,8 +421,8 @@ export function PortalProductsList({ initialProducts, hasBrand }: PortalProducts
                     })()}
                   </td>
 
-                  {/* 3. Sales Status Badge (Read Only) */}
-                  <td className="px-4 py-4 whitespace-nowrap">
+                  {/* Sales Status Badge */}
+                  <td className="px-2 py-3 text-center whitespace-nowrap">
                     {(() => {
                       const salesKey = (product.sales_status || "PREPARING") as SalesStatus;
                       const label = SALES_STATUS_LABELS[salesKey] || product.sales_status;
@@ -433,7 +433,7 @@ export function PortalProductsList({ initialProducts, hasBrand }: PortalProducts
                       };
                       return (
                         <span
-                          className={`inline-flex items-center rounded px-2 py-0.5 text-[10px] font-bold border ${style.bg} ${style.text} ${style.border}`}
+                          className={`inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-bold border ${style.bg} ${style.text} ${style.border}`}
                           title="어드민 판매 운영 상태"
                         >
                           {label}
@@ -442,12 +442,12 @@ export function PortalProductsList({ initialProducts, hasBrand }: PortalProducts
                     })()}
                   </td>
 
-                  {/* Actions */}
-                  <td className="px-4 py-4 text-right whitespace-nowrap">
+                  {/* Actions (Guaranteed visible with right-side breathing room) */}
+                  <td className="pl-2 pr-4 py-3 text-right whitespace-nowrap min-w-[125px]">
                     <div className="flex justify-end items-center gap-1.5">
                       <Link
                         href={`/portal/products/${product.id}`}
-                        className="rounded bg-zinc-100 dark:bg-zinc-800 px-2.5 py-1.5 font-bold text-zinc-700 hover:bg-zinc-200 dark:text-zinc-300 dark:hover:bg-zinc-700 hover:underline transition-all whitespace-nowrap shrink-0 inline-flex items-center text-[11px]"
+                        className="rounded bg-zinc-100 dark:bg-zinc-800 px-2 py-1 font-bold text-zinc-700 hover:bg-zinc-200 dark:text-zinc-300 dark:hover:bg-zinc-700 transition-all whitespace-nowrap shrink-0 inline-flex items-center text-[11px]"
                       >
                         수정/상세
                       </Link>
@@ -455,7 +455,7 @@ export function PortalProductsList({ initialProducts, hasBrand }: PortalProducts
                         <button
                           type="button"
                           onClick={() => openDeleteModal(product)}
-                          className="rounded bg-rose-50 text-rose-700 hover:bg-rose-100 dark:bg-rose-950/20 dark:text-rose-455 dark:hover:bg-rose-900/30 px-2.5 py-1.5 font-bold transition-all cursor-pointer border border-rose-100 dark:border-rose-900/50 whitespace-nowrap shrink-0 inline-flex items-center text-[11px]"
+                          className="rounded bg-rose-50 text-rose-700 hover:bg-rose-100 dark:bg-rose-950/20 dark:text-rose-455 dark:hover:bg-rose-900/30 px-2 py-1 font-bold transition-all cursor-pointer border border-rose-100 dark:border-rose-900/50 whitespace-nowrap shrink-0 inline-flex items-center text-[11px]"
                         >
                           삭제
                         </button>
