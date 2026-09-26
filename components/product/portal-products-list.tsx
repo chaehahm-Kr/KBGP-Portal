@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import { PRODUCT_CATEGORY_LABEL, type ProductCategory } from "@/lib/product/types";
-import { deleteProduct } from "@/lib/product/actions";
+import { bulkDeleteProducts } from "@/lib/product/actions";
 import { useSearchParams } from "next/navigation";
 import {
   SELECTION_STATUS_LABELS,
@@ -54,12 +54,13 @@ export function PortalProductsList({ initialProducts, hasBrand }: PortalProducts
   const [products, setProducts] = useState<PortalProductItem[]>(initialProducts);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
-  const [selectedStatus, setSelectedStatus] = useState<string>("active_draft"); // 디폴트 값: 활성/보완 대기
+  const [selectedStatus, setSelectedStatus] = useState<string>("active_draft"); // 디폴트: 활성/보완 대기
 
-  // Delete modal & Toast states
-  const [deletingProduct, setDeletingProduct] = useState<PortalProductItem | null>(null);
-  const [isDeleting, setIsDeleting] = useState(false);
-  const [deleteError, setDeleteError] = useState<string | null>(null);
+  // Selection & Bulk Delete state
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [isBulkDeleteModalOpen, setIsBulkDeleteModalOpen] = useState(false);
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
+  const [bulkDeleteError, setBulkDeleteError] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   React.useEffect(() => {
@@ -73,40 +74,6 @@ export function PortalProductsList({ initialProducts, hasBrand }: PortalProducts
   React.useEffect(() => {
     setProducts(initialProducts);
   }, [initialProducts]);
-
-  const openDeleteModal = (product: PortalProductItem) => {
-    setDeletingProduct(product);
-    setDeleteError(null);
-  };
-
-  const handleConfirmDelete = async () => {
-    if (!deletingProduct) return;
-    setIsDeleting(true);
-    setDeleteError(null);
-
-    try {
-      const res = await deleteProduct(deletingProduct.id);
-      if (res.success) {
-        const now = new Date().toISOString();
-        setProducts((prev) =>
-          prev.map((p) =>
-            p.id === deletingProduct.id
-              ? { ...p, deleted_at: now, is_draft: false, selection_status: "NOT_SELECTED", sales_status: "ENDED" }
-              : p
-          )
-        );
-        setDeletingProduct(null);
-        setToastMessage("제품이 삭제되었습니다.");
-        setTimeout(() => setToastMessage(null), 4000);
-      } else {
-        setDeleteError(res.error || "제품 삭제에 실패했습니다.");
-      }
-    } catch (err: any) {
-      setDeleteError(err.message || "제품을 삭제하지 못했습니다. 잠시 후 다시 시도해주세요.");
-    } finally {
-      setIsDeleting(false);
-    }
-  };
 
   const filteredProducts = products.filter((product) => {
     // 1. Search filter
@@ -143,6 +110,71 @@ export function PortalProductsList({ initialProducts, hasBrand }: PortalProducts
 
     return matchesSearch && matchesCategory && matchesStatus;
   });
+
+  // Selectable products (non-deleted products in the current filtered view)
+  const selectableProducts = filteredProducts.filter((p) => !p.deleted_at);
+  const selectableIds = selectableProducts.map((p) => p.id);
+
+  const isAllSelected =
+    selectableIds.length > 0 && selectableIds.every((id) => selectedIds.includes(id));
+  const isSomeSelected =
+    selectableIds.some((id) => selectedIds.includes(id)) && !isAllSelected;
+
+  const handleToggleSelectAll = () => {
+    if (isAllSelected) {
+      // Deselect all currently visible selectable items
+      setSelectedIds((prev) => prev.filter((id) => !selectableIds.includes(id)));
+    } else {
+      // Select all currently visible selectable items
+      setSelectedIds((prev) => Array.from(new Set([...prev, ...selectableIds])));
+    }
+  };
+
+  const handleToggleSelect = (productId: string) => {
+    setSelectedIds((prev) =>
+      prev.includes(productId) ? prev.filter((id) => id !== productId) : [...prev, productId]
+    );
+  };
+
+  const handleConfirmBulkDelete = async () => {
+    if (selectedIds.length === 0) return;
+    setIsBulkDeleting(true);
+    setBulkDeleteError(null);
+
+    try {
+      const res = await bulkDeleteProducts(selectedIds);
+      if (res.success) {
+        const now = new Date().toISOString();
+        const deletedSet = new Set(selectedIds);
+        setProducts((prev) =>
+          prev.map((p) =>
+            deletedSet.has(p.id)
+              ? {
+                  ...p,
+                  deleted_at: now,
+                  is_draft: false,
+                  selection_status: "NOT_SELECTED",
+                  sales_status: "ENDED",
+                }
+              : p
+          )
+        );
+        const count = res.deletedCount ?? selectedIds.length;
+        setSelectedIds([]);
+        setIsBulkDeleteModalOpen(false);
+        setToastMessage(`${count}개의 제품이 삭제(비활성화)되었습니다.`);
+        setTimeout(() => setToastMessage(null), 4000);
+      } else {
+        setBulkDeleteError(res.error || "제품 삭제 처리에 실패했습니다.");
+      }
+    } catch (err: any) {
+      setBulkDeleteError(err.message || "제품 삭제 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.");
+    } finally {
+      setIsBulkDeleting(false);
+    }
+  };
+
+  const selectedProductList = products.filter((p) => selectedIds.includes(p.id));
 
   return (
     <div className="space-y-6">
@@ -203,7 +235,6 @@ export function PortalProductsList({ initialProducts, hasBrand }: PortalProducts
               <option value="wellness_patch">웰니스 패치</option>
             </select>
           </div>
-
         </div>
 
         {/* Exposed Status Tab Filters */}
@@ -234,21 +265,53 @@ export function PortalProductsList({ initialProducts, hasBrand }: PortalProducts
           })}
         </div>
 
-        {/* Quick Filter Info */}
-        <div className="text-[10px] text-zinc-500 dark:text-zinc-500 flex justify-between items-center">
-          <span>검색 결과: <strong className="text-zinc-800 dark:text-zinc-200 font-bold">{filteredProducts.length}</strong> 건</span>
-          {(searchTerm || selectedCategory !== "all" || selectedStatus !== "active_draft") && (
+        {/* Bulk Action & Results Info Bar */}
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 border-t border-zinc-100 pt-3 dark:border-zinc-850">
+          <div className="flex items-center gap-3">
+            {selectedIds.length > 0 ? (
+              <div className="inline-flex items-center gap-2 bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 px-3 py-1 rounded-lg border border-indigo-200 dark:border-indigo-900/60 text-xs font-bold">
+                <span>✓ {selectedIds.length}개 선택됨</span>
+                <button
+                  type="button"
+                  onClick={() => setSelectedIds([])}
+                  className="text-[10px] text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 underline ml-1 cursor-pointer"
+                >
+                  선택 해제
+                </button>
+              </div>
+            ) : (
+              <span className="text-xs text-zinc-500 dark:text-zinc-400">
+                검색 결과: <strong className="text-zinc-800 dark:text-zinc-200 font-bold">{filteredProducts.length}</strong> 건
+              </span>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2">
             <button
+              type="button"
+              disabled={selectedIds.length === 0}
               onClick={() => {
-                setSearchTerm("");
-                setSelectedCategory("all");
-                setSelectedStatus("active_draft");
+                setBulkDeleteError(null);
+                setIsBulkDeleteModalOpen(true);
               }}
-              className="text-indigo-650 hover:underline dark:text-indigo-400 font-semibold"
+              className="rounded-lg bg-rose-50 text-rose-700 hover:bg-rose-100 dark:bg-rose-950/30 dark:text-rose-400 dark:hover:bg-rose-900/50 px-3 py-1.5 text-xs font-bold transition-all disabled:opacity-40 disabled:cursor-not-allowed border border-rose-200 dark:border-rose-900/60 cursor-pointer flex items-center gap-1.5"
             >
-              필터 초기화
+              <span>🗑️</span>
+              <span>선택 삭제 {selectedIds.length > 0 ? `(${selectedIds.length})` : ""}</span>
             </button>
-          )}
+            {(searchTerm || selectedCategory !== "all" || selectedStatus !== "active_draft") && (
+              <button
+                onClick={() => {
+                  setSearchTerm("");
+                  setSelectedCategory("all");
+                  setSelectedStatus("active_draft");
+                }}
+                className="text-indigo-650 hover:underline dark:text-indigo-400 font-semibold text-xs ml-2 cursor-pointer"
+              >
+                필터 초기화
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
@@ -257,213 +320,237 @@ export function PortalProductsList({ initialProducts, hasBrand }: PortalProducts
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse text-xs">
             <thead>
-              <tr className="border-b border-zinc-200 bg-zinc-50/50 text-zinc-500 font-bold dark:border-zinc-800 dark:bg-zinc-900/50">
-                <th className="px-2.5 py-3 w-12 text-center">사진</th>
+              <tr className="border-b border-zinc-200 bg-zinc-50/60 text-zinc-600 font-bold dark:border-zinc-800 dark:bg-zinc-900/60">
+                {/* Checkbox Header */}
+                <th className="w-10 px-3 py-3 text-center">
+                  <input
+                    type="checkbox"
+                    checked={isAllSelected}
+                    ref={(el) => {
+                      if (el) el.indeterminate = isSomeSelected;
+                    }}
+                    onChange={handleToggleSelectAll}
+                    disabled={selectableIds.length === 0}
+                    className="h-4 w-4 rounded border-zinc-300 text-indigo-600 focus:ring-indigo-500 dark:border-zinc-700 dark:bg-zinc-950 cursor-pointer disabled:opacity-30 align-middle"
+                    aria-label="전체 제품 선택"
+                  />
+                </th>
+                <th className="px-2 py-3 w-12 text-center whitespace-nowrap">사진</th>
                 <th className="px-2.5 py-3 whitespace-nowrap">Letusto SKU</th>
                 <th className="px-2.5 py-3 whitespace-nowrap">제조사 SKU</th>
-                <th className="px-3 py-3 min-w-[280px] md:min-w-[340px]">제품명</th>
-                <th className="px-2.5 py-3 whitespace-nowrap">브랜드</th>
-                <th className="px-2.5 py-3 max-w-[100px] text-center">카테고리</th>
-                <th className="px-2.5 py-3 whitespace-nowrap min-w-[105px]">속성 완성도</th>
-                <th className="px-2.5 py-3 min-w-[120px] max-w-[160px]">등록 상태</th>
+                <th className="px-3.5 py-3 min-w-[240px]">제품명</th>
+                <th className="px-2.5 py-3 whitespace-nowrap max-w-[100px]">브랜드</th>
+                <th className="px-3 py-3 min-w-[140px] max-w-[180px]">카테고리 / 속성</th>
+                <th className="px-2.5 py-3 min-w-[110px] max-w-[150px]">등록 상태</th>
                 <th className="px-2 py-3 whitespace-nowrap text-center">선정 상태</th>
                 <th className="px-2 py-3 whitespace-nowrap text-center">판매 상태</th>
-                <th className="pl-2 pr-4 py-3 text-right whitespace-nowrap min-w-[125px]">관리</th>
+                <th className="px-3 py-3 text-right whitespace-nowrap w-24">관리</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-200 text-xs dark:divide-zinc-800/80">
-              {filteredProducts.map((product) => (
-                <tr
-                  key={product.id}
-                  className="hover:bg-zinc-50/50 dark:hover:bg-zinc-850/20 transition-colors"
-                >
-                  {/* Thumbnail */}
-                  <td className="px-2.5 py-3">
-                    {product.photoUrl ? (
-                      <div className="h-10 w-10 mx-auto rounded-md bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 flex items-center justify-center p-0.5 shadow-sm overflow-hidden">
-                        <img
-                          src={product.photoUrl}
-                          alt={product.display_name}
-                          className="h-full w-full object-contain"
-                        />
-                      </div>
-                    ) : (
-                      <div className="h-10 w-10 mx-auto rounded-md bg-zinc-100 flex items-center justify-center text-zinc-400 dark:bg-zinc-800 text-[9px] font-bold border border-dashed border-zinc-200 dark:border-zinc-700">
-                        No Pic
-                      </div>
-                    )}
-                  </td>
+              {filteredProducts.map((product) => {
+                const isSelected = selectedIds.includes(product.id);
+                const categoryLabel =
+                  PRODUCT_CATEGORY_LABEL[product.category as ProductCategory] || product.category || "-";
 
-                  {/* Letusto SKU */}
-                  <td className="px-2.5 py-3 font-mono font-bold text-[11px] text-zinc-950 dark:text-white whitespace-nowrap">
-                    {product.letusto_sku || (
-                      <span className="text-zinc-350 dark:text-zinc-600 italic font-sans font-normal text-[10px]">지정 대기 중</span>
-                    )}
-                  </td>
+                return (
+                  <tr
+                    key={product.id}
+                    className={`transition-colors ${
+                      isSelected
+                        ? "bg-indigo-50/40 dark:bg-indigo-950/20"
+                        : "hover:bg-zinc-50/50 dark:hover:bg-zinc-850/20"
+                    }`}
+                  >
+                    {/* Row Checkbox */}
+                    <td className="w-10 px-3 py-3 text-center">
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => handleToggleSelect(product.id)}
+                        disabled={!!product.deleted_at}
+                        className="h-4 w-4 rounded border-zinc-300 text-indigo-600 focus:ring-indigo-500 dark:border-zinc-700 dark:bg-zinc-950 cursor-pointer disabled:opacity-20 align-middle"
+                        aria-label={`${product.display_name} 선택`}
+                      />
+                    </td>
 
-                  {/* Manufacture SKU */}
-                  <td className="px-2.5 py-3 text-zinc-700 dark:text-zinc-300 font-mono font-semibold text-[11px] whitespace-nowrap">
-                    {product.manufacture_sku || (
-                      <span className="text-zinc-350 dark:text-zinc-500 italic text-[10px]">미입력</span>
-                    )}
-                  </td>
-
-                  {/* Product Name (Priority Expanded Column) */}
-                  <td className="px-3 py-3 font-bold text-zinc-900 dark:text-white min-w-[280px] md:min-w-[340px]">
-                    <Link
-                      href={`/portal/products/${product.id}`}
-                      className="hover:underline hover:text-indigo-650 block text-xs md:text-sm font-bold leading-snug line-clamp-2"
-                      title={product.display_name}
-                    >
-                      {product.display_name}
-                    </Link>
-                  </td>
-
-                  {/* Brand */}
-                  <td className="px-2.5 py-3 text-zinc-600 dark:text-zinc-300 font-medium text-xs whitespace-nowrap max-w-[110px] truncate" title={product.brandName}>
-                    {product.brandName}
-                  </td>
-
-                  {/* Category (Compact, wraps up to 2 lines if needed) */}
-                  <td className="px-2.5 py-3 text-center max-w-[100px]">
-                    <span className="inline-block rounded bg-zinc-100 dark:bg-zinc-800 px-1.5 py-0.5 text-[10px] font-semibold text-zinc-700 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700 leading-tight break-words text-center">
-                      {PRODUCT_CATEGORY_LABEL[product.category as ProductCategory] || product.category}
-                    </span>
-                  </td>
-
-                  {/* Attribute Completion (Compact progress + % on line 1, warning on line 2) */}
-                  <td className="px-2.5 py-3 min-w-[105px]">
-                    {product.category_completion ? (
-                      <div className="flex flex-col gap-0.5">
-                        <div className="flex items-center gap-1.5">
-                          <div className="w-12 bg-zinc-200 dark:bg-zinc-800 rounded-full h-1.5 overflow-hidden">
-                            <div
-                              className={`h-full rounded-full transition-all ${
-                                product.category_completion.completionPercent === 100
-                                  ? "bg-emerald-500"
-                                  : (product.category_completion.completionPercent ?? 0) >= 50
-                                  ? "bg-indigo-500"
-                                  : "bg-amber-500"
-                              }`}
-                              style={{ width: `${product.category_completion.completionPercent ?? 0}%` }}
-                            />
-                          </div>
-                          <span className={`text-[11px] font-bold font-mono ${
-                            product.category_completion.completionPercent === 100
-                              ? "text-emerald-700 dark:text-emerald-400"
-                              : "text-zinc-700 dark:text-zinc-300"
-                          }`}>
-                            {product.category_completion.completionPercent ?? 0}%
-                          </span>
+                    {/* Thumbnail */}
+                    <td className="px-2 py-3 text-center">
+                      {product.photoUrl ? (
+                        <div className="h-10 w-10 mx-auto rounded-md bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 flex items-center justify-center p-0.5 shadow-sm overflow-hidden">
+                          <img
+                            src={product.photoUrl}
+                            alt={product.display_name}
+                            className="h-full w-full object-contain"
+                          />
                         </div>
-                        {product.category_completion.warningLabel && (
-                          <Link
-                            href={`/portal/products/${product.id}?tab=category_attributes${
-                              product.category_completion.missingRequiredAttributes?.[0]?.code
-                                ? `#attr-${product.category_completion.missingRequiredAttributes[0].code}`
-                                : ""
-                            }`}
-                            className="text-[9px] text-amber-600 dark:text-amber-400 font-semibold hover:underline leading-tight block line-clamp-2"
-                            title={product.category_completion.warningLabel}
-                          >
-                            ⚠️ {product.category_completion.warningLabel}
-                          </Link>
-                        )}
-                      </div>
-                    ) : (
-                      <span className="text-zinc-400 text-xs italic">-</span>
-                    )}
-                  </td>
+                      ) : (
+                        <div className="h-10 w-10 mx-auto rounded-md bg-zinc-100 flex items-center justify-center text-zinc-400 dark:bg-zinc-800 text-[9px] font-bold border border-dashed border-zinc-200 dark:border-zinc-700">
+                          No Pic
+                        </div>
+                      )}
+                    </td>
 
-                  {/* Registration Status Badge */}
-                  <td className="px-2.5 py-3 min-w-[120px] max-w-[160px]">
-                    {product.deleted_at ? (
-                      <span className="inline-flex items-center rounded bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400 px-1.5 py-0.5 text-[10px] font-bold border border-zinc-200 dark:border-zinc-700 whitespace-nowrap">
-                        Deleted (삭제됨)
-                      </span>
-                    ) : product.is_draft ? (
-                      <div className="space-y-0.5">
-                        <span className="inline-flex items-center rounded bg-rose-50 text-rose-700 dark:bg-rose-950/20 dark:text-rose-400 px-1.5 py-0.5 text-[10px] font-bold border border-rose-200 dark:border-rose-900/50 whitespace-nowrap">
-                          Draft (보완 대기)
-                        </span>
-                        {product.missing_fields && product.missing_fields.length > 0 && (
-                          <div className="text-[9px] text-rose-600 dark:text-rose-400 leading-tight line-clamp-2">
-                            <span className="font-semibold">* 누락: </span>
-                            <span>{product.missing_fields.join(", ")}</span>
-                          </div>
-                        )}
-                      </div>
-                    ) : (
-                      <span className="inline-flex items-center rounded bg-emerald-50 text-emerald-700 dark:bg-emerald-950/20 dark:text-emerald-400 px-1.5 py-0.5 text-[10px] font-bold border border-emerald-200 dark:border-emerald-900/50 whitespace-nowrap">
-                        등록 완료
-                      </span>
-                    )}
-                  </td>
+                    {/* Letusto SKU */}
+                    <td className="px-2.5 py-3 font-mono font-bold text-[11px] text-zinc-950 dark:text-white whitespace-nowrap">
+                      {product.letusto_sku || (
+                        <span className="text-zinc-350 dark:text-zinc-600 italic font-sans font-normal text-[10px]">지정 대기 중</span>
+                      )}
+                    </td>
 
-                  {/* Selection Status Badge */}
-                  <td className="px-2 py-3 text-center whitespace-nowrap">
-                    {(() => {
-                      const selKey = (product.selection_status || "UNREVIEWED") as SelectionStatus;
-                      const label = SELECTION_STATUS_LABELS[selKey] || product.selection_status;
-                      const style = SELECTION_STATUS_STYLES[selKey] || {
-                        bg: "bg-zinc-100 dark:bg-zinc-800",
-                        text: "text-zinc-700 dark:text-zinc-300",
-                        border: "border-zinc-200 dark:border-zinc-700",
-                      };
-                      return (
-                        <span
-                          className={`inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-bold border ${style.bg} ${style.text} ${style.border}`}
-                          title="어드민 검토 상태"
-                        >
-                          {label}
-                        </span>
-                      );
-                    })()}
-                  </td>
+                    {/* Manufacture SKU */}
+                    <td className="px-2.5 py-3 text-zinc-700 dark:text-zinc-300 font-mono font-semibold text-[11px] whitespace-nowrap">
+                      {product.manufacture_sku || (
+                        <span className="text-zinc-350 dark:text-zinc-500 italic text-[10px]">미입력</span>
+                      )}
+                    </td>
 
-                  {/* Sales Status Badge */}
-                  <td className="px-2 py-3 text-center whitespace-nowrap">
-                    {(() => {
-                      const salesKey = (product.sales_status || "PREPARING") as SalesStatus;
-                      const label = SALES_STATUS_LABELS[salesKey] || product.sales_status;
-                      const style = SALES_STATUS_STYLES[salesKey] || {
-                        bg: "bg-zinc-100 dark:bg-zinc-800",
-                        text: "text-zinc-700 dark:text-zinc-300",
-                        border: "border-zinc-200 dark:border-zinc-700",
-                      };
-                      return (
-                        <span
-                          className={`inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-bold border ${style.bg} ${style.text} ${style.border}`}
-                          title="어드민 판매 운영 상태"
-                        >
-                          {label}
-                        </span>
-                      );
-                    })()}
-                  </td>
-
-                  {/* Actions (Guaranteed visible with right-side breathing room) */}
-                  <td className="pl-2 pr-4 py-3 text-right whitespace-nowrap min-w-[125px]">
-                    <div className="flex justify-end items-center gap-1.5">
+                    {/* Product Name (Priority Expanded Column) */}
+                    <td className="px-3.5 py-3 font-bold text-zinc-900 dark:text-white min-w-[240px]">
                       <Link
                         href={`/portal/products/${product.id}`}
-                        className="rounded bg-zinc-100 dark:bg-zinc-800 px-2 py-1 font-bold text-zinc-700 hover:bg-zinc-200 dark:text-zinc-300 dark:hover:bg-zinc-700 transition-all whitespace-nowrap shrink-0 inline-flex items-center text-[11px]"
+                        className="hover:underline hover:text-indigo-650 dark:hover:text-indigo-400 block text-xs md:text-sm font-bold leading-snug line-clamp-2"
+                        title={product.display_name}
+                      >
+                        {product.display_name}
+                      </Link>
+                    </td>
+
+                    {/* Brand */}
+                    <td className="px-2.5 py-3 text-zinc-600 dark:text-zinc-300 font-medium text-xs whitespace-nowrap max-w-[100px] truncate" title={product.brandName}>
+                      {product.brandName}
+                    </td>
+
+                    {/* Merged Category / Attribute Completion */}
+                    <td className="px-3 py-3 min-w-[140px] max-w-[180px]">
+                      <div className="space-y-1">
+                        <div className="font-semibold text-zinc-900 dark:text-zinc-100 text-xs leading-tight truncate" title={categoryLabel}>
+                          {categoryLabel}
+                        </div>
+                        {product.category_completion ? (
+                          <div className="space-y-0.5">
+                            <div className="flex items-center gap-1.5">
+                              <div className="w-14 bg-zinc-200 dark:bg-zinc-800 rounded-full h-1.5 overflow-hidden">
+                                <div
+                                  className={`h-full rounded-full transition-all ${
+                                    product.category_completion.completionPercent === 100
+                                      ? "bg-emerald-500"
+                                      : (product.category_completion.completionPercent ?? 0) >= 50
+                                      ? "bg-indigo-500"
+                                      : "bg-amber-500"
+                                  }`}
+                                  style={{ width: `${product.category_completion.completionPercent ?? 0}%` }}
+                                />
+                              </div>
+                              <span className={`text-[10px] font-bold font-mono ${
+                                product.category_completion.completionPercent === 100
+                                  ? "text-emerald-700 dark:text-emerald-400"
+                                  : "text-zinc-700 dark:text-zinc-300"
+                              }`}>
+                                {product.category_completion.completionPercent ?? 0}%
+                              </span>
+                            </div>
+                            {product.category_completion.warningLabel && (
+                              <Link
+                                href={`/portal/products/${product.id}?tab=category_attributes${
+                                  product.category_completion.missingRequiredAttributes?.[0]?.code
+                                    ? `#attr-${product.category_completion.missingRequiredAttributes[0].code}`
+                                    : ""
+                                }`}
+                                className="text-[9px] text-amber-600 dark:text-amber-400 font-semibold hover:underline leading-tight block line-clamp-1"
+                                title={product.category_completion.warningLabel}
+                              >
+                                ⚠️ {product.category_completion.warningLabel}
+                              </Link>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="text-[10px] text-amber-600 dark:text-amber-400 font-semibold leading-tight">
+                            ⚠️ 속성 입력 필요
+                          </div>
+                        )}
+                      </div>
+                    </td>
+
+                    {/* Registration Status Badge */}
+                    <td className="px-2.5 py-3 min-w-[110px] max-w-[150px]">
+                      {product.deleted_at ? (
+                        <span className="inline-flex items-center rounded bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400 px-1.5 py-0.5 text-[10px] font-bold border border-zinc-200 dark:border-zinc-700 whitespace-nowrap">
+                          Deleted (삭제됨)
+                        </span>
+                      ) : product.is_draft ? (
+                        <div className="space-y-0.5">
+                          <span className="inline-flex items-center rounded bg-rose-50 text-rose-700 dark:bg-rose-950/20 dark:text-rose-400 px-1.5 py-0.5 text-[10px] font-bold border border-rose-200 dark:border-rose-900/50 whitespace-nowrap">
+                            Draft (보완 대기)
+                          </span>
+                          {product.missing_fields && product.missing_fields.length > 0 && (
+                            <div className="text-[9px] text-rose-600 dark:text-rose-400 leading-tight line-clamp-2">
+                              <span className="font-semibold">* 누락: </span>
+                              <span>{product.missing_fields.join(", ")}</span>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="inline-flex items-center rounded bg-emerald-50 text-emerald-700 dark:bg-emerald-950/20 dark:text-emerald-400 px-1.5 py-0.5 text-[10px] font-bold border border-emerald-200 dark:border-emerald-900/50 whitespace-nowrap">
+                          등록 완료
+                        </span>
+                      )}
+                    </td>
+
+                    {/* Selection Status Badge */}
+                    <td className="px-2 py-3 text-center whitespace-nowrap">
+                      {(() => {
+                        const selKey = (product.selection_status || "UNREVIEWED") as SelectionStatus;
+                        const label = SELECTION_STATUS_LABELS[selKey] || product.selection_status;
+                        const style = SELECTION_STATUS_STYLES[selKey] || {
+                          bg: "bg-zinc-100 dark:bg-zinc-800",
+                          text: "text-zinc-700 dark:text-zinc-300",
+                          border: "border-zinc-200 dark:border-zinc-700",
+                        };
+                        return (
+                          <span
+                            className={`inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-bold border ${style.bg} ${style.text} ${style.border}`}
+                            title="어드민 검토 상태"
+                          >
+                            {label}
+                          </span>
+                        );
+                      })()}
+                    </td>
+
+                    {/* Sales Status Badge */}
+                    <td className="px-2 py-3 text-center whitespace-nowrap">
+                      {(() => {
+                        const salesKey = (product.sales_status || "PREPARING") as SalesStatus;
+                        const label = SALES_STATUS_LABELS[salesKey] || product.sales_status;
+                        const style = SALES_STATUS_STYLES[salesKey] || {
+                          bg: "bg-zinc-100 dark:bg-zinc-800",
+                          text: "text-zinc-700 dark:text-zinc-300",
+                          border: "border-zinc-200 dark:border-zinc-700",
+                        };
+                        return (
+                          <span
+                            className={`inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-bold border ${style.bg} ${style.text} ${style.border}`}
+                            title="어드민 판매 운영 상태"
+                          >
+                            {label}
+                          </span>
+                        );
+                      })()}
+                    </td>
+
+                    {/* Actions (수정/상세 only) */}
+                    <td className="px-3 py-3 text-right whitespace-nowrap w-24">
+                      <Link
+                        href={`/portal/products/${product.id}`}
+                        className="rounded bg-zinc-100 dark:bg-zinc-800 px-2.5 py-1 font-bold text-zinc-700 hover:bg-zinc-200 dark:text-zinc-300 dark:hover:bg-zinc-700 transition-all whitespace-nowrap inline-flex items-center text-[11px]"
                       >
                         수정/상세
                       </Link>
-                      {!product.deleted_at && (
-                        <button
-                          type="button"
-                          onClick={() => openDeleteModal(product)}
-                          className="rounded bg-rose-50 text-rose-700 hover:bg-rose-100 dark:bg-rose-950/20 dark:text-rose-455 dark:hover:bg-rose-900/30 px-2 py-1 font-bold transition-all cursor-pointer border border-rose-100 dark:border-rose-900/50 whitespace-nowrap shrink-0 inline-flex items-center text-[11px]"
-                        >
-                          삭제
-                        </button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ))}
+                    </td>
+                  </tr>
+                );
+              })}
 
               {filteredProducts.length === 0 && (
                 <tr>
@@ -488,17 +575,17 @@ export function PortalProductsList({ initialProducts, hasBrand }: PortalProducts
         </div>
       )}
 
-      {/* Safe Soft-Delete Confirmation Modal */}
-      {deletingProduct && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
-          <div className="w-full max-w-md rounded-xl border border-zinc-200 bg-white p-6 shadow-2xl dark:border-zinc-800 dark:bg-zinc-900">
+      {/* Custom Bulk Soft-Delete Confirmation Modal */}
+      {isBulkDeleteModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-200">
+          <div className="w-full max-w-md rounded-xl border border-zinc-200 bg-white p-6 shadow-2xl dark:border-zinc-800 dark:bg-zinc-900 space-y-4">
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-rose-100 text-rose-600 dark:bg-rose-950/40 dark:text-rose-400">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-rose-100 text-rose-600 dark:bg-rose-950/40 dark:text-rose-400 shrink-0">
                 <span className="text-lg">⚠️</span>
               </div>
               <div>
                 <h3 className="text-base font-bold text-zinc-900 dark:text-white">
-                  제품을 삭제하시겠습니까?
+                  선택한 {selectedIds.length}개 제품을 삭제하시겠습니까?
                 </h3>
                 <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
                   안전한 데이터 보존을 위해 비활성화(Soft Delete) 처리됩니다.
@@ -506,37 +593,42 @@ export function PortalProductsList({ initialProducts, hasBrand }: PortalProducts
               </div>
             </div>
 
-            <div className="mt-4 rounded-lg bg-zinc-50 p-3.5 border border-zinc-200/80 dark:bg-zinc-950/60 dark:border-zinc-800">
-              <div className="text-xs font-bold text-zinc-900 dark:text-white truncate">
-                {deletingProduct.display_name}
-              </div>
-              <div className="mt-1 flex items-center gap-3 text-[11px] text-zinc-500 dark:text-zinc-400 font-mono">
-                {deletingProduct.letusto_sku && (
-                  <span>Letusto: {deletingProduct.letusto_sku}</span>
-                )}
-                {deletingProduct.manufacture_sku && (
-                  <span>제조사: {deletingProduct.manufacture_sku}</span>
-                )}
-              </div>
+            {/* Selected Products Preview Box */}
+            <div className="rounded-lg bg-zinc-50 dark:bg-zinc-950/60 border border-zinc-200/80 dark:border-zinc-800 p-2.5 max-h-48 overflow-y-auto divide-y divide-zinc-150 dark:divide-zinc-850 text-xs">
+              {selectedProductList.slice(0, 4).map((p) => (
+                <div key={p.id} className="py-1.5 px-1.5 flex items-center justify-between gap-2">
+                  <span className="font-bold text-zinc-900 dark:text-white truncate max-w-[230px]" title={p.display_name}>
+                    {p.display_name}
+                  </span>
+                  <span className="text-[10px] text-zinc-450 dark:text-zinc-500 font-mono shrink-0">
+                    {p.letusto_sku || p.manufacture_sku || "SKU 미지정"}
+                  </span>
+                </div>
+              ))}
+              {selectedProductList.length > 4 && (
+                <div className="py-2 text-center text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 bg-zinc-100/50 dark:bg-zinc-900/50 rounded mt-1">
+                  ... 외 {selectedProductList.length - 4}개 제품
+                </div>
+              )}
             </div>
 
-            {deleteError && (
-              <div className="mt-3 rounded-md bg-rose-50 p-3 text-xs font-medium text-rose-700 dark:bg-rose-950/30 dark:text-rose-400 border border-rose-200 dark:border-rose-900/50">
-                {deleteError}
+            {bulkDeleteError && (
+              <div className="rounded-md bg-rose-50 p-3 text-xs font-medium text-rose-700 dark:bg-rose-950/30 dark:text-rose-400 border border-rose-200 dark:border-rose-900/50">
+                {bulkDeleteError}
               </div>
             )}
 
-            <p className="mt-3 text-[11px] text-zinc-500 dark:text-zinc-400">
-              삭제된 제품은 활성 목록에서 제외되며, &apos;삭제됨&apos; 필터에서 조회할 수 있습니다.
+            <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-relaxed">
+              삭제된 제품은 활성 목록에서 제외되며, 상단 &apos;삭제됨&apos; 필터에서 언제든 조회할 수 있습니다.
             </p>
 
-            <div className="mt-6 flex justify-end gap-2.5">
+            <div className="flex justify-end gap-2.5 pt-2">
               <button
                 type="button"
-                disabled={isDeleting}
+                disabled={isBulkDeleting}
                 onClick={() => {
-                  setDeletingProduct(null);
-                  setDeleteError(null);
+                  setIsBulkDeleteModalOpen(false);
+                  setBulkDeleteError(null);
                 }}
                 className="rounded-lg border border-zinc-200 bg-white px-4 py-2 text-xs font-semibold text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700 disabled:opacity-50 transition-colors cursor-pointer"
               >
@@ -544,11 +636,11 @@ export function PortalProductsList({ initialProducts, hasBrand }: PortalProducts
               </button>
               <button
                 type="button"
-                disabled={isDeleting}
-                onClick={handleConfirmDelete}
+                disabled={isBulkDeleting}
+                onClick={handleConfirmBulkDelete}
                 className="inline-flex items-center justify-center rounded-lg bg-rose-600 px-4 py-2 text-xs font-semibold text-white hover:bg-rose-700 disabled:opacity-50 transition-colors shadow-sm cursor-pointer"
               >
-                {isDeleting ? "삭제 처리 중..." : "제품 삭제"}
+                {isBulkDeleting ? "삭제 처리 중..." : `선택 제품 ${selectedIds.length}개 삭제`}
               </button>
             </div>
           </div>
@@ -557,4 +649,3 @@ export function PortalProductsList({ initialProducts, hasBrand }: PortalProducts
     </div>
   );
 }
-

@@ -1361,3 +1361,134 @@ export async function deleteProduct(productId: string): Promise<{ success: boole
     return { success: false, error: "제품을 삭제하지 못했습니다. 잠시 후 다시 시도해주세요." };
   }
 }
+
+/**
+ * 선택된 여러 제품을 일괄 소프트 삭제(Soft Delete)합니다.
+ * 회사 권한 검증, 이중 지속성(Dual Persistence) 및 감사 로그를 보장합니다.
+ */
+export async function bulkDeleteProducts(productIds: string[]): Promise<{ success: boolean; deletedCount?: number; error?: string }> {
+  try {
+    if (!productIds || productIds.length === 0) {
+      return { success: false, error: "삭제할 제품이 선택되지 않았습니다." };
+    }
+
+    const { companyId } = await requireCompanyMembership();
+    const supabase = await createClient();
+
+    // 1. 소속 회사 제품들만 필터링하여 조회
+    const { data: products, error: fetchError } = await supabase
+      .from("products")
+      .select("id, name, name_en, manufacture_sku, letusto_sku, company_id, selection_status, sales_status, price_additional_info")
+      .in("id", productIds)
+      .eq("company_id", companyId);
+
+    if (fetchError || !products || products.length === 0) {
+      return { success: false, error: "삭제 가능한 제품을 찾을 수 없습니다." };
+    }
+
+    const validProducts = products.filter((p) => {
+      const currentMeta = (p.price_additional_info as any) || {};
+      return !((p as any).deleted_at || currentMeta.deleted_at);
+    });
+
+    if (validProducts.length === 0) {
+      return { success: false, error: "선택한 제품들이 이미 모두 삭제된 상태입니다." };
+    }
+
+    const now = new Date().toISOString();
+    const validIds = validProducts.map((p) => p.id);
+
+    // 2. 일괄 업데이트 (deleted_at 컬럼 시도)
+    let updateSuccess = false;
+    try {
+      const { error: colUpdateError } = await supabase
+        .from("products")
+        .update({
+          deleted_at: now,
+          selection_status: "NOT_SELECTED",
+          sales_status: "ENDED",
+        })
+        .in("id", validIds)
+        .eq("company_id", companyId);
+
+      if (!colUpdateError) {
+        updateSuccess = true;
+      }
+    } catch {
+      // Fallback
+    }
+
+    // Individual JSONB metadata update to ensure dual persistence
+    await Promise.all(
+      validProducts.map(async (product) => {
+        const currentMeta = (product.price_additional_info as any) || {};
+        const updatedPriceInfo = {
+          ...currentMeta,
+          deleted_at: now,
+        };
+        await supabase
+          .from("products")
+          .update({
+            selection_status: "NOT_SELECTED",
+            sales_status: "ENDED",
+            price_additional_info: updatedPriceInfo,
+          })
+          .eq("id", product.id)
+          .eq("company_id", companyId);
+      })
+    );
+
+    // 3. 감사 로그 기록
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      const { data: profile } = user ? await supabase.from("profiles").select("display_name").eq("id", user.id).maybeSingle() : { data: null };
+      const { data: company } = await supabase.from("companies").select("name").eq("id", companyId).maybeSingle();
+
+      await Promise.all(
+        validProducts.map((product) =>
+          recordProductChangeLog({
+            productId: product.id,
+            userId: user?.id,
+            userName: profile?.display_name || user?.email || "Brand User",
+            userEmail: user?.email,
+            source: "BRAND_PORTAL",
+            companyName: company?.name || "Brand Portal",
+            section: "삭제/복구",
+            actionType: "DELETE",
+            summary: `브랜드사 상품 일괄 삭제 (Soft Delete) - SKU: ${product.letusto_sku || product.manufacture_sku || "N/A"}`,
+            changes: {
+              deleted_at: {
+                label: "삭제 일시",
+                before: null,
+                after: now,
+              },
+              selection_status: {
+                label: "선정 상태",
+                before: product.selection_status || "UNREVIEWED",
+                after: "NOT_SELECTED",
+              },
+              sales_status: {
+                label: "판매 상태",
+                before: product.sales_status || "PREPARING",
+                after: "ENDED",
+              },
+            },
+          })
+        )
+      );
+    } catch (logErr) {
+      console.warn("[bulkDeleteProducts] Change log recording warning:", logErr);
+    }
+
+    // 4. 캐시 무효화 (Portal & Admin 동시 갱신)
+    revalidatePath("/portal/products");
+    validIds.forEach((id) => revalidatePath(`/portal/products/${id}`));
+    revalidatePath("/admin/products");
+    validIds.forEach((id) => revalidatePath(`/admin/products/${id}`));
+
+    return { success: true, deletedCount: validProducts.length };
+  } catch (err: any) {
+    console.error("[bulkDeleteProducts] Unexpected exception:", err);
+    return { success: false, error: "선택한 제품을 삭제하지 못했습니다. 잠시 후 다시 시도해주세요." };
+  }
+}
