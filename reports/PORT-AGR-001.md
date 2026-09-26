@@ -36,3 +36,19 @@
 3. Verified clean execution with live DB test script `scripts/test-prod-sign-action.js`:
    `Fetch Error: null`
    `Parsed Company Info: { id: '4c845ae8-b93b-4db2-858f-bda3252e8167', name: 'Brands Global Inc.', address: '225 kangnam Dae ro 2FL, Seoul, Seoul (060223)', representativeName: 'Tammy Hahm' }`.
+
+## R4 Fix Summary: Executed Agreement PDF View & Download Production Fix
+- **Task ID**: `PORT-AGR-001-R4`
+- **Task Name**: Executed Agreement PDF View & Download Production Fix
+- **Root Causes Discovered**:
+  1. **[계약서 보기] Popup Blocking**: Calling `window.open(res.url, "_blank")` AFTER `await getSignedExecutedPdfUrlAction(...)` in an async handler caused modern web browsers to block the window opening as an untrusted popup.
+  2. **[PDF 다운로드] Cross-Origin `a.download` Limitation**: Standard HTML5 `a.download` attribute is ignored for cross-origin URLs (`https://shzfrppdobpmrstcjfqu.supabase.co`). Without specifying `{ download: filename }` in Supabase `createSignedUrl`, Supabase omitted the `Content-Disposition: attachment` HTTP header, preventing browser file downloads.
+  3. **Tenant Security & Path Resolution**: Updated `getSignedExecutedPdfUrlAction()` to validate user authentication, verify company membership, and pass `{ download: filename }` option to Supabase Storage.
+- **Client Handler Fixes**:
+  - `handleOpenPdfWindow`: Pre-opens `window.open("about:blank", "_blank")` BEFORE the `await` call to bypass popup blockers reliably, then updates `win.location.href = res.url`.
+  - `handleDownloadCompletedPdf` & `handleDownloadPdf`: Calls `getSignedExecutedPdfUrlAction(path, { downloadFilename })` which sets `Content-Disposition: attachment; filename=K_SELECT_Agreement_KSN-AGR-2026-000001.pdf`, triggering instant native browser file downloads.
+- **Production Verification**:
+  - Live executed agreement `KSN-AGR-2026-000001` (PDF SHA: `b3b6f0d6c81af3f78988020ddcbcb0be838c28f54fcf8d2a6e94067330ee94b3`, path: `agreements/4c845ae8-b93b-4db2-858f-bda3252e8167/KSN-AGR-2026-000001.pdf`).
+  - View Signed URL: HTTP status 200, valid PDF header.
+  - Download Signed URL: HTTP status 200, `Content-Disposition: attachment; filename=K_SELECT_Agreement_KSN-AGR-2026-000001.pdf`.
+  - Tenant Isolation: Unauthorized user access returns `해당 계약서에 접근할 권한이 없습니다.`.

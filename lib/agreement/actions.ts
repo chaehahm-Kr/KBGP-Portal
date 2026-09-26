@@ -579,15 +579,90 @@ export async function resendAgreementRecipientEmailAction(recipientId: string): 
 
 /**
  * Gets a temporary signed URL for viewing/downloading the executed PDF document.
+ * Validates authentication, company membership, and agreement ownership before generating URL.
  */
-export async function getSignedExecutedPdfUrlAction(storagePath: string): Promise<{
+export async function getSignedExecutedPdfUrlAction(
+  storagePathOrAgreementId: string,
+  options?: { downloadFilename?: string }
+): Promise<{
   url: string | null;
   error?: string;
 }> {
-  if (!storagePath) return { url: null, error: "저장된 PDF 경로가 없습니다." };
+  if (!storagePathOrAgreementId) {
+    return { url: null, error: "저장된 PDF 경로 또는 계약서 ID가 필요합니다." };
+  }
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return { url: null, error: "인증되지 않은 사용자입니다. 다시 로그인해 주세요." };
+  }
+
+  const admin = createAdminClient();
+
+  let targetPath = storagePathOrAgreementId;
+  let targetCompanyId: string | null = null;
+
+  const isUuid = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(
+    storagePathOrAgreementId
+  );
+
+  let query = admin
+    .from("company_agreements")
+    .select("id, company_id, agreement_id, final_pdf_path, status");
+
+  if (storagePathOrAgreementId.includes("/")) {
+    query = query.eq("final_pdf_path", storagePathOrAgreementId);
+  } else if (isUuid) {
+    query = query.eq("id", storagePathOrAgreementId);
+  } else {
+    query = query.eq("agreement_id", storagePathOrAgreementId);
+  }
+
+  const { data: ca } = await query.maybeSingle();
+
+  if (ca) {
+    targetPath = ca.final_pdf_path || targetPath;
+    targetCompanyId = ca.company_id;
+  } else if (storagePathOrAgreementId.includes("agreements/")) {
+    const parts = storagePathOrAgreementId.split("/");
+    if (parts.length >= 2) targetCompanyId = parts[1];
+  }
+
+  // Tenant Security Check:
+  // User must be an Admin (staff) OR belong to targetCompanyId as active member
+  if (targetCompanyId) {
+    const { data: staff } = await admin
+      .from("staff_members")
+      .select("id")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    const isAdmin = !!staff;
+
+    if (!isAdmin) {
+      const { data: cu } = await admin
+        .from("company_users")
+        .select("company_id, status")
+        .eq("id", user.id)
+        .maybeSingle();
+
+      const isCompanyMember = cu && cu.company_id === targetCompanyId && cu.status === "active";
+
+      if (!isCompanyMember) {
+        return { url: null, error: "해당 계약서에 접근할 권한이 없습니다." };
+      }
+    }
+  }
 
   try {
-    const url = await getSignedFileUrl(storagePath, 3600, "company-uploads");
+    const downloadOpt = options?.downloadFilename
+      ? { download: options.downloadFilename }
+      : undefined;
+
+    const url = await getSignedFileUrl(targetPath, 3600, "company-uploads", downloadOpt);
     if (!url) return { url: null, error: "서명된 다운로드 URL을 생성할 수 없습니다." };
     return { url };
   } catch (err: any) {

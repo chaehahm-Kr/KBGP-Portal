@@ -63,45 +63,54 @@ export function AgreementCard({ agreement: initialAgreement, companyInfo, userEm
     }
   }, [agreement.id, agreement.status]);
 
-  const handleFetchPdfUrl = async () => {
-    if (pdfUrl) return pdfUrl;
+  const handleOpenPdfViewer = async () => {
+    const targetPath =
+      agreement.final_pdf_path ||
+      agreement.id ||
+      `agreements/${companyInfo.id}/${agreement.agreement_id}.pdf`;
+
     setLoadingPdf(true);
     setPdfError(null);
     try {
-      const res = await getSignedExecutedPdfUrlAction(
-        agreement.final_pdf_path || `agreements/${companyInfo.id}/${agreement.agreement_id}.pdf`
-      );
+      const res = await getSignedExecutedPdfUrlAction(targetPath);
       if (!res.url) {
         setPdfError(res.error || "PDF URL을 생성할 수 없습니다.");
         setLoadingPdf(false);
-        return null;
+        return;
       }
       setPdfUrl(res.url);
       setLoadingPdf(false);
-      return res.url;
+      setIsPreviewModalOpen(true);
     } catch (err: any) {
       setPdfError(err.message || "PDF 불러오기 오류");
       setLoadingPdf(false);
-      return null;
-    }
-  };
-
-  const handleOpenPdfViewer = async () => {
-    const url = await handleFetchPdfUrl();
-    if (url) {
-      setIsPreviewModalOpen(true);
     }
   };
 
   const handleDownloadPdf = async () => {
-    const url = await handleFetchPdfUrl();
-    if (url) {
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `${companyInfo.name}_${agreement.agreement_id}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
+    const targetPath =
+      agreement.final_pdf_path ||
+      agreement.id ||
+      `agreements/${companyInfo.id}/${agreement.agreement_id}.pdf`;
+    const downloadFilename = `K_SELECT_Agreement_${agreement.agreement_id || "v1.0"}.pdf`;
+
+    setLoadingPdf(true);
+    setPdfError(null);
+    try {
+      const res = await getSignedExecutedPdfUrlAction(targetPath, { downloadFilename });
+      if (res.url) {
+        const a = document.createElement("a");
+        a.href = res.url;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+      } else {
+        setPdfError(res.error || "PDF 다운로드 URL을 생성할 수 없습니다.");
+      }
+    } catch (err: any) {
+      setPdfError(err.message || "PDF 다운로드 오류");
+    } finally {
+      setLoadingPdf(false);
     }
   };
 

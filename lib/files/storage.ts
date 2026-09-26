@@ -10,12 +10,13 @@ import { createClient } from "@/lib/supabase/server";
 export async function getSignedFileUrl(
   path: string,
   expiresInSeconds = 3600,
-  bucket: "company-uploads" | "inquiry-uploads" = "company-uploads"
+  bucket: "company-uploads" | "inquiry-uploads" = "company-uploads",
+  options?: { download?: string | boolean }
 ) {
   const supabase = await createClient();
   const { data, error } = await supabase.storage
     .from(bucket)
-    .createSignedUrl(path, expiresInSeconds);
+    .createSignedUrl(path, expiresInSeconds, options);
 
   if (error || !data) return null;
   return data.signedUrl;

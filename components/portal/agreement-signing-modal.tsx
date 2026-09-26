@@ -149,20 +149,26 @@ export function AgreementSigningModal({
   const handleDownloadCompletedPdf = async () => {
     if (!completedAgreement) return;
     setDownloadingPdf(true);
+    const targetPath =
+      completedAgreement.final_pdf_path ||
+      completedAgreement.id ||
+      `agreements/${companyInfo.id}/${completedAgreement.agreement_id}.pdf`;
+    const downloadFilename = `K_SELECT_Agreement_${completedAgreement.agreement_id || "v1.0"}.pdf`;
+
     try {
-      const res = await getSignedExecutedPdfUrlAction(
-        completedAgreement.final_pdf_path || `agreements/${companyInfo.id}/${completedAgreement.agreement_id}.pdf`
-      );
+      const res = await getSignedExecutedPdfUrlAction(targetPath, { downloadFilename });
       if (res.url) {
         const a = document.createElement("a");
         a.href = res.url;
-        a.download = `${companyInfo.name}_${completedAgreement.agreement_id}.pdf`;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
+      } else {
+        alert(res.error || "PDF 다운로드 URL을 생성할 수 없습니다.");
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error("PDF Download Error", e);
+      alert(`PDF 다운로드 오류: ${e.message}`);
     } finally {
       setDownloadingPdf(false);
     }
@@ -170,11 +176,28 @@ export function AgreementSigningModal({
 
   const handleOpenPdfWindow = async () => {
     if (!completedAgreement) return;
-    const res = await getSignedExecutedPdfUrlAction(
-      completedAgreement.final_pdf_path || `agreements/${companyInfo.id}/${completedAgreement.agreement_id}.pdf`
-    );
-    if (res.url) {
-      window.open(res.url, "_blank");
+    const win = window.open("about:blank", "_blank");
+    if (win) {
+      win.document.write(
+        "<div style='font-family:sans-serif;padding:24px;color:#333;text-align:center;'><h2>K SELECT NETWORK</h2><p>전자서명 완료된 최종 계약서 PDF를 불러오는 중입니다...</p></div>"
+      );
+    }
+    const targetPath =
+      completedAgreement.final_pdf_path ||
+      completedAgreement.id ||
+      `agreements/${companyInfo.id}/${completedAgreement.agreement_id}.pdf`;
+
+    try {
+      const res = await getSignedExecutedPdfUrlAction(targetPath);
+      if (res.url && win) {
+        win.location.href = res.url;
+      } else {
+        if (win) win.close();
+        alert(res.error || "PDF URL을 불러올 수 없습니다.");
+      }
+    } catch (e: any) {
+      if (win) win.close();
+      alert(`PDF 열기 오류: ${e.message}`);
     }
   };
 
