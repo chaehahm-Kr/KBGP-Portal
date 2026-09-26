@@ -25,6 +25,7 @@ import { InternationalPhoneInput } from "@/components/shared/international-phone
 import { CountrySelect } from "@/components/shared/country-select";
 import { CompanyShippingOriginsTab } from "@/components/company/company-shipping-origins-tab";
 import { type CompanyShippingOrigin } from "@/lib/company/shipping-origin-actions";
+import { CompanyAgreementsTab } from "@/components/admin/company-agreements-tab";
 
 const STATUS_LABEL: Record<string, string> = {
   invited: "초대됨",
@@ -223,7 +224,7 @@ export function CompanyDetailManager({
   const showSupplierTab = true;
 
   const [activeTab, setActiveTab] = useState<
-    "staff" | "tasks" | "brands" | "products" | "applications" | "supplier" | "shipping-origin" | "remittance"
+    "staff" | "tasks" | "brands" | "products" | "applications" | "supplier" | "shipping-origin" | "remittance" | "agreements"
   >("staff");
   const [isPending, startTransition] = useTransition();
 
@@ -1167,6 +1168,7 @@ export function CompanyDetailManager({
                   "brands",
                   "products",
                   "applications",
+                  "agreements" as const,
                   ...(showSupplierTab
                     ? [
                         "supplier" as const,
@@ -1194,6 +1196,8 @@ export function CompanyDetailManager({
                       ? "등록 제품"
                       : tab === "applications"
                       ? "입점 신청서"
+                      : tab === "agreements"
+                      ? "계약 관리"
                       : tab === "supplier"
                       ? "거래 정보"
                       : tab === "shipping-origin"
@@ -1205,6 +1209,11 @@ export function CompanyDetailManager({
             </div>
 
             <div className="p-5 text-xs">
+              
+              {/* Agreements Tab */}
+              {activeTab === "agreements" && (
+                <CompanyAgreementsTab companyId={company.id} companyName={name} />
+              )}
               
               {/* 1. Staff Tab */}
               {activeTab === "staff" && (

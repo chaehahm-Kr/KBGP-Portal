@@ -299,6 +299,7 @@ export default function Sidebar({
       name: "Settings",
       icon: SettingsIcon,
       subItems: [
+        { name: "Agreement Templates", href: "/admin/settings/agreement-templates", icon: EmailTemplatesIcon },
         { name: "Knowledge Center", href: "/admin/knowledge", icon: KnowledgeSubIcon },
         { name: "Email Templates", href: "/admin/settings/email-templates", icon: EmailTemplatesIcon },
         { name: "Company Configs", href: "/admin/settings/company-configs", icon: CompanyConfigsIcon },

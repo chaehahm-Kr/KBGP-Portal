@@ -226,6 +226,26 @@ export function buildPoChangeInquiryUrl(params: PoChangeInquiryQueryParams): str
   return `/portal/support?${searchParams.toString()}`;
 }
 
+export interface AgreementChangeQueryParams {
+  new?: string;
+  category?: string;
+  company_name?: string;
+  agreement_id?: string;
+  agreement_version?: string;
+  agreement_status?: string;
+}
+
+export function buildAgreementChangeInquiryUrl(params: AgreementChangeQueryParams): string {
+  const searchParams = new URLSearchParams();
+  searchParams.set("new", "1");
+  searchParams.set("category", params.category || "agreement_change");
+  if (params.company_name) searchParams.set("company_name", params.company_name);
+  if (params.agreement_id) searchParams.set("agreement_id", params.agreement_id);
+  if (params.agreement_version) searchParams.set("agreement_version", params.agreement_version);
+  if (params.agreement_status) searchParams.set("agreement_status", params.agreement_status);
+  return `/portal/support?${searchParams.toString()}`;
+}
+
 export interface RetailerCaseCategory {
   key: string;
   labelEn: string;
@@ -295,13 +315,14 @@ export const RETAILER_CASE_CATEGORIES: RetailerCaseCategory[] = [
 
 export const ALL_CASE_CATEGORY_LABELS: Record<string, { en: string; ko: string }> = {
   // Brand Categories
-  po_change:   { en: "PO Change Request", ko: "PO 변경 요청" },
-  product:     { en: "Product Registration", ko: "제품 등록 및 스펙 수정" },
-  onboarding:  { en: "Onboarding Review", ko: "입점 신청 및 심사 현황" },
-  logistics:   { en: "Logistics & Packaging", ko: "물류 공급 및 패키징" },
-  translation: { en: "Translation & Ingredients", ko: "번역 및 전성분표 기재" },
-  settlement:  { en: "Settlement / Invoice", ko: "정산 / 인보이스 문의" },
-  system:      { en: "System & Tech", ko: "시스템 오류 제보 및 기능 제안" },
+  po_change:        { en: "PO Change Request", ko: "PO 변경 요청" },
+  agreement_change: { en: "Agreement Change Request", ko: "계약 변경 요청" },
+  product:          { en: "Product Registration", ko: "제품 등록 및 스펙 수정" },
+  onboarding:       { en: "Onboarding Review", ko: "입점 신청 및 심사 현황" },
+  logistics:        { en: "Logistics & Packaging", ko: "물류 공급 및 패키징" },
+  translation:      { en: "Translation & Ingredients", ko: "번역 및 전성분표 기재" },
+  settlement:       { en: "Settlement / Invoice", ko: "정산 / 인보이스 문의" },
+  system:           { en: "System & Tech", ko: "시스템 오류 제보 및 기능 제안" },
   // Retailer Categories
   order_delivery:  { en: "Order & Delivery", ko: "주문 및 배송 문의" },
   product_pricing: { en: "Product & Pricing", ko: "상품 및 공급가 문의" },

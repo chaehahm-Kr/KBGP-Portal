@@ -338,6 +338,16 @@ export default async function PortalHomePage() {
     return d.toLocaleDateString("ko-KR", { year: "numeric", month: "2-digit", day: "2-digit" });
   };
 
+  // 8. Fetch Company Agreement
+  let agreement = null;
+  try {
+    const { getCompanyAgreement } = await import("@/lib/agreement/actions");
+    const res = await getCompanyAgreement(companyId);
+    agreement = res.agreement;
+  } catch (err) {
+    console.error("Failed to fetch agreement on dashboard:", err);
+  }
+
   return (
     <div className="space-y-6 w-full max-w-7xl pb-10">
       {/* 1. Header: Compact Welcome Banner */}
@@ -380,6 +390,12 @@ export default async function PortalHomePage() {
           </Link>
         </div>
       </div>
+
+      {/* Agreement Onboarding Status Banner (PORT-DASH-002) */}
+      {(() => {
+        const { PortalAgreementDashboardBanner } = require("@/components/portal/portal-agreement-dashboard-banner");
+        return <PortalAgreementDashboardBanner agreement={agreement} />;
+      })()}
 
       {/* ----------------- MODE A: PRE-APPROVAL MODE ----------------- */}
       {!isOperationalMode && (

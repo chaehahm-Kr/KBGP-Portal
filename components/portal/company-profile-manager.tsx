@@ -9,6 +9,9 @@ import { InternationalPhoneInput } from "@/components/shared/international-phone
 import { CountrySelect } from "@/components/shared/country-select";
 import { CompanyShippingOriginsTab } from "@/components/company/company-shipping-origins-tab";
 import { type CompanyShippingOrigin } from "@/lib/company/shipping-origin-actions";
+import { AgreementCard } from "@/components/portal/agreement-card";
+import { type CompanyAgreementItem } from "@/lib/agreement/types";
+import { useSearchParams } from "next/navigation";
 
 interface CompanyProfileManagerProps {
   company: {
@@ -29,6 +32,8 @@ interface CompanyProfileManagerProps {
   warehouses: any[];
   initialShippingOrigins?: CompanyShippingOrigin[];
   canEditCompanyInfo?: boolean;
+  initialAgreement?: CompanyAgreementItem | null;
+  userEmail?: string;
 }
 
 export function CompanyProfileManager({
@@ -42,6 +47,8 @@ export function CompanyProfileManager({
   warehouses,
   initialShippingOrigins = [],
   canEditCompanyInfo = true,
+  initialAgreement,
+  userEmail = "",
 }: CompanyProfileManagerProps) {
   const isCompanyAdmin = companyRole === "company_admin";
   const canEdit = isCompanyAdmin || canEditCompanyInfo;
@@ -111,8 +118,16 @@ export function CompanyProfileManager({
   const [remNote, setRemNote] = useState(initialSupplierRemittance?.remittance_note || "");
   const [tempZipCode, setTempZipCode] = useState(zipCode);
   const [tempWebsite, setTempWebsite] = useState(website);
-  // Right column tab state: 'members' | 'tasks' | 'trading' | 'shipping-origin' | 'remittance'
-  const [activeTab, setActiveTab] = useState<"members" | "tasks" | "trading" | "shipping-origin" | "remittance">("members");
+  const searchParams = useSearchParams();
+  const tabParam = searchParams.get("tab");
+  const initialTabVal = (tabParam === "agreements" || tabParam === "agreement")
+    ? "agreements"
+    : (tabParam && ["members", "tasks", "trading", "shipping-origin", "remittance", "agreements"].includes(tabParam) ? tabParam : "members");
+
+  // Right column tab state: 'members' | 'tasks' | 'trading' | 'shipping-origin' | 'remittance' | 'agreements'
+  const [activeTab, setActiveTab] = useState<"members" | "tasks" | "trading" | "shipping-origin" | "remittance" | "agreements">(
+    initialTabVal as any
+  );
 
   // [신규 기능]: 담당 업무 상태 로컬 관리
   const [tasks, setTasks] = useState<TaskAssignmentItem[]>(taskAssignments);
@@ -672,7 +687,32 @@ export function CompanyProfileManager({
             >
               송금 계좌 정보
             </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab("agreements")}
+              className={`px-4 py-2.5 text-xs font-bold transition-all border-b-2 whitespace-nowrap cursor-pointer ${
+                activeTab === "agreements"
+                  ? "border-zinc-950 text-zinc-950 dark:border-white dark:text-white"
+                  : "border-transparent text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white"
+              }`}
+            >
+              계약 및 문서
+            </button>
           </div>
+
+          {/* 계약 및 문서 (Agreement & Documents) Card */}
+          {activeTab === "agreements" && initialAgreement && (
+            <AgreementCard
+              agreement={initialAgreement}
+              companyInfo={{
+                id: company.id,
+                name: name,
+                address: [address, address1, address2, city, stateProv, country, zipCode].filter(Boolean).join(" ").trim(),
+                representativeName: parsedMeta.contacts?.find((c: any) => c.isPrimary)?.name || parsedMeta.contacts?.[0]?.name || null,
+              }}
+              userEmail={userEmail}
+            />
+          )}
           {/* 거래 정보 (Supplier / Trading Info) Card */}
           {activeTab === "trading" && (
             <div className="rounded-lg border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 relative">

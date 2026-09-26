@@ -134,6 +134,12 @@ export default async function PortalCompanyInfoPage() {
   const shippingOrigins = await getCompanyShippingOrigins(membership.companyId);
   const canEditCompanyInfo = isCompanyAdmin || (await hasMenuPermission("company_info", "write"));
 
+  // Fetch Company Agreement
+  const { getCompanyAgreement } = await import("@/lib/agreement/actions");
+  const { agreement: initialAgreement } = await getCompanyAgreement(membership.companyId);
+
+  const { data: { user } } = await supabase.auth.getUser();
+
   return (
     <CompanyProfileManager
       company={company}
@@ -146,6 +152,8 @@ export default async function PortalCompanyInfoPage() {
       warehouses={warehouses || []}
       initialShippingOrigins={shippingOrigins}
       canEditCompanyInfo={canEditCompanyInfo}
+      initialAgreement={initialAgreement}
+      userEmail={user?.email || ""}
     />
   );
 }
