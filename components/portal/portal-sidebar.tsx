@@ -49,9 +49,24 @@ export default function PortalSidebar({
     return (
       pathname.startsWith("/portal/company/") ||
       pathname.startsWith("/portal/brands") ||
+      pathname.startsWith("/portal/applications") ||
       pathname.startsWith("/portal/account")
     );
   });
+
+  React.useEffect(() => {
+    if (
+      pathname.startsWith("/portal/company/") ||
+      pathname.startsWith("/portal/brands") ||
+      pathname.startsWith("/portal/applications") ||
+      pathname.startsWith("/portal/account")
+    ) {
+      setIsSettingsOpen(true);
+    }
+    if (pathname.startsWith("/portal/orders")) {
+      setIsOrdersOpen(true);
+    }
+  }, [pathname]);
 
   const menuItems: MenuItem[] = [
     { name: "대시보드", icon: DashboardIcon, href: "/portal" },
@@ -60,20 +75,20 @@ export default function PortalSidebar({
       name: "주문 관리",
       icon: SalesIcon,
       subItems: [
-        { name: "발주 요청", href: "/portal/orders/requests" },
         { name: "발주서", href: "/portal/orders/purchase-orders" },
+        { name: "발주 요청", href: "/portal/orders/requests" },
       ],
     },
     { name: "정산 관리", icon: ReportsIcon, href: "/portal/finance" },
     { name: "문의 지원", icon: SupportIcon, href: "/portal/support" },
-    { name: "입점 신청서", icon: ApplicationsIcon, href: "/portal/applications" },
   ];
 
   const settingsPages = [
     { name: "회사 정보", href: "/portal/company/info" },
     { name: "브랜드 관리", href: "/portal/brands" },
     ...(isCompanyAdmin ? [{ name: "사용자 관리", href: "/portal/company/users" }] : []),
-    { name: "내 계정", href: "/portal/account" },
+    { name: "입점 신청 내역", href: "/portal/applications" },
+    { name: "My Account", href: "/portal/account" },
   ];
 
   return (
@@ -195,7 +210,7 @@ export default function PortalSidebar({
           <Link
             href="/portal/company/info"
             className={`flex h-10 w-full items-center justify-center rounded-md text-sm font-medium transition-colors ${
-              pathname.startsWith("/portal/company/") || pathname.startsWith("/portal/brands") || pathname.startsWith("/portal/account")
+              pathname.startsWith("/portal/company/") || pathname.startsWith("/portal/brands") || pathname.startsWith("/portal/applications") || pathname.startsWith("/portal/account")
                 ? "bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-white"
                 : "text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-900 dark:hover:text-white"
             }`}
@@ -208,7 +223,7 @@ export default function PortalSidebar({
             <button
               onClick={() => setIsSettingsOpen(!isSettingsOpen)}
               className={`flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-semibold transition-colors cursor-pointer ${
-                pathname.startsWith("/portal/company/") || pathname.startsWith("/portal/brands") || pathname.startsWith("/portal/account")
+                pathname.startsWith("/portal/company/") || pathname.startsWith("/portal/brands") || pathname.startsWith("/portal/applications") || pathname.startsWith("/portal/account")
                   ? "text-zinc-900 dark:text-white"
                   : "text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-900 dark:hover:text-white"
               }`}
