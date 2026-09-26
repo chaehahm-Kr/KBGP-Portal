@@ -38,6 +38,13 @@ import type { CategoryCompletionResult } from "@/lib/product/attribute-completio
 import { formatEasternDate, getEasternTodayString } from "@/lib/utils/timezone";
 import { LogisticsHelpModal, type LogisticsHelpSectionKey } from "@/components/product/logistics-help-modal";
 
+interface PendingImageFile {
+  id: string;
+  file: File;
+  previewUrl: string;
+  formattedSize: string;
+}
+
 interface ProductOverrideTabsProps {
   product: Product;
   brandName: string;
@@ -161,6 +168,10 @@ export function ProductOverrideTabs({
     }));
   });
 
+  const [pendingImages, setPendingImages] = useState<PendingImageFile[]>([]);
+  const [uploadingImages, setUploadingImages] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   useEffect(() => {
     setLocalImages(
       imageRows.map((row, idx) => ({
@@ -205,30 +216,77 @@ export function ProductOverrideTabs({
     }
   };
 
-  // 1. Image upload handler
-  const handleImageUpload = (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    const form = e.currentTarget;
-    const fileInput = form.querySelector('input[type="file"]') as HTMLInputElement;
-    if (!fileInput || !fileInput.files || fileInput.files.length === 0) return;
+  // 1. Image select handler for staging pending files
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
 
+    const currentCount = localImages.length + pendingImages.length;
+    const newFilesArray = Array.from(files);
+
+    if (currentCount + newFilesArray.length > 10) {
+      const maxAllowed = 10 - currentCount;
+      if (maxAllowed <= 0) {
+        alert("제품 이미지는 최대 10장까지 등록 가능합니다.");
+        if (fileInputRef.current) fileInputRef.current.value = "";
+        return;
+      }
+      alert(`제품 이미지는 최대 10장까지 등록할 수 있습니다.\n현재 ${currentCount}개 이미지가 등록/대기 중이므로 ${maxAllowed}개만 선택됩니다.`);
+      newFilesArray.splice(maxAllowed);
+    }
+
+    const newPending: PendingImageFile[] = newFilesArray.map((file) => {
+      const previewUrl = URL.createObjectURL(file);
+      const sizeInKb = file.size / 1024;
+      const formattedSize = sizeInKb > 1024 
+        ? `${(sizeInKb / 1024).toFixed(1)} MB` 
+        : `${Math.round(sizeInKb)} KB`;
+      return {
+        id: Math.random().toString(36).substring(2, 9),
+        file,
+        previewUrl,
+        formattedSize,
+      };
+    });
+
+    setPendingImages((prev) => [...prev, ...newPending]);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  // 2. Remove pending image handler
+  const handleRemovePendingImage = (id: string) => {
+    setPendingImages((prev) => {
+      const target = prev.find((item) => item.id === id);
+      if (target) {
+        URL.revokeObjectURL(target.previewUrl);
+      }
+      return prev.filter((item) => item.id !== id);
+    });
+  };
+
+  // 3. Upload staged pending images
+  const handleUploadPendingImages = async () => {
+    if (pendingImages.length === 0) return;
+    setUploadingImages(true);
     setMediaPending(true);
     setMediaError(null);
-    startTransition(async () => {
-      try {
-        const formData = new FormData();
-        for (const file of Array.from(fileInput.files || [])) {
-          formData.append("images", file);
-        }
-        await adminAddProductImages(product.id, formData);
-        form.reset();
-        router.refresh();
-      } catch (err: any) {
-        setMediaError(err.message || "이미지 업로드 실패");
-      } finally {
-        setMediaPending(false);
-      }
-    });
+    try {
+      const formData = new FormData();
+      pendingImages.forEach((item) => {
+        formData.append("images", item.file);
+      });
+      await adminAddProductImages(product.id, formData);
+
+      pendingImages.forEach((item) => URL.revokeObjectURL(item.previewUrl));
+      setPendingImages([]);
+      setStatusMessage({ type: "success", text: "이미지가 성공적으로 추가되었습니다." });
+      router.refresh();
+    } catch (err: any) {
+      setMediaError(err.message || "이미지 업로드에 실패했습니다.");
+    } finally {
+      setUploadingImages(false);
+      setMediaPending(false);
+    }
   };
 
   // 2. Image delete handler
@@ -1036,20 +1094,31 @@ export function ProductOverrideTabs({
     ovMatrix, initialMatrixStr,
   ]);
 
-  const isAnyDirty = isBasicDirty || isCategoryDirty || isPriceDirty || isLogisticsDirty || isCurationDirty;
+  const isMediaDirty = pendingImages.length > 0;
+  const isAnyDirty = isBasicDirty || isCategoryDirty || isPriceDirty || isLogisticsDirty || isCurationDirty || isMediaDirty;
 
   const handleSave = async (): Promise<{ success: boolean; error?: string }> => {
     setStatusMessage(null);
     try {
       // 1. Auto-upload pending images if any
-      const imageFileInput = document.querySelector('input[type="file"][accept*="image"]') as HTMLInputElement;
-      if (imageFileInput && imageFileInput.files && imageFileInput.files.length > 0) {
+      if (pendingImages.length > 0) {
         const formData = new FormData();
-        for (const file of Array.from(imageFileInput.files)) {
-          formData.append("images", file);
-        }
+        pendingImages.forEach((item) => {
+          formData.append("images", item.file);
+        });
         await adminAddProductImages(product.id, formData);
-        imageFileInput.value = "";
+        pendingImages.forEach((item) => URL.revokeObjectURL(item.previewUrl));
+        setPendingImages([]);
+      } else {
+        const imageFileInput = document.querySelector('input[type="file"][accept*="image"]') as HTMLInputElement;
+        if (imageFileInput && imageFileInput.files && imageFileInput.files.length > 0) {
+          const formData = new FormData();
+          for (const file of Array.from(imageFileInput.files)) {
+            formData.append("images", file);
+          }
+          await adminAddProductImages(product.id, formData);
+          imageFileInput.value = "";
+        }
       }
 
       // 2. Save Category & Attributes if mounted
@@ -2390,16 +2459,21 @@ export function ProductOverrideTabs({
           <div className="space-y-6">
             {/* Item Spec Card */}
             <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 space-y-4">
-              <h3 className="text-xs font-bold text-zinc-700 dark:text-zinc-300 uppercase tracking-wider border-b border-zinc-100 pb-2.5 dark:border-zinc-800 flex items-center gap-2">
-                <svg className="w-4 h-4 text-indigo-500 shrink-0" viewBox="0 0 64 64" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M28 20V12h8v8" strokeLinecap="round"/>
-                  <path d="M24 20h16v32a4 4 0 0 1-4 4H28a4 4 0 0 1-4-4V20z"/>
-                  <line x1="32" y1="6" x2="32" y2="12" strokeLinecap="round"/>
-                  <path d="M32 20v28" strokeDasharray="3 3"/>
-                  <circle cx="32" cy="36" r="3" fill="currentColor"/>
-                </svg>
-                <span>1. 단품 아이템 스펙 (Item Spec)</span>
-              </h3>
+              <div className="space-y-1.5 border-b border-zinc-100 pb-2.5 dark:border-zinc-800">
+                <h3 className="text-xs font-bold text-zinc-700 dark:text-zinc-300 uppercase tracking-wider flex items-center gap-2">
+                  <svg className="w-4 h-4 text-indigo-500 shrink-0" viewBox="0 0 64 64" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M28 20V12h8v8" strokeLinecap="round"/>
+                    <path d="M24 20h16v32a4 4 0 0 1-4 4H28a4 4 0 0 1-4-4V20z"/>
+                    <line x1="32" y1="6" x2="32" y2="12" strokeLinecap="round"/>
+                    <path d="M32 20v28" strokeDasharray="3 3"/>
+                    <circle cx="32" cy="36" r="3" fill="currentColor"/>
+                  </svg>
+                  <span>1. 단품 아이템 스펙 (Item Spec)</span>
+                </h3>
+                <p className="text-xs text-zinc-600 dark:text-zinc-400 font-normal leading-relaxed">
+                  제품 자체의 실제 크기와 무게를 입력합니다. 튜브, 병, 용기 등 제품 본체 기준입니다.
+                </p>
+              </div>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
                 {/* Width */}
                 <div className="space-y-1">
@@ -2430,15 +2504,20 @@ export function ProductOverrideTabs({
 
             {/* Package Spec Card */}
             <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 space-y-4">
-              <h3 className="text-xs font-bold text-zinc-700 dark:text-zinc-300 uppercase tracking-wider border-b border-zinc-100 pb-2.5 dark:border-zinc-800 flex items-center gap-2">
-                <svg className="w-4 h-4 text-indigo-500 shrink-0" viewBox="0 0 64 64" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M16 12l16-6 16 6v36l-16 6-16-6V12z"/>
-                  <path d="M16 12l16 6 16-6"/>
-                  <path d="M32 18v38"/>
-                  <path d="M16 22l16 6 16-6" opacity="0.6"/>
-                </svg>
-                <span>2. 단품 포장 패키지 스펙 (Package Spec)</span>
-              </h3>
+              <div className="space-y-1.5 border-b border-zinc-100 pb-2.5 dark:border-zinc-800">
+                <h3 className="text-xs font-bold text-zinc-700 dark:text-zinc-300 uppercase tracking-wider flex items-center gap-2">
+                  <svg className="w-4 h-4 text-indigo-500 shrink-0" viewBox="0 0 64 64" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M16 12l16-6 16 6v36l-16 6-16-6V12z"/>
+                    <path d="M16 12l16 6 16-6"/>
+                    <path d="M32 18v38"/>
+                    <path d="M16 22l16 6 16-6" opacity="0.6"/>
+                  </svg>
+                  <span>2. 단품 포장 패키지 스펙 (Package Spec)</span>
+                </h3>
+                <p className="text-xs text-zinc-600 dark:text-zinc-400 font-normal leading-relaxed">
+                  제품 1개의 최종 판매 포장 상태의 크기와 무게를 입력합니다. 단상자 등 판매용 포장은 포함하며, 택배·배송용 외부 박스는 포함하지 않습니다.
+                </p>
+              </div>
               <div className="grid gap-4 sm:grid-cols-2 text-xs">
                 {/* Width */}
                 <div className="space-y-1.5 p-3 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50/20">
@@ -2591,27 +2670,32 @@ export function ProductOverrideTabs({
 
             {/* Master Carton Spec Card */}
             <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 space-y-4">
-              <div className="flex justify-between items-center border-b border-zinc-100 pb-2.5 dark:border-zinc-800">
-                <h3 className="text-xs font-bold text-zinc-700 dark:text-zinc-300 uppercase tracking-wider flex items-center gap-2">
-                  <svg className="w-4 h-4 text-indigo-500 shrink-0" viewBox="0 0 64 64" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M10 18l22-8 22 8v28l-22 8-22-8V18z"/>
-                    <path d="M10 18l22 8 22-8"/>
-                    <path d="M32 26v28"/>
-                    <path d="M32 10l11 4M32 10L21 14" opacity="0.8"/>
-                    <path d="M21 21.5l11 4 11-4" strokeDasharray="2 2"/>
-                  </svg>
-                  <span>3. 마스터 카톤 규격 (Master Carton Specs)</span>
-                </h3>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setActiveLogisticsHelpSection("carton");
-                    setIsLogisticsHelpOpen(true);
-                  }}
-                  className="px-2 py-0.5 rounded bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/40 dark:hover:bg-indigo-900/60 text-indigo-650 dark:text-indigo-300 text-[11px] font-bold transition-colors border border-indigo-200 dark:border-indigo-800"
-                >
-                  ? 가이드
-                </button>
+              <div className="border-b border-zinc-100 pb-2.5 dark:border-zinc-850 space-y-1.5">
+                <div className="flex justify-between items-center">
+                  <h3 className="text-xs font-bold text-zinc-700 dark:text-zinc-300 uppercase tracking-wider flex items-center gap-2">
+                    <svg className="w-4 h-4 text-indigo-500 shrink-0" viewBox="0 0 64 64" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M10 18l22-8 22 8v28l-22 8-22-8V18z"/>
+                      <path d="M10 18l22 8 22-8"/>
+                      <path d="M32 26v28"/>
+                      <path d="M32 10l11 4M32 10L21 14" opacity="0.8"/>
+                      <path d="M21 21.5l11 4 11-4" strokeDasharray="2 2"/>
+                    </svg>
+                    <span>3. 마스터 카톤 규격 (Master Carton Specs)</span>
+                  </h3>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveLogisticsHelpSection("carton");
+                      setIsLogisticsHelpOpen(true);
+                    }}
+                    className="px-2 py-0.5 rounded bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/40 dark:hover:bg-indigo-900/60 text-indigo-650 dark:text-indigo-300 text-[11px] font-bold transition-colors border border-indigo-200 dark:border-indigo-800"
+                  >
+                    ? 가이드
+                  </button>
+                </div>
+                <p className="text-xs text-zinc-600 dark:text-zinc-400 font-normal leading-relaxed">
+                  여러 개의 단품 판매 패키지를 담아 보관·운송하는 카톤의 입수 수량, 크기와 총중량을 입력합니다.
+                </p>
               </div>
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 text-xs">
                 {/* Qty */}
@@ -2634,7 +2718,7 @@ export function ProductOverrideTabs({
                 </div>
                 {/* Height */}
                 <div className="space-y-1">
-                  <label className="font-bold text-zinc-600 dark:text-zinc-455 block">높이 (Height, cm)</label>
+                  <label className="font-bold text-zinc-600 dark:text-zinc-450 block">높이 (Height, cm)</label>
                   <div className="p-1 rounded bg-zinc-50 text-[10px] text-zinc-450 dark:text-zinc-500 font-mono text-center">원본: {product.carton_height || 0}</div>
                   <input type="number" step="0.1" placeholder={product.carton_height?.toString() || "0"} value={ovCartonHeight} onChange={(e) => setOvCartonHeight(e.target.value)} className="w-full rounded border border-zinc-200 p-1.5 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white outline-none" />
                 </div>
@@ -2655,25 +2739,30 @@ export function ProductOverrideTabs({
 
             {/* Palette Spec Card */}
             <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 space-y-4">
-              <div className="flex justify-between items-center border-b border-zinc-100 pb-2.5 dark:border-zinc-800">
-                <h3 className="text-xs font-bold text-zinc-700 dark:text-zinc-300 uppercase tracking-wider flex items-center gap-2">
-                  <svg className="w-4 h-4 text-indigo-500 shrink-0" viewBox="0 0 64 64" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M8 50h48v4H8z"/>
-                    <path d="M14 50v4M32 50v4M50 50v4"/>
-                    <path d="M12 24h18v22H12zm22 6h18v16H34zM20 12h24v12H20z"/>
-                  </svg>
-                  <span>4. 적재 단위 팔레트 스펙 (Palette Spec)</span>
-                </h3>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setActiveLogisticsHelpSection("pallet");
-                    setIsLogisticsHelpOpen(true);
-                  }}
-                  className="px-2 py-0.5 rounded bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/40 dark:hover:bg-indigo-900/60 text-indigo-650 dark:text-indigo-300 text-[11px] font-bold transition-colors border border-indigo-200 dark:border-indigo-800"
-                >
-                  ? 가이드
-                </button>
+              <div className="border-b border-zinc-100 pb-2.5 dark:border-zinc-850 space-y-1.5">
+                <div className="flex justify-between items-center">
+                  <h3 className="text-xs font-bold text-zinc-700 dark:text-zinc-300 uppercase tracking-wider flex items-center gap-2">
+                    <svg className="w-4 h-4 text-indigo-500 shrink-0" viewBox="0 0 64 64" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M8 50h48v4H8z"/>
+                      <path d="M14 50v4M32 50v4M50 50v4"/>
+                      <path d="M12 24h18v22H12zm22 6h18v16H34zM20 12h24v12H20z"/>
+                    </svg>
+                    <span>4. 적재 단위 팔레트 스펙 (Palette Spec)</span>
+                  </h3>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveLogisticsHelpSection("pallet");
+                      setIsLogisticsHelpOpen(true);
+                    }}
+                    className="px-2 py-0.5 rounded bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/40 dark:hover:bg-indigo-900/60 text-indigo-650 dark:text-indigo-300 text-[11px] font-bold transition-colors border border-indigo-200 dark:border-indigo-800"
+                  >
+                    ? 가이드
+                  </button>
+                </div>
+                <p className="text-xs text-zinc-600 dark:text-zinc-400 font-normal leading-relaxed">
+                  여러 마스터 카톤을 팔레트에 적재한 최종 출고 상태의 정보를 입력합니다. 팔레트 자체를 포함한 전체 크기, 총중량, 적재 카톤 수를 기준으로 합니다.
+                </p>
               </div>
               <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-xs">
                 {/* Qty */}
@@ -2723,7 +2812,7 @@ export function ProductOverrideTabs({
                     </svg>
                     <span>5. 컨테이너 적재 시뮬레이터 및 저장 정보</span>
                   </h3>
-                  <p className="text-[11px] text-zinc-500 dark:text-zinc-400 font-normal leading-relaxed">
+                  <p className="text-xs text-zinc-600 dark:text-zinc-400 font-normal leading-relaxed">
                     본 시뮬레이터는 입력된 마스터 카톤 규격을 기준으로 한 <strong>이론적 적재 추정치</strong>입니다. 20FT(28 CBM), 40FT(58 CBM), 40HQ(68 CBM) 규격별 예상 상품 및 카톤 적재량을 제공합니다.
                   </p>
                 </div>
@@ -3041,16 +3130,24 @@ export function ProductOverrideTabs({
         {/* Media Tab */}
         {activeTab === "media" && (
           <div className="space-y-6">
+            {/* Product Images Card */}
             <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 space-y-4">
-              <div className="flex justify-between items-center border-b border-zinc-100 pb-2 dark:border-zinc-800">
-                <h3 className="text-xs font-bold text-zinc-700 dark:text-zinc-300 uppercase tracking-wider">
-                  제품 미디어 자료 관리 (이미지 및 동영상)
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-zinc-100 dark:border-zinc-850 pb-3 gap-3">
+                <h3 className="text-sm font-bold text-zinc-900 dark:text-white flex items-center gap-2">
+                  <span>제품 이미지 관리 (최대 10장)</span>
+                  {mediaPending && (
+                    <span className="text-[10px] text-indigo-650 dark:text-indigo-400 font-bold animate-pulse">
+                      처리 중...
+                    </span>
+                  )}
                 </h3>
-                {mediaPending && (
-                  <span className="text-[10px] text-indigo-650 dark:text-indigo-400 font-bold animate-pulse">
-                    처리 중...
-                  </span>
-                )}
+                <div className="flex items-center gap-3 text-xs font-semibold text-zinc-600 dark:text-zinc-400 bg-zinc-50 dark:bg-zinc-950 px-3 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-800">
+                  <span>등록된 이미지: <strong className="text-zinc-900 dark:text-white font-bold">{localImages.length}개</strong></span>
+                  <span className="text-zinc-300 dark:text-zinc-700">|</span>
+                  <span>추가 대기 이미지: <strong className="text-indigo-650 dark:text-indigo-400 font-bold">{pendingImages.length}개</strong></span>
+                  <span className="text-zinc-300 dark:text-zinc-700">|</span>
+                  <span>최대: <strong className="text-zinc-700 dark:text-zinc-300 font-bold">10개</strong></span>
+                </div>
               </div>
 
               {mediaError && (
@@ -3060,91 +3157,158 @@ export function ProductOverrideTabs({
               )}
 
               {/* Images list */}
-              <div className="space-y-4">
-                <div className="flex flex-col gap-1">
-                  <h4 className="text-xs font-bold text-zinc-800 dark:text-white">등록 상품 이미지 목록 ({localImages.length}개 / 최대 10개)</h4>
-                  {localImages.length > 0 && (
-                    <p className="text-[10px] text-zinc-500 dark:text-zinc-400 flex items-center gap-1.5 bg-zinc-50 dark:bg-zinc-950/20 p-2.5 rounded-lg border border-zinc-150 dark:border-zinc-850">
-                      <span>💡</span>
-                      <span>이미지를 마우스로 드래그 앤 드롭하여 순서를 변경할 수 있습니다. <strong>(1번 이미지가 자동으로 대표 이미지로 설정됩니다)</strong></span>
-                    </p>
-                  )}
-                </div>
-                {localImages.length > 0 ? (
-                  <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-5 gap-4">
-                    {localImages.map((img, idx) => {
-                      return (
-                        <div
-                          key={img.id}
-                          draggable
-                          onDragStart={(e) => handleDragStart(e, idx)}
-                          onDragOver={(e) => handleDragOver(e, idx)}
-                          onDragEnd={handleDragEnd}
-                          className={`relative rounded-lg overflow-hidden border bg-zinc-50 dark:bg-zinc-950/40 group shadow-sm flex flex-col justify-between aspect-square p-2 transition-all cursor-grab active:cursor-grabbing ${
-                            draggedIndex === idx
-                              ? "opacity-40 border-dashed border-indigo-500 ring-2 ring-indigo-500/20"
-                              : idx === 0
-                                ? "border-amber-500 dark:border-amber-400 border-2 shadow-amber-100/50 dark:shadow-none ring-2 ring-amber-500/10"
-                                : "border-zinc-200 dark:border-zinc-800"
-                          }`}
-                        >
-                          <div className="relative w-full flex-1 rounded overflow-hidden select-none pointer-events-none">
-                            {img.url ? (
-                              <img src={img.url} alt={`제품 사진 ${idx + 1}`} className="w-full h-full object-cover select-none pointer-events-none" />
-                            ) : (
-                              <div className="w-full h-full flex items-center justify-center text-[10px] text-rose-500 font-bold">로딩 실패</div>
-                            )}
-                            {idx === 0 ? (
-                              <span className="absolute top-1 left-1 rounded bg-amber-500 text-white px-1.5 py-0.5 text-[8px] font-extrabold shadow-sm border border-amber-400">
-                                대표 이미지
-                              </span>
-                            ) : (
-                              <span className="absolute top-1 left-1 rounded bg-black/60 text-white px-1.5 py-0.5 text-[8px] font-semibold">
-                                서브 {idx}
-                              </span>
-                            )}
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => handleImageDelete(img.id)}
-                            disabled={mediaPending}
-                            className="mt-1.5 w-full text-center text-[9px] font-bold text-rose-600 hover:text-rose-800 hover:underline cursor-pointer disabled:opacity-50"
-                          >
-                            이미지 삭제
-                          </button>
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <p className="text-xs text-zinc-400 italic py-3 text-center">등록된 사진 이미지가 없습니다.</p>
-                )}
+              {localImages.length === 0 ? (
+                <p className="mt-4 text-xs text-zinc-400 dark:text-zinc-500 py-6 text-center">등록된 제품 이미지가 없습니다. 아래에서 이미지를 추가해 주세요.</p>
+              ) : (
+                <div className="space-y-3">
+                  <p className="text-[11px] text-zinc-500 flex items-center gap-1.5 bg-zinc-50 dark:bg-zinc-950/40 p-2.5 rounded-lg border border-zinc-150 dark:border-zinc-850">
+                    <span>💡</span>
+                    <span>이미지를 마우스로 드래그 앤 드롭하여 순서를 변경할 수 있습니다. <strong>(1번 이미지가 자동으로 대표 이미지로 설정됩니다)</strong></span>
+                  </p>
+                  <div className="flex flex-wrap gap-4 pt-1">
+                    {localImages.map((img, i) => (
+                      <div
+                        key={img.id}
+                        draggable
+                        onDragStart={(e) => handleDragStart(e, i)}
+                        onDragOver={(e) => handleDragOver(e, i)}
+                        onDragEnd={handleDragEnd}
+                        className={`relative group border rounded-lg p-1.5 bg-zinc-50/50 dark:bg-zinc-950 shadow-sm transition-all hover:shadow cursor-grab active:cursor-grabbing ${
+                          draggedIndex === i
+                            ? "opacity-40 border-dashed border-indigo-500 ring-2 ring-indigo-500/20"
+                            : i === 0
+                              ? "border-amber-500 dark:border-amber-400 border-2 shadow-amber-100/50 dark:shadow-none ring-2 ring-amber-500/10"
+                              : "border-zinc-150 dark:border-zinc-800"
+                        }`}
+                      >
+                        {img.url ? (
+                          <img
+                            src={img.url}
+                            alt={`제품 이미지 ${i + 1}`}
+                            className="h-28 w-28 rounded-lg object-cover pointer-events-none select-none"
+                          />
+                        ) : (
+                          <div className="h-28 w-28 rounded-lg flex items-center justify-center text-[10px] text-rose-500 font-bold bg-zinc-100 dark:bg-zinc-800">로딩 실패</div>
+                        )}
+                        {/* Position Badge */}
+                        {i === 0 ? (
+                          <span className="absolute top-2 left-2 rounded bg-amber-500 text-white px-2 py-0.5 text-[9px] font-extrabold shadow-sm border border-amber-400">
+                            대표 이미지
+                          </span>
+                        ) : (
+                          <span className="absolute top-2 left-2 rounded bg-zinc-900/70 backdrop-blur px-1.5 py-0.5 text-[9px] font-bold text-white">
+                            서브 {i}
+                          </span>
+                        )}
 
-                {/* Image upload form */}
-                {imageUrls.length < 10 && (
-                  <form
-                    onSubmit={handleImageUpload}
-                    className="border-t border-zinc-100 dark:border-zinc-850 pt-3 flex flex-col sm:flex-row sm:items-center gap-3"
-                  >
-                    <div className="flex-1">
-                      <input
-                        type="file"
-                        accept="image/jpeg,image/png,image/webp"
-                        multiple
-                        disabled={mediaPending}
-                        className="block text-xs text-zinc-500 dark:text-zinc-400 file:mr-4 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-zinc-100 file:text-zinc-700 dark:file:bg-zinc-800 dark:file:text-zinc-300 hover:file:bg-zinc-200 dark:hover:file:bg-zinc-750 cursor-pointer disabled:opacity-50"
-                      />
-                    </div>
+                        <button
+                          type="button"
+                          onClick={() => handleImageDelete(img.id)}
+                          disabled={mediaPending}
+                          className="mt-2 w-full text-center text-[10px] font-bold text-rose-600 hover:text-rose-800 hover:underline cursor-pointer disabled:opacity-50 py-1"
+                        >
+                          이미지 삭제
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Staging Area for Selected Pending Files */}
+              {pendingImages.length > 0 && (
+                <div className="mt-4 p-4 rounded-xl border-2 border-indigo-500 bg-indigo-50/50 dark:border-indigo-900/60 dark:bg-indigo-950/30 shadow-md space-y-4">
+                  <div className="flex items-center justify-between border-b border-indigo-100 dark:border-indigo-900/60 pb-2.5">
+                    <span className="text-xs font-bold text-indigo-950 dark:text-indigo-200 flex items-center gap-2">
+                      <span className="text-base">📸</span>
+                      <span>추가 대기 목록 ({pendingImages.length}개 선택됨)</span>
+                    </span>
+                    <span className="text-[11px] font-semibold text-indigo-700 dark:text-indigo-300">
+                      아래 [선택한 이미지 {pendingImages.length}개 추가] 버튼을 눌러야 저장됩니다.
+                    </span>
+                  </div>
+
+                  <div className="flex flex-wrap gap-3 pt-1">
+                    {pendingImages.map((img) => (
+                      <div
+                        key={img.id}
+                        className="relative group border border-indigo-200 dark:border-indigo-800 rounded-xl p-2 bg-white dark:bg-zinc-900 shadow-sm w-32 flex flex-col items-center text-center"
+                      >
+                        <img
+                          src={img.previewUrl}
+                          alt={img.file.name}
+                          className="h-24 w-full rounded-lg object-cover border border-zinc-100 dark:border-zinc-800"
+                        />
+                        <p className="mt-1.5 text-[11px] font-bold text-zinc-900 dark:text-white truncate w-full px-1" title={img.file.name}>
+                          {img.file.name}
+                        </p>
+                        <p className="text-[10px] text-zinc-500 dark:text-zinc-400 font-mono">
+                          {img.formattedSize}
+                        </p>
+
+                        <button
+                          type="button"
+                          onClick={() => handleRemovePendingImage(img.id)}
+                          className="mt-2 w-full rounded-md bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900/60 text-rose-700 dark:text-rose-300 text-[10px] font-bold py-1 border border-rose-200 dark:border-rose-900/60 transition-colors cursor-pointer flex items-center justify-center gap-1"
+                          title="이 선택 파일 제외"
+                        >
+                          <span>✕</span>
+                          <span>삭제</span>
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="pt-3 border-t border-indigo-100 dark:border-indigo-900/60 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                    <p className="text-xs text-indigo-900 dark:text-indigo-200 font-semibold">
+                      선택된 파일은 아직 저장되지 않았습니다. 업로드 완료 버튼을 눌러주세요.
+                    </p>
                     <button
-                      type="submit"
-                      disabled={mediaPending}
-                      className="rounded-lg border border-zinc-300 px-4 py-1.5 text-xs font-bold text-zinc-700 hover:bg-zinc-50 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-850 cursor-pointer disabled:opacity-50"
+                      type="button"
+                      onClick={handleUploadPendingImages}
+                      disabled={uploadingImages || mediaPending}
+                      className="rounded-xl bg-indigo-650 hover:bg-indigo-700 active:scale-95 text-white px-6 py-2.5 text-xs font-extrabold shadow-lg transition-all cursor-pointer disabled:opacity-50 flex items-center gap-2 border border-indigo-500 ring-2 ring-indigo-500/30 shrink-0"
                     >
-                      이미지 추가
+                      {uploadingImages ? (
+                        <>
+                          <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                          </svg>
+                          <span>이미지 업로드 중...</span>
+                        </>
+                      ) : (
+                        <>
+                          <span>📤</span>
+                          <span>선택한 이미지 {pendingImages.length}개 추가</span>
+                        </>
+                      )}
                     </button>
-                  </form>
-                )}
-              </div>
+                  </div>
+                </div>
+              )}
+
+              {localImages.length + pendingImages.length < 10 && (
+                <div className="mt-6 border-t border-zinc-100 dark:border-zinc-850 pt-4 flex flex-col sm:flex-row sm:items-center gap-3">
+                  <div className="flex-1">
+                    <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                      컴퓨터에서 이미지 선택 (다중 선택 가능)
+                    </label>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      multiple
+                      disabled={mediaPending}
+                      onChange={handleImageSelect}
+                      className="block w-full text-xs text-zinc-500 dark:text-zinc-400 file:mr-4 file:py-1.5 file:px-3.5 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-zinc-100 file:text-zinc-700 dark:file:bg-zinc-800 dark:file:text-zinc-300 hover:file:bg-zinc-200 dark:hover:file:bg-zinc-750 cursor-pointer disabled:opacity-50"
+                    />
+                  </div>
+                  <div className="text-[11px] text-zinc-400 self-end pb-1.5 font-medium">
+                    (등록 가능: <strong className="text-zinc-700 dark:text-zinc-300 font-mono">{10 - localImages.length - pendingImages.length}</strong>장 남음)
+                  </div>
+                </div>
+              )}
 
               {/* Videos list */}
               <div className="pt-6 border-t border-zinc-100 dark:border-zinc-850 space-y-4">

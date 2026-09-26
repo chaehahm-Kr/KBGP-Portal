@@ -2296,7 +2296,7 @@ export function ProductDetailTabs({
                   </button>
                 </h2>
               </div>
-              <p className="text-sm text-zinc-650 dark:text-zinc-300 font-normal leading-relaxed">
+              <p className="text-xs text-zinc-600 dark:text-zinc-400 font-normal leading-relaxed">
                 제품 자체의 실제 크기와 무게를 입력합니다. 튜브, 병, 용기 등 제품 본체 기준입니다.
               </p>
             </div>
@@ -2379,7 +2379,7 @@ export function ProductDetailTabs({
                   </button>
                 </h2>
               </div>
-              <p className="text-sm text-zinc-650 dark:text-zinc-300 font-normal leading-relaxed">
+              <p className="text-xs text-zinc-600 dark:text-zinc-400 font-normal leading-relaxed">
                 제품 1개의 최종 판매 포장 상태의 크기와 무게를 입력합니다. 단상자 등 판매용 포장은 포함하며, 택배·배송용 외부 박스는 포함하지 않습니다.
               </p>
             </div>
@@ -2550,7 +2550,7 @@ export function ProductDetailTabs({
                   </button>
                 </h2>
               </div>
-              <p className="text-sm text-zinc-650 dark:text-zinc-300 font-normal leading-relaxed">
+              <p className="text-xs text-zinc-600 dark:text-zinc-400 font-normal leading-relaxed">
                 여러 개의 단품 판매 패키지를 담아 보관·운송하는 카톤의 입수 수량, 크기와 총중량을 입력합니다.
               </p>
             </div>
@@ -2657,7 +2657,7 @@ export function ProductDetailTabs({
                   </button>
                 </h2>
               </div>
-              <p className="text-sm text-zinc-650 dark:text-zinc-300 font-normal leading-relaxed">
+              <p className="text-xs text-zinc-600 dark:text-zinc-400 font-normal leading-relaxed">
                 여러 마스터 카톤을 팔레트에 적재한 최종 출고 상태의 정보를 입력합니다. 팔레트 자체를 포함한 전체 크기, 총중량, 적재 카톤 수를 기준으로 합니다.
               </p>
             </div>
