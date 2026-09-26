@@ -81,3 +81,26 @@ export interface AgreementAuditLogItem {
   details?: Record<string, any>;
   created_at: string;
 }
+
+export type RecipientRoleType = "signer" | "additional_recipient";
+
+export interface AgreementRecipientItem {
+  id: string;
+  company_agreement_id: string;
+  agreement_id: string;
+  company_id: string;
+  recipient_name: string;
+  recipient_title: string;
+  recipient_email: string;
+  recipient_type: RecipientRoleType;
+  sent_at?: string | null;
+  delivery_status: "pending" | "sent" | "failed";
+  created_at: string;
+}
+
+export interface AdditionalRecipientInput {
+  name: string;
+  title: string;
+  email: string;
+}
+

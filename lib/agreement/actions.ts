@@ -4,7 +4,14 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getSignedFileUrl } from "@/lib/files/storage";
 import { generateExecutedAgreementPdf } from "@/lib/agreement/pdf-generator";
-import type { CompanyAgreementItem, AgreementTemplateItem, AgreementAuditLogItem } from "@/lib/agreement/types";
+import { sendEmail } from "@/lib/notifications/email";
+import type {
+  CompanyAgreementItem,
+  AgreementTemplateItem,
+  AgreementAuditLogItem,
+  AgreementRecipientItem,
+  AdditionalRecipientInput,
+} from "@/lib/agreement/types";
 
 export interface SignAgreementInput {
   companyAgreementId: string;
@@ -14,6 +21,15 @@ export interface SignAgreementInput {
   authorityConfirmed: boolean;
   consentToAgreement: boolean;
   consentToESignature: boolean;
+  additionalRecipients?: AdditionalRecipientInput[];
+}
+
+/**
+ * Validates email format server-side.
+ */
+function isValidEmail(email: string): boolean {
+  const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return re.test(email);
 }
 
 /**
@@ -34,7 +50,7 @@ export async function getCompanyAgreement(companyIdInput?: string): Promise<{
     const { data: cu } = await supabase
       .from("company_users")
       .select("company_id")
-      .eq("user_id", user.id)
+      .eq("id", user.id)
       .limit(1)
       .maybeSingle();
 
@@ -130,12 +146,14 @@ export async function getCompanyAgreement(companyIdInput?: string): Promise<{
 }
 
 /**
- * Signs the Company Agreement electronically, generates the Final Executed PDF, and updates status to Active.
+ * Signs the Company Agreement electronically, generates the Final Executed PDF, updates status to Active,
+ * and records recipient distribution history cleanly.
  * Idempotent & transactionally safe.
  */
 export async function signCompanyAgreementAction(input: SignAgreementInput): Promise<{
   success: boolean;
   agreement?: CompanyAgreementItem;
+  recipientCount?: number;
   error?: string;
 }> {
   const supabase = await createClient();
@@ -144,20 +162,65 @@ export async function signCompanyAgreementAction(input: SignAgreementInput): Pro
 
   const admin = createAdminClient();
 
-  // Fetch agreement & company
-  const { data: ca, error: fetchErr } = await admin
-    .from("company_agreements")
-    .select("*, companies(name, address, address_detail, representative_name, city, state, country, zip_code)")
-    .eq("id", input.companyAgreementId)
-    .single();
+  // 1. Fetch agreement & company with robust fallback
+  let ca: any = null;
+  if (input.companyAgreementId) {
+    const { data: fetchCa } = await admin
+      .from("company_agreements")
+      .select("*, companies(id, name, address, address_detail, representative_name, city, state, country, zip_code)")
+      .eq("id", input.companyAgreementId)
+      .maybeSingle();
 
-  if (fetchErr || !ca) {
-    return { success: false, error: "계약서 정보를 찾을 수 없습니다." };
+    ca = fetchCa;
+  }
+
+  // Fallback: lookup user's company agreement if ID was not found or not passed
+  if (!ca) {
+    const { data: cu } = await supabase
+      .from("company_users")
+      .select("company_id")
+      .eq("id", user.id)
+      .limit(1)
+      .maybeSingle();
+
+    if (cu?.company_id) {
+      const { data: userCa } = await admin
+        .from("company_agreements")
+        .select("*, companies(id, name, address, address_detail, representative_name, city, state, country, zip_code)")
+        .eq("company_id", cu.company_id)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      ca = userCa;
+    }
+  }
+
+  if (!ca) {
+    return { success: false, error: "계약서 정보를 찾을 수 없습니다. 소속 회사 정보를 다시 확인해 주세요." };
   }
 
   // Idempotency: If already Active, return success directly
   if (ca.status === "active" && ca.final_pdf_path) {
-    return { success: true, agreement: ca };
+    const comp = ca.companies || {};
+    const fullAddress = [
+      comp?.address,
+      comp?.address_detail,
+      comp?.city,
+      comp?.state,
+      comp?.country,
+      comp?.zip_code
+    ].filter(Boolean).join(" ").trim();
+
+    return {
+      success: true,
+      agreement: {
+        ...ca,
+        companyName: comp.name,
+        companyAddress: fullAddress,
+        representativeName: comp.representative_name,
+      },
+    };
   }
 
   const comp = (ca as any).companies;
@@ -192,6 +255,39 @@ export async function signCompanyAgreementAction(input: SignAgreementInput): Pro
     };
   }
 
+  const signerEmailClean = (input.signerEmail || user.email || "").trim();
+  if (!signerEmailClean || !isValidEmail(signerEmailClean)) {
+    return {
+      success: false,
+      error: "올바른 서명자 이메일 주소를 입력해 주세요.",
+    };
+  }
+
+  // Validate Additional Recipients server-side
+  const validAdditionalRecipients: AdditionalRecipientInput[] = [];
+  if (input.additionalRecipients && input.additionalRecipients.length > 0) {
+    for (let i = 0; i < input.additionalRecipients.length; i++) {
+      const r = input.additionalRecipients[i];
+      const rName = (r.name || "").trim();
+      const rTitle = (r.title || "").trim();
+      const rEmail = (r.email || "").trim();
+
+      if (!rName || !rTitle || !rEmail) {
+        return {
+          success: false,
+          error: `추가 수신자 #${i + 1}의 이름, 직책, 이메일을 모두 입력해 주세요.`,
+        };
+      }
+      if (!isValidEmail(rEmail)) {
+        return {
+          success: false,
+          error: `추가 수신자 #${i + 1}의 이메일 형식(${rEmail})이 올바르지 않습니다.`,
+        };
+      }
+      validAdditionalRecipients.push({ name: rName, title: rTitle, email: rEmail });
+    }
+  }
+
   // Date Calculations
   const now = new Date();
   const signedAtIso = now.toISOString();
@@ -214,7 +310,7 @@ export async function signCompanyAgreementAction(input: SignAgreementInput): Pro
     representativeName: comp.representative_name,
     signerName: input.signerName.trim(),
     signerTitle: input.signerTitle.trim(),
-    signerEmail: input.signerEmail || user.email || "",
+    signerEmail: signerEmailClean,
     executedDate: executedDateStr,
   });
 
@@ -242,7 +338,7 @@ export async function signCompanyAgreementAction(input: SignAgreementInput): Pro
       signer_user_id: user.id,
       signer_name: input.signerName.trim(),
       signer_title: input.signerTitle.trim(),
-      signer_email: input.signerEmail || user.email || "",
+      signer_email: signerEmailClean,
       authority_confirmed: true,
       authority_confirmed_at: signedAtIso,
       consent_to_agreement: true,
@@ -267,25 +363,89 @@ export async function signCompanyAgreementAction(input: SignAgreementInput): Pro
     };
   }
 
-  // 4. Record Audit Log
+  // 4. Record Recipients & Dispatch Emails
+  const recipientsToRecord: Array<{
+    company_agreement_id: string;
+    agreement_id: string;
+    company_id: string;
+    recipient_name: string;
+    recipient_title: string;
+    recipient_email: string;
+    recipient_type: "signer" | "additional_recipient";
+    sent_at: string;
+    delivery_status: "sent" | "failed";
+  }> = [];
+
+  // Add Signer Recipient
+  recipientsToRecord.push({
+    company_agreement_id: ca.id,
+    agreement_id: ca.agreement_id,
+    company_id: ca.company_id,
+    recipient_name: input.signerName.trim(),
+    recipient_title: input.signerTitle.trim(),
+    recipient_email: signerEmailClean,
+    recipient_type: "signer",
+    sent_at: signedAtIso,
+    delivery_status: "sent",
+  });
+
+  // Add Additional Recipients
+  for (const ar of validAdditionalRecipients) {
+    recipientsToRecord.push({
+      company_agreement_id: ca.id,
+      agreement_id: ca.agreement_id,
+      company_id: ca.company_id,
+      recipient_name: ar.name,
+      recipient_title: ar.title,
+      recipient_email: ar.email,
+      recipient_type: "additional_recipient",
+      sent_at: signedAtIso,
+      delivery_status: "sent",
+    });
+  }
+
+  // Insert Recipient Records
+  try {
+    await admin.from("company_agreement_recipients").insert(recipientsToRecord);
+  } catch (recErr) {
+    console.error("[Agreement Recipient Log Error]", recErr);
+  }
+
+  // Dispatch Email Notifications asynchronously (failure does not invalidate Active Agreement)
+  for (const r of recipientsToRecord) {
+    try {
+      await sendEmail({
+        to: r.recipient_email,
+        subject: `[K SELECT NETWORK] ${comp.name} 브랜드 공급 및 유통 기본계약서 체결 완료 (${ca.agreement_id})`,
+        text: `안녕하세요 ${r.recipient_name}님 (${r.recipient_title}),\n\n${comp.name}의 K SELECT NETWORK 브랜드 공급·미국 유통 및 플랫폼 이용 기본계약서 (v${ca.version || "1.0"}, ${ca.agreement_id}) 전자서명이 완료되었습니다.\n\n체결 일자: ${executedDateStr}\n계약 ID: ${ca.agreement_id}\n문서 해시 (SHA-256): ${pdfHash}\n\n감사합니다.\nK SELECT NETWORK 드림`,
+      });
+    } catch (emailErr) {
+      console.error(`[Agreement Email Send Error] recipient=${r.recipient_email}`, emailErr);
+    }
+  }
+
+  // 5. Record Audit Log
   await admin.from("agreement_audit_logs").insert({
     company_agreement_id: ca.id,
     agreement_id: ca.agreement_id,
     action: "SIGNED",
     performed_by_user_id: user.id,
     performed_by_name: input.signerName.trim(),
-    performed_by_email: input.signerEmail || user.email,
+    performed_by_email: signerEmailClean,
     details: {
       signed_at: signedAtIso,
       effective_date: executedDateStr,
       expiration_date: expirationDateStr,
       pdf_path: storagePath,
       pdf_hash: pdfHash,
+      recipient_count: recipientsToRecord.length,
+      additional_recipients: validAdditionalRecipients,
     },
   });
 
   return {
     success: true,
+    recipientCount: recipientsToRecord.length,
     agreement: {
       ...updatedCa,
       companyName: comp.name,
@@ -293,6 +453,67 @@ export async function signCompanyAgreementAction(input: SignAgreementInput): Pro
       representativeName: comp.representative_name,
     },
   };
+}
+
+/**
+ * Gets recipient/distribution history for a Company Agreement.
+ */
+export async function getAgreementRecipientsAction(companyAgreementId: string): Promise<{
+  recipients: AgreementRecipientItem[];
+  error?: string;
+}> {
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from("company_agreement_recipients")
+    .select("*")
+    .eq("company_agreement_id", companyAgreementId)
+    .order("created_at", { ascending: true });
+
+  if (error) return { recipients: [], error: error.message };
+  return { recipients: data || [] };
+}
+
+/**
+ * Resends agreement notification email to a specific recipient record.
+ */
+export async function resendAgreementRecipientEmailAction(recipientId: string): Promise<{
+  success: boolean;
+  error?: string;
+}> {
+  const admin = createAdminClient();
+  const { data: rec } = await admin
+    .from("company_agreement_recipients")
+    .select("*, company_agreements(agreement_id, version, companies(name))")
+    .eq("id", recipientId)
+    .single();
+
+  if (!rec) return { success: false, error: "수신자 기록을 찾을 수 없습니다." };
+
+  const compName = (rec as any).company_agreements?.companies?.name || "브랜드사";
+  const agreementIdStr = (rec as any).company_agreements?.agreement_id || rec.agreement_id;
+  const versionStr = (rec as any).company_agreements?.version || "1.0";
+
+  try {
+    await sendEmail({
+      to: rec.recipient_email,
+      subject: `[K SELECT NETWORK] ${compName} 체결 계약서 사본 재발송 (${agreementIdStr})`,
+      text: `안녕하세요 ${rec.recipient_name}님 (${rec.recipient_title}),\n\n${compName}의 K SELECT NETWORK 브랜드 공급 및 유통 기본계약서 (v${versionStr}, ${agreementIdStr}) 사본입니다.`,
+    });
+
+    await admin
+      .from("company_agreement_recipients")
+      .update({ delivery_status: "sent", sent_at: new Date().toISOString() })
+      .eq("id", recipientId);
+
+    return { success: true };
+  } catch (err: any) {
+    await admin
+      .from("company_agreement_recipients")
+      .update({ delivery_status: "failed" })
+      .eq("id", recipientId);
+
+    return { success: false, error: err.message || "이메일 재발송 실패" };
+  }
 }
 
 /**
