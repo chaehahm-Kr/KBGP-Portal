@@ -24,11 +24,19 @@ export const AGREEMENT_STATUS_STYLES: Record<AgreementStatus, string> = {
   superseded: "bg-zinc-100 text-zinc-600 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:border-zinc-700",
 };
 
+export type AgreementType = "BRAND_SUPPLIER" | "RETAILER";
+
+export const AGREEMENT_TYPE_LABELS: Record<AgreementType, { ko: string; en: string }> = {
+  BRAND_SUPPLIER: { ko: "브랜드 공급사 (Brand)", en: "Brand Agreement" },
+  RETAILER: { ko: "리테일러 (Retailer)", en: "Retailer Agreement" },
+};
+
 export interface AgreementTemplateItem {
   id: string;
+  agreement_type?: AgreementType;
   name: string;
   version: string;
-  status: "draft" | "active" | "archived";
+  status: "draft" | "active" | "inactive" | "archived";
   source_pdf_path: string;
   letusto_signer_name: string;
   letusto_signer_title: string;
@@ -37,8 +45,11 @@ export interface AgreementTemplateItem {
   initial_term_years: number;
   renewal_term_years: number;
   non_renewal_notice_days: number;
+  notes?: string | null;
+  created_by?: string | null;
   activated_at?: string | null;
   created_at: string;
+  updated_at?: string;
 }
 
 export interface CompanyAgreementItem {

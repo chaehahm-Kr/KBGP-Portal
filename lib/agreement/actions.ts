@@ -762,20 +762,215 @@ export async function getSignedExecutedPdfUrlAction(
 }
 
 /**
- * Admin: Lists all Agreement Templates
+ * Admin: Lists all Agreement Templates with optional Agreement Type filter
  */
-export async function adminListAgreementTemplatesAction(): Promise<{
+export async function adminListAgreementTemplatesAction(agreementTypeFilter?: string): Promise<{
   templates: AgreementTemplateItem[];
   error?: string;
 }> {
   const admin = createAdminClient();
-  const { data, error } = await admin
+  let query = admin
     .from("agreement_templates")
     .select("*")
     .order("created_at", { ascending: false });
 
+  if (agreementTypeFilter && agreementTypeFilter !== "ALL") {
+    query = query.eq("agreement_type", agreementTypeFilter);
+  }
+
+  const { data, error } = await query;
+
   if (error) return { templates: [], error: error.message };
   return { templates: data || [] };
+}
+
+/**
+ * Admin: Gets preview/download URL for an Agreement Template PDF
+ */
+export async function adminGetTemplatePdfUrlAction(
+  templateId: string,
+  downloadFilename?: string
+): Promise<{ url: string | null; error?: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { url: null, error: "인증되지 않은 사용자입니다." };
+
+  const admin = createAdminClient();
+  const { data: tmpl } = await admin
+    .from("agreement_templates")
+    .select("source_pdf_path, name, version")
+    .eq("id", templateId)
+    .single();
+
+  if (!tmpl || !tmpl.source_pdf_path) {
+    return { url: null, error: "템플릿 PDF 경로를 찾을 수 없습니다." };
+  }
+
+  // If public web path (starts with "/")
+  if (tmpl.source_pdf_path.startsWith("/")) {
+    return { url: tmpl.source_pdf_path };
+  }
+
+  // Private storage path (company-uploads bucket)
+  try {
+    const downloadOpt = downloadFilename ? { download: downloadFilename } : undefined;
+    const { data: signed, error: signErr } = await admin.storage
+      .from("company-uploads")
+      .createSignedUrl(tmpl.source_pdf_path, 3600, downloadOpt);
+
+    if (signErr || !signed?.signedUrl) {
+      console.error("[adminGetTemplatePdfUrlAction] Storage error:", signErr);
+      return { url: null, error: "템플릿 서명된 URL 생성에 실패했습니다." };
+    }
+
+    return { url: signed.signedUrl };
+  } catch (err: any) {
+    console.error("[adminGetTemplatePdfUrlAction] Exception:", err);
+    return { url: null, error: err?.message || "URL 생성 오류가 발생했습니다." };
+  }
+}
+
+/**
+ * Admin: Uploads a new Agreement Template version and optionally sets it as Active.
+ */
+export async function adminUploadAgreementTemplateAction(formData: FormData): Promise<{
+  success: boolean;
+  template?: AgreementTemplateItem;
+  error?: string;
+}> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { success: false, error: "인증되지 않은 사용자입니다." };
+
+  const admin = createAdminClient();
+
+  const agreementType = (formData.get("agreement_type") as string) || "BRAND_SUPPLIER";
+  const name = (formData.get("name") as string || "").trim();
+  const version = (formData.get("version") as string || "").trim();
+  const notes = (formData.get("notes") as string || "").trim();
+  const setActive = formData.get("setActive") === "true";
+  const file = formData.get("pdfFile") as File;
+
+  if (!name || !version || !file) {
+    return { success: false, error: "계약서 명칭, 버전, PDF 파일은 필수 항목입니다." };
+  }
+
+  if (file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf")) {
+    return { success: false, error: "PDF 형식의 파일만 업로드할 수 있습니다." };
+  }
+
+  // 1. Check version uniqueness for the specific agreement_type
+  const { data: existing } = await admin
+    .from("agreement_templates")
+    .select("id")
+    .eq("agreement_type", agreementType)
+    .eq("version", version)
+    .maybeSingle();
+
+  if (existing) {
+    return {
+      success: false,
+      error: `해당 계약 유형(${agreementType === "BRAND_SUPPLIER" ? "브랜드 공급사" : "리테일러"})의 버전 ${version} 템플릿이 이미 존재합니다. 다른 버전을 입력해 주세요.`,
+    };
+  }
+
+  // 2. Upload template PDF to private storage
+  const arrayBuffer = await file.arrayBuffer();
+  const fileBuffer = Buffer.from(arrayBuffer);
+  const sanitizeVersion = version.replace(/[^a-zA-Z0-9._-]/g, "_");
+  const storagePath = `agreements/templates/${agreementType}/${sanitizeVersion}_${Date.now()}.pdf`;
+
+  const { error: uploadErr } = await admin.storage
+    .from("company-uploads")
+    .upload(storagePath, fileBuffer, {
+      contentType: "application/pdf",
+      upsert: true,
+    });
+
+  if (uploadErr) {
+    console.error("[adminUploadAgreementTemplateAction] Storage upload error:", uploadErr);
+    return { success: false, error: `템플릿 파일 업로드 실패: ${uploadErr.message}` };
+  }
+
+  // 3. If setActive is true, deactivate existing active templates of the SAME agreement_type ONLY
+  if (setActive) {
+    await admin
+      .from("agreement_templates")
+      .update({ status: "inactive" })
+      .eq("agreement_type", agreementType)
+      .eq("status", "active");
+  }
+
+  // 4. Insert new agreement template record
+  const { data: newTmpl, error: insertErr } = await admin
+    .from("agreement_templates")
+    .insert({
+      agreement_type: agreementType,
+      name,
+      version,
+      status: setActive ? "active" : "inactive",
+      source_pdf_path: storagePath,
+      notes: notes || null,
+      created_by: user.email,
+      activated_at: setActive ? new Date().toISOString() : null,
+    })
+    .select()
+    .single();
+
+  if (insertErr || !newTmpl) {
+    console.error("[adminUploadAgreementTemplateAction] DB insert error:", insertErr);
+    return { success: false, error: `템플릿 DB 등록 실패: ${insertErr?.message || "오류 발생"}` };
+  }
+
+  return { success: true, template: newTmpl };
+}
+
+/**
+ * Admin: Sets an existing Agreement Template as Active for its Agreement Type.
+ * Deactivates previous active templates of the SAME Agreement Type ONLY.
+ */
+export async function adminSetAgreementTemplateActiveAction(templateId: string): Promise<{
+  success: boolean;
+  error?: string;
+}> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { success: false, error: "인증되지 않은 사용자입니다." };
+
+  const admin = createAdminClient();
+
+  const { data: tmpl } = await admin
+    .from("agreement_templates")
+    .select("*")
+    .eq("id", templateId)
+    .single();
+
+  if (!tmpl) return { success: false, error: "대상 템플릿을 찾을 수 없습니다." };
+
+  const targetType = tmpl.agreement_type || "BRAND_SUPPLIER";
+
+  // Deactivate previous active templates of the SAME agreement_type ONLY
+  await admin
+    .from("agreement_templates")
+    .update({ status: "inactive" })
+    .eq("agreement_type", targetType)
+    .eq("status", "active");
+
+  // Activate target template
+  const { error: updateErr } = await admin
+    .from("agreement_templates")
+    .update({
+      status: "active",
+      activated_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", templateId);
+
+  if (updateErr) {
+    return { success: false, error: `Active 설정 실패: ${updateErr.message}` };
+  }
+
+  return { success: true };
 }
 
 /**
