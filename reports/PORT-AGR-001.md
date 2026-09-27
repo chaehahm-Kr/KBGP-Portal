@@ -99,3 +99,29 @@
      - Formats platform name (`K SELECT NETWORK`), version, agreement ID, and executed date cleanly inside the execution record table at `y: 174`.
      - Draws agreement ID as a single continuous string without letter spacing anomalies.
 
+## R7 Fix Summary: Executed PDF Overlay Alignment Refinement + Brands Global Inc. Test Reset
+- **Task ID**: `PORT-AGR-001-R7`
+- **Task Name**: Executed PDF Overlay Alignment Refinement + Brands Global Inc. Test Reset
+- **Root Cause Analysis**:
+  - In `pdf-lib`, text rendering origin `(0, 0)` is located at the **bottom-left** of the PDF page, and `drawText({ x, y })` positions text by its **baseline**.
+  - On Page 1 and Page 5, previous field coordinates were placed too low (approx. 8–18 points below cell baseline), causing text to sit on or near the lower cell borders/lines.
+- **Coordinate Recalibration (`TEMPLATE_V1_CONFIG`)**:
+  1. **Page 1**:
+     - `companyName.y`: `609` -> `624` (+15pt up) for centered positioning in the Company Name box.
+     - `companyAddress.y`: `568` -> `584` (+16pt up), with `lineHeight = 12` to center 1-line or 2-line wrapped addresses neatly between top and bottom borders.
+     - `representativeName.y`: `518` -> `536` (+18pt up) for centered positioning in the Representative box.
+  2. **Page 5**:
+     - `companyName.y`: `432` -> `444` (+12pt up).
+     - `signerName.y`: `382` -> `390` (+8pt up).
+     - `signerTitle.y`: `356` -> `356` (verified clearly above signature area).
+     - `signatureBox.y`: `288` -> `304` (+16pt up) to position the cursive script signature (`AlexBrush-Regular`) cleanly inside the signature box, clear of the bottom line.
+     - `brandDate.y` & `letustoDate.y`: `240` -> `248` (+8pt up) for natural alignment with the Date line.
+  3. **Execution Record Table**:
+     - `executedVia`, `version`, `agreementId`, `executedDate`: `174` -> `178` (+4pt up) for table row centering.
+- **Controlled Test Reset for Brands Global Inc. (`4c845ae8-b93b-4db2-858f-bda3252e8167`)**:
+  - `company_agreements` status updated to `pending` with cleared signature metadata.
+  - Recipient records deleted (`company_agreement_recipients`: 0 remaining).
+  - Audit log records deleted (`agreement_audit_logs`: 0 remaining).
+  - Test executed PDF removed from private storage (`company-uploads`).
+  - Agreement Template v1.0 and all other company data preserved intact.
+  - Final Status: **Pending / 계약 서명 필요** (Ready for User E2E Test).
