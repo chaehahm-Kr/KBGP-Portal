@@ -1,9 +1,10 @@
 import "server-only";
-import { PDFDocument, rgb } from "pdf-lib";
+import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
 import fontkit from "@pdf-lib/fontkit";
 import fs from "fs";
 import path from "path";
 import crypto from "crypto";
+import type { AgreementType } from "@/lib/agreement/types";
 
 export interface ExecutedAgreementPdfData {
   agreementId: string;
@@ -15,11 +16,12 @@ export interface ExecutedAgreementPdfData {
   signerTitle: string;
   signerEmail: string;
   executedDate: string; // YYYY-MM-DD
+  agreementType?: AgreementType;
 }
 
 export interface PdfFieldOverlayConfig {
   field: string;
-  pageIndex: number; // 0-indexed (0 = Page 1, 4 = Page 5)
+  pageIndex: number;
   x: number;
   y: number;
   maxWidth?: number;
@@ -31,8 +33,7 @@ export interface PdfFieldOverlayConfig {
 }
 
 /**
- * Reusable template field coordinate configuration.
- * Designed for precise overlay alignment on v1.0 Agreement PDF template.
+ * Reusable template field coordinate configuration for Brand Agreements (5-page v1.0).
  */
 export const TEMPLATE_V1_CONFIG = {
   page1: {
@@ -113,7 +114,6 @@ export const TEMPLATE_V1_CONFIG = {
       fontType: "regular" as const,
     },
     letustoDate: {
-      field: "letustoDate",
       pageIndex: 4,
       x: 415,
       y: 270,
@@ -159,6 +159,132 @@ export const TEMPLATE_V1_CONFIG = {
     x: 142,
     y: 25,
     fontSize: 8.5,
+  },
+};
+
+/**
+ * Reusable template field coordinate configuration for Retailer Agreements (6-page S1/v1.0).
+ */
+export const RETAILER_TEMPLATE_V1_CONFIG = {
+  page1: {
+    companyName: {
+      field: "companyName",
+      pageIndex: 0,
+      x: 48,
+      y: 627,
+      maxWidth: 230,
+      fontSize: 9.5,
+      fontType: "bold" as const,
+    },
+    companyAddress: {
+      field: "companyAddress",
+      pageIndex: 0,
+      x: 48,
+      y: 576,
+      maxWidth: 230,
+      fontSize: 8.5,
+      lineHeight: 12,
+      maxLines: 2,
+      fontType: "regular" as const,
+    },
+    representativeName: {
+      field: "representativeName",
+      pageIndex: 0,
+      x: 48,
+      y: 508,
+      maxWidth: 230,
+      fontSize: 9.5,
+      fontType: "regular" as const,
+    },
+  },
+  page6: {
+    companyName: {
+      field: "companyName",
+      pageIndex: 5,
+      x: 65,
+      y: 592,
+      maxWidth: 200,
+      fontSize: 9.5,
+      fontType: "bold" as const,
+    },
+    signerName: {
+      field: "signerName",
+      pageIndex: 5,
+      x: 65,
+      y: 538,
+      maxWidth: 200,
+      fontSize: 9.5,
+      fontType: "regular" as const,
+    },
+    signerTitle: {
+      field: "signerTitle",
+      pageIndex: 5,
+      x: 65,
+      y: 483,
+      maxWidth: 200,
+      fontSize: 9.5,
+      fontType: "regular" as const,
+    },
+    signatureBox: {
+      field: "signatureBox",
+      pageIndex: 5,
+      x: 70,
+      y: 395,
+      maxWidth: 180,
+      fontSize: 26,
+      fontType: "script" as const,
+      color: { r: 0.05, g: 0.12, b: 0.42 },
+    },
+    retailerDate: {
+      field: "retailerDate",
+      pageIndex: 5,
+      x: 65,
+      y: 325,
+      fontSize: 9.5,
+      fontType: "regular" as const,
+    },
+    letustoDate: {
+      field: "letustoDate",
+      pageIndex: 5,
+      x: 324,
+      y: 325,
+      fontSize: 9.5,
+      fontType: "regular" as const,
+    },
+    executionRecord: {
+      executedVia: {
+        field: "executedVia",
+        pageIndex: 5,
+        x: 60,
+        y: 226,
+        fontSize: 7.5,
+        fontType: "bold" as const,
+      },
+      version: {
+        field: "version",
+        pageIndex: 5,
+        x: 175,
+        y: 226,
+        fontSize: 8.5,
+        fontType: "regular" as const,
+      },
+      agreementId: {
+        field: "agreementId",
+        pageIndex: 5,
+        x: 265,
+        y: 226,
+        fontSize: 8.5,
+        fontType: "bold" as const,
+      },
+      executedDate: {
+        field: "executedDate",
+        pageIndex: 5,
+        x: 465,
+        y: 226,
+        fontSize: 8.5,
+        fontType: "regular" as const,
+      },
+    },
   },
 };
 
@@ -234,14 +360,31 @@ function wrapAndFitText(
 }
 
 /**
- * Generates an immutable, archival Final Executed Agreement PDF from v1.0 template.
- * Overlays Company & Signer details, typed electronic signature, dates, and execution record.
+ * Generates an immutable, archival Final Executed Agreement PDF.
+ * Supports both Brand (5 pages) and Retailer (6 pages) templates.
  */
-export async function generateExecutedAgreementPdf(data: ExecutedAgreementPdfData): Promise<{
+export async function generateExecutedAgreementPdf(
+  data: ExecutedAgreementPdfData
+): Promise<{
   pdfBuffer: Buffer;
   pdfHash: string;
 }> {
-  // Resolve asset paths
+  const isRetailer = data.agreementType === "RETAILER";
+
+  if (isRetailer) {
+    return await generateExecutedRetailerPdf(data);
+  } else {
+    return await generateExecutedBrandPdf(data);
+  }
+}
+
+/**
+ * Brand Agreement Executed PDF Generator (5 pages, Korean fonts)
+ */
+async function generateExecutedBrandPdf(data: ExecutedAgreementPdfData): Promise<{
+  pdfBuffer: Buffer;
+  pdfHash: string;
+}> {
   const templatePath = path.join(process.cwd(), "private_assets/agreements/template_v1.pdf");
   const fontRegularPath = path.join(process.cwd(), "private_assets/fonts/NotoSansKR-Regular.ttf");
   const fontBoldPath = path.join(process.cwd(), "private_assets/fonts/NotoSansKR-Bold.ttf");
@@ -256,12 +399,11 @@ export async function generateExecutedAgreementPdf(data: ExecutedAgreementPdfDat
   const scriptFont = await pdfDoc.embedFont(fs.readFileSync(fontScriptPath));
 
   const textColor = rgb(0.12, 0.12, 0.14);
-  const sigColor = rgb(0.05, 0.12, 0.42); // Professional dark navy
+  const sigColor = rgb(0.05, 0.12, 0.42);
 
   // --- PAGE 1 OVERLAY ---
   const page1 = pdfDoc.getPage(TEMPLATE_V1_CONFIG.page1.companyName.pageIndex);
 
-  // 1. Company Name ONLY in Company Name field
   page1.drawText(data.companyName, {
     x: TEMPLATE_V1_CONFIG.page1.companyName.x,
     y: TEMPLATE_V1_CONFIG.page1.companyName.y,
@@ -270,7 +412,6 @@ export async function generateExecutedAgreementPdf(data: ExecutedAgreementPdfDat
     color: textColor,
   });
 
-  // 2. Company Address (Wrapped up to 2 lines)
   const addrConfig = TEMPLATE_V1_CONFIG.page1.companyAddress;
   const { lines: addrLines, fontSize: addrFontSize } = wrapAndFitText(
     data.companyAddress || "-",
@@ -306,7 +447,6 @@ export async function generateExecutedAgreementPdf(data: ExecutedAgreementPdfDat
     });
   }
 
-  // 3. Representative Name ONLY in Representative field
   if (data.representativeName) {
     page1.drawText(data.representativeName, {
       x: TEMPLATE_V1_CONFIG.page1.representativeName.x,
@@ -333,7 +473,6 @@ export async function generateExecutedAgreementPdf(data: ExecutedAgreementPdfDat
   // --- PAGE 5 OVERLAY ---
   const page5 = pdfDoc.getPage(TEMPLATE_V1_CONFIG.page5.companyName.pageIndex);
 
-  // Left Box: 공급사
   page5.drawText(data.companyName, {
     x: TEMPLATE_V1_CONFIG.page5.companyName.x,
     y: TEMPLATE_V1_CONFIG.page5.companyName.y,
@@ -358,7 +497,6 @@ export async function generateExecutedAgreementPdf(data: ExecutedAgreementPdfDat
     color: textColor,
   });
 
-  // Typed Cursive Electronic Signature (AlexBrush-Regular)
   const sigConfig = TEMPLATE_V1_CONFIG.page5.signatureBox;
   let sigFontSize = sigConfig.fontSize || 22;
   const maxSigWidth = sigConfig.maxWidth || 125;
@@ -374,7 +512,6 @@ export async function generateExecutedAgreementPdf(data: ExecutedAgreementPdfDat
     color: sigColor,
   });
 
-  // Brand Date & Letusto Date
   page5.drawText(data.executedDate, {
     x: TEMPLATE_V1_CONFIG.page5.brandDate.x,
     y: TEMPLATE_V1_CONFIG.page5.brandDate.y,
@@ -391,7 +528,6 @@ export async function generateExecutedAgreementPdf(data: ExecutedAgreementPdfDat
     color: textColor,
   });
 
-  // Electronic Execution Record Table
   const execRec = TEMPLATE_V1_CONFIG.executionRecord;
   page5.drawText("K SELECT NETWORK", {
     x: execRec.executedVia.x,
@@ -409,7 +545,6 @@ export async function generateExecutedAgreementPdf(data: ExecutedAgreementPdfDat
     color: textColor,
   });
 
-  // Agreement ID drawn as single continuous string without letter spacing
   page5.drawText(data.agreementId, {
     x: execRec.agreementId.x,
     y: execRec.agreementId.y,
@@ -428,8 +563,185 @@ export async function generateExecutedAgreementPdf(data: ExecutedAgreementPdfDat
 
   const pdfUint8 = await pdfDoc.save();
   const pdfBuffer = Buffer.from(pdfUint8);
+  const pdfHash = crypto.createHash("sha256").update(pdfBuffer).digest("hex");
 
-  // Compute SHA-256 hash checksum
+  return { pdfBuffer, pdfHash };
+}
+
+/**
+ * Retailer Agreement Executed PDF Generator (6 pages S1, Standard English Helvetica + AlexBrush)
+ */
+async function generateExecutedRetailerPdf(data: ExecutedAgreementPdfData): Promise<{
+  pdfBuffer: Buffer;
+  pdfHash: string;
+}> {
+  const templatePath = path.join(process.cwd(), "private_assets/agreements/retailer_template_v1.pdf");
+  const fontScriptPath = path.join(process.cwd(), "private_assets/fonts/AlexBrush-Regular.ttf");
+
+  const templateBytes = fs.readFileSync(templatePath);
+  const pdfDoc = await PDFDocument.load(templateBytes);
+  pdfDoc.registerFontkit(fontkit);
+
+  const fontRegular = await pdfDoc.embedFont(StandardFonts.Helvetica);
+  const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+  const scriptFont = await pdfDoc.embedFont(fs.readFileSync(fontScriptPath));
+
+  const textColor = rgb(0.12, 0.12, 0.14);
+  const sigColor = rgb(0.05, 0.12, 0.42);
+
+  const cfg = RETAILER_TEMPLATE_V1_CONFIG;
+
+  // --- PAGE 1 OVERLAY ---
+  const page1 = pdfDoc.getPage(cfg.page1.companyName.pageIndex);
+  page1.drawText(data.companyName, {
+    x: cfg.page1.companyName.x,
+    y: cfg.page1.companyName.y,
+    size: cfg.page1.companyName.fontSize,
+    font: fontBold,
+    color: textColor,
+  });
+
+  const addrConfig = cfg.page1.companyAddress;
+  const { lines: addrLines, fontSize: addrFontSize } = wrapAndFitText(
+    data.companyAddress || "-",
+    fontRegular,
+    addrConfig.fontSize,
+    addrConfig.maxWidth,
+    addrConfig.maxLines
+  );
+
+  if (addrLines.length === 1) {
+    page1.drawText(addrLines[0], {
+      x: addrConfig.x,
+      y: addrConfig.y,
+      size: addrFontSize,
+      font: fontRegular,
+      color: textColor,
+    });
+  } else if (addrLines.length > 1) {
+    const lineSpacing = addrConfig.lineHeight || 12;
+    page1.drawText(addrLines[0], {
+      x: addrConfig.x,
+      y: addrConfig.y + 4,
+      size: addrFontSize,
+      font: fontRegular,
+      color: textColor,
+    });
+    page1.drawText(addrLines[1], {
+      x: addrConfig.x,
+      y: addrConfig.y + 4 - lineSpacing,
+      size: addrFontSize,
+      font: fontRegular,
+      color: textColor,
+    });
+  }
+
+  if (data.representativeName) {
+    page1.drawText(data.representativeName, {
+      x: cfg.page1.representativeName.x,
+      y: cfg.page1.representativeName.y,
+      size: cfg.page1.representativeName.fontSize,
+      font: fontRegular,
+      color: textColor,
+    });
+  }
+
+  // --- PAGE 6 OVERLAY ---
+  const page6 = pdfDoc.getPage(cfg.page6.companyName.pageIndex);
+
+  page6.drawText(data.companyName, {
+    x: cfg.page6.companyName.x,
+    y: cfg.page6.companyName.y,
+    size: cfg.page6.companyName.fontSize,
+    font: fontBold,
+    color: textColor,
+  });
+
+  page6.drawText(data.signerName, {
+    x: cfg.page6.signerName.x,
+    y: cfg.page6.signerName.y,
+    size: cfg.page6.signerName.fontSize,
+    font: fontRegular,
+    color: textColor,
+  });
+
+  page6.drawText(data.signerTitle || "Representative", {
+    x: cfg.page6.signerTitle.x,
+    y: cfg.page6.signerTitle.y,
+    size: cfg.page6.signerTitle.fontSize,
+    font: fontRegular,
+    color: textColor,
+  });
+
+  // Typed Cursive Signature
+  const sigConfig = cfg.page6.signatureBox;
+  let sigFontSize = sigConfig.fontSize;
+  const maxSigWidth = sigConfig.maxWidth;
+  let sigTextWidth = scriptFont.widthOfTextAtSize(data.signerName, sigFontSize);
+  if (sigTextWidth > maxSigWidth) {
+    sigFontSize = Math.max(16, sigFontSize * (maxSigWidth / sigTextWidth));
+  }
+  page6.drawText(data.signerName, {
+    x: sigConfig.x,
+    y: sigConfig.y,
+    size: sigFontSize,
+    font: scriptFont,
+    color: sigColor,
+  });
+
+  // Dates
+  page6.drawText(data.executedDate, {
+    x: cfg.page6.retailerDate.x,
+    y: cfg.page6.retailerDate.y,
+    size: cfg.page6.retailerDate.fontSize,
+    font: fontRegular,
+    color: textColor,
+  });
+
+  page6.drawText(data.executedDate, {
+    x: cfg.page6.letustoDate.x,
+    y: cfg.page6.letustoDate.y,
+    size: cfg.page6.letustoDate.fontSize,
+    font: fontRegular,
+    color: textColor,
+  });
+
+  // Execution Record
+  const execRec = cfg.page6.executionRecord;
+  page6.drawText("K SELECT NETWORK", {
+    x: execRec.executedVia.x,
+    y: execRec.executedVia.y,
+    size: execRec.executedVia.fontSize,
+    font: fontBold,
+    color: textColor,
+  });
+
+  page6.drawText(data.version || "1.0", {
+    x: execRec.version.x,
+    y: execRec.version.y,
+    size: execRec.version.fontSize,
+    font: fontRegular,
+    color: textColor,
+  });
+
+  page6.drawText(data.agreementId, {
+    x: execRec.agreementId.x,
+    y: execRec.agreementId.y,
+    size: execRec.agreementId.fontSize,
+    font: fontBold,
+    color: textColor,
+  });
+
+  page6.drawText(data.executedDate, {
+    x: execRec.executedDate.x,
+    y: execRec.executedDate.y,
+    size: execRec.executedDate.fontSize,
+    font: fontRegular,
+    color: textColor,
+  });
+
+  const pdfUint8 = await pdfDoc.save();
+  const pdfBuffer = Buffer.from(pdfUint8);
   const pdfHash = crypto.createHash("sha256").update(pdfBuffer).digest("hex");
 
   return { pdfBuffer, pdfHash };

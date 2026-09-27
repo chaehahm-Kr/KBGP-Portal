@@ -293,6 +293,7 @@ export interface Retailer360Data {
   invitations: Retailer360InvitationItem[];
   agreements: Array<{
     id: string;
+    agreement_id?: string | null;
     agreement_type: string;
     agreement_version: string;
     accepted_name: string;
@@ -300,6 +301,9 @@ export interface Retailer360Data {
     signer_email?: string | null;
     accepted_ip?: string | null;
     accepted_at: string;
+    effective_date?: string | null;
+    expiration_date?: string | null;
+    status?: string | null;
     pdf_status?: "pending" | "generated" | "failed" | null;
     pdf_storage_path?: string | null;
     pdf_filename?: string | null;
@@ -454,11 +458,16 @@ export async function getAdminRetailer360Data(companyId: string): Promise<Retail
     };
   });
 
-  // 4. Fetch Invitations & Agreements
-  const [invitationsRes, rawAgreementsRes] = await Promise.all([
+  // 4. Fetch Invitations & Authoritative Company Agreements
+  const [invitationsRes, companyAgreementsRes, rawAcceptancesRes] = await Promise.all([
     adminClient
       .from("retailer_invitations")
       .select("*")
+      .eq("company_id", companyId)
+      .order("created_at", { ascending: false }),
+    adminClient
+      .from("company_agreements")
+      .select("*, agreement_templates(id, name, version, agreement_type)")
       .eq("company_id", companyId)
       .order("created_at", { ascending: false }),
     adminClient
@@ -469,34 +478,69 @@ export async function getAdminRetailer360Data(companyId: string): Promise<Retail
   ]);
 
   const invitations: Retailer360InvitationItem[] = invitationsRes.data || [];
-  const rawAgreements = rawAgreementsRes.data || [];
+  const companyAgreements = companyAgreementsRes.data || [];
+  const rawAcceptances = rawAcceptancesRes.data || [];
 
   const agreements: Retailer360Data["agreements"] = [];
-  for (const acc of rawAgreements) {
-    let signedPdfUrl: string | null = null;
-    if (acc.pdf_storage_path && acc.pdf_status === "generated") {
-      const { data: signedData } = await adminClient.storage
-        .from("company-uploads")
-        .createSignedUrl(acc.pdf_storage_path, 3600);
-      signedPdfUrl = signedData?.signedUrl || null;
-    }
 
-    agreements.push({
-      id: acc.id,
-      agreement_type: acc.agreement_type,
-      agreement_version: acc.agreement_version,
-      accepted_name: acc.accepted_name,
-      signer_title: acc.signer_title,
-      signer_email: acc.signer_email,
-      accepted_ip: acc.accepted_ip,
-      accepted_at: acc.accepted_at,
-      pdf_status: acc.pdf_status,
-      pdf_storage_path: acc.pdf_storage_path,
-      pdf_filename: acc.pdf_filename,
-      pdf_generated_at: acc.pdf_generated_at,
-      pdf_error: acc.pdf_error,
-      signedPdfUrl,
-    });
+  if (companyAgreements.length > 0) {
+    for (const ca of companyAgreements) {
+      let signedPdfUrl: string | null = null;
+      if (ca.final_pdf_path) {
+        const { data: signedData } = await adminClient.storage
+          .from("company-uploads")
+          .createSignedUrl(ca.final_pdf_path, 3600);
+        signedPdfUrl = signedData?.signedUrl || null;
+      }
+
+      agreements.push({
+        id: ca.id,
+        agreement_id: ca.agreement_id,
+        agreement_type: ca.agreement_templates?.agreement_type || "RETAILER",
+        agreement_version: ca.version || "1.0",
+        accepted_name: ca.signer_name || "Authorized Representative",
+        signer_title: ca.signer_title || null,
+        signer_email: ca.signer_email || null,
+        accepted_ip: null,
+        accepted_at: ca.signed_at || ca.created_at,
+        effective_date: ca.effective_date || null,
+        expiration_date: ca.expiration_date || null,
+        status: ca.status,
+        pdf_status: ca.status === "active" && ca.final_pdf_path ? "generated" : ca.status === "pending" ? "pending" : "failed",
+        pdf_storage_path: ca.final_pdf_path,
+        pdf_filename: ca.final_pdf_path ? `K_SELECT_Retailer_Agreement_${ca.agreement_id}.pdf` : null,
+        pdf_generated_at: ca.signed_at || null,
+        pdf_error: null,
+        signedPdfUrl,
+      });
+    }
+  } else {
+    for (const acc of rawAcceptances) {
+      let signedPdfUrl: string | null = null;
+      if (acc.pdf_storage_path && acc.pdf_status === "generated") {
+        const { data: signedData } = await adminClient.storage
+          .from("company-uploads")
+          .createSignedUrl(acc.pdf_storage_path, 3600);
+        signedPdfUrl = signedData?.signedUrl || null;
+      }
+
+      agreements.push({
+        id: acc.id,
+        agreement_type: acc.agreement_type,
+        agreement_version: acc.agreement_version,
+        accepted_name: acc.accepted_name,
+        signer_title: acc.signer_title,
+        signer_email: acc.signer_email,
+        accepted_ip: acc.accepted_ip,
+        accepted_at: acc.accepted_at,
+        pdf_status: acc.pdf_status,
+        pdf_storage_path: acc.pdf_storage_path,
+        pdf_filename: acc.pdf_filename,
+        pdf_generated_at: acc.pdf_generated_at,
+        pdf_error: acc.pdf_error,
+        signedPdfUrl,
+      });
+    }
   }
 
   // 5. Fetch Retailer Orders & Fulfillments

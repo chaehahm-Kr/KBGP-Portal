@@ -2,6 +2,7 @@ import React from "react";
 import { verifyRetailerSession } from "@/lib/auth/dal";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getRetailerTeamData } from "@/lib/retailer/onboarding-actions";
+import { getCompanyAgreement } from "@/lib/agreement/actions";
 import { getRetailerCompanyAgreementsAndDocuments } from "@/lib/retailer/agreement-actions";
 import {
   AccountOrganizationView,
@@ -85,20 +86,21 @@ export default async function RetailerAccountPage({ searchParams }: RetailerAcco
     managerPhone: s.manager_phone,
   }));
 
-  // 5. Fetch team data & agreements/documents
+  // 5. Fetch team data, authoritative company agreement, and documents
   let teamMembers: any[] = [];
   let pendingInvitations: any[] = [];
-  let agreements: any[] = [];
+  let companyAgreement: any = null;
   let documents: any[] = [];
 
   try {
-    const [teamData, docsData] = await Promise.all([
+    const [teamData, agrData, docsData] = await Promise.all([
       getRetailerTeamData(companyId),
+      getCompanyAgreement(companyId, "RETAILER"),
       getRetailerCompanyAgreementsAndDocuments(companyId),
     ]);
     teamMembers = teamData.members;
     pendingInvitations = teamData.invitations;
-    agreements = docsData.agreements;
+    companyAgreement = agrData.agreement;
     documents = docsData.documents;
   } catch (err) {
     console.error("Error loading team or document data:", err);
@@ -113,15 +115,24 @@ export default async function RetailerAccountPage({ searchParams }: RetailerAcco
     role: rawRole,
   };
 
+  const companyAddressStr = [
+    retailerProfile?.billing_address || rawCompany?.address,
+    retailerProfile?.billing_city || rawCompany?.city,
+    retailerProfile?.billing_state || rawCompany?.state,
+    retailerProfile?.billing_zip || rawCompany?.zip,
+  ]
+    .filter(Boolean)
+    .join(", ");
+
   const companyInfo: CompanyInfoItem = {
     id: companyId,
-    name: rawCompany?.name || "K SELECT Test Retailer",
+    name: rawCompany?.name || "K SELECT Retailer Partner",
     businessRegistrationNumber: rawCompany?.business_registration_number || null,
     country: rawCompany?.country || "US",
     contactName: rawCompany?.contact_name || retailerProfile?.billing_contact_name || null,
     contactPhone: rawCompany?.contact_phone || retailerProfile?.billing_contact_phone || null,
     contactEmail: retailerProfile?.billing_contact_email || null,
-    address: retailerProfile?.billing_address || null,
+    address: companyAddressStr || null,
     city: retailerProfile?.billing_city || null,
     state: retailerProfile?.billing_state || null,
     zip: retailerProfile?.billing_zip || null,
@@ -141,7 +152,7 @@ export default async function RetailerAccountPage({ searchParams }: RetailerAcco
       stores={storesList}
       teamMembers={teamMembers}
       pendingInvitations={pendingInvitations}
-      agreements={agreements}
+      companyAgreement={companyAgreement}
       documents={documents}
     />
   );

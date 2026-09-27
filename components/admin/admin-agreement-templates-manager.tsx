@@ -1,12 +1,16 @@
 "use client";
 
 import React, { useState, useTransition } from "react";
-import type { AgreementTemplateItem, AgreementType } from "@/lib/agreement/types";
+import Link from "next/link";
+import type { AgreementTemplateItem, AgreementType, CompanyAgreementItem } from "@/lib/agreement/types";
 import {
   adminListAgreementTemplatesAction,
   adminUploadAgreementTemplateAction,
   adminSetAgreementTemplateActiveAction,
   adminGetTemplatePdfUrlAction,
+  adminGetTemplateUsageCompaniesAction,
+  adminDeleteAgreementTemplateAction,
+  getSignedExecutedPdfUrlAction,
 } from "@/lib/agreement/actions";
 
 interface AdminAgreementTemplatesManagerProps {
@@ -36,7 +40,16 @@ export function AdminAgreementTemplatesManager({ initialTemplates }: AdminAgreem
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
 
-  // Status Action Loading State
+  // Usage Modal State
+  const [usageModalTmpl, setUsageModalTmpl] = useState<AgreementTemplateItem | null>(null);
+  const [usageAgreements, setUsageAgreements] = useState<CompanyAgreementItem[]>([]);
+  const [isLoadingUsage, setIsLoadingUsage] = useState(false);
+
+  // Delete Modal State
+  const [deleteConfirmTmpl, setDeleteConfirmTmpl] = useState<AgreementTemplateItem | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  // Status & General Action Error/Loading State
   const [activatingId, setActivatingId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
@@ -109,6 +122,22 @@ export function AdminAgreementTemplatesManager({ initialTemplates }: AdminAgreem
     }
   };
 
+  // View Executed PDF for a company agreement in usage modal
+  const handleViewExecutedPdf = async (ca: CompanyAgreementItem) => {
+    setActionError(null);
+    try {
+      const res = await getSignedExecutedPdfUrlAction(ca.id);
+      if (res.url) {
+        setPreviewTitle(`체결 완료 계약서 PDF (${ca.agreement_id} - ${ca.companyName})`);
+        setPreviewPdfUrl(res.url);
+      } else {
+        setActionError(res.error || "체결 완료 PDF URL을 생성할 수 없습니다.");
+      }
+    } catch (err: any) {
+      setActionError(err?.message || "PDF 보기 중 오류가 발생했습니다.");
+    }
+  };
+
   // Set Active handler
   const handleSetActive = async (tmpl: AgreementTemplateItem) => {
     const typeLabel = tmpl.agreement_type === "RETAILER" ? "리테일러" : "브랜드 공급사";
@@ -130,6 +159,66 @@ export function AdminAgreementTemplatesManager({ initialTemplates }: AdminAgreem
       setActionError(err?.message || "Active 설정 중 오류가 발생했습니다.");
     } finally {
       setActivatingId(null);
+    }
+  };
+
+  // Handle View Usage Companies
+  const handleViewUsage = async (tmpl: AgreementTemplateItem) => {
+    setActionError(null);
+    setUsageModalTmpl(tmpl);
+    setIsLoadingUsage(true);
+    setUsageAgreements([]);
+    try {
+      const res = await adminGetTemplateUsageCompaniesAction(tmpl.id);
+      if (res.agreements) {
+        setUsageAgreements(res.agreements);
+      } else if (res.error) {
+        setActionError(res.error);
+      }
+    } catch (err: any) {
+      setActionError(err?.message || "사용 회사 목록 조회 중 오류가 발생했습니다.");
+    } finally {
+      setIsLoadingUsage(false);
+    }
+  };
+
+  // Handle Safe Delete Click
+  const handleDeleteClick = (tmpl: AgreementTemplateItem) => {
+    setActionError(null);
+
+    // Rule 6: Active template cannot be deleted
+    if (tmpl.status === "active") {
+      setActionError("Active 템플릿은 삭제할 수 없습니다. 먼저 다른 버전을 Active로 설정하거나 이 템플릿을 비활성화해 주세요.");
+      return;
+    }
+
+    // Rule 5: Used template cannot be deleted
+    if ((tmpl.usage?.companyCount ?? 0) > 0) {
+      setActionError("이 템플릿은 현재 또는 과거 계약에 사용되어 삭제할 수 없습니다. Inactive 상태로 보관해 주세요.");
+      return;
+    }
+
+    // Truly unused and Inactive -> Open Delete Confirmation Modal
+    setDeleteConfirmTmpl(tmpl);
+  };
+
+  // Execute Safe Delete
+  const handleConfirmDelete = async () => {
+    if (!deleteConfirmTmpl) return;
+    setIsDeleting(true);
+    setActionError(null);
+    try {
+      const res = await adminDeleteAgreementTemplateAction(deleteConfirmTmpl.id);
+      if (res.success) {
+        setDeleteConfirmTmpl(null);
+        refreshTemplates(activeTab);
+      } else {
+        setActionError(res.error || "템플릿 삭제에 실패했습니다.");
+      }
+    } catch (err: any) {
+      setActionError(err?.message || "템플릿 삭제 중 오류가 발생했습니다.");
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -190,7 +279,7 @@ export function AdminAgreementTemplatesManager({ initialTemplates }: AdminAgreem
             기본계약서 템플릿 관리 (Agreement Templates)
           </h1>
           <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
-            K SELECT NETWORK 브랜드 공급사 및 리테일러 입점/유통 기본계약서의 템플릿 버전과 원본 PDF 문서를 독립적으로 관리합니다.
+            K SELECT NETWORK 브랜드 공급사 및 리테일러 입점/유통 기본계약서 템플릿 버전과 사용 현황 추적, 안전 삭제를 관리합니다.
           </p>
         </div>
 
@@ -207,9 +296,9 @@ export function AdminAgreementTemplatesManager({ initialTemplates }: AdminAgreem
 
       {/* Global Action Error Alert */}
       {actionError && (
-        <div className="p-4 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 text-xs font-semibold flex items-center justify-between">
+        <div className="p-4 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 text-xs font-semibold flex items-center justify-between animate-fadeIn">
           <span>⚠️ {actionError}</span>
-          <button onClick={() => setActionError(null)} className="text-rose-500 hover:text-rose-700 font-bold">
+          <button onClick={() => setActionError(null)} className="text-rose-500 hover:text-rose-700 font-bold cursor-pointer">
             ✕
           </button>
         </div>
@@ -289,6 +378,9 @@ export function AdminAgreementTemplatesManager({ initialTemplates }: AdminAgreem
             {templates.map((tmpl) => {
               const isRetailer = tmpl.agreement_type === "RETAILER";
               const isActive = tmpl.status === "active";
+              const companyCount = tmpl.usage?.companyCount ?? 0;
+              const pendingCount = tmpl.usage?.pendingCount ?? 0;
+              const executedCount = tmpl.usage?.executedCount ?? 0;
 
               return (
                 <div
@@ -317,7 +409,7 @@ export function AdminAgreementTemplatesManager({ initialTemplates }: AdminAgreem
                               : "bg-zinc-100 text-zinc-600 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:border-zinc-700"
                           }`}
                         >
-                          {isActive ? "ACTIVE (사용 중)" : "INACTIVE (미사용)"}
+                          {isActive ? "ACTIVE (사용 중)" : "INACTIVE (보관됨)"}
                         </span>
 
                         <span className="text-xs font-mono font-bold text-zinc-500 dark:text-zinc-400">
@@ -354,6 +446,14 @@ export function AdminAgreementTemplatesManager({ initialTemplates }: AdminAgreem
                         📥 다운로드
                       </button>
 
+                      <button
+                        type="button"
+                        onClick={() => handleViewUsage(tmpl)}
+                        className="rounded-xl border border-indigo-200 bg-indigo-50/50 hover:bg-indigo-100/50 px-3.5 py-1.5 text-xs font-bold text-indigo-700 dark:border-indigo-800 dark:bg-indigo-950/40 dark:text-indigo-300 transition-colors cursor-pointer"
+                      >
+                        👥 사용 회사 보기 ({companyCount})
+                      </button>
+
                       {!isActive && (
                         <button
                           type="button"
@@ -364,10 +464,35 @@ export function AdminAgreementTemplatesManager({ initialTemplates }: AdminAgreem
                           {activatingId === tmpl.id ? "처리 중..." : "✨ Active로 설정"}
                         </button>
                       )}
+
+                      {!isActive && companyCount === 0 && (
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteClick(tmpl)}
+                          className="rounded-xl border border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-700 dark:border-rose-800 dark:bg-rose-950/40 dark:text-rose-300 px-3.5 py-1.5 text-xs font-bold transition-colors cursor-pointer"
+                        >
+                          🗑️ 삭제
+                        </button>
+                      )}
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-xs pt-2">
+                  {/* Details Grid & Usage Summary Box */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 text-xs pt-2">
+                    <div className="p-3 rounded-xl bg-indigo-50/60 dark:bg-indigo-950/30 border border-indigo-150 dark:border-indigo-900/50 flex flex-col justify-between">
+                      <span className="text-zinc-500 dark:text-zinc-400 font-bold block text-[11px]">
+                        템플릿 사용 현황 (Usage)
+                      </span>
+                      <div className="mt-1">
+                        <strong className="text-sm font-extrabold text-indigo-700 dark:text-indigo-300 block">
+                          사용 회사 {companyCount}개
+                        </strong>
+                        <span className="text-[11px] text-zinc-600 dark:text-zinc-400 font-semibold block mt-0.5">
+                          서명 대기 {pendingCount} / 체결 완료 {executedCount}
+                        </span>
+                      </div>
+                    </div>
+
                     <div className="p-3 rounded-xl bg-zinc-50 dark:bg-zinc-850 border border-zinc-150 dark:border-zinc-800">
                       <span className="text-zinc-400 font-medium block text-[11px]">Letusto 서명권자</span>
                       <strong className="text-zinc-900 dark:text-zinc-100 font-bold block">
@@ -417,10 +542,10 @@ export function AdminAgreementTemplatesManager({ initialTemplates }: AdminAgreem
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs animate-fadeIn">
           <div className="w-full max-w-4xl h-[90vh] rounded-2xl border border-zinc-200 bg-white p-5 shadow-2xl dark:border-zinc-800 dark:bg-zinc-900 flex flex-col">
             <div className="flex items-center justify-between pb-3 border-b border-zinc-150 dark:border-zinc-800">
-              <h3 className="text-sm font-bold text-zinc-900 dark:text-white">
-                계약서 템플릿 원본 PDF 미리보기 — {previewTitle}
+              <h3 className="text-sm font-bold text-zinc-900 dark:text-white truncate pr-4">
+                계약서 PDF 미리보기 — {previewTitle}
               </h3>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 shrink-0">
                 <a
                   href={previewPdfUrl}
                   target="_blank"
@@ -438,7 +563,160 @@ export function AdminAgreementTemplatesManager({ initialTemplates }: AdminAgreem
               </div>
             </div>
             <div className="flex-1 mt-3 rounded-xl border border-zinc-200 dark:border-zinc-800 overflow-hidden bg-zinc-100 dark:bg-zinc-950">
-              <iframe src={`${previewPdfUrl}#toolbar=1`} className="w-full h-full border-none" title="Template PDF Preview" />
+              <iframe src={`${previewPdfUrl}#toolbar=1`} className="w-full h-full border-none" title="PDF Preview" />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* View Usage Companies Modal */}
+      {usageModalTmpl && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs animate-fadeIn">
+          <div className="w-full max-w-4xl max-h-[85vh] rounded-2xl border border-zinc-200 bg-white p-6 shadow-2xl dark:border-zinc-800 dark:bg-zinc-900 flex flex-col space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-zinc-150 dark:border-zinc-800 shrink-0">
+              <div>
+                <h3 className="text-base font-extrabold text-zinc-900 dark:text-white">
+                  템플릿 사용 회사 목록 (Linked Agreements)
+                </h3>
+                <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
+                  템플릿: <span className="font-bold text-zinc-800 dark:text-zinc-200">{usageModalTmpl.name}</span> (v{usageModalTmpl.version}) | 유형: {usageModalTmpl.agreement_type === "RETAILER" ? "리테일러" : "브랜드 공급사"}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setUsageModalTmpl(null)}
+                className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 text-sm font-bold p-1 cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto min-h-[250px]">
+              {isLoadingUsage ? (
+                <div className="p-12 text-center text-xs text-zinc-400 animate-pulse font-medium">
+                  사용 회사 목록 불러오는 중...
+                </div>
+              ) : usageAgreements.length === 0 ? (
+                <div className="p-12 text-center text-xs text-zinc-500 dark:text-zinc-400 font-medium">
+                  이 템플릿을 연동하거나 사용 중인 회사가 없습니다.
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead>
+                      <tr className="border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-850 text-zinc-500 dark:text-zinc-400 font-bold">
+                        <th className="p-3">회사명</th>
+                        <th className="p-3">계약 ID</th>
+                        <th className="p-3">상태</th>
+                        <th className="p-3">서명자</th>
+                        <th className="p-3">체결 일시</th>
+                        <th className="p-3 text-right">작업</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-zinc-150 dark:divide-zinc-800 font-medium">
+                      {usageAgreements.map((ca) => (
+                        <tr key={ca.id} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-850/50">
+                          <td className="p-3 font-bold text-zinc-900 dark:text-white">
+                            {ca.companyName || "-"}
+                          </td>
+                          <td className="p-3 font-mono text-[11px] text-zinc-600 dark:text-zinc-400">
+                            {ca.agreement_id}
+                          </td>
+                          <td className="p-3">
+                            <span
+                              className={`inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-bold border ${
+                                ca.status === "active"
+                                  ? "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800"
+                                  : "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800"
+                              }`}
+                            >
+                              {ca.status === "active" ? "계약 완료" : "서명 필요"}
+                            </span>
+                          </td>
+                          <td className="p-3 text-zinc-700 dark:text-zinc-300">
+                            {ca.signer_name ? `${ca.signer_name} (${ca.signer_title || "-"})` : "-"}
+                          </td>
+                          <td className="p-3 font-mono text-[11px] text-zinc-500">
+                            {ca.signed_at ? new Date(ca.signed_at).toLocaleDateString("ko-KR") : "-"}
+                          </td>
+                          <td className="p-3 text-right space-x-2">
+                            <Link
+                              href={`/admin/companies/${ca.company_id}`}
+                              target="_blank"
+                              className="inline-flex items-center rounded-lg bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 px-2.5 py-1 text-[11px] font-bold text-zinc-700 dark:text-zinc-300"
+                            >
+                              🏢 회사 보기 ↗
+                            </Link>
+
+                            {ca.status === "active" && (
+                              <button
+                                type="button"
+                                onClick={() => handleViewExecutedPdf(ca)}
+                                className="inline-flex items-center rounded-lg bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 px-2.5 py-1 text-[11px] font-bold cursor-pointer"
+                              >
+                                📄 체결 PDF
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Safe Delete Confirmation Modal */}
+      {deleteConfirmTmpl && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs animate-fadeIn">
+          <div className="w-full max-w-md rounded-2xl border border-rose-200 bg-white p-6 shadow-2xl dark:border-rose-900/60 dark:bg-zinc-900 space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-zinc-150 dark:border-zinc-800">
+              <h3 className="text-base font-extrabold text-rose-600 dark:text-rose-400">
+                ⚠️ 템플릿 삭제 확인 (Delete Template)
+              </h3>
+              <button
+                type="button"
+                onClick={() => setDeleteConfirmTmpl(null)}
+                className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 text-sm font-bold cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="p-4 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800/60 text-xs text-rose-800 dark:text-rose-200 space-y-2">
+              <p className="font-bold text-sm">
+                아래 미사용 템플릿을 정말로 영구 삭제하시겠습니까?
+              </p>
+              <div className="space-y-1 text-zinc-700 dark:text-zinc-300 font-medium">
+                <div>• <strong>계약 유형:</strong> {deleteConfirmTmpl.agreement_type === "RETAILER" ? "리테일러 (Retailer)" : "브랜드 공급사 (Brand)"}</div>
+                <div>• <strong>템플릿 명칭:</strong> {deleteConfirmTmpl.name}</div>
+                <div>• <strong>버전:</strong> {deleteConfirmTmpl.version}</div>
+                <div>• <strong>파일 경로:</strong> <code className="font-mono text-[11px]">{deleteConfirmTmpl.source_pdf_path}</code></div>
+              </div>
+              <p className="text-[11px] text-rose-600 dark:text-rose-400 font-bold pt-1">
+                이 작업은 되돌릴 수 없으며 DB 기록과 스토리지 원본 PDF 파일이 함께 삭제됩니다.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-zinc-150 dark:border-zinc-800">
+              <button
+                type="button"
+                onClick={() => setDeleteConfirmTmpl(null)}
+                className="rounded-xl border border-zinc-300 bg-white hover:bg-zinc-50 px-4 py-2 text-xs font-bold text-zinc-700 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 transition-colors cursor-pointer"
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDelete}
+                disabled={isDeleting}
+                className="rounded-xl bg-rose-600 hover:bg-rose-700 text-white px-5 py-2 text-xs font-bold shadow-xs transition-colors cursor-pointer disabled:opacity-50"
+              >
+                {isDeleting ? "삭제 중..." : "영구 삭제 실행"}
+              </button>
             </div>
           </div>
         </div>

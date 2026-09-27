@@ -31,6 +31,12 @@ export const AGREEMENT_TYPE_LABELS: Record<AgreementType, { ko: string; en: stri
   RETAILER: { ko: "리테일러 (Retailer)", en: "Retailer Agreement" },
 };
 
+export interface AgreementTemplateUsageSummary {
+  companyCount: number;
+  pendingCount: number;
+  executedCount: number;
+}
+
 export interface AgreementTemplateItem {
   id: string;
   agreement_type?: AgreementType;
@@ -50,6 +56,7 @@ export interface AgreementTemplateItem {
   activated_at?: string | null;
   created_at: string;
   updated_at?: string;
+  usage?: AgreementTemplateUsageSummary;
 }
 
 export interface CompanyAgreementItem {
@@ -79,6 +86,8 @@ export interface CompanyAgreementItem {
   companyName?: string;
   companyAddress?: string;
   representativeName?: string;
+  agreement_type?: AgreementType;
+  template_name?: string;
 }
 
 export interface AgreementAuditLogItem {

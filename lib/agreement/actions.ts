@@ -5,6 +5,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getSignedFileUrl } from "@/lib/files/storage";
 import { generateExecutedAgreementPdf } from "@/lib/agreement/pdf-generator";
 import { sendEmail } from "@/lib/notifications/email";
+import { sendTemplatedEmail } from "@/lib/notifications/templates";
+import { publicEnv } from "@/lib/env/public";
 import type {
   CompanyAgreementItem,
   AgreementTemplateItem,
@@ -141,9 +143,12 @@ export async function generateUniqueExternalAgreementId(
 }
 
 /**
- * Gets or initializes the Company Agreement record for a Brand Company.
+ * Gets or initializes the Company Agreement record for a Brand or Retailer Company.
  */
-export async function getCompanyAgreement(companyIdInput?: string): Promise<{
+export async function getCompanyAgreement(
+  companyIdInput?: string,
+  agreementType: "BRAND_SUPPLIER" | "RETAILER" = "BRAND_SUPPLIER"
+): Promise<{
   agreement: CompanyAgreementItem | null;
   companyInfo: { id: string; name: string; address?: string | null; representativeName?: string | null };
   error?: string;
@@ -191,51 +196,63 @@ export async function getCompanyAgreement(companyIdInput?: string): Promise<{
     representativeName: compMeta.representativeName || null,
   };
 
-  // Fetch existing Company Agreement
+  // Fetch active template for this agreement_type
+  const { data: tmpl } = await admin
+    .from("agreement_templates")
+    .select("id, version, name, agreement_type")
+    .eq("agreement_type", agreementType)
+    .eq("status", "active")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  // Fetch existing Company Agreements for this company
   const { data: caList } = await admin
     .from("company_agreements")
-    .select("*")
+    .select("*, agreement_templates(id, name, version, agreement_type)")
     .eq("company_id", targetCompanyId)
     .order("created_at", { ascending: false });
 
-  let ca = caList?.[0] || null;
+  // Find agreement matching this agreement_type
+  let ca = (caList || []).find((item: any) => {
+    const itemType = item.agreement_templates?.agreement_type || (tmpl && item.template_id === tmpl.id ? agreementType : null);
+    return itemType === agreementType;
+  }) || null;
 
-  // If no agreement record exists yet, create an initial Pending Agreement record linked to Template v1.0
-  if (!ca) {
-    const { data: tmpl } = await admin
-      .from("agreement_templates")
-      .select("id, version")
-      .eq("status", "active")
-      .order("created_at", { ascending: false })
-      .limit(1)
+  // Fallback: If no matching type was explicitly found but a single agreement exists and types aren't linked
+  if (!ca && caList && caList.length > 0 && !caList[0].agreement_templates?.agreement_type) {
+    ca = caList[0];
+  }
+
+  // If no agreement record exists yet for this type, create an initial Pending Agreement record linked to Active Template
+  if (!ca && tmpl) {
+    const newAgreementId = await generateUniqueExternalAgreementId(admin, compMeta.name);
+    const { data: newCa, error: createErr } = await admin
+      .from("company_agreements")
+      .insert({
+        company_id: targetCompanyId,
+        template_id: tmpl.id,
+        agreement_id: newAgreementId,
+        version: tmpl.version || "1.0",
+        status: "pending",
+      })
+      .select("*, agreement_templates(id, name, version, agreement_type)")
       .single();
 
-    if (tmpl) {
-      const newAgreementId = await generateUniqueExternalAgreementId(admin, compMeta.name);
-      const { data: newCa, error: createErr } = await admin
-        .from("company_agreements")
-        .insert({
-          company_id: targetCompanyId,
-          template_id: tmpl.id,
-          agreement_id: newAgreementId,
-          version: tmpl.version || "1.0",
-          status: "pending",
-        })
-        .select()
-        .single();
-
-      if (!createErr && newCa) {
-        ca = newCa;
-        // Log audit creation
-        await admin.from("agreement_audit_logs").insert({
-          company_agreement_id: newCa.id,
-          agreement_id: newCa.agreement_id,
-          action: "CREATED",
-          performed_by_user_id: user.id,
-          performed_by_email: user.email,
-          details: { note: "Company Agreement initialized from Template v1.0" },
-        });
-      }
+    if (!createErr && newCa) {
+      ca = newCa;
+      // Log audit creation
+      await admin.from("agreement_audit_logs").insert({
+        company_agreement_id: newCa.id,
+        agreement_id: newCa.agreement_id,
+        action: "CREATED",
+        performed_by_user_id: user.id,
+        performed_by_email: user.email,
+        details: {
+          note: `Company Agreement initialized from ${agreementType} Template v${tmpl.version || "1.0"}`,
+          agreement_type: agreementType,
+        },
+      });
     }
   }
 
@@ -245,6 +262,8 @@ export async function getCompanyAgreement(companyIdInput?: string): Promise<{
 
   const agreementItem: CompanyAgreementItem = {
     ...ca,
+    agreement_type: ca.agreement_templates?.agreement_type || tmpl?.agreement_type || agreementType,
+    template_name: ca.agreement_templates?.name || tmpl?.name || undefined,
     companyName: companyInfo.name,
     companyAddress: companyInfo.address || undefined,
     representativeName: companyInfo.representativeName || undefined,
@@ -277,7 +296,7 @@ export async function signCompanyAgreementAction(input: SignAgreementInput): Pro
   if (input.companyAgreementId) {
     const { data: fetchCa, error: err } = await admin
       .from("company_agreements")
-      .select("*, companies(id, name, country, contact_name, contact_phone, intro)")
+      .select("*, companies(id, name, country, contact_name, contact_phone, intro), agreement_templates(id, name, version, agreement_type)")
       .eq("id", input.companyAgreementId)
       .maybeSingle();
 
@@ -291,7 +310,7 @@ export async function signCompanyAgreementAction(input: SignAgreementInput): Pro
   if (!ca && targetCompanyId) {
     const { data: companyCa } = await admin
       .from("company_agreements")
-      .select("*, companies(id, name, country, contact_name, contact_phone, intro)")
+      .select("*, companies(id, name, country, contact_name, contact_phone, intro), agreement_templates(id, name, version, agreement_type)")
       .eq("company_id", targetCompanyId)
       .order("created_at", { ascending: false })
       .limit(1)
@@ -312,7 +331,7 @@ export async function signCompanyAgreementAction(input: SignAgreementInput): Pro
     if (cu?.company_id) {
       const { data: userCa } = await admin
         .from("company_agreements")
-        .select("*, companies(id, name, country, contact_name, contact_phone, intro)")
+        .select("*, companies(id, name, country, contact_name, contact_phone, intro), agreement_templates(id, name, version, agreement_type)")
         .eq("company_id", cu.company_id)
         .order("created_at", { ascending: false })
         .limit(1)
@@ -322,42 +341,13 @@ export async function signCompanyAgreementAction(input: SignAgreementInput): Pro
     }
   }
 
-  // Fallback 3: If NO agreement record exists yet for the target company, auto-initialize a pending record right now!
-  const finalCompId = targetCompanyId || ca?.company_id;
-  if (!ca && finalCompId) {
-    const { data: tmpl } = await admin
-      .from("agreement_templates")
-      .select("id, version")
-      .eq("status", "active")
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .single();
-
-    if (tmpl) {
-      const compInfo = parseCompanyMetadata(ca?.companies);
-      const newAgreementId = await generateUniqueExternalAgreementId(admin, compInfo.name || "Brand");
-      const { data: newCa } = await admin
-        .from("company_agreements")
-        .insert({
-          company_id: finalCompId,
-          template_id: tmpl.id,
-          agreement_id: newAgreementId,
-          version: tmpl.version || "1.0",
-          status: "pending",
-        })
-        .select("*, companies(id, name, country, contact_name, contact_phone, intro)")
-        .single();
-
-      ca = newCa;
-    }
-  }
-
   if (!ca) {
     console.error("[signCompanyAgreementAction] Failed to resolve agreement. fetchErr:", fetchErr, "input:", input);
     return { success: false, error: "계약서 정보를 찾을 수 없습니다. 소속 회사 정보를 다시 확인해 주세요." };
   }
 
   const compMeta = parseCompanyMetadata(ca.companies);
+  const agreementType: "BRAND_SUPPLIER" | "RETAILER" = ca.agreement_templates?.agreement_type || "BRAND_SUPPLIER";
 
   // Idempotency: If already Active, return success directly
   if (ca.status === "active" && ca.final_pdf_path) {
@@ -365,6 +355,8 @@ export async function signCompanyAgreementAction(input: SignAgreementInput): Pro
       success: true,
       agreement: {
         ...ca,
+        agreement_type: agreementType,
+        template_name: ca.agreement_templates?.name,
         companyName: compMeta.name,
         companyAddress: compMeta.address,
         representativeName: compMeta.representativeName,
@@ -376,21 +368,27 @@ export async function signCompanyAgreementAction(input: SignAgreementInput): Pro
   if (!compMeta.name || !compMeta.address) {
     return {
       success: false,
-      error: "계약서를 진행하려면 회사명과 회사 주소를 먼저 입력해 주세요.",
+      error: agreementType === "RETAILER"
+        ? "Please make sure Company Name and Headquarters Address are recorded before signing."
+        : "계약서를 진행하려면 회사명과 회사 주소를 먼저 입력해 주세요.",
     };
   }
 
   if (!input.authorityConfirmed || !input.consentToAgreement || !input.consentToESignature) {
     return {
       success: false,
-      error: "모든 필수 동의 항목에 동의해 주셔야 계약을 체결할 수 있습니다.",
+      error: agreementType === "RETAILER"
+        ? "Please accept all required agreements and confirmations before executing."
+        : "모든 필수 동의 항목에 동의해 주셔야 계약을 체결할 수 있습니다.",
     };
   }
 
   if (!input.signerName.trim() || !input.signerTitle.trim()) {
     return {
       success: false,
-      error: "서명자 이름과 직책을 모두 입력해 주세요.",
+      error: agreementType === "RETAILER"
+        ? "Please provide the Signatory Name and Title."
+        : "서명자 이름과 직책을 모두 입력해 주세요.",
     };
   }
 
@@ -398,7 +396,9 @@ export async function signCompanyAgreementAction(input: SignAgreementInput): Pro
   if (!signerEmailClean || !isValidEmail(signerEmailClean)) {
     return {
       success: false,
-      error: "올바른 서명자 이메일 주소를 입력해 주세요.",
+      error: agreementType === "RETAILER"
+        ? "Please provide a valid signatory email address."
+        : "올바른 서명자 이메일 주소를 입력해 주세요.",
     };
   }
 
@@ -414,13 +414,17 @@ export async function signCompanyAgreementAction(input: SignAgreementInput): Pro
       if (!rName || !rTitle || !rEmail) {
         return {
           success: false,
-          error: `추가 수신자 #${i + 1}의 이름, 직책, 이메일을 모두 입력해 주세요.`,
+          error: agreementType === "RETAILER"
+            ? `Please fill in all fields (Name, Title, Email) for recipient #${i + 1}.`
+            : `추가 수신자 #${i + 1}의 이름, 직책, 이메일을 모두 입력해 주세요.`,
         };
       }
       if (!isValidEmail(rEmail)) {
         return {
           success: false,
-          error: `추가 수신자 #${i + 1}의 이메일 형식(${rEmail})이 올바르지 않습니다.`,
+          error: agreementType === "RETAILER"
+            ? `Invalid email format for recipient #${i + 1} (${rEmail}).`
+            : `추가 수신자 #${i + 1}의 이메일 형식(${rEmail})이 올바르지 않습니다.`,
         };
       }
       validAdditionalRecipients.push({ name: rName, title: rTitle, email: rEmail });
@@ -451,6 +455,7 @@ export async function signCompanyAgreementAction(input: SignAgreementInput): Pro
     signerTitle: input.signerTitle.trim(),
     signerEmail: signerEmailClean,
     executedDate: executedDateStr,
+    agreementType,
   });
 
   // 2. Upload Final PDF to Supabase Storage
@@ -493,7 +498,7 @@ export async function signCompanyAgreementAction(input: SignAgreementInput): Pro
       updated_at: signedAtIso,
     })
     .eq("id", ca.id)
-    .select()
+    .select("*, agreement_templates(id, name, version, agreement_type)")
     .single();
 
   if (updateErr || !updatedCa) {
@@ -552,14 +557,58 @@ export async function signCompanyAgreementAction(input: SignAgreementInput): Pro
     console.error("[Agreement Recipient Log Error]", recErr);
   }
 
-  // Dispatch Email Notifications asynchronously (failure does not invalidate Active Agreement)
+  // Dispatch Email Notifications asynchronously
+  const isRetailerEmail = agreementType === "RETAILER";
+  const base64Pdf = pdfBuffer.toString("base64");
+  const pdfFilename = isRetailerEmail
+    ? `K_SELECT_Retailer_Agreement_${ca.agreement_id}.pdf`
+    : `K_SELECT_Agreement_${ca.agreement_id}.pdf`;
+
   for (const r of recipientsToRecord) {
     try {
-      await sendEmail({
-        to: r.recipient_email,
-        subject: `[K SELECT NETWORK] ${compMeta.name} 브랜드 공급 및 유통 기본계약서 체결 완료 (${ca.agreement_id})`,
-        text: `안녕하세요 ${r.recipient_name}님 (${r.recipient_title}),\n\n${compMeta.name}의 K SELECT NETWORK 브랜드 공급·미국 유통 및 플랫폼 이용 기본계약서 (v${ca.version || "1.0"}, ${ca.agreement_id}) 전자서명이 완료되었습니다.\n\n체결 일자: ${executedDateStr}\n계약 ID: ${ca.agreement_id}\n문서 해시 (SHA-256): ${pdfHash}\n\n감사합니다.\nK SELECT NETWORK 드림`,
-      });
+      const templateKey = isRetailerEmail ? "hub_retailer_agreement_completed" : "brand_agreement_completed";
+      const vars = {
+        company_name: compMeta.name,
+        companyName: compMeta.name,
+        agreement_name: isRetailerEmail
+          ? "K SELECT Retailer Operating Agreement"
+          : "K SELECT NETWORK 브랜드 공급 및 유통 기본계약서",
+        agreementName: isRetailerEmail
+          ? "K SELECT Retailer Operating Agreement"
+          : "K SELECT NETWORK 브랜드 공급 및 유통 기본계약서",
+        agreement_version: ca.version || "1.0",
+        agreementVersion: ca.version || "1.0",
+        agreement_id: ca.agreement_id,
+        agreementId: ca.agreement_id,
+        signer_name: r.recipient_name,
+        signerName: r.recipient_name,
+        signer_title: r.recipient_title,
+        signerTitle: r.recipient_title,
+        executed_date: executedDateStr,
+        executedDate: executedDateStr,
+        effective_date: executedDateStr,
+        effectiveDate: executedDateStr,
+        portal_url: isRetailerEmail
+          ? "https://portal.kselecthub.com/retailer/account?tab=documents"
+          : `${publicEnv.NEXT_PUBLIC_SITE_URL || "https://portal.kselectnetwork.com"}/portal/company/info?tab=agreements`,
+        portalUrl: isRetailerEmail
+          ? "https://portal.kselecthub.com/retailer/account?tab=documents"
+          : `${publicEnv.NEXT_PUBLIC_SITE_URL || "https://portal.kselectnetwork.com"}/portal/company/info?tab=agreements`,
+        agreement_view_url: isRetailerEmail
+          ? "https://portal.kselecthub.com/retailer/account?tab=documents"
+          : `${publicEnv.NEXT_PUBLIC_SITE_URL || "https://portal.kselectnetwork.com"}/portal/company/info?tab=agreements`,
+        agreementViewUrl: isRetailerEmail
+          ? "https://portal.kselecthub.com/retailer/account?tab=documents"
+          : `${publicEnv.NEXT_PUBLIC_SITE_URL || "https://portal.kselectnetwork.com"}/portal/company/info?tab=agreements`,
+        supportEmail: isRetailerEmail ? "support@kselecthub.com" : "contact@kselectnetwork.com",
+      };
+
+      await sendTemplatedEmail(
+        templateKey,
+        r.recipient_email,
+        vars,
+        [{ filename: pdfFilename, content: base64Pdf }]
+      );
     } catch (emailErr) {
       console.error(`[Agreement Email Send Error] recipient=${r.recipient_email}`, emailErr);
     }
@@ -574,6 +623,7 @@ export async function signCompanyAgreementAction(input: SignAgreementInput): Pro
     performed_by_name: input.signerName.trim(),
     performed_by_email: signerEmailClean,
     details: {
+      agreement_type: agreementType,
       signed_at: signedAtIso,
       effective_date: executedDateStr,
       expiration_date: expirationDateStr,
@@ -589,6 +639,8 @@ export async function signCompanyAgreementAction(input: SignAgreementInput): Pro
     recipientCount: recipientsToRecord.length,
     agreement: {
       ...updatedCa,
+      agreement_type: agreementType,
+      template_name: updatedCa.agreement_templates?.name,
       companyName: compMeta.name,
       companyAddress: compMeta.address,
       representativeName: compMeta.representativeName,
@@ -621,30 +673,119 @@ export async function resendAgreementRecipientEmailAction(recipientId: string): 
   success: boolean;
   error?: string;
 }> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
   const admin = createAdminClient();
+
   const { data: rec } = await admin
     .from("company_agreement_recipients")
-    .select("*, company_agreements(agreement_id, version, companies(name))")
+    .select(
+      "*, company_agreements(id, agreement_id, version, final_pdf_path, agreement_templates(name, agreement_type), companies(id, name, country, contact_name, contact_phone, intro))"
+    )
     .eq("id", recipientId)
     .single();
 
   if (!rec) return { success: false, error: "수신자 기록을 찾을 수 없습니다." };
 
-  const compName = (rec as any).company_agreements?.companies?.name || "브랜드사";
-  const agreementIdStr = (rec as any).company_agreements?.agreement_id || rec.agreement_id;
-  const versionStr = (rec as any).company_agreements?.version || "1.0";
+  const ca = (rec as any).company_agreements;
+  const compMeta = parseCompanyMetadata(ca?.companies);
+  const agreementIdStr = ca?.agreement_id || rec.agreement_id;
+  const versionStr = ca?.version || "1.0";
+  const agreementType = ca?.agreement_templates?.agreement_type || "BRAND_SUPPLIER";
+  const isRetailerEmail = agreementType === "RETAILER";
+  const finalPdfPath = ca?.final_pdf_path;
 
   try {
-    await sendEmail({
-      to: rec.recipient_email,
-      subject: `[K SELECT NETWORK] ${compName} 체결 계약서 사본 재발송 (${agreementIdStr})`,
-      text: `안녕하세요 ${rec.recipient_name}님 (${rec.recipient_title}),\n\n${compName}의 K SELECT NETWORK 브랜드 공급 및 유통 기본계약서 (v${versionStr}, ${agreementIdStr}) 사본입니다.`,
-    });
+    let attachments: Array<{ filename: string; content: string }> | undefined = undefined;
+    const pdfFilename = isRetailerEmail
+      ? `K_SELECT_Retailer_Agreement_${agreementIdStr}.pdf`
+      : `K_SELECT_Agreement_${agreementIdStr}.pdf`;
+
+    if (finalPdfPath) {
+      const { data: fileData, error: dlErr } = await admin.storage
+        .from("company-uploads")
+        .download(finalPdfPath);
+
+      if (!dlErr && fileData) {
+        const arrayBuffer = await fileData.arrayBuffer();
+        const base64Pdf = Buffer.from(arrayBuffer).toString("base64");
+        attachments = [{ filename: pdfFilename, content: base64Pdf }];
+      }
+    }
+
+    const executedDateStr = rec.sent_at
+      ? new Date(rec.sent_at).toISOString().split("T")[0]
+      : new Date().toISOString().split("T")[0];
+
+    const templateKey = isRetailerEmail ? "hub_retailer_agreement_completed" : "brand_agreement_completed";
+    const vars = {
+      company_name: compMeta.name || "브랜드사",
+      companyName: compMeta.name || "브랜드사",
+      agreement_name: isRetailerEmail
+        ? ca?.agreement_templates?.name || "K SELECT Retailer Operating Agreement"
+        : ca?.agreement_templates?.name || "K SELECT NETWORK 브랜드 공급 및 유통 기본계약서",
+      agreementName: isRetailerEmail
+        ? ca?.agreement_templates?.name || "K SELECT Retailer Operating Agreement"
+        : ca?.agreement_templates?.name || "K SELECT NETWORK 브랜드 공급 및 유통 기본계약서",
+      agreement_version: versionStr,
+      agreementVersion: versionStr,
+      agreement_id: agreementIdStr,
+      agreementId: agreementIdStr,
+      signer_name: rec.recipient_name,
+      signerName: rec.recipient_name,
+      signer_title: rec.recipient_title,
+      signerTitle: rec.recipient_title,
+      executed_date: executedDateStr,
+      executedDate: executedDateStr,
+      effective_date: executedDateStr,
+      effectiveDate: executedDateStr,
+      portal_url: isRetailerEmail
+        ? "https://portal.kselecthub.com/retailer/account?tab=documents"
+        : `${publicEnv.NEXT_PUBLIC_SITE_URL || "https://portal.kselectnetwork.com"}/portal/company/info?tab=agreements`,
+      portalUrl: isRetailerEmail
+        ? "https://portal.kselecthub.com/retailer/account?tab=documents"
+        : `${publicEnv.NEXT_PUBLIC_SITE_URL || "https://portal.kselectnetwork.com"}/portal/company/info?tab=agreements`,
+      agreement_view_url: isRetailerEmail
+        ? "https://portal.kselecthub.com/retailer/account?tab=documents"
+        : `${publicEnv.NEXT_PUBLIC_SITE_URL || "https://portal.kselectnetwork.com"}/portal/company/info?tab=agreements`,
+      agreementViewUrl: isRetailerEmail
+        ? "https://portal.kselecthub.com/retailer/account?tab=documents"
+        : `${publicEnv.NEXT_PUBLIC_SITE_URL || "https://portal.kselectnetwork.com"}/portal/company/info?tab=agreements`,
+      supportEmail: isRetailerEmail ? "support@kselecthub.com" : "contact@kselectnetwork.com",
+    };
+
+    const result = await sendTemplatedEmail(templateKey, rec.recipient_email, vars, attachments);
+
+    if (!result.success) {
+      await admin
+        .from("company_agreement_recipients")
+        .update({ delivery_status: "failed" })
+        .eq("id", recipientId);
+      return { success: false, error: result.error || "이메일 재발송 실패" };
+    }
 
     await admin
       .from("company_agreement_recipients")
       .update({ delivery_status: "sent", sent_at: new Date().toISOString() })
       .eq("id", recipientId);
+
+    if (ca?.id) {
+      await admin.from("agreement_audit_logs").insert({
+        company_agreement_id: ca.id,
+        agreement_id: agreementIdStr,
+        action: "RESENT",
+        performed_by_user_id: user?.id,
+        performed_by_email: user?.email,
+        details: {
+          recipient_id: recipientId,
+          recipient_email: rec.recipient_email,
+          recipient_name: rec.recipient_name,
+          recipient_title: rec.recipient_title,
+        },
+      });
+    }
 
     return { success: true };
   } catch (err: any) {
@@ -762,7 +903,7 @@ export async function getSignedExecutedPdfUrlAction(
 }
 
 /**
- * Admin: Lists all Agreement Templates with optional Agreement Type filter
+ * Admin: Lists all Agreement Templates with usage tracking summary & optional Agreement Type filter
  */
 export async function adminListAgreementTemplatesAction(agreementTypeFilter?: string): Promise<{
   templates: AgreementTemplateItem[];
@@ -778,10 +919,184 @@ export async function adminListAgreementTemplatesAction(agreementTypeFilter?: st
     query = query.eq("agreement_type", agreementTypeFilter);
   }
 
-  const { data, error } = await query;
-
+  const { data: tmplData, error } = await query;
   if (error) return { templates: [], error: error.message };
-  return { templates: data || [] };
+
+  // Fetch all company agreements to compute usage statistics per template
+  const { data: casData } = await admin
+    .from("company_agreements")
+    .select("id, company_id, template_id, version, status");
+
+  const formattedTemplates: AgreementTemplateItem[] = (tmplData || []).map((tmpl: any) => {
+    const linkedCas = (casData || []).filter(
+      (ca: any) =>
+        ca.template_id === tmpl.id ||
+        (!ca.template_id && ca.version === tmpl.version)
+    );
+    const companyIds = new Set(linkedCas.map((ca: any) => ca.company_id).filter(Boolean));
+    const pendingCount = linkedCas.filter((ca: any) => ca.status === "pending").length;
+    const executedCount = linkedCas.filter((ca: any) => ca.status !== "pending").length;
+
+    return {
+      ...tmpl,
+      usage: {
+        companyCount: companyIds.size,
+        pendingCount,
+        executedCount,
+      },
+    };
+  });
+
+  return { templates: formattedTemplates };
+}
+
+/**
+ * Admin: Gets all Company Agreements using a specific Agreement Template
+ */
+export async function adminGetTemplateUsageCompaniesAction(templateId: string): Promise<{
+  template?: AgreementTemplateItem;
+  agreements: CompanyAgreementItem[];
+  error?: string;
+}> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { agreements: [], error: "인증되지 않은 사용자입니다." };
+
+  const admin = createAdminClient();
+
+  // Admin staff verification
+  const { data: staff } = await admin
+    .from("staff_members")
+    .select("id")
+    .eq("id", user.id)
+    .maybeSingle();
+
+  if (!staff) {
+    return { agreements: [], error: "관리자 권한이 필요합니다." };
+  }
+
+  const { data: tmpl } = await admin
+    .from("agreement_templates")
+    .select("*")
+    .eq("id", templateId)
+    .single();
+
+  if (!tmpl) return { agreements: [], error: "대상 템플릿을 찾을 수 없습니다." };
+
+  const { data, error } = await admin
+    .from("company_agreements")
+    .select("*, companies(id, name, country, contact_name, contact_phone, intro)")
+    .order("created_at", { ascending: false });
+
+  if (error) return { template: tmpl, agreements: [], error: error.message };
+
+  const filtered = (data || []).filter(
+    (ca: any) =>
+      ca.template_id === templateId ||
+      (!ca.template_id && ca.version === tmpl.version)
+  );
+
+  const formatted: CompanyAgreementItem[] = filtered.map((ca: any) => {
+    const compMeta = parseCompanyMetadata(ca.companies);
+    return {
+      ...ca,
+      companyName: compMeta.name || "-",
+      companyAddress: compMeta.address || "-",
+      representativeName: compMeta.representativeName || "-",
+      agreement_type: tmpl.agreement_type,
+      template_name: tmpl.name,
+    };
+  });
+
+  return { template: tmpl, agreements: formatted };
+}
+
+/**
+ * Admin: Safely deletes an unused, Inactive Agreement Template and its associated private storage file.
+ * Delete is strictly blocked if the template is Active OR referenced by any company agreement.
+ */
+export async function adminDeleteAgreementTemplateAction(templateId: string): Promise<{
+  success: boolean;
+  error?: string;
+}> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { success: false, error: "인증되지 않은 사용자입니다." };
+
+  const admin = createAdminClient();
+
+  // Admin staff verification
+  const { data: staff } = await admin
+    .from("staff_members")
+    .select("id")
+    .eq("id", user.id)
+    .maybeSingle();
+
+  if (!staff) {
+    return { success: false, error: "관리자 권한이 필요합니다." };
+  }
+
+  const { data: tmpl } = await admin
+    .from("agreement_templates")
+    .select("*")
+    .eq("id", templateId)
+    .single();
+
+  if (!tmpl) return { success: false, error: "대상 템플릿을 찾을 수 없습니다." };
+
+  // Rule 6: Active template cannot be deleted
+  if (tmpl.status === "active") {
+    return {
+      success: false,
+      error: "Active 템플릿은 삭제할 수 없습니다. 먼저 다른 버전을 Active로 설정하거나 이 템플릿을 비활성화해 주세요.",
+    };
+  }
+
+  // Rule 5: If any company agreement references this template, delete must be blocked
+  const { data: casData } = await admin
+    .from("company_agreements")
+    .select("id, template_id, version");
+
+  const usageCount = (casData || []).filter(
+    (ca: any) =>
+      ca.template_id === templateId ||
+      (!ca.template_id && ca.version === tmpl.version)
+  ).length;
+
+  if (usageCount > 0) {
+    return {
+      success: false,
+      error: "이 템플릿은 현재 또는 과거 계약에 사용되어 삭제할 수 없습니다. Inactive 상태로 보관해 주세요.",
+    };
+  }
+
+  // Delete DB record first
+  const { error: deleteErr } = await admin
+    .from("agreement_templates")
+    .delete()
+    .eq("id", templateId);
+
+  if (deleteErr) {
+    console.error("[adminDeleteAgreementTemplateAction] DB deletion error:", deleteErr);
+    return { success: false, error: `템플릿 삭제 실패: ${deleteErr.message}` };
+  }
+
+  // Storage Cleanup: If stored in private storage bucket (company-uploads), delete exact file object
+  if (tmpl.source_pdf_path && !tmpl.source_pdf_path.startsWith("/") && !tmpl.source_pdf_path.startsWith("http")) {
+    try {
+      const { error: storageErr } = await admin.storage
+        .from("company-uploads")
+        .remove([tmpl.source_pdf_path]);
+
+      if (storageErr) {
+        console.warn("[adminDeleteAgreementTemplateAction] Storage file cleanup warning:", storageErr);
+      }
+    } catch (sErr: any) {
+      console.warn("[adminDeleteAgreementTemplateAction] Storage cleanup exception:", sErr);
+    }
+  }
+
+  return { success: true };
 }
 
 /**

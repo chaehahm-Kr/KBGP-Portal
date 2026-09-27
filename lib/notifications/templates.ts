@@ -21,6 +21,7 @@ export const NETWORK_TEMPLATE_KEYS = [
   "inquiry_received_applicant",
   "inquiry_received_internal",
   "staff_invited",
+  "brand_agreement_completed",
 ] as const;
 
 export const HUB_TEMPLATE_KEYS = [
@@ -38,6 +39,7 @@ export const HUB_TEMPLATE_KEYS = [
   "hub_shipment_created",
   "hub_shipment_tracking_update",
   "hub_order_delivered",
+  "hub_retailer_agreement_completed",
 ] as const;
 
 export const TEMPLATE_KEYS = [
@@ -142,6 +144,11 @@ export const DEFAULT_TEMPLATES: Record<
     subject: "[K SELECT NETWORK] {{contactName}}님, 관리자 포털로 초대합니다",
     body: "안녕하세요, {{contactName}}님.\n\nK SELECT NETWORK 관리자 포털의 내부 직원으로 초대되었습니다.\n\n아래 로그인 정보와 임시 비밀번호로 최초 로그인하신 후, 비밀번호 변경 및 계정 설정 절차를 완료해 주세요.\n\n- 접속 이메일: {{email}}\n- 임시 비밀번호: {{tempPassword}}\n\n* 본 임시 비밀번호는 최초 1회 로그인 전용입니다.\n\n{{ctaButton}}",
   },
+  brand_agreement_completed: {
+    description: "브랜드사 담당자 — 계약 체결 완료 (Brand Agreement Completed)",
+    subject: "[K SELECT NETWORK] {{company_name}} 계약 체결이 완료되었습니다",
+    body: "전자 기본계약 체결이 완료되었습니다.\n\n안녕하세요, {{signer_name}}님.\n\n{{company_name}}의 K SELECT NETWORK 브랜드 공급 및 유통 기본계약(Version {{agreement_version}}) 체결이 완료되었습니다.\n\n체결된 최종 계약서 사본이 본 메일에 첨부되어 있으며, 브랜드사 포털에서도 언제든지 확인 및 다운로드하실 수 있습니다.\n\n{{infoBox}}\n\n{{ctaButton}}\n\n본 계약서는 양사의 전자서명 및 타임스탬프를 통해 법적 효력을 갖는 공식 문서로 안전하게 보관됩니다.",
+  },
 
   // === K SELECT HUB (리테일러 파트너) ===
   hub_retailer_application_received: {
@@ -213,6 +220,11 @@ export const DEFAULT_TEMPLATES: Record<
     description: "Retailer Partner — Order Delivered Confirmation",
     subject: "[K SELECT HUB] Package Delivered — Order {{orderNumber}}",
     body: "Your order has been delivered.\n\nHello {{contactName}},\n\nCarrier records indicate that Order {{orderNumber}} for {{companyName}} has been successfully delivered to your store address.\n\n{{infoBox}}\n\nPlease inspect your shipment. If you have any questions or require support with store merchandising, log in to your portal or contact {{supportEmail}}.\n\n{{ctaButton}}",
+  },
+  hub_retailer_agreement_completed: {
+    description: "Retailer Partner — Retailer Agreement Completed",
+    subject: "[K SELECT HUB] Your Retailer Agreement Has Been Completed",
+    body: "Your Retailer Agreement has been successfully executed.\n\nHello {{signer_name}},\n\nThe K SELECT Retailer Operating Agreement (Version {{agreement_version}}) for {{company_name}} has been successfully executed.\n\nYour official executed agreement is attached to this email and is also permanently preserved in your Retailer Portal for secure access.\n\n{{infoBox}}\n\n{{ctaButton}}\n\nIf you have any questions regarding your agreement or next onboarding steps, our team is here to assist you at {{supportEmail}}.",
   },
 };
 
@@ -318,6 +330,29 @@ export const TEMPLATE_SAMPLE_VARIABLES: Record<TemplateKey, Record<string, strin
     email: "admin2@kselectnetwork.com",
     tempPassword: "TempPassword123!",
     portalUrl: "https://admin.kselectnetwork.com/admin/login",
+  },
+  brand_agreement_completed: {
+    company_name: "주식회사 더마랩코리아",
+    companyName: "주식회사 더마랩코리아",
+    agreement_name: "K SELECT NETWORK 브랜드 공급 및 유통 기본계약서",
+    agreementName: "K SELECT NETWORK 브랜드 공급 및 유통 기본계약서",
+    agreement_version: "1.0",
+    agreementVersion: "1.0",
+    version: "1.0",
+    agreement_id: "KSN-AGR-DML-26-8J8W",
+    agreementId: "KSN-AGR-DML-26-8J8W",
+    signer_name: "김민지",
+    signerName: "김민지",
+    signer_title: "대표이사",
+    signerTitle: "대표이사",
+    contactName: "김민지",
+    executed_date: "2026년 9월 26일",
+    executedDate: "2026년 9월 26일",
+    effective_date: "2026년 9월 26일",
+    effectiveDate: "2026년 9월 26일",
+    portalUrl: "https://portal.kselectnetwork.com/portal/company/info?tab=agreements",
+    agreement_view_url: "https://portal.kselectnetwork.com/portal/company/info?tab=agreements",
+    agreementViewUrl: "https://portal.kselectnetwork.com/portal/company/info?tab=agreements",
   },
 
   // === HUB ===
@@ -462,6 +497,30 @@ export const TEMPLATE_SAMPLE_VARIABLES: Record<TemplateKey, Record<string, strin
     link: "https://portal.kselecthub.com/retailer/orders/ORD-2026-0891",
     supportEmail: "support@kselecthub.com",
   },
+  hub_retailer_agreement_completed: {
+    company_name: "Luxe Beauty Bar",
+    companyName: "Luxe Beauty Bar",
+    agreement_name: "K SELECT Retailer Operating Agreement",
+    agreementName: "K SELECT Retailer Operating Agreement",
+    agreement_version: "1.0",
+    agreementVersion: "1.0",
+    version: "1.0",
+    agreement_id: "KSH-AGR-LBB-26-9M2K",
+    agreementId: "KSH-AGR-LBB-26-9M2K",
+    signer_name: "Sarah Jenkins",
+    signerName: "Sarah Jenkins",
+    signer_title: "Managing Partner",
+    signerTitle: "Managing Partner",
+    contactName: "Sarah Jenkins",
+    executed_date: "September 26, 2026",
+    executedDate: "September 26, 2026",
+    effective_date: "September 26, 2026",
+    effectiveDate: "September 26, 2026",
+    supportEmail: "support@kselecthub.com",
+    portalUrl: "https://portal.kselecthub.com/retailer/account?tab=documents",
+    agreement_view_url: "https://portal.kselecthub.com/retailer/account?tab=documents",
+    agreementViewUrl: "https://portal.kselecthub.com/retailer/account?tab=documents",
+  },
 };
 
 /**
@@ -563,6 +622,18 @@ export const TEMPLATE_VARIABLE_CHIPS: Record<TemplateKey, Array<{ tag: string; l
     { tag: "{{email}}", label: "접속 이메일" },
     { tag: "{{tempPassword}}", label: "임시 비밀번호" },
     { tag: "{{ctaButton}}", label: "로그인 바로가기 버튼" },
+  ],
+  brand_agreement_completed: [
+    { tag: "{{company_name}}", label: "회사명" },
+    { tag: "{{agreement_name}}", label: "계약 명칭" },
+    { tag: "{{agreement_version}}", label: "계약 버전" },
+    { tag: "{{agreement_id}}", label: "계약 ID" },
+    { tag: "{{signer_name}}", label: "서명자 이름" },
+    { tag: "{{signer_title}}", label: "서명자 직책" },
+    { tag: "{{executed_date}}", label: "체결 일자" },
+    { tag: "{{effective_date}}", label: "효력 발생일" },
+    { tag: "{{infoBox}}", label: "계약 요약 카드" },
+    { tag: "{{ctaButton}}", label: "계약서 바로가기 버튼" },
   ],
 
   // === HUB ===
@@ -693,6 +764,19 @@ export const TEMPLATE_VARIABLE_CHIPS: Record<TemplateKey, Array<{ tag: string; l
     { tag: "{{infoBox}}", label: "Delivery Info Box" },
     { tag: "{{ctaButton}}", label: "View Order Details Button" },
   ],
+  hub_retailer_agreement_completed: [
+    { tag: "{{company_name}}", label: "Company Name" },
+    { tag: "{{agreement_name}}", label: "Agreement Name" },
+    { tag: "{{agreement_version}}", label: "Agreement Version" },
+    { tag: "{{agreement_id}}", label: "Agreement ID" },
+    { tag: "{{signer_name}}", label: "Signer Name" },
+    { tag: "{{signer_title}}", label: "Signer Title" },
+    { tag: "{{executed_date}}", label: "Executed Date" },
+    { tag: "{{effective_date}}", label: "Effective Date" },
+    { tag: "{{supportEmail}}", label: "Support Email" },
+    { tag: "{{infoBox}}", label: "Agreement Summary Card" },
+    { tag: "{{ctaButton}}", label: "View Agreement Button" },
+  ],
 };
 
 // Global fallback sample variables for backward compatibility
@@ -712,7 +796,14 @@ export function getSampleVariables(key: string): Record<string, string> {
 }
 
 function render(template: string, variables: Record<string, string>) {
-  return template.replace(/\{\{(\w+)\}\}/g, (_match, name) => variables[name] ?? "");
+  return template.replace(/\{\{(\w+)\}\}/g, (_match: string, name: string) => {
+    if (variables[name] !== undefined) return variables[name];
+    const snakeCase = name.replace(/[A-Z]/g, (letter: string) => `_${letter.toLowerCase()}`);
+    if (variables[snakeCase] !== undefined) return variables[snakeCase];
+    const camelCase = name.replace(/_([a-z])/g, (_: string, letter: string) => letter.toUpperCase());
+    if (variables[camelCase] !== undefined) return variables[camelCase];
+    return "";
+  });
 }
 
 /** 템플릿 키에 따른 영문/한글 배지 라벨 매핑 (NETWORK) */
@@ -748,6 +839,8 @@ function getNetworkBadgeLabel(key: string): string | undefined {
       return "EXPIRING · 초청 만료 임박 안내";
     case "staff_invited":
       return "INVITED · 관리자 초대 발송";
+    case "brand_agreement_completed":
+      return "EXECUTED · 계약 체결 완료";
     case "password_reset":
       return "PASSWORD RESET · 비밀번호 재설정";
     default:
@@ -786,6 +879,8 @@ function getHubBadgeLabel(key: string): string | undefined {
       return "TRANSIT UPDATE · EN ROUTE";
     case "hub_order_delivered":
       return "DELIVERED · COMPLETED";
+    case "hub_retailer_agreement_completed":
+      return "EXECUTED · AGREEMENT COMPLETED";
     default:
       return undefined;
   }
@@ -795,21 +890,45 @@ function getHubBadgeLabel(key: string): string | undefined {
 function buildNetworkInfoCardHtml(variables: Record<string, string>) {
   const rows: { label: string; value: string; isBold?: boolean }[] = [];
   
-  const appNo = variables.applicationNo || variables.applicationNumber || variables.inquiryNumber;
-  if (appNo) {
-    rows.push({ label: "신청번호", value: appNo, isBold: true });
-  }
-  
-  const brand = variables.brandName;
-  if (brand) {
-    rows.push({ label: "신청 브랜드", value: brand });
-  }
+  if (variables.key === "brand_agreement_completed") {
+    const compName = variables.company_name || variables.companyName;
+    if (compName) rows.push({ label: "회사명", value: compName });
 
-  const nextStep = variables.nextStep;
-  if (nextStep) {
-    rows.push({ label: "다음 단계", value: nextStep });
-  } else if (appNo && (variables.key === "application_submitted_company" || variables.key === "inquiry_received_applicant")) {
-    rows.push({ label: "다음 단계", value: "서류 심사 · 3 영업일 내" });
+    const agrName = variables.agreement_name || variables.agreementName || "K SELECT NETWORK 기본계약";
+    rows.push({ label: "계약 명칭", value: agrName });
+
+    const agrVer = variables.agreement_version || variables.agreementVersion || variables.version || "1.0";
+    rows.push({ label: "계약 버전", value: `Version ${agrVer}` });
+
+    const agrId = variables.agreement_id || variables.agreementId;
+    if (agrId) rows.push({ label: "계약 ID", value: agrId, isBold: true });
+
+    const signer = variables.signer_name || variables.signerName;
+    const title = variables.signer_title || variables.signerTitle;
+    if (signer) rows.push({ label: "서명자", value: title ? `${signer} (${title})` : signer });
+
+    const execDate = variables.executed_date || variables.executedDate;
+    if (execDate) rows.push({ label: "체결 일자", value: execDate });
+
+    const effDate = variables.effective_date || variables.effectiveDate;
+    if (effDate && effDate !== execDate) rows.push({ label: "효력 발생일", value: effDate });
+  } else {
+    const appNo = variables.applicationNo || variables.applicationNumber || variables.inquiryNumber;
+    if (appNo) {
+      rows.push({ label: "신청번호", value: appNo, isBold: true });
+    }
+    
+    const brand = variables.brandName;
+    if (brand) {
+      rows.push({ label: "신청 브랜드", value: brand });
+    }
+
+    const nextStep = variables.nextStep;
+    if (nextStep) {
+      rows.push({ label: "다음 단계", value: nextStep });
+    } else if (appNo && (variables.key === "application_submitted_company" || variables.key === "inquiry_received_applicant")) {
+      rows.push({ label: "다음 단계", value: "서류 심사 · 3 영업일 내" });
+    }
   }
 
   if (rows.length === 0) return "";
@@ -856,7 +975,31 @@ function buildHubInfoCardHtml(variables: Record<string, string>) {
   const key = variables.key || "";
   const rows: { label: string; value: string; isBold?: boolean; highlight?: boolean }[] = [];
 
-  if (
+  if (key === "hub_retailer_agreement_completed") {
+    const compName = variables.company_name || variables.companyName;
+    if (compName) {
+      rows.push({ label: "Retailer Company", value: compName, isBold: true });
+    }
+    const agrName = variables.agreement_name || variables.agreementName || "K SELECT Retailer Operating Agreement";
+    rows.push({ label: "Agreement Name", value: agrName });
+
+    const agrVer = variables.agreement_version || variables.agreementVersion || variables.version || "1.0";
+    rows.push({ label: "Version", value: `Version ${agrVer}` });
+
+    const agrId = variables.agreement_id || variables.agreementId;
+    if (agrId) {
+      rows.push({ label: "Agreement ID", value: agrId, isBold: true });
+    }
+    const signer = variables.signer_name || variables.signerName;
+    const title = variables.signer_title || variables.signerTitle;
+    if (signer) {
+      rows.push({ label: "Signed By", value: title ? `${signer} (${title})` : signer });
+    }
+    const execDate = variables.executed_date || variables.executedDate;
+    if (execDate) {
+      rows.push({ label: "Executed Date", value: execDate });
+    }
+  } else if (
     key === "hub_retailer_application_received" ||
     key === "hub_application_under_review" ||
     key === "hub_info_request_created" ||
@@ -1075,6 +1218,9 @@ function buildNetworkCtaButtonHtml(variables: Record<string, string>) {
   } else if (key === "staff_invited") {
     buttonLabel = "관리자 로그인하기";
     url = `${siteUrl}/admin/login`;
+  } else if (key === "brand_agreement_completed") {
+    buttonLabel = "체결 계약서 확인하기";
+    url = variables.agreement_view_url || variables.agreementViewUrl || `${siteUrl}/portal/company/info?tab=agreements`;
   } else if (key === "password_reset") {
     buttonLabel = "비밀번호 재설정하기";
   }
@@ -1108,6 +1254,9 @@ function buildHubCtaButtonHtml(variables: Record<string, string>) {
     buttonLabel = "Submit Requested Info →";
   } else if (key === "hub_password_reset") {
     buttonLabel = "Reset Password →";
+  } else if (key === "hub_retailer_agreement_completed") {
+    buttonLabel = "View Executed Agreement →";
+    url = variables.agreement_view_url || variables.agreementViewUrl || `${hubPortalUrl}/retailer/account?tab=documents`;
   } else if (
     key === "hub_order_confirmed" ||
     key === "hub_shipment_created" ||
@@ -1359,7 +1508,9 @@ function renderNetworkEmailHtml(
   const formattedTemplate = formatNetworkBodyText(rawBodyLines);
   const finalBodyContent = render(formattedTemplate, extendedVariables);
 
-  const preheaderText = `신청번호 ${appNo}의 파트너십 알림입니다.`;
+  const preheaderText = variables.key === "brand_agreement_completed"
+    ? `${extendedVariables.company_name || extendedVariables.companyName || "브랜드사"}의 K SELECT NETWORK 전자 기본계약 체결이 완료되었습니다.`
+    : `신청번호 ${appNo}의 파트너십 알림입니다.`;
   const badgeLabel = getNetworkBadgeLabel(variables.key || "");
   
   let badgeHtml = "";
@@ -1486,7 +1637,9 @@ function renderHubEmailHtml(
   const formattedTemplate = formatHubBodyText(rawBodyLines);
   const finalBodyContent = render(formattedTemplate, extendedVariables);
 
-  const preheaderText = `K SELECT HUB notification for ${extendedVariables.companyName || "Retail Partner"}`;
+  const preheaderText = variables.key === "hub_retailer_agreement_completed"
+    ? `Your Retailer Operating Agreement for ${extendedVariables.company_name || extendedVariables.companyName || "Retail Partner"} has been executed.`
+    : `K SELECT HUB notification for ${extendedVariables.companyName || "Retail Partner"}`;
   const badgeLabel = getHubBadgeLabel(variables.key || "");
 
   let badgeHtml = "";
@@ -1582,35 +1735,47 @@ function renderHubEmailHtml(
 export async function sendTemplatedEmail(
   key: TemplateKey,
   to: string,
-  variables: Record<string, string>
-) {
-  const admin = createAdminClient();
-  const { data: template } = await admin
-    .from("email_templates")
-    .select("subject_template, body_template")
-    .eq("key", key)
-    .maybeSingle();
+  variables: Record<string, string>,
+  attachments?: Array<{
+    filename: string;
+    content: string; // base64 encoded string
+  }>
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const admin = createAdminClient();
+    const { data: template } = await admin
+      .from("email_templates")
+      .select("subject_template, body_template")
+      .eq("key", key)
+      .maybeSingle();
 
-  const fallback = DEFAULT_TEMPLATES[key];
-  const subjectTemplate = template?.subject_template ?? fallback?.subject ?? "";
-  let bodyTemplate = template?.body_template ?? fallback?.body ?? "";
+    const fallback = DEFAULT_TEMPLATES[key];
+    const subjectTemplate = template?.subject_template ?? fallback?.subject ?? "";
+    let bodyTemplate = template?.body_template ?? fallback?.body ?? "";
 
-  if (key === "info_request_created" && !variables.dueDate) {
-    bodyTemplate = bodyTemplate
-      .replace("회신 기한인 {{dueDate}}까지 ", "")
-      .replace("회신 기한인 까지 ", "")
-      .replace("회신 기한인  까지 ", "");
+    if (key === "info_request_created" && !variables.dueDate) {
+      bodyTemplate = bodyTemplate
+        .replace("회신 기한인 {{dueDate}}까지 ", "")
+        .replace("회신 기한인 까지 ", "")
+        .replace("회신 기한인  까지 ", "");
+    }
+
+    const { subject, text, html } = renderEmailHtml(subjectTemplate, bodyTemplate, {
+      ...variables,
+      key,
+    });
+
+    await sendEmail({
+      to,
+      subject,
+      text,
+      html,
+      attachments,
+    });
+
+    return { success: true };
+  } catch (err: any) {
+    console.error(`[sendTemplatedEmail Error] key=${key}, to=${to}:`, err);
+    return { success: false, error: err?.message || "이메일 발송에 실패했습니다." };
   }
-
-  const { subject, text, html } = renderEmailHtml(subjectTemplate, bodyTemplate, {
-    ...variables,
-    key,
-  });
-
-  await sendEmail({
-    to,
-    subject,
-    text,
-    html,
-  });
 }

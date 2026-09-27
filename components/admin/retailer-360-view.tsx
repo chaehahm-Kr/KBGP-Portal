@@ -1632,12 +1632,21 @@ export function Retailer360View({ data }: Retailer360ViewProps) {
                       className="p-4 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-950/40 flex flex-col md:flex-row md:items-center justify-between gap-4"
                     >
                       <div className="space-y-1 text-xs">
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
                           <span className="font-bold text-zinc-900 dark:text-white">
-                            K SELECT Retailer Operating Agreement (v{acc.agreement_version})
+                            Retailer Supply & K SELECT Platform Agreement (v{acc.agreement_version})
                           </span>
-                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
-                            Executed
+                          {acc.agreement_id && (
+                            <span className="font-mono text-xs text-indigo-600 dark:text-indigo-400 font-bold">
+                              [{acc.agreement_id}]
+                            </span>
+                          )}
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
+                            acc.status === "active" || acc.pdf_status === "generated"
+                              ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800"
+                              : "bg-amber-50 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border-amber-200 dark:border-amber-800"
+                          }`}>
+                            {acc.status === "active" || acc.pdf_status === "generated" ? "Executed" : "Pending Signature"}
                           </span>
                         </div>
 
@@ -1654,12 +1663,14 @@ export function Retailer360View({ data }: Retailer360ViewProps) {
                             <span className="font-medium text-zinc-700 dark:text-zinc-300">Executed At: </span>
                             <span>{execDate}</span>
                           </div>
+                          {acc.effective_date && (
+                            <div>
+                              <span className="font-medium text-zinc-700 dark:text-zinc-300">Effective Date: </span>
+                              <span className="font-mono">{acc.effective_date} (Exp: {acc.expiration_date || "—"})</span>
+                            </div>
+                          )}
                           <div>
-                            <span className="font-medium text-zinc-700 dark:text-zinc-300">IP / Session: </span>
-                            <span className="font-mono">{acc.accepted_ip || "Verified Electronic Session"}</span>
-                          </div>
-                          <div>
-                            <span className="font-medium text-zinc-700 dark:text-zinc-300">PDF Status: </span>
+                            <span className="font-medium text-zinc-700 dark:text-zinc-300">PDF Archival: </span>
                             <span className={acc.pdf_status === "generated" ? "text-emerald-600 dark:text-emerald-400 font-semibold" : "text-amber-600 dark:text-amber-400"}>
                               {acc.pdf_status === "generated" ? "Archived in Supabase Storage" : acc.pdf_status === "pending" ? "Processing..." : "Generation Failed"}
                             </span>

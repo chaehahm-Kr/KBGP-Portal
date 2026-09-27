@@ -13,6 +13,8 @@ import {
 import { TeamManagementView } from "@/components/retailer/team-management-view";
 import { RetailerTeamMember, RetailerInvitationItem } from "@/lib/retailer/onboarding-types";
 import { RetailerAgreementViewItem, RetailerDocumentRecord } from "@/lib/retailer/agreement-actions";
+import { RetailerAgreementCard } from "@/components/retailer/retailer-agreement-card";
+import type { CompanyAgreementItem } from "@/lib/agreement/types";
 import { PwaInstallAffordance } from "@/components/retailer/pwa-install-manager";
 import { changeRetailerPasswordAction } from "@/lib/auth/password-actions";
 
@@ -68,6 +70,7 @@ interface AccountOrganizationViewProps {
   stores: StoreLocationItem[];
   teamMembers: RetailerTeamMember[];
   pendingInvitations: RetailerInvitationItem[];
+  companyAgreement?: CompanyAgreementItem | null;
   agreements?: RetailerAgreementViewItem[];
   documents?: RetailerDocumentRecord[];
 }
@@ -79,6 +82,7 @@ export function AccountOrganizationView({
   stores,
   teamMembers,
   pendingInvitations,
+  companyAgreement = null,
   agreements = [],
   documents = [],
 }: AccountOrganizationViewProps) {
@@ -870,113 +874,21 @@ export function AccountOrganizationView({
       {/* TAB 4 CONTENT: AGREEMENTS & DOCUMENTS */}
       {currentTab === "documents" && (
         <div className="space-y-6">
-          {/* Section 1: Retailer Operating Agreements */}
-          <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-5 sm:p-6 shadow-xs space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-zinc-100 dark:border-zinc-800 pb-3">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center text-lg">
-                  📑
-                </div>
-                <div>
-                  <h2 className="text-sm font-bold text-zinc-900 dark:text-white flex items-center gap-2">
-                    <span>Retailer Operating Agreements</span>
-                    <span className="px-2 py-0.2 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
-                      Authoritative
-                    </span>
-                  </h2>
-                  <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
-                    Official executed operating terms, weekly inventory counting obligations, and 90-day trial risk protection.
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {agreements.length === 0 ? (
-              <div className="py-8 text-center text-xs text-zinc-400">
-                No agreement acceptance records found for your organization.
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {agreements.map((acc) => {
-                  const execDate = new Date(acc.acceptedAt).toLocaleDateString("en-US", {
-                    year: "numeric",
-                    month: "long",
-                    day: "numeric",
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  });
-
-                  return (
-                    <div
-                      key={acc.id}
-                      className="p-4 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900 flex flex-col md:flex-row md:items-center justify-between gap-4"
-                    >
-                      <div className="space-y-1.5">
-                        <div className="flex items-center gap-2">
-                          <span className="font-bold text-xs text-zinc-900 dark:text-white">
-                            K SELECT Retailer Operating Agreement (v{acc.agreementVersion})
-                          </span>
-                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
-                            Active Standard
-                          </span>
-                        </div>
-
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-0.5 text-[11px] text-zinc-500 dark:text-zinc-400">
-                          <div>
-                            <span className="font-medium text-zinc-700 dark:text-zinc-300">Executed by: </span>
-                            <span>{acc.acceptedName} ({acc.signerTitle || "Representative"})</span>
-                          </div>
-                          <div>
-                            <span className="font-medium text-zinc-700 dark:text-zinc-300">Signatory Email: </span>
-                            <span className="font-mono">{acc.signerEmail || profile.email}</span>
-                          </div>
-                          <div>
-                            <span className="font-medium text-zinc-700 dark:text-zinc-300">Timestamp: </span>
-                            <span>{execDate}</span>
-                          </div>
-                          <div>
-                            <span className="font-medium text-zinc-700 dark:text-zinc-300">PDF Archival: </span>
-                            <span className={acc.pdfStatus === "generated" ? "text-emerald-600 dark:text-emerald-400 font-semibold" : "text-amber-600 dark:text-amber-400"}>
-                              {acc.pdfStatus === "generated" ? "Archived & Verified" : acc.pdfStatus === "pending" ? "Processing..." : "Issue rendering PDF"}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Action buttons */}
-                      <div className="flex items-center gap-2 shrink-0">
-                        {acc.signedPdfUrl ? (
-                          <>
-                            <a
-                              href={acc.signedPdfUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="px-3 py-1.5 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-700 text-xs font-bold text-zinc-800 dark:text-zinc-200 transition-colors inline-flex items-center gap-1.5 shadow-2xs"
-                            >
-                              <span>👁️</span>
-                              <span>View PDF</span>
-                            </a>
-                            <a
-                              href={acc.signedPdfUrl}
-                              download={acc.pdfFilename || `kselect_retailer_agreement_v${acc.agreementVersion}.pdf`}
-                              className="px-3.5 py-1.5 rounded-xl bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 text-xs font-bold hover:bg-zinc-800 dark:hover:bg-zinc-100 transition-colors inline-flex items-center gap-1.5 shadow-2xs"
-                            >
-                              <span>⬇️</span>
-                              <span>Download PDF</span>
-                            </a>
-                          </>
-                        ) : (
-                          <span className="text-[11px] text-zinc-400 italic">
-                            PDF generating in background...
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
+          {/* Section 1: Retailer Supply & Platform Operating Agreement (Authoritative) */}
+          <RetailerAgreementCard
+            initialAgreement={companyAgreement}
+            companyInfo={{
+              id: company.id,
+              name: company.name,
+              address: company.address,
+              representativeName: company.contactName,
+            }}
+            currentUser={{
+              displayName: profile.displayName,
+              email: profile.email,
+              role: profile.role,
+            }}
+          />
 
           {/* Section 2: General Organization Documents Archive */}
           <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-5 sm:p-6 shadow-xs space-y-4">

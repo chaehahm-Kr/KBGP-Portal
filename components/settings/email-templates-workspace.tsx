@@ -164,6 +164,14 @@ const TEMPLATE_METADATA: Record<string, TemplateMetadata> = {
     triggerCondition: "어드민이 내부 직원 관리 화면에서 신규 직원을 관리자 포털로 초대할 때(임시 비밀번호 포함) 발송됩니다.",
     scope: "network",
   },
+  brand_agreement_completed: {
+    recipientType: "partner",
+    recipientLabel: "브랜드사 서명권자 및 추가 수신자 (Signer & Recipients)",
+    triggerType: "auto",
+    triggerLabel: "자동 발송 (Auto)",
+    triggerCondition: "브랜드사 포털에서 기본계약서 전자서명이 완료되었거나 어드민에서 계약서 사본을 재발송할 때, 서명자 및 추가 수신자에게 체결 완료 안내와 최종 체결본 PDF가 첨부되어 발송됩니다.",
+    scope: "network",
+  },
 
   // === K SELECT HUB ===
   hub_retailer_application_received: {
@@ -278,6 +286,14 @@ const TEMPLATE_METADATA: Record<string, TemplateMetadata> = {
     triggerCondition: "운송사 배송 완료 확인 시 매장 입고 검수 및 영수증 확인을 위해 발송됩니다.",
     scope: "hub",
   },
+  hub_retailer_agreement_completed: {
+    recipientType: "partner",
+    recipientLabel: "리테일러 서명권자 (Retailer Signer)",
+    triggerType: "auto",
+    triggerLabel: "자동 발송 (Auto)",
+    triggerCondition: "리테일러 온보딩 또는 포털에서 Retailer Operating Agreement 전자서명이 완료되었을 때, 서명자에게 체결 완료 확인 및 불변 전자서명 PDF 사본이 첨부되어 발송됩니다.",
+    scope: "hub",
+  },
 };
 
 const SCOPE_CATEGORIES: Record<
@@ -304,6 +320,11 @@ const SCOPE_CATEGORIES: Record<
       id: "net_review",
       name: "⚖️ 심사 결과 통보 (Review)",
       keys: ["review_result_approved", "review_result_partial_approved", "review_result_on_hold", "review_result_rejected"],
+    },
+    {
+      id: "net_agreement",
+      name: "📜 계약 및 법무 (Agreements & Contracts)",
+      keys: ["brand_agreement_completed"],
     },
     {
       id: "net_inquiry",
@@ -339,6 +360,11 @@ const SCOPE_CATEGORIES: Record<
         "hub_welcome_retailer",
         "hub_password_reset",
       ],
+    },
+    {
+      id: "hub_agreement",
+      name: "📜 계약 및 법무 (Agreements & Legal)",
+      keys: ["hub_retailer_agreement_completed"],
     },
     {
       id: "hub_orders",
@@ -449,6 +475,18 @@ const TEMPLATE_VARIABLE_CHIPS: Record<string, Array<{ tag: string; label: string
     { tag: "{{email}}", label: "접속 이메일" },
     { tag: "{{tempPassword}}", label: "임시 비밀번호" },
     { tag: "{{ctaButton}}", label: "로그인 바로가기 버튼" },
+  ],
+  brand_agreement_completed: [
+    { tag: "{{company_name}}", label: "회사명" },
+    { tag: "{{agreement_name}}", label: "계약 명칭" },
+    { tag: "{{agreement_version}}", label: "계약 버전" },
+    { tag: "{{agreement_id}}", label: "계약 ID" },
+    { tag: "{{signer_name}}", label: "서명자 이름" },
+    { tag: "{{signer_title}}", label: "서명자 직책" },
+    { tag: "{{executed_date}}", label: "체결 일자" },
+    { tag: "{{effective_date}}", label: "효력 발생일" },
+    { tag: "{{infoBox}}", label: "계약 요약 카드" },
+    { tag: "{{ctaButton}}", label: "계약서 바로가기 버튼" },
   ],
 
   // === HUB ===
@@ -579,6 +617,19 @@ const TEMPLATE_VARIABLE_CHIPS: Record<string, Array<{ tag: string; label: string
     { tag: "{{infoBox}}", label: "Delivery Info Box" },
     { tag: "{{ctaButton}}", label: "View Order Details Button" },
   ],
+  hub_retailer_agreement_completed: [
+    { tag: "{{company_name}}", label: "Company Name" },
+    { tag: "{{agreement_name}}", label: "Agreement Name" },
+    { tag: "{{agreement_version}}", label: "Agreement Version" },
+    { tag: "{{agreement_id}}", label: "Agreement ID" },
+    { tag: "{{signer_name}}", label: "Signer Name" },
+    { tag: "{{signer_title}}", label: "Signer Title" },
+    { tag: "{{executed_date}}", label: "Executed Date" },
+    { tag: "{{effective_date}}", label: "Effective Date" },
+    { tag: "{{supportEmail}}", label: "Support Email" },
+    { tag: "{{infoBox}}", label: "Agreement Summary Card" },
+    { tag: "{{ctaButton}}", label: "View Agreement Button" },
+  ],
 };
 
 export function EmailTemplatesWorkspace({
@@ -595,9 +646,11 @@ export function EmailTemplatesWorkspace({
     net_assignment: true,
     net_info_request: true,
     net_review: true,
+    net_agreement: true,
     net_inquiry: true,
     hub_application: true,
     hub_account: true,
+    hub_agreement: true,
     hub_orders: true,
   });
 

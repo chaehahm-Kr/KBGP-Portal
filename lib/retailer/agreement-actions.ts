@@ -3,6 +3,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { generateRetailerAgreementPdf } from "./agreement-pdf";
 import { sendEmail } from "@/lib/notifications/email";
+import { sendTemplatedEmail } from "@/lib/notifications/templates";
 import { verifyAdminSession, verifyRetailerSession } from "@/lib/auth/dal";
 
 export interface RetailerDocumentRecord {
@@ -155,53 +156,40 @@ export async function processAgreementPdfGeneration(acceptanceId: string): Promi
     if (signerEmail && signerEmail.includes("@")) {
       try {
         const base64Pdf = pdfBuffer.toString("base64");
-        await sendEmail({
-          to: signerEmail,
-          subject: `[K SELECT] Executed Retailer Operating Agreement (v${version}) - ${companyName}`,
-          text: `Dear ${signerName},\n\nThank you for executing the K SELECT Retailer Operating Agreement (Version ${version}) for ${companyName}.\n\nAttached is your official, immutable signed PDF document for your records.\n\nYou can also access and download this document at any time from your Retailer Portal Account Settings under "Agreements & Documents".\n\nBest regards,\nK SELECT Operations & Compliance Team`,
-          html: `
-            <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 32px 20px; color: #18181b; background-color: #ffffff;">
-              <div style="margin-bottom: 24px;">
-                <span style="font-size: 20px; font-weight: 900; letter-spacing: -0.5px; color: #18181b;">K SELECT</span>
-                <span style="font-size: 13px; font-weight: 700; color: #71717a; margin-left: 8px;">Document Archive</span>
-              </div>
-              
-              <div style="background: #f4f4f5; border-radius: 16px; padding: 24px; margin-bottom: 24px;">
-                <h2 style="font-size: 18px; font-weight: 800; margin: 0 0 12px 0; color: #18181b;">Retailer Operating Agreement Executed</h2>
-                <p style="font-size: 14px; line-height: 1.6; color: #3f3f46; margin: 0;">
-                  The K SELECT Retailer Operating Agreement (<strong>Version ${version}</strong>) has been successfully executed for <strong>${companyName}</strong>.
-                </p>
-              </div>
-
-              <div style="border: 1px solid #e4e4e7; border-radius: 12px; padding: 16px; margin-bottom: 24px; font-size: 13px; line-height: 1.6;">
-                <div><strong>Signatory:</strong> ${signerName} (${signerTitle})</div>
-                <div><strong>Executed Date:</strong> ${new Date(acceptance.accepted_at).toUTCString()}</div>
-                <div><strong>Document:</strong> ${pdfFilename}</div>
-              </div>
-
-              <p style="font-size: 13px; line-height: 1.6; color: #52525b; margin-bottom: 28px;">
-                Attached to this email is your official, tamper-evident archival PDF. You can also view and download this agreement at any time in the Retailer Portal under <strong>Account → Agreements & Documents</strong>.
-              </p>
-
-              <div style="text-align: center; margin-bottom: 32px;">
-                <a href="https://portal.kselecthub.com/account?tab=documents" style="display: inline-block; background-color: #18181b; color: #ffffff; font-size: 14px; font-weight: 700; text-decoration: none; padding: 14px 28px; border-radius: 12px;">
-                  Open Retailer Portal Documents →
-                </a>
-              </div>
-
-              <p style="font-size: 12px; color: #a1a1aa; line-height: 1.5; margin: 0;">
-                K SELECT NETWORK Compliance & Legal Archiving System.<br/>
-                This is an automated system confirmation.
-              </p>
-            </div>
-          `,
-          attachments: [
+        const executedDateStr = new Date(acceptance.accepted_at).toISOString().split("T")[0];
+        await sendTemplatedEmail(
+          "hub_retailer_agreement_completed",
+          signerEmail,
+          {
+            company_name: companyName,
+            companyName: companyName,
+            agreement_name: `K SELECT Retailer Operating Agreement (v${version})`,
+            agreementName: `K SELECT Retailer Operating Agreement (v${version})`,
+            agreement_version: version,
+            agreementVersion: version,
+            agreement_id: acceptance.id.slice(0, 8).toUpperCase(),
+            agreementId: acceptance.id.slice(0, 8).toUpperCase(),
+            signer_name: signerName,
+            signerName: signerName,
+            signer_title: signerTitle,
+            signerTitle: signerTitle,
+            executed_date: executedDateStr,
+            executedDate: executedDateStr,
+            effective_date: executedDateStr,
+            effectiveDate: executedDateStr,
+            portal_url: "https://portal.kselecthub.com/retailer/account?tab=documents",
+            portalUrl: "https://portal.kselecthub.com/retailer/account?tab=documents",
+            agreement_view_url: "https://portal.kselecthub.com/retailer/account?tab=documents",
+            agreementViewUrl: "https://portal.kselecthub.com/retailer/account?tab=documents",
+            supportEmail: "support@kselecthub.com",
+          },
+          [
             {
               filename: pdfFilename,
               content: base64Pdf,
             },
-          ],
-        });
+          ]
+        );
       } catch (emailErr) {
         console.warn("[processAgreementPdfGeneration] Email delivery failed (PDF still archived):", emailErr);
       }
