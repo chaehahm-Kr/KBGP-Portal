@@ -7,7 +7,6 @@ import {
   getAgreementRecipientsAction,
   resendAgreementRecipientEmailAction,
 } from "@/lib/agreement/actions";
-import { buildAgreementChangeInquiryUrl } from "@/lib/inquiry/types";
 import {
   type CompanyAgreementItem,
   type AgreementRecipientItem,
@@ -131,13 +130,6 @@ export function AgreementCard({ agreement: initialAgreement, companyInfo, userEm
     }
   };
 
-  const changeInquiryUrl = buildAgreementChangeInquiryUrl({
-    company_name: companyInfo.name,
-    agreement_id: agreement.agreement_id,
-    agreement_version: agreement.version || "1.0",
-    agreement_status: agreement.status,
-  });
-
   return (
     <div className="space-y-6 w-full">
       {/* Main Agreement Card */}
@@ -193,12 +185,6 @@ export function AgreementCard({ agreement: initialAgreement, companyInfo, userEm
                 >
                   📥 PDF 다운로드
                 </button>
-                <a
-                  href={changeInquiryUrl}
-                  className="rounded-xl border border-indigo-200 bg-indigo-50/70 hover:bg-indigo-100 text-indigo-700 dark:border-indigo-900/60 dark:bg-indigo-950/30 dark:text-indigo-300 dark:hover:bg-indigo-950/60 px-3.5 py-2 text-xs font-bold transition-colors cursor-pointer"
-                >
-                  💬 계약 변경 문의
-                </a>
               </div>
             )}
           </div>
@@ -210,8 +196,8 @@ export function AgreementCard({ agreement: initialAgreement, companyInfo, userEm
           </div>
         )}
 
-        {/* Details Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-xs">
+        {/* Details Grid (3 Cards: Signed By, Effective Date, Term Expiration) */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
           <div className="space-y-1 p-3 rounded-xl bg-zinc-50 dark:bg-zinc-850 border border-zinc-150 dark:border-zinc-800">
             <span className="text-zinc-400 font-medium block text-[11px]">계약 체결자 (Signed By)</span>
             <strong className="text-zinc-900 dark:text-zinc-100 font-bold block text-xs">
@@ -230,13 +216,6 @@ export function AgreementCard({ agreement: initialAgreement, companyInfo, userEm
             <span className="text-zinc-400 font-medium block text-[11px]">최초 만료일 (Term Expiration)</span>
             <strong className="text-zinc-900 dark:text-zinc-100 font-mono font-bold block text-xs">
               {agreement.expiration_date || "-"}
-            </strong>
-          </div>
-
-          <div className="space-y-1 p-3 rounded-xl bg-zinc-50 dark:bg-zinc-850 border border-zinc-150 dark:border-zinc-800">
-            <span className="text-zinc-400 font-medium block text-[11px]">갱신 거절 통지 기한</span>
-            <strong className="text-amber-700 dark:text-amber-400 font-mono font-bold block text-xs">
-              {agreement.non_renewal_notice_deadline ? `${agreement.non_renewal_notice_deadline} 까지` : "-"}
             </strong>
           </div>
         </div>

@@ -66,6 +66,81 @@ function isValidEmail(email: string): boolean {
 }
 
 /**
+ * Generates a deterministic short company code for external Agreement IDs.
+ * Order: companyCode input -> derived from companyName -> "CMP"
+ * Normalized: uppercase, alphanumeric only, 3 to 5 chars.
+ */
+export async function generateCompanyShortCode(companyName: string, companyCode?: string | null): Promise<string> {
+  if (companyCode) {
+    const cleaned = companyCode.toUpperCase().replace(/[^A-Z0-9]/g, "");
+    if (cleaned.length >= 2) return cleaned.substring(0, 5);
+  }
+
+  const cleanName = (companyName || "").toUpperCase().replace(/[^A-Z0-9\s-]/g, "").trim();
+  if (!cleanName) return "CMP";
+
+  const words = cleanName.split(/[\s-]+/).filter(Boolean);
+  if (words.length >= 3) {
+    return (words[0][0] + words[1][0] + words[2][0]).substring(0, 5);
+  } else if (words.length === 2) {
+    const w1 = words[0];
+    const w2 = words[1];
+    return (w1.substring(0, 2) + w2[0]).substring(0, 5);
+  } else if (words.length === 1 && words[0].length >= 3) {
+    return words[0].substring(0, 3);
+  } else if (words.length === 1 && words[0].length > 0) {
+    return (words[0] + "X").substring(0, 3);
+  }
+
+  return "CMP";
+}
+
+/**
+ * Generates a non-sequential random alphanumeric suffix for external Agreement IDs.
+ * Avoids ambiguous characters (0, O, 1, I).
+ */
+export async function generateRandomAgreementSuffix(length: number = 4): Promise<string> {
+  const chars = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
+  let result = "";
+  for (let i = 0; i < length; i++) {
+    result += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return result;
+}
+
+/**
+ * Generates a non-sequential, globally unique external Agreement ID for FUTURE agreements.
+ * Format: KSN-AGR-{COMPANY_CODE}-{YY}-{RANDOM_SUFFIX}
+ * Example: KSN-AGR-BGI-26-A7K4
+ */
+export async function generateUniqueExternalAgreementId(
+  adminClient: any,
+  companyName: string,
+  companyCode?: string | null
+): Promise<string> {
+  const shortCode = await generateCompanyShortCode(companyName, companyCode);
+  const yy = new Date().getFullYear().toString().slice(-2);
+
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const suffix = await generateRandomAgreementSuffix(4);
+    const candidateId = `KSN-AGR-${shortCode}-${yy}-${suffix}`;
+
+    const { data } = await adminClient
+      .from("company_agreements")
+      .select("id")
+      .eq("agreement_id", candidateId)
+      .maybeSingle();
+
+    if (!data) {
+      return candidateId;
+    }
+  }
+
+  const fallbackSuffix = await generateRandomAgreementSuffix(6);
+  return `KSN-AGR-${shortCode}-${yy}-${fallbackSuffix}`;
+}
+
+/**
  * Gets or initializes the Company Agreement record for a Brand Company.
  */
 export async function getCompanyAgreement(companyIdInput?: string): Promise<{
@@ -136,11 +211,13 @@ export async function getCompanyAgreement(companyIdInput?: string): Promise<{
       .single();
 
     if (tmpl) {
+      const newAgreementId = await generateUniqueExternalAgreementId(admin, compMeta.name);
       const { data: newCa, error: createErr } = await admin
         .from("company_agreements")
         .insert({
           company_id: targetCompanyId,
           template_id: tmpl.id,
+          agreement_id: newAgreementId,
           version: tmpl.version || "1.0",
           status: "pending",
         })
@@ -257,11 +334,14 @@ export async function signCompanyAgreementAction(input: SignAgreementInput): Pro
       .single();
 
     if (tmpl) {
+      const compInfo = parseCompanyMetadata(ca?.companies);
+      const newAgreementId = await generateUniqueExternalAgreementId(admin, compInfo.name || "Brand");
       const { data: newCa } = await admin
         .from("company_agreements")
         .insert({
           company_id: finalCompId,
           template_id: tmpl.id,
+          agreement_id: newAgreementId,
           version: tmpl.version || "1.0",
           status: "pending",
         })

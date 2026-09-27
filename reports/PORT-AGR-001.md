@@ -152,3 +152,28 @@
   - Agreement Template v1.0 and all other company data preserved intact.
   - Final Status: **Pending / 계약 서명 필요** (Ready for User E2E Test).
 
+## R9 Fix Summary: Agreement Completion UI Simplification + External Agreement ID Privacy Improvement
+- **Task ID**: `PORT-AGR-001-R9`
+- **Task Name**: Agreement Completion UI Simplification + External Agreement ID Privacy Improvement
+- **Portal UI Simplification**:
+  1. **Removed `계약 변경 문의` CTA**: Removed the inquiry link button from the completed Agreement card (`components/portal/agreement-card.tsx`).
+  2. **Removed `갱신 거절 통지 기한` Card**: Removed the deadline display card from the completed card grid. Contract terms and 90-day notice logic remain fully operational in underlying code and operating info notes.
+  3. **Summary Grid Rebalance**: Rebalanced the details grid from 4 columns to 3 clean, focused cards:
+     - `계약 체결자 (Signed By)`
+     - `계약 발효일 (Effective Date)`
+     - `최초 만료일 (Term Expiration)`
+- **External Agreement ID Privacy Improvement**:
+  1. **Privacy & Security Goal**: Replaced public global sequence numbers (e.g., `KSN-AGR-2026-000001`) for FUTURE Agreements with non-sequential, company-specific, privacy-preserving external IDs: `KSN-AGR-{COMPANY_CODE}-{YY}-{RANDOM_SUFFIX}`.
+  2. **Company Code Helper (`generateCompanyShortCode`)**: Derives a clean, uppercase 3-to-5 character alphanumeric short code from company name (e.g. `Brands Global Inc.` -> `BGI`).
+  3. **Random Suffix Generator (`generateRandomAgreementSuffix`)**: Generates a 4-character non-sequential uppercase alphanumeric suffix using unambiguous characters (`2-9`, `A-Z` without `0`, `O`, `1`, `I`).
+  4. **Collision Handling (`generateUniqueExternalAgreementId`)**: Checks database uniqueness before insertion; retries with fresh random suffix on collision (up to 5 retries).
+  5. **Persistence & Surface Consistency**: Generated external ID is stored once in `company_agreements.agreement_id` and reused consistently across Portal, Admin, PDF overlay, download filename, emails, recipient history, audit logs, and storage path.
+  6. **Historical Agreement Integrity**: Existing historical Agreements (e.g., `KSN-AGR-2026-000001`) are preserved unchanged without destructive renaming.
+- **Controlled Test Reset for Brands Global Inc. (`4c845ae8-b93b-4db2-858f-bda3252e8167`)**:
+  - Assigned new non-sequential external Agreement ID format: `KSN-AGR-BGI-26-8J8W`.
+  - Recipient records deleted (`company_agreement_recipients`: 0 remaining).
+  - Audit log records deleted (`agreement_audit_logs`: 0 remaining).
+  - Test executed PDF removed from private storage (`company-uploads`).
+  - Final Status: **Pending / 계약 서명 필요** (Ready for User E2E Test).
+
+
