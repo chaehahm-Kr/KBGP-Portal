@@ -155,7 +155,10 @@ export async function getCompanyAgreement(
 }> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { agreement: null, companyInfo: { id: "", name: "" }, error: "인증되지 않은 사용자입니다." };
+  if (!user) {
+    console.error(`[getCompanyAgreement] ${agreementType === "RETAILER" ? "RETAILER_USER_NOT_RESOLVED" : "USER_NOT_RESOLVED"}: No authenticated user session`);
+    return { agreement: null, companyInfo: { id: "", name: "" }, error: "인증되지 않은 사용자입니다." };
+  }
 
   let targetCompanyId = companyIdInput;
 
@@ -171,6 +174,7 @@ export async function getCompanyAgreement(
   }
 
   if (!targetCompanyId) {
+    console.error(`[getCompanyAgreement] ${agreementType === "RETAILER" ? "RETAILER_COMPANY_NOT_FOUND" : "COMPANY_NOT_FOUND"}: No company_id resolved for user ${user.id}`);
     return { agreement: null, companyInfo: { id: "", name: "" }, error: "소속 회사 정보를 찾을 수 없습니다." };
   }
 
@@ -178,12 +182,12 @@ export async function getCompanyAgreement(
   const admin = createAdminClient();
   const { data: comp, error: compErr } = await admin
     .from("companies")
-    .select("id, name, country, contact_name, contact_phone, intro")
+    .select("id, name, country, contact_name, contact_phone, intro, company_code")
     .eq("id", targetCompanyId)
     .single();
 
   if (compErr || !comp) {
-    console.error("[getCompanyAgreement] Company fetch error:", compErr);
+    console.error(`[getCompanyAgreement] ${agreementType === "RETAILER" ? "RETAILER_COMPANY_NOT_FOUND" : "COMPANY_NOT_FOUND"}: Company fetch error:`, compErr);
     return { agreement: null, companyInfo: { id: targetCompanyId, name: "" }, error: "회사 정보를 불러올 수 없습니다." };
   }
 
@@ -197,21 +201,33 @@ export async function getCompanyAgreement(
   };
 
   // Fetch active template for this agreement_type
-  const { data: tmpl } = await admin
+  const { data: tmpl, error: tmplErr } = await admin
     .from("agreement_templates")
-    .select("id, version, name, agreement_type")
+    .select("id, version, name, agreement_type, status")
     .eq("agreement_type", agreementType)
     .eq("status", "active")
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
 
+  if (tmplErr) {
+    console.error(`[getCompanyAgreement] ${agreementType === "RETAILER" ? "RETAILER_TEMPLATE_NOT_FOUND" : "TEMPLATE_NOT_FOUND"}: Template query error:`, tmplErr);
+  }
+
+  if (!tmpl) {
+    console.error(`[getCompanyAgreement] ${agreementType === "RETAILER" ? "RETAILER_TEMPLATE_INACTIVE" : "TEMPLATE_INACTIVE"}: No active template found for agreement_type=${agreementType}`);
+  }
+
   // Fetch existing Company Agreements for this company
-  const { data: caList } = await admin
+  const { data: caList, error: caErr } = await admin
     .from("company_agreements")
     .select("*, agreement_templates(id, name, version, agreement_type)")
     .eq("company_id", targetCompanyId)
     .order("created_at", { ascending: false });
+
+  if (caErr) {
+    console.error(`[getCompanyAgreement] ${agreementType === "RETAILER" ? "RETAILER_AGREEMENT_LOOKUP_FAILED" : "AGREEMENT_LOOKUP_FAILED"}:`, caErr);
+  }
 
   // Find agreement matching this agreement_type
   let ca = (caList || []).find((item: any) => {
@@ -226,7 +242,7 @@ export async function getCompanyAgreement(
 
   // If no agreement record exists yet for this type, create an initial Pending Agreement record linked to Active Template
   if (!ca && tmpl) {
-    const newAgreementId = await generateUniqueExternalAgreementId(admin, compMeta.name);
+    const newAgreementId = await generateUniqueExternalAgreementId(admin, compMeta.name, comp?.company_code);
     const { data: newCa, error: createErr } = await admin
       .from("company_agreements")
       .insert({
@@ -238,6 +254,10 @@ export async function getCompanyAgreement(
       })
       .select("*, agreement_templates(id, name, version, agreement_type)")
       .single();
+
+    if (createErr) {
+      console.error(`[getCompanyAgreement] ${agreementType === "RETAILER" ? "RETAILER_AGREEMENT_CREATE_FAILED" : "AGREEMENT_CREATE_FAILED"}:`, createErr);
+    }
 
     if (!createErr && newCa) {
       ca = newCa;
@@ -257,6 +277,13 @@ export async function getCompanyAgreement(
   }
 
   if (!ca) {
+    if (!tmpl) {
+      return {
+        agreement: null,
+        companyInfo,
+        error: `Active ${agreementType === "RETAILER" ? "Retailer" : "Brand"} Agreement Template is not configured. Please contact administrator.`,
+      };
+    }
     return { agreement: null, companyInfo, error: "계약서 정보를 생성할 수 없습니다." };
   }
 

@@ -71,6 +71,7 @@ interface AccountOrganizationViewProps {
   teamMembers: RetailerTeamMember[];
   pendingInvitations: RetailerInvitationItem[];
   companyAgreement?: CompanyAgreementItem | null;
+  agreementError?: string | null;
   agreements?: RetailerAgreementViewItem[];
   documents?: RetailerDocumentRecord[];
 }
@@ -83,6 +84,7 @@ export function AccountOrganizationView({
   teamMembers,
   pendingInvitations,
   companyAgreement = null,
+  agreementError = null,
   agreements = [],
   documents = [],
 }: AccountOrganizationViewProps) {
@@ -877,6 +879,7 @@ export function AccountOrganizationView({
           {/* Section 1: Retailer Supply & Platform Operating Agreement (Authoritative) */}
           <RetailerAgreementCard
             initialAgreement={companyAgreement}
+            error={agreementError}
             companyInfo={{
               id: company.id,
               name: company.name,

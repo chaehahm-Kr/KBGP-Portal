@@ -14,6 +14,7 @@ import type {
 
 interface RetailerAgreementCardProps {
   initialAgreement: CompanyAgreementItem | null;
+  error?: string | null;
   companyInfo: {
     id: string;
     name: string;
@@ -29,6 +30,7 @@ interface RetailerAgreementCardProps {
 
 export function RetailerAgreementCard({
   initialAgreement,
+  error = null,
   companyInfo,
   currentUser,
 }: RetailerAgreementCardProps) {
@@ -129,10 +131,33 @@ export function RetailerAgreementCard({
     loadRecipients(updatedAgreement.id);
   };
 
+  if (error) {
+    return (
+      <div className="rounded-2xl border border-rose-200 dark:border-rose-900/60 bg-rose-50 dark:bg-rose-950/30 p-6 shadow-xs text-center space-y-2">
+        <div className="text-xl">⚠️</div>
+        <h3 className="text-sm font-bold text-rose-900 dark:text-rose-200">
+          Retailer Operating Agreement
+        </h3>
+        <p className="text-xs text-rose-700 dark:text-rose-300">
+          {error}
+        </p>
+        <p className="text-[11px] text-zinc-500 dark:text-zinc-400 pt-1">
+          If you believe this is an error, please reach out to support@kselecthub.com.
+        </p>
+      </div>
+    );
+  }
+
   if (!agreement) {
     return (
-      <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-6 shadow-xs text-center text-xs text-zinc-400">
-        Initializing Retailer Operating Agreement...
+      <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-6 shadow-xs text-center space-y-2">
+        <div className="text-xl">📑</div>
+        <h3 className="text-sm font-bold text-zinc-900 dark:text-white">
+          Retailer Supply & Platform Agreement
+        </h3>
+        <p className="text-xs text-zinc-500 dark:text-zinc-400">
+          Agreement record is being configured. Please refresh the page or contact your account administrator.
+        </p>
       </div>
     );
   }

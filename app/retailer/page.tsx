@@ -3,6 +3,8 @@ import Link from "next/link";
 import { verifyRetailerSession } from "@/lib/auth/dal";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getRetailerPerformanceData } from "@/lib/retailer/performance";
+import { getCompanyAgreement } from "@/lib/agreement/actions";
+import { RetailerAgreementBanner } from "@/components/retailer/retailer-agreement-banner";
 
 export const dynamic = "force-dynamic";
 
@@ -19,23 +21,36 @@ export default async function RetailerHomePage() {
 
   const displayName = profile?.display_name || session.email.split("@")[0] || "Retailer Partner";
 
-  // 2. Fetch company info
+  // 2. Fetch company user relation (direct select without ambiguous embedding)
   const { data: companyUser } = await adminClient
     .from("company_users")
-    .select("company_id, company_role, companies(id, name, business_registration_number)")
+    .select("company_id, company_role")
     .eq("id", session.userId)
     .maybeSingle();
 
-  const company = companyUser?.companies as any;
-  const companyName = company?.name || "K SELECT Test Retailer";
-  const companyId = company?.id || companyUser?.company_id;
+  const companyId = companyUser?.company_id;
+
+  let rawCompany: any = null;
+  if (companyId) {
+    const { data: compData } = await adminClient
+      .from("companies")
+      .select("id, name, business_registration_number")
+      .eq("id", companyId)
+      .maybeSingle();
+    rawCompany = compData;
+  }
+
+  const companyName = rawCompany?.name || "K SELECT Retailer Partner";
 
   // 3. Fetch retailer specific role
-  const { data: retailerRole } = await adminClient
-    .from("retailer_user_roles")
-    .select("role, has_all_stores_access")
-    .eq("user_id", session.userId)
-    .maybeSingle();
+  const { data: retailerRole } = companyId
+    ? await adminClient
+        .from("retailer_user_roles")
+        .select("role, has_all_stores_access")
+        .eq("user_id", session.userId)
+        .eq("company_id", companyId)
+        .maybeSingle()
+    : { data: null };
 
   const roleTitle = retailerRole?.role
     ? retailerRole.role.charAt(0).toUpperCase() + retailerRole.role.slice(1)
@@ -66,7 +81,7 @@ export default async function RetailerHomePage() {
   }
 
   if (storeNames.length === 0) {
-    storeNames = ["Test Store 01"];
+    storeNames = ["Main Store"];
   }
 
   // 5. Fetch Quick Performance Summary (Last 30 Days)
@@ -88,8 +103,22 @@ export default async function RetailerHomePage() {
     // Non-blocking fallback
   }
 
+  // 7. Fetch Authoritative Retailer Agreement (Onboarding Guidance)
+  let companyAgreement = null;
+  if (companyId) {
+    try {
+      const agrRes = await getCompanyAgreement(companyId, "RETAILER");
+      companyAgreement = agrRes.agreement;
+    } catch {
+      // Non-blocking fallback
+    }
+  }
+
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
+      {/* Agreement Onboarding Guidance Banner (Non-blocking) */}
+      <RetailerAgreementBanner agreement={companyAgreement} />
+
       {/* Welcome Banner */}
       <div className="rounded-2xl bg-gradient-to-r from-zinc-900 via-zinc-800 to-zinc-900 dark:from-zinc-900 dark:via-zinc-900 dark:to-zinc-950 p-6 sm:p-8 text-white shadow-xl border border-zinc-700/50 dark:border-zinc-800">
         <div className="max-w-2xl space-y-2">
