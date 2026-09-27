@@ -147,7 +147,7 @@ export const DEFAULT_TEMPLATES: Record<
   brand_agreement_completed: {
     description: "브랜드사 담당자 — 계약 체결 완료 (Brand Agreement Completed)",
     subject: "[K SELECT NETWORK] {{company_name}} 계약 체결이 완료되었습니다",
-    body: "전자 기본계약 체결이 완료되었습니다.\n\n안녕하세요, {{signer_name}}님.\n\n{{company_name}}의 K SELECT NETWORK 브랜드 공급 및 유통 기본계약(Version {{agreement_version}}) 체결이 완료되었습니다.\n\n체결된 최종 계약서 사본이 본 메일에 첨부되어 있으며, 브랜드사 포털에서도 언제든지 확인 및 다운로드하실 수 있습니다.\n\n{{infoBox}}\n\n{{ctaButton}}\n\n본 계약서는 양사의 전자서명 및 타임스탬프를 통해 법적 효력을 갖는 공식 문서로 안전하게 보관됩니다.",
+    body: "전자 기본계약 체결이 완료되었습니다.\n\n안녕하세요, {{recipient_name}}님.\n\n{{company_name}}의 K SELECT NETWORK 브랜드 공급 및 유통 기본계약(Version {{agreement_version}}) 체결이 완료되었습니다.\n\n체결된 최종 계약서 사본이 본 메일에 첨부되어 있으며, 브랜드사 포털에서도 언제든지 확인 및 다운로드하실 수 있습니다.\n\n{{infoBox}}\n\n{{ctaButton}}\n\n본 계약서는 양사의 전자서명 및 타임스탬프를 통해 법적 효력을 갖는 공식 문서로 안전하게 보관됩니다.",
   },
 
   // === K SELECT HUB (리테일러 파트너) ===
@@ -224,7 +224,7 @@ export const DEFAULT_TEMPLATES: Record<
   hub_retailer_agreement_completed: {
     description: "Retailer Partner — Retailer Agreement Completed",
     subject: "[K SELECT HUB] Your Retailer Agreement Has Been Completed",
-    body: "Your Retailer Agreement has been successfully executed.\n\nHello {{signer_name}},\n\nThe K SELECT Retailer Operating Agreement (Version {{agreement_version}}) for {{company_name}} has been successfully executed.\n\nYour official executed agreement is attached to this email and is also permanently preserved in your Retailer Portal for secure access.\n\n{{infoBox}}\n\n{{ctaButton}}\n\nIf you have any questions regarding your agreement or next onboarding steps, our team is here to assist you at {{supportEmail}}.",
+    body: "Your Retailer Agreement has been successfully executed.\n\nHello {{recipient_name}},\n\nThe K SELECT Retailer Operating Agreement (Version {{agreement_version}}) for {{company_name}} has been successfully executed.\n\nYour official executed agreement is attached to this email and is also permanently preserved in your Retailer Portal for secure access.\n\n{{infoBox}}\n\n{{ctaButton}}\n\nIf you have any questions regarding your agreement or next onboarding steps, our team is here to assist you at {{supportEmail}}.",
   },
 };
 
@@ -343,8 +343,14 @@ export const TEMPLATE_SAMPLE_VARIABLES: Record<TemplateKey, Record<string, strin
     agreementId: "KSN-AGR-DML-26-8J8W",
     signer_name: "김민지",
     signerName: "김민지",
-    signer_title: "대표이사",
-    signerTitle: "대표이사",
+    signer_title: "대표이사 (CEO)",
+    signerTitle: "대표이사 (CEO)",
+    recipient_name: "김민지",
+    recipientName: "김민지",
+    recipient_title: "대표이사 (CEO)",
+    recipientTitle: "대표이사 (CEO)",
+    recipient_role: "SIGNER",
+    recipientRole: "SIGNER",
     contactName: "김민지",
     executed_date: "2026년 9월 26일",
     executedDate: "2026년 9월 26일",
@@ -511,6 +517,12 @@ export const TEMPLATE_SAMPLE_VARIABLES: Record<TemplateKey, Record<string, strin
     signerName: "Sarah Jenkins",
     signer_title: "Managing Partner",
     signerTitle: "Managing Partner",
+    recipient_name: "Sarah Jenkins",
+    recipientName: "Sarah Jenkins",
+    recipient_title: "Managing Partner",
+    recipientTitle: "Managing Partner",
+    recipient_role: "SIGNER",
+    recipientRole: "SIGNER",
     contactName: "Sarah Jenkins",
     executed_date: "September 26, 2026",
     executedDate: "September 26, 2026",
@@ -624,16 +636,18 @@ export const TEMPLATE_VARIABLE_CHIPS: Record<TemplateKey, Array<{ tag: string; l
     { tag: "{{ctaButton}}", label: "로그인 바로가기 버튼" },
   ],
   brand_agreement_completed: [
+    { tag: "{{recipient_name}}", label: "수신자 이름" },
+    { tag: "{{recipient_title}}", label: "수신자 직책" },
+    { tag: "{{signer_name}}", label: "서명자 이름" },
+    { tag: "{{signer_title}}", label: "서명자 직책" },
     { tag: "{{company_name}}", label: "회사명" },
     { tag: "{{agreement_name}}", label: "계약 명칭" },
     { tag: "{{agreement_version}}", label: "계약 버전" },
     { tag: "{{agreement_id}}", label: "계약 ID" },
-    { tag: "{{signer_name}}", label: "서명자 이름" },
-    { tag: "{{signer_title}}", label: "서명자 직책" },
     { tag: "{{executed_date}}", label: "체결 일자" },
     { tag: "{{effective_date}}", label: "효력 발생일" },
     { tag: "{{infoBox}}", label: "계약 요약 카드" },
-    { tag: "{{ctaButton}}", label: "계약서 바로가기 버튼" },
+    { tag: "{{ctaButton}}", label: "계약서 바로가기 버튼 (서명자 전용)" },
   ],
 
   // === HUB ===
@@ -765,17 +779,19 @@ export const TEMPLATE_VARIABLE_CHIPS: Record<TemplateKey, Array<{ tag: string; l
     { tag: "{{ctaButton}}", label: "View Order Details Button" },
   ],
   hub_retailer_agreement_completed: [
+    { tag: "{{recipient_name}}", label: "Recipient Name" },
+    { tag: "{{recipient_title}}", label: "Recipient Title" },
+    { tag: "{{signer_name}}", label: "Signer Name" },
+    { tag: "{{signer_title}}", label: "Signer Title" },
     { tag: "{{company_name}}", label: "Company Name" },
     { tag: "{{agreement_name}}", label: "Agreement Name" },
     { tag: "{{agreement_version}}", label: "Agreement Version" },
     { tag: "{{agreement_id}}", label: "Agreement ID" },
-    { tag: "{{signer_name}}", label: "Signer Name" },
-    { tag: "{{signer_title}}", label: "Signer Title" },
     { tag: "{{executed_date}}", label: "Executed Date" },
     { tag: "{{effective_date}}", label: "Effective Date" },
     { tag: "{{supportEmail}}", label: "Support Email" },
     { tag: "{{infoBox}}", label: "Agreement Summary Card" },
-    { tag: "{{ctaButton}}", label: "View Agreement Button" },
+    { tag: "{{ctaButton}}", label: "View Agreement Button (Signer Only)" },
   ],
 };
 
@@ -802,6 +818,16 @@ function render(template: string, variables: Record<string, string>) {
     if (variables[snakeCase] !== undefined) return variables[snakeCase];
     const camelCase = name.replace(/_([a-z])/g, (_: string, letter: string) => letter.toUpperCase());
     if (variables[camelCase] !== undefined) return variables[camelCase];
+    // Fallbacks for recipient / signer cross-compatibility
+    if (name === "recipient_name" || name === "recipientName") {
+      return variables.signer_name || variables.signerName || variables.contactName || "";
+    }
+    if (name === "recipient_title" || name === "recipientTitle") {
+      return variables.signer_title || variables.signerTitle || "";
+    }
+    if (name === "signer_name" || name === "signerName") {
+      return variables.recipient_name || variables.recipientName || variables.contactName || "";
+    }
     return "";
   });
 }
@@ -1176,6 +1202,11 @@ function buildHubInfoCardHtml(variables: Record<string, string>) {
 
 /** K SELECT NETWORK 이메일용 CTA 버튼 HTML */
 function buildNetworkCtaButtonHtml(variables: Record<string, string>) {
+  const role = (variables.recipient_role || variables.recipientRole || "").toUpperCase();
+  if (role === "ADDITIONAL_RECIPIENT" || role === "ADDITIONAL") {
+    return "";
+  }
+
   const siteUrl = publicEnv.NEXT_PUBLIC_SITE_URL || "https://www.kselectnetwork.com";
   let url = variables.portalUrl || variables.applicationUrl || `${siteUrl}/portal`;
   let buttonLabel = variables.buttonLabel || "포털에서 확인하기";
@@ -1239,6 +1270,11 @@ function buildNetworkCtaButtonHtml(variables: Record<string, string>) {
 
 /** K SELECT HUB 이메일용 CTA 버튼 HTML */
 function buildHubCtaButtonHtml(variables: Record<string, string>) {
+  const role = (variables.recipient_role || variables.recipientRole || "").toUpperCase();
+  if (role === "ADDITIONAL_RECIPIENT" || role === "ADDITIONAL") {
+    return "";
+  }
+
   const hubPortalUrl = "https://portal.kselecthub.com";
   let url = variables.invitationLink || variables.link || variables.portalUrl || hubPortalUrl;
   let buttonLabel = variables.buttonLabel || "Access Retailer Portal →";

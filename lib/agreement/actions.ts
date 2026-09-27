@@ -591,9 +591,15 @@ export async function signCompanyAgreementAction(input: SignAgreementInput): Pro
     ? `K_SELECT_Retailer_Agreement_${ca.agreement_id}.pdf`
     : `K_SELECT_Agreement_${ca.agreement_id}.pdf`;
 
+  const actualSignerName = input.signerName.trim();
+  const actualSignerTitle = input.signerTitle.trim();
+  const actualSignerEmail = signerEmailClean;
+
   for (const r of recipientsToRecord) {
     try {
       const templateKey = isRetailerEmail ? "hub_retailer_agreement_completed" : "brand_agreement_completed";
+      const recipientRole = r.recipient_type === "signer" ? "SIGNER" : "ADDITIONAL_RECIPIENT";
+
       const vars = {
         company_name: compMeta.name,
         companyName: compMeta.name,
@@ -607,10 +613,23 @@ export async function signCompanyAgreementAction(input: SignAgreementInput): Pro
         agreementVersion: ca.version || "1.0",
         agreement_id: ca.agreement_id,
         agreementId: ca.agreement_id,
-        signer_name: r.recipient_name,
-        signerName: r.recipient_name,
-        signer_title: r.recipient_title,
-        signerTitle: r.recipient_title,
+        // Authoritative executed agreement legal signer metadata (constant across all emails)
+        signer_name: actualSignerName,
+        signerName: actualSignerName,
+        signer_title: actualSignerTitle,
+        signerTitle: actualSignerTitle,
+        signer_email: actualSignerEmail,
+        signerEmail: actualSignerEmail,
+        // Individual email recipient metadata (personalized greeting & role)
+        recipient_name: r.recipient_name,
+        recipientName: r.recipient_name,
+        recipient_title: r.recipient_title,
+        recipientTitle: r.recipient_title,
+        recipient_email: r.recipient_email,
+        recipientEmail: r.recipient_email,
+        recipient_role: recipientRole,
+        recipientRole: recipientRole,
+        contactName: r.recipient_name,
         executed_date: executedDateStr,
         executedDate: executedDateStr,
         effective_date: executedDateStr,
@@ -746,7 +765,12 @@ export async function resendAgreementRecipientEmailAction(recipientId: string): 
       ? new Date(rec.sent_at).toISOString().split("T")[0]
       : new Date().toISOString().split("T")[0];
 
+    const actualSignerName = ca?.signer_name || compMeta.representativeName || "Authorized Signer";
+    const actualSignerTitle = ca?.signer_title || "대표이사 (CEO)";
+    const actualSignerEmail = ca?.signer_email || "";
+    const recipientRole = rec.recipient_type === "signer" ? "SIGNER" : "ADDITIONAL_RECIPIENT";
     const templateKey = isRetailerEmail ? "hub_retailer_agreement_completed" : "brand_agreement_completed";
+
     const vars = {
       company_name: compMeta.name || "브랜드사",
       companyName: compMeta.name || "브랜드사",
@@ -760,10 +784,23 @@ export async function resendAgreementRecipientEmailAction(recipientId: string): 
       agreementVersion: versionStr,
       agreement_id: agreementIdStr,
       agreementId: agreementIdStr,
-      signer_name: rec.recipient_name,
-      signerName: rec.recipient_name,
-      signer_title: rec.recipient_title,
-      signerTitle: rec.recipient_title,
+      // Authoritative executed agreement legal signer metadata (constant across all emails)
+      signer_name: actualSignerName,
+      signerName: actualSignerName,
+      signer_title: actualSignerTitle,
+      signerTitle: actualSignerTitle,
+      signer_email: actualSignerEmail,
+      signerEmail: actualSignerEmail,
+      // Individual email recipient metadata (personalized greeting & role)
+      recipient_name: rec.recipient_name,
+      recipientName: rec.recipient_name,
+      recipient_title: rec.recipient_title,
+      recipientTitle: rec.recipient_title,
+      recipient_email: rec.recipient_email,
+      recipientEmail: rec.recipient_email,
+      recipient_role: recipientRole,
+      recipientRole: recipientRole,
+      contactName: rec.recipient_name,
       executed_date: executedDateStr,
       executedDate: executedDateStr,
       effective_date: executedDateStr,
