@@ -77,3 +77,25 @@
     - Reset `company_agreements` row status to `pending` with cleared signature metadata.
     - Preserved Agreement Template v1.0, company profile, products, users, applications, and all other company data.
   - Final Status: **Pending / 계약 서명 필요** (Ready for User E2E Test).
+
+## R6 Fix Summary: Executed PDF Layout & Signature Rendering Refinement
+- **Task ID**: `PORT-AGR-001-R6`
+- **Task Name**: Executed PDF Layout & Signature Rendering Refinement
+- **Scope & Objectives**:
+  - Refactor `lib/agreement/pdf-generator.ts` to improve layout alignment, dynamic text wrapping, cursive script electronic signature rendering, and field positioning on the final executed agreement PDF.
+  - Retain source template PDF (`private_assets/agreements/template_v1.pdf`), legal text, recipient logic, email logic, Admin features, and storage workflows without alteration.
+- **Key Enhancements**:
+  1. **Structured Template Configuration (`TEMPLATE_V1_CONFIG`)**:
+     - Centralized page coordinates for Page 1 company fields, Page 5 signature block, Page 5 electronic execution record table, and page footers.
+  2. **Dynamic Text Wrapping & Scaling (`wrapAndFitText`)**:
+     - Dynamically measures text widths using `pdf-lib` fonts (`font.widthOfTextAtSize`).
+     - Prevents company address text from overflowing single-line fields by wrapping long addresses into up to 2 neatly formatted lines.
+     - Separates Company Name, Representative Name, and Company Address into distinct dedicated fields on Page 1.
+  3. **Embedded Cursive Script Electronic Signature**:
+     - Installed `AlexBrush-Regular.ttf` font asset into `private_assets/fonts/AlexBrush-Regular.ttf`.
+     - Renders typed electronic signatures in elegant cursive script using dark navy ink (`rgb(0.05, 0.12, 0.42)`).
+     - Dynamically scales signature font size to remain perfectly bounded within the signature box (`maxWidth: 125`).
+  4. **Electronic Execution Record Table**:
+     - Formats platform name (`K SELECT NETWORK`), version, agreement ID, and executed date cleanly inside the execution record table at `y: 174`.
+     - Draws agreement ID as a single continuous string without letter spacing anomalies.
+
