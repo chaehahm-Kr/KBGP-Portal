@@ -26,6 +26,7 @@ interface RetailerAgreementCardProps {
     email: string;
     role: string;
   };
+  onOpenCompanyEdit?: () => void;
 }
 
 export function RetailerAgreementCard({
@@ -33,6 +34,7 @@ export function RetailerAgreementCard({
   error = null,
   companyInfo,
   currentUser,
+  onOpenCompanyEdit,
 }: RetailerAgreementCardProps) {
   const [agreement, setAgreement] = useState<CompanyAgreementItem | null>(initialAgreement);
   const [isSigningModalOpen, setIsSigningModalOpen] = useState(false);
@@ -437,6 +439,7 @@ export function RetailerAgreementCard({
           agreement={agreement}
           companyInfo={companyInfo}
           currentUser={currentUser}
+          onOpenCompanyEdit={onOpenCompanyEdit}
         />
       )}
 

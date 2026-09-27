@@ -298,6 +298,13 @@ export const RETAILER_CASE_CATEGORIES: RetailerCaseCategory[] = [
     icon: "🎓",
   },
   {
+    key: "agreement_inquiry",
+    labelEn: "Agreement / Contract Inquiry",
+    labelKo: "계약 및 약관 문의",
+    description: "Questions regarding Retailer Agreement terms, legal representative, or contract execution",
+    icon: "📜",
+  },
+  {
     key: "portal_tech",
     labelEn: "Portal / Technical Support",
     labelKo: "포털 오류 및 시스템 문의",
@@ -317,6 +324,7 @@ export const ALL_CASE_CATEGORY_LABELS: Record<string, { en: string; ko: string }
   // Brand Categories
   po_change:        { en: "PO Change Request", ko: "PO 변경 요청" },
   agreement_change: { en: "Agreement Change Request", ko: "계약 변경 요청" },
+  agreement_inquiry:{ en: "Agreement / Contract Inquiry", ko: "계약 및 약관 문의" },
   product:          { en: "Product Registration", ko: "제품 등록 및 스펙 수정" },
   onboarding:       { en: "Onboarding Review", ko: "입점 신청 및 심사 현황" },
   logistics:        { en: "Logistics & Packaging", ko: "물류 공급 및 패키징" },

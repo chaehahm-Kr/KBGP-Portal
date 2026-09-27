@@ -891,6 +891,7 @@ export function AccountOrganizationView({
               email: profile.email,
               role: profile.role,
             }}
+            onOpenCompanyEdit={handleOpenCompanyModal}
           />
 
           {/* Section 2: General Organization Documents Archive */}
