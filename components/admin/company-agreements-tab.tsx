@@ -9,6 +9,7 @@ import {
   getAgreementRecipientsAction,
   resendAgreementRecipientEmailAction,
 } from "@/lib/agreement/actions";
+import { EditAgreementRecipientModal } from "@/components/agreement/edit-recipient-modal";
 import { buildAgreementChangeInquiryUrl } from "@/lib/inquiry/types";
 import {
   type CompanyAgreementItem,
@@ -36,6 +37,7 @@ export function CompanyAgreementsTab({ companyId, companyName }: CompanyAgreemen
   const [recipients, setRecipients] = useState<AgreementRecipientItem[]>([]);
   const [loadingRecipients, setLoadingRecipients] = useState(false);
   const [resendingId, setResendingId] = useState<string | null>(null);
+  const [editingRecipient, setEditingRecipient] = useState<AgreementRecipientItem | null>(null);
 
   const [previewPdfUrl, setPreviewPdfUrl] = useState<string | null>(null);
   const [loadingPdfId, setLoadingPdfId] = useState<string | null>(null);
@@ -393,14 +395,25 @@ export function CompanyAgreementsTab({ companyId, companyName }: CompanyAgreemen
                             </span>
                           </td>
                           <td className="py-2.5 px-3 text-right">
-                            <button
-                              type="button"
-                              onClick={() => handleResendRecipientEmail(r.id)}
-                              disabled={resendingId === r.id}
-                              className="text-[11px] font-bold text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 cursor-pointer disabled:opacity-50"
-                            >
-                              {resendingId === r.id ? "발송 중..." : "재발송"}
-                            </button>
+                            <div className="flex items-center justify-end gap-2">
+                              {r.recipient_type === "additional_recipient" && (
+                                <button
+                                  type="button"
+                                  onClick={() => setEditingRecipient(r)}
+                                  className="text-[11px] font-bold text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100 hover:underline cursor-pointer"
+                                >
+                                  수정
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => handleResendRecipientEmail(r.id)}
+                                disabled={resendingId === r.id}
+                                className="text-[11px] font-bold text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 cursor-pointer disabled:opacity-50"
+                              >
+                                {resendingId === r.id ? "발송 중..." : "재발송"}
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       ))}
@@ -412,6 +425,25 @@ export function CompanyAgreementsTab({ companyId, companyName }: CompanyAgreemen
           </div>
         </div>
       )}
+
+      {/* Recipient Edit Modal */}
+      <EditAgreementRecipientModal
+        isOpen={!!editingRecipient}
+        onClose={() => setEditingRecipient(null)}
+        recipient={editingRecipient}
+        locale="ko"
+        onSuccess={(updated, resent) => {
+          setRecipients((prev) =>
+            prev.map((rec) => (rec.id === updated.id ? { ...rec, ...updated } : rec))
+          );
+          if (resent) {
+            alert("수신자 정보가 수정되었으며, 계약서 사본이 즉시 재발송되었습니다.");
+          } else {
+            alert("수신자 정보가 성공적으로 수정되었습니다.");
+          }
+          if (selectedRecipientCa) handleViewRecipients(selectedRecipientCa);
+        }}
+      />
 
       {/* Audit Log Modal */}
       {selectedAuditLogCa && (

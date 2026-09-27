@@ -13,6 +13,7 @@ import type {
   AgreementAuditLogItem,
   AgreementRecipientItem,
   AdditionalRecipientInput,
+  UpdateAdditionalRecipientInput,
 } from "@/lib/agreement/types";
 
 export interface SignAgreementInput {
@@ -723,12 +724,14 @@ export async function resendAgreementRecipientEmailAction(recipientId: string): 
   const {
     data: { user },
   } = await supabase.auth.getUser();
+  if (!user) return { success: false, error: "인증되지 않은 사용자입니다." };
+
   const admin = createAdminClient();
 
   const { data: rec } = await admin
     .from("company_agreement_recipients")
     .select(
-      "*, company_agreements(id, agreement_id, version, final_pdf_path, agreement_templates(name, agreement_type), companies(id, name, country, contact_name, contact_phone, intro))"
+      "*, company_agreements(id, company_id, agreement_id, version, final_pdf_path, agreement_templates(name, agreement_type), companies(id, name, country, contact_name, contact_phone, intro))"
     )
     .eq("id", recipientId)
     .single();
@@ -736,6 +739,41 @@ export async function resendAgreementRecipientEmailAction(recipientId: string): 
   if (!rec) return { success: false, error: "수신자 기록을 찾을 수 없습니다." };
 
   const ca = (rec as any).company_agreements;
+  const targetCompanyId = rec.company_id || ca?.company_id;
+
+  // Verify tenant authorization
+  const { data: profile } = await admin
+    .from("profiles")
+    .select("name, role, is_staff")
+    .eq("id", user.id)
+    .maybeSingle();
+
+  const isAdminOrStaff = profile?.role === "admin" || profile?.is_staff === true;
+
+  if (!isAdminOrStaff && targetCompanyId) {
+    const { data: cu } = await admin
+      .from("company_users")
+      .select("company_id")
+      .eq("id", user.id)
+      .eq("company_id", targetCompanyId)
+      .maybeSingle();
+
+    let isRetailerMember = false;
+    if (!cu) {
+      const { data: rcu } = await admin
+        .from("retailer_company_users")
+        .select("company_id")
+        .eq("user_id", user.id)
+        .eq("company_id", targetCompanyId)
+        .maybeSingle();
+      if (rcu) isRetailerMember = true;
+    }
+
+    if (!cu && !isRetailerMember) {
+      return { success: false, error: "해당 계약서 사본을 재발송할 권한이 없습니다." };
+    }
+  }
+
   const compMeta = parseCompanyMetadata(ca?.companies);
   const agreementIdStr = ca?.agreement_id || rec.agreement_id;
   const versionStr = ca?.version || "1.0";
@@ -841,12 +879,14 @@ export async function resendAgreementRecipientEmailAction(recipientId: string): 
         agreement_id: agreementIdStr,
         action: "RESENT",
         performed_by_user_id: user?.id,
+        performed_by_name: profile?.name || user?.email,
         performed_by_email: user?.email,
         details: {
           recipient_id: recipientId,
           recipient_email: rec.recipient_email,
           recipient_name: rec.recipient_name,
           recipient_title: rec.recipient_title,
+          recipient_type: rec.recipient_type,
         },
       });
     }
@@ -861,6 +901,197 @@ export async function resendAgreementRecipientEmailAction(recipientId: string): 
     return { success: false, error: err.message || "이메일 재발송 실패" };
   }
 }
+
+/**
+ * Updates an Additional Recipient's information (Name, Title, Email) for an executed Agreement,
+ * verifies tenant permissions, ensures legal Signers cannot be edited, writes an audit event,
+ * and optionally triggers an immediate resend with the immutable executed PDF attached.
+ */
+export async function updateAgreementAdditionalRecipientAction(
+  input: UpdateAdditionalRecipientInput
+): Promise<{
+  success: boolean;
+  recipient?: AgreementRecipientItem;
+  resent?: boolean;
+  resendError?: string;
+  error?: string;
+}> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return { success: false, error: "인증되지 않은 사용자입니다." };
+  }
+
+  const admin = createAdminClient();
+
+  // 1. Fetch recipient record and associated company_agreement
+  const { data: rec, error: recErr } = await admin
+    .from("company_agreement_recipients")
+    .select(`
+      *,
+      company_agreements (
+        id,
+        agreement_id,
+        company_id,
+        status,
+        version,
+        final_pdf_path
+      )
+    `)
+    .eq("id", input.recipientId)
+    .single();
+
+  if (recErr || !rec) {
+    return { success: false, error: "수신자 정보를 찾을 수 없습니다." };
+  }
+
+  // 2. Strict Business Rule: Only ADDITIONAL_RECIPIENT can be edited
+  if (rec.recipient_type !== "additional_recipient") {
+    return {
+      success: false,
+      error: "법적 서명자(Signer) 정보는 수정할 수 없습니다. 추가 수신자 정보만 수정 가능합니다.",
+    };
+  }
+
+  // 3. Authorization & Tenant Isolation Verification
+  const targetCompanyId = rec.company_id;
+
+  const { data: profile } = await admin
+    .from("profiles")
+    .select("name, role, is_staff")
+    .eq("id", user.id)
+    .maybeSingle();
+
+  const isAdminOrStaff = profile?.role === "admin" || profile?.is_staff === true;
+
+  if (!isAdminOrStaff && targetCompanyId) {
+    // Check Brand company membership
+    const { data: cu } = await admin
+      .from("company_users")
+      .select("company_id")
+      .eq("id", user.id)
+      .eq("company_id", targetCompanyId)
+      .maybeSingle();
+
+    // Check Retailer company membership if not in company_users
+    let isRetailerMember = false;
+    if (!cu) {
+      const { data: rcu } = await admin
+        .from("retailer_company_users")
+        .select("company_id")
+        .eq("user_id", user.id)
+        .eq("company_id", targetCompanyId)
+        .maybeSingle();
+      if (rcu) isRetailerMember = true;
+    }
+
+    if (!cu && !isRetailerMember) {
+      return { success: false, error: "해당 회사의 계약 수신자를 수정할 권한이 없습니다." };
+    }
+  }
+
+  // 4. Validate input
+  const newName = (input.name || "").trim();
+  const newTitle = (input.title || "").trim();
+  const newEmail = (input.email || "").trim().toLowerCase();
+
+  if (!newName) {
+    return { success: false, error: "수신자 이름을 입력해 주세요." };
+  }
+  if (!newEmail || !isValidEmail(newEmail)) {
+    return { success: false, error: "유효한 이메일 주소를 입력해 주세요." };
+  }
+
+  const previousName = rec.recipient_name;
+  const previousTitle = rec.recipient_title;
+  const previousEmail = rec.recipient_email;
+
+  const nowIso = new Date().toISOString();
+
+  // 5. Update recipient record
+  const updatePayload: any = {
+    recipient_name: newName,
+    recipient_title: newTitle,
+    recipient_email: newEmail,
+  };
+  if (rec.hasOwnProperty("updated_at") || true) {
+    updatePayload.updated_at = nowIso;
+  }
+
+  const { data: updatedRec, error: updateErr } = await admin
+    .from("company_agreement_recipients")
+    .update(updatePayload)
+    .eq("id", rec.id)
+    .select()
+    .single();
+
+  let finalRecipient = updatedRec;
+
+  if (updateErr || !updatedRec) {
+    // Fallback without updated_at column if not yet migrated
+    const { data: fallbackRec, error: fallbackErr } = await admin
+      .from("company_agreement_recipients")
+      .update({
+        recipient_name: newName,
+        recipient_title: newTitle,
+        recipient_email: newEmail,
+      })
+      .eq("id", rec.id)
+      .select()
+      .single();
+
+    if (fallbackErr || !fallbackRec) {
+      return {
+        success: false,
+        error: `수신자 정보 수정 실패: ${fallbackErr?.message || updateErr?.message}`,
+      };
+    }
+    finalRecipient = fallbackRec;
+  }
+
+  // 6. Record Audit Event: AGREEMENT_RECIPIENT_UPDATED
+  await admin.from("agreement_audit_logs").insert({
+    company_agreement_id: rec.company_agreement_id,
+    agreement_id: rec.agreement_id,
+    action: "AGREEMENT_RECIPIENT_UPDATED",
+    performed_by_user_id: user.id,
+    performed_by_name: profile?.name || user.email,
+    performed_by_email: user.email,
+    details: {
+      recipient_id: rec.id,
+      previous_name: previousName,
+      previous_title: previousTitle,
+      previous_email: previousEmail,
+      updated_name: newName,
+      updated_title: newTitle,
+      updated_email: newEmail,
+      resend_immediately: !!input.resendImmediately,
+      changed_at: nowIso,
+    },
+  });
+
+  // 7. Optional Resend Immediately
+  let resent = false;
+  let resendError: string | undefined = undefined;
+
+  if (input.resendImmediately) {
+    const resendRes = await resendAgreementRecipientEmailAction(rec.id);
+    resent = resendRes.success;
+    if (!resendRes.success) {
+      resendError = resendRes.error;
+    }
+  }
+
+  return {
+    success: true,
+    recipient: finalRecipient,
+    resent,
+    resendError,
+  };
+}
+
 
 /**
  * Gets a temporary signed URL for viewing/downloading the executed PDF document.

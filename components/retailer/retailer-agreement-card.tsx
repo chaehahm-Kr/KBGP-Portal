@@ -7,6 +7,7 @@ import {
   resendAgreementRecipientEmailAction,
 } from "@/lib/agreement/actions";
 import { RetailerAgreementSigningModal } from "@/components/retailer/retailer-agreement-signing-modal";
+import { EditAgreementRecipientModal } from "@/components/agreement/edit-recipient-modal";
 import type {
   CompanyAgreementItem,
   AgreementRecipientItem,
@@ -48,6 +49,7 @@ export function RetailerAgreementCard({
   const [recipients, setRecipients] = useState<AgreementRecipientItem[]>([]);
   const [loadingRecipients, setLoadingRecipients] = useState(false);
   const [resendingId, setResendingId] = useState<string | null>(null);
+  const [editingRecipient, setEditingRecipient] = useState<AgreementRecipientItem | null>(null);
 
   const isExecuted = agreement?.status === "active" && !!agreement.final_pdf_path;
   const isOwner = currentUser.role === "owner";
@@ -399,14 +401,25 @@ export function RetailerAgreementCard({
                           </span>
                         </td>
                         <td className="py-2 px-3 text-right">
-                          <button
-                            type="button"
-                            onClick={() => handleResendRecipient(r.id)}
-                            disabled={resendingId === r.id}
-                            className="text-[11px] font-bold text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 cursor-pointer disabled:opacity-50"
-                          >
-                            {resendingId === r.id ? "Sending..." : "Resend"}
-                          </button>
+                          <div className="flex items-center justify-end gap-2">
+                            {r.recipient_type === "additional_recipient" && (
+                              <button
+                                type="button"
+                                onClick={() => setEditingRecipient(r)}
+                                className="text-[11px] font-bold text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100 hover:underline cursor-pointer"
+                              >
+                                Edit
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => handleResendRecipient(r.id)}
+                              disabled={resendingId === r.id}
+                              className="text-[11px] font-bold text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 cursor-pointer disabled:opacity-50"
+                            >
+                              {resendingId === r.id ? "Sending..." : "Resend"}
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -429,6 +442,25 @@ export function RetailerAgreementCard({
           )}
         </div>
       )}
+
+      {/* Recipient Edit Modal */}
+      <EditAgreementRecipientModal
+        isOpen={!!editingRecipient}
+        onClose={() => setEditingRecipient(null)}
+        recipient={editingRecipient}
+        locale="en"
+        onSuccess={(updated, resent) => {
+          setRecipients((prev) =>
+            prev.map((rec) => (rec.id === updated.id ? { ...rec, ...updated } : rec))
+          );
+          if (resent) {
+            alert("Recipient details updated and execution copy resent successfully.");
+          } else {
+            alert("Recipient details updated successfully.");
+          }
+          if (agreement) loadRecipients(agreement.id);
+        }}
+      />
 
       {/* Signing Wizard Modal */}
       {isSigningModalOpen && (

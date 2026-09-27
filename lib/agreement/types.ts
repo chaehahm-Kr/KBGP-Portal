@@ -116,11 +116,20 @@ export interface AgreementRecipientItem {
   sent_at?: string | null;
   delivery_status: "pending" | "sent" | "failed";
   created_at: string;
+  updated_at?: string | null;
 }
 
 export interface AdditionalRecipientInput {
   name: string;
   title: string;
   email: string;
+}
+
+export interface UpdateAdditionalRecipientInput {
+  recipientId: string;
+  name: string;
+  title?: string;
+  email: string;
+  resendImmediately?: boolean;
 }
 
