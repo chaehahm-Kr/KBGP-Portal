@@ -125,3 +125,30 @@
   - Test executed PDF removed from private storage (`company-uploads`).
   - Agreement Template v1.0 and all other company data preserved intact.
   - Final Status: **Pending / 계약 서명 필요** (Ready for User E2E Test).
+
+## R8 Fix Summary: Supplier Overlay Upward Recalibration + Brands Global Inc. Test Reset
+- **Task ID**: `PORT-AGR-001-R8`
+- **Task Name**: Supplier Overlay Upward Recalibration + Brands Global Inc. Test Reset
+- **Root Cause & Visual Alignment Analysis**:
+  - Based on user visual markup (`media_1790471437824.png`), Page 1 and Page 5 supplier dynamic values were sitting low relative to the template box underlines, and Date values were sitting completely below the `날짜:` line outside the supplier/Letusto signature boxes.
+- **Coordinate Recalibration (`TEMPLATE_V1_CONFIG`)**:
+  1. **Page 1**:
+     - `companyName.y`: `624` -> `658` (+34pt up) to match Letusto Inc. alignment line.
+     - `companyAddress.y`: `584` -> `598` (+14pt up, line 1 at 598, line 2 at 586) to match Letusto address lines.
+     - `representativeName.y`: `536` -> `540` (+4pt up) to match Chae Hahm baseline.
+  2. **Page 5**:
+     - `companyName.y`: `444` -> `448` (+4pt up).
+     - `signerName.y`: `390` -> `394` (+4pt up).
+     - `signerTitle.y`: `356` -> `360` (+4pt up) to sit cleanly in `직책:` area above signature box.
+     - `signatureBox.y`: `304` -> `318` (+14pt up) to center cursive script signature (`AlexBrush-Regular`) inside the `[280, 340]` signature box.
+     - `brandDate.y` & `letustoDate.y`: `248` -> `270` (+22pt up) to place dates inside the signature box above the `날짜:` line.
+  3. **Execution Record Table**:
+     - `executedVia`, `version`, `agreementId`, `executedDate`: `178` -> `184` (+6pt up) to sit centered inside execution record table cells.
+- **Controlled Test Reset for Brands Global Inc. (`4c845ae8-b93b-4db2-858f-bda3252e8167`)**:
+  - `company_agreements` status updated to `pending` with cleared signature metadata.
+  - Recipient records deleted (`company_agreement_recipients`: 0 remaining).
+  - Audit log records deleted (`agreement_audit_logs`: 0 remaining).
+  - Test executed PDF removed from private storage (`company-uploads`).
+  - Agreement Template v1.0 and all other company data preserved intact.
+  - Final Status: **Pending / 계약 서명 필요** (Ready for User E2E Test).
+
