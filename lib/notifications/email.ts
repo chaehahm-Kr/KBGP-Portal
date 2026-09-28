@@ -22,29 +22,43 @@ export type EmailPayload = {
  * 막히지 않도록) 실제 발송 대신 콘솔에 로그만 남긴다. 이 함수의 호출부(예: 심사 결과
  * 확정 로직)는 이후 명세서 08에서 이벤트 목록을 전체 점검할 때 그대로 재사용된다.
  */
-export async function sendEmail(payload: EmailPayload) {
+export async function sendEmail(payload: EmailPayload): Promise<{
+  success: boolean;
+  messageId?: string;
+  error?: string;
+}> {
   if (!serverEnv.RESEND_API_KEY || !serverEnv.EMAIL_FROM_ADDRESS) {
     console.log("[email:dev] RESEND_API_KEY 미설정 — 실제 발송 대신 로그로 남깁니다.", payload);
-    return;
+    return { success: true, messageId: "dev-simulated-id" };
   }
 
-  const response = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${serverEnv.RESEND_API_KEY}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      from: serverEnv.EMAIL_FROM_ADDRESS,
-      to: payload.to,
-      subject: payload.subject,
-      text: payload.text,
-      html: payload.html,
-      attachments: payload.attachments,
-    }),
-  });
+  try {
+    const response = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${serverEnv.RESEND_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        from: serverEnv.EMAIL_FROM_ADDRESS,
+        to: payload.to,
+        subject: payload.subject,
+        text: payload.text,
+        html: payload.html,
+        attachments: payload.attachments,
+      }),
+    });
 
-  if (!response.ok) {
-    console.error("[email] 발송 실패", await response.text());
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("[email] Resend 발송 실패:", response.status, errorText);
+      return { success: false, error: `Resend HTTP ${response.status}: ${errorText}` };
+    }
+
+    const data = await response.json();
+    return { success: true, messageId: data?.id };
+  } catch (err: any) {
+    console.error("[email] 발송 예외 발생:", err);
+    return { success: false, error: err?.message || "이메일 전송 중 네트워크 오류가 발생했습니다." };
   }
 }

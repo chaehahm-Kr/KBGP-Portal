@@ -172,6 +172,14 @@ const TEMPLATE_METADATA: Record<string, TemplateMetadata> = {
     triggerCondition: "브랜드사 포털에서 기본계약서 전자서명이 완료되었거나 어드민에서 계약서 사본을 재발송할 때, 서명자 및 추가 수신자에게 체결 완료 안내와 최종 체결본 PDF가 첨부되어 발송됩니다.",
     scope: "network",
   },
+  brand_application_rejected: {
+    recipientType: "partner",
+    recipientLabel: "신청자 (Applicant)",
+    triggerType: "manual",
+    triggerLabel: "수동 액션 (Manual)",
+    triggerCondition: "어드민이 브랜드 파트너십 신청서를 최종 거절/반려 처리할 때 신청자 이메일로 정중한 검토 결과 안내 메일을 발송합니다.",
+    scope: "network",
+  },
 
   // === K SELECT HUB ===
   hub_retailer_application_received: {

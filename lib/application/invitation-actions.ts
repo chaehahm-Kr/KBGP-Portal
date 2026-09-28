@@ -6,6 +6,7 @@ import { verifyAdminSession } from "@/lib/auth/dal";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { publicEnv } from "@/lib/env/public";
 import { sendEmail } from "@/lib/notifications/email";
+import { sendTemplatedEmail } from "@/lib/notifications/templates";
 import {
   createRetailerInvitation,
   resendRetailerInvitation,
@@ -347,10 +348,13 @@ export async function adminInviteRetailerPartner(payload: {
 /**
  * Approve & Invite action from Application detail view
  */
+/**
+ * Approve & Invite action from Application detail view
+ */
 export async function approveAndInviteApplication(
   applicationId: string,
   reviewerNotes?: string
-): Promise<{ success: boolean; error?: string }> {
+): Promise<{ success: boolean; emailSent?: boolean; messageId?: string; error?: string }> {
   const session = await verifyAdminSession();
   const admin = createAdminClient();
 
@@ -361,12 +365,12 @@ export async function approveAndInviteApplication(
     .single();
 
   if (findErr || !app) {
-    return { success: false, error: "Application record not found." };
+    return { success: false, error: "신청서 정보를 찾을 수 없습니다." };
   }
 
   const beforeState = app.status || "submitted";
   const partnerType = app.partner_type || "brand";
-  const compName = app.applicant_company_name || app.company_id || "Partner Company";
+  const compName = app.applicant_company_name || "Partner Company";
   const contactName = app.applicant_contact_name || "Partner Contact";
   const contactEmail = app.applicant_contact_email;
 
@@ -388,7 +392,7 @@ export async function approveAndInviteApplication(
     }
 
     if (!emailToUse) {
-      return { success: false, error: "Contact email is required to send invitation." };
+      return { success: false, error: "초대 이메일을 발송할 담당자 이메일 주소가 없습니다." };
     }
 
     let companyId = app.company_id || app.onboarded_company_id;
@@ -408,7 +412,7 @@ export async function approveAndInviteApplication(
     }
 
     if (!companyId) {
-      return { success: false, error: "Failed to resolve company for retailer invitation." };
+      return { success: false, error: "리테일러 회사 레코드를 생성할 수 없습니다." };
     }
 
     const inviteRes = await createRetailerInvitation({
@@ -420,7 +424,7 @@ export async function approveAndInviteApplication(
     });
 
     if (!inviteRes.success) {
-      return { success: false, error: inviteRes.error || "Failed to create retailer invitation." };
+      return { success: false, error: inviteRes.error || "리테일러 초대 생성에 실패했습니다." };
     }
 
     await admin
@@ -436,150 +440,225 @@ export async function approveAndInviteApplication(
       .eq("id", applicationId);
 
     await logApplicationActivity(admin, applicationId, beforeState, "invitation_sent", session.userId, reviewerNotes || "Approved & Invited Retailer");
-  } else {
-    // Brand Approve & Invite
-    let emailToUse = contactEmail;
-    let nameToUse = contactName;
 
-    if (!emailToUse && app.company_id) {
-      const { data: cu } = await admin
-        .from("company_users")
-        .select("email, name")
-        .eq("company_id", app.company_id)
-        .maybeSingle();
-
-      if (cu) {
-        emailToUse = cu.email;
-        nameToUse = cu.name || nameToUse;
-      }
-    }
-
-    if (!emailToUse) {
-      return { success: false, error: "Contact email is required to send invitation." };
-    }
-
-    let companyId = app.company_id || app.onboarded_company_id;
-    if (!companyId) {
-      const { data: newComp } = await admin
-        .from("companies")
-        .insert({
-          name: compName,
-          business_registration_number: "PENDING",
-          country: "대한민국",
-          status: "active",
-          contact_name: nameToUse,
-        })
-        .select("id")
-        .single();
-      companyId = newComp?.id;
-    }
-
-    if (companyId) {
-      const { data: existingCu } = await admin
-        .from("company_users")
-        .select("id")
-        .eq("company_id", companyId)
-        .eq("email", emailToUse)
-        .maybeSingle();
-
-      if (!existingCu) {
-        const { data: invitedAuth } = await admin.auth.admin.createUser({
-          email: emailToUse,
-          email_confirm: false,
-          user_metadata: { role: "portal", display_name: nameToUse },
-        });
-
-        if (invitedAuth?.user) {
-          await admin.from("company_users").insert({
-            id: invitedAuth.user.id,
-            company_id: companyId,
-            name: nameToUse,
-            email: emailToUse,
-            company_role: "company_admin",
-            status: "invited",
-            invited_at: new Date().toISOString(),
-            is_primary: true,
-          });
-        }
-      }
-    }
-
-    // Send Brand Invitation email strictly pointing to portal.kselectnetwork.com
-    const brandSiteUrl = publicEnv.NEXT_PUBLIC_SITE_URL || "https://portal.kselectnetwork.com";
-    const activationUrl = `${brandSiteUrl}/portal/login`;
-
-    await sendEmail({
-      to: emailToUse,
-      subject: `[K SELECT NETWORK] Application Approved & Brand Account Invitation`,
-      text: `Hello ${nameToUse},\n\nYour application for ${compName} has been approved by K SELECT NETWORK.\n\nPlease log in to activate your account:\n${activationUrl}\n\nThank you,\nK SELECT Operations Team`,
-      html: `
-        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 32px 20px; color: #18181b; background-color: #ffffff;">
-          <h2 style="font-size: 18px; font-weight: 800; color: #18181b;">Application Approved!</h2>
-          <p style="font-size: 14px; line-height: 1.6; color: #3f3f46;">
-            Your application for <strong>${compName}</strong> has been approved by K SELECT NETWORK.
-          </p>
-          <div style="text-align: center; margin: 28px 0;">
-            <a href="${activationUrl}" style="background-color: #18181b; color: #ffffff; font-size: 14px; font-weight: 700; text-decoration: none; padding: 14px 28px; border-radius: 12px;">
-              Access Brand Portal →
-            </a>
-          </div>
-        </div>
-      `,
-    });
-
-    await admin
-      .from("applications")
-      .update({
-        status: "approved",
-        company_id: companyId,
-        onboarded_company_id: null,
-        review_notes: reviewerNotes || "Approved & Invited Brand",
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", applicationId);
-
-    await logApplicationActivity(admin, applicationId, beforeState, "approved", session.userId, reviewerNotes || "Approved & Invited Brand");
+    revalidatePath("/admin/applications");
+    revalidatePath(`/admin/applications/${applicationId}`);
+    return { success: true, emailSent: true };
   }
 
-  revalidatePath("/admin/applications");
-  revalidatePath(`/admin/applications/${applicationId}`);
-  return { success: true };
+  // === Brand Approve & Invite ===
+  let emailToUse = contactEmail;
+  let nameToUse = contactName;
+
+  if (!emailToUse && app.company_id) {
+    const { data: cu } = await admin
+      .from("company_users")
+      .select("email, name")
+      .eq("company_id", app.company_id)
+      .maybeSingle();
+
+    if (cu) {
+      emailToUse = cu.email;
+      nameToUse = cu.name || nameToUse;
+    }
+  }
+
+  if (!emailToUse) {
+    return { success: false, error: "초대 이메일을 발송할 담당자 이메일 주소가 없습니다." };
+  }
+
+  let companyId = app.company_id || app.onboarded_company_id;
+  if (!companyId) {
+    const { data: newComp } = await admin
+      .from("companies")
+      .insert({
+        name: compName,
+        business_registration_number: "PENDING",
+        country: "대한민국",
+        status: "active",
+        contact_name: nameToUse,
+      })
+      .select("id")
+      .single();
+    companyId = newComp?.id;
+  }
+
+  if (!companyId) {
+    return { success: false, error: "회사 레코드를 생성 또는 연결할 수 없습니다." };
+  }
+
+  // Ensure Company User exists & update invited_at
+  const { data: existingCu } = await admin
+    .from("company_users")
+    .select("id, status")
+    .eq("company_id", companyId)
+    .eq("email", emailToUse)
+    .maybeSingle();
+
+  if (!existingCu) {
+    const { data: invitedAuth } = await admin.auth.admin.createUser({
+      email: emailToUse,
+      email_confirm: false,
+      user_metadata: { role: "portal", display_name: nameToUse },
+    });
+
+    if (invitedAuth?.user) {
+      await admin.from("company_users").insert({
+        id: invitedAuth.user.id,
+        company_id: companyId,
+        name: nameToUse,
+        email: emailToUse,
+        company_role: "company_admin",
+        status: "invited",
+        invited_at: new Date().toISOString(),
+        is_primary: true,
+      });
+    }
+  } else {
+    // Update existing company_users to set invited_at
+    await admin
+      .from("company_users")
+      .update({
+        status: "invited",
+        invited_at: new Date().toISOString(),
+      })
+      .eq("id", existingCu.id);
+  }
+
+  // Update Application state to approved
+  await admin
+    .from("applications")
+    .update({
+      status: "approved",
+      company_id: companyId,
+      onboarded_company_id: null,
+      review_notes: reviewerNotes || "Approved & Invited Brand",
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", applicationId);
+
+  await logApplicationActivity(admin, applicationId, beforeState, "approved", session.userId, reviewerNotes || "Approved & Invited Brand");
+
+  // Send Brand Invitation email via templated system
+  const portalSignupUrl = "https://portal.kselectnetwork.com/portal/signup";
+  const sendRes = await sendTemplatedEmail("portal_signup_request", emailToUse, {
+    contactName: nameToUse,
+    companyName: compName,
+    portalUrl: portalSignupUrl,
+  });
+
+  if (sendRes.success) {
+    await logApplicationActivity(
+      admin,
+      applicationId,
+      "approved",
+      "approved",
+      session.userId,
+      `파트너 초대 메일 발송 완료: ${emailToUse} (Message ID: ${sendRes.messageId || "sent"})`
+    );
+    revalidatePath("/admin/applications");
+    revalidatePath(`/admin/applications/${applicationId}`);
+    return { success: true, emailSent: true, messageId: sendRes.messageId };
+  } else {
+    await logApplicationActivity(
+      admin,
+      applicationId,
+      "approved",
+      "approved",
+      session.userId,
+      `파트너 초대 메일 발송 실패: ${emailToUse} (${sendRes.error})`
+    );
+    revalidatePath("/admin/applications");
+    revalidatePath(`/admin/applications/${applicationId}`);
+    return {
+      success: true,
+      emailSent: false,
+      error: `파트너 승인은 완료되었지만 초대 이메일 발송에 실패했습니다: ${sendRes.error}`,
+    };
+  }
 }
 
 /**
  * Resend Invitation for Application
  */
-export async function resendApplicationInvitation(applicationId: string): Promise<{ success: boolean; error?: string }> {
+export async function resendApplicationInvitation(
+  applicationId: string
+): Promise<{ success: boolean; messageId?: string; error?: string }> {
   const session = await verifyAdminSession();
   const admin = createAdminClient();
 
   const { data: app } = await admin
     .from("applications")
-    .select("id, partner_type, status, invitation_id, company_id, applicant_contact_email")
+    .select("id, partner_type, status, invitation_id, company_id, applicant_company_name, applicant_contact_name, applicant_contact_email")
     .eq("id", applicationId)
     .single();
 
-  if (!app) return { success: false, error: "Application not found." };
+  if (!app) return { success: false, error: "신청서 정보를 찾을 수 없습니다." };
 
   if (app.partner_type === "retailer" && app.invitation_id) {
     const res = await resendRetailerInvitation(app.invitation_id);
-    if (!res.success) return { success: false, error: res.error || "Failed to resend retailer invitation." };
-  } else if (app.company_id) {
+    if (!res.success) return { success: false, error: res.error || "리테일러 초대장 재발송에 실패했습니다." };
+    await logApplicationActivity(admin, applicationId, app.status, app.status, session.userId, "리테일러 초대장 재발송 완료");
+    revalidatePath(`/admin/applications/${applicationId}`);
+    return { success: true };
+  }
+
+  // === Brand Resend ===
+  let emailToUse = app.applicant_contact_email;
+  let nameToUse = app.applicant_contact_name || "브랜드사 담당자";
+
+  if (app.company_id) {
     const { data: cu } = await admin
       .from("company_users")
-      .select("id")
+      .select("id, email, name, status")
       .eq("company_id", app.company_id)
-      .eq("status", "invited")
       .maybeSingle();
 
     if (cu) {
-      await sendPortalInvitationAction(cu.id);
+      emailToUse = cu.email || emailToUse;
+      nameToUse = cu.name || nameToUse;
+      await admin
+        .from("company_users")
+        .update({
+          invited_at: new Date().toISOString(),
+        })
+        .eq("id", cu.id);
     }
   }
 
-  await logApplicationActivity(admin, applicationId, app.status, app.status, session.userId, "Resent Invitation");
+  if (!emailToUse) {
+    return { success: false, error: "초대 이메일을 재발송할 수신자 이메일 주소가 없습니다." };
+  }
+
+  const portalSignupUrl = "https://portal.kselectnetwork.com/portal/signup";
+  const sendRes = await sendTemplatedEmail("portal_signup_request", emailToUse, {
+    contactName: nameToUse,
+    companyName: app.applicant_company_name || "",
+    portalUrl: portalSignupUrl,
+  });
+
+  if (!sendRes.success) {
+    await logApplicationActivity(
+      admin,
+      applicationId,
+      app.status,
+      app.status,
+      session.userId,
+      `파트너 초대장 재발송 실패: ${emailToUse} (${sendRes.error})`
+    );
+    return { success: false, error: sendRes.error || "초대장 이메일 발송에 실패했습니다." };
+  }
+
+  await logApplicationActivity(
+    admin,
+    applicationId,
+    app.status,
+    app.status,
+    session.userId,
+    `파트너 초대장 재발송 완료: ${emailToUse} (Message ID: ${sendRes.messageId || "sent"})`
+  );
   revalidatePath(`/admin/applications/${applicationId}`);
-  return { success: true };
+  return { success: true, messageId: sendRes.messageId };
 }
 
 /**
@@ -595,7 +674,7 @@ export async function revokeApplicationInvitation(applicationId: string): Promis
     .eq("id", applicationId)
     .single();
 
-  if (!app) return { success: false, error: "Application not found." };
+  if (!app) return { success: false, error: "신청서 정보를 찾을 수 없습니다." };
 
   if (app.partner_type === "retailer" && app.invitation_id) {
     const res = await revokeRetailerInvitation(app.invitation_id);
@@ -613,39 +692,161 @@ export async function revokeApplicationInvitation(applicationId: string): Promis
 }
 
 /**
- * Reject application action
+ * Reject application action with structured reason and customer notification
  */
 export async function rejectApplication(
   applicationId: string,
-  rejectReason: string
-): Promise<{ success: boolean; error?: string }> {
+  internalReason: string,
+  applicantMessage?: string
+): Promise<{ success: boolean; emailSent?: boolean; messageId?: string; error?: string }> {
+  const session = await verifyAdminSession();
+  const admin = createAdminClient();
+
+  const { data: app, error: findErr } = await admin
+    .from("applications")
+    .select("id, application_number, status, partner_type, applicant_company_name, applicant_contact_name, applicant_contact_email, company_id")
+    .eq("id", applicationId)
+    .single();
+
+  if (findErr || !app) {
+    return { success: false, error: "신청서 정보를 찾을 수 없습니다." };
+  }
+
+  if (app.status === "rejected") {
+    return { success: false, error: "이미 거절 처리된 신청서입니다." };
+  }
+
+  const beforeState = app.status || "under_review";
+  const appNumber = app.application_number || applicationId;
+  const compName = app.applicant_company_name || "파트너사";
+  const contactName = app.applicant_contact_name || "신청자";
+  const contactEmail = app.applicant_contact_email;
+
+  const { error: updateErr } = await admin
+    .from("applications")
+    .update({
+      status: "rejected",
+      review_notes: internalReason || "Application Rejected",
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", applicationId);
+
+  if (updateErr) {
+    console.error("[rejectApplication] Update error:", updateErr);
+    return { success: false, error: "신청서 상태 변경에 실패했습니다." };
+  }
+
+  await logApplicationActivity(
+    admin,
+    applicationId,
+    beforeState,
+    "rejected",
+    session.userId,
+    `거절 사유: ${internalReason || "사유 미입력"}`
+  );
+
+  if (!contactEmail) {
+    revalidatePath("/admin/applications");
+    revalidatePath(`/admin/applications/${applicationId}`);
+    return {
+      success: true,
+      emailSent: false,
+      error: "신청서에 등록된 담당자 이메일이 없어 안내 메일은 발송되지 않았습니다.",
+    };
+  }
+
+  const sendRes = await sendTemplatedEmail("brand_application_rejected", contactEmail, {
+    contact_name: contactName,
+    company_name: compName,
+    application_id: appNumber,
+    applicant_message: applicantMessage || "",
+    support_email: "support@kselectnetwork.com",
+  });
+
+  if (sendRes.success) {
+    await logApplicationActivity(
+      admin,
+      applicationId,
+      "rejected",
+      "rejected",
+      session.userId,
+      `거절 안내 메일 발송 완료: ${contactEmail} (Message ID: ${sendRes.messageId || "sent"})`
+    );
+    revalidatePath("/admin/applications");
+    revalidatePath(`/admin/applications/${applicationId}`);
+    return { success: true, emailSent: true, messageId: sendRes.messageId };
+  } else {
+    await logApplicationActivity(
+      admin,
+      applicationId,
+      "rejected",
+      "rejected",
+      session.userId,
+      `거절 안내 메일 발송 실패: ${contactEmail} (${sendRes.error})`
+    );
+    revalidatePath("/admin/applications");
+    revalidatePath(`/admin/applications/${applicationId}`);
+    return {
+      success: true,
+      emailSent: false,
+      error: `신청은 거절 처리되었지만 안내 이메일 발송에 실패했습니다: ${sendRes.error}`,
+    };
+  }
+}
+
+/**
+ * Resend Application Rejection Email
+ */
+export async function resendApplicationRejectionEmail(
+  applicationId: string,
+  applicantMessage?: string
+): Promise<{ success: boolean; messageId?: string; error?: string }> {
   const session = await verifyAdminSession();
   const admin = createAdminClient();
 
   const { data: app } = await admin
     .from("applications")
-    .select("status")
+    .select("id, application_number, status, applicant_company_name, applicant_contact_name, applicant_contact_email")
     .eq("id", applicationId)
     .single();
 
-  const beforeState = app?.status || "under_review";
-
-  const { error } = await admin
-    .from("applications")
-    .update({
-      status: "rejected",
-      review_notes: rejectReason || "Application Rejected",
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", applicationId);
-
-  if (error) {
-    return { success: false, error: "Failed to reject application." };
+  if (!app) return { success: false, error: "신청서 정보를 찾을 수 없습니다." };
+  if (app.status !== "rejected") {
+    return { success: false, error: "거절 상태의 신청서에만 거절 안내 메일을 재발송할 수 있습니다." };
   }
 
-  await logApplicationActivity(admin, applicationId, beforeState, "rejected", session.userId, rejectReason || "Application Rejected");
+  if (!app.applicant_contact_email) {
+    return { success: false, error: "수신자 이메일 주소가 등록되어 있지 않습니다." };
+  }
 
-  revalidatePath("/admin/applications");
+  const sendRes = await sendTemplatedEmail("brand_application_rejected", app.applicant_contact_email, {
+    contact_name: app.applicant_contact_name || "신청자",
+    company_name: app.applicant_company_name || "",
+    application_id: app.application_number || "",
+    applicant_message: applicantMessage || "",
+    support_email: "support@kselectnetwork.com",
+  });
+
+  if (!sendRes.success) {
+    await logApplicationActivity(
+      admin,
+      applicationId,
+      "rejected",
+      "rejected",
+      session.userId,
+      `거절 안내 메일 재발송 실패: ${app.applicant_contact_email} (${sendRes.error})`
+    );
+    return { success: false, error: sendRes.error || "거절 안내 메일 재발송에 실패했습니다." };
+  }
+
+  await logApplicationActivity(
+    admin,
+    applicationId,
+    "rejected",
+    "rejected",
+    session.userId,
+    `거절 안내 메일 재발송 완료: ${app.applicant_contact_email} (Message ID: ${sendRes.messageId || "sent"})`
+  );
   revalidatePath(`/admin/applications/${applicationId}`);
-  return { success: true };
+  return { success: true, messageId: sendRes.messageId };
 }

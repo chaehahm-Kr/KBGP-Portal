@@ -17,6 +17,7 @@ import {
   rejectApplication,
   resendApplicationInvitation,
   revokeApplicationInvitation,
+  resendApplicationRejectionEmail,
 } from "@/lib/application/invitation-actions";
 import ApplicationWorkspace from "@/components/application/application-workspace";
 
@@ -283,6 +284,7 @@ export default async function AdminApplicationDetailPage({
       rejectAppAction={rejectApplication.bind(null, id)}
       resendInviteAction={resendApplicationInvitation.bind(null, id)}
       revokeInviteAction={revokeApplicationInvitation.bind(null, id)}
+      resendRejectionAction={resendApplicationRejectionEmail.bind(null, id)}
     />
   );
 }

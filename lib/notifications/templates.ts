@@ -22,6 +22,7 @@ export const NETWORK_TEMPLATE_KEYS = [
   "inquiry_received_internal",
   "staff_invited",
   "brand_agreement_completed",
+  "brand_application_rejected",
 ] as const;
 
 export const HUB_TEMPLATE_KEYS = [
@@ -149,6 +150,11 @@ export const DEFAULT_TEMPLATES: Record<
     subject: "[K SELECT NETWORK] {{company_name}} 계약 체결이 완료되었습니다",
     body: "전자 기본계약 체결이 완료되었습니다.\n\n안녕하세요, {{recipient_name}}님.\n\n{{company_name}}의 K SELECT NETWORK 브랜드 공급 및 유통 기본계약(Version {{agreement_version}}) 체결이 완료되었습니다.\n\n체결된 최종 계약서 사본이 본 메일에 첨부되어 있으며, 브랜드사 포털에서도 언제든지 확인 및 다운로드하실 수 있습니다.\n\n{{infoBox}}\n\n{{ctaButton}}\n\n본 계약서는 양사의 전자서명 및 타임스탬프를 통해 법적 효력을 갖는 공식 문서로 안전하게 보관됩니다.",
   },
+  brand_application_rejected: {
+    description: "신청자 — 브랜드 파트너십 신청 검토 결과 안내 (Brand Application Rejected)",
+    subject: "K SELECT NETWORK 파트너십 신청 검토 결과 안내",
+    body: "신청 검토 결과를 안내해 드립니다.\n\n안녕하세요, {{contact_name}}님.\n\nK SELECT NETWORK K-Beauty Growth Program에 관심을 가지고 신청해 주셔서 진심으로 감사드립니다.\n\n보내주신 회사 및 상품 정보를 검토한 결과, 현재 단계에서는 파트너 프로그램 진행을 함께하지 못하게 되었습니다.\n\n이번 결정은 브랜드나 제품의 전반적인 가치를 평가하는 의미라기보다, 현재 프로그램의 운영 방향, 시장 적합성 및 상품 구성 등을 종합적으로 고려한 결과입니다.{{applicant_message}}\n\n향후 적합한 협업 기회가 생길 경우 다시 함께 검토할 수 있기를 바랍니다.\n\nK SELECT NETWORK에 보내주신 관심과 시간을 다시 한번 감사드립니다.\n\nK SELECT NETWORK Team",
+  },
 
   // === K SELECT HUB (리테일러 파트너) ===
   hub_retailer_application_received: {
@@ -238,7 +244,7 @@ export const TEMPLATE_SAMPLE_VARIABLES: Record<TemplateKey, Record<string, strin
     applicationNo: "APP-000001",
     contactName: "김민지",
     brandName: "ABC Beauty",
-    nextStep: "서류 심사 · 3 영업일 내",
+    nextStep: "신청 검토 · 영업일 기준 2일 이내",
     portalUrl: "https://portal.kselectnetwork.com",
     privacyUrl: "https://www.kselectnetwork.com/privacy",
     unsubscribeUrl: "https://www.kselectnetwork.com/unsubscribe",
@@ -268,7 +274,7 @@ export const TEMPLATE_SAMPLE_VARIABLES: Record<TemplateKey, Record<string, strin
   portal_signup_request: {
     contactName: "김민지",
     companyName: "샘플뷰티코리아",
-    portalUrl: "https://portal.kselectnetwork.com/portal/login",
+    portalUrl: "https://portal.kselectnetwork.com/portal/signup",
   },
   info_request_replied: {
     applicationNumber: "APP-000001",
@@ -316,7 +322,7 @@ export const TEMPLATE_SAMPLE_VARIABLES: Record<TemplateKey, Record<string, strin
     applicationNumber: "APP-000001",
     contactName: "김민지",
     brandName: "ABC Beauty",
-    nextStep: "서류 심사 · 3 영업일 내",
+    nextStep: "신청 검토 · 영업일 기준 2일 이내",
     portalUrl: "https://portal.kselectnetwork.com",
   },
   inquiry_received_internal: {
@@ -359,6 +365,17 @@ export const TEMPLATE_SAMPLE_VARIABLES: Record<TemplateKey, Record<string, strin
     portalUrl: "https://portal.kselectnetwork.com/portal/company/info?tab=agreements",
     agreement_view_url: "https://portal.kselectnetwork.com/portal/company/info?tab=agreements",
     agreementViewUrl: "https://portal.kselectnetwork.com/portal/company/info?tab=agreements",
+  },
+  brand_application_rejected: {
+    contact_name: "박은애",
+    contactName: "박은애",
+    company_name: "Extreme Inc.",
+    companyName: "Extreme Inc.",
+    application_id: "APP-20260928-0016",
+    applicationNumber: "APP-20260928-0016",
+    applicant_message: "",
+    support_email: "support@kselectnetwork.com",
+    supportEmail: "support@kselectnetwork.com",
   },
 
   // === HUB ===
@@ -545,7 +562,6 @@ export const TEMPLATE_VARIABLE_CHIPS: Record<TemplateKey, Array<{ tag: string; l
     { tag: "{{applicationNumber}}", label: "신청번호" },
     { tag: "{{brandName}}", label: "신청 브랜드" },
     { tag: "{{infoBox}}", label: "접수 정보 카드" },
-    { tag: "{{ctaButton}}", label: "신청 바로가기 버튼" },
   ],
   application_received_internal: [
     { tag: "{{applicationNumber}}", label: "신청번호" },
@@ -621,7 +637,6 @@ export const TEMPLATE_VARIABLE_CHIPS: Record<TemplateKey, Array<{ tag: string; l
     { tag: "{{applicationNumber}}", label: "신청번호" },
     { tag: "{{brandName}}", label: "브랜드명" },
     { tag: "{{infoBox}}", label: "접수 정보 카드" },
-    { tag: "{{ctaButton}}", label: "신청 바로가기 버튼" },
   ],
   inquiry_received_internal: [
     { tag: "{{inquiryNumber}}", label: "문의번호" },
@@ -648,6 +663,13 @@ export const TEMPLATE_VARIABLE_CHIPS: Record<TemplateKey, Array<{ tag: string; l
     { tag: "{{effective_date}}", label: "효력 발생일" },
     { tag: "{{infoBox}}", label: "계약 요약 카드" },
     { tag: "{{ctaButton}}", label: "계약서 바로가기 버튼 (서명자 전용)" },
+  ],
+  brand_application_rejected: [
+    { tag: "{{contact_name}}", label: "신청자 이름" },
+    { tag: "{{company_name}}", label: "회사명" },
+    { tag: "{{application_id}}", label: "신청 번호" },
+    { tag: "{{applicant_message}}", label: "신청자 전달 메시지 (선택)" },
+    { tag: "{{support_email}}", label: "고객지원 이메일" },
   ],
 
   // === HUB ===
@@ -813,20 +835,44 @@ export function getSampleVariables(key: string): Record<string, string> {
 
 function render(template: string, variables: Record<string, string>) {
   return template.replace(/\{\{(\w+)\}\}/g, (_match: string, name: string) => {
+    // Handle applicant_message special formatting
+    if (name === "applicant_message" || name === "applicantMessage") {
+      const msg = variables.applicant_message || variables.applicantMessage;
+      if (msg && msg.trim()) {
+        return `\n\n[안내 사항]\n${msg.trim()}`;
+      }
+      return "";
+    }
+
     if (variables[name] !== undefined) return variables[name];
     const snakeCase = name.replace(/[A-Z]/g, (letter: string) => `_${letter.toLowerCase()}`);
     if (variables[snakeCase] !== undefined) return variables[snakeCase];
     const camelCase = name.replace(/_([a-z])/g, (_: string, letter: string) => letter.toUpperCase());
     if (variables[camelCase] !== undefined) return variables[camelCase];
+    
+    // Cross compatibility for contact_name / applicant_name / signer_name
+    if (name === "contact_name" || name === "contactName") {
+      return variables.contact_name || variables.contactName || variables.recipient_name || variables.recipientName || "";
+    }
+    if (name === "company_name" || name === "companyName") {
+      return variables.company_name || variables.companyName || "";
+    }
+    if (name === "application_id" || name === "applicationId" || name === "applicationNumber" || name === "applicationNo") {
+      return variables.application_id || variables.applicationId || variables.applicationNumber || variables.applicationNo || variables.inquiryNumber || "";
+    }
+    if (name === "support_email" || name === "supportEmail") {
+      return variables.support_email || variables.supportEmail || "support@kselectnetwork.com";
+    }
+
     // Fallbacks for recipient / signer cross-compatibility
     if (name === "recipient_name" || name === "recipientName") {
-      return variables.signer_name || variables.signerName || variables.contactName || "";
+      return variables.signer_name || variables.signerName || variables.contactName || variables.contact_name || "";
     }
     if (name === "recipient_title" || name === "recipientTitle") {
       return variables.signer_title || variables.signerTitle || "";
     }
     if (name === "signer_name" || name === "signerName") {
-      return variables.recipient_name || variables.recipientName || variables.contactName || "";
+      return variables.recipient_name || variables.recipientName || variables.contactName || variables.contact_name || "";
     }
     return "";
   });
@@ -856,7 +902,8 @@ function getNetworkBadgeLabel(key: string): string | undefined {
     case "review_result_on_hold":
       return "ON HOLD · 심사 보류 안내";
     case "review_result_rejected":
-      return "REJECTED · 파트너십 반려 안내";
+    case "brand_application_rejected":
+      return "REJECTED · 파트너십 검토 결과 안내";
     case "info_request_due_soon":
       return "URGENT · 회신 기한 임박 안내";
     case "info_request_overdue":
@@ -953,7 +1000,7 @@ function buildNetworkInfoCardHtml(variables: Record<string, string>) {
     if (nextStep) {
       rows.push({ label: "다음 단계", value: nextStep });
     } else if (appNo && (variables.key === "application_submitted_company" || variables.key === "inquiry_received_applicant")) {
-      rows.push({ label: "다음 단계", value: "서류 심사 · 3 영업일 내" });
+      rows.push({ label: "다음 단계", value: "신청 검토 · 영업일 기준 2일 이내" });
     }
   }
 
@@ -1216,8 +1263,8 @@ function buildNetworkCtaButtonHtml(variables: Record<string, string>) {
   }
 
   const key = variables.key;
-  if (key === "application_submitted_company" || key === "inquiry_received_applicant") {
-    buttonLabel = "다른 브랜드 추가 신청";
+  if (key === "application_submitted_company" || key === "inquiry_received_applicant" || key === "brand_application_rejected") {
+    return "";
   } else if (key === "application_received_internal") {
     buttonLabel = "신청서 상세 심사하기";
     url = "https://admin.kselectnetwork.com/admin/login";
@@ -1516,7 +1563,7 @@ function renderNetworkEmailHtml(
   variables: Record<string, string>
 ) {
   const siteUrl = publicEnv.NEXT_PUBLIC_SITE_URL || "https://www.kselectnetwork.com";
-  const contactName = variables.contactName || "브랜드사 담당자";
+  const contactName = variables.contactName || variables.contact_name || "브랜드사 담당자";
 
   const extendedVariables: Record<string, string> = {
     ...variables,
@@ -1529,7 +1576,7 @@ function renderNetworkEmailHtml(
     unsubscribeUrl: `${siteUrl}/unsubscribe`,
   };
 
-  const appNo = extendedVariables.applicationNo || extendedVariables.applicationNumber || extendedVariables.inquiryNumber || "APP-000001";
+  const appNo = extendedVariables.applicationNo || extendedVariables.applicationNumber || extendedVariables.application_id || extendedVariables.inquiryNumber || "APP-000001";
   extendedVariables.applicationNo = appNo;
   extendedVariables.infoBox = buildNetworkInfoCardHtml(extendedVariables);
   extendedVariables.ctaButton = buildNetworkCtaButtonHtml(extendedVariables);
@@ -1546,6 +1593,8 @@ function renderNetworkEmailHtml(
 
   const preheaderText = variables.key === "brand_agreement_completed"
     ? `${extendedVariables.company_name || extendedVariables.companyName || "브랜드사"}의 K SELECT NETWORK 전자 기본계약 체결이 완료되었습니다.`
+    : variables.key === "brand_application_rejected"
+    ? `K SELECT NETWORK 파트너십 신청 검토 결과 안내입니다.`
     : `신청번호 ${appNo}의 파트너십 알림입니다.`;
   const badgeLabel = getNetworkBadgeLabel(variables.key || "");
   
@@ -1609,7 +1658,7 @@ function renderNetworkEmailHtml(
         <td align="center" style="padding:24px 24px 8px 24px;">
           <div style="font-family:Arial,Helvetica,sans-serif;font-size:9px;line-height:12px;mso-line-height-rule:exactly;font-weight:bold;letter-spacing:2.4px;color:#8C1C2B;text-transform:uppercase;">CURATED. CONNECTED. GROWING TOGETHER.</div>
           <div style="height:14px;line-height:14px;font-size:0;">&nbsp;</div>
-          <div style="font-size:11px;line-height:19px;mso-line-height-rule:exactly;color:#9E988E;text-align:center;">K SELECT NETWORK · K-Beauty Growth Program<br>23B, Roland Avenue, Mount Laurel, New Jersey 08054<br>본 메일은 파트너 신청 접수 확인을 위해 자동 발송되었습니다.</div>
+          <div style="font-size:11px;line-height:19px;mso-line-height-rule:exactly;color:#9E988E;text-align:center;">K SELECT NETWORK · K-Beauty Growth Program<br>23B, Roland Avenue, Mount Laurel, New Jersey 08054<br>본 메일은 파트너 신청 관련 안내를 위해 발송되었습니다.</div>
           <div style="height:12px;line-height:12px;font-size:0;">&nbsp;</div>
           <div style="font-size:11px;line-height:19px;mso-line-height-rule:exactly;text-align:center;"><a href="${privacyUrl}" target="_blank" style="color:#7B7469;text-decoration:underline;">개인정보 처리방침</a> &nbsp;·&nbsp; <a href="${unsubscribeUrl}" target="_blank" style="color:#7B7469;text-decoration:underline;">수신 거부</a></div>
         </td>
@@ -1776,7 +1825,7 @@ export async function sendTemplatedEmail(
     filename: string;
     content: string; // base64 encoded string
   }>
-): Promise<{ success: boolean; error?: string }> {
+): Promise<{ success: boolean; messageId?: string; error?: string }> {
   try {
     const admin = createAdminClient();
     const { data: template } = await admin
@@ -1801,7 +1850,7 @@ export async function sendTemplatedEmail(
       key,
     });
 
-    await sendEmail({
+    const res = await sendEmail({
       to,
       subject,
       text,
@@ -1809,7 +1858,7 @@ export async function sendTemplatedEmail(
       attachments,
     });
 
-    return { success: true };
+    return res;
   } catch (err: any) {
     console.error(`[sendTemplatedEmail Error] key=${key}, to=${to}:`, err);
     return { success: false, error: err?.message || "이메일 발송에 실패했습니다." };

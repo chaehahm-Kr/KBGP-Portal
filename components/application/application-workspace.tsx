@@ -45,6 +45,7 @@ interface ApplicationWorkspaceProps {
   rejectAppAction?: any;
   resendInviteAction?: any;
   revokeInviteAction?: any;
+  resendRejectionAction?: any;
 }
 
 export default function ApplicationWorkspace({
@@ -77,6 +78,7 @@ export default function ApplicationWorkspace({
   rejectAppAction,
   resendInviteAction,
   revokeInviteAction,
+  resendRejectionAction,
 }: ApplicationWorkspaceProps) {
   const [isProcessingAction, setIsProcessingAction] = useState(false);
 
@@ -86,6 +88,14 @@ export default function ApplicationWorkspace({
   const [isSubmittingApprove, setIsSubmittingApprove] = useState(false);
   const [approveError, setApproveError] = useState<string | null>(null);
   const [approveSuccessToast, setApproveSuccessToast] = useState<string | null>(null);
+
+  // Rejection Modal State
+  const [isRejectModalOpen, setIsRejectModalOpen] = useState(false);
+  const [rejectInternalNote, setRejectInternalNote] = useState("");
+  const [rejectApplicantMessage, setRejectApplicantMessage] = useState("");
+  const [isSubmittingReject, setIsSubmittingReject] = useState(false);
+  const [rejectError, setRejectError] = useState<string | null>(null);
+  const [rejectSuccessToast, setRejectSuccessToast] = useState<string | null>(null);
 
   const handleOpenApproveModal = () => {
     if (!approveAndInviteAction) return;
@@ -104,7 +114,7 @@ export default function ApplicationWorkspace({
       const res = await approveAndInviteAction(noteToPass);
       if (res?.success) {
         setIsApproveModalOpen(false);
-        setApproveSuccessToast("승인 및 파트너 초대가 완료되었습니다.");
+        setApproveSuccessToast(res.message || "승인 및 파트너 초대가 완료되었습니다.");
         setTimeout(() => {
           window.location.reload();
         }, 1200);
@@ -121,6 +131,45 @@ export default function ApplicationWorkspace({
     }
   };
 
+  const handleOpenRejectModal = () => {
+    if (!rejectAppAction) return;
+    setRejectInternalNote("");
+    setRejectApplicantMessage("");
+    setRejectError(null);
+    setIsRejectModalOpen(true);
+  };
+
+  const handleConfirmReject = async () => {
+    if (!rejectAppAction || isSubmittingReject) return;
+    if (!rejectInternalNote.trim()) {
+      setRejectError("내부 심사 반려 사유(Internal Note)를 입력해 주세요 (필수).");
+      return;
+    }
+
+    setIsSubmittingReject(true);
+    setRejectError(null);
+
+    try {
+      const res = await rejectAppAction(rejectInternalNote.trim(), rejectApplicantMessage.trim());
+      if (res?.success) {
+        setIsRejectModalOpen(false);
+        setRejectSuccessToast(res.message || "신청서가 반려 처리되고 안내 메일이 발송되었습니다.");
+        setTimeout(() => {
+          window.location.reload();
+        }, 1200);
+      } else {
+        const errorMsg = res?.error || "반려 처리 중 알 수 없는 오류가 발생했습니다.";
+        setRejectError(errorMsg);
+        console.error("[rejectApplication] Server error:", res);
+      }
+    } catch (err: any) {
+      console.error("[rejectApplication] Exception:", err);
+      setRejectError(err.message || "서버 통신 중 오류가 발생했습니다.");
+    } finally {
+      setIsSubmittingReject(false);
+    }
+  };
+
   const handleResendInvite = async () => {
     if (!resendInviteAction) return;
     if (!confirm("이 파트너사에게 초대장을 재발송하시겠습니까?")) return;
@@ -129,10 +178,30 @@ export default function ApplicationWorkspace({
     try {
       const res = await resendInviteAction();
       if (res?.success) {
-        alert("초대장을 재발송했습니다.");
+        alert(res.message || "초대장을 재발송했습니다.");
         window.location.reload();
       } else {
         alert("초대장 재발송 실패: " + (res?.error || "알 수 없는 오류"));
+      }
+    } catch (err: any) {
+      alert("오류 발생: " + err.message);
+    } finally {
+      setIsProcessingAction(false);
+    }
+  };
+
+  const handleResendRejectionEmail = async () => {
+    if (!resendRejectionAction) return;
+    if (!confirm("신청자에게 거절 안내 이메일을 다시 발송하시겠습니까?")) return;
+
+    setIsProcessingAction(true);
+    try {
+      const res = await resendRejectionAction();
+      if (res?.success) {
+        alert(res.message || "거절 안내 이메일을 재발송했습니다.");
+        window.location.reload();
+      } else {
+        alert("거절 안내 이메일 재발송 실패: " + (res?.error || "알 수 없는 오류"));
       }
     } catch (err: any) {
       alert("오류 발생: " + err.message);
@@ -161,26 +230,6 @@ export default function ApplicationWorkspace({
     }
   };
 
-  const handleRejectApp = async () => {
-    if (!rejectAppAction) return;
-    const reason = prompt("신청서 반려 사유를 입력하세요 (필수):");
-    if (!reason || !reason.trim()) return;
-
-    setIsProcessingAction(true);
-    try {
-      const res = await rejectAppAction(reason.trim());
-      if (res?.success) {
-        alert("신청서가 반려 처리되었습니다.");
-        window.location.reload();
-      } else {
-        alert("반려 처리 실패: " + (res?.error || "알 수 없는 오류"));
-      }
-    } catch (err: any) {
-      alert("오류 발생: " + err.message);
-    } finally {
-      setIsProcessingAction(false);
-    }
-  };
   const [activeTab, setActiveTab] = useState<
     "overview" | "review" | "communication" | "activity"
   >("overview");
@@ -482,8 +531,20 @@ export default function ApplicationWorkspace({
               <span className="text-xl font-mono font-extrabold text-zinc-950 dark:text-white">
                 {application.application_number}
               </span>
-              <span className="inline-block rounded-md px-2.5 py-0.5 text-xs font-bold bg-amber-50 text-amber-800 border border-amber-200 dark:bg-amber-950/50 dark:text-amber-300">
-                {APPLICATION_STATUS_LABEL[application.status as ApplicationStatus] || application.status}
+              <span className={`inline-block rounded-md px-2.5 py-0.5 text-xs font-bold border ${
+                application.status === "approved" || application.status === "invitation_sent"
+                  ? "bg-blue-50 text-blue-800 border-blue-200 dark:bg-blue-950/50 dark:text-blue-300"
+                  : application.status === "onboarded"
+                  ? "bg-emerald-50 text-emerald-800 border-emerald-200 dark:bg-emerald-950/50 dark:text-emerald-300"
+                  : application.status === "rejected"
+                  ? "bg-rose-50 text-rose-800 border-rose-200 dark:bg-rose-950/50 dark:text-rose-300"
+                  : "bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-950/50 dark:text-amber-300"
+              }`}>
+                {application.status === "approved" || application.status === "invitation_sent"
+                  ? "승인 완료 · 초대 발송됨"
+                  : application.status === "onboarded"
+                  ? "포털 계정 활성화 완료"
+                  : APPLICATION_STATUS_LABEL[application.status as ApplicationStatus] || application.status}
               </span>
 
               {/* Partner Type Badge */}
@@ -522,51 +583,75 @@ export default function ApplicationWorkspace({
               심사 담당: <span className="font-bold text-zinc-800 dark:text-zinc-200">{currentAssignment ? staffNameById.get(currentAssignment.staff_id) : "미지정 (Unassigned)"}</span>
             </span>
 
-            {/* Action 1: Approve & Invite */}
-            {approveAndInviteAction && application.status !== "onboarded" && application.status !== "rejected" && application.status !== "invitation_sent" && (
-              <button
-                type="button"
-                onClick={handleOpenApproveModal}
-                disabled={isProcessingAction || isSubmittingApprove}
-                className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs rounded-xl transition-all shadow-xs cursor-pointer disabled:opacity-50"
-              >
-                {isSubmittingApprove ? "Approving & Sending..." : "✓ Approve & Invite Partner"}
-              </button>
-            )}
+            {/* Action 1: Approve & Invite (Only for submitted / under_review / pending / assigned) */}
+            {approveAndInviteAction &&
+              (application.status === "submitted" ||
+                application.status === "under_review" ||
+                application.status === "pending" ||
+                application.status === "assigned" ||
+                application.status === "draft") && (
+                <button
+                  type="button"
+                  onClick={handleOpenApproveModal}
+                  disabled={isProcessingAction || isSubmittingApprove}
+                  className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs rounded-xl transition-all shadow-xs cursor-pointer disabled:opacity-50"
+                >
+                  {isSubmittingApprove ? "Approving & Sending..." : "✓ Approve & Invite Partner"}
+                </button>
+              )}
 
-            {/* Action: Resend Invite */}
-            {resendInviteAction && (application.status === "invitation_sent" || application.status === "approved") && (
-              <button
-                type="button"
-                onClick={handleResendInvite}
-                disabled={isProcessingAction}
-                className="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs rounded-xl transition-all shadow-xs cursor-pointer disabled:opacity-50"
-              >
-                📨 Resend Invitation
-              </button>
-            )}
+            {/* Action 2: Reject (Only for submitted / under_review / pending / assigned) */}
+            {rejectAppAction &&
+              (application.status === "submitted" ||
+                application.status === "under_review" ||
+                application.status === "pending" ||
+                application.status === "assigned" ||
+                application.status === "draft") && (
+                <button
+                  type="button"
+                  onClick={handleOpenRejectModal}
+                  disabled={isProcessingAction}
+                  className="px-3.5 py-2 bg-amber-600 hover:bg-amber-700 text-white font-extrabold text-xs rounded-xl transition-all shadow-xs cursor-pointer disabled:opacity-50"
+                >
+                  ✕ Reject Application
+                </button>
+              )}
 
-            {/* Action: Revoke Invite */}
-            {revokeInviteAction && (application.status === "invitation_sent" || application.status === "approved") && (
-              <button
-                type="button"
-                onClick={handleRevokeInvite}
-                disabled={isProcessingAction}
-                className="px-3 py-2 bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-xs rounded-xl transition-all shadow-xs cursor-pointer disabled:opacity-50"
-              >
-                🚫 Revoke Invitation
-              </button>
-            )}
+            {/* Action: Resend Invite (When approved / invitation_sent) */}
+            {resendInviteAction &&
+              (application.status === "invitation_sent" || application.status === "approved") && (
+                <button
+                  type="button"
+                  onClick={handleResendInvite}
+                  disabled={isProcessingAction}
+                  className="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs rounded-xl transition-all shadow-xs cursor-pointer disabled:opacity-50"
+                >
+                  📨 Resend Invitation
+                </button>
+              )}
 
-            {/* Action 2: Reject */}
-            {rejectAppAction && application.status !== "rejected" && application.status !== "onboarded" && (
+            {/* Action: Revoke Invite (When approved / invitation_sent) */}
+            {revokeInviteAction &&
+              (application.status === "invitation_sent" || application.status === "approved") && (
+                <button
+                  type="button"
+                  onClick={handleRevokeInvite}
+                  disabled={isProcessingAction}
+                  className="px-3 py-2 bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-xs rounded-xl transition-all shadow-xs cursor-pointer disabled:opacity-50"
+                >
+                  🚫 Revoke Invitation
+                </button>
+              )}
+
+            {/* Action: Resend Rejection Email (When rejected) */}
+            {resendRejectionAction && application.status === "rejected" && (
               <button
                 type="button"
-                onClick={handleRejectApp}
+                onClick={handleResendRejectionEmail}
                 disabled={isProcessingAction}
-                className="px-3.5 py-2 bg-amber-600 hover:bg-amber-700 text-white font-extrabold text-xs rounded-xl transition-all shadow-xs cursor-pointer disabled:opacity-50"
+                className="px-3 py-2 bg-amber-600 hover:bg-amber-700 text-white font-extrabold text-xs rounded-xl transition-all shadow-xs cursor-pointer disabled:opacity-50"
               >
-                ✕ Reject Application
+                📨 Resend Rejection Email
               </button>
             )}
 
@@ -1232,11 +1317,18 @@ export default function ApplicationWorkspace({
         )}
       </div>
 
-      {/* Top Floating Toast Notification */}
+      {/* Floating Toast Notifications */}
       {approveSuccessToast && (
         <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2 rounded-xl bg-zinc-900 px-5 py-3.5 text-xs font-extrabold text-white shadow-2xl dark:bg-white dark:text-zinc-900 animate-in fade-in slide-in-from-bottom-3">
           <span>✅</span>
           <span>{approveSuccessToast}</span>
+        </div>
+      )}
+
+      {rejectSuccessToast && (
+        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2 rounded-xl bg-amber-900 px-5 py-3.5 text-xs font-extrabold text-white shadow-2xl dark:bg-amber-100 dark:text-amber-950 animate-in fade-in slide-in-from-bottom-3 border border-amber-800">
+          <span>📩</span>
+          <span>{rejectSuccessToast}</span>
         </div>
       )}
 
@@ -1362,6 +1454,134 @@ export default function ApplicationWorkspace({
                 className="inline-flex items-center justify-center rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-extrabold text-white hover:bg-emerald-700 disabled:opacity-50 transition-colors shadow-xs cursor-pointer"
               >
                 {isSubmittingApprove ? "Approving & Sending..." : "Approve & Send Invitation"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Admin Rejection Modal */}
+      {isRejectModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-lg rounded-2xl border border-zinc-200 bg-white p-6 shadow-2xl dark:border-zinc-800 dark:bg-zinc-900 space-y-5 animate-in fade-in zoom-in-95 duration-150">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between border-b border-zinc-150 pb-4 dark:border-zinc-800">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300">
+                  <span className="text-xl font-bold">✕</span>
+                </div>
+                <div>
+                  <h3 className="text-base font-extrabold text-zinc-950 dark:text-white">
+                    파트너 신청 반려 (Reject Application)
+                  </h3>
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
+                    신청서를 반려 처리하고 신청자에게 거절 안내 이메일을 발송합니다.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsRejectModalOpen(false)}
+                disabled={isSubmittingReject}
+                className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 text-lg font-bold p-1 cursor-pointer disabled:opacity-50"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Application & Partner Details Card */}
+            <div className="rounded-xl bg-zinc-50 p-4 border border-zinc-200/80 dark:bg-zinc-950/70 dark:border-zinc-800 space-y-2.5 text-xs">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <span className="text-zinc-400 dark:text-zinc-500 text-[10px] uppercase font-bold block">신청 번호 (App No)</span>
+                  <span className="font-mono font-extrabold text-zinc-950 dark:text-white">{application.application_number}</span>
+                </div>
+                <div>
+                  <span className="text-zinc-400 dark:text-zinc-500 text-[10px] uppercase font-bold block">파트너 유형 (Partner Type)</span>
+                  {application.partner_type === "retailer" ? (
+                    <span className="font-extrabold text-amber-900 dark:text-amber-300">🏪 Retailer Partner</span>
+                  ) : (
+                    <span className="font-extrabold text-blue-900 dark:text-blue-300">🏷️ Brand Partner</span>
+                  )}
+                </div>
+                <div>
+                  <span className="text-zinc-400 dark:text-zinc-500 text-[10px] uppercase font-bold block">회사명 (Company Name)</span>
+                  <span className="font-bold text-zinc-900 dark:text-white truncate block">{company?.name || application.applicant_company_name || "-"}</span>
+                </div>
+                <div>
+                  <span className="text-zinc-400 dark:text-zinc-500 text-[10px] uppercase font-bold block">담당자 (Contact Name)</span>
+                  <span className="font-bold text-zinc-900 dark:text-white truncate block">{company?.contact_name || application.applicant_contact_name || "-"}</span>
+                </div>
+                <div className="col-span-2">
+                  <span className="text-zinc-400 dark:text-zinc-500 text-[10px] uppercase font-bold block">수신 이메일 (Contact Email)</span>
+                  <span className="font-mono font-semibold text-zinc-800 dark:text-zinc-200">{application.applicant_contact_email || "-"}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Required Internal Reason */}
+            <div className="space-y-1.5">
+              <label htmlFor="rejectInternalNote" className="block text-xs font-bold text-zinc-800 dark:text-zinc-200">
+                내부 심사 반려 사유 (Internal Reason) <span className="text-rose-600 dark:text-rose-400">*필수</span>
+              </label>
+              <textarea
+                id="rejectInternalNote"
+                rows={2}
+                value={rejectInternalNote}
+                onChange={(e) => setRejectInternalNote(e.target.value)}
+                placeholder="내부 심사 기록용 반려 사유를 입력하세요 (예: 미국 MoCRA 규제 미비, 마진율 불일치)..."
+                disabled={isSubmittingReject}
+                className="w-full rounded-xl border border-zinc-200 bg-white p-3 text-xs outline-none focus:border-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white dark:focus:border-white transition-all resize-none"
+              />
+              <p className="text-[10px] text-zinc-400 dark:text-zinc-500">
+                ※ 내부 관리 및 히스토리 기록용이며, 신청자 이메일에 직접 노출되지 않습니다.
+              </p>
+            </div>
+
+            {/* Optional Applicant Message */}
+            <div className="space-y-1.5">
+              <label htmlFor="rejectApplicantMessage" className="block text-xs font-bold text-zinc-800 dark:text-zinc-200">
+                신청자 전달 안내 메시지 (Message to Applicant) <span className="font-normal text-zinc-400 dark:text-zinc-500">(선택 사항)</span>
+              </label>
+              <textarea
+                id="rejectApplicantMessage"
+                rows={3}
+                value={rejectApplicantMessage}
+                onChange={(e) => setRejectApplicantMessage(e.target.value)}
+                placeholder="신청자에게 발송되는 거절 안내 메일에 포함할 추가 안내 또는 보완 권고사항이 있는 경우 입력하세요..."
+                disabled={isSubmittingReject}
+                className="w-full rounded-xl border border-zinc-200 bg-white p-3 text-xs outline-none focus:border-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white dark:focus:border-white transition-all resize-none"
+              />
+              <p className="text-[10px] text-zinc-400 dark:text-zinc-500">
+                ※ 입력 시 거절 안내 이메일 본문 내 &lsquo;추가 안내 사항&rsquo; 항목으로 포함되어 전달됩니다.
+              </p>
+            </div>
+
+            {/* Error Banner */}
+            {rejectError && (
+              <div className="rounded-xl bg-rose-50 p-3.5 text-xs font-semibold text-rose-700 dark:bg-rose-950/40 dark:text-rose-300 border border-rose-200 dark:border-rose-900/50 flex items-start gap-2">
+                <span className="shrink-0">⚠️</span>
+                <span>{rejectError}</span>
+              </div>
+            )}
+
+            {/* Modal Buttons */}
+            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-zinc-150 dark:border-zinc-800">
+              <button
+                type="button"
+                onClick={() => setIsRejectModalOpen(false)}
+                disabled={isSubmittingReject}
+                className="rounded-xl border border-zinc-200 bg-white px-4 py-2.5 text-xs font-bold text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700 disabled:opacity-50 transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmReject}
+                disabled={isSubmittingReject}
+                className="inline-flex items-center justify-center rounded-xl bg-rose-600 px-4 py-2.5 text-xs font-extrabold text-white hover:bg-rose-700 disabled:opacity-50 transition-colors shadow-xs cursor-pointer"
+              >
+                {isSubmittingReject ? "Rejecting & Sending..." : "✕ Confirm Rejection"}
               </button>
             </div>
           </div>
