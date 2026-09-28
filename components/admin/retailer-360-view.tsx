@@ -30,6 +30,7 @@ import {
 import { adminRetryAgreementPdfAction } from "@/lib/retailer/agreement-actions";
 import { RetailerRole } from "@/lib/retailer/onboarding-types";
 import { Retailer360MemberItem } from "@/lib/retailer/admin-retailer-360";
+import { StartImpersonationModal } from "@/components/admin/start-impersonation-modal";
 
 interface Retailer360ViewProps {
   data: Retailer360Data;
@@ -49,6 +50,7 @@ type TabKey =
 export function Retailer360View({ data }: Retailer360ViewProps) {
   const [activeTab, setActiveTab] = useState<TabKey>("overview");
   const [isPending, startTransition] = useTransition();
+  const [impersonateMember, setImpersonateMember] = useState<Retailer360MemberItem | null>(null);
 
   // Commercial Terms Editing State
   const [status, setStatus] = useState(data.profile?.status || "active");
@@ -1208,6 +1210,16 @@ export function Retailer360View({ data }: Retailer360ViewProps) {
                       </td>
                       <td className="py-3 px-4 text-right">
                         <div className="flex items-center justify-end gap-1.5">
+                          {isUserActive && (
+                            <button
+                              type="button"
+                              onClick={() => setImpersonateMember(member)}
+                              className="px-2.5 py-1 rounded-lg border border-amber-300 bg-amber-50 text-[10px] font-bold text-amber-800 hover:bg-amber-100 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300 cursor-pointer shadow-2xs flex items-center gap-1"
+                              title="Login as User"
+                            >
+                              🔑 Login as User
+                            </button>
+                          )}
                           <button
                             type="button"
                             onClick={() => handleOpenRoleModal(member)}
@@ -2953,6 +2965,22 @@ export function Retailer360View({ data }: Retailer360ViewProps) {
           </div>
         </div>
       )}
+
+      <StartImpersonationModal
+        isOpen={!!impersonateMember}
+        onClose={() => setImpersonateMember(null)}
+        targetUser={impersonateMember ? {
+          id: impersonateMember.userId,
+          name: impersonateMember.displayName || impersonateMember.email,
+          email: impersonateMember.email,
+          status: impersonateMember.status || "active",
+        } : null}
+        targetCompany={{
+          id: data.company.id,
+          name: data.company.name,
+          portalType: "RETAILER",
+        }}
+      />
     </div>
   );
 }

@@ -4,12 +4,16 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 
+import { getImpersonationSession } from "@/lib/auth/impersonation";
+
 export type AppRole = "portal" | "admin" | "retailer";
 
 export type VerifiedSession = {
   userId: string;
   email: string;
   role: AppRole;
+  isImpersonating?: boolean;
+  impersonationSession?: any;
 };
 
 const LOGIN_PATH: Record<AppRole, string> = {
@@ -22,6 +26,23 @@ const LOGIN_PATH: Record<AppRole, string> = {
  * Data Access Layer의 핵심 함수. area("portal", "admin", "retailer")별로 세션을 검증한다.
  */
 async function verifySession(area: AppRole): Promise<VerifiedSession> {
+  // Check Admin Impersonation override for portal and retailer areas
+  if (area === "portal" || area === "retailer") {
+    const impSession = await getImpersonationSession();
+    if (impSession) {
+      const expectedType = area === "portal" ? "BRAND" : "RETAILER";
+      if (impSession.portalType === expectedType) {
+        return {
+          userId: impSession.targetUserId,
+          email: impSession.targetUserEmail,
+          role: area,
+          isImpersonating: true,
+          impersonationSession: impSession,
+        };
+      }
+    }
+  }
+
   const supabase = await createClient();
 
   const {

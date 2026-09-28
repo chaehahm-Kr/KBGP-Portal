@@ -44,18 +44,22 @@ export const viewport: Viewport = {
   viewportFit: "cover",
 };
 
+import { getImpersonationSession } from "@/lib/auth/impersonation";
+import { ImpersonationBanner } from "@/components/shared/impersonation-banner";
+
 export default async function RetailerLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const impSession = await getImpersonationSession();
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
   // 1. Unauthenticated view (e.g. /retailer/login)
-  if (!user) {
+  if (!user && !impSession) {
     return (
       <div className="min-h-screen bg-zinc-950 flex items-center justify-center p-4 sm:p-6 selection:bg-zinc-800 selection:text-white">
         {children}
@@ -65,36 +69,51 @@ export default async function RetailerLayout({
 
   // 2. Authenticated layout: Fetch user, company & store metadata
   const adminClient = createAdminClient();
+  const effectiveUserId = impSession ? impSession.targetUserId : user?.id;
 
   // Profile
-  const { data: profile } = await adminClient
-    .from("profiles")
-    .select("display_name, role")
-    .eq("id", user.id)
-    .maybeSingle();
+  let userName = impSession ? impSession.targetUserName : "Retailer User";
+  let userEmail = impSession ? impSession.targetUserEmail : (user?.email || "");
 
-  const userName = profile?.display_name || user.email?.split("@")[0] || "Retailer User";
-  const userEmail = user.email || "";
+  if (effectiveUserId && !impSession) {
+    const { data: profile } = await adminClient
+      .from("profiles")
+      .select("display_name, role")
+      .eq("id", effectiveUserId)
+      .maybeSingle();
+
+    userName = profile?.display_name || user?.email?.split("@")[0] || "Retailer User";
+  }
 
   // Company Membership
-  const { data: companyUser } = await adminClient
-    .from("company_users")
-    .select("company_id, company_role, companies(id, name)")
-    .eq("id", user.id)
-    .maybeSingle();
+  let companyName = impSession ? impSession.targetCompanyName : "K SELECT Retailer";
+  let companyId = impSession ? impSession.targetCompanyId : undefined;
 
-  const company = companyUser?.companies as any;
-  const companyName = company?.name || "K SELECT Retailer";
-  const companyId = company?.id || companyUser?.company_id;
+  if (effectiveUserId && !impSession) {
+    const { data: companyUser } = await adminClient
+      .from("company_users")
+      .select("company_id, company_role, companies(id, name)")
+      .eq("id", effectiveUserId)
+      .maybeSingle();
+
+    const company = companyUser?.companies as any;
+    companyName = company?.name || "K SELECT Retailer";
+    companyId = company?.id || companyUser?.company_id;
+  }
 
   // Retailer Specific Role
-  const { data: retailerRole } = await adminClient
-    .from("retailer_user_roles")
-    .select("role, has_all_stores_access")
-    .eq("user_id", user.id)
-    .maybeSingle();
+  let role = "owner";
+  if (effectiveUserId) {
+    const { data: retailerRole } = await adminClient
+      .from("retailer_user_roles")
+      .select("role, has_all_stores_access")
+      .eq("user_id", effectiveUserId)
+      .maybeSingle();
 
-  const role = retailerRole?.role || companyUser?.company_role || "owner";
+    if (retailerRole?.role) {
+      role = retailerRole.role;
+    }
+  }
 
   // Store Name
   let storeName = "Main Store";
@@ -113,31 +132,34 @@ export default async function RetailerLayout({
 
   return (
     <CartProvider>
-      <div className="min-h-screen flex bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 font-sans transition-colors">
-        {/* Desktop Sidebar */}
-        <RetailerSidebar
-          role={role}
-          companyName={companyName}
-          storeName={storeName}
-          userName={userName}
-        />
-
-        {/* Main Content Column */}
-        <div className="flex-1 flex flex-col min-w-0">
-          <RetailerHeader
-            userName={userName}
-            userEmail={userEmail}
-            companyName={companyName}
+      <div className="min-h-screen flex flex-col bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 font-sans transition-colors">
+        {impSession && <ImpersonationBanner session={impSession} />}
+        <div className="flex-1 flex min-w-0">
+          {/* Desktop Sidebar */}
+          <RetailerSidebar
             role={role}
+            companyName={companyName}
             storeName={storeName}
+            userName={userName}
           />
 
-          <main className="flex-1 p-4 sm:p-6 lg:p-8 pb-24 lg:pb-8 overflow-y-auto">
-            <div className="w-full max-w-7xl">{children}</div>
-          </main>
+          {/* Main Content Column */}
+          <div className="flex-1 flex flex-col min-w-0">
+            <RetailerHeader
+              userName={userName}
+              userEmail={userEmail}
+              companyName={companyName}
+              role={role}
+              storeName={storeName}
+            />
 
-          {/* Mobile Bottom Navigation */}
-          <RetailerBottomNav role={role} />
+            <main className="flex-1 p-4 sm:p-6 lg:p-8 pb-24 lg:pb-8 overflow-y-auto">
+              <div className="w-full max-w-7xl">{children}</div>
+            </main>
+
+            {/* Mobile Bottom Navigation */}
+            <RetailerBottomNav role={role} />
+          </div>
         </div>
       </div>
     </CartProvider>

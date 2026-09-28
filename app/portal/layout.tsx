@@ -23,17 +23,21 @@ export const metadata: Metadata = {
   },
 };
 
+import { getImpersonationSession } from "@/lib/auth/impersonation";
+import { ImpersonationBanner } from "@/components/shared/impersonation-banner";
+
 export default async function PartnerPortalLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const impSession = await getImpersonationSession();
   const supabase = await createClient();
   
   // Try to get user session safely without redirecting
   const { data: { user } } = await supabase.auth.getUser();
-  
-  if (!user) {
+
+  if (!user && !impSession) {
     return (
       <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
         {children}
@@ -41,49 +45,60 @@ export default async function PartnerPortalLayout({
     );
   }
 
-  let companyName = "Partner Company";
+  let companyName = impSession ? impSession.targetCompanyName : "Partner Company";
   let companyRole = "member";
-  const userEmail = user.email || "";
-  let displayName = "";
+  const userEmail = impSession ? impSession.targetUserEmail : (user?.email || "");
+  let displayName = impSession ? impSession.targetUserName : "";
 
-  // Fetch profile display_name
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("display_name")
-    .eq("id", user.id)
-    .maybeSingle();
+  const effectiveUserId = impSession ? impSession.targetUserId : user?.id;
+
+  if (effectiveUserId) {
+    if (!impSession) {
+      // Fetch profile display_name
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("display_name")
+        .eq("id", effectiveUserId)
+        .maybeSingle();
+        
+      if (profile) {
+        displayName = profile.display_name || "";
+      }
+    }
     
-  if (profile) {
-    displayName = profile.display_name || "";
-  }
-  
-  const { data: companyUser } = await supabase
-    .from("company_users")
-    .select("company_id, company_role")
-    .eq("id", user.id)
-    .maybeSingle();
-
-  if (companyUser) {
-    companyRole = companyUser.company_role;
-    const { data: company } = await supabase
-      .from("companies")
-      .select("name")
-      .eq("id", companyUser.company_id)
+    const { data: companyUser } = await supabase
+      .from("company_users")
+      .select("company_id, company_role")
+      .eq("id", effectiveUserId)
       .maybeSingle();
-    
-    if (company) {
-      companyName = company.name;
+
+    if (companyUser) {
+      companyRole = companyUser.company_role;
+      if (!impSession) {
+        const { data: company } = await supabase
+          .from("companies")
+          .select("name")
+          .eq("id", companyUser.company_id)
+          .maybeSingle();
+        
+        if (company) {
+          companyName = company.name;
+        }
+      }
     }
   }
 
   return (
-    <PortalLayout
-      companyName={companyName}
-      companyRole={companyRole}
-      userEmail={userEmail}
-      userDisplayName={displayName}
-    >
-      {children}
-    </PortalLayout>
+    <div className="min-h-screen flex flex-col">
+      {impSession && <ImpersonationBanner session={impSession} />}
+      <PortalLayout
+        companyName={companyName}
+        companyRole={companyRole}
+        userEmail={userEmail}
+        userDisplayName={displayName}
+      >
+        {children}
+      </PortalLayout>
+    </div>
   );
 }

@@ -26,6 +26,7 @@ import { CountrySelect } from "@/components/shared/country-select";
 import { CompanyShippingOriginsTab } from "@/components/company/company-shipping-origins-tab";
 import { type CompanyShippingOrigin } from "@/lib/company/shipping-origin-actions";
 import { CompanyAgreementsTab } from "@/components/admin/company-agreements-tab";
+import { StartImpersonationModal } from "@/components/admin/start-impersonation-modal";
 
 const STATUS_LABEL: Record<string, string> = {
   invited: "초대됨",
@@ -115,6 +116,7 @@ export function CompanyDetailManager({
   const [tempCompanyCode, setTempCompanyCode] = useState(companyCode);
   const [types, setTypes] = useState<string[]>(parsedMeta.types || ["Brand Owner"]);
   const [tempTypes, setTempTypes] = useState<string[]>(types);
+  const [impersonateTargetUser, setImpersonateTargetUser] = useState<any | null>(null);
 
   const [supplierProfile, setSupplierProfile] = useState<any>(initialSupplierProfile);
   const [supplierRemittance, setSupplierRemittance] = useState<any>(initialSupplierRemittance);
@@ -1284,12 +1286,24 @@ export function CompanyDetailManager({
                               </span>
                             </td>
                             <td className="px-4 py-3 text-right">
-                              <button
-                                onClick={() => handleOpenEdit(row)}
-                                className="font-bold text-indigo-650 hover:underline dark:text-indigo-400"
-                              >
-                                상세 및 권한
-                              </button>
+                              <div className="flex items-center justify-end gap-2">
+                                {row.status === "active" && (
+                                  <button
+                                    type="button"
+                                    onClick={() => setImpersonateTargetUser(row)}
+                                    className="font-bold text-amber-600 hover:underline dark:text-amber-400 text-[11px] flex items-center gap-1 cursor-pointer"
+                                    title="Login as User"
+                                  >
+                                    🔑 Login as User
+                                  </button>
+                                )}
+                                <button
+                                  onClick={() => handleOpenEdit(row)}
+                                  className="font-bold text-indigo-650 hover:underline dark:text-indigo-400"
+                                >
+                                  상세 및 권한
+                                </button>
+                              </div>
                             </td>
                           </tr>
                         ))}
@@ -2891,6 +2905,22 @@ export function CompanyDetailManager({
           </div>
         </div>
       )}
+
+      <StartImpersonationModal
+        isOpen={!!impersonateTargetUser}
+        onClose={() => setImpersonateTargetUser(null)}
+        targetUser={impersonateTargetUser ? {
+          id: impersonateTargetUser.id,
+          name: impersonateTargetUser.name || impersonateTargetUser.email,
+          email: impersonateTargetUser.email,
+          status: impersonateTargetUser.status || "active",
+        } : null}
+        targetCompany={{
+          id: company.id,
+          name: company.name,
+          portalType: "BRAND",
+        }}
+      />
     </div>
   );
 }

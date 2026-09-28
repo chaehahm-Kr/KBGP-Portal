@@ -7,6 +7,7 @@ import { generateExecutedAgreementPdf } from "@/lib/agreement/pdf-generator";
 import { sendEmail } from "@/lib/notifications/email";
 import { sendTemplatedEmail } from "@/lib/notifications/templates";
 import { publicEnv } from "@/lib/env/public";
+import { isImpersonating } from "@/lib/auth/impersonation";
 import type {
   CompanyAgreementItem,
   AgreementTemplateItem,
@@ -314,6 +315,13 @@ export async function signCompanyAgreementAction(input: SignAgreementInput): Pro
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { success: false, error: "인증되지 않은 사용자입니다." };
+
+  if (await isImpersonating()) {
+    return {
+      success: false,
+      error: "This action is unavailable during an Admin Support Session. Exit impersonation to continue through the appropriate administrative workflow.",
+    };
+  }
 
   const admin = createAdminClient();
 
