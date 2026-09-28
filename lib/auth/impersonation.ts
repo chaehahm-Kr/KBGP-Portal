@@ -453,8 +453,8 @@ export async function stopImpersonationAction(): Promise<{
     if (sessionData) {
       targetPath =
         sessionData.portalType === "RETAILER"
-          ? `/admin/retailers/${sessionData.targetCompanyId}`
-          : `/admin/companies/${sessionData.targetCompanyId}`;
+          ? "/admin/retailers"
+          : "/admin/companies";
 
       const endedAt = new Date().toISOString();
       const durationSeconds = Math.round(

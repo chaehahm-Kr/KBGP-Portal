@@ -23,6 +23,7 @@ export const metadata: Metadata = {
   },
 };
 
+import { createAdminClient } from "@/lib/supabase/admin";
 import { getImpersonationSession } from "@/lib/auth/impersonation";
 import { ImpersonationBanner } from "@/components/shared/impersonation-banner";
 
@@ -32,7 +33,7 @@ export default async function PartnerPortalLayout({
   children: React.ReactNode;
 }) {
   const impSession = await getImpersonationSession();
-  const supabase = await createClient();
+  const supabase = impSession ? createAdminClient() : await createClient();
   
   // Try to get user session safely without redirecting
   const { data: { user } } = await supabase.auth.getUser();

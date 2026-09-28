@@ -3,6 +3,7 @@ import Link from "next/link";
 import { verifyPortalSession } from "@/lib/auth/dal";
 import { requireCompanyMembership } from "@/lib/company/dal";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { APPLICATION_STATUS_LABEL, type ApplicationStatus } from "@/lib/application/types";
 import { getPortalPurchaseOrders, getPortalInvoices } from "@/lib/portal/actions";
 import { getPartnerInquiries } from "@/lib/inquiry/actions";
@@ -19,7 +20,7 @@ export const metadata: Metadata = {
 export default async function PortalHomePage() {
   const session = await verifyPortalSession();
   const { companyId } = await requireCompanyMembership();
-  const supabase = await createClient();
+  const supabase = session.isImpersonating ? createAdminClient() : await createClient();
 
   // 1. Fetch Company & User Info
   const { data: companyUser } = await supabase
