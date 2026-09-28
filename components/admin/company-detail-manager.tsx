@@ -2918,7 +2918,7 @@ export function CompanyDetailManager({
         targetCompany={{
           id: company.id,
           name: company.name,
-          portalType: "BRAND",
+          portalType: (parsedMeta.types?.some((t: string) => t.toLowerCase() === "retailer") || (parsedMeta.companyCode || "").toUpperCase().startsWith("RET-")) ? "RETAILER" : "BRAND",
         }}
       />
     </div>

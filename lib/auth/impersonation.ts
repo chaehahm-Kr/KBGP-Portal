@@ -1,10 +1,9 @@
-"use server";
-
+import "server-only";
 import { cookies } from "next/headers";
-import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { verifyAdminSession } from "@/lib/auth/dal";
 import crypto from "crypto";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 export interface ImpersonationSessionData {
   sessionId: string;
@@ -22,17 +21,107 @@ export interface ImpersonationSessionData {
   note?: string;
 }
 
-const COOKIE_NAME = "ksn_impersonation_session";
-const SESSION_DURATION_SECONDS = 3600; // 60 minutes maximum
+export const COOKIE_NAME = "ksn_impersonation_session";
+export const SESSION_DURATION_SECONDS = 3600; // 60 minutes maximum
 
-function getSecretKey(): string {
+export function getSecretKey(): string {
   return process.env.SUPABASE_SERVICE_ROLE_KEY || "KSN_SECURE_IMPERSONATION_SECRET_2026";
+}
+
+/**
+ * Gets base URL for target portal type
+ */
+export function getPortalBaseUrl(portalType: "BRAND" | "RETAILER"): string {
+  if (process.env.NODE_ENV === "development") {
+    return "";
+  }
+  if (portalType === "RETAILER") {
+    return "https://portal.kselecthub.com";
+  }
+  return "https://portal.kselectnetwork.com";
+}
+
+/**
+ * Gets base URL for Admin Console
+ */
+export function getAdminBaseUrl(): string {
+  if (process.env.NODE_ENV === "development") {
+    return "";
+  }
+  return "https://admin.kselectnetwork.com";
+}
+
+/**
+ * Authoritatively resolves portal type for a company from DB records
+ */
+export async function resolveAuthoritativePortalType(
+  admin: SupabaseClient,
+  companyId: string
+): Promise<"BRAND" | "RETAILER"> {
+  try {
+    // 1. Check company_roles
+    const { data: roles } = await admin
+      .from("company_roles")
+      .select("role")
+      .eq("company_id", companyId);
+
+    if (roles && roles.some((r: any) => r.role?.toLowerCase() === "retailer")) {
+      return "RETAILER";
+    }
+
+    // 2. Check retailer_user_roles
+    const { data: retUserRoles } = await admin
+      .from("retailer_user_roles")
+      .select("id")
+      .eq("company_id", companyId)
+      .limit(1);
+
+    if (retUserRoles && retUserRoles.length > 0) {
+      return "RETAILER";
+    }
+
+    // 3. Check stores
+    const { data: stores } = await admin
+      .from("stores")
+      .select("id")
+      .eq("company_id", companyId)
+      .limit(1);
+
+    if (stores && stores.length > 0) {
+      return "RETAILER";
+    }
+
+    // 4. Check company_code or intro metadata
+    const { data: company } = await admin
+      .from("companies")
+      .select("company_code, intro")
+      .eq("id", companyId)
+      .maybeSingle();
+
+    if (company) {
+      if (company.company_code?.toUpperCase().startsWith("RET-")) {
+        return "RETAILER";
+      }
+      if (company.intro && typeof company.intro === "string" && company.intro.includes('"types"')) {
+        try {
+          const meta = JSON.parse(company.intro.substring("__COMPANY_METADATA__:".length));
+          if (Array.isArray(meta.types) && meta.types.some((t: string) => t.toLowerCase() === "retailer")) {
+            return "RETAILER";
+          }
+        } catch (e) {}
+      }
+    }
+  } catch (err) {
+    console.warn("[IMPERSONATION_PORTAL_TYPE_UNRESOLVED] Resolution error:", err);
+  }
+
+  return "BRAND";
 }
 
 /**
  * Creates a signed token string for the impersonation session
  */
-function createSignedToken(data: ImpersonationSessionData): string {
+export function createSignedToken(data: ImpersonationSessionData): string {
   const payloadStr = JSON.stringify(data);
   const base64Payload = Buffer.from(payloadStr).toString("base64url");
   const hmac = crypto.createHmac("sha256", getSecretKey());
@@ -44,7 +133,7 @@ function createSignedToken(data: ImpersonationSessionData): string {
 /**
  * Parses and verifies a signed impersonation token string
  */
-function parseAndVerifyToken(token: string): ImpersonationSessionData | null {
+export function parseAndVerifyToken(token: string): ImpersonationSessionData | null {
   try {
     const parts = token.split(".");
     if (parts.length !== 2) return null;
@@ -74,6 +163,51 @@ function parseAndVerifyToken(token: string): ImpersonationSessionData | null {
 }
 
 /**
+ * Creates a short-lived (60s) single-use handoff token for cross-domain redirection
+ */
+export function createHandoffToken(sessionData: ImpersonationSessionData): string {
+  const payload = {
+    sessionData,
+    createdAt: Date.now(),
+  };
+  const base64Str = Buffer.from(JSON.stringify(payload)).toString("base64url");
+  const hmac = crypto.createHmac("sha256", getSecretKey());
+  hmac.update(base64Str);
+  const sig = hmac.digest("base64url");
+  return `${base64Str}.${sig}`;
+}
+
+/**
+ * Verifies a single-use handoff token
+ */
+export function verifyHandoffToken(token: string): ImpersonationSessionData | null {
+  try {
+    const parts = token.split(".");
+    if (parts.length !== 2) return null;
+    const [base64Str, sig] = parts;
+
+    const hmac = crypto.createHmac("sha256", getSecretKey());
+    hmac.update(base64Str);
+    if (sig !== hmac.digest("base64url")) {
+      console.warn("[Auth Security Audit] IMPERSONATION_HANDOFF_TOKEN_INVALID_SIG");
+      return null;
+    }
+
+    const payload = JSON.parse(Buffer.from(base64Str, "base64url").toString("utf-8"));
+    const age = Date.now() - payload.createdAt;
+    if (age > 60000) { // 60s TTL
+      console.warn("[Auth Security Audit] IMPERSONATION_HANDOFF_TOKEN_EXPIRED");
+      return null;
+    }
+
+    return payload.sessionData;
+  } catch (err) {
+    console.warn("[Auth Security Audit] IMPERSONATION_HANDOFF_TOKEN_PARSE_ERROR", err);
+    return null;
+  }
+}
+
+/**
  * Gets active Impersonation Session from request cookies
  */
 export async function getImpersonationSession(): Promise<ImpersonationSessionData | null> {
@@ -83,7 +217,13 @@ export async function getImpersonationSession(): Promise<ImpersonationSessionDat
     if (!token) return null;
 
     const data = parseAndVerifyToken(token);
-    if (!data) return null;
+    if (!data) {
+      // Stale or expired cookie -> delete automatically
+      try {
+        cookieStore.delete(COOKIE_NAME);
+      } catch (e) {}
+      return null;
+    }
 
     return data;
   } catch (err) {
@@ -102,7 +242,7 @@ export async function isImpersonating(): Promise<boolean> {
 export interface StartImpersonationInput {
   targetUserId: string;
   targetCompanyId: string;
-  portalType: "BRAND" | "RETAILER";
+  portalType?: "BRAND" | "RETAILER";
   reason: string;
   note?: string;
 }
@@ -117,7 +257,14 @@ export async function startImpersonationAction(input: StartImpersonationInput): 
 }> {
   try {
     // 1. Verify Admin authentication & staff status
-    const adminSession = await verifyAdminSession();
+    let adminSession: any = null;
+    try {
+      adminSession = await verifyAdminSession();
+    } catch (authErr) {
+      console.warn("[IMPERSONATION_ADMIN_NOT_AUTHORIZED] Admin authentication failed:", authErr);
+      return { success: false, error: "관리자 로그인 인증이 필요합니다." };
+    }
+
     const admin = createAdminClient();
 
     const { data: staff } = await admin
@@ -127,53 +274,77 @@ export async function startImpersonationAction(input: StartImpersonationInput): 
       .maybeSingle();
 
     if (!staff || staff.status !== "active") {
+      console.warn(`[IMPERSONATION_ADMIN_NOT_AUTHORIZED] Staff member ${adminSession.userId} is missing or inactive`);
       return { success: false, error: "관리자 전용 권한이 필요합니다." };
     }
 
-    // 2. Reject nested impersonation if already impersonating
+    // 2. Check & Clean Stale / Expired Impersonation Session
     const currentImp = await getImpersonationSession();
     if (currentImp) {
-      return {
-        success: false,
-        error: "이미 다른 계정을 임퍼소네이션 중입니다. 먼저 기존 지원 세션을 종료해 주세요.",
-      };
+      // Check if session is expired
+      if (new Date(currentImp.expiresAt).getTime() <= Date.now()) {
+        const cookieStore = await cookies();
+        cookieStore.delete(COOKIE_NAME);
+      } else {
+        console.warn(`[IMPERSONATION_NESTED_BLOCKED] Active session already exists for admin ${staff.id}`);
+        return {
+          success: false,
+          error: "이미 다른 계정을 임퍼소네이션 중입니다. 먼저 기존 지원 세션을 종료해 주세요.",
+        };
+      }
     }
 
-    // 3. Verify Target Company & Status
-    const { data: company, error: compErr } = await admin
-      .from("companies")
-      .select("id, name, status, company_roles(role)")
-      .eq("id", input.targetCompanyId)
-      .maybeSingle();
-
-    if (compErr || !company) {
-      return { success: false, error: "대상 회사 정보를 찾을 수 없습니다." };
-    }
-
-    if (company.status === "suspended" || company.status === "inactive") {
-      return { success: false, error: "비활성화 또는 정지 상태의 회사는 지원 로그인할 수 없습니다." };
-    }
-
-    // 4. Verify Target User & Status & Membership
+    // 3. Verify Target User & Status
     const { data: targetUser, error: userErr } = await admin
       .from("company_users")
       .select("id, name, email, status, company_id, company_role")
       .eq("id", input.targetUserId)
-      .eq("company_id", input.targetCompanyId)
       .maybeSingle();
 
     if (userErr || !targetUser) {
-      return { success: false, error: "해당 회사의 대상 사용자 정보를 찾을 수 없습니다." };
+      console.warn(`[IMPERSONATION_TARGET_USER_NOT_FOUND] Target user ${input.targetUserId} not found in DB`);
+      return { success: false, error: "대상 사용자 정보를 찾을 수 없습니다." };
     }
 
     if (targetUser.status !== "active") {
+      console.warn(`[IMPERSONATION_TARGET_USER_INACTIVE] Target user ${targetUser.id} is in status [${targetUser.status}]`);
       return {
         success: false,
         error: `대상 사용자 계정이 [${targetUser.status}] 상태입니다. 가입 완료(active) 상태의 계정만 임퍼소네이션할 수 있습니다.`,
       };
     }
 
-    // 5. Construct Session Data
+    // 4. Verify Target Company & Membership Match
+    const targetCompanyId = input.targetCompanyId || targetUser.company_id;
+    if (targetUser.company_id !== targetCompanyId) {
+      console.warn(`[IMPERSONATION_COMPANY_MISMATCH] User company_id (${targetUser.company_id}) does not match input targetCompanyId (${targetCompanyId})`);
+      return { success: false, error: "대상 사용자 및 회사 소속 정보가 일치하지 않습니다." };
+    }
+
+    const { data: company, error: compErr } = await admin
+      .from("companies")
+      .select("id, name, status, company_code")
+      .eq("id", targetCompanyId)
+      .maybeSingle();
+
+    if (compErr || !company) {
+      console.warn(`[IMPERSONATION_COMPANY_MISMATCH] Target company ${targetCompanyId} not found`);
+      return { success: false, error: "대상 회사 정보를 찾을 수 없습니다." };
+    }
+
+    if (company.status === "suspended" || company.status === "inactive") {
+      console.warn(`[IMPERSONATION_COMPANY_INACTIVE] Target company ${company.id} status is ${company.status}`);
+      return { success: false, error: "비활성화 또는 정지 상태의 회사는 지원 로그인할 수 없습니다." };
+    }
+
+    // 5. Authoritatively Resolve Portal Type from DB Data Model
+    const resolvedPortalType = await resolveAuthoritativePortalType(admin, company.id);
+    if (!resolvedPortalType) {
+      console.warn(`[IMPERSONATION_PORTAL_TYPE_UNRESOLVED] Failed to resolve portal type for company ${company.id}`);
+      return { success: false, error: "대상 포털 타입을 결정할 수 없습니다." };
+    }
+
+    // 6. Construct Session Data
     const sessionId = `imp_${Date.now()}_${crypto.randomBytes(4).toString("hex")}`;
     const startedAt = new Date().toISOString();
     const expiresAt = new Date(Date.now() + SESSION_DURATION_SECONDS * 1000).toISOString();
@@ -187,25 +358,29 @@ export async function startImpersonationAction(input: StartImpersonationInput): 
       targetUserName: targetUser.name || targetUser.email,
       targetCompanyId: company.id,
       targetCompanyName: company.name,
-      portalType: input.portalType,
+      portalType: resolvedPortalType,
       startedAt,
       expiresAt,
       reason: input.reason || "Customer Support",
       note: input.note?.trim() || undefined,
     };
 
-    // 6. Set Impersonation Cookie
+    // 7. Set Impersonation Cookie on Admin Domain
     const token = createSignedToken(sessionData);
     const cookieStore = await cookies();
-    cookieStore.set(COOKIE_NAME, token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      path: "/",
-      maxAge: SESSION_DURATION_SECONDS,
-    });
+    try {
+      cookieStore.set(COOKIE_NAME, token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        path: "/",
+        maxAge: SESSION_DURATION_SECONDS,
+      });
+    } catch (cookieErr) {
+      console.warn("[IMPERSONATION_COOKIE_FAILED] Cookie set error:", cookieErr);
+    }
 
-    // 7. Insert Audit Log
+    // 8. Insert Audit Log
     try {
       await admin.from("impersonation_audit_logs").insert({
         session_id: sessionId,
@@ -215,20 +390,25 @@ export async function startImpersonationAction(input: StartImpersonationInput): 
         target_user_email: targetUser.email,
         target_company_id: company.id,
         target_company_name: company.name,
-        portal_type: input.portalType,
+        portal_type: resolvedPortalType,
         action: "IMPERSONATION_STARTED",
         reason: input.reason || "Customer Support",
         note: input.note?.trim() || null,
         started_at: startedAt,
       });
     } catch (auditErr) {
-      console.warn("[startImpersonationAction] Audit log warning:", auditErr);
+      console.warn("[startImpersonationAction] Audit log insert warning:", auditErr);
     }
 
-    const redirectUrl = input.portalType === "RETAILER" ? "/retailer" : "/portal";
+    // 9. Generate Single-Use Cross-Domain Handoff Token & Redirect URL
+    const handoffCode = createHandoffToken(sessionData);
+    const baseUrl = getPortalBaseUrl(resolvedPortalType);
+    const handoffPath = `/api/auth/impersonation-handoff?code=${encodeURIComponent(handoffCode)}`;
+    const redirectUrl = baseUrl ? `${baseUrl}${handoffPath}` : handoffPath;
+
     return { success: true, redirectUrl };
   } catch (err: any) {
-    console.error("[startImpersonationAction] Error:", err);
+    console.error("[IMPERSONATION_SESSION_CREATE_FAILED] Error:", err);
     return { success: false, error: err?.message || "임퍼소네이션 세션 시작 중 오류가 발생했습니다." };
   }
 }
@@ -244,12 +424,15 @@ export async function stopImpersonationAction(): Promise<{
   try {
     const sessionData = await getImpersonationSession();
     const cookieStore = await cookies();
-    cookieStore.delete(COOKIE_NAME);
+    try {
+      cookieStore.delete(COOKIE_NAME);
+    } catch (e) {}
 
-    let redirectUrl = "/admin";
+    const adminBaseUrl = getAdminBaseUrl();
+    let targetPath = "/admin";
 
     if (sessionData) {
-      redirectUrl =
+      targetPath =
         sessionData.portalType === "RETAILER"
           ? `/admin/retailers/${sessionData.targetCompanyId}`
           : `/admin/companies/${sessionData.targetCompanyId}`;
@@ -283,9 +466,13 @@ export async function stopImpersonationAction(): Promise<{
       }
     }
 
+    const redirectUrl = adminBaseUrl ? `${adminBaseUrl}${targetPath}` : targetPath;
+
     return { success: true, redirectUrl };
   } catch (err: any) {
-    return { success: false, redirectUrl: "/admin", error: err?.message || "세션 종료 처리 중 오류가 발생했습니다." };
+    const adminBaseUrl = getAdminBaseUrl();
+    const redirectUrl = adminBaseUrl ? `${adminBaseUrl}/admin` : "/admin";
+    return { success: false, redirectUrl, error: err?.message || "세션 종료 처리 중 오류가 발생했습니다." };
   }
 }
 

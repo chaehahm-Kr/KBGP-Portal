@@ -30,7 +30,7 @@ export function ImpersonationBanner({ session }: ImpersonationBannerProps) {
         </span>
 
         <span className="font-extrabold text-zinc-950 text-sm">
-          Viewing as {session.targetUserName} ({session.targetUserEmail}) — <span className="underline decoration-amber-700 font-black">{session.targetCompanyName}</span>
+          Viewing as {session.targetUserName} ({session.targetUserEmail}) — <span className="underline decoration-amber-700 font-black">{session.targetCompanyName}</span> <span className="text-[11px] font-bold text-amber-950 opacity-90">({isRetailer ? "Retailer Portal" : "Brand Portal"})</span>
         </span>
 
         <span className="hidden md:inline bg-amber-400/80 text-amber-950 px-2 py-0.5 rounded-md text-[11px] font-medium border border-amber-600/50">

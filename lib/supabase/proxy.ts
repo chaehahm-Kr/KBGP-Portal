@@ -1,6 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { publicEnv } from "@/lib/env/public";
+import { COOKIE_NAME, parseAndVerifyToken } from "@/lib/auth/impersonation";
 
 const AREAS: { prefix: string; login: string; publicPaths: string[] }[] = [
   {
@@ -196,6 +197,16 @@ export async function updateSession(request: NextRequest) {
   }
   const isAuthenticated = Boolean(user);
 
+  // Impersonation session check & stale cookie cleanup
+  const impersonationCookie = request.cookies.get(COOKIE_NAME)?.value;
+  const isImpersonatingActive = Boolean(impersonationCookie && parseAndVerifyToken(impersonationCookie));
+  if (impersonationCookie && !isImpersonatingActive) {
+    try {
+      supabaseResponse.cookies.delete(COOKIE_NAME);
+    } catch (e) {}
+  }
+  const isUserOrImpersonated = isAuthenticated || isImpersonatingActive;
+
   // 2. Retailer Portal (portal.kselecthub.com) Clean URL Routing & Host Isolation
   if (host.includes("portal.kselecthub.com")) {
     // A. Block access to admin or brand portal paths
@@ -233,7 +244,7 @@ export async function updateSession(request: NextRequest) {
     ].some((p) => pathname === p || pathname.startsWith(`${p}/`));
 
     // E. Unauthenticated access to protected route -> redirect to /login
-    if (!isAuthenticated && !isPublicRetailerPath) {
+    if (!isUserOrImpersonated && !isPublicRetailerPath) {
       console.warn(`[Auth Security Audit] [${new Date().toISOString()}] Proxy updateSession redirected unauthenticated retailer request from ${pathname} to /login`);
       const url = request.nextUrl.clone();
       url.pathname = "/login";
@@ -256,7 +267,7 @@ export async function updateSession(request: NextRequest) {
     request.nextUrl.pathname.startsWith(path)
   );
 
-  if (area && !isAuthenticated && !isPublicPath) {
+  if (area && !isUserOrImpersonated && !isPublicPath) {
     console.warn(`[Auth Security Audit] [${new Date().toISOString()}] Proxy updateSession redirected unauthenticated request from ${pathname} to ${area.login}`);
     const url = request.nextUrl.clone();
     url.pathname = area.login;
