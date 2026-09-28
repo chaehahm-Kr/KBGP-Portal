@@ -71,9 +71,24 @@ export async function convertInquiryToCompany(
     .insert({
       name: inquiry.company_name,
       business_registration_number: inquiry.business_registration_number,
-      country: parsed.data.country,
+      country: parsed.data.country || "대한민국",
       contact_name: inquiry.contact_name,
       contact_phone: inquiry.contact_phone,
+      intro: `__COMPANY_METADATA__:${JSON.stringify({
+        description: "",
+        address: inquiry.company_address || "",
+        website: inquiry.homepage || "",
+        contacts: [
+          {
+            name: inquiry.contact_name,
+            title: inquiry.contact_title || "",
+            email: inquiry.contact_email,
+            phone: inquiry.contact_phone,
+            isPrimary: true,
+          },
+        ],
+        type: "Brand Owner",
+      })}`,
     })
     .select("id")
     .single();

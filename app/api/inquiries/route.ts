@@ -32,9 +32,9 @@ const productSchema = z.object({
   packageWidth: z.string().optional().default(""),
   packageDepth: z.string().optional().default(""),
   packageHeight: z.string().optional().default(""),
-  dimensionUnit: z.enum(["cm", "inch"]).optional().default("cm"),
+  dimensionUnit: z.enum(["cm", "inch", ""]).optional().default("cm"),
   packageWeight: z.string().optional().default(""),
-  weightUnit: z.enum(["kg", "g", "lb"]).optional().default("g"),
+  weightUnit: z.enum(["kg", "g", "lb", ""]).optional().default("g"),
   monthlyCapacity: z.string().optional().default(""),
   leadTime: z.string().optional().default(""),
   note: z.string().optional().default(""),
@@ -55,6 +55,12 @@ const eligibilityResponseSchema = z.object({
 const payloadSchema = z.object({
   companyName: z.string().trim().min(1),
   businessNumber: z.string().trim().min(1),
+  country: z.string().optional().default("대한민국"),
+  addressLine1: z.string().optional().default(""),
+  addressLine2: z.string().optional().default(""),
+  city: z.string().optional().default(""),
+  state: z.string().optional().default(""),
+  postalCode: z.string().optional().default(""),
   companyAddress: z.string().trim().min(1),
   brandName: z.string().optional().default(""),
   homepage: z.string().optional().default(""),
@@ -253,12 +259,17 @@ export async function POST(request: Request) {
     .insert({
       name: input.companyName,
       business_registration_number: input.businessNumber,
-      country: (input as any).country?.trim() || "",
+      country: input.country?.trim() || "대한민국",
       contact_name: input.contactName,
       contact_phone: input.phone,
       intro: `__COMPANY_METADATA__:${JSON.stringify({
         description: "",
         address: input.companyAddress,
+        address_1: input.addressLine1 || "",
+        address_2: input.addressLine2 || "",
+        city: input.city || "",
+        state: input.state || "",
+        zip_code: input.postalCode || "",
         website: input.homepage || "",
         contacts: [
           {
@@ -396,9 +407,13 @@ export async function POST(request: Request) {
     const cat = CATEGORY_MAP[p.category] || "skincare";
 
     // 가로, 세로, 높이 단위 변환 (inch -> cm)
-    let widthNum = Number(p.packageWidth) || null;
-    let depthNum = Number(p.packageDepth) || null;
-    let heightNum = Number(p.packageHeight) || null;
+    let widthNum = p.packageWidth?.trim() ? Number(p.packageWidth) : null;
+    if (isNaN(widthNum as number)) widthNum = null;
+    let depthNum = p.packageDepth?.trim() ? Number(p.packageDepth) : null;
+    if (isNaN(depthNum as number)) depthNum = null;
+    let heightNum = p.packageHeight?.trim() ? Number(p.packageHeight) : null;
+    if (isNaN(heightNum as number)) heightNum = null;
+
     if (p.dimensionUnit === "inch") {
       if (widthNum !== null) widthNum = Number((widthNum * 2.54).toFixed(3));
       if (depthNum !== null) depthNum = Number((depthNum * 2.54).toFixed(3));
@@ -406,7 +421,8 @@ export async function POST(request: Request) {
     }
 
     // 무게 단위 변환 (kg, lb -> g)
-    let weightNum = Number(p.packageWeight) || null;
+    let weightNum = p.packageWeight?.trim() ? Number(p.packageWeight) : null;
+    if (isNaN(weightNum as number)) weightNum = null;
     if (weightNum !== null) {
       if (p.weightUnit === "kg") {
         weightNum = Number((weightNum * 1000).toFixed(3));
@@ -415,8 +431,8 @@ export async function POST(request: Request) {
       }
     }
 
-    const formattedVolume = p.packageWidth && p.packageDepth && p.packageHeight
-      ? `${p.packageWidth}x${p.packageDepth}x${p.packageHeight} ${p.dimensionUnit}`
+    const formattedVolume = p.packageWidth?.trim() && p.packageDepth?.trim() && p.packageHeight?.trim()
+      ? `${p.packageWidth.trim()}x${p.packageDepth.trim()}x${p.packageHeight.trim()} ${p.dimensionUnit || "cm"}`
       : null;
 
     const { data: product, error: prodError } = await admin
