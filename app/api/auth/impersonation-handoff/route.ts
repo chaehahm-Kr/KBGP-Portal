@@ -5,6 +5,7 @@ import {
   COOKIE_NAME,
   SESSION_DURATION_SECONDS,
   getPortalBaseUrl,
+  getPortalLandingPath,
 } from "@/lib/auth/impersonation";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -30,7 +31,7 @@ export async function GET(request: NextRequest) {
 
     const token = createSignedToken(sessionData);
 
-    const landingPath = sessionData.portalType === "RETAILER" ? "/retailer" : "/portal";
+    const landingPath = getPortalLandingPath(sessionData.portalType);
     const baseUrl = getPortalBaseUrl(sessionData.portalType);
     const targetUrlStr = baseUrl ? `${baseUrl}${landingPath}` : landingPath;
 

@@ -36,13 +36,19 @@ export function StartImpersonationModal({
   const [reason, setReason] = useState("Customer Support");
   const [note, setNote] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [activeSession, setActiveSession] = useState<{
+    targetUserName: string;
+    targetCompanyName: string;
+    portalType: "BRAND" | "RETAILER";
+    redirectUrl?: string;
+  } | null>(null);
   const [isPending, startTransition] = useTransition();
 
   if (!isOpen || !targetUser || !targetCompany) return null;
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleStartSession = (forceRestart = false) => {
     setError(null);
+    setActiveSession(null);
 
     startTransition(async () => {
       const res = await startImpersonationAction({
@@ -51,14 +57,26 @@ export function StartImpersonationModal({
         portalType: targetCompany.portalType,
         reason,
         note,
+        forceRestart,
       });
 
       if (res.success && res.redirectUrl) {
         window.location.href = res.redirectUrl;
+      } else if (res.activeSession) {
+        setActiveSession({
+          ...res.activeSession,
+          redirectUrl: res.redirectUrl,
+        });
+        setError(res.error || "현재 실행 중인 지원 세션이 있습니다.");
       } else {
         setError(res.error || "지원 세션을 시작할 수 없습니다.");
       }
     });
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    handleStartSession(false);
   };
 
   return (
@@ -84,8 +102,33 @@ export function StartImpersonationModal({
         </div>
 
         {error && (
-          <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 text-xs font-semibold">
-            ⚠️ {error}
+          <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 text-xs font-semibold space-y-2">
+            <div>⚠️ {error}</div>
+            {activeSession && (
+              <div className="flex flex-wrap gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => handleStartSession(true)}
+                  disabled={isPending}
+                  className="rounded-lg bg-amber-600 hover:bg-amber-700 text-white px-3 py-1.5 text-xs font-bold transition-colors cursor-pointer"
+                >
+                  기존 세션 종료 및 새로 시작
+                </button>
+                {activeSession.redirectUrl && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (activeSession.redirectUrl) {
+                        window.location.href = activeSession.redirectUrl;
+                      }
+                    }}
+                    className="rounded-lg bg-zinc-700 hover:bg-zinc-800 text-white px-3 py-1.5 text-xs font-bold transition-colors cursor-pointer"
+                  >
+                    기존 세션으로 이동
+                  </button>
+                )}
+              </div>
+            )}
           </div>
         )}
 

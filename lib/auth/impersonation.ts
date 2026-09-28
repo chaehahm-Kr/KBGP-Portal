@@ -41,6 +41,16 @@ export function getPortalBaseUrl(portalType: "BRAND" | "RETAILER"): string {
 }
 
 /**
+ * Gets clean landing path for target portal type
+ */
+export function getPortalLandingPath(portalType: "BRAND" | "RETAILER"): string {
+  if (portalType === "RETAILER") {
+    return process.env.NODE_ENV === "development" ? "/retailer" : "/";
+  }
+  return "/portal";
+}
+
+/**
  * Gets base URL for Admin Console
  */
 export function getAdminBaseUrl(): string {
@@ -244,6 +254,14 @@ export interface StartImpersonationInput {
   portalType?: "BRAND" | "RETAILER";
   reason: string;
   note?: string;
+  forceRestart?: boolean;
+}
+
+export interface ActiveSessionDetails {
+  targetUserId?: string;
+  targetUserName: string;
+  targetCompanyName: string;
+  portalType: "BRAND" | "RETAILER";
 }
 
 /**
@@ -252,6 +270,7 @@ export interface StartImpersonationInput {
 export async function startImpersonationAction(input: StartImpersonationInput): Promise<{
   success: boolean;
   redirectUrl?: string;
+  activeSession?: ActiveSessionDetails;
   error?: string;
 }> {
   try {
@@ -280,15 +299,31 @@ export async function startImpersonationAction(input: StartImpersonationInput): 
     // 2. Check & Clean Stale / Expired Impersonation Session
     const currentImp = await getImpersonationSession();
     if (currentImp) {
-      // Check if session is expired
-      if (new Date(currentImp.expiresAt).getTime() <= Date.now()) {
-        const cookieStore = await cookies();
-        cookieStore.delete(COOKIE_NAME);
+      const isExpired = new Date(currentImp.expiresAt).getTime() <= Date.now();
+      const isSameUser = currentImp.targetUserId === input.targetUserId;
+
+      if (isExpired || input.forceRestart || isSameUser) {
+        // Automatically delete stale/overridden cookie on Admin domain
+        try {
+          const cookieStore = await cookies();
+          cookieStore.delete(COOKIE_NAME);
+        } catch (e) {}
       } else {
         console.warn(`[IMPERSONATION_NESTED_BLOCKED] Active session already exists for admin ${staff.id}`);
+        const existingBaseUrl = getPortalBaseUrl(currentImp.portalType);
+        const existingLandingPath = getPortalLandingPath(currentImp.portalType);
+        const existingRedirectUrl = existingBaseUrl ? `${existingBaseUrl}${existingLandingPath}` : existingLandingPath;
+
         return {
           success: false,
-          error: "이미 다른 계정을 임퍼소네이션 중입니다. 먼저 기존 지원 세션을 종료해 주세요.",
+          redirectUrl: existingRedirectUrl,
+          activeSession: {
+            targetUserId: currentImp.targetUserId,
+            targetUserName: currentImp.targetUserName,
+            targetCompanyName: currentImp.targetCompanyName,
+            portalType: currentImp.portalType,
+          },
+          error: `현재 [${currentImp.targetCompanyName} - ${currentImp.targetUserName}] 지원 세션이 실행 중입니다.`,
         };
       }
     }
@@ -364,22 +399,7 @@ export async function startImpersonationAction(input: StartImpersonationInput): 
       note: input.note?.trim() || undefined,
     };
 
-    // 7. Set Impersonation Cookie on Admin Domain
-    const token = createSignedToken(sessionData);
-    const cookieStore = await cookies();
-    try {
-      cookieStore.set(COOKIE_NAME, token, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        sameSite: "lax",
-        path: "/",
-        maxAge: SESSION_DURATION_SECONDS,
-      });
-    } catch (cookieErr) {
-      console.warn("[IMPERSONATION_COOKIE_FAILED] Cookie set error:", cookieErr);
-    }
-
-    // 8. Insert Audit Log
+    // 7. Insert Audit Log
     try {
       await admin.from("impersonation_audit_logs").insert({
         session_id: sessionId,
@@ -399,7 +419,7 @@ export async function startImpersonationAction(input: StartImpersonationInput): 
       console.warn("[startImpersonationAction] Audit log insert warning:", auditErr);
     }
 
-    // 9. Generate Single-Use Cross-Domain Handoff Token & Redirect URL
+    // 8. Generate Single-Use Cross-Domain Handoff Token & Redirect URL
     const handoffCode = createHandoffToken(sessionData);
     const baseUrl = getPortalBaseUrl(resolvedPortalType);
     const handoffPath = `/api/auth/impersonation-handoff?code=${encodeURIComponent(handoffCode)}`;
