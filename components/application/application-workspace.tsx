@@ -18,6 +18,9 @@ interface ApplicationWorkspaceProps {
   application: any;
   company: any;
   companyUsers?: any[];
+  brands?: any[];
+  inquiry?: any;
+  submittedProducts?: any[];
   linkRows: any[];
   productNameById: Map<string, string>;
   infoRequestRows: any[];
@@ -48,6 +51,9 @@ export default function ApplicationWorkspace({
   application,
   company,
   companyUsers = [],
+  brands = [],
+  inquiry = null,
+  submittedProducts = [],
   linkRows,
   productNameById,
   infoRequestRows,
@@ -206,9 +212,15 @@ export default function ApplicationWorkspace({
   let parsedMeta = {
     description: company?.intro || "",
     address: "",
+    address_1: "",
+    address_2: "",
+    city: "",
+    state: "",
+    zip_code: "",
+    country: company?.country || "대한민국",
     website: "",
     contacts: [] as any[],
-    type: "Brand Owner"
+    type: "Brand Owner",
   };
 
   if (company?.intro && company.intro.startsWith("__COMPANY_METADATA__:")) {
@@ -218,14 +230,134 @@ export default function ApplicationWorkspace({
       parsedMeta = {
         description: data.description || "",
         address: data.address || "",
+        address_1: data.address_1 || "",
+        address_2: data.address_2 || "",
+        city: data.city || "",
+        state: data.state || "",
+        zip_code: data.zip_code || "",
+        country: data.country || company?.country || "대한민국",
         website: data.website || "",
         contacts: data.contacts || [],
-        type: data.type || "Brand Owner"
+        type: data.type || "Brand Owner",
       };
     } catch (e) {
       console.error("Error parsing company metadata in workspace:", e);
     }
   }
+
+  // Resolve structured address
+  let structuredAddress = {
+    country: company?.country || parsedMeta.country || "대한민국",
+    address1: "",
+    address2: "",
+    city: "",
+    state: "",
+    postalCode: "",
+    fullFormatted: "",
+  };
+
+  if (application?.applicant_address) {
+    if (typeof application.applicant_address === "object") {
+      structuredAddress = {
+        country: application.applicant_address.country || company?.country || parsedMeta.country || "대한민국",
+        address1:
+          application.applicant_address.address_line_1 ||
+          application.applicant_address.street ||
+          application.applicant_address.address ||
+          "",
+        address2: application.applicant_address.address_line_2 || "",
+        city: application.applicant_address.city || "",
+        state: application.applicant_address.state || "",
+        postalCode: application.applicant_address.postal_code || application.applicant_address.zip || "",
+        fullFormatted: application.applicant_address.formatted || "",
+      };
+    } else if (typeof application.applicant_address === "string") {
+      try {
+        const parsed = JSON.parse(application.applicant_address);
+        structuredAddress = {
+          country: parsed.country || company?.country || parsedMeta.country || "대한민국",
+          address1: parsed.address_line_1 || parsed.street || parsed.address || "",
+          address2: parsed.address_line_2 || "",
+          city: parsed.city || "",
+          state: parsed.state || "",
+          postalCode: parsed.postal_code || parsed.zip || "",
+          fullFormatted: parsed.formatted || "",
+        };
+      } catch {
+        structuredAddress.address1 = application.applicant_address;
+        structuredAddress.fullFormatted = application.applicant_address;
+      }
+    }
+  }
+
+  if (!structuredAddress.address1 && parsedMeta.address_1) {
+    structuredAddress.address1 = parsedMeta.address_1;
+    structuredAddress.address2 = parsedMeta.address_2 || "";
+    structuredAddress.city = parsedMeta.city || "";
+    structuredAddress.state = parsedMeta.state || "";
+    structuredAddress.postalCode = parsedMeta.zip_code || "";
+  } else if (!structuredAddress.address1 && parsedMeta.address) {
+    structuredAddress.address1 = parsedMeta.address;
+  }
+
+  if (!structuredAddress.address1 && inquiry?.company_address) {
+    if (typeof inquiry.company_address === "object") {
+      structuredAddress.address1 = inquiry.company_address.address_line_1 || inquiry.company_address.address || "";
+      structuredAddress.address2 = inquiry.company_address.address_line_2 || "";
+      structuredAddress.city = inquiry.company_address.city || "";
+      structuredAddress.state = inquiry.company_address.state || "";
+      structuredAddress.postalCode = inquiry.company_address.postal_code || inquiry.company_address.zip || "";
+    } else {
+      structuredAddress.address1 = String(inquiry.company_address);
+    }
+  }
+
+  if (!structuredAddress.fullFormatted) {
+    const parts = [
+      structuredAddress.address1,
+      structuredAddress.address2,
+      structuredAddress.city,
+      structuredAddress.state,
+      structuredAddress.postalCode,
+      structuredAddress.country !== "대한민국" ? structuredAddress.country : "",
+    ].filter(Boolean);
+    structuredAddress.fullFormatted = parts.length > 0 ? parts.join(", ") : "-";
+  }
+
+  // Display values
+  const displayCompanyName =
+    company?.name || application.applicant_company_name || inquiry?.brand_name || "-";
+  const displayBrandName =
+    inquiry?.brand_name || brands?.[0]?.name || company?.name || application.applicant_company_name || "-";
+  const displayWebsite = inquiry?.homepage || brands?.[0]?.website || parsedMeta.website || "";
+  const displayBRN = company?.business_registration_number || "-";
+
+  const displayContactName =
+    company?.contact_name || application.applicant_contact_name || companyUsers?.[0]?.name || "-";
+  const displayContactTitle =
+    inquiry?.contact_title ||
+    companyUsers?.[0]?.title ||
+    companyUsers?.[0]?.position ||
+    parsedMeta.contacts?.[0]?.title ||
+    "대표/담당자";
+  const displayContactEmail = application.applicant_contact_email || companyUsers?.[0]?.email || "-";
+  const displayContactPhone =
+    application.applicant_contact_phone || company?.contact_phone || companyUsers?.[0]?.phone || "-";
+
+  const formatFileSize = (bytes?: number | null) => {
+    if (!bytes || bytes <= 0) return "";
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
+  const CATEGORY_LABEL_MAP: Record<string, string> = {
+    skincare: "스킨케어",
+    hair_scalp: "헤어/두피",
+    beauty_tools: "미용기기",
+    wellness_patch: "웰니스 패치",
+    daily_care: "데일리 케어",
+  };
 
   const getProductHistory = (linkId: string) => {
     const history: { status: string; label: string; time: string; reason: string | null; dateObj: Date }[] = [];
@@ -378,16 +510,16 @@ export default function ApplicationWorkspace({
             </div>
 
             <p className="text-xs text-zinc-600 dark:text-zinc-400">
-              Company Name: <span className="font-bold text-zinc-950 dark:text-white">{company?.name || application.applicant_company_name || "-"}</span> · 
-              Contact: <span className="font-semibold text-zinc-800 dark:text-zinc-200">{company?.contact_name || application.applicant_contact_name || "-"} ({application.applicant_contact_email || "-"})</span> · 
-              Submitted: {application.submitted_at ? new Date(application.submitted_at).toLocaleDateString() : "-"}
+              회사명: <span className="font-bold text-zinc-950 dark:text-white">{displayCompanyName}</span> · 
+              주 담당자: <span className="font-semibold text-zinc-800 dark:text-zinc-200">{displayContactName} ({displayContactEmail})</span> · 
+              접수일: {application.submitted_at ? new Date(application.submitted_at).toLocaleDateString() : "-"}
             </p>
           </div>
 
           {/* Action Buttons */}
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-xs text-zinc-500 dark:text-zinc-400 mr-2">
-              Reviewer: <span className="font-bold text-zinc-800 dark:text-zinc-200">{currentAssignment ? staffNameById.get(currentAssignment.staff_id) : "Unassigned"}</span>
+              심사 담당: <span className="font-bold text-zinc-800 dark:text-zinc-200">{currentAssignment ? staffNameById.get(currentAssignment.staff_id) : "미지정 (Unassigned)"}</span>
             </span>
 
             {/* Action 1: Approve & Invite */}
@@ -491,88 +623,370 @@ export default function ApplicationWorkspace({
       {/* Tab Panels */}
       <div className="space-y-6">
         {activeTab === "overview" && (
-          <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
-            <div className="md:col-span-2 space-y-6">
-              {/* Company & Application Summary */}
-              <div className="rounded-lg border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900 space-y-3">
-                <h3 className="text-xs font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">
-                  {application.partner_type === "retailer" ? "Retailer Company & Contact Profile" : "Brand Company Profile"}
-                </h3>
-                <div className="text-xs text-zinc-800 dark:text-zinc-200 space-y-2">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <p>
-                      <span className="text-zinc-400 dark:text-zinc-500">회사명:</span>{" "}
-                      <span className="font-bold">{company?.name || application.applicant_company_name || "-"}</span>
-                    </p>
-                    <p>
-                      <span className="text-zinc-400 dark:text-zinc-500">주 담당자:</span>{" "}
-                      <span className="font-semibold">{company?.contact_name || application.applicant_contact_name || "-"}</span>
-                    </p>
-                    <p>
-                      <span className="text-zinc-400 dark:text-zinc-500">이메일:</span>{" "}
-                      <span className="font-mono">{application.applicant_contact_email || parsedMeta.contacts?.[0]?.email || "-"}</span>
-                    </p>
-                    <p>
-                      <span className="text-zinc-400 dark:text-zinc-500">연락처:</span>{" "}
-                      <span className="font-mono">{application.applicant_contact_phone || company?.contact_phone || "-"}</span>
-                    </p>
-                    {application.applicant_address && (
-                      <p className="sm:col-span-2">
-                        <span className="text-zinc-400 dark:text-zinc-500">사업장 주소:</span>{" "}
-                        <span className="font-semibold">
-                          {typeof application.applicant_address === "string"
-                            ? application.applicant_address
-                            : `${application.applicant_address.street || ""} ${application.applicant_address.city || ""} ${application.applicant_address.state || ""} ${application.applicant_address.zip || ""}`.trim() || "-"}
-                        </span>
-                      </p>
-                    )}
-                  </div>
-                  {application.motivation_note && (
-                    <div className="mt-3 p-3 bg-zinc-50 dark:bg-zinc-950 rounded-lg border border-zinc-200 dark:border-zinc-800">
-                      <span className="block text-[10px] font-bold text-zinc-400 dark:text-zinc-500 mb-1">
-                        신청 메모 / 시뮬레이터 연동
-                      </span>
-                      <p className="text-xs text-zinc-700 dark:text-zinc-300 whitespace-pre-wrap">
-                        {application.motivation_note}
-                      </p>
-                    </div>
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+            {/* Left 2 Columns: 3 Core Information Groups */}
+            <div className="lg:col-span-2 space-y-6">
+              {/* Group 1: Company Information Card */}
+              <div className="rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-900 space-y-4 shadow-xs">
+                <div className="flex items-center justify-between border-b border-zinc-100 pb-3 dark:border-zinc-800">
+                  <h3 className="text-xs font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider flex items-center gap-1.5">
+                    <span>🏢</span>
+                    <span>1. 회사 정보 (Company Information)</span>
+                  </h3>
+                  {displayWebsite && (
+                    <a
+                      href={displayWebsite.startsWith("http") ? displayWebsite : `https://${displayWebsite}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-xs font-bold text-indigo-600 hover:underline dark:text-indigo-400 flex items-center gap-1"
+                    >
+                      <span>공식 웹사이트</span>
+                      <span>↗</span>
+                    </a>
                   )}
-                  {(() => {
-                    const list = Array.isArray(application.eligibility_responses)
-                      ? (application.eligibility_responses as any[])
-                      : [];
-                    if (list.length === 0) return null;
-                    const readyCount = list.filter((r) => r.response === "available" || r.response === "ready").length;
-                    const discussCount = list.filter((r) => r.response === "discussion_required" || r.response === "discuss").length;
-                    return (
-                      <p className="text-xs text-zinc-500 dark:text-zinc-400 pt-1">
-                        운영 준비 사항:{" "}
-                        <span className="font-bold text-emerald-600 dark:text-emerald-400">
-                          진행 가능 (Ready) {readyCount}
-                        </span>
-                        {" · "}
-                        <span className="font-bold text-amber-600 dark:text-amber-400">
-                          협의 필요 (Discuss) {discussCount}
-                        </span>
-                      </p>
-                    );
-                  })()}
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+                  <div>
+                    <span className="text-[11px] text-zinc-400 dark:text-zinc-500 block">회사명</span>
+                    <span className="font-bold text-zinc-900 dark:text-white text-sm">{displayCompanyName}</span>
+                  </div>
+                  <div>
+                    <span className="text-[11px] text-zinc-400 dark:text-zinc-500 block">사업자등록번호</span>
+                    <span className="font-mono font-semibold text-zinc-800 dark:text-zinc-200">{displayBRN}</span>
+                  </div>
+                  <div>
+                    <span className="text-[11px] text-zinc-400 dark:text-zinc-500 block">대표 브랜드명</span>
+                    <span className="font-bold text-zinc-900 dark:text-white">{displayBrandName}</span>
+                  </div>
+                  <div>
+                    <span className="text-[11px] text-zinc-400 dark:text-zinc-500 block">국가</span>
+                    <span className="font-semibold text-zinc-800 dark:text-zinc-200">{structuredAddress.country}</span>
+                  </div>
+                  <div>
+                    <span className="text-[11px] text-zinc-400 dark:text-zinc-500 block">기본 주소 (Address Line 1)</span>
+                    <span className="font-medium text-zinc-800 dark:text-zinc-200">{structuredAddress.address1 || "-"}</span>
+                  </div>
+                  <div>
+                    <span className="text-[11px] text-zinc-400 dark:text-zinc-500 block">상세 주소 (Address Line 2)</span>
+                    <span className="font-medium text-zinc-800 dark:text-zinc-200">{structuredAddress.address2 || "-"}</span>
+                  </div>
+                  <div>
+                    <span className="text-[11px] text-zinc-400 dark:text-zinc-500 block">도시 (City) / 시·도 (State)</span>
+                    <span className="font-medium text-zinc-800 dark:text-zinc-200">
+                      {[structuredAddress.city, structuredAddress.state].filter(Boolean).join(", ") || "-"}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[11px] text-zinc-400 dark:text-zinc-500 block">우편번호 (ZIP / Postal Code)</span>
+                    <span className="font-mono font-medium text-zinc-800 dark:text-zinc-200">{structuredAddress.postalCode || "-"}</span>
+                  </div>
+                </div>
+
+                {parsedMeta.description && (
+                  <div className="mt-2 p-3 bg-zinc-50 dark:bg-zinc-950 rounded-xl border border-zinc-200/80 dark:border-zinc-800">
+                    <span className="block text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider mb-1">
+                      회사 소개 (Company Intro)
+                    </span>
+                    <p className="text-xs text-zinc-700 dark:text-zinc-300 whitespace-pre-wrap leading-relaxed">
+                      {parsedMeta.description}
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {/* Group 2: Contact Information Card */}
+              <div className="rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-900 space-y-4 shadow-xs">
+                <div className="flex items-center justify-between border-b border-zinc-100 pb-3 dark:border-zinc-800">
+                  <h3 className="text-xs font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider flex items-center gap-1.5">
+                    <span>👤</span>
+                    <span>2. 담당자 정보 (Contact Information)</span>
+                  </h3>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+                  <div>
+                    <span className="text-[11px] text-zinc-400 dark:text-zinc-500 block">주 담당자 성명</span>
+                    <span className="font-bold text-zinc-900 dark:text-white text-sm">{displayContactName}</span>
+                  </div>
+                  <div>
+                    <span className="text-[11px] text-zinc-400 dark:text-zinc-500 block">직책 / 직함</span>
+                    <span className="font-semibold text-zinc-800 dark:text-zinc-200">{displayContactTitle}</span>
+                  </div>
+                  <div>
+                    <span className="text-[11px] text-zinc-400 dark:text-zinc-500 block">이메일 (Contact Email)</span>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <span className="font-mono font-semibold text-zinc-900 dark:text-white">{displayContactEmail}</span>
+                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800">
+                        ✓ 인증 완료
+                      </span>
+                    </div>
+                  </div>
+                  <div>
+                    <span className="text-[11px] text-zinc-400 dark:text-zinc-500 block">연락처 (Phone)</span>
+                    <span className="font-mono font-semibold text-zinc-800 dark:text-zinc-200 mt-0.5 block">{displayContactPhone}</span>
+                  </div>
                 </div>
               </div>
 
+              {/* Group 3: Submitted Products Cards (Max 3) */}
+              <div className="rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-900 space-y-4 shadow-xs">
+                <div className="flex items-center justify-between border-b border-zinc-100 pb-3 dark:border-zinc-800">
+                  <h3 className="text-xs font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider flex items-center gap-1.5">
+                    <span>📦</span>
+                    <span>3. 신청 제품 정보 (Submitted Products · 총 {submittedProducts.length}개)</span>
+                  </h3>
+                </div>
 
+                {submittedProducts.length === 0 ? (
+                  <p className="text-xs text-zinc-400 py-4 text-center">신청된 제품 정보가 없습니다.</p>
+                ) : (
+                  <div className="space-y-4">
+                    {submittedProducts.map((prod, idx) => (
+                      <div
+                        key={prod.id || idx}
+                        className="rounded-xl border border-zinc-200/90 bg-zinc-50/50 p-4 dark:border-zinc-800 dark:bg-zinc-950/40 space-y-3"
+                      >
+                        {/* Product Header */}
+                        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-200/60 pb-2.5 dark:border-zinc-800">
+                          <div className="flex items-center gap-2">
+                            <span className="px-2 py-0.5 rounded-md text-[11px] font-extrabold bg-zinc-900 text-white dark:bg-white dark:text-zinc-900">
+                              제품 {idx + 1}
+                            </span>
+                            <span className="font-extrabold text-sm text-zinc-950 dark:text-white">
+                              {prod.name}
+                            </span>
+                            {prod.category && (
+                              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-zinc-200 text-zinc-800 dark:bg-zinc-800 dark:text-zinc-300">
+                                {CATEGORY_LABEL_MAP[prod.category] || prod.category}
+                              </span>
+                            )}
+                          </div>
+                          <div>
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-extrabold uppercase ${
+                              prod.reviewStatus === "approved"
+                                ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
+                                : prod.reviewStatus === "rejected"
+                                ? "bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300"
+                                : prod.reviewStatus === "on_hold"
+                                ? "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300"
+                                : "bg-zinc-200 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300"
+                            }`}>
+                              심사 상태: {prod.reviewStatus === "pending" ? "대기 (Pending)" : prod.reviewStatus}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Specs Grid */}
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs">
+                          <div className="p-2.5 rounded-lg bg-white dark:bg-zinc-900 border border-zinc-200/60 dark:border-zinc-800">
+                            <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase block">소비자가격 (KRW)</span>
+                            <span className="font-extrabold text-zinc-900 dark:text-white text-sm">
+                              {prod.retailPriceKrw ? `₩${prod.retailPriceKrw.toLocaleString()}` : "— (미입력)"}
+                            </span>
+                          </div>
+
+                          <div className="p-2.5 rounded-lg bg-white dark:bg-zinc-900 border border-zinc-200/60 dark:border-zinc-800">
+                            <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase block">공급희망가격 (USD)</span>
+                            <span className="font-extrabold text-indigo-600 dark:text-indigo-400 text-sm font-mono">
+                              {prod.targetSupplyPriceUsd ? `$${prod.targetSupplyPriceUsd}` : "— (미입력)"}
+                            </span>
+                          </div>
+
+                          <div className="p-2.5 rounded-lg bg-white dark:bg-zinc-900 border border-zinc-200/60 dark:border-zinc-800">
+                            <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase block">카톤/패키지 규격 (W×D×H)</span>
+                            <span className="font-semibold text-zinc-800 dark:text-zinc-200">
+                              {prod.packageWidth && prod.packageDepth && prod.packageHeight
+                                ? `${prod.packageWidth} × ${prod.packageDepth} × ${prod.packageHeight} ${prod.dimensionUnit || "cm"}`
+                                : prod.volume || "— (미입력)"}
+                            </span>
+                          </div>
+
+                          <div className="p-2.5 rounded-lg bg-white dark:bg-zinc-900 border border-zinc-200/60 dark:border-zinc-800">
+                            <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase block">패키지 중량</span>
+                            <span className="font-semibold text-zinc-800 dark:text-zinc-200">
+                              {prod.packageWeight ? `${prod.packageWeight} ${prod.weightUnit || "g"}` : "— (미입력)"}
+                            </span>
+                          </div>
+
+                          <div className="p-2.5 rounded-lg bg-white dark:bg-zinc-900 border border-zinc-200/60 dark:border-zinc-800">
+                            <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase block">월 생산 가능 수량</span>
+                            <span className="font-semibold text-zinc-800 dark:text-zinc-200">
+                              {prod.monthlyCapacity ? String(prod.monthlyCapacity) : "— (미입력)"}
+                            </span>
+                          </div>
+
+                          <div className="p-2.5 rounded-lg bg-white dark:bg-zinc-900 border border-zinc-200/60 dark:border-zinc-800">
+                            <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase block">리드 타임 (Lead Time)</span>
+                            <span className="font-semibold text-zinc-800 dark:text-zinc-200">
+                              {prod.leadTime ? String(prod.leadTime) : "— (미입력)"}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Description Note */}
+                        {prod.description && (
+                          <div className="p-3 bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200/60 dark:border-zinc-800">
+                            <span className="block text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider mb-1">
+                              제품 설명 / 주요 특징 (Description & Key Points)
+                            </span>
+                            <p className="text-xs text-zinc-700 dark:text-zinc-300 whitespace-pre-wrap leading-relaxed">
+                              {prod.description}
+                            </p>
+                          </div>
+                        )}
+
+                        {/* Uploaded Files & Images */}
+                        <div className="space-y-1.5 pt-1">
+                          <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider block">
+                            첨부 파일 및 이미지 (Attached Files & Images)
+                          </span>
+                          {prod.images && prod.images.length > 0 ? (
+                            <div className="flex flex-wrap gap-2">
+                              {prod.images.map((img: any, imgIdx: number) => (
+                                <div
+                                  key={img.id || imgIdx}
+                                  className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-xs"
+                                >
+                                  <span>📎</span>
+                                  <span className="font-medium text-zinc-800 dark:text-zinc-200 truncate max-w-[200px]">
+                                    {img.fileName}
+                                  </span>
+                                  {img.fileSize && (
+                                    <span className="text-[10px] text-zinc-400">
+                                      ({formatFileSize(img.fileSize)})
+                                    </span>
+                                  )}
+                                  {img.url && (
+                                    <a
+                                      href={img.url}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="ml-1 px-2 py-0.5 rounded bg-zinc-900 text-white font-bold text-[10px] hover:bg-zinc-800 dark:bg-white dark:text-zinc-950"
+                                    >
+                                      다운로드 ↗
+                                    </a>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <span className="text-xs text-zinc-400 dark:text-zinc-500">첨부된 파일 없음</span>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Group 4: Readiness & Self Check Summary */}
+              <div className="rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-900 space-y-4 shadow-xs">
+                <div className="flex items-center justify-between border-b border-zinc-100 pb-3 dark:border-zinc-800">
+                  <h3 className="text-xs font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider flex items-center gap-1.5">
+                    <span>📋</span>
+                    <span>4. 입점 및 운영 준비 사항 요약 (Readiness Summary)</span>
+                  </h3>
+                </div>
+
+                {(() => {
+                  const list = Array.isArray(application.eligibility_responses)
+                    ? (application.eligibility_responses as any[])
+                    : [];
+                  if (list.length === 0) {
+                    return <p className="text-xs text-zinc-400 py-2">등록된 준비 사항 데이터가 없습니다.</p>;
+                  }
+
+                  const READINESS_MAP: Record<string, string> = {
+                    stable_supply: "안정적인 생산 및 공급망 확보",
+                    us_regulatory_compliance: "미국 화장품 규제(MoCRA) 준수 및 FDA 등록 준비",
+                    initial_test_quantity: "초기 파트너십 테스트 물량 공급 의향",
+                    north_america_distribution: "북미 온/오프라인 유통 및 가격 정책 동의",
+                    joint_marketing: "북미 현지 공동 마케팅 협력 의향",
+                    sales_content_support: "상세 페이지 및 현지화 마케팅 콘텐츠 지원",
+                    kbeauty_space: "전용 K-Beauty 진열 공간 확보",
+                    staff_education: "스태프 제품 교육 및 루틴 숙지",
+                    weekly_sync: "주간 재고 실사 및 리오더 협력",
+                    category_mindset: "카테고리 파트너십 및 가격 준수",
+                  };
+
+                  return (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                      {list.map((item, idx) => {
+                        const key = item.itemKey || item.key || `item_${idx}`;
+                        const title = item.title || READINESS_MAP[key] || key;
+                        const isReady = item.response === "available" || item.response === "ready";
+
+                        return (
+                          <div
+                            key={key}
+                            className={`flex items-center justify-between p-2.5 rounded-lg border text-xs ${
+                              isReady
+                                ? "bg-emerald-50/50 border-emerald-100 text-emerald-900 dark:bg-emerald-950/20 dark:border-emerald-900/40 dark:text-emerald-300"
+                                : "bg-amber-50/50 border-amber-100 text-amber-900 dark:bg-amber-950/20 dark:border-amber-900/40 dark:text-amber-300"
+                            }`}
+                          >
+                            <span className="font-semibold truncate mr-2">{title}</span>
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold shrink-0 ${
+                              isReady
+                                ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-200"
+                                : "bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-200"
+                            }`}>
+                              {isReady ? "Ready" : "Discuss"}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
+              </div>
             </div>
 
-            {/* Quick Actions / Assignee Panel */}
+            {/* Right Column: Quick Actions & Scoring Summary */}
             <div className="space-y-6">
-              <div className="rounded-lg border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900">
-                <h3 className="text-xs font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider mb-4">담당자 배정 (Assignee)</h3>
+              {/* Assignee Card */}
+              <div className="rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-900 space-y-4 shadow-xs">
+                <h3 className="text-xs font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider mb-2">
+                  담당자 배정 (Assignee)
+                </h3>
                 <AssignApplicationForm
                   action={assignAction}
                   staffMembers={staffMembers}
                   currentStaffId={currentAssignment?.staff_id ?? null}
                 />
               </div>
+
+              {/* Scoring Summary Card */}
+              <div className="rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-900 space-y-4 shadow-xs">
+                <h3 className="text-xs font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider mb-2">
+                  신속 평가 점수 (Weighted Score)
+                </h3>
+                <div className="flex items-baseline gap-2">
+                  <span className="text-3xl font-extrabold text-zinc-950 dark:text-white">{weightedScore}</span>
+                  <span className="text-xs font-semibold text-zinc-400">/ 10.0</span>
+                </div>
+                <div>
+                  <span className="inline-block rounded-lg bg-zinc-900 px-2.5 py-1 text-xs font-bold text-white dark:bg-white dark:text-zinc-950">
+                    {getRecommendation(weightedScore)}
+                  </span>
+                </div>
+                <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-relaxed">
+                  '채점 및 권고' 탭에서 세부 항목별 10점 만점 점수를 조정하고 심사 평가서를 작성할 수 있습니다.
+                </p>
+              </div>
+
+              {/* Application Motivation Note */}
+              {application.motivation_note && (
+                <div className="rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-900 space-y-2 shadow-xs">
+                  <h3 className="text-xs font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">
+                    신청 메모 / 비고 (Application Note)
+                  </h3>
+                  <p className="text-xs text-zinc-700 dark:text-zinc-300 whitespace-pre-wrap leading-relaxed">
+                    {application.motivation_note}
+                  </p>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -580,57 +994,62 @@ export default function ApplicationWorkspace({
         {activeTab === "company" && (
           <div className="space-y-6">
             {/* 1. 회사 상세 정보 카드 */}
-            <div className="rounded-lg border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-900 space-y-4 shadow-sm">
-              <h2 className="text-xs font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider border-b border-zinc-100 pb-2 dark:border-zinc-800">
-                회사 상세 프로필
+            <div className="rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-900 space-y-4 shadow-xs">
+              <h2 className="text-xs font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider border-b border-zinc-100 pb-3 dark:border-zinc-800">
+                회사 상세 프로필 (Company Profile)
               </h2>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 text-xs text-zinc-600 dark:text-zinc-400">
-                <div className="space-y-2">
-                  <p>회사 이름: <span className="font-bold text-zinc-900 dark:text-white">{company?.name || "-"}</span></p>
-                  <p>국가: <span className="font-semibold text-zinc-800 dark:text-zinc-200">{company?.country || "-"}</span></p>
-                  <p>사업자번호: <span className="font-semibold text-zinc-800 dark:text-zinc-200 font-mono">{company?.business_registration_number || "-"}</span></p>
-                  <p>파트너 유형: <span className="font-semibold text-zinc-800 dark:text-zinc-200">{parsedMeta.type || "-"}</span></p>
+                <div className="space-y-2.5">
+                  <p>회사 이름: <span className="font-bold text-zinc-900 dark:text-white text-sm">{displayCompanyName}</span></p>
+                  <p>국가: <span className="font-semibold text-zinc-800 dark:text-zinc-200">{structuredAddress.country}</span></p>
+                  <p>사업자등록번호: <span className="font-semibold text-zinc-800 dark:text-zinc-200 font-mono">{displayBRN}</span></p>
+                  <p>대표 브랜드명: <span className="font-semibold text-zinc-800 dark:text-zinc-200">{displayBrandName}</span></p>
+                  <p>파트너 유형: <span className="font-semibold text-zinc-800 dark:text-zinc-200">{parsedMeta.type || "Brand Owner"}</span></p>
                 </div>
-                <div className="space-y-2">
-                  <p>회사 주소: <span className="font-semibold text-zinc-800 dark:text-zinc-200">{parsedMeta.address || "-"}</span></p>
-                  <p>웹사이트: {parsedMeta.website ? (
+                <div className="space-y-2.5">
+                  <p>기본 주소: <span className="font-semibold text-zinc-800 dark:text-zinc-200">{structuredAddress.address1 || "-"}</span></p>
+                  <p>상세 주소: <span className="font-semibold text-zinc-800 dark:text-zinc-200">{structuredAddress.address2 || "-"}</span></p>
+                  <p>도시 / 시·도 / 우편번호: <span className="font-semibold text-zinc-800 dark:text-zinc-200">{[structuredAddress.city, structuredAddress.state, structuredAddress.postalCode].filter(Boolean).join(", ") || "-"}</span></p>
+                  <p>전체 주소: <span className="font-semibold text-zinc-800 dark:text-zinc-200">{structuredAddress.fullFormatted}</span></p>
+                  <p>공식 웹사이트: {displayWebsite ? (
                     <a
-                      href={parsedMeta.website.startsWith("http") ? parsedMeta.website : `https://${parsedMeta.website}`}
+                      href={displayWebsite.startsWith("http") ? displayWebsite : `https://${displayWebsite}`}
                       target="_blank"
                       rel="noreferrer"
                       className="font-bold text-indigo-600 dark:text-indigo-400 hover:underline underline-offset-2"
                     >
-                      {parsedMeta.website} ↗
+                      {displayWebsite} ↗
                     </a>
                   ) : (
                     <span className="text-zinc-400 dark:text-zinc-500">-</span>
                   )}</p>
-                  {parsedMeta.description && (
-                    <div>
-                      <span className="block text-[10px] text-zinc-400 dark:text-zinc-500 font-bold mb-1">회사 소개</span>
-                      <p className="text-[11px] leading-relaxed text-zinc-600 dark:text-zinc-300 bg-zinc-50 dark:bg-zinc-950 p-2 rounded border border-zinc-200 dark:border-zinc-800 whitespace-pre-wrap">{parsedMeta.description}</p>
-                    </div>
-                  )}
                 </div>
               </div>
+
+              {parsedMeta.description && (
+                <div className="pt-2 border-t border-zinc-100 dark:border-zinc-800">
+                  <span className="block text-[10px] text-zinc-400 dark:text-zinc-500 font-bold uppercase tracking-wider mb-1">회사 소개</span>
+                  <p className="text-xs leading-relaxed text-zinc-700 dark:text-zinc-300 bg-zinc-50 dark:bg-zinc-950 p-3 rounded-xl border border-zinc-200/80 dark:border-zinc-800 whitespace-pre-wrap">{parsedMeta.description}</p>
+                </div>
+              )}
             </div>
 
             {/* 2. 회사 소속 담당자 및 포털 가입 계정 */}
-            <div className="rounded-lg border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-900 space-y-4 shadow-sm">
-              <h2 className="text-xs font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider border-b border-zinc-100 pb-2 dark:border-zinc-800">
+            <div className="rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-900 space-y-4 shadow-xs">
+              <h2 className="text-xs font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider border-b border-zinc-100 pb-3 dark:border-zinc-800">
                 회사 소속 담당자 및 포털 가입 계정 (Contacts & Portal Users)
               </h2>
               <div className="overflow-x-auto">
                 <table className="w-full border-collapse text-left text-xs text-zinc-500 dark:text-zinc-400">
                   <thead>
                     <tr className="border-b border-zinc-200 bg-zinc-50 font-bold text-zinc-900 dark:border-zinc-800 dark:bg-zinc-900/50 dark:text-white">
-                      <th className="px-4 py-2 font-semibold">이름</th>
-                      <th className="px-4 py-2 font-semibold">부서 / 직함</th>
-                      <th className="px-4 py-2 font-semibold">이메일</th>
-                      <th className="px-4 py-2 font-semibold">연락처</th>
-                      <th className="px-4 py-2 font-semibold">계정 권한 (Role)</th>
-                      <th className="px-4 py-2 font-semibold">메뉴별 세부 권한</th>
-                      <th className="px-4 py-2 font-semibold text-center">이용 상태</th>
+                      <th className="px-4 py-2.5 font-semibold">이름</th>
+                      <th className="px-4 py-2.5 font-semibold">부서 / 직함</th>
+                      <th className="px-4 py-2.5 font-semibold">이메일</th>
+                      <th className="px-4 py-2.5 font-semibold">연락처</th>
+                      <th className="px-4 py-2.5 font-semibold">계정 권한 (Role)</th>
+                      <th className="px-4 py-2.5 font-semibold">메뉴별 세부 권한</th>
+                      <th className="px-4 py-2.5 font-semibold text-center">이용 상태</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
@@ -689,7 +1108,7 @@ export default function ApplicationWorkspace({
                             ) : user.invited_at ? (
                               <>
                                 <span className="inline-block rounded px-1.5 py-0.5 text-[10px] font-bold bg-amber-50 text-amber-700 dark:bg-amber-955/50 dark:text-amber-300 border border-amber-100 dark:border-amber-900/50">
-                                  가입 대기
+                                   가입 대기
                                 </span>
                                 <button
                                   type="button"
@@ -732,63 +1151,210 @@ export default function ApplicationWorkspace({
             </div>
 
             {/* 회사 관리 대시보기 바로가기 링크 */}
-            <div className="pt-2">
-              <Link
-                href={`/admin/companies/${company?.id}`}
-                className="text-xs font-semibold text-indigo-650 hover:text-indigo-850 underline underline-offset-2 dark:text-indigo-400 dark:hover:text-indigo-300"
-              >
-                회사 관리 대시보드 바로가기 (브랜드/제품 전체보기) →
-              </Link>
-            </div>
+            {company?.id && (
+              <div className="pt-2">
+                <Link
+                  href={`/admin/companies/${company.id}`}
+                  className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 underline underline-offset-2 dark:text-indigo-400 dark:hover:text-indigo-300"
+                >
+                  회사 관리 대시보드 바로가기 (브랜드/제품 전체보기) →
+                </Link>
+              </div>
+            )}
           </div>
         )}
 
         {activeTab === "products" && (
-          <div className="rounded-lg border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900 space-y-4">
-            <h2 className="text-sm font-bold text-zinc-900 dark:text-white">신청 제품 리스트 및 심사</h2>
-            <div className="space-y-4">
-              {linkRows.map((link) => (
-                <div key={link.id} className="rounded border border-zinc-200 p-4 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/50">
-                  <ReviewProductForm
-                    action={reviewAction.bind(null, link.id, application.id)}
-                    productName={productNameById.get(link.product_id) ?? "(삭제된 제품)"}
-                    currentStatus={link.review_status as ApplicationProductReviewStatus}
-                    currentReason={link.review_reason}
-                    disabled={!canReview}
-                  />
-                  {/* History Timeline */}
-                  <div className="mt-4 pt-4 border-t border-zinc-200 dark:border-zinc-800 space-y-2">
-                    <h4 className="text-[11px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">심사 히스토리</h4>
-                    <div className="pl-2.5 border-l border-zinc-200 dark:border-zinc-800 space-y-2">
-                      {getProductHistory(link.id).map((event, idx) => (
-                        <div key={idx} className="relative text-[11px] text-zinc-500 dark:text-zinc-400">
-                          <div className={`absolute -left-[14px] top-1.5 h-1.5 w-1.5 rounded-full ${
-                            idx === 0 ? "bg-emerald-500 dark:bg-emerald-400" : "bg-zinc-300 dark:bg-zinc-700"
-                          }`} />
-                          <div className="flex flex-wrap items-center gap-1.5">
-                            <span className={`font-semibold ${
-                              event.status === "approved" ? "text-emerald-600 dark:text-emerald-400" :
-                              event.status === "rejected" ? "text-rose-600 dark:text-rose-400" :
-                              event.status === "on_hold" ? "text-amber-600 dark:text-amber-400" :
-                              "text-zinc-700 dark:text-zinc-300"
-                            }`}>
-                              [{event.label}]
+          <div className="space-y-6">
+            <div className="rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-900 space-y-6 shadow-xs">
+              <div className="flex items-center justify-between border-b border-zinc-100 pb-3 dark:border-zinc-800">
+                <h2 className="text-sm font-bold text-zinc-950 dark:text-white">
+                  신청 제품 리스트 및 상세 심사 (Products & Review)
+                </h2>
+                <span className="text-xs text-zinc-400">총 {submittedProducts.length}개 상품 등록</span>
+              </div>
+
+              {submittedProducts.length === 0 ? (
+                <p className="text-xs text-zinc-400 py-6 text-center">등록된 제품이 없습니다.</p>
+              ) : (
+                <div className="space-y-6">
+                  {submittedProducts.map((prod, idx) => (
+                    <div
+                      key={prod.id || idx}
+                      className="rounded-xl border border-zinc-200 bg-zinc-50/40 p-5 dark:border-zinc-800 dark:bg-zinc-950/40 space-y-4"
+                    >
+                      {/* Product Header */}
+                      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-200/80 pb-3 dark:border-zinc-800">
+                        <div className="flex items-center gap-2">
+                          <span className="px-2.5 py-0.5 rounded-md text-xs font-extrabold bg-zinc-900 text-white dark:bg-white dark:text-zinc-900">
+                            제품 {idx + 1}
+                          </span>
+                          <span className="font-extrabold text-base text-zinc-950 dark:text-white">
+                            {prod.name}
+                          </span>
+                          {prod.category && (
+                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-zinc-200 text-zinc-800 dark:bg-zinc-800 dark:text-zinc-300">
+                              {CATEGORY_LABEL_MAP[prod.category] || prod.category}
                             </span>
-                            <span className="font-mono text-[10px] text-zinc-400">
-                              {event.time}
-                            </span>
-                          </div>
-                          {event.reason && (
-                            <p className="mt-0.5 pl-3 text-xs text-zinc-600 dark:text-zinc-400 italic">
-                              ↳ 사유: {event.reason}
-                            </p>
                           )}
                         </div>
-                      ))}
+                      </div>
+
+                      {/* Specs Grid */}
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs">
+                        <div className="p-3 rounded-lg bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800">
+                          <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase block">소비자가격 (KRW)</span>
+                          <span className="font-extrabold text-zinc-900 dark:text-white text-sm">
+                            {prod.retailPriceKrw ? `₩${prod.retailPriceKrw.toLocaleString()}` : "— (미입력)"}
+                          </span>
+                        </div>
+
+                        <div className="p-3 rounded-lg bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800">
+                          <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase block">공급희망가격 (USD)</span>
+                          <span className="font-extrabold text-indigo-600 dark:text-indigo-400 text-sm font-mono">
+                            {prod.targetSupplyPriceUsd ? `$${prod.targetSupplyPriceUsd}` : "— (미입력)"}
+                          </span>
+                        </div>
+
+                        <div className="p-3 rounded-lg bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800">
+                          <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase block">카톤/패키지 규격 (W×D×H)</span>
+                          <span className="font-semibold text-zinc-800 dark:text-zinc-200">
+                            {prod.packageWidth && prod.packageDepth && prod.packageHeight
+                              ? `${prod.packageWidth} × ${prod.packageDepth} × ${prod.packageHeight} ${prod.dimensionUnit || "cm"}`
+                              : prod.volume || "— (미입력)"}
+                          </span>
+                        </div>
+
+                        <div className="p-3 rounded-lg bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800">
+                          <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase block">패키지 중량</span>
+                          <span className="font-semibold text-zinc-800 dark:text-zinc-200">
+                            {prod.packageWeight ? `${prod.packageWeight} ${prod.weightUnit || "g"}` : "— (미입력)"}
+                          </span>
+                        </div>
+
+                        <div className="p-3 rounded-lg bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800">
+                          <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase block">월 생산 가능 수량</span>
+                          <span className="font-semibold text-zinc-800 dark:text-zinc-200">
+                            {prod.monthlyCapacity ? String(prod.monthlyCapacity) : "— (미입력)"}
+                          </span>
+                        </div>
+
+                        <div className="p-3 rounded-lg bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800">
+                          <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase block">리드 타임 (Lead Time)</span>
+                          <span className="font-semibold text-zinc-800 dark:text-zinc-200">
+                            {prod.leadTime ? String(prod.leadTime) : "— (미입력)"}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Description Note */}
+                      {prod.description && (
+                        <div className="p-3 bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200/80 dark:border-zinc-800">
+                          <span className="block text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider mb-1">
+                            제품 설명 / 주요 특징 (Description & Key Points)
+                          </span>
+                          <p className="text-xs text-zinc-700 dark:text-zinc-300 whitespace-pre-wrap leading-relaxed">
+                            {prod.description}
+                          </p>
+                        </div>
+                      )}
+
+                      {/* Uploaded Files & Images */}
+                      <div className="space-y-1.5 pt-1">
+                        <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider block">
+                          첨부 파일 및 이미지 (Attached Files & Images)
+                        </span>
+                        {prod.images && prod.images.length > 0 ? (
+                          <div className="flex flex-wrap gap-2">
+                            {prod.images.map((img: any, imgIdx: number) => (
+                              <div
+                                key={img.id || imgIdx}
+                                className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-xs"
+                              >
+                                <span>📎</span>
+                                <span className="font-medium text-zinc-800 dark:text-zinc-200 truncate max-w-[200px]">
+                                  {img.fileName}
+                                </span>
+                                {img.fileSize && (
+                                  <span className="text-[10px] text-zinc-400">
+                                    ({formatFileSize(img.fileSize)})
+                                  </span>
+                                )}
+                                {img.url && (
+                                  <a
+                                    href={img.url}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="ml-1 px-2 py-0.5 rounded bg-zinc-900 text-white font-bold text-[10px] hover:bg-zinc-800 dark:bg-white dark:text-zinc-950"
+                                  >
+                                    다운로드 ↗
+                                  </a>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <span className="text-xs text-zinc-400 dark:text-zinc-500">첨부된 파일 없음</span>
+                        )}
+                      </div>
+
+                      {/* Review Action Form (if linked) */}
+                      {prod.linkId ? (
+                        <div className="pt-3 border-t border-zinc-200/80 dark:border-zinc-800">
+                          <ReviewProductForm
+                            action={reviewAction.bind(null, prod.linkId, application.id)}
+                            productName={prod.name}
+                            currentStatus={prod.reviewStatus as ApplicationProductReviewStatus}
+                            currentReason={prod.reviewReason}
+                            disabled={!canReview}
+                          />
+
+                          {/* History Timeline */}
+                          <div className="mt-4 pt-4 border-t border-zinc-200/80 dark:border-zinc-800 space-y-2">
+                            <h4 className="text-[11px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">
+                              심사 히스토리
+                            </h4>
+                            <div className="pl-2.5 border-l border-zinc-200 dark:border-zinc-800 space-y-2">
+                              {getProductHistory(prod.linkId).map((event, eventIdx) => (
+                                <div key={eventIdx} className="relative text-[11px] text-zinc-500 dark:text-zinc-400">
+                                  <div
+                                    className={`absolute -left-[14px] top-1.5 h-1.5 w-1.5 rounded-full ${
+                                      eventIdx === 0 ? "bg-emerald-500 dark:bg-emerald-400" : "bg-zinc-300 dark:bg-zinc-700"
+                                    }`}
+                                  />
+                                  <div className="flex flex-wrap items-center gap-1.5">
+                                    <span
+                                      className={`font-semibold ${
+                                        event.status === "approved"
+                                          ? "text-emerald-600 dark:text-emerald-400"
+                                          : event.status === "rejected"
+                                          ? "text-rose-600 dark:text-rose-400"
+                                          : event.status === "on_hold"
+                                          ? "text-amber-600 dark:text-amber-400"
+                                          : "text-zinc-700 dark:text-zinc-300"
+                                      }`}
+                                    >
+                                      [{event.label}]
+                                    </span>
+                                    <span className="font-mono text-[10px] text-zinc-400">
+                                      {event.time}
+                                    </span>
+                                  </div>
+                                  {event.reason && (
+                                    <p className="mt-0.5 pl-3 text-xs text-zinc-600 dark:text-zinc-400 italic">
+                                      ↳ 사유: {event.reason}
+                                    </p>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      ) : null}
                     </div>
-                  </div>
+                  ))}
                 </div>
-              ))}
+              )}
             </div>
           </div>
         )}

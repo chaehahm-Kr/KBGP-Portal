@@ -62,7 +62,7 @@ export const DEFAULT_TEMPLATES: Record<
   application_submitted_company: {
     description: "회사 담당자 — 신청서 제출 완료",
     subject: "[K SELECT NETWORK] {{applicationNumber}} 파트너 신청이 접수되었습니다",
-    body: "신청이 정상적으로 접수되었습니다.\n\n안녕하세요, {{contactName}}님.\nK SELECT NETWORK의 K-Beauty Growth Program에 신청해 주셔서 감사합니다.\n제출해 주신 신청서는 아래 접수번호로 정상 등록되었습니다.\n\n{{infoBox}}\n\n제출하신 브랜드와 상품 정보를 검토한 후, 담당자가 영업일 기준 3일 이내에 이메일 또는 전화로 연락드리겠습니다.",
+    body: "신청이 정상적으로 접수되었습니다.\n\n안녕하세요, {{contactName}}님.\nK SELECT NETWORK의 K-Beauty Growth Program에 신청해 주셔서 감사합니다.\n제출해 주신 신청서는 아래 접수번호로 정상 등록되었습니다.\n\n{{infoBox}}\n\n제출하신 브랜드와 상품 정보를 검토한 후, 담당자가 영업일 기준 2일 이내에 이메일 또는 전화로 연락드리겠습니다.",
   },
   application_received_internal: {
     description: "내부 직원 전체 — 신규 신청서 접수",
@@ -132,7 +132,7 @@ export const DEFAULT_TEMPLATES: Record<
   inquiry_received_applicant: {
     description: "신청자 — 마케팅 사이트 신청서 접수 확인",
     subject: "[K SELECT NETWORK] {{applicationNumber}} 파트너 신청이 접수되었습니다",
-    body: "신청이 정상적으로 접수되었습니다.\n\n안녕하세요, {{contactName}}님.\nK SELECT NETWORK의 K-Beauty Growth Program에 신청해 주셔서 감사합니다.\n제출해 주신 신청서는 아래 접수번호로 정상 등록되었습니다.\n\n{{infoBox}}\n\n제출하신 브랜드와 상품 정보를 검토한 후, 담당자가 영업일 기준 3일 이내에 이메일 또는 전화로 연락드리겠습니다.",
+    body: "신청이 정상적으로 접수되었습니다.\n\n안녕하세요, {{contactName}}님.\nK SELECT NETWORK의 K-Beauty Growth Program에 신청해 주셔서 감사합니다.\n제출해 주신 신청서는 아래 접수번호로 정상 등록되었습니다.\n\n{{infoBox}}\n\n제출하신 브랜드와 상품 정보를 검토한 후, 담당자가 영업일 기준 2일 이내에 이메일 또는 전화로 연락드리겠습니다.",
   },
   inquiry_received_internal: {
     description: "내부 직원 전체 — 마케팅 사이트 신규 문의 접수",
@@ -1333,8 +1333,8 @@ function formatNetworkBodyText(text: string) {
     `<strong style="color: #131E2E;">K-Beauty Growth Program</strong>`
   );
   html = html.replace(
-    /영업일(?: 기준)?\s*3일\s*이내/g,
-    `<span style="color: #8C1C2B; font-weight: bold;">영업일 기준 3일 이내</span>`
+    /영업일(?: 기준)?\s*2일\s*이내/g,
+    `<span style="color: #8C1C2B; font-weight: bold;">영업일 기준 2일 이내</span>`
   );
 
   return html;

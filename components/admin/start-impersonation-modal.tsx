@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useTransition } from "react";
-import { startImpersonationAction } from "@/lib/auth/impersonation";
+import { startImpersonationAction } from "@/lib/auth/impersonation-actions";
 
 interface StartImpersonationModalProps {
   isOpen: boolean;

@@ -55,6 +55,25 @@ export default async function AdminApplicationDetailPage({
     company = cData;
   }
 
+  let inquiry: any = null;
+  if (application.application_number) {
+    const { data: inqData } = await supabase
+      .from("inquiries")
+      .select("id, application_number, brand_name, homepage, company_address, contact_title, products, raw_payload")
+      .eq("application_number", application.application_number)
+      .maybeSingle();
+    inquiry = inqData;
+  }
+
+  let brands: any[] = [];
+  if (application.company_id) {
+    const { data: bData } = await supabase
+      .from("brands")
+      .select("id, name, website, description, logo_url")
+      .eq("company_id", application.company_id);
+    brands = bData ?? [];
+  }
+
   let companyUsers: any[] = [];
   if (application.company_id) {
     const { data: cuData } = await supabase
@@ -74,9 +93,102 @@ export default async function AdminApplicationDetailPage({
   const productIds = linkRows.map((l) => l.product_id);
 
   const { data: productRows } = productIds.length
-    ? await supabase.from("products").select("id, name").in("id", productIds)
+    ? await supabase
+        .from("products")
+        .select(
+          "id, brand_id, company_id, name, category, volume, estimated_retail_price, ingredients_text, status, package_width, package_depth, package_height, package_weight, lead_time, created_at"
+        )
+        .in("id", productIds)
     : { data: [] };
   const productNameById = new Map((productRows ?? []).map((p) => [p.id, p.name]));
+
+  const { data: productImages } = productIds.length
+    ? await supabase
+        .from("product_images")
+        .select("id, product_id, file_path, file_name, file_size, sort_order")
+        .in("product_id", productIds)
+        .order("sort_order", { ascending: true })
+    : { data: [] };
+
+  const productImagesWithSignedUrls = await Promise.all(
+    (productImages ?? []).map(async (img) => {
+      let signedUrl = null;
+      if (img.file_path) {
+        signedUrl = await getSignedFileUrl(img.file_path, 7200, "company-uploads", {
+          download: img.file_name || true,
+        });
+      }
+      return {
+        ...img,
+        signedUrl,
+      };
+    })
+  );
+
+  const inquiryProducts = Array.isArray(inquiry?.products) ? inquiry.products : [];
+
+  const submittedProducts = (productRows ?? []).map((p, idx) => {
+    const link = linkRows.find((l) => l.product_id === p.id);
+    const inqP = inquiryProducts[idx] || inquiryProducts.find((ip: any) => ip.name === p.name) || null;
+    const images = productImagesWithSignedUrls.filter((img) => img.product_id === p.id);
+
+    return {
+      id: p.id,
+      linkId: link?.id || null,
+      reviewStatus: link?.review_status || "pending",
+      reviewReason: link?.review_reason || null,
+      name: p.name,
+      category: p.category || inqP?.category || "",
+      volume: p.volume || inqP?.volume || null,
+      retailPriceKrw:
+        p.estimated_retail_price ??
+        (inqP?.priceKrw ? Number(String(inqP.priceKrw).replace(/[^0-9]/g, "")) : null),
+      targetSupplyPriceUsd:
+        inqP?.targetSupplyPriceUsd ?? inqP?.supplyPriceUsd ?? inqP?.supply_price ?? null,
+      packageWidth: p.package_width ?? inqP?.packageWidth ?? null,
+      packageDepth: p.package_depth ?? inqP?.packageDepth ?? null,
+      packageHeight: p.package_height ?? inqP?.packageHeight ?? null,
+      dimensionUnit: inqP?.dimensionUnit || "cm",
+      packageWeight: p.package_weight ?? inqP?.packageWeight ?? null,
+      weightUnit: inqP?.weightUnit || "g",
+      monthlyCapacity: inqP?.monthlyCapacity ?? inqP?.monthly_capacity ?? null,
+      leadTime: p.lead_time || inqP?.leadTime || inqP?.lead_time || null,
+      description: p.ingredients_text || inqP?.note || inqP?.description || null,
+      images: images.map((img) => ({
+        id: img.id,
+        fileName: img.file_name || "첨부파일",
+        fileSize: img.file_size || null,
+        url: img.signedUrl,
+      })),
+    };
+  });
+
+  if (submittedProducts.length === 0 && inquiryProducts.length > 0) {
+    inquiryProducts.forEach((inqP: any, idx: number) => {
+      submittedProducts.push({
+        id: `inq-${idx}`,
+        linkId: null,
+        reviewStatus: "pending",
+        reviewReason: null,
+        name: inqP.name,
+        category: inqP.category || "",
+        volume: inqP.volume || null,
+        retailPriceKrw: inqP.priceKrw ? Number(String(inqP.priceKrw).replace(/[^0-9]/g, "")) : null,
+        targetSupplyPriceUsd:
+          inqP.targetSupplyPriceUsd ?? inqP.supplyPriceUsd ?? inqP.supply_price ?? null,
+        packageWidth: inqP.packageWidth ?? null,
+        packageDepth: inqP.packageDepth ?? null,
+        packageHeight: inqP.packageHeight ?? null,
+        dimensionUnit: inqP.dimensionUnit || "cm",
+        packageWeight: inqP.packageWeight ?? null,
+        weightUnit: inqP.weightUnit || "g",
+        monthlyCapacity: inqP.monthlyCapacity ?? inqP.monthly_capacity ?? null,
+        leadTime: inqP.leadTime || inqP.lead_time || null,
+        description: inqP.note || inqP.description || null,
+        images: [],
+      });
+    });
+  }
 
   const { data: infoRequests } = await supabase
     .from("additional_info_requests")
@@ -141,6 +253,9 @@ export default async function AdminApplicationDetailPage({
       application={application}
       company={company}
       companyUsers={companyUsers}
+      brands={brands}
+      inquiry={inquiry}
+      submittedProducts={submittedProducts}
       linkRows={linkRows}
       productNameById={productNameById}
       infoRequestRows={infoRequestRows}

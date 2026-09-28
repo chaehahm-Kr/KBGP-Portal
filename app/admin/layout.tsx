@@ -2,6 +2,7 @@ import React from "react";
 import type { Metadata } from "next";
 import AdminLayout from "@/components/admin/layout";
 import { getPendingPartnerInquiriesCount } from "@/lib/inquiry/actions";
+import { getPendingApplicationsCount } from "@/lib/application/actions";
 
 export const dynamic = "force-dynamic";
 
@@ -27,6 +28,16 @@ export default async function AdminPageLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const pendingInquiriesCount = await getPendingPartnerInquiriesCount();
-  return <AdminLayout pendingInquiriesCount={pendingInquiriesCount}>{children}</AdminLayout>;
+  const [pendingInquiriesCount, pendingApplicationsCount] = await Promise.all([
+    getPendingPartnerInquiriesCount(),
+    getPendingApplicationsCount(),
+  ]);
+  return (
+    <AdminLayout
+      pendingInquiriesCount={pendingInquiriesCount}
+      pendingApplicationsCount={pendingApplicationsCount}
+    >
+      {children}
+    </AdminLayout>
+  );
 }

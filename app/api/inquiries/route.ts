@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendTemplatedEmail } from "@/lib/notifications/templates";
+import { createNotification } from "@/lib/notification/actions";
 import { serverEnv } from "@/lib/env/server";
 import { publicEnv } from "@/lib/env/public";
 import { validateUploadedFile } from "@/lib/files/validate";
@@ -361,7 +362,22 @@ export async function POST(request: Request) {
     .insert({
       company_id: company.id,
       application_number: applicationNumber,
+      partner_type: "brand",
+      entry_mode: "public_application",
       status: "submitted",
+      applicant_company_name: input.companyName,
+      applicant_contact_name: input.contactName,
+      applicant_contact_email: input.email,
+      applicant_contact_phone: input.phone,
+      applicant_address: {
+        country: input.country || "대한민국",
+        address_line_1: input.addressLine1 || "",
+        address_line_2: input.addressLine2 || "",
+        city: input.city || "",
+        state: input.state || "",
+        postal_code: input.postalCode || "",
+        formatted: input.companyAddress,
+      },
       motivation_note: "공개 마케팅 사이트 파트너십 신청 접수 건",
       self_check_answers: Array(6).fill(true),
       eligibility_responses: finalEligibility,
@@ -524,17 +540,40 @@ export async function POST(request: Request) {
 
   const { data: staffMembers } = await admin
     .from("staff_members")
-    .select("email")
+    .select("id, email, user_id")
     .eq("status", "active");
 
-  const link = `${publicEnv.NEXT_PUBLIC_SITE_URL}/admin/applications/${application.id}`;
+  const appDetailRelativePath = `/admin/applications/${application.id}`;
+  const link = `${publicEnv.NEXT_PUBLIC_SITE_URL}${appDetailRelativePath}`;
+
   for (const staff of staffMembers ?? []) {
-    await sendTemplatedEmail("inquiry_received_internal", staff.email, {
-      inquiryNumber: applicationNumber,
-      companyName: input.companyName,
-      productCount: String(input.products.length),
-      link,
-    });
+    // In-app admin notification
+    const targetUserId = staff.user_id || staff.id;
+    if (targetUserId) {
+      try {
+        await createNotification(
+          targetUserId,
+          null,
+          `신규 브랜드 파트너십 신청 — ${input.companyName}`,
+          `${input.companyName}의 신규 브랜드 파트너십 신청서(#${applicationNumber})가 접수되었습니다.`,
+          appDetailRelativePath
+        );
+      } catch (notifErr) {
+        console.warn("[inquiries] createNotification failed for staff:", staff.email, notifErr);
+      }
+    }
+
+    // Templated email
+    try {
+      await sendTemplatedEmail("inquiry_received_internal", staff.email, {
+        inquiryNumber: applicationNumber,
+        companyName: input.companyName,
+        productCount: String(input.products.length),
+        link,
+      });
+    } catch (emailErr) {
+      console.warn("[inquiries] sendTemplatedEmail failed for staff:", staff.email, emailErr);
+    }
   }
 
   return NextResponse.json({ ok: true, id: applicationNumber });

@@ -257,3 +257,20 @@ export async function deleteApplicationAction(applicationId: string) {
   revalidatePath("/admin/applications");
   redirect("/admin/applications");
 }
+
+/**
+ * Returns the count of pending/submitted applications that need admin review.
+ */
+export async function getPendingApplicationsCount(): Promise<number> {
+  try {
+    const admin = createAdminClient();
+    const { count, error } = await admin
+      .from("applications")
+      .select("id", { count: "exact", head: true })
+      .in("status", ["submitted", "reviewing", "pending"]);
+    if (error || count === null) return 0;
+    return count;
+  } catch {
+    return 0;
+  }
+}

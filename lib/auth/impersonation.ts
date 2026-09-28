@@ -1,4 +1,3 @@
-import "server-only";
 import { cookies } from "next/headers";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { verifyAdminSession } from "@/lib/auth/dal";
@@ -486,7 +485,6 @@ export async function getImpersonationAuditLogsAction(): Promise<{
   try {
     await verifyAdminSession();
     const admin = createAdminClient();
-
     const { data, error } = await admin
       .from("impersonation_audit_logs")
       .select("*")
@@ -499,3 +497,7 @@ export async function getImpersonationAuditLogsAction(): Promise<{
     return { logs: [], error: err?.message || "감사 로그를 불러오지 못했습니다." };
   }
 }
+
+export const startImpersonationActionInternal = startImpersonationAction;
+export const stopImpersonationActionInternal = stopImpersonationAction;
+export const getImpersonationAuditLogsActionInternal = getImpersonationAuditLogsAction;

@@ -2,7 +2,7 @@
 
 import React, { useTransition } from "react";
 import type { ImpersonationSessionData } from "@/lib/auth/impersonation";
-import { stopImpersonationAction } from "@/lib/auth/impersonation";
+import { stopImpersonationAction } from "@/lib/auth/impersonation-actions";
 
 interface ImpersonationBannerProps {
   session: ImpersonationSessionData;

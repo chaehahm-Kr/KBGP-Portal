@@ -33,6 +33,7 @@ interface SidebarProps {
   isCollapsed: boolean;
   toggleCollapse: () => void;
   pendingInquiriesCount?: number;
+  pendingApplicationsCount?: number;
 }
 
 interface SubItem {
@@ -123,6 +124,7 @@ export default function Sidebar({
   isCollapsed,
   toggleCollapse,
   pendingInquiriesCount = 0,
+  pendingApplicationsCount = 0,
 }: SidebarProps) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -410,7 +412,7 @@ export default function Sidebar({
               ) : (
                 <Link
                   href={item.href || "/admin"}
-                  className={`flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+                  className={`flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors relative ${
                     isActive
                       ? "bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-white font-semibold"
                       : "text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-900 dark:hover:text-white"
@@ -418,6 +420,14 @@ export default function Sidebar({
                 >
                   <item.icon className="h-5 w-5 shrink-0" />
                   {!isCollapsed && <span className="flex-1">{item.name}</span>}
+                  {!isCollapsed && item.name === "Applications" && pendingApplicationsCount > 0 && (
+                    <span className="rounded-full bg-amber-500 text-white px-2 py-0.5 text-[10px] font-extrabold shadow-xs">
+                      {pendingApplicationsCount}
+                    </span>
+                  )}
+                  {isCollapsed && item.name === "Applications" && pendingApplicationsCount > 0 && (
+                    <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-amber-500 ring-2 ring-white dark:ring-zinc-950" />
+                  )}
                 </Link>
               )}
 
