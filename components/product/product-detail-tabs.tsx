@@ -48,9 +48,30 @@ import {
   SELECTION_STATUS_STYLES,
   SALES_STATUS_LABELS,
   SALES_STATUS_STYLES,
+  REGISTRATION_STATUS_LABELS,
+  REGISTRATION_STATUS_STYLES,
+  evaluateProductRegistrationStatus,
   type SelectionStatus,
   type SalesStatus,
+  type RegistrationStatus,
 } from "@/lib/product/registration-status";
+
+const MISSING_FIELD_TAB_MAP: Record<string, { tab: string; inputName: string }> = {
+  "브랜드": { tab: "basic", inputName: "brandId" },
+  "카테고리": { tab: "category_attributes", inputName: "categorySelect" },
+  "카테고리 필수 속성": { tab: "category_attributes", inputName: "categoryAttributes" },
+  "영문 제품명": { tab: "basic", inputName: "nameEn" },
+  "제조사 SKU": { tab: "basic", inputName: "manufactureSku" },
+  "원산지": { tab: "basic", inputName: "origin" },
+  "소비자 판매가": { tab: "price", inputName: "priceKrwRetail" },
+  "FOB 수출 가격": { tab: "price", inputName: "priceUsdFob" },
+  "단품 규격": { tab: "logistics", inputName: "itemWidth" },
+  "단품 포장 패키지 규격": { tab: "logistics", inputName: "packageWidth" },
+  "마스터 카톤 규격": { tab: "logistics", inputName: "cartonPackQty" },
+  "식별 바코드(UPC 또는 EAN)": { tab: "basic", inputName: "upc" },
+  "온라인 판매 링크": { tab: "basic", inputName: "salesLink1" },
+  "대표 이미지": { tab: "media", inputName: "images" },
+};
 
 const normalizePriceTiers = (tiers: { qty: number | string; price: number | string }[]) => {
   if (!Array.isArray(tiers)) return [];
@@ -650,84 +671,50 @@ export function ProductDetailTabs({
     c40hqCbm: product.container_40fthc_cbm?.toString() || ""
   });
 
+  const effectiveDeletedAt = (product as any).deleted_at || (product.price_additional_info as any)?.deleted_at || null;
+
+  const registrationEval = evaluateProductRegistrationStatus({
+    id: product.id,
+    name: name || product.name,
+    name_en: nameEn || product.name_en,
+    brand_id: brandId || product.brand_id,
+    category_code: category || product.category_code,
+    manufacture_sku: manufactureSku || product.manufacture_sku,
+    origin: origin || product.origin,
+    price_krw_retail: priceKrwRetail || product.price_krw_retail,
+    price_usd_fob: priceUsdFobState || product.price_usd_fob,
+    item_width: itemWidth || product.item_width,
+    item_depth: itemDepth || product.item_depth,
+    item_height: itemHeight || product.item_height,
+    item_weight: itemWeight || product.item_weight,
+    package_width: packageWidth || product.package_width,
+    package_depth: packageDepth || product.package_depth,
+    package_height: packageHeight || product.package_height,
+    package_weight: packageWeight || product.package_weight,
+    carton_pack_qty: cartonPackQty || product.carton_pack_qty,
+    carton_width: cartonWidth || product.carton_width,
+    carton_depth: cartonDepth || product.carton_depth,
+    carton_height: cartonHeight || product.carton_height,
+    carton_weight: cartonWeight || product.carton_weight,
+    upc: upc || product.upc,
+    ean: ean || product.ean,
+    selling_online: sellingOnline,
+    sales_link_1: salesLink1 || product.sales_link_1,
+    deleted_at: effectiveDeletedAt,
+    adminOverrides,
+    hasImages: localImages.length > 0,
+    categoryCompletion: categoryCompletion || initialCategoryCompletion,
+  });
+
   const getMissingFieldsList = () => {
-    const missing = [];
-    
-    // Basic Info tab
-    if (!brandId) missing.push({ tab: "basic", field: "브랜드", inputName: "brandId" });
-    if (!nameEn.trim()) missing.push({ tab: "basic", field: "영문 제품명", inputName: "nameEn" });
-    if (!manufactureSku.trim()) missing.push({ tab: "basic", field: "제조사 SKU", inputName: "manufactureSku" });
-    if (!origin) missing.push({ tab: "basic", field: "원산지", inputName: "origin" });
-    
-    const hasUpc = !!upc.trim();
-    const hasEan = !!ean.trim();
-    if (!hasUpc && !hasEan) {
-      missing.push({ tab: "basic", field: "식별 바코드 (UPC 또는 EAN 중 최소 하나 필수)", inputName: "upc" });
-    }
-    
-    if (sellingOnline && !salesLink1.trim()) {
-      missing.push({ tab: "basic", field: "온라인 판매 링크 1", inputName: "salesLink1" });
-    }
-
-    // Category & Dynamic Attributes tab
-    if (categoryCompletion) {
-      if (!categoryCompletion.categoryComplete) {
-        missing.push({ tab: "category_attributes", field: "카테고리 미선택 (3Depth 최종 카테고리 지정 필수)", inputName: "categorySelect" });
-      } else if (!categoryCompletion.requiredAttributesComplete) {
-        if (categoryCompletion.missingRequiredAttributes && categoryCompletion.missingRequiredAttributes.length > 0) {
-          categoryCompletion.missingRequiredAttributes.forEach(attr => {
-            missing.push({ tab: "category_attributes", field: `${attr.nameKo} (필수 속성)`, inputName: `attr-field-${attr.code}` });
-          });
-        } else {
-          missing.push({ tab: "category_attributes", field: "카테고리 필수 속성 미입력", inputName: "categoryAttributes" });
-        }
-      }
-    } else if (!product.category_code) {
-      missing.push({ tab: "category_attributes", field: "카테고리 및 속성 미선택", inputName: "categorySelect" });
-    }
-    
-    // Price Info tab
-    const krw = Number(priceKrwRetail || 0);
-    if (!priceKrwRetail || krw <= 0) {
-      missing.push({ tab: "price", field: "한국 소비자 판매가", inputName: "priceKrwRetail" });
-    }
-    const usd = Number(priceUsdFobState || 0);
-    if (!priceUsdFobState || usd <= 0) {
-      missing.push({ tab: "price", field: "미국 수출 FOB 가격", inputName: "priceUsdFob" });
-    }
-    
-    // Logistics tab
-    const iw = Number(itemWidth || 0);
-    const id = Number(itemDepth || 0);
-    const ih = Number(itemHeight || 0);
-    const iwt = Number(itemWeight || 0);
-    if (!itemWidth || iw <= 0 || !itemDepth || id <= 0 || !itemHeight || ih <= 0 || !itemWeight || iwt <= 0) {
-      missing.push({ tab: "logistics", field: "단품 규격 (가로/세로/높이/무게)", inputName: "itemWidth" });
-    }
-    
-    const pw = Number(packageWidth || 0);
-    const pd = Number(packageDepth || 0);
-    const ph = Number(packageHeight || 0);
-    const pwt = Number(packageWeight || 0);
-    if (!packageWidth || pw <= 0 || !packageDepth || pd <= 0 || !packageHeight || ph <= 0 || !packageWeight || pwt <= 0) {
-      missing.push({ tab: "logistics", field: "단품 포장 패키지 규격 (가로/세로/높이/무게)", inputName: "packageWidth" });
-    }
-
-    const cq = Number(cartonPackQty || 0);
-    const cw = Number(cartonWidth || 0);
-    const cd = Number(cartonDepth || 0);
-    const ch = Number(cartonHeight || 0);
-    const cwt = Number(cartonWeight || 0);
-    if (!cartonPackQty || cq <= 0 || !cartonWidth || cw <= 0 || !cartonDepth || cd <= 0 || !cartonHeight || ch <= 0 || !cartonWeight || cwt <= 0) {
-      missing.push({ tab: "logistics", field: "마스터 카톤 규격 (입수량/가로/세로/높이/무게)", inputName: "cartonPackQty" });
-    }
-    
-    // Media tab
-    if (localImages.length === 0) {
-      missing.push({ tab: "media", field: "대표 이미지 (최소 1개 이상의 제품 이미지 필수)", inputName: "images" });
-    }
-    
-    return missing;
+    return registrationEval.missingFields.map((field) => {
+      const mapping = MISSING_FIELD_TAB_MAP[field] || { tab: "basic", inputName: "" };
+      return {
+        tab: mapping.tab,
+        field,
+        inputName: mapping.inputName,
+      };
+    });
   };
 
   const getCriticalErrors = () => {
