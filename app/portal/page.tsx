@@ -12,6 +12,7 @@ import { OVERALL_STATUS_LABELS, OVERALL_STATUS_COLORS } from "@/lib/purchase-ord
 import { formatEasternDateTime } from "@/lib/utils/timezone";
 import { BrandOnboardingChecklist } from "@/components/portal/brand-onboarding-checklist";
 import { parseCompanyMetadata } from "@/lib/company/admin-actions";
+import { getCompanyTaskSetupStatus } from "@/lib/company/task-actions";
 import { evaluateProductRegistrationStatus } from "@/lib/product/registration-status";
 import { getBatchProductCategoryCompletions } from "@/lib/product/attribute-completion";
 import { resolveEffectiveSku } from "@/lib/product/types";
@@ -30,7 +31,7 @@ export default async function PortalHomePage() {
   // 1. Fetch Company & User Info
   const { data: companyUser } = await supabase
     .from("company_users")
-    .select("company_id, company_role")
+    .select("company_id, company_role, name, title, position, phone")
     .eq("id", session.userId)
     .single();
 
@@ -407,10 +408,24 @@ export default async function PortalHomePage() {
 
   const parsedMeta = await parseCompanyMetadata(company || {});
   const isCompanyInfoConfirmed = Boolean(parsedMeta.company_onboarding_confirmed_at);
-  const isAdminProfileConfirmed = Boolean(parsedMeta.admin_profile_onboarding_confirmed_at);
+  const isAdminProfileConfirmed = Boolean(
+    parsedMeta.admin_profile_onboarding_confirmed_at &&
+    companyUser?.name &&
+    companyUser?.title &&
+    companyUser?.phone
+  );
   const teamSkipped = Boolean(parsedMeta.team_onboarding_skipped);
   const isTeamComplete = teamCount > 1 || teamSkipped;
   const isBrandConfirmed = Boolean(parsedMeta.brand_onboarding_confirmed_at);
+
+  let taskSetupStatus = { completedCount: 0, totalCount: 6, percent: 0 };
+  try {
+    taskSetupStatus = await getCompanyTaskSetupStatus(companyId);
+  } catch (err) {
+    console.error("Dashboard taskSetupStatus error:", err);
+  }
+  const isTaskComplete = taskSetupStatus.completedCount === taskSetupStatus.totalCount && taskSetupStatus.totalCount > 0;
+
   const isProductComplete = completeProductCount >= 1;
   const isAgreementComplete = agreement?.status === "active";
 
@@ -457,19 +472,22 @@ export default async function PortalHomePage() {
         </div>
       </div>
 
-      {/* 2. 6-Step Brand Onboarding Checklist (PORT-ONB-002-R2) */}
+      {/* 2. 7-Step Brand Onboarding Checklist (PORT-ONB-002-R4) */}
       <BrandOnboardingChecklist
         companyId={companyId}
         companyName={company?.name || "브랜드 파트너"}
         userEmail={session.email}
         isCompanyInfoConfirmed={isCompanyInfoConfirmed}
         isAdminProfileConfirmed={isAdminProfileConfirmed}
-        isTeamComplete={isTeamComplete}
-        teamCount={teamCount}
-        teamSkipped={teamSkipped}
         isBrandConfirmed={isBrandConfirmed}
         brandCount={brandList.length}
         brandName={primaryBrandName}
+        isTeamComplete={isTeamComplete}
+        teamCount={teamCount}
+        teamSkipped={teamSkipped}
+        isTaskComplete={isTaskComplete}
+        taskCompletedCount={taskSetupStatus.completedCount}
+        taskTotalCount={taskSetupStatus.totalCount}
         isProductComplete={isProductComplete}
         completeProductCount={completeProductCount}
         totalProductCount={products.length}

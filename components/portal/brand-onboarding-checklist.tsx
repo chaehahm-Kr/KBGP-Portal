@@ -10,12 +10,15 @@ export interface BrandOnboardingChecklistProps {
   userEmail: string;
   isCompanyInfoConfirmed: boolean;
   isAdminProfileConfirmed: boolean;
-  isTeamComplete: boolean;
-  teamCount: number;
-  teamSkipped: boolean;
   isBrandConfirmed: boolean;
   brandCount: number;
   brandName?: string | null;
+  isTeamComplete: boolean;
+  teamCount: number;
+  teamSkipped: boolean;
+  isTaskComplete: boolean;
+  taskCompletedCount: number;
+  taskTotalCount: number;
   isProductComplete: boolean;
   completeProductCount: number;
   totalProductCount: number;
@@ -31,12 +34,15 @@ export function BrandOnboardingChecklist({
   userEmail,
   isCompanyInfoConfirmed,
   isAdminProfileConfirmed,
-  isTeamComplete,
-  teamCount,
-  teamSkipped,
   isBrandConfirmed,
   brandCount,
   brandName,
+  isTeamComplete,
+  teamCount,
+  teamSkipped,
+  isTaskComplete,
+  taskCompletedCount,
+  taskTotalCount,
   isProductComplete,
   completeProductCount,
   totalProductCount,
@@ -73,8 +79,26 @@ export function BrandOnboardingChecklist({
       ctaHref: "/portal/account",
     },
     {
-      id: "team",
+      id: "brand",
       number: 3,
+      title: "브랜드 정보 확인",
+      subtitle: "대표 브랜드 및 상표권 등록 여부",
+      description: "브랜드 정보와 한국/미국 상표권 등록 여부(예/아니오)를 검토하고 저장하세요.",
+      isComplete: isBrandConfirmed,
+      statusLabel: isBrandConfirmed ? "완료 ✓" : "미완료",
+      detailText: isBrandConfirmed
+        ? brandName
+          ? `등록 브랜드: ${brandName}`
+          : `${brandCount}개 브랜드 확인됨`
+        : brandCount > 0
+        ? "상표권 등록 여부 검토 필요"
+        : "등록된 브랜드 없음",
+      ctaLabel: isBrandConfirmed ? "브랜드 관리 →" : "브랜드 정보 확인하기 →",
+      ctaHref: "/portal/brands",
+    },
+    {
+      id: "team",
+      number: 4,
       title: "팀원 초대",
       subtitle: "사내 협업 담당자 추가 (선택)",
       description: "포털 관리 및 발주/정산 업무를 함께할 팀원을 초대하세요. (선택 사항이며 건너뛸 수 있습니다)",
@@ -95,57 +119,57 @@ export function BrandOnboardingChecklist({
       canSkip: !isTeamComplete,
     },
     {
-      id: "brand",
-      number: 4,
-      title: "브랜드 정보 확인",
-      subtitle: "대표 브랜드 및 상표권 등록 여부",
-      description: "브랜드 정보와 한국/미국 상표권 등록 여부(예/아니오)를 검토하고 저장하세요.",
-      isComplete: isBrandConfirmed,
-      statusLabel: isBrandConfirmed ? "완료 ✓" : "미완료",
-      detailText: isBrandConfirmed
-        ? brandName
-          ? `등록 브랜드: ${brandName}`
-          : `${brandCount}개 브랜드 확인됨`
-        : brandCount > 0
-        ? "상표권 등록 여부 검토 필요"
-        : "등록된 브랜드 없음",
-      ctaLabel: isBrandConfirmed ? "브랜드 관리 →" : "브랜드 정보 확인하기 →",
-      ctaHref: "/portal/brands",
+      id: "tasks",
+      number: 5,
+      title: "담당업무 및 주 담당자 지정",
+      subtitle: "주요 운영 업무별 주 담당자 지정",
+      description: "회사신청, 계약, 제품/콘텐츠, 가격, 발주/물류, 정산 등 6대 핵심 업무별 주 담당자를 지정하세요.",
+      isComplete: isTaskComplete,
+      statusLabel: isTaskComplete ? "완료 ✓" : "미완료",
+      detailText: isTaskComplete
+        ? `모든 업무 주 담당자 지정 완료 (${taskTotalCount || 6}/${taskTotalCount || 6})`
+        : `주 담당자 지정 필요 (${taskCompletedCount || 0}/${taskTotalCount || 6})`,
+      ctaLabel: isTaskComplete ? "담당업무 관리 →" : "담당업무 지정하기 →",
+      ctaHref: "/portal/company/info?tab=tasks",
     },
     {
       id: "product",
-      number: 5,
+      number: 6,
       title: "상품 등록 완료",
-      subtitle: "상품 정식 등록 (필수 규격/바코드)",
-      description: "글로벌 유통 및 파트너 매칭을 위해 최소 1개 이상의 상품을 정식 등록(등록 완료)하세요.",
+      subtitle: "최소 1개 이상의 상품 등록 완료 필요",
+      description: "최소 1개 이상의 상품을 등록 완료 상태까지 진행해 주세요. 원활한 검토와 운영을 위해 가능한 상품 속성 정보도 최대한 입력해 주시기 바랍니다.",
       isComplete: isProductComplete,
       statusLabel: isProductComplete ? "완료 ✓" : "미완료",
       detailText: isProductComplete
-        ? `${completeProductCount}개 상품 등록 완료`
+        ? `${completeProductCount}개 상품 등록 완료 (가능한 상품 속성까지 완료 요청)`
         : totalProductCount > 0
-        ? "등록 완료된 상품이 없습니다. (Draft/보완 대기 상태)"
+        ? "등록 완료된 상품이 없습니다. (Draft/보완 대기 상태 - 최소 1개 등록 완료 필요)"
         : "등록 완료된 상품이 없습니다.",
-      ctaLabel: isProductComplete ? "상품 관리 →" : "상품 등록/보완하기 →",
+      ctaLabel: isProductComplete ? "상품 관리 →" : "상품 관리 →",
       ctaHref: "/portal/products",
     },
     {
       id: "agreement",
-      number: 6,
-      title: "계약서 확인 및 서명",
-      subtitle: "기본 공급 및 파트너십 계약",
-      description: "브랜드 공급·미국 유통 및 플랫폼 이용 기본계약서를 검토하고 전자서명을 완료하세요.",
+      number: 7,
+      title: "상품공급 및 플랫폼 이용 약관 확인·서명",
+      subtitle: "기본 공급 및 파트너십 약관",
+      description: "브랜드 공급·미국 유통 및 플랫폼 이용 기본 약관을 검토하고 전자서명을 완료하세요.",
       isComplete: isAgreementComplete,
       statusLabel: isAgreementComplete ? "완료 ✓" : "서명 대기",
       detailText: isAgreementComplete
-        ? `계약 체결 완료 (${agreementId || "Active"})`
-        : `Version ${agreementVersion || "1.0"} 서명 필요`,
-      ctaLabel: isAgreementComplete ? "계약서 보기 →" : "계약서 확인 및 서명 →",
+        ? `약관 체결 완료 (${agreementId || "Active"})`
+        : `Version ${agreementVersion || "1.0"} 서명 대기`,
+      ctaLabel: isAgreementComplete
+        ? "공급 및 이용 약관 보기 →"
+        : agreementStatus === "pending" || !isAgreementComplete
+        ? "공급 및 이용 약관 확인·서명 →"
+        : "공급 및 이용 약관 확인 →",
       ctaHref: "/portal/company/info?tab=agreements",
     },
   ];
 
   const completedCount = steps.filter((s) => s.isComplete).length;
-  const totalCount = 6;
+  const totalCount = 7;
   const progressPercent = Math.round((completedCount / totalCount) * 100);
   const isAllComplete = completedCount === totalCount;
 
@@ -160,6 +184,9 @@ export function BrandOnboardingChecklist({
       }
     });
   };
+
+  const top6Steps = steps.slice(0, 6);
+  const step7 = steps[6];
 
   return (
     <section aria-labelledby="onboarding-heading" className="w-full rounded-2xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950 p-5 sm:p-6 shadow-sm space-y-5 transition-all">
@@ -185,8 +212,8 @@ export function BrandOnboardingChecklist({
           </div>
           <p className="text-xs text-zinc-500 dark:text-zinc-400">
             {isAllComplete
-              ? "모든 온보딩 6단계를 완료하셨습니다. 이제 글로벌 유통 및 발주/정산 업무를 자유롭게 진행하실 수 있습니다."
-              : "K SELECT NETWORK 글로벌 유통 및 파트너십을 위한 6단계 온보딩 체크리스트입니다. 각 항목을 검토하고 완료해 주세요."}
+              ? "모든 온보딩 7단계를 완료하셨습니다. 이제 글로벌 유통 및 발주/정산 업무를 자유롭게 진행하실 수 있습니다."
+              : "K SELECT NETWORK 글로벌 유통 및 파트너십을 위한 7단계 온보딩 체크리스트입니다. 각 항목을 검토하고 완료해 주세요."}
           </p>
         </div>
 
@@ -220,102 +247,173 @@ export function BrandOnboardingChecklist({
         </div>
       </div>
 
-      {/* 6 Onboarding Cards Grid (Visible together) */}
+      {/* 7 Onboarding Cards Grid (3 + 3 + 1 Layout) */}
       {!isCollapsed && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5 pt-1">
-          {steps.map((step) => {
-            const isDone = step.isComplete;
+        <div className="space-y-3.5 pt-1">
+          {/* Row 1 & Row 2: Steps 1 through 6 (3 cards per row on desktop) */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
+            {top6Steps.map((step) => {
+              const isDone = step.isComplete;
 
-            return (
-              <div
-                key={step.id}
-                className={`relative flex flex-col justify-between rounded-xl border p-4 transition-all ${
-                  isDone
-                    ? "border-emerald-200/80 bg-emerald-50/30 dark:border-emerald-950/60 dark:bg-emerald-950/10"
-                    : "border-zinc-200 bg-zinc-50/50 dark:border-zinc-800 dark:bg-zinc-900/40 hover:border-zinc-300 dark:hover:border-zinc-700"
-                }`}
-              >
-                <div className="space-y-3">
-                  {/* Card Header: Step number & Status Badge */}
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2">
+              return (
+                <div
+                  key={step.id}
+                  className={`relative flex flex-col justify-between rounded-xl border p-4 transition-all ${
+                    isDone
+                      ? "border-emerald-200/80 bg-emerald-50/30 dark:border-emerald-950/60 dark:bg-emerald-950/10"
+                      : "border-zinc-200 bg-zinc-50/50 dark:border-zinc-800 dark:bg-zinc-900/40 hover:border-zinc-300 dark:hover:border-zinc-700"
+                  }`}
+                >
+                  <div className="space-y-3">
+                    {/* Card Header: Step number & Status Badge */}
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] font-bold ${
+                            isDone
+                              ? "bg-emerald-600 text-white dark:bg-emerald-500 dark:text-zinc-950"
+                              : "bg-zinc-200 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300"
+                          }`}
+                        >
+                          {isDone ? "✓" : step.number}
+                        </span>
+                        <span className="text-xs font-bold text-zinc-500 dark:text-zinc-400">
+                          STEP {step.number}
+                        </span>
+                      </div>
+
                       <span
-                        className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] font-bold ${
+                        className={`inline-flex items-center rounded-md px-2 py-0.5 text-[10px] font-bold border ${
                           isDone
-                            ? "bg-emerald-600 text-white dark:bg-emerald-500 dark:text-zinc-950"
-                            : "bg-zinc-200 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300"
+                            ? "bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-950/80 dark:text-emerald-300 dark:border-emerald-800"
+                            : "bg-zinc-100 text-zinc-700 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:border-zinc-700"
                         }`}
                       >
-                        {isDone ? "✓" : step.number}
-                      </span>
-                      <span className="text-xs font-bold text-zinc-500 dark:text-zinc-400">
-                        STEP {step.number}
+                        {step.statusLabel}
                       </span>
                     </div>
 
+                    {/* Title & Subtitle */}
+                    <div className="space-y-1">
+                      <h3 className="text-sm font-bold text-zinc-950 dark:text-white">
+                        {step.title}
+                      </h3>
+                      <p className="text-xs text-zinc-600 dark:text-zinc-400 leading-relaxed">
+                        {step.description}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Footer: Detail & CTA Button */}
+                  <div className="pt-4 mt-3 border-t border-zinc-150 dark:border-zinc-800/80 space-y-2">
+                    <div className="text-[11px] font-mono text-zinc-500 dark:text-zinc-400 truncate" title={step.detailText}>
+                      {step.detailText}
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      {step.ctaHref ? (
+                        <Link
+                          href={step.ctaHref}
+                          className={`flex-1 inline-flex items-center justify-center rounded-lg px-3 py-2 text-xs font-bold transition-all ${
+                            isDone
+                              ? "border border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-100 dark:border-zinc-750 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                              : "bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-100 shadow-sm"
+                          }`}
+                        >
+                          {step.ctaLabel}
+                        </Link>
+                      ) : (
+                        <span className="flex-1 inline-flex items-center justify-center rounded-lg border border-emerald-200/60 bg-emerald-50/50 dark:border-emerald-900/40 dark:bg-emerald-950/30 px-3 py-2 text-xs font-bold text-emerald-700 dark:text-emerald-300 cursor-default">
+                          {step.ctaLabel}
+                        </span>
+                      )}
+
+                      {/* Optional Skip button for Team step */}
+                      {step.canSkip && (
+                        <button
+                          type="button"
+                          onClick={handleSkipTeam}
+                          disabled={isPending}
+                          className="px-2.5 py-2 rounded-lg border border-zinc-300 dark:border-zinc-700 text-xs font-semibold text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer whitespace-nowrap disabled:opacity-50"
+                          title="팀원 초대를 나중에 진행하고 온보딩을 계속합니다"
+                        >
+                          {isPending ? "처리중..." : "나중에 하기"}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Row 3: Step 7 — Full Width Bottom Hero Card */}
+          {step7 && (() => {
+            const isDone = step7.isComplete;
+
+            return (
+              <div
+                key={step7.id}
+                className={`rounded-xl border p-4 sm:p-5 transition-all flex flex-col md:flex-row md:items-center justify-between gap-4 ${
+                  isDone
+                    ? "border-emerald-200/80 bg-emerald-50/30 dark:border-emerald-950/60 dark:bg-emerald-950/10"
+                    : "border-zinc-250 bg-zinc-50/70 dark:border-zinc-750 dark:bg-zinc-900/60 hover:border-zinc-350 dark:hover:border-zinc-650"
+                }`}
+              >
+                <div className="space-y-2 flex-1 max-w-3xl">
+                  <div className="flex items-center gap-2.5">
+                    <span
+                      className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] font-bold ${
+                        isDone
+                          ? "bg-emerald-600 text-white dark:bg-emerald-500 dark:text-zinc-950"
+                          : "bg-zinc-200 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300"
+                      }`}
+                    >
+                      {isDone ? "✓" : step7.number}
+                    </span>
+                    <span className="text-xs font-bold text-zinc-500 dark:text-zinc-400">
+                      STEP {step7.number} · 최종 법적 체결 단계
+                    </span>
                     <span
                       className={`inline-flex items-center rounded-md px-2 py-0.5 text-[10px] font-bold border ${
                         isDone
                           ? "bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-950/80 dark:text-emerald-300 dark:border-emerald-800"
-                          : "bg-zinc-100 text-zinc-700 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:border-zinc-700"
+                          : "bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-950/80 dark:text-amber-300 dark:border-amber-800"
                       }`}
                     >
-                      {step.statusLabel}
+                      {step7.statusLabel}
                     </span>
                   </div>
 
-                  {/* Title & Subtitle */}
-                  <div className="space-y-1">
-                    <h3 className="text-sm font-bold text-zinc-950 dark:text-white">
-                      {step.title}
+                  <div>
+                    <h3 className="text-sm sm:text-base font-bold text-zinc-950 dark:text-white">
+                      {step7.title}
                     </h3>
-                    <p className="text-xs text-zinc-600 dark:text-zinc-400 leading-relaxed">
-                      {step.description}
+                    <p className="text-xs text-zinc-600 dark:text-zinc-400 leading-relaxed mt-0.5">
+                      {step7.description}
                     </p>
+                  </div>
+
+                  <div className="text-[11px] font-mono text-zinc-500 dark:text-zinc-400 pt-1">
+                    {step7.detailText}
                   </div>
                 </div>
 
-                {/* Footer: Detail & CTA Button */}
-                <div className="pt-4 mt-3 border-t border-zinc-150 dark:border-zinc-800/80 space-y-2">
-                  <div className="text-[11px] font-mono text-zinc-500 dark:text-zinc-400 truncate" title={step.detailText}>
-                    {step.detailText}
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    {step.ctaHref ? (
-                      <Link
-                        href={step.ctaHref}
-                        className={`flex-1 inline-flex items-center justify-center rounded-lg px-3 py-2 text-xs font-bold transition-all ${
-                          isDone
-                            ? "border border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-100 dark:border-zinc-750 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
-                            : "bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-100 shadow-sm"
-                        }`}
-                      >
-                        {step.ctaLabel}
-                      </Link>
-                    ) : (
-                      <span className="flex-1 inline-flex items-center justify-center rounded-lg border border-emerald-200/60 bg-emerald-50/50 dark:border-emerald-900/40 dark:bg-emerald-950/30 px-3 py-2 text-xs font-bold text-emerald-700 dark:text-emerald-300 cursor-default">
-                        {step.ctaLabel}
-                      </span>
-                    )}
-
-                    {/* Optional Skip button for Team step */}
-                    {step.canSkip && (
-                      <button
-                        type="button"
-                        onClick={handleSkipTeam}
-                        disabled={isPending}
-                        className="px-2.5 py-2 rounded-lg border border-zinc-300 dark:border-zinc-700 text-xs font-semibold text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer whitespace-nowrap disabled:opacity-50"
-                        title="팀원 초대를 나중에 진행하고 온보딩을 계속합니다"
-                      >
-                        {isPending ? "처리중..." : "나중에 하기"}
-                      </button>
-                    )}
-                  </div>
+                <div className="shrink-0 flex items-center">
+                  <Link
+                    href={step7.ctaHref}
+                    className={`w-full md:w-auto inline-flex items-center justify-center rounded-lg px-5 py-2.5 text-xs font-bold transition-all shadow-sm ${
+                      isDone
+                        ? "border border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-100 dark:border-zinc-750 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                        : "bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-100"
+                    }`}
+                  >
+                    {step7.ctaLabel}
+                  </Link>
                 </div>
               </div>
             );
-          })}
+          })()}
         </div>
       )}
     </section>

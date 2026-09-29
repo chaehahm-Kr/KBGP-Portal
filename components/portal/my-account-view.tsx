@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import {
   MyAccountData,
   updateMyAccountProfileAction,
@@ -15,8 +16,11 @@ interface MyAccountViewProps {
 }
 
 export function MyAccountView({ initialData }: MyAccountViewProps) {
+  const router = useRouter();
   const [data, setData] = useState<MyAccountData>(initialData);
-  const [isPending, startTransition] = useTransition();
+  const [isProfilePending, startProfileTransition] = useTransition();
+  const [isPasswordPending, startPasswordTransition] = useTransition();
+  const [isResetEmailPending, startResetEmailTransition] = useTransition();
 
   // Profile Form States
   const [name, setName] = useState(data.name);
@@ -64,7 +68,7 @@ export function MyAccountView({ initialData }: MyAccountViewProps) {
       return;
     }
 
-    startTransition(async () => {
+    startProfileTransition(async () => {
       const res = await updateMyAccountProfileAction({
         name: name.trim(),
         phone: phone.trim(),
@@ -81,6 +85,7 @@ export function MyAccountView({ initialData }: MyAccountViewProps) {
           title: title.trim(),
           position: position.trim(),
         }));
+        router.refresh();
       } else {
         setProfileMessage({ type: "error", text: res.error || "프로필 저장에 실패했습니다." });
       }
@@ -98,6 +103,11 @@ export function MyAccountView({ initialData }: MyAccountViewProps) {
 
     if (!newPassword) {
       setPasswordMessage({ type: "error", text: "새 비밀번호를 입력해 주세요." });
+      return;
+    }
+
+    if (!confirmPassword) {
+      setPasswordMessage({ type: "error", text: "새 비밀번호 확인을 입력해 주세요." });
       return;
     }
 
@@ -119,7 +129,7 @@ export function MyAccountView({ initialData }: MyAccountViewProps) {
       return;
     }
 
-    startTransition(async () => {
+    startPasswordTransition(async () => {
       const res = await changeMyAccountPasswordAction({
         currentPassword,
         newPassword,
@@ -131,6 +141,7 @@ export function MyAccountView({ initialData }: MyAccountViewProps) {
         setCurrentPassword("");
         setNewPassword("");
         setConfirmPassword("");
+        router.refresh();
       } else {
         setPasswordMessage({ type: "error", text: res.error || "비밀번호 변경에 실패했습니다." });
       }
@@ -139,7 +150,7 @@ export function MyAccountView({ initialData }: MyAccountViewProps) {
 
   const handleSendResetEmail = () => {
     setResetEmailMessage(null);
-    startTransition(async () => {
+    startResetEmailTransition(async () => {
       const res = await sendMyAccountPasswordResetEmailAction();
       if (res.success) {
         setResetEmailMessage({
@@ -328,10 +339,10 @@ export function MyAccountView({ initialData }: MyAccountViewProps) {
             <div className="pt-2 flex justify-end">
               <button
                 type="submit"
-                disabled={isPending}
+                disabled={isProfilePending}
                 className="rounded-xl bg-zinc-900 px-5 py-2.5 text-xs font-bold text-white hover:bg-zinc-800 disabled:opacity-40 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-100 cursor-pointer shadow-xs inline-flex items-center gap-2"
               >
-                {isPending && (
+                {isProfilePending && (
                   <span className="inline-block w-3 h-3 border-2 border-white/30 border-t-white dark:border-zinc-900/30 dark:border-t-zinc-900 rounded-full animate-spin" />
                 )}
                 <span>변경사항 저장</span>
@@ -448,10 +459,10 @@ export function MyAccountView({ initialData }: MyAccountViewProps) {
             <div className="pt-2 flex justify-end">
               <button
                 type="submit"
-                disabled={isPending}
-                className="rounded-xl bg-zinc-900 px-5 py-2.5 text-xs font-bold text-white hover:bg-zinc-800 disabled:opacity-40 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-100 cursor-pointer shadow-xs inline-flex items-center gap-2"
+                disabled={isPasswordPending || !currentPassword.trim() || !newPassword.trim() || !confirmPassword.trim()}
+                className="rounded-xl bg-zinc-900 px-5 py-2.5 text-xs font-bold text-white hover:bg-zinc-800 disabled:opacity-40 disabled:cursor-not-allowed dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-100 cursor-pointer shadow-xs inline-flex items-center gap-2"
               >
-                {isPending && (
+                {isPasswordPending && (
                   <span className="inline-block w-3 h-3 border-2 border-white/30 border-t-white dark:border-zinc-900/30 dark:border-t-zinc-900 rounded-full animate-spin" />
                 )}
                 <span>비밀번호 변경하기</span>
@@ -487,10 +498,14 @@ export function MyAccountView({ initialData }: MyAccountViewProps) {
             <button
               type="button"
               onClick={handleSendResetEmail}
-              disabled={isPending}
-              className="w-full py-2.5 px-4 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800/80 hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-800 dark:text-zinc-200 text-xs font-bold transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-2xs"
+              disabled={isResetEmailPending}
+              className="w-full py-2.5 px-4 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800/80 hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-800 dark:text-zinc-200 text-xs font-bold transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-2xs disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <span>✉️</span>
+              {isResetEmailPending ? (
+                <span className="inline-block w-3 h-3 border-2 border-zinc-500/30 border-t-zinc-500 rounded-full animate-spin" />
+              ) : (
+                <span>✉️</span>
+              )}
               <span>비밀번호 재설정 이메일 발송</span>
             </button>
           </div>

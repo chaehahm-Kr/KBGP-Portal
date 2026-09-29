@@ -116,8 +116,40 @@ export async function updateCompanyPortalMetadata(
     throw new Error(`회사 정보를 업데이트하지 못했습니다: ${error.message}`);
   }
 
+  // Synchronize company_users table for all matching contacts
+  const adminClient = createAdminClient();
+  if (Array.isArray(payload.contacts)) {
+    for (const contact of payload.contacts) {
+      if (contact.id || contact.email) {
+        const updateData: Record<string, any> = {};
+        if (contact.name) updateData.name = contact.name.trim();
+        if (contact.phone) updateData.phone = contact.phone.trim();
+        if (contact.title !== undefined) updateData.title = contact.title.trim() || null;
+        if (contact.position !== undefined) updateData.position = contact.position.trim() || null;
+
+        if (Object.keys(updateData).length > 0) {
+          if (contact.id && contact.id !== "default-contact") {
+            await adminClient
+              .from("company_users")
+              .update(updateData)
+              .eq("id", contact.id)
+              .eq("company_id", companyId);
+          } else if (contact.email) {
+            await adminClient
+              .from("company_users")
+              .update(updateData)
+              .eq("email", contact.email.toLowerCase().trim())
+              .eq("company_id", companyId);
+          }
+        }
+      }
+    }
+  }
+
   revalidatePath(`/portal`);
   revalidatePath(`/portal/company/info`);
+  revalidatePath(`/portal/account`);
+  revalidatePath(`/portal/company/users`);
   revalidatePath(`/admin/companies/${companyId}`);
   revalidatePath("/admin/companies");
 }

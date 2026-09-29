@@ -125,26 +125,39 @@ export async function updateMyAccountProfileAction(
         position: position?.trim() || null,
       })
       .eq("id", session.userId)
-      .select("company_id")
+      .select("id, company_id, name, phone, title, position")
       .single();
 
-    if (updateError) {
+    if (updateError || !updatedUser) {
       console.error("[updateMyAccountProfileAction] update error:", updateError);
       return { success: false, error: "프로필 저장 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요." };
     }
 
-    // 2. Synchronize profiles table display_name
+    // 2. Strict read-back verification to guarantee DB persistence before returning success
+    const { data: verifiedUser, error: verifyError } = await adminClient
+      .from("company_users")
+      .select("id, name, phone, title, position, company_id")
+      .eq("id", session.userId)
+      .single();
+
+    if (verifyError || !verifiedUser || verifiedUser.name !== name.trim() || verifiedUser.title !== title.trim()) {
+      console.error("[updateMyAccountProfileAction] Read-back verification failed:", { verifyError, verifiedUser });
+      return { success: false, error: "데이터베이스 저장 검증에 실패했습니다. 다시 시도해 주세요." };
+    }
+
+    // 3. Synchronize profiles table display_name
     await adminClient
       .from("profiles")
       .update({ display_name: name.trim() })
       .eq("id", session.userId);
 
-    // 3. Mark admin_profile_onboarding_confirmed_at on company metadata
-    if (updatedUser?.company_id) {
+    // 4. Mark admin_profile_onboarding_confirmed_at on company metadata AND sync contacts array
+    const targetCompanyId = updatedUser.company_id || verifiedUser.company_id;
+    if (targetCompanyId) {
       const { data: comp } = await adminClient
         .from("companies")
-        .select("intro")
-        .eq("id", updatedUser.company_id)
+        .select("intro, contact_name, contact_phone")
+        .eq("id", targetCompanyId)
         .single();
 
       let metaObj: Record<string, any> = {};
@@ -155,20 +168,48 @@ export async function updateMyAccountProfileAction(
       }
       metaObj.admin_profile_onboarding_confirmed_at = new Date().toISOString();
 
+      // Synchronize contacts in company intro metadata JSON
+      if (Array.isArray(metaObj.contacts)) {
+        const idx = metaObj.contacts.findIndex(
+          (c: any) => c.id === session.userId || (session.email && c.email?.toLowerCase() === session.email.toLowerCase())
+        );
+        if (idx !== -1) {
+          metaObj.contacts[idx].name = name.trim();
+          metaObj.contacts[idx].phone = phone.trim();
+          metaObj.contacts[idx].title = title.trim();
+          metaObj.contacts[idx].position = position?.trim() || "";
+        } else {
+          metaObj.contacts.push({
+            id: session.userId,
+            name: name.trim(),
+            phone: phone.trim(),
+            email: session.email,
+            title: title.trim(),
+            position: position?.trim() || "",
+            isPrimary: true,
+            status: "active",
+          });
+        }
+      }
+
       await adminClient
         .from("companies")
         .update({
           intro: `__COMPANY_METADATA__:${JSON.stringify(metaObj)}`,
+          contact_name: name.trim(),
+          contact_phone: phone.trim(),
           updated_at: new Date().toISOString(),
         })
-        .eq("id", updatedUser.company_id);
+        .eq("id", targetCompanyId);
 
-      revalidatePath(`/admin/companies/${updatedUser.company_id}`);
+      revalidatePath(`/admin/companies/${targetCompanyId}`);
     }
 
     revalidatePath("/portal/account");
+    revalidatePath("/portal/company/info");
     revalidatePath("/portal/company/users");
     revalidatePath("/portal");
+    revalidatePath("/admin/companies");
 
     return { success: true, message: "관리자 프로필 정보가 성공적으로 변경 및 확인되었습니다." };
   } catch (err: any) {
