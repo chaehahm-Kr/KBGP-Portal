@@ -203,8 +203,55 @@ export function ProductForm({ action, brands }: ProductFormProps) {
     setValidationError(null);
     setFieldErrors({});
 
-    // 1. Draft Save ("임시 저장 후 나중에 등록"): Skip required validations completely
+    const hasUpcVal = upc.trim();
+    const hasEanVal = ean.trim();
+
+    // 1. Draft Save ("임시 저장 후 나중에 등록"): Validate 4 minimum fields & barcode format
     if (submitActionVal === "list") {
+      const missingFields: string[] = [];
+      const errors: Record<string, boolean> = {};
+
+      if (!brandId) {
+        missingFields.push("브랜드");
+        errors.brandId = true;
+      }
+      if (!category) {
+        missingFields.push("카테고리");
+        errors.category = true;
+      }
+      if (!manufactureSku.trim()) {
+        missingFields.push("제조사 SKU");
+        errors.manufactureSku = true;
+      }
+      if (!nameEn.trim()) {
+        missingFields.push("영문 제품명");
+        errors.nameEn = true;
+      }
+
+      let errorMsg: string | null = null;
+      if (missingFields.length === 1) {
+        if (!brandId) errorMsg = "임시 저장을 위해 브랜드를 선택해 주세요.";
+        else if (!category) errorMsg = "임시 저장을 위해 카테고리를 선택해 주세요.";
+        else if (!manufactureSku.trim()) errorMsg = "임시 저장을 위해 제조사 SKU를 입력해 주세요.";
+        else if (!nameEn.trim()) errorMsg = "임시 저장을 위해 영문 제품명을 입력해 주세요.";
+      } else if (missingFields.length > 1) {
+        errorMsg = `임시 저장을 위해 아래 기본 정보를 입력해 주세요: ${missingFields.join(", ")}`;
+      }
+
+      if (!errorMsg && hasUpcVal && !/^\d{12}$/.test(hasUpcVal)) {
+        errors.upc = true;
+        errorMsg = "UPC는 숫자 12자리로 입력해 주세요.";
+      }
+      if (!errorMsg && hasEanVal && !/^\d{13}$/.test(hasEanVal)) {
+        errors.ean = true;
+        errorMsg = "EAN은 숫자 13자리로 입력해 주세요.";
+      }
+
+      if (errorMsg) {
+        e.preventDefault();
+        setFieldErrors(errors);
+        setValidationError(errorMsg);
+      }
       return;
     }
 
@@ -237,13 +284,19 @@ export function ProductForm({ action, brands }: ProductFormProps) {
       errorMsg = errorMsg || "미국 수출 FOB 가격을 입력해주세요.";
     }
 
-    const hasUpc = !!upc.trim();
-    const hasEan = !!ean.trim();
-
-    if (!hasUpc && !hasEan) {
+    if (!hasUpcVal && !hasEanVal) {
       errors.upc = true;
       errors.ean = true;
-      errorMsg = errorMsg || "UPC 또는 EAN 번호 중 하나는 반드시 입력해야 합니다.";
+      errorMsg = errorMsg || "정식 제품 등록을 위해 UPC(12자리) 또는 EAN(13자리) 중 하나를 입력해 주세요.";
+    } else {
+      if (hasUpcVal && !/^\d{12}$/.test(hasUpcVal)) {
+        errors.upc = true;
+        errorMsg = errorMsg || "UPC는 숫자 12자리로 입력해 주세요.";
+      }
+      if (hasEanVal && !/^\d{13}$/.test(hasEanVal)) {
+        errors.ean = true;
+        errorMsg = errorMsg || "EAN은 숫자 13자리로 입력해 주세요.";
+      }
     }
 
     if (sellingOnline && !salesLink1.trim()) {
@@ -456,7 +509,7 @@ export function ProductForm({ action, brands }: ProductFormProps) {
                 <div>
                   <p className="font-bold">UPC 또는 EAN 중 하나는 반드시 입력해야 합니다.</p>
                   <p className="text-[11px] opacity-90 font-normal mt-0.5 leading-relaxed">
-                    미국 시장 바코드(UPC) 또는 글로벌 바코드(EAN) 중 최소 한 가지를 입력해야 정식 제품 등록이 완료됩니다. (둘 다 입력하는 것도 가능하며, 임시 저장 시에는 비워둘 수 있습니다.)
+                    UPC는 숫자 12자리, EAN은 숫자 13자리로 입력해야 하며, 정식 제품 등록 시 둘 중 하나는 필수입니다. (둘 다 입력하는 것도 가능하며, 임시 저장 시에는 비워둘 수 있습니다.)
                   </p>
                 </div>
               </div>

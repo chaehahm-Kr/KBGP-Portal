@@ -61,7 +61,7 @@ export async function createProduct(
   const rawBrandId = (formData.get("brandId") as string)?.trim() || "";
   const rawManufactureSku = (formData.get("manufactureSku") as string)?.trim() || "";
   const rawNameEn = (formData.get("nameEn") as string)?.trim() || "";
-  const rawCategory = (formData.get("category") as string)?.trim() || null;
+  const rawCategory = (formData.get("category") as string)?.trim() || "";
   const rawPriceKrwRetail = formData.get("priceKrwRetail");
   const rawPriceUsdFob = formData.get("priceUsdFob");
   const rawPackageWidth = formData.get("packageWidth");
@@ -79,9 +79,28 @@ export async function createProduct(
   const supabase = await createClient();
 
   if (isDraft) {
-    // DRAFT SAVE PATH: Allow required fields & UPC/EAN to be empty
-    if (!rawBrandId) {
-      return { error: "브랜드를 선택해주세요." };
+    // DRAFT SAVE PATH: Enforce 4 minimum fields (brand, category, manufactureSku, nameEn)
+    const missingFields: string[] = [];
+    if (!rawBrandId) missingFields.push("브랜드");
+    if (!rawCategory) missingFields.push("카테고리");
+    if (!rawManufactureSku) missingFields.push("제조사 SKU");
+    if (!rawNameEn) missingFields.push("영문 제품명");
+
+    if (missingFields.length === 1) {
+      if (!rawBrandId) return { error: "임시 저장을 위해 브랜드를 선택해 주세요." };
+      if (!rawCategory) return { error: "임시 저장을 위해 카테고리를 선택해 주세요." };
+      if (!rawManufactureSku) return { error: "임시 저장을 위해 제조사 SKU를 입력해 주세요." };
+      if (!rawNameEn) return { error: "임시 저장을 위해 영문 제품명을 입력해 주세요." };
+    } else if (missingFields.length > 1) {
+      return { error: `임시 저장을 위해 아래 기본 정보를 입력해 주세요: ${missingFields.join(", ")}` };
+    }
+
+    // Barcode format check if provided
+    if (upc && !/^\d{12}$/.test(upc)) {
+      return { error: "UPC는 숫자 12자리로 입력해 주세요." };
+    }
+    if (ean && !/^\d{13}$/.test(ean)) {
+      return { error: "EAN은 숫자 13자리로 입력해 주세요." };
     }
 
     const { data: brand } = await supabase
@@ -95,9 +114,7 @@ export async function createProduct(
       return { error: "선택한 브랜드를 찾을 수 없습니다." };
     }
 
-    const manufactureSku = rawManufactureSku || `DRAFT-SKU-${Date.now().toString().slice(-6)}`;
-    const nameEn = rawNameEn || "[임시저장] 신규 제품";
-    const category = (["skincare", "hair_scalp", "beauty_tools", "daily_care", "wellness_patch"].includes(rawCategory || "") ? rawCategory : null) as ProductCategory | null;
+    const category = (["skincare", "hair_scalp", "beauty_tools", "daily_care", "wellness_patch"].includes(rawCategory) ? rawCategory : null) as ProductCategory | null;
     const priceKrwRetail = rawPriceKrwRetail && !isNaN(Number(rawPriceKrwRetail)) ? Number(rawPriceKrwRetail) : null;
     const priceUsdFob = rawPriceUsdFob && !isNaN(Number(rawPriceUsdFob)) ? Number(rawPriceUsdFob) : null;
     const packageWidth = rawPackageWidth && !isNaN(Number(rawPackageWidth)) ? Number(rawPackageWidth) : null;
@@ -110,10 +127,11 @@ export async function createProduct(
       .insert({
         brand_id: brand.id,
         company_id: companyId,
-        name: nameEn,
-        name_en: rawNameEn || null,
+        name: rawNameEn,
+        name_en: rawNameEn,
         category: category,
-        manufacture_sku: manufactureSku,
+        category_code: category,
+        manufacture_sku: rawManufactureSku,
         price_krw_retail: priceKrwRetail,
         price_usd_fob: priceUsdFob,
         package_width: packageWidth,
@@ -132,7 +150,7 @@ export async function createProduct(
 
     if (insertError || !product) {
       console.error("Draft product insert error:", insertError);
-      return { error: "임시 저장에 실패했습니다. 잠시 후 다시 시도해주세요." };
+      return { error: "임시 저장 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요." };
     }
 
     revalidatePath("/portal/products");
@@ -159,9 +177,15 @@ export async function createProduct(
     return { error: parsed.error.issues[0]?.message ?? "입력값을 확인해주세요." };
   }
 
-  // UPC / EAN 최소 1개 필수 검증
+  // UPC / EAN 최소 1개 필수 및 바코드 포맷 검증
   if (!upc && !ean) {
-    return { error: "UPC 또는 EAN 번호 중 하나는 반드시 입력해야 합니다." };
+    return { error: "정식 제품 등록을 위해 UPC(12자리) 또는 EAN(13자리) 중 하나를 입력해 주세요." };
+  }
+  if (upc && !/^\d{12}$/.test(upc)) {
+    return { error: "UPC는 숫자 12자리로 입력해 주세요." };
+  }
+  if (ean && !/^\d{13}$/.test(ean)) {
+    return { error: "EAN은 숫자 13자리로 입력해 주세요." };
   }
 
   if (sellingOnline && !salesLink1) {
@@ -188,6 +212,7 @@ export async function createProduct(
       name: parsed.data.nameEn,
       name_en: parsed.data.nameEn,
       category: parsed.data.category || null,
+      category_code: parsed.data.category || null,
       manufacture_sku: parsed.data.manufactureSku,
       price_krw_retail: parsed.data.priceKrwRetail ?? null,
       price_usd_fob: parsed.data.priceUsdFob ?? null,
@@ -207,7 +232,7 @@ export async function createProduct(
 
   if (insertError || !product) {
     console.error("Insert product error:", insertError);
-    return { error: "제품 등록에 실패했습니다. 잠시 후 다시 시도해주세요." };
+    return { error: "제품 등록 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요." };
   }
 
   revalidatePath("/portal/products");
