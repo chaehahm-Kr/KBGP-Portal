@@ -20,7 +20,7 @@ export interface CompanyOnboardingPopoverProps {
   companyId?: string | null;
 }
 
-// 7-Step Short Display Labels
+// ADM-APP-004-R2 / ADM-COMP-004-R2: 7-Step Short Display Labels & Smart Dynamic Positioning
 const CANONICAL_SHORT_STEPS: { step: number; id: string; name: string }[] = [
   { step: 1, id: "company", name: "회사 정보" },
   { step: 2, id: "admin_profile", name: "관리자 정보" },
