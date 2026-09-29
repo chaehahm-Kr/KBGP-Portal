@@ -43,6 +43,7 @@ export interface CompanyParsedMetadata {
   status: string;
   logoPath?: string | null;
   logoUrl?: string | null;
+  team_onboarding_skipped?: boolean;
 }
 
 export async function parseCompanyMetadata(company: any): Promise<CompanyParsedMetadata> {
@@ -106,6 +107,7 @@ export async function parseCompanyMetadata(company: any): Promise<CompanyParsedM
         status: data.status || (company.status === "active" ? "Active" : "Inactive"),
         logoPath,
         logoUrl,
+        team_onboarding_skipped: Boolean(data.team_onboarding_skipped),
       };
     } catch (e) {
       // ignore

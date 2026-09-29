@@ -10,6 +10,8 @@ import { getPartnerInquiries } from "@/lib/inquiry/actions";
 import { getNormalizedStatus, OFFICIAL_STATUS_LABEL } from "@/lib/inquiry/types";
 import { OVERALL_STATUS_LABELS, OVERALL_STATUS_COLORS } from "@/lib/purchase-order/status-helper";
 import { formatEasternDateTime } from "@/lib/utils/timezone";
+import { BrandOnboardingChecklist } from "@/components/portal/brand-onboarding-checklist";
+import { parseCompanyMetadata } from "@/lib/company/admin-actions";
 
 export const dynamic = "force-dynamic";
 
@@ -31,7 +33,7 @@ export default async function PortalHomePage() {
 
   const { data: company } = await supabase
     .from("companies")
-    .select("name, intro, country, contact_phone")
+    .select("name, business_registration_number, intro, country, contact_name, contact_phone")
     .eq("id", companyId)
     .single();
 
@@ -349,6 +351,36 @@ export default async function PortalHomePage() {
     console.error("Failed to fetch agreement on dashboard:", err);
   }
 
+  // 9. Fetch Onboarding Metrics (Brands, Users, Company Info completeness)
+  const { data: rawBrands } = await supabase
+    .from("brands")
+    .select("id, name, is_active")
+    .eq("company_id", companyId);
+  const brandList = rawBrands ?? [];
+  const isBrandComplete = brandList.length > 0;
+  const primaryBrandName = brandList[0]?.name || null;
+
+  const { data: rawCompanyUsers } = await supabase
+    .from("company_users")
+    .select("id, email, status")
+    .eq("company_id", companyId);
+  const companyUsersList = rawCompanyUsers ?? [];
+  const teamCount = companyUsersList.length;
+
+  const parsedMeta = await parseCompanyMetadata(company || {});
+  const isCompanyInfoComplete = Boolean(
+    company?.name?.trim() &&
+    company?.business_registration_number?.trim() &&
+    company?.country?.trim() &&
+    (parsedMeta.address_1?.trim() || parsedMeta.address?.trim()) &&
+    parsedMeta.city?.trim() &&
+    (company?.contact_phone?.trim() || parsedMeta.contacts?.[0]?.phone?.trim())
+  );
+  const teamSkipped = Boolean(parsedMeta.team_onboarding_skipped);
+  const isTeamComplete = teamCount > 1 || teamSkipped;
+  const isProductComplete = products.length > 0;
+  const isAgreementComplete = agreement?.status === "active";
+
   return (
     <div className="space-y-6 w-full max-w-7xl pb-10">
       {/* 1. Header: Compact Welcome Banner */}
@@ -392,11 +424,26 @@ export default async function PortalHomePage() {
         </div>
       </div>
 
-      {/* Agreement Onboarding Status Banner (PORT-DASH-002) */}
-      {(() => {
-        const { PortalAgreementDashboardBanner } = require("@/components/portal/portal-agreement-dashboard-banner");
-        return <PortalAgreementDashboardBanner agreement={agreement} />;
-      })()}
+      {/* 2. 6-Step Brand Onboarding Checklist (PORT-ONB-002-R1) */}
+      <BrandOnboardingChecklist
+        companyId={companyId}
+        companyName={company?.name || "브랜드 파트너"}
+        userEmail={session.email}
+        isAccountActive={true}
+        isCompanyInfoComplete={isCompanyInfoComplete}
+        isTeamComplete={isTeamComplete}
+        teamCount={teamCount}
+        teamSkipped={teamSkipped}
+        isBrandComplete={isBrandComplete}
+        brandCount={brandList.length}
+        brandName={primaryBrandName}
+        isProductComplete={isProductComplete}
+        productCount={products.length}
+        isAgreementComplete={isAgreementComplete}
+        agreementStatus={agreement?.status}
+        agreementVersion={agreement?.version}
+        agreementId={agreement?.agreement_id}
+      />
 
       {/* ----------------- MODE A: PRE-APPROVAL MODE ----------------- */}
       {!isOperationalMode && (

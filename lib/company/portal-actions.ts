@@ -322,3 +322,41 @@ export async function portalUpdateSupplierRemittance(
   revalidatePath(`/admin/companies/${companyId}`);
   return { success: true };
 }
+
+export async function skipTeamOnboardingAction(companyId: string) {
+  const membership = await requireCompanyAdmin();
+  if (membership.companyId !== companyId) {
+    throw new Error("소속 회사 권한이 없습니다.");
+  }
+
+  const supabase = createAdminClient();
+  const { data: company } = await supabase
+    .from("companies")
+    .select("intro")
+    .eq("id", companyId)
+    .single();
+
+  let metaObj: Record<string, any> = {};
+  if (company?.intro && company.intro.startsWith("__COMPANY_METADATA__:")) {
+    try {
+      metaObj = JSON.parse(company.intro.substring("__COMPANY_METADATA__:".length));
+    } catch {}
+  }
+  metaObj.team_onboarding_skipped = true;
+
+  const { error } = await supabase
+    .from("companies")
+    .update({
+      intro: `__COMPANY_METADATA__:${JSON.stringify(metaObj)}`,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", companyId);
+
+  if (error) {
+    throw new Error(`팀원 초대 건너뛰기 실패: ${error.message}`);
+  }
+
+  revalidatePath("/portal");
+  return { success: true };
+}
+
