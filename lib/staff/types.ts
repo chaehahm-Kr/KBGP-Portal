@@ -38,6 +38,7 @@ export type MenuActionPermissions = {
   edit: boolean;
   delete: boolean;
   approve: boolean;
+  impersonate?: boolean;
 };
 
 export type StaffMenuPermissions = {
@@ -55,57 +56,58 @@ export const DEFAULT_MENU_ACTION: MenuActionPermissions = {
   edit: false,
   delete: false,
   approve: false,
+  impersonate: false,
 };
 
 // 02_사용자유형과권한표.md 및 신규 기획에 맞춤 기본 권한 프리셋
 export const DEFAULT_ROLE_PERMISSIONS: Record<StaffRole, StaffMenuPermissions> = {
   super_admin: {
-    applications: { view: true, create: true, edit: true, delete: true, approve: true },
-    companies: { view: true, create: true, edit: true, delete: true, approve: true },
-    products: { view: true, create: true, edit: true, delete: true, approve: true },
-    retail: { view: true, create: true, edit: true, delete: true, approve: true },
-    sales: { view: true, create: true, edit: true, delete: true, approve: true },
-    staff: { view: true, create: true, edit: true, delete: true, approve: true },
+    applications: { view: true, create: true, edit: true, delete: true, approve: true, impersonate: true },
+    companies: { view: true, create: true, edit: true, delete: true, approve: true, impersonate: true },
+    products: { view: true, create: true, edit: true, delete: true, approve: true, impersonate: true },
+    retail: { view: true, create: true, edit: true, delete: true, approve: true, impersonate: true },
+    sales: { view: true, create: true, edit: true, delete: true, approve: true, impersonate: true },
+    staff: { view: true, create: true, edit: true, delete: true, approve: true, impersonate: true },
   },
   admin: {
-    applications: { view: true, create: true, edit: true, delete: false, approve: true },
-    companies: { view: true, create: true, edit: true, delete: false, approve: true },
-    products: { view: true, create: true, edit: true, delete: false, approve: true },
-    retail: { view: true, create: true, edit: true, delete: false, approve: false },
-    sales: { view: true, create: true, edit: false, delete: false, approve: false },
-    staff: { view: true, create: true, edit: true, delete: true, approve: true },
+    applications: { view: true, create: true, edit: true, delete: false, approve: true, impersonate: true },
+    companies: { view: true, create: true, edit: true, delete: false, approve: true, impersonate: true },
+    products: { view: true, create: true, edit: true, delete: false, approve: true, impersonate: true },
+    retail: { view: true, create: true, edit: true, delete: false, approve: false, impersonate: false },
+    sales: { view: true, create: true, edit: false, delete: false, approve: false, impersonate: false },
+    staff: { view: true, create: true, edit: true, delete: true, approve: true, impersonate: true },
   },
   reviewer: {
-    applications: { view: true, create: false, edit: true, delete: false, approve: true },
-    companies: { view: true, create: false, edit: false, delete: false, approve: false },
-    products: { view: true, create: false, edit: true, delete: false, approve: true },
-    retail: { view: false, create: false, edit: false, delete: false, approve: false },
-    sales: { view: false, create: false, edit: false, delete: false, approve: false },
-    staff: { view: false, create: false, edit: false, delete: false, approve: false },
+    applications: { view: true, create: false, edit: true, delete: false, approve: true, impersonate: false },
+    companies: { view: true, create: false, edit: false, delete: false, approve: false, impersonate: false },
+    products: { view: true, create: false, edit: true, delete: false, approve: true, impersonate: false },
+    retail: { view: false, create: false, edit: false, delete: false, approve: false, impersonate: false },
+    sales: { view: false, create: false, edit: false, delete: false, approve: false, impersonate: false },
+    staff: { view: false, create: false, edit: false, delete: false, approve: false, impersonate: false },
   },
   account_manager: {
-    applications: { view: true, create: false, edit: true, delete: false, approve: false },
-    companies: { view: true, create: true, edit: true, delete: false, approve: false },
-    products: { view: true, create: true, edit: true, delete: false, approve: false },
-    retail: { view: true, create: false, edit: true, delete: false, approve: false },
-    sales: { view: true, create: false, edit: false, delete: false, approve: false },
-    staff: { view: false, create: false, edit: false, delete: false, approve: false },
+    applications: { view: true, create: false, edit: true, delete: false, approve: false, impersonate: false },
+    companies: { view: true, create: true, edit: true, delete: false, approve: false, impersonate: false },
+    products: { view: true, create: true, edit: true, delete: false, approve: false, impersonate: false },
+    retail: { view: true, create: false, edit: true, delete: false, approve: false, impersonate: false },
+    sales: { view: true, create: false, edit: false, delete: false, approve: false, impersonate: false },
+    staff: { view: false, create: false, edit: false, delete: false, approve: false, impersonate: false },
   },
   operations: {
-    applications: { view: true, create: false, edit: true, delete: false, approve: false },
-    companies: { view: true, create: false, edit: true, delete: false, approve: false },
-    products: { view: true, create: true, edit: true, delete: false, approve: true },
-    retail: { view: true, create: true, edit: true, delete: false, approve: false },
-    sales: { view: true, create: false, edit: false, delete: false, approve: false },
-    staff: { view: false, create: false, edit: false, delete: false, approve: false },
+    applications: { view: true, create: false, edit: true, delete: false, approve: false, impersonate: false },
+    companies: { view: true, create: false, edit: true, delete: false, approve: false, impersonate: false },
+    products: { view: true, create: true, edit: true, delete: false, approve: true, impersonate: false },
+    retail: { view: true, create: true, edit: true, delete: false, approve: false, impersonate: false },
+    sales: { view: true, create: false, edit: false, delete: false, approve: false, impersonate: false },
+    staff: { view: false, create: false, edit: false, delete: false, approve: false, impersonate: false },
   },
   executive_viewer: {
-    applications: { view: true, create: false, edit: false, delete: false, approve: false },
-    companies: { view: true, create: false, edit: false, delete: false, approve: false },
-    products: { view: true, create: false, edit: false, delete: false, approve: false },
-    retail: { view: true, create: false, edit: false, delete: false, approve: false },
-    sales: { view: true, create: false, edit: false, delete: false, approve: false },
-    staff: { view: true, create: false, edit: false, delete: false, approve: false },
+    applications: { view: true, create: false, edit: false, delete: false, approve: false, impersonate: false },
+    companies: { view: true, create: false, edit: false, delete: false, approve: false, impersonate: false },
+    products: { view: true, create: false, edit: false, delete: false, approve: false, impersonate: false },
+    retail: { view: true, create: false, edit: false, delete: false, approve: false, impersonate: false },
+    sales: { view: true, create: false, edit: false, delete: false, approve: false, impersonate: false },
+    staff: { view: true, create: false, edit: false, delete: false, approve: false, impersonate: false },
   },
   custom: {
     applications: { ...DEFAULT_MENU_ACTION },

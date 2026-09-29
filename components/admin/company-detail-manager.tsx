@@ -88,6 +88,7 @@ interface CompanyDetailManagerProps {
   taskAssignments: TaskAssignmentItem[];
   isSuperAdmin: boolean;
   isFinanceUser: boolean;
+  canImpersonate?: boolean;
   initialSupplierProfile: any | null;
   initialSupplierRemittance: any | null;
   warehouses: any[];
@@ -107,6 +108,7 @@ export function CompanyDetailManager({
   taskAssignments,
   isSuperAdmin,
   isFinanceUser,
+  canImpersonate = true,
   initialSupplierProfile,
   initialSupplierRemittance,
   warehouses,
@@ -1287,7 +1289,7 @@ export function CompanyDetailManager({
                             </td>
                             <td className="px-4 py-3 text-right">
                               <div className="flex items-center justify-end gap-2">
-                                {row.status === "active" && (
+                                {row.status === "active" && canImpersonate && (
                                   <button
                                     type="button"
                                     onClick={() => setImpersonateTargetUser(row)}

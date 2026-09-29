@@ -296,7 +296,14 @@ export default function Sidebar({
       ],
     },
     { name: "Reports", icon: ReportsIcon, href: "/admin/reports" },
-    { name: "Users & Permissions", icon: UsersIcon, href: "/admin/staff" },
+    {
+      name: "Users & Permissions",
+      icon: UsersIcon,
+      subItems: [
+        { name: "Staff & Permissions", href: "/admin/staff" },
+        { name: "Support Session Logs", href: "/admin/staff/support-sessions" },
+      ],
+    },
     {
       name: "Settings",
       icon: SettingsIcon,

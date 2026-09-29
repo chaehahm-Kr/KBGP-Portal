@@ -287,13 +287,42 @@ export async function startImpersonationAction(input: StartImpersonationInput): 
 
     const { data: staff } = await admin
       .from("staff_members")
-      .select("id, status, email")
+      .select("id, name, status, email, base_role, menu_permissions")
       .eq("id", adminSession.userId)
       .maybeSingle();
 
     if (!staff || staff.status !== "active") {
       console.warn(`[IMPERSONATION_ADMIN_NOT_AUTHORIZED] Staff member ${adminSession.userId} is missing or inactive`);
       return { success: false, error: "관리자 전용 권한이 필요합니다." };
+    }
+
+    // Permission Verification: Check if caller has Login as User / Support Session permission
+    const isSuperAdminRole = staff.base_role === "super_admin";
+    const perms = (staff.menu_permissions as any) || {};
+    const hasImpersonatePerm = isSuperAdminRole || Boolean(
+      perms.impersonate ||
+      perms.companies?.impersonate ||
+      perms.companies?.login_as_user ||
+      perms.login_as_user
+    );
+
+    let isSuperAdminConfirmed = isSuperAdminRole;
+    if (!isSuperAdminConfirmed) {
+      const { data: roles } = await admin
+        .from("staff_roles")
+        .select("role")
+        .eq("staff_id", staff.id);
+      if ((roles ?? []).some((r) => r.role === "super_admin")) {
+        isSuperAdminConfirmed = true;
+      }
+    }
+
+    if (!isSuperAdminConfirmed && !hasImpersonatePerm) {
+      console.warn(`[IMPERSONATION_PERMISSION_DENIED] Staff member ${staff.id} lacks login_as_user permission`);
+      return {
+        success: false,
+        error: "Login as User (사용자 계정 지원 세션) 권한이 없습니다. 관리자에게 권한을 요청해 주세요.",
+      };
     }
 
     // 2. Check & Clean Stale / Expired Impersonation Session
@@ -405,8 +434,10 @@ export async function startImpersonationAction(input: StartImpersonationInput): 
         session_id: sessionId,
         admin_user_id: staff.id,
         admin_email: staff.email || adminSession.email,
+        admin_name: staff.name || staff.email || adminSession.email,
         target_user_id: targetUser.id,
         target_user_email: targetUser.email,
+        target_user_name: targetUser.name || targetUser.email,
         target_company_id: company.id,
         target_company_name: company.name,
         portal_type: resolvedPortalType,
@@ -414,6 +445,7 @@ export async function startImpersonationAction(input: StartImpersonationInput): 
         reason: input.reason || "Customer Support",
         note: input.note?.trim() || null,
         started_at: startedAt,
+        expires_at: expiresAt,
       });
     } catch (auditErr) {
       console.warn("[startImpersonationAction] Audit log insert warning:", auditErr);
@@ -467,8 +499,10 @@ export async function stopImpersonationAction(): Promise<{
           session_id: sessionData.sessionId,
           admin_user_id: sessionData.adminUserId,
           admin_email: sessionData.adminEmail,
+          admin_name: sessionData.adminEmail,
           target_user_id: sessionData.targetUserId,
           target_user_email: sessionData.targetUserEmail,
+          target_user_name: sessionData.targetUserName || sessionData.targetUserEmail,
           target_company_id: sessionData.targetCompanyId,
           target_company_name: sessionData.targetCompanyName,
           portal_type: sessionData.portalType,
@@ -496,26 +530,170 @@ export async function stopImpersonationAction(): Promise<{
 }
 
 /**
- * Server Action: Fetches Impersonation Audit Trail for Admin Audit Page
+ * Check if a staff member has Login as User permission
  */
-export async function getImpersonationAuditLogsAction(): Promise<{
+export async function hasImpersonationPermission(userId: string): Promise<boolean> {
+  try {
+    const admin = createAdminClient();
+    const { data: staff } = await admin
+      .from("staff_members")
+      .select("base_role, menu_permissions, status")
+      .eq("id", userId)
+      .maybeSingle();
+
+    if (!staff || staff.status !== "active") return false;
+    if (staff.base_role === "super_admin") return true;
+
+    const { data: roles } = await admin
+      .from("staff_roles")
+      .select("role")
+      .eq("staff_id", userId);
+
+    if ((roles ?? []).some((r) => r.role === "super_admin")) return true;
+
+    const perms = (staff.menu_permissions as any) || {};
+    return Boolean(
+      perms.impersonate ||
+      perms.companies?.impersonate ||
+      perms.companies?.login_as_user ||
+      perms.login_as_user
+    );
+  } catch (e) {
+    return false;
+  }
+}
+
+export interface SupportSessionLogFilter {
+  startDate?: string;
+  endDate?: string;
+  staffId?: string;
+  companyId?: string;
+  portalType?: string;
+  status?: string;
+  query?: string;
+}
+
+/**
+ * Server Action: Fetches Impersonation Audit Trail for Support Session Logs Page
+ */
+export async function getSupportSessionLogsAction(filters?: SupportSessionLogFilter): Promise<{
   logs: any[];
   error?: string;
 }> {
   try {
     await verifyAdminSession();
     const admin = createAdminClient();
-    const { data, error } = await admin
+
+    let query = admin
       .from("impersonation_audit_logs")
       .select("*")
-      .order("created_at", { ascending: false })
-      .limit(100);
+      .order("started_at", { ascending: false })
+      .limit(300);
 
+    if (filters?.portalType && filters.portalType !== "ALL") {
+      query = query.eq("portal_type", filters.portalType.toUpperCase());
+    }
+    if (filters?.staffId && filters.staffId !== "ALL") {
+      query = query.eq("admin_user_id", filters.staffId);
+    }
+    if (filters?.companyId && filters.companyId !== "ALL") {
+      query = query.eq("target_company_id", filters.companyId);
+    }
+
+    const { data: rawLogs, error } = await query;
     if (error) return { logs: [], error: error.message };
-    return { logs: data || [] };
+
+    const { data: staffMembers } = await admin.from("staff_members").select("id, name, email");
+    const staffMap = new Map((staffMembers || []).map((s) => [s.id, s.name || s.email]));
+
+    const { data: companyUsers } = await admin.from("company_users").select("id, name, email");
+    const userMap = new Map((companyUsers || []).map((u) => [u.id, u.name || u.email]));
+
+    const now = Date.now();
+    const formattedLogs = (rawLogs || []).map((log) => {
+      const adminName = log.admin_name || staffMap.get(log.admin_user_id) || log.admin_email;
+      const targetUserName = log.target_user_name || userMap.get(log.target_user_id) || log.target_user_email;
+
+      let status = "ENDED";
+      if (log.ended_at || log.action === "IMPERSONATION_ENDED") {
+        status = "ENDED";
+      } else {
+        const expTime = log.expires_at
+          ? new Date(log.expires_at).getTime()
+          : new Date(log.started_at).getTime() + SESSION_DURATION_SECONDS * 1000;
+        if (now < expTime) {
+          status = "ACTIVE";
+        } else {
+          status = "EXPIRED";
+        }
+      }
+
+      let durationText = "-";
+      if (log.duration_seconds) {
+        const mins = Math.floor(log.duration_seconds / 60);
+        const secs = log.duration_seconds % 60;
+        durationText = mins > 0 ? `${mins}분 ${secs}초` : `${secs}초`;
+      } else if (log.ended_at) {
+        const diffSecs = Math.max(0, Math.round((new Date(log.ended_at).getTime() - new Date(log.started_at).getTime()) / 1000));
+        const mins = Math.floor(diffSecs / 60);
+        const secs = diffSecs % 60;
+        durationText = mins > 0 ? `${mins}분 ${secs}초` : `${secs}초`;
+      } else if (status === "ACTIVE") {
+        const diffSecs = Math.max(0, Math.round((now - new Date(log.started_at).getTime()) / 1000));
+        const mins = Math.floor(diffSecs / 60);
+        const secs = diffSecs % 60;
+        durationText = `진행 중 (${mins}분 ${secs}초)`;
+      }
+
+      return {
+        ...log,
+        admin_name: adminName,
+        target_user_name: targetUserName,
+        status,
+        durationText,
+      };
+    });
+
+    let filteredLogs = formattedLogs;
+    if (filters?.status && filters.status !== "ALL") {
+      filteredLogs = filteredLogs.filter((l) => l.status === filters.status);
+    }
+    if (filters?.startDate) {
+      const startTs = new Date(filters.startDate).getTime();
+      filteredLogs = filteredLogs.filter((l) => new Date(l.started_at).getTime() >= startTs);
+    }
+    if (filters?.endDate) {
+      const endTs = new Date(filters.endDate).getTime() + 86400000;
+      filteredLogs = filteredLogs.filter((l) => new Date(l.started_at).getTime() <= endTs);
+    }
+    if (filters?.query?.trim()) {
+      const q = filters.query.trim().toLowerCase();
+      filteredLogs = filteredLogs.filter(
+        (l) =>
+          l.target_company_name?.toLowerCase().includes(q) ||
+          l.target_user_name?.toLowerCase().includes(q) ||
+          l.target_user_email?.toLowerCase().includes(q) ||
+          l.admin_name?.toLowerCase().includes(q) ||
+          l.admin_email?.toLowerCase().includes(q) ||
+          l.note?.toLowerCase().includes(q) ||
+          l.reason?.toLowerCase().includes(q)
+      );
+    }
+
+    return { logs: filteredLogs };
   } catch (err: any) {
-    return { logs: [], error: err?.message || "감사 로그를 불러오지 못했습니다." };
+    return { logs: [], error: err?.message || "지원 세션 로그를 불러오지 못했습니다." };
   }
+}
+
+/**
+ * Server Action: Legacy wrapper for fetching logs
+ */
+export async function getImpersonationAuditLogsAction(): Promise<{
+  logs: any[];
+  error?: string;
+}> {
+  return getSupportSessionLogsAction();
 }
 
 export const startImpersonationActionInternal = startImpersonationAction;

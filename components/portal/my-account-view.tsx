@@ -23,19 +23,19 @@ export function MyAccountView({ initialData }: MyAccountViewProps) {
   const [isResetEmailPending, startResetEmailTransition] = useTransition();
 
   // Profile Form States
-  const [name, setName] = useState(data.name);
-  const [phone, setPhone] = useState(data.phone);
-  const [title, setTitle] = useState(data.title);
-  const [position, setPosition] = useState(data.position);
+  const [name, setName] = useState(initialData.name || "");
+  const [phone, setPhone] = useState(initialData.phone || "");
+  const [title, setTitle] = useState(initialData.title || "");
+  const [position, setPosition] = useState(initialData.position || "");
   const [profileMessage, setProfileMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   React.useEffect(() => {
     setData(initialData);
-    setName(initialData.name || "");
-    setPhone(initialData.phone || "");
-    setTitle(initialData.title || "");
-    setPosition(initialData.position || "");
-  }, [initialData]);
+    if (initialData.name) setName(initialData.name);
+    if (initialData.phone) setPhone(initialData.phone);
+    if (initialData.title) setTitle(initialData.title);
+    if (initialData.position !== undefined && initialData.position !== null) setPosition(initialData.position);
+  }, [initialData.name, initialData.phone, initialData.title, initialData.position]);
 
   // Password Form States
   const [currentPassword, setCurrentPassword] = useState("");
@@ -76,14 +76,18 @@ export function MyAccountView({ initialData }: MyAccountViewProps) {
         position: position.trim(),
       });
 
-      if (res.success) {
-        setProfileMessage({ type: "success", text: res.message || "관리자 프로필 정보가 성공적으로 변경 및 확인되었습니다." });
+      if (res.success && res.profile) {
+        setProfileMessage({ type: "success", text: res.message || "관리자 프로필 정보가 성공적으로 저장되었습니다." });
+        setName(res.profile.name);
+        setTitle(res.profile.title);
+        setPosition(res.profile.position);
+        setPhone(res.profile.phone);
         setData((prev) => ({
           ...prev,
-          name: name.trim(),
-          phone: phone.trim(),
-          title: title.trim(),
-          position: position.trim(),
+          name: res.profile!.name,
+          phone: res.profile!.phone,
+          title: res.profile!.title,
+          position: res.profile!.position,
         }));
         router.refresh();
       } else {

@@ -3,8 +3,10 @@
 import {
   startImpersonationActionInternal,
   stopImpersonationActionInternal,
-  getImpersonationAuditLogsActionInternal,
+  getSupportSessionLogsAction,
+  hasImpersonationPermission,
   type StartImpersonationInput,
+  type SupportSessionLogFilter,
 } from "@/lib/auth/impersonation";
 
 export async function startImpersonationAction(input: StartImpersonationInput) {
@@ -15,6 +17,13 @@ export async function stopImpersonationAction() {
   return stopImpersonationActionInternal();
 }
 
-export async function getImpersonationAuditLogsAction() {
-  return getImpersonationAuditLogsActionInternal();
+export async function getImpersonationAuditLogsAction(filters?: SupportSessionLogFilter) {
+  return getSupportSessionLogsAction(filters);
 }
+
+export {
+  getSupportSessionLogsAction,
+  hasImpersonationPermission,
+  type StartImpersonationInput,
+  type SupportSessionLogFilter,
+};

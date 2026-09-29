@@ -41,6 +41,12 @@ export interface ActionResult {
   success: boolean;
   message?: string;
   error?: string;
+  profile?: {
+    name: string;
+    phone: string;
+    title: string;
+    position: string;
+  };
 }
 
 /**
@@ -50,13 +56,27 @@ export async function getMyAccountData(): Promise<MyAccountData> {
   const session = await verifyPortalSession();
   const adminClient = createAdminClient();
 
-  const { data: userRecord, error: userError } = await adminClient
+  let userRecord: any = null;
+  const { data: userById, error: userError } = await adminClient
     .from("company_users")
     .select(
       "id, company_id, name, email, company_role, status, title, position, phone, is_primary, created_at, joined_at, companies(id, name)"
     )
     .eq("id", session.userId)
     .maybeSingle();
+
+  if (userById) {
+    userRecord = userById;
+  } else if (session.email) {
+    const { data: userByEmail } = await adminClient
+      .from("company_users")
+      .select(
+        "id, company_id, name, email, company_role, status, title, position, phone, is_primary, created_at, joined_at, companies(id, name)"
+      )
+      .eq("email", session.email.toLowerCase().trim())
+      .maybeSingle();
+    userRecord = userByEmail;
+  }
 
   if (userError) {
     console.error("[getMyAccountData] Error loading company user:", userError);
@@ -116,6 +136,17 @@ export async function updateMyAccountProfileAction(
     const adminClient = createAdminClient();
 
     // 1. Update company_users table (Authoritative user record across Portal & Admin)
+    let targetUserId = session.userId;
+    const { data: existingUser } = await adminClient
+      .from("company_users")
+      .select("id, company_id")
+      .or(`id.eq.${session.userId},email.eq.${session.email.toLowerCase().trim()}`)
+      .maybeSingle();
+
+    if (existingUser) {
+      targetUserId = existingUser.id;
+    }
+
     const { data: updatedUser, error: updateError } = await adminClient
       .from("company_users")
       .update({
@@ -124,7 +155,7 @@ export async function updateMyAccountProfileAction(
         title: title.trim(),
         position: position?.trim() || null,
       })
-      .eq("id", session.userId)
+      .eq("id", targetUserId)
       .select("id, company_id, name, phone, title, position")
       .single();
 
@@ -137,7 +168,7 @@ export async function updateMyAccountProfileAction(
     const { data: verifiedUser, error: verifyError } = await adminClient
       .from("company_users")
       .select("id, name, phone, title, position, company_id")
-      .eq("id", session.userId)
+      .eq("id", targetUserId)
       .single();
 
     if (
@@ -178,7 +209,7 @@ export async function updateMyAccountProfileAction(
       // Synchronize contacts in company intro metadata JSON
       if (Array.isArray(metaObj.contacts)) {
         const idx = metaObj.contacts.findIndex(
-          (c: any) => c.id === session.userId || (session.email && c.email?.toLowerCase() === session.email.toLowerCase())
+          (c: any) => c.id === targetUserId || (session.email && c.email?.toLowerCase() === session.email.toLowerCase())
         );
         if (idx !== -1) {
           metaObj.contacts[idx].name = name.trim();
@@ -187,7 +218,7 @@ export async function updateMyAccountProfileAction(
           metaObj.contacts[idx].position = position?.trim() || "";
         } else {
           metaObj.contacts.push({
-            id: session.userId,
+            id: targetUserId,
             name: name.trim(),
             phone: phone.trim(),
             email: session.email,
@@ -218,7 +249,16 @@ export async function updateMyAccountProfileAction(
     revalidatePath("/portal");
     revalidatePath("/admin/companies");
 
-    return { success: true, message: "관리자 프로필 정보가 성공적으로 저장되었습니다." };
+    return {
+      success: true,
+      message: "관리자 프로필 정보가 성공적으로 저장되었습니다.",
+      profile: {
+        name: verifiedUser.name || name.trim(),
+        title: verifiedUser.title || title.trim(),
+        position: verifiedUser.position || position?.trim() || "",
+        phone: verifiedUser.phone || phone.trim(),
+      },
+    };
   } catch (err: any) {
     if (err?.digest?.includes("NEXT_REDIRECT")) throw err;
     console.error("[updateMyAccountProfileAction] Unexpected error:", err);

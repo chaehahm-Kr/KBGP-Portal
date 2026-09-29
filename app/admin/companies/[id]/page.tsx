@@ -331,6 +331,9 @@ export default async function AdminCompanyDetailPage({
     // Fetch shipping origins
     const shippingOrigins = await getCompanyShippingOrigins(id);
 
+    const { hasImpersonationPermission } = await import("@/lib/auth/impersonation-actions");
+    const canImpersonate = await hasImpersonationPermission(session.userId);
+
     return (
       <CompanyDetailManager
         company={company}
@@ -345,6 +348,7 @@ export default async function AdminCompanyDetailPage({
         taskAssignments={taskAssignments}
         isSuperAdmin={isSuperAdmin}
         isFinanceUser={isFinanceUser}
+        canImpersonate={canImpersonate}
         initialSupplierProfile={supplierProfile || null}
         initialSupplierRemittance={supplierRemittance || null}
         warehouses={warehouses || []}
