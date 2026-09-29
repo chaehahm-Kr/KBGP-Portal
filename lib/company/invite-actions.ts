@@ -11,10 +11,16 @@ import { requireCompanyAdmin } from "@/lib/company/dal";
 import { normalizeEmail, checkUserEmailDuplicate } from "@/lib/user/validation";
 import { getBilingualError } from "@/lib/errors/bilingual-messages";
 
+import { getPersonStructuredNames } from "@/lib/user/name-helper";
+
 export type InviteFormState = { error: string } | undefined;
 
 const inviteSchema = z.object({
-  name: z.string().trim().min(1, "이름을 입력해주세요."),
+  name: z.string().trim().optional().default(""),
+  koreanLastName: z.string().trim().optional().default(""),
+  koreanFirstName: z.string().trim().optional().default(""),
+  englishFirstName: z.string().trim().optional().default(""),
+  englishLastName: z.string().trim().optional().default(""),
   email: z.email({ message: "올바른 이메일 형식이 아닙니다." }),
   companyRole: z.enum(["company_admin", "company_staff"] as const),
 });
@@ -32,7 +38,11 @@ export async function inviteCompanyUser(
   const { companyId, userId } = await requireCompanyAdmin();
 
   const parsed = inviteSchema.safeParse({
-    name: formData.get("name"),
+    name: formData.get("name") || "",
+    koreanLastName: formData.get("koreanLastName") || "",
+    koreanFirstName: formData.get("koreanFirstName") || "",
+    englishFirstName: formData.get("englishFirstName") || "",
+    englishLastName: formData.get("englishLastName") || "",
     email: formData.get("email"),
     companyRole: formData.get("companyRole"),
   });
@@ -41,7 +51,20 @@ export async function inviteCompanyUser(
     return { error: parsed.error.issues[0]?.message ?? getBilingualError("REQUIRED_FIELD") };
   }
 
-  const { name, email, companyRole } = parsed.data;
+  const { email, companyRole } = parsed.data;
+  const structured = getPersonStructuredNames({
+    koreanLastName: parsed.data.koreanLastName,
+    koreanFirstName: parsed.data.koreanFirstName,
+    firstName: parsed.data.englishFirstName,
+    lastName: parsed.data.englishLastName,
+    name: parsed.data.name,
+  });
+
+  const canonicalName = structured.koreanLastName && structured.koreanFirstName
+    ? `${structured.koreanLastName}${structured.koreanFirstName}`
+    : (parsed.data.name || structured.canonicalEnglishName || "포털 사용자");
+  const canonicalEnglishName = structured.canonicalEnglishName || null;
+
   const normalizedEmail = normalizeEmail(email);
 
   // 1. System-wide Email Duplicate Validation (One Email = One User = One Company)
@@ -54,7 +77,7 @@ export async function inviteCompanyUser(
 
   const { data: invited, error: inviteError } =
     await admin.auth.admin.inviteUserByEmail(normalizedEmail, {
-      data: { role: "portal", display_name: name },
+      data: { role: "portal", display_name: canonicalName },
       redirectTo: `${publicEnv.NEXT_PUBLIC_SITE_URL}/portal/invite/accept`,
     });
 
@@ -71,15 +94,27 @@ export async function inviteCompanyUser(
     return { error: getBilingualError("INVITATION_FAILED") };
   }
 
+  const permissions = {
+    korean_last_name: structured.koreanLastName,
+    korean_first_name: structured.koreanFirstName,
+    english_first_name: structured.englishFirstName,
+    english_last_name: structured.englishLastName,
+    first_name: structured.englishFirstName,
+    last_name: structured.englishLastName,
+    english_name: canonicalEnglishName,
+  };
+
   const { error: companyUserError } = await admin.from("company_users").insert({
     id: invited.user.id,
     company_id: companyId,
-    name,
+    name: canonicalName,
+    english_name: canonicalEnglishName,
     email: normalizedEmail,
     company_role: companyRole,
     status: "invited",
     invited_by: userId,
     invited_at: new Date().toISOString(),
+    permissions,
   });
 
   if (companyUserError) {

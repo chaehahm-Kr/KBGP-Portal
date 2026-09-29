@@ -12,6 +12,7 @@ import { isInviteExpired } from "@/lib/company/types";
 import { updateUserTaskAssignments } from "@/lib/company/task-actions";
 import { TASK_DEFINITIONS } from "@/lib/company/task-constants";
 import { InternationalPhoneInput } from "@/components/shared/international-phone-input";
+import { getPersonDisplayName, getPersonStructuredNames } from "@/lib/user/name-helper";
 
 interface CompanyUsersManagerProps {
   initialUsers: any[];
@@ -45,6 +46,10 @@ export function CompanyUsersManager({ initialUsers, currentUserId }: CompanyUser
   const [removeConfirmUser, setRemoveConfirmUser] = useState<any | null>(null);
 
   // Edit Form Temp States
+  const [formKoreanLastName, setFormKoreanLastName] = useState("");
+  const [formKoreanFirstName, setFormKoreanFirstName] = useState("");
+  const [formEnglishFirstName, setFormEnglishFirstName] = useState("");
+  const [formEnglishLastName, setFormEnglishLastName] = useState("");
   const [formName, setFormName] = useState("");
   const [formEmail, setFormEmail] = useState("");
   const [formTitle, setFormTitle] = useState("");
@@ -77,7 +82,12 @@ export function CompanyUsersManager({ initialUsers, currentUserId }: CompanyUser
   };
 
   const handleOpenEdit = (user: any) => {
+    const structured = getPersonStructuredNames(user);
     setEditingUser(user);
+    setFormKoreanLastName(structured.koreanLastName);
+    setFormKoreanFirstName(structured.koreanFirstName);
+    setFormEnglishFirstName(structured.englishFirstName);
+    setFormEnglishLastName(structured.englishLastName);
     setFormName(user.name || "");
     setFormEmail(user.email || "");
     setFormTitle(user.title || "");
@@ -146,7 +156,21 @@ export function CompanyUsersManager({ initialUsers, currentUserId }: CompanyUser
 
   const handleSave = () => {
     if (!editingUser) return;
-    if (!formName.trim()) {
+
+    const structured = getPersonStructuredNames({
+      koreanLastName: formKoreanLastName,
+      koreanFirstName: formKoreanFirstName,
+      firstName: formEnglishFirstName,
+      lastName: formEnglishLastName,
+      name: formName,
+    });
+
+    const canonicalName = structured.koreanLastName && structured.koreanFirstName
+      ? `${structured.koreanLastName}${structured.koreanFirstName}`
+      : (formName.trim() || structured.canonicalEnglishName);
+    const canonicalEnglishName = structured.canonicalEnglishName || null;
+
+    if (!canonicalName && !canonicalEnglishName) {
       alert("이름을 입력해주세요.");
       return;
     }
@@ -155,11 +179,22 @@ export function CompanyUsersManager({ initialUsers, currentUserId }: CompanyUser
       return;
     }
 
+    const updatedPermissions = {
+      ...formPermissions,
+      korean_last_name: structured.koreanLastName,
+      korean_first_name: structured.koreanFirstName,
+      english_first_name: structured.englishFirstName,
+      english_last_name: structured.englishLastName,
+      first_name: structured.englishFirstName,
+      last_name: structured.englishLastName,
+      english_name: canonicalEnglishName,
+    };
+
     startTransition(async () => {
       try {
         // 1. 유저 정보, 이메일, 권한 업데이트
         await updateCompanyUser(editingUser.id, {
-          name: formName,
+          name: canonicalName,
           email: formEmail,
           title: formTitle,
           position: formPosition,
@@ -167,7 +202,7 @@ export function CompanyUsersManager({ initialUsers, currentUserId }: CompanyUser
           companyRole: formRole,
           status: formStatus,
           isPrimary: formIsPrimary,
-          permissions: formPermissions,
+          permissions: updatedPermissions,
         });
 
         // 2. 담당 업무 저장
@@ -189,7 +224,8 @@ export function CompanyUsersManager({ initialUsers, currentUserId }: CompanyUser
             }));
             return {
               ...u,
-              name: formName.trim(),
+              name: canonicalName,
+              english_name: canonicalEnglishName,
               email: formEmail.trim().toLowerCase(),
               title: formTitle.trim(),
               position: formPosition.trim(),
@@ -197,7 +233,7 @@ export function CompanyUsersManager({ initialUsers, currentUserId }: CompanyUser
               company_role: formRole,
               status: formStatus,
               is_primary: formIsPrimary,
-              permissions: formPermissions,
+              permissions: updatedPermissions,
               task_assignments: newAssignments,
             };
           } else {
@@ -335,7 +371,7 @@ export function CompanyUsersManager({ initialUsers, currentUserId }: CompanyUser
                   >
                     <td className="px-6 py-4">
                       <div className="font-semibold text-zinc-900 dark:text-zinc-100 flex items-center gap-1.5 flex-wrap">
-                        <span>{row.name || "(이름 미입력)"}</span>
+                        <span>{getPersonDisplayName(row) || row.name || "(이름 미입력)"}</span>
                         {row.id === currentUserId && (
                           <span className="inline-block rounded bg-zinc-900 text-white dark:bg-white dark:text-zinc-900 px-1.5 py-0.5 text-[9px] font-bold">
                             본인
@@ -540,33 +576,75 @@ export function CompanyUsersManager({ initialUsers, currentUserId }: CompanyUser
                   </span>
                 </div>
 
+                {/* Row 1: 한글 성명 (Korean Name) */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="text-xs font-bold text-zinc-700 dark:text-zinc-300 block mb-1">
-                      이름 *
+                      한글 성 (Korean Last Name)
                     </label>
                     <input
                       type="text"
-                      required
-                      value={formName}
-                      onChange={(e) => setFormName(e.target.value)}
-                      placeholder="홍길동"
+                      value={formKoreanLastName}
+                      onChange={(e) => setFormKoreanLastName(e.target.value)}
+                      placeholder="박"
                       className={inputClass}
                     />
                   </div>
                   <div>
                     <label className="text-xs font-bold text-zinc-700 dark:text-zinc-300 block mb-1">
-                      이메일 (Login Email) *
+                      한글 이름 (Korean First Name)
                     </label>
                     <input
-                      type="email"
-                      required
-                      value={formEmail}
-                      onChange={(e) => setFormEmail(e.target.value)}
-                      placeholder="account@company.com"
+                      type="text"
+                      value={formKoreanFirstName}
+                      onChange={(e) => setFormKoreanFirstName(e.target.value)}
+                      placeholder="은애"
                       className={inputClass}
                     />
                   </div>
+                </div>
+
+                {/* Row 2: 영문 성명 (English Name) */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-xs font-bold text-zinc-700 dark:text-zinc-300 block mb-1">
+                      영문 성 (English Last Name)
+                    </label>
+                    <input
+                      type="text"
+                      value={formEnglishLastName}
+                      onChange={(e) => setFormEnglishLastName(e.target.value)}
+                      placeholder="Park"
+                      className={inputClass}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold text-zinc-700 dark:text-zinc-300 block mb-1">
+                      영문 이름 (English First Name)
+                    </label>
+                    <input
+                      type="text"
+                      value={formEnglishFirstName}
+                      onChange={(e) => setFormEnglishFirstName(e.target.value)}
+                      placeholder="Eun"
+                      className={inputClass}
+                    />
+                  </div>
+                </div>
+
+                {/* Row 3: 이메일 */}
+                <div>
+                  <label className="text-xs font-bold text-zinc-700 dark:text-zinc-300 block mb-1">
+                    이메일 (Login Email) *
+                  </label>
+                  <input
+                    type="email"
+                    required
+                    value={formEmail}
+                    onChange={(e) => setFormEmail(e.target.value)}
+                    placeholder="account@company.com"
+                    className={inputClass}
+                  />
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

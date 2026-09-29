@@ -15,11 +15,21 @@ import { sendTemplatedEmail } from "@/lib/notifications/templates";
 import { logRemittanceChanges } from "@/lib/company/remittance-log";
 import { normalizeEmail, checkUserEmailDuplicate } from "@/lib/user/validation";
 import { getBilingualError } from "@/lib/errors/bilingual-messages";
+import {
+  getPersonStructuredNames,
+  formatKoreanFullName,
+  formatEnglishFullName,
+  type ResolvablePersonName,
+} from "@/lib/user/name-helper";
 
 export interface CompanyContact {
   id: string;
   name: string;
   englishName?: string;
+  koreanLastName?: string;
+  koreanFirstName?: string;
+  englishFirstName?: string;
+  englishLastName?: string;
   phone: string;
   email: string;
   title: string;      // 직함 (e.g. 과장, 부장)
@@ -395,15 +405,19 @@ import { deactivateUserSessions } from "@/lib/auth/admin-actions";
 export async function adminInviteCompanyUser(
   companyId: string,
   payload: {
-    name: string;
+    name?: string;
     englishName?: string;
+    koreanLastName?: string;
+    koreanFirstName?: string;
+    englishFirstName?: string;
+    englishLastName?: string;
     email: string;
     title: string;
     position: string;
     phone: string;
     companyRole: "company_admin" | "company_staff";
     isPrimary: boolean;
-    permissions: Record<string, any>;
+    permissions?: Record<string, any>;
   }
 ) {
   await verifyAdminSession();
@@ -414,6 +428,20 @@ export async function adminInviteCompanyUser(
     throw new Error(getBilingualError("INVALID_EMAIL"));
   }
 
+  // Derive canonical structured names
+  const structured = getPersonStructuredNames({
+    koreanLastName: payload.koreanLastName,
+    koreanFirstName: payload.koreanFirstName,
+    englishFirstName: payload.englishFirstName,
+    englishLastName: payload.englishLastName,
+    name: payload.name,
+    englishName: payload.englishName,
+    email: normalizedEmail,
+  });
+
+  const finalKoreanFullName = structured.koreanFullName || payload.name?.trim() || "";
+  const finalEnglishFullName = structured.englishFullName || payload.englishName?.trim() || "";
+
   // 1. System-wide Email Duplicate Validation (One Email = One User = One Company)
   const dupCheck = await checkUserEmailDuplicate(normalizedEmail, companyId);
   if (dupCheck.status !== "AVAILABLE") {
@@ -423,7 +451,7 @@ export async function adminInviteCompanyUser(
   // 2. Invite Auth User
   const { data: invited, error: inviteError } =
     await admin.auth.admin.inviteUserByEmail(normalizedEmail, {
-      data: { role: "portal", display_name: payload.name },
+      data: { role: "portal", display_name: finalKoreanFullName || finalEnglishFullName },
       redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3010'}/portal/invite/accept`,
     });
 
@@ -445,13 +473,17 @@ export async function adminInviteCompanyUser(
   // 4. Insert into company_users
   const permissionsObj = {
     ...(payload.permissions || {}),
-    ...(payload.englishName ? { english_name: payload.englishName.trim() } : {}),
+    ...(structured.koreanLastName ? { korean_last_name: structured.koreanLastName } : {}),
+    ...(structured.koreanFirstName ? { korean_first_name: structured.koreanFirstName } : {}),
+    ...(structured.englishFirstName ? { english_first_name: structured.englishFirstName, first_name: structured.englishFirstName } : {}),
+    ...(structured.englishLastName ? { english_last_name: structured.englishLastName, last_name: structured.englishLastName } : {}),
+    ...(finalEnglishFullName ? { english_name: finalEnglishFullName } : {}),
   };
 
   const insertPayload: Record<string, any> = {
     id: invited.user.id,
     company_id: companyId,
-    name: payload.name,
+    name: finalKoreanFullName || finalEnglishFullName,
     email: normalizedEmail,
     company_role: payload.companyRole,
     status: "invited",
@@ -463,8 +495,8 @@ export async function adminInviteCompanyUser(
     invited_at: new Date().toISOString(),
   };
 
-  if (payload.englishName) {
-    insertPayload.english_name = payload.englishName.trim();
+  if (finalEnglishFullName) {
+    insertPayload.english_name = finalEnglishFullName;
   }
 
   const { error: insertError } = await admin.from("company_users").insert(insertPayload);
@@ -487,15 +519,19 @@ export async function adminUpdateCompanyUser(
   companyId: string,
   targetUserId: string,
   payload: {
-    name: string;
+    name?: string;
     englishName?: string;
+    koreanLastName?: string;
+    koreanFirstName?: string;
+    englishFirstName?: string;
+    englishLastName?: string;
     title: string;
     position: string;
     phone: string;
     companyRole: "company_admin" | "company_staff";
     status: "active" | "suspended" | "invited";
     isPrimary: boolean;
-    permissions: Record<string, any>;
+    permissions?: Record<string, any>;
   }
 ) {
   await verifyAdminSession();
@@ -504,13 +540,28 @@ export async function adminUpdateCompanyUser(
   // 1. Fetch current status to detect changes
   const { data: target } = await admin
     .from("company_users")
-    .select("status, company_role, permissions")
+    .select("status, company_role, permissions, name, english_name")
     .eq("id", targetUserId)
     .single();
 
   if (!target) {
     throw new Error("대상 사용자를 찾을 수 없습니다.");
   }
+
+  // Derive canonical structured names merging existing target data
+  const structured = getPersonStructuredNames({
+    ...target,
+    ...(target.permissions || {}),
+    koreanLastName: payload.koreanLastName,
+    koreanFirstName: payload.koreanFirstName,
+    englishFirstName: payload.englishFirstName,
+    englishLastName: payload.englishLastName,
+    name: payload.name !== undefined ? payload.name : target.name,
+    englishName: payload.englishName !== undefined ? payload.englishName : target.english_name,
+  });
+
+  const finalKoreanFullName = structured.koreanFullName || payload.name?.trim() || target.name || "";
+  const finalEnglishFullName = structured.englishFullName || payload.englishName?.trim() || target.english_name || "";
 
   // 2. Handle isPrimary
   if (payload.isPrimary) {
@@ -525,11 +576,17 @@ export async function adminUpdateCompanyUser(
   const permissionsObj = {
     ...(target.permissions || {}),
     ...(payload.permissions || {}),
-    ...(payload.englishName !== undefined ? { english_name: payload.englishName.trim() } : {}),
+    korean_last_name: structured.koreanLastName,
+    korean_first_name: structured.koreanFirstName,
+    english_first_name: structured.englishFirstName,
+    english_last_name: structured.englishLastName,
+    first_name: structured.englishFirstName,
+    last_name: structured.englishLastName,
+    english_name: finalEnglishFullName,
   };
 
   const updatePayload: Record<string, any> = {
-    name: payload.name,
+    name: finalKoreanFullName || finalEnglishFullName,
     title: payload.title,
     position: payload.position,
     phone: payload.phone,
@@ -539,8 +596,8 @@ export async function adminUpdateCompanyUser(
     permissions: permissionsObj,
   };
 
-  if (payload.englishName !== undefined) {
-    updatePayload.english_name = payload.englishName.trim();
+  if (finalEnglishFullName !== undefined) {
+    updatePayload.english_name = finalEnglishFullName;
   }
 
   let { error: updateError } = await admin

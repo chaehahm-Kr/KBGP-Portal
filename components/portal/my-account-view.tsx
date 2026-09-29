@@ -10,6 +10,7 @@ import {
 } from "@/lib/portal/account-actions";
 import { PASSWORD_RULE_DESCRIPTION } from "@/lib/auth/password";
 import { InternationalPhoneInput } from "@/components/shared/international-phone-input";
+import { getPersonDisplayName, getPersonStructuredNames } from "@/lib/user/name-helper";
 
 interface MyAccountViewProps {
   initialData: MyAccountData;
@@ -24,6 +25,8 @@ export function MyAccountView({ initialData }: MyAccountViewProps) {
 
   // 1. Authoritative Verified Profile State
   const [savedProfile, setSavedProfile] = useState({
+    koreanLastName: initialData.koreanLastName || "",
+    koreanFirstName: initialData.koreanFirstName || "",
     name: initialData.name || "",
     firstName: initialData.firstName || "",
     lastName: initialData.lastName || "",
@@ -35,6 +38,8 @@ export function MyAccountView({ initialData }: MyAccountViewProps) {
 
   // 2. Working Edit State
   const [editProfile, setEditProfile] = useState({
+    koreanLastName: initialData.koreanLastName || "",
+    koreanFirstName: initialData.koreanFirstName || "",
     name: initialData.name || "",
     firstName: initialData.firstName || "",
     lastName: initialData.lastName || "",
@@ -53,6 +58,8 @@ export function MyAccountView({ initialData }: MyAccountViewProps) {
     setData(initialData);
     if (!isEditing) {
       const fresh = {
+        koreanLastName: initialData.koreanLastName || "",
+        koreanFirstName: initialData.koreanFirstName || "",
         name: initialData.name || "",
         firstName: initialData.firstName || "",
         lastName: initialData.lastName || "",
@@ -83,12 +90,22 @@ export function MyAccountView({ initialData }: MyAccountViewProps) {
     e.preventDefault();
     setProfileMessage(null);
 
-    if (!editProfile.name.trim()) {
-      setProfileMessage({ type: "error", text: "한글 성명(Korean Name)을 입력해 주세요." });
+    const kLast = editProfile.koreanLastName.trim();
+    const kFirst = editProfile.koreanFirstName.trim();
+    const eLast = editProfile.lastName.trim();
+    const eFirst = editProfile.firstName.trim();
+
+    if (!kLast) {
+      setProfileMessage({ type: "error", text: "한글 성(Korean Last Name)을 입력해 주세요. (예: 박)" });
       return;
     }
 
-    if (!editProfile.lastName.trim()) {
+    if (!kFirst) {
+      setProfileMessage({ type: "error", text: "한글 이름(Korean First Name)을 입력해 주세요. (예: 은애)" });
+      return;
+    }
+
+    if (!eLast) {
       setProfileMessage({
         type: "error",
         text: "영문 성(Last Name)을 입력해 주세요. (예: Park)",
@@ -96,10 +113,10 @@ export function MyAccountView({ initialData }: MyAccountViewProps) {
       return;
     }
 
-    if (!editProfile.firstName.trim()) {
+    if (!eFirst) {
       setProfileMessage({
         type: "error",
-        text: "영문 이름(First Name)을 입력해 주세요. (예: Eun Ae)",
+        text: "영문 이름(First Name)을 입력해 주세요. (예: Eun 또는 Eun Ae)",
       });
       return;
     }
@@ -116,9 +133,11 @@ export function MyAccountView({ initialData }: MyAccountViewProps) {
 
     startProfileTransition(async () => {
       const res = await updateMyAccountProfileAction({
-        name: editProfile.name.trim(),
-        firstName: editProfile.firstName.trim(),
-        lastName: editProfile.lastName.trim(),
+        koreanLastName: kLast,
+        koreanFirstName: kFirst,
+        name: `${kLast}${kFirst}`,
+        firstName: eFirst,
+        lastName: eLast,
         phone: editProfile.phone.trim(),
         title: editProfile.title.trim(),
         position: editProfile.position.trim(),
@@ -126,6 +145,8 @@ export function MyAccountView({ initialData }: MyAccountViewProps) {
 
       if (res.success && res.profile) {
         const verified = {
+          koreanLastName: res.profile.koreanLastName,
+          koreanFirstName: res.profile.koreanFirstName,
           name: res.profile.name,
           firstName: res.profile.firstName,
           lastName: res.profile.lastName,
@@ -138,6 +159,8 @@ export function MyAccountView({ initialData }: MyAccountViewProps) {
         setEditProfile(verified);
         setData((prev) => ({
           ...prev,
+          koreanLastName: verified.koreanLastName,
+          koreanFirstName: verified.koreanFirstName,
           name: verified.name,
           firstName: verified.firstName,
           lastName: verified.lastName,
@@ -257,6 +280,16 @@ export function MyAccountView({ initialData }: MyAccountViewProps) {
       ? "이용정지"
       : "제외됨";
 
+  const displayHeaderName = getPersonDisplayName({
+    korean_last_name: savedProfile.koreanLastName,
+    korean_first_name: savedProfile.koreanFirstName,
+    name: savedProfile.name,
+    english_first_name: savedProfile.firstName,
+    english_last_name: savedProfile.lastName,
+    english_name: savedProfile.englishName,
+    email: data.email,
+  });
+
   return (
     <div className="space-y-6 w-full max-w-5xl">
       {/* 1. Header Summary Card */}
@@ -264,18 +297,13 @@ export function MyAccountView({ initialData }: MyAccountViewProps) {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="flex items-center gap-4">
             <div className="w-14 h-14 rounded-2xl bg-zinc-900 text-white dark:bg-white dark:text-zinc-950 flex items-center justify-center text-xl font-extrabold shadow-sm">
-              {savedProfile.name ? savedProfile.name.trim().charAt(0) : data.email.charAt(0).toUpperCase()}
+              {savedProfile.koreanFirstName || savedProfile.firstName || (savedProfile.name ? savedProfile.name.trim().charAt(0) : data.email.charAt(0).toUpperCase())}
             </div>
             <div>
               <div className="flex items-center gap-2 flex-wrap">
                 <h1 className="text-xl font-bold text-zinc-900 dark:text-white">
-                  {savedProfile.name || "이름 미등록"}
+                  {displayHeaderName || "이름 미등록"}
                 </h1>
-                {savedProfile.englishName && (
-                  <span className="text-xs text-zinc-500 dark:text-zinc-400 font-normal">
-                    ({savedProfile.englishName})
-                  </span>
-                )}
                 {data.isPrimary && (
                   <span className="rounded bg-emerald-50 text-emerald-700 px-2 py-0.5 text-[10px] font-bold border border-emerald-200 dark:bg-emerald-950/70 dark:text-emerald-300 dark:border-emerald-800">
                     대표 담당자
@@ -347,15 +375,28 @@ export function MyAccountView({ initialData }: MyAccountViewProps) {
           {/* READ-ONLY VIEW MODE */}
           {!isEditing ? (
             <div className="space-y-4 text-xs">
-              <div className="rounded-xl border border-zinc-150 bg-zinc-50/50 p-3.5 dark:border-zinc-800 dark:bg-zinc-950/30">
-                <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block mb-1">
-                  한글 성명 (Korean Name)
-                </span>
-                <span className="font-semibold text-sm text-zinc-900 dark:text-white block">
-                  {savedProfile.name || <span className="text-zinc-400 italic">미등록</span>}
-                </span>
+              {/* Row 1: 한글 성 | 한글 이름 */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="rounded-xl border border-zinc-150 bg-zinc-50/50 p-3.5 dark:border-zinc-800 dark:bg-zinc-950/30">
+                  <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block mb-1">
+                    한글 성 (Korean Last Name)
+                  </span>
+                  <span className="font-semibold text-sm text-zinc-900 dark:text-white block">
+                    {savedProfile.koreanLastName || <span className="text-zinc-400 italic">미등록</span>}
+                  </span>
+                </div>
+
+                <div className="rounded-xl border border-zinc-150 bg-zinc-50/50 p-3.5 dark:border-zinc-800 dark:bg-zinc-950/30">
+                  <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block mb-1">
+                    한글 이름 (Korean First Name)
+                  </span>
+                  <span className="font-semibold text-sm text-zinc-900 dark:text-white block">
+                    {savedProfile.koreanFirstName || <span className="text-zinc-400 italic">미등록</span>}
+                  </span>
+                </div>
               </div>
 
+              {/* Row 2: 영문 성 | 영문 이름 */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="rounded-xl border border-zinc-150 bg-zinc-50/50 p-3.5 dark:border-zinc-800 dark:bg-zinc-950/30">
                   <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block mb-1">
@@ -433,23 +474,44 @@ export function MyAccountView({ initialData }: MyAccountViewProps) {
           ) : (
             /* EDIT MODE */
             <form onSubmit={handleProfileSubmit} className="space-y-4 text-xs">
-              <div>
-                <label className="block font-bold text-zinc-700 dark:text-zinc-300 mb-1">
-                  한글 성명 (Korean Name) <span className="text-rose-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={editProfile.name}
-                  onChange={(e) => setEditProfile({ ...editProfile, name: e.target.value })}
-                  placeholder="예: 박은애"
-                  required
-                  className="w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-xs outline-none focus:border-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
-                />
-                <p className="mt-1 text-[10px] text-zinc-400 dark:text-zinc-500">
-                  국문 성명
-                </p>
+              {/* Row 1: 한글 성 | 한글 이름 */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                    한글 성 (Korean Last Name) <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={editProfile.koreanLastName}
+                    onChange={(e) => setEditProfile({ ...editProfile, koreanLastName: e.target.value })}
+                    placeholder="예: 박"
+                    required
+                    className="w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-xs outline-none focus:border-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+                  />
+                  <p className="mt-1 text-[10px] text-zinc-400 dark:text-zinc-500">
+                    국문 성 (Family Name)
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                    한글 이름 (Korean First Name) <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={editProfile.koreanFirstName}
+                    onChange={(e) => setEditProfile({ ...editProfile, koreanFirstName: e.target.value })}
+                    placeholder="예: 은애"
+                    required
+                    className="w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-xs outline-none focus:border-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+                  />
+                  <p className="mt-1 text-[10px] text-zinc-400 dark:text-zinc-500">
+                    국문 이름 (Given Name)
+                  </p>
+                </div>
               </div>
 
+              {/* Row 2: 영문 성 | 영문 이름 */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block font-bold text-zinc-700 dark:text-zinc-300 mb-1">
@@ -464,7 +526,7 @@ export function MyAccountView({ initialData }: MyAccountViewProps) {
                     className="w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-xs outline-none focus:border-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
                   />
                   <p className="mt-1 text-[10px] text-zinc-400 dark:text-zinc-500">
-                    공식 영문 성
+                    공식 영문 성 (Surname)
                   </p>
                 </div>
 
@@ -476,12 +538,12 @@ export function MyAccountView({ initialData }: MyAccountViewProps) {
                     type="text"
                     value={editProfile.firstName}
                     onChange={(e) => setEditProfile({ ...editProfile, firstName: e.target.value })}
-                    placeholder="예: Eun Ae"
+                    placeholder="예: Eun 또는 Eun Ae"
                     required
                     className="w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-xs outline-none focus:border-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white font-sans"
                   />
                   <p className="mt-1 text-[10px] text-zinc-400 dark:text-zinc-500">
-                    공식 영문 이름
+                    공식 영문 이름 (Given Name)
                   </p>
                 </div>
               </div>

@@ -13,6 +13,7 @@ import { AssignApplicationForm } from "@/components/application/assign-applicati
 import { AddReviewNoteForm } from "@/components/application/add-review-note-form";
 import { CreateInfoRequestForm } from "@/components/application/create-info-request-form";
 import { sendPortalInvitationAction } from "@/lib/company/admin-actions";
+import { getPersonDisplayName } from "@/lib/user/name-helper";
 
 interface ApplicationWorkspaceProps {
   application: any;
@@ -381,8 +382,15 @@ export default function ApplicationWorkspace({
   const displayWebsite = inquiry?.homepage || brands?.[0]?.website || parsedMeta.website || "";
   const displayBRN = company?.business_registration_number || "-";
 
+  const primaryUser = companyUsers?.find((u) => u.is_primary) || companyUsers?.[0];
+  const primaryContactFromMeta = parsedMeta.contacts?.find((c) => c.isPrimary) || parsedMeta.contacts?.[0];
   const displayContactName =
-    company?.contact_name || application.applicant_contact_name || companyUsers?.[0]?.name || "-";
+    (primaryUser && getPersonDisplayName(primaryUser)) ||
+    (primaryContactFromMeta && getPersonDisplayName(primaryContactFromMeta)) ||
+    getPersonDisplayName({ name: company?.contact_name || application.applicant_contact_name, email: application.applicant_contact_email }) ||
+    company?.contact_name ||
+    application.applicant_contact_name ||
+    "-";
   const displayContactTitle =
     inquiry?.contact_title ||
     companyUsers?.[0]?.title ||
@@ -1382,7 +1390,7 @@ export default function ApplicationWorkspace({
                 </div>
                 <div>
                   <span className="text-zinc-400 dark:text-zinc-500 text-[10px] uppercase font-bold block">담당자 (Contact Name)</span>
-                  <span className="font-bold text-zinc-900 dark:text-white truncate block">{company?.contact_name || application.applicant_contact_name || "-"}</span>
+                  <span className="font-bold text-zinc-900 dark:text-white truncate block">{displayContactName}</span>
                 </div>
                 <div className="col-span-2">
                   <span className="text-zinc-400 dark:text-zinc-500 text-[10px] uppercase font-bold block">이메일 (Contact Email)</span>
@@ -1510,7 +1518,7 @@ export default function ApplicationWorkspace({
                 </div>
                 <div>
                   <span className="text-zinc-400 dark:text-zinc-500 text-[10px] uppercase font-bold block">담당자 (Contact Name)</span>
-                  <span className="font-bold text-zinc-900 dark:text-white truncate block">{company?.contact_name || application.applicant_contact_name || "-"}</span>
+                  <span className="font-bold text-zinc-900 dark:text-white truncate block">{displayContactName}</span>
                 </div>
                 <div className="col-span-2">
                   <span className="text-zinc-400 dark:text-zinc-500 text-[10px] uppercase font-bold block">수신 이메일 (Contact Email)</span>

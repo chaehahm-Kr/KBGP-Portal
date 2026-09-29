@@ -2,6 +2,7 @@
 
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
+import { getPersonDisplayName } from "@/lib/user/name-helper";
 
 export interface CompanyContactPopoverProps {
   contactName: string;
@@ -129,6 +130,11 @@ export function CompanyContactPopover({
     return <span className="text-zinc-400 dark:text-zinc-500">담당자 정보 없음</span>;
   }
 
+  const displayName = getPersonDisplayName({
+    name: contactName,
+    englishName: contactEnglishName,
+  }) || contactName;
+
   const hasDetails = Boolean(contactEnglishName || contactTitle || contactPosition || contactPhone || contactEmail);
 
   return (
@@ -150,7 +156,7 @@ export function CompanyContactPopover({
         }}
         className="cursor-help font-semibold text-zinc-800 dark:text-zinc-200 border-b border-dashed border-zinc-300 hover:text-zinc-950 dark:hover:text-white transition-colors focus:outline-hidden focus:ring-1 focus:ring-zinc-400 rounded-xs"
       >
-        {contactName}
+        {displayName}
       </span>
 
       {mounted &&
@@ -174,10 +180,7 @@ export function CompanyContactPopover({
             <div className="space-y-2 text-[11px] text-zinc-600 dark:text-zinc-400">
               <div className="flex items-center justify-between border-b border-zinc-100 pb-2 dark:border-zinc-800">
                 <div>
-                  <span className="font-bold text-zinc-950 dark:text-white text-xs block">{contactName}</span>
-                  {contactEnglishName && (
-                    <span className="text-[10px] text-zinc-400 font-sans block">{contactEnglishName}</span>
-                  )}
+                  <span className="font-bold text-zinc-950 dark:text-white text-xs block">{displayName}</span>
                 </div>
                 <span className="rounded bg-emerald-50 text-emerald-700 px-1.5 py-0.5 text-[9px] font-bold dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200/50 dark:border-emerald-800/40 shrink-0">
                   주 컨택

@@ -8,9 +8,13 @@ import { publicEnv } from "@/lib/env/public";
 import { passwordSchema, PASSWORD_RULE_DESCRIPTION } from "@/lib/auth/password";
 import { requestPasswordReset } from "@/lib/auth/reset-password";
 
+import { getPersonStructuredNames, ResolvablePersonName } from "@/lib/user/name-helper";
+
 export interface MyAccountData {
   userId: string;
   email: string;
+  koreanLastName: string;
+  koreanFirstName: string;
   name: string;
   firstName: string;
   lastName: string;
@@ -28,7 +32,9 @@ export interface MyAccountData {
 }
 
 export interface UpdateProfilePayload {
-  name: string;
+  koreanLastName?: string;
+  koreanFirstName?: string;
+  name?: string;
   firstName?: string;
   lastName?: string;
   englishName?: string;
@@ -48,6 +54,8 @@ export interface ActionResult {
   message?: string;
   error?: string;
   profile?: {
+    koreanLastName: string;
+    koreanFirstName: string;
     name: string;
     firstName: string;
     lastName: string;
@@ -58,20 +66,8 @@ export interface ActionResult {
   };
 }
 
-function parseEnglishName(fullName: string): { firstName: string; lastName: string } {
-  const trimmed = (fullName || "").trim();
-  if (!trimmed) return { firstName: "", lastName: "" };
-  const parts = trimmed.split(/\s+/);
-  if (parts.length === 1) {
-    return { firstName: parts[0], lastName: "" };
-  }
-  const lastName = parts[parts.length - 1];
-  const firstName = parts.slice(0, parts.length - 1).join(" ");
-  return { firstName, lastName };
-}
-
 /**
- * PORT-ACC-001: Get authenticated Brand Portal user's own account data
+ * PORT-ACC-001 / PORT-NAME-001: Get authenticated Brand Portal user's own account data
  */
 export async function getMyAccountData(): Promise<MyAccountData> {
   const session = await verifyPortalSession();
@@ -121,27 +117,21 @@ export async function getMyAccountData(): Promise<MyAccountData> {
     .eq("id", session.userId)
     .maybeSingle();
 
-  const englishName = (
-    userRecord?.english_name ||
-    userRecord?.permissions?.english_name ||
-    ""
-  ).trim();
-
-  const parsed = parseEnglishName(englishName);
-  const firstName = (userRecord?.permissions?.first_name || parsed.firstName || "").trim();
-  const lastName = (userRecord?.permissions?.last_name || parsed.lastName || "").trim();
-
-  const combinedEnglishName = firstName && lastName
-    ? `${firstName} ${lastName}`
-    : englishName || firstName || lastName;
+  const structured = getPersonStructuredNames({
+    ...userRecord,
+    displayName: profile?.display_name,
+    email: session.email,
+  });
 
   return {
     userId: session.userId,
     email: session.email,
-    name: userRecord?.name || profile?.display_name || "",
-    firstName: firstName,
-    lastName: lastName,
-    englishName: combinedEnglishName,
+    koreanLastName: structured.koreanLastName,
+    koreanFirstName: structured.koreanFirstName,
+    name: structured.koreanFullName || userRecord?.name || profile?.display_name || "",
+    firstName: structured.englishFirstName,
+    lastName: structured.englishLastName,
+    englishName: structured.englishFullName,
     phone: userRecord?.phone || "",
     title: userRecord?.title || "",
     position: userRecord?.position || "",
@@ -169,17 +159,24 @@ export async function updateMyAccountProfileAction(
       return { success: false, error: "인증 세션이 만료되었습니다. 다시 로그인해 주세요." };
     }
 
-    const { name, firstName, lastName, phone, title, position } = payload;
+    const { koreanLastName, koreanFirstName, name, firstName, lastName, phone, title, position } = payload;
 
-    const trimmedName = (name || "").trim();
+    const trimmedKoreanLast = (koreanLastName || "").trim();
+    const trimmedKoreanFirst = (koreanFirstName || "").trim();
     const trimmedFirst = (firstName || "").trim();
     const trimmedLast = (lastName || "").trim();
+    const computedKoreanName = trimmedKoreanLast && trimmedKoreanFirst
+      ? `${trimmedKoreanLast}${trimmedKoreanFirst}`
+      : (name || "").trim();
     const trimmedTitle = (title || "").trim();
     const trimmedPhone = (phone || "").trim();
     const trimmedPosition = (position || "").trim();
 
-    if (!trimmedName) {
-      return { success: false, error: "한글 성명(Korean Name)을 입력해 주세요." };
+    if (!trimmedKoreanLast && !computedKoreanName) {
+      return { success: false, error: "한글 성(Korean Last Name)을 입력해 주세요. (예: 박)" };
+    }
+    if (!trimmedKoreanFirst && !computedKoreanName) {
+      return { success: false, error: "한글 이름(Korean First Name)을 입력해 주세요. (예: 은애)" };
     }
     if (!trimmedLast) {
       return { success: false, error: "영문 성(Last Name)을 입력해 주세요. (예: Park)" };
@@ -212,13 +209,17 @@ export async function updateMyAccountProfileAction(
 
     const updatedPermissions = {
       ...(existingUser?.permissions || {}),
+      korean_last_name: trimmedKoreanLast,
+      korean_first_name: trimmedKoreanFirst,
       english_name: combinedEnglishName,
+      english_first_name: trimmedFirst,
+      english_last_name: trimmedLast,
       first_name: trimmedFirst,
       last_name: trimmedLast,
     };
 
     const updatePayload: Record<string, any> = {
-      name: trimmedName,
+      name: computedKoreanName,
       phone: trimmedPhone,
       title: trimmedTitle,
       position: trimmedPosition || null,
@@ -266,7 +267,7 @@ export async function updateMyAccountProfileAction(
     if (
       verifyError ||
       !verifiedUser ||
-      verifiedUser.name !== trimmedName ||
+      verifiedUser.name !== computedKoreanName ||
       verifiedEnglishName !== combinedEnglishName ||
       verifiedUser.title !== trimmedTitle ||
       verifiedUser.phone !== trimmedPhone ||
@@ -279,7 +280,7 @@ export async function updateMyAccountProfileAction(
     // 3. Synchronize profiles table display_name
     await adminClient
       .from("profiles")
-      .update({ display_name: trimmedName })
+      .update({ display_name: computedKoreanName })
       .eq("id", session.userId);
 
     // 4. Mark admin_profile_onboarding_confirmed_at on company metadata AND sync contacts array
@@ -305,8 +306,12 @@ export async function updateMyAccountProfileAction(
           (c: any) => c.id === targetUserId || (session.email && c.email?.toLowerCase() === session.email.toLowerCase())
         );
         if (idx !== -1) {
-          metaObj.contacts[idx].name = trimmedName;
+          metaObj.contacts[idx].koreanLastName = trimmedKoreanLast;
+          metaObj.contacts[idx].koreanFirstName = trimmedKoreanFirst;
+          metaObj.contacts[idx].name = computedKoreanName;
           metaObj.contacts[idx].englishName = combinedEnglishName;
+          metaObj.contacts[idx].englishFirstName = trimmedFirst;
+          metaObj.contacts[idx].englishLastName = trimmedLast;
           metaObj.contacts[idx].firstName = trimmedFirst;
           metaObj.contacts[idx].lastName = trimmedLast;
           metaObj.contacts[idx].phone = trimmedPhone;
@@ -315,8 +320,12 @@ export async function updateMyAccountProfileAction(
         } else {
           metaObj.contacts.push({
             id: targetUserId,
-            name: trimmedName,
+            koreanLastName: trimmedKoreanLast,
+            koreanFirstName: trimmedKoreanFirst,
+            name: computedKoreanName,
             englishName: combinedEnglishName,
+            englishFirstName: trimmedFirst,
+            englishLastName: trimmedLast,
             firstName: trimmedFirst,
             lastName: trimmedLast,
             phone: trimmedPhone,
@@ -333,7 +342,7 @@ export async function updateMyAccountProfileAction(
         .from("companies")
         .update({
           intro: `__COMPANY_METADATA__:${JSON.stringify(metaObj)}`,
-          contact_name: trimmedName,
+          contact_name: computedKoreanName,
           contact_phone: trimmedPhone,
           updated_at: new Date().toISOString(),
         })
@@ -352,7 +361,9 @@ export async function updateMyAccountProfileAction(
       success: true,
       message: "관리자 프로필 정보가 성공적으로 저장되었습니다.",
       profile: {
-        name: verifiedUser.name || trimmedName,
+        koreanLastName: trimmedKoreanLast,
+        koreanFirstName: trimmedKoreanFirst,
+        name: verifiedUser.name || computedKoreanName,
         firstName: trimmedFirst,
         lastName: trimmedLast,
         englishName: verifiedEnglishName || combinedEnglishName,

@@ -6,6 +6,7 @@ import { createNotification } from "@/lib/notification/actions";
 import { serverEnv } from "@/lib/env/server";
 import { publicEnv } from "@/lib/env/public";
 import { validateUploadedFile } from "@/lib/files/validate";
+import { getPersonStructuredNames, getPersonGreetingName, getPersonDisplayName } from "@/lib/user/name-helper";
 
 export const runtime = "nodejs";
 
@@ -66,9 +67,16 @@ const payloadSchema = z.object({
   brandName: z.string().optional().default(""),
   homepage: z.string().optional().default(""),
   contactName: z.string().trim().min(1),
+  koreanLastName: z.string().optional().default(""),
+  koreanFirstName: z.string().optional().default(""),
+  englishFirstName: z.string().optional().default(""),
+  englishLastName: z.string().optional().default(""),
   contactTitle: z.string().optional().default(""),
+  contactDepartment: z.string().optional().default(""),
   email: z.email(),
   phone: z.string().trim().min(1),
+  phoneCountryCode: z.string().optional().default("+82"),
+  phoneNumber: z.string().optional().default(""),
   products: z.array(productSchema).min(1).max(MAX_PRODUCTS),
   agreePrivacy: z.literal(true),
   eligibilityResponses: z.array(eligibilityResponseSchema).length(6).optional(),
@@ -233,11 +241,24 @@ export async function POST(request: Request) {
     );
   }
 
+  const structuredName = getPersonStructuredNames({
+    koreanLastName: input.koreanLastName,
+    koreanFirstName: input.koreanFirstName,
+    firstName: input.englishFirstName,
+    lastName: input.englishLastName,
+    name: input.contactName,
+  });
+
+  const resolvedContactName = structuredName.koreanLastName && structuredName.koreanFirstName
+    ? `${structuredName.koreanLastName}${structuredName.koreanFirstName}`
+    : (input.contactName || structuredName.canonicalEnglishName);
+  const resolvedEnglishName = structuredName.canonicalEnglishName || null;
+
   // 1. Supabase Auth로 포털 사용자 계정 생성 (이메일은 발송하지 않음)
   const { data: invited, error: inviteError } = await admin.auth.admin.createUser({
     email: input.email,
     email_confirm: false,
-    user_metadata: { role: "portal", display_name: input.contactName },
+    user_metadata: { role: "portal", display_name: resolvedContactName },
   });
 
   if (inviteError || !invited.user) {
@@ -261,7 +282,7 @@ export async function POST(request: Request) {
       name: input.companyName,
       business_registration_number: input.businessNumber,
       country: input.country?.trim() || "대한민국",
-      contact_name: input.contactName,
+      contact_name: resolvedContactName,
       contact_phone: input.phone,
       intro: `__COMPANY_METADATA__:${JSON.stringify({
         description: "",
@@ -274,10 +295,19 @@ export async function POST(request: Request) {
         website: input.homepage || "",
         contacts: [
           {
-            name: input.contactName,
+            name: resolvedContactName,
+            englishName: resolvedEnglishName,
+            koreanLastName: structuredName.koreanLastName,
+            koreanFirstName: structuredName.koreanFirstName,
+            englishFirstName: structuredName.englishFirstName,
+            englishLastName: structuredName.englishLastName,
             title: input.contactTitle || "",
+            position: input.contactTitle || "",
+            department: input.contactDepartment || "",
             email: input.email,
             phone: input.phone,
+            phoneCountryCode: input.phoneCountryCode || "+82",
+            phoneNumber: input.phoneNumber || input.phone,
             isPrimary: true,
           },
         ],
@@ -297,14 +327,33 @@ export async function POST(request: Request) {
   }
 
   // 3. 회사 유저 권한 매핑(Company Users) 생성
+  const permissionsObj = {
+    korean_last_name: structuredName.koreanLastName,
+    korean_first_name: structuredName.koreanFirstName,
+    english_first_name: structuredName.englishFirstName,
+    english_last_name: structuredName.englishLastName,
+    first_name: structuredName.englishFirstName,
+    last_name: structuredName.englishLastName,
+    english_name: resolvedEnglishName,
+    phone_country_code: input.phoneCountryCode || "+82",
+    phone_number: input.phoneNumber || input.phone,
+    job_title: input.contactTitle || "",
+    department: input.contactDepartment || "",
+  };
+
   const { error: companyUserError } = await admin.from("company_users").insert({
     id: invited.user.id,
     company_id: company.id,
-    name: input.contactName,
+    name: resolvedContactName,
+    english_name: resolvedEnglishName,
     email: input.email,
     company_role: "company_admin",
     status: "invited",
     invited_at: null,
+    title: input.contactTitle || null,
+    position: input.contactDepartment || null,
+    phone: input.phone || null,
+    permissions: permissionsObj,
   });
 
   if (companyUserError) {
@@ -537,6 +586,23 @@ export async function POST(request: Request) {
   await sendTemplatedEmail("inquiry_received_applicant", input.email, {
     inquiryNumber: applicationNumber,
     companyName: input.companyName,
+    contactName: resolvedContactName,
+    contact_name: resolvedContactName,
+    greeting_name: getPersonGreetingName({
+      koreanLastName: structuredName.koreanLastName,
+      koreanFirstName: structuredName.koreanFirstName,
+      firstName: structuredName.englishFirstName,
+      name: resolvedContactName,
+      email: input.email,
+    }),
+    display_name: getPersonDisplayName({
+      koreanLastName: structuredName.koreanLastName,
+      koreanFirstName: structuredName.koreanFirstName,
+      firstName: structuredName.englishFirstName,
+      lastName: structuredName.englishLastName,
+      name: resolvedContactName,
+      email: input.email,
+    }),
   });
 
   const { data: staffMembers } = await admin

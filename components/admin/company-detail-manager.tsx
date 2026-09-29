@@ -29,6 +29,12 @@ import { CompanyShippingOriginsTab } from "@/components/company/company-shipping
 import { type CompanyShippingOrigin } from "@/lib/company/shipping-origin-actions";
 import { CompanyAgreementsTab } from "@/components/admin/company-agreements-tab";
 import { StartImpersonationModal } from "@/components/admin/start-impersonation-modal";
+import {
+  getPersonDisplayName,
+  getPersonStructuredNames,
+  formatKoreanFullName,
+  formatEnglishFullName,
+} from "@/lib/user/name-helper";
 
 const STATUS_LABEL: Record<string, string> = {
   invited: "초대됨",
@@ -300,9 +306,11 @@ export function CompanyDetailManager({
   const [users, setUsers] = useState<any[]>(companyUsers);
   const [tasks, setTasks] = useState<TaskAssignmentItem[]>(taskAssignments);
 
-  // Add User Form States
-  const [addName, setAddName] = useState("");
-  const [addEnglishName, setAddEnglishName] = useState("");
+  // Add User Form States (Canonical 4-component person names)
+  const [addKoreanLastName, setAddKoreanLastName] = useState("");
+  const [addKoreanFirstName, setAddKoreanFirstName] = useState("");
+  const [addEnglishLastName, setAddEnglishLastName] = useState("");
+  const [addEnglishFirstName, setAddEnglishFirstName] = useState("");
   const [addEmail, setAddEmail] = useState("");
   const [addPhone, setAddPhone] = useState("");
   const [addTitle, setAddTitle] = useState("");
@@ -316,9 +324,11 @@ export function CompanyDetailManager({
     company_info: "none",
   });
 
-  // Edit User Form States
-  const [editName, setEditName] = useState("");
-  const [editEnglishName, setEditEnglishName] = useState("");
+  // Edit User Form States (Canonical 4-component person names)
+  const [editKoreanLastName, setEditKoreanLastName] = useState("");
+  const [editKoreanFirstName, setEditKoreanFirstName] = useState("");
+  const [editEnglishLastName, setEditEnglishLastName] = useState("");
+  const [editEnglishFirstName, setEditEnglishFirstName] = useState("");
   const [editPhone, setEditPhone] = useState("");
   const [editTitle, setEditTitle] = useState("");
   const [editPosition, setEditPosition] = useState("");
@@ -434,8 +444,11 @@ export function CompanyDetailManager({
 
   const handleOpenEdit = (user: any) => {
     setSelectedUser(user);
-    setEditName(user.name || "");
-    setEditEnglishName(user.english_name || user.permissions?.english_name || "");
+    const structured = getPersonStructuredNames(user);
+    setEditKoreanLastName(structured.koreanLastName);
+    setEditKoreanFirstName(structured.koreanFirstName);
+    setEditEnglishLastName(structured.englishLastName);
+    setEditEnglishFirstName(structured.englishFirstName);
     setEditPhone(user.phone || "");
     setEditTitle(user.title || "");
     setEditPosition(user.position || "");
@@ -479,7 +492,7 @@ export function CompanyDetailManager({
 
       if (activePrimaryUser) {
         const confirmChange = confirm(
-          `현재 이 업무에는 다른 주 담당자(${activePrimaryUser.name || "미지정"})가 지정되어 있습니다. 주 담당자를 변경하시겠습니까?`
+          `현재 이 업무에는 다른 주 담당자(${getPersonDisplayName(activePrimaryUser)})가 지정되어 있습니다. 주 담당자를 변경하시겠습니까?`
         );
         if (!confirmChange) return;
       }
@@ -507,7 +520,7 @@ export function CompanyDetailManager({
   const getEmailRecipientsForTask = (taskCode: string) => {
     return users
       .filter(u => u.status === "active" && u.task_assignments?.some((a: any) => a.task_code === taskCode && a.email_notify))
-      .map(u => u.name || "(이름 없음)")
+      .map(u => getPersonDisplayName(u))
       .join(", ") || "없음";
   };
 
@@ -579,15 +592,20 @@ export function CompanyDetailManager({
 
   const handleAddUserSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!addName.trim() || !addEmail.trim()) {
+    if (
+      (!addKoreanLastName.trim() && !addKoreanFirstName.trim() && !addEnglishFirstName.trim() && !addEnglishLastName.trim()) ||
+      !addEmail.trim()
+    ) {
       alert("이름과 이메일은 필수 입력 사항입니다.");
       return;
     }
     startTransition(async () => {
       try {
         await adminInviteCompanyUser(company.id, {
-          name: addName,
-          englishName: addEnglishName,
+          koreanLastName: addKoreanLastName,
+          koreanFirstName: addKoreanFirstName,
+          englishFirstName: addEnglishFirstName,
+          englishLastName: addEnglishLastName,
           email: addEmail,
           title: addTitle,
           position: addPosition,
@@ -610,7 +628,12 @@ export function CompanyDetailManager({
   const handleUpdateUserSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedUser) return;
-    if (!editName.trim()) {
+    if (
+      !editKoreanLastName.trim() &&
+      !editKoreanFirstName.trim() &&
+      !editEnglishFirstName.trim() &&
+      !editEnglishLastName.trim()
+    ) {
       alert("이름은 필수 입력 사항입니다.");
       return;
     }
@@ -634,8 +657,10 @@ export function CompanyDetailManager({
       try {
         // 1. 인적 권한 정보 갱신
         await adminUpdateCompanyUser(company.id, selectedUser.id, {
-          name: editName,
-          englishName: editEnglishName,
+          koreanLastName: editKoreanLastName,
+          koreanFirstName: editKoreanFirstName,
+          englishFirstName: editEnglishFirstName,
+          englishLastName: editEnglishLastName,
           phone: editPhone,
           title: editTitle,
           position: editPosition,
@@ -653,6 +678,14 @@ export function CompanyDetailManager({
         }));
         await updateUserTaskAssignments(selectedUser.id, company.id, payload, "admin");
 
+        const computedStructured = getPersonStructuredNames({
+          koreanLastName: editKoreanLastName,
+          koreanFirstName: editKoreanFirstName,
+          englishFirstName: editEnglishFirstName,
+          englishLastName: editEnglishLastName,
+          email: selectedUser.email,
+        });
+
         // 3. 로컬 렌더링 상태 동기화 갱신
         const updatedUsers = users.map(u => {
           if (u.id === selectedUser.id) {
@@ -664,15 +697,25 @@ export function CompanyDetailManager({
             }));
             return {
               ...u,
-              name: editName,
-              english_name: editEnglishName,
+              name: computedStructured.koreanFullName || computedStructured.englishFullName,
+              english_name: computedStructured.englishFullName,
               phone: editPhone,
               title: editTitle,
               position: editPosition,
               company_role: editRole,
               status: editStatus,
               is_primary: editIsPrimary,
-              permissions: editPermissions,
+              permissions: {
+                ...(u.permissions || {}),
+                ...editPermissions,
+                korean_last_name: computedStructured.koreanLastName,
+                korean_first_name: computedStructured.koreanFirstName,
+                english_first_name: computedStructured.englishFirstName,
+                english_last_name: computedStructured.englishLastName,
+                first_name: computedStructured.englishFirstName,
+                last_name: computedStructured.englishLastName,
+                english_name: computedStructured.englishFullName,
+              },
               task_assignments: newAssignments
             };
           } else {
@@ -700,7 +743,7 @@ export function CompanyDetailManager({
               ...t,
               userId: selectedUser.id,
               isPrimary: true,
-              userName: editName,
+              userName: computedStructured.displayName,
               userTitle: editTitle,
               userPosition: editPosition,
               userEmail: selectedUser.email,
@@ -1259,18 +1302,15 @@ export function CompanyDetailManager({
                             <td className="px-4 py-3">
                               <div className="flex flex-col">
                                 <div className="flex items-center gap-1.5">
-                                  <span className="font-semibold text-zinc-900 dark:text-white">{row.name || "(이름 없음)"}</span>
+                                  <span className="font-semibold text-zinc-900 dark:text-white">
+                                    {getPersonDisplayName(row)}
+                                  </span>
                                   {row.is_primary && (
                                     <span className="rounded bg-emerald-50 text-emerald-700 px-1.5 py-0.5 text-[8px] font-bold border border-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-900">
                                       주 컨택
                                     </span>
                                   )}
                                 </div>
-                                {(row.english_name || row.permissions?.english_name) && (
-                                  <span className="text-[11px] text-zinc-500 dark:text-zinc-400 font-normal">
-                                    {row.english_name || row.permissions?.english_name}
-                                  </span>
-                                )}
                               </div>
                             </td>
                             <td className="px-4 py-3">
@@ -1367,6 +1407,17 @@ export function CompanyDetailManager({
                         {tasks.map((task) => {
                           const notifyNames = getEmailRecipientsForTask(task.taskCode);
                           const matchingUser = users.find(u => u.id === task.userId);
+                          const taskDisplayName = matchingUser
+                            ? getPersonDisplayName(matchingUser)
+                            : task.userName
+                            ? getPersonDisplayName({
+                                name: task.userName,
+                                email: task.userEmail,
+                                phone: task.userPhone,
+                                title: task.userTitle,
+                                position: task.userPosition,
+                              })
+                            : null;
                           return (
                             <tr key={task.taskCode} className="hover:bg-zinc-50/20">
                               <td className="px-4 py-3.5">
@@ -1380,7 +1431,7 @@ export function CompanyDetailManager({
                                       onClick={() => matchingUser && handleOpenEdit(matchingUser)}
                                       className="font-semibold text-emerald-600 hover:underline dark:text-emerald-450 text-[13px] text-left cursor-pointer"
                                     >
-                                      {task.userName}
+                                      {taskDisplayName}
                                     </button>
                                     {task.userTitle || task.userPosition ? (
                                       <p className="text-[10px] text-zinc-400">
@@ -1418,7 +1469,7 @@ export function CompanyDetailManager({
                                   <option value="">-- 담당자 선택 --</option>
                                   {activeMembers.map(u => (
                                     <option key={u.id} value={u.id}>
-                                      {u.name || "(이름 없음)"} ({u.title || "멤버"})
+                                      {getPersonDisplayName(u)} ({u.title || "멤버"})
                                     </option>
                                   ))}
                                 </select>
@@ -2288,25 +2339,53 @@ export function CompanyDetailManager({
             </div>
 
             <form onSubmit={handleAddUserSubmit} className="p-5 space-y-4">
+              {/* Row 1: 한글 성 & 한글 이름 */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-[10px] font-bold text-zinc-450 block">이름 *</label>
+                  <label className="text-[10px] font-bold text-zinc-450 block">한글 성 (Last Name) *</label>
                   <input
                     type="text"
                     required
-                    value={addName}
-                    onChange={(e) => setAddName(e.target.value)}
-                    placeholder="홍길동"
+                    value={addKoreanLastName}
+                    onChange={(e) => setAddKoreanLastName(e.target.value)}
+                    placeholder="홍"
                     className="w-full rounded border border-zinc-200 p-2 text-xs outline-none bg-white focus:border-zinc-400 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
                   />
                 </div>
                 <div>
-                  <label className="text-[10px] font-bold text-zinc-450 block">영문 이름 (English Name)</label>
+                  <label className="text-[10px] font-bold text-zinc-450 block">한글 이름 (First Name) *</label>
                   <input
                     type="text"
-                    value={addEnglishName}
-                    onChange={(e) => setAddEnglishName(e.target.value)}
-                    placeholder="Gildong Hong"
+                    required
+                    value={addKoreanFirstName}
+                    onChange={(e) => setAddKoreanFirstName(e.target.value)}
+                    placeholder="길동"
+                    className="w-full rounded border border-zinc-200 p-2 text-xs outline-none bg-white focus:border-zinc-400 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+                  />
+                </div>
+              </div>
+
+              {/* Row 2: 영문 성 & 영문 이름 */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[10px] font-bold text-zinc-450 block">영문 성 (Last Name) *</label>
+                  <input
+                    type="text"
+                    required
+                    value={addEnglishLastName}
+                    onChange={(e) => setAddEnglishLastName(e.target.value)}
+                    placeholder="Hong"
+                    className="w-full rounded border border-zinc-200 p-2 text-xs outline-none bg-white focus:border-zinc-400 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold text-zinc-450 block">영문 이름 (First Name) *</label>
+                  <input
+                    type="text"
+                    required
+                    value={addEnglishFirstName}
+                    onChange={(e) => setAddEnglishFirstName(e.target.value)}
+                    placeholder="Gildong"
                     className="w-full rounded border border-zinc-200 p-2 text-xs outline-none bg-white focus:border-zinc-400 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
                   />
                 </div>
@@ -2428,26 +2507,53 @@ export function CompanyDetailManager({
                   <span>👤</span> 담당자 기본 정보
                 </h4>
 
-                {/* Row 1: 이름 & 영문 이름 */}
+                {/* Row 1: 한글 성 & 한글 이름 */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
-                    <label className="text-[11px] font-bold text-zinc-600 dark:text-zinc-400 block mb-1.5">이름 *</label>
+                    <label className="text-[11px] font-bold text-zinc-600 dark:text-zinc-400 block mb-1.5">한글 성 (Last Name) *</label>
                     <input
                       type="text"
                       required
-                      value={editName}
-                      onChange={(e) => setEditName(e.target.value)}
-                      placeholder="홍길동"
+                      value={editKoreanLastName}
+                      onChange={(e) => setEditKoreanLastName(e.target.value)}
+                      placeholder="홍"
                       className="w-full rounded-md border border-zinc-200 p-2.5 text-xs outline-none bg-white focus:border-zinc-400 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
                     />
                   </div>
                   <div>
-                    <label className="text-[11px] font-bold text-zinc-600 dark:text-zinc-400 block mb-1.5">영문 이름 (English Name)</label>
+                    <label className="text-[11px] font-bold text-zinc-600 dark:text-zinc-400 block mb-1.5">한글 이름 (First Name) *</label>
                     <input
                       type="text"
-                      value={editEnglishName}
-                      onChange={(e) => setEditEnglishName(e.target.value)}
-                      placeholder="Gildong Hong"
+                      required
+                      value={editKoreanFirstName}
+                      onChange={(e) => setEditKoreanFirstName(e.target.value)}
+                      placeholder="길동"
+                      className="w-full rounded-md border border-zinc-200 p-2.5 text-xs outline-none bg-white focus:border-zinc-400 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+                    />
+                  </div>
+                </div>
+
+                {/* Row 2: 영문 성 & 영문 이름 */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-[11px] font-bold text-zinc-600 dark:text-zinc-400 block mb-1.5">영문 성 (Last Name) *</label>
+                    <input
+                      type="text"
+                      required
+                      value={editEnglishLastName}
+                      onChange={(e) => setEditEnglishLastName(e.target.value)}
+                      placeholder="Hong"
+                      className="w-full rounded-md border border-zinc-200 p-2.5 text-xs outline-none bg-white focus:border-zinc-400 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[11px] font-bold text-zinc-600 dark:text-zinc-400 block mb-1.5">영문 이름 (First Name) *</label>
+                    <input
+                      type="text"
+                      required
+                      value={editEnglishFirstName}
+                      onChange={(e) => setEditEnglishFirstName(e.target.value)}
+                      placeholder="Gildong"
                       className="w-full rounded-md border border-zinc-200 p-2.5 text-xs outline-none bg-white focus:border-zinc-400 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
                     />
                   </div>

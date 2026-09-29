@@ -16,6 +16,7 @@ import { getCompanyTaskSetupStatus } from "@/lib/company/task-actions";
 import { evaluateProductRegistrationStatus } from "@/lib/product/registration-status";
 import { getBatchProductCategoryCompletions } from "@/lib/product/attribute-completion";
 import { resolveEffectiveSku } from "@/lib/product/types";
+import { getPersonGreetingName } from "@/lib/user/name-helper";
 
 export const dynamic = "force-dynamic";
 
@@ -443,7 +444,7 @@ export default async function PortalHomePage() {
         <div>
           <div className="flex items-center gap-2 flex-wrap">
             <h1 className="text-xl font-bold tracking-tight text-zinc-950 dark:text-white">
-              안녕하세요, {session.email} 님
+              안녕하세요, {getPersonGreetingName(companyUser || { email: session.email })}님
             </h1>
             <span className="inline-flex items-center rounded-md bg-zinc-100 dark:bg-zinc-800 px-2.5 py-0.5 text-xs font-semibold text-zinc-700 dark:text-zinc-300">
               {companyUser?.company_role === "company_admin" ? "관리자" : "담당자"}

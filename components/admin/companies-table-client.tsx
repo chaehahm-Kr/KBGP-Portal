@@ -93,14 +93,16 @@ export function CompaniesTableClient({ companies, partnerStatuses }: CompaniesTa
         const q = search.trim().toLowerCase();
         const matchName = company.name.toLowerCase().includes(q);
         const matchContactName = company.contactName.toLowerCase().includes(q);
+        const matchContactEnglish = (company.contactEnglishName || "").toLowerCase().includes(q);
         const matchContactEmail = company.contactEmail.toLowerCase().includes(q);
         const matchUsers = company.users?.some(
           (u) =>
             (u.name && u.name.toLowerCase().includes(q)) ||
+            (u.englishName && u.englishName.toLowerCase().includes(q)) ||
             (u.email && u.email.toLowerCase().includes(q))
         );
 
-        if (!matchName && !matchContactName && !matchContactEmail && !matchUsers) {
+        if (!matchName && !matchContactName && !matchContactEnglish && !matchContactEmail && !matchUsers) {
           return false;
         }
       }

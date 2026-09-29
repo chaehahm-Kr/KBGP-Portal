@@ -7,6 +7,8 @@ import { verifyAdminSession } from "@/lib/auth/dal";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { publicEnv } from "@/lib/env/public";
 
+import { getPersonStructuredNames } from "@/lib/user/name-helper";
+
 export type InquiryFormState = { error: string } | undefined;
 
 const convertSchema = z.object({
@@ -50,11 +52,20 @@ export async function convertInquiryToCompany(
     return { error: "이미 처리된 접수 건입니다." };
   }
 
+  const structuredName = getPersonStructuredNames({
+    name: inquiry.contact_name,
+  });
+
+  const resolvedContactName = structuredName.koreanLastName && structuredName.koreanFirstName
+    ? `${structuredName.koreanLastName}${structuredName.koreanFirstName}`
+    : (inquiry.contact_name || structuredName.canonicalEnglishName);
+  const resolvedEnglishName = structuredName.canonicalEnglishName || null;
+
   // 계정을 먼저 생성한다 (이메일은 가입 요청 시 발송)
   const { data: invited, error: inviteError } = await admin.auth.admin.createUser({
     email: inquiry.contact_email,
     email_confirm: false,
-    user_metadata: { role: "portal", display_name: inquiry.contact_name },
+    user_metadata: { role: "portal", display_name: resolvedContactName },
   });
 
   if (inviteError || !invited.user) {
@@ -72,7 +83,7 @@ export async function convertInquiryToCompany(
       name: inquiry.company_name,
       business_registration_number: inquiry.business_registration_number,
       country: parsed.data.country || "대한민국",
-      contact_name: inquiry.contact_name,
+      contact_name: resolvedContactName,
       contact_phone: inquiry.contact_phone,
       intro: `__COMPANY_METADATA__:${JSON.stringify({
         description: "",
@@ -80,8 +91,14 @@ export async function convertInquiryToCompany(
         website: inquiry.homepage || "",
         contacts: [
           {
-            name: inquiry.contact_name,
+            name: resolvedContactName,
+            englishName: resolvedEnglishName,
+            koreanLastName: structuredName.koreanLastName,
+            koreanFirstName: structuredName.koreanFirstName,
+            englishFirstName: structuredName.englishFirstName,
+            englishLastName: structuredName.englishLastName,
             title: inquiry.contact_title || "",
+            position: inquiry.contact_title || "",
             email: inquiry.contact_email,
             phone: inquiry.contact_phone,
             isPrimary: true,
@@ -101,15 +118,30 @@ export async function convertInquiryToCompany(
     return { error: "회사 정보를 저장하지 못했습니다. 잠시 후 다시 시도해주세요." };
   }
 
+  const permissionsObj = {
+    korean_last_name: structuredName.koreanLastName,
+    korean_first_name: structuredName.koreanFirstName,
+    english_first_name: structuredName.englishFirstName,
+    english_last_name: structuredName.englishLastName,
+    first_name: structuredName.englishFirstName,
+    last_name: structuredName.englishLastName,
+    english_name: resolvedEnglishName,
+    job_title: inquiry.contact_title || "",
+  };
+
   const { error: companyUserError } = await admin.from("company_users").insert({
     id: invited.user.id,
     company_id: company.id,
-    name: inquiry.contact_name,
+    name: resolvedContactName,
+    english_name: resolvedEnglishName,
     email: inquiry.contact_email,
     company_role: "company_admin",
     status: "invited",
     invited_by: session.userId,
     invited_at: null,
+    title: inquiry.contact_title || null,
+    phone: inquiry.contact_phone || null,
+    permissions: permissionsObj,
   });
 
   if (companyUserError) {

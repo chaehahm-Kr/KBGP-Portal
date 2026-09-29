@@ -15,6 +15,7 @@ import { sendPortalInvitationAction } from "@/lib/company/admin-actions";
 import { parseCompanyMetadata } from "@/lib/company/admin-actions";
 import { evaluateCompanyOnboarding } from "@/lib/company/onboarding-status";
 import { CompanyOnboardingPopover } from "@/components/admin/company-onboarding-popover";
+import { getPersonDisplayName } from "@/lib/user/name-helper";
 
 export const metadata: Metadata = {
   title: "신청서 및 파트너 초대 관리 | K SELECT NETWORK 어드민",
@@ -174,7 +175,7 @@ export default async function AdminApplicationsPage({
     let contactPosition = "";
 
     if (dbPrimary) {
-      contactName = dbPrimary.name || contactName;
+      contactName = getPersonDisplayName(dbPrimary) || dbPrimary.name || contactName;
       contactEmail = dbPrimary.email || "";
       contactPhone = dbPrimary.phone || contactPhone;
       contactTitle = dbPrimary.title || "";
@@ -186,13 +187,15 @@ export default async function AdminApplicationsPage({
         const contacts = data.contacts || [];
         const primary = contacts.find((x: any) => x.isPrimary) || contacts[0];
         if (primary) {
-          contactName = primary.name || contactName;
+          contactName = getPersonDisplayName(primary) || primary.name || contactName;
           contactEmail = primary.email || "";
           contactPhone = primary.phone || contactPhone;
           contactTitle = primary.title || "";
           contactPosition = primary.position || "";
         }
       } catch (e) {}
+    } else if (c.contact_name) {
+      contactName = getPersonDisplayName({ name: c.contact_name, email: c.contact_phone }) || c.contact_name;
     }
 
     if (c.intro && c.intro.startsWith("__COMPANY_METADATA__:")) {
@@ -449,7 +452,7 @@ export default async function AdminApplicationsPage({
                 const targetCompanyId = app.company_id || app.onboarded_company_id;
                 const compInfo = targetCompanyId ? companyMap.get(targetCompanyId) : null;
                 const companyName = compInfo?.name || app.applicant_company_name || "-";
-                const contactName = compInfo?.contactName || app.applicant_contact_name || "-";
+                const contactName = compInfo?.contactName || getPersonDisplayName({ name: app.applicant_contact_name, email: app.applicant_contact_email }) || app.applicant_contact_name || "-";
                 const contactEmail = compInfo?.contactEmail || app.applicant_contact_email || "-";
                 const contactPhone = compInfo?.contactPhone || app.applicant_contact_phone || "-";
 
