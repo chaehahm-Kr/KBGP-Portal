@@ -1,7 +1,6 @@
 import { Suspense } from "react";
 import type { Metadata } from "next";
-import { requireCompanyMembership } from "@/lib/company/dal";
-import { createClient } from "@/lib/supabase/server";
+import { getPortalTenantContext } from "@/lib/company/dal";
 import { getSignedFileUrl } from "@/lib/files/storage";
 import { PortalProductsList } from "@/components/product/portal-products-list";
 import { getBatchProductCategoryCompletions } from "@/lib/product/attribute-completion";
@@ -13,8 +12,7 @@ export const metadata: Metadata = {
 };
 
 export default async function ProductsPage() {
-  const { companyId } = await requireCompanyMembership();
-  const supabase = await createClient();
+  const { companyId, supabase } = await getPortalTenantContext();
 
   let products: any[] | null = null;
   const { data: firstQueryProducts, error: queryError } = await supabase

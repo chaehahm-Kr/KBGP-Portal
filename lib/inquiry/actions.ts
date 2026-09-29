@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireCompanyMembership } from "@/lib/company/dal";
+import { requireCompanyMembership, getPortalTenantContext } from "@/lib/company/dal";
 import { verifyAdminSession } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -591,8 +591,7 @@ export async function createAdminPartnerInquiry(formData: FormData) {
  */
 export async function getPartnerInquiries(): Promise<PartnerInquiryItem[]> {
   try {
-    const { companyId } = await requireCompanyMembership();
-    const supabase = await createClient();
+    const { companyId, supabase } = await getPortalTenantContext();
 
     const { data, error } = await supabase
       .from("partner_inquiries")

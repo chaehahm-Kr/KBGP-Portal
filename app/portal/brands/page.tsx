@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { requireCompanyMembership } from "@/lib/company/dal";
-import { createClient } from "@/lib/supabase/server";
+import { getPortalTenantContext } from "@/lib/company/dal";
 import { getSignedFileUrl } from "@/lib/files/storage";
 import { deactivateBrand, parseBrandTrademarks } from "@/lib/brand/actions";
 
@@ -12,8 +11,7 @@ export const metadata: Metadata = {
 };
 
 export default async function BrandsPage() {
-  const { companyId } = await requireCompanyMembership();
-  const supabase = await createClient();
+  const { companyId, supabase } = await getPortalTenantContext();
 
   // Safely fetch brands with trademark columns
   let brandsData: any[] = [];

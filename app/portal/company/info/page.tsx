@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { requireCompanyMembership } from "@/lib/company/dal";
+import { requireCompanyMembership, getPortalTenantContext } from "@/lib/company/dal";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { parseCompanyMetadata } from "@/lib/company/admin-actions";
@@ -15,8 +15,8 @@ export const metadata: Metadata = {
 };
 
 export default async function PortalCompanyInfoPage() {
-  const membership = await requireCompanyMembership();
-  const supabase = await createClient();
+  const membership = await getPortalTenantContext();
+  const supabase = membership.supabase;
 
   const { data: company } = await supabase
     .from("companies")

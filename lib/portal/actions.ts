@@ -1,7 +1,7 @@
 "use server";
 
 // Task ID: ADM-PUR-UI-001-R3 / PORT-PO-UI-001-R3 (Shipment Confirmation & Progress Synchronization)
-import { requireCompanyMembership } from "@/lib/company/dal";
+import { requireCompanyMembership, getPortalTenantContext } from "@/lib/company/dal";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { revalidatePath } from "next/cache";
@@ -15,8 +15,7 @@ import { formatEasternDateTime } from "@/lib/utils/timezone";
  */
 export async function getPortalPurchaseOrders() {
   try {
-    const { companyId } = await requireCompanyMembership();
-    const supabase = await createClient();
+    const { companyId, supabase } = await getPortalTenantContext();
     const adminSupabase = createAdminClient();
 
     let pos: any[] | null = null;
@@ -1896,8 +1895,7 @@ export async function getPortalReadinessById(id: string) {
 // ==========================================
 
 export async function getPortalInvoices() {
-  const { companyId } = await requireCompanyMembership();
-  const supabase = await createClient();
+  const { companyId, supabase } = await getPortalTenantContext();
 
   const { data, error } = await supabase
     .from("supplier_invoices")
@@ -1952,8 +1950,7 @@ export async function getPortalInvoices() {
 }
 
 export async function getPortalInvoiceDetail(id: string) {
-  const { companyId } = await requireCompanyMembership();
-  const supabase = await createClient();
+  const { companyId, supabase } = await getPortalTenantContext();
   const adminDb = createAdminClient();
 
   // 1. Fetch invoice header and verify ownership
@@ -2808,8 +2805,7 @@ export async function getPortalInvoiceAttachmentUrl(path: string) {
 }
 
 export async function getPortalAdjustments() {
-  const { companyId } = await requireCompanyMembership();
-  const supabase = await createClient();
+  const { companyId, supabase } = await getPortalTenantContext();
 
   const { data, error } = await supabase
     .from("supplier_invoice_adjustments")
@@ -2852,8 +2848,7 @@ export async function getPortalAdjustments() {
 }
 
 export async function getPortalPayments() {
-  const { companyId } = await requireCompanyMembership();
-  const supabase = await createClient();
+  const { companyId, supabase } = await getPortalTenantContext();
 
   const { data, error } = await supabase
     .from("supplier_payments")

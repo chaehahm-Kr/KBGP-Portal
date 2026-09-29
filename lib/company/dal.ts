@@ -9,6 +9,7 @@ export type CompanyMembership = {
   userId: string;
   companyId: string;
   companyRole: CompanyRole;
+  isImpersonating?: boolean;
 };
 
 /**
@@ -35,6 +36,20 @@ export async function requireCompanyMembership(): Promise<CompanyMembership> {
     userId: session.userId,
     companyId: companyUser.company_id,
     companyRole: companyUser.company_role as CompanyRole,
+    isImpersonating: session.isImpersonating,
+  };
+}
+
+/**
+ * 포털 테넌트 컨텍스트 및 안전하게 바인딩된 Supabase 클라이언트를 반환합니다.
+ * Impersonation 세션인 경우 createAdminClient()를 사용하고, 일반 세션인 경우 createClient()를 사용합니다.
+ */
+export async function getPortalTenantContext() {
+  const membership = await requireCompanyMembership();
+  const supabase = membership.isImpersonating ? createAdminClient() : await createClient();
+  return {
+    ...membership,
+    supabase,
   };
 }
 

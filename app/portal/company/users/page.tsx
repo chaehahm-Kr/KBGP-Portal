@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
-import { requireCompanyAdmin } from "@/lib/company/dal";
-import { createClient } from "@/lib/supabase/server";
+import { requireCompanyAdmin, getPortalTenantContext } from "@/lib/company/dal";
 import { InviteUserForm } from "@/components/company/invite-user-form";
 import { CompanyUsersManager } from "@/components/company/company-users-manager";
 
@@ -9,8 +8,8 @@ export const metadata: Metadata = {
 };
 
 export default async function CompanyUsersPage() {
-  const { companyId, userId } = await requireCompanyAdmin();
-  const supabase = await createClient();
+  const { companyId, userId, supabase } = await getPortalTenantContext();
+  await requireCompanyAdmin();
 
   // Query company users with detailed permissions and metadata
   let { data: users, error } = await supabase
