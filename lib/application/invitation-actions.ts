@@ -662,33 +662,81 @@ export async function resendApplicationInvitation(
 }
 
 /**
- * Revoke Invitation for Application
+ * Revoke Invitation for Application and return to initial review state
  */
-export async function revokeApplicationInvitation(applicationId: string): Promise<{ success: boolean; error?: string }> {
+export async function revokeApplicationInvitation(
+  applicationId: string
+): Promise<{ success: boolean; message?: string; error?: string }> {
   const session = await verifyAdminSession();
   const admin = createAdminClient();
 
-  const { data: app } = await admin
+  const { data: app, error: appFetchErr } = await admin
     .from("applications")
-    .select("id, partner_type, status, invitation_id, company_id")
+    .select("id, application_number, partner_type, status, invitation_id, company_id, applicant_company_name, applicant_contact_email, applicant_contact_name")
     .eq("id", applicationId)
     .single();
 
-  if (!app) return { success: false, error: "신청서 정보를 찾을 수 없습니다." };
-
-  if (app.partner_type === "retailer" && app.invitation_id) {
-    const res = await revokeRetailerInvitation(app.invitation_id);
-    if (!res.success) return { success: false, error: res.error || "Failed to revoke retailer invitation." };
+  if (appFetchErr || !app) {
+    return { success: false, error: "신청서 정보를 찾을 수 없습니다." };
   }
 
-  await admin
+  // 1. Retailer invitation revocation if applicable
+  if (app.partner_type === "retailer" && app.invitation_id) {
+    const res = await revokeRetailerInvitation(app.invitation_id);
+    if (!res.success) {
+      return { success: false, error: res.error || "리테일러 초대 취소에 실패했습니다." };
+    }
+  }
+
+  // 2. Brand Partner / Company User invitation eligibility invalidation
+  // Reset invited_at to null for any unactivated users so they cannot activate with old invite
+  if (app.company_id) {
+    const { error: cuUpdateErr } = await admin
+      .from("company_users")
+      .update({
+        invited_at: null,
+      })
+      .eq("company_id", app.company_id)
+      .neq("status", "active");
+
+    if (cuUpdateErr) {
+      console.error("[revokeApplicationInvitation] Error clearing company_users invited_at:", cuUpdateErr);
+    }
+  }
+
+  // 3. Reset Application status back to 'submitted' (initial review state)
+  const beforeState = app.status || "approved";
+  const targetStatus = "submitted";
+
+  const { error: appUpdateErr } = await admin
     .from("applications")
-    .update({ status: "cancelled", updated_at: new Date().toISOString() })
+    .update({
+      status: targetStatus,
+      invitation_id: null,
+      updated_at: new Date().toISOString(),
+    })
     .eq("id", applicationId);
 
-  await logApplicationActivity(admin, applicationId, app.status, "cancelled", session.userId, "Revoked Invitation");
+  if (appUpdateErr) {
+    return { success: false, error: appUpdateErr.message || "신청서 상태 초기화에 실패했습니다." };
+  }
+
+  // 4. Record granular audit log
+  await logApplicationActivity(
+    admin,
+    applicationId,
+    beforeState,
+    targetStatus,
+    session.userId,
+    `PARTNER_INVITATION_REVOKED: Invitation revoked by Admin. Application returned to initial review state. (Company: ${app.applicant_company_name || app.company_id}, Email: ${app.applicant_contact_email || "N/A"})`
+  );
+
+  revalidatePath("/admin/applications");
   revalidatePath(`/admin/applications/${applicationId}`);
-  return { success: true };
+  return {
+    success: true,
+    message: "초대장이 취소되었으며, 신청서가 초기 심사(접수/검토) 상태로 복구되었습니다.",
+  };
 }
 
 /**

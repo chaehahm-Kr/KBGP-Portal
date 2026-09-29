@@ -212,13 +212,13 @@ export default function ApplicationWorkspace({
 
   const handleRevokeInvite = async () => {
     if (!revokeInviteAction) return;
-    if (!confirm("⚠️ 정말로 발송된 초대장을 취소/회수하시겠습니까? (기존 초대 링크는 즉시 무효화됩니다)")) return;
+    if (!confirm("⚠️ 정말로 발송된 초대장을 취소/회수하시겠습니까? (기존 초대 링크는 즉시 무효화되며 신청서가 초기 심사 상태로 돌아갑니다)")) return;
 
     setIsProcessingAction(true);
     try {
       const res = await revokeInviteAction();
       if (res?.success) {
-        alert("초대장이 취소 처리되었습니다.");
+        alert(res.message || "초대장이 취소되었으며, 신청서가 초기 심사(접수/검토) 상태로 복구되었습니다.");
         window.location.reload();
       } else {
         alert("초대장 취소 실패: " + (res?.error || "알 수 없는 오류"));
