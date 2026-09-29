@@ -45,7 +45,7 @@ export async function getCompanyTaskAssignments(companyId: string): Promise<Task
   // 회사 소속 모든 멤버 목록 조회
   const { data: companyUsers } = await admin
     .from("company_users")
-    .select("id, name, title, position, email, phone, permissions, korean_last_name, korean_first_name, english_first_name, english_last_name, english_name")
+    .select("id, name, title, position, email, phone, permissions, english_name")
     .eq("company_id", companyId);
 
   const usersMap = new Map(companyUsers?.map(u => [u.id, u]) || []);
