@@ -20,7 +20,7 @@ export async function generateMetadata({ params }: AdminRetailerDetailPageProps)
 }
 
 export default async function AdminRetailerDetailPage({ params }: AdminRetailerDetailPageProps) {
-  await verifyAdminSession();
+  const session = await verifyAdminSession();
   const { id } = await params;
   const data = await getAdminRetailer360Data(id);
 
@@ -28,5 +28,8 @@ export default async function AdminRetailerDetailPage({ params }: AdminRetailerD
     notFound();
   }
 
-  return <Retailer360View data={data} />;
+  const { hasImpersonationPermission } = await import("@/lib/auth/impersonation-actions");
+  const canImpersonate = await hasImpersonationPermission(session.userId);
+
+  return <Retailer360View data={data} canImpersonate={canImpersonate} />;
 }

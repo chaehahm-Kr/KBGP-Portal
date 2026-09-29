@@ -960,64 +960,64 @@ export function StaffWorkspace({
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 
                 {/* FORM A: Basic Info */}
-                <form onSubmit={handleBasicInfoSave} className="space-y-3 bg-zinc-50/20 p-3.5 rounded-xl border border-zinc-200 dark:border-zinc-800/50">
-                  <h4 className="font-extrabold text-zinc-900 dark:text-white border-b pb-1 select-none">👤 인적 정보 (기본 정보)</h4>
+                <form onSubmit={handleBasicInfoSave} className="space-y-3 bg-zinc-50 dark:bg-zinc-950/60 p-3.5 rounded-xl border border-zinc-200 dark:border-zinc-800">
+                  <h4 className="font-extrabold text-zinc-900 dark:text-white border-b border-zinc-200 dark:border-zinc-800 pb-1 select-none text-xs">👤 인적 정보 (기본 정보)</h4>
                   
                   <div className="space-y-0.5">
-                    <label className="block text-zinc-500 font-bold select-none">이름 (한글)</label>
+                    <label className="block text-zinc-700 dark:text-zinc-300 font-bold select-none text-[11px]">이름 (한글)</label>
                     <input
                       type="text"
                       required
                       value={name}
                       onChange={(e) => setName(e.target.value)}
-                      className="w-full bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white border border-zinc-200 dark:border-zinc-800 rounded px-2.5 py-1"
+                      className="w-full bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white border border-zinc-300 dark:border-zinc-700 rounded px-2.5 py-1 text-xs focus:border-zinc-500 dark:focus:border-zinc-500 outline-none"
                     />
                   </div>
 
                   <div className="space-y-0.5">
-                    <label className="block text-zinc-500 font-bold select-none">영문 이름</label>
+                    <label className="block text-zinc-700 dark:text-zinc-300 font-bold select-none text-[11px]">영문 이름</label>
                     <input
                       type="text"
                       value={englishName}
                       onChange={(e) => setEnglishName(e.target.value)}
-                      className="w-full bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white border border-zinc-200 dark:border-zinc-800 rounded px-2.5 py-1"
+                      className="w-full bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white border border-zinc-300 dark:border-zinc-700 rounded px-2.5 py-1 text-xs focus:border-zinc-500 dark:focus:border-zinc-500 outline-none"
                     />
                   </div>
 
                   <div className="space-y-0.5">
-                    <label className="block text-zinc-500 font-bold select-none">닉네임</label>
+                    <label className="block text-zinc-700 dark:text-zinc-300 font-bold select-none text-[11px]">닉네임</label>
                     <input
                       type="text"
                       value={nickname}
                       onChange={(e) => setNickname(e.target.value)}
-                      className="w-full bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white border border-zinc-200 dark:border-zinc-800 rounded px-2.5 py-1"
+                      className="w-full bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white border border-zinc-300 dark:border-zinc-700 rounded px-2.5 py-1 text-xs focus:border-zinc-500 dark:focus:border-zinc-500 outline-none"
                     />
                   </div>
 
                   <div className="space-y-0.5">
-                    <label className="block text-zinc-500 font-bold select-none">연락처</label>
+                    <label className="block text-zinc-700 dark:text-zinc-300 font-bold select-none text-[11px]">연락처</label>
                     <input
                       type="text"
                       value={phone}
                       onChange={(e) => setPhone(e.target.value)}
-                      className="w-full bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white border border-zinc-200 dark:border-zinc-800 rounded px-2.5 py-1"
+                      className="w-full bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white border border-zinc-300 dark:border-zinc-700 rounded px-2.5 py-1 text-xs focus:border-zinc-500 dark:focus:border-zinc-500 outline-none"
                     />
                   </div>
 
                   <div className="space-y-0.5">
-                    <label className="block text-zinc-500 font-bold select-none">근무 도시 / 시간대</label>
+                    <label className="block text-zinc-700 dark:text-zinc-300 font-bold select-none text-[11px]">근무 도시 / 시간대</label>
                     <div className="flex gap-1">
                       <input
                         type="text"
                         value={region}
                         onChange={(e) => setRegion(e.target.value)}
                         placeholder="Seoul"
-                        className="flex-1 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white border border-zinc-200 dark:border-zinc-800 rounded px-2.5 py-1"
+                        className="flex-1 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white border border-zinc-300 dark:border-zinc-700 rounded px-2.5 py-1 text-xs focus:border-zinc-500 dark:focus:border-zinc-500 outline-none"
                       />
                       <select
                         value={timezone}
                         onChange={(e) => setTimezone(e.target.value)}
-                        className="w-1/2 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white border border-zinc-200 dark:border-zinc-800 rounded px-1.5 py-1 cursor-pointer"
+                        className="w-1/2 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white border border-zinc-300 dark:border-zinc-700 rounded px-1.5 py-1 cursor-pointer text-xs focus:border-zinc-500 dark:focus:border-zinc-500 outline-none"
                       >
                         <option value="Asia/Seoul">KST (GMT+9)</option>
                         <option value="America/New_York">EST (GMT-5)</option>
@@ -1029,21 +1029,21 @@ export function StaffWorkspace({
 
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-0.5">
-                      <label className="block text-zinc-500 font-bold select-none">생년월일</label>
+                      <label className="block text-zinc-700 dark:text-zinc-300 font-bold select-none text-[11px]">생년월일</label>
                       <input
                         type="date"
                         value={birthday}
                         onChange={(e) => setBirthday(e.target.value)}
-                        className="w-full bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white border border-zinc-200 dark:border-zinc-800 rounded px-2.5 py-1 cursor-pointer text-xs"
+                        className="w-full bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white border border-zinc-300 dark:border-zinc-700 rounded px-2.5 py-1 cursor-pointer text-xs focus:border-zinc-500 dark:focus:border-zinc-500 outline-none"
                       />
                     </div>
 
                     <div className="space-y-0.5">
-                      <label className="block text-zinc-500 font-bold select-none">선호 언어</label>
+                      <label className="block text-zinc-700 dark:text-zinc-300 font-bold select-none text-[11px]">선호 언어</label>
                       <select
                         value={language}
                         onChange={(e) => setLanguage(e.target.value)}
-                        className="w-full bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white border border-zinc-200 dark:border-zinc-800 rounded px-2.5 py-1 cursor-pointer"
+                        className="w-full bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white border border-zinc-300 dark:border-zinc-700 rounded px-2.5 py-1 cursor-pointer text-xs focus:border-zinc-500 dark:focus:border-zinc-500 outline-none"
                       >
                         <option value="ko">한국어 (Korean)</option>
                         <option value="en">English (영어)</option>
@@ -1054,22 +1054,22 @@ export function StaffWorkspace({
                   <button
                     type="submit"
                     disabled={isActionPending}
-                    className="w-full mt-2 bg-zinc-950 hover:bg-zinc-800 text-white dark:bg-white dark:text-zinc-950 font-bold py-1.5 rounded transition-all cursor-pointer disabled:opacity-50 select-none"
+                    className="w-full mt-2 bg-zinc-950 hover:bg-zinc-800 text-white dark:bg-white dark:text-zinc-950 font-bold py-1.5 rounded transition-all cursor-pointer disabled:opacity-50 select-none text-xs"
                   >
                     💾 기본 인적사항 저장
                   </button>
                 </form>
 
                 {/* FORM B: Organizational Info */}
-                <form onSubmit={handleOrgInfoSave} className="space-y-3 bg-zinc-50/20 p-3.5 rounded-xl border border-zinc-200 dark:border-zinc-800/50">
-                  <h4 className="font-extrabold text-zinc-900 dark:text-white border-b pb-1 select-none">🏢 인사 정보 (조직 배정)</h4>
+                <form onSubmit={handleOrgInfoSave} className="space-y-3 bg-zinc-50 dark:bg-zinc-950/60 p-3.5 rounded-xl border border-zinc-200 dark:border-zinc-800">
+                  <h4 className="font-extrabold text-zinc-900 dark:text-white border-b border-zinc-200 dark:border-zinc-800 pb-1 select-none text-xs">🏢 인사 정보 (조직 배정)</h4>
                   
                   <div className="space-y-0.5">
-                    <label className="block text-zinc-500 font-bold select-none">소속 부서</label>
+                    <label className="block text-zinc-700 dark:text-zinc-300 font-bold select-none text-[11px]">소속 부서</label>
                     <select
                       value={departmentId}
                       onChange={(e) => setDepartmentId(e.target.value)}
-                      className="w-full bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white border border-zinc-200 dark:border-zinc-800 rounded px-2.5 py-1 cursor-pointer"
+                      className="w-full bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white border border-zinc-300 dark:border-zinc-700 rounded px-2.5 py-1 cursor-pointer text-xs focus:border-zinc-500 dark:focus:border-zinc-500 outline-none"
                     >
                       <option value="">소속 없음</option>
                       {departments.filter(d => d.is_active).map(d => (
@@ -1079,11 +1079,11 @@ export function StaffWorkspace({
                   </div>
 
                   <div className="space-y-0.5">
-                    <label className="block text-zinc-500 font-bold select-none">보임 직책</label>
+                    <label className="block text-zinc-700 dark:text-zinc-300 font-bold select-none text-[11px]">보임 직책</label>
                     <select
                       value={jobTitleId}
                       onChange={(e) => setJobTitleId(e.target.value)}
-                      className="w-full bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white border border-zinc-200 dark:border-zinc-800 rounded px-2.5 py-1 cursor-pointer"
+                      className="w-full bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white border border-zinc-300 dark:border-zinc-700 rounded px-2.5 py-1 cursor-pointer text-xs focus:border-zinc-500 dark:focus:border-zinc-500 outline-none"
                     >
                       <option value="">직책 없음</option>
                       {jobTitles.filter(j => j.is_active).map(j => (
@@ -1093,11 +1093,11 @@ export function StaffWorkspace({
                   </div>
 
                   <div className="space-y-0.5">
-                    <label className="block text-zinc-500 font-bold select-none">직속 관리자</label>
+                    <label className="block text-zinc-700 dark:text-zinc-300 font-bold select-none text-[11px]">직속 관리자</label>
                     <select
                       value={managerId}
                       onChange={(e) => setManagerId(e.target.value)}
-                      className="w-full bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white border border-zinc-200 dark:border-zinc-800 rounded px-2.5 py-1 cursor-pointer"
+                      className="w-full bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white border border-zinc-300 dark:border-zinc-700 rounded px-2.5 py-1 cursor-pointer text-xs focus:border-zinc-500 dark:focus:border-zinc-500 outline-none"
                     >
                       <option value="">지정 없음</option>
                       {staffList.filter(s => s.id !== activeStaff.id && s.status === 'active').map(s => (
@@ -1107,30 +1107,30 @@ export function StaffWorkspace({
                   </div>
 
                   <div className="space-y-0.5">
-                    <label className="block text-zinc-500 font-bold select-none">입사일</label>
+                    <label className="block text-zinc-700 dark:text-zinc-300 font-bold select-none text-[11px]">입사일</label>
                     <input
                       type="date"
                       value={hireDate}
                       onChange={(e) => setHireDate(e.target.value)}
-                      className="w-full bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white border border-zinc-200 dark:border-zinc-800 rounded px-2.5 py-1 cursor-pointer"
+                      className="w-full bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white border border-zinc-300 dark:border-zinc-700 rounded px-2.5 py-1 cursor-pointer text-xs focus:border-zinc-500 dark:focus:border-zinc-500 outline-none"
                     />
                   </div>
 
                   <div className="pt-2.5 space-y-1 text-[10px] text-zinc-400 select-none">
                     <div className="flex justify-between">
                       <span>최근 로그인 일시:</span>
-                      <span className="font-mono text-zinc-600 dark:text-zinc-350">{activeStaff.last_login_at ? new Date(activeStaff.last_login_at).toLocaleString("ko-KR") : "기록 없음"}</span>
+                      <span className="font-mono text-zinc-600 dark:text-zinc-300">{activeStaff.last_login_at ? new Date(activeStaff.last_login_at).toLocaleString("ko-KR") : "기록 없음"}</span>
                     </div>
                     <div className="flex justify-between">
                       <span>최초 계정 등록일:</span>
-                      <span className="font-mono text-zinc-600 dark:text-zinc-350">{new Date(activeStaff.created_at).toLocaleString("ko-KR")}</span>
+                      <span className="font-mono text-zinc-600 dark:text-zinc-300">{new Date(activeStaff.created_at).toLocaleString("ko-KR")}</span>
                     </div>
                   </div>
 
                   <button
                     type="submit"
                     disabled={isActionPending}
-                    className="w-full mt-2 bg-zinc-950 hover:bg-zinc-800 text-white dark:bg-white dark:text-zinc-950 font-bold py-1.5 rounded transition-all cursor-pointer disabled:opacity-50 select-none"
+                    className="w-full mt-2 bg-zinc-950 hover:bg-zinc-800 text-white dark:bg-white dark:text-zinc-950 font-bold py-1.5 rounded transition-all cursor-pointer disabled:opacity-50 select-none text-xs"
                   >
                     💾 조직 정보 업데이트
                   </button>
@@ -1179,12 +1179,12 @@ export function StaffWorkspace({
             <div className="flex-1 p-4 space-y-4 overflow-y-auto">
               
               {/* Role selection dropdown */}
-              <div className="space-y-1 bg-zinc-50/50 dark:bg-zinc-950/20 p-3 rounded-lg border select-none">
-                <label className="block font-bold text-zinc-700 dark:text-zinc-300">대표 권한 역할 (Base Role)</label>
+              <div className="space-y-1 bg-zinc-50 dark:bg-zinc-950/60 p-3 rounded-lg border border-zinc-200 dark:border-zinc-800 select-none">
+                <label className="block font-bold text-zinc-700 dark:text-zinc-300 text-xs">대표 권한 역할 (Base Role)</label>
                 <select
                   value={baseRole}
                   onChange={(e) => handleBaseRoleChange(e.target.value as StaffRole)}
-                  className="w-full bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white border border-zinc-200 dark:border-zinc-800 rounded px-2 py-1.5 outline-none font-semibold cursor-pointer"
+                  className="w-full bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white border border-zinc-300 dark:border-zinc-700 rounded px-2 py-1.5 outline-none font-semibold cursor-pointer text-xs"
                 >
                   {Object.entries(STAFF_ROLE_LABEL).map(([k, v]) => (
                     <option key={k} value={k}>{v}</option>
@@ -1221,14 +1221,15 @@ export function StaffWorkspace({
                         staff: "👥 Staff & Perms",
                       };
 
+                      const standardActions: (keyof MenuActionPermissions)[] = ["view", "create", "edit", "delete", "approve"];
+
                       return (
                         <tr key={mKey} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-950/30 transition-colors">
                           <td className="py-3 pl-3 text-left font-extrabold text-zinc-800 dark:text-zinc-200 bg-zinc-50/20">
                             {menuLabelMap[mKey] || mKey}
                           </td>
-                          {Object.keys(row).map((actionKey) => {
-                            const aKey = actionKey as keyof MenuActionPermissions;
-                            const isChecked = row[aKey];
+                          {standardActions.map((aKey) => {
+                            const isChecked = Boolean(row?.[aKey]);
                             return (
                               <td key={aKey} className="py-3">
                                 <input
@@ -1246,6 +1247,43 @@ export function StaffWorkspace({
                     })}
                   </tbody>
                 </table>
+              </div>
+
+              {/* Login as User (Support Session) Sensitive Permission Card */}
+              <div className="p-3.5 rounded-xl border border-amber-300/80 bg-amber-50/60 dark:border-amber-900/60 dark:bg-amber-950/40 text-xs select-none">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <div className="font-extrabold text-amber-900 dark:text-amber-300 flex items-center gap-1.5">
+                      <span>🔑</span>
+                      <span>사용자 계정 지원 세션 (Login as User)</span>
+                    </div>
+                    <p className="text-[11px] text-amber-800/80 dark:text-amber-400/90 mt-0.5 leading-relaxed font-normal">
+                      Admin Staff가 브랜드 및 리테일러 회원 계정으로 직접 지원 접속할 수 있는 고위험 지원 권한입니다.
+                    </p>
+                  </div>
+                  <label className="flex items-center gap-2 font-bold cursor-pointer shrink-0">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(permissions?.companies?.impersonate || (permissions as any)?.impersonate)}
+                      onChange={(e) => {
+                        const val = e.target.checked;
+                        setPermissions((prev) => {
+                          if (!prev) return prev;
+                          return {
+                            ...prev,
+                            companies: {
+                              ...prev.companies,
+                              impersonate: val,
+                            },
+                          };
+                        });
+                      }}
+                      disabled={baseRole === "super_admin"}
+                      className="h-4 w-4 rounded border-amber-400 accent-amber-600 dark:accent-amber-400 cursor-pointer disabled:opacity-50"
+                    />
+                    <span className="text-amber-900 dark:text-amber-200 font-extrabold text-xs">권한 허용</span>
+                  </label>
+                </div>
               </div>
 
             </div>

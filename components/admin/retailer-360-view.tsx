@@ -34,6 +34,7 @@ import { StartImpersonationModal } from "@/components/admin/start-impersonation-
 
 interface Retailer360ViewProps {
   data: Retailer360Data;
+  canImpersonate?: boolean;
 }
 
 type TabKey =
@@ -47,7 +48,7 @@ type TabKey =
   | "protection"
   | "cases";
 
-export function Retailer360View({ data }: Retailer360ViewProps) {
+export function Retailer360View({ data, canImpersonate = true }: Retailer360ViewProps) {
   const [activeTab, setActiveTab] = useState<TabKey>("overview");
   const [isPending, startTransition] = useTransition();
   const [impersonateMember, setImpersonateMember] = useState<Retailer360MemberItem | null>(null);
@@ -1210,12 +1211,12 @@ export function Retailer360View({ data }: Retailer360ViewProps) {
                       </td>
                       <td className="py-3 px-4 text-right">
                         <div className="flex items-center justify-end gap-1.5">
-                          {isUserActive && (
+                          {isUserActive && canImpersonate && (
                             <button
                               type="button"
                               onClick={() => setImpersonateMember(member)}
                               className="px-2.5 py-1 rounded-lg border border-amber-300 bg-amber-50 text-[10px] font-bold text-amber-800 hover:bg-amber-100 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300 cursor-pointer shadow-2xs flex items-center gap-1"
-                              title="Login as User"
+                              title="Login as User (Support Session)"
                             >
                               🔑 Login as User
                             </button>
