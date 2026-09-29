@@ -7,6 +7,8 @@ import {
   verifyPartnerApplicationAction,
   activatePartnerAccountAction,
   verifyBrandInvitationTokenAction,
+  sendInvitationVerificationCodeAction,
+  verifyInvitationCodeAction,
   activatePartnerAccountWithTokenAction,
 } from "@/lib/auth/signup-verification";
 import { PASSWORD_RULE_DESCRIPTION } from "@/lib/auth/password";
@@ -15,18 +17,38 @@ const inputClass =
   "mt-1 block w-full rounded-md border border-zinc-700 bg-zinc-950 px-3.5 py-2.5 text-sm text-white placeholder:text-zinc-500 outline-none transition-all focus:border-zinc-400 focus:ring-1 focus:ring-zinc-400";
 const labelClass = "block text-xs font-semibold text-zinc-300 mb-1";
 
+type StepState =
+  | "token_loading"
+  | "verify"
+  | "email_confirm"
+  | "otp_verify"
+  | "setPassword"
+  | "success"
+  | "result_A"
+  | "result_B"
+  | "result_C"
+  | "error_expired"
+  | "error_used"
+  | "error_invalid";
+
 export function PortalVerificationSignup() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const tokenFromUrl = searchParams.get("token");
 
-  const [step, setStep] = useState<
-    "verify" | "result_A" | "result_B" | "result_C" | "setPassword" | "success"
-  >("verify");
+  // Initial step: If token exists in URL, start immediately in token_loading to avoid generic form flash
+  const [step, setStep] = useState<StepState>(
+    tokenFromUrl ? "token_loading" : "verify"
+  );
 
-  // Inputs
+  // Public Application Inputs
   const [brn, setBrn] = useState("");
   const [email, setEmail] = useState("");
+
+  // OTP Verification Inputs
+  const [otpCode, setOtpCode] = useState("");
+
+  // Password Inputs
   const [password, setPassword] = useState("");
   const [passwordConfirm, setPasswordConfirm] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -35,13 +57,16 @@ export function PortalVerificationSignup() {
   // States
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [otpNotice, setOtpNotice] = useState<string | null>(null);
   const [inviteToken, setInviteToken] = useState<string | null>(null);
+
   const [verifiedUser, setVerifiedUser] = useState<{
     userId: string;
     companyName: string;
     contactName: string;
     email: string;
   } | null>(null);
+
   const [activeEmail, setActiveEmail] = useState("");
 
   // PORT-ONB-003: Auto-verify Token from Email CTA link on mount
@@ -61,19 +86,26 @@ export function PortalVerificationSignup() {
               email: res.email,
             });
             setEmail(res.email);
-            setStep("setPassword");
-          } else if (res.case === "C") {
+            setStep("email_confirm");
+          } else if (res.case === "EXPIRED") {
+            setError(res.message);
+            setStep("error_expired");
+          } else if (res.case === "USED") {
             setActiveEmail((res as any).email || "");
-            setStep("result_C");
+            setError(res.message);
+            setStep("error_used");
+          } else if (res.case === "INVALID") {
+            setError(res.message);
+            setStep("error_invalid");
           } else {
-            setStep("result_A");
-            setError((res as any).message || "초대 링크가 유효하지 않거나 만료되었습니다.");
+            setError(res.message || "초대 링크가 유효하지 않거나 만료되었습니다.");
+            setStep("error_invalid");
           }
         })
         .catch((err) => {
           setPending(false);
-          setStep("result_A");
           setError(err?.message || "초대 정보 검증 중 오류가 발생했습니다.");
+          setStep("error_invalid");
         });
     }
   }, [tokenFromUrl]);
@@ -115,7 +147,53 @@ export function PortalVerificationSignup() {
     }
   }
 
-  // 2단계: 비밀번호 설정 및 계정 활성화
+  // Admin Direct Invite: Send 6-digit OTP code to email
+  async function handleSendOtp() {
+    if (!verifiedUser?.email) {
+      setError("초청 계정 이메일 정보가 없습니다.");
+      return;
+    }
+    setError(null);
+    setOtpNotice(null);
+    setPending(true);
+
+    try {
+      const res = await sendInvitationVerificationCodeAction(verifiedUser.email);
+      setPending(false);
+      if (res.success) {
+        setOtpNotice(`${verifiedUser.email} (으)로 6자리 인증 번호가 발송되었습니다.`);
+        setStep("otp_verify");
+      } else {
+        setError(res.error || "인증 번호 발송에 실패했습니다.");
+      }
+    } catch (err: any) {
+      setPending(false);
+      setError(err?.message || "인증 번호 발송 중 오류가 발생했습니다.");
+    }
+  }
+
+  // Admin Direct Invite: Verify 6-digit OTP code
+  async function handleVerifyOtp(e: FormEvent) {
+    e.preventDefault();
+    if (!verifiedUser?.email) return;
+    setError(null);
+    setPending(true);
+
+    try {
+      const res = await verifyInvitationCodeAction(verifiedUser.email, otpCode);
+      setPending(false);
+      if (res.success) {
+        setStep("setPassword");
+      } else {
+        setError(res.error || "인증 번호가 일치하지 않습니다.");
+      }
+    } catch (err: any) {
+      setPending(false);
+      setError(err?.message || "인증 번호 확인 중 오류가 발생했습니다.");
+    }
+  }
+
+  // 비밀번호 설정 및 계정 활성화 (Token / Public 공통)
   async function handleActivate(e: FormEvent) {
     e.preventDefault();
     setError(null);
@@ -152,7 +230,24 @@ export function PortalVerificationSignup() {
     }
   }
 
-  // 1. 조회 단계 폼 (2-Path Onboarding UI)
+  // 0. Token Check Loading State (Prevents generic signup flash)
+  if (step === "token_loading") {
+    return (
+      <div className="space-y-6 py-8 text-center">
+        <div className="flex justify-center">
+          <div className="h-10 w-10 animate-spin rounded-full border-2 border-zinc-600 border-t-white" />
+        </div>
+        <div className="space-y-2">
+          <h2 className="text-lg font-bold text-white">초청 정보 확인 중</h2>
+          <p className="text-xs text-zinc-400">
+            초청 토큰 및 파트너 계정 승인 상태를 검증하고 있습니다. 잠시만 기다려 주세요...
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // 1. 조회 단계 폼 (Public Marketing Application 2-Path Onboarding UI)
   if (step === "verify") {
     return (
       <div className="space-y-6">
@@ -264,170 +359,140 @@ export function PortalVerificationSignup() {
     );
   }
 
-  // Case A. 입점 신청 내역을 찾을 수 없는 경우
-  if (step === "result_A") {
+  // Admin Direct Invite: Step 2 - Confirm Invited Email & Trigger OTP
+  if (step === "email_confirm") {
     return (
-      <div className="space-y-6 text-center">
-        <div className="flex justify-center">
-          <div className="rounded-full bg-red-100 dark:bg-red-950/30 p-3 text-red-600 dark:text-red-400">
-            <svg
-              className="h-8 w-8"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-              />
-            </svg>
-          </div>
-        </div>
-
+      <div className="space-y-6">
         <div className="space-y-2">
-          <h2 className="text-lg font-semibold text-zinc-900 dark:text-white">
-            입점 신청 내역 없음
-          </h2>
-          <p className="text-sm text-zinc-500 dark:text-zinc-400 leading-relaxed px-2">
-            입력하신 사업자등록번호와 연락처에 매칭되는 입점 신청 내역을 찾을 수 없습니다. 파트너 포털에 가입하시려면 먼저 kselectnetwork.com을 통한 입점 신청이 선행되어야 합니다.
+          <div className="inline-flex items-center rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2.5 py-1 text-[11px] font-bold">
+            어드민 직접 초청 파트너
+          </div>
+          <h1 className="text-xl font-bold text-white">
+            브랜드 포털 계정 활성화
+          </h1>
+          <p className="text-xs text-zinc-400 leading-relaxed">
+            초대받으신 담당자 계정 정보를 확인하고 이메일 소유 인증을 진행해 주세요.
           </p>
         </div>
 
-        <div className="space-y-3 pt-2">
-          <a
-            href="https://www.kselectnetwork.com/#eligibility"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="block w-full text-center rounded-md bg-zinc-900 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-zinc-800 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-100 shadow-sm"
-          >
-            kselectnetwork.com에서 파트너십 신청하기 →
-          </a>
-          <button
-            onClick={() => setStep("verify")}
-            className="block w-full text-center text-xs font-semibold text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300 underline bg-transparent border-0 cursor-pointer"
-          >
-            다시 정보 입력하기
-          </button>
+        <div className="rounded-xl border border-zinc-800 bg-zinc-950/80 p-5 space-y-3.5 shadow-sm">
+          <div className="flex justify-between items-center py-1.5 border-b border-zinc-800/80">
+            <span className="text-xs text-zinc-400 font-medium">파트너사명</span>
+            <span className="text-xs font-bold text-white">{verifiedUser?.companyName}</span>
+          </div>
+          <div className="flex justify-between items-center py-1.5 border-b border-zinc-800/80">
+            <span className="text-xs text-zinc-400 font-medium">담당자</span>
+            <span className="text-xs font-bold text-white">{verifiedUser?.contactName}</span>
+          </div>
+          <div className="flex justify-between items-center py-1.5">
+            <span className="text-xs text-zinc-400 font-medium">초청 이메일</span>
+            <span className="text-xs font-bold text-emerald-400 bg-emerald-950/40 px-2 py-1 rounded border border-emerald-800/40">
+              {verifiedUser?.email}
+            </span>
+          </div>
         </div>
+
+        {error && (
+          <div className="rounded-md bg-rose-500/10 border border-rose-500/20 p-3 text-xs text-rose-400 font-medium" role="alert">
+            {error}
+          </div>
+        )}
+
+        <button
+          type="button"
+          onClick={handleSendOtp}
+          disabled={pending}
+          className="w-full rounded-md bg-white px-4 py-2.5 text-sm font-bold text-zinc-950 transition-colors hover:bg-zinc-200 disabled:opacity-50 cursor-pointer h-10 shadow-sm"
+        >
+          {pending ? "인증 번호 발송 중..." : "이메일 인증 번호 받기"}
+        </button>
       </div>
     );
   }
 
-  // Case B. 신청 내역은 있으나 심사 및 승인 대기인 경우
-  if (step === "result_B") {
+  // Admin Direct Invite: Step 3 - Enter & Verify 6-digit OTP
+  if (step === "otp_verify") {
     return (
-      <div className="space-y-6 text-center">
-        <div className="flex justify-center">
-          <div className="rounded-full bg-amber-100 dark:bg-amber-950/30 p-3 text-amber-600 dark:text-amber-400">
-            <svg
-              className="h-8 w-8"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-                d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-              />
-            </svg>
+      <div className="space-y-6">
+        <div className="space-y-1.5">
+          <div className="inline-flex items-center rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2.5 py-1 text-[11px] font-bold">
+            이메일 인증 번호 발송됨
           </div>
-        </div>
-
-        <div className="space-y-2">
-          <h2 className="text-lg font-semibold text-zinc-900 dark:text-white">
-            입점 신청 심사 대기 중
-          </h2>
-          <p className="text-sm text-zinc-500 dark:text-zinc-400 leading-relaxed px-2">
-            제출해주신 입점 신청서가 접수되어 현재 <strong>어드민 검토 대기 중</strong>입니다. 심사 및 가입 요청 승인이 완료되면 기재하신 이메일로 포털 가입 안내 메일이 발송됩니다. 심사가 완료될 때까지 잠시만 기다려 주시기 바랍니다.
+          <h1 className="text-xl font-bold text-white">
+            이메일 인증 번호 입력
+          </h1>
+          <p className="text-xs text-zinc-400 leading-relaxed">
+            <strong className="text-white">{verifiedUser?.email}</strong> (으)로 발송된 6자리 인증 번호를 입력해 주세요. (5분간 유효)
           </p>
         </div>
 
-        <div className="pt-4 border-t border-zinc-800/50">
-          <Link
-            href="/portal/login"
-            className="inline-flex items-center text-sm font-semibold text-white hover:underline gap-1.5"
-          >
-            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-            </svg>
-            로그인 화면으로 돌아가기
-          </Link>
-        </div>
+        {otpNotice && (
+          <div className="rounded-md bg-emerald-500/10 border border-emerald-500/20 p-3 text-xs text-emerald-400 font-medium">
+            {otpNotice}
+          </div>
+        )}
+
+        <form onSubmit={handleVerifyOtp} className="space-y-4">
+          <div>
+            <label htmlFor="otp" className={labelClass}>
+              6자리 인증 번호
+            </label>
+            <input
+              id="otp"
+              type="text"
+              maxLength={6}
+              placeholder="123456"
+              required
+              autoFocus
+              value={otpCode}
+              onChange={(e) => setOtpCode(e.target.value.replace(/[^0-9]/g, ""))}
+              className="mt-1 block w-full rounded-md border border-zinc-700 bg-zinc-950 px-4 py-3 text-center text-xl font-mono tracking-[0.5em] font-bold text-white placeholder:text-zinc-600 outline-none transition-all focus:border-zinc-400 focus:ring-1 focus:ring-zinc-400"
+            />
+          </div>
+
+          {error && (
+            <div className="rounded-md bg-rose-500/10 border border-rose-500/20 p-3 text-xs text-rose-400 font-medium" role="alert">
+              {error}
+            </div>
+          )}
+
+          <div className="flex gap-2 pt-1">
+            <button
+              type="button"
+              onClick={handleSendOtp}
+              disabled={pending}
+              className="w-1/3 rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2.5 text-xs font-bold text-zinc-300 transition-colors hover:bg-zinc-800 disabled:opacity-50 cursor-pointer h-10"
+            >
+              재발송
+            </button>
+            <button
+              type="submit"
+              disabled={pending || otpCode.length !== 6}
+              className="w-2/3 rounded-md bg-white px-4 py-2.5 text-sm font-bold text-zinc-950 transition-colors hover:bg-zinc-200 disabled:opacity-50 cursor-pointer h-10 shadow-sm"
+            >
+              {pending ? "인증 확인 중..." : "인증 번호 확인"}
+            </button>
+          </div>
+        </form>
       </div>
     );
   }
 
-  // Case C. 이미 가입 완료 상태인 경우
-  if (step === "result_C") {
-    return (
-      <div className="space-y-6 text-center">
-        <div className="flex justify-center">
-          <div className="rounded-full bg-emerald-100 dark:bg-emerald-950/30 p-3 text-emerald-600 dark:text-emerald-400">
-            <svg
-              className="h-8 w-8"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-                d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-              />
-            </svg>
-          </div>
-        </div>
-
-        <div className="space-y-2">
-          <h2 className="text-lg font-semibold text-zinc-900 dark:text-white">
-            이미 가입 완료된 회원
-          </h2>
-          <p className="text-sm text-zinc-500 dark:text-zinc-400 leading-relaxed px-2">
-            이미 파트너 포털 가입 및 비밀번호 설정이 완료된 계정입니다. 아래 이메일 계정으로 로그인 화면을 이용해 주세요.
-          </p>
-          <div className="mt-2 bg-zinc-950/50 rounded p-2 text-xs font-mono text-zinc-300 select-all border border-zinc-800">
-            {activeEmail}
-          </div>
-        </div>
-
-        <div className="space-y-3 pt-2">
-          <Link
-            href="/portal/login"
-            className="block w-full text-center rounded-md bg-zinc-900 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-zinc-800 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-100"
-          >
-            로그인 하러 가기
-          </Link>
-          <button
-            onClick={() => setStep("verify")}
-            className="block w-full text-center text-xs font-semibold text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300 underline bg-transparent border-0 cursor-pointer"
-          >
-            다른 정보로 가입하기
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  // Case D. 비밀번호 설정 화면
+  // Step 4. 비밀번호 설정 화면 (Token & Public Common)
   if (step === "setPassword") {
     return (
       <div className="space-y-6">
-        <div className="space-y-1">
-          <div className="inline-flex items-center rounded-full bg-emerald-950/40 text-emerald-400 border border-emerald-900/50 px-2 py-0.5 text-[10px] font-bold">
-            신청 확인 완료
+        <div className="space-y-1.5">
+          <div className="inline-flex items-center rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2.5 py-1 text-[11px] font-bold">
+            인증 완료
           </div>
-          <h1 className="text-xl font-semibold text-zinc-900 dark:text-white">
-            계정 활성화 및 비밀번호 설정
+          <h1 className="text-xl font-bold text-white">
+            비밀번호 설정
           </h1>
-          <div className="text-xs text-zinc-500 dark:text-zinc-400 space-y-1 bg-zinc-950/30 rounded p-3 border border-zinc-850 mt-2">
-            <div>• <strong>회사명</strong>: {verifiedUser?.companyName}</div>
-            <div>• <strong>담당자</strong>: {verifiedUser?.contactName}</div>
-            <div>• <strong>계정(이메일)</strong>: {verifiedUser?.email}</div>
+          <div className="text-xs text-zinc-400 space-y-1 bg-zinc-950/60 rounded-lg p-3 border border-zinc-800 mt-2">
+            <div>• <strong className="text-zinc-300">회사명</strong>: {verifiedUser?.companyName}</div>
+            <div>• <strong className="text-zinc-300">담당자</strong>: {verifiedUser?.contactName}</div>
+            <div>• <strong className="text-zinc-300">계정(이메일)</strong>: {verifiedUser?.email}</div>
           </div>
         </div>
 
@@ -556,15 +621,15 @@ export function PortalVerificationSignup() {
           </div>
 
           {error && (
-            <p className="text-sm text-red-600 dark:text-red-400 font-medium" role="alert">
+            <div className="rounded-md bg-rose-500/10 border border-rose-500/20 p-3 text-xs text-rose-400 font-medium" role="alert">
               {error}
-            </p>
+            </div>
           )}
 
           <button
             type="submit"
             disabled={pending}
-            className="w-full rounded-md bg-zinc-900 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-zinc-800 disabled:opacity-50 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-100 cursor-pointer h-10"
+            className="w-full rounded-md bg-white px-4 py-2.5 text-sm font-bold text-zinc-950 transition-colors hover:bg-zinc-200 disabled:opacity-50 cursor-pointer h-10 shadow-sm"
           >
             {pending ? "활성화 처리 중..." : "가입 및 계정 활성화 완료"}
           </button>
@@ -573,12 +638,17 @@ export function PortalVerificationSignup() {
     );
   }
 
-  // 성공 완료 화면
+  // Step 5. 성공 완료 화면
   if (step === "success") {
+    const targetEmail = verifiedUser?.email || activeEmail;
+    const loginUrl = targetEmail
+      ? `/portal/login?email=${encodeURIComponent(targetEmail)}&signup_success=true`
+      : `/portal/login?signup_success=true`;
+
     return (
       <div className="space-y-6 text-center">
         <div className="flex justify-center">
-          <div className="rounded-full bg-emerald-100 dark:bg-emerald-950/30 p-3 text-emerald-600 dark:text-emerald-400 animate-bounce">
+          <div className="rounded-full bg-emerald-950/60 border border-emerald-500/30 p-3.5 text-emerald-400">
             <svg
               className="h-8 w-8"
               fill="none"
@@ -596,21 +666,237 @@ export function PortalVerificationSignup() {
         </div>
 
         <div className="space-y-2">
-          <h2 className="text-lg font-semibold text-zinc-900 dark:text-white">
+          <h2 className="text-lg font-bold text-white">
             가입 및 비밀번호 설정 완료!
           </h2>
-          <p className="text-sm text-zinc-500 dark:text-zinc-400 leading-relaxed px-2">
-            파트너 계정이 성공적으로 활성화되었습니다. 이제 아래의 로그인 페이지 링크를 통해 가입하신 정보로 포털에 로그인하실 수 있습니다.
+          <p className="text-xs text-zinc-400 leading-relaxed px-2">
+            파트너 계정이 성공적으로 활성화되었습니다. 이제 설정하신 비밀번호로 로그인하여 브랜드 온보딩 절차를 진행해 주세요.
           </p>
         </div>
 
         <div className="pt-2">
           <Link
-            href="/portal/login?signup_success=true"
-            className="block w-full text-center rounded-md bg-zinc-900 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-zinc-800 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-100"
+            href={loginUrl}
+            className="block w-full text-center rounded-md bg-white px-4 py-2.5 text-sm font-bold text-zinc-950 transition-colors hover:bg-zinc-200 shadow-sm"
+          >
+            브랜드 포털 로그인 바로가기 →
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  // Dedicated Error State 1: Expired Token
+  if (step === "error_expired") {
+    return (
+      <div className="space-y-6 text-center">
+        <div className="flex justify-center">
+          <div className="rounded-full bg-amber-950/60 border border-amber-500/30 p-3.5 text-amber-400">
+            <svg className="h-8 w-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </div>
+        </div>
+        <div className="space-y-2">
+          <h2 className="text-lg font-bold text-white">초청 링크 만료</h2>
+          <p className="text-xs text-zinc-400 leading-relaxed px-2">
+            {error || "초청 링크 유효 기간(7일)이 만료되었습니다. 관리자에게 재초대를 요청해 주세요."}
+          </p>
+        </div>
+        <div className="pt-2">
+          <Link
+            href="/portal/login"
+            className="block w-full text-center rounded-md bg-zinc-900 border border-zinc-700 px-4 py-2.5 text-sm font-bold text-white transition-colors hover:bg-zinc-800"
           >
             로그인 화면으로 이동
           </Link>
+        </div>
+      </div>
+    );
+  }
+
+  // Dedicated Error State 2: Used Token
+  if (step === "error_used") {
+    const loginUrl = activeEmail
+      ? `/portal/login?email=${encodeURIComponent(activeEmail)}`
+      : `/portal/login`;
+
+    return (
+      <div className="space-y-6 text-center">
+        <div className="flex justify-center">
+          <div className="rounded-full bg-emerald-950/60 border border-emerald-500/30 p-3.5 text-emerald-400">
+            <svg className="h-8 w-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </div>
+        </div>
+        <div className="space-y-2">
+          <h2 className="text-lg font-bold text-white">이미 사용된 초청 링크</h2>
+          <p className="text-xs text-zinc-400 leading-relaxed px-2">
+            이미 파트너 포털 가입 및 비밀번호 설정이 완료된 계정입니다. 가입하신 계정으로 로그인해 주세요.
+          </p>
+          {activeEmail && (
+            <div className="mt-2 bg-zinc-950 rounded p-2.5 text-xs font-mono text-emerald-400 border border-zinc-800">
+              {activeEmail}
+            </div>
+          )}
+        </div>
+        <div className="pt-2">
+          <Link
+            href={loginUrl}
+            className="block w-full text-center rounded-md bg-white px-4 py-2.5 text-sm font-bold text-zinc-950 transition-colors hover:bg-zinc-200 shadow-sm"
+          >
+            로그인 하러 가기 →
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  // Dedicated Error State 3: Invalid / Cancelled Token
+  if (step === "error_invalid") {
+    return (
+      <div className="space-y-6 text-center">
+        <div className="flex justify-center">
+          <div className="rounded-full bg-rose-950/60 border border-rose-500/30 p-3.5 text-rose-400">
+            <svg className="h-8 w-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+          </div>
+        </div>
+        <div className="space-y-2">
+          <h2 className="text-lg font-bold text-white">유효하지 않은 초청 링크</h2>
+          <p className="text-xs text-zinc-400 leading-relaxed px-2">
+            {error || "유효하지 않거나 취소된 초청 링크입니다. 어드민 관리자에게 문의해 주세요."}
+          </p>
+        </div>
+        <div className="space-y-3 pt-2">
+          <button
+            onClick={() => {
+              setInviteToken(null);
+              setStep("verify");
+              setError(null);
+            }}
+            className="block w-full text-center rounded-md bg-zinc-900 border border-zinc-700 px-4 py-2.5 text-sm font-bold text-white transition-colors hover:bg-zinc-800"
+          >
+            신청 내역 직접 조회하기
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Case A. 입점 신청 내역을 찾을 수 없는 경우 (Public Flow)
+  if (step === "result_A") {
+    return (
+      <div className="space-y-6 text-center">
+        <div className="flex justify-center">
+          <div className="rounded-full bg-rose-950/60 border border-rose-500/30 p-3.5 text-rose-400">
+            <svg className="h-8 w-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <h2 className="text-lg font-bold text-white">
+            입점 신청 내역 없음
+          </h2>
+          <p className="text-xs text-zinc-400 leading-relaxed px-2">
+            입력하신 사업자등록번호와 연락처에 매칭되는 입점 신청 내역을 찾을 수 없습니다. 파트너 포털에 가입하시려면 먼저 kselectnetwork.com을 통한 입점 신청이 선행되어야 합니다.
+          </p>
+        </div>
+
+        <div className="space-y-3 pt-2">
+          <a
+            href="https://www.kselectnetwork.com/#eligibility"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="block w-full text-center rounded-md bg-white px-4 py-2.5 text-sm font-bold text-zinc-950 transition-colors hover:bg-zinc-200 shadow-sm"
+          >
+            kselectnetwork.com에서 파트너십 신청하기 →
+          </a>
+          <button
+            onClick={() => setStep("verify")}
+            className="block w-full text-center text-xs font-semibold text-zinc-400 hover:text-white underline bg-transparent border-0 cursor-pointer"
+          >
+            다시 정보 입력하기
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Case B. 신청 내역은 있으나 심사 및 승인 대기인 경우 (Public Flow)
+  if (step === "result_B") {
+    return (
+      <div className="space-y-6 text-center">
+        <div className="flex justify-center">
+          <div className="rounded-full bg-amber-950/60 border border-amber-500/30 p-3.5 text-amber-400">
+            <svg className="h-8 w-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <h2 className="text-lg font-bold text-white">
+            입점 신청 심사 대기 중
+          </h2>
+          <p className="text-xs text-zinc-400 leading-relaxed px-2">
+            제출해주신 입점 신청서가 접수되어 현재 <strong className="text-white">어드민 검토 대기 중</strong>입니다. 심사 및 가입 요청 승인이 완료되면 기재하신 이메일로 포털 가입 안내 메일이 발송됩니다.
+          </p>
+        </div>
+
+        <div className="pt-4 border-t border-zinc-800/80">
+          <Link
+            href="/portal/login"
+            className="inline-flex items-center text-xs font-bold text-white hover:underline gap-1.5"
+          >
+            ← 로그인 화면으로 돌아가기
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  // Case C. 이미 가입 완료 상태인 경우 (Public Flow)
+  if (step === "result_C") {
+    return (
+      <div className="space-y-6 text-center">
+        <div className="flex justify-center">
+          <div className="rounded-full bg-emerald-950/60 border border-emerald-500/30 p-3.5 text-emerald-400">
+            <svg className="h-8 w-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <h2 className="text-lg font-bold text-white">
+            이미 가입 완료된 회원
+          </h2>
+          <p className="text-xs text-zinc-400 leading-relaxed px-2">
+            이미 파트너 포털 가입 및 비밀번호 설정이 완료된 계정입니다. 아래 이메일 계정으로 로그인해 주세요.
+          </p>
+          <div className="mt-2 bg-zinc-950 rounded p-2.5 text-xs font-mono text-emerald-400 border border-zinc-800 select-all">
+            {activeEmail}
+          </div>
+        </div>
+
+        <div className="space-y-3 pt-2">
+          <Link
+            href={activeEmail ? `/portal/login?email=${encodeURIComponent(activeEmail)}` : "/portal/login"}
+            className="block w-full text-center rounded-md bg-white px-4 py-2.5 text-sm font-bold text-zinc-950 transition-colors hover:bg-zinc-200 shadow-sm"
+          >
+            로그인 하러 가기 →
+          </Link>
+          <button
+            onClick={() => setStep("verify")}
+            className="block w-full text-center text-xs font-semibold text-zinc-400 hover:text-white underline bg-transparent border-0 cursor-pointer"
+          >
+            다른 정보로 가입하기
+          </button>
         </div>
       </div>
     );

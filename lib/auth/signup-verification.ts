@@ -220,11 +220,14 @@ export async function activatePartnerAccountAction(
  */
 export async function verifyBrandInvitationTokenAction(
   rawToken: string
-): Promise<VerificationResult> {
+): Promise<
+  | { success: true; case: "D"; userId: string; companyName: string; contactName: string; email: string }
+  | { success: false; case: "EXPIRED" | "USED" | "INVALID" | "A"; message: string; email?: string }
+> {
   if (!rawToken || typeof rawToken !== "string" || !rawToken.trim()) {
     return {
       success: false,
-      case: "A",
+      case: "INVALID",
       message: "유효하지 않은 초청 토큰입니다. 이메일 내 초청 버튼을 통해 접속해 주세요.",
     };
   }
@@ -232,16 +235,16 @@ export async function verifyBrandInvitationTokenAction(
   const admin = createAdminClient();
   const tokenHash = crypto.createHash("sha256").update(rawToken.trim()).digest("hex");
 
-  // 1. Query company_users
+  // 1. Query company_users with invitation_token_hash in select list
   const { data: matchedUsers } = await admin
     .from("company_users")
-    .select("id, company_id, name, email, status, invited_at, invitation_expires_at, companies(name)");
+    .select("id, company_id, name, email, status, invited_at, invitation_token_hash, invitation_expires_at, companies(name)");
 
   let user = (matchedUsers || []).find(
     (u) => (u as any).invitation_token_hash === tokenHash
   );
 
-  // Fallback: If token hash column query didn't match, check if rawToken is user id
+  // Fallback: If token hash column query didn't match directly, check if rawToken is user id
   if (!user && rawToken.length >= 32) {
     user = (matchedUsers || []).find((u) => u.id === rawToken.trim());
   }
@@ -249,39 +252,40 @@ export async function verifyBrandInvitationTokenAction(
   if (!user) {
     return {
       success: false,
-      case: "A",
-      message: "초대 링크가 유효하지 않거나 만료되었습니다. 어드민 관리자에게 재초대를 요청해 주세요.",
+      case: "INVALID",
+      message: "유효하지 않거나 취소된 초청 링크입니다. 어드민 관리자에게 문의해 주세요.",
     };
   }
 
   const compName = (user as any)?.companies?.name || "파트너사";
 
-  // Case C: 이미 가입 및 활성화 완료 상태
+  // Case USED: 이미 가입 및 활성화 완료 상태
   if (user.status === "active") {
     return {
       success: false,
-      case: "C",
-      message: "이미 파트너 포털 가입 및 비밀번호 설정이 완료된 계정입니다. 로그인해 주세요.",
+      case: "USED",
+      message: "이미 사용된 초청 링크입니다. 파트너 포털에 로그인하여 온보딩을 진행해 주세요.",
       email: user.email,
     };
   }
 
-  // Case B / Expired link
-  if (user.status !== "invited" || !user.invited_at) {
+  // Case INVALID: 초대 취소 상태
+  if (user.status !== "invited") {
     return {
       success: false,
-      case: "A",
-      message: "초대 링크가 만료되었거나 취소되었습니다. 어드민 관리자에게 문의해 주세요.",
+      case: "INVALID",
+      message: "취소된 초청입니다. 어드민 관리자에게 문의해 주세요.",
     };
   }
 
+  // Case EXPIRED: 만료된 초대 링크
   if ((user as any).invitation_expires_at) {
     const exp = new Date((user as any).invitation_expires_at);
     if (!isNaN(exp.getTime()) && exp < new Date()) {
       return {
         success: false,
-        case: "A",
-        message: "초대 링크 유효 기간(7일)이 만료되었습니다. 관리자에게 재초대를 요청해 주세요.",
+        case: "EXPIRED",
+        message: "초청 링크 유효 기간(7일)이 만료되었습니다. 관리자에게 재초대를 요청해 주세요.",
       };
     }
   }
@@ -294,6 +298,118 @@ export async function verifyBrandInvitationTokenAction(
     contactName: user.name || "담당자",
     email: user.email,
   };
+}
+
+/**
+ * Generates and sends a 6-digit email verification OTP code for Admin Direct Invite activation
+ */
+export async function sendInvitationVerificationCodeAction(
+  email: string
+): Promise<{ success: boolean; error?: string }> {
+  const admin = createAdminClient();
+  const normalized = (email || "").trim().toLowerCase();
+  if (!normalized || !normalized.includes("@")) {
+    return { success: false, error: "올바른 이메일 주소를 입력해 주세요." };
+  }
+
+  const code = Math.floor(100000 + Math.random() * 900000).toString();
+  const expiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString();
+
+  const { data: user } = await admin
+    .from("company_users")
+    .select("id, permissions")
+    .ilike("email", normalized)
+    .maybeSingle();
+
+  if (!user) {
+    return { success: false, error: "초청 계정 정보를 찾을 수 없습니다." };
+  }
+
+  const currentPerms = (user.permissions || {}) as Record<string, any>;
+  await admin
+    .from("company_users")
+    .update({
+      permissions: {
+        ...currentPerms,
+        otp_code: code,
+        otp_expires_at: expiresAt,
+      },
+    })
+    .eq("id", user.id);
+
+  const { sendEmail } = await import("@/lib/notifications/email");
+  const sendRes = await sendEmail({
+    to: normalized,
+    subject: "[K SELECT NETWORK] 이메일 인증 번호 안내",
+    text: `K SELECT NETWORK 브랜드 포털 계정 활성화를 위한 인증 번호는 [${code}] 입니다. (5분간 유효)`,
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 500px; padding: 24px; border: 1px solid #131E2E; border-radius: 8px; color: #131E2E;">
+        <h2 style="color: #131E2E; margin-top: 0; font-size: 20px;">K SELECT NETWORK 이메일 인증</h2>
+        <p style="font-size: 14px; color: #4A5568; line-height: 1.6;">브랜드 포털 계정 활성화를 위한 6자리 인증 번호입니다. 아래 번호를 포털 화면에 입력해 주세요.</p>
+        <div style="font-size: 32px; font-weight: bold; letter-spacing: 8px; color: #8C1C2B; padding: 20px; background-color: #F7FAFC; text-align: center; border-radius: 8px; margin: 24px 0; border: 1px solid #E2E8F0;">
+          ${code}
+        </div>
+        <p style="font-size: 12px; color: #718096;">* 본 인증 번호는 5분간 유효합니다.</p>
+      </div>
+    `,
+  });
+
+  return { success: sendRes.success, error: sendRes.error };
+}
+
+/**
+ * Verifies 6-digit OTP code for Admin Direct Invite email verification
+ */
+export async function verifyInvitationCodeAction(
+  email: string,
+  inputCode: string
+): Promise<{ success: boolean; error?: string }> {
+  const admin = createAdminClient();
+  const normalized = (email || "").trim().toLowerCase();
+  const code = (inputCode || "").trim();
+
+  if (!code || code.length !== 6) {
+    return { success: false, error: "6자리 인증 번호를 올바르게 입력해 주세요." };
+  }
+
+  const { data: user } = await admin
+    .from("company_users")
+    .select("id, permissions")
+    .ilike("email", normalized)
+    .maybeSingle();
+
+  if (!user) {
+    return { success: false, error: "초청 계정 정보를 찾을 수 없습니다." };
+  }
+
+  const perms = (user.permissions || {}) as Record<string, any>;
+  const storedOtp = perms.otp_code;
+  const expStr = perms.otp_expires_at;
+
+  if (!storedOtp || storedOtp !== code) {
+    return { success: false, error: "인증 번호가 일치하지 않습니다. 다시 확인해 주세요." };
+  }
+
+  if (expStr) {
+    const exp = new Date(expStr);
+    if (!isNaN(exp.getTime()) && exp < new Date()) {
+      return { success: false, error: "인증 번호 유효 기한(5분)이 만료되었습니다. 인증 번호를 다시 요청해 주세요." };
+    }
+  }
+
+  await admin
+    .from("company_users")
+    .update({
+      permissions: {
+        ...perms,
+        email_verified: true,
+        otp_code: null,
+        otp_expires_at: null,
+      },
+    })
+    .eq("id", user.id);
+
+  return { success: true };
 }
 
 /**
