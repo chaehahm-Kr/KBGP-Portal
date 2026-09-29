@@ -1,23 +1,18 @@
 "use client";
 
-import React, { useTransition } from "react";
+import React from "react";
 import type { ImpersonationSessionData } from "@/lib/auth/impersonation";
-import { stopImpersonationAction } from "@/lib/auth/impersonation-actions";
 
 interface ImpersonationBannerProps {
   session: ImpersonationSessionData;
 }
 
 export function ImpersonationBanner({ session }: ImpersonationBannerProps) {
-  const [isPending, startTransition] = useTransition();
+  const [isExiting, setIsExiting] = React.useState(false);
 
   const handleExit = () => {
-    startTransition(async () => {
-      const res = await stopImpersonationAction();
-      if (res.redirectUrl) {
-        window.location.href = res.redirectUrl;
-      }
-    });
+    setIsExiting(true);
+    window.location.href = "/api/auth/stop-impersonation";
   };
 
   const isRetailer = session.portalType === "RETAILER";
@@ -45,11 +40,11 @@ export function ImpersonationBanner({ session }: ImpersonationBannerProps) {
       <button
         type="button"
         onClick={handleExit}
-        disabled={isPending}
+        disabled={isExiting}
         className="inline-flex items-center gap-1.5 rounded-lg bg-zinc-950 hover:bg-zinc-800 text-amber-400 px-3.5 py-1.5 text-xs font-extrabold transition-all shadow-xs shrink-0 cursor-pointer disabled:opacity-50"
       >
         <span>✕</span>
-        <span>{isPending ? "종료 중..." : "Exit Impersonation (지원 세션 종료)"}</span>
+        <span>{isExiting ? "종료 중..." : "Exit Impersonation (지원 세션 종료)"}</span>
       </button>
     </div>
   );

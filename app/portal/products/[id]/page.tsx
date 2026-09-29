@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { requireCompanyMembership } from "@/lib/company/dal";
-import { createClient } from "@/lib/supabase/server";
+import { requireCompanyMembership, getPortalTenantContext } from "@/lib/company/dal";
 import { getSignedFileUrl } from "@/lib/files/storage";
 import { ProductDetailTabs } from "@/components/product/product-detail-tabs";
 import type { Product, ProductVideo } from "@/lib/product/types";
@@ -17,8 +16,7 @@ export default async function ProductDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const { companyId } = await requireCompanyMembership();
-  const supabase = await createClient();
+  const { companyId, supabase } = await getPortalTenantContext();
 
   let product: any = null;
   const { data: fetchedProduct, error: fetchErr } = await supabase

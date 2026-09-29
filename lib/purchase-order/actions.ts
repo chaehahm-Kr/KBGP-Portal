@@ -8,6 +8,7 @@ import { getOverallStatus } from "./status-helper";
 import { resolveEffectiveSku } from "@/lib/product/types";
 import { formatEasternDateTime } from "@/lib/utils/timezone";
 import { createPoNotification } from "@/lib/notification/actions";
+import { evaluateProductRegistrationStatus } from "@/lib/product/registration-status";
 
 async function verifyWritePermission(supabase: any, userId: string) {
   const { data: userRoles } = await supabase
@@ -758,23 +759,79 @@ export async function getProductsForSupplier(supplierId: string) {
     orFilters.push(`id.in.(${mappedProductIds.join(",")})`);
   }
 
-  const { data: products, error } = await supabase
+  const { data: rawProducts, error } = await supabase
     .from("products")
     .select(`
       id, name, name_en, manufacture_sku, letusto_sku, parent_sku, child_sku, price_usd_fob, price_additional_info, category, brand_id, company_id,
       carton_pack_qty, carton_width, carton_depth, carton_height, carton_weight, carton_cbm,
-      brands (name), upc, ean, status, trading_status
+      item_width, item_depth, item_height, item_weight, package_width, package_depth, package_height, package_weight,
+      brands (name), upc, ean, status, trading_status, deleted_at, category_code, origin, price_krw_retail, selling_online, sales_link_1
     `)
     .or(orFilters.join(","))
     .order("name", { ascending: true });
 
   if (error) throw new Error(`공급사 제품 조회 실패: ${error.message}`);
-  if (!products || products.length === 0) return [];
+  if (!rawProducts || rawProducts.length === 0) return [];
 
+  const candidateProductIds = rawProducts.map((p) => p.id);
+  const { data: productImages } = await supabase
+    .from("product_images")
+    .select("product_id, storage_path, position")
+    .in("product_id", candidateProductIds)
+    .order("position", { ascending: true });
+
+  const imageSet = new Set((productImages ?? []).map((img: any) => img.product_id));
+
+  // Authoritative PO Product Eligibility Filtering
+  const products = rawProducts.filter((p: any) => {
+    const adminOverrides = p.price_additional_info?.admin_overrides || {};
+    const hasImages = imageSet.has(p.id);
+    const deletedAt = p.deleted_at || p.price_additional_info?.deleted_at || null;
+
+    if (deletedAt || p.status === "DELETED") return false;
+    if (p.status === "DRAFT" || p.price_additional_info?.is_draft === true) return false;
+    if (p.status === "INACTIVE" || p.status === "ARCHIVED") return false;
+
+    const evalResult = evaluateProductRegistrationStatus({
+      id: p.id,
+      name: p.name,
+      name_en: p.name_en,
+      brand_id: p.brand_id,
+      category_code: p.category_code,
+      manufacture_sku: p.manufacture_sku,
+      origin: p.origin,
+      price_krw_retail: p.price_krw_retail,
+      price_usd_fob: p.price_usd_fob,
+      item_width: p.item_width,
+      item_depth: p.item_depth,
+      item_height: p.item_height,
+      item_weight: p.item_weight,
+      package_width: p.package_width,
+      package_depth: p.package_depth,
+      package_height: p.package_height,
+      package_weight: p.package_weight,
+      carton_pack_qty: p.carton_pack_qty,
+      carton_width: p.carton_width,
+      carton_depth: p.carton_depth,
+      carton_height: p.carton_height,
+      carton_weight: p.carton_weight,
+      upc: p.upc,
+      ean: p.ean,
+      selling_online: p.selling_online,
+      sales_link_1: p.sales_link_1,
+      deleted_at: deletedAt,
+      adminOverrides,
+      hasImages,
+    });
+
+    return !evalResult.isDraft && !evalResult.isDeleted;
+  });
+
+  if (products.length === 0) return [];
   const productIds = products.map((p) => p.id);
 
   // 4. Fetch first images (lowest position) for these products
-  const { data: productImages } = await supabase
+  const { data: finalProductImages } = await supabase
     .from("product_images")
     .select("product_id, storage_path, position")
     .in("product_id", productIds)
@@ -782,9 +839,9 @@ export async function getProductsForSupplier(supplierId: string) {
 
   const { getSignedFileUrl } = await import("@/lib/files/storage");
   const imageMap = new Map<string, string>();
-  if (productImages && productImages.length > 0) {
+  if (finalProductImages && finalProductImages.length > 0) {
     const processed = new Set<string>();
-    for (const img of productImages) {
+    for (const img of finalProductImages) {
       if (!processed.has(img.product_id)) {
         processed.add(img.product_id);
         if (img.storage_path) {

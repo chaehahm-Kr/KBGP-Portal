@@ -215,6 +215,83 @@ export async function getPortalPoRequestDetail(requestId: string): Promise<PoReq
 }
 
 /**
+ * Authoritative Server-side PO Product Eligibility Validation
+ */
+async function validatePoProductsEligibility(admin: any, productIds: string[]) {
+  if (!productIds || productIds.length === 0) return;
+
+  const { data: dbProducts } = await admin
+    .from("products")
+    .select(`
+      id, name, name_en, letusto_sku, manufacture_sku, price_usd_fob, price_additional_info, status, deleted_at,
+      category_code, origin, price_krw_retail, item_width, item_depth, item_height, item_weight,
+      package_width, package_depth, package_height, package_weight, carton_pack_qty, carton_width,
+      carton_depth, carton_height, carton_weight, upc, ean, selling_online, sales_link_1, brand_id
+    `)
+    .in("id", productIds);
+
+  const { data: dbImages } = await admin
+    .from("product_images")
+    .select("product_id")
+    .in("product_id", productIds);
+
+  const imageSet = new Set((dbImages ?? []).map((img: any) => img.product_id));
+  const { evaluateProductRegistrationStatus } = await import("@/lib/product/registration-status");
+
+  const invalidProductNames: string[] = [];
+  for (const p of dbProducts ?? []) {
+    const adminOverrides = p.price_additional_info?.admin_overrides || {};
+    const hasImages = imageSet.has(p.id);
+    const deletedAt = p.deleted_at || p.price_additional_info?.deleted_at || null;
+
+    if (deletedAt || p.status === "DELETED" || p.status === "DRAFT" || p.price_additional_info?.is_draft === true || p.status === "INACTIVE" || p.status === "ARCHIVED") {
+      invalidProductNames.push(p.name || p.letusto_sku || p.id);
+      continue;
+    }
+
+    const evalResult = evaluateProductRegistrationStatus({
+      id: p.id,
+      name: p.name,
+      name_en: p.name_en,
+      brand_id: p.brand_id,
+      category_code: p.category_code,
+      manufacture_sku: p.manufacture_sku,
+      origin: p.origin,
+      price_krw_retail: p.price_krw_retail,
+      price_usd_fob: p.price_usd_fob,
+      item_width: p.item_width,
+      item_depth: p.item_depth,
+      item_height: p.item_height,
+      item_weight: p.item_weight,
+      package_width: p.package_width,
+      package_depth: p.package_depth,
+      package_height: p.package_height,
+      package_weight: p.package_weight,
+      carton_pack_qty: p.carton_pack_qty,
+      carton_width: p.carton_width,
+      carton_depth: p.carton_depth,
+      carton_height: p.carton_height,
+      carton_weight: p.carton_weight,
+      upc: p.upc,
+      ean: p.ean,
+      selling_online: p.selling_online,
+      sales_link_1: p.sales_link_1,
+      deleted_at: deletedAt,
+      adminOverrides,
+      hasImages,
+    });
+
+    if (evalResult.isDraft || evalResult.isDeleted) {
+      invalidProductNames.push(p.name || p.letusto_sku || p.id);
+    }
+  }
+
+  if (invalidProductNames.length > 0) {
+    throw new Error(`선택한 상품 중 발주 불가능한 상품(Draft, 삭제 또는 미완료: ${invalidProductNames.join(", ")})이 포함되어 있습니다.`);
+  }
+}
+
+/**
  * PORTAL: Create a new PO Request (Draft or Submitted)
  */
 export async function createPoRequest(input: PoRequestInput): Promise<{ id: string; request_number: string }> {
@@ -240,6 +317,8 @@ export async function createPoRequest(input: PoRequestInput): Promise<{ id: stri
 
   // Fetch product snapshot master data
   const productIds = input.lines.map((l) => l.product_id);
+  await validatePoProductsEligibility(admin, productIds);
+
   const { data: dbProducts, error: pErr } = await admin
     .from("products")
     .select("id, name, name_en, letusto_sku, manufacture_sku, price_usd_fob, price_additional_info")
@@ -381,6 +460,7 @@ export async function updatePoRequest(
 
   // Snapshot updated products
   const productIds = input.lines.map((l) => l.product_id);
+  await validatePoProductsEligibility(admin, productIds);
   const { data: dbProducts } = await admin
     .from("products")
     .select("id, name, name_en, letusto_sku, manufacture_sku, price_usd_fob, price_additional_info")

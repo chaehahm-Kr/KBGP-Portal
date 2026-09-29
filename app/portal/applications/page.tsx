@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { requireCompanyMembership } from "@/lib/company/dal";
-import { createClient } from "@/lib/supabase/server";
+import { requireCompanyMembership, getPortalTenantContext } from "@/lib/company/dal";
 import { createDraftApplication } from "@/lib/application/actions";
 import { APPLICATION_STATUS_LABEL, type ApplicationStatus } from "@/lib/application/types";
 
@@ -10,8 +9,7 @@ export const metadata: Metadata = {
 };
 
 export default async function ApplicationsPage() {
-  const { companyId } = await requireCompanyMembership();
-  const supabase = await createClient();
+  const { companyId, supabase } = await getPortalTenantContext();
 
   const { data: applications } = await supabase
     .from("applications")

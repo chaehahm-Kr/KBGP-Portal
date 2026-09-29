@@ -733,7 +733,11 @@ function PortalProductBrowseModal({
           </button>
         </div>
 
-        <div className="p-4 bg-zinc-50/50 dark:bg-zinc-950/20 border-b border-zinc-150 dark:border-zinc-800">
+        <div className="p-4 bg-zinc-50/50 dark:bg-zinc-950/20 border-b border-zinc-150 dark:border-zinc-800 space-y-3">
+          <div className="p-2.5 rounded-lg border border-blue-200 bg-blue-50/60 dark:border-blue-900/40 dark:bg-blue-950/30 text-blue-900 dark:text-blue-200 text-[11px] font-semibold flex items-center gap-2">
+            <span>💡</span>
+            <span>발주 요청에는 등록 완료된 상품만 표시됩니다. Draft, 등록 미완료 또는 삭제된 상품은 발주 대상에서 제외됩니다.</span>
+          </div>
           <input
             type="text"
             placeholder="제품명, SKU 검색..."

@@ -4,8 +4,7 @@ import { getPortalPurchaseOrderById, getPortalPoChangeRequests } from "@/lib/por
 import { getCompanyShippingOrigins } from "@/lib/company/shipping-origin-actions";
 import { getPoDocuments } from "@/lib/purchase-order/document-actions";
 import PoDetailClient from "@/components/portal/po-detail-client";
-import { requireCompanyMembership } from "@/lib/company/dal";
-import { createClient } from "@/lib/supabase/server";
+import { requireCompanyMembership, getPortalTenantContext } from "@/lib/company/dal";
 
 export const metadata: Metadata = {
   title: "발주 상세 정보 | 파트너 포털",
@@ -18,8 +17,7 @@ interface PortalPoDetailPageProps {
 export default async function PortalPoDetailPage({ params }: PortalPoDetailPageProps) {
   const resolvedParams = await params;
   const { id } = resolvedParams;
-  const { companyId } = await requireCompanyMembership();
-  const supabase = await createClient();
+  const { companyId, supabase } = await getPortalTenantContext();
 
   // Fetch PO detail and change request logs
   let po: any = null;

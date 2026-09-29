@@ -275,12 +275,14 @@ export async function getPortalPurchaseOrders() {
  * Returns complete external Order Overview fields.
  */
 export async function getPortalPurchaseOrderById(id: string) {
-  const { companyId } = await requireCompanyMembership();
-  const supabase = await createClient();
+  const { companyId, supabase } = await getPortalTenantContext();
 
   let data: any = null;
 
-  // Primary attempt: query purchase_orders with revision / cancellation / warehouse joins
+  // Primary attempt: query purchase_orders by id or po_number
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+  const filterCol = isUuid ? "id" : "po_number";
+
   const primaryRes = await supabase
     .from("purchase_orders")
     .select(`
@@ -333,7 +335,7 @@ export async function getPortalPurchaseOrderById(id: string) {
         )
       )
     `)
-    .eq("id", id)
+    .eq(filterCol, id)
     .eq("supplier_id", companyId)
     .maybeSingle();
 
@@ -1285,8 +1287,7 @@ export async function withdrawPortalPoChangeRequest(requestId: string) {
  * Fetch all change requests for a given PO in the portal.
  */
 export async function getPortalPoChangeRequests(poId: string) {
-  const { companyId } = await requireCompanyMembership();
-  const supabase = await createClient();
+  const { companyId, supabase } = await getPortalTenantContext();
 
   const { data, error } = await supabase
     .from("purchase_order_change_requests")

@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { requireCompanyMembership } from "@/lib/company/dal";
-import { createClient } from "@/lib/supabase/server";
+import { requireCompanyMembership, getPortalTenantContext } from "@/lib/company/dal";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ApplicationDraftForm } from "@/components/application/application-draft-form";
 import { SubmitApplicationButton } from "@/components/application/submit-application-button";
@@ -30,8 +29,7 @@ export default async function ApplicationDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const { companyId } = await requireCompanyMembership();
-  const supabase = await createClient();
+  const { companyId, supabase } = await getPortalTenantContext();
 
   const { data: application } = await supabase
     .from("applications")
@@ -39,7 +37,8 @@ export default async function ApplicationDetailPage({
       "id, application_number, status, motivation_note, self_check_answers, submitted_at, eligibility_responses"
     )
     .eq("id", id)
-    .single();
+    .eq("company_id", companyId)
+    .maybeSingle();
 
   if (!application) {
     notFound();

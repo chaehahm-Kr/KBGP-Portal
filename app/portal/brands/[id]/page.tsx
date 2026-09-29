@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { requireCompanyMembership } from "@/lib/company/dal";
-import { createClient } from "@/lib/supabase/server";
+import { requireCompanyMembership, getPortalTenantContext } from "@/lib/company/dal";
 import { BrandForm } from "@/components/brand/brand-form";
 import { updateBrand, parseBrandTrademarks } from "@/lib/brand/actions";
 import { getSignedFileUrl } from "@/lib/files/storage";
@@ -16,11 +15,8 @@ export default async function EditBrandPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  await requireCompanyMembership();
-  const supabase = await createClient();
+  const { companyId, supabase } = await getPortalTenantContext();
 
-  // RLS(brands_select_own_or_admin)가 본인 회사 브랜드가 아니면 애초에 결과를 안 준다 —
-  // 그 경우를 "없는 브랜드"와 동일하게 404로 처리한다.
   let brandData: any = null;
 
   // Try fetching with new trademark columns first
@@ -28,7 +24,8 @@ export default async function EditBrandPage({
     .from("brands")
     .select("id, name, intro, logo_path, has_kr_trademark, kr_trademark_number, kr_trademark_path, has_us_trademark, us_trademark_number, us_trademark_path")
     .eq("id", id)
-    .single();
+    .eq("company_id", companyId)
+    .maybeSingle();
 
   if (!selectError && brandWithTrademarks) {
     brandData = brandWithTrademarks;
