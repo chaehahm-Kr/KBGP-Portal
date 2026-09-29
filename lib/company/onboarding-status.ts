@@ -5,6 +5,7 @@ export interface CompanyOnboardingStepResult {
   id: string;
   name: string;
   isComplete: boolean;
+  isSkipped?: boolean;
 }
 
 export interface CompanyOnboardingProgress {
@@ -99,7 +100,7 @@ export function evaluateCompanyOnboarding(input: CompanyEvaluationInput): Compan
     { step: 1, id: "company", name: "회사 정보 확인", isComplete: isCompanyInfoConfirmed },
     { step: 2, id: "admin_profile", name: "관리자 정보 확인", isComplete: isAdminProfileConfirmed },
     { step: 3, id: "brand", name: "브랜드 정보 확인", isComplete: isBrandConfirmed },
-    { step: 4, id: "team", name: "팀원 초대", isComplete: isTeamComplete },
+    { step: 4, id: "team", name: "팀원 초대", isComplete: isTeamComplete, isSkipped: users.length <= 1 && teamSkipped },
     { step: 5, id: "tasks", name: "담당업무 및 주 담당자 지정", isComplete: isTaskComplete },
     { step: 6, id: "product", name: "상품 등록 완료", isComplete: isProductComplete },
     { step: 7, id: "agreement", name: "상품공급 및 플랫폼 이용 약관 확인·서명", isComplete: isAgreementComplete },

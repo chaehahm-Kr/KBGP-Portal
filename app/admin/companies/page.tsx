@@ -126,6 +126,7 @@ export default async function AdminCompaniesPage() {
       let onboardingTotalCount = 7;
       let onboardingStatus: "completed" | "in_progress" | "not_started" | "not_applicable" = "not_started";
       let onboardingBadgeText = "0 / 7 미시작";
+      let onboardingSteps: any[] = [];
 
       if (isRetailerOnly) {
         onboardingStatus = "not_applicable";
@@ -145,6 +146,7 @@ export default async function AdminCompaniesPage() {
         onboardingTotalCount = onboarding.totalCount;
         onboardingStatus = onboarding.status;
         onboardingBadgeText = onboarding.badgeText;
+        onboardingSteps = onboarding.steps;
       }
 
       return {
@@ -165,6 +167,7 @@ export default async function AdminCompaniesPage() {
         onboardingTotalCount,
         onboardingStatus,
         onboardingBadgeText,
+        onboardingSteps,
         appStatus: parsed.status === "Active" ? "Approved" : "Pending",
         partnerStatus: parsed.status,
         accountOwner: "Alex Kim",

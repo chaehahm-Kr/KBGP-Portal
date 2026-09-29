@@ -12,6 +12,10 @@ import {
 } from "@/lib/application/types";
 import { sendPortalInvitationAction } from "@/lib/company/admin-actions";
 
+import { parseCompanyMetadata } from "@/lib/company/admin-actions";
+import { evaluateCompanyOnboarding } from "@/lib/company/onboarding-status";
+import { CompanyOnboardingPopover } from "@/components/admin/company-onboarding-popover";
+
 export const metadata: Metadata = {
   title: "신청서 및 파트너 초대 관리 | K SELECT NETWORK 어드민",
 };
@@ -86,16 +90,36 @@ export default async function AdminApplicationsPage({
     query = query.eq("entry_mode", mode);
   }
 
-  const { data: applications } = await query;
+  const [
+    { data: applications },
+    { data: companies },
+    { data: companyUsers },
+    { data: primaryTasks },
+    { data: activeAgreements },
+  ] = await Promise.all([
+    query,
+    supabase
+      .from("companies")
+      .select(`
+        id, name, country, status, intro, created_at, contact_name, contact_phone,
+        brands (id, is_active),
+        products (id, name, selection_status, status, price_usd_fob, price_krw_retail)
+      `),
+    supabase
+      .from("company_users")
+      .select("id, company_id, name, email, phone, title, position, is_primary, status, company_role, permissions, invited_at")
+      .order("created_at", { ascending: true }),
+    supabase
+      .from("company_task_assignments")
+      .select("company_id, task_code")
+      .eq("is_primary", true),
+    supabase
+      .from("company_agreements")
+      .select("company_id")
+      .eq("status", "active"),
+  ]);
 
-  const { data: companies } = await supabase
-    .from("companies")
-    .select("id, name, intro, contact_name, contact_phone");
-
-  const { data: companyUsers } = await supabase
-    .from("company_users")
-    .select("id, company_id, name, email, phone, title, position, is_primary, status, invited_at")
-    .order("created_at", { ascending: true });
+  const activeAgreementsSet = new Set((activeAgreements ?? []).map((a) => a.company_id));
 
   const companyMap = new Map<
     string,
@@ -110,7 +134,35 @@ export default async function AdminApplicationsPage({
     }
   >();
 
+  const companyOnboardingMap = new Map<
+    string,
+    {
+      status: "completed" | "in_progress" | "not_started" | "not_applicable";
+      badgeText: string;
+      completedCount: number;
+      totalCount: number;
+      steps: any[];
+    }
+  >();
+
   for (const c of companies ?? []) {
+    let parsed;
+    try {
+      parsed = await parseCompanyMetadata(c);
+    } catch (e) {
+      parsed = {
+        description: "",
+        address: "",
+        website: "",
+        adminMemo: "",
+        contacts: [],
+        type: "Brand Owner",
+        types: ["Brand Owner"],
+        companyCode: "",
+        status: c.status === "active" ? "Active" : "Inactive",
+      };
+    }
+
     const users = (companyUsers ?? []).filter((u) => u.company_id === c.id);
     const dbPrimary = users.find((u) => u.is_primary) || users[0];
 
@@ -162,6 +214,52 @@ export default async function AdminApplicationsPage({
       contactPosition,
       description,
     });
+
+    // Evaluate 7-step onboarding status for company
+    const activeBrandsCount = ((c.brands as any[]) || []).filter((b) => b.is_active).length;
+    const totalProductsCount = ((c.products as any[]) || []).length;
+    const completedProductsCount = ((c.products as any[]) || []).filter((p) => {
+      return (
+        p.status === "COMPLETE" ||
+        p.selection_status === "APPROVED" ||
+        (p.name && (p.price_usd_fob || p.price_krw_retail))
+      );
+    }).length;
+
+    const companyPrimaryTasksCount = (primaryTasks ?? []).filter((t) => t.company_id === c.id).length;
+    const companyTypes = parsed.types && parsed.types.length > 0 ? parsed.types : [parsed.type || "Brand Owner"];
+    const isRetailerOnly = companyTypes.every((t) => {
+      const norm = t.toLowerCase();
+      return norm.includes("retail") && !norm.includes("brand") && !norm.includes("manufacturer");
+    });
+
+    if (isRetailerOnly) {
+      companyOnboardingMap.set(c.id, {
+        status: "not_applicable",
+        badgeText: "N/A",
+        completedCount: 0,
+        totalCount: 7,
+        steps: [],
+      });
+    } else {
+      const ob = evaluateCompanyOnboarding({
+        companyId: c.id,
+        parsedMeta: parsed,
+        users,
+        brandCount: activeBrandsCount,
+        completeProductCount: completedProductsCount,
+        totalProductCount: totalProductsCount,
+        primaryTaskCount: companyPrimaryTasksCount,
+        hasActiveAgreement: activeAgreementsSet.has(c.id),
+      });
+      companyOnboardingMap.set(c.id, {
+        status: ob.status,
+        badgeText: ob.badgeText,
+        completedCount: ob.completedCount,
+        totalCount: ob.totalCount,
+        steps: ob.steps,
+      });
+    }
   }
 
   const { data: staffMembers } = await supabase.from("staff_members").select("id, name, email");
@@ -337,7 +435,8 @@ export default async function AdminApplicationsPage({
                 <th className="px-4 py-3 font-semibold">유입 경로</th>
                 <th className="px-4 py-3 font-semibold">담당 심사원</th>
                 <th className="px-5 py-3 font-semibold text-center">주 담당자</th>
-                <th className="px-4 py-3 font-semibold">포털 / 온보딩 상태</th>
+                <th className="px-4 py-3 font-semibold">포털 상태</th>
+                <th className="px-4 py-3 font-semibold text-center">온보딩</th>
                 <th className="px-5 py-3 font-semibold">접수 / 생성일</th>
               </tr>
             </thead>
@@ -347,7 +446,8 @@ export default async function AdminApplicationsPage({
                 const entryMode: ApplicationEntryMode = app.entry_mode || "public_application";
                 const badgeClass = STATUS_BADGE_STYLE[app.status as ApplicationStatus] || "bg-zinc-100 text-zinc-800";
                 
-                const compInfo = app.company_id ? companyMap.get(app.company_id) : null;
+                const targetCompanyId = app.company_id || app.onboarded_company_id;
+                const compInfo = targetCompanyId ? companyMap.get(targetCompanyId) : null;
                 const companyName = compInfo?.name || app.applicant_company_name || "-";
                 const contactName = compInfo?.contactName || app.applicant_contact_name || "-";
                 const contactEmail = compInfo?.contactEmail || app.applicant_contact_email || "-";
@@ -427,12 +527,18 @@ export default async function AdminApplicationsPage({
                       </div>
                     </td>
 
+                    {/* 1. 포털 상태 (Portal Status) */}
                     <td className="px-4 py-3.5 whitespace-nowrap">
                       {(() => {
-                        if (app.status === "onboarded") {
+                        const usersOfCompany = targetCompanyId
+                          ? (companyUsers ?? []).filter((u) => u.company_id === targetCompanyId)
+                          : [];
+                        const primaryUser = usersOfCompany.find((u) => u.is_primary) || usersOfCompany[0];
+
+                        if (app.status === "onboarded" || primaryUser?.status === "active") {
                           return (
                             <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200">
-                              ✓ 온보딩 완료
+                              ✓ 가입 완료
                             </span>
                           );
                         }
@@ -443,35 +549,61 @@ export default async function AdminApplicationsPage({
                             </span>
                           );
                         }
-
-                        const usersOfCompany = app.company_id
-                          ? (companyUsers ?? []).filter((u) => u.company_id === app.company_id)
-                          : [];
-                        const primaryUser = usersOfCompany.find((u) => u.is_primary) || usersOfCompany[0];
-                        if (!primaryUser) return <span className="text-zinc-400 font-medium">미초대</span>;
-
-                        if (primaryUser.status === "active") {
+                        if (primaryUser && primaryUser.status === "invited") {
                           return (
-                            <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-100">
-                              가입 완료
-                            </span>
+                            <div className="flex items-center gap-2">
+                              <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border border-amber-100">
+                                가입 대기
+                              </span>
+                              <form action={sendPortalInvitationAction.bind(null, primaryUser.id)}>
+                                <button
+                                  type="submit"
+                                  className="inline-flex items-center justify-center rounded px-2 py-1 text-[10px] font-semibold bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-955 dark:hover:bg-zinc-100 transition-colors h-5 cursor-pointer"
+                                >
+                                  재요청
+                                </button>
+                              </form>
+                            </div>
+                          );
+                        }
+                        return <span className="text-zinc-400 font-medium">미초대</span>;
+                      })()}
+                    </td>
+
+                    {/* 2. 온보딩 상태 (Onboarding 7-Step Progress + Hover Popover) */}
+                    <td className="px-4 py-3.5 text-center whitespace-nowrap">
+                      {(() => {
+                        const isRetailer = app.partner_type === "retailer";
+
+                        if (isRetailer || !targetCompanyId) {
+                          return (
+                            <CompanyOnboardingPopover
+                              onboardingStatus="not_applicable"
+                              onboardingBadgeText="N/A"
+                            />
+                          );
+                        }
+
+                        const obInfo = companyOnboardingMap.get(targetCompanyId);
+                        if (!obInfo) {
+                          return (
+                            <CompanyOnboardingPopover
+                              companyId={targetCompanyId}
+                              onboardingStatus="not_started"
+                              onboardingBadgeText="0 / 7 미시작"
+                            />
                           );
                         }
 
                         return (
-                          <div className="flex items-center gap-2">
-                            <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border border-amber-100">
-                              가입 대기
-                            </span>
-                            <form action={sendPortalInvitationAction.bind(null, primaryUser.id)}>
-                              <button
-                                type="submit"
-                                className="inline-flex items-center justify-center rounded px-2 py-1 text-[10px] font-semibold bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-100 transition-colors h-5 cursor-pointer"
-                              >
-                                재요청
-                              </button>
-                            </form>
-                          </div>
+                          <CompanyOnboardingPopover
+                            companyId={targetCompanyId}
+                            onboardingStatus={obInfo.status}
+                            onboardingBadgeText={obInfo.badgeText}
+                            completedCount={obInfo.completedCount}
+                            totalCount={obInfo.totalCount}
+                            steps={obInfo.steps}
+                          />
                         );
                       })()}
                     </td>
@@ -499,7 +631,7 @@ export default async function AdminApplicationsPage({
               })}
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={9} className="py-12 text-center text-sm text-zinc-400">
+                  <td colSpan={10} className="py-12 text-center text-sm text-zinc-400">
                     조건에 부합하는 신청서 및 파트너 초대 내역이 없습니다.
                   </td>
                 </tr>

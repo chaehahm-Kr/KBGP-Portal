@@ -4,6 +4,7 @@ import React, { useState, useMemo } from "react";
 import Link from "next/link";
 import { CompanyContactPopover } from "@/components/admin/company-contact-popover";
 import { formatCanonicalCountryName } from "@/lib/constants/countries";
+import { CompanyOnboardingPopover, type OnboardingStepItem } from "@/components/admin/company-onboarding-popover";
 
 export interface CompanyUserItem {
   name?: string;
@@ -31,6 +32,7 @@ export interface CompanyRowItem {
   onboardingTotalCount?: number;
   onboardingStatus?: "completed" | "in_progress" | "not_started" | "not_applicable";
   onboardingBadgeText?: string;
+  onboardingSteps?: OnboardingStepItem[];
   appStatus: string;
   partnerStatus: string;
   accountOwner: string;
@@ -488,15 +490,14 @@ export function CompaniesTableClient({ companies, partnerStatuses }: CompaniesTa
                       {company.productsCount}
                     </td>
                     <td className="px-6 py-3.5 text-center">
-                      <Link
-                        href={`/admin/companies/${company.id}`}
-                        className={`inline-flex items-center justify-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-bold border transition-colors cursor-pointer ${getOnboardingBadgeClass(
-                          company.onboardingStatus
-                        )}`}
-                        title="온보딩 상태 확인 (회사 상세 이동)"
-                      >
-                        {company.onboardingBadgeText || "0 / 7 미시작"}
-                      </Link>
+                      <CompanyOnboardingPopover
+                        companyId={company.id}
+                        onboardingStatus={company.onboardingStatus}
+                        onboardingBadgeText={company.onboardingBadgeText}
+                        completedCount={company.onboardingCompletedCount}
+                        totalCount={company.onboardingTotalCount}
+                        steps={company.onboardingSteps}
+                      />
                     </td>
                     <td className="px-6 py-3.5">
                       <span className={`inline-block rounded px-2.5 py-0.5 text-[10px] font-bold border ${statusClass}`}>
