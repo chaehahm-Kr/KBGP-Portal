@@ -12,6 +12,7 @@ import { type CompanyShippingOrigin } from "@/lib/company/shipping-origin-action
 import { AgreementCard } from "@/components/portal/agreement-card";
 import { type CompanyAgreementItem } from "@/lib/agreement/types";
 import { useSearchParams } from "next/navigation";
+import { getPersonDisplayName } from "@/lib/user/name-helper";
 
 interface CompanyProfileManagerProps {
   company: {
@@ -237,7 +238,7 @@ export function CompanyProfileManager({
                 ...t,
                 userId: assignedUserId,
                 isPrimary: !!assignedUserId,
-                userName: assignedUser?.name || null,
+                userName: assignedUser ? getPersonDisplayName(assignedUser) : null,
                 userTitle: assignedUser?.title || null,
                 userPosition: assignedUser?.position || null,
                 userEmail: assignedUser?.email || null,
@@ -797,6 +798,7 @@ export function CompanyProfileManager({
                   signerTitle: resolvedSignerTitle || null,
                 }}
                 userEmail={userEmail}
+                companyUsers={companyUsers}
               />
             );
           })()}
@@ -1335,7 +1337,7 @@ export function CompanyProfileManager({
                         <tr key={contact.id || index} className="hover:bg-zinc-50/20">
                           <td className="px-4 py-3 font-bold text-zinc-900 dark:text-white">
                             <div className="flex items-center gap-1.5">
-                              <span>{contact.name || "-"}</span>
+                              <span>{getPersonDisplayName(contact) || contact.name || "-"}</span>
                               {contact.isPrimary && (
                                 <span className="inline-block rounded bg-emerald-50 text-emerald-700 px-1.5 py-0.5 text-[8px] font-bold border border-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-900">
                                   주 컨택
@@ -1454,7 +1456,10 @@ export function CompanyProfileManager({
                       const notifyIds = notifyMap[task.taskCode] || [];
                       const notifyNames =
                         notifyIds
-                          .map((id) => companyUsers.find((u) => u.id === id)?.name || "(이름 없음)")
+                          .map((id) => {
+                            const u = companyUsers.find((user) => user.id === id);
+                            return u ? getPersonDisplayName(u) : "(이름 없음)";
+                          })
                           .join(", ") || "없음";
 
                       return (
@@ -1470,7 +1475,7 @@ export function CompanyProfileManager({
                                   href="/portal/company/users"
                                   className="font-semibold text-emerald-600 hover:underline dark:text-emerald-450 text-[13px]"
                                 >
-                                  {assignedUser.name || "(이름 없음)"}
+                                  {getPersonDisplayName(assignedUser) || "(이름 없음)"}
                                 </a>
                                 {assignedUser.title || assignedUser.position ? (
                                   <p className="text-[10px] text-zinc-400">
@@ -1497,7 +1502,7 @@ export function CompanyProfileManager({
                                         onChange={(e) => handleToggleEmailNotification(task.taskCode, u.id, e.target.checked)}
                                         className="h-3.5 w-3.5 rounded border-zinc-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
                                       />
-                                      <span className="truncate max-w-[80px]" title={u.name || "(이름 없음)"}>{u.name || "(이름 없음)"}</span>
+                                      <span className="truncate max-w-[120px]" title={getPersonDisplayName(u)}>{getPersonDisplayName(u)}</span>
                                     </label>
                                   );
                                 })}
@@ -1527,7 +1532,7 @@ export function CompanyProfileManager({
                                 <option value="">-- 담당자 선택 --</option>
                                 {activeMembers.map((u) => (
                                   <option key={u.id} value={u.id}>
-                                    {u.name || "(이름 없음)"} ({u.title || "멤버"})
+                                    {getPersonDisplayName(u)} ({u.title || "멤버"})
                                   </option>
                                 ))}
                               </select>

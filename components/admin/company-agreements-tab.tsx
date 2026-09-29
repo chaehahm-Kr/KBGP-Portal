@@ -18,6 +18,7 @@ import {
   AGREEMENT_STATUS_LABELS,
   AGREEMENT_STATUS_STYLES,
 } from "@/lib/agreement/types";
+import { getPersonDisplayName } from "@/lib/user/name-helper";
 
 interface CompanyAgreementsTabProps {
   companyId: string;
@@ -243,7 +244,9 @@ export function CompanyAgreementsTab({ companyId, companyName }: CompanyAgreemen
                   <div className="p-3 rounded-xl bg-zinc-50 dark:bg-zinc-850 border border-zinc-150 dark:border-zinc-800">
                     <span className="text-zinc-400 font-medium block text-[11px]">서명자 (Brand Signer)</span>
                     <strong className="text-zinc-900 dark:text-zinc-100 font-bold block">
-                      {ca.signer_name ? `${ca.signer_name} (${ca.signer_title || "-"})` : "미서명"}
+                      {ca.signer_name
+                        ? `${getPersonDisplayName({ name: ca.signer_name, email: ca.signer_email }) || ca.signer_name} (${ca.signer_title || "-"})`
+                        : "미서명"}
                     </strong>
                     {ca.signer_email && (
                       <span className="text-[11px] font-mono text-zinc-400 block mt-0.5">
@@ -361,7 +364,7 @@ export function CompanyAgreementsTab({ companyId, companyName }: CompanyAgreemen
                       {recipients.map((r) => (
                         <tr key={r.id} className="hover:bg-zinc-50/60 dark:hover:bg-zinc-900/40">
                           <td className="py-2.5 px-3 font-bold text-zinc-900 dark:text-zinc-100">
-                            {r.recipient_name}
+                            {getPersonDisplayName({ name: r.recipient_name, email: r.recipient_email }) || r.recipient_name}
                           </td>
                           <td className="py-2.5 px-3 text-zinc-600 dark:text-zinc-400">
                             {r.recipient_title}

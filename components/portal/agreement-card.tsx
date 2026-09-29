@@ -14,6 +14,7 @@ import {
   AGREEMENT_STATUS_LABELS,
   AGREEMENT_STATUS_STYLES,
 } from "@/lib/agreement/types";
+import { getPersonDisplayName } from "@/lib/user/name-helper";
 
 interface AgreementCardProps {
   agreement: CompanyAgreementItem;
@@ -25,16 +26,51 @@ interface AgreementCardProps {
     signerName?: string | null;
     signerTitle?: string | null;
   };
+  companyUsers?: any[];
   userEmail: string;
 }
 
-export function AgreementCard({ agreement: initialAgreement, companyInfo, userEmail }: AgreementCardProps) {
+export function AgreementCard({ agreement: initialAgreement, companyInfo, companyUsers, userEmail }: AgreementCardProps) {
   const [agreement, setAgreement] = useState<CompanyAgreementItem>(initialAgreement);
   const [isSigningModalOpen, setIsSigningModalOpen] = useState(false);
   const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false);
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [loadingPdf, setLoadingPdf] = useState(false);
   const [pdfError, setPdfError] = useState<string | null>(null);
+
+  const resolveRecipientDisplayName = (r: AgreementRecipientItem) => {
+    if (companyUsers && companyUsers.length > 0) {
+      const match = companyUsers.find(
+        (u) =>
+          (u.email && r.recipient_email && u.email.toLowerCase() === r.recipient_email.toLowerCase()) ||
+          (u.id && (r as any).user_id && u.id === (r as any).user_id)
+      );
+      if (match) {
+        return getPersonDisplayName(match);
+      }
+    }
+    return getPersonDisplayName({
+      name: r.recipient_name,
+      email: r.recipient_email,
+    }) || r.recipient_name;
+  };
+
+  const resolveSignerDisplayName = () => {
+    if (!agreement.signer_name) return "체결 대기 중";
+    if (companyUsers && companyUsers.length > 0) {
+      const match = companyUsers.find(
+        (u) =>
+          (u.email && (agreement as any).signer_email && u.email.toLowerCase() === (agreement as any).signer_email.toLowerCase()) ||
+          (u.name && agreement.signer_name && (u.name === agreement.signer_name || u.korean_first_name === agreement.signer_name || u.english_name === agreement.signer_name))
+      );
+      if (match) {
+        const dName = getPersonDisplayName(match);
+        return `${dName} (${agreement.signer_title || "대표자"})`;
+      }
+    }
+    const dName = getPersonDisplayName({ name: agreement.signer_name, email: (agreement as any).signer_email }) || agreement.signer_name;
+    return `${dName} (${agreement.signer_title || "대표자"})`;
+  };
 
   // Recipient History State
   const [recipients, setRecipients] = useState<AgreementRecipientItem[]>([]);
@@ -205,7 +241,7 @@ export function AgreementCard({ agreement: initialAgreement, companyInfo, userEm
           <div className="space-y-1 p-3 rounded-xl bg-zinc-50 dark:bg-zinc-850 border border-zinc-150 dark:border-zinc-800">
             <span className="text-zinc-400 font-medium block text-[11px]">계약 체결자 (Signed By)</span>
             <strong className="text-zinc-900 dark:text-zinc-100 font-bold block text-xs">
-              {agreement.signer_name ? `${agreement.signer_name} (${agreement.signer_title || "대표자"})` : "체결 대기 중"}
+              {resolveSignerDisplayName()}
             </strong>
           </div>
 
@@ -259,7 +295,7 @@ export function AgreementCard({ agreement: initialAgreement, companyInfo, userEm
                     {recipients.map((r) => (
                       <tr key={r.id} className="hover:bg-zinc-50/60 dark:hover:bg-zinc-900/40">
                         <td className="py-2.5 px-3 font-bold text-zinc-900 dark:text-zinc-100">
-                          {r.recipient_name}
+                          {resolveRecipientDisplayName(r)}
                         </td>
                         <td className="py-2.5 px-3 text-zinc-600 dark:text-zinc-400">
                           {r.recipient_title}
