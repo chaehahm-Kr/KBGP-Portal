@@ -5,6 +5,7 @@ import Link from "next/link";
 import { CompanyContactPopover } from "@/components/admin/company-contact-popover";
 import { formatCanonicalCountryName } from "@/lib/constants/countries";
 import { CompanyOnboardingPopover, type OnboardingStepItem } from "@/components/admin/company-onboarding-popover";
+import { formatEasternDateTime } from "@/lib/utils/timezone";
 
 export interface CompanyUserItem {
   name?: string;
@@ -12,6 +13,7 @@ export interface CompanyUserItem {
   email?: string;
   phone?: string;
   role?: string;
+  last_sign_in_at?: string | null;
 }
 
 export interface CompanyRowItem {
@@ -36,7 +38,9 @@ export interface CompanyRowItem {
   appStatus: string;
   partnerStatus: string;
   accountOwner: string;
-  lastContact: string;
+  registeredUsersCount?: number;
+  latestLoginAt?: string | null;
+  lastContact?: string;
   users?: CompanyUserItem[];
 }
 
@@ -50,6 +54,24 @@ export function CompaniesTableClient({ companies, partnerStatuses }: CompaniesTa
   const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
   const [selectedCountries, setSelectedCountries] = useState<string[]>([]);
   const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
+
+  // Sorting state for latest login
+  const [sortField, setSortField] = useState<"latestLogin" | null>(null);
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
+
+  const toggleSortLatestLogin = () => {
+    if (sortField === "latestLogin") {
+      if (sortOrder === "desc") {
+        setSortOrder("asc");
+      } else {
+        setSortField(null);
+        setSortOrder("desc");
+      }
+    } else {
+      setSortField("latestLogin");
+      setSortOrder("desc");
+    }
+  };
 
   // Popover Open states
   const [openTypeFilter, setOpenTypeFilter] = useState(false);
@@ -85,9 +107,9 @@ export function CompaniesTableClient({ companies, partnerStatuses }: CompaniesTa
     return Array.from(set).sort();
   }, [companies]);
 
-  // Combined Search & Multi-Filter Logic
+  // Combined Search & Multi-Filter Logic with optional latest login sorting
   const filteredCompanies = useMemo(() => {
-    return companies.filter((company) => {
+    const list = companies.filter((company) => {
       // 1. Search Query (Partial Match across Company Name, Company Email, Contact Name, User Names, User Emails)
       if (search.trim()) {
         const q = search.trim().toLowerCase();
@@ -131,7 +153,22 @@ export function CompaniesTableClient({ companies, partnerStatuses }: CompaniesTa
 
       return true;
     });
-  }, [companies, search, selectedTypes, selectedCountries, selectedStatuses]);
+
+    if (sortField === "latestLogin") {
+      return [...list].sort((a, b) => {
+        const timeA = a.latestLoginAt ? new Date(a.latestLoginAt).getTime() : 0;
+        const timeB = b.latestLoginAt ? new Date(b.latestLoginAt).getTime() : 0;
+
+        if (timeA === 0 && timeB === 0) return 0;
+        if (timeA === 0) return 1; // companies with no login placed at bottom
+        if (timeB === 0) return -1;
+
+        return sortOrder === "desc" ? timeB - timeA : timeA - timeB;
+      });
+    }
+
+    return list;
+  }, [companies, search, selectedTypes, selectedCountries, selectedStatuses, sortField, sortOrder]);
 
   const isFiltered =
     search.trim() !== "" ||
@@ -437,7 +474,18 @@ export function CompaniesTableClient({ companies, partnerStatuses }: CompaniesTa
                 <th className="px-6 py-3.5 font-semibold">파트너 상태</th>
                 <th className="px-6 py-3.5 font-semibold">주 컨택 담당자</th>
                 <th className="px-6 py-3.5 font-semibold text-center">등록 인원</th>
-                <th className="px-6 py-3.5 font-semibold">최근 연락</th>
+                <th
+                  onClick={toggleSortLatestLogin}
+                  className="px-6 py-3.5 font-semibold cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors select-none group"
+                  title="미국 동부시간 (ET) 기준 최근 로그인 일시 (클릭하여 정렬)"
+                >
+                  <div className="flex items-center gap-1.5">
+                    <span>최근 로그인</span>
+                    <span className="text-[10px] text-zinc-400 group-hover:text-zinc-700 dark:group-hover:text-zinc-200">
+                      {sortField === "latestLogin" ? (sortOrder === "desc" ? "▼" : "▲") : "↕"}
+                    </span>
+                  </div>
+                </th>
                 <th className="px-6 py-3.5 font-semibold text-right">관리</th>
               </tr>
             </thead>
@@ -528,8 +576,23 @@ export function CompaniesTableClient({ companies, partnerStatuses }: CompaniesTa
                       </span>
                     </td>
 
-                    <td className="px-6 py-3.5 text-zinc-400">
-                      {company.lastContact}
+                    <td className="px-6 py-3.5 whitespace-nowrap">
+                      {company.latestLoginAt ? (
+                        <span
+                          className="font-mono text-xs text-zinc-750 dark:text-zinc-250 font-medium cursor-default"
+                          title={`${formatEasternDateTime(company.latestLoginAt, true)} ET`}
+                        >
+                          {formatEasternDateTime(company.latestLoginAt)}
+                        </span>
+                      ) : (company.users && company.users.length > 0) || (company.registeredUsersCount && company.registeredUsersCount > 0) ? (
+                        <span className="text-xs text-zinc-400 dark:text-zinc-500 italic">
+                          로그인 없음
+                        </span>
+                      ) : (
+                        <span className="text-xs text-zinc-350 dark:text-zinc-600">
+                          —
+                        </span>
+                      )}
                     </td>
                     <td className="px-6 py-3.5 text-right font-semibold text-zinc-900 dark:text-white">
                       <Link

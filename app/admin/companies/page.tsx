@@ -25,6 +25,7 @@ export default async function AdminCompaniesPage() {
     { data: primaryTasks },
     { data: activeAgreements },
     configs,
+    authUsersRes,
   ] = await Promise.all([
     supabase
       .from("companies")
@@ -51,7 +52,22 @@ export default async function AdminCompaniesPage() {
       .eq("status", "active"),
 
     getSystemCompanyConfigs(),
+
+    supabase.auth.admin.listUsers({ perPage: 1000 }).catch((err) => {
+      console.warn("[AdminCompaniesPage] Failed to fetch auth users:", err);
+      return { data: { users: [] }, error: err };
+    }),
   ]);
+
+  // Build lookup maps for user last_sign_in_at
+  const authMapById = new Map<string, string | null>();
+  const authMapByEmail = new Map<string, string | null>();
+  if (authUsersRes?.data?.users) {
+    for (const u of authUsersRes.data.users) {
+      if (u.id) authMapById.set(u.id, u.last_sign_in_at || null);
+      if (u.email) authMapByEmail.set(u.email.toLowerCase().trim(), u.last_sign_in_at || null);
+    }
+  }
 
   let dbCompanies: any[] = companiesRes.data || [];
   if (companiesRes.error || !companiesRes.data) {
@@ -171,6 +187,22 @@ export default async function AdminCompaniesPage() {
         appStatus: parsed.status === "Active" ? "Approved" : "Pending",
         partnerStatus: parsed.status,
         accountOwner: "Alex Kim",
+        registeredUsersCount: users.length,
+        latestLoginAt: (() => {
+          const validTimestamps = users
+            .map((u) => {
+              const login =
+                authMapById.get(u.id) ??
+                (u.email ? authMapByEmail.get(u.email.toLowerCase().trim()) : null) ??
+                null;
+              return login ? new Date(login).getTime() : NaN;
+            })
+            .filter((t) => !isNaN(t));
+
+          return validTimestamps.length > 0
+            ? new Date(Math.max(...validTimestamps)).toISOString()
+            : null;
+        })(),
         lastContact: new Date(c.created_at).toLocaleDateString(),
       };
     })
@@ -207,6 +239,10 @@ export default async function AdminCompaniesPage() {
               email: u.email,
               phone: u.phone,
               role: u.company_role,
+              last_sign_in_at:
+                authMapById.get(u.id) ??
+                (u.email ? authMapByEmail.get(u.email.toLowerCase().trim()) : null) ??
+                null,
             })),
         }))}
         partnerStatuses={configs.partner_statuses}

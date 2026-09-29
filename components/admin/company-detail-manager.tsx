@@ -1292,7 +1292,7 @@ export function CompanyDetailManager({
                           <th className="px-4 py-2">직함/부서</th>
                           <th className="px-4 py-2">역할</th>
                           <th className="px-4 py-2">상태</th>
-                          <th className="px-4 py-2">최근 로그인</th>
+                          <th className="px-4 py-2" title="미국 동부시간 (ET)">최근 로그인</th>
                           <th className="px-4 py-2 text-right">설정</th>
                         </tr>
                       </thead>
@@ -1347,13 +1347,13 @@ export function CompanyDetailManager({
                               {row.last_sign_in_at ? (
                                 <span
                                   className="font-mono text-[11px] text-zinc-650 dark:text-zinc-350 cursor-default"
-                                  title={`${formatEasternDateTime(row.last_sign_in_at, true)} EDT`}
+                                  title={`${formatEasternDateTime(row.last_sign_in_at, true)} ET`}
                                 >
                                   {formatEasternDateTime(row.last_sign_in_at)}
                                 </span>
                               ) : (
                                 <span className="text-[11px] text-zinc-400 dark:text-zinc-500 italic">
-                                  로그인 기록 없음
+                                  로그인 없음
                                 </span>
                               )}
                             </td>
