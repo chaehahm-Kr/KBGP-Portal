@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { verifyAdminSession, verifyPortalSession } from "@/lib/auth/dal";
 import { recordProductChangeLog, formatAuditValue } from "@/lib/product/audit";
+import { resolveRootCategoryEnum } from "@/lib/product/types";
 
 async function getEffectiveClient(customClient?: any) {
   if (customClient) return customClient;
@@ -327,10 +328,14 @@ export async function saveProductAttributeValues(
     .select("attribute_code, value_json, text_value")
     .eq("product_id", productId);
 
-  // 4.1 products 테이블의 category_code 필드 우선 업데이트 (RLS 우회)
+  // 4.1 products 테이블의 category_code 및 category 필드 우선 업데이트 (RLS 우회)
+  const resolvedCatEnum = resolveRootCategoryEnum(categoryCode);
   const { error: productError } = await admin
     .from("products")
-    .update({ category_code: categoryCode })
+    .update({
+      category_code: categoryCode,
+      category: resolvedCatEnum,
+    })
     .eq("id", productId);
 
   if (productError) {

@@ -9,6 +9,7 @@ import {
   type CertificateType,
   type ProductCategory,
   resolveAuthoritativeCategoryCode,
+  resolveRootCategoryEnum,
 } from "@/lib/product/types";
 import { recordProductChangeLog, computeProductFieldDiffs } from "@/lib/product/audit";
 
@@ -16,6 +17,72 @@ export type ProductFormState = {
   error?: string;
   fieldErrors?: Record<string, string>;
 } | undefined;
+
+/**
+ * Real-time identifier uniqueness check for SKU (company scoped), UPC (global), and EAN (global).
+ */
+export async function checkProductIdentifierUniqueness(params: {
+  field: "manufactureSku" | "upc" | "ean";
+  value: string;
+  excludeProductId?: string;
+  companyId?: string;
+}): Promise<{ isUnique: boolean; message?: string }> {
+  const supabase = await createClient();
+  const val = params.value?.trim();
+  if (!val) return { isUnique: true };
+
+  if (params.field === "manufactureSku") {
+    let targetCompanyId = params.companyId;
+    if (!targetCompanyId) {
+      try {
+        const mem = await requireCompanyMembership();
+        targetCompanyId = mem.companyId;
+      } catch {
+        return { isUnique: true };
+      }
+    }
+    let query = supabase
+      .from("products")
+      .select("id")
+      .eq("company_id", targetCompanyId)
+      .ilike("manufacture_sku", val);
+
+    if (params.excludeProductId) {
+      query = query.neq("id", params.excludeProductId);
+    }
+    const { data } = await query.limit(1).maybeSingle();
+    if (data) {
+      return { isUnique: false, message: "동일한 제조사 SKU가 이미 등록되어 있습니다." };
+    }
+    return { isUnique: true };
+  }
+
+  if (params.field === "upc") {
+    let query = supabase.from("products").select("id").eq("upc", val);
+    if (params.excludeProductId) {
+      query = query.neq("id", params.excludeProductId);
+    }
+    const { data } = await query.limit(1).maybeSingle();
+    if (data) {
+      return { isUnique: false, message: "해당 UPC는 시스템에 이미 등록되어 있습니다. 고유한 바코드를 입력해 주세요." };
+    }
+    return { isUnique: true };
+  }
+
+  if (params.field === "ean") {
+    let query = supabase.from("products").select("id").eq("ean", val);
+    if (params.excludeProductId) {
+      query = query.neq("id", params.excludeProductId);
+    }
+    const { data } = await query.limit(1).maybeSingle();
+    if (data) {
+      return { isUnique: false, message: "해당 EAN은 시스템에 이미 등록되어 있습니다. 고유한 바코드를 입력해 주세요." };
+    }
+    return { isUnique: true };
+  }
+
+  return { isUnique: true };
+}
 
 const MAX_IMAGES = 5;
 
@@ -113,6 +180,47 @@ export async function createProduct(
       fieldErrors.ean = "EAN은 숫자 13자리로 입력해 주세요.";
     }
 
+    // Uniqueness checks for draft save
+    if (rawManufactureSku) {
+      const { data: dupSku } = await supabase
+        .from("products")
+        .select("id")
+        .eq("company_id", companyId)
+        .ilike("manufacture_sku", rawManufactureSku)
+        .limit(1)
+        .maybeSingle();
+
+      if (dupSku) {
+        fieldErrors.manufactureSku = "동일한 제조사 SKU가 이미 등록되어 있습니다. 다른 SKU를 입력해 주세요.";
+      }
+    }
+
+    if (upc) {
+      const { data: dupUpc } = await supabase
+        .from("products")
+        .select("id")
+        .eq("upc", upc)
+        .limit(1)
+        .maybeSingle();
+
+      if (dupUpc) {
+        fieldErrors.upc = "해당 UPC는 시스템에 이미 등록되어 있습니다. 고유한 바코드를 입력해 주세요.";
+      }
+    }
+
+    if (ean) {
+      const { data: dupEan } = await supabase
+        .from("products")
+        .select("id")
+        .eq("ean", ean)
+        .limit(1)
+        .maybeSingle();
+
+      if (dupEan) {
+        fieldErrors.ean = "해당 EAN은 시스템에 이미 등록되어 있습니다. 고유한 바코드를 입력해 주세요.";
+      }
+    }
+
     if (Object.keys(fieldErrors).length > 0) {
       const errorCount = Object.keys(fieldErrors).length;
       return {
@@ -161,6 +269,7 @@ export async function createProduct(
         package_depth: packageDepth,
         package_height: packageHeight,
         package_weight: packageWeight,
+        carton_pack_qty: null,
         upc,
         ean,
         selling_online: sellingOnline,
@@ -174,8 +283,21 @@ export async function createProduct(
     if (insertError || !product) {
       console.error("Draft product insert error:", insertError);
       if (insertError?.code === "23505") {
+        const msg = insertError.message || "";
+        if (msg.includes("upc")) {
+          return {
+            error: "해당 UPC는 시스템에 이미 등록되어 있습니다. 고유한 바코드를 입력해 주세요.",
+            fieldErrors: { upc: "이미 등록된 UPC입니다." },
+          };
+        }
+        if (msg.includes("ean")) {
+          return {
+            error: "해당 EAN은 시스템에 이미 등록되어 있습니다. 고유한 바코드를 입력해 주세요.",
+            fieldErrors: { ean: "이미 등록된 EAN입니다." },
+          };
+        }
         return {
-          error: "이미 등록된 제조사 SKU입니다. 다른 SKU를 입력해 주세요.",
+          error: "동일한 제조사 SKU가 이미 등록되어 있습니다. 다른 SKU를 입력해 주세요.",
           fieldErrors: { manufactureSku: "이미 등록된 제조사 SKU입니다." },
         };
       }
@@ -225,6 +347,47 @@ export async function createProduct(
     }
     if (ean && !/^\d{13}$/.test(ean)) {
       fieldErrors.ean = "EAN은 숫자 13자리로 입력해 주세요.";
+    }
+  }
+
+  // Uniqueness checks for final registration
+  if (rawManufactureSku) {
+    const { data: dupSku } = await supabase
+      .from("products")
+      .select("id")
+      .eq("company_id", companyId)
+      .ilike("manufacture_sku", rawManufactureSku)
+      .limit(1)
+      .maybeSingle();
+
+    if (dupSku) {
+      fieldErrors.manufactureSku = "동일한 제조사 SKU가 이미 등록되어 있습니다. 다른 SKU를 입력해 주세요.";
+    }
+  }
+
+  if (upc) {
+    const { data: dupUpc } = await supabase
+      .from("products")
+      .select("id")
+      .eq("upc", upc)
+      .limit(1)
+      .maybeSingle();
+
+    if (dupUpc) {
+      fieldErrors.upc = "해당 UPC는 시스템에 이미 등록되어 있습니다. 고유한 바코드를 입력해 주세요.";
+    }
+  }
+
+  if (ean) {
+    const { data: dupEan } = await supabase
+      .from("products")
+      .select("id")
+      .eq("ean", ean)
+      .limit(1)
+      .maybeSingle();
+
+    if (dupEan) {
+      fieldErrors.ean = "해당 EAN은 시스템에 이미 등록되어 있습니다. 고유한 바코드를 입력해 주세요.";
     }
   }
 
@@ -281,6 +444,7 @@ export async function createProduct(
       package_depth: packageDepth,
       package_height: packageHeight,
       package_weight: packageWeight,
+      carton_pack_qty: null,
       upc,
       ean,
       selling_online: sellingOnline,
@@ -294,8 +458,21 @@ export async function createProduct(
   if (insertError || !product) {
     console.error("Insert product error:", insertError);
     if (insertError?.code === "23505") {
+      const msg = insertError.message || "";
+      if (msg.includes("upc")) {
+        return {
+          error: "해당 UPC는 시스템에 이미 등록되어 있습니다. 고유한 바코드를 입력해 주세요.",
+          fieldErrors: { upc: "이미 등록된 UPC입니다." },
+        };
+      }
+      if (msg.includes("ean")) {
+        return {
+          error: "해당 EAN은 시스템에 이미 등록되어 있습니다. 고유한 바코드를 입력해 주세요.",
+          fieldErrors: { ean: "이미 등록된 EAN입니다." },
+        };
+      }
       return {
-        error: "이미 등록된 제조사 SKU입니다. 다른 SKU를 입력해 주세요.",
+        error: "동일한 제조사 SKU가 이미 등록되어 있습니다. 다른 SKU를 입력해 주세요.",
         fieldErrors: { manufactureSku: "이미 등록된 제조사 SKU입니다." },
       };
     }
@@ -838,6 +1015,59 @@ export async function updateProduct(
     container_40ft_cbm: parsed.data.container40ftCbm,
   };
 
+  // Uniqueness checks for product update
+  if (parsed.data.manufactureSku) {
+    const { data: dupSku } = await supabase
+      .from("products")
+      .select("id")
+      .eq("company_id", companyId)
+      .ilike("manufacture_sku", parsed.data.manufactureSku.trim())
+      .neq("id", productId)
+      .limit(1)
+      .maybeSingle();
+
+    if (dupSku) {
+      return {
+        error: "동일한 제조사 SKU가 이미 등록되어 있습니다. 다른 SKU를 입력해 주세요.",
+        fieldErrors: { manufactureSku: "이미 등록된 제조사 SKU입니다." },
+      };
+    }
+  }
+
+  if (upc) {
+    const { data: dupUpc } = await supabase
+      .from("products")
+      .select("id")
+      .eq("upc", upc)
+      .neq("id", productId)
+      .limit(1)
+      .maybeSingle();
+
+    if (dupUpc) {
+      return {
+        error: "해당 UPC는 시스템에 이미 등록되어 있습니다. 고유한 바코드를 입력해 주세요.",
+        fieldErrors: { upc: "이미 등록된 UPC입니다." },
+      };
+    }
+  }
+
+  if (ean) {
+    const { data: dupEan } = await supabase
+      .from("products")
+      .select("id")
+      .eq("ean", ean)
+      .neq("id", productId)
+      .limit(1)
+      .maybeSingle();
+
+    if (dupEan) {
+      return {
+        error: "해당 EAN은 시스템에 이미 등록되어 있습니다. 고유한 바코드를 입력해 주세요.",
+        fieldErrors: { ean: "이미 등록된 EAN입니다." },
+      };
+    }
+  }
+
   const effectiveLetustoSku = parsed.data.letustoSku && parsed.data.letustoSku.trim() !== ""
     ? parsed.data.letustoSku.trim()
     : beforeProduct?.letusto_sku || null;
@@ -846,13 +1076,14 @@ export async function updateProduct(
   const fallbackCatCode = beforeProduct?.category_code ? resolveAuthoritativeCategoryCode(beforeProduct.category_code) : null;
   const categoryDefault = resolveAuthoritativeCategoryCode(parsed.data.category);
   const effectiveCategoryCode = explicitCatCode || fallbackCatCode || categoryDefault;
+  const resolvedCategoryEnum = parsed.data.category || resolveRootCategoryEnum(effectiveCategoryCode);
 
   const { error: updateError } = await supabase
     .from("products")
     .update({
       name: parsed.data.name,
       name_en: parsed.data.nameEn || null,
-      category: parsed.data.category,
+      category: resolvedCategoryEnum,
       category_code: effectiveCategoryCode,
       volume: parsed.data.volume || null,
       estimated_retail_price: parsed.data.estimatedRetailPrice,
@@ -918,6 +1149,25 @@ export async function updateProduct(
 
   if (updateError) {
     console.error("Product update error:", updateError);
+    if (updateError.code === "23505") {
+      const msg = updateError.message || "";
+      if (msg.includes("upc")) {
+        return {
+          error: "해당 UPC는 시스템에 이미 등록되어 있습니다. 고유한 바코드를 입력해 주세요.",
+          fieldErrors: { upc: "이미 등록된 UPC입니다." },
+        };
+      }
+      if (msg.includes("ean")) {
+        return {
+          error: "해당 EAN은 시스템에 이미 등록되어 있습니다. 고유한 바코드를 입력해 주세요.",
+          fieldErrors: { ean: "이미 등록된 EAN입니다." },
+        };
+      }
+      return {
+        error: "동일한 제조사 SKU가 이미 등록되어 있습니다. 다른 SKU를 입력해 주세요.",
+        fieldErrors: { manufactureSku: "이미 등록된 제조사 SKU입니다." },
+      };
+    }
     return { error: "제품 정보 수정에 실패했습니다. 잠시 후 다시 시도해주세요." };
   }
 

@@ -1726,6 +1726,47 @@ export async function adminCreateProduct(
     return { error: "온라인 판매 중인 경우, 최소 한 개 이상의 온라인 판매 링크(링크 1)를 입력해 주세요." };
   }
 
+  // Uniqueness checks for admin product registration
+  if (parsed.data.manufactureSku) {
+    const { data: dupSku } = await supabase
+      .from("products")
+      .select("id")
+      .eq("company_id", parsed.data.companyId)
+      .ilike("manufacture_sku", parsed.data.manufactureSku.trim())
+      .limit(1)
+      .maybeSingle();
+
+    if (dupSku) {
+      return { error: "해당 회사에 동일한 제조사 SKU가 이미 등록되어 있습니다." };
+    }
+  }
+
+  if (upc) {
+    const { data: dupUpc } = await supabase
+      .from("products")
+      .select("id")
+      .eq("upc", upc)
+      .limit(1)
+      .maybeSingle();
+
+    if (dupUpc) {
+      return { error: "해당 UPC는 시스템에 이미 등록되어 있습니다. 고유한 바코드를 입력해 주세요." };
+    }
+  }
+
+  if (ean) {
+    const { data: dupEan } = await supabase
+      .from("products")
+      .select("id")
+      .eq("ean", ean)
+      .limit(1)
+      .maybeSingle();
+
+    if (dupEan) {
+      return { error: "해당 EAN은 시스템에 이미 등록되어 있습니다. 고유한 바코드를 입력해 주세요." };
+    }
+  }
+
   // 회사 및 브랜드 존재 및 소유 매핑 검증
   const { data: brand } = await supabase
     .from("brands")
@@ -1754,6 +1795,7 @@ export async function adminCreateProduct(
       package_depth: parsed.data.packageDepth ?? null,
       package_height: parsed.data.packageHeight ?? null,
       package_weight: parsed.data.packageWeight ?? null,
+      carton_pack_qty: null,
       upc,
       ean,
       selling_online: sellingOnline,
@@ -1766,6 +1808,16 @@ export async function adminCreateProduct(
 
   if (insertError || !product) {
     console.error("Admin insert product error:", insertError);
+    if (insertError?.code === "23505") {
+      const msg = insertError.message || "";
+      if (msg.includes("upc")) {
+        return { error: "해당 UPC는 시스템에 이미 등록되어 있습니다. 고유한 바코드를 입력해 주세요." };
+      }
+      if (msg.includes("ean")) {
+        return { error: "해당 EAN은 시스템에 이미 등록되어 있습니다. 고유한 바코드를 입력해 주세요." };
+      }
+      return { error: "동일한 제조사 SKU가 이미 등록되어 있습니다. 다른 SKU를 입력해 주세요." };
+    }
     return { error: "제품 등록에 실패했습니다. 잠시 후 다시 시도해주세요." };
   }
 

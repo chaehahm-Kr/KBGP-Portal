@@ -331,5 +331,68 @@ export function parseLeadTime(leadTimeStr?: string | null): ParsedLeadTime {
   return { value: leadTimeStr.trim(), unit: "일" };
 }
 
+/**
+ * Resolves root category code (e.g. "SKINCARE", "BODY_CARE", "HAIR_CARE", etc.)
+ * from any category code (1Depth, 2Depth, or 3Depth).
+ */
+export function resolveRootCategoryCode(categoryCode: string | null | undefined): string {
+  if (!categoryCode || typeof categoryCode !== "string") return "OTHER";
+  const upper = categoryCode.trim().toUpperCase();
+  if (!upper) return "OTHER";
 
+  if (upper === "SKINCARE" || upper.startsWith("SK_")) return "SKINCARE";
+  if (upper === "HAIR_CARE" || upper.startsWith("HC_") || upper.startsWith("HR_")) return "HAIR_CARE";
+  if (upper === "BODY_CARE" || upper.startsWith("BC_") || upper.startsWith("BD_")) return "BODY_CARE";
+  if (upper === "BEAUTY_TOOLS" || upper.startsWith("BT_") || upper.startsWith("TL_")) return "BEAUTY_TOOLS";
+  if (upper === "PERSONAL_CARE" || upper.startsWith("PC_")) return "PERSONAL_CARE";
+  if (upper === "MAKEUP" || upper.startsWith("MU_")) return "MAKEUP";
+  if (upper === "SETS_COLLECTIONS" || upper.startsWith("SET_") || upper.startsWith("SETS_") || upper.startsWith("ST_")) return "SETS_COLLECTIONS";
+  if (upper === "OTHER") return "OTHER";
 
+  // Check mapped category enum values (e.g. "daily_care" -> "BODY_CARE")
+  if (upper.toLowerCase() in CATEGORY_TO_CODE_MAP) {
+    return CATEGORY_TO_CODE_MAP[upper.toLowerCase() as ProductCategory];
+  }
+
+  return "OTHER";
+}
+
+/**
+ * Resolves the 1Depth Korean Category Label for display (e.g., "스킨케어", "바디케어", "헤어&스칼프", etc.)
+ */
+export function resolveRootCategoryLabel(
+  categoryCode: string | null | undefined,
+  fallbackCategory?: string | null
+): string {
+  const rootCode = resolveRootCategoryCode(categoryCode);
+  if (rootCode === "SKINCARE") return "스킨케어";
+  if (rootCode === "HAIR_CARE") return "헤어&스칼프";
+  if (rootCode === "BODY_CARE") return "바디케어";
+  if (rootCode === "BEAUTY_TOOLS") return "뷰티툴";
+  if (rootCode === "PERSONAL_CARE") return "퍼스널케어";
+  if (rootCode === "MAKEUP") return "메이크업";
+  if (rootCode === "SETS_COLLECTIONS") return "세트/기획";
+  if (rootCode === "OTHER") {
+    if (fallbackCategory && fallbackCategory in PRODUCT_CATEGORY_LABEL) {
+      return PRODUCT_CATEGORY_LABEL[fallbackCategory as ProductCategory];
+    }
+    return "기타";
+  }
+
+  if (fallbackCategory && fallbackCategory in PRODUCT_CATEGORY_LABEL) {
+    return PRODUCT_CATEGORY_LABEL[fallbackCategory as ProductCategory];
+  }
+
+  return "기타";
+}
+
+/**
+ * Resolves the DB ProductCategory enum value from category code.
+ */
+export function resolveRootCategoryEnum(categoryCode: string | null | undefined): ProductCategory {
+  const rootCode = resolveRootCategoryCode(categoryCode);
+  if (rootCode in CODE_TO_CATEGORY_MAP) {
+    return CODE_TO_CATEGORY_MAP[rootCode];
+  }
+  return "other";
+}

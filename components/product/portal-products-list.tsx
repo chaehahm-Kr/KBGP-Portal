@@ -2,7 +2,12 @@
 
 import React, { useState } from "react";
 import Link from "next/link";
-import { PRODUCT_CATEGORY_LABEL, type ProductCategory } from "@/lib/product/types";
+import {
+  PRODUCT_CATEGORY_LABEL,
+  type ProductCategory,
+  resolveRootCategoryLabel,
+  resolveRootCategoryEnum,
+} from "@/lib/product/types";
 import { bulkDeleteProducts } from "@/lib/product/actions";
 import { useSearchParams } from "next/navigation";
 import {
@@ -86,7 +91,9 @@ export function PortalProductsList({ initialProducts, hasBrand }: PortalProducts
 
     // 2. Category filter
     const matchesCategory =
-      selectedCategory === "all" || product.category === selectedCategory;
+      selectedCategory === "all" ||
+      product.category === selectedCategory ||
+      resolveRootCategoryEnum(product.category_code) === selectedCategory;
 
     // 3. Status filter (Active vs Draft vs Deleted vs Active+Draft)
     const matchesStatus = (() => {
@@ -351,7 +358,7 @@ export function PortalProductsList({ initialProducts, hasBrand }: PortalProducts
               {filteredProducts.map((product) => {
                 const isSelected = selectedIds.includes(product.id);
                 const categoryLabel =
-                  PRODUCT_CATEGORY_LABEL[product.category as ProductCategory] || product.category || "-";
+                  resolveRootCategoryLabel(product.category_code, product.category);
 
                 return (
                   <tr
