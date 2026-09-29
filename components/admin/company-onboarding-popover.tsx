@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 
 export interface OnboardingStepItem {
@@ -20,7 +21,7 @@ export interface CompanyOnboardingPopoverProps {
   companyId?: string | null;
 }
 
-// ADM-APP-004-R2 / ADM-COMP-004-R2: 7-Step Short Display Labels & Smart Dynamic Positioning
+// ADM-APP-004-R3 / ADM-COMP-004-R3: 7-Step Short Display Labels & Portal Fixed Dynamic Positioning
 const CANONICAL_SHORT_STEPS: { step: number; id: string; name: string }[] = [
   { step: 1, id: "company", name: "회사 정보" },
   { step: 2, id: "admin_profile", name: "관리자 정보" },
@@ -40,24 +41,104 @@ export function CompanyOnboardingPopover({
   companyId,
 }: CompanyOnboardingPopoverProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const [popoverPosition, setPopoverPosition] = useState<"top" | "bottom">("top");
+  const [mounted, setMounted] = useState(false);
+  const [popoverPlacement, setPopoverPlacement] = useState<"top" | "bottom">("bottom");
+  const [coords, setCoords] = useState<{ left: number; top: number; arrowLeft: number }>({
+    left: 0,
+    top: 0,
+    arrowLeft: 128,
+  });
+
   const containerRef = useRef<HTMLDivElement>(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
+  const closeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const isNna = onboardingStatus === "not_applicable";
 
-  const handleMouseEnterOrFocus = () => {
-    if (isNna) return;
-    if (containerRef.current) {
-      const rect = containerRef.current.getBoundingClientRect();
-      // If element is near top of viewport (< 250px from top), open downward to prevent clipping
-      if (rect.top < 250) {
-        setPopoverPosition("bottom");
-      } else {
-        setPopoverPosition("top");
-      }
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const calculatePosition = useCallback(() => {
+    if (!containerRef.current) return;
+    const rect = containerRef.current.getBoundingClientRect();
+
+    // Fixed Admin Header height (64px) + safety margin (20px) = 84px
+    const ADMIN_HEADER_SAFE_TOP = 84;
+    const POPOVER_APPROX_HEIGHT = 270;
+    const POPOVER_WIDTH = 256; // w-64
+
+    // Check top edge if opened upward
+    const topEdgeIfUpward = rect.top - POPOVER_APPROX_HEIGHT - 8;
+
+    let placement: "top" | "bottom" = "top";
+    // Force open BELOW if opening upward touches/overlaps top admin header area or rect.top < 360px
+    if (topEdgeIfUpward < ADMIN_HEADER_SAFE_TOP || rect.top < 360) {
+      placement = "bottom";
+    } else if (window.innerHeight - rect.bottom < POPOVER_APPROX_HEIGHT + 20) {
+      placement = "top";
     }
+
+    setPopoverPlacement(placement);
+
+    // Compute left coordinate & arrow offset
+    const badgeCenterX = rect.left + rect.width / 2;
+    let popoverLeft = badgeCenterX - POPOVER_WIDTH / 2;
+
+    // Viewport horizontal bounds protection
+    if (popoverLeft < 12) popoverLeft = 12;
+    if (popoverLeft + POPOVER_WIDTH > window.innerWidth - 12) {
+      popoverLeft = window.innerWidth - POPOVER_WIDTH - 12;
+    }
+
+    // Arrow relative offset on popover
+    let arrowLeft = badgeCenterX - popoverLeft;
+    arrowLeft = Math.max(16, Math.min(POPOVER_WIDTH - 16, arrowLeft));
+
+    // Vertical top coordinate
+    let popoverTop = 0;
+    if (placement === "bottom") {
+      popoverTop = rect.bottom + 8;
+    } else {
+      popoverTop = rect.top - POPOVER_APPROX_HEIGHT - 8;
+    }
+
+    setCoords({
+      left: popoverLeft,
+      top: popoverTop,
+      arrowLeft,
+    });
+  }, []);
+
+  const handleMouseEnter = () => {
+    if (isNna) return;
+    if (closeTimeoutRef.current) {
+      clearTimeout(closeTimeoutRef.current);
+      closeTimeoutRef.current = null;
+    }
+    calculatePosition();
     setIsOpen(true);
   };
+
+  const handleMouseLeave = () => {
+    closeTimeoutRef.current = setTimeout(() => {
+      setIsOpen(false);
+    }, 150);
+  };
+
+  // Recalculate position on scroll/resize while popover is open
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleScrollOrResize = () => {
+      calculatePosition();
+    };
+    window.addEventListener("scroll", handleScrollOrResize, true);
+    window.addEventListener("resize", handleScrollOrResize);
+    return () => {
+      window.removeEventListener("scroll", handleScrollOrResize, true);
+      window.removeEventListener("resize", handleScrollOrResize);
+    };
+  }, [isOpen, calculatePosition]);
 
   const getBadgeStyle = (status: "completed" | "in_progress" | "not_started" | "not_applicable") => {
     if (status === "completed") {
@@ -72,7 +153,6 @@ export function CompanyOnboardingPopover({
     return "bg-zinc-100 text-zinc-600 border-zinc-200 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:border-zinc-700";
   };
 
-  // Map provided steps or generate default 7 steps list using Short Labels
   const resolvedSteps = CANONICAL_SHORT_STEPS.map((cs) => {
     const found = steps.find((s) => s.step === cs.step || s.id === cs.id);
     return {
@@ -100,10 +180,10 @@ export function CompanyOnboardingPopover({
     <div
       ref={containerRef}
       className="relative inline-block"
-      onMouseEnter={handleMouseEnterOrFocus}
-      onMouseLeave={() => setIsOpen(false)}
-      onFocus={handleMouseEnterOrFocus}
-      onBlur={() => setIsOpen(false)}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
+      onFocus={handleMouseEnter}
+      onBlur={handleMouseLeave}
     >
       {companyId ? (
         <Link href={`/admin/companies/${companyId}`} title="온보딩 상세 보기 (회사 상세 이동)">
@@ -113,11 +193,17 @@ export function CompanyOnboardingPopover({
         BadgeContent
       )}
 
-      {isOpen && !isNna && (
+      {isOpen && !isNna && mounted && createPortal(
         <div
-          className={`absolute left-1/2 -translate-x-1/2 z-50 w-64 rounded-xl border border-zinc-200 bg-white p-3.5 shadow-2xl dark:border-zinc-700 dark:bg-zinc-950 text-left animate-in fade-in zoom-in-95 duration-150 ${
-            popoverPosition === "bottom" ? "top-full mt-2" : "bottom-full mb-2"
-          }`}
+          ref={popoverRef}
+          onMouseEnter={handleMouseEnter}
+          onMouseLeave={handleMouseLeave}
+          style={{
+            position: "fixed",
+            left: `${coords.left}px`,
+            top: `${coords.top}px`,
+          }}
+          className="z-[9999] w-64 rounded-xl border border-zinc-200 bg-white p-3.5 shadow-2xl dark:border-zinc-700 dark:bg-zinc-950 text-left animate-in fade-in zoom-in-95 duration-150 pointer-events-auto"
         >
           <div className="flex items-center justify-between border-b border-zinc-150 dark:border-zinc-800 pb-2 mb-2">
             <span className="text-[11px] font-extrabold text-zinc-900 dark:text-white flex items-center gap-1.5">
@@ -161,13 +247,20 @@ export function CompanyOnboardingPopover({
             ))}
           </div>
 
-          {/* Arrow pointing to trigger badge */}
-          {popoverPosition === "top" ? (
-            <div className="absolute left-1/2 top-full h-2 w-2 -translate-x-1/2 -translate-y-1 rotate-45 border-r border-b border-zinc-200 bg-white dark:border-zinc-700 dark:bg-zinc-950" />
+          {/* Dynamic Arrow Indicator */}
+          {popoverPlacement === "top" ? (
+            <div
+              style={{ left: `${coords.arrowLeft}px` }}
+              className="absolute top-full h-2 w-2 -translate-x-1/2 -translate-y-1 rotate-45 border-r border-b border-zinc-200 bg-white dark:border-zinc-700 dark:bg-zinc-950"
+            />
           ) : (
-            <div className="absolute left-1/2 bottom-full h-2 w-2 -translate-x-1/2 translate-y-1 rotate-45 border-l border-t border-zinc-200 bg-white dark:border-zinc-700 dark:bg-zinc-950" />
+            <div
+              style={{ left: `${coords.arrowLeft}px` }}
+              className="absolute bottom-full h-2 w-2 -translate-x-1/2 translate-y-1 rotate-45 border-l border-t border-zinc-200 bg-white dark:border-zinc-700 dark:bg-zinc-950"
+            />
           )}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

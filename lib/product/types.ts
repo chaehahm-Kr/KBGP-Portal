@@ -15,6 +15,76 @@ export const PRODUCT_CATEGORY_LABEL: Record<ProductCategory, string> = {
   other: "기타",
 };
 
+/**
+ * Authoritative mapping from UI ProductCategory enum to categories.code (FK target)
+ */
+export const CATEGORY_TO_CODE_MAP: Record<ProductCategory, string> = {
+  skincare: "SKINCARE",
+  hair_scalp: "HAIR_CARE",
+  beauty_tools: "BEAUTY_TOOLS",
+  daily_care: "BODY_CARE",
+  wellness_patch: "PERSONAL_CARE",
+  other: "OTHER",
+};
+
+/**
+ * Reverse mapping from categories.code to UI ProductCategory enum
+ */
+export const CODE_TO_CATEGORY_MAP: Record<string, ProductCategory> = {
+  SKINCARE: "skincare",
+  HAIR_CARE: "hair_scalp",
+  BEAUTY_TOOLS: "beauty_tools",
+  BODY_CARE: "daily_care",
+  PERSONAL_CARE: "wellness_patch",
+  OTHER: "other",
+  MAKEUP: "other",
+  SETS_COLLECTIONS: "other",
+};
+
+/**
+ * Resolves the authoritative categories.code for products.category_code FK.
+ * Guarantees a valid uppercase category code referenced by public.categories (code) or null.
+ */
+export function resolveAuthoritativeCategoryCode(
+  categoryOrCode: string | null | undefined
+): string | null {
+  if (!categoryOrCode || typeof categoryOrCode !== "string") return null;
+  const trimmed = categoryOrCode.trim();
+  if (!trimmed) return null;
+
+  // 1. Direct match in CATEGORY_TO_CODE_MAP (e.g. "skincare" -> "SKINCARE")
+  if (trimmed in CATEGORY_TO_CODE_MAP) {
+    return CATEGORY_TO_CODE_MAP[trimmed as ProductCategory];
+  }
+
+  const lower = trimmed.toLowerCase();
+  if (lower in CATEGORY_TO_CODE_MAP) {
+    return CATEGORY_TO_CODE_MAP[lower as ProductCategory];
+  }
+
+  // 2. Korean category name match
+  if (trimmed === "스킨케어") return "SKINCARE";
+  if (trimmed === "헤어케어" || trimmed === "헤어&스칼프" || trimmed === "헤어") return "HAIR_CARE";
+  if (trimmed === "바디케어" || trimmed === "데일리케어") return "BODY_CARE";
+  if (trimmed === "뷰티툴" || trimmed === "뷰티소품·툴") return "BEAUTY_TOOLS";
+  if (trimmed === "퍼스널케어" || trimmed === "웰니스·기능성패치") return "PERSONAL_CARE";
+  if (trimmed === "메이크업") return "MAKEUP";
+  if (trimmed === "세트/기획" || trimmed === "세트") return "SETS_COLLECTIONS";
+  if (trimmed === "기타") return "OTHER";
+
+  // 3. Known uppercase code or standard code pattern
+  const upper = trimmed.toUpperCase();
+  if (upper in CODE_TO_CATEGORY_MAP) {
+    return upper;
+  }
+
+  if (/^[A-Z0-9_]+$/.test(upper)) {
+    return upper;
+  }
+
+  return "OTHER";
+}
+
 export type CertificateType =
   | "ingredient_certification"
   | "trademark"

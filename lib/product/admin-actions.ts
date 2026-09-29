@@ -8,7 +8,7 @@ import { redirect } from "next/navigation";
 import { validateUploadedFile } from "@/lib/files/validate";
 import crypto from "crypto";
 import { z } from "zod";
-import { type ProductCategory } from "@/lib/product/types";
+import { type ProductCategory, resolveAuthoritativeCategoryCode } from "@/lib/product/types";
 import { recordProductChangeLog, getProductChangeHistory, computeProductFieldDiffs, type AuditActionType } from "@/lib/product/audit";
 import { formatEasternDate, getEasternTodayString } from "@/lib/utils/timezone";
 
@@ -1746,6 +1746,7 @@ export async function adminCreateProduct(
       name: parsed.data.nameEn,
       name_en: parsed.data.nameEn,
       category: parsed.data.category,
+      category_code: resolveAuthoritativeCategoryCode(parsed.data.category),
       manufacture_sku: parsed.data.manufactureSku,
       price_krw_retail: parsed.data.priceKrwRetail ?? null,
       price_usd_fob: parsed.data.priceUsdFob ?? null,

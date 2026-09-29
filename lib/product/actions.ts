@@ -6,7 +6,11 @@ import { revalidatePath } from "next/cache";
 import { requireCompanyMembership } from "@/lib/company/dal";
 import { createClient } from "@/lib/supabase/server";
 import { validateUploadedFile } from "@/lib/files/validate";
-import type { CertificateType, ProductCategory } from "@/lib/product/types";
+import {
+  type CertificateType,
+  type ProductCategory,
+  resolveAuthoritativeCategoryCode,
+} from "@/lib/product/types";
 import { recordProductChangeLog, computeProductFieldDiffs } from "@/lib/product/audit";
 
 export type ProductFormState = {
@@ -150,7 +154,7 @@ export async function createProduct(
         name: rawNameEn,
         name_en: rawNameEn,
         category: category,
-        category_code: category,
+        category_code: resolveAuthoritativeCategoryCode(category),
         manufacture_sku: rawManufactureSku,
         price_krw_retail: priceKrwRetail,
         price_usd_fob: priceUsdFob,
@@ -176,10 +180,14 @@ export async function createProduct(
           fieldErrors: { manufactureSku: "이미 등록된 제조사 SKU입니다." },
         };
       }
+      if (insertError?.code === "23503") {
+        return {
+          error: "선택한 카테고리 또는 브랜드 정보를 확인할 수 없습니다. 항목을 다시 선택해 주세요.",
+          fieldErrors: { category: "유효한 카테고리를 선택해 주세요." },
+        };
+      }
       return {
-        error: insertError?.message
-          ? `임시 저장 실패: ${insertError.message}`
-          : "임시 저장 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.",
+        error: "임시 저장 중 시스템 오류가 발생했습니다. 입력한 내용은 유지되었습니다. 잠시 후 다시 시도해 주세요.",
       };
     }
 
@@ -266,7 +274,7 @@ export async function createProduct(
       name: rawNameEn,
       name_en: rawNameEn,
       category: category,
-      category_code: category,
+      category_code: resolveAuthoritativeCategoryCode(category),
       manufacture_sku: rawManufactureSku,
       price_krw_retail: priceKrwRetail,
       price_usd_fob: priceUsdFob,
@@ -292,10 +300,14 @@ export async function createProduct(
         fieldErrors: { manufactureSku: "이미 등록된 제조사 SKU입니다." },
       };
     }
+    if (insertError?.code === "23503") {
+      return {
+        error: "선택한 카테고리 또는 브랜드 정보를 확인할 수 없습니다. 항목을 다시 선택해 주세요.",
+        fieldErrors: { category: "유효한 카테고리를 선택해 주세요." },
+      };
+    }
     return {
-      error: insertError?.message
-        ? `제품 등록 실패: ${insertError.message}`
-        : "제품 등록 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.",
+      error: "제품 등록 중 시스템 오류가 발생했습니다. 입력한 내용은 유지되었습니다. 잠시 후 다시 시도해 주세요.",
     };
   }
 
@@ -833,6 +845,7 @@ export async function updateProduct(
       name: parsed.data.name,
       name_en: parsed.data.nameEn || null,
       category: parsed.data.category,
+      category_code: resolveAuthoritativeCategoryCode(parsed.data.category),
       volume: parsed.data.volume || null,
       estimated_retail_price: parsed.data.estimatedRetailPrice,
       ingredients_text: parsed.data.ingredientsText || null,
