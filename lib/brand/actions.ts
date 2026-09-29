@@ -293,7 +293,49 @@ export async function createBrand(
       .eq("id", brand.id);
   }
 
+  await markBrandOnboardingConfirmed(supabase, companyId);
   redirect("/portal/brands");
+}
+
+async function markBrandOnboardingConfirmed(supabase: any, companyId: string) {
+  try {
+    const { data: company } = await supabase
+      .from("companies")
+      .select("intro")
+      .eq("id", companyId)
+      .single();
+
+    let parsed: any = {};
+    if (company?.intro?.startsWith("__COMPANY_METADATA__:")) {
+      try {
+        parsed = JSON.parse(company.intro.substring("__COMPANY_METADATA__:".length));
+      } catch (e) {}
+    } else if (company?.intro) {
+      parsed.description = company.intro;
+    }
+
+    parsed.brand_onboarding_confirmed_at = new Date().toISOString();
+
+    await supabase
+      .from("companies")
+      .update({
+        intro: `__COMPANY_METADATA__:${JSON.stringify(parsed)}`,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", companyId);
+
+    revalidatePath("/portal");
+    revalidatePath("/portal/brands");
+  } catch (err) {
+    console.error("Failed to mark brand onboarding confirmed:", err);
+  }
+}
+
+export async function confirmBrandOnboardingAction() {
+  const { companyId } = await requireCompanyMembership();
+  const supabase = await createClient();
+  await markBrandOnboardingConfirmed(supabase, companyId);
+  return { success: true };
 }
 
 export async function updateBrand(
@@ -429,6 +471,7 @@ export async function updateBrand(
     return { error: "브랜드 정보를 저장하지 못했습니다." };
   }
 
+  await markBrandOnboardingConfirmed(supabase, companyId);
   redirect("/portal/brands");
 }
 

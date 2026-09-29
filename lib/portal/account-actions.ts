@@ -106,19 +106,27 @@ export async function updateMyAccountProfileAction(
     if (!name || !name.trim()) {
       return { success: false, error: "이름을 입력해 주세요." };
     }
+    if (!title || !title.trim()) {
+      return { success: false, error: "직함을 입력해 주세요. (예: 대표이사, 이사, 팀장)" };
+    }
+    if (!phone || !phone.trim()) {
+      return { success: false, error: "연락처를 입력해 주세요." };
+    }
 
     const adminClient = createAdminClient();
 
-    // 1. Update company_users table
-    const { error: updateError } = await adminClient
+    // 1. Update company_users table (Authoritative user record across Portal & Admin)
+    const { data: updatedUser, error: updateError } = await adminClient
       .from("company_users")
       .update({
         name: name.trim(),
-        phone: phone?.trim() || null,
-        title: title?.trim() || null,
+        phone: phone.trim(),
+        title: title.trim(),
         position: position?.trim() || null,
       })
-      .eq("id", session.userId);
+      .eq("id", session.userId)
+      .select("company_id")
+      .single();
 
     if (updateError) {
       console.error("[updateMyAccountProfileAction] update error:", updateError);
@@ -131,11 +139,38 @@ export async function updateMyAccountProfileAction(
       .update({ display_name: name.trim() })
       .eq("id", session.userId);
 
+    // 3. Mark admin_profile_onboarding_confirmed_at on company metadata
+    if (updatedUser?.company_id) {
+      const { data: comp } = await adminClient
+        .from("companies")
+        .select("intro")
+        .eq("id", updatedUser.company_id)
+        .single();
+
+      let metaObj: Record<string, any> = {};
+      if (comp?.intro && comp.intro.startsWith("__COMPANY_METADATA__:")) {
+        try {
+          metaObj = JSON.parse(comp.intro.substring("__COMPANY_METADATA__:".length));
+        } catch {}
+      }
+      metaObj.admin_profile_onboarding_confirmed_at = new Date().toISOString();
+
+      await adminClient
+        .from("companies")
+        .update({
+          intro: `__COMPANY_METADATA__:${JSON.stringify(metaObj)}`,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", updatedUser.company_id);
+
+      revalidatePath(`/admin/companies/${updatedUser.company_id}`);
+    }
+
     revalidatePath("/portal/account");
     revalidatePath("/portal/company/users");
     revalidatePath("/portal");
 
-    return { success: true, message: "프로필 정보가 성공적으로 변경되었습니다." };
+    return { success: true, message: "관리자 프로필 정보가 성공적으로 변경 및 확인되었습니다." };
   } catch (err: any) {
     if (err?.digest?.includes("NEXT_REDIRECT")) throw err;
     console.error("[updateMyAccountProfileAction] Unexpected error:", err);

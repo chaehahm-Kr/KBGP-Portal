@@ -8,6 +8,7 @@ import {
   sendMyAccountPasswordResetEmailAction,
 } from "@/lib/portal/account-actions";
 import { PASSWORD_RULE_DESCRIPTION } from "@/lib/auth/password";
+import { InternationalPhoneInput } from "@/components/shared/international-phone-input";
 
 interface MyAccountViewProps {
   initialData: MyAccountData;
@@ -41,7 +42,17 @@ export function MyAccountView({ initialData }: MyAccountViewProps) {
     setProfileMessage(null);
 
     if (!name.trim()) {
-      setProfileMessage({ type: "error", text: "이름을 입력해 주세요." });
+      setProfileMessage({ type: "error", text: "이름(Full Name)을 입력해 주세요." });
+      return;
+    }
+
+    if (!title.trim()) {
+      setProfileMessage({ type: "error", text: "직함(Job Title)을 입력해 주세요. (예: 대표이사, 이사, 팀장)" });
+      return;
+    }
+
+    if (!phone.trim()) {
+      setProfileMessage({ type: "error", text: "국가번호 및 연락처(Phone Number)를 입력해 주세요." });
       return;
     }
 
@@ -54,7 +65,7 @@ export function MyAccountView({ initialData }: MyAccountViewProps) {
       });
 
       if (res.success) {
-        setProfileMessage({ type: "success", text: res.message || "프로필이 성공적으로 변경되었습니다." });
+        setProfileMessage({ type: "success", text: res.message || "관리자 프로필 정보가 성공적으로 변경 및 확인되었습니다." });
         setData((prev) => ({
           ...prev,
           name: name.trim(),
@@ -247,20 +258,21 @@ export function MyAccountView({ initialData }: MyAccountViewProps) {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="block font-bold text-zinc-700 dark:text-zinc-300 mb-1">
-                  직함 (Job Title)
+                  직함 (Job Title) <span className="text-rose-500">*</span>
                 </label>
                 <input
                   type="text"
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
-                  placeholder="예: 팀장 / 매니저"
+                  placeholder="예: 대표이사 / 이사 / 팀장"
+                  required
                   className="w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-xs outline-none focus:border-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
                 />
               </div>
 
               <div>
                 <label className="block font-bold text-zinc-700 dark:text-zinc-300 mb-1">
-                  부서 / 직책 (Department)
+                  부서 / 직책 (Department) <span className="text-[10px] text-zinc-400 font-normal">[선택]</span>
                 </label>
                 <input
                   type="text"
@@ -274,15 +286,19 @@ export function MyAccountView({ initialData }: MyAccountViewProps) {
 
             <div>
               <label className="block font-bold text-zinc-700 dark:text-zinc-300 mb-1">
-                연락처 (Phone Number)
+                국가번호 및 연락처 (Phone Number) <span className="text-rose-500">*</span>
               </label>
-              <input
-                type="tel"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                placeholder="예: 010-1234-5678 또는 +82 10-1234-5678"
-                className="w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-xs outline-none focus:border-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white font-mono"
-              />
+              <div className="mt-1">
+                <InternationalPhoneInput
+                  value={phone}
+                  onChange={(val) => setPhone(val)}
+                  placeholder="10-1234-5678"
+                  required
+                />
+              </div>
+              <p className="mt-1 text-[10px] text-zinc-400 dark:text-zinc-500">
+                국가번호(예: Korea +82)를 선택하고 대시(-) 또는 숫자 형식으로 전화번호를 입력하세요.
+              </p>
             </div>
 
             {/* Read-Only Organization Context */}

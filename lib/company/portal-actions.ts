@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireCompanyAdmin } from "./dal";
+import { requireCompanyAdmin, requireCompanyMembership } from "./dal";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { type CompanyContact } from "./admin-actions";
@@ -42,15 +42,16 @@ export async function updateCompanyPortalMetadata(
   let baseDescription = "";
   let currentType = "Brand Owner";
   let currentStatus = "Active";
+  let parsedExisting: any = {};
 
   if (company && company.intro) {
     if (company.intro.startsWith("__COMPANY_METADATA__:")) {
       try {
         const jsonStr = company.intro.substring("__COMPANY_METADATA__:".length);
-        const parsed = JSON.parse(jsonStr);
-        baseDescription = parsed.description || "";
-        currentType = parsed.type || "Brand Owner";
-        currentStatus = parsed.status || "Active";
+        parsedExisting = JSON.parse(jsonStr);
+        baseDescription = parsedExisting.description || "";
+        currentType = parsedExisting.type || "Brand Owner";
+        currentStatus = parsedExisting.status || "Active";
       } catch (e) {}
     } else {
       baseDescription = company.intro;
@@ -60,6 +61,7 @@ export async function updateCompanyPortalMetadata(
   // 3. Construct the serialized metadata object.
   // Note: We preserve the 'type' and 'status' that were configured by Letusto Admins.
   const metaObj = {
+    ...parsedExisting,
     description: baseDescription,
     address: payload.address,
     address_1: payload.address_1 || "",
@@ -68,10 +70,11 @@ export async function updateCompanyPortalMetadata(
     state: payload.state || "",
     zip_code: payload.zip_code || "",
     website: payload.website,
-    admin_memo: company && (company as any).admin_memo ? (company as any).admin_memo : "", // Preserve admin notes if any
+    admin_memo: company && (company as any).admin_memo ? (company as any).admin_memo : (parsedExisting.admin_memo || ""),
     contacts: payload.contacts,
     type: currentType,
     status: currentStatus,
+    company_onboarding_confirmed_at: new Date().toISOString(),
   };
 
   const introString = `__COMPANY_METADATA__:${JSON.stringify(metaObj)}`;
@@ -359,4 +362,43 @@ export async function skipTeamOnboardingAction(companyId: string) {
   revalidatePath("/portal");
   return { success: true };
 }
+
+export async function confirmCompanyOnboardingAction(companyId: string) {
+  const membership = await requireCompanyMembership();
+  if (membership.companyId !== companyId) {
+    throw new Error("소속 회사 권한이 없습니다.");
+  }
+
+  const supabase = createAdminClient();
+  const { data: company } = await supabase
+    .from("companies")
+    .select("intro")
+    .eq("id", companyId)
+    .single();
+
+  let metaObj: Record<string, any> = {};
+  if (company?.intro && company.intro.startsWith("__COMPANY_METADATA__:")) {
+    try {
+      metaObj = JSON.parse(company.intro.substring("__COMPANY_METADATA__:".length));
+    } catch {}
+  }
+  metaObj.company_onboarding_confirmed_at = new Date().toISOString();
+
+  const { error } = await supabase
+    .from("companies")
+    .update({
+      intro: `__COMPANY_METADATA__:${JSON.stringify(metaObj)}`,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", companyId);
+
+  if (error) {
+    throw new Error(`회사 정보 확인 처리 실패: ${error.message}`);
+  }
+
+  revalidatePath("/portal");
+  revalidatePath("/portal/company/info");
+  return { success: true };
+}
+
 

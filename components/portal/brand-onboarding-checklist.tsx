@@ -8,16 +8,17 @@ export interface BrandOnboardingChecklistProps {
   companyId: string;
   companyName: string;
   userEmail: string;
-  isAccountActive: boolean;
-  isCompanyInfoComplete: boolean;
+  isCompanyInfoConfirmed: boolean;
+  isAdminProfileConfirmed: boolean;
   isTeamComplete: boolean;
   teamCount: number;
   teamSkipped: boolean;
-  isBrandComplete: boolean;
+  isBrandConfirmed: boolean;
   brandCount: number;
   brandName?: string | null;
   isProductComplete: boolean;
-  productCount: number;
+  completeProductCount: number;
+  totalProductCount: number;
   isAgreementComplete: boolean;
   agreementStatus?: string | null;
   agreementVersion?: string | null;
@@ -28,16 +29,17 @@ export function BrandOnboardingChecklist({
   companyId,
   companyName,
   userEmail,
-  isAccountActive,
-  isCompanyInfoComplete,
+  isCompanyInfoConfirmed,
+  isAdminProfileConfirmed,
   isTeamComplete,
   teamCount,
   teamSkipped,
-  isBrandComplete,
+  isBrandConfirmed,
   brandCount,
   brandName,
   isProductComplete,
-  productCount,
+  completeProductCount,
+  totalProductCount,
   isAgreementComplete,
   agreementStatus,
   agreementVersion,
@@ -47,28 +49,28 @@ export function BrandOnboardingChecklist({
 
   const steps = [
     {
-      id: "account",
+      id: "company",
       number: 1,
-      title: "계정 활성화",
-      subtitle: "포털 계정 활성화 완료",
-      description: "파트너십 신청 검증 및 포털 계정 비밀번호 설정이 완료되었습니다.",
-      isComplete: isAccountActive,
-      statusLabel: "완료 ✓",
-      detailText: userEmail,
-      ctaLabel: "활성화 완료",
-      ctaHref: null,
+      title: "회사 정보 확인",
+      subtitle: "기본 기업 정보 및 로고 등록",
+      description: "회사명, 사업자등록번호, 주소, 웹사이트, 주요 연락처 및 회사 로고를 검토하고 완료해 주세요.",
+      isComplete: isCompanyInfoConfirmed,
+      statusLabel: isCompanyInfoConfirmed ? "완료 ✓" : "미완료",
+      detailText: isCompanyInfoConfirmed ? "회사 정보 확인 완료" : "검토 및 확인 완료 필요",
+      ctaLabel: isCompanyInfoConfirmed ? "회사 정보 보기 →" : "회사 정보 확인하기 →",
+      ctaHref: "/portal/company/info",
     },
     {
-      id: "company",
+      id: "admin_profile",
       number: 2,
-      title: "회사 정보 확인",
-      subtitle: "기본 기업 정보 및 담당자",
-      description: "회사명, 사업자등록번호, 주소, 웹사이트, 주요 연락처를 확인하고 완료해 주세요.",
-      isComplete: isCompanyInfoComplete,
-      statusLabel: isCompanyInfoComplete ? "완료 ✓" : "미완료",
-      detailText: isCompanyInfoComplete ? "기본 정보 확인 완료" : "필수 정보 입력 필요",
-      ctaLabel: isCompanyInfoComplete ? "회사 정보 보기 →" : "회사 정보 확인하기 →",
-      ctaHref: "/portal/company/info",
+      title: "관리자 정보 확인",
+      subtitle: "포털 대표 관리자 프로필",
+      description: "대표 관리자의 이름, 직함, 국가번호 및 연락처를 확인하고 저장해 주세요.",
+      isComplete: isAdminProfileConfirmed,
+      statusLabel: isAdminProfileConfirmed ? "완료 ✓" : "미완료",
+      detailText: isAdminProfileConfirmed ? "관리자 프로필 확인 완료" : "직함/연락처 등록 필요",
+      ctaLabel: isAdminProfileConfirmed ? "관리자 프로필 보기 →" : "관리자 정보 확인하기 →",
+      ctaHref: "/portal/account",
     },
     {
       id: "team",
@@ -95,31 +97,35 @@ export function BrandOnboardingChecklist({
     {
       id: "brand",
       number: 4,
-      title: "브랜드 등록",
-      subtitle: "대표 브랜드 정보 관리",
-      description: "글로벌 유통 및 판매를 위한 대표 브랜드 정보를 등록하거나 확인하세요.",
-      isComplete: isBrandComplete,
-      statusLabel: isBrandComplete ? "완료 ✓" : "미완료",
-      detailText: isBrandComplete
+      title: "브랜드 정보 확인",
+      subtitle: "대표 브랜드 및 상표권 등록 여부",
+      description: "브랜드 정보와 한국/미국 상표권 등록 여부(예/아니오)를 검토하고 저장하세요.",
+      isComplete: isBrandConfirmed,
+      statusLabel: isBrandConfirmed ? "완료 ✓" : "미완료",
+      detailText: isBrandConfirmed
         ? brandName
           ? `등록 브랜드: ${brandName}`
-          : `${brandCount}개 브랜드 등록됨`
+          : `${brandCount}개 브랜드 확인됨`
+        : brandCount > 0
+        ? "상표권 등록 여부 검토 필요"
         : "등록된 브랜드 없음",
-      ctaLabel: isBrandComplete ? "브랜드 관리 →" : "브랜드 등록하기 →",
+      ctaLabel: isBrandConfirmed ? "브랜드 관리 →" : "브랜드 정보 확인하기 →",
       ctaHref: "/portal/brands",
     },
     {
       id: "product",
       number: 5,
-      title: "상품 등록",
-      subtitle: "유통 상품 등록 및 규격",
-      description: "글로벌 유통 및 파트너 매칭을 위해 상품 정보 및 패키지 규격을 등록하세요.",
+      title: "상품 등록 완료",
+      subtitle: "상품 정식 등록 (필수 규격/바코드)",
+      description: "글로벌 유통 및 파트너 매칭을 위해 최소 1개 이상의 상품을 정식 등록(등록 완료)하세요.",
       isComplete: isProductComplete,
       statusLabel: isProductComplete ? "완료 ✓" : "미완료",
       detailText: isProductComplete
-        ? `${productCount}개 상품 등록됨`
-        : "등록된 상품 없음",
-      ctaLabel: isProductComplete ? "상품 관리 →" : "상품 등록하기 →",
+        ? `${completeProductCount}개 상품 등록 완료`
+        : totalProductCount > 0
+        ? "등록 완료된 상품이 없습니다. (Draft/보완 대기 상태)"
+        : "등록 완료된 상품이 없습니다.",
+      ctaLabel: isProductComplete ? "상품 관리 →" : "상품 등록/보완하기 →",
       ctaHref: "/portal/products",
     },
     {
@@ -180,7 +186,7 @@ export function BrandOnboardingChecklist({
           <p className="text-xs text-zinc-500 dark:text-zinc-400">
             {isAllComplete
               ? "모든 온보딩 6단계를 완료하셨습니다. 이제 글로벌 유통 및 발주/정산 업무를 자유롭게 진행하실 수 있습니다."
-              : "K SELECT NETWORK 글로벌 유통 및 파트너십을 위한 6단계 온보딩 체크리스트입니다. 순서대로 완료해 주세요."}
+              : "K SELECT NETWORK 글로벌 유통 및 파트너십을 위한 6단계 온보딩 체크리스트입니다. 각 항목을 검토하고 완료해 주세요."}
           </p>
         </div>
 
@@ -271,7 +277,7 @@ export function BrandOnboardingChecklist({
 
                 {/* Footer: Detail & CTA Button */}
                 <div className="pt-4 mt-3 border-t border-zinc-150 dark:border-zinc-800/80 space-y-2">
-                  <div className="text-[11px] font-mono text-zinc-500 dark:text-zinc-400 truncate">
+                  <div className="text-[11px] font-mono text-zinc-500 dark:text-zinc-400 truncate" title={step.detailText}>
                     {step.detailText}
                   </div>
 
@@ -289,7 +295,7 @@ export function BrandOnboardingChecklist({
                       </Link>
                     ) : (
                       <span className="flex-1 inline-flex items-center justify-center rounded-lg border border-emerald-200/60 bg-emerald-50/50 dark:border-emerald-900/40 dark:bg-emerald-950/30 px-3 py-2 text-xs font-bold text-emerald-700 dark:text-emerald-300 cursor-default">
-                        {step.ctaLabel} ✓
+                        {step.ctaLabel}
                       </span>
                     )}
 

@@ -12,6 +12,9 @@ import { OVERALL_STATUS_LABELS, OVERALL_STATUS_COLORS } from "@/lib/purchase-ord
 import { formatEasternDateTime } from "@/lib/utils/timezone";
 import { BrandOnboardingChecklist } from "@/components/portal/brand-onboarding-checklist";
 import { parseCompanyMetadata } from "@/lib/company/admin-actions";
+import { evaluateProductRegistrationStatus } from "@/lib/product/registration-status";
+import { getBatchProductCategoryCompletions } from "@/lib/product/attribute-completion";
+import { resolveEffectiveSku } from "@/lib/product/types";
 
 export const dynamic = "force-dynamic";
 
@@ -86,47 +89,81 @@ export default async function PortalHomePage() {
   // 7. Fetch Products (Canonical source for company)
   const { data: rawProducts } = await supabase
     .from("products")
-    .select("id, name, name_en, category, brand_id, letusto_sku, manufacture_sku, price_krw_retail, price_usd_fob, package_width, package_depth, package_height, package_weight, price_additional_info, origin, upc, ean, selling_online, sales_link_1, selection_status, status, updated_at, created_at")
+    .select("id, name, name_en, category, brand_id, letusto_sku, manufacture_sku, price_krw_retail, price_usd_fob, item_width, item_depth, item_height, item_weight, package_width, package_depth, package_height, package_weight, carton_pack_qty, carton_width, carton_depth, carton_height, carton_weight, price_additional_info, origin, upc, ean, selling_online, selling_offline, sales_link_1, sales_link_2, category_code, selection_status, sales_status, status, updated_at, created_at")
     .eq("company_id", companyId)
     .order("updated_at", { ascending: false });
 
   const products = rawProducts ?? [];
 
-  // Determine product completeness
-  let activeProductCount = 0;
+  // Fetch product images
+  const { data: productImages } = await supabase
+    .from("product_images")
+    .select("id, product_id")
+    .eq("company_id", companyId);
+
+  // Fetch category & attribute completion status for all products
+  let categoryCompletions = new Map<string, any>();
+  try {
+    categoryCompletions = await getBatchProductCategoryCompletions(
+      products.map((p) => ({
+        id: p.id,
+        category_code: p.category_code || null,
+      }))
+    );
+  } catch (err) {
+    console.error("Dashboard products categoryCompletions error:", err);
+  }
+
+  // Authoritative product completeness evaluation
+  let completeProductCount = 0;
   let incompleteProductCount = 0;
   const productsWithIssues: any[] = [];
 
   for (const p of products) {
     const adminOverrides = (p.price_additional_info as any)?.admin_overrides || {};
-    const effectiveManufactureSku = adminOverrides.manufacture_sku || p.manufacture_sku || "";
+    const effectiveManufactureSku = resolveEffectiveSku(adminOverrides.manufacture_sku, p.manufacture_sku);
+    const catCompletion = categoryCompletions.get(p.id) || null;
+    const hasImages = (productImages ?? []).some((img) => img.product_id === p.id);
+    const effectiveDeletedAt = (p as any).deleted_at || (p.price_additional_info as any)?.deleted_at || null;
 
-    const missingFields: string[] = [];
-    if (!p.brand_id) missingFields.push("브랜드");
-    if (!p.category) missingFields.push("카테고리");
-    if (!p.name_en?.trim()) missingFields.push("영문 제품명");
-    if (!effectiveManufactureSku.trim()) missingFields.push("제조사 SKU");
-    if (!p.origin?.trim()) missingFields.push("원산지");
-    if (!p.price_krw_retail || Number(p.price_krw_retail) <= 0) missingFields.push("소비자 판매가");
-    if (!p.price_usd_fob || Number(p.price_usd_fob) <= 0) missingFields.push("FOB 수출 가격");
+    const regEval = evaluateProductRegistrationStatus({
+      id: p.id,
+      name: p.name,
+      name_en: p.name_en,
+      brand_id: p.brand_id,
+      category_code: p.category_code,
+      manufacture_sku: effectiveManufactureSku,
+      origin: p.origin,
+      price_krw_retail: p.price_krw_retail,
+      price_usd_fob: p.price_usd_fob,
+      item_width: p.item_width,
+      item_depth: p.item_depth,
+      item_height: p.item_height,
+      item_weight: p.item_weight,
+      package_width: p.package_width,
+      package_depth: p.package_depth,
+      package_height: p.package_height,
+      package_weight: p.package_weight,
+      carton_pack_qty: p.carton_pack_qty,
+      carton_width: p.carton_width,
+      carton_depth: p.carton_depth,
+      carton_height: p.carton_height,
+      carton_weight: p.carton_weight,
+      upc: p.upc,
+      ean: p.ean,
+      selling_online: p.selling_online,
+      sales_link_1: p.sales_link_1,
+      deleted_at: effectiveDeletedAt,
+      adminOverrides,
+      hasImages,
+      categoryCompletion: catCompletion,
+    });
 
-    const widthVal = Number(p.package_width || 0);
-    const depthVal = Number(p.package_depth || 0);
-    const heightVal = Number(p.package_height || 0);
-    const weightVal = Number(p.package_weight || 0);
-    if (widthVal <= 0 || depthVal <= 0 || heightVal <= 0 || weightVal <= 0) {
-      missingFields.push("패키지 규격");
-    }
-
-    if (!p.upc?.trim() && !p.ean?.trim()) {
-      missingFields.push("바코드");
-    }
-
-    if (missingFields.length === 0) {
-      activeProductCount++;
+    if (regEval.status === "COMPLETE") {
+      completeProductCount++;
     } else {
       incompleteProductCount++;
-      productsWithIssues.push({ product: p, missingFields });
+      productsWithIssues.push({ product: p, missingFields: regEval.missingFields });
     }
   }
 
@@ -368,17 +405,12 @@ export default async function PortalHomePage() {
   const teamCount = companyUsersList.length;
 
   const parsedMeta = await parseCompanyMetadata(company || {});
-  const isCompanyInfoComplete = Boolean(
-    company?.name?.trim() &&
-    company?.business_registration_number?.trim() &&
-    company?.country?.trim() &&
-    (parsedMeta.address_1?.trim() || parsedMeta.address?.trim()) &&
-    parsedMeta.city?.trim() &&
-    (company?.contact_phone?.trim() || parsedMeta.contacts?.[0]?.phone?.trim())
-  );
+  const isCompanyInfoConfirmed = Boolean(parsedMeta.company_onboarding_confirmed_at);
+  const isAdminProfileConfirmed = Boolean(parsedMeta.admin_profile_onboarding_confirmed_at);
   const teamSkipped = Boolean(parsedMeta.team_onboarding_skipped);
   const isTeamComplete = teamCount > 1 || teamSkipped;
-  const isProductComplete = products.length > 0;
+  const isBrandConfirmed = Boolean(parsedMeta.brand_onboarding_confirmed_at);
+  const isProductComplete = completeProductCount >= 1;
   const isAgreementComplete = agreement?.status === "active";
 
   return (
@@ -424,21 +456,22 @@ export default async function PortalHomePage() {
         </div>
       </div>
 
-      {/* 2. 6-Step Brand Onboarding Checklist (PORT-ONB-002-R1) */}
+      {/* 2. 6-Step Brand Onboarding Checklist (PORT-ONB-002-R2) */}
       <BrandOnboardingChecklist
         companyId={companyId}
         companyName={company?.name || "브랜드 파트너"}
         userEmail={session.email}
-        isAccountActive={true}
-        isCompanyInfoComplete={isCompanyInfoComplete}
+        isCompanyInfoConfirmed={isCompanyInfoConfirmed}
+        isAdminProfileConfirmed={isAdminProfileConfirmed}
         isTeamComplete={isTeamComplete}
         teamCount={teamCount}
         teamSkipped={teamSkipped}
-        isBrandComplete={isBrandComplete}
+        isBrandConfirmed={isBrandConfirmed}
         brandCount={brandList.length}
         brandName={primaryBrandName}
         isProductComplete={isProductComplete}
-        productCount={products.length}
+        completeProductCount={completeProductCount}
+        totalProductCount={products.length}
         isAgreementComplete={isAgreementComplete}
         agreementStatus={agreement?.status}
         agreementVersion={agreement?.version}
@@ -565,7 +598,7 @@ export default async function PortalHomePage() {
                 운영 활성 제품
               </div>
               <div className="mt-1 text-2xl font-bold font-mono text-zinc-950 dark:text-white">
-                {activeProductCount}
+                {completeProductCount}
               </div>
               <div className="mt-1 text-[11px] text-zinc-400">
                 전체 {products.length}개 등록
@@ -969,8 +1002,8 @@ export default async function PortalHomePage() {
                     <div className="text-lg font-bold font-mono text-zinc-950 dark:text-white mt-0.5">{products.length}개</div>
                   </div>
                   <div className="p-2.5 rounded-lg border border-emerald-100 bg-emerald-50/30 dark:border-emerald-900/30 dark:bg-emerald-950/20">
-                    <div className="text-[11px] text-emerald-700 dark:text-emerald-400 font-medium">활성 거래 제품</div>
-                    <div className="text-lg font-bold font-mono text-emerald-800 dark:text-emerald-300 mt-0.5">{activeProductCount}개</div>
+                    <div className="text-[11px] text-emerald-700 dark:text-emerald-400 font-medium">등록 완료 제품</div>
+                    <div className="text-lg font-bold font-mono text-emerald-800 dark:text-emerald-300 mt-0.5">{completeProductCount}개</div>
                   </div>
                   <div className="p-2.5 rounded-lg border border-amber-100 bg-amber-50/30 dark:border-amber-900/30 dark:bg-amber-950/20">
                     <div className="text-[11px] text-amber-700 dark:text-amber-400 font-medium">정보 보완 필요</div>

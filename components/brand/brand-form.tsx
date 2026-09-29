@@ -203,21 +203,38 @@ export function BrandForm({
 
       {/* 대한민국 특허청 상표권 */}
       <div className="space-y-4 rounded-lg border border-zinc-200 p-4 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-950/20">
-        <div className="flex items-center justify-between">
-          <label htmlFor="hasKrTrademark" className="text-sm font-bold text-zinc-900 dark:text-white cursor-pointer select-none">
+        <div>
+          <label className="text-sm font-bold text-zinc-900 dark:text-white block mb-2">
             대한민국 특허청 상표권 등록 여부
           </label>
-          <input
-            id="hasKrTrademark"
-            type="checkbox"
-            checked={hasKrTrademark}
-            onChange={(e) => setHasKrTrademark(e.target.checked)}
-            className="h-4 w-4 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-900"
-          />
+          <div className="flex items-center gap-6">
+            <label className="flex items-center gap-2 text-xs font-semibold text-zinc-800 dark:text-zinc-200 cursor-pointer">
+              <input
+                type="radio"
+                name="krTrademarkChoice"
+                value="yes"
+                checked={hasKrTrademark === true}
+                onChange={() => setHasKrTrademark(true)}
+                className="h-4 w-4 border-zinc-300 text-[#131E2E] focus:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-900"
+              />
+              <span>예 (등록됨)</span>
+            </label>
+            <label className="flex items-center gap-2 text-xs font-semibold text-zinc-800 dark:text-zinc-200 cursor-pointer">
+              <input
+                type="radio"
+                name="krTrademarkChoice"
+                value="no"
+                checked={hasKrTrademark === false}
+                onChange={() => setHasKrTrademark(false)}
+                className="h-4 w-4 border-zinc-300 text-[#131E2E] focus:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-900"
+              />
+              <span>아니오 (미등록 / 출원 중)</span>
+            </label>
+          </div>
         </div>
 
         {hasKrTrademark && (
-          <div className="space-y-3.5 pt-1.5 border-t border-zinc-200/60 dark:border-zinc-800/60 animate-fadeIn">
+          <div className="space-y-3.5 pt-2 border-t border-zinc-200/60 dark:border-zinc-800/60 animate-fadeIn">
             <div>
               <label htmlFor="krTrademarkNumber" className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 block mb-1">
                 상표권 등록 번호
@@ -272,21 +289,38 @@ export function BrandForm({
 
       {/* 미국 USPTO 상표권 */}
       <div className="space-y-4 rounded-lg border border-zinc-200 p-4 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-950/20">
-        <div className="flex items-center justify-between">
-          <label htmlFor="hasUsTrademark" className="text-sm font-bold text-zinc-900 dark:text-white cursor-pointer select-none">
+        <div>
+          <label className="text-sm font-bold text-zinc-900 dark:text-white block mb-2">
             미국 USPTO 상표권 등록 여부
           </label>
-          <input
-            id="hasUsTrademark"
-            type="checkbox"
-            checked={hasUsTrademark}
-            onChange={(e) => setHasUsTrademark(e.target.checked)}
-            className="h-4 w-4 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-900"
-          />
+          <div className="flex items-center gap-6">
+            <label className="flex items-center gap-2 text-xs font-semibold text-zinc-800 dark:text-zinc-200 cursor-pointer">
+              <input
+                type="radio"
+                name="usTrademarkChoice"
+                value="yes"
+                checked={hasUsTrademark === true}
+                onChange={() => setHasUsTrademark(true)}
+                className="h-4 w-4 border-zinc-300 text-[#131E2E] focus:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-900"
+              />
+              <span>예 (등록됨)</span>
+            </label>
+            <label className="flex items-center gap-2 text-xs font-semibold text-zinc-800 dark:text-zinc-200 cursor-pointer">
+              <input
+                type="radio"
+                name="usTrademarkChoice"
+                value="no"
+                checked={hasUsTrademark === false}
+                onChange={() => setHasUsTrademark(false)}
+                className="h-4 w-4 border-zinc-300 text-[#131E2E] focus:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-900"
+              />
+              <span>아니오 (미등록 / 출원 중)</span>
+            </label>
+          </div>
         </div>
 
         {hasUsTrademark && (
-          <div className="space-y-3.5 pt-1.5 border-t border-zinc-200/60 dark:border-zinc-800/60 animate-fadeIn">
+          <div className="space-y-3.5 pt-2 border-t border-zinc-200/60 dark:border-zinc-800/60 animate-fadeIn">
             <div>
               <label htmlFor="usTrademarkNumber" className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 block mb-1">
                 상표권 등록 번호

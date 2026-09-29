@@ -3,8 +3,9 @@ import Link from "next/link";
 import { getPortalTenantContext } from "@/lib/company/dal";
 import { getSignedFileUrl } from "@/lib/files/storage";
 import { deactivateBrand, parseBrandTrademarks } from "@/lib/brand/actions";
-
+import { parseCompanyMetadata } from "@/lib/company/admin-actions";
 import { ConfirmForm } from "@/components/common/confirm-form";
+import { BrandOnboardingBanner } from "@/components/brand/brand-onboarding-banner";
 
 export const metadata: Metadata = {
   title: "브랜드 관리 | 파트너 포털",
@@ -12,6 +13,16 @@ export const metadata: Metadata = {
 
 export default async function BrandsPage() {
   const { companyId, supabase } = await getPortalTenantContext();
+
+  // Fetch company intro to check onboarding confirmation
+  const { data: company } = await supabase
+    .from("companies")
+    .select("intro")
+    .eq("id", companyId)
+    .single();
+
+  const parsedMeta = await parseCompanyMetadata(company || {});
+  const isBrandConfirmed = Boolean(parsedMeta.brand_onboarding_confirmed_at);
 
   // Safely fetch brands with trademark columns
   let brandsData: any[] = [];
@@ -67,6 +78,11 @@ export default async function BrandsPage() {
           새 브랜드 추가
         </Link>
       </div>
+
+      {/* Onboarding Banner */}
+      {resolvedBrands.length > 0 && (
+        <BrandOnboardingBanner isConfirmed={isBrandConfirmed} />
+      )}
 
       {/* Brands Grid */}
       {resolvedBrands.length === 0 ? (

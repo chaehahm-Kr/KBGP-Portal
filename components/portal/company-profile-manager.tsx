@@ -2,7 +2,7 @@
 
 import React, { useState, useTransition } from "react";
 import Link from "next/link";
-import { updateCompanyPortalMetadata, portalUploadCompanyLogo, portalUpdateSupplierProfile, portalUpdateSupplierRemittance } from "@/lib/company/portal-actions";
+import { updateCompanyPortalMetadata, portalUploadCompanyLogo, portalUpdateSupplierProfile, portalUpdateSupplierRemittance, confirmCompanyOnboardingAction } from "@/lib/company/portal-actions";
 import { type CompanyContact, type CompanyParsedMetadata } from "@/lib/company/admin-actions";
 import { assignTaskPrimaryUser, type TaskAssignmentItem, toggleTaskEmailNotification } from "@/lib/company/task-actions";
 import { InternationalPhoneInput } from "@/components/shared/international-phone-input";
@@ -354,6 +354,18 @@ export function CompanyProfileManager({
   // 활성 상태의 소속 사용자만 선택 가능
   const activeMembers = companyUsers.filter(u => u.status === "active");
 
+  const handleConfirmOnboarding = async () => {
+    startTransition(async () => {
+      try {
+        await confirmCompanyOnboardingAction(company.id);
+        alert("회사 정보 확인이 완료되었습니다. (온보딩 STEP 1 완료)");
+        window.location.reload();
+      } catch (err: any) {
+        alert(err instanceof Error ? err.message : "회사 정보 확인 처리 실패");
+      }
+    });
+  };
+
   return (
     <div className="space-y-6">
       <div>
@@ -362,6 +374,29 @@ export function CompanyProfileManager({
           귀사의 소속 법인 정보와 웹사이트, 그리고 소속 담당자들의 연락망을 확인하고 수정합니다.
         </p>
       </div>
+
+      {/* Onboarding Confirmation Banner (Step 1) */}
+      {!parsedMeta.company_onboarding_confirmed_at && (
+        <div className="rounded-xl border border-amber-300 bg-amber-50/90 p-4 dark:border-amber-900/70 dark:bg-amber-950/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs animate-fadeIn">
+          <div className="space-y-1">
+            <div className="text-xs font-extrabold text-amber-950 dark:text-amber-200 flex items-center gap-1.5">
+              <span>🚀</span>
+              <span>온보딩 STEP 1 — 회사 정보 확인</span>
+            </div>
+            <p className="text-xs text-amber-800 dark:text-amber-400">
+              기본 법인 정보, 주소, 대표 연락처 및 회사 로고를 검토하신 후 확인 완료 버튼을 눌러주세요.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={handleConfirmOnboarding}
+            disabled={isPending}
+            className="px-4 py-2 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs shadow-sm cursor-pointer whitespace-nowrap transition-colors disabled:opacity-50"
+          >
+            {isPending ? "처리중..." : "회사 정보 확인 완료 ✓"}
+          </button>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 gap-6 md:grid-cols-3 items-start">
         {/* Left Column: General & Legal Info */}
@@ -423,6 +458,9 @@ export function CompanyProfileManager({
                     LOGO
                   </div>
                 )}
+                <p className="text-[10px] text-zinc-500 dark:text-zinc-400 text-center">
+                  회사 로고를 등록하면 포털 및 관련 문서에서 회사 식별이 더 명확해집니다. (선택)
+                </p>
                 {isEditingMeta && (
                   <div className="w-full mt-1">
                     <input

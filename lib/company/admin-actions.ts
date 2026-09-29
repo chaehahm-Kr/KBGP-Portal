@@ -44,6 +44,9 @@ export interface CompanyParsedMetadata {
   logoPath?: string | null;
   logoUrl?: string | null;
   team_onboarding_skipped?: boolean;
+  company_onboarding_confirmed_at?: string | null;
+  admin_profile_onboarding_confirmed_at?: string | null;
+  brand_onboarding_confirmed_at?: string | null;
 }
 
 export async function parseCompanyMetadata(company: any): Promise<CompanyParsedMetadata> {
@@ -108,6 +111,9 @@ export async function parseCompanyMetadata(company: any): Promise<CompanyParsedM
         logoPath,
         logoUrl,
         team_onboarding_skipped: Boolean(data.team_onboarding_skipped),
+        company_onboarding_confirmed_at: data.company_onboarding_confirmed_at || null,
+        admin_profile_onboarding_confirmed_at: data.admin_profile_onboarding_confirmed_at || null,
+        brand_onboarding_confirmed_at: data.brand_onboarding_confirmed_at || null,
       };
     } catch (e) {
       // ignore
