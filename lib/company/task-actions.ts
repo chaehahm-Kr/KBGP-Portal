@@ -381,3 +381,136 @@ export async function toggleTaskEmailNotification(
   revalidatePath("/portal/company/info");
   revalidatePath("/portal");
 }
+
+export interface BatchTaskAssignmentItem {
+  taskCode: string;
+  primaryUserId: string | null;
+  notifyUserIds: string[];
+}
+
+/**
+ * 7. 회사 6대 담당 업무 배정 및 알림 수신인 일괄(Batch) 저장
+ */
+export async function saveCompanyTaskAssignmentsBatch(
+  companyId: string,
+  assignmentsPayload: BatchTaskAssignmentItem[],
+  path: "portal" | "admin"
+): Promise<{ success: boolean; message?: string; error?: string }> {
+  try {
+    const admin = createAdminClient();
+
+    let changerId: string | null = null;
+    try {
+      if (path === "admin") {
+        const sess = await verifyAdminSession();
+        changerId = sess.userId;
+      } else {
+        const supabase = await createClient();
+        const { data: { user } } = await supabase.auth.getUser();
+        changerId = user?.id || null;
+      }
+    } catch (e) {}
+
+    // 1. Fetch current active company users
+    const { data: activeUsers } = await admin
+      .from("company_users")
+      .select("id, name, email, status")
+      .eq("company_id", companyId);
+
+    const activeUserIds = new Set((activeUsers ?? []).map((u) => u.id));
+
+    // 2. Process each task assignment in batch
+    for (const item of assignmentsPayload) {
+      const { taskCode, primaryUserId, notifyUserIds } = item;
+
+      // Unset previous primary for this task in company
+      await admin
+        .from("company_task_assignments")
+        .update({ is_primary: false, updated_at: new Date().toISOString(), updated_by: changerId, updated_path: path })
+        .eq("company_id", companyId)
+        .eq("task_code", taskCode);
+
+      // Upsert for primary user
+      if (primaryUserId && activeUserIds.has(primaryUserId)) {
+        const isNotified = notifyUserIds.includes(primaryUserId) || true; // Primary user default gets email notification
+        const { error: upsertPrimaryErr } = await admin
+          .from("company_task_assignments")
+          .upsert({
+            company_id: companyId,
+            user_id: primaryUserId,
+            task_code: taskCode,
+            is_primary: true,
+            email_notify: isNotified,
+            updated_at: new Date().toISOString(),
+            updated_by: changerId,
+            updated_path: path,
+          }, {
+            onConflict: "company_id,user_id,task_code",
+          });
+
+        if (upsertPrimaryErr) {
+          throw new Error(`주 담당자 저장 실패 (${taskCode}): ${upsertPrimaryErr.message}`);
+        }
+      }
+
+      // Upsert for notify users
+      for (const notifyId of notifyUserIds) {
+        if (notifyId !== primaryUserId && activeUserIds.has(notifyId)) {
+          const { error: upsertNotifyErr } = await admin
+            .from("company_task_assignments")
+            .upsert({
+              company_id: companyId,
+              user_id: notifyId,
+              task_code: taskCode,
+              is_primary: false,
+              email_notify: true,
+              updated_at: new Date().toISOString(),
+              updated_by: changerId,
+              updated_path: path,
+            }, {
+              onConflict: "company_id,user_id,task_code",
+            });
+
+          if (upsertNotifyErr) {
+            throw new Error(`알림 수신인 저장 실패 (${taskCode}): ${upsertNotifyErr.message}`);
+          }
+        }
+      }
+
+      // Clear email_notify for active users who are neither primary nor in notifyUserIds
+      for (const u of activeUsers ?? []) {
+        if (u.id !== primaryUserId && !notifyUserIds.includes(u.id)) {
+          await admin
+            .from("company_task_assignments")
+            .update({ email_notify: false, is_primary: false, updated_at: new Date().toISOString(), updated_by: changerId, updated_path: path })
+            .eq("company_id", companyId)
+            .eq("user_id", u.id)
+            .eq("task_code", taskCode);
+        }
+      }
+
+      // Log batch update
+      await admin.from("company_task_assignment_logs").insert({
+        company_id: companyId,
+        user_id: primaryUserId || changerId,
+        task_code: taskCode,
+        is_primary: !!primaryUserId,
+        email_notify: notifyUserIds.length > 0,
+        changed_at: new Date().toISOString(),
+        changed_by: changerId,
+        changed_path: path,
+      });
+    }
+
+    revalidatePath(`/admin/companies/${companyId}`);
+    revalidatePath("/portal/company/users");
+    revalidatePath("/portal/company/info");
+    revalidatePath("/portal");
+    revalidatePath("/admin/companies");
+
+    return { success: true, message: "담당업무 및 주 담당자 설정이 저장되었습니다." };
+  } catch (err: any) {
+    console.error("[saveCompanyTaskAssignmentsBatch] Error:", err);
+    return { success: false, error: err.message || "담당 업무 일괄 저장 중 오류가 발생했습니다." };
+  }
+}

@@ -116,16 +116,16 @@ export async function updateCompanyPortalMetadata(
     throw new Error(`회사 정보를 업데이트하지 못했습니다: ${error.message}`);
   }
 
-  // Synchronize company_users table for all matching contacts
+  // Synchronize company_users table and contacts safely without erasing authoritative profile data
   const adminClient = createAdminClient();
   if (Array.isArray(payload.contacts)) {
     for (const contact of payload.contacts) {
       if (contact.id || contact.email) {
         const updateData: Record<string, any> = {};
-        if (contact.name) updateData.name = contact.name.trim();
-        if (contact.phone) updateData.phone = contact.phone.trim();
-        if (contact.title !== undefined) updateData.title = contact.title.trim() || null;
-        if (contact.position !== undefined) updateData.position = contact.position.trim() || null;
+        if (contact.name && contact.name.trim()) updateData.name = contact.name.trim();
+        if (contact.phone && contact.phone.trim()) updateData.phone = contact.phone.trim();
+        if (contact.title && contact.title.trim()) updateData.title = contact.title.trim();
+        if (contact.position && contact.position.trim()) updateData.position = contact.position.trim();
 
         if (Object.keys(updateData).length > 0) {
           if (contact.id && contact.id !== "default-contact") {

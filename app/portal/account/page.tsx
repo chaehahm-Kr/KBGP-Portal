@@ -2,6 +2,9 @@ import type { Metadata } from "next";
 import { getMyAccountData } from "@/lib/portal/account-actions";
 import { MyAccountView } from "@/components/portal/my-account-view";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export const metadata: Metadata = {
   title: "내 계정 관리 | 파트너 포털",
   description: "로그인 계정 프로필 및 보안 비밀번호 설정",

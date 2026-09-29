@@ -140,7 +140,14 @@ export async function updateMyAccountProfileAction(
       .eq("id", session.userId)
       .single();
 
-    if (verifyError || !verifiedUser || verifiedUser.name !== name.trim() || verifiedUser.title !== title.trim()) {
+    if (
+      verifyError ||
+      !verifiedUser ||
+      verifiedUser.name !== name.trim() ||
+      verifiedUser.title !== title.trim() ||
+      verifiedUser.phone !== phone.trim() ||
+      (verifiedUser.position || "") !== (position?.trim() || "")
+    ) {
       console.error("[updateMyAccountProfileAction] Read-back verification failed:", { verifyError, verifiedUser });
       return { success: false, error: "데이터베이스 저장 검증에 실패했습니다. 다시 시도해 주세요." };
     }
@@ -211,7 +218,7 @@ export async function updateMyAccountProfileAction(
     revalidatePath("/portal");
     revalidatePath("/admin/companies");
 
-    return { success: true, message: "관리자 프로필 정보가 성공적으로 변경 및 확인되었습니다." };
+    return { success: true, message: "관리자 프로필 정보가 성공적으로 저장되었습니다." };
   } catch (err: any) {
     if (err?.digest?.includes("NEXT_REDIRECT")) throw err;
     console.error("[updateMyAccountProfileAction] Unexpected error:", err);

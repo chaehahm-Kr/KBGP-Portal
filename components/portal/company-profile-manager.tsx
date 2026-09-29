@@ -4,7 +4,7 @@ import React, { useState, useTransition } from "react";
 import Link from "next/link";
 import { updateCompanyPortalMetadata, portalUploadCompanyLogo, portalUpdateSupplierProfile, portalUpdateSupplierRemittance, confirmCompanyOnboardingAction } from "@/lib/company/portal-actions";
 import { type CompanyContact, type CompanyParsedMetadata } from "@/lib/company/admin-actions";
-import { assignTaskPrimaryUser, type TaskAssignmentItem, toggleTaskEmailNotification } from "@/lib/company/task-actions";
+import { saveCompanyTaskAssignmentsBatch, type BatchTaskAssignmentItem, type TaskAssignmentItem } from "@/lib/company/task-actions";
 import { InternationalPhoneInput } from "@/components/shared/international-phone-input";
 import { CountrySelect } from "@/components/shared/country-select";
 import { CompanyShippingOriginsTab } from "@/components/company/company-shipping-origins-tab";
@@ -132,98 +132,138 @@ export function CompanyProfileManager({
   // [신규 기능]: 담당 업무 상태 로컬 관리
   const [tasks, setTasks] = useState<TaskAssignmentItem[]>(taskAssignments);
 
-  // [신규 기능]: 인쇄할 이메일 알림 수신자 목록 헬퍼 (로컬 수집 보강)
-  const getEmailRecipientsForTask = (taskCode: string) => {
-    return companyUsers
-      .filter(u => u.status === "active" && u.task_assignments?.some((a: any) => a.task_code === taskCode && a.email_notify))
-      .map(u => u.name || "(이름 없음)")
-      .join(", ") || "없음";
+  // Batch Task Assignment States
+  const getInitialTaskMaps = () => {
+    const pMap: Record<string, string | null> = {};
+    const nMap: Record<string, string[]> = {};
+
+    taskAssignments.forEach((t) => {
+      pMap[t.taskCode] = t.userId || null;
+      const notifies: string[] = [];
+      companyUsers.forEach((u) => {
+        const assign = u.task_assignments?.find((a: any) => a.task_code === t.taskCode);
+        if (assign?.email_notify) {
+          notifies.push(u.id);
+        }
+      });
+      if (t.userId && !notifies.includes(t.userId)) {
+        notifies.push(t.userId);
+      }
+      nMap[t.taskCode] = notifies;
+    });
+
+    return { pMap, nMap };
   };
 
-  // [신규 기능]: 알림 수신인 인라인 토글
-  const handleToggleEmailNotification = async (taskCode: string, userId: string, checked: boolean) => {
-    startTransition(async () => {
-      try {
-        await toggleTaskEmailNotification(company.id, taskCode, userId, checked, "portal");
-        // 로컬 상태 동기화 갱신
-        const matchedUser = companyUsers.find(u => u.id === userId);
-        if (matchedUser) {
-          if (!matchedUser.task_assignments) {
-            matchedUser.task_assignments = [];
-          }
-          const taskAssign = matchedUser.task_assignments.find((a: any) => a.task_code === taskCode);
-          if (taskAssign) {
-            taskAssign.email_notify = checked;
-          } else {
-            matchedUser.task_assignments.push({ task_code: taskCode, is_primary: false, email_notify: checked });
-          }
-        }
-        // 강제로 컴포넌트 리렌더링 유도를 위해 tasks 상태 업데이트
-        setTasks(prev => [...prev]);
-      } catch (err) {
-        alert(err instanceof Error ? err.message : "알림 설정 수정 실패");
-      }
+  const initialTaskState = React.useMemo(() => getInitialTaskMaps(), [taskAssignments, companyUsers]);
+
+  const [primaryMap, setPrimaryMap] = useState<Record<string, string | null>>(initialTaskState.pMap);
+  const [notifyMap, setNotifyMap] = useState<Record<string, string[]>>(initialTaskState.nMap);
+  const [savedPrimaryMap, setSavedPrimaryMap] = useState<Record<string, string | null>>(initialTaskState.pMap);
+  const [savedNotifyMap, setSavedNotifyMap] = useState<Record<string, string[]>>(initialTaskState.nMap);
+  const [taskMessage, setTaskMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
+  React.useEffect(() => {
+    const nextInit = getInitialTaskMaps();
+    setPrimaryMap(nextInit.pMap);
+    setNotifyMap(nextInit.nMap);
+    setSavedPrimaryMap(nextInit.pMap);
+    setSavedNotifyMap(nextInit.nMap);
+  }, [taskAssignments, companyUsers]);
+
+  const hasUnsavedTaskChanges = React.useMemo(() => {
+    const taskCodes = Object.keys(primaryMap);
+    for (const code of taskCodes) {
+      if (primaryMap[code] !== savedPrimaryMap[code]) return true;
+      const currNotifies = (notifyMap[code] || []).slice().sort().join(",");
+      const savedNotifies = (savedNotifyMap[code] || []).slice().sort().join(",");
+      if (currNotifies !== savedNotifies) return true;
+    }
+    return false;
+  }, [primaryMap, notifyMap, savedPrimaryMap, savedNotifyMap]);
+
+  // [신규 기능]: 알림 수신인 인라인 토글 (로컬 상태만 변경)
+  const handleToggleEmailNotification = (taskCode: string, userId: string, checked: boolean) => {
+    setNotifyMap((prev) => {
+      const current = prev[taskCode] || [];
+      return {
+        ...prev,
+        [taskCode]: checked ? [...current, userId] : current.filter((id) => id !== userId),
+      };
     });
   };
 
-  // [신규 기능]: 주 담당자 직접 변경 핸들러
-  const handleAssignPrimaryUser = async (taskCode: string, targetUserId: string | null) => {
-    const targetUser = companyUsers.find(u => u.id === targetUserId);
-    const currentPrimary = tasks.find(t => t.taskCode === taskCode);
-
-    if (targetUserId && currentPrimary?.userId && currentPrimary.userId !== targetUserId) {
-      const confirmChange = confirm(
-        `현재 이 업무에는 다른 주 담당자(${currentPrimary.userName || "미지정"})가 지정되어 있습니다. 주 담당자를 변경하시겠습니까?`
-      );
-      if (!confirmChange) return;
+  // [신규 기능]: 주 담당자 직접 변경 핸들러 (로컬 상태만 변경)
+  const handleAssignPrimaryUser = (taskCode: string, targetUserId: string | null) => {
+    setPrimaryMap((prev) => ({
+      ...prev,
+      [taskCode]: targetUserId,
+    }));
+    if (targetUserId) {
+      setNotifyMap((prev) => {
+        const current = prev[taskCode] || [];
+        if (!current.includes(targetUserId)) {
+          return { ...prev, [taskCode]: [...current, targetUserId] };
+        }
+        return prev;
+      });
     }
+  };
 
+  // [신규 기능]: 6대 담당 업무 일괄 저장
+  const handleSaveTasksBatch = () => {
+    setTaskMessage(null);
     startTransition(async () => {
       try {
-        await assignTaskPrimaryUser(company.id, taskCode, targetUserId, "portal");
+        const payload: BatchTaskAssignmentItem[] = tasks.map((t) => ({
+          taskCode: t.taskCode,
+          primaryUserId: primaryMap[t.taskCode] || null,
+          notifyUserIds: notifyMap[t.taskCode] || [],
+        }));
 
-        // 로컬 상태 동기화 갱신
-        setTasks(prev => 
-          prev.map(t => {
-            if (t.taskCode === taskCode) {
+        const res = await saveCompanyTaskAssignmentsBatch(company.id, payload, "portal");
+        if (res.success) {
+          setSavedPrimaryMap({ ...primaryMap });
+          setSavedNotifyMap({ ...notifyMap });
+          setTaskMessage({
+            type: "success",
+            text: res.message || "담당업무 및 주 담당자 설정이 저장되었습니다.",
+          });
+          setTasks((prev) =>
+            prev.map((t) => {
+              const assignedUserId = primaryMap[t.taskCode] || null;
+              const assignedUser = companyUsers.find((u) => u.id === assignedUserId);
               return {
                 ...t,
-                userId: targetUserId,
-                isPrimary: !!targetUserId,
-                userName: targetUser?.name || null,
-                userTitle: targetUser?.title || null,
-                userPosition: targetUser?.position || null,
-                userEmail: targetUser?.email || null,
-                userPhone: targetUser?.phone || null,
+                userId: assignedUserId,
+                isPrimary: !!assignedUserId,
+                userName: assignedUser?.name || null,
+                userTitle: assignedUser?.title || null,
+                userPosition: assignedUser?.position || null,
+                userEmail: assignedUser?.email || null,
+                userPhone: assignedUser?.phone || null,
               };
-            }
-            return t;
-          })
-        );
-
-        // companyUsers 측에서도 주담당자 정보(is_primary) 업데이트 처리
-        companyUsers.forEach(u => {
-          if (!u.task_assignments) u.task_assignments = [];
-          const taskAssign = u.task_assignments.find((a: any) => a.task_code === taskCode);
-          if (u.id === targetUserId) {
-            if (taskAssign) {
-              taskAssign.is_primary = true;
-              taskAssign.email_notify = true; // 주담당자는 이메일 알림 기본 활성화
-            } else {
-              u.task_assignments.push({ task_code: taskCode, is_primary: true, email_notify: true });
-            }
-          } else {
-            if (taskAssign) {
-              taskAssign.is_primary = false;
-            }
-          }
+            })
+          );
+        } else {
+          setTaskMessage({
+            type: "error",
+            text: res.error || "담당업무 저장에 실패했습니다.",
+          });
+        }
+      } catch (err: any) {
+        setTaskMessage({
+          type: "error",
+          text: err.message || "담당업무 저장 중 오류가 발생했습니다.",
         });
-
-        alert("담당자 배정이 완료되었습니다.");
-      } catch (err) {
-        alert(err instanceof Error ? err.message : "담당자 배정에 실패했습니다.");
       }
     });
+  };
+
+  const handleResetTasks = () => {
+    setPrimaryMap({ ...savedPrimaryMap });
+    setNotifyMap({ ...savedNotifyMap });
+    setTaskMessage(null);
   };
 
   const handleSaveMeta = async () => {
@@ -1341,109 +1381,189 @@ export function CompanyProfileManager({
           {/* [신규 기능]: 담당 업무 및 주 담당자 관리 테이블 카드 */}
           {activeTab === "tasks" && (
             <div className="rounded-lg border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-            <div className="flex items-center justify-between mb-4 pb-2 border-b border-zinc-100 dark:border-zinc-800">
-              <h3 className="text-sm font-bold text-zinc-950 dark:text-white">담당 업무 및 주 담당자</h3>
-            </div>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 pb-3 border-b border-zinc-100 dark:border-zinc-800">
+                <div>
+                  <h3 className="text-sm font-bold text-zinc-950 dark:text-white flex items-center gap-2">
+                    <span>📋</span>
+                    <span>담당 업무 및 주 담당자 (6대 운영 영역)</span>
+                  </h3>
+                  <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5">
+                    회사 운영 6대 핵심 영역별 주 담당자 및 알림 수신인을 지정합니다.
+                  </p>
+                </div>
+                {isCompanyAdmin && (
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {hasUnsavedTaskChanges && (
+                      <span className="text-[11px] font-semibold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 px-2.5 py-1 rounded-md border border-amber-200 dark:border-amber-800">
+                        저장되지 않은 변경사항이 있습니다.
+                      </span>
+                    )}
+                    {hasUnsavedTaskChanges && (
+                      <button
+                        type="button"
+                        onClick={handleResetTasks}
+                        disabled={isPending}
+                        className="px-3 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-700 text-xs font-bold text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800 cursor-pointer disabled:opacity-50"
+                      >
+                        취소
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={handleSaveTasksBatch}
+                      disabled={!hasUnsavedTaskChanges || isPending}
+                      className="rounded-lg bg-zinc-900 px-4 py-1.5 text-xs font-bold text-white hover:bg-zinc-800 disabled:opacity-40 disabled:cursor-not-allowed dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-100 cursor-pointer shadow-xs inline-flex items-center gap-2"
+                    >
+                      {isPending && (
+                        <span className="inline-block w-3 h-3 border-2 border-white/30 border-t-white dark:border-zinc-900/30 dark:border-t-zinc-900 rounded-full animate-spin" />
+                      )}
+                      <span>변경사항 저장</span>
+                    </button>
+                  </div>
+                )}
+              </div>
 
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse text-xs">
-                <thead>
-                  <tr className="border-b border-zinc-200 bg-zinc-50/50 text-[10px] font-bold text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900/50">
-                    <th className="px-4 py-3">업무명</th>
-                    <th className="px-4 py-3">주 담당자 정보</th>
-                    <th className="px-4 py-3">알림 수신인</th>
-                    <th className="px-4 py-3 text-center w-28">지정 상태</th>
-                    {isCompanyAdmin && <th className="px-4 py-3 text-right">담당자 변경</th>}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800/60">
-                  {tasks.map((task) => {
-                    const notifyNames = getEmailRecipientsForTask(task.taskCode);
-                    return (
-                      <tr key={task.taskCode} className="hover:bg-zinc-50/20">
-                        <td className="px-4 py-3.5">
-                          <span className="font-bold text-zinc-850 dark:text-zinc-200 block">{task.label}</span>
-                          <span className="text-[9px] text-zinc-400 block mt-0.5 leading-relaxed max-w-xs">{task.desc}</span>
-                        </td>
-                        <td className="px-4 py-3.5 text-zinc-700 dark:text-zinc-350">
-                          {task.userId ? (
-                            <div className="space-y-0.5">
-                              <a
-                                href="/portal/company/users"
-                                className="font-semibold text-emerald-600 hover:underline dark:text-emerald-450 text-[13px]"
-                              >
-                                {task.userName}
-                              </a>
-                              {task.userTitle || task.userPosition ? (
-                                <p className="text-[10px] text-zinc-400">
-                                  {task.userTitle || ""}{task.userTitle && task.userPosition ? " / " : ""}{task.userPosition || ""}
-                                </p>
-                              ) : null}
-                              <p className="text-[9px] text-zinc-450 font-mono">{task.userEmail}</p>
-                              {task.userPhone && <p className="text-[9px] text-zinc-400">📞 {task.userPhone}</p>}
-                            </div>
-                          ) : (
-                            <span className="text-zinc-450 italic">주 담당자 미지정</span>
-                          )}
-                        </td>
-                        <td className="px-4 py-3.5 text-zinc-500 dark:text-zinc-400">
-                          {isCompanyAdmin ? (
-                            <div className="flex flex-col gap-1 max-h-24 overflow-y-auto p-1.5 rounded border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 w-[140px] shadow-2xs">
-                              {activeMembers.map(u => {
-                                const isNotified = u.task_assignments?.some((a: any) => a.task_code === task.taskCode && a.email_notify);
-                                return (
-                                  <label key={u.id} className="flex items-center gap-1.5 text-[10px] font-semibold text-zinc-700 dark:text-zinc-300 cursor-pointer select-none">
-                                    <input
-                                      type="checkbox"
-                                      checked={!!isNotified}
-                                      onChange={(e) => handleToggleEmailNotification(task.taskCode, u.id, e.target.checked)}
-                                      disabled={isPending}
-                                      className="h-3.5 w-3.5 rounded border-zinc-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
-                                    />
-                                    <span className="truncate max-w-[80px]" title={u.name || "(이름 없음)"}>{u.name || "(이름 없음)"}</span>
-                                  </label>
-                                );
-                              })}
-                            </div>
-                          ) : (
-                            <span className="truncate max-w-xxs block" title={notifyNames}>{notifyNames}</span>
-                          )}
-                        </td>
-                        <td className="px-4 py-3.5 text-center">
-                          {task.userId ? (
-                            <span className="inline-block rounded bg-emerald-50 text-emerald-700 px-2 py-0.5 text-[10px] font-bold border border-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-900">
-                              설정 완료
-                            </span>
-                          ) : (
-                            <span className="inline-block rounded bg-rose-50 text-rose-700 px-2 py-0.5 text-[10px] font-bold border border-rose-100 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-900">
-                              미지정
-                            </span>
-                          )}
-                        </td>
-                        {isCompanyAdmin && (
-                          <td className="px-4 py-3.5 text-right">
-                            <select
-                              value={task.userId || ""}
-                              onChange={(e) => handleAssignPrimaryUser(task.taskCode, e.target.value || null)}
-                              disabled={isPending}
-                              className="rounded border border-zinc-200 bg-white p-1 text-[11px] text-zinc-800 outline-none dark:border-zinc-800 dark:bg-zinc-950 dark:text-white max-w-xs focus:ring-1 focus:ring-emerald-500 cursor-pointer"
-                            >
-                              <option value="">-- 담당자 선택 --</option>
-                              {activeMembers.map(u => (
-                                <option key={u.id} value={u.id}>
-                                  {u.name || "(이름 없음)"} ({u.title || "멤버"})
-                                </option>
-                              ))}
-                            </select>
+              {taskMessage && (
+                <div
+                  className={`mb-4 p-3 rounded-xl text-xs font-medium border flex items-center gap-2 ${
+                    taskMessage.type === "success"
+                      ? "bg-emerald-50 border-emerald-200 text-emerald-700 dark:bg-emerald-950/40 dark:border-emerald-900/60 dark:text-emerald-300"
+                      : "bg-rose-50 border-rose-200 text-rose-700 dark:bg-rose-950/40 dark:border-rose-900/60 dark:text-rose-300"
+                  }`}
+                >
+                  <span>{taskMessage.type === "success" ? "✅" : "⚠️"}</span>
+                  <span>{taskMessage.text}</span>
+                </div>
+              )}
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="border-b border-zinc-200 bg-zinc-50/50 text-[10px] font-bold text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900/50">
+                      <th className="px-4 py-3">업무명</th>
+                      <th className="px-4 py-3">주 담당자 정보</th>
+                      <th className="px-4 py-3">알림 수신인</th>
+                      <th className="px-4 py-3 text-center w-28">지정 상태</th>
+                      {isCompanyAdmin && <th className="px-4 py-3 text-right">담당자 변경</th>}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800/60">
+                    {tasks.map((task) => {
+                      const assignedUserId = primaryMap[task.taskCode] || null;
+                      const assignedUser = companyUsers.find((u) => u.id === assignedUserId);
+                      const notifyIds = notifyMap[task.taskCode] || [];
+                      const notifyNames =
+                        notifyIds
+                          .map((id) => companyUsers.find((u) => u.id === id)?.name || "(이름 없음)")
+                          .join(", ") || "없음";
+
+                      return (
+                        <tr key={task.taskCode} className="hover:bg-zinc-50/20">
+                          <td className="px-4 py-3.5">
+                            <span className="font-bold text-zinc-850 dark:text-zinc-200 block">{task.label}</span>
+                            <span className="text-[9px] text-zinc-400 block mt-0.5 leading-relaxed max-w-xs">{task.desc}</span>
                           </td>
-                        )}
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                          <td className="px-4 py-3.5 text-zinc-700 dark:text-zinc-350">
+                            {assignedUserId && assignedUser ? (
+                              <div className="space-y-0.5">
+                                <a
+                                  href="/portal/company/users"
+                                  className="font-semibold text-emerald-600 hover:underline dark:text-emerald-450 text-[13px]"
+                                >
+                                  {assignedUser.name || "(이름 없음)"}
+                                </a>
+                                {assignedUser.title || assignedUser.position ? (
+                                  <p className="text-[10px] text-zinc-400">
+                                    {assignedUser.title || ""}{assignedUser.title && assignedUser.position ? " / " : ""}{assignedUser.position || ""}
+                                  </p>
+                                ) : null}
+                                <p className="text-[9px] text-zinc-450 font-mono">{assignedUser.email}</p>
+                                {assignedUser.phone && <p className="text-[9px] text-zinc-400">📞 {assignedUser.phone}</p>}
+                              </div>
+                            ) : (
+                              <span className="text-zinc-450 italic">주 담당자 미지정</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3.5 text-zinc-500 dark:text-zinc-400">
+                            {isCompanyAdmin ? (
+                              <div className="flex flex-col gap-1 max-h-24 overflow-y-auto p-1.5 rounded border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 w-[140px] shadow-2xs">
+                                {activeMembers.map((u) => {
+                                  const isNotified = notifyIds.includes(u.id);
+                                  return (
+                                    <label key={u.id} className="flex items-center gap-1.5 text-[10px] font-semibold text-zinc-700 dark:text-zinc-300 cursor-pointer select-none">
+                                      <input
+                                        type="checkbox"
+                                        checked={isNotified}
+                                        onChange={(e) => handleToggleEmailNotification(task.taskCode, u.id, e.target.checked)}
+                                        className="h-3.5 w-3.5 rounded border-zinc-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                                      />
+                                      <span className="truncate max-w-[80px]" title={u.name || "(이름 없음)"}>{u.name || "(이름 없음)"}</span>
+                                    </label>
+                                  );
+                                })}
+                              </div>
+                            ) : (
+                              <span className="truncate max-w-xxs block" title={notifyNames}>{notifyNames}</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3.5 text-center">
+                            {assignedUserId ? (
+                              <span className="inline-block rounded bg-emerald-50 text-emerald-700 px-2 py-0.5 text-[10px] font-bold border border-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-900">
+                                설정 완료
+                              </span>
+                            ) : (
+                              <span className="inline-block rounded bg-rose-50 text-rose-700 px-2 py-0.5 text-[10px] font-bold border border-rose-100 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-900">
+                                미지정
+                              </span>
+                            )}
+                          </td>
+                          {isCompanyAdmin && (
+                            <td className="px-4 py-3.5 text-right">
+                              <select
+                                value={assignedUserId || ""}
+                                onChange={(e) => handleAssignPrimaryUser(task.taskCode, e.target.value || null)}
+                                className="rounded border border-zinc-200 bg-white p-1 text-[11px] text-zinc-800 outline-none dark:border-zinc-800 dark:bg-zinc-950 dark:text-white max-w-xs focus:ring-1 focus:ring-emerald-500 cursor-pointer"
+                              >
+                                <option value="">-- 담당자 선택 --</option>
+                                {activeMembers.map((u) => (
+                                  <option key={u.id} value={u.id}>
+                                    {u.name || "(이름 없음)"} ({u.title || "멤버"})
+                                  </option>
+                                ))}
+                              </select>
+                            </td>
+                          )}
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {isCompanyAdmin && hasUnsavedTaskChanges && (
+                <div className="mt-4 pt-3 border-t border-zinc-100 dark:border-zinc-800 flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={handleResetTasks}
+                    disabled={isPending}
+                    className="px-3 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-700 text-xs font-bold text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800 cursor-pointer disabled:opacity-50"
+                  >
+                    취소
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSaveTasksBatch}
+                    disabled={isPending}
+                    className="rounded-lg bg-zinc-900 px-5 py-1.5 text-xs font-bold text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-100 cursor-pointer shadow-xs inline-flex items-center gap-2"
+                  >
+                    {isPending && (
+                      <span className="inline-block w-3 h-3 border-2 border-white/30 border-t-white dark:border-zinc-900/30 dark:border-t-zinc-900 rounded-full animate-spin" />
+                    )}
+                    <span>변경사항 저장</span>
+                  </button>
+                </div>
+              )}
             </div>
-          </div>
           )}
         </div>
       </div>
