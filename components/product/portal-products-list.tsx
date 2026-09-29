@@ -29,6 +29,7 @@ interface PortalProductItem {
   brand_id: string;
   brandName: string;
   photoUrl: string | null;
+  photoUrls?: string[] | null;
   is_draft: boolean;
   missing_fields?: string[];
   selection_status?: SelectionStatus | string;
@@ -54,12 +55,26 @@ interface PortalProductsListProps {
   hasBrand: boolean;
 }
 
+const CATEGORY_TABS: { id: string; label: string }[] = [
+  { id: "all", label: "All" },
+  { id: "SKINCARE", label: "스킨케어" },
+  { id: "HAIR_SCALP", label: "헤어&스칼프" },
+  { id: "BEAUTY_TOOL", label: "뷰티소품툴" },
+  { id: "DAILY_CARE", label: "데일리케어" },
+  { id: "WELLNESS_PATCH", label: "웰니스/기능성패치" },
+  { id: "OTHER", label: "기타" },
+];
+
 export function PortalProductsList({ initialProducts, hasBrand }: PortalProductsListProps) {
   const searchParams = useSearchParams();
   const [products, setProducts] = useState<PortalProductItem[]>(initialProducts);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
-  const [selectedStatus, setSelectedStatus] = useState<string>("active_draft"); // 디폴트: 활성/보완 대기
+  // Default: 등록완료 + 보완대기 (Draft)
+  const [selectedStatuses, setSelectedStatuses] = useState<string[]>(["active", "draft"]);
+
+  // Zoom Lightbox State
+  const [zoomModal, setZoomModal] = useState<{ productName: string; images: string[]; currentIndex: number } | null>(null);
 
   // Selection & Bulk Delete state
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -80,6 +95,67 @@ export function PortalProductsList({ initialProducts, hasBrand }: PortalProducts
     setProducts(initialProducts);
   }, [initialProducts]);
 
+  // Keyboard navigation & body scroll lock for Image Zoom Lightbox
+  React.useEffect(() => {
+    if (!zoomModal) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setZoomModal(null);
+      } else if (e.key === "ArrowLeft") {
+        setZoomModal((prev) => {
+          if (!prev || prev.images.length <= 1) return prev;
+          const nextIndex = (prev.currentIndex - 1 + prev.images.length) % prev.images.length;
+          return { ...prev, currentIndex: nextIndex };
+        });
+      } else if (e.key === "ArrowRight") {
+        setZoomModal((prev) => {
+          if (!prev || prev.images.length <= 1) return prev;
+          const nextIndex = (prev.currentIndex + 1) % prev.images.length;
+          return { ...prev, currentIndex: nextIndex };
+        });
+      }
+    };
+
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [zoomModal]);
+
+  const handleStatusClick = (statusId: string) => {
+    if (statusId === "all") {
+      setSelectedStatuses(["all"]);
+      return;
+    }
+
+    setSelectedStatuses((prev) => {
+      const withoutAll = prev.filter((s) => s !== "all");
+      if (withoutAll.includes(statusId)) {
+        const next = withoutAll.filter((s) => s !== statusId);
+        return next.length === 0 ? ["all"] : next;
+      } else {
+        return [...withoutAll, statusId];
+      }
+    });
+  };
+
+  const openImageZoom = (product: PortalProductItem, initialIndex = 0) => {
+    const images = (product.photoUrls && product.photoUrls.length > 0)
+      ? product.photoUrls
+      : (product.photoUrl ? [product.photoUrl] : []);
+    if (images.length === 0) return;
+    setZoomModal({
+      productName: product.display_name,
+      images,
+      currentIndex: initialIndex >= 0 && initialIndex < images.length ? initialIndex : 0,
+    });
+  };
+
   const filteredProducts = products.filter((product) => {
     // 1. Search filter
     const searchLower = searchTerm.toLowerCase();
@@ -95,24 +171,22 @@ export function PortalProductsList({ initialProducts, hasBrand }: PortalProducts
       product.category === selectedCategory ||
       resolveRootCategoryEnum(product.category_code) === selectedCategory;
 
-    // 3. Status filter (Active vs Draft vs Deleted vs Active+Draft)
+    // 3. Status filter (Active vs Draft vs Deleted vs All)
     const matchesStatus = (() => {
-      if (selectedStatus === "active_draft") {
-        return !product.deleted_at; // 삭제되지 않은 활성 + 보완대기 전체
+      if (selectedStatuses.includes("all")) {
+        return true;
       }
-      if (selectedStatus === "active") {
-        return !product.deleted_at && !product.is_draft;
+      let matches = false;
+      if (selectedStatuses.includes("active") && !product.deleted_at && !product.is_draft) {
+        matches = true;
       }
-      if (selectedStatus === "draft") {
-        return !product.deleted_at && product.is_draft;
+      if (selectedStatuses.includes("draft") && !product.deleted_at && product.is_draft) {
+        matches = true;
       }
-      if (selectedStatus === "deleted") {
-        return !!product.deleted_at;
+      if (selectedStatuses.includes("deleted") && !!product.deleted_at) {
+        matches = true;
       }
-      if (selectedStatus === "all") {
-        return true; // 전체 (삭제 포함)
-      }
-      return true;
+      return matches;
     })();
 
     return matchesSearch && matchesCategory && matchesStatus;
@@ -129,10 +203,8 @@ export function PortalProductsList({ initialProducts, hasBrand }: PortalProducts
 
   const handleToggleSelectAll = () => {
     if (isAllSelected) {
-      // Deselect all currently visible selectable items
       setSelectedIds((prev) => prev.filter((id) => !selectableIds.includes(id)));
     } else {
-      // Select all currently visible selectable items
       setSelectedIds((prev) => Array.from(new Set([...prev, ...selectableIds])));
     }
   };
@@ -183,6 +255,14 @@ export function PortalProductsList({ initialProducts, hasBrand }: PortalProducts
 
   const selectedProductList = products.filter((p) => selectedIds.includes(p.id));
 
+  const isFilterChanged = Boolean(
+    searchTerm ||
+    selectedCategory !== "all" ||
+    selectedStatuses.length !== 2 ||
+    !selectedStatuses.includes("active") ||
+    !selectedStatuses.includes("draft")
+  );
+
   return (
     <div className="space-y-6">
       {/* Top Header */}
@@ -212,9 +292,9 @@ export function PortalProductsList({ initialProducts, hasBrand }: PortalProducts
 
       {/* Filter and Search Bar Card */}
       <div className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 space-y-4">
-        <div className="flex flex-col md:flex-row gap-3">
-          {/* Search bar */}
-          <div className="relative flex-1">
+        {/* Search bar */}
+        <div>
+          <div className="relative w-full">
             <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-zinc-400 dark:text-zinc-500">
               🔍
             </span>
@@ -226,43 +306,53 @@ export function PortalProductsList({ initialProducts, hasBrand }: PortalProducts
               className="w-full rounded-lg border border-zinc-200 py-2.5 pl-10 pr-4 text-xs outline-none bg-zinc-50/50 focus:border-zinc-950 focus:bg-white dark:border-zinc-800 dark:bg-zinc-950 dark:text-white dark:focus:border-white dark:focus:bg-zinc-900 transition-all"
             />
           </div>
+        </div>
 
-          {/* Category Dropdown */}
-          <div className="w-full md:w-48">
-            <select
-              value={selectedCategory}
-              onChange={(e) => setSelectedCategory(e.target.value)}
-              className="w-full rounded-lg border border-zinc-200 p-2.5 text-xs outline-none bg-white text-zinc-800 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:border-zinc-950 dark:focus:border-white transition-all"
-            >
-              <option value="all">모든 카테고리</option>
-              {(Object.keys(PRODUCT_CATEGORY_LABEL) as ProductCategory[]).map((cat) => (
-                <option key={cat} value={cat}>
-                  {PRODUCT_CATEGORY_LABEL[cat]}
-                </option>
-              ))}
-            </select>
+        {/* Category Button Pills Filter */}
+        <div className="space-y-2">
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">
+            <span className="text-xs font-bold text-zinc-500 mr-1 shrink-0">카테고리:</span>
+            {CATEGORY_TABS.map((cat) => {
+              const isSelected = selectedCategory === cat.id;
+              return (
+                <button
+                  key={cat.id}
+                  type="button"
+                  onClick={() => setSelectedCategory(cat.id)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap border shrink-0 ${
+                    isSelected
+                      ? "bg-zinc-950 text-white border-zinc-950 dark:bg-white dark:text-zinc-950 dark:border-white shadow-sm"
+                      : "bg-zinc-50 text-zinc-600 border-zinc-200 hover:bg-zinc-100 hover:text-zinc-900 dark:bg-zinc-950 dark:text-zinc-400 dark:border-zinc-850 dark:hover:bg-zinc-900"
+                  }`}
+                >
+                  {cat.label}
+                </button>
+              );
+            })}
           </div>
         </div>
 
-        {/* Exposed Status Tab Filters */}
-        <div className="flex flex-wrap items-center gap-1.5 border-t border-zinc-150 pt-4 dark:border-zinc-800">
-          <span className="text-xs font-bold text-zinc-500 mr-2">등록 상태 필터:</span>
+        {/* Exposed Status Button Filters (4 options) */}
+        <div className="flex flex-wrap items-center gap-1.5 border-t border-zinc-150 pt-3 dark:border-zinc-800">
+          <span className="text-xs font-bold text-zinc-500 mr-1">등록 상태:</span>
           {[
-            { id: "active_draft", label: "활성/보완 대기 (기본)" },
-            { id: "active", label: "등록 완료" },
-            { id: "draft", label: "보완 대기 (Draft)" },
-            { id: "deleted", label: "삭제됨" },
             { id: "all", label: "전체" },
+            { id: "active", label: "등록완료" },
+            { id: "draft", label: "보완대기 (Draft)" },
+            { id: "deleted", label: "삭제" },
           ].map((tab) => {
-            const isActive = selectedStatus === tab.id;
+            const isSelected =
+              tab.id === "all"
+                ? selectedStatuses.includes("all")
+                : selectedStatuses.includes(tab.id) && !selectedStatuses.includes("all");
             return (
               <button
                 key={tab.id}
                 type="button"
-                onClick={() => setSelectedStatus(tab.id)}
+                onClick={() => handleStatusClick(tab.id)}
                 className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer border ${
-                  isActive
-                    ? "bg-zinc-950 text-white border-zinc-950 dark:bg-white dark:text-zinc-950 dark:border-white shadow-sm"
+                  isSelected
+                    ? "bg-indigo-600 text-white border-indigo-600 dark:bg-indigo-500 dark:border-indigo-500 shadow-sm"
                     : "bg-zinc-50 text-zinc-600 border-zinc-200 hover:bg-zinc-100 hover:text-zinc-900 dark:bg-zinc-950 dark:text-zinc-400 dark:border-zinc-850 dark:hover:bg-zinc-900"
                 }`}
               >
@@ -306,12 +396,12 @@ export function PortalProductsList({ initialProducts, hasBrand }: PortalProducts
               <span>🗑️</span>
               <span>선택 삭제 {selectedIds.length > 0 ? `(${selectedIds.length})` : ""}</span>
             </button>
-            {(searchTerm || selectedCategory !== "all" || selectedStatus !== "active_draft") && (
+            {isFilterChanged && (
               <button
                 onClick={() => {
                   setSearchTerm("");
                   setSelectedCategory("all");
-                  setSelectedStatus("active_draft");
+                  setSelectedStatuses(["active", "draft"]);
                 }}
                 className="text-indigo-650 hover:underline dark:text-indigo-400 font-semibold text-xs ml-2 cursor-pointer"
               >
@@ -384,15 +474,25 @@ export function PortalProductsList({ initialProducts, hasBrand }: PortalProducts
                     {/* Thumbnail */}
                     <td className="px-2 py-3 text-center">
                       {product.photoUrl ? (
-                        <div className="h-10 w-10 mx-auto rounded-md bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 flex items-center justify-center p-0.5 shadow-sm overflow-hidden">
+                        <button
+                          type="button"
+                          onClick={() => openImageZoom(product)}
+                          className="group relative h-10 w-10 mx-auto rounded-md bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 flex items-center justify-center p-0.5 shadow-sm overflow-hidden cursor-zoom-in hover:border-indigo-400 hover:ring-2 hover:ring-indigo-400/30 transition-all"
+                          title="클릭하여 이미지 크게 보기"
+                        >
                           <img
                             src={product.photoUrl}
                             alt={product.display_name}
-                            className="h-full w-full object-contain"
+                            className="h-full w-full object-contain group-hover:scale-105 transition-transform duration-150"
                           />
-                        </div>
+                          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 flex items-center justify-center transition-colors">
+                            <span className="opacity-0 group-hover:opacity-100 text-[9px] text-white bg-black/60 rounded-full px-1 py-0.2 transition-opacity">
+                              🔍
+                            </span>
+                          </div>
+                        </button>
                       ) : (
-                        <div className="h-10 w-10 mx-auto rounded-md bg-zinc-100 flex items-center justify-center text-zinc-400 dark:bg-zinc-800 text-[9px] font-bold border border-dashed border-zinc-200 dark:border-zinc-700">
+                        <div className="h-10 w-10 mx-auto rounded-md bg-zinc-100 flex items-center justify-center text-zinc-400 dark:bg-zinc-800 text-[9px] font-bold border border-dashed border-zinc-200 dark:border-zinc-700 select-none">
                           No Pic
                         </div>
                       )}
@@ -650,6 +750,104 @@ export function PortalProductsList({ initialProducts, hasBrand }: PortalProducts
                 {isBulkDeleting ? "삭제 처리 중..." : `선택 제품 ${selectedIds.length}개 삭제`}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Image Zoom / Lightbox Modal */}
+      {zoomModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-sm p-4 animate-in fade-in duration-200"
+          onClick={() => setZoomModal(null)}
+        >
+          <div
+            className="relative max-w-4xl w-full max-h-[90vh] flex flex-col items-center justify-center"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header bar with Title, Index & Close Button */}
+            <div className="w-full flex items-center justify-between text-white pb-3 px-2">
+              <div className="flex items-center gap-2 truncate pr-4">
+                <span className="text-sm font-bold truncate max-w-md">{zoomModal.productName}</span>
+                {zoomModal.images.length > 1 && (
+                  <span className="text-xs font-mono bg-white/20 px-2 py-0.5 rounded-full text-zinc-200 shrink-0">
+                    {zoomModal.currentIndex + 1} / {zoomModal.images.length}
+                  </span>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => setZoomModal(null)}
+                className="h-8 w-8 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/25 text-white text-lg font-bold transition-colors cursor-pointer shrink-0"
+                aria-label="닫기"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Main Image Viewport with Nav Arrows */}
+            <div className="relative flex items-center justify-center w-full max-h-[70vh] min-h-[300px] bg-zinc-950/70 rounded-xl overflow-hidden border border-zinc-800 p-2 shadow-2xl">
+              {zoomModal.images.length > 1 && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setZoomModal((prev) => {
+                      if (!prev) return prev;
+                      const nextIndex = (prev.currentIndex - 1 + prev.images.length) % prev.images.length;
+                      return { ...prev, currentIndex: nextIndex };
+                    });
+                  }}
+                  className="absolute left-3 z-10 h-10 w-10 flex items-center justify-center rounded-full bg-black/50 hover:bg-black/80 text-white text-xl font-bold transition-colors cursor-pointer select-none"
+                  aria-label="이전 이미지"
+                >
+                  ‹
+                </button>
+              )}
+
+              <img
+                src={zoomModal.images[zoomModal.currentIndex]}
+                alt={`${zoomModal.productName} - 확대 이미지 ${zoomModal.currentIndex + 1}`}
+                className="max-h-[68vh] max-w-full object-contain select-none"
+              />
+
+              {zoomModal.images.length > 1 && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setZoomModal((prev) => {
+                      if (!prev) return prev;
+                      const nextIndex = (prev.currentIndex + 1) % prev.images.length;
+                      return { ...prev, currentIndex: nextIndex };
+                    });
+                  }}
+                  className="absolute right-3 z-10 h-10 w-10 flex items-center justify-center rounded-full bg-black/50 hover:bg-black/80 text-white text-xl font-bold transition-colors cursor-pointer select-none"
+                  aria-label="다음 이미지"
+                >
+                  ›
+                </button>
+              )}
+            </div>
+
+            {/* Thumbnail Strip (if multiple images) */}
+            {zoomModal.images.length > 1 && (
+              <div className="flex items-center gap-2 mt-3 p-1.5 overflow-x-auto max-w-full bg-zinc-900/80 rounded-lg border border-zinc-800">
+                {zoomModal.images.map((imgUrl, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => setZoomModal((prev) => (prev ? { ...prev, currentIndex: idx } : prev))}
+                    className={`h-12 w-12 rounded-md overflow-hidden border-2 transition-all p-0.5 shrink-0 cursor-pointer ${
+                      idx === zoomModal.currentIndex
+                        ? "border-white scale-105 shadow-md bg-white/10"
+                        : "border-transparent opacity-60 hover:opacity-100 bg-zinc-950"
+                    }`}
+                  >
+                    <img src={imgUrl} alt={`썸네일 ${idx + 1}`} className="h-full w-full object-contain" />
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}

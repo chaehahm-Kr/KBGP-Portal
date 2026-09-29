@@ -64,23 +64,30 @@ export default async function ProductsPage() {
   const resolvedProducts = await Promise.all(
     (products ?? []).map(async (p) => {
       try {
-        // Find the first image for this product
-        const firstImage = (productImages ?? []).find((img) => img.product_id === p.id);
-        let photoUrl: string | null = null;
-        if (firstImage?.storage_path) {
-          try {
-            photoUrl = await getSignedFileUrl(firstImage.storage_path);
-          } catch {
-            // Ignore
+        // Find all images for this product
+        const prodImages = (productImages ?? [])
+          .filter((img) => img.product_id === p.id)
+          .sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
+        
+        const photoUrls: string[] = [];
+        for (const img of prodImages) {
+          if (img.storage_path) {
+            try {
+              const url = await getSignedFileUrl(img.storage_path);
+              if (url) photoUrls.push(url);
+            } catch {
+              // Ignore
+            }
           }
         }
+        const photoUrl = photoUrls[0] || null;
 
         const adminOverrides = (p.price_additional_info as any)?.admin_overrides || {};
         const effectiveLetustoSku = resolveEffectiveSku(adminOverrides.letusto_sku, p.letusto_sku);
         const effectiveManufactureSku = resolveEffectiveSku(adminOverrides.manufacture_sku, p.manufacture_sku);
 
         const catCompletion = categoryCompletions.get(p.id) || null;
-        const hasImages = (productImages ?? []).some((img) => img.product_id === p.id);
+        const hasImages = photoUrls.length > 0;
 
         const effectiveDeletedAt = (p as any).deleted_at || (p.price_additional_info as any)?.deleted_at || null;
 
@@ -133,6 +140,7 @@ export default async function ProductsPage() {
           brand_id: p.brand_id,
           brandName: brandNameById.get(p.brand_id) || "(미지정 브랜드)",
           photoUrl,
+          photoUrls,
           is_draft: registrationEvaluation.isDraft,
           missing_fields: registrationEvaluation.missingFields,
           registration_status: registrationEvaluation.status,

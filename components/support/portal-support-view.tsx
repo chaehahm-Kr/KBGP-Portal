@@ -26,7 +26,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   agreement_change: "계약 변경 및 서명 문의",
   onboarding:       "입점 신청 및 심사 현황",
   po_change:        "PO 변경 요청",
-  product:          "제품 등록 및 스펙 수정",
+  product:          "제품 등록 및 정보수정",
   logistics:        "물류 공급 및 패키징",
   translation:      "번역 및 전성분표 기재",
   settlement:       "정산 / 인보이스 문의",
@@ -47,6 +47,9 @@ export function PortalSupportView({ initialInquiries, createAction }: PortalSupp
   const caseParam = searchParams.get("case") || searchParams.get("id");
   const newParam = searchParams.get("new");
   const categoryParam = searchParams.get("category");
+  const titleParam = searchParams.get("title") || searchParams.get("subject");
+  const bodyParam = searchParams.get("body") || searchParams.get("content");
+  const productIdParam = searchParams.get("product_id") || searchParams.get("productId");
   const invoiceIdParam = searchParams.get("invoice_id") || searchParams.get("invoiceId");
   const invoiceNoParam = searchParams.get("invoice_no") || searchParams.get("invoiceNo");
   const apNoParam = searchParams.get("ap_no") || searchParams.get("apNo");
@@ -162,8 +165,16 @@ Order Date: ${orderDateParam || "-"}
       return;
     }
 
-    // 3. If new inquiry / settlement inquiry requested
-    const isNewRequested = newParam === "1" || newParam === "true" || !!invoiceIdParam || categoryParam === "settlement";
+    // 4. If new inquiry / settlement inquiry / product inquiry requested
+    const isNewRequested =
+      newParam === "1" ||
+      newParam === "true" ||
+      !!invoiceIdParam ||
+      categoryParam === "settlement" ||
+      categoryParam === "product" ||
+      !!titleParam ||
+      !!bodyParam;
+
     if (isNewRequested) {
       setIsWriteOpen(true);
       setSelectedInquiry(null);
@@ -171,6 +182,13 @@ Order Date: ${orderDateParam || "-"}
 
       if (invoiceIdParam) setRelatedInvoiceId(invoiceIdParam);
       if (poIdParam) setRelatedPoId(poIdParam);
+
+      if (titleParam) {
+        setTitle(titleParam);
+      }
+      if (bodyParam) {
+        setContent(bodyParam);
+      }
 
       if (invoiceIdParam || invoiceNoParam || apNoParam || poIdParam || poNoParam) {
         setLinkedContext({
@@ -183,14 +201,17 @@ Order Date: ${orderDateParam || "-"}
           balance: balanceParam || null,
         });
 
-        const invLabel = invoiceNoParam || apNoParam || "인보이스";
-        const poLabel = poNoParam ? ` / ${poNoParam}` : "";
-        setTitle(`[Invoice ${invLabel}${poLabel}] 정산 이견 문의`);
+        if (!titleParam) {
+          const invLabel = invoiceNoParam || apNoParam || "인보이스";
+          const poLabel = poNoParam ? ` / ${poNoParam}` : "";
+          setTitle(`[Invoice ${invLabel}${poLabel}] 정산 이견 문의`);
+        }
 
-        const formattedTotal = totalParam ? (totalParam.startsWith("$") ? totalParam : `$${Number(totalParam).toLocaleString()}`) : "-";
-        const formattedBalance = balanceParam ? (balanceParam.startsWith("$") ? balanceParam : `$${Number(balanceParam).toLocaleString()}`) : "-";
+        if (!bodyParam) {
+          const formattedTotal = totalParam ? (totalParam.startsWith("$") ? totalParam : `$${Number(totalParam).toLocaleString()}`) : "-";
+          const formattedBalance = balanceParam ? (balanceParam.startsWith("$") ? balanceParam : `$${Number(balanceParam).toLocaleString()}`) : "-";
 
-        setContent(
+          setContent(
 `정산 내역에 대해 문의드립니다.
 
 Invoice No: ${invoiceNoParam || "-"}
@@ -201,7 +222,8 @@ Outstanding Balance: ${formattedBalance}
 
 문의 내용을 아래에 작성해 주세요.
 `
-        );
+          );
+        }
       }
     }
   }, [searchParams, inquiries]);

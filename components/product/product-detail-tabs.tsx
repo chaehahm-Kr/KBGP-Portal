@@ -11,6 +11,7 @@ import {
   type ProductVideo, 
   PRODUCT_CATEGORY_LABEL, 
   type ProductCategory,
+  resolveRootCategoryLabel,
   CERTIFICATE_TYPE_LABEL,
   type CertificateType,
   sanitizeSku,
@@ -1322,6 +1323,54 @@ export function ProductDetailTabs({
     }
   };
 
+  const currentCategoryLabel = resolveRootCategoryLabel(
+    categoryAttrRef.current?.getCurrentState()?.categoryCode || product.category_code,
+    product.category
+  );
+
+  const handleProductInquiry = () => {
+    const skuDisplay = manufactureSku || effectiveLetustoSku || "SKU 미지정";
+    const nameDisplay = nameEn || product.name_en || name || product.name || "제품";
+    const inquiryTitle = `[제품 문의] ${nameDisplay} / ${skuDisplay}`;
+    const inquiryBody = `제품에 대한 문의 내용을 작성해 주세요.
+
+- 브랜드: ${brandName || "-"}
+- 제품명(한글): ${name || "-"}
+- 제품명(영문): ${nameEn || "-"}
+- 제조사 SKU: ${manufactureSku || "-"}
+- Letusto SKU: ${effectiveLetustoSku || "-"}
+- UPC / EAN: ${upc || ean || "-"}
+- 카테고리: ${currentCategoryLabel}
+- 제품 ID: ${product.id}
+
+문의 내용:
+`;
+    const inquiryUrl = `/portal/support?category=product&new=1&product_id=${product.id}&title=${encodeURIComponent(inquiryTitle)}&body=${encodeURIComponent(inquiryBody)}`;
+    confirmNavigation(inquiryUrl);
+  };
+
+  const handleBarcodeInquiry = () => {
+    const skuDisplay = manufactureSku || effectiveLetustoSku || "SKU 미지정";
+    const nameDisplay = nameEn || product.name_en || name || product.name || "제품";
+    const barcodeTitle = `[바코드 문의] ${nameDisplay} / ${skuDisplay}`;
+    const barcodeBody = `바코드(UPC / EAN) 관련 문의사항을 작성해 주세요.
+
+- 브랜드: ${brandName || "-"}
+- 제품명(한글): ${name || "-"}
+- 제품명(영문): ${nameEn || "-"}
+- 제조사 SKU: ${manufactureSku || "-"}
+- Letusto SKU: ${effectiveLetustoSku || "-"}
+- UPC: ${upc || "미발급/미입력"}
+- EAN: ${ean || "미발급/미입력"}
+- 카테고리: ${currentCategoryLabel}
+- 제품 ID: ${product.id}
+
+문의 내용:
+`;
+    const barcodeUrl = `/portal/support?category=product&new=1&product_id=${product.id}&title=${encodeURIComponent(barcodeTitle)}&body=${encodeURIComponent(barcodeBody)}`;
+    confirmNavigation(barcodeUrl);
+  };
+
   return (
     <div data-active-tab={activeTab} className="space-y-6 w-full max-w-7xl">
       {guardModalNode}
@@ -1556,6 +1605,14 @@ export function ProductDetailTabs({
                 <span>저장되지 않은 변경사항이 있습니다.</span>
               </span>
             )}
+            <button
+              type="button"
+              onClick={handleProductInquiry}
+              className="w-full sm:w-auto text-center rounded-lg border border-zinc-250 bg-white hover:bg-zinc-50 px-4 py-2.5 text-xs font-bold text-zinc-700 transition-all dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-300 dark:hover:bg-zinc-900 cursor-pointer flex items-center justify-center gap-1.5 shadow-xs"
+            >
+              <span>💬</span>
+              <span>제품 문의</span>
+            </button>
             <button
               type="button"
               onClick={() => confirmNavigation("/portal/products")}
@@ -1985,10 +2042,40 @@ export function ProductDetailTabs({
           </div>
 
           {/* Identification Numbers Card */}
-          <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 space-y-6">
-            <h2 className="text-sm font-bold text-zinc-900 dark:text-white border-b border-zinc-100 pb-3 dark:border-zinc-850">
-              식별 관리 번호
-            </h2>
+          <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 space-y-5">
+            <div className="flex items-center justify-between border-b border-zinc-100 pb-3 dark:border-zinc-850">
+              <h2 className="text-sm font-bold text-zinc-900 dark:text-white">
+                식별 관리 번호 (UPC / EAN)
+              </h2>
+              <button
+                type="button"
+                onClick={handleBarcodeInquiry}
+                className="inline-flex items-center gap-1 text-[11px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
+              >
+                <span>💬 바코드 문의</span>
+              </button>
+            </div>
+
+            {/* Informative Guidance Box for barcode assistance */}
+            <div className="rounded-lg bg-indigo-50/50 dark:bg-indigo-950/20 border border-indigo-150 dark:border-indigo-900/50 p-3.5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+              <div className="space-y-1">
+                <div className="flex items-center gap-1.5 text-xs font-bold text-indigo-900 dark:text-indigo-300">
+                  <span>ℹ️</span>
+                  <span>바코드(UPC/EAN) 발급 및 등록 안내</span>
+                </div>
+                <p className="text-[11px] text-indigo-800/80 dark:text-indigo-300/80 leading-relaxed">
+                  미국 바코드(UPC) 또는 글로벌 바코드(EAN)를 아직 발급받지 못하셨거나 등록 지원이 필요하신 경우, &apos;바코드 문의&apos;를 통해 신속하게 상담 및 지원을 받으실 수 있습니다.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleBarcodeInquiry}
+                className="shrink-0 rounded-lg border border-indigo-300 bg-white hover:bg-indigo-50 px-3 py-1.5 text-xs font-bold text-indigo-700 dark:border-indigo-800 dark:bg-indigo-950 dark:text-indigo-300 dark:hover:bg-indigo-900 cursor-pointer shadow-xs transition-colors"
+              >
+                바코드 문의 💬
+              </button>
+            </div>
+
             <div className="grid gap-6 sm:grid-cols-2">
               <div className="sm:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <input type="hidden" name="parentSku" value={isParentSku ? "Y" : ""} />
