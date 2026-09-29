@@ -362,11 +362,11 @@ export function AdminProductsList({ initialProducts }: AdminProductsListProps) {
               className="w-full rounded-lg border border-zinc-200 p-2.5 text-xs outline-none bg-white dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:border-zinc-950 dark:focus:border-white transition-all"
             >
               <option value="all">모든 카테고리</option>
-              <option value="skincare">스킨케어</option>
-              <option value="hair_scalp">헤어/두피</option>
-              <option value="beauty_tools">뷰티 툴</option>
-              <option value="daily_care">데일리 케어</option>
-              <option value="wellness_patch">웰니스 패치</option>
+              {(Object.keys(PRODUCT_CATEGORY_LABEL) as ProductCategory[]).map((cat) => (
+                <option key={cat} value={cat}>
+                  {PRODUCT_CATEGORY_LABEL[cat]}
+                </option>
+              ))}
             </select>
           </div>
         </div>

@@ -3,7 +3,8 @@ export type ProductCategory =
   | "hair_scalp"
   | "beauty_tools"
   | "daily_care"
-  | "wellness_patch";
+  | "wellness_patch"
+  | "other";
 
 export const PRODUCT_CATEGORY_LABEL: Record<ProductCategory, string> = {
   skincare: "스킨케어",
@@ -11,6 +12,7 @@ export const PRODUCT_CATEGORY_LABEL: Record<ProductCategory, string> = {
   beauty_tools: "뷰티소품·툴",
   daily_care: "데일리케어",
   wellness_patch: "웰니스·기능성패치",
+  other: "기타",
 };
 
 export type CertificateType =

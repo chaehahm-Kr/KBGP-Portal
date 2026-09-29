@@ -296,7 +296,7 @@ export function AdminProductCreateForm({ companies, brands }: AdminProductCreate
               onChange={(e) => setCategory(e.target.value)}
               className={inputClass}
             >
-              <option value="">카테고리 선택</option>
+              <option value="" disabled>카테고리를 선택해 주세요</option>
               {(Object.keys(PRODUCT_CATEGORY_LABEL) as ProductCategory[]).map((value) => (
                 <option key={value} value={value}>
                   {PRODUCT_CATEGORY_LABEL[value]}

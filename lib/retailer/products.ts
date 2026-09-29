@@ -63,6 +63,7 @@ const CATEGORY_NAMES_EN: Record<string, string> = {
   beauty_tools: "Beauty Tools",
   daily_care: "Daily Care",
   wellness_patch: "Wellness & Patches",
+  other: "Other",
   makeup: "Makeup",
   cleanser: "Cleansers",
   toner: "Toners & Mists",

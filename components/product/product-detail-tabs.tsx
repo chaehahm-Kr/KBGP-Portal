@@ -1697,7 +1697,7 @@ export function ProductDetailTabs({
                   value={category} onChange={(e) => setCategory(e.target.value)}
                   className={`block w-full rounded-lg border px-3.5 py-2 text-xs text-zinc-900 dark:bg-zinc-950 dark:text-white focus:outline-none ${!category ? "border-rose-350 dark:border-rose-900/60 focus:border-rose-500" : "border-zinc-300 dark:border-zinc-800 focus:border-zinc-900 dark:focus:border-white"}`}
                 >
-                  <option value="">카테고리 선택</option>
+                  <option value="" disabled>카테고리를 선택해 주세요</option>
                   {Object.entries(PRODUCT_CATEGORY_LABEL).map(([val, label]) => (
                     <option key={val} value={val}>{label}</option>
                   ))}

@@ -9,14 +9,17 @@ import { validateUploadedFile } from "@/lib/files/validate";
 import type { CertificateType, ProductCategory } from "@/lib/product/types";
 import { recordProductChangeLog, computeProductFieldDiffs } from "@/lib/product/audit";
 
-export type ProductFormState = { error: string } | undefined;
+export type ProductFormState = {
+  error?: string;
+  fieldErrors?: Record<string, string>;
+} | undefined;
 
 const MAX_IMAGES = 5;
 
 const productSchema = z.object({
-  brandId: z.string().uuid("브랜드를 선택해주세요."),
-  manufactureSku: z.string().trim().min(1, "제조사 SKU를 입력해주세요."),
-  nameEn: z.string().trim().min(1, "영문 제품명을 입력해주세요."),
+  brandId: z.string().uuid("필수 항목 \"브랜드\"를 선택해 주세요."),
+  manufactureSku: z.string().trim().min(1, "필수 항목 \"제조사 SKU\"를 입력해 주세요."),
+  nameEn: z.string().trim().min(1, "필수 항목 \"영문 제품명\"을 입력해 주세요."),
   category: z.preprocess(
     (val) => (val === "" || val === null || val === undefined ? null : val),
     z.enum([
@@ -25,7 +28,10 @@ const productSchema = z.object({
       "beauty_tools",
       "daily_care",
       "wellness_patch",
-    ] as const satisfies readonly ProductCategory[]).nullable().optional()
+      "other",
+    ] as const satisfies readonly ProductCategory[], {
+      message: "필수 항목 \"카테고리\"를 선택해 주세요.",
+    }).nullable().optional()
   ),
   priceKrwRetail: z.preprocess((val) => (val === "" || val === null ? undefined : val), z.coerce.number().min(0).optional()),
   priceUsdFob: z.preprocess((val) => (val === "" || val === null ? undefined : val), z.coerce.number().min(0).optional()),
@@ -76,31 +82,42 @@ export async function createProduct(
   const salesLink1 = formData.get("salesLink1")?.toString().trim() || null;
   const salesLink2 = formData.get("salesLink2")?.toString().trim() || null;
 
+  const validCategories: ProductCategory[] = [
+    "skincare",
+    "hair_scalp",
+    "beauty_tools",
+    "daily_care",
+    "wellness_patch",
+    "other",
+  ];
+
   const supabase = await createClient();
 
   if (isDraft) {
     // DRAFT SAVE PATH: Enforce 4 minimum fields (brand, category, manufactureSku, nameEn)
-    const missingFields: string[] = [];
-    if (!rawBrandId) missingFields.push("브랜드");
-    if (!rawCategory) missingFields.push("카테고리");
-    if (!rawManufactureSku) missingFields.push("제조사 SKU");
-    if (!rawNameEn) missingFields.push("영문 제품명");
-
-    if (missingFields.length === 1) {
-      if (!rawBrandId) return { error: "임시 저장을 위해 브랜드를 선택해 주세요." };
-      if (!rawCategory) return { error: "임시 저장을 위해 카테고리를 선택해 주세요." };
-      if (!rawManufactureSku) return { error: "임시 저장을 위해 제조사 SKU를 입력해 주세요." };
-      if (!rawNameEn) return { error: "임시 저장을 위해 영문 제품명을 입력해 주세요." };
-    } else if (missingFields.length > 1) {
-      return { error: `임시 저장을 위해 아래 기본 정보를 입력해 주세요: ${missingFields.join(", ")}` };
+    const fieldErrors: Record<string, string> = {};
+    if (!rawBrandId) fieldErrors.brandId = "임시 저장을 위해 브랜드를 선택해 주세요.";
+    if (!rawCategory || !validCategories.includes(rawCategory as ProductCategory)) {
+      fieldErrors.category = "임시 저장을 위해 카테고리를 선택해 주세요.";
     }
+    if (!rawManufactureSku) fieldErrors.manufactureSku = "임시 저장을 위해 제조사 SKU를 입력해 주세요.";
+    if (!rawNameEn) fieldErrors.nameEn = "임시 저장을 위해 영문 제품명을 입력해 주세요.";
 
-    // Barcode format check if provided
     if (upc && !/^\d{12}$/.test(upc)) {
-      return { error: "UPC는 숫자 12자리로 입력해 주세요." };
+      fieldErrors.upc = "UPC는 숫자 12자리로 입력해 주세요.";
     }
     if (ean && !/^\d{13}$/.test(ean)) {
-      return { error: "EAN은 숫자 13자리로 입력해 주세요." };
+      fieldErrors.ean = "EAN은 숫자 13자리로 입력해 주세요.";
+    }
+
+    if (Object.keys(fieldErrors).length > 0) {
+      const errorCount = Object.keys(fieldErrors).length;
+      return {
+        error: errorCount === 1
+          ? Object.values(fieldErrors)[0]
+          : `임시 저장을 위해 필수 기본 정보를 입력해 주세요 (${errorCount}건).`,
+        fieldErrors,
+      };
     }
 
     const { data: brand } = await supabase
@@ -111,10 +128,13 @@ export async function createProduct(
       .single();
 
     if (!brand) {
-      return { error: "선택한 브랜드를 찾을 수 없습니다." };
+      return {
+        error: "선택한 브랜드를 찾을 수 없습니다.",
+        fieldErrors: { brandId: "선택한 브랜드를 찾을 수 없습니다." },
+      };
     }
 
-    const category = (["skincare", "hair_scalp", "beauty_tools", "daily_care", "wellness_patch"].includes(rawCategory) ? rawCategory : null) as ProductCategory | null;
+    const category = rawCategory as ProductCategory;
     const priceKrwRetail = rawPriceKrwRetail && !isNaN(Number(rawPriceKrwRetail)) ? Number(rawPriceKrwRetail) : null;
     const priceUsdFob = rawPriceUsdFob && !isNaN(Number(rawPriceUsdFob)) ? Number(rawPriceUsdFob) : null;
     const packageWidth = rawPackageWidth && !isNaN(Number(rawPackageWidth)) ? Number(rawPackageWidth) : null;
@@ -150,7 +170,17 @@ export async function createProduct(
 
     if (insertError || !product) {
       console.error("Draft product insert error:", insertError);
-      return { error: "임시 저장 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요." };
+      if (insertError?.code === "23505") {
+        return {
+          error: "이미 등록된 제조사 SKU입니다. 다른 SKU를 입력해 주세요.",
+          fieldErrors: { manufactureSku: "이미 등록된 제조사 SKU입니다." },
+        };
+      }
+      return {
+        error: insertError?.message
+          ? `임시 저장 실패: ${insertError.message}`
+          : "임시 저장 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.",
+      };
     }
 
     revalidatePath("/portal/products");
@@ -158,68 +188,92 @@ export async function createProduct(
   }
 
   // FINAL SUBMIT PATH: Full required validation
-  const parsed = productSchema.safeParse({
-    brandId: rawBrandId,
-    manufactureSku: rawManufactureSku,
-    nameEn: rawNameEn,
-    category: rawCategory,
-    priceKrwRetail: rawPriceKrwRetail,
-    priceUsdFob: rawPriceUsdFob,
-    packageWidth: rawPackageWidth,
-    packageDepth: rawPackageDepth,
-    packageHeight: rawPackageHeight,
-    packageWeight: rawPackageWeight,
-    upc,
-    ean,
-  });
+  const fieldErrors: Record<string, string> = {};
 
-  if (!parsed.success) {
-    return { error: parsed.error.issues[0]?.message ?? "입력값을 확인해주세요." };
+  if (!rawBrandId) {
+    fieldErrors.brandId = "필수 항목 \"브랜드\"를 선택해 주세요.";
+  }
+  if (!rawCategory || !validCategories.includes(rawCategory as ProductCategory)) {
+    fieldErrors.category = "필수 항목 \"카테고리\"를 선택해 주세요.";
+  }
+  if (!rawManufactureSku) {
+    fieldErrors.manufactureSku = "필수 항목 \"제조사 SKU\"를 입력해 주세요.";
+  }
+  if (!rawNameEn) {
+    fieldErrors.nameEn = "필수 항목 \"영문 제품명\"을 입력해 주세요.";
+  }
+  if (rawPriceKrwRetail === null || rawPriceKrwRetail === "" || isNaN(Number(rawPriceKrwRetail))) {
+    fieldErrors.priceKrwRetail = "필수 항목 \"한국 소비자 판매가\"를 입력해 주세요.";
+  }
+  if (rawPriceUsdFob === null || rawPriceUsdFob === "" || isNaN(Number(rawPriceUsdFob))) {
+    fieldErrors.priceUsdFob = "필수 항목 \"미국 수출 FOB 가격\"을 입력해 주세요.";
   }
 
-  // UPC / EAN 최소 1개 필수 및 바코드 포맷 검증
   if (!upc && !ean) {
-    return { error: "정식 제품 등록을 위해 UPC(12자리) 또는 EAN(13자리) 중 하나를 입력해 주세요." };
-  }
-  if (upc && !/^\d{12}$/.test(upc)) {
-    return { error: "UPC는 숫자 12자리로 입력해 주세요." };
-  }
-  if (ean && !/^\d{13}$/.test(ean)) {
-    return { error: "EAN은 숫자 13자리로 입력해 주세요." };
+    fieldErrors.upc = "정식 제품 등록을 위해 UPC(12자리) 또는 EAN(13자리) 중 하나를 입력해 주세요.";
+    fieldErrors.ean = "정식 제품 등록을 위해 UPC(12자리) 또는 EAN(13자리) 중 하나를 입력해 주세요.";
+  } else {
+    if (upc && !/^\d{12}$/.test(upc)) {
+      fieldErrors.upc = "UPC는 숫자 12자리로 입력해 주세요.";
+    }
+    if (ean && !/^\d{13}$/.test(ean)) {
+      fieldErrors.ean = "EAN은 숫자 13자리로 입력해 주세요.";
+    }
   }
 
   if (sellingOnline && !salesLink1) {
-    return { error: "온라인 판매 중인 경우, 최소 한 개 이상의 온라인 판매 링크(링크 1)를 입력해 주세요." };
+    fieldErrors.salesLink1 = "온라인 판매 중인 경우, 최소 한 개 이상의 온라인 판매 링크(링크 1)를 입력해 주세요.";
+  }
+
+  if (Object.keys(fieldErrors).length > 0) {
+    const errorCount = Object.keys(fieldErrors).length;
+    return {
+      error: errorCount === 1
+        ? Object.values(fieldErrors)[0]
+        : `입력 항목에 오류가 있습니다 (${errorCount}건). 각 항목의 안내를 확인해 주세요.`,
+      fieldErrors,
+    };
   }
 
   // 브랜드 소유 확인
   const { data: brand } = await supabase
     .from("brands")
     .select("id")
-    .eq("id", parsed.data.brandId)
+    .eq("id", rawBrandId)
     .eq("company_id", companyId)
     .single();
 
   if (!brand) {
-    return { error: "선택한 브랜드를 찾을 수 없습니다." };
+    return {
+      error: "선택한 브랜드를 찾을 수 없습니다.",
+      fieldErrors: { brandId: "선택한 브랜드를 찾을 수 없습니다." },
+    };
   }
+
+  const category = rawCategory as ProductCategory;
+  const priceKrwRetail = Number(rawPriceKrwRetail);
+  const priceUsdFob = Number(rawPriceUsdFob);
+  const packageWidth = rawPackageWidth && !isNaN(Number(rawPackageWidth)) ? Number(rawPackageWidth) : null;
+  const packageDepth = rawPackageDepth && !isNaN(Number(rawPackageDepth)) ? Number(rawPackageDepth) : null;
+  const packageHeight = rawPackageHeight && !isNaN(Number(rawPackageHeight)) ? Number(rawPackageHeight) : null;
+  const packageWeight = rawPackageWeight && !isNaN(Number(rawPackageWeight)) ? Number(rawPackageWeight) : null;
 
   const { data: product, error: insertError } = await supabase
     .from("products")
     .insert({
       brand_id: brand.id,
       company_id: companyId,
-      name: parsed.data.nameEn,
-      name_en: parsed.data.nameEn,
-      category: parsed.data.category || null,
-      category_code: parsed.data.category || null,
-      manufacture_sku: parsed.data.manufactureSku,
-      price_krw_retail: parsed.data.priceKrwRetail ?? null,
-      price_usd_fob: parsed.data.priceUsdFob ?? null,
-      package_width: parsed.data.packageWidth ?? null,
-      package_depth: parsed.data.packageDepth ?? null,
-      package_height: parsed.data.packageHeight ?? null,
-      package_weight: parsed.data.packageWeight ?? null,
+      name: rawNameEn,
+      name_en: rawNameEn,
+      category: category,
+      category_code: category,
+      manufacture_sku: rawManufactureSku,
+      price_krw_retail: priceKrwRetail,
+      price_usd_fob: priceUsdFob,
+      package_width: packageWidth,
+      package_depth: packageDepth,
+      package_height: packageHeight,
+      package_weight: packageWeight,
       upc,
       ean,
       selling_online: sellingOnline,
@@ -232,7 +286,17 @@ export async function createProduct(
 
   if (insertError || !product) {
     console.error("Insert product error:", insertError);
-    return { error: "제품 등록 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요." };
+    if (insertError?.code === "23505") {
+      return {
+        error: "이미 등록된 제조사 SKU입니다. 다른 SKU를 입력해 주세요.",
+        fieldErrors: { manufactureSku: "이미 등록된 제조사 SKU입니다." },
+      };
+    }
+    return {
+      error: insertError?.message
+        ? `제품 등록 실패: ${insertError.message}`
+        : "제품 등록 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.",
+    };
   }
 
   revalidatePath("/portal/products");
@@ -542,6 +606,7 @@ const productUpdateSchema = z.object({
       "beauty_tools",
       "daily_care",
       "wellness_patch",
+      "other",
     ] as const satisfies readonly ProductCategory[]).nullable().optional()
   ),
   volume: z.string().trim().nullable().optional(),

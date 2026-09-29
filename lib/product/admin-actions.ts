@@ -1668,6 +1668,7 @@ const adminProductSchema = z.object({
     "beauty_tools",
     "daily_care",
     "wellness_patch",
+    "other",
   ] as const satisfies readonly ProductCategory[]),
   priceKrwRetail: z.preprocess((val) => (val === "" || val === null ? undefined : val), z.coerce.number().min(0).optional()),
   priceUsdFob: z.preprocess((val) => (val === "" || val === null ? undefined : val), z.coerce.number().min(0).optional()),

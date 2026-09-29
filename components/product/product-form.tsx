@@ -44,8 +44,33 @@ export function ProductForm({ action, brands }: ProductFormProps) {
   const [salesLink2, setSalesLink2] = useState("");
 
   // Field error state & inline validation message
-  const [fieldErrors, setFieldErrors] = useState<Record<string, boolean>>({});
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [validationError, setValidationError] = useState<string | null>(null);
+
+  // Sync server action field errors
+  React.useEffect(() => {
+    if (state?.fieldErrors && Object.keys(state.fieldErrors).length > 0) {
+      setFieldErrors(state.fieldErrors);
+      const firstKey = Object.keys(state.fieldErrors)[0];
+      if (firstKey) {
+        const el = document.getElementById(firstKey);
+        if (el) {
+          el.focus();
+          el.scrollIntoView({ behavior: "smooth", block: "center" });
+        }
+      }
+    }
+  }, [state]);
+
+  const clearFieldError = (fieldName: string) => {
+    setFieldErrors((prev) => {
+      if (!prev[fieldName]) return prev;
+      const next = { ...prev };
+      delete next[fieldName];
+      return next;
+    });
+    setValidationError(null);
+  };
 
   // Dimensions & weight with metric-imperial sync
   const [packageWidth, setPackageWidth] = useState("");
@@ -186,6 +211,7 @@ export function ProductForm({ action, brands }: ProductFormProps) {
   const isDirty =
     manufactureSku.trim() !== "" ||
     nameEn.trim() !== "" ||
+    category.trim() !== "" ||
     priceKrwRetail !== "" ||
     priceUsdFob !== "" ||
     packageWidth !== "" ||
@@ -208,106 +234,101 @@ export function ProductForm({ action, brands }: ProductFormProps) {
 
     // 1. Draft Save ("임시 저장 후 나중에 등록"): Validate 4 minimum fields & barcode format
     if (submitActionVal === "list") {
-      const missingFields: string[] = [];
-      const errors: Record<string, boolean> = {};
+      const errors: Record<string, string> = {};
 
       if (!brandId) {
-        missingFields.push("브랜드");
-        errors.brandId = true;
+        errors.brandId = "임시 저장을 위해 브랜드를 선택해 주세요.";
       }
       if (!category) {
-        missingFields.push("카테고리");
-        errors.category = true;
+        errors.category = "임시 저장을 위해 카테고리를 선택해 주세요.";
       }
       if (!manufactureSku.trim()) {
-        missingFields.push("제조사 SKU");
-        errors.manufactureSku = true;
+        errors.manufactureSku = "임시 저장을 위해 제조사 SKU를 입력해 주세요.";
       }
       if (!nameEn.trim()) {
-        missingFields.push("영문 제품명");
-        errors.nameEn = true;
+        errors.nameEn = "임시 저장을 위해 영문 제품명을 입력해 주세요.";
       }
 
-      let errorMsg: string | null = null;
-      if (missingFields.length === 1) {
-        if (!brandId) errorMsg = "임시 저장을 위해 브랜드를 선택해 주세요.";
-        else if (!category) errorMsg = "임시 저장을 위해 카테고리를 선택해 주세요.";
-        else if (!manufactureSku.trim()) errorMsg = "임시 저장을 위해 제조사 SKU를 입력해 주세요.";
-        else if (!nameEn.trim()) errorMsg = "임시 저장을 위해 영문 제품명을 입력해 주세요.";
-      } else if (missingFields.length > 1) {
-        errorMsg = `임시 저장을 위해 아래 기본 정보를 입력해 주세요: ${missingFields.join(", ")}`;
+      if (hasUpcVal && !/^\d{12}$/.test(hasUpcVal)) {
+        errors.upc = "UPC는 숫자 12자리로 입력해 주세요.";
+      }
+      if (hasEanVal && !/^\d{13}$/.test(hasEanVal)) {
+        errors.ean = "EAN은 숫자 13자리로 입력해 주세요.";
       }
 
-      if (!errorMsg && hasUpcVal && !/^\d{12}$/.test(hasUpcVal)) {
-        errors.upc = true;
-        errorMsg = "UPC는 숫자 12자리로 입력해 주세요.";
-      }
-      if (!errorMsg && hasEanVal && !/^\d{13}$/.test(hasEanVal)) {
-        errors.ean = true;
-        errorMsg = "EAN은 숫자 13자리로 입력해 주세요.";
-      }
-
-      if (errorMsg) {
+      if (Object.keys(errors).length > 0) {
         e.preventDefault();
         setFieldErrors(errors);
-        setValidationError(errorMsg);
+        const errorCount = Object.keys(errors).length;
+        setValidationError(
+          errorCount === 1
+            ? Object.values(errors)[0]
+            : `임시 저장을 위해 필수 기본 정보를 입력해 주세요 (${errorCount}건).`
+        );
+        const firstKey = Object.keys(errors)[0];
+        const el = document.getElementById(firstKey);
+        if (el) {
+          el.focus();
+          el.scrollIntoView({ behavior: "smooth", block: "center" });
+        }
+        return;
       }
       return;
     }
 
     // 2. Final Submit ("제품 등록 및 계속"): Full required validation
-    const errors: Record<string, boolean> = {};
-    let errorMsg: string | null = null;
+    const errors: Record<string, string> = {};
 
     if (!brandId) {
-      errors.brandId = true;
-      errorMsg = errorMsg || "브랜드를 선택해주세요.";
+      errors.brandId = "필수 항목 \"브랜드\"를 선택해 주세요.";
     }
     if (!category) {
-      errors.category = true;
-      errorMsg = errorMsg || "카테고리를 선택해주세요.";
+      errors.category = "필수 항목 \"카테고리\"를 선택해 주세요.";
     }
     if (!manufactureSku.trim()) {
-      errors.manufactureSku = true;
-      errorMsg = errorMsg || "제조사 SKU를 입력해주세요.";
+      errors.manufactureSku = "필수 항목 \"제조사 SKU\"를 입력해 주세요.";
     }
     if (!nameEn.trim()) {
-      errors.nameEn = true;
-      errorMsg = errorMsg || "영문 제품명을 입력해주세요.";
+      errors.nameEn = "필수 항목 \"영문 제품명\"을 입력해 주세요.";
     }
     if (!priceKrwRetail || isNaN(Number(priceKrwRetail))) {
-      errors.priceKrwRetail = true;
-      errorMsg = errorMsg || "한국 소비자 판매가를 입력해주세요.";
+      errors.priceKrwRetail = "필수 항목 \"한국 소비자 판매가\"를 입력해 주세요.";
     }
     if (!priceUsdFob || isNaN(Number(priceUsdFob))) {
-      errors.priceUsdFob = true;
-      errorMsg = errorMsg || "미국 수출 FOB 가격을 입력해주세요.";
+      errors.priceUsdFob = "필수 항목 \"미국 수출 FOB 가격\"을 입력해 주세요.";
     }
 
     if (!hasUpcVal && !hasEanVal) {
-      errors.upc = true;
-      errors.ean = true;
-      errorMsg = errorMsg || "정식 제품 등록을 위해 UPC(12자리) 또는 EAN(13자리) 중 하나를 입력해 주세요.";
+      errors.upc = "정식 제품 등록을 위해 UPC(12자리) 또는 EAN(13자리) 중 하나를 입력해 주세요.";
+      errors.ean = "정식 제품 등록을 위해 UPC(12자리) 또는 EAN(13자리) 중 하나를 입력해 주세요.";
     } else {
       if (hasUpcVal && !/^\d{12}$/.test(hasUpcVal)) {
-        errors.upc = true;
-        errorMsg = errorMsg || "UPC는 숫자 12자리로 입력해 주세요.";
+        errors.upc = "UPC는 숫자 12자리로 입력해 주세요.";
       }
       if (hasEanVal && !/^\d{13}$/.test(hasEanVal)) {
-        errors.ean = true;
-        errorMsg = errorMsg || "EAN은 숫자 13자리로 입력해 주세요.";
+        errors.ean = "EAN은 숫자 13자리로 입력해 주세요.";
       }
     }
 
     if (sellingOnline && !salesLink1.trim()) {
-      errors.salesLink1 = true;
-      errorMsg = errorMsg || "온라인 판매 중인 경우, 최소 한 개 이상의 온라인 판매 링크(링크 1)를 입력해 주세요.";
+      errors.salesLink1 = "온라인 판매 중인 경우, 최소 한 개 이상의 온라인 판매 링크(링크 1)를 입력해 주세요.";
     }
 
     if (Object.keys(errors).length > 0) {
       e.preventDefault();
       setFieldErrors(errors);
-      setValidationError(errorMsg || "필수 입력 항목을 확인해 주세요.");
+      const errorCount = Object.keys(errors).length;
+      setValidationError(
+        errorCount === 1
+          ? Object.values(errors)[0]
+          : `입력 항목에 오류가 있습니다 (${errorCount}건). 각 항목의 안내를 확인해 주세요.`
+      );
+      const firstKey = Object.keys(errors)[0];
+      const el = document.getElementById(firstKey);
+      if (el) {
+        el.focus();
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
     }
   };
 
@@ -327,7 +348,7 @@ export function ProductForm({ action, brands }: ProductFormProps) {
       return;
     }
     setBrandId(selected);
-    setFieldErrors((prev) => ({ ...prev, brandId: false }));
+    clearFieldError("brandId");
   };
 
   const handleExitClick = () => {
@@ -365,9 +386,18 @@ export function ProductForm({ action, brands }: ProductFormProps) {
       </button>
 
       {(validationError || state?.error) && (
-        <div className="mb-5 rounded-lg bg-rose-50 p-3.5 text-xs font-semibold text-rose-700 border border-rose-200 dark:bg-rose-950/30 dark:border-rose-900/40 dark:text-rose-400 flex items-center gap-2 shadow-xs">
-          <span>⚠️</span>
-          <span>{validationError || state?.error}</span>
+        <div className="mb-5 rounded-lg bg-rose-50 p-4 text-xs font-semibold text-rose-700 border border-rose-200 dark:bg-rose-950/30 dark:border-rose-900/40 dark:text-rose-400 space-y-1 shadow-xs animate-fadeIn">
+          <div className="flex items-center gap-2 font-bold text-sm text-rose-800 dark:text-rose-300">
+            <span>⚠️</span>
+            <span>{validationError || state?.error}</span>
+          </div>
+          {Object.keys(fieldErrors).length > 1 && (
+            <ul className="list-disc list-inside mt-2 pl-2 space-y-1 text-xs text-rose-700 dark:text-rose-400">
+              {Array.from(new Set(Object.values(fieldErrors))).map((msg, idx) => (
+                <li key={idx}>{msg}</li>
+              ))}
+            </ul>
+          )}
         </div>
       )}
 
@@ -391,7 +421,7 @@ export function ProductForm({ action, brands }: ProductFormProps) {
                 name="brandId"
                 value={brandId}
                 onChange={handleBrandChange}
-                className={getInputClass(fieldErrors.brandId)}
+                className={getInputClass(!!fieldErrors.brandId)}
               >
                 {brands.map((brand) => (
                   <option key={brand.id} value={brand.id}>
@@ -403,6 +433,11 @@ export function ProductForm({ action, brands }: ProductFormProps) {
                   + 브랜드 추가
                 </option>
               </select>
+              {fieldErrors.brandId && (
+                <p className="text-xs font-semibold text-rose-600 dark:text-rose-400 mt-1">
+                  {fieldErrors.brandId}
+                </p>
+              )}
             </div>
 
             <div>
@@ -415,17 +450,22 @@ export function ProductForm({ action, brands }: ProductFormProps) {
                 value={category}
                 onChange={(e) => {
                   setCategory(e.target.value);
-                  setFieldErrors((prev) => ({ ...prev, category: false }));
+                  clearFieldError("category");
                 }}
-                className={getInputClass(fieldErrors.category)}
+                className={getInputClass(!!fieldErrors.category)}
               >
-                <option value="">카테고리 선택</option>
+                <option value="" disabled>카테고리를 선택해 주세요</option>
                 {(Object.keys(PRODUCT_CATEGORY_LABEL) as ProductCategory[]).map((value) => (
                   <option key={value} value={value}>
                     {PRODUCT_CATEGORY_LABEL[value]}
                   </option>
                 ))}
               </select>
+              {fieldErrors.category && (
+                <p className="text-xs font-semibold text-rose-600 dark:text-rose-400 mt-1">
+                  {fieldErrors.category}
+                </p>
+              )}
             </div>
           </div>
 
@@ -441,11 +481,16 @@ export function ProductForm({ action, brands }: ProductFormProps) {
                 value={manufactureSku}
                 onChange={(e) => {
                   setManufactureSku(sanitizeSku(e.target.value));
-                  setFieldErrors((prev) => ({ ...prev, manufactureSku: false }));
+                  clearFieldError("manufactureSku");
                 }}
                 onBlur={(e) => setManufactureSku(trimSkuSeparators(e.target.value))}
-                className={getInputClass(fieldErrors.manufactureSku, "font-mono")}
+                className={getInputClass(!!fieldErrors.manufactureSku, "font-mono")}
               />
+              {fieldErrors.manufactureSku && (
+                <p className="text-xs font-semibold text-rose-600 dark:text-rose-400 mt-1">
+                  {fieldErrors.manufactureSku}
+                </p>
+              )}
               <p className="text-xs text-zinc-600 dark:text-zinc-300 mt-1.5 leading-relaxed font-medium">
                 ※ 영문 대문자, 숫자, 하이픈(-), 언더스코어(_)만 허용됩니다. (소문자는 자동 대문자 변환, 공백 및 기타 특수문자 제한)
               </p>
@@ -462,10 +507,15 @@ export function ProductForm({ action, brands }: ProductFormProps) {
                 value={nameEn}
                 onChange={(e) => {
                   setNameEn(e.target.value);
-                  setFieldErrors((prev) => ({ ...prev, nameEn: false }));
+                  clearFieldError("nameEn");
                 }}
-                className={getInputClass(fieldErrors.nameEn)}
+                className={getInputClass(!!fieldErrors.nameEn)}
               />
+              {fieldErrors.nameEn && (
+                <p className="text-xs font-semibold text-rose-600 dark:text-rose-400 mt-1">
+                  {fieldErrors.nameEn}
+                </p>
+              )}
             </div>
           </div>
 
@@ -481,10 +531,16 @@ export function ProductForm({ action, brands }: ProductFormProps) {
                 value={upc}
                 onChange={(e) => {
                   setUpc(e.target.value);
-                  setFieldErrors((prev) => ({ ...prev, upc: false, ean: false }));
+                  clearFieldError("upc");
+                  clearFieldError("ean");
                 }}
-                className={getInputClass(fieldErrors.upc, "font-mono")}
+                className={getInputClass(!!fieldErrors.upc, "font-mono")}
               />
+              {fieldErrors.upc && (
+                <p className="text-xs font-semibold text-rose-600 dark:text-rose-400 mt-1">
+                  {fieldErrors.upc}
+                </p>
+              )}
             </div>
             <div>
               <label htmlFor="ean" className={labelClass}>
@@ -497,10 +553,16 @@ export function ProductForm({ action, brands }: ProductFormProps) {
                 value={ean}
                 onChange={(e) => {
                   setEan(e.target.value);
-                  setFieldErrors((prev) => ({ ...prev, upc: false, ean: false }));
+                  clearFieldError("upc");
+                  clearFieldError("ean");
                 }}
-                className={getInputClass(fieldErrors.ean, "font-mono")}
+                className={getInputClass(!!fieldErrors.ean, "font-mono")}
               />
+              {fieldErrors.ean && (
+                <p className="text-xs font-semibold text-rose-600 dark:text-rose-400 mt-1">
+                  {fieldErrors.ean}
+                </p>
+              )}
             </div>
 
             <div className="sm:col-span-2">
@@ -545,10 +607,15 @@ export function ProductForm({ action, brands }: ProductFormProps) {
                 onFocus={(e) => e.target.select()}
                 onChange={(e) => {
                   setPriceKrwRetail(e.target.value.replace(/[^0-9]/g, ""));
-                  setFieldErrors((prev) => ({ ...prev, priceKrwRetail: false }));
+                  clearFieldError("priceKrwRetail");
                 }}
-                className={getInputClass(fieldErrors.priceKrwRetail)}
+                className={getInputClass(!!fieldErrors.priceKrwRetail)}
               />
+              {fieldErrors.priceKrwRetail && (
+                <p className="text-xs font-semibold text-rose-600 dark:text-rose-400 mt-1">
+                  {fieldErrors.priceKrwRetail}
+                </p>
+              )}
             </div>
 
             <div>
@@ -565,10 +632,15 @@ export function ProductForm({ action, brands }: ProductFormProps) {
                 onFocus={(e) => e.target.select()}
                 onChange={(e) => {
                   setPriceUsdFob(e.target.value.replace(/[^0-9.]/g, ""));
-                  setFieldErrors((prev) => ({ ...prev, priceUsdFob: false }));
+                  clearFieldError("priceUsdFob");
                 }}
-                className={getInputClass(fieldErrors.priceUsdFob)}
+                className={getInputClass(!!fieldErrors.priceUsdFob)}
               />
+              {fieldErrors.priceUsdFob && (
+                <p className="text-xs font-semibold text-rose-600 dark:text-rose-400 mt-1">
+                  {fieldErrors.priceUsdFob}
+                </p>
+              )}
             </div>
           </div>
         </div>
@@ -614,10 +686,15 @@ export function ProductForm({ action, brands }: ProductFormProps) {
                   value={salesLink1}
                   onChange={(e) => {
                     setSalesLink1(e.target.value);
-                    setFieldErrors((prev) => ({ ...prev, salesLink1: false }));
+                    clearFieldError("salesLink1");
                   }}
-                  className={getInputClass(fieldErrors.salesLink1)}
+                  className={getInputClass(!!fieldErrors.salesLink1)}
                 />
+                {fieldErrors.salesLink1 && (
+                  <p className="text-xs font-semibold text-rose-600 dark:text-rose-400 mt-1">
+                    {fieldErrors.salesLink1}
+                  </p>
+                )}
               </div>
               <div>
                 <label htmlFor="salesLink2" className={labelClass}>
