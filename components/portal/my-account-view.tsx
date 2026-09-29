@@ -25,6 +25,8 @@ export function MyAccountView({ initialData }: MyAccountViewProps) {
   // 1. Authoritative Verified Profile State
   const [savedProfile, setSavedProfile] = useState({
     name: initialData.name || "",
+    firstName: initialData.firstName || "",
+    lastName: initialData.lastName || "",
     englishName: initialData.englishName || "",
     phone: initialData.phone || "",
     title: initialData.title || "",
@@ -34,6 +36,8 @@ export function MyAccountView({ initialData }: MyAccountViewProps) {
   // 2. Working Edit State
   const [editProfile, setEditProfile] = useState({
     name: initialData.name || "",
+    firstName: initialData.firstName || "",
+    lastName: initialData.lastName || "",
     englishName: initialData.englishName || "",
     phone: initialData.phone || "",
     title: initialData.title || "",
@@ -50,6 +54,8 @@ export function MyAccountView({ initialData }: MyAccountViewProps) {
     if (!isEditing) {
       const fresh = {
         name: initialData.name || "",
+        firstName: initialData.firstName || "",
+        lastName: initialData.lastName || "",
         englishName: initialData.englishName || "",
         phone: initialData.phone || "",
         title: initialData.title || "",
@@ -78,14 +84,22 @@ export function MyAccountView({ initialData }: MyAccountViewProps) {
     setProfileMessage(null);
 
     if (!editProfile.name.trim()) {
-      setProfileMessage({ type: "error", text: "이름(Name)을 입력해 주세요." });
+      setProfileMessage({ type: "error", text: "한글 성명(Korean Name)을 입력해 주세요." });
       return;
     }
 
-    if (!editProfile.englishName.trim()) {
+    if (!editProfile.lastName.trim()) {
       setProfileMessage({
         type: "error",
-        text: "영문 이름(English Name)을 입력해 주세요. (공식 영문 문서 및 발주/인보이스에 사용됩니다)",
+        text: "영문 성(Last Name)을 입력해 주세요. (예: Park)",
+      });
+      return;
+    }
+
+    if (!editProfile.firstName.trim()) {
+      setProfileMessage({
+        type: "error",
+        text: "영문 이름(First Name)을 입력해 주세요. (예: Eun Ae)",
       });
       return;
     }
@@ -103,7 +117,8 @@ export function MyAccountView({ initialData }: MyAccountViewProps) {
     startProfileTransition(async () => {
       const res = await updateMyAccountProfileAction({
         name: editProfile.name.trim(),
-        englishName: editProfile.englishName.trim(),
+        firstName: editProfile.firstName.trim(),
+        lastName: editProfile.lastName.trim(),
         phone: editProfile.phone.trim(),
         title: editProfile.title.trim(),
         position: editProfile.position.trim(),
@@ -112,6 +127,8 @@ export function MyAccountView({ initialData }: MyAccountViewProps) {
       if (res.success && res.profile) {
         const verified = {
           name: res.profile.name,
+          firstName: res.profile.firstName,
+          lastName: res.profile.lastName,
           englishName: res.profile.englishName,
           title: res.profile.title,
           position: res.profile.position,
@@ -122,6 +139,8 @@ export function MyAccountView({ initialData }: MyAccountViewProps) {
         setData((prev) => ({
           ...prev,
           name: verified.name,
+          firstName: verified.firstName,
+          lastName: verified.lastName,
           englishName: verified.englishName,
           phone: verified.phone,
           title: verified.title,
@@ -328,22 +347,31 @@ export function MyAccountView({ initialData }: MyAccountViewProps) {
           {/* READ-ONLY VIEW MODE */}
           {!isEditing ? (
             <div className="space-y-4 text-xs">
+              <div className="rounded-xl border border-zinc-150 bg-zinc-50/50 p-3.5 dark:border-zinc-800 dark:bg-zinc-950/30">
+                <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block mb-1">
+                  한글 성명 (Korean Name)
+                </span>
+                <span className="font-semibold text-sm text-zinc-900 dark:text-white block">
+                  {savedProfile.name || <span className="text-zinc-400 italic">미등록</span>}
+                </span>
+              </div>
+
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="rounded-xl border border-zinc-150 bg-zinc-50/50 p-3.5 dark:border-zinc-800 dark:bg-zinc-950/30">
                   <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block mb-1">
-                    이름 (Name)
+                    영문 성 (Last Name)
                   </span>
                   <span className="font-semibold text-sm text-zinc-900 dark:text-white block">
-                    {savedProfile.name || <span className="text-zinc-400 italic">미등록</span>}
+                    {savedProfile.lastName || <span className="text-zinc-400 italic">미등록</span>}
                   </span>
                 </div>
 
                 <div className="rounded-xl border border-zinc-150 bg-zinc-50/50 p-3.5 dark:border-zinc-800 dark:bg-zinc-950/30">
                   <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block mb-1">
-                    영문 이름 (English Name)
+                    영문 이름 (First Name)
                   </span>
                   <span className="font-semibold text-sm text-zinc-900 dark:text-white block">
-                    {savedProfile.englishName || <span className="text-zinc-400 italic">미등록</span>}
+                    {savedProfile.firstName || <span className="text-zinc-400 italic">미등록</span>}
                   </span>
                 </div>
               </div>
@@ -405,38 +433,55 @@ export function MyAccountView({ initialData }: MyAccountViewProps) {
           ) : (
             /* EDIT MODE */
             <form onSubmit={handleProfileSubmit} className="space-y-4 text-xs">
+              <div>
+                <label className="block font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                  한글 성명 (Korean Name) <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={editProfile.name}
+                  onChange={(e) => setEditProfile({ ...editProfile, name: e.target.value })}
+                  placeholder="예: 박은애"
+                  required
+                  className="w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-xs outline-none focus:border-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+                />
+                <p className="mt-1 text-[10px] text-zinc-400 dark:text-zinc-500">
+                  국문 성명
+                </p>
+              </div>
+
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block font-bold text-zinc-700 dark:text-zinc-300 mb-1">
-                    이름 (Name) <span className="text-rose-500">*</span>
+                    영문 성 (Last Name) <span className="text-rose-500">*</span>
                   </label>
                   <input
                     type="text"
-                    value={editProfile.name}
-                    onChange={(e) => setEditProfile({ ...editProfile, name: e.target.value })}
-                    placeholder="예: 박은애"
+                    value={editProfile.lastName}
+                    onChange={(e) => setEditProfile({ ...editProfile, lastName: e.target.value })}
+                    placeholder="예: Park"
                     required
                     className="w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-xs outline-none focus:border-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
                   />
                   <p className="mt-1 text-[10px] text-zinc-400 dark:text-zinc-500">
-                    국문 또는 본명
+                    공식 영문 성
                   </p>
                 </div>
 
                 <div>
                   <label className="block font-bold text-zinc-700 dark:text-zinc-300 mb-1">
-                    영문 이름 (English Name) <span className="text-rose-500">*</span>
+                    영문 이름 (First Name) <span className="text-rose-500">*</span>
                   </label>
                   <input
                     type="text"
-                    value={editProfile.englishName}
-                    onChange={(e) => setEditProfile({ ...editProfile, englishName: e.target.value })}
-                    placeholder="예: Eunae Park / Tammy Hahm"
+                    value={editProfile.firstName}
+                    onChange={(e) => setEditProfile({ ...editProfile, firstName: e.target.value })}
+                    placeholder="예: Eun Ae"
                     required
                     className="w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-xs outline-none focus:border-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white font-sans"
                   />
                   <p className="mt-1 text-[10px] text-zinc-400 dark:text-zinc-500">
-                    발주서·인보이스 등 공식 영문 문서용
+                    공식 영문 이름
                   </p>
                 </div>
               </div>

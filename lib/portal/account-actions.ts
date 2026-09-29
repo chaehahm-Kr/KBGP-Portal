@@ -12,6 +12,8 @@ export interface MyAccountData {
   userId: string;
   email: string;
   name: string;
+  firstName: string;
+  lastName: string;
   englishName: string;
   phone: string;
   title: string;
@@ -27,7 +29,9 @@ export interface MyAccountData {
 
 export interface UpdateProfilePayload {
   name: string;
-  englishName: string;
+  firstName?: string;
+  lastName?: string;
+  englishName?: string;
   phone?: string;
   title?: string;
   position?: string;
@@ -45,11 +49,25 @@ export interface ActionResult {
   error?: string;
   profile?: {
     name: string;
+    firstName: string;
+    lastName: string;
     englishName: string;
     phone: string;
     title: string;
     position: string;
   };
+}
+
+function parseEnglishName(fullName: string): { firstName: string; lastName: string } {
+  const trimmed = (fullName || "").trim();
+  if (!trimmed) return { firstName: "", lastName: "" };
+  const parts = trimmed.split(/\s+/);
+  if (parts.length === 1) {
+    return { firstName: parts[0], lastName: "" };
+  }
+  const lastName = parts[parts.length - 1];
+  const firstName = parts.slice(0, parts.length - 1).join(" ");
+  return { firstName, lastName };
 }
 
 /**
@@ -109,11 +127,21 @@ export async function getMyAccountData(): Promise<MyAccountData> {
     ""
   ).trim();
 
+  const parsed = parseEnglishName(englishName);
+  const firstName = (userRecord?.permissions?.first_name || parsed.firstName || "").trim();
+  const lastName = (userRecord?.permissions?.last_name || parsed.lastName || "").trim();
+
+  const combinedEnglishName = firstName && lastName
+    ? `${firstName} ${lastName}`
+    : englishName || firstName || lastName;
+
   return {
     userId: session.userId,
     email: session.email,
     name: userRecord?.name || profile?.display_name || "",
-    englishName: englishName,
+    firstName: firstName,
+    lastName: lastName,
+    englishName: combinedEnglishName,
     phone: userRecord?.phone || "",
     title: userRecord?.title || "",
     position: userRecord?.position || "",
@@ -141,20 +169,32 @@ export async function updateMyAccountProfileAction(
       return { success: false, error: "인증 세션이 만료되었습니다. 다시 로그인해 주세요." };
     }
 
-    const { name, englishName, phone, title, position } = payload;
+    const { name, firstName, lastName, phone, title, position } = payload;
 
-    if (!name || !name.trim()) {
-      return { success: false, error: "이름(Name)을 입력해 주세요." };
+    const trimmedName = (name || "").trim();
+    const trimmedFirst = (firstName || "").trim();
+    const trimmedLast = (lastName || "").trim();
+    const trimmedTitle = (title || "").trim();
+    const trimmedPhone = (phone || "").trim();
+    const trimmedPosition = (position || "").trim();
+
+    if (!trimmedName) {
+      return { success: false, error: "한글 성명(Korean Name)을 입력해 주세요." };
     }
-    if (!englishName || !englishName.trim()) {
-      return { success: false, error: "영문 이름(English Name)을 입력해 주세요. (공식 영문 문서 및 발주/인보이스에 사용됩니다)" };
+    if (!trimmedLast) {
+      return { success: false, error: "영문 성(Last Name)을 입력해 주세요. (예: Park)" };
     }
-    if (!title || !title.trim()) {
+    if (!trimmedFirst) {
+      return { success: false, error: "영문 이름(First Name)을 입력해 주세요. (예: Eun Ae)" };
+    }
+    if (!trimmedTitle) {
       return { success: false, error: "직함을 입력해 주세요. (예: 대표이사, 이사, 팀장)" };
     }
-    if (!phone || !phone.trim()) {
+    if (!trimmedPhone) {
       return { success: false, error: "연락처를 입력해 주세요." };
     }
+
+    const combinedEnglishName = `${trimmedFirst} ${trimmedLast}`.trim();
 
     const adminClient = createAdminClient();
 
@@ -172,16 +212,18 @@ export async function updateMyAccountProfileAction(
 
     const updatedPermissions = {
       ...(existingUser?.permissions || {}),
-      english_name: englishName.trim(),
+      english_name: combinedEnglishName,
+      first_name: trimmedFirst,
+      last_name: trimmedLast,
     };
 
     const updatePayload: Record<string, any> = {
-      name: name.trim(),
-      phone: phone.trim(),
-      title: title.trim(),
-      position: position?.trim() || null,
+      name: trimmedName,
+      phone: trimmedPhone,
+      title: trimmedTitle,
+      position: trimmedPosition || null,
       permissions: updatedPermissions,
-      english_name: englishName.trim(),
+      english_name: combinedEnglishName,
     };
 
     let { data: updatedUser, error: updateError } = await adminClient
@@ -224,11 +266,11 @@ export async function updateMyAccountProfileAction(
     if (
       verifyError ||
       !verifiedUser ||
-      verifiedUser.name !== name.trim() ||
-      verifiedEnglishName !== englishName.trim() ||
-      verifiedUser.title !== title.trim() ||
-      verifiedUser.phone !== phone.trim() ||
-      (verifiedUser.position || "") !== (position?.trim() || "")
+      verifiedUser.name !== trimmedName ||
+      verifiedEnglishName !== combinedEnglishName ||
+      verifiedUser.title !== trimmedTitle ||
+      verifiedUser.phone !== trimmedPhone ||
+      (verifiedUser.position || "") !== trimmedPosition
     ) {
       console.error("[updateMyAccountProfileAction] Read-back verification failed:", { verifyError, verifiedUser, verifiedEnglishName });
       return { success: false, error: "데이터베이스 저장 검증에 실패했습니다. 다시 시도해 주세요." };
@@ -237,7 +279,7 @@ export async function updateMyAccountProfileAction(
     // 3. Synchronize profiles table display_name
     await adminClient
       .from("profiles")
-      .update({ display_name: name.trim() })
+      .update({ display_name: trimmedName })
       .eq("id", session.userId);
 
     // 4. Mark admin_profile_onboarding_confirmed_at on company metadata AND sync contacts array
@@ -263,20 +305,24 @@ export async function updateMyAccountProfileAction(
           (c: any) => c.id === targetUserId || (session.email && c.email?.toLowerCase() === session.email.toLowerCase())
         );
         if (idx !== -1) {
-          metaObj.contacts[idx].name = name.trim();
-          metaObj.contacts[idx].englishName = englishName.trim();
-          metaObj.contacts[idx].phone = phone.trim();
-          metaObj.contacts[idx].title = title.trim();
-          metaObj.contacts[idx].position = position?.trim() || "";
+          metaObj.contacts[idx].name = trimmedName;
+          metaObj.contacts[idx].englishName = combinedEnglishName;
+          metaObj.contacts[idx].firstName = trimmedFirst;
+          metaObj.contacts[idx].lastName = trimmedLast;
+          metaObj.contacts[idx].phone = trimmedPhone;
+          metaObj.contacts[idx].title = trimmedTitle;
+          metaObj.contacts[idx].position = trimmedPosition;
         } else {
           metaObj.contacts.push({
             id: targetUserId,
-            name: name.trim(),
-            englishName: englishName.trim(),
-            phone: phone.trim(),
+            name: trimmedName,
+            englishName: combinedEnglishName,
+            firstName: trimmedFirst,
+            lastName: trimmedLast,
+            phone: trimmedPhone,
             email: session.email,
-            title: title.trim(),
-            position: position?.trim() || "",
+            title: trimmedTitle,
+            position: trimmedPosition,
             isPrimary: true,
             status: "active",
           });
@@ -287,8 +333,8 @@ export async function updateMyAccountProfileAction(
         .from("companies")
         .update({
           intro: `__COMPANY_METADATA__:${JSON.stringify(metaObj)}`,
-          contact_name: name.trim(),
-          contact_phone: phone.trim(),
+          contact_name: trimmedName,
+          contact_phone: trimmedPhone,
           updated_at: new Date().toISOString(),
         })
         .eq("id", targetCompanyId);
@@ -306,11 +352,13 @@ export async function updateMyAccountProfileAction(
       success: true,
       message: "관리자 프로필 정보가 성공적으로 저장되었습니다.",
       profile: {
-        name: verifiedUser.name || name.trim(),
-        englishName: verifiedEnglishName || englishName.trim(),
-        title: verifiedUser.title || title.trim(),
-        position: verifiedUser.position || position?.trim() || "",
-        phone: verifiedUser.phone || phone.trim(),
+        name: verifiedUser.name || trimmedName,
+        firstName: trimmedFirst,
+        lastName: trimmedLast,
+        englishName: verifiedEnglishName || combinedEnglishName,
+        title: verifiedUser.title || trimmedTitle,
+        position: verifiedUser.position || trimmedPosition,
+        phone: verifiedUser.phone || trimmedPhone,
       },
     };
   } catch (err: any) {
