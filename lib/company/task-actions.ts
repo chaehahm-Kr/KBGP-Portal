@@ -6,6 +6,7 @@ import { verifyAdminSession } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 
 import { TASK_DEFINITIONS, type TaskCode } from "./task-constants";
+import { getPersonDisplayName } from "@/lib/user/name-helper";
 
 export interface TaskAssignmentItem {
   taskCode: TaskCode;
@@ -44,7 +45,7 @@ export async function getCompanyTaskAssignments(companyId: string): Promise<Task
   // 회사 소속 모든 멤버 목록 조회
   const { data: companyUsers } = await admin
     .from("company_users")
-    .select("id, name, title, position, email, phone")
+    .select("id, name, title, position, email, phone, permissions, korean_last_name, korean_first_name, english_first_name, english_last_name, english_name")
     .eq("company_id", companyId);
 
   const usersMap = new Map(companyUsers?.map(u => [u.id, u]) || []);
@@ -65,7 +66,7 @@ export async function getCompanyTaskAssignments(companyId: string): Promise<Task
       isPrimary: !!primaryAssign,
       emailNotify: primaryAssign ? primaryAssign.email_notify : false,
       userId: targetUserId,
-      userName: primaryUser?.name || null,
+      userName: primaryUser ? getPersonDisplayName(primaryUser) : null,
       userTitle: primaryUser?.title || null,
       userPosition: primaryUser?.position || null,
       userEmail: primaryUser?.email || null,

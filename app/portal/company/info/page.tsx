@@ -34,7 +34,8 @@ export default async function PortalCompanyInfoPage() {
   let { data: dbUsers, error: usersError } = await supabase
     .from("company_users")
     .select(`
-      id, name, email, company_role, status, title, position, phone, is_primary,
+      id, name, email, company_role, status, title, position, phone, is_primary, permissions,
+      korean_last_name, korean_first_name, english_first_name, english_last_name, english_name,
       task_assignments:company_task_assignments(task_code, is_primary, email_notify)
     `)
     .eq("company_id", membership.companyId)
@@ -44,7 +45,7 @@ export default async function PortalCompanyInfoPage() {
   if (usersError && (usersError.code === "42703" || usersError.message.includes("column"))) {
     const { data: fallbackUsers } = await supabase
       .from("company_users")
-      .select("id, name, email, company_role, status")
+      .select("id, name, email, company_role, status, permissions")
       .eq("company_id", membership.companyId)
       .order("created_at", { ascending: true });
 
@@ -66,6 +67,17 @@ export default async function PortalCompanyInfoPage() {
     position: u.position || "",
     isPrimary: u.is_primary || false,
     status: u.status,
+    permissions: u.permissions || null,
+    koreanLastName: u.korean_last_name || u.permissions?.korean_last_name || null,
+    koreanFirstName: u.korean_first_name || u.permissions?.korean_first_name || null,
+    englishFirstName: u.english_first_name || u.permissions?.english_first_name || null,
+    englishLastName: u.english_last_name || u.permissions?.english_last_name || null,
+    englishName: u.english_name || u.permissions?.english_name || null,
+    korean_last_name: u.korean_last_name || u.permissions?.korean_last_name || null,
+    korean_first_name: u.korean_first_name || u.permissions?.korean_first_name || null,
+    english_first_name: u.english_first_name || u.permissions?.english_first_name || null,
+    english_last_name: u.english_last_name || u.permissions?.english_last_name || null,
+    english_name: u.english_name || u.permissions?.english_name || null,
   }));
 
   // Overwrite contacts in parsedMeta with the actual database company_users

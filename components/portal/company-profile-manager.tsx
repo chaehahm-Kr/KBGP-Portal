@@ -783,7 +783,7 @@ export function CompanyProfileManager({
           {activeTab === "agreements" && initialAgreement && (() => {
             const primaryContact = parsedMeta.contacts?.find((c: any) => c.isPrimary) || parsedMeta.contacts?.[0];
             const currentUserObj = companyUsers?.find((u: any) => u.email === userEmail || u.id === userEmail);
-            const resolvedSignerName = currentUserObj?.name || primaryContact?.name || "";
+            const resolvedSignerName = currentUserObj ? getPersonDisplayName(currentUserObj) : (primaryContact ? getPersonDisplayName(primaryContact) : "");
             const resolvedSignerTitle = currentUserObj?.title || currentUserObj?.position || primaryContact?.title || primaryContact?.position || "";
 
             return (
@@ -793,7 +793,7 @@ export function CompanyProfileManager({
                   id: company.id,
                   name: name,
                   address: [address, address1, address2, city, stateProv, country, zipCode].filter(Boolean).join(" ").trim(),
-                  representativeName: primaryContact?.name || null,
+                  representativeName: primaryContact ? getPersonDisplayName(primaryContact) : null,
                   signerName: resolvedSignerName || null,
                   signerTitle: resolvedSignerTitle || null,
                 }}
