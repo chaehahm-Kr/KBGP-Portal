@@ -5,7 +5,6 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { requireCompanyMembership } from "@/lib/company/dal";
 import { createClient } from "@/lib/supabase/server";
-import { validateUploadedFile } from "@/lib/files/validate";
 import {
   type CertificateType,
   type ProductCategory,
@@ -378,6 +377,7 @@ export async function addProductImages(productId: string, formData: FormData): P
         continue;
       }
 
+      const { validateUploadedFile } = await import("@/lib/files/validate");
       const validation = await validateUploadedFile(image, ["image"]);
       if (!validation.ok) {
         results.push({
@@ -535,6 +535,7 @@ export async function addProductCertificate(
     return { error: "파일을 선택해주세요." };
   }
 
+  const { validateUploadedFile } = await import("@/lib/files/validate");
   const validation = await validateUploadedFile(file, ["document", "image"]);
   if (!validation.ok) {
     return { error: validation.error };
@@ -1117,6 +1118,7 @@ export async function uploadIngredientsFile(productId: string, language: "ko" | 
     throw new Error("파일을 선택해주세요.");
   }
 
+  const { validateUploadedFile } = await import("@/lib/files/validate");
   const validation = await validateUploadedFile(file, ["document", "image"]);
   if (!validation.ok) {
     throw new Error(validation.error);
