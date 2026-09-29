@@ -14,6 +14,7 @@ import {
 } from "@/lib/retailer/onboarding-actions";
 import { normalizeEmail } from "@/lib/user/validation";
 import { sendPortalInvitationAction } from "@/lib/company/admin-actions";
+import { generateNextApplicationNumber } from "@/lib/application/number-generator";
 
 function formatSubmittedDateKo(submittedAt?: string | null): string {
   if (!submittedAt) return "-";
@@ -58,8 +59,8 @@ export type DuplicateEmailCheckResult = {
 };
 
 /**
- * ADM-APP-005: Server-side Duplicate Email Guard
- * Checks normalized email against active portal users, pending invitations, and active applications.
+ * ADM-APP-005-R1: Global Server-side Duplicate Email Guard
+ * Checks normalized email against Supabase Auth users, company_users, applications, and retailer invitations.
  */
 export async function checkDuplicateEmailAction(
   email: string
@@ -72,37 +73,69 @@ export async function checkDuplicateEmailAction(
     return { isDuplicate: false };
   }
 
-  // 1. Check company_users table for active portal user
+  // 1. Check Supabase Auth users globally across the system
+  try {
+    const { data: authData } = await admin.auth.admin.listUsers();
+    const foundAuth = (authData?.users || []).find(
+      (u) => (u.email || "").trim().toLowerCase() === normalized
+    );
+    if (foundAuth) {
+      return {
+        isDuplicate: true,
+        type: "active_user",
+        message: "이미 K SELECT 시스템에 등록된 이메일입니다.",
+        details: "Admin, Brand Portal 또는 Retailer Portal의 기존 사용자 정보를 확인해 주세요.",
+      };
+    }
+  } catch (err) {
+    console.warn("[checkDuplicateEmailAction] auth.admin.listUsers check error:", err);
+  }
+
+  // 2. Check company_users table for active portal user or pending invitation
   const { data: activeUsers } = await admin
     .from("company_users")
     .select("id, name, status, company_id, companies(name)")
     .ilike("email", normalized);
 
-  const activeUser = (activeUsers || []).find((u) => u.status === "active");
+  if (activeUsers && activeUsers.length > 0) {
+    const activeUser = activeUsers.find((u) => u.status === "active");
+    if (activeUser) {
+      const compName = (activeUser as any)?.companies?.name || "";
+      return {
+        isDuplicate: true,
+        type: "active_user",
+        message: "이미 K SELECT 시스템에 등록된 이메일입니다.",
+        details: compName
+          ? `등록된 회사: ${compName} — Admin, Brand Portal 또는 Retailer Portal의 기존 사용자 정보를 확인해 주세요.`
+          : "Admin, Brand Portal 또는 Retailer Portal의 기존 사용자 정보를 확인해 주세요.",
+        companyName: compName,
+        companyId: activeUser.company_id,
+      };
+    }
 
-  if (activeUser) {
-    const compName = (activeUser as any)?.companies?.name || "";
+    const pendingUser = activeUsers.find((u) => u.status === "invited");
+    if (pendingUser) {
+      const compName = (pendingUser as any)?.companies?.name || "";
+      return {
+        isDuplicate: true,
+        type: "pending_invitation",
+        message: "이미 초청된 이메일입니다.",
+        details: compName
+          ? `초청된 회사: ${compName} — 기존 초청 내역을 확인하거나 필요한 경우 초청 메일을 다시 보내주세요.`
+          : "기존 초청 내역을 확인하거나 필요한 경우 초청 메일을 다시 보내주세요.",
+        companyName: compName,
+        companyId: pendingUser.company_id,
+      };
+    }
+
+    const compName = (activeUsers[0] as any)?.companies?.name || "";
     return {
       isDuplicate: true,
       type: "active_user",
-      message: "이미 브랜드 포털에 등록된 이메일입니다.",
-      details: compName ? `등록된 회사: ${compName}` : "기존 사용자 또는 회사 정보를 확인해 주세요.",
+      message: "이미 K SELECT 시스템에 등록된 이메일입니다.",
+      details: "Admin, Brand Portal 또는 Retailer Portal의 기존 사용자 정보를 확인해 주세요.",
       companyName: compName,
-      companyId: activeUser.company_id,
-    };
-  }
-
-  // 2. Check for pending invitations in company_users
-  const pendingUser = (activeUsers || []).find((u) => u.status === "invited");
-  if (pendingUser) {
-    const compName = (pendingUser as any)?.companies?.name || "";
-    return {
-      isDuplicate: true,
-      type: "pending_invitation",
-      message: "이미 초청된 이메일입니다.",
-      details: compName ? `초청된 회사: ${compName}` : "기존 초청 상태를 확인하거나 필요한 경우 초청 메일을 다시 보내주세요.",
-      companyName: compName,
-      companyId: pendingUser.company_id,
+      companyId: activeUsers[0].company_id,
     };
   }
 
@@ -111,14 +144,14 @@ export async function checkDuplicateEmailAction(
     .from("applications")
     .select("id, application_number, applicant_company_name, status, partner_type")
     .ilike("applicant_contact_email", normalized)
-    .in("status", ["invitation_sent", "approved", "submitted", "under_review"]);
+    .neq("status", "deleted");
 
   if (activeApps && activeApps.length > 0) {
     const app = activeApps[0];
     return {
       isDuplicate: true,
       type: "pending_invitation",
-      message: "이미 초청된 이메일입니다.",
+      message: "이미 동일한 이메일로 진행 중인 신청 또는 초청 내역이 있습니다.",
       details: `기존 신청/초청 번호(${app.application_number || app.id})가 존재합니다. 기존 초청 상태를 확인하거나 초청 메일을 다시 보내주세요.`,
       companyName: app.applicant_company_name || "",
     };
@@ -129,7 +162,7 @@ export async function checkDuplicateEmailAction(
     .from("retailer_invitations")
     .select("id, email, status, company_id")
     .ilike("email", normalized)
-    .eq("status", "pending")
+    .neq("status", "expired")
     .maybeSingle();
 
   if (pendingRetInv) {
@@ -292,9 +325,8 @@ export async function adminInviteBrandPartner(payload: {
     });
   }
 
-  // 4. Generate Application Number & Record
-  const { data: appNum } = await admin.rpc("generate_application_number");
-  const applicationNumber = appNum || `APP-${Date.now().toString().slice(-6)}`;
+  // 4. Generate Application Number & Record (ADM-APP-005-R1: APP-YYYYMMDD-I####)
+  const { applicationNumber } = await generateNextApplicationNumber(admin, "admin_invitation");
 
   const { data: appRow, error: appErr } = await admin
     .from("applications")

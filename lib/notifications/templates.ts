@@ -1604,7 +1604,7 @@ function renderNetworkEmailHtml(
 
   if (variables.key === "portal_signup_request" && isDirectInvite) {
     effectiveSubjectTemplate = `[K SELECT NETWORK] ${compName} 브랜드 포털 가입 안내`;
-    effectiveBodyTemplate = `[K SELECT NETWORK] ${compName} 브랜드 포털 가입 안내\n안녕하세요, {{contact_name}}님.\n\n${compName}이 K SELECT NETWORK Brand Portal 파트너로 초청되었습니다.\n\n아래 버튼을 통해 이메일 인증 및 계정 설정을 완료한 후 브랜드 포털을 이용해 주세요.\n\n계정 활성화가 완료되면 회사 정보, 브랜드 정보, 담당자 지정, 상품 등록 및 계약 등 온보딩 절차를 진행할 수 있습니다.`;
+    effectiveBodyTemplate = `[K SELECT NETWORK] ${compName} 브랜드 포털 가입 안내\n안녕하세요, {{contact_name}}님.\n\n${compName}이 K SELECT NETWORK Brand Portal 파트너로 초청되었습니다.\n\n아래 버튼을 통해 이메일 인증 및 계정 설정을 완료한 후 브랜드 포털을 이용해 주세요.\n\n계정 활성화가 완료되면 회사 정보, 브랜드 정보, 담당자 지정, 상품 등록 및 계약 등 온보딩 절차를 진행할 수 있습니다.\n\n{{infoBox}}\n\n{{ctaButton}}`;
   }
 
   const extendedVariables: Record<string, string> = {

@@ -7,6 +7,7 @@ import { serverEnv } from "@/lib/env/server";
 import { publicEnv } from "@/lib/env/public";
 import { validateUploadedFile } from "@/lib/files/validate";
 import { getPersonStructuredNames, getPersonGreetingName, getPersonDisplayName } from "@/lib/user/name-helper";
+import { generateNextApplicationNumber } from "@/lib/application/number-generator";
 
 export const runtime = "nodejs";
 
@@ -386,12 +387,8 @@ export async function POST(request: Request) {
     );
   }
 
-  // 5. 신청 고유번호 발급
-  const { data: numberResult, error: numberError } = await admin.rpc("generate_inquiry_number");
-  if (numberError) {
-    console.warn("[inquiries] generate_inquiry_number RPC failed, falling back to timestamp", numberError);
-  }
-  const applicationNumber = numberResult || `APP-${new Date().toISOString().slice(0, 10).replace(/-/g, "")}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
+  // 5. 신청 고유번호 발급 (ADM-APP-005-R1: APP-YYYYMMDD-M####)
+  const { applicationNumber } = await generateNextApplicationNumber(admin, "public_application");
 
   const defaultEligibility = [
     { itemKey: "stable_supply", response: "available" },
