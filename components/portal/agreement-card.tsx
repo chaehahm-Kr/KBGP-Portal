@@ -22,6 +22,8 @@ interface AgreementCardProps {
     name: string;
     address?: string | null;
     representativeName?: string | null;
+    signerName?: string | null;
+    signerTitle?: string | null;
   };
   userEmail: string;
 }

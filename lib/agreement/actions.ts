@@ -152,7 +152,14 @@ export async function getCompanyAgreement(
   agreementType: "BRAND_SUPPLIER" | "RETAILER" = "BRAND_SUPPLIER"
 ): Promise<{
   agreement: CompanyAgreementItem | null;
-  companyInfo: { id: string; name: string; address?: string | null; representativeName?: string | null };
+  companyInfo: {
+    id: string;
+    name: string;
+    address?: string | null;
+    representativeName?: string | null;
+    signerName?: string | null;
+    signerTitle?: string | null;
+  };
   error?: string;
 }> {
   let targetCompanyId = companyIdInput;
@@ -204,11 +211,29 @@ export async function getCompanyAgreement(
 
   const compMeta = parseCompanyMetadata(comp);
 
+  let signerTitle = "";
+  let signerName = compMeta.representativeName || "";
+
+  if (resolvedUserId) {
+    const { data: userProfile } = await admin
+      .from("company_users")
+      .select("name, title, position")
+      .eq("id", resolvedUserId)
+      .maybeSingle();
+
+    if (userProfile) {
+      if (userProfile.name) signerName = userProfile.name;
+      signerTitle = userProfile.title || userProfile.position || "";
+    }
+  }
+
   const companyInfo = {
     id: targetCompanyId,
     name: compMeta.name,
     address: compMeta.address || null,
     representativeName: compMeta.representativeName || null,
+    signerName: signerName || null,
+    signerTitle: signerTitle || null,
   };
 
   // Fetch active template for this agreement_type

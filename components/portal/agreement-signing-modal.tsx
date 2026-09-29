@@ -12,6 +12,8 @@ interface AgreementSigningModalProps {
     name: string;
     address?: string | null;
     representativeName?: string | null;
+    signerName?: string | null;
+    signerTitle?: string | null;
   };
   userEmail: string;
   isOpen: boolean;
@@ -30,9 +32,22 @@ export function AgreementSigningModal({
   const router = useRouter();
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
 
-  const [signerName, setSignerName] = useState(companyInfo.representativeName || "");
-  const [signerTitle, setSignerTitle] = useState("대표이사 (CEO)");
+  const [signerName, setSignerName] = useState(companyInfo.signerName || companyInfo.representativeName || "");
+  const [signerTitle, setSignerTitle] = useState(companyInfo.signerTitle || "");
   const [signerEmail, setSignerEmail] = useState(userEmail || "");
+
+  // Sync state when props change
+  React.useEffect(() => {
+    if (companyInfo.signerName || companyInfo.representativeName) {
+      setSignerName(companyInfo.signerName || companyInfo.representativeName || "");
+    }
+    if (companyInfo.signerTitle !== undefined && companyInfo.signerTitle !== null) {
+      setSignerTitle(companyInfo.signerTitle);
+    }
+    if (userEmail) {
+      setSignerEmail(userEmail);
+    }
+  }, [companyInfo.signerName, companyInfo.representativeName, companyInfo.signerTitle, userEmail]);
 
   // Additional Recipients list
   const [additionalRecipients, setAdditionalRecipients] = useState<AdditionalRecipientInput[]>([]);

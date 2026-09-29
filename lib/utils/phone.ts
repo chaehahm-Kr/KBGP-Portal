@@ -1,18 +1,22 @@
-import { ALL_COUNTRIES, TOP_COUNTRIES } from "@/lib/constants/countries";
+import { ALL_COUNTRIES } from "@/lib/constants/countries";
 
 export interface ParsedPhone {
-  callingCode: string; // e.g. "+1", "+82"
-  localNumber: string; // e.g. "8565551234", "1012345678"
-  fullNumber: string;  // e.g. "+1 8565551234", "+82 1012345678"
+  callingCode: string; // e.g. "+82", "+1"
+  localNumber: string; // e.g. "33-3333-3333", "10-1234-5678"
+  fullNumber: string;  // e.g. "+82 33-3333-3333", "+1 856-555-1234"
 }
 
 /**
  * Parses existing DB raw phone strings into Calling Code & Local Number.
- * Preserves original content if no calling code matched.
+ * Defaults to South Korea (+82) for empty/unspecified inputs while preserving existing country codes.
+ * Preserves user-entered hyphens and local number formatting exactly.
  */
-export function parsePhoneNumber(rawPhone: string | null | undefined): ParsedPhone {
+export function parsePhoneNumber(
+  rawPhone: string | null | undefined,
+  defaultCallingCode: string = "+82"
+): ParsedPhone {
   if (!rawPhone || !rawPhone.trim()) {
-    return { callingCode: "+1", localNumber: "", fullNumber: "" };
+    return { callingCode: defaultCallingCode, localNumber: "", fullNumber: "" };
   }
 
   const cleaned = rawPhone.trim();
@@ -31,7 +35,7 @@ export function parsePhoneNumber(rawPhone: string | null | undefined): ParsedPho
         ? cleaned.slice(code.length)
         : cleaned.slice(sanitizedCode.length);
       
-      rest = rest.replace(/^[\s\-().]+/, "").trim();
+      rest = rest.replace(/^[\s]+/, "").trim();
       return {
         callingCode: code,
         localNumber: rest,
@@ -42,7 +46,6 @@ export function parsePhoneNumber(rawPhone: string | null | undefined): ParsedPho
 
   // If starts with 010, 02, 031, etc. in South Korea without + prefix
   if (/^01[0-9]|^0[2-6][0-9]/.test(cleaned)) {
-    // Strip leading 0 for Korean international format if needed, but preserve numbers
     const local = cleaned.replace(/^0/, "");
     return {
       callingCode: "+82",
@@ -51,20 +54,22 @@ export function parsePhoneNumber(rawPhone: string | null | undefined): ParsedPho
     };
   }
 
-  // Fallback default: US (+1) or return as raw local number
+  // Fallback default: South Korea (+82) or defaultCallingCode, preserving raw local number
   return {
-    callingCode: "+1",
+    callingCode: defaultCallingCode,
     localNumber: cleaned,
-    fullNumber: cleaned,
+    fullNumber: `${defaultCallingCode} ${cleaned}`.trim(),
   };
 }
 
 /**
- * Formats Calling Code & Local Number into E.164 inspired full international number string
+ * Formats Calling Code & Local Number into full international phone number string.
+ * Preserves user-typed hyphens and spacing exactly without destructive digit-only stripping.
  */
 export function formatPhoneNumber(callingCode: string, localNumber: string): string {
-  const cleanLocal = localNumber.replace(/[^\d]/g, "");
+  const cleanLocal = (localNumber || "").trim();
   if (!cleanLocal) return "";
-  const cleanCode = callingCode.trim();
+  const cleanCode = (callingCode || "+82").trim();
   return `${cleanCode} ${cleanLocal}`.trim();
 }
+

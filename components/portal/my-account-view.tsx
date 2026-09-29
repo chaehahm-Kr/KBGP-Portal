@@ -25,6 +25,14 @@ export function MyAccountView({ initialData }: MyAccountViewProps) {
   const [position, setPosition] = useState(data.position);
   const [profileMessage, setProfileMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
+  React.useEffect(() => {
+    setData(initialData);
+    setName(initialData.name || "");
+    setPhone(initialData.phone || "");
+    setTitle(initialData.title || "");
+    setPosition(initialData.position || "");
+  }, [initialData]);
+
   // Password Form States
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");

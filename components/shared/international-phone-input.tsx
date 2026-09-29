@@ -19,16 +19,16 @@ export function InternationalPhoneInput({
   disabled = false,
   required = false,
   className = "",
-  placeholder = "856 555 1234, 10 1234 5678",
+  placeholder = "전화번호 입력",
 }: InternationalPhoneInputProps) {
   const parsed = parsePhoneNumber(value);
-  const [selectedCallingCode, setSelectedCallingCode] = useState<string>(parsed.callingCode || "+1");
+  const [selectedCallingCode, setSelectedCallingCode] = useState<string>(parsed.callingCode || "+82");
   const [localNumber, setLocalNumber] = useState<string>(parsed.localNumber || "");
 
   // Sync internal state when external value changes
   useEffect(() => {
     const p = parsePhoneNumber(value);
-    setSelectedCallingCode(p.callingCode || "+1");
+    setSelectedCallingCode(p.callingCode || "+82");
     setLocalNumber(p.localNumber || "");
   }, [value]);
 

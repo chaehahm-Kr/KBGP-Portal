@@ -739,18 +739,27 @@ export function CompanyProfileManager({
           </div>
 
           {/* 계약 및 문서 (Agreement & Documents) Card */}
-          {activeTab === "agreements" && initialAgreement && (
-            <AgreementCard
-              agreement={initialAgreement}
-              companyInfo={{
-                id: company.id,
-                name: name,
-                address: [address, address1, address2, city, stateProv, country, zipCode].filter(Boolean).join(" ").trim(),
-                representativeName: parsedMeta.contacts?.find((c: any) => c.isPrimary)?.name || parsedMeta.contacts?.[0]?.name || null,
-              }}
-              userEmail={userEmail}
-            />
-          )}
+          {activeTab === "agreements" && initialAgreement && (() => {
+            const primaryContact = parsedMeta.contacts?.find((c: any) => c.isPrimary) || parsedMeta.contacts?.[0];
+            const currentUserObj = companyUsers?.find((u: any) => u.email === userEmail || u.id === userEmail);
+            const resolvedSignerName = currentUserObj?.name || primaryContact?.name || "";
+            const resolvedSignerTitle = currentUserObj?.title || currentUserObj?.position || primaryContact?.title || primaryContact?.position || "";
+
+            return (
+              <AgreementCard
+                agreement={initialAgreement}
+                companyInfo={{
+                  id: company.id,
+                  name: name,
+                  address: [address, address1, address2, city, stateProv, country, zipCode].filter(Boolean).join(" ").trim(),
+                  representativeName: primaryContact?.name || null,
+                  signerName: resolvedSignerName || null,
+                  signerTitle: resolvedSignerTitle || null,
+                }}
+                userEmail={userEmail}
+              />
+            );
+          })()}
           {/* 거래 정보 (Supplier / Trading Info) Card */}
           {activeTab === "trading" && (
             <div className="rounded-lg border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 relative">
@@ -1266,60 +1275,67 @@ export function CompanyProfileManager({
           {/* Contacts List Card */}
           {activeTab === "members" && (
             <div className="rounded-lg border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-            <div className="flex items-center justify-between mb-4 pb-2 border-b border-zinc-100 dark:border-zinc-800">
-              <h3 className="text-sm font-bold text-zinc-950 dark:text-white">소속 담당자 목록 ({contacts.length})</h3>
-            </div>
+              <div className="flex items-center justify-between mb-4 pb-2 border-b border-zinc-100 dark:border-zinc-800">
+                <h3 className="text-sm font-bold text-zinc-950 dark:text-white">소속 담당자 목록 ({contacts.length})</h3>
+              </div>
 
-            <div className="space-y-4">
-              {contacts.length > 0 ? (
-                contacts.map((contact, index) => (
-                  <div key={contact.id || index} className={`text-xs space-y-2 ${index > 0 ? "pt-4 border-t border-zinc-100 dark:border-zinc-800/80" : ""}`}>
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="space-y-0.5">
-                        <span className="font-bold text-zinc-900 dark:text-white text-[13px] flex items-center gap-1.5">
-                          {contact.name}
-                          {contact.isPrimary && (
-                            <span className="inline-block rounded bg-emerald-50 text-emerald-700 px-1.5 py-0.5 text-[8px] font-bold border border-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-900">
-                              주 컨택
-                            </span>
-                          )}
-                        </span>
-                      </div>
-                      <div className="flex flex-wrap gap-1 justify-end">
-                        {contact.title && (
-                          <span className="rounded bg-zinc-50 border border-zinc-150 text-zinc-650 px-1.5 py-0.5 text-[9px] font-semibold dark:bg-zinc-800/20 dark:border-zinc-700 dark:text-zinc-350">
-                            직함: {contact.title}
-                          </span>
-                        )}
-                        {contact.position && (
-                          <span className="rounded bg-zinc-50 border border-zinc-150 text-zinc-650 px-1.5 py-0.5 text-[9px] font-semibold dark:bg-zinc-800/20 dark:border-zinc-700 dark:text-zinc-350">
-                            부서: {contact.position}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-1 gap-1 text-[11px] text-zinc-550 dark:text-zinc-450">
-                      {contact.phone && <p>📞 {contact.phone}</p>}
-                      {contact.email && <p>✉️ {contact.email}</p>}
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <p className="text-xs text-zinc-400 py-3 text-center">등록된 담당자 정보가 없습니다.</p>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="border-b border-zinc-200 bg-zinc-50/50 text-[10px] font-bold text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900/50">
+                      <th className="px-4 py-2.5">이름</th>
+                      <th className="px-4 py-2.5">연락처</th>
+                      <th className="px-4 py-2.5">이메일</th>
+                      <th className="px-4 py-2.5">직함</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800/60">
+                    {contacts.length > 0 ? (
+                      contacts.map((contact, index) => (
+                        <tr key={contact.id || index} className="hover:bg-zinc-50/20">
+                          <td className="px-4 py-3 font-bold text-zinc-900 dark:text-white">
+                            <div className="flex items-center gap-1.5">
+                              <span>{contact.name || "-"}</span>
+                              {contact.isPrimary && (
+                                <span className="inline-block rounded bg-emerald-50 text-emerald-700 px-1.5 py-0.5 text-[8px] font-bold border border-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-900">
+                                  주 컨택
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 text-zinc-650 dark:text-zinc-350 font-mono text-[11px]">
+                            {contact.phone || "-"}
+                          </td>
+                          <td className="px-4 py-3 text-zinc-650 dark:text-zinc-350 font-mono text-[11px]">
+                            {contact.email || "-"}
+                          </td>
+                          <td className="px-4 py-3 text-zinc-650 dark:text-zinc-350">
+                            {contact.title || contact.position || "-"}
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan={4} className="text-xs text-zinc-400 py-6 text-center">
+                          등록된 담당자 정보가 없습니다.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              {isCompanyAdmin && (
+                <div className="mt-4 pt-3 border-t border-zinc-100 dark:border-zinc-800 text-center">
+                  <a
+                    href="/portal/company/users"
+                    className="inline-block text-xs font-semibold text-emerald-600 hover:underline dark:text-emerald-450"
+                  >
+                    담당자 초대, 수정 및 권한 관리는 [사용자 관리] 메뉴에서 진행할 수 있습니다. →
+                  </a>
+                </div>
               )}
             </div>
-
-            {isCompanyAdmin && (
-              <div className="mt-6 pt-4 border-t border-zinc-100 dark:border-zinc-800 text-center">
-                <a
-                  href="/portal/company/users"
-                  className="inline-block text-xs font-semibold text-emerald-600 hover:underline dark:text-emerald-450"
-                >
-                  담당자 초대, 수정 및 권한 관리는 [사용자 관리] 메뉴에서 진행할 수 있습니다. →
-                </a>
-              </div>
-            )}
-          </div>
           )}
 
           {/* [신규 기능]: 담당 업무 및 주 담당자 관리 테이블 카드 */}

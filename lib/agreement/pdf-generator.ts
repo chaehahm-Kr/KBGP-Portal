@@ -498,17 +498,19 @@ async function generateExecutedBrandPdf(data: ExecutedAgreementPdfData): Promise
   });
 
   const sigConfig = TEMPLATE_V1_CONFIG.page5.signatureBox;
-  let sigFontSize = sigConfig.fontSize || 22;
+  const hasKoreanSig = /[가-힣ㄱ-ㅎㅏ-ㅣ]/.test(data.signerName || "");
+  const sigFont = hasKoreanSig ? krBoldFont : scriptFont;
+  let sigFontSize = hasKoreanSig ? 16 : (sigConfig.fontSize || 22);
   const maxSigWidth = sigConfig.maxWidth || 125;
-  let sigTextWidth = scriptFont.widthOfTextAtSize(data.signerName, sigFontSize);
+  let sigTextWidth = sigFont.widthOfTextAtSize(data.signerName, sigFontSize);
   if (sigTextWidth > maxSigWidth) {
-    sigFontSize = Math.max(14, sigFontSize * (maxSigWidth / sigTextWidth));
+    sigFontSize = Math.max(hasKoreanSig ? 10 : 14, sigFontSize * (maxSigWidth / sigTextWidth));
   }
   page5.drawText(data.signerName, {
     x: sigConfig.x,
     y: sigConfig.y,
     size: sigFontSize,
-    font: scriptFont,
+    font: sigFont,
     color: sigColor,
   });
 
@@ -673,19 +675,21 @@ async function generateExecutedRetailerPdf(data: ExecutedAgreementPdfData): Prom
     color: textColor,
   });
 
-  // Typed Cursive Signature
+  // Typed Signature (Use fontBold for Hangul / scriptFont for English)
   const sigConfig = cfg.page6.signatureBox;
-  let sigFontSize = sigConfig.fontSize;
+  const hasKoreanSig = /[가-힣ㄱ-ㅎㅏ-ㅣ]/.test(data.signerName || "");
+  const sigFont = hasKoreanSig ? fontBold : scriptFont;
+  let sigFontSize = hasKoreanSig ? 18 : sigConfig.fontSize;
   const maxSigWidth = sigConfig.maxWidth;
-  let sigTextWidth = scriptFont.widthOfTextAtSize(data.signerName, sigFontSize);
+  let sigTextWidth = sigFont.widthOfTextAtSize(data.signerName, sigFontSize);
   if (sigTextWidth > maxSigWidth) {
-    sigFontSize = Math.max(16, sigFontSize * (maxSigWidth / sigTextWidth));
+    sigFontSize = Math.max(hasKoreanSig ? 12 : 16, sigFontSize * (maxSigWidth / sigTextWidth));
   }
   page6.drawText(data.signerName, {
     x: sigConfig.x,
     y: sigConfig.y,
     size: sigFontSize,
-    font: scriptFont,
+    font: sigFont,
     color: sigColor,
   });
 
