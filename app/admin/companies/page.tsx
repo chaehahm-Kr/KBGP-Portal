@@ -18,9 +18,9 @@ export default async function AdminCompaniesPage() {
   await verifyAdminSession();
   const supabase = createAdminClient();
 
-  // 1. Batch parallel data fetching to guarantee 0 N+1 queries across company list
+  // 1. Safe batch parallel data fetching with error isolation
   const [
-    { data: dbCompanies },
+    companiesRes,
     { data: companyUsers },
     { data: primaryTasks },
     { data: activeAgreements },
@@ -31,7 +31,7 @@ export default async function AdminCompaniesPage() {
       .select(`
         id, name, country, status, intro, created_at,
         brands (id, is_active),
-        products (id, name, is_draft, selection_status, status, price_usd_fob, price_krw_retail)
+        products (id, name, selection_status, status, price_usd_fob, price_krw_retail)
       `)
       .order("created_at", { ascending: false }),
 
@@ -53,18 +53,48 @@ export default async function AdminCompaniesPage() {
     getSystemCompanyConfigs(),
   ]);
 
+  let dbCompanies: any[] = companiesRes.data || [];
+  if (companiesRes.error || !companiesRes.data) {
+    console.error("Error fetching companies with relations:", companiesRes.error);
+    const { data: fallbackCompanies } = await supabase
+      .from("companies")
+      .select("id, name, country, status, intro, created_at")
+      .order("created_at", { ascending: false });
+    dbCompanies = (fallbackCompanies || []).map((c) => ({
+      ...c,
+      brands: [],
+      products: [],
+    }));
+  }
+
   const activeAgreementsSet = new Set((activeAgreements ?? []).map((a) => a.company_id));
 
   const resolvedDbCompanies = await Promise.all(
     (dbCompanies ?? []).map(async (c) => {
-      const parsed = await parseCompanyMetadata(c);
+      let parsed;
+      try {
+        parsed = await parseCompanyMetadata(c);
+      } catch (e) {
+        parsed = {
+          description: "",
+          address: "",
+          website: "",
+          adminMemo: "",
+          contacts: [],
+          type: "Brand Owner",
+          types: ["Brand Owner"],
+          companyCode: "",
+          status: c.status === "active" ? "Active" : "Inactive",
+        };
+      }
+
       const activeBrandsCount = ((c.brands as any[]) || []).filter((b) => b.is_active).length;
       const totalProductsCount = ((c.products as any[]) || []).length;
       const completedProductsCount = ((c.products as any[]) || []).filter((p) => {
         return (
           p.status === "COMPLETE" ||
           p.selection_status === "APPROVED" ||
-          (!p.is_draft && p.name && (p.price_usd_fob || p.price_krw_retail))
+          (p.name && (p.price_usd_fob || p.price_krw_retail))
         );
       }).length;
 
@@ -73,7 +103,7 @@ export default async function AdminCompaniesPage() {
       const dbPrimary = users.find((u) => u.is_primary) || users[0] || null;
 
       // Fallback to parsed metadata contacts
-      const metadataPrimary = parsed.contacts.find((contact) => contact.isPrimary) || parsed.contacts[0] || null;
+      const metadataPrimary = parsed.contacts?.find((contact) => contact.isPrimary) || parsed.contacts?.[0] || null;
       const primaryContact = dbPrimary || metadataPrimary;
 
       const primaryContactEnglishName =
@@ -85,22 +115,43 @@ export default async function AdminCompaniesPage() {
       // Count primary tasks assigned for this company
       const companyPrimaryTasksCount = (primaryTasks ?? []).filter((t) => t.company_id === c.id).length;
 
-      // Authoritative 7-step onboarding evaluation
-      const onboarding = evaluateCompanyOnboarding({
-        companyId: c.id,
-        parsedMeta: parsed,
-        users,
-        brandCount: activeBrandsCount,
-        completeProductCount: completedProductsCount,
-        totalProductCount: totalProductsCount,
-        primaryTaskCount: companyPrimaryTasksCount,
-        hasActiveAgreement: activeAgreementsSet.has(c.id),
+      // Check if Retailer-only company (Brand onboarding 7-step is N/A for Retailers)
+      const companyTypes = parsed.types && parsed.types.length > 0 ? parsed.types : [parsed.type || "Brand Owner"];
+      const isRetailerOnly = companyTypes.every((t) => {
+        const norm = t.toLowerCase();
+        return norm.includes("retail") && !norm.includes("brand") && !norm.includes("manufacturer");
       });
+
+      let onboardingCompletedCount = 0;
+      let onboardingTotalCount = 7;
+      let onboardingStatus: "completed" | "in_progress" | "not_started" | "not_applicable" = "not_started";
+      let onboardingBadgeText = "0 / 7 미시작";
+
+      if (isRetailerOnly) {
+        onboardingStatus = "not_applicable";
+        onboardingBadgeText = "N/A";
+      } else {
+        const onboarding = evaluateCompanyOnboarding({
+          companyId: c.id,
+          parsedMeta: parsed,
+          users,
+          brandCount: activeBrandsCount,
+          completeProductCount: completedProductsCount,
+          totalProductCount: totalProductsCount,
+          primaryTaskCount: companyPrimaryTasksCount,
+          hasActiveAgreement: activeAgreementsSet.has(c.id),
+        });
+        onboardingCompletedCount = onboarding.completedCount;
+        onboardingTotalCount = onboarding.totalCount;
+        onboardingStatus = onboarding.status;
+        onboardingBadgeText = onboarding.badgeText;
+      }
 
       return {
         id: c.id,
         name: c.name,
-        type: parsed.type,
+        type: parsed.type || "Brand Owner",
+        types: companyTypes,
         country: formatCanonicalCountryName(c.country),
         contactName: primaryContact ? primaryContact.name : "담당자 정보 없음",
         contactEnglishName: primaryContactEnglishName,
@@ -110,10 +161,10 @@ export default async function AdminCompaniesPage() {
         contactPosition: primaryContact ? primaryContact.position : "",
         brandsCount: activeBrandsCount,
         productsCount: totalProductsCount,
-        onboardingCompletedCount: onboarding.completedCount,
-        onboardingTotalCount: onboarding.totalCount,
-        onboardingStatus: onboarding.status,
-        onboardingBadgeText: onboarding.badgeText,
+        onboardingCompletedCount,
+        onboardingTotalCount,
+        onboardingStatus,
+        onboardingBadgeText,
         appStatus: parsed.status === "Active" ? "Approved" : "Pending",
         partnerStatus: parsed.status,
         accountOwner: "Alex Kim",
