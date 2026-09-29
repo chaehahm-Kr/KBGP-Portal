@@ -229,11 +229,26 @@ export default async function AdminCompanyDetailPage({
 
     const { data: companyUsers } = await supabase
       .from("company_users")
-      .select("id, name, email, status, company_role, title, position, phone, is_primary, permissions")
+      .select("id, name, email, status, company_role, title, position, phone, is_primary, permissions, created_at, joined_at")
       .eq("company_id", id)
       .order("created_at", { ascending: true });
 
-    // Hydrate task assignments on companyUsers
+    // Batch resolve last_sign_in_at from Supabase Auth to avoid N+1 queries
+    const authMapById = new Map<string, string | null>();
+    const authMapByEmail = new Map<string, string | null>();
+    try {
+      const { data: authData } = await admin.auth.admin.listUsers({ perPage: 1000 });
+      if (authData?.users) {
+        for (const u of authData.users) {
+          if (u.id) authMapById.set(u.id, u.last_sign_in_at || null);
+          if (u.email) authMapByEmail.set(u.email.toLowerCase().trim(), u.last_sign_in_at || null);
+        }
+      }
+    } catch (e) {
+      console.warn("[AdminCompanyDetailPage] Failed to batch fetch auth last_sign_in_at:", e);
+    }
+
+    // Hydrate task assignments and last_sign_in_at on companyUsers
     let assignments: any[] = [];
     try {
       const { data, error } = await supabase
@@ -247,10 +262,18 @@ export default async function AdminCompanyDetailPage({
       console.warn("company_task_assignments table not ready in admin detail page", e);
     }
 
-    const hydratedUsers = (companyUsers ?? []).map((u: any) => ({
-      ...u,
-      task_assignments: assignments.filter((a: any) => a.user_id === u.id)
-    }));
+    const hydratedUsers = (companyUsers ?? []).map((u: any) => {
+      const lastLogin =
+        authMapById.get(u.id) ??
+        (u.email ? authMapByEmail.get(u.email.toLowerCase().trim()) : null) ??
+        null;
+
+      return {
+        ...u,
+        last_sign_in_at: lastLogin,
+        task_assignments: assignments.filter((a: any) => a.user_id === u.id),
+      };
+    });
 
     const brandNameById = new Map(brandsData.map((b) => [b.id, b.name]));
 
