@@ -63,7 +63,7 @@ export async function getMyAccountData(): Promise<MyAccountData> {
   const { data: userById, error: userError } = await adminClient
     .from("company_users")
     .select(
-      "id, company_id, name, email, company_role, status, title, position, phone, is_primary, permissions, created_at, joined_at, companies(id, name)"
+      "id, company_id, name, email, company_role, status, title, position, phone, is_primary, permissions, created_at, joined_at"
     )
     .eq("id", session.userId)
     .maybeSingle();
@@ -74,7 +74,7 @@ export async function getMyAccountData(): Promise<MyAccountData> {
     const { data: userByEmail } = await adminClient
       .from("company_users")
       .select(
-        "id, company_id, name, email, company_role, status, title, position, phone, is_primary, permissions, created_at, joined_at, companies(id, name)"
+        "id, company_id, name, email, company_role, status, title, position, phone, is_primary, permissions, created_at, joined_at"
       )
       .eq("email", session.email.toLowerCase().trim())
       .maybeSingle();
@@ -85,13 +85,24 @@ export async function getMyAccountData(): Promise<MyAccountData> {
     console.error("[getMyAccountData] Error loading company user:", userError);
   }
 
+  let companyName = "소속 회사";
+  if (userRecord?.company_id) {
+    const { data: comp } = await adminClient
+      .from("companies")
+      .select("name")
+      .eq("id", userRecord.company_id)
+      .maybeSingle();
+    if (comp?.name) {
+      companyName = comp.name;
+    }
+  }
+
   const { data: profile } = await adminClient
     .from("profiles")
     .select("display_name, created_at")
     .eq("id", session.userId)
     .maybeSingle();
 
-  const rawCompany = userRecord?.companies as any;
   const englishName = (
     userRecord?.english_name ||
     userRecord?.permissions?.english_name ||
@@ -110,7 +121,7 @@ export async function getMyAccountData(): Promise<MyAccountData> {
     status: (userRecord?.status as any) || "active",
     isPrimary: userRecord?.is_primary || false,
     companyId: userRecord?.company_id || "",
-    companyName: rawCompany?.name || "소속 회사",
+    companyName: companyName,
     createdAt: userRecord?.created_at || profile?.created_at || "",
     joinedAt: userRecord?.joined_at || "",
   };
