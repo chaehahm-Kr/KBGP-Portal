@@ -235,18 +235,32 @@ export async function verifyBrandInvitationTokenAction(
   const admin = createAdminClient();
   const tokenHash = crypto.createHash("sha256").update(rawToken.trim()).digest("hex");
 
-  // 1. Query company_users with invitation_token_hash in select list
-  const { data: matchedUsers } = await admin
+  let user: any = null;
+
+  // 1. Direct match by invitation_token_hash with explicit FK relationship hint
+  const { data: matchedByHash, error: hashErr } = await admin
     .from("company_users")
-    .select("id, company_id, name, email, status, invited_at, invitation_token_hash, invitation_expires_at, companies(name)");
+    .select("id, company_id, name, email, status, invited_at, invitation_token_hash, invitation_expires_at, companies!company_users_company_id_fkey(name)")
+    .eq("invitation_token_hash", tokenHash)
+    .maybeSingle();
 
-  let user = (matchedUsers || []).find(
-    (u) => (u as any).invitation_token_hash === tokenHash
-  );
+  if (matchedByHash) {
+    user = matchedByHash;
+  } else if (hashErr) {
+    console.warn("[verifyBrandInvitationTokenAction] Error querying by invitation_token_hash:", hashErr);
+  }
 
-  // Fallback: If token hash column query didn't match directly, check if rawToken is user id
-  if (!user && rawToken.length >= 32) {
-    user = (matchedUsers || []).find((u) => u.id === rawToken.trim());
+  // Fallback: If token hash query didn't match directly, check if rawToken is user id
+  if (!user && rawToken.trim().length >= 32) {
+    const { data: matchedById } = await admin
+      .from("company_users")
+      .select("id, company_id, name, email, status, invited_at, invitation_token_hash, invitation_expires_at, companies!company_users_company_id_fkey(name)")
+      .eq("id", rawToken.trim())
+      .maybeSingle();
+
+    if (matchedById) {
+      user = matchedById;
+    }
   }
 
   if (!user) {

@@ -15,6 +15,7 @@ import {
 import { normalizeEmail } from "@/lib/user/validation";
 import { sendPortalInvitationAction } from "@/lib/company/admin-actions";
 import { generateNextApplicationNumber } from "@/lib/application/number-generator";
+import { buildBrandPortalInvitationUrl, getCanonicalBrandPortalDomain } from "@/lib/utils/url-builder";
 
 function formatSubmittedDateKo(submittedAt?: string | null): string {
   if (!submittedAt) return "-";
@@ -355,8 +356,7 @@ export async function adminInviteBrandPartner(payload: {
   await logApplicationActivity(admin, appRow.id, "none", "invitation_sent", session.userId, "Admin Direct Brand Invitation");
 
   // 5. ADM-EMAIL-005: Send Templated Brand Invitation Email with Secure Activation Link
-  const brandSiteUrl = publicEnv.NEXT_PUBLIC_SITE_URL || "https://portal.kselectnetwork.com";
-  const portalSignupUrl = `${brandSiteUrl}/portal/signup?token=${rawToken}`;
+  const portalSignupUrl = buildBrandPortalInvitationUrl(rawToken);
 
   const sendRes = await sendTemplatedEmail("portal_signup_request", normalizedEmail, {
     contact_name: payload.contactName.trim(),
