@@ -923,6 +923,8 @@ function getNetworkBadgeLabel(key: string): string | undefined {
       return "OVERDUE · 회신 기한 초과 안내";
     case "invite_expiring_soon":
       return "EXPIRING · 초청 만료 임박 안내";
+    case "portal_signup_request":
+      return "INVITED · 브랜드 파트너 초청";
     case "staff_invited":
       return "INVITED · 관리자 초대 발송";
     case "brand_agreement_completed":
@@ -999,14 +1001,20 @@ function buildNetworkInfoCardHtml(variables: Record<string, string>) {
     const effDate = variables.effective_date || variables.effectiveDate;
     if (effDate && effDate !== execDate) rows.push({ label: "효력 발생일", value: effDate });
   } else if (variables.key === "portal_signup_request") {
+    const isDirectInvite = variables.isDirectInvite === "true" || variables.entry_mode === "admin_invitation";
     const compName = variables.company_name || variables.companyName;
-    if (compName) rows.push({ label: "신청 회사명", value: compName, isBold: true });
+    const contactName = variables.contact_name || variables.contactName;
 
-    const subDate = variables.submitted_date || variables.submittedDate;
-    if (subDate) rows.push({ label: "신청일", value: subDate });
-
-    const appNo = variables.application_id || variables.applicationId || variables.applicationNumber || variables.applicationNo;
-    if (appNo) rows.push({ label: "신청 번호", value: appNo, isBold: true });
+    if (isDirectInvite) {
+      if (compName) rows.push({ label: "초청 회사명", value: compName, isBold: true });
+      if (contactName) rows.push({ label: "담당자", value: contactName });
+    } else {
+      if (compName) rows.push({ label: "신청 회사명", value: compName, isBold: true });
+      const subDate = variables.submitted_date || variables.submittedDate;
+      if (subDate) rows.push({ label: "신청일", value: subDate });
+      const appNo = variables.application_id || variables.applicationId || variables.applicationNumber || variables.applicationNo;
+      if (appNo) rows.push({ label: "신청 번호", value: appNo, isBold: true });
+    }
   } else {
     const appNo = variables.applicationNo || variables.applicationNumber || variables.inquiryNumber;
     if (appNo) {
@@ -1302,7 +1310,8 @@ function buildNetworkCtaButtonHtml(variables: Record<string, string>) {
   } else if (key === "info_request_created") {
     buttonLabel = "추가 자료 제출하기";
   } else if (key === "portal_signup_request") {
-    buttonLabel = "포털 가입 시작하기";
+    const isDirectInvite = variables.isDirectInvite === "true" || variables.entry_mode === "admin_invitation";
+    buttonLabel = variables.button_label || variables.buttonLabel || (isDirectInvite ? "브랜드 포털 가입하기" : "포털 가입 시작하기");
     url = variables.portal_signup_url || variables.portalSignupUrl || variables.portalUrl || "https://portal.kselectnetwork.com/portal/signup";
   } else if (key === "info_request_replied") {
     buttonLabel = "회신 자료 검토하기";
@@ -1587,10 +1596,22 @@ function renderNetworkEmailHtml(
 ) {
   const siteUrl = publicEnv.NEXT_PUBLIC_SITE_URL || "https://www.kselectnetwork.com";
   const contactName = variables.contactName || variables.contact_name || "브랜드사 담당자";
+  const compName = variables.companyName || variables.company_name || "파트너사";
+  const isDirectInvite = variables.isDirectInvite === "true" || variables.entry_mode === "admin_invitation";
+
+  let effectiveSubjectTemplate = subjectTemplate;
+  let effectiveBodyTemplate = bodyTemplate;
+
+  if (variables.key === "portal_signup_request" && isDirectInvite) {
+    effectiveSubjectTemplate = `[K SELECT NETWORK] ${compName} 브랜드 포털 가입 안내`;
+    effectiveBodyTemplate = `[K SELECT NETWORK] ${compName} 브랜드 포털 가입 안내\n안녕하세요, {{contact_name}}님.\n\n${compName}이 K SELECT NETWORK Brand Portal 파트너로 초청되었습니다.\n\n아래 버튼을 통해 이메일 인증 및 계정 설정을 완료한 후 브랜드 포털을 이용해 주세요.\n\n계정 활성화가 완료되면 회사 정보, 브랜드 정보, 담당자 지정, 상품 등록 및 계약 등 온보딩 절차를 진행할 수 있습니다.`;
+  }
 
   const extendedVariables: Record<string, string> = {
     ...variables,
     contactName,
+    company_name: compName,
+    companyName: compName,
     submittedDate: variables.submittedDate || new Date().toLocaleDateString("ko-KR", { year: "numeric", month: "long", day: "numeric" }),
     applicationUrl: `${siteUrl}/portal`,
     portalUrl: variables.portalUrl || `${siteUrl}/portal`,
@@ -1604,9 +1625,9 @@ function renderNetworkEmailHtml(
   extendedVariables.infoBox = buildNetworkInfoCardHtml(extendedVariables);
   extendedVariables.ctaButton = buildNetworkCtaButtonHtml(extendedVariables);
 
-  const finalSubject = render(subjectTemplate, extendedVariables);
+  const finalSubject = render(effectiveSubjectTemplate, extendedVariables);
 
-  const bodyLines = bodyTemplate.split("\n");
+  const bodyLines = effectiveBodyTemplate.split("\n");
   const rawTitle = bodyLines[0] || "";
   const rawBodyLines = bodyLines.slice(1).join("\n").trim();
 

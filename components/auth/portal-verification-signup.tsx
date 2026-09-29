@@ -1,11 +1,13 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect, type FormEvent } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
   verifyPartnerApplicationAction,
   activatePartnerAccountAction,
+  verifyBrandInvitationTokenAction,
+  activatePartnerAccountWithTokenAction,
 } from "@/lib/auth/signup-verification";
 import { PASSWORD_RULE_DESCRIPTION } from "@/lib/auth/password";
 
@@ -15,6 +17,9 @@ const labelClass = "block text-xs font-semibold text-zinc-300 mb-1";
 
 export function PortalVerificationSignup() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const tokenFromUrl = searchParams.get("token");
+
   const [step, setStep] = useState<
     "verify" | "result_A" | "result_B" | "result_C" | "setPassword" | "success"
   >("verify");
@@ -30,6 +35,7 @@ export function PortalVerificationSignup() {
   // States
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [inviteToken, setInviteToken] = useState<string | null>(null);
   const [verifiedUser, setVerifiedUser] = useState<{
     userId: string;
     companyName: string;
@@ -38,7 +44,41 @@ export function PortalVerificationSignup() {
   } | null>(null);
   const [activeEmail, setActiveEmail] = useState("");
 
-  // 1단계: 파트너십 신청 조회
+  // PORT-ONB-003: Auto-verify Token from Email CTA link on mount
+  useEffect(() => {
+    if (tokenFromUrl) {
+      setInviteToken(tokenFromUrl);
+      setPending(true);
+      setError(null);
+      verifyBrandInvitationTokenAction(tokenFromUrl)
+        .then((res) => {
+          setPending(false);
+          if (res.success && res.case === "D") {
+            setVerifiedUser({
+              userId: res.userId,
+              companyName: res.companyName,
+              contactName: res.contactName,
+              email: res.email,
+            });
+            setEmail(res.email);
+            setStep("setPassword");
+          } else if (res.case === "C") {
+            setActiveEmail((res as any).email || "");
+            setStep("result_C");
+          } else {
+            setStep("result_A");
+            setError((res as any).message || "초대 링크가 유효하지 않거나 만료되었습니다.");
+          }
+        })
+        .catch((err) => {
+          setPending(false);
+          setStep("result_A");
+          setError(err?.message || "초대 정보 검증 중 오류가 발생했습니다.");
+        });
+    }
+  }, [tokenFromUrl]);
+
+  // 1단계: 파트너십 신청 조회 (Public Application BRN + Email path)
   async function handleVerify(e: FormEvent) {
     e.preventDefault();
     setError(null);
@@ -75,7 +115,7 @@ export function PortalVerificationSignup() {
     }
   }
 
-  // 2단계: 비밀번호 설정 및 완료
+  // 2단계: 비밀번호 설정 및 계정 활성화
   async function handleActivate(e: FormEvent) {
     e.preventDefault();
     setError(null);
@@ -93,7 +133,12 @@ export function PortalVerificationSignup() {
     setPending(true);
 
     try {
-      const res = await activatePartnerAccountAction(verifiedUser.userId, password);
+      let res: { success: boolean; error?: string; email?: string };
+      if (inviteToken) {
+        res = await activatePartnerAccountWithTokenAction(inviteToken, password);
+      } else {
+        res = await activatePartnerAccountAction(verifiedUser.userId, password);
+      }
       setPending(false);
 
       if (res.success) {

@@ -2,9 +2,12 @@
 
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import {
   adminInviteBrandPartner,
   adminInviteRetailerPartner,
+  checkDuplicateEmailAction,
+  type DuplicateEmailCheckResult,
 } from "@/lib/application/invitation-actions";
 
 export function AdminInvitePartnerClient() {
@@ -22,10 +25,28 @@ export function AdminInvitePartnerClient() {
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [dupResult, setDupResult] = useState<DuplicateEmailCheckResult | null>(null);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
+    if (name === "email" && dupResult) {
+      setDupResult(null);
+    }
+  };
+
+  const handleEmailBlur = async () => {
+    if (!formData.email.trim() || !formData.email.includes("@")) return;
+    try {
+      const res = await checkDuplicateEmailAction(formData.email);
+      if (res.isDuplicate) {
+        setDupResult(res);
+      } else {
+        setDupResult(null);
+      }
+    } catch (err) {
+      console.warn("Email duplicate check error:", err);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -45,6 +66,11 @@ export function AdminInvitePartnerClient() {
       return;
     }
 
+    if (dupResult?.isDuplicate) {
+      setErrorMessage(dupResult.message || "이미 등록되거나 초청된 이메일입니다.");
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
@@ -58,11 +84,19 @@ export function AdminInvitePartnerClient() {
         });
 
         if (res.success) {
-          alert(`Success! Brand Partner invitation sent for ${formData.companyName}.`);
+          alert(`성공: ${formData.companyName} 파트너 초청 메일을 발송했습니다.`);
           router.push("/admin/applications");
           router.refresh();
         } else {
-          setErrorMessage(res.error || "Failed to send Brand invitation.");
+          setErrorMessage(res.error || "브랜드 파트너 초청 발송에 실패했습니다.");
+          if (res.isDuplicate) {
+            setDupResult({
+              isDuplicate: true,
+              message: res.error,
+              details: res.details,
+              type: res.duplicateType as any,
+            });
+          }
         }
       } else {
         const res = await adminInviteRetailerPartner({
@@ -125,6 +159,29 @@ export function AdminInvitePartnerClient() {
           </div>
         )}
 
+        {dupResult?.isDuplicate && (
+          <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 dark:bg-amber-950/60 dark:border-amber-800 dark:text-amber-200 space-y-2">
+            <div className="flex items-center gap-2 font-bold text-sm">
+              <span>⚠️</span>
+              <span>{dupResult.message}</span>
+            </div>
+            <p className="text-xs leading-relaxed text-amber-800 dark:text-amber-300">
+              {dupResult.details}
+            </p>
+            {dupResult.type === "pending_invitation" && (
+              <div className="pt-1">
+                <Link
+                  href="/admin/applications"
+                  className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-amber-600 text-white text-xs font-bold hover:bg-amber-700 transition-colors"
+                >
+                  <span>📋 기존 초청 보기 (신청서 목록 이동)</span>
+                  <span>→</span>
+                </Link>
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="space-y-1.5">
             <label className="font-bold text-zinc-700 dark:text-zinc-300">
@@ -165,9 +222,14 @@ export function AdminInvitePartnerClient() {
               name="email"
               value={formData.email}
               onChange={handleChange}
+              onBlur={handleEmailBlur}
               placeholder="contact@company.com"
               required
-              className="w-full rounded-xl border border-zinc-200 bg-zinc-50 px-3.5 py-2.5 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white outline-none focus:border-zinc-400 font-mono"
+              className={`w-full rounded-xl border bg-zinc-50 px-3.5 py-2.5 text-xs text-zinc-900 dark:bg-zinc-950 dark:text-white outline-none font-mono ${
+                dupResult?.isDuplicate
+                  ? "border-rose-400 focus:border-rose-500 dark:border-rose-800"
+                  : "border-zinc-200 dark:border-zinc-800 focus:border-zinc-400"
+              }`}
             />
           </div>
 
@@ -229,7 +291,7 @@ export function AdminInvitePartnerClient() {
           </button>
           <button
             type="submit"
-            disabled={isSubmitting}
+            disabled={isSubmitting || Boolean(dupResult?.isDuplicate)}
             className="px-6 py-2.5 rounded-xl text-xs font-bold bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-100 transition-colors shadow-xs disabled:opacity-50 cursor-pointer"
           >
             {isSubmitting
@@ -243,3 +305,4 @@ export function AdminInvitePartnerClient() {
     </div>
   );
 }
+

@@ -48,13 +48,120 @@ async function logApplicationActivity(
 /**
  * Admin direct Brand Partner invitation flow
  */
+export type DuplicateEmailCheckResult = {
+  isDuplicate: boolean;
+  type?: "active_user" | "pending_invitation";
+  message?: string;
+  details?: string;
+  companyName?: string;
+  companyId?: string;
+};
+
+/**
+ * ADM-APP-005: Server-side Duplicate Email Guard
+ * Checks normalized email against active portal users, pending invitations, and active applications.
+ */
+export async function checkDuplicateEmailAction(
+  email: string
+): Promise<DuplicateEmailCheckResult> {
+  const session = await verifyAdminSession();
+  const admin = createAdminClient();
+
+  const normalized = (email || "").trim().toLowerCase();
+  if (!normalized || !normalized.includes("@")) {
+    return { isDuplicate: false };
+  }
+
+  // 1. Check company_users table for active portal user
+  const { data: activeUsers } = await admin
+    .from("company_users")
+    .select("id, name, status, company_id, companies(name)")
+    .ilike("email", normalized);
+
+  const activeUser = (activeUsers || []).find((u) => u.status === "active");
+
+  if (activeUser) {
+    const compName = (activeUser as any)?.companies?.name || "";
+    return {
+      isDuplicate: true,
+      type: "active_user",
+      message: "이미 브랜드 포털에 등록된 이메일입니다.",
+      details: compName ? `등록된 회사: ${compName}` : "기존 사용자 또는 회사 정보를 확인해 주세요.",
+      companyName: compName,
+      companyId: activeUser.company_id,
+    };
+  }
+
+  // 2. Check for pending invitations in company_users
+  const pendingUser = (activeUsers || []).find((u) => u.status === "invited");
+  if (pendingUser) {
+    const compName = (pendingUser as any)?.companies?.name || "";
+    return {
+      isDuplicate: true,
+      type: "pending_invitation",
+      message: "이미 초청된 이메일입니다.",
+      details: compName ? `초청된 회사: ${compName}` : "기존 초청 상태를 확인하거나 필요한 경우 초청 메일을 다시 보내주세요.",
+      companyName: compName,
+      companyId: pendingUser.company_id,
+    };
+  }
+
+  // 3. Check applications table for existing pending/active applications
+  const { data: activeApps } = await admin
+    .from("applications")
+    .select("id, application_number, applicant_company_name, status, partner_type")
+    .ilike("applicant_contact_email", normalized)
+    .in("status", ["invitation_sent", "approved", "submitted", "under_review"]);
+
+  if (activeApps && activeApps.length > 0) {
+    const app = activeApps[0];
+    return {
+      isDuplicate: true,
+      type: "pending_invitation",
+      message: "이미 초청된 이메일입니다.",
+      details: `기존 신청/초청 번호(${app.application_number || app.id})가 존재합니다. 기존 초청 상태를 확인하거나 초청 메일을 다시 보내주세요.`,
+      companyName: app.applicant_company_name || "",
+    };
+  }
+
+  // 4. Check retailer_invitations table for pending retailer invites
+  const { data: pendingRetInv } = await admin
+    .from("retailer_invitations")
+    .select("id, email, status, company_id")
+    .ilike("email", normalized)
+    .eq("status", "pending")
+    .maybeSingle();
+
+  if (pendingRetInv) {
+    return {
+      isDuplicate: true,
+      type: "pending_invitation",
+      message: "이미 초청된 이메일입니다.",
+      details: "리테일러 포털 초청 내역이 존재합니다. 기존 초청 상태를 확인해 주세요.",
+    };
+  }
+
+  return { isDuplicate: false };
+}
+
+/**
+ * Admin direct Brand Partner invitation flow
+ */
 export async function adminInviteBrandPartner(payload: {
   companyName: string;
   contactName: string;
   email: string;
   phone?: string;
   adminNotes?: string;
-}): Promise<{ success: boolean; error?: string; applicationId?: string; companyId?: string }> {
+}): Promise<{
+  success: boolean;
+  error?: string;
+  details?: string;
+  isDuplicate?: boolean;
+  duplicateType?: string;
+  applicationId?: string;
+  companyId?: string;
+}> {
   const session = await verifyAdminSession();
   const admin = createAdminClient();
 
@@ -70,7 +177,19 @@ export async function adminInviteBrandPartner(payload: {
     return { success: false, error: "Primary Contact Name is required." };
   }
 
-  // 1. Duplicate check warning & lookup
+  // === ADM-APP-005: Mandatory Server-Side Duplicate Check BEFORE Record Creation ===
+  const dupCheck = await checkDuplicateEmailAction(normalizedEmail);
+  if (dupCheck.isDuplicate) {
+    return {
+      success: false,
+      error: dupCheck.message || "이미 등록되거나 초청된 이메일입니다.",
+      details: dupCheck.details,
+      isDuplicate: true,
+      duplicateType: dupCheck.type,
+    };
+  }
+
+  // 1. Company lookup or creation
   const { data: existingComp } = await admin
     .from("companies")
     .select("id, name")
@@ -121,7 +240,12 @@ export async function adminInviteBrandPartner(payload: {
     companyId = newComp.id;
   }
 
-  // 2. Check if auth user exists or invite auth user
+  // 2. Generate Secure Invitation Token (PORT-ONB-003)
+  const rawToken = crypto.randomBytes(32).toString("hex");
+  const tokenHash = crypto.createHash("sha256").update(rawToken).digest("hex");
+  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+
+  // 3. Create or update Company User
   const { data: existingUser } = await admin
     .from("company_users")
     .select("id, status")
@@ -129,36 +253,49 @@ export async function adminInviteBrandPartner(payload: {
     .eq("email", normalizedEmail)
     .maybeSingle();
 
-  let companyUserId: string | null = existingUser?.id || null;
+  let companyUserId: string;
 
-  if (!existingUser) {
+  if (existingUser) {
+    companyUserId = existingUser.id;
+    await admin
+      .from("company_users")
+      .update({
+        status: "invited",
+        invited_at: new Date().toISOString(),
+        invitation_token_hash: tokenHash,
+        invitation_expires_at: expiresAt,
+        name: payload.contactName.trim(),
+        phone: payload.phone?.trim() || null,
+      })
+      .eq("id", existingUser.id);
+  } else {
     const { data: invitedAuth } = await admin.auth.admin.createUser({
       email: normalizedEmail,
       email_confirm: false,
       user_metadata: { role: "portal", display_name: payload.contactName.trim() },
     });
 
-    if (invitedAuth?.user) {
-      companyUserId = invitedAuth.user.id;
-      await admin.from("company_users").insert({
-        id: invitedAuth.user.id,
-        company_id: companyId,
-        name: payload.contactName.trim(),
-        email: normalizedEmail,
-        company_role: "company_admin",
-        status: "invited",
-        invited_at: new Date().toISOString(),
-        phone: payload.phone?.trim() || null,
-        is_primary: true,
-      });
-    }
+    companyUserId = invitedAuth?.user?.id || crypto.randomUUID();
+
+    await admin.from("company_users").insert({
+      id: companyUserId,
+      company_id: companyId,
+      name: payload.contactName.trim(),
+      email: normalizedEmail,
+      company_role: "company_admin",
+      status: "invited",
+      invited_at: new Date().toISOString(),
+      invitation_token_hash: tokenHash,
+      invitation_expires_at: expiresAt,
+      phone: payload.phone?.trim() || null,
+      is_primary: true,
+    });
   }
 
-  // 3. Generate Application number
+  // 4. Generate Application Number & Record
   const { data: appNum } = await admin.rpc("generate_application_number");
   const applicationNumber = appNum || `APP-${Date.now().toString().slice(-6)}`;
 
-  // 4. Create Application record
   const { data: appRow, error: appErr } = await admin
     .from("applications")
     .insert({
@@ -185,40 +322,27 @@ export async function adminInviteBrandPartner(payload: {
 
   await logApplicationActivity(admin, appRow.id, "none", "invitation_sent", session.userId, "Admin Direct Brand Invitation");
 
-  // 5. Send Brand invitation email strictly pointing to portal.kselectnetwork.com
+  // 5. ADM-EMAIL-005: Send Templated Brand Invitation Email with Secure Activation Link
   const brandSiteUrl = publicEnv.NEXT_PUBLIC_SITE_URL || "https://portal.kselectnetwork.com";
-  const activationUrl = `${brandSiteUrl}/portal/login`;
+  const portalSignupUrl = `${brandSiteUrl}/portal/signup?token=${rawToken}`;
 
-  try {
-    await sendEmail({
-      to: normalizedEmail,
-      subject: `[K SELECT NETWORK] Invitation to join ${payload.companyName} Brand Portal`,
-      text: `Hello ${payload.contactName},\n\nYou have been invited by K SELECT Admin to activate your Brand account for ${payload.companyName}.\n\nPlease activate your account here:\n${activationUrl}\n\nThank you,\nK SELECT Operations Team`,
-      html: `
-        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 32px 20px; color: #18181b; background-color: #ffffff;">
-          <div style="margin-bottom: 24px;">
-            <span style="font-size: 20px; font-weight: 900; letter-spacing: -0.5px; color: #18181b;">K SELECT NETWORK</span>
-            <span style="font-size: 13px; font-weight: 700; color: #71717a; margin-left: 8px;">Brand Portal</span>
-          </div>
-          
-          <div style="background: #f4f4f5; border-radius: 16px; padding: 24px; margin-bottom: 24px;">
-            <h2 style="font-size: 18px; font-weight: 800; margin: 0 0 12px 0; color: #18181b;">Brand Account Activation Invitation</h2>
-            <p style="font-size: 14px; line-height: 1.6; color: #3f3f46; margin: 0;">
-              Hello <strong>${payload.contactName}</strong>,<br/><br/>
-              K SELECT Admin has invited <strong>${payload.companyName}</strong> to join the K SELECT Brand Portal.
-            </p>
-          </div>
+  const sendRes = await sendTemplatedEmail("portal_signup_request", normalizedEmail, {
+    contact_name: payload.contactName.trim(),
+    contactName: payload.contactName.trim(),
+    company_name: payload.companyName.trim(),
+    companyName: payload.companyName.trim(),
+    entry_mode: "admin_invitation",
+    isDirectInvite: "true",
+    portal_signup_url: portalSignupUrl,
+    portalSignupUrl: portalSignupUrl,
+    button_label: "브랜드 포털 가입하기",
+    buttonLabel: "브랜드 포털 가입하기",
+    support_email: "support@kselectnetwork.com",
+    supportEmail: "support@kselectnetwork.com",
+  });
 
-          <div style="text-align: center; margin-bottom: 32px;">
-            <a href="${activationUrl}" style="display: inline-block; background-color: #18181b; color: #ffffff; font-size: 14px; font-weight: 700; text-decoration: none; padding: 14px 28px; border-radius: 12px;">
-              Activate Brand Account →
-            </a>
-          </div>
-        </div>
-      `,
-    });
-  } catch (emailErr) {
-    console.warn("[adminInviteBrandPartner] Email delivery warning:", emailErr);
+  if (!sendRes.success) {
+    console.warn("[adminInviteBrandPartner] Email delivery warning:", sendRes.error);
   }
 
   revalidatePath("/admin/applications");
@@ -249,6 +373,15 @@ export async function adminInviteRetailerPartner(payload: {
   }
   if (!payload.contactName?.trim()) {
     return { success: false, error: "Owner / Primary Contact Name is required." };
+  }
+
+  // === ADM-APP-005: Mandatory Server-Side Duplicate Check BEFORE Record Creation ===
+  const dupCheck = await checkDuplicateEmailAction(normalizedEmail);
+  if (dupCheck.isDuplicate) {
+    return {
+      success: false,
+      error: dupCheck.message || "이미 등록되거나 초청된 이메일입니다.",
+    };
   }
 
   // 1. Check or create Company

@@ -1,5 +1,6 @@
 "use server";
 
+import crypto from "crypto";
 import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { passwordSchema } from "@/lib/auth/password";
@@ -211,4 +212,162 @@ export async function activatePartnerAccountAction(
   }
 
   return { success: true };
+}
+
+/**
+ * PORT-ONB-003: Secure Brand Invitation Token Verification Action
+ * Verifies raw invitation token from email CTA URL against company_users token hash.
+ */
+export async function verifyBrandInvitationTokenAction(
+  rawToken: string
+): Promise<VerificationResult> {
+  if (!rawToken || typeof rawToken !== "string" || !rawToken.trim()) {
+    return {
+      success: false,
+      case: "A",
+      message: "유효하지 않은 초청 토큰입니다. 이메일 내 초청 버튼을 통해 접속해 주세요.",
+    };
+  }
+
+  const admin = createAdminClient();
+  const tokenHash = crypto.createHash("sha256").update(rawToken.trim()).digest("hex");
+
+  // 1. Query company_users
+  const { data: matchedUsers } = await admin
+    .from("company_users")
+    .select("id, company_id, name, email, status, invited_at, invitation_expires_at, companies(name)");
+
+  let user = (matchedUsers || []).find(
+    (u) => (u as any).invitation_token_hash === tokenHash
+  );
+
+  // Fallback: If token hash column query didn't match, check if rawToken is user id
+  if (!user && rawToken.length >= 32) {
+    user = (matchedUsers || []).find((u) => u.id === rawToken.trim());
+  }
+
+  if (!user) {
+    return {
+      success: false,
+      case: "A",
+      message: "초대 링크가 유효하지 않거나 만료되었습니다. 어드민 관리자에게 재초대를 요청해 주세요.",
+    };
+  }
+
+  const compName = (user as any)?.companies?.name || "파트너사";
+
+  // Case C: 이미 가입 및 활성화 완료 상태
+  if (user.status === "active") {
+    return {
+      success: false,
+      case: "C",
+      message: "이미 파트너 포털 가입 및 비밀번호 설정이 완료된 계정입니다. 로그인해 주세요.",
+      email: user.email,
+    };
+  }
+
+  // Case B / Expired link
+  if (user.status !== "invited" || !user.invited_at) {
+    return {
+      success: false,
+      case: "A",
+      message: "초대 링크가 만료되었거나 취소되었습니다. 어드민 관리자에게 문의해 주세요.",
+    };
+  }
+
+  if ((user as any).invitation_expires_at) {
+    const exp = new Date((user as any).invitation_expires_at);
+    if (!isNaN(exp.getTime()) && exp < new Date()) {
+      return {
+        success: false,
+        case: "A",
+        message: "초대 링크 유효 기간(7일)이 만료되었습니다. 관리자에게 재초대를 요청해 주세요.",
+      };
+    }
+  }
+
+  return {
+    success: true,
+    case: "D",
+    userId: user.id,
+    companyName: compName,
+    contactName: user.name || "담당자",
+    email: user.email,
+  };
+}
+
+/**
+ * PORT-ONB-003: Token-based Partner Account Password Activation
+ */
+export async function activatePartnerAccountWithTokenAction(
+  rawToken: string,
+  password: string
+): Promise<{ success: boolean; error?: string; email?: string }> {
+  const verifyRes = await verifyBrandInvitationTokenAction(rawToken);
+
+  if (!verifyRes.success || verifyRes.case !== "D") {
+    return {
+      success: false,
+      error: (verifyRes as any).message || "초대 토큰 검증에 실패했습니다.",
+    };
+  }
+
+  // 비밀번호 안전성 검사
+  const parsed = passwordSchema.safeParse(password);
+  if (!parsed.success) {
+    return {
+      success: false,
+      error: parsed.error.issues[0]?.message ?? "올바른 비밀번호 형식이 아닙니다.",
+    };
+  }
+
+  const userId = verifyRes.userId;
+  const admin = createAdminClient();
+
+  // 1. Update or create Auth Account password & confirm email
+  const { error: authError } = await admin.auth.admin.updateUserById(userId, {
+    password: password,
+    email_confirm: true,
+  });
+
+  if (authError) {
+    console.error("[activatePartnerAccountWithTokenAction] auth update error:", authError);
+    return { success: false, error: "비밀번호 설정 중 오류가 발생했습니다: " + authError.message };
+  }
+
+  // 2. Update company_users status to active and clear token hash
+  const { error: dbError } = await admin
+    .from("company_users")
+    .update({
+      status: "active",
+      joined_at: new Date().toISOString(),
+      invitation_token_hash: null,
+      invitation_expires_at: null,
+    })
+    .eq("id", userId);
+
+  if (dbError) {
+    console.error("[activatePartnerAccountWithTokenAction] DB update error:", dbError);
+    return { success: false, error: "계정 활성화 처리 실패: " + dbError.message };
+  }
+
+  // 3. Update associated applications status to approved
+  const { data: userRow } = await admin
+    .from("company_users")
+    .select("company_id")
+    .eq("id", userId)
+    .single();
+
+  if (userRow?.company_id) {
+    await admin
+      .from("applications")
+      .update({
+        status: "approved",
+        updated_at: new Date().toISOString(),
+      })
+      .eq("company_id", userRow.company_id)
+      .eq("status", "invitation_sent");
+  }
+
+  return { success: true, email: verifyRes.email };
 }

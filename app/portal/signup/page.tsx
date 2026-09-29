@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { PortalVerificationSignup } from "@/components/auth/portal-verification-signup";
@@ -9,7 +10,9 @@ export const metadata: Metadata = {
 export default function PortalSignupPage() {
   return (
     <div className="w-full max-w-lg rounded-xl border border-zinc-800 bg-zinc-900/90 p-6 sm:p-8 shadow-2xl space-y-6 backdrop-blur-sm">
-      <PortalVerificationSignup />
+      <Suspense fallback={<div className="text-center py-8 text-sm text-zinc-400">인증 정보를 불러오는 중입니다...</div>}>
+        <PortalVerificationSignup />
+      </Suspense>
       <p className="text-xs text-zinc-400 text-center border-t border-zinc-800 pt-4">
         이미 Portal 계정이 있으신가요?{" "}
         <Link href="/portal/login" className="font-semibold text-white hover:underline">
