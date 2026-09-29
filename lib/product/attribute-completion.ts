@@ -1,4 +1,16 @@
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { verifyPortalSession } from "@/lib/auth/dal";
+
+async function getEffectiveClient(customClient?: any) {
+  if (customClient) return customClient;
+  try {
+    const session = await verifyPortalSession();
+    return session.isImpersonating ? createAdminClient() : await createClient();
+  } catch {
+    return await createClient();
+  }
+}
 
 export interface CategoryCompletionResult {
   categoryComplete: boolean;
@@ -43,7 +55,7 @@ export async function getProductCategoryCompletion(
   categoryCode: string | null,
   customClient?: any
 ): Promise<CategoryCompletionResult> {
-  const supabase = customClient || (await createClient());
+  const supabase = await getEffectiveClient(customClient);
 
   // 1. Verify Category Completeness (must exist, be active, and be a leaf/is_final category)
   let categoryComplete = false;

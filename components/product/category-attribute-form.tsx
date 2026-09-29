@@ -119,6 +119,9 @@ export interface CategoryAttributeFormProps {
   volume: string | null;
   colorMap?: string | null;
   isAdmin: boolean;
+  initialCategoriesTree?: CategoryNode[];
+  initialAttributeValues?: Record<string, { value: any; text: string | null }>;
+  initialCategoryAttributes?: AttributeMasterItem[];
   onCompletionChange?: (status: CategoryCompletionStatus) => void;
   onDirtyChange?: (isDirty: boolean) => void;
 }
@@ -138,6 +141,9 @@ export const CategoryAttributeForm = forwardRef<CategoryAttributeFormHandle, Cat
       volume,
       colorMap,
       isAdmin,
+      initialCategoriesTree,
+      initialAttributeValues,
+      initialCategoryAttributes,
       onCompletionChange,
       onDirtyChange,
     },
@@ -266,10 +272,14 @@ export const CategoryAttributeForm = forwardRef<CategoryAttributeFormHandle, Cat
     async function init() {
       setLoading(true);
       try {
-        const tree = await getCategoriesTree();
+        const tree = initialCategoriesTree && initialCategoriesTree.length > 0
+          ? initialCategoriesTree
+          : await getCategoriesTree();
         setCategoriesTree(tree);
 
-        const values = await getProductAttributeValues(productId);
+        const values = initialAttributeValues
+          ? initialAttributeValues
+          : await getProductAttributeValues(productId);
         setStoredValues(values);
 
         // 기존 category_code 가 있으면 트리 경로를 역추적하여 콤보박스 세팅
@@ -291,7 +301,7 @@ export const CategoryAttributeForm = forwardRef<CategoryAttributeFormHandle, Cat
     if (!hasInitialized || productId) {
       init();
     }
-  }, [productId]);
+  }, [productId, initialCategoriesTree, initialAttributeValues]);
 
   // 카테고리 선택 값에 따라 콤보박스들 세팅
   const setupCategorySelectors = (tree: CategoryNode[], code: string) => {

@@ -103,6 +103,8 @@ const getInitialPriceTiers = (storedTiers: any) => {
   }));
 };
 
+import type { CategoryNode, AttributeMasterItem } from "@/lib/product/attribute-actions";
+
 interface ProductDetailTabsProps {
   product: Product;
   brandName: string;
@@ -116,6 +118,9 @@ interface ProductDetailTabsProps {
   ingredientsFileUrl: string | null;
   ingredientsFileUrlEn: string | null;
   initialCategoryCompletion?: CategoryCompletionResult | null;
+  initialCategoriesTree?: CategoryNode[];
+  initialAttributeValues?: Record<string, { value: any; text: string | null }>;
+  initialCategoryAttributes?: AttributeMasterItem[];
 }
 
 export function ProductDetailTabs({
@@ -131,6 +136,9 @@ export function ProductDetailTabs({
   ingredientsFileUrl,
   ingredientsFileUrlEn,
   initialCategoryCompletion,
+  initialCategoriesTree,
+  initialAttributeValues,
+  initialCategoryAttributes,
 }: ProductDetailTabsProps) {
   const router = useRouter();
   const isDeleted = Boolean(product.deleted_at || (product.price_additional_info as any)?.deleted_at);
@@ -2171,6 +2179,9 @@ export function ProductDetailTabs({
             volume={formatVolume(volumeValue, volumeUnit) || null}
             colorMap={colorMap || null}
             isAdmin={false}
+            initialCategoriesTree={initialCategoriesTree}
+            initialAttributeValues={initialAttributeValues}
+            initialCategoryAttributes={initialCategoryAttributes}
             onCompletionChange={handleCompletionChange}
             onDirtyChange={handleCatAttrDirtyChange}
           />

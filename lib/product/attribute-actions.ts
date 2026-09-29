@@ -3,8 +3,18 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { verifyAdminSession } from "@/lib/auth/dal";
+import { verifyAdminSession, verifyPortalSession } from "@/lib/auth/dal";
 import { recordProductChangeLog, formatAuditValue } from "@/lib/product/audit";
+
+async function getEffectiveClient(customClient?: any) {
+  if (customClient) return customClient;
+  try {
+    const session = await verifyPortalSession();
+    return session.isImpersonating ? createAdminClient() : await createClient();
+  } catch {
+    return await createClient();
+  }
+}
 
 export interface CategoryNode {
   code: string;
@@ -19,8 +29,8 @@ export interface CategoryNode {
 /**
  * 1. 카테고리 트리 전체 로드
  */
-export async function getCategoriesTree(): Promise<CategoryNode[]> {
-  const supabase = await createClient();
+export async function getCategoriesTree(customClient?: any): Promise<CategoryNode[]> {
+  const supabase = await getEffectiveClient(customClient);
   const { data, error } = await supabase
     .from("categories")
     .select("code, name_ko, name_en, depth, parent_code, is_final, display_order")
@@ -34,7 +44,7 @@ export async function getCategoriesTree(): Promise<CategoryNode[]> {
   const roots: CategoryNode[] = [];
 
   // Node 생성
-  data.forEach((item) => {
+  data.forEach((item: any) => {
     nodesMap.set(item.code, {
       code: item.code,
       nameKo: item.name_ko,
@@ -47,7 +57,7 @@ export async function getCategoriesTree(): Promise<CategoryNode[]> {
   });
 
   // 관계 설정
-  data.forEach((item) => {
+  data.forEach((item: any) => {
     const current = nodesMap.get(item.code);
     if (!current) return;
 
@@ -93,12 +103,15 @@ export interface AttributeMasterItem {
 /**
  * 2. 특정 카테고리에 매핑된 공통 속성 및 제품군 프로필 속성 정보 결합 조회
  */
-export async function getCategoryAttributes(categoryCode: string | null): Promise<{
+export async function getCategoryAttributes(
+  categoryCode: string | null,
+  customClient?: any
+): Promise<{
   profileCode: string | null;
   profileName: string | null;
   attributes: AttributeMasterItem[];
 }> {
-  const supabase = await createClient();
+  const supabase = await getEffectiveClient(customClient);
   const admin = createAdminClient();
 
   // 2.1 공통 속성(Scope = 'COMMON') 조회
@@ -109,7 +122,7 @@ export async function getCategoryAttributes(categoryCode: string | null): Promis
     .eq("is_active", true)
     .order("display_order", { ascending: true });
 
-  const commonCodes = commonAttrsData?.map(a => a.code) || [];
+  const commonCodes = commonAttrsData?.map((a: any) => a.code) || [];
 
   // 공통 속성 옵션 일괄 조회
   let commonOptions: any[] = [];
@@ -123,7 +136,7 @@ export async function getCategoryAttributes(categoryCode: string | null): Promis
     if (optData) commonOptions = optData;
   }
 
-  const commonAttributes: AttributeMasterItem[] = (commonAttrsData || []).map((attr) => ({
+  const commonAttributes: AttributeMasterItem[] = (commonAttrsData || []).map((attr: any) => ({
     code: attr.code,
     nameKo: attr.name_ko,
     nameEn: attr.name_en,
@@ -142,8 +155,8 @@ export async function getCategoryAttributes(categoryCode: string | null): Promis
     displayOrder: attr.display_order,
     helpText: attr.help_text,
     options: commonOptions
-      .filter((o) => o.attribute_code === attr.code)
-      .map((o) => ({
+      .filter((o: any) => o.attribute_code === attr.code)
+      .map((o: any) => ({
         optionCode: o.option_code,
         optionKo: o.option_ko,
         optionEn: o.option_en,
@@ -193,7 +206,7 @@ export async function getCategoryAttributes(categoryCode: string | null): Promis
     .eq("is_active", true)
     .order("display_order", { ascending: true });
 
-  const profileAttrCodes = profileAttrs?.map(pa => pa.attribute_code) || [];
+  const profileAttrCodes = profileAttrs?.map((pa: any) => pa.attribute_code) || [];
 
   if (profileAttrCodes.length === 0) {
     return {
@@ -219,14 +232,14 @@ export async function getCategoryAttributes(categoryCode: string | null): Promis
     .order("display_order", { ascending: true });
 
   const profileAttributes: AttributeMasterItem[] = (profileAttrs || [])
-    .map((pa) => {
+    .map((pa: any) => {
       // 이미 공통 속성에 등록된 속성이면 프로필 속성에서는 중복 노출 방지를 위해 제외
       if (commonCodes.includes(pa.attribute_code)) return null;
 
-      const attr = attrMasterData?.find((a) => a.code === pa.attribute_code);
+      const attr = attrMasterData?.find((a: any) => a.code === pa.attribute_code);
       if (!attr) return null;
 
-      const opts = (profileOptions || []).filter((o) => o.attribute_code === attr.code);
+      const opts = (profileOptions || []).filter((o: any) => o.attribute_code === attr.code);
 
       return {
         code: attr.code,
@@ -246,7 +259,7 @@ export async function getCategoryAttributes(categoryCode: string | null): Promis
         isSearchable: attr.is_searchable,
         displayOrder: pa.display_order,
         helpText: attr.help_text,
-        options: opts.map((o) => ({
+        options: opts.map((o: any) => ({
           optionCode: o.option_code,
           optionKo: o.option_ko,
           optionEn: o.option_en,
@@ -266,8 +279,11 @@ export async function getCategoryAttributes(categoryCode: string | null): Promis
 /**
  * 3. 특정 제품의 동적 입력 속성 데이터셋 로드
  */
-export async function getProductAttributeValues(productId: string): Promise<Record<string, { value: any; text: string | null }>> {
-  const supabase = await createClient();
+export async function getProductAttributeValues(
+  productId: string,
+  customClient?: any
+): Promise<Record<string, { value: any; text: string | null }>> {
+  const supabase = await getEffectiveClient(customClient);
   const { data, error } = await supabase
     .from("product_attribute_values")
     .select("attribute_code, value_json, text_value")
@@ -276,7 +292,7 @@ export async function getProductAttributeValues(productId: string): Promise<Reco
   if (error || !data) return {};
 
   const map: Record<string, { value: any; text: string | null }> = {};
-  data.forEach((row) => {
+  data.forEach((row: any) => {
     map[row.attribute_code] = {
       value: row.value_json,
       text: row.text_value,
@@ -293,10 +309,11 @@ export async function saveProductAttributeValues(
   productId: string,
   categoryCode: string | null,
   values: Record<string, any>,
-  textValues: Record<string, string>
+  textValues: Record<string, string>,
+  customClient?: any
 ) {
   const admin = createAdminClient();
-  const supabase = await createClient();
+  const supabase = await getEffectiveClient(customClient);
 
   // 4.0 Pre-fetch existing state for audit diff calculation
   const { data: currentProd } = await admin

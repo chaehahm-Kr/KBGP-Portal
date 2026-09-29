@@ -1,10 +1,6 @@
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
-import { requireCompanyMembership, getPortalTenantContext } from "@/lib/company/dal";
-import { getSignedFileUrl } from "@/lib/files/storage";
 import { ProductDetailTabs } from "@/components/product/product-detail-tabs";
-import type { Product, ProductVideo } from "@/lib/product/types";
-import { getProductCategoryCompletion } from "@/lib/product/attribute-completion";
+import { getPortalProductDetail } from "@/lib/product/portal-detail-loader";
 
 export const metadata: Metadata = {
   title: "제품 상세 | 파트너 포털",
@@ -16,138 +12,25 @@ export default async function ProductDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const { companyId, supabase } = await getPortalTenantContext();
-
-  let product: any = null;
-  const { data: fetchedProduct, error: fetchErr } = await supabase
-    .from("products")
-    .select(`
-      id, name, name_en, category, volume, estimated_retail_price, ingredients_text, ingredients_file_path, ingredients_file_path_en, brand_id,
-      description, bullet_points, color, color_map, origin, lead_time,
-      parent_sku, child_sku, manufacture_sku, letusto_sku, upc, ean,
-      selling_online, selling_offline, sales_link_1, sales_link_2,
-      price_krw_retail, price_krw_wholesale, price_usd_fob, price_additional_info,
-      item_width, item_depth, item_height, item_weight,
-      package_width, package_depth, package_height, package_weight,
-      carton_pack_qty, carton_width, carton_depth, carton_height, carton_weight, carton_cbm,
-      palette_carton_qty, palette_width, palette_depth, palette_height, palette_weight,
-      container_20ft_qty, container_20ft_weight, container_20ft_cbm,
-      container_40fthc_qty, container_40fthc_weight, container_40fthc_cbm, category_code,
-      selection_status, sales_status, status
-    `)
-    .eq("id", id)
-    .eq("company_id", companyId)
-    .maybeSingle();
-
-  if (fetchErr) {
-    console.error("Error fetching product detail, trying select('*'):", fetchErr);
-    const fallback = await supabase
-      .from("products")
-      .select("*")
-      .eq("id", id)
-      .eq("company_id", companyId)
-      .maybeSingle();
-    product = fallback.data;
-  } else {
-    product = fetchedProduct;
-  }
-
-  if (!product) {
-    notFound();
-  }
-
-  // Calculate category and attribute completion
-  const initialCategoryCompletion = await getProductCategoryCompletion(product.id, product.category_code || null, supabase);
-
-  const { data: brand } = await supabase
-    .from("brands")
-    .select("name")
-    .eq("id", product.brand_id)
-    .single();
-
-  const { data: brands } = await supabase
-    .from("brands")
-    .select("id, name")
-    .eq("company_id", companyId)
-    .eq("is_active", true)
-    .order("name", { ascending: true });
-
-  const { data: images } = await supabase
-    .from("product_images")
-    .select("id, storage_path")
-    .eq("product_id", id)
-    .order("position", { ascending: true });
-
-  const { data: videos } = await supabase
-    .from("product_videos")
-    .select("id, storage_path, video_url, position")
-    .eq("product_id", id)
-    .order("position", { ascending: true });
-
-  const { data: certificates } = await supabase
-    .from("product_certificates")
-    .select("id, certificate_type, storage_path, original_filename, version")
-    .eq("product_id", id)
-    .eq("is_current", true)
-    .order("created_at", { ascending: true });
-
-  const imageRows = images ?? [];
-  const imageUrls = await Promise.all(
-    imageRows.map((img) => getSignedFileUrl(img.storage_path))
-  );
-
-  const videoRows = (videos ?? []) as ProductVideo[];
-  const videoUrls = await Promise.all(
-    videoRows.map(async (v) => {
-      if (v.storage_path) {
-        try {
-          return await getSignedFileUrl(v.storage_path);
-        } catch {
-          return null;
-        }
-      }
-      return v.video_url || null;
-    })
-  );
-
-  const certificateRows = certificates ?? [];
-  const certificateUrls = await Promise.all(
-    certificateRows.map((cert) => getSignedFileUrl(cert.storage_path))
-  );
-
-  let ingredientsFileUrl: string | null = null;
-  if (product.ingredients_file_path) {
-    try {
-      ingredientsFileUrl = await getSignedFileUrl(product.ingredients_file_path);
-    } catch {
-      // Ignore
-    }
-  }
-
-  let ingredientsFileUrlEn: string | null = null;
-  if (product.ingredients_file_path_en) {
-    try {
-      ingredientsFileUrlEn = await getSignedFileUrl(product.ingredients_file_path_en);
-    } catch {
-      // Ignore
-    }
-  }
+  const detailData = await getPortalProductDetail(id);
 
   return (
     <ProductDetailTabs
-      product={product as unknown as Product}
-      brandName={brand?.name ?? "(미확인 브랜드)"}
-      brands={brands ?? []}
-      imageRows={imageRows}
-      imageUrls={imageUrls}
-      videoRows={videoRows}
-      videoUrls={videoUrls}
-      certificateRows={certificateRows}
-      certificateUrls={certificateUrls}
-      ingredientsFileUrl={ingredientsFileUrl}
-      ingredientsFileUrlEn={ingredientsFileUrlEn}
-      initialCategoryCompletion={initialCategoryCompletion}
+      product={detailData.product}
+      brandName={detailData.brandName}
+      brands={detailData.brands}
+      imageRows={detailData.imageRows}
+      imageUrls={detailData.imageUrls}
+      videoRows={detailData.videoRows}
+      videoUrls={detailData.videoUrls}
+      certificateRows={detailData.certificateRows}
+      certificateUrls={detailData.certificateUrls}
+      ingredientsFileUrl={detailData.ingredientsFileUrl}
+      ingredientsFileUrlEn={detailData.ingredientsFileUrlEn}
+      initialCategoryCompletion={detailData.initialCategoryCompletion}
+      initialCategoriesTree={detailData.initialCategoriesTree}
+      initialAttributeValues={detailData.initialAttributeValues}
+      initialCategoryAttributes={detailData.initialCategoryAttributes}
     />
   );
 }
-
