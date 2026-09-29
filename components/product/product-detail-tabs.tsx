@@ -384,7 +384,9 @@ export function ProductDetailTabs({
     }
   };
 
-  const [cartonPackQty, setCartonPackQty] = useState(product.carton_pack_qty?.toString() || "1");
+  const [cartonPackQty, setCartonPackQty] = useState(
+    product.carton_pack_qty !== undefined && product.carton_pack_qty !== null ? product.carton_pack_qty.toString() : ""
+  );
   const [cartonWidth, setCartonWidth] = useState(product.carton_width?.toString() || "");
   const [cartonDepth, setCartonDepth] = useState(product.carton_depth?.toString() || "");
   const [cartonHeight, setCartonHeight] = useState(product.carton_height?.toString() || "");
@@ -658,7 +660,7 @@ export function ProductDetailTabs({
     packageDepth: product.package_depth?.toString() || "",
     packageHeight: product.package_height?.toString() || "",
     packageWeight: product.package_weight?.toString() || "",
-    cartonPackQty: product.carton_pack_qty?.toString() || "1",
+    cartonPackQty: product.carton_pack_qty !== undefined && product.carton_pack_qty !== null ? product.carton_pack_qty.toString() : "",
     cartonWidth: product.carton_width?.toString() || "",
     cartonDepth: product.carton_depth?.toString() || "",
     cartonHeight: product.carton_height?.toString() || "",
@@ -1143,6 +1145,12 @@ export function ProductDetailTabs({
           window.scrollTo({ top: 0, behavior: "smooth" });
           return { success: false, error: catErr };
         }
+      }
+
+      const catState = categoryAttrRef.current?.getCurrentState();
+      const authoritativeCategoryCode = catState?.categoryCode || (product as any).category_code || null;
+      if (authoritativeCategoryCode) {
+        formData.set("categoryCode", authoritativeCategoryCode);
       }
 
       const res = await updateProduct(product.id, undefined, formData);
@@ -2653,7 +2661,7 @@ export function ProductDetailTabs({
                   value={cartonPackQty}
                   onFocus={(e) => e.target.select()}
                   onChange={(e) => setCartonPackQty(e.target.value.replace(/[^0-9]/g, ""))}
-                  placeholder="1"
+                  placeholder="예: 24"
                   className="block w-full rounded-lg border border-zinc-300 px-3.5 py-1.5 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-zinc-900 dark:focus:border-white"
                 />
               </div>

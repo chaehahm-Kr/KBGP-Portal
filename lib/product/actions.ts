@@ -622,6 +622,7 @@ const productUpdateSchema = z.object({
       "other",
     ] as const satisfies readonly ProductCategory[]).nullable().optional()
   ),
+  categoryCode: z.string().trim().nullable().optional(),
   volume: z.string().trim().nullable().optional(),
   estimatedRetailPrice: z
     .string()
@@ -722,6 +723,7 @@ export async function updateProduct(
     name: formData.get("name"),
     nameEn: formData.get("nameEn") || null,
     category: formData.get("category"),
+    categoryCode: formData.get("categoryCode") || formData.get("category_code") || null,
     volume: formData.get("volume") || null,
     estimatedRetailPrice: formData.get("estimatedRetailPrice") || null,
     ingredientsText: formData.get("ingredientsText") || null,
@@ -840,13 +842,18 @@ export async function updateProduct(
     ? parsed.data.letustoSku.trim()
     : beforeProduct?.letusto_sku || null;
 
+  const explicitCatCode = parsed.data.categoryCode ? resolveAuthoritativeCategoryCode(parsed.data.categoryCode) : null;
+  const fallbackCatCode = beforeProduct?.category_code ? resolveAuthoritativeCategoryCode(beforeProduct.category_code) : null;
+  const categoryDefault = resolveAuthoritativeCategoryCode(parsed.data.category);
+  const effectiveCategoryCode = explicitCatCode || fallbackCatCode || categoryDefault;
+
   const { error: updateError } = await supabase
     .from("products")
     .update({
       name: parsed.data.name,
       name_en: parsed.data.nameEn || null,
       category: parsed.data.category,
-      category_code: resolveAuthoritativeCategoryCode(parsed.data.category),
+      category_code: effectiveCategoryCode,
       volume: parsed.data.volume || null,
       estimated_retail_price: parsed.data.estimatedRetailPrice,
       ingredients_text: parsed.data.ingredientsText || null,

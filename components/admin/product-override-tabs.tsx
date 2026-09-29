@@ -2795,8 +2795,8 @@ export function ProductOverrideTabs({
                 {/* Qty */}
                 <div className="space-y-1">
                   <label className="font-bold text-zinc-600 dark:text-zinc-455 block">입수량 (Qty, 개)</label>
-                  <div className="p-1 rounded bg-zinc-50 text-[10px] text-zinc-400 dark:bg-zinc-950/20 font-mono text-center">원본: {product.carton_pack_qty || 1}</div>
-                  <input type="number" placeholder={product.carton_pack_qty?.toString() || "1"} value={ovCartonPackQty} onChange={(e) => setOvCartonPackQty(e.target.value)} className="w-full rounded border border-zinc-200 p-1.5 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white outline-none" />
+                  <div className="p-1 rounded bg-zinc-50 text-[10px] text-zinc-400 dark:bg-zinc-950/20 font-mono text-center">원본: {product.carton_pack_qty !== undefined && product.carton_pack_qty !== null ? product.carton_pack_qty : "-"}</div>
+                  <input type="number" placeholder={product.carton_pack_qty !== undefined && product.carton_pack_qty !== null ? product.carton_pack_qty.toString() : "예: 24"} value={ovCartonPackQty} onChange={(e) => setOvCartonPackQty(e.target.value)} className="w-full rounded border border-zinc-200 p-1.5 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white outline-none" />
                 </div>
                 {/* Width */}
                 <div className="space-y-1">

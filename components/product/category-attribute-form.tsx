@@ -267,19 +267,24 @@ export const CategoryAttributeForm = forwardRef<CategoryAttributeFormHandle, Cat
     return () => window.removeEventListener("hashchange", checkHashAndJump);
   }, [loading, attributes]);
 
+  const initializedProductIdRef = useRef<string | null>(null);
+
   // 1. 카테고리 트리 및 기존 저장값 초기 로드
   useEffect(() => {
+    let isCancelled = false;
     async function init() {
       setLoading(true);
       try {
         const tree = initialCategoriesTree && initialCategoriesTree.length > 0
           ? initialCategoriesTree
           : await getCategoriesTree();
+        if (isCancelled) return;
         setCategoriesTree(tree);
 
         const values = initialAttributeValues
           ? initialAttributeValues
           : await getProductAttributeValues(productId);
+        if (isCancelled) return;
         setStoredValues(values);
 
         // 기존 category_code 가 있으면 트리 경로를 역추적하여 콤보박스 세팅
@@ -290,18 +295,26 @@ export const CategoryAttributeForm = forwardRef<CategoryAttributeFormHandle, Cat
           // 카테고리 미정 시 공통 속성만 로드
           await loadAttributes(null, values, true);
         }
+        if (isCancelled) return;
         setHasInitialized(true);
+        initializedProductIdRef.current = productId;
       } catch (err) {
         console.error("데이터 로드 에러:", err);
       } finally {
-        setLoading(false);
+        if (!isCancelled) {
+          setLoading(false);
+        }
       }
     }
     
-    if (!hasInitialized || productId) {
+    if (initializedProductIdRef.current !== productId) {
       init();
     }
-  }, [productId, initialCategoriesTree, initialAttributeValues]);
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [productId, initialCategoriesTree, initialAttributeValues, initialCategoryCode]);
 
   // 카테고리 선택 값에 따라 콤보박스들 세팅
   const setupCategorySelectors = (tree: CategoryNode[], code: string) => {
@@ -315,21 +328,26 @@ export const CategoryAttributeForm = forwardRef<CategoryAttributeFormHandle, Cat
         cat1 = c1.code;
         break;
       }
-      for (const c2 of c1.children) {
+      let found = false;
+      for (const c2 of c1.children || []) {
         if (c2.code === code) {
           cat1 = c1.code;
           cat2 = c2.code;
+          found = true;
           break;
         }
-        for (const c3 of c2.children) {
+        for (const c3 of c2.children || []) {
           if (c3.code === code) {
             cat1 = c1.code;
             cat2 = c2.code;
             cat3 = c3.code;
+            found = true;
             break;
           }
         }
+        if (found) break;
       }
+      if (found) break;
     }
 
     setSelectedCat1(cat1);
@@ -632,7 +650,13 @@ export const CategoryAttributeForm = forwardRef<CategoryAttributeFormHandle, Cat
 
   // 공통 저장 실행 로직 (Global Save 및 개별 저장 버튼에서 공통 재사용)
   const performSave = async (): Promise<{ success: boolean; error?: string; missingRequired?: string[] }> => {
-    const categoryCode = finalCat ? finalCat.code : null;
+    const getSelectedCatCode = (): string | null => {
+      if (selectedCat3) return selectedCat3;
+      if (selectedCat2) return selectedCat2;
+      if (selectedCat1) return selectedCat1;
+      return initialCategoryCode || null;
+    };
+    const categoryCode = finalCat ? finalCat.code : getSelectedCatCode();
     const validation = validateInternal();
 
     if (!validation.isValid) {
@@ -684,7 +708,13 @@ export const CategoryAttributeForm = forwardRef<CategoryAttributeFormHandle, Cat
       return checkIsDirty();
     },
     getCurrentState: () => {
-      const categoryCode = finalCat ? finalCat.code : null;
+      const getSelectedCatCode = (): string | null => {
+        if (selectedCat3) return selectedCat3;
+        if (selectedCat2) return selectedCat2;
+        if (selectedCat1) return selectedCat1;
+        return initialCategoryCode || null;
+      };
+      const categoryCode = finalCat ? finalCat.code : getSelectedCatCode();
       return {
         categoryCode,
         formValues,
