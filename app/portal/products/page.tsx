@@ -54,7 +54,8 @@ export default async function ProductsPage() {
       (products ?? []).map((p) => ({
         id: p.id,
         category_code: p.category_code || null,
-      }))
+      })),
+      supabase
     );
   } catch (err) {
     console.error("Portal products categoryCompletions error:", err);

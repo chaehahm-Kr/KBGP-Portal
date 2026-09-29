@@ -223,7 +223,7 @@ async function validatePoProductsEligibility(admin: any, productIds: string[]) {
   const { data: dbProducts } = await admin
     .from("products")
     .select(`
-      id, name, name_en, letusto_sku, manufacture_sku, price_usd_fob, price_additional_info, status, deleted_at,
+      id, name, name_en, letusto_sku, manufacture_sku, price_usd_fob, price_additional_info, status,
       category_code, origin, price_krw_retail, item_width, item_depth, item_height, item_weight,
       package_width, package_depth, package_height, package_weight, carton_pack_qty, carton_width,
       carton_depth, carton_height, carton_weight, upc, ean, selling_online, sales_link_1, brand_id

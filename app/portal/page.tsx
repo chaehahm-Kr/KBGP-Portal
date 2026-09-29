@@ -108,7 +108,8 @@ export default async function PortalHomePage() {
       products.map((p) => ({
         id: p.id,
         category_code: p.category_code || null,
-      }))
+      })),
+      supabase
     );
   } catch (err) {
     console.error("Dashboard products categoryCompletions error:", err);

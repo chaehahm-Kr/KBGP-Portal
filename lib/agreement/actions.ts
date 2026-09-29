@@ -155,28 +155,37 @@ export async function getCompanyAgreement(
   companyInfo: { id: string; name: string; address?: string | null; representativeName?: string | null };
   error?: string;
 }> {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) {
-    console.error(`[getCompanyAgreement] ${agreementType === "RETAILER" ? "RETAILER_USER_NOT_RESOLVED" : "USER_NOT_RESOLVED"}: No authenticated user session`);
-    return { agreement: null, companyInfo: { id: "", name: "" }, error: "인증되지 않은 사용자입니다." };
-  }
-
   let targetCompanyId = companyIdInput;
+  let resolvedUserId = "";
+  let resolvedEmail = "";
 
-  if (!targetCompanyId) {
-    const { data: cu } = await supabase
-      .from("company_users")
-      .select("company_id")
-      .eq("id", user.id)
-      .limit(1)
-      .maybeSingle();
-
-    targetCompanyId = cu?.company_id;
+  try {
+    const { getPortalTenantContext } = await import("@/lib/company/dal");
+    const tenantContext = await getPortalTenantContext();
+    if (!targetCompanyId) {
+      targetCompanyId = tenantContext.companyId;
+    }
+    resolvedUserId = tenantContext.userId;
+  } catch (tenantErr) {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      resolvedUserId = user.id;
+      resolvedEmail = user.email || "";
+      if (!targetCompanyId) {
+        const { data: cu } = await supabase
+          .from("company_users")
+          .select("company_id")
+          .eq("id", user.id)
+          .limit(1)
+          .maybeSingle();
+        targetCompanyId = cu?.company_id;
+      }
+    }
   }
 
   if (!targetCompanyId) {
-    console.error(`[getCompanyAgreement] ${agreementType === "RETAILER" ? "RETAILER_COMPANY_NOT_FOUND" : "COMPANY_NOT_FOUND"}: No company_id resolved for user ${user.id}`);
+    console.error(`[getCompanyAgreement] ${agreementType === "RETAILER" ? "RETAILER_COMPANY_NOT_FOUND" : "COMPANY_NOT_FOUND"}: No company_id resolved`);
     return { agreement: null, companyInfo: { id: "", name: "" }, error: "소속 회사 정보를 찾을 수 없습니다." };
   }
 
@@ -268,8 +277,8 @@ export async function getCompanyAgreement(
         company_agreement_id: newCa.id,
         agreement_id: newCa.agreement_id,
         action: "CREATED",
-        performed_by_user_id: user.id,
-        performed_by_email: user.email,
+        performed_by_user_id: resolvedUserId || null,
+        performed_by_email: resolvedEmail || null,
         details: {
           note: `Company Agreement initialized from ${agreementType} Template v${tmpl.version || "1.0"}`,
           agreement_type: agreementType,

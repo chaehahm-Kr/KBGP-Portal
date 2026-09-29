@@ -57,7 +57,7 @@ export default async function ProductDetailPage({
   }
 
   // Calculate category and attribute completion
-  const initialCategoryCompletion = await getProductCategoryCompletion(product.id, product.category_code || null);
+  const initialCategoryCompletion = await getProductCategoryCompletion(product.id, product.category_code || null, supabase);
 
   const { data: brand } = await supabase
     .from("brands")
