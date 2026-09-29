@@ -86,9 +86,9 @@ export const DEFAULT_TEMPLATES: Record<
     body: "안녕하세요, {{contactName}}님.\n\n{{applicationNumber}} 신청서 심사를 위해 추가 자료가 필요합니다.\n\n요청 내용:\n{{requestContent}}\n\n회신 기한인 {{dueDate}}까지 아래 버튼을 눌러 포털에 로그인하신 후 추가 자료를 제출해 주시기 바랍니다.\n\n{{ctaButton}}",
   },
   portal_signup_request: {
-    description: "회사 담당자 — 포털 가입 요청",
-    subject: "[K SELECT NETWORK] 브랜드사 포털 가입 요청 안내",
-    body: "안녕하세요, {{contactName}}님.\n\n귀사의 입점 신청서를 검토한 결과, 상세 심사 단계를 진행하기 위해 브랜드사 포털 가입을 요청드립니다.\n\n아래 버튼을 클릭하여 회원가입 및 비밀번호 설정을 완료하신 후 포털에 로그인하여 주시기 바랍니다.\n\n{{ctaButton}}",
+    description: "회사 담당자 — 브랜드 파트너 포털 가입 안내 (Brand Portal Invitation)",
+    subject: "[K SELECT NETWORK] {{company_name}} 파트너 포털 가입 안내",
+    body: "안녕하세요, {{contact_name}}님.\n\n{{company_name}}의 K SELECT NETWORK 파트너십 신청이 승인되었습니다.\n\n아래 버튼을 통해 파트너 포털 가입을 진행해 주세요.\n포털 가입 시 신청에 사용하신 이메일 주소와 신청 시 입력한 사업자등록번호가 필요합니다.\n\n{{infoBox}}\n\n{{ctaButton}}",
   },
   info_request_replied: {
     description: "내부 담당자 — 추가 자료 회신 도착",
@@ -272,9 +272,18 @@ export const TEMPLATE_SAMPLE_VARIABLES: Record<TemplateKey, Record<string, strin
     portalUrl: "https://portal.kselectnetwork.com",
   },
   portal_signup_request: {
-    contactName: "김민지",
-    companyName: "샘플뷰티코리아",
+    contact_name: "박은애",
+    contactName: "박은애",
+    company_name: "Extreme Inc.",
+    companyName: "Extreme Inc.",
+    application_id: "APP-20260928-0016",
+    applicationNumber: "APP-20260928-0016",
+    submitted_date: "2026. 9. 28.",
+    submittedDate: "2026. 9. 28.",
+    portal_signup_url: "https://portal.kselectnetwork.com/portal/signup",
     portalUrl: "https://portal.kselectnetwork.com/portal/signup",
+    support_email: "support@kselectnetwork.com",
+    supportEmail: "support@kselectnetwork.com",
   },
   info_request_replied: {
     applicationNumber: "APP-000001",
@@ -586,9 +595,13 @@ export const TEMPLATE_VARIABLE_CHIPS: Record<TemplateKey, Array<{ tag: string; l
     { tag: "{{ctaButton}}", label: "자료 제출 버튼" },
   ],
   portal_signup_request: [
-    { tag: "{{contactName}}", label: "담당자명" },
-    { tag: "{{companyName}}", label: "회사명" },
-    { tag: "{{ctaButton}}", label: "가입 시작 버튼" },
+    { tag: "{{contact_name}}", label: "담당자명" },
+    { tag: "{{company_name}}", label: "회사명" },
+    { tag: "{{application_id}}", label: "신청 번호" },
+    { tag: "{{submitted_date}}", label: "신청일" },
+    { tag: "{{infoBox}}", label: "신청 정보 요약 카드" },
+    { tag: "{{ctaButton}}", label: "포털 가입 시작 버튼" },
+    { tag: "{{support_email}}", label: "고객지원 이메일" },
   ],
   info_request_replied: [
     { tag: "{{applicationNumber}}", label: "신청번호" },
@@ -985,6 +998,15 @@ function buildNetworkInfoCardHtml(variables: Record<string, string>) {
 
     const effDate = variables.effective_date || variables.effectiveDate;
     if (effDate && effDate !== execDate) rows.push({ label: "효력 발생일", value: effDate });
+  } else if (variables.key === "portal_signup_request") {
+    const compName = variables.company_name || variables.companyName;
+    if (compName) rows.push({ label: "신청 회사명", value: compName, isBold: true });
+
+    const subDate = variables.submitted_date || variables.submittedDate;
+    if (subDate) rows.push({ label: "신청일", value: subDate });
+
+    const appNo = variables.application_id || variables.applicationId || variables.applicationNumber || variables.applicationNo;
+    if (appNo) rows.push({ label: "신청 번호", value: appNo, isBold: true });
   } else {
     const appNo = variables.applicationNo || variables.applicationNumber || variables.inquiryNumber;
     if (appNo) {
@@ -1281,6 +1303,7 @@ function buildNetworkCtaButtonHtml(variables: Record<string, string>) {
     buttonLabel = "추가 자료 제출하기";
   } else if (key === "portal_signup_request") {
     buttonLabel = "포털 가입 시작하기";
+    url = variables.portal_signup_url || variables.portalSignupUrl || variables.portalUrl || "https://portal.kselectnetwork.com/portal/signup";
   } else if (key === "info_request_replied") {
     buttonLabel = "회신 자료 검토하기";
   } else if (key === "review_result_approved" || key === "review_result_partial_approved") {

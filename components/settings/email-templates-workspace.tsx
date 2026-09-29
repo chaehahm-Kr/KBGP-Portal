@@ -419,9 +419,13 @@ const TEMPLATE_VARIABLE_CHIPS: Record<string, Array<{ tag: string; label: string
     { tag: "{{ctaButton}}", label: "자료 제출 버튼" },
   ],
   portal_signup_request: [
-    { tag: "{{contactName}}", label: "담당자명" },
-    { tag: "{{companyName}}", label: "회사명" },
-    { tag: "{{ctaButton}}", label: "가입 시작 버튼" },
+    { tag: "{{contact_name}}", label: "담당자명" },
+    { tag: "{{company_name}}", label: "회사명" },
+    { tag: "{{application_id}}", label: "신청 번호" },
+    { tag: "{{submitted_date}}", label: "신청일" },
+    { tag: "{{infoBox}}", label: "신청 정보 요약 카드" },
+    { tag: "{{ctaButton}}", label: "포털 가입 시작 버튼" },
+    { tag: "{{support_email}}", label: "고객지원 이메일" },
   ],
   info_request_replied: [
     { tag: "{{applicationNumber}}", label: "신청번호" },

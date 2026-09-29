@@ -15,6 +15,13 @@ import {
 import { normalizeEmail } from "@/lib/user/validation";
 import { sendPortalInvitationAction } from "@/lib/company/admin-actions";
 
+function formatSubmittedDateKo(submittedAt?: string | null): string {
+  if (!submittedAt) return "-";
+  const dt = new Date(submittedAt);
+  if (isNaN(dt.getTime())) return "-";
+  return `${dt.getFullYear()}. ${dt.getMonth() + 1}. ${dt.getDate()}.`;
+}
+
 async function logApplicationActivity(
   admin: any,
   applicationId: string,
@@ -540,11 +547,22 @@ export async function approveAndInviteApplication(
   await logApplicationActivity(admin, applicationId, beforeState, "approved", session.userId, reviewerNotes || "Approved & Invited Brand");
 
   // Send Brand Invitation email via templated system
+  const submittedDateStr = formatSubmittedDateKo(app.submitted_at);
   const portalSignupUrl = "https://portal.kselectnetwork.com/portal/signup";
   const sendRes = await sendTemplatedEmail("portal_signup_request", emailToUse, {
+    contact_name: nameToUse,
     contactName: nameToUse,
+    company_name: compName,
     companyName: compName,
+    application_id: app.application_number || applicationId,
+    applicationId: app.application_number || applicationId,
+    applicationNumber: app.application_number || applicationId,
+    submitted_date: submittedDateStr,
+    submittedDate: submittedDateStr,
+    portal_signup_url: portalSignupUrl,
     portalUrl: portalSignupUrl,
+    support_email: "support@kselectnetwork.com",
+    supportEmail: "support@kselectnetwork.com",
   });
 
   if (sendRes.success) {
@@ -589,7 +607,7 @@ export async function resendApplicationInvitation(
 
   const { data: app } = await admin
     .from("applications")
-    .select("id, partner_type, status, invitation_id, company_id, applicant_company_name, applicant_contact_name, applicant_contact_email")
+    .select("id, application_number, partner_type, status, invitation_id, company_id, applicant_company_name, applicant_contact_name, applicant_contact_email, submitted_at")
     .eq("id", applicationId)
     .single();
 
@@ -630,11 +648,22 @@ export async function resendApplicationInvitation(
     return { success: false, error: "초대 이메일을 재발송할 수신자 이메일 주소가 없습니다." };
   }
 
+  const submittedDateStr = formatSubmittedDateKo(app.submitted_at);
   const portalSignupUrl = "https://portal.kselectnetwork.com/portal/signup";
   const sendRes = await sendTemplatedEmail("portal_signup_request", emailToUse, {
+    contact_name: nameToUse,
     contactName: nameToUse,
+    company_name: app.applicant_company_name || "",
     companyName: app.applicant_company_name || "",
+    application_id: app.application_number || applicationId,
+    applicationId: app.application_number || applicationId,
+    applicationNumber: app.application_number || applicationId,
+    submitted_date: submittedDateStr,
+    submittedDate: submittedDateStr,
+    portal_signup_url: portalSignupUrl,
     portalUrl: portalSignupUrl,
+    support_email: "support@kselectnetwork.com",
+    supportEmail: "support@kselectnetwork.com",
   });
 
   if (!sendRes.success) {
