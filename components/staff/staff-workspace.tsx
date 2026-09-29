@@ -1199,13 +1199,13 @@ export function StaffWorkspace({
               <div className="border border-zinc-200 dark:border-zinc-800 rounded-lg overflow-hidden select-none">
                 <table className="w-full text-center border-collapse text-[10px]">
                   <thead>
-                    <tr className="bg-zinc-50 dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800">
-                      <th className="py-2.5 pl-3 text-left font-bold text-zinc-600 dark:text-zinc-400">메뉴 (Menu)</th>
-                      <th className="py-2.5 font-bold text-zinc-600 dark:text-zinc-400">보기</th>
-                      <th className="py-2.5 font-bold text-zinc-600 dark:text-zinc-400">생성</th>
-                      <th className="py-2.5 font-bold text-zinc-600 dark:text-zinc-400">수정</th>
-                      <th className="py-2.5 font-bold text-zinc-600 dark:text-zinc-400">삭제</th>
-                      <th className="py-2.5 font-bold text-zinc-600 dark:text-zinc-400">승인</th>
+                    <tr className="bg-zinc-100 dark:bg-zinc-800/90 border-b border-zinc-200 dark:border-zinc-700">
+                      <th className="py-2.5 pl-3 text-left font-extrabold text-zinc-900 dark:text-zinc-100 border-r border-zinc-200 dark:border-zinc-700">메뉴 (Menu)</th>
+                      <th className="py-2.5 font-extrabold text-zinc-900 dark:text-zinc-100">보기</th>
+                      <th className="py-2.5 font-extrabold text-zinc-900 dark:text-zinc-100">생성</th>
+                      <th className="py-2.5 font-extrabold text-zinc-900 dark:text-zinc-100">수정</th>
+                      <th className="py-2.5 font-extrabold text-zinc-900 dark:text-zinc-100">삭제</th>
+                      <th className="py-2.5 font-extrabold text-zinc-900 dark:text-zinc-100">승인</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800 font-medium">
@@ -1225,7 +1225,7 @@ export function StaffWorkspace({
 
                       return (
                         <tr key={mKey} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-950/30 transition-colors">
-                          <td className="py-3 pl-3 text-left font-extrabold text-zinc-800 dark:text-zinc-200 bg-zinc-50/20">
+                          <td className="py-3 pl-3 text-left font-extrabold text-zinc-900 dark:text-zinc-100 bg-zinc-100/70 dark:bg-zinc-900/90 border-r border-zinc-200 dark:border-zinc-800">
                             {menuLabelMap[mKey] || mKey}
                           </td>
                           {standardActions.map((aKey) => {
@@ -1237,7 +1237,7 @@ export function StaffWorkspace({
                                   checked={isChecked}
                                   onChange={() => handlePermissionToggle(mKey, aKey)}
                                   disabled={baseRole === "super_admin"} // Super Admin is hard-locked to true
-                                  className="h-3.5 w-3.5 rounded border-zinc-300 accent-zinc-950 dark:accent-white cursor-pointer disabled:opacity-50"
+                                  className="h-3.5 w-3.5 rounded border-2 border-zinc-400 dark:border-zinc-600 bg-white dark:bg-zinc-950 accent-zinc-950 dark:accent-white cursor-pointer disabled:opacity-50"
                                 />
                               </td>
                             );

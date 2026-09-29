@@ -24,6 +24,7 @@ export function MyAccountView({ initialData }: MyAccountViewProps) {
 
   // Profile Form States
   const [name, setName] = useState(initialData.name || "");
+  const [englishName, setEnglishName] = useState(initialData.englishName || "");
   const [phone, setPhone] = useState(initialData.phone || "");
   const [title, setTitle] = useState(initialData.title || "");
   const [position, setPosition] = useState(initialData.position || "");
@@ -32,10 +33,11 @@ export function MyAccountView({ initialData }: MyAccountViewProps) {
   React.useEffect(() => {
     setData(initialData);
     if (initialData.name) setName(initialData.name);
+    if (initialData.englishName !== undefined && initialData.englishName !== null) setEnglishName(initialData.englishName);
     if (initialData.phone) setPhone(initialData.phone);
     if (initialData.title) setTitle(initialData.title);
     if (initialData.position !== undefined && initialData.position !== null) setPosition(initialData.position);
-  }, [initialData.name, initialData.phone, initialData.title, initialData.position]);
+  }, [initialData.name, initialData.englishName, initialData.phone, initialData.title, initialData.position]);
 
   // Password Form States
   const [currentPassword, setCurrentPassword] = useState("");
@@ -54,7 +56,12 @@ export function MyAccountView({ initialData }: MyAccountViewProps) {
     setProfileMessage(null);
 
     if (!name.trim()) {
-      setProfileMessage({ type: "error", text: "이름(Full Name)을 입력해 주세요." });
+      setProfileMessage({ type: "error", text: "이름(Name)을 입력해 주세요." });
+      return;
+    }
+
+    if (!englishName.trim()) {
+      setProfileMessage({ type: "error", text: "영문 이름(English Name)을 입력해 주세요. (공식 영문 문서 및 발주/인보이스에 사용됩니다)" });
       return;
     }
 
@@ -71,6 +78,7 @@ export function MyAccountView({ initialData }: MyAccountViewProps) {
     startProfileTransition(async () => {
       const res = await updateMyAccountProfileAction({
         name: name.trim(),
+        englishName: englishName.trim(),
         phone: phone.trim(),
         title: title.trim(),
         position: position.trim(),
@@ -79,12 +87,14 @@ export function MyAccountView({ initialData }: MyAccountViewProps) {
       if (res.success && res.profile) {
         setProfileMessage({ type: "success", text: res.message || "관리자 프로필 정보가 성공적으로 저장되었습니다." });
         setName(res.profile.name);
+        setEnglishName(res.profile.englishName);
         setTitle(res.profile.title);
         setPosition(res.profile.position);
         setPhone(res.profile.phone);
         setData((prev) => ({
           ...prev,
           name: res.profile!.name,
+          englishName: res.profile!.englishName,
           phone: res.profile!.phone,
           title: res.profile!.title,
           position: res.profile!.position,
@@ -249,18 +259,40 @@ export function MyAccountView({ initialData }: MyAccountViewProps) {
           )}
 
           <form onSubmit={handleProfileSubmit} className="space-y-4 text-xs">
-            <div>
-              <label className="block font-bold text-zinc-700 dark:text-zinc-300 mb-1">
-                이름 (Full Name) <span className="text-rose-500">*</span>
-              </label>
-              <input
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="예: 홍길동"
-                required
-                className="w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-xs outline-none focus:border-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
-              />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                  이름 (Name) <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="예: 박은애"
+                  required
+                  className="w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-xs outline-none focus:border-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+                />
+                <p className="mt-1 text-[10px] text-zinc-400 dark:text-zinc-500">
+                  국문 또는 본명
+                </p>
+              </div>
+
+              <div>
+                <label className="block font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                  영문 이름 (English Name) <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={englishName}
+                  onChange={(e) => setEnglishName(e.target.value)}
+                  placeholder="예: Eunae Park / Tammy Hahm"
+                  required
+                  className="w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-xs outline-none focus:border-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white font-sans"
+                />
+                <p className="mt-1 text-[10px] text-zinc-400 dark:text-zinc-500">
+                  발주서·인보이스 등 공식 영문 문서용
+                </p>
+              </div>
             </div>
 
             <div>

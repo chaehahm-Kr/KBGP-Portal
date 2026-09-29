@@ -159,3 +159,63 @@ export const ALL_COUNTRIES: CountryCallingCode[] = [
   ...TOP_COUNTRIES,
   ...OTHER_COUNTRIES,
 ];
+
+/**
+ * Standardize any localized or legacy country string to English canonical country name.
+ * Examples:
+ * - "대한민국", "KR", "Korea", "Republic of Korea" -> "South Korea"
+ * - "미국", "US", "USA", "United States of America" -> "United States"
+ * - "중국", "CN" -> "China"
+ * - "일본", "JP" -> "Japan"
+ */
+export function formatCanonicalCountryName(val?: string | null): string {
+  if (!val) return "";
+  const trimmed = val.trim();
+  if (!trimmed) return "";
+  const lower = trimmed.toLowerCase();
+
+  if (
+    lower === "대한민국" ||
+    lower === "korea" ||
+    lower === "kr" ||
+    lower === "south korea" ||
+    lower === "republic of korea" ||
+    lower === "한국"
+  ) {
+    return "South Korea";
+  }
+
+  if (
+    lower === "미국" ||
+    lower === "usa" ||
+    lower === "us" ||
+    lower === "united states" ||
+    lower === "united states of america"
+  ) {
+    return "United States";
+  }
+
+  if (lower === "중국" || lower === "china" || lower === "cn") return "China";
+  if (lower === "일본" || lower === "japan" || lower === "jp") return "Japan";
+  if (lower === "홍콩" || lower === "hong kong" || lower === "hk") return "Hong Kong";
+  if (lower === "대만" || lower === "taiwan" || lower === "tw") return "Taiwan";
+  if (lower === "영국" || lower === "uk" || lower === "united kingdom" || lower === "gb") return "United Kingdom";
+  if (lower === "독일" || lower === "germany" || lower === "de") return "Germany";
+  if (lower === "프랑스" || lower === "france" || lower === "fr") return "France";
+  if (lower === "베트남" || lower === "vietnam" || lower === "vn") return "Vietnam";
+  if (lower === "싱가포르" || lower === "singapore" || lower === "sg") return "Singapore";
+  if (lower === "태국" || lower === "thailand" || lower === "th") return "Thailand";
+  if (lower === "호주" || lower === "australia" || lower === "au") return "Australia";
+  if (lower === "캐나다" || lower === "canada" || lower === "ca") return "Canada";
+  if (lower === "이탈리아" || lower === "italy" || lower === "it") return "Italy";
+  if (lower === "스페인" || lower === "spain" || lower === "es") return "Spain";
+  if (lower === "스위스" || lower === "switzerland" || lower === "ch") return "Switzerland";
+
+  const found = ALL_COUNTRIES_RAW.find(
+    (c) => c.code.toLowerCase() === lower || c.name.toLowerCase() === lower
+  );
+  if (found) return found.name;
+
+  return trimmed;
+}
+

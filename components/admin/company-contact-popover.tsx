@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 
 export interface CompanyContactPopoverProps {
   contactName: string;
+  contactEnglishName?: string;
   contactTitle?: string;
   contactPosition?: string;
   contactPhone?: string;
@@ -25,6 +26,7 @@ const VIEWPORT_PADDING = 12;
 
 export function CompanyContactPopover({
   contactName,
+  contactEnglishName,
   contactTitle,
   contactPosition,
   contactPhone,
@@ -127,7 +129,7 @@ export function CompanyContactPopover({
     return <span className="text-zinc-400 dark:text-zinc-500">담당자 정보 없음</span>;
   }
 
-  const hasDetails = Boolean(contactTitle || contactPosition || contactPhone || contactEmail);
+  const hasDetails = Boolean(contactEnglishName || contactTitle || contactPosition || contactPhone || contactEmail);
 
   return (
     <div className="inline-block">
@@ -171,8 +173,13 @@ export function CompanyContactPopover({
           >
             <div className="space-y-2 text-[11px] text-zinc-600 dark:text-zinc-400">
               <div className="flex items-center justify-between border-b border-zinc-100 pb-2 dark:border-zinc-800">
-                <span className="font-bold text-zinc-950 dark:text-white text-xs">{contactName}</span>
-                <span className="rounded bg-emerald-50 text-emerald-700 px-1.5 py-0.5 text-[9px] font-bold dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200/50 dark:border-emerald-800/40">
+                <div>
+                  <span className="font-bold text-zinc-950 dark:text-white text-xs block">{contactName}</span>
+                  {contactEnglishName && (
+                    <span className="text-[10px] text-zinc-400 font-sans block">{contactEnglishName}</span>
+                  )}
+                </div>
+                <span className="rounded bg-emerald-50 text-emerald-700 px-1.5 py-0.5 text-[9px] font-bold dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200/50 dark:border-emerald-800/40 shrink-0">
                   주 컨택
                 </span>
               </div>

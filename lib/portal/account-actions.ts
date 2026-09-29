@@ -12,6 +12,7 @@ export interface MyAccountData {
   userId: string;
   email: string;
   name: string;
+  englishName: string;
   phone: string;
   title: string;
   position: string;
@@ -26,6 +27,7 @@ export interface MyAccountData {
 
 export interface UpdateProfilePayload {
   name: string;
+  englishName: string;
   phone?: string;
   title?: string;
   position?: string;
@@ -43,6 +45,7 @@ export interface ActionResult {
   error?: string;
   profile?: {
     name: string;
+    englishName: string;
     phone: string;
     title: string;
     position: string;
@@ -60,7 +63,7 @@ export async function getMyAccountData(): Promise<MyAccountData> {
   const { data: userById, error: userError } = await adminClient
     .from("company_users")
     .select(
-      "id, company_id, name, email, company_role, status, title, position, phone, is_primary, created_at, joined_at, companies(id, name)"
+      "id, company_id, name, email, company_role, status, title, position, phone, is_primary, permissions, created_at, joined_at, companies(id, name)"
     )
     .eq("id", session.userId)
     .maybeSingle();
@@ -71,7 +74,7 @@ export async function getMyAccountData(): Promise<MyAccountData> {
     const { data: userByEmail } = await adminClient
       .from("company_users")
       .select(
-        "id, company_id, name, email, company_role, status, title, position, phone, is_primary, created_at, joined_at, companies(id, name)"
+        "id, company_id, name, email, company_role, status, title, position, phone, is_primary, permissions, created_at, joined_at, companies(id, name)"
       )
       .eq("email", session.email.toLowerCase().trim())
       .maybeSingle();
@@ -89,11 +92,17 @@ export async function getMyAccountData(): Promise<MyAccountData> {
     .maybeSingle();
 
   const rawCompany = userRecord?.companies as any;
+  const englishName = (
+    userRecord?.english_name ||
+    userRecord?.permissions?.english_name ||
+    ""
+  ).trim();
 
   return {
     userId: session.userId,
     email: session.email,
     name: userRecord?.name || profile?.display_name || "",
+    englishName: englishName,
     phone: userRecord?.phone || "",
     title: userRecord?.title || "",
     position: userRecord?.position || "",
@@ -108,7 +117,7 @@ export async function getMyAccountData(): Promise<MyAccountData> {
 }
 
 /**
- * PORT-ACC-001: Update user's own personal profile (name, phone, title, position/department).
+ * PORT-ACC-001 / PORT-PROFILE-002: Update user's own personal profile (name, englishName, phone, title, position/department).
  * Security: Strictly enforces that only the authenticated user's own record can be updated.
  * Role, company, status, and email cannot be altered through this action.
  */
@@ -121,10 +130,13 @@ export async function updateMyAccountProfileAction(
       return { success: false, error: "인증 세션이 만료되었습니다. 다시 로그인해 주세요." };
     }
 
-    const { name, phone, title, position } = payload;
+    const { name, englishName, phone, title, position } = payload;
 
     if (!name || !name.trim()) {
-      return { success: false, error: "이름을 입력해 주세요." };
+      return { success: false, error: "이름(Name)을 입력해 주세요." };
+    }
+    if (!englishName || !englishName.trim()) {
+      return { success: false, error: "영문 이름(English Name)을 입력해 주세요. (공식 영문 문서 및 발주/인보이스에 사용됩니다)" };
     }
     if (!title || !title.trim()) {
       return { success: false, error: "직함을 입력해 주세요. (예: 대표이사, 이사, 팀장)" };
@@ -139,7 +151,7 @@ export async function updateMyAccountProfileAction(
     let targetUserId = session.userId;
     const { data: existingUser } = await adminClient
       .from("company_users")
-      .select("id, company_id")
+      .select("id, company_id, permissions")
       .or(`id.eq.${session.userId},email.eq.${session.email.toLowerCase().trim()}`)
       .maybeSingle();
 
@@ -147,17 +159,38 @@ export async function updateMyAccountProfileAction(
       targetUserId = existingUser.id;
     }
 
-    const { data: updatedUser, error: updateError } = await adminClient
+    const updatedPermissions = {
+      ...(existingUser?.permissions || {}),
+      english_name: englishName.trim(),
+    };
+
+    const updatePayload: Record<string, any> = {
+      name: name.trim(),
+      phone: phone.trim(),
+      title: title.trim(),
+      position: position?.trim() || null,
+      permissions: updatedPermissions,
+      english_name: englishName.trim(),
+    };
+
+    let { data: updatedUser, error: updateError } = await adminClient
       .from("company_users")
-      .update({
-        name: name.trim(),
-        phone: phone.trim(),
-        title: title.trim(),
-        position: position?.trim() || null,
-      })
+      .update(updatePayload)
       .eq("id", targetUserId)
-      .select("id, company_id, name, phone, title, position")
+      .select("id, company_id, name, phone, title, position, permissions")
       .single();
+
+    if (updateError && updateError.code === "42703") {
+      delete updatePayload.english_name;
+      const retry = await adminClient
+        .from("company_users")
+        .update(updatePayload)
+        .eq("id", targetUserId)
+        .select("id, company_id, name, phone, title, position, permissions")
+        .single();
+      updatedUser = retry.data;
+      updateError = retry.error;
+    }
 
     if (updateError || !updatedUser) {
       console.error("[updateMyAccountProfileAction] update error:", updateError);
@@ -167,19 +200,26 @@ export async function updateMyAccountProfileAction(
     // 2. Strict read-back verification to guarantee DB persistence before returning success
     const { data: verifiedUser, error: verifyError } = await adminClient
       .from("company_users")
-      .select("id, name, phone, title, position, company_id")
+      .select("id, name, phone, title, position, company_id, permissions")
       .eq("id", targetUserId)
       .single();
+
+    const verifiedEnglishName = (
+      (verifiedUser as any)?.english_name ||
+      verifiedUser?.permissions?.english_name ||
+      ""
+    ).trim();
 
     if (
       verifyError ||
       !verifiedUser ||
       verifiedUser.name !== name.trim() ||
+      verifiedEnglishName !== englishName.trim() ||
       verifiedUser.title !== title.trim() ||
       verifiedUser.phone !== phone.trim() ||
       (verifiedUser.position || "") !== (position?.trim() || "")
     ) {
-      console.error("[updateMyAccountProfileAction] Read-back verification failed:", { verifyError, verifiedUser });
+      console.error("[updateMyAccountProfileAction] Read-back verification failed:", { verifyError, verifiedUser, verifiedEnglishName });
       return { success: false, error: "데이터베이스 저장 검증에 실패했습니다. 다시 시도해 주세요." };
     }
 
@@ -213,6 +253,7 @@ export async function updateMyAccountProfileAction(
         );
         if (idx !== -1) {
           metaObj.contacts[idx].name = name.trim();
+          metaObj.contacts[idx].englishName = englishName.trim();
           metaObj.contacts[idx].phone = phone.trim();
           metaObj.contacts[idx].title = title.trim();
           metaObj.contacts[idx].position = position?.trim() || "";
@@ -220,6 +261,7 @@ export async function updateMyAccountProfileAction(
           metaObj.contacts.push({
             id: targetUserId,
             name: name.trim(),
+            englishName: englishName.trim(),
             phone: phone.trim(),
             email: session.email,
             title: title.trim(),
@@ -254,6 +296,7 @@ export async function updateMyAccountProfileAction(
       message: "관리자 프로필 정보가 성공적으로 저장되었습니다.",
       profile: {
         name: verifiedUser.name || name.trim(),
+        englishName: verifiedEnglishName || englishName.trim(),
         title: verifiedUser.title || title.trim(),
         position: verifiedUser.position || position?.trim() || "",
         phone: verifiedUser.phone || phone.trim(),

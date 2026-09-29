@@ -3,9 +3,11 @@
 import React, { useState, useMemo } from "react";
 import Link from "next/link";
 import { CompanyContactPopover } from "@/components/admin/company-contact-popover";
+import { formatCanonicalCountryName } from "@/lib/constants/countries";
 
 export interface CompanyUserItem {
   name?: string;
+  englishName?: string;
   email?: string;
   phone?: string;
   role?: string;
@@ -17,12 +19,17 @@ export interface CompanyRowItem {
   type: string;
   country: string;
   contactName: string;
+  contactEnglishName?: string;
   contactPhone: string;
   contactEmail: string;
   contactTitle: string;
   contactPosition: string;
   brandsCount: number;
   productsCount: number;
+  onboardingCompletedCount?: number;
+  onboardingTotalCount?: number;
+  onboardingStatus?: "completed" | "in_progress" | "not_started";
+  onboardingBadgeText?: string;
   appStatus: string;
   partnerStatus: string;
   accountOwner: string;
@@ -58,7 +65,8 @@ export function CompaniesTableClient({ companies, partnerStatuses }: CompaniesTa
   const uniqueCountries = useMemo(() => {
     const set = new Set<string>();
     companies.forEach((c) => {
-      if (c.country) set.add(c.country);
+      const canonical = formatCanonicalCountryName(c.country);
+      if (canonical) set.add(canonical);
     });
     return Array.from(set).sort();
   }, [companies]);
@@ -97,8 +105,11 @@ export function CompaniesTableClient({ companies, partnerStatuses }: CompaniesTa
       }
 
       // 3. Country Multi-Filter (OR within group)
-      if (selectedCountries.length > 0 && !selectedCountries.includes(company.country)) {
-        return false;
+      if (selectedCountries.length > 0) {
+        const canonical = formatCanonicalCountryName(company.country);
+        if (!selectedCountries.includes(canonical)) {
+          return false;
+        }
       }
 
       // 4. Partner Status Multi-Filter (OR within group)
@@ -139,6 +150,33 @@ export function CompaniesTableClient({ companies, partnerStatuses }: CompaniesTa
     setSelectedStatuses((prev) =>
       prev.includes(status) ? prev.filter((s) => s !== status) : [...prev, status]
     );
+  };
+
+  const getTypeBadgeClass = (type: string) => {
+    const norm = (type || "").toLowerCase();
+    if (norm.includes("brand")) {
+      return "bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-950/50 dark:text-indigo-300 dark:border-indigo-800";
+    }
+    if (norm.includes("manufacturer")) {
+      return "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/50 dark:text-blue-300 dark:border-blue-800";
+    }
+    if (norm.includes("retail")) {
+      return "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-800";
+    }
+    if (norm.includes("distributor") || norm.includes("supplier") || norm.includes("exporter")) {
+      return "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/50 dark:text-amber-300 dark:border-amber-800";
+    }
+    return "bg-zinc-100 text-zinc-700 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:border-zinc-700";
+  };
+
+  const getOnboardingBadgeClass = (status?: "completed" | "in_progress" | "not_started") => {
+    if (status === "completed") {
+      return "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-800";
+    }
+    if (status === "in_progress") {
+      return "bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100 dark:bg-amber-950/50 dark:text-amber-300 dark:border-amber-800";
+    }
+    return "bg-zinc-100 text-zinc-600 border-zinc-200 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:border-zinc-700";
   };
 
   return (
@@ -380,6 +418,7 @@ export function CompaniesTableClient({ companies, partnerStatuses }: CompaniesTa
                 <th className="px-6 py-3.5 font-semibold">국가</th>
                 <th className="px-6 py-3.5 font-semibold text-center">브랜드 수</th>
                 <th className="px-6 py-3.5 font-semibold text-center">등록 제품 수</th>
+                <th className="px-6 py-3.5 font-semibold text-center">온보딩</th>
                 <th className="px-6 py-3.5 font-semibold">파트너 상태</th>
                 <th className="px-6 py-3.5 font-semibold">주 컨택 담당자</th>
                 <th className="px-6 py-3.5 font-semibold text-center">등록 인원</th>
@@ -414,17 +453,34 @@ export function CompaniesTableClient({ companies, partnerStatuses }: CompaniesTa
                         {company.name}
                       </Link>
                     </td>
-                    <td className="px-6 py-3.5 text-zinc-700 dark:text-zinc-300 font-medium">
-                      {company.type}
+                    <td className="px-6 py-3.5">
+                      <span
+                        className={`inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-semibold border ${getTypeBadgeClass(
+                          company.type
+                        )}`}
+                      >
+                        {company.type || "Brand Owner"}
+                      </span>
                     </td>
-                    <td className="px-6 py-3.5 text-zinc-700 dark:text-zinc-300">
-                      {company.country}
+                    <td className="px-6 py-3.5 text-zinc-700 dark:text-zinc-300 font-medium">
+                      {formatCanonicalCountryName(company.country)}
                     </td>
                     <td className="px-6 py-3.5 text-center text-zinc-900 dark:text-white font-semibold">
                       {company.brandsCount}
                     </td>
                     <td className="px-6 py-3.5 text-center text-zinc-900 dark:text-white font-semibold">
                       {company.productsCount}
+                    </td>
+                    <td className="px-6 py-3.5 text-center">
+                      <Link
+                        href={`/admin/companies/${company.id}`}
+                        className={`inline-flex items-center justify-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-bold border transition-colors cursor-pointer ${getOnboardingBadgeClass(
+                          company.onboardingStatus
+                        )}`}
+                        title="온보딩 상태 확인 (회사 상세 이동)"
+                      >
+                        {company.onboardingBadgeText || "0 / 7 미시작"}
+                      </Link>
                     </td>
                     <td className="px-6 py-3.5">
                       <span className={`inline-block rounded px-2.5 py-0.5 text-[10px] font-bold border ${statusClass}`}>
@@ -436,6 +492,7 @@ export function CompaniesTableClient({ companies, partnerStatuses }: CompaniesTa
                     <td className="px-6 py-3.5">
                       <CompanyContactPopover
                         contactName={company.contactName}
+                        contactEnglishName={company.contactEnglishName}
                         contactTitle={company.contactTitle}
                         contactPosition={company.contactPosition}
                         contactPhone={company.contactPhone}
@@ -469,7 +526,7 @@ export function CompaniesTableClient({ companies, partnerStatuses }: CompaniesTa
 
               {filteredCompanies.length === 0 && (
                 <tr>
-                  <td colSpan={10} className="px-6 py-12 text-center text-zinc-400 dark:text-zinc-500">
+                  <td colSpan={11} className="px-6 py-12 text-center text-zinc-400 dark:text-zinc-500">
                     검색 조건과 일치하는 회사가 없습니다.
                   </td>
                 </tr>

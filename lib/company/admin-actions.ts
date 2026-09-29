@@ -19,6 +19,7 @@ import { getBilingualError } from "@/lib/errors/bilingual-messages";
 export interface CompanyContact {
   id: string;
   name: string;
+  englishName?: string;
   phone: string;
   email: string;
   title: string;      // 직함 (e.g. 과장, 부장)
@@ -98,6 +99,7 @@ export async function parseCompanyMetadata(company: any): Promise<CompanyParsedM
         contacts: (data.contacts || []).map((c: any) => ({
           id: c.id,
           name: c.name || "",
+          englishName: c.englishName || c.english_name || "",
           phone: c.phone || "",
           email: c.email || "",
           title: c.title || "",
@@ -394,6 +396,7 @@ export async function adminInviteCompanyUser(
   companyId: string,
   payload: {
     name: string;
+    englishName?: string;
     email: string;
     title: string;
     position: string;
@@ -440,7 +443,12 @@ export async function adminInviteCompanyUser(
   }
 
   // 4. Insert into company_users
-  const { error: insertError } = await admin.from("company_users").insert({
+  const permissionsObj = {
+    ...(payload.permissions || {}),
+    ...(payload.englishName ? { english_name: payload.englishName.trim() } : {}),
+  };
+
+  const insertPayload: Record<string, any> = {
     id: invited.user.id,
     company_id: companyId,
     name: payload.name,
@@ -451,9 +459,15 @@ export async function adminInviteCompanyUser(
     position: payload.position,
     phone: payload.phone,
     is_primary: payload.isPrimary,
-    permissions: payload.permissions,
+    permissions: permissionsObj,
     invited_at: new Date().toISOString(),
-  });
+  };
+
+  if (payload.englishName) {
+    insertPayload.english_name = payload.englishName.trim();
+  }
+
+  const { error: insertError } = await admin.from("company_users").insert(insertPayload);
 
   if (insertError) {
     console.error("Insert error:", insertError);
@@ -474,6 +488,7 @@ export async function adminUpdateCompanyUser(
   targetUserId: string,
   payload: {
     name: string;
+    englishName?: string;
     title: string;
     position: string;
     phone: string;
@@ -489,7 +504,7 @@ export async function adminUpdateCompanyUser(
   // 1. Fetch current status to detect changes
   const { data: target } = await admin
     .from("company_users")
-    .select("status, company_role")
+    .select("status, company_role, permissions")
     .eq("id", targetUserId)
     .single();
 
@@ -507,19 +522,41 @@ export async function adminUpdateCompanyUser(
   }
 
   // 3. Update company_users
-  const { error: updateError } = await admin
+  const permissionsObj = {
+    ...(target.permissions || {}),
+    ...(payload.permissions || {}),
+    ...(payload.englishName !== undefined ? { english_name: payload.englishName.trim() } : {}),
+  };
+
+  const updatePayload: Record<string, any> = {
+    name: payload.name,
+    title: payload.title,
+    position: payload.position,
+    phone: payload.phone,
+    company_role: payload.companyRole,
+    status: payload.status,
+    is_primary: payload.isPrimary,
+    permissions: permissionsObj,
+  };
+
+  if (payload.englishName !== undefined) {
+    updatePayload.english_name = payload.englishName.trim();
+  }
+
+  let { error: updateError } = await admin
     .from("company_users")
-    .update({
-      name: payload.name,
-      title: payload.title,
-      position: payload.position,
-      phone: payload.phone,
-      company_role: payload.companyRole,
-      status: payload.status,
-      is_primary: payload.isPrimary,
-      permissions: payload.permissions,
-    })
+    .update(updatePayload)
     .eq("id", targetUserId);
+
+  if (updateError && updateError.code === "42703") {
+    // Retry without direct english_name column if column not yet added to table
+    delete updatePayload.english_name;
+    const retry = await admin
+      .from("company_users")
+      .update(updatePayload)
+      .eq("id", targetUserId);
+    updateError = retry.error;
+  }
 
   if (updateError) {
     throw new Error(`담당자 정보 업데이트 실패: ${updateError.message}`);

@@ -31,7 +31,7 @@ export default async function PortalHomePage() {
   // 1. Fetch Company & User Info
   const { data: companyUser } = await supabase
     .from("company_users")
-    .select("company_id, company_role, name, title, position, phone")
+    .select("company_id, company_role, name, title, position, phone, permissions")
     .eq("id", session.userId)
     .single();
 
@@ -407,12 +407,19 @@ export default async function PortalHomePage() {
   const teamCount = companyUsersList.length;
 
   const parsedMeta = await parseCompanyMetadata(company || {});
+  const userEnglishName = (
+    (companyUser as any)?.english_name ||
+    (companyUser?.permissions as any)?.english_name ||
+    ""
+  ).trim();
+
   const isCompanyInfoConfirmed = Boolean(parsedMeta.company_onboarding_confirmed_at);
   const isAdminProfileConfirmed = Boolean(
     parsedMeta.admin_profile_onboarding_confirmed_at &&
-    companyUser?.name &&
-    companyUser?.title &&
-    companyUser?.phone
+    companyUser?.name?.trim() &&
+    userEnglishName &&
+    companyUser?.title?.trim() &&
+    companyUser?.phone?.trim()
   );
   const teamSkipped = Boolean(parsedMeta.team_onboarding_skipped);
   const isTeamComplete = teamCount > 1 || teamSkipped;
