@@ -281,12 +281,32 @@ export function getPersonStructuredNames(
     ""
   ).trim();
 
+  // Check for combined parenthesized patterns in rawLegacyName (e.g. "박은애 (Eun Park)" or "Eun Park (박은애)")
+  let extractedLegacyKor = "";
+  let extractedLegacyEng = "";
+  if (rawLegacyName) {
+    const combinedMatch = rawLegacyName.match(/^([^(]+)\s*\(([^)]+)\)$/);
+    if (combinedMatch) {
+      const p1 = combinedMatch[1].trim();
+      const p2 = combinedMatch[2].trim();
+      if (LATIN_REGEX.test(p1) && KOREAN_REGEX.test(p2)) {
+        extractedLegacyEng = p1;
+        extractedLegacyKor = p2;
+      } else if (KOREAN_REGEX.test(p1) && LATIN_REGEX.test(p2)) {
+        extractedLegacyKor = p1;
+        extractedLegacyEng = p2;
+      }
+    }
+  }
+
   // 1. Resolve Korean Full Name
   let koreanFullName = "";
   if (rawKoreanLastName && rawKoreanFirstName) {
     koreanFullName = `${rawKoreanLastName}${rawKoreanFirstName}`;
   } else if (rawKoreanLastName || rawKoreanFirstName) {
     koreanFullName = `${rawKoreanLastName}${rawKoreanFirstName}`.trim();
+  } else if (extractedLegacyKor) {
+    koreanFullName = extractedLegacyKor;
   } else if (rawLegacyName && KOREAN_REGEX.test(rawLegacyName)) {
     // If legacy name contains Korean
     koreanFullName = rawLegacyName;
@@ -303,6 +323,17 @@ export function getPersonStructuredNames(
     englishFullName = rawExplicitEnglish;
     if (!englishFirstName && !englishLastName) {
       const parts = rawExplicitEnglish.split(/\s+/);
+      if (parts.length > 1) {
+        englishLastName = parts[parts.length - 1];
+        englishFirstName = parts.slice(0, -1).join(" ");
+      } else {
+        englishFirstName = parts[0];
+      }
+    }
+  } else if (extractedLegacyEng) {
+    englishFullName = extractedLegacyEng;
+    if (!englishFirstName && !englishLastName) {
+      const parts = extractedLegacyEng.split(/\s+/);
       if (parts.length > 1) {
         englishLastName = parts[parts.length - 1];
         englishFirstName = parts.slice(0, -1).join(" ");
