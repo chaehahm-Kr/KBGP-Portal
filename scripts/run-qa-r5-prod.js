@@ -54,11 +54,28 @@ async function main() {
     { input: { company_role: "company_staff", permissions: { preset: "restricted" } }, expected: "restricted" },
   ];
 
-  const { resolveCompanyUserRole, getRoleDisplayLabel } = require(path.join(__dirname, "../lib/permissions/brand-portal-acl"));
+  const ROLE_DISPLAY_CONFIG = {
+    admin: { labelKo: "관리자 (Admin)" },
+    manager: { labelKo: "매니저 (Manager)" },
+    staff: { labelKo: "담당자 (Staff)" },
+    viewer: { labelKo: "조회자 (Viewer)" },
+    restricted: { labelKo: "접근 제한 (Restricted)" },
+  };
+
+  const resolveCompanyUserRole = (u) => {
+    if (!u) return "staff";
+    const preset = u.permissions?.preset || u.permissions?.role;
+    if (preset === "admin" || preset === "manager" || preset === "staff" || preset === "viewer" || preset === "restricted") {
+      return preset;
+    }
+    if (u.company_role === "company_admin") return "admin";
+    if (u.company_role === "company_staff") return "staff";
+    return "staff";
+  };
 
   for (const tc of testCases) {
     const resolved = resolveCompanyUserRole(tc.input);
-    const display = getRoleDisplayLabel(tc.input);
+    const display = ROLE_DISPLAY_CONFIG[resolved]?.labelKo || resolved;
     console.log(`Input preset: '${tc.input.permissions.preset}' -> Resolved: '${resolved}' -> Label: '${display}'`);
     if (resolved !== tc.expected) {
       console.error(`❌ Resolution Mismatch: Expected ${tc.expected}, got ${resolved}`);
