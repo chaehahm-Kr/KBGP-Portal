@@ -10,6 +10,7 @@ import { publicEnv } from "@/lib/env/public";
 import { requireCompanyAdmin } from "@/lib/company/dal";
 import { normalizeEmail, checkUserEmailDuplicate } from "@/lib/user/validation";
 import { getBilingualError } from "@/lib/errors/bilingual-messages";
+import { mapPresetToMembershipRole } from "@/lib/permissions/brand-portal-acl";
 
 import { getPersonStructuredNames } from "@/lib/user/name-helper";
 
@@ -45,7 +46,7 @@ const inviteSchema = z.object({
   englishFirstName: z.string().trim().min(1, "영문 이름(English First Name)을 입력해 주세요."),
   englishLastName: z.string().trim().min(1, "영문 성(English Last Name)을 입력해 주세요."),
   email: z.string().trim().email("올바른 이메일 형식이 아닙니다."),
-  companyRole: z.enum(["company_admin", "company_staff"] as const),
+  companyRole: z.string().min(1).transform((val) => mapPresetToMembershipRole(val)),
 });
 
 /**
@@ -67,7 +68,7 @@ export async function inviteCompanyUser(
     englishFirstName: formData.get("englishFirstName") || "",
     englishLastName: formData.get("englishLastName") || "",
     email: formData.get("email"),
-    companyRole: formData.get("companyRole"),
+    companyRole: formData.get("companyRole") || "staff",
   });
 
   if (!parsed.success) {
@@ -92,7 +93,7 @@ export async function inviteCompanyUser(
 
   // 1. System-wide Email Duplicate Validation (One Email = One User = One Company)
   const dupCheck = await checkUserEmailDuplicate(normalizedEmail, companyId);
-  if (dupCheck.status !== "AVAILABLE") {
+  if (dupCheck.status === "EXISTS_SAME_COMPANY" || dupCheck.status === "EXISTS_OTHER_COMPANY") {
     return { error: dupCheck.message };
   }
 
@@ -118,30 +119,51 @@ export async function inviteCompanyUser(
 
   // 2. Generate secure invite token link via Supabase Auth generateLink
   const targetRedirect = `${getCanonicalPortalUrl()}/portal/invite/accept`;
-  const { data: linkData, error: inviteError } = await admin.auth.admin.generateLink({
-    type: "invite",
-    email: normalizedEmail,
-    options: {
-      redirectTo: targetRedirect,
-      data: { role: "portal", display_name: canonicalName },
-    },
-  });
+  let invitedUserId: string;
+  let actionLink: string;
 
-  if (inviteError || !linkData?.user) {
-    if (inviteError?.code === "over_email_send_rate_limit") {
-      return {
-        error:
-          "이메일 발송 한도를 초과했습니다. 잠시 후 다시 시도해주세요.\nRate limit exceeded. Please try again later.",
-      };
+  if (dupCheck.status === "REUSE_AUTH_USER") {
+    // Auth user exists in auth.users but has no active company_users record (Re-invite Case B/C)
+    invitedUserId = dupCheck.authUserId;
+    const { data: linkData, error: linkErr } = await admin.auth.admin.generateLink({
+      type: "magiclink",
+      email: normalizedEmail,
+      options: {
+        redirectTo: targetRedirect,
+      },
+    });
+
+    if (linkErr || !linkData) {
+      console.error("Failed to generate magiclink for re-invite:", linkErr);
+      return { error: getBilingualError("INVITATION_FAILED") };
     }
-    if (inviteError?.message?.includes("already been registered")) {
-      return { error: getBilingualError("EMAIL_ALREADY_IN_OTHER_COMPANY") };
+
+    actionLink = linkData.properties?.action_link || targetRedirect;
+  } else {
+    // Brand new user (Case A)
+    const { data: linkData, error: inviteError } = await admin.auth.admin.generateLink({
+      type: "invite",
+      email: normalizedEmail,
+      options: {
+        redirectTo: targetRedirect,
+        data: { role: "portal", display_name: canonicalName },
+      },
+    });
+
+    if (inviteError || !linkData?.user) {
+      if (inviteError?.code === "over_email_send_rate_limit") {
+        return {
+          error:
+            "이메일 발송 한도를 초과했습니다. 잠시 후 다시 시도해주세요.\nRate limit exceeded. Please try again later.",
+        };
+      }
+      return { error: getBilingualError("INVITATION_FAILED") };
     }
-    return { error: getBilingualError("INVITATION_FAILED") };
+
+    invitedUserId = linkData.user.id;
+    actionLink = linkData.properties?.action_link || targetRedirect;
   }
 
-  const invitedUserId = linkData.user.id;
-  let actionLink = linkData.properties?.action_link || targetRedirect;
   try {
     const parsedUrl = new URL(actionLink);
     parsedUrl.searchParams.set("redirect_to", targetRedirect);
@@ -547,7 +569,7 @@ export async function updateCompanyUser(
   const isEmailChanged = normalizedEmail !== normalizeEmail(target.email);
   if (isEmailChanged) {
     const dupCheck = await checkUserEmailDuplicate(normalizedEmail, companyId);
-    if (dupCheck.status !== "AVAILABLE") {
+    if (dupCheck.status === "EXISTS_SAME_COMPANY" || dupCheck.status === "EXISTS_OTHER_COMPANY") {
       throw new Error(dupCheck.message);
     }
 

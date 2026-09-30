@@ -8,6 +8,7 @@ export function normalizeEmail(email: string): string {
 
 export type DuplicateCheckResult =
   | { status: "AVAILABLE" }
+  | { status: "REUSE_AUTH_USER"; authUserId: string }
   | { status: "EXISTS_SAME_COMPANY"; message: string }
   | { status: "EXISTS_OTHER_COMPANY"; message: string };
 
@@ -50,20 +51,8 @@ export async function checkUserEmailDuplicate(
     }
   }
 
-  // 2. Also check profiles / auth.users via RPC or profiles table to prevent Orphan auth users
-  const { data: existingProfile } = await admin
-    .from("profiles")
-    .select("id")
-    .eq("id", (
-      // Subquery or fallback check if auth user exists
-      await admin.from("company_users").select("id").eq("email", normalized).maybeSingle()
-    )?.data?.id || "00000000-0000-0000-0000-000000000000")
-    .maybeSingle();
-
-  // Alternative: query auth.users by searching in company_users again with lower() or checking existing auth
-  // Supabase Auth Admin listUsers or getUserByEmail
+  // 2. Check auth.users table to prevent orphan records or support safe re-invitation
   try {
-    // Admin client to verify if auth user with this email exists
     const { data: authUsers } = await admin.auth.admin.listUsers({
       page: 1,
       perPage: 50,
@@ -94,10 +83,11 @@ export async function checkUserEmailDuplicate(
           };
         }
       } else {
-        // Registered in Auth but not in company_users yet
+        // Registered in Auth but not in company_users currently (Cancelled/Removed/Expired invite)
+        // Safe to reuse existing Auth identity for re-invitation
         return {
-          status: "EXISTS_OTHER_COMPANY",
-          message: getBilingualError("EMAIL_ALREADY_IN_OTHER_COMPANY"),
+          status: "REUSE_AUTH_USER",
+          authUserId: existingAuthUser.id,
         };
       }
     }

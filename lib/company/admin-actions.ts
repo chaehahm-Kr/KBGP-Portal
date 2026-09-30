@@ -449,22 +449,28 @@ export async function adminInviteCompanyUser(
 
   // 1. System-wide Email Duplicate Validation (One Email = One User = One Company)
   const dupCheck = await checkUserEmailDuplicate(normalizedEmail, companyId);
-  if (dupCheck.status !== "AVAILABLE") {
+  if (dupCheck.status === "EXISTS_SAME_COMPANY" || dupCheck.status === "EXISTS_OTHER_COMPANY") {
     throw new Error(dupCheck.message);
   }
 
-  // 2. Invite Auth User
-  const { data: invited, error: inviteError } =
-    await admin.auth.admin.inviteUserByEmail(normalizedEmail, {
-      data: { role: "portal", display_name: finalKoreanFullName || finalEnglishFullName },
-      redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3010'}/portal/invite/accept`,
-    });
+  let invitedUser: any = null;
+  if (dupCheck.status === "REUSE_AUTH_USER") {
+    invitedUser = { id: dupCheck.authUserId };
+  } else {
+    // 2. Invite Auth User
+    const { data: invited, error: inviteError } =
+      await admin.auth.admin.inviteUserByEmail(normalizedEmail, {
+        data: { role: "portal", display_name: finalKoreanFullName || finalEnglishFullName },
+        redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3010'}/portal/invite/accept`,
+      });
 
-  if (inviteError || !invited.user) {
-    if (inviteError?.message?.includes("already been registered")) {
-      throw new Error(getBilingualError("EMAIL_ALREADY_IN_OTHER_COMPANY"));
+    if (inviteError || !invited.user) {
+      if (inviteError?.message?.includes("already been registered")) {
+        throw new Error(getBilingualError("EMAIL_ALREADY_IN_OTHER_COMPANY"));
+      }
+      throw new Error(getBilingualError("USER_CREATE_FAILED"));
     }
-    throw new Error(getBilingualError("USER_CREATE_FAILED"));
+    invitedUser = invited.user;
   }
 
   // 3. Handle isPrimary
@@ -486,7 +492,7 @@ export async function adminInviteCompanyUser(
   };
 
   const insertPayload: Record<string, any> = {
-    id: invited.user.id,
+    id: invitedUser.id,
     company_id: companyId,
     name: finalKoreanFullName || finalEnglishFullName,
     email: normalizedEmail,
@@ -510,7 +516,7 @@ export async function adminInviteCompanyUser(
     console.error("Insert error:", insertError);
     // Rollback invited auth user to prevent Orphan records
     try {
-      await admin.auth.admin.deleteUser(invited.user.id);
+      await admin.auth.admin.deleteUser(invitedUser.id);
     } catch (rbErr) {
       console.error("Auth rollback error:", rbErr);
     }

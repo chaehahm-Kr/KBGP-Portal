@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { requireCompanyAdmin, getPortalTenantContext } from "@/lib/company/dal";
-import { InviteUserForm } from "@/components/company/invite-user-form";
 import { CompanyUsersManager } from "@/components/company/company-users-manager";
 
 export const metadata: Metadata = {
@@ -67,12 +66,6 @@ export default async function CompanyUsersPage() {
         <p className="text-xs text-zinc-500 dark:text-zinc-400">
           같은 회사 동료를 포털에 초대하고, 멤버들의 세부 권한(ACL) 및 로그인 활성 상태를 관리합니다.
         </p>
-      </div>
-
-      {/* Invite Form Card */}
-      <div className="rounded-lg border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-900 space-y-4 shadow-sm">
-        <h2 className="text-xs font-bold text-zinc-600 dark:text-zinc-300 uppercase tracking-wider">신규 멤버 초대</h2>
-        <InviteUserForm />
       </div>
 
       {/* Unified User Manager Component */}

@@ -1,17 +1,22 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useState, useEffect } from "react";
 import {
   inviteCompanyUser,
   type InviteFormState,
 } from "@/lib/company/invite-actions";
 import { CompanyAclMatrixEditor } from "./company-acl-matrix-editor";
-import { ROLE_PRESETS } from "@/lib/permissions/brand-portal-acl";
+import { ROLE_PRESETS, mapPresetToMembershipRole } from "@/lib/permissions/brand-portal-acl";
 
 const inputClass =
   "mt-1 block w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-xs text-zinc-900 placeholder:text-zinc-400 outline-none transition-all focus:border-zinc-500 focus:ring-1 focus:ring-zinc-400 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:placeholder:text-zinc-500 dark:focus:border-zinc-500 dark:focus:ring-zinc-600";
 
-export function InviteUserForm() {
+interface InviteUserFormProps {
+  onSuccess?: (email: string) => void;
+  onCancel?: () => void;
+}
+
+export function InviteUserForm({ onSuccess, onCancel }: InviteUserFormProps) {
   const [state, formAction, pending] = useActionState<
     InviteFormState,
     FormData
@@ -22,23 +27,52 @@ export function InviteUserForm() {
   const [permissions, setPermissions] = useState<Record<string, any>>({
     ...ROLE_PRESETS.viewer,
   });
+  const [submittedEmail, setSubmittedEmail] = useState("");
+
+  useEffect(() => {
+    if (state?.message && submittedEmail && onSuccess) {
+      onSuccess(submittedEmail);
+    }
+  }, [state?.message, submittedEmail, onSuccess]);
 
   return (
     <div className="w-full space-y-4">
       <form
-        action={formAction}
-        className="flex flex-col gap-4 rounded-xl border border-zinc-200 bg-zinc-50/50 p-5 dark:border-zinc-800 dark:bg-zinc-950/40 shadow-xs"
+        action={(formData) => {
+          setSubmittedEmail((formData.get("email") || "").toString());
+          formAction(formData);
+        }}
+        className="flex flex-col gap-5 rounded-xl border border-zinc-200 bg-zinc-50/50 p-5 dark:border-zinc-800 dark:bg-zinc-950/40 shadow-xs"
       >
         <input
           type="hidden"
           name="companyRole"
-          value={selectedRole === "admin" ? "company_admin" : selectedRole === "staff" ? "company_staff" : selectedRole}
+          value={mapPresetToMembershipRole(selectedRole)}
         />
         <input
           type="hidden"
           name="permissionsJson"
           value={JSON.stringify(permissions)}
         />
+
+        {/* Header line if modal/card cancel is provided */}
+        <div className="flex items-center justify-between border-b border-zinc-200 dark:border-zinc-800 pb-3">
+          <div>
+            <h3 className="text-sm font-bold text-zinc-900 dark:text-white">신규 멤버 초대</h3>
+            <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+              초대 이메일 발송 후 수신자가 비밀번호를 설정하면 브랜드 포털 가입이 완료됩니다.
+            </p>
+          </div>
+          {onCancel && (
+            <button
+              type="button"
+              onClick={onCancel}
+              className="text-xs text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 p-1 cursor-pointer"
+            >
+              ✕
+            </button>
+          )}
+        </div>
 
         {/* Row 1: 영문 성명 (필수) */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -80,7 +114,7 @@ export function InviteUserForm() {
           <input name="email" type="email" required placeholder="user@example.com" className={inputClass} />
         </div>
 
-        {/* Row 4: Unified Role Presets & 9-Category ACL Matrix */}
+        {/* Row 4: Desktop 2-Column Role Presets & 9-Category ACL Matrix */}
         <div className="pt-2 border-t border-zinc-200 dark:border-zinc-800">
           <CompanyAclMatrixEditor
             selectedRole={selectedRole}
@@ -91,7 +125,18 @@ export function InviteUserForm() {
         </div>
 
         {/* Submit Row */}
-        <div className="pt-3 border-t border-zinc-200 dark:border-zinc-800 flex justify-end">
+        <div className="pt-3 border-t border-zinc-200 dark:border-zinc-800 flex items-center justify-between">
+          {onCancel ? (
+            <button
+              type="button"
+              onClick={onCancel}
+              className="rounded-xl border border-zinc-300 bg-white px-4 py-2.5 text-xs font-semibold text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 cursor-pointer transition-colors"
+            >
+              취소
+            </button>
+          ) : (
+            <div />
+          )}
           <button
             type="submit"
             disabled={pending}

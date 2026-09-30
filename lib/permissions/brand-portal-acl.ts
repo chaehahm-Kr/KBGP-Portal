@@ -142,12 +142,10 @@ export function normalizePermissions(
   permissionsObj: Record<string, any> = {},
   userRole?: string
 ): Record<AclCategory, AclLevel> {
-  if (userRole === "company_admin" || userRole === "admin") {
-    return { ...ROLE_PRESETS.admin };
-  }
-
   let defaultPreset = ROLE_PRESETS.viewer;
-  if (userRole === "restricted" || userRole === "company_restricted") {
+  if (userRole === "company_admin" || userRole === "admin") {
+    defaultPreset = ROLE_PRESETS.admin;
+  } else if (userRole === "restricted" || userRole === "company_restricted") {
     defaultPreset = ROLE_PRESETS.restricted;
   } else if (userRole === "staff" || userRole === "company_staff") {
     defaultPreset = ROLE_PRESETS.staff;
@@ -186,4 +184,14 @@ export function mapRoleToPreset(role: string): BrandPortalRole {
   if (role === "company_staff" || role === "staff") return "staff";
   if (role === "company_restricted" || role === "restricted") return "restricted";
   return "viewer";
+}
+
+/**
+ * Maps any role preset string ("admin", "staff", "viewer", "manager", "restricted") to valid company_users DB role enum
+ */
+export function mapPresetToMembershipRole(roleInput: string): "company_admin" | "company_staff" {
+  if (roleInput === "admin" || roleInput === "company_admin") {
+    return "company_admin";
+  }
+  return "company_staff";
 }

@@ -5,11 +5,11 @@ import {
   AclCategory,
   AclLevel,
   ACL_CATEGORIES,
-  ACL_LEVEL_LABELS,
   BRAND_PORTAL_ROLES,
   ROLE_PRESETS,
   BrandPortalRole,
   mapRoleToPreset,
+  parseAclLevel,
 } from "@/lib/permissions/brand-portal-acl";
 
 interface CompanyAclMatrixEditorProps {
@@ -41,7 +41,7 @@ export function CompanyAclMatrixEditor({
     });
   };
 
-  // Change individual category row
+  // Change individual category row level
   const handleCategoryLevelChange = (catId: AclCategory, level: AclLevel) => {
     onPermissionsChange({
       ...permissions,
@@ -49,16 +49,14 @@ export function CompanyAclMatrixEditor({
     });
   };
 
-  const isCompanyAdmin = selectedRole === "company_admin" || selectedRole === "admin";
-
   return (
-    <div className="space-y-4">
-      {/* 1. Role Preset Selection Header */}
-      <div className="space-y-2">
+    <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start w-full">
+      {/* 1. Left Column — Role Preset Selection (Vertical Stack) */}
+      <div className="lg:col-span-4 space-y-2">
         <label className="block text-xs font-bold text-zinc-900 dark:text-white uppercase tracking-wider">
           역할 선택 (Role Preset) <span className="text-rose-500">*</span>
         </label>
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+        <div className="flex flex-col gap-2">
           {BRAND_PORTAL_ROLES.map((roleObj) => {
             const isSelected = currentPresetId === roleObj.id;
             return (
@@ -67,57 +65,56 @@ export function CompanyAclMatrixEditor({
                 type="button"
                 disabled={readOnly}
                 onClick={() => handleRolePresetSelect(roleObj.id)}
-                className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+                className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
                   isSelected
-                    ? "border-indigo-600 bg-indigo-50/80 text-indigo-950 dark:bg-indigo-950/60 dark:border-indigo-500 dark:text-indigo-100 ring-2 ring-indigo-500/20 font-bold"
+                    ? "border-indigo-600 bg-indigo-50/80 text-indigo-950 dark:bg-indigo-950/60 dark:border-indigo-500 dark:text-indigo-100 ring-2 ring-indigo-500/20 font-bold shadow-xs"
                     : "border-zinc-200 bg-white hover:bg-zinc-50 text-zinc-700 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800"
                 } ${readOnly ? "opacity-60 cursor-not-allowed" : ""}`}
               >
                 <div className="text-xs flex items-center justify-between">
-                  <span>{roleObj.labelKo}</span>
-                  {isSelected && <span className="text-[10px]">✓</span>}
+                  <span className="font-semibold">{roleObj.labelKo}</span>
+                  {isSelected && <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400">✓</span>}
                 </div>
-                <div className="text-[10px] text-zinc-400 dark:text-zinc-500 font-sans mt-0.5 truncate">
+                <div className="text-[10px] text-zinc-400 dark:text-zinc-500 font-sans mt-0.5">
                   {roleObj.labelEn}
+                </div>
+                <div className="text-[10px] text-zinc-500 dark:text-zinc-400 mt-1 line-clamp-2 leading-tight">
+                  {roleObj.description}
                 </div>
               </button>
             );
           })}
         </div>
-        <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
-          역할(Role)을 선택하면 기본 권한 매트릭스가 자동 적용되며, 아래 매트릭스에서 항목별로 권한을 커스텀 설정하실 수 있습니다.
+        <p className="text-[11px] text-zinc-500 dark:text-zinc-400 pt-1 leading-relaxed">
+          💡 역할을 클릭하면 기본 권한이 오른쪽 매트릭스에 즉시 반영되며, 특정 업무 항목을 개별적으로 자유롭게 변경할 수 있습니다.
         </p>
       </div>
 
-      {/* 2. ACL Matrix Table */}
-      <div className="space-y-2 pt-2">
+      {/* 2. Right Column — 9-Category ACL Matrix Table */}
+      <div className="lg:col-span-8 space-y-2">
         <div className="flex items-center justify-between">
           <label className="block text-xs font-bold text-zinc-900 dark:text-white uppercase tracking-wider">
-            포털 메뉴별 세부 권한 설정 (ACL Matrix)
+            메뉴별 상세 권한 설정 (ACL Matrix)
           </label>
-          {isCompanyAdmin && (
-            <span className="text-[10px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded dark:bg-indigo-950/70 dark:text-indigo-300 dark:border-indigo-800">
-              관리자(Admin)는 항상 전 메뉴 삭제/관리 권한 보유
-            </span>
-          )}
         </div>
 
-        <div className="rounded-xl border border-zinc-200 overflow-hidden dark:border-zinc-800 shadow-2xs">
+        <div className="rounded-xl border border-zinc-200 overflow-hidden dark:border-zinc-800 shadow-2xs bg-white dark:bg-zinc-900">
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="border-b border-zinc-200 bg-zinc-100/80 text-[11px] font-bold text-zinc-700 dark:border-zinc-800 dark:bg-zinc-950/80 dark:text-zinc-300">
                 <th className="px-3.5 py-2.5 w-2/5">메뉴 / 업무 영역</th>
-                <th className="px-2 py-2.5 text-center text-rose-600 dark:text-rose-400">접근불가</th>
-                <th className="px-2 py-2.5 text-center text-zinc-700 dark:text-zinc-300">조회전용</th>
-                <th className="px-2 py-2.5 text-center text-indigo-600 dark:text-indigo-400">생성/수정</th>
-                <th className="px-2 py-2.5 text-center text-emerald-600 dark:text-emerald-400">생성/수정/삭제</th>
+                <th className="px-1.5 py-2.5 text-center text-rose-600 dark:text-rose-400">접근불가</th>
+                <th className="px-1.5 py-2.5 text-center text-zinc-700 dark:text-zinc-300">조회전용</th>
+                <th className="px-1.5 py-2.5 text-center text-indigo-600 dark:text-indigo-400">생성/수정</th>
+                <th className="px-1.5 py-2.5 text-center text-emerald-600 dark:text-emerald-400">생성/수정/삭제</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-zinc-200 text-xs dark:divide-zinc-800/80 bg-white dark:bg-zinc-900">
+            <tbody className="divide-y divide-zinc-200 text-xs dark:divide-zinc-800/80">
               {ACL_CATEGORIES.map((cat) => {
-                const currentLevel: AclLevel = isCompanyAdmin
-                  ? "manage"
-                  : (permissions[cat.id] as AclLevel) || ROLE_PRESETS.viewer[cat.id];
+                const currentLevel: AclLevel =
+                  permissions[cat.id] !== undefined
+                    ? parseAclLevel(permissions[cat.id])
+                    : ROLE_PRESETS[currentPresetId]?.[cat.id] || "none";
 
                 return (
                   <tr key={cat.id} className="hover:bg-zinc-50/60 dark:hover:bg-zinc-800/40 transition-colors">
@@ -132,11 +129,11 @@ export function CompanyAclMatrixEditor({
                     </td>
 
                     {/* Level 1: none */}
-                    <td className="px-2 py-2.5 text-center align-middle">
+                    <td className="px-1.5 py-2.5 text-center align-middle">
                       <input
                         type="radio"
                         name={`acl-${cat.id}`}
-                        disabled={readOnly || isCompanyAdmin}
+                        disabled={readOnly}
                         checked={currentLevel === "none"}
                         onChange={() => handleCategoryLevelChange(cat.id, "none")}
                         className="h-4 w-4 text-rose-600 focus:ring-rose-500 dark:bg-zinc-950 border-zinc-300 cursor-pointer disabled:cursor-not-allowed"
@@ -145,11 +142,11 @@ export function CompanyAclMatrixEditor({
                     </td>
 
                     {/* Level 2: read */}
-                    <td className="px-2 py-2.5 text-center align-middle">
+                    <td className="px-1.5 py-2.5 text-center align-middle">
                       <input
                         type="radio"
                         name={`acl-${cat.id}`}
-                        disabled={readOnly || isCompanyAdmin}
+                        disabled={readOnly}
                         checked={currentLevel === "read"}
                         onChange={() => handleCategoryLevelChange(cat.id, "read")}
                         className="h-4 w-4 text-zinc-700 focus:ring-zinc-500 dark:bg-zinc-950 border-zinc-300 cursor-pointer disabled:cursor-not-allowed"
@@ -158,11 +155,11 @@ export function CompanyAclMatrixEditor({
                     </td>
 
                     {/* Level 3: write */}
-                    <td className="px-2 py-2.5 text-center align-middle">
+                    <td className="px-1.5 py-2.5 text-center align-middle">
                       <input
                         type="radio"
                         name={`acl-${cat.id}`}
-                        disabled={readOnly || isCompanyAdmin}
+                        disabled={readOnly}
                         checked={currentLevel === "write"}
                         onChange={() => handleCategoryLevelChange(cat.id, "write")}
                         className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 dark:bg-zinc-950 border-zinc-300 cursor-pointer disabled:cursor-not-allowed"
@@ -171,11 +168,11 @@ export function CompanyAclMatrixEditor({
                     </td>
 
                     {/* Level 4: manage */}
-                    <td className="px-2 py-2.5 text-center align-middle">
+                    <td className="px-1.5 py-2.5 text-center align-middle">
                       <input
                         type="radio"
                         name={`acl-${cat.id}`}
-                        disabled={readOnly || isCompanyAdmin}
+                        disabled={readOnly}
                         checked={currentLevel === "manage"}
                         onChange={() => handleCategoryLevelChange(cat.id, "manage")}
                         className="h-4 w-4 text-emerald-600 focus:ring-emerald-500 dark:bg-zinc-950 border-zinc-300 cursor-pointer disabled:cursor-not-allowed"

@@ -2,6 +2,7 @@
 
 import React, { useState, useTransition } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   updateCompanyUser,
   reinviteCompanyUser,
@@ -14,6 +15,7 @@ import { TASK_DEFINITIONS } from "@/lib/company/task-constants";
 import { InternationalPhoneInput } from "@/components/shared/international-phone-input";
 import { getPersonDisplayName, getPersonStructuredNames } from "@/lib/user/name-helper";
 import { CompanyAclMatrixEditor } from "./company-acl-matrix-editor";
+import { InviteUserForm } from "./invite-user-form";
 import { mapRoleToPreset, normalizePermissions, type BrandPortalRole } from "@/lib/permissions/brand-portal-acl";
 
 interface CompanyUsersManagerProps {
@@ -42,12 +44,15 @@ const permissionOptions = [
 ];
 
 export function CompanyUsersManager({ initialUsers, currentUserId }: CompanyUsersManagerProps) {
+  const router = useRouter();
   const [users, setUsers] = useState<any[]>(initialUsers);
 
   React.useEffect(() => {
     setUsers(initialUsers);
   }, [initialUsers]);
 
+  const [isInviteOpen, setIsInviteOpen] = useState(false);
+  const [inviteSuccessMsg, setInviteSuccessMsg] = useState<string | null>(null);
   const [editingUser, setEditingUser] = useState<any | null>(null);
   const [cancelConfirmUser, setCancelConfirmUser] = useState<any | null>(null);
   const [removeConfirmUser, setRemoveConfirmUser] = useState<any | null>(null);
@@ -316,8 +321,48 @@ export function CompanyUsersManager({ initialUsers, currentUserId }: CompanyUser
 
   return (
     <div className="space-y-6">
+      {/* Success Notification Banner */}
+      {inviteSuccessMsg && (
+        <div className="flex items-center justify-between rounded-xl bg-emerald-50 border border-emerald-200 p-4 dark:bg-emerald-950/40 dark:border-emerald-800 text-xs font-bold text-emerald-800 dark:text-emerald-200 shadow-xs animate-in fade-in slide-in-from-top-2 duration-200">
+          <div className="flex items-center gap-2">
+            <span>✅</span>
+            <span>{inviteSuccessMsg}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setInviteSuccessMsg(null)}
+            className="text-emerald-600 hover:text-emerald-900 dark:text-emerald-400 dark:hover:text-emerald-100 text-xs font-semibold cursor-pointer"
+          >
+            닫기
+          </button>
+        </div>
+      )}
+
       {/* Users Table Card */}
       <div className="rounded-lg border border-zinc-200 bg-white overflow-hidden dark:border-zinc-800 dark:bg-zinc-900 shadow-sm">
+        {/* Card Header with + 사용자 초대하기 button */}
+        <div className="flex items-center justify-between border-b border-zinc-200 bg-zinc-50/80 px-6 py-4 dark:border-zinc-800 dark:bg-zinc-950/60">
+          <div>
+            <h2 className="text-sm font-bold text-zinc-900 dark:text-white flex items-center gap-2">
+              <span>소속 멤버 목록</span>
+              <span className="rounded-full bg-zinc-200 dark:bg-zinc-800 px-2 py-0.5 text-xs font-semibold text-zinc-700 dark:text-zinc-300">
+                {users.length}명
+              </span>
+            </h2>
+            <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
+              등록된 소속 사용자, 가입 상태 및 접근 권한(ACL)을 관리합니다.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setIsInviteOpen(true)}
+            className="rounded-lg bg-zinc-950 px-4 py-2 text-xs font-bold text-white transition-colors hover:bg-zinc-800 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-200 cursor-pointer shadow-sm flex items-center gap-1.5"
+          >
+            <span className="text-sm font-bold">+</span>
+            <span>사용자 초대하기</span>
+          </button>
+        </div>
+
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
@@ -523,6 +568,22 @@ export function CompanyUsersManager({ initialUsers, currentUserId }: CompanyUser
           </table>
         </div>
       </div>
+
+      {/* Invite Modal (Popup) */}
+      {isInviteOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm overflow-y-auto">
+          <div className="w-full max-w-3xl rounded-xl border border-zinc-200 bg-white shadow-2xl dark:border-zinc-800 dark:bg-zinc-900 overflow-hidden animate-in fade-in zoom-in-95 duration-150 p-6 max-h-[90vh] overflow-y-auto">
+            <InviteUserForm
+              onSuccess={(invitedEmail) => {
+                setIsInviteOpen(false);
+                setInviteSuccessMsg(`${invitedEmail} 님에게 초대 이메일을 발송했습니다.`);
+                router.refresh();
+              }}
+              onCancel={() => setIsInviteOpen(false)}
+            />
+          </div>
+        </div>
+      )}
 
       {/* Edit Modal (Popup) */}
       {editingUser && (
