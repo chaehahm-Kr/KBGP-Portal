@@ -89,6 +89,17 @@ export default async function PartnerPortalLayout({
     }
   }
 
+  let userAcl: Record<string, any> = {};
+  if (effectiveUserId) {
+    try {
+      const { getPortalUserAcl } = await import("@/lib/company/permissions");
+      const aclRes = await getPortalUserAcl();
+      userAcl = aclRes.permissions;
+    } catch (e) {
+      console.warn("Failed to load user ACL in portal layout:", e);
+    }
+  }
+
   return (
     <div className="min-h-screen flex flex-col">
       {impSession && <ImpersonationBanner session={impSession} />}
@@ -97,6 +108,7 @@ export default async function PartnerPortalLayout({
         companyRole={companyRole}
         userEmail={userEmail}
         userDisplayName={displayName}
+        permissions={userAcl}
       >
         {children}
       </PortalLayout>

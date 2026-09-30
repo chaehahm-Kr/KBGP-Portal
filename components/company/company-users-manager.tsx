@@ -13,6 +13,8 @@ import { updateUserTaskAssignments } from "@/lib/company/task-actions";
 import { TASK_DEFINITIONS } from "@/lib/company/task-constants";
 import { InternationalPhoneInput } from "@/components/shared/international-phone-input";
 import { getPersonDisplayName, getPersonStructuredNames } from "@/lib/user/name-helper";
+import { CompanyAclMatrixEditor } from "./company-acl-matrix-editor";
+import { mapRoleToPreset, normalizePermissions, type BrandPortalRole } from "@/lib/permissions/brand-portal-acl";
 
 interface CompanyUsersManagerProps {
   initialUsers: any[];
@@ -61,14 +63,10 @@ export function CompanyUsersManager({ initialUsers, currentUserId }: CompanyUser
   const [formPosition, setFormPosition] = useState("");
   const [formPhone, setFormPhone] = useState("");
   const [formRole, setFormRole] = useState<"company_admin" | "company_staff">("company_staff");
+  const [formRolePreset, setFormRolePreset] = useState<BrandPortalRole>("viewer");
   const [formStatus, setFormStatus] = useState<"active" | "suspended" | "invited">("active");
   const [formIsPrimary, setFormIsPrimary] = useState(false);
-  const [formPermissions, setFormPermissions] = useState<Record<string, any>>({
-    application: "none",
-    brands: "none",
-    products: "none",
-    company_info: "none",
-  });
+  const [formPermissions, setFormPermissions] = useState<Record<string, any>>({});
 
   // 6대 담당 업무 배정 체크박스 상태 선언
   const [formTaskAssignments, setFormTaskAssignments] = useState<
@@ -98,16 +96,11 @@ export function CompanyUsersManager({ initialUsers, currentUserId }: CompanyUser
     setFormTitle(user.title || "");
     setFormPosition(user.position || "");
     setFormPhone(user.phone || "");
-    setFormRole(user.company_role);
+    setFormRole(user.company_role || "company_staff");
+    setFormRolePreset(mapRoleToPreset(user.company_role || user.role));
     setFormStatus(user.status);
     setFormIsPrimary(user.is_primary || false);
-    setFormPermissions({
-      application: user.permissions?.application || "none",
-      brands: user.permissions?.brands || "none",
-      products: user.permissions?.products || "none",
-      company_info: user.permissions?.company_info || "none",
-      ...user.permissions,
-    });
+    setFormPermissions(normalizePermissions(user.permissions || {}, user.company_role));
 
     // 해당 유저의 담당 업무 6개 상태 매핑
     const initialTasks: Record<string, { is_primary: boolean; email_notify: boolean }> = {};
@@ -770,146 +763,16 @@ export function CompanyUsersManager({ initialUsers, currentUserId }: CompanyUser
               </div>
 
               {/* Section 2: ACL Permissions Matrix */}
-              <div className="space-y-3 pt-2">
-                <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-2">
-                  <span className="text-xs font-bold text-zinc-900 dark:text-white uppercase tracking-wider">
-                    2. 포털 메뉴별 세부 권한 설정 (ACL)
-                  </span>
-                  {formRole === "company_admin" && (
-                    <span className="text-[10px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded dark:bg-indigo-950/70 dark:text-indigo-300 dark:border-indigo-800">
-                      관리자는 항상 모든 권한 소유
-                    </span>
-                  )}
-                </div>
-
-                <div className="rounded-lg border border-zinc-200 overflow-hidden dark:border-zinc-800">
-                  <div className="grid grid-cols-2 bg-zinc-50/80 text-[11px] font-bold text-zinc-600 border-b border-zinc-200 dark:bg-zinc-950/60 dark:border-zinc-800 p-2.5">
-                    <div>메뉴 카테고리</div>
-                    <div className="text-right">권한 수준</div>
-                  </div>
-
-                  <div className="divide-y divide-zinc-100 dark:divide-zinc-800/80 text-xs">
-                    {/* Inquiry Application */}
-                    <div className="grid grid-cols-2 p-2.5 items-center">
-                      <span className="font-semibold text-zinc-700 dark:text-zinc-300">
-                        입점 신청서
-                      </span>
-                      <div className="flex justify-end">
-                        <select
-                          value={formPermissions.application || "none"}
-                          disabled={formRole === "company_admin"}
-                          onChange={(e) =>
-                            setFormPermissions({
-                              ...formPermissions,
-                              application: e.target.value,
-                            })
-                          }
-                          className="rounded border border-zinc-300 bg-white px-2 py-1 text-xs text-zinc-900 outline-none dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 disabled:opacity-50"
-                        >
-                          {permissionOptions.map((opt) => (
-                            <option
-                              key={opt.value}
-                              value={opt.value}
-                              className="bg-white text-zinc-900 dark:bg-zinc-900 dark:text-zinc-100"
-                            >
-                              {opt.label}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    </div>
-
-                    {/* Brands */}
-                    <div className="grid grid-cols-2 p-2.5 items-center">
-                      <span className="font-semibold text-zinc-700 dark:text-zinc-300">
-                        브랜드 관리
-                      </span>
-                      <div className="flex justify-end">
-                        <select
-                          value={formPermissions.brands || "none"}
-                          disabled={formRole === "company_admin"}
-                          onChange={(e) =>
-                            setFormPermissions({
-                              ...formPermissions,
-                              brands: e.target.value,
-                            })
-                          }
-                          className="rounded border border-zinc-300 bg-white px-2 py-1 text-xs text-zinc-900 outline-none dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 disabled:opacity-50"
-                        >
-                          {permissionOptions.map((opt) => (
-                            <option
-                              key={opt.value}
-                              value={opt.value}
-                              className="bg-white text-zinc-900 dark:bg-zinc-900 dark:text-zinc-100"
-                            >
-                              {opt.label}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    </div>
-
-                    {/* Products */}
-                    <div className="grid grid-cols-2 p-2.5 items-center">
-                      <span className="font-semibold text-zinc-700 dark:text-zinc-300">
-                        제품 관리
-                      </span>
-                      <div className="flex justify-end">
-                        <select
-                          value={formPermissions.products || "none"}
-                          disabled={formRole === "company_admin"}
-                          onChange={(e) =>
-                            setFormPermissions({
-                              ...formPermissions,
-                              products: e.target.value,
-                            })
-                          }
-                          className="rounded border border-zinc-300 bg-white px-2 py-1 text-xs text-zinc-900 outline-none dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 disabled:opacity-50"
-                        >
-                          {permissionOptions.map((opt) => (
-                            <option
-                              key={opt.value}
-                              value={opt.value}
-                              className="bg-white text-zinc-900 dark:bg-zinc-900 dark:text-zinc-100"
-                            >
-                              {opt.label}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    </div>
-
-                    {/* Company Info */}
-                    <div className="grid grid-cols-2 p-2.5 items-center">
-                      <span className="font-semibold text-zinc-700 dark:text-zinc-300">
-                        회사 정보
-                      </span>
-                      <div className="flex justify-end">
-                        <select
-                          value={formPermissions.company_info || "none"}
-                          disabled={formRole === "company_admin"}
-                          onChange={(e) =>
-                            setFormPermissions({
-                              ...formPermissions,
-                              company_info: e.target.value,
-                            })
-                          }
-                          className="rounded border border-zinc-300 bg-white px-2 py-1 text-xs text-zinc-900 outline-none dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 disabled:opacity-50"
-                        >
-                          {permissionOptions.map((opt) => (
-                            <option
-                              key={opt.value}
-                              value={opt.value}
-                              className="bg-white text-zinc-900 dark:bg-zinc-900 dark:text-zinc-100"
-                            >
-                              {opt.label}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    </div>
-                  </div>
-                </div>
+              <div className="pt-2">
+                <CompanyAclMatrixEditor
+                  selectedRole={formRolePreset}
+                  onRoleChange={(newRole) => {
+                    setFormRolePreset(newRole as BrandPortalRole);
+                    setFormRole(newRole === "admin" ? "company_admin" : "company_staff");
+                  }}
+                  permissions={formPermissions}
+                  onPermissionsChange={setFormPermissions}
+                />
               </div>
 
               {/* Section 3: 담당 업무 설정 섹션 */}

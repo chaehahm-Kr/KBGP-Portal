@@ -35,6 +35,8 @@ import {
   formatKoreanFullName,
   formatEnglishFullName,
 } from "@/lib/user/name-helper";
+import { CompanyAclMatrixEditor } from "@/components/company/company-acl-matrix-editor";
+import { mapRoleToPreset, normalizePermissions, type BrandPortalRole } from "@/lib/permissions/brand-portal-acl";
 
 const STATUS_LABEL: Record<string, string> = {
   invited: "초대됨",
@@ -333,14 +335,10 @@ export function CompanyDetailManager({
   const [editTitle, setEditTitle] = useState("");
   const [editPosition, setEditPosition] = useState("");
   const [editRole, setEditRole] = useState<"company_admin" | "company_staff">("company_staff");
+  const [editRolePreset, setEditRolePreset] = useState<BrandPortalRole>("viewer");
   const [editStatus, setEditStatus] = useState<"active" | "suspended" | "invited">("active");
   const [editIsPrimary, setEditIsPrimary] = useState(false);
-  const [editPermissions, setEditPermissions] = useState({
-    application: "none",
-    brands: "none",
-    products: "none",
-    company_info: "none",
-  });
+  const [editPermissions, setEditPermissions] = useState<Record<string, any>>({});
 
   // [신규 기능]: 수정 모달 용 담당 업무 임시 상태
   const [editTaskAssignments, setEditTaskAssignments] = useState<
@@ -453,16 +451,10 @@ export function CompanyDetailManager({
     setEditTitle(user.title || "");
     setEditPosition(user.position || "");
     setEditRole(user.company_role || "company_staff");
+    setEditRolePreset(mapRoleToPreset(user.company_role || user.role));
     setEditStatus(user.status || "active");
     setEditIsPrimary(user.is_primary || false);
-    setEditPermissions(
-      user.permissions || {
-        application: "none",
-        brands: "none",
-        products: "none",
-        company_info: "none",
-      }
-    );
+    setEditPermissions(normalizePermissions(user.permissions || {}, user.company_role));
 
     // 해당 유저의 담당 업무 6개 임시 상태 초기화
     const initialTasks: Record<string, { is_primary: boolean; email_notify: boolean }> = {};
@@ -2648,62 +2640,17 @@ export function CompanyDetailManager({
                 </div>
               </div>
 
-              {/* Section 2: 메뉴별 상세 권한 설정 */}
-              <div className="rounded-xl border border-zinc-200 bg-zinc-50/50 p-4.5 dark:border-zinc-800 dark:bg-zinc-950/30 space-y-3">
-                <div className="flex items-center justify-between">
-                  <h4 className="font-bold text-xs text-zinc-900 dark:text-zinc-100">메뉴별 상세 권한 설정</h4>
-                  <span className="text-[10px] text-zinc-400">포털 내 메뉴 접근 권한 제어</span>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                  <div className="flex flex-col gap-1.5 bg-white dark:bg-zinc-900 p-3 rounded-lg border border-zinc-150 dark:border-zinc-800">
-                    <span className="font-semibold text-zinc-700 dark:text-zinc-300">입점 신청서</span>
-                    <select
-                      value={editPermissions.application || "none"}
-                      onChange={(e) => setEditPermissions({ ...editPermissions, application: e.target.value })}
-                      className="rounded border border-zinc-200 bg-zinc-50/50 p-2 text-xs text-zinc-900 outline-none dark:border-zinc-700 dark:bg-zinc-950 dark:text-white"
-                    >
-                      <option value="none">권한 없음</option>
-                      <option value="read_only">읽기 전용</option>
-                      <option value="read_write">읽기 및 쓰기</option>
-                    </select>
-                  </div>
-                  <div className="flex flex-col gap-1.5 bg-white dark:bg-zinc-900 p-3 rounded-lg border border-zinc-150 dark:border-zinc-800">
-                    <span className="font-semibold text-zinc-700 dark:text-zinc-300">브랜드 관리</span>
-                    <select
-                      value={editPermissions.brands || "none"}
-                      onChange={(e) => setEditPermissions({ ...editPermissions, brands: e.target.value })}
-                      className="rounded border border-zinc-200 bg-zinc-50/50 p-2 text-xs text-zinc-900 outline-none dark:border-zinc-700 dark:bg-zinc-950 dark:text-white"
-                    >
-                      <option value="none">권한 없음</option>
-                      <option value="read_only">읽기 전용</option>
-                      <option value="read_write">읽기 및 쓰기</option>
-                    </select>
-                  </div>
-                  <div className="flex flex-col gap-1.5 bg-white dark:bg-zinc-900 p-3 rounded-lg border border-zinc-150 dark:border-zinc-800">
-                    <span className="font-semibold text-zinc-700 dark:text-zinc-300">제품 관리</span>
-                    <select
-                      value={editPermissions.products || "none"}
-                      onChange={(e) => setEditPermissions({ ...editPermissions, products: e.target.value })}
-                      className="rounded border border-zinc-200 bg-zinc-50/50 p-2 text-xs text-zinc-900 outline-none dark:border-zinc-700 dark:bg-zinc-950 dark:text-white"
-                    >
-                      <option value="none">권한 없음</option>
-                      <option value="read_only">읽기 전용</option>
-                      <option value="read_write">읽기 및 쓰기</option>
-                    </select>
-                  </div>
-                  <div className="flex flex-col gap-1.5 bg-white dark:bg-zinc-900 p-3 rounded-lg border border-zinc-150 dark:border-zinc-800">
-                    <span className="font-semibold text-zinc-700 dark:text-zinc-300">회사 정보</span>
-                    <select
-                      value={editPermissions.company_info || "none"}
-                      onChange={(e) => setEditPermissions({ ...editPermissions, company_info: e.target.value })}
-                      className="rounded border border-zinc-200 bg-zinc-50/50 p-2 text-xs text-zinc-900 outline-none dark:border-zinc-700 dark:bg-zinc-950 dark:text-white"
-                    >
-                      <option value="none">권한 없음</option>
-                      <option value="read_only">읽기 전용</option>
-                      <option value="read_write">읽기 및 쓰기</option>
-                    </select>
-                  </div>
-                </div>
+              {/* Section 2: 메뉴별 상세 권한 설정 (ACL) */}
+              <div className="pt-2">
+                <CompanyAclMatrixEditor
+                  selectedRole={editRolePreset}
+                  onRoleChange={(newRole) => {
+                    setEditRolePreset(newRole as BrandPortalRole);
+                    setEditRole(newRole === "admin" ? "company_admin" : "company_staff");
+                  }}
+                  permissions={editPermissions}
+                  onPermissionsChange={setEditPermissions}
+                />
               </div>
 
               {/* Section 3: 담당 업무 설정 */}

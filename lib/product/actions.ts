@@ -4,6 +4,7 @@ import { z } from "zod";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { requireCompanyMembership } from "@/lib/company/dal";
+import { requirePortalPermission } from "@/lib/company/permissions";
 import { createClient } from "@/lib/supabase/server";
 import {
   type CertificateType,
@@ -130,7 +131,7 @@ export async function createProduct(
   _prevState: ProductFormState,
   formData: FormData
 ): Promise<ProductFormState> {
-  const { companyId } = await requireCompanyMembership();
+  const { companyId } = await requirePortalPermission("products", "write");
   const submitAction = (formData.get("submitAction") as string) || "continue";
   const isDraft = submitAction === "list";
 
@@ -506,7 +507,7 @@ export interface ImageUploadResponse {
 
 export async function addProductImages(productId: string, formData: FormData): Promise<ImageUploadResponse> {
   try {
-    const { companyId } = await requireCompanyMembership();
+    const { companyId } = await requirePortalPermission("products", "write");
     const supabase = await createClient();
 
     const images = formData
@@ -652,7 +653,7 @@ export async function addProductImages(productId: string, formData: FormData): P
 }
 
 export async function removeProductImage(productId: string, imageId: string) {
-  const { companyId } = await requireCompanyMembership();
+  const { companyId } = await requirePortalPermission("products", "write");
   const supabase = await createClient();
 
   await supabase
@@ -692,7 +693,7 @@ export async function addProductCertificate(
   _prevState: ProductFormState,
   formData: FormData
 ): Promise<ProductFormState> {
-  const { companyId } = await requireCompanyMembership();
+  const { companyId } = await requirePortalPermission("products", "write");
 
   const certificateType = formData.get("certificateType");
   const file = formData.get("file");

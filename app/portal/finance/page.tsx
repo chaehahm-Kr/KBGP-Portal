@@ -1,8 +1,20 @@
 import React from "react";
 import { getPortalInvoices, getPortalAdjustments, getPortalPayments } from "@/lib/portal/actions";
 import { FinanceClient } from "@/components/portal/finance-client";
+import { hasPortalPermission } from "@/lib/company/permissions";
+import { AccessDeniedView } from "@/components/portal/access-denied";
 
 export default async function PortalFinancePage() {
+  const canRead = await hasPortalPermission("finance", "read");
+  if (!canRead) {
+    return (
+      <AccessDeniedView
+        title="접근 권한이 없습니다."
+        message="정산 / 인보이스 메뉴를 이용할 권한이 없습니다. 권한 조정을 원하시면 회사 관리자에게 문의해주세요."
+      />
+    );
+  }
+
   const invoices = await getPortalInvoices();
   const adjustments = await getPortalAdjustments();
   const payments = await getPortalPayments();

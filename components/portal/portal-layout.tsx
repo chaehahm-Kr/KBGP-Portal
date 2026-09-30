@@ -12,6 +12,7 @@ interface PortalLayoutProps {
   companyRole?: string;
   userEmail?: string;
   userDisplayName?: string;
+  permissions?: Record<string, any>;
 }
 
 export default function PortalLayout({
@@ -19,7 +20,8 @@ export default function PortalLayout({
   companyName,
   companyRole,
   userEmail,
-  userDisplayName
+  userDisplayName,
+  permissions
 }: PortalLayoutProps) {
   const pathname = usePathname();
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
@@ -59,6 +61,7 @@ export default function PortalLayout({
         toggleCollapse={toggleSidebar}
         companyName={companyName}
         companyRole={companyRole}
+        permissions={permissions}
       />
 
       {/* Main Content Area */}

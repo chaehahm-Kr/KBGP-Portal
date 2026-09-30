@@ -5,8 +5,9 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { parseCompanyMetadata } from "@/lib/company/admin-actions";
 import { getCompanyShippingOrigins } from "@/lib/company/shipping-origin-actions";
-import { hasMenuPermission } from "@/lib/company/permissions";
+import { hasMenuPermission, hasPortalPermission } from "@/lib/company/permissions";
 import { CompanyProfileManager } from "@/components/portal/company-profile-manager";
+import { AccessDeniedView } from "@/components/portal/access-denied";
 
 export const dynamic = "force-dynamic";
 
@@ -15,6 +16,16 @@ export const metadata: Metadata = {
 };
 
 export default async function PortalCompanyInfoPage() {
+  const canRead = await hasPortalPermission("company_info", "read");
+  if (!canRead) {
+    return (
+      <AccessDeniedView
+        title="접근 권한이 없습니다."
+        message="회사 정보 메뉴를 이용할 권한이 없습니다. 권한 조정을 원하시면 회사 관리자에게 문의해주세요."
+      />
+    );
+  }
+
   const membership = await getPortalTenantContext();
   const supabase = membership.supabase;
 

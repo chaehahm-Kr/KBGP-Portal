@@ -4,6 +4,7 @@ import { z } from "zod";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { requireCompanyMembership } from "@/lib/company/dal";
+import { requirePortalPermission } from "@/lib/company/permissions";
 import { verifyAdminSession } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -147,7 +148,7 @@ export async function createBrand(
   _prevState: BrandFormState,
   formData: FormData
 ): Promise<BrandFormState> {
-  const { companyId } = await requireCompanyMembership();
+  const { companyId } = await requirePortalPermission("brands", "write");
 
   const parsed = brandSchema.safeParse({
     name: formData.get("name"),
@@ -343,7 +344,7 @@ export async function updateBrand(
   _prevState: BrandFormState,
   formData: FormData
 ): Promise<BrandFormState> {
-  const { companyId } = await requireCompanyMembership();
+  const { companyId } = await requirePortalPermission("brands", "write");
 
   const parsed = brandSchema.safeParse({
     name: formData.get("name"),
@@ -617,7 +618,7 @@ export async function adminUpdateBrand(
  * 기능(명세서 03) 이전이라도 정책을 미리 물리 삭제가 아닌 논리 삭제로 통일해둔다.
  */
 export async function deactivateBrand(brandId: string) {
-  const { companyId } = await requireCompanyMembership();
+  const { companyId } = await requirePortalPermission("brands", "manage");
   const supabase = await createClient();
 
   await supabase

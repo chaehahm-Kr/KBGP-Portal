@@ -6,12 +6,24 @@ import { deactivateBrand, parseBrandTrademarks } from "@/lib/brand/actions";
 import { parseCompanyMetadata } from "@/lib/company/admin-actions";
 import { ConfirmForm } from "@/components/common/confirm-form";
 import { BrandOnboardingBanner } from "@/components/brand/brand-onboarding-banner";
+import { hasPortalPermission } from "@/lib/company/permissions";
+import { AccessDeniedView } from "@/components/portal/access-denied";
 
 export const metadata: Metadata = {
   title: "브랜드 관리 | 파트너 포털",
 };
 
 export default async function BrandsPage() {
+  const canRead = await hasPortalPermission("brands", "read");
+  if (!canRead) {
+    return (
+      <AccessDeniedView
+        title="접근 권한이 없습니다."
+        message="브랜드 관리 메뉴를 이용할 권한이 없습니다. 권한 조정을 원하시면 회사 관리자에게 문의해주세요."
+      />
+    );
+  }
+
   const { companyId, supabase } = await getPortalTenantContext();
 
   // Fetch company intro to check onboarding confirmation

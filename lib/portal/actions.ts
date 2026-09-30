@@ -2,6 +2,7 @@
 
 // Task ID: ADM-PUR-UI-001-R3 / PORT-PO-UI-001-R3 (Shipment Confirmation & Progress Synchronization)
 import { requireCompanyMembership, getPortalTenantContext } from "@/lib/company/dal";
+import { requirePortalPermission } from "@/lib/company/permissions";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { revalidatePath } from "next/cache";
@@ -2358,7 +2359,7 @@ export async function createPortalInvoiceDraft(input: {
     category?: string;
   }>;
 }) {
-  const { companyId, userId } = await requireCompanyMembership();
+  const { companyId, userId } = await requirePortalPermission("finance", "write");
   const supabase = await createClient();
 
   // Validate PO belongs to company and is not DRAFT
@@ -2682,7 +2683,7 @@ export async function updatePortalInvoiceDraft(input: {
 }
 
 export async function submitPortalInvoice(invoiceId: string) {
-  const { companyId } = await requireCompanyMembership();
+  const { companyId } = await requirePortalPermission("finance", "write");
   const supabase = await createClient();
 
   // Fetch to check
@@ -2719,7 +2720,7 @@ export async function submitPortalInvoice(invoiceId: string) {
 }
 
 export async function deletePortalInvoiceDraft(invoiceId: string) {
-  const { companyId } = await requireCompanyMembership();
+  const { companyId } = await requirePortalPermission("finance", "manage");
   const supabase = await createClient();
   const adminDb = createAdminClient();
 

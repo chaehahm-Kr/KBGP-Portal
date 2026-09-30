@@ -3,12 +3,24 @@ import Link from "next/link";
 import { requireCompanyMembership, getPortalTenantContext } from "@/lib/company/dal";
 import { createDraftApplication } from "@/lib/application/actions";
 import { APPLICATION_STATUS_LABEL, type ApplicationStatus } from "@/lib/application/types";
+import { hasPortalPermission } from "@/lib/company/permissions";
+import { AccessDeniedView } from "@/components/portal/access-denied";
 
 export const metadata: Metadata = {
   title: "신청 현황 | 파트너 포털",
 };
 
 export default async function ApplicationsPage() {
+  const canRead = await hasPortalPermission("application", "read");
+  if (!canRead) {
+    return (
+      <AccessDeniedView
+        title="접근 권한이 없습니다."
+        message="입점 신청서 메뉴를 이용할 권한이 없습니다. 권한 조정을 원하시면 회사 관리자에게 문의해주세요."
+      />
+    );
+  }
+
   const { companyId, supabase } = await getPortalTenantContext();
 
   const { data: applications } = await supabase

@@ -94,7 +94,18 @@ export async function inviteCompanyUser(
     return { error: getBilingualError("INVITATION_FAILED") };
   }
 
+  let customPermissions: Record<string, any> = {};
+  try {
+    const rawJson = formData.get("permissionsJson");
+    if (typeof rawJson === "string") {
+      customPermissions = JSON.parse(rawJson);
+    }
+  } catch (e) {
+    console.warn("Failed to parse permissionsJson in inviteCompanyUser:", e);
+  }
+
   const permissions = {
+    ...customPermissions,
     korean_last_name: structured.koreanLastName,
     korean_first_name: structured.koreanFirstName,
     english_first_name: structured.englishFirstName,

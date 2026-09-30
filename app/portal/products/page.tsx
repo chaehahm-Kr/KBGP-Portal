@@ -6,12 +6,24 @@ import { PortalProductsList } from "@/components/product/portal-products-list";
 import { getBatchProductCategoryCompletions } from "@/lib/product/attribute-completion";
 import { evaluateProductRegistrationStatus } from "@/lib/product/registration-status";
 import { resolveEffectiveSku, cleanPlaceholderName } from "@/lib/product/types";
+import { hasPortalPermission } from "@/lib/company/permissions";
+import { AccessDeniedView } from "@/components/portal/access-denied";
 
 export const metadata: Metadata = {
   title: "제품 관리 | 파트너 포털",
 };
 
 export default async function ProductsPage() {
+  const canRead = await hasPortalPermission("products", "read");
+  if (!canRead) {
+    return (
+      <AccessDeniedView
+        title="접근 권한이 없습니다."
+        message="제품 관리 메뉴를 이용할 권한이 없습니다. 권한 조정을 원하시면 회사 관리자에게 문의해주세요."
+      />
+    );
+  }
+
   const { companyId, supabase } = await getPortalTenantContext();
 
   let products: any[] | null = null;

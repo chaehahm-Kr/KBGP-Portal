@@ -1,66 +1,103 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
-import { requireCompanyMembership } from "./dal";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { requireCompanyMembership, type CompanyMembership } from "./dal";
+import {
+  AclCategory,
+  AclLevel,
+  ACL_LEVEL_NUMERIC,
+  ROLE_PRESETS,
+  normalizePermissions,
+} from "@/lib/permissions/brand-portal-acl";
 
-export type PermissionLevel = "none" | "read" | "write";
-
-export interface CompanyUserPermissions {
-  application?: PermissionLevel;
-  brands?: PermissionLevel;
-  products?: PermissionLevel;
-  company_info?: PermissionLevel;
-}
+export type { AclCategory, AclLevel } from "@/lib/permissions/brand-portal-acl";
 
 /**
- * Checks if the current user has the required permission level for a given category.
- * company_admin always has full access (write).
+ * Resolves current user's full 9-category ACL matrix and company membership context.
+ * Serves impersonating sessions via admin client to bypass RLS.
  */
-export async function hasMenuPermission(
-  category: keyof CompanyUserPermissions,
-  required: "read" | "write"
-): Promise<boolean> {
+export async function getPortalUserAcl(): Promise<{
+  membership: CompanyMembership;
+  permissions: Record<AclCategory, AclLevel>;
+}> {
   const membership = await requireCompanyMembership();
-  
-  // 1. company_admin always has full access
+
+  // Company Admin always has full 'manage' access to all categories for their own company
   if (membership.companyRole === "company_admin") {
-    return true;
+    return {
+      membership,
+      permissions: { ...ROLE_PRESETS.admin },
+    };
   }
 
-  // 2. Query company_users permissions column for company_staff
-  const supabase = await createClient();
+  const supabase = membership.isImpersonating ? createAdminClient() : await createClient();
   const { data: user } = await supabase
     .from("company_users")
-    .select("permissions")
+    .select("permissions, company_role")
     .eq("id", membership.userId)
-    .single();
+    .maybeSingle();
 
-  if (!user) {
-    return false;
-  }
+  const rawPermissions = (user?.permissions || {}) as Record<string, any>;
+  const normalized = normalizePermissions(rawPermissions, user?.company_role || membership.companyRole);
 
-  const permissions = (user.permissions || {}) as CompanyUserPermissions;
-  const level = permissions[category] || "none";
-
-  if (required === "write") {
-    return level === "write";
-  }
-
-  if (required === "read") {
-    return level === "read" || level === "write";
-  }
-
-  return false;
+  return {
+    membership,
+    permissions: normalized,
+  };
 }
 
 /**
- * Ensures the user has the required permission level, otherwise throws an error or redirects.
+ * Check if the current logged-in portal user has at least `requiredLevel` for `category`.
  */
+export async function hasPortalPermission(
+  category: AclCategory,
+  requiredLevel: AclLevel
+): Promise<boolean> {
+  try {
+    const { permissions } = await getPortalUserAcl();
+    const userLevel = permissions[category] || "none";
+    return ACL_LEVEL_NUMERIC[userLevel] >= ACL_LEVEL_NUMERIC[requiredLevel];
+  } catch (err) {
+    console.warn(`[Permission Check] Failed to evaluate permission for category ${category}:`, err);
+    return false;
+  }
+}
+
+/**
+ * Enforce minimum ACL level. Throws error if unauthorized.
+ */
+export async function requirePortalPermission(
+  category: AclCategory,
+  requiredLevel: AclLevel
+): Promise<CompanyMembership> {
+  const { membership, permissions } = await getPortalUserAcl();
+  const userLevel = permissions[category] || "none";
+
+  if (ACL_LEVEL_NUMERIC[userLevel] < ACL_LEVEL_NUMERIC[requiredLevel]) {
+    throw new Error(
+      `이 작업을 수행할 권한이 없습니다. (메뉴: ${category}, 필요 권한: ${requiredLevel}, 보유 권한: ${userLevel})`
+    );
+  }
+
+  return membership;
+}
+
+// ==========================================
+// Backward Compatibility Aliases
+// ==========================================
+
+export async function hasMenuPermission(
+  category: any,
+  required: "read" | "write"
+): Promise<boolean> {
+  const level: AclLevel = required === "write" ? "write" : "read";
+  return hasPortalPermission(category as AclCategory, level);
+}
+
 export async function requireMenuPermission(
-  category: keyof CompanyUserPermissions,
+  category: any,
   required: "read" | "write"
 ): Promise<void> {
-  const allowed = await hasMenuPermission(category, required);
-  if (!allowed) {
-    throw new Error(`이 작업을 수행할 권한이 없습니다. (카테고리: ${category}, 요구권한: ${required})`);
-  }
+  const level: AclLevel = required === "write" ? "write" : "read";
+  await requirePortalPermission(category as AclCategory, level);
 }
