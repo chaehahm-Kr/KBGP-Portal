@@ -13,15 +13,15 @@ import { getBilingualError } from "@/lib/errors/bilingual-messages";
 
 import { getPersonStructuredNames } from "@/lib/user/name-helper";
 
-export type InviteFormState = { error: string } | undefined;
+export type InviteFormState = { error?: string; message?: string } | undefined;
 
 const inviteSchema = z.object({
   name: z.string().trim().optional().default(""),
   koreanLastName: z.string().trim().optional().default(""),
   koreanFirstName: z.string().trim().optional().default(""),
-  englishFirstName: z.string().trim().optional().default(""),
-  englishLastName: z.string().trim().optional().default(""),
-  email: z.email({ message: "올바른 이메일 형식이 아닙니다." }),
+  englishFirstName: z.string().trim().min(1, "영문 이름(English First Name)을 입력해 주세요."),
+  englishLastName: z.string().trim().min(1, "영문 성(English Last Name)을 입력해 주세요."),
+  email: z.string().trim().email("올바른 이메일 형식이 아닙니다."),
   companyRole: z.enum(["company_admin", "company_staff"] as const),
 });
 
@@ -128,6 +128,7 @@ export async function inviteCompanyUser(
   }
 
   revalidatePath("/portal/company/users");
+  return { message: "초청 메일을 발송했습니다." };
 }
 
 /** 초대 링크가 만료된 뒤(7일) 관리자가 다시 초대 메일을 보낸다. */

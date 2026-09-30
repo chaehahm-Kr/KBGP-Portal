@@ -142,8 +142,8 @@ export const DEFAULT_TEMPLATES: Record<
   },
   staff_invited: {
     description: "내부 직원 — 초대 발송",
-    subject: "[K SELECT NETWORK] {{contactName}}님, 관리자 포털로 초대합니다",
-    body: "안녕하세요, {{contactName}}님.\n\nK SELECT NETWORK 관리자 포털의 내부 직원으로 초대되었습니다.\n\n아래 로그인 정보와 임시 비밀번호로 최초 로그인하신 후, 비밀번호 변경 및 계정 설정 절차를 완료해 주세요.\n\n- 접속 이메일: {{email}}\n- 임시 비밀번호: {{tempPassword}}\n\n* 본 임시 비밀번호는 최초 1회 로그인 전용입니다.\n\n{{ctaButton}}",
+    subject: "[K SELECT NETWORK ADMIN] 관리자 계정 초대 안내",
+    body: "안녕하세요, {{contactName}}님.\n\nLetusto 내부 직원 및 승인된 관리자 전용 백엔드 관리 시스템에 초대되었습니다.\n\n아래 버튼을 눌러 관리자 계정 설정 및 비밀번호 등록을 진행해 주시기 바랍니다.\n\n- 접속 이메일: {{email}}\n\n* 본 초청 링크는 보안을 위해 기한 내 1회만 사용 가능합니다.\n\n{{ctaButton}}",
   },
   brand_agreement_completed: {
     description: "브랜드사 담당자 — 계약 체결 완료 (Brand Agreement Completed)",
@@ -1326,8 +1326,8 @@ function buildNetworkCtaButtonHtml(variables: Record<string, string>) {
   } else if (key === "invite_expiring_soon") {
     buttonLabel = "사용자 관리 화면으로 이동";
   } else if (key === "staff_invited") {
-    buttonLabel = "관리자 로그인하기";
-    url = `${siteUrl}/admin/login`;
+    buttonLabel = variables.buttonLabel || variables.button_label || "관리자 계정 설정하기";
+    url = variables.inviteLink || variables.invite_link || variables.portalUrl || "https://admin.kselectnetwork.com/admin/invite/accept";
   } else if (key === "brand_agreement_completed") {
     buttonLabel = "체결 계약서 확인하기";
     url = variables.agreement_view_url || variables.agreementViewUrl || `${siteUrl}/portal/company/info?tab=agreements`;

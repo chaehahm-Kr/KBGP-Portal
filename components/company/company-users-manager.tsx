@@ -41,6 +41,11 @@ const permissionOptions = [
 
 export function CompanyUsersManager({ initialUsers, currentUserId }: CompanyUsersManagerProps) {
   const [users, setUsers] = useState<any[]>(initialUsers);
+
+  React.useEffect(() => {
+    setUsers(initialUsers);
+  }, [initialUsers]);
+
   const [editingUser, setEditingUser] = useState<any | null>(null);
   const [cancelConfirmUser, setCancelConfirmUser] = useState<any | null>(null);
   const [removeConfirmUser, setRemoveConfirmUser] = useState<any | null>(null);

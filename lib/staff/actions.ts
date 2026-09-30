@@ -10,6 +10,7 @@ import { DEFAULT_ROLE_PERMISSIONS, type StaffRole, type StaffStatus, type StaffM
 import { renderEmailHtml } from "@/lib/notifications/templates";
 import { sendEmail } from "@/lib/notifications/email";
 import { assertNotProtectedProductionAccount } from "@/lib/auth/guard";
+import { publicEnv } from "@/lib/env/public";
 
 // Helper: Log staff change histories
 async function logAudit({
@@ -80,8 +81,10 @@ export async function inviteStaffMemberAction(
 
   const { name, email, departmentId, jobTitleId, baseRole, customMessage } = parsed.data;
 
-  // 1. Generate secure temporary password
-  const tempPassword = "Temp" + Math.random().toString(36).substring(2, 10) + "!";
+  // 1. Generate secure invitation link via Supabase Auth Admin generateLink
+  const adminRedirectUrl = process.env.NODE_ENV === "production"
+    ? "https://admin.kselectnetwork.com/admin/invite/accept"
+    : `${publicEnv.NEXT_PUBLIC_SITE_URL}/admin/invite/accept`;
 
   const admin = createAdminClient();
 
@@ -96,31 +99,39 @@ export async function inviteStaffMemberAction(
     return { error: "이미 등록되어 있는 이메일 주소입니다." };
   }
 
-  // 2. Create Auth User in Supabase with auto email confirmation
-  const { data: authData, error: authError } = await admin.auth.admin.createUser({
+  // 2. Generate secure token/link to /admin/invite/accept
+  const { data: linkData, error: authError } = await admin.auth.admin.generateLink({
+    type: "invite",
     email,
-    password: tempPassword,
-    email_confirm: true,
-    user_metadata: {
-      role: "admin",
-      display_name: name,
-      base_role: baseRole,
-      department_id: departmentId,
-      job_title_id: jobTitleId,
+    options: {
+      redirectTo: adminRedirectUrl,
+      data: {
+        role: "admin",
+        display_name: name,
+        base_role: baseRole,
+        department_id: departmentId,
+        job_title_id: jobTitleId,
+      },
     },
   });
 
-  if (authError || !authData.user) {
+  if (authError || !linkData.user) {
     return { error: authError?.message || "직원 계정을 생성하지 못했습니다." };
   }
 
-  const newUserId = authData.user.id;
+  const newUserId = linkData.user.id;
+  const inviteLink = linkData.properties?.action_link || adminRedirectUrl;
 
   // 3. Assign base role default permissions in DB
   const defaultPerms = DEFAULT_ROLE_PERMISSIONS[baseRole as StaffRole] || DEFAULT_ROLE_PERMISSIONS["reviewer"];
   await admin
     .from("staff_members")
     .update({
+      name,
+      base_role: baseRole,
+      department_id: departmentId,
+      job_title_id: jobTitleId,
+      status: "invited",
       menu_permissions: defaultPerms,
     })
     .eq("id", newUserId);
@@ -132,12 +143,12 @@ export async function inviteStaffMemberAction(
 
   // 4. Send email using Resend and templates helper
   const { subject, html } = renderEmailHtml(
-    "[K SELECT NETWORK] {{contactName}}님, 관리자 포털로 초대합니다",
-    "안녕하세요, {{contactName}}님.\n\nK SELECT NETWORK 관리자 포털의 내부 직원으로 초대되었습니다.\n\n아래 로그인 정보와 임시 비밀번호로 최초 로그인하신 후, 비밀번호 변경 및 계정 설정 절차를 완료해 주세요.\n\n- 접속 이메일: {{email}}\n- 임시 비밀번호: {{tempPassword}}\n\n* 본 임시 비밀번호는 최초 1회 로그인 전용입니다.\n\n{{ctaButton}}",
+    "[K SELECT NETWORK ADMIN] 관리자 계정 초대 안내",
+    "안녕하세요, {{contactName}}님.\n\nLetusto 내부 직원 및 승인된 관리자 전용 백엔드 관리 시스템에 초대되었습니다.\n\n아래 버튼을 눌러 관리자 계정 설정 및 비밀번호 등록을 진행해 주시기 바랍니다.\n\n- 접속 이메일: {{email}}\n\n* 본 초청 링크는 보안을 위해 기한 내 1회만 사용 가능합니다.\n\n{{ctaButton}}",
     {
       contactName: name,
       email,
-      tempPassword,
+      inviteLink,
       key: "staff_invited",
     }
   );
@@ -147,7 +158,7 @@ export async function inviteStaffMemberAction(
       to: email,
       subject,
       html,
-      text: "K SELECT NETWORK 관리자 포털 초대 메일입니다.",
+      text: "[K SELECT NETWORK ADMIN] Letusto 내부 직원 및 승인된 관리자 전용 백엔드 관리 시스템 초대 메일입니다.",
     });
   } catch (e) {
     console.error("Failed to send invitation email:", e);
@@ -169,7 +180,7 @@ export async function inviteStaffMemberAction(
   });
 
   revalidatePath("/admin/staff");
-  return { success: "직원 초대 발송 완료. 임시 비밀번호: " + tempPassword };
+  return { success: "직원 초대 발송 완료: " + email };
 }
 
 // Zod schema for profile setup
@@ -587,16 +598,23 @@ export async function reinviteStaffAction(targetId: string) {
 
   await assertNotProtectedProductionAccount(staff.email, "reinviteStaffAction");
 
-  const tempPassword = "Temp" + Math.random().toString(36).substring(2, 10) + "!";
+  const adminRedirectUrl = process.env.NODE_ENV === "production"
+    ? "https://admin.kselectnetwork.com/admin/invite/accept"
+    : `${publicEnv.NEXT_PUBLIC_SITE_URL}/admin/invite/accept`;
 
-  // Reset auth user to the new temporary password
-  const { error: authError } = await admin.auth.admin.updateUserById(targetId, {
-    password: tempPassword,
+  const { data: linkData, error: linkError } = await admin.auth.admin.generateLink({
+    type: "invite",
+    email: staff.email,
+    options: {
+      redirectTo: adminRedirectUrl,
+    },
   });
 
-  if (authError) {
-    throw new Error("초대 재발송 처리 실패: " + authError.message);
+  if (linkError) {
+    throw new Error("초대 재발송 처리 실패: " + linkError.message);
   }
+
+  const inviteLink = linkData?.properties?.action_link || adminRedirectUrl;
 
   await admin
     .from("staff_members")
@@ -604,12 +622,12 @@ export async function reinviteStaffAction(targetId: string) {
     .eq("id", targetId);
 
   const { subject, html } = renderEmailHtml(
-    "[초대 재발송] [K SELECT NETWORK] {{contactName}}님, 관리자 포털로 초대합니다",
-    "안녕하세요, {{contactName}}님.\n\nK SELECT NETWORK 관리자 포털의 내부 직원으로 다시 초대되었습니다.\n\n아래 로그인 정보와 임시 비밀번호로 최초 로그인하신 후, 비밀번호 변경 및 계정 설정 절차를 완료해 주세요.\n\n- 접속 이메일: {{email}}\n- 임시 비밀번호: {{tempPassword}}\n\n* 본 임시 비밀번호는 최초 1회 로그인 전용입니다.\n\n{{ctaButton}}",
+    "[초대 재발송] [K SELECT NETWORK ADMIN] 관리자 계정 초대 안내",
+    "안녕하세요, {{contactName}}님.\n\nLetusto 내부 직원 및 승인된 관리자 전용 백엔드 관리 시스템으로 다시 초대되었습니다.\n\n아래 버튼을 클릭하여 관리자 계정 설정 및 비밀번호 등록을 진행해 주시기 바랍니다.\n\n- 접속 이메일: {{email}}\n\n* 본 초청 링크는 보안을 위해 기한 내 1회만 사용 가능합니다.\n\n{{ctaButton}}",
     {
       contactName: staff.name,
       email: staff.email,
-      tempPassword,
+      inviteLink,
       key: "staff_invited",
     }
   );
@@ -619,7 +637,7 @@ export async function reinviteStaffAction(targetId: string) {
       to: staff.email,
       subject,
       html,
-      text: "K SELECT NETWORK 관리자 포털 초대 재발송 메일입니다.",
+      text: "[K SELECT NETWORK ADMIN] Letusto 내부 직원 및 승인된 관리자 전용 백엔드 관리 시스템 초대 재발송 메일입니다.",
     });
   } catch (e) {
     console.error("Failed to resend invitation email:", e);
@@ -760,13 +778,19 @@ export async function completeStaffInviteAcceptance() {
     data: { user },
   } = await supabase.auth.getUser();
 
+  const { redirect } = await import("next/navigation");
   if (!user) {
-    const { redirect } = await import("next/navigation");
     redirect("/admin/login");
+    return;
   }
 
-  const { redirect } = await import("next/navigation");
-  redirect("/admin");
+  const admin = createAdminClient();
+  await admin
+    .from("staff_members")
+    .update({ status: "active", must_change_password: false })
+    .eq("id", user.id);
+
+  redirect("/admin/login");
 }
 
 /**
