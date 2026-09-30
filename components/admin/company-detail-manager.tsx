@@ -37,7 +37,7 @@ import {
   formatEnglishFullName,
 } from "@/lib/user/name-helper";
 import { CompanyAclMatrixEditor } from "@/components/company/company-acl-matrix-editor";
-import { mapRoleToPreset, normalizePermissions, resolveCompanyUserRole, ROLE_DISPLAY_CONFIG, type BrandPortalRole } from "@/lib/permissions/brand-portal-acl";
+import { mapRoleToPreset, mapPresetToMembershipRole, normalizePermissions, resolveCompanyUserRole, ROLE_DISPLAY_CONFIG, type BrandPortalRole } from "@/lib/permissions/brand-portal-acl";
 
 
 const STATUS_LABEL: Record<string, string> = {
@@ -449,11 +449,9 @@ export function CompanyDetailManager({
     setEditKoreanFirstName(structured.koreanFirstName);
     setEditEnglishLastName(structured.englishLastName);
     setEditEnglishFirstName(structured.englishFirstName);
-    setEditPhone(user.phone || "");
-    setEditTitle(user.title || "");
-    setEditPosition(user.position || "");
-    setEditRole(user.company_role || "company_staff");
-    setEditRolePreset(mapRoleToPreset(user.company_role || user.role));
+    const canonicalRole = resolveCompanyUserRole(user);
+    setEditRolePreset(canonicalRole);
+    setEditRole(mapPresetToMembershipRole(canonicalRole));
     setEditStatus(user.status || "active");
     setEditIsPrimary(user.is_primary || false);
     setEditPermissions(normalizePermissions(user.permissions || {}, user.company_role));
@@ -682,6 +680,12 @@ export function CompanyDetailManager({
 
     startTransition(async () => {
       try {
+        const finalPermissionsPayload = {
+          ...editPermissions,
+          preset: editRolePreset,
+          role: editRolePreset,
+        };
+
         // 1. 인적 권한 정보 갱신
         await adminUpdateCompanyUser(company.id, selectedUser.id, {
           koreanLastName: editKoreanLastName,
@@ -694,7 +698,7 @@ export function CompanyDetailManager({
           companyRole: editRole,
           status: editStatus,
           isPrimary: editIsPrimary,
-          permissions: editPermissions,
+          permissions: finalPermissionsPayload,
         });
 
         // 2. 담당 업무 6개 상태 갱신
@@ -734,7 +738,7 @@ export function CompanyDetailManager({
               is_primary: editIsPrimary,
               permissions: {
                 ...(u.permissions || {}),
-                ...editPermissions,
+                ...finalPermissionsPayload,
                 korean_last_name: computedStructured.koreanLastName,
                 korean_first_name: computedStructured.koreanFirstName,
                 english_first_name: computedStructured.englishFirstName,
@@ -2678,8 +2682,9 @@ export function CompanyDetailManager({
                 <CompanyAclMatrixEditor
                   selectedRole={editRolePreset}
                   onRoleChange={(newRole) => {
-                    setEditRolePreset(newRole as BrandPortalRole);
-                    setEditRole(newRole === "admin" ? "company_admin" : "company_staff");
+                    const preset = newRole as BrandPortalRole;
+                    setEditRolePreset(preset);
+                    setEditRole(mapPresetToMembershipRole(preset));
                   }}
                   permissions={editPermissions}
                   onPermissionsChange={setEditPermissions}

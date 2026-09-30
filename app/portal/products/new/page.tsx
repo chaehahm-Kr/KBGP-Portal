@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { requireCompanyMembership } from "@/lib/company/dal";
+import { hasPortalPermission } from "@/lib/company/permissions";
+import { AccessDeniedView } from "@/components/portal/access-denied";
 import { createClient } from "@/lib/supabase/server";
 import { ProductForm } from "@/components/product/product-form";
 import { createProduct } from "@/lib/product/actions";
@@ -10,6 +12,17 @@ export const metadata: Metadata = {
 };
 
 export default async function NewProductPage() {
+  const canCreateProduct = await hasPortalPermission("products", "write");
+  if (!canCreateProduct) {
+    return (
+      <AccessDeniedView
+        title="접근 권한이 없습니다."
+        message="제품을 생성하거나 수정할 권한이 없습니다 (Access Restricted). 권한 조정을 원하시면 회사 관리자에게 문의해주세요."
+        categoryLabel="제품 관리"
+      />
+    );
+  }
+
   const { companyId } = await requireCompanyMembership();
   const supabase = await createClient();
 

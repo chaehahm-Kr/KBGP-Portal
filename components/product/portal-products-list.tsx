@@ -53,6 +53,7 @@ interface PortalProductItem {
 interface PortalProductsListProps {
   initialProducts: PortalProductItem[];
   hasBrand: boolean;
+  canCreateProduct?: boolean;
 }
 
 const CATEGORY_TABS: { id: string; label: string }[] = [
@@ -65,7 +66,7 @@ const CATEGORY_TABS: { id: string; label: string }[] = [
   { id: "OTHER", label: "기타" },
 ];
 
-export function PortalProductsList({ initialProducts, hasBrand }: PortalProductsListProps) {
+export function PortalProductsList({ initialProducts, hasBrand, canCreateProduct = true }: PortalProductsListProps) {
   const searchParams = useSearchParams();
   const [products, setProducts] = useState<PortalProductItem[]>(initialProducts);
   const [searchTerm, setSearchTerm] = useState("");
@@ -273,7 +274,16 @@ export function PortalProductsList({ initialProducts, hasBrand }: PortalProducts
             입점 신청서에 등록할 제품군 카탈로그를 관리합니다.
           </p>
         </div>
-        {hasBrand ? (
+        {!canCreateProduct ? (
+          <button
+            type="button"
+            disabled
+            title="제품 추가 권한이 없습니다 (Access Restricted)"
+            className="w-full sm:w-auto text-center rounded-md bg-zinc-200 px-4 py-2 text-xs font-semibold text-zinc-400 cursor-not-allowed opacity-60 dark:bg-zinc-800 dark:text-zinc-600 select-none"
+          >
+            🔒 새 제품 추가
+          </button>
+        ) : hasBrand ? (
           <Link
             href="/portal/products/new"
             className="w-full sm:w-auto text-center rounded-md bg-zinc-900 px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-zinc-800 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-100"

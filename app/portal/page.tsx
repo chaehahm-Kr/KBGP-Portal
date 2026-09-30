@@ -17,6 +17,7 @@ import { evaluateProductRegistrationStatus } from "@/lib/product/registration-st
 import { getBatchProductCategoryCompletions } from "@/lib/product/attribute-completion";
 import { resolveEffectiveSku } from "@/lib/product/types";
 import { getPersonGreetingName } from "@/lib/user/name-helper";
+import { hasPortalPermission } from "@/lib/company/permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -28,6 +29,7 @@ export default async function PortalHomePage() {
   const session = await verifyPortalSession();
   const { companyId } = await requireCompanyMembership();
   const supabase = session.isImpersonating ? createAdminClient() : await createClient();
+  const canCreateProduct = await hasPortalPermission("products", "write");
 
   // 1. Fetch Company & User Info
   const { data: companyUser } = await supabase
@@ -471,12 +473,23 @@ export default async function PortalHomePage() {
         </div>
 
         <div className="flex items-center gap-2">
-          <Link
-            href="/portal/products/new"
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-900 text-white text-xs font-semibold hover:bg-zinc-800 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-100 transition-all"
-          >
-            <span>+</span> 제품 추가
-          </Link>
+          {canCreateProduct ? (
+            <Link
+              href="/portal/products/new"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-900 text-white text-xs font-semibold hover:bg-zinc-800 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-100 transition-all"
+            >
+              <span>+</span> 제품 추가
+            </Link>
+          ) : (
+            <button
+              type="button"
+              disabled
+              title="제품 추가 권한이 없습니다 (Access Restricted)"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-200 text-zinc-400 text-xs font-semibold dark:bg-zinc-800 dark:text-zinc-500 cursor-not-allowed opacity-70 select-none"
+            >
+              <span>🔒</span> 제품 추가
+            </button>
+          )}
           <Link
             href="/portal/support"
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-zinc-200 bg-zinc-50 text-zinc-700 text-xs font-semibold hover:bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800 transition-all"

@@ -24,6 +24,8 @@ export default async function ProductsPage() {
     );
   }
 
+  const canCreateProduct = await hasPortalPermission("products", "write");
+
   const { companyId, supabase } = await getPortalTenantContext();
 
   let products: any[] | null = null;
@@ -191,7 +193,7 @@ export default async function ProductsPage() {
   return (
     <div className="w-full max-w-7xl">
       <Suspense fallback={<div className="p-8 text-center text-xs text-zinc-500">로딩 중...</div>}>
-        <PortalProductsList initialProducts={resolvedProducts} hasBrand={hasBrand} />
+        <PortalProductsList initialProducts={resolvedProducts} hasBrand={hasBrand} canCreateProduct={canCreateProduct} />
       </Suspense>
     </div>
   );
