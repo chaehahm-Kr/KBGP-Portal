@@ -15,16 +15,27 @@ import { getPersonStructuredNames } from "@/lib/user/name-helper";
 
 import { renderEmailHtml } from "@/lib/notifications/templates";
 import { sendEmail } from "@/lib/notifications/email";
+import { getCanonicalPortalUrl } from "@/lib/config/portal";
 
 export type InviteFormState = { error?: string; message?: string } | undefined;
 
+function getRoleKoreanTitle(companyRole: string, permissions?: Record<string, any>): string {
+  if (companyRole === "company_admin" || permissions?.role === "admin") return "관리자";
+  if (permissions?.role === "manager") return "매니저";
+  if (permissions?.role === "staff" || companyRole === "company_staff") return "담당자";
+  if (permissions?.role === "viewer") return "조회 사용자";
+  if (permissions?.role === "restricted") return "접근 제한 사용자";
+  return "담당자";
+}
+
 function getRoleDisplayLabel(companyRole: string, permissions?: Record<string, any>): string {
-  if (companyRole === "company_admin" || permissions?.role === "admin") return "Admin (관리자)";
-  if (permissions?.role === "manager") return "Manager (매니저)";
-  if (permissions?.role === "staff" || companyRole === "company_staff") return "Staff (담당자)";
-  if (permissions?.role === "viewer") return "Viewer (조회 사용자)";
-  if (permissions?.role === "restricted") return "Restricted (접근 제한)";
-  return "Staff (담당자)";
+  const title = getRoleKoreanTitle(companyRole, permissions);
+  if (companyRole === "company_admin" || permissions?.role === "admin") return `Admin (${title})`;
+  if (permissions?.role === "manager") return `Manager (${title})`;
+  if (permissions?.role === "staff" || companyRole === "company_staff") return `Staff (${title})`;
+  if (permissions?.role === "viewer") return `Viewer (${title})`;
+  if (permissions?.role === "restricted") return `Restricted (${title})`;
+  return `Staff (${title})`;
 }
 
 const inviteSchema = z.object({
@@ -101,12 +112,12 @@ export async function inviteCompanyUser(
     .eq("id", companyId)
     .maybeSingle();
 
-  const companyDisplayName = company?.company_name_ko || company?.name || company?.company_name_en || "파트너사";
+  const companyDisplayName = company?.name || company?.company_name_ko || company?.company_name_en || "파트너사";
   const inviterName = inviterUser?.name || "회사 관리자";
   const inviterEmail = inviterUser?.email || "";
 
   // 2. Generate secure invite token link via Supabase Auth generateLink
-  const targetRedirect = `${publicEnv.NEXT_PUBLIC_SITE_URL}/portal/invite/accept`;
+  const targetRedirect = `${getCanonicalPortalUrl()}/portal/invite/accept`;
   const { data: linkData, error: inviteError } = await admin.auth.admin.generateLink({
     type: "invite",
     email: normalizedEmail,
@@ -183,10 +194,11 @@ export async function inviteCompanyUser(
 
   // 3. Dispatch custom K SELECT NETWORK Branded Invitation Email via Resend
   const roleLabel = getRoleDisplayLabel(companyRole, permissions);
-  const subjectTemplate = `[K SELECT NETWORK] ${companyDisplayName} 파트너 포털 초대 안내`;
+  const roleKoreanTitle = getRoleKoreanTitle(companyRole, permissions);
+  const subjectTemplate = `[K SELECT NETWORK] ${companyDisplayName} 브랜드 포털 초대 안내`;
   const bodyTemplate = `안녕하세요, ${canonicalName}님.
 
-${inviterName} (${inviterEmail}) 님이 ${companyDisplayName}의 K SELECT NETWORK 브랜드 포털 멤버로 초청하였습니다.
+K SELECT NETWORK 파트너사인 "${companyDisplayName}"의 ${roleKoreanTitle}로 초청되었습니다.
 
 아래 버튼을 클릭하여 초대 수락 및 비밀번호 설정을 진행해 주시기 바랍니다.
 
@@ -203,6 +215,7 @@ ${inviterName} (${inviterEmail}) 님이 ${companyDisplayName}의 K SELECT NETWOR
     inviter_email: inviterEmail,
     invitee_email: normalizedEmail,
     role_label: roleLabel,
+    role_korean_title: roleKoreanTitle,
     isDirectInvite: "true",
     button_label: "초대 수락 및 비밀번호 설정",
   });
@@ -251,12 +264,13 @@ export async function reinviteCompanyUser(targetUserId: string) {
     .eq("id", companyId)
     .maybeSingle();
 
-  const companyDisplayName = company?.company_name_ko || company?.name || company?.company_name_en || "파트너사";
+  const companyDisplayName = company?.name || company?.company_name_ko || company?.company_name_en || "파트너사";
   const inviterName = inviterUser?.name || "회사 관리자";
   const inviterEmail = inviterUser?.email || "";
   const roleLabel = getRoleDisplayLabel(target.company_role, target.permissions);
+  const roleKoreanTitle = getRoleKoreanTitle(target.company_role, target.permissions);
 
-  const targetRedirect = `${publicEnv.NEXT_PUBLIC_SITE_URL}/portal/invite/accept`;
+  const targetRedirect = `${getCanonicalPortalUrl()}/portal/invite/accept`;
   const { data: linkData } = await admin.auth.admin.generateLink({
     type: "invite",
     email: target.email,
@@ -273,10 +287,10 @@ export async function reinviteCompanyUser(targetUserId: string) {
     actionLink = parsedUrl.toString();
   } catch {}
 
-  const subjectTemplate = `[초대 재발송] [K SELECT NETWORK] ${companyDisplayName} 파트너 포털 초대 안내`;
+  const subjectTemplate = `[초대 재발송] [K SELECT NETWORK] ${companyDisplayName} 브랜드 포털 초대 안내`;
   const bodyTemplate = `안녕하세요, ${target.name}님.
 
-${inviterName} (${inviterEmail}) 님이 ${companyDisplayName}의 K SELECT NETWORK 브랜드 포털 멤버로 초청하였습니다.
+K SELECT NETWORK 파트너사인 "${companyDisplayName}"의 ${roleKoreanTitle}로 초청되었습니다.
 
 아래 버튼을 클릭하여 초대 수락 및 비밀번호 설정을 진행해 주시기 바랍니다.
 
@@ -293,6 +307,7 @@ ${inviterName} (${inviterEmail}) 님이 ${companyDisplayName}의 K SELECT NETWOR
     inviter_email: inviterEmail,
     invitee_email: target.email,
     role_label: roleLabel,
+    role_korean_title: roleKoreanTitle,
     isDirectInvite: "true",
     button_label: "초대 수락 및 비밀번호 설정",
   });

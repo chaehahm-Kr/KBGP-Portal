@@ -1006,7 +1006,7 @@ function buildNetworkInfoCardHtml(variables: Record<string, string>) {
     const contactName = variables.contact_name || variables.contactName;
 
     if (isDirectInvite) {
-      if (compName) rows.push({ label: "초대된 회사", value: compName, isBold: true });
+      if (compName) rows.push({ label: "초청 회사", value: compName, isBold: true });
       const inviterName = variables.inviter_name || variables.inviterName;
       const inviterEmail = variables.inviter_email || variables.inviterEmail;
       if (inviterName || inviterEmail) {
@@ -1327,8 +1327,8 @@ function buildNetworkCtaButtonHtml(variables: Record<string, string>) {
     buttonLabel = "추가 자료 제출하기";
   } else if (key === "portal_signup_request") {
     const isDirectInvite = variables.isDirectInvite === "true" || variables.entry_mode === "admin_invitation";
-    buttonLabel = variables.button_label || variables.buttonLabel || (isDirectInvite ? "브랜드 포털 가입하기" : "포털 가입 시작하기");
-    url = variables.portal_signup_url || variables.portalSignupUrl || variables.portalUrl || "https://portal.kselectnetwork.com/portal/signup";
+    buttonLabel = variables.button_label || variables.buttonLabel || (isDirectInvite ? "초대 수락 및 비밀번호 설정" : "포털 가입 시작하기");
+    url = variables.link || variables.portal_signup_url || variables.portalSignupUrl || variables.portalUrl || "https://portal.kselectnetwork.com/portal/signup";
   } else if (key === "info_request_replied") {
     buttonLabel = "회신 자료 검토하기";
   } else if (key === "review_result_approved" || key === "review_result_partial_approved") {
@@ -1619,8 +1619,9 @@ function renderNetworkEmailHtml(
   let effectiveBodyTemplate = bodyTemplate;
 
   if (variables.key === "portal_signup_request" && isDirectInvite) {
-    effectiveSubjectTemplate = `[K SELECT NETWORK] ${compName} 브랜드 포털 가입 안내`;
-    effectiveBodyTemplate = `[K SELECT NETWORK] ${compName} 브랜드 포털 가입 안내\n안녕하세요, {{contact_name}}님.\n\n${compName}이 K SELECT NETWORK Brand Portal 파트너로 초청되었습니다.\n\n아래 버튼을 통해 이메일 인증 및 계정 설정을 완료한 후 브랜드 포털을 이용해 주세요.\n\n계정 활성화가 완료되면 회사 정보, 브랜드 정보, 담당자 지정, 상품 등록 및 계약 등 온보딩 절차를 진행할 수 있습니다.\n\n{{infoBox}}\n\n{{ctaButton}}`;
+    const roleTitle = variables.role_korean_title || (variables.company_role === "company_admin" ? "관리자" : "담당자");
+    effectiveSubjectTemplate = `[K SELECT NETWORK] ${compName} 브랜드 포털 초대 안내`;
+    effectiveBodyTemplate = `[K SELECT NETWORK] ${compName} 브랜드 포털 초대 안내\n안녕하세요, {{contact_name}}님.\n\nK SELECT NETWORK 파트너사인 "${compName}"의 ${roleTitle}로 초청되었습니다.\n\n아래 버튼을 클릭하여 초대 수락 및 비밀번호 설정을 진행해 주시기 바랍니다.\n\n* 본 초대 링크는 보안을 위해 기한 내 1회만 사용 가능합니다.\n\n{{infoBox}}\n\n{{ctaButton}}`;
   }
 
   const extendedVariables: Record<string, string> = {
