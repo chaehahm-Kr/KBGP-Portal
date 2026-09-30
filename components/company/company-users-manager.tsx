@@ -980,22 +980,39 @@ export function CompanyUsersManager({ initialUsers, currentUserId }: CompanyUser
             </div>
 
             {/* Modal Footer */}
-            <div className="flex items-center justify-end gap-2.5 border-t border-zinc-200 bg-zinc-50/80 px-6 py-4 dark:border-zinc-800 dark:bg-zinc-950/60 shrink-0">
-              <button
-                type="button"
-                onClick={() => setEditingUser(null)}
-                className="rounded-lg border border-zinc-300 bg-white px-4 py-2 text-xs font-semibold text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700 cursor-pointer transition-colors"
-              >
-                취소
-              </button>
-              <button
-                type="button"
-                onClick={handleSave}
-                disabled={isPending}
-                className="rounded-lg bg-emerald-600 px-5 py-2 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-50 cursor-pointer transition-colors shadow-sm"
-              >
-                {isPending ? "저장 중..." : "수정 완료"}
-              </button>
+            <div className="flex items-center justify-between border-t border-zinc-200 bg-zinc-50/80 px-6 py-4 dark:border-zinc-800 dark:bg-zinc-950/60 shrink-0">
+              <div>
+                {editingUser.id !== currentUserId && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const userToRemove = editingUser;
+                      setEditingUser(null);
+                      setRemoveConfirmUser(userToRemove);
+                    }}
+                    className="rounded-lg border border-rose-500/50 bg-rose-500/10 text-rose-600 hover:bg-rose-500/20 dark:text-rose-400 dark:border-rose-500/50 dark:bg-rose-950/40 dark:hover:bg-rose-900/50 font-bold px-4 py-2 text-xs transition-colors cursor-pointer"
+                  >
+                    담당자 삭제
+                  </button>
+                )}
+              </div>
+              <div className="flex items-center gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setEditingUser(null)}
+                  className="rounded-lg border border-zinc-300 bg-white px-4 py-2 text-xs font-semibold text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700 cursor-pointer transition-colors"
+                >
+                  취소
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSave}
+                  disabled={isPending}
+                  className="rounded-lg bg-emerald-600 px-5 py-2 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-50 cursor-pointer transition-colors shadow-sm"
+                >
+                  {isPending ? "저장 중..." : "수정 완료"}
+                </button>
+              </div>
             </div>
           </div>
         </div>

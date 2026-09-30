@@ -1446,6 +1446,14 @@ export function CompanyProfileManager({
                 )}
               </div>
 
+              {/* Instructions banner */}
+              <div className="mb-4 p-3 rounded-lg border border-indigo-200/80 bg-indigo-50/70 text-indigo-900 dark:border-indigo-900/60 dark:bg-indigo-950/40 dark:text-indigo-200 text-xs leading-relaxed flex items-start gap-2">
+                <span className="text-sm shrink-0 mt-0.5">💡</span>
+                <span>
+                  각 업무의 주 담당자는 오른쪽 &quot;주 담당자 지정&quot;에서 선택해 주세요. 알림 수신인은 해당 업무의 이메일 알림을 함께 받을 사용자를 설정하는 기능입니다.
+                </span>
+              </div>
+
               {taskMessage && (
                 <div
                   className={`mb-4 p-3 rounded-xl text-xs font-medium border flex items-center gap-2 ${
@@ -1467,7 +1475,13 @@ export function CompanyProfileManager({
                       <th className="px-4 py-3">주 담당자 정보</th>
                       <th className="px-4 py-3">알림 수신인</th>
                       <th className="px-4 py-3 text-center w-28">지정 상태</th>
-                      {isCompanyAdmin && <th className="px-4 py-3 text-right">담당자 변경</th>}
+                      {isCompanyAdmin && (
+                        <th className="px-4 py-3 text-right">
+                          <span className="inline-flex items-center gap-1 rounded bg-indigo-100 dark:bg-indigo-900/60 text-indigo-800 dark:text-indigo-200 px-2 py-0.5 text-[10px] font-bold border border-indigo-200 dark:border-indigo-800">
+                            주 담당자 지정
+                          </span>
+                        </th>
+                      )}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800/60">

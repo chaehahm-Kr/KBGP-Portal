@@ -491,13 +491,10 @@ export function ProductDetailTabs({
   }
   const [pendingImages, setPendingImages] = useState<PendingImageFile[]>([]);
   const [uploadingImages, setUploadingImages] = useState(false);
+  const [isDragOver, setIsDragOver] = useState(false);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
-  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
-
-    const fileList = Array.from(files);
+  const processFiles = (fileList: File[]) => {
     const ALLOWED_MIME_TYPES = ["image/jpeg", "image/png", "image/webp"];
     const ALLOWED_EXTENSIONS = [".jpg", ".jpeg", ".png", ".webp"];
     const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10MB
@@ -546,6 +543,33 @@ export function ProductDetailTabs({
 
     setPendingImages((prev) => [...prev, ...newPending]);
     if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    processFiles(Array.from(files));
+  };
+
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(false);
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      processFiles(Array.from(e.dataTransfer.files));
+    }
+  };
+
+  const handleDropzoneDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!isDragOver) setIsDragOver(true);
+  };
+
+  const handleDropzoneDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(false);
   };
 
   const handleRemovePendingImage = (id: string) => {
@@ -3456,22 +3480,37 @@ export function ProductDetailTabs({
           )}
 
           {localImages.length + pendingImages.filter((p) => !p.error).length < 10 && (
-            <div className="mt-6 border-t border-zinc-100 dark:border-zinc-850 pt-4 flex flex-col sm:flex-row sm:items-center gap-3">
-              <div className="flex-1">
-                <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1">
-                  컴퓨터에서 이미지 선택 (다중 선택 가능)
-                </label>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp"
-                  multiple
-                  onChange={handleImageSelect}
-                  className="block w-full text-xs text-zinc-500 dark:text-zinc-400 file:mr-4 file:py-1.5 file:px-3.5 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-zinc-100 file:text-zinc-700 dark:file:bg-zinc-800 dark:file:text-zinc-300 hover:file:bg-zinc-200 dark:hover:file:bg-zinc-750 cursor-pointer"
-                />
-              </div>
-              <div className="text-[11px] text-zinc-400 self-end pb-1.5 font-medium">
-                (등록 가능: <strong className="text-zinc-700 dark:text-zinc-300 font-mono">{10 - localImages.length - pendingImages.filter((p) => !p.error).length}</strong>장 남음)
+            <div
+              onDragOver={handleDropzoneDragOver}
+              onDragLeave={handleDropzoneDragLeave}
+              onDrop={handleDrop}
+              onClick={() => fileInputRef.current?.click()}
+              className={`mt-6 border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-all ${
+                isDragOver
+                  ? "border-indigo-500 bg-indigo-50/80 dark:border-indigo-400 dark:bg-indigo-950/50 ring-4 ring-indigo-500/20"
+                  : "border-zinc-300 dark:border-zinc-700 bg-zinc-50/50 dark:bg-zinc-950/40 hover:border-indigo-400 dark:hover:border-indigo-500 hover:bg-indigo-50/20"
+              }`}
+            >
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                multiple
+                onChange={handleImageSelect}
+                className="hidden"
+              />
+              <div className="flex flex-col items-center justify-center space-y-2">
+                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800 text-xl">
+                  📥
+                </div>
+                <div className="space-y-0.5">
+                  <p className="text-xs font-bold text-zinc-800 dark:text-zinc-200">
+                    이미지를 여기에 끌어다 놓거나 파일을 선택해 주세요.
+                  </p>
+                  <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                    JPG, PNG, WEBP 파일 지원 (최대 10MB/장, 등록 가능: <strong className="text-indigo-600 dark:text-indigo-400 font-mono font-bold">{10 - localImages.length - pendingImages.filter((p) => !p.error).length}</strong>장 남음)
+                  </p>
+                </div>
               </div>
             </div>
           )}

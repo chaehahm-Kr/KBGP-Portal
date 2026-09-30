@@ -254,7 +254,13 @@ export function evaluateProductRegistrationStatus(
   }
 
   // 8. Barcode (UPC or EAN)
-  if (!effectiveUpc && !effectiveEan) {
+  const isValidUpc = Boolean(effectiveUpc && /^\d{12}$/.test(effectiveUpc));
+  const isValidEan = Boolean(effectiveEan && /^\d{13}$/.test(effectiveEan));
+  const isUpcAcceptable = !effectiveUpc || isValidUpc;
+  const isEanAcceptable = !effectiveEan || isValidEan;
+  const hasAtLeastOneValid = isValidUpc || isValidEan;
+
+  if (!isUpcAcceptable || !isEanAcceptable || !hasAtLeastOneValid) {
     missingFields.push("식별 바코드(UPC 또는 EAN)");
   }
 
