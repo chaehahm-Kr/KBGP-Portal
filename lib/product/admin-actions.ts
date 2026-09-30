@@ -11,6 +11,7 @@ import { z } from "zod";
 import { type ProductCategory, resolveAuthoritativeCategoryCode } from "@/lib/product/types";
 import { recordProductChangeLog, getProductChangeHistory, computeProductFieldDiffs, type AuditActionType } from "@/lib/product/audit";
 import { formatEasternDate, getEasternTodayString } from "@/lib/utils/timezone";
+import { validatePrice, isNumericPrice, normalizePrice } from "@/lib/validation/global-validators";
 
 export { getProductChangeHistory };
 
@@ -63,6 +64,27 @@ export async function adminUpdateProductOverrides(
   }
   if (currentOverrides.trading_status !== undefined) {
     delete currentOverrides.trading_status;
+  }
+
+  if (cleanOverrides.price_krw_retail !== undefined && cleanOverrides.price_krw_retail !== null && String(cleanOverrides.price_krw_retail).trim() !== "") {
+    if (!isNumericPrice(cleanOverrides.price_krw_retail)) {
+      throw new Error("한국 소비자 판매가는 올바른 숫자 형식으로 입력해 주세요.");
+    }
+  }
+  if (cleanOverrides.price_usd_fob !== undefined && cleanOverrides.price_usd_fob !== null && String(cleanOverrides.price_usd_fob).trim() !== "") {
+    if (!isNumericPrice(cleanOverrides.price_usd_fob)) {
+      throw new Error("미국 수출 FOB 가격은 올바른 숫자 형식으로 입력해 주세요.");
+    }
+  }
+  if (cleanOverrides.estimated_retail_price !== undefined && cleanOverrides.estimated_retail_price !== null && String(cleanOverrides.estimated_retail_price).trim() !== "") {
+    if (!isNumericPrice(cleanOverrides.estimated_retail_price)) {
+      throw new Error("예상 미국 소비자가는 올바른 숫자 형식으로 입력해 주세요.");
+    }
+  }
+  if (cleanOverrides.price_usd_wholesale !== undefined && cleanOverrides.price_usd_wholesale !== null && String(cleanOverrides.price_usd_wholesale).trim() !== "") {
+    if (!isNumericPrice(cleanOverrides.price_usd_wholesale)) {
+      throw new Error("도매가는 올바른 숫자 형식으로 입력해 주세요.");
+    }
   }
 
   // Merge the new overrides into existing admin_overrides
@@ -1670,8 +1692,18 @@ const adminProductSchema = z.object({
     "wellness_patch",
     "other",
   ] as const satisfies readonly ProductCategory[]),
-  priceKrwRetail: z.preprocess((val) => (val === "" || val === null ? undefined : val), z.coerce.number().min(0).optional()),
-  priceUsdFob: z.preprocess((val) => (val === "" || val === null ? undefined : val), z.coerce.number().min(0).optional()),
+  priceKrwRetail: z.preprocess(
+    (val) => (val === "" || val === null ? undefined : val),
+    z.union([z.string(), z.number()]).refine((v) => v === undefined || isNumericPrice(v), {
+      message: "한국 소비자 판매가는 올바른 숫자 형식으로 입력해 주세요.",
+    }).transform((v) => (v === undefined ? undefined : Number(v))).optional()
+  ),
+  priceUsdFob: z.preprocess(
+    (val) => (val === "" || val === null ? undefined : val),
+    z.union([z.string(), z.number()]).refine((v) => v === undefined || isNumericPrice(v), {
+      message: "미국 수출 FOB 가격은 올바른 숫자 형식으로 입력해 주세요.",
+    }).transform((v) => (v === undefined ? undefined : Number(v))).optional()
+  ),
   packageWidth: z.preprocess((val) => (val === "" || val === null ? undefined : val), z.coerce.number().min(0).optional()),
   packageDepth: z.preprocess((val) => (val === "" || val === null ? undefined : val), z.coerce.number().min(0).optional()),
   packageHeight: z.preprocess((val) => (val === "" || val === null ? undefined : val), z.coerce.number().min(0).optional()),

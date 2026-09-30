@@ -6,7 +6,17 @@ export function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
 }
 
-export { ENGLISH_NAME_REGEX, isPureEnglishName } from "@/lib/user/name-helper";
+export {
+  ENGLISH_NAME_REGEX,
+  isPureEnglishName,
+  validateEnglishName,
+  NUMERIC_PRICE_REGEX,
+  isNumericPrice,
+  normalizePrice,
+  validatePrice,
+  type EnglishNameValidationResult,
+  type PriceValidationResult,
+} from "@/lib/validation/global-validators";
 
 export type DuplicateCheckResult =
   | { status: "AVAILABLE" }

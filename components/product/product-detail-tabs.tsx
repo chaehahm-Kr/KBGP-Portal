@@ -41,6 +41,7 @@ import {
 import { ConfirmForm } from "@/components/common/confirm-form";
 import { AddCertificateForm } from "@/components/product/add-certificate-form";
 import { LogisticsHelpModal, type LogisticsHelpSectionKey } from "@/components/product/logistics-help-modal";
+import { validatePrice } from "@/lib/validation/global-validators";
 
 import { type CategoryCompletionResult } from "@/lib/product/attribute-completion";
 import { useUnsavedChangesGuard } from "@/hooks/use-unsaved-changes-guard";
@@ -778,7 +779,33 @@ export function ProductDetailTabs({
       });
     }
 
-    // 4. Tiered Supply Prices validation (partial input check)
+    // 4. Price & Cost field numeric format validations
+    if (priceKrwRetail.trim() !== "") {
+      const v = validatePrice(priceKrwRetail, { required: false, allowDecimal: false, fieldNameKo: "한국 소비자가" });
+      if (!v.valid) {
+        errors.push({ tab: "price", field: "한국 소비자가", inputName: "priceKrwRetail", message: v.error! });
+      }
+    }
+    if (priceKrwWholesale.trim() !== "") {
+      const v = validatePrice(priceKrwWholesale, { required: false, allowDecimal: false, fieldNameKo: "한국 도매가" });
+      if (!v.valid) {
+        errors.push({ tab: "price", field: "한국 도매가", inputName: "priceKrwWholesale", message: v.error! });
+      }
+    }
+    if (estimatedRetailPrice.trim() !== "") {
+      const v = validatePrice(estimatedRetailPrice, { required: false, allowDecimal: true, fieldNameKo: "예상 미국 소비자가" });
+      if (!v.valid) {
+        errors.push({ tab: "price", field: "예상 미국 소비자가", inputName: "estimatedRetailPrice", message: v.error! });
+      }
+    }
+    if (priceUsdFobState.toString().trim() !== "") {
+      const v = validatePrice(priceUsdFobState, { required: false, allowDecimal: true, fieldNameKo: "수출용 FOB 가격" });
+      if (!v.valid) {
+        errors.push({ tab: "price", field: "수출용 FOB 가격", inputName: "priceUsdFob", message: v.error! });
+      }
+    }
+
+    // 5. Tiered Supply Prices validation (partial input check & numeric validation)
     const hasIncompleteTier = priceTiers.some((tier) => {
       const q = String(tier.qty ?? "").trim();
       const p = String(tier.price ?? "").trim();
@@ -791,6 +818,17 @@ export function ProductDetailTabs({
         inputName: "priceTiers",
         message: "수량별 B2B 공급가 항목에서 최소 주문 수량과 구간별 공급 단가를 모두 입력해 주세요."
       });
+    } else {
+      for (let i = 0; i < priceTiers.length; i++) {
+        const tier = priceTiers[i];
+        if (tier.price !== "" && tier.price !== undefined && tier.price !== null) {
+          const v = validatePrice(tier.price, { required: false, allowDecimal: true, fieldNameKo: `공급가 구간 ${i + 1} 단가` });
+          if (!v.valid) {
+            errors.push({ tab: "price", field: "수량별 B2B 공급 가격", inputName: "priceTiers", message: v.error! });
+            break;
+          }
+        }
+      }
     }
     
     return errors;

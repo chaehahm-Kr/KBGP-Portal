@@ -13,6 +13,7 @@ import {
   resolveRootCategoryEnum,
 } from "@/lib/product/types";
 import { recordProductChangeLog, computeProductFieldDiffs } from "@/lib/product/audit";
+import { validatePrice, isNumericPrice, normalizePrice } from "@/lib/validation/global-validators";
 
 export type ProductFormState = {
   error?: string;
@@ -247,8 +248,43 @@ export async function createProduct(
     }
 
     const category = rawCategory as ProductCategory;
-    const priceKrwRetail = rawPriceKrwRetail && !isNaN(Number(rawPriceKrwRetail)) ? Number(rawPriceKrwRetail) : null;
-    const priceUsdFob = rawPriceUsdFob && !isNaN(Number(rawPriceUsdFob)) ? Number(rawPriceUsdFob) : null;
+
+    if (rawPriceKrwRetail !== null && rawPriceKrwRetail !== undefined && String(rawPriceKrwRetail).trim() !== "") {
+      const krwValidation = validatePrice(rawPriceKrwRetail, {
+        required: false,
+        allowDecimal: false,
+        fieldNameKo: "한국 소비자 판매가",
+        language: "ko",
+      });
+      if (!krwValidation.valid) {
+        fieldErrors.priceKrwRetail = krwValidation.error!;
+      }
+    }
+
+    if (rawPriceUsdFob !== null && rawPriceUsdFob !== undefined && String(rawPriceUsdFob).trim() !== "") {
+      const usdValidation = validatePrice(rawPriceUsdFob, {
+        required: false,
+        allowDecimal: true,
+        fieldNameKo: "미국 수출 FOB 가격",
+        language: "ko",
+      });
+      if (!usdValidation.valid) {
+        fieldErrors.priceUsdFob = usdValidation.error!;
+      }
+    }
+
+    if (Object.keys(fieldErrors).length > 0) {
+      const errorCount = Object.keys(fieldErrors).length;
+      return {
+        error: errorCount === 1
+          ? Object.values(fieldErrors)[0]
+          : `임시 저장을 위해 필수 기본 정보를 입력해 주세요 (${errorCount}건).`,
+        fieldErrors,
+      };
+    }
+
+    const priceKrwRetail = normalizePrice(rawPriceKrwRetail);
+    const priceUsdFob = normalizePrice(rawPriceUsdFob);
     const packageWidth = rawPackageWidth && !isNaN(Number(rawPackageWidth)) ? Number(rawPackageWidth) : null;
     const packageDepth = rawPackageDepth && !isNaN(Number(rawPackageDepth)) ? Number(rawPackageDepth) : null;
     const packageHeight = rawPackageHeight && !isNaN(Number(rawPackageHeight)) ? Number(rawPackageHeight) : null;
@@ -332,11 +368,24 @@ export async function createProduct(
   if (!rawNameEn) {
     fieldErrors.nameEn = "필수 항목 \"영문 제품명\"을 입력해 주세요.";
   }
-  if (rawPriceKrwRetail === null || rawPriceKrwRetail === "" || isNaN(Number(rawPriceKrwRetail))) {
-    fieldErrors.priceKrwRetail = "필수 항목 \"한국 소비자 판매가\"를 입력해 주세요.";
+  const krwValidation = validatePrice(rawPriceKrwRetail, {
+    required: true,
+    allowDecimal: false,
+    fieldNameKo: "한국 소비자 판매가",
+    language: "ko",
+  });
+  if (!krwValidation.valid) {
+    fieldErrors.priceKrwRetail = krwValidation.error!;
   }
-  if (rawPriceUsdFob === null || rawPriceUsdFob === "" || isNaN(Number(rawPriceUsdFob))) {
-    fieldErrors.priceUsdFob = "필수 항목 \"미국 수출 FOB 가격\"을 입력해 주세요.";
+
+  const usdValidation = validatePrice(rawPriceUsdFob, {
+    required: true,
+    allowDecimal: true,
+    fieldNameKo: "미국 수출 FOB 가격",
+    language: "ko",
+  });
+  if (!usdValidation.valid) {
+    fieldErrors.priceUsdFob = usdValidation.error!;
   }
 
   if (!upc && !ean) {
@@ -422,8 +471,8 @@ export async function createProduct(
   }
 
   const category = rawCategory as ProductCategory;
-  const priceKrwRetail = Number(rawPriceKrwRetail);
-  const priceUsdFob = Number(rawPriceUsdFob);
+  const priceKrwRetail = normalizePrice(rawPriceKrwRetail);
+  const priceUsdFob = normalizePrice(rawPriceUsdFob);
   const packageWidth = rawPackageWidth && !isNaN(Number(rawPackageWidth)) ? Number(rawPackageWidth) : null;
   const packageDepth = rawPackageDepth && !isNaN(Number(rawPackageDepth)) ? Number(rawPackageDepth) : null;
   const packageHeight = rawPackageHeight && !isNaN(Number(rawPackageHeight)) ? Number(rawPackageHeight) : null;
@@ -807,6 +856,9 @@ const productUpdateSchema = z.object({
     .trim()
     .nullable()
     .optional()
+    .refine((v) => !v || isNumericPrice(v), {
+      message: "예상 미국 소비자가는 올바른 숫자 형식으로 입력해 주세요. 예: 12.99",
+    })
     .transform((v) => (v ? Number(v) : null)),
   ingredientsText: z.string().trim().nullable().optional(),
   description: z.string().trim().nullable().optional(),
@@ -833,18 +885,27 @@ const productUpdateSchema = z.object({
     .trim()
     .nullable()
     .optional()
+    .refine((v) => !v || isNumericPrice(v), {
+      message: "한국 소비자 판매가는 올바른 숫자 형식으로 입력해 주세요.",
+    })
     .transform((v) => (v ? Number(v) : null)),
   priceKrwWholesale: z
     .string()
     .trim()
     .nullable()
     .optional()
+    .refine((v) => !v || isNumericPrice(v), {
+      message: "한국 도매가는 올바른 숫자 형식으로 입력해 주세요.",
+    })
     .transform((v) => (v ? Number(v) : null)),
   priceUsdFob: z
     .string()
     .trim()
     .nullable()
     .optional()
+    .refine((v) => !v || isNumericPrice(v), {
+      message: "수출용 FOB 가격은 올바른 숫자 형식으로 입력해 주세요. 예: 12.99",
+    })
     .transform((v) => (v ? Number(v) : null)),
 
   // Logistics

@@ -11,6 +11,7 @@ import {
 import { PASSWORD_RULE_DESCRIPTION } from "@/lib/auth/password";
 import { InternationalPhoneInput } from "@/components/shared/international-phone-input";
 import { getPersonDisplayName, getPersonStructuredNames } from "@/lib/user/name-helper";
+import { validateEnglishName } from "@/lib/validation/global-validators";
 
 interface MyAccountViewProps {
   initialData: MyAccountData;
@@ -106,18 +107,28 @@ export function MyAccountView({ initialData }: MyAccountViewProps) {
       return;
     }
 
-    if (!eLast) {
+    const lastRes = validateEnglishName(eLast, {
+      required: true,
+      fieldNameKo: "영문 성",
+      language: "ko",
+    });
+    if (!lastRes.valid) {
       setProfileMessage({
         type: "error",
-        text: "영문 성(Last Name)을 입력해 주세요. (예: Park)",
+        text: lastRes.error || "영문 성은 영문자로 입력해 주세요.",
       });
       return;
     }
 
-    if (!eFirst) {
+    const firstRes = validateEnglishName(eFirst, {
+      required: true,
+      fieldNameKo: "영문 이름",
+      language: "ko",
+    });
+    if (!firstRes.valid) {
       setProfileMessage({
         type: "error",
-        text: "영문 이름(First Name)을 입력해 주세요. (예: Eun 또는 Eun Ae)",
+        text: firstRes.error || "영문 이름은 영문자로 입력해 주세요.",
       });
       return;
     }

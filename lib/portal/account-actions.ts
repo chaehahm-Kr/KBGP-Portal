@@ -9,6 +9,7 @@ import { passwordSchema, PASSWORD_RULE_DESCRIPTION } from "@/lib/auth/password";
 import { requestPasswordReset } from "@/lib/auth/reset-password";
 
 import { getPersonStructuredNames, ResolvablePersonName } from "@/lib/user/name-helper";
+import { validateEnglishName } from "@/lib/validation/global-validators";
 
 export interface MyAccountData {
   userId: string;
@@ -178,11 +179,22 @@ export async function updateMyAccountProfileAction(
     if (!trimmedKoreanFirst && !computedKoreanName) {
       return { success: false, error: "한글 이름(Korean First Name)을 입력해 주세요. (예: 은애)" };
     }
-    if (!trimmedLast) {
-      return { success: false, error: "영문 성(Last Name)을 입력해 주세요. (예: Park)" };
+    const lastValidation = validateEnglishName(trimmedLast, {
+      required: true,
+      fieldNameKo: "영문 성",
+      language: "ko",
+    });
+    if (!lastValidation.valid) {
+      return { success: false, error: lastValidation.error! };
     }
-    if (!trimmedFirst) {
-      return { success: false, error: "영문 이름(First Name)을 입력해 주세요. (예: Eun Ae)" };
+
+    const firstValidation = validateEnglishName(trimmedFirst, {
+      required: true,
+      fieldNameKo: "영문 이름",
+      language: "ko",
+    });
+    if (!firstValidation.valid) {
+      return { success: false, error: firstValidation.error! };
     }
     if (!trimmedTitle) {
       return { success: false, error: "직함을 입력해 주세요. (예: 대표이사, 이사, 팀장)" };

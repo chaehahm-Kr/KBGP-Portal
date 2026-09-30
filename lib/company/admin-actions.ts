@@ -569,6 +569,13 @@ export async function adminUpdateCompanyUser(
     throw new Error("대상 사용자를 찾을 수 없습니다.");
   }
 
+  if (payload.englishFirstName && !isPureEnglishName(payload.englishFirstName)) {
+    throw new Error("영문 이름은 영문자로 입력해 주세요.");
+  }
+  if (payload.englishLastName && !isPureEnglishName(payload.englishLastName)) {
+    throw new Error("영문 성은 영문자로 입력해 주세요.");
+  }
+
   // Derive canonical structured names merging existing target data
   const structured = getPersonStructuredNames({
     ...target,

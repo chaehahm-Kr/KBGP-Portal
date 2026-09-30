@@ -28,6 +28,7 @@ import { formatEasternDateTime } from "@/lib/utils/timezone";
 import { CompanyShippingOriginsTab } from "@/components/company/company-shipping-origins-tab";
 import { type CompanyShippingOrigin } from "@/lib/company/shipping-origin-actions";
 import { CompanyAgreementsTab } from "@/components/admin/company-agreements-tab";
+import { validateEnglishName } from "@/lib/validation/global-validators";
 import { StartImpersonationModal } from "@/components/admin/start-impersonation-modal";
 import {
   getPersonDisplayName,
@@ -591,6 +592,23 @@ export function CompanyDetailManager({
       alert("이름과 이메일은 필수 입력 사항입니다.");
       return;
     }
+
+    if (addEnglishFirstName.trim()) {
+      const v = validateEnglishName(addEnglishFirstName, { required: false, fieldNameKo: "영문 이름" });
+      if (!v.valid) {
+        alert(v.error);
+        return;
+      }
+    }
+
+    if (addEnglishLastName.trim()) {
+      const v = validateEnglishName(addEnglishLastName, { required: false, fieldNameKo: "영문 성" });
+      if (!v.valid) {
+        alert(v.error);
+        return;
+      }
+    }
+
     startTransition(async () => {
       try {
         await adminInviteCompanyUser(company.id, {
@@ -628,6 +646,22 @@ export function CompanyDetailManager({
     ) {
       alert("이름은 필수 입력 사항입니다.");
       return;
+    }
+
+    if (editEnglishFirstName.trim()) {
+      const v = validateEnglishName(editEnglishFirstName, { required: false, fieldNameKo: "영문 이름" });
+      if (!v.valid) {
+        alert(v.error);
+        return;
+      }
+    }
+
+    if (editEnglishLastName.trim()) {
+      const v = validateEnglishName(editEnglishLastName, { required: false, fieldNameKo: "영문 성" });
+      if (!v.valid) {
+        alert(v.error);
+        return;
+      }
     }
 
     // [신규 예외처리]: 비활성화(suspended) 시 주 담당자 배정 여부 검사

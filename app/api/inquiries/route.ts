@@ -8,6 +8,7 @@ import { publicEnv } from "@/lib/env/public";
 import { validateUploadedFile } from "@/lib/files/validate";
 import { getPersonStructuredNames, getPersonGreetingName, getPersonDisplayName } from "@/lib/user/name-helper";
 import { generateNextApplicationNumber } from "@/lib/application/number-generator";
+import { isPureEnglishName, isNumericPrice, normalizePrice } from "@/lib/validation/global-validators";
 
 export const runtime = "nodejs";
 
@@ -30,8 +31,22 @@ const MAX_TOTAL_BYTES = 10 * 1024 * 1024;
 const productSchema = z.object({
   name: z.string().trim().min(1),
   category: z.string().trim().min(1),
-  priceKrw: z.string().optional().default(""),
-  supplyPriceUsd: z.string().optional().default(""),
+  priceKrw: z
+    .string()
+    .trim()
+    .refine((val) => !val || isNumericPrice(val), {
+      message: "국내 판매가는 숫자만 입력해 주세요.",
+    })
+    .optional()
+    .default(""),
+  supplyPriceUsd: z
+    .string()
+    .trim()
+    .refine((val) => !val || isNumericPrice(val), {
+      message: "공급가는 올바른 숫자 형식으로 입력해 주세요. 예: 12.99",
+    })
+    .optional()
+    .default(""),
   packageWidth: z.string().optional().default(""),
   packageDepth: z.string().optional().default(""),
   packageHeight: z.string().optional().default(""),
@@ -70,8 +85,22 @@ const payloadSchema = z.object({
   contactName: z.string().trim().min(1),
   koreanLastName: z.string().optional().default(""),
   koreanFirstName: z.string().optional().default(""),
-  englishFirstName: z.string().optional().default(""),
-  englishLastName: z.string().optional().default(""),
+  englishFirstName: z
+    .string()
+    .trim()
+    .refine((val) => !val || isPureEnglishName(val), {
+      message: "영문 이름은 영문자로 입력해 주세요.",
+    })
+    .optional()
+    .default(""),
+  englishLastName: z
+    .string()
+    .trim()
+    .refine((val) => !val || isPureEnglishName(val), {
+      message: "영문 성은 영문자로 입력해 주세요.",
+    })
+    .optional()
+    .default(""),
   contactTitle: z.string().optional().default(""),
   contactDepartment: z.string().optional().default(""),
   email: z.email(),

@@ -4,6 +4,7 @@ import React, { useState, useRef, useTransition, useActionState, startTransition
 import { useRouter } from "next/navigation";
 import type { ProductFormState } from "@/lib/product/actions";
 import { PRODUCT_CATEGORY_LABEL, type ProductCategory, sanitizeSku, trimSkuSeparators } from "@/lib/product/types";
+import { validatePrice } from "@/lib/validation/global-validators";
 
 const NEW_BRAND_ACTION = "__NEW_BRAND_SHORTCUT__";
 
@@ -256,6 +257,30 @@ export function ProductForm({ action, brands }: ProductFormProps) {
         errors.ean = "EAN은 숫자 13자리로 입력해 주세요.";
       }
 
+      if (priceKrwRetail.trim()) {
+        const krwRes = validatePrice(priceKrwRetail, {
+          required: false,
+          allowDecimal: false,
+          fieldNameKo: "한국 소비자 판매가",
+          language: "ko",
+        });
+        if (!krwRes.valid) {
+          errors.priceKrwRetail = krwRes.error!;
+        }
+      }
+
+      if (priceUsdFob.trim()) {
+        const usdRes = validatePrice(priceUsdFob, {
+          required: false,
+          allowDecimal: true,
+          fieldNameKo: "미국 수출 FOB 가격",
+          language: "ko",
+        });
+        if (!usdRes.valid) {
+          errors.priceUsdFob = usdRes.error!;
+        }
+      }
+
       if (Object.keys(errors).length > 0) {
         e.preventDefault();
         setFieldErrors(errors);
@@ -291,11 +316,25 @@ export function ProductForm({ action, brands }: ProductFormProps) {
     if (!nameEn.trim()) {
       errors.nameEn = "필수 항목 \"영문 제품명\"을 입력해 주세요.";
     }
-    if (!priceKrwRetail || isNaN(Number(priceKrwRetail))) {
-      errors.priceKrwRetail = "필수 항목 \"한국 소비자 판매가\"를 입력해 주세요.";
+
+    const krwValidation = validatePrice(priceKrwRetail, {
+      required: true,
+      allowDecimal: false,
+      fieldNameKo: "한국 소비자 판매가",
+      language: "ko",
+    });
+    if (!krwValidation.valid) {
+      errors.priceKrwRetail = krwValidation.error!;
     }
-    if (!priceUsdFob || isNaN(Number(priceUsdFob))) {
-      errors.priceUsdFob = "필수 항목 \"미국 수출 FOB 가격\"을 입력해 주세요.";
+
+    const usdValidation = validatePrice(priceUsdFob, {
+      required: true,
+      allowDecimal: true,
+      fieldNameKo: "미국 수출 FOB 가격",
+      language: "ko",
+    });
+    if (!usdValidation.valid) {
+      errors.priceUsdFob = usdValidation.error!;
     }
 
     if (!hasUpcVal && !hasEanVal) {
