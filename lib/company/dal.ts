@@ -19,7 +19,7 @@ export type CompanyMembership = {
  */
 export async function requireCompanyMembership(): Promise<CompanyMembership> {
   const session = await verifyPortalSession();
-  const supabase = session.isImpersonating ? createAdminClient() : await createClient();
+  const supabase = createAdminClient();
 
   const { data: companyUser } = await supabase
     .from("company_users")

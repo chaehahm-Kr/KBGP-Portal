@@ -33,10 +33,11 @@ export default async function PartnerPortalLayout({
   children: React.ReactNode;
 }) {
   const impSession = await getImpersonationSession();
-  const supabase = impSession ? createAdminClient() : await createClient();
+  const authSupabase = await createClient();
+  const adminSupabase = createAdminClient();
   
   // Try to get user session safely without redirecting
-  const { data: { user } } = await supabase.auth.getUser();
+  const { data: { user } } = await authSupabase.auth.getUser();
 
   if (!user && !impSession) {
     return (
@@ -56,7 +57,7 @@ export default async function PartnerPortalLayout({
   if (effectiveUserId) {
     if (!impSession) {
       // Fetch profile display_name
-      const { data: profile } = await supabase
+      const { data: profile } = await adminSupabase
         .from("profiles")
         .select("display_name")
         .eq("id", effectiveUserId)
@@ -67,7 +68,7 @@ export default async function PartnerPortalLayout({
       }
     }
     
-    const { data: companyUser } = await supabase
+    const { data: companyUser } = await adminSupabase
       .from("company_users")
       .select("company_id, company_role")
       .eq("id", effectiveUserId)
@@ -76,7 +77,7 @@ export default async function PartnerPortalLayout({
     if (companyUser) {
       companyRole = companyUser.company_role;
       if (!impSession) {
-        const { data: company } = await supabase
+        const { data: company } = await adminSupabase
           .from("companies")
           .select("name")
           .eq("id", companyUser.company_id)

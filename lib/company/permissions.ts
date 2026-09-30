@@ -30,7 +30,7 @@ export async function getPortalUserAcl(): Promise<{
     };
   }
 
-  const supabase = membership.isImpersonating ? createAdminClient() : await createClient();
+  const supabase = createAdminClient();
   const { data: user } = await supabase
     .from("company_users")
     .select("permissions, company_role")
