@@ -6,6 +6,8 @@ export function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
 }
 
+export { ENGLISH_NAME_REGEX, isPureEnglishName } from "@/lib/user/name-helper";
+
 export type DuplicateCheckResult =
   | { status: "AVAILABLE" }
   | { status: "REUSE_AUTH_USER"; authUserId: string }

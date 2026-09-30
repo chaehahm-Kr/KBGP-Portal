@@ -37,6 +37,8 @@ export function CompanyAclMatrixEditor({
     const presetMatrix = ROLE_PRESETS[newRole];
     onPermissionsChange({
       ...permissions,
+      preset: newRole,
+      role: newRole,
       ...presetMatrix,
     });
   };

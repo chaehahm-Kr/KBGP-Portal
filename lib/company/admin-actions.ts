@@ -13,7 +13,7 @@ import { validateUploadedFile } from "@/lib/files/validate";
 import { publicEnv } from "@/lib/env/public";
 import { sendTemplatedEmail } from "@/lib/notifications/templates";
 import { logRemittanceChanges } from "@/lib/company/remittance-log";
-import { normalizeEmail, checkUserEmailDuplicate } from "@/lib/user/validation";
+import { normalizeEmail, checkUserEmailDuplicate, isPureEnglishName } from "@/lib/user/validation";
 import { getBilingualError } from "@/lib/errors/bilingual-messages";
 import {
   getPersonStructuredNames,
@@ -433,6 +433,13 @@ export async function adminInviteCompanyUser(
     throw new Error(getBilingualError("INVALID_EMAIL"));
   }
 
+  if (payload.englishFirstName && !isPureEnglishName(payload.englishFirstName)) {
+    throw new Error("영문 이름은 영문자로 입력해 주세요.");
+  }
+  if (payload.englishLastName && !isPureEnglishName(payload.englishLastName)) {
+    throw new Error("영문 성은 영문자로 입력해 주세요.");
+  }
+
   // Derive canonical structured names
   const structured = getPersonStructuredNames({
     koreanLastName: payload.koreanLastName,
@@ -482,8 +489,11 @@ export async function adminInviteCompanyUser(
   }
 
   // 4. Insert into company_users
+  const rawPreset = (payload as any).preset || (payload as any).role || (payload.companyRole === "company_admin" ? "admin" : "staff");
   const permissionsObj = {
     ...(payload.permissions || {}),
+    preset: rawPreset,
+    role: rawPreset,
     ...(structured.koreanLastName ? { korean_last_name: structured.koreanLastName } : {}),
     ...(structured.koreanFirstName ? { korean_first_name: structured.koreanFirstName } : {}),
     ...(structured.englishFirstName ? { english_first_name: structured.englishFirstName, first_name: structured.englishFirstName } : {}),

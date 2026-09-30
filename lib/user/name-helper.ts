@@ -15,6 +15,13 @@
  * - english_last_name (영문 Last Name)
  */
 
+export const ENGLISH_NAME_REGEX = /^[A-Za-z\s'\-]+$/;
+
+export function isPureEnglishName(name: string): boolean {
+  if (!name || !name.trim()) return false;
+  return ENGLISH_NAME_REGEX.test(name.trim());
+}
+
 export interface StructuredPersonNames {
   koreanLastName: string;
   koreanFirstName: string;

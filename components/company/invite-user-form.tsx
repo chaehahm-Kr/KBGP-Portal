@@ -51,8 +51,13 @@ export function InviteUserForm({ onSuccess, onCancel }: InviteUserFormProps) {
         />
         <input
           type="hidden"
+          name="rawRolePreset"
+          value={selectedRole}
+        />
+        <input
+          type="hidden"
           name="permissionsJson"
-          value={JSON.stringify(permissions)}
+          value={JSON.stringify({ preset: selectedRole, role: selectedRole, ...permissions })}
         />
 
         {/* Header line if modal/card cancel is provided */}
@@ -80,13 +85,27 @@ export function InviteUserForm({ onSuccess, onCancel }: InviteUserFormProps) {
             <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300">
               영문 성 (English Last Name) <span className="text-rose-500">*</span>
             </label>
-            <input name="englishLastName" required placeholder="Hong" className={inputClass} />
+            <input
+              name="englishLastName"
+              required
+              placeholder="Hong"
+              pattern="[A-Za-z\s'\-]+"
+              title="영문 성은 영문자(A-Z, a-z), 공백, 하이픈(-), 아포스트로피(')만 입력 가능합니다."
+              className={inputClass}
+            />
           </div>
           <div>
             <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300">
               영문 이름 (English First Name) <span className="text-rose-500">*</span>
             </label>
-            <input name="englishFirstName" required placeholder="Gildong" className={inputClass} />
+            <input
+              name="englishFirstName"
+              required
+              placeholder="Gildong"
+              pattern="[A-Za-z\s'\-]+"
+              title="영문 이름은 영문자(A-Z, a-z), 공백, 하이픈(-), 아포스트로피(')만 입력 가능합니다."
+              className={inputClass}
+            />
           </div>
         </div>
 

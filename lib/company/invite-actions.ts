@@ -8,9 +8,9 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { deactivateUserSessions } from "@/lib/auth/admin-actions";
 import { publicEnv } from "@/lib/env/public";
 import { requireCompanyAdmin } from "@/lib/company/dal";
-import { normalizeEmail, checkUserEmailDuplicate } from "@/lib/user/validation";
+import { normalizeEmail, checkUserEmailDuplicate, isPureEnglishName } from "@/lib/user/validation";
 import { getBilingualError } from "@/lib/errors/bilingual-messages";
-import { mapPresetToMembershipRole } from "@/lib/permissions/brand-portal-acl";
+import { mapPresetToMembershipRole, mapRoleToPreset, getRoleKoreanTitle, getRoleDisplayLabel } from "@/lib/permissions/brand-portal-acl";
 
 import { getPersonStructuredNames } from "@/lib/user/name-helper";
 
@@ -20,32 +20,27 @@ import { getCanonicalPortalUrl } from "@/lib/config/portal";
 
 export type InviteFormState = { error?: string; message?: string } | undefined;
 
-function getRoleKoreanTitle(companyRole: string, permissions?: Record<string, any>): string {
-  if (companyRole === "company_admin" || permissions?.role === "admin") return "관리자";
-  if (permissions?.role === "manager") return "매니저";
-  if (permissions?.role === "staff" || companyRole === "company_staff") return "담당자";
-  if (permissions?.role === "viewer") return "조회 사용자";
-  if (permissions?.role === "restricted") return "접근 제한 사용자";
-  return "담당자";
-}
-
-function getRoleDisplayLabel(companyRole: string, permissions?: Record<string, any>): string {
-  const title = getRoleKoreanTitle(companyRole, permissions);
-  if (companyRole === "company_admin" || permissions?.role === "admin") return `Admin (${title})`;
-  if (permissions?.role === "manager") return `Manager (${title})`;
-  if (permissions?.role === "staff" || companyRole === "company_staff") return `Staff (${title})`;
-  if (permissions?.role === "viewer") return `Viewer (${title})`;
-  if (permissions?.role === "restricted") return `Restricted (${title})`;
-  return `Staff (${title})`;
-}
 
 const inviteSchema = z.object({
   name: z.string().trim().optional().default(""),
   koreanLastName: z.string().trim().optional().default(""),
   koreanFirstName: z.string().trim().optional().default(""),
-  englishFirstName: z.string().trim().min(1, "영문 이름(English First Name)을 입력해 주세요."),
-  englishLastName: z.string().trim().min(1, "영문 성(English Last Name)을 입력해 주세요."),
+  englishFirstName: z
+    .string()
+    .trim()
+    .min(1, "영문 이름(English First Name)을 입력해 주세요.")
+    .refine((val) => isPureEnglishName(val), {
+      message: "영문 이름은 영문자로 입력해 주세요.",
+    }),
+  englishLastName: z
+    .string()
+    .trim()
+    .min(1, "영문 성(English Last Name)을 입력해 주세요.")
+    .refine((val) => isPureEnglishName(val), {
+      message: "영문 성은 영문자로 입력해 주세요.",
+    }),
   email: z.string().trim().email("올바른 이메일 형식이 아닙니다."),
+  rawRolePreset: z.string().optional().default("viewer"),
   companyRole: z.string().min(1).transform((val) => mapPresetToMembershipRole(val)),
 });
 
@@ -99,6 +94,8 @@ export async function inviteCompanyUser(
 
   const admin = createAdminClient();
 
+  const rawRolePreset = (formData.get("companyRole") as string) || "viewer";
+
   // Fetch inviter user info
   const { data: inviterUser } = await admin
     .from("company_users")
@@ -107,13 +104,18 @@ export async function inviteCompanyUser(
     .maybeSingle();
 
   // Fetch company info
-  const { data: company } = await admin
+  const { data: company, error: compErr } = await admin
     .from("companies")
-    .select("name, company_name_ko, company_name_en")
+    .select("name")
     .eq("id", companyId)
     .maybeSingle();
 
-  const companyDisplayName = company?.name || company?.company_name_ko || company?.company_name_en || "파트너사";
+  if (compErr || !company?.name) {
+    console.error("Failed to resolve inviting company record:", compErr);
+    return { error: "초청 회사의 정보(회사명)를 불러올 수 없습니다." };
+  }
+
+  const companyDisplayName = company.name;
   const inviterName = inviterUser?.name || "회사 관리자";
   const inviterEmail = inviterUser?.email || "";
 
@@ -182,6 +184,8 @@ export async function inviteCompanyUser(
 
   const permissions = {
     ...customPermissions,
+    preset: rawRolePreset,
+    role: rawRolePreset,
     korean_last_name: structured.koreanLastName,
     korean_first_name: structured.koreanFirstName,
     english_first_name: structured.englishFirstName,
@@ -280,13 +284,18 @@ export async function reinviteCompanyUser(targetUserId: string) {
     .maybeSingle();
 
   // Fetch company info
-  const { data: company } = await admin
+  const { data: company, error: compErr } = await admin
     .from("companies")
-    .select("name, company_name_ko, company_name_en")
+    .select("name")
     .eq("id", companyId)
     .maybeSingle();
 
-  const companyDisplayName = company?.name || company?.company_name_ko || company?.company_name_en || "파트너사";
+  if (compErr || !company?.name) {
+    console.error("Failed to resolve company in reinviteCompanyUser:", compErr);
+    throw new Error("초청 회사의 정보(회사명)를 불러올 수 없습니다.");
+  }
+
+  const companyDisplayName = company.name;
   const inviterName = inviterUser?.name || "회사 관리자";
   const inviterEmail = inviterUser?.email || "";
   const roleLabel = getRoleDisplayLabel(target.company_role, target.permissions);

@@ -92,6 +92,8 @@ export default function PortalSidebar({
 
   const settingsPages: { name: string; href: string; category?: AclCategory }[] = [
     { name: "회사 정보", href: "/portal/company/info", category: "company_info" },
+    { name: "송금 계좌 정보", href: "/portal/company/info#bank", category: "bank_info" },
+    { name: "계약 및 문서", href: "/portal/company/info#agreements", category: "agreements" },
     { name: "브랜드 관리", href: "/portal/brands", category: "brands" },
     ...(isCompanyAdmin ? [{ name: "사용자 관리", href: "/portal/company/users" }] : []),
     { name: "입점 신청 내역", href: "/portal/applications", category: "application" },

@@ -142,14 +142,15 @@ export function normalizePermissions(
   permissionsObj: Record<string, any> = {},
   userRole?: string
 ): Record<AclCategory, AclLevel> {
+  const presetKey = permissionsObj?.preset || permissionsObj?.role || userRole;
   let defaultPreset = ROLE_PRESETS.viewer;
-  if (userRole === "company_admin" || userRole === "admin") {
+  if (presetKey === "company_admin" || presetKey === "admin") {
     defaultPreset = ROLE_PRESETS.admin;
-  } else if (userRole === "restricted" || userRole === "company_restricted") {
+  } else if (presetKey === "restricted" || presetKey === "company_restricted") {
     defaultPreset = ROLE_PRESETS.restricted;
-  } else if (userRole === "staff" || userRole === "company_staff") {
+  } else if (presetKey === "staff" || presetKey === "company_staff") {
     defaultPreset = ROLE_PRESETS.staff;
-  } else if (userRole === "manager" || userRole === "company_manager") {
+  } else if (presetKey === "manager" || presetKey === "company_manager") {
     defaultPreset = ROLE_PRESETS.manager;
   }
 
@@ -176,13 +177,25 @@ export function normalizePermissions(
 }
 
 /**
- * Maps a CompanyRole or BrandPortalRole to its preset id
+ * Maps a CompanyRole, permissions object, or BrandPortalRole to its canonical preset id
  */
-export function mapRoleToPreset(role: string): BrandPortalRole {
-  if (role === "company_admin" || role === "admin") return "admin";
-  if (role === "company_manager" || role === "manager") return "manager";
-  if (role === "company_staff" || role === "staff") return "staff";
-  if (role === "company_restricted" || role === "restricted") return "restricted";
+export function mapRoleToPreset(
+  roleOrPermissions: any,
+  fallbackCompanyRole?: string
+): BrandPortalRole {
+  let r = "";
+  if (typeof roleOrPermissions === "object" && roleOrPermissions !== null) {
+    r = roleOrPermissions.preset || roleOrPermissions.role || fallbackCompanyRole || "";
+  } else if (typeof roleOrPermissions === "string") {
+    r = roleOrPermissions;
+  } else {
+    r = fallbackCompanyRole || "";
+  }
+
+  if (r === "company_admin" || r === "admin") return "admin";
+  if (r === "company_manager" || r === "manager") return "manager";
+  if (r === "company_staff" || r === "staff") return "staff";
+  if (r === "company_restricted" || r === "restricted") return "restricted";
   return "viewer";
 }
 
@@ -195,3 +208,25 @@ export function mapPresetToMembershipRole(roleInput: string): "company_admin" | 
   }
   return "company_staff";
 }
+
+export function getRoleKoreanTitle(companyRole: string, permissions?: Record<string, any>): string {
+  const preset = permissions?.preset || permissions?.role || mapRoleToPreset(permissions, companyRole);
+  if (preset === "admin" || companyRole === "company_admin") return "관리자";
+  if (preset === "manager") return "매니저";
+  if (preset === "staff") return "담당자";
+  if (preset === "viewer") return "조회 사용자";
+  if (preset === "restricted") return "접근 제한 사용자";
+  return "담당자";
+}
+
+export function getRoleDisplayLabel(companyRole: string, permissions?: Record<string, any>): string {
+  const title = getRoleKoreanTitle(companyRole, permissions);
+  const preset = permissions?.preset || permissions?.role || mapRoleToPreset(permissions, companyRole);
+  if (preset === "admin" || companyRole === "company_admin") return `Admin (${title})`;
+  if (preset === "manager") return `Manager (${title})`;
+  if (preset === "staff") return `Staff (${title})`;
+  if (preset === "viewer") return `Viewer (${title})`;
+  if (preset === "restricted") return `Restricted (${title})`;
+  return `Staff (${title})`;
+}
+

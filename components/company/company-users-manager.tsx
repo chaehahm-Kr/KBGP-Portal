@@ -13,8 +13,9 @@ import { isInviteExpired } from "@/lib/company/types";
 import { updateUserTaskAssignments } from "@/lib/company/task-actions";
 import { TASK_DEFINITIONS } from "@/lib/company/task-constants";
 import { InternationalPhoneInput } from "@/components/shared/international-phone-input";
-import { getPersonDisplayName, getPersonStructuredNames } from "@/lib/user/name-helper";
+import { getPersonDisplayName, getPersonStructuredNames, isPureEnglishName } from "@/lib/user/name-helper";
 import { CompanyAclMatrixEditor } from "./company-acl-matrix-editor";
+
 import { InviteUserForm } from "./invite-user-form";
 import { mapRoleToPreset, normalizePermissions, type BrandPortalRole } from "@/lib/permissions/brand-portal-acl";
 
@@ -102,7 +103,7 @@ export function CompanyUsersManager({ initialUsers, currentUserId }: CompanyUser
     setFormPosition(user.position || "");
     setFormPhone(user.phone || "");
     setFormRole(user.company_role || "company_staff");
-    setFormRolePreset(mapRoleToPreset(user.company_role || user.role));
+    setFormRolePreset(mapRoleToPreset(user.permissions, user.company_role));
     setFormStatus(user.status);
     setFormIsPrimary(user.is_primary || false);
     setFormPermissions(normalizePermissions(user.permissions || {}, user.company_role));
@@ -160,6 +161,15 @@ export function CompanyUsersManager({ initialUsers, currentUserId }: CompanyUser
   const handleSave = () => {
     if (!editingUser) return;
 
+    if (formEnglishFirstName && !isPureEnglishName(formEnglishFirstName)) {
+      alert("영문 이름은 영문자로 입력해 주세요.");
+      return;
+    }
+    if (formEnglishLastName && !isPureEnglishName(formEnglishLastName)) {
+      alert("영문 성은 영문자로 입력해 주세요.");
+      return;
+    }
+
     const structured = getPersonStructuredNames({
       koreanLastName: formKoreanLastName,
       koreanFirstName: formKoreanFirstName,
@@ -184,6 +194,8 @@ export function CompanyUsersManager({ initialUsers, currentUserId }: CompanyUser
 
     const updatedPermissions = {
       ...formPermissions,
+      preset: formRolePreset,
+      role: formRolePreset,
       korean_last_name: structured.koreanLastName,
       korean_first_name: structured.koreanFirstName,
       english_first_name: structured.englishFirstName,
@@ -467,15 +479,42 @@ export function CompanyUsersManager({ initialUsers, currentUserId }: CompanyUser
                       )}
                     </td>
                     <td className="px-6 py-4">
-                      {row.company_role === "company_admin" ? (
-                        <span className="inline-flex items-center rounded-md bg-indigo-50 border border-indigo-200 dark:bg-indigo-950/70 dark:border-indigo-700/70 px-2.5 py-0.5 text-[11px] font-bold text-indigo-700 dark:text-indigo-200 shadow-2xs">
-                          {ROLE_LABEL[row.company_role] || "관리자(Admin)"}
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center rounded-md bg-zinc-100 border border-zinc-200 dark:bg-zinc-800 dark:border-zinc-700 px-2.5 py-0.5 text-[11px] font-medium text-zinc-800 dark:text-zinc-200">
-                          {ROLE_LABEL[row.company_role] || "담당자(Staff)"}
-                        </span>
-                      )}
+                      {(() => {
+                        const preset = mapRoleToPreset(row.permissions, row.company_role);
+                        if (preset === "admin" || row.company_role === "company_admin") {
+                          return (
+                            <span className="inline-flex items-center rounded-md bg-indigo-50 border border-indigo-200 dark:bg-indigo-950/70 dark:border-indigo-700/70 px-2.5 py-0.5 text-[11px] font-bold text-indigo-700 dark:text-indigo-200 shadow-2xs">
+                              관리자 (Admin)
+                            </span>
+                          );
+                        }
+                        if (preset === "manager") {
+                          return (
+                            <span className="inline-flex items-center rounded-md bg-purple-50 border border-purple-200 dark:bg-purple-950/70 dark:border-purple-700/70 px-2.5 py-0.5 text-[11px] font-bold text-purple-700 dark:text-purple-200 shadow-2xs">
+                              매니저 (Manager)
+                            </span>
+                          );
+                        }
+                        if (preset === "staff") {
+                          return (
+                            <span className="inline-flex items-center rounded-md bg-blue-50 border border-blue-200 dark:bg-blue-950/70 dark:border-blue-700/70 px-2.5 py-0.5 text-[11px] font-medium text-blue-700 dark:text-blue-200">
+                              담당자 (Staff)
+                            </span>
+                          );
+                        }
+                        if (preset === "viewer") {
+                          return (
+                            <span className="inline-flex items-center rounded-md bg-zinc-100 border border-zinc-200 dark:bg-zinc-800 dark:border-zinc-700 px-2.5 py-0.5 text-[11px] font-medium text-zinc-800 dark:text-zinc-200">
+                              조회자 (Viewer)
+                            </span>
+                          );
+                        }
+                        return (
+                          <span className="inline-flex items-center rounded-md bg-amber-50 border border-amber-200 dark:bg-amber-950/70 dark:border-amber-700/70 px-2.5 py-0.5 text-[11px] font-medium text-amber-800 dark:text-amber-200">
+                            접근제한 (Restricted)
+                          </span>
+                        );
+                      })()}
                     </td>
                     <td className="px-6 py-4">
                       <span
