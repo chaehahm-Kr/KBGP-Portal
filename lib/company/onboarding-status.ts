@@ -68,8 +68,14 @@ export function evaluateCompanyOnboarding(input: CompanyEvaluationInput): Compan
     ""
   ).trim();
 
-  // 1. 회사 정보 확인
-  const isCompanyInfoConfirmed = Boolean(parsedMeta.company_onboarding_confirmed_at);
+  // 1. 회사 정보 확인 (Mandatory Address: address_1, city, state, zip_code required)
+  const hasRequiredAddress = Boolean(
+    parsedMeta.address_1?.trim() &&
+    parsedMeta.city?.trim() &&
+    parsedMeta.state?.trim() &&
+    parsedMeta.zip_code?.trim()
+  );
+  const isCompanyInfoConfirmed = Boolean(parsedMeta.company_onboarding_confirmed_at && hasRequiredAddress);
 
   // 2. 관리자 정보 확인 (Name, English Name, Job Title, Phone are REQUIRED)
   const isAdminProfileConfirmed = Boolean(

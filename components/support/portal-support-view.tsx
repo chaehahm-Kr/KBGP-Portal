@@ -694,11 +694,11 @@ Outstanding Balance: ${formattedBalance}
                   <label className="text-[10px] font-bold text-zinc-700 dark:text-zinc-300">내용 <span className="text-rose-500">*</span></label>
                   <textarea
                     name="content"
-                    rows={5}
+                    rows={10}
                     value={content}
                     onChange={(e) => setContent(e.target.value)}
                     placeholder="문의 내용을 자세히 입력해주세요."
-                    className="w-full rounded-lg border border-zinc-200 bg-zinc-50/50 px-3 py-2 text-xs outline-none dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:border-zinc-950 dark:focus:border-white transition-colors leading-relaxed resize-none"
+                    className="w-full min-h-[220px] rounded-lg border border-zinc-200 bg-zinc-50/50 px-3 py-2 text-xs outline-none dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:border-zinc-950 dark:focus:border-white transition-colors leading-relaxed resize-y"
                   />
                 </div>
                 <div className="space-y-1.5">

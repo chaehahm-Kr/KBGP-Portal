@@ -395,7 +395,14 @@ export function CompanyProfileManager({
   // 활성 상태의 소속 사용자만 선택 가능
   const activeMembers = companyUsers.filter(u => u.status === "active");
 
+  const hasRequiredAddress = Boolean(address1.trim() && city.trim() && stateProv.trim() && zipCode.trim());
+  const isStep1Complete = Boolean(parsedMeta.company_onboarding_confirmed_at && hasRequiredAddress);
+
   const handleConfirmOnboarding = async () => {
+    if (!hasRequiredAddress) {
+      alert("온보딩 STEP 1 완료를 위해 필수 주소 정보(기본 주소, 시, 주/도, 우편번호)를 모두 입력 후 저장해 주세요.");
+      return;
+    }
     startTransition(async () => {
       try {
         await confirmCompanyOnboardingAction(company.id);
@@ -417,15 +424,22 @@ export function CompanyProfileManager({
       </div>
 
       {/* Onboarding Confirmation Banner (Step 1) */}
-      {!parsedMeta.company_onboarding_confirmed_at && (
+      {!isStep1Complete && (
         <div className="rounded-xl border border-amber-300 bg-amber-50/90 p-4 dark:border-amber-900/70 dark:bg-amber-950/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs animate-fadeIn">
           <div className="space-y-1">
             <div className="text-xs font-extrabold text-amber-950 dark:text-amber-200 flex items-center gap-1.5">
               <span>🚀</span>
               <span>온보딩 STEP 1 — 회사 정보 확인</span>
+              {!hasRequiredAddress && (
+                <span className="rounded bg-amber-200 px-2 py-0.5 text-[10px] font-bold text-amber-900 dark:bg-amber-800 dark:text-amber-100">
+                  주소 입력 필요
+                </span>
+              )}
             </div>
             <p className="text-xs text-amber-800 dark:text-amber-400">
-              기본 법인 정보, 주소, 대표 연락처 및 회사 로고를 검토하신 후 확인 완료 버튼을 눌러주세요.
+              {!hasRequiredAddress
+                ? "회사 필수 주소 정보(기본 주소, 시, 주/도, 우편번호)를 모두 입력하고 저장하신 후 확인을 완료해 주세요."
+                : "기본 법인 정보, 주소, 대표 연락처 및 회사 로고를 검토하신 후 확인 완료 버튼을 눌러주세요."}
             </p>
           </div>
           <button
@@ -672,9 +686,16 @@ export function CompanyProfileManager({
                     </div>
                   </div>
                 ) : (
-                  <span className="font-semibold text-zinc-700 dark:text-zinc-300 mt-0.5 block whitespace-pre-wrap leading-relaxed">
-                    {address || "주소 미등록"}
-                  </span>
+                  <>
+                    <span className="font-semibold text-zinc-700 dark:text-zinc-300 mt-0.5 block whitespace-pre-wrap leading-relaxed">
+                      {address || "주소 미등록"}
+                    </span>
+                    {!hasRequiredAddress && (
+                      <span className="inline-block mt-1 text-[10px] font-bold text-amber-600 dark:text-amber-400">
+                        ⚠️ 주소 입력 필요 (기본 주소, 시, 주/도, 우편번호 필수)
+                      </span>
+                    )}
+                  </>
                 )}
               </div>
 

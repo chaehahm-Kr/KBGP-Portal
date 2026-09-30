@@ -414,7 +414,13 @@ export default async function PortalHomePage() {
     ""
   ).trim();
 
-  const isCompanyInfoConfirmed = Boolean(parsedMeta.company_onboarding_confirmed_at);
+  const hasRequiredAddress = Boolean(
+    parsedMeta.address_1?.trim() &&
+    parsedMeta.city?.trim() &&
+    parsedMeta.state?.trim() &&
+    parsedMeta.zip_code?.trim()
+  );
+  const isCompanyInfoConfirmed = Boolean(parsedMeta.company_onboarding_confirmed_at && hasRequiredAddress);
   const isAdminProfileConfirmed = Boolean(
     parsedMeta.admin_profile_onboarding_confirmed_at &&
     companyUser?.name?.trim() &&
