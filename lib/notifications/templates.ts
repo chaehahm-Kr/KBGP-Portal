@@ -1006,8 +1006,24 @@ function buildNetworkInfoCardHtml(variables: Record<string, string>) {
     const contactName = variables.contact_name || variables.contactName;
 
     if (isDirectInvite) {
-      if (compName) rows.push({ label: "초청 회사명", value: compName, isBold: true });
-      if (contactName) rows.push({ label: "담당자", value: contactName });
+      if (compName) rows.push({ label: "초대된 회사", value: compName, isBold: true });
+      const inviterName = variables.inviter_name || variables.inviterName;
+      const inviterEmail = variables.inviter_email || variables.inviterEmail;
+      if (inviterName || inviterEmail) {
+        const inviterStr = inviterName && inviterEmail ? `${inviterName} (${inviterEmail})` : inviterName || inviterEmail;
+        rows.push({ label: "초대한 사람", value: inviterStr });
+      }
+      const inviteeEmail = variables.invitee_email || variables.inviteeEmail;
+      if (inviteeEmail) {
+        rows.push({ label: "수신 이메일", value: inviteeEmail });
+      }
+      const roleLabel = variables.role_label || variables.roleLabel;
+      if (roleLabel) {
+        rows.push({ label: "부여된 역할", value: roleLabel, isBold: true });
+      }
+      if (contactName && !inviterName) {
+        rows.push({ label: "담당자", value: contactName });
+      }
     } else {
       if (compName) rows.push({ label: "신청 회사명", value: compName, isBold: true });
       const subDate = variables.submitted_date || variables.submittedDate;

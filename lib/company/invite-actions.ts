@@ -13,7 +13,19 @@ import { getBilingualError } from "@/lib/errors/bilingual-messages";
 
 import { getPersonStructuredNames } from "@/lib/user/name-helper";
 
+import { renderEmailHtml } from "@/lib/notifications/templates";
+import { sendEmail } from "@/lib/notifications/email";
+
 export type InviteFormState = { error?: string; message?: string } | undefined;
+
+function getRoleDisplayLabel(companyRole: string, permissions?: Record<string, any>): string {
+  if (companyRole === "company_admin" || permissions?.role === "admin") return "Admin (관리자)";
+  if (permissions?.role === "manager") return "Manager (매니저)";
+  if (permissions?.role === "staff" || companyRole === "company_staff") return "Staff (담당자)";
+  if (permissions?.role === "viewer") return "Viewer (조회 사용자)";
+  if (permissions?.role === "restricted") return "Restricted (접근 제한)";
+  return "Staff (담당자)";
+}
 
 const inviteSchema = z.object({
   name: z.string().trim().optional().default(""),
@@ -75,13 +87,36 @@ export async function inviteCompanyUser(
 
   const admin = createAdminClient();
 
-  const { data: invited, error: inviteError } =
-    await admin.auth.admin.inviteUserByEmail(normalizedEmail, {
-      data: { role: "portal", display_name: canonicalName },
-      redirectTo: `${publicEnv.NEXT_PUBLIC_SITE_URL}/portal/invite/accept`,
-    });
+  // Fetch inviter user info
+  const { data: inviterUser } = await admin
+    .from("company_users")
+    .select("name, email")
+    .eq("id", userId)
+    .maybeSingle();
 
-  if (inviteError || !invited.user) {
+  // Fetch company info
+  const { data: company } = await admin
+    .from("companies")
+    .select("name, company_name_ko, company_name_en")
+    .eq("id", companyId)
+    .maybeSingle();
+
+  const companyDisplayName = company?.company_name_ko || company?.name || company?.company_name_en || "파트너사";
+  const inviterName = inviterUser?.name || "회사 관리자";
+  const inviterEmail = inviterUser?.email || "";
+
+  // 2. Generate secure invite token link via Supabase Auth generateLink
+  const targetRedirect = `${publicEnv.NEXT_PUBLIC_SITE_URL}/portal/invite/accept`;
+  const { data: linkData, error: inviteError } = await admin.auth.admin.generateLink({
+    type: "invite",
+    email: normalizedEmail,
+    options: {
+      redirectTo: targetRedirect,
+      data: { role: "portal", display_name: canonicalName },
+    },
+  });
+
+  if (inviteError || !linkData?.user) {
     if (inviteError?.code === "over_email_send_rate_limit") {
       return {
         error:
@@ -93,6 +128,14 @@ export async function inviteCompanyUser(
     }
     return { error: getBilingualError("INVITATION_FAILED") };
   }
+
+  const invitedUserId = linkData.user.id;
+  let actionLink = linkData.properties?.action_link || targetRedirect;
+  try {
+    const parsedUrl = new URL(actionLink);
+    parsedUrl.searchParams.set("redirect_to", targetRedirect);
+    actionLink = parsedUrl.toString();
+  } catch {}
 
   let customPermissions: Record<string, any> = {};
   try {
@@ -116,7 +159,7 @@ export async function inviteCompanyUser(
   };
 
   const { error: companyUserError } = await admin.from("company_users").insert({
-    id: invited.user.id,
+    id: invitedUserId,
     company_id: companyId,
     name: canonicalName,
     english_name: canonicalEnglishName,
@@ -131,11 +174,48 @@ export async function inviteCompanyUser(
   if (companyUserError) {
     // Rollback auth user to prevent Orphan records
     try {
-      await admin.auth.admin.deleteUser(invited.user.id);
+      await admin.auth.admin.deleteUser(invitedUserId);
     } catch (rbErr) {
       console.error("Auth rollback error:", rbErr);
     }
     return { error: getBilingualError("SAVE_FAILED") };
+  }
+
+  // 3. Dispatch custom K SELECT NETWORK Branded Invitation Email via Resend
+  const roleLabel = getRoleDisplayLabel(companyRole, permissions);
+  const subjectTemplate = `[K SELECT NETWORK] ${companyDisplayName} 파트너 포털 초대 안내`;
+  const bodyTemplate = `안녕하세요, ${canonicalName}님.
+
+${inviterName} (${inviterEmail}) 님이 ${companyDisplayName}의 K SELECT NETWORK 브랜드 포털 멤버로 초청하였습니다.
+
+아래 버튼을 클릭하여 초대 수락 및 비밀번호 설정을 진행해 주시기 바랍니다.
+
+* 본 초대 링크는 보안을 위해 기한 내 1회만 사용 가능합니다.
+
+{{ctaButton}}`;
+
+  const { subject, html, text } = renderEmailHtml(subjectTemplate, bodyTemplate, {
+    link: actionLink,
+    key: "portal_signup_request",
+    contact_name: canonicalName,
+    company_name: companyDisplayName,
+    inviter_name: inviterName,
+    inviter_email: inviterEmail,
+    invitee_email: normalizedEmail,
+    role_label: roleLabel,
+    isDirectInvite: "true",
+    button_label: "초대 수락 및 비밀번호 설정",
+  });
+
+  try {
+    await sendEmail({
+      to: normalizedEmail,
+      subject,
+      text,
+      html,
+    });
+  } catch (e) {
+    console.error("Failed to send custom invitation email:", e);
   }
 
   revalidatePath("/portal/company/users");
@@ -144,12 +224,12 @@ export async function inviteCompanyUser(
 
 /** 초대 링크가 만료된 뒤(7일) 관리자가 다시 초대 메일을 보낸다. */
 export async function reinviteCompanyUser(targetUserId: string) {
-  const { companyId } = await requireCompanyAdmin();
+  const { companyId, userId } = await requireCompanyAdmin();
   const admin = createAdminClient();
 
   const { data: target } = await admin
     .from("company_users")
-    .select("email, name, company_id, status")
+    .select("email, name, company_id, company_role, permissions, status")
     .eq("id", targetUserId)
     .single();
 
@@ -157,10 +237,76 @@ export async function reinviteCompanyUser(targetUserId: string) {
     return;
   }
 
-  await admin.auth.admin.inviteUserByEmail(target.email, {
-    data: { role: "portal", display_name: target.name },
-    redirectTo: `${publicEnv.NEXT_PUBLIC_SITE_URL}/portal/invite/accept`,
+  // Fetch inviter user info
+  const { data: inviterUser } = await admin
+    .from("company_users")
+    .select("name, email")
+    .eq("id", userId)
+    .maybeSingle();
+
+  // Fetch company info
+  const { data: company } = await admin
+    .from("companies")
+    .select("name, company_name_ko, company_name_en")
+    .eq("id", companyId)
+    .maybeSingle();
+
+  const companyDisplayName = company?.company_name_ko || company?.name || company?.company_name_en || "파트너사";
+  const inviterName = inviterUser?.name || "회사 관리자";
+  const inviterEmail = inviterUser?.email || "";
+  const roleLabel = getRoleDisplayLabel(target.company_role, target.permissions);
+
+  const targetRedirect = `${publicEnv.NEXT_PUBLIC_SITE_URL}/portal/invite/accept`;
+  const { data: linkData } = await admin.auth.admin.generateLink({
+    type: "invite",
+    email: target.email,
+    options: {
+      redirectTo: targetRedirect,
+      data: { role: "portal", display_name: target.name },
+    },
   });
+
+  let actionLink = linkData?.properties?.action_link || targetRedirect;
+  try {
+    const parsedUrl = new URL(actionLink);
+    parsedUrl.searchParams.set("redirect_to", targetRedirect);
+    actionLink = parsedUrl.toString();
+  } catch {}
+
+  const subjectTemplate = `[초대 재발송] [K SELECT NETWORK] ${companyDisplayName} 파트너 포털 초대 안내`;
+  const bodyTemplate = `안녕하세요, ${target.name}님.
+
+${inviterName} (${inviterEmail}) 님이 ${companyDisplayName}의 K SELECT NETWORK 브랜드 포털 멤버로 초청하였습니다.
+
+아래 버튼을 클릭하여 초대 수락 및 비밀번호 설정을 진행해 주시기 바랍니다.
+
+* 본 초대 링크는 보안을 위해 기한 내 1회만 사용 가능합니다.
+
+{{ctaButton}}`;
+
+  const { subject, html, text } = renderEmailHtml(subjectTemplate, bodyTemplate, {
+    link: actionLink,
+    key: "portal_signup_request",
+    contact_name: target.name,
+    company_name: companyDisplayName,
+    inviter_name: inviterName,
+    inviter_email: inviterEmail,
+    invitee_email: target.email,
+    role_label: roleLabel,
+    isDirectInvite: "true",
+    button_label: "초대 수락 및 비밀번호 설정",
+  });
+
+  try {
+    await sendEmail({
+      to: target.email,
+      subject,
+      text,
+      html,
+    });
+  } catch (e) {
+    console.error("Failed to resend custom invitation email:", e);
+  }
 
   await admin
     .from("company_users")
