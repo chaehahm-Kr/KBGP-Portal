@@ -27,6 +27,9 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getImpersonationSession } from "@/lib/auth/impersonation";
 import { ImpersonationBanner } from "@/components/shared/impersonation-banner";
 
+import { isRedirectError } from "next/dist/client/components/redirect-error";
+import { normalizePermissions } from "@/lib/permissions/brand-portal-acl";
+
 export default async function PartnerPortalLayout({
   children,
 }: {
@@ -90,14 +93,17 @@ export default async function PartnerPortalLayout({
     }
   }
 
-  let userAcl: Record<string, any> = {};
+  let userAcl: Record<string, any> = normalizePermissions({}, companyRole);
   if (effectiveUserId) {
     try {
       const { getPortalUserAcl } = await import("@/lib/company/permissions");
       const aclRes = await getPortalUserAcl();
       userAcl = aclRes.permissions;
     } catch (e) {
-      console.warn("Failed to load user ACL in portal layout:", e);
+      if (isRedirectError(e)) {
+        throw e;
+      }
+      console.warn("Failed to load user ACL in portal layout, falling back to role defaults:", e);
     }
   }
 
@@ -116,3 +122,4 @@ export default async function PartnerPortalLayout({
     </div>
   );
 }
+

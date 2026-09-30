@@ -611,7 +611,7 @@ export function CompanyUsersManager({ initialUsers, currentUserId }: CompanyUser
       {/* Invite Modal (Popup) */}
       {isInviteOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm overflow-y-auto">
-          <div className="w-full max-w-3xl rounded-xl border border-zinc-200 bg-white shadow-2xl dark:border-zinc-800 dark:bg-zinc-900 overflow-hidden animate-in fade-in zoom-in-95 duration-150 p-6 max-h-[90vh] overflow-y-auto">
+          <div className="w-full max-w-5xl rounded-xl border border-zinc-200 bg-white shadow-2xl dark:border-zinc-800 dark:bg-zinc-900 overflow-hidden animate-in fade-in zoom-in-95 duration-150 p-6 max-h-[90vh] overflow-y-auto">
             <InviteUserForm
               onSuccess={(invitedEmail) => {
                 setIsInviteOpen(false);
@@ -627,7 +627,8 @@ export function CompanyUsersManager({ initialUsers, currentUserId }: CompanyUser
       {/* Edit Modal (Popup) */}
       {editingUser && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-2xl rounded-xl border border-zinc-200 bg-white shadow-2xl dark:border-zinc-800 dark:bg-zinc-900 overflow-hidden animate-in fade-in zoom-in-95 duration-150 flex flex-col max-h-[90vh]">
+          <div className="w-full max-w-5xl rounded-xl border border-zinc-200 bg-white shadow-2xl dark:border-zinc-800 dark:bg-zinc-900 overflow-hidden animate-in fade-in zoom-in-95 duration-150 flex flex-col max-h-[90vh]">
+
             {/* Modal Header */}
             <div className="flex items-center justify-between border-b border-zinc-200 bg-zinc-50/80 px-6 py-4 dark:border-zinc-800 dark:bg-zinc-950/60 shrink-0">
               <div>

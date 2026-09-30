@@ -104,11 +104,11 @@ export function CompanyAclMatrixEditor({
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="border-b border-zinc-200 bg-zinc-100/80 text-[11px] font-bold text-zinc-700 dark:border-zinc-800 dark:bg-zinc-950/80 dark:text-zinc-300">
-                <th className="px-3.5 py-2.5 w-2/5">메뉴 / 업무 영역</th>
-                <th className="px-1.5 py-2.5 text-center text-rose-600 dark:text-rose-400">접근불가</th>
-                <th className="px-1.5 py-2.5 text-center text-zinc-700 dark:text-zinc-300">조회전용</th>
-                <th className="px-1.5 py-2.5 text-center text-indigo-600 dark:text-indigo-400">생성/수정</th>
-                <th className="px-1.5 py-2.5 text-center text-emerald-600 dark:text-emerald-400">생성/수정/삭제</th>
+                <th className="px-3.5 py-2.5 whitespace-nowrap min-w-[170px]">메뉴 / 업무 영역</th>
+                <th className="px-1.5 py-2.5 text-center text-rose-600 dark:text-rose-400 whitespace-nowrap">접근불가</th>
+                <th className="px-1.5 py-2.5 text-center text-zinc-700 dark:text-zinc-300 whitespace-nowrap">조회전용</th>
+                <th className="px-1.5 py-2.5 text-center text-indigo-600 dark:text-indigo-400 whitespace-nowrap">생성/수정</th>
+                <th className="px-1.5 py-2.5 text-center text-emerald-600 dark:text-emerald-400 whitespace-nowrap">생성/수정/삭제</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-200 text-xs dark:divide-zinc-800/80">
@@ -121,14 +121,15 @@ export function CompanyAclMatrixEditor({
                 return (
                   <tr key={cat.id} className="hover:bg-zinc-50/60 dark:hover:bg-zinc-800/40 transition-colors">
                     <td className="px-3.5 py-2.5">
-                      <div className="font-semibold text-zinc-900 dark:text-zinc-100 flex items-center gap-1.5">
-                        <span>{cat.labelKo}</span>
+                      <div className="font-semibold text-zinc-900 dark:text-zinc-100 flex flex-wrap items-baseline gap-x-1.5">
+                        <span className="whitespace-nowrap font-bold text-xs">{cat.labelKo}</span>
                         <span className="text-[10px] text-zinc-400 font-normal">({cat.labelEn})</span>
                       </div>
                       <div className="text-[10px] text-zinc-400 dark:text-zinc-500 mt-0.5">
                         {cat.description}
                       </div>
                     </td>
+
 
                     {/* Level 1: none */}
                     <td className="px-1.5 py-2.5 text-center align-middle">

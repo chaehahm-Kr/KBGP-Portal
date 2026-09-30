@@ -2478,7 +2478,8 @@ export function CompanyDetailManager({
       {/* Edit User Modal */}
       {isEditUserOpen && selectedUser && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-[760px] rounded-xl border border-zinc-200 bg-white shadow-2xl dark:border-zinc-800 dark:bg-zinc-900 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+          <div className="w-full max-w-5xl rounded-xl border border-zinc-200 bg-white shadow-2xl dark:border-zinc-800 dark:bg-zinc-900 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+
             <div className="flex items-center justify-between border-b border-zinc-100 bg-zinc-50/50 px-6 py-4 dark:border-zinc-800 dark:bg-zinc-950/20">
               <div>
                 <h3 className="text-sm font-bold text-zinc-900 dark:text-white">담당자 세부 설정 및 권한</h3>

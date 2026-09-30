@@ -94,7 +94,8 @@ export async function inviteCompanyUser(
 
   const admin = createAdminClient();
 
-  const rawRolePreset = (formData.get("companyRole") as string) || "viewer";
+  const rawRolePreset = (formData.get("rawRolePreset") as string) || (formData.get("preset") as string) || (formData.get("companyRole") as string) || "viewer";
+
 
   // Fetch inviter user info
   const { data: inviterUser } = await admin
