@@ -54,11 +54,31 @@ export function CompanyAclMatrixEditor({
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start w-full">
       {/* 1. Left Column — Role Preset Selection (Vertical Stack) */}
-      <div className="lg:col-span-4 space-y-2">
-        <label className="block text-xs font-bold text-zinc-900 dark:text-white uppercase tracking-wider">
-          역할 선택 (Role Preset) <span className="text-rose-500">*</span>
-        </label>
-        <div className="flex flex-col gap-2">
+      <div className="lg:col-span-4 space-y-3">
+        <div>
+          <label className="block text-xs font-bold text-zinc-900 dark:text-white uppercase tracking-wider mb-1">
+            회사 내 역할 (Company Role) <span className="text-rose-500">*</span>
+          </label>
+          <select
+            value={currentPresetId}
+            disabled={readOnly}
+            onChange={(e) => handleRolePresetSelect(e.target.value as BrandPortalRole)}
+            className="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 outline-none transition-all focus:border-zinc-500 focus:ring-1 focus:ring-zinc-400 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 cursor-pointer disabled:cursor-not-allowed"
+          >
+            {BRAND_PORTAL_ROLES.map((r) => (
+              <option key={r.id} value={r.id}>
+                {r.labelKo} ({r.labelEn})
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="pt-1">
+          <label className="block text-xs font-bold text-zinc-900 dark:text-white uppercase tracking-wider mb-2">
+            역할 템플릿 (Role Preset)
+          </label>
+          <div className="flex flex-col gap-2">
+
           {BRAND_PORTAL_ROLES.map((roleObj) => {
             const isSelected = currentPresetId === roleObj.id;
             return (
@@ -90,6 +110,7 @@ export function CompanyAclMatrixEditor({
         <p className="text-[11px] text-zinc-500 dark:text-zinc-400 pt-1 leading-relaxed">
           💡 역할을 클릭하면 기본 권한이 오른쪽 매트릭스에 즉시 반영되며, 특정 업무 항목을 개별적으로 자유롭게 변경할 수 있습니다.
         </p>
+      </div>
       </div>
 
       {/* 2. Right Column — 9-Category ACL Matrix Table */}

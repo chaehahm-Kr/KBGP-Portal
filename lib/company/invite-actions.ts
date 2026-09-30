@@ -661,17 +661,19 @@ export async function completeInviteAcceptance() {
     data: { user },
   } = await supabase.auth.getUser();
 
-  if (!user) {
-    redirect("/portal/login");
+  if (user) {
+    const admin = createAdminClient();
+    await admin
+      .from("company_users")
+      .update({ status: "active", joined_at: new Date().toISOString() })
+      .eq("id", user.id)
+      .eq("status", "invited");
+
+    // FIX 8 & FIX 10: Sign out session after password setup so user MUST manually log in
+    await supabase.auth.signOut();
   }
 
-  const admin = createAdminClient();
-  await admin
-    .from("company_users")
-    .update({ status: "active", joined_at: new Date().toISOString() })
-    .eq("id", user.id)
-    .eq("status", "invited");
-
-  redirect("/portal");
+  redirect("/portal/login?reason=invited_activated");
 }
+
 

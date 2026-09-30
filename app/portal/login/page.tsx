@@ -14,6 +14,7 @@ export default async function PortalLoginPage({
 }) {
   const resolvedParams = searchParams ? await searchParams : {};
   const isIdleLogout = resolvedParams.reason === "idle";
+  const isActivated = resolvedParams.reason === "invited_activated" || resolvedParams.reason === "password_updated";
 
   return (
     <div className="w-full max-w-md rounded-xl border border-zinc-800 bg-zinc-900/90 p-8 shadow-2xl space-y-6 backdrop-blur-sm">
@@ -29,6 +30,31 @@ export default async function PortalLoginPage({
         </div>
         <p className="text-[11px] text-zinc-400 font-medium">브랜드사 담당자 전용 로그인입니다.</p>
       </div>
+
+      {isActivated && (
+        <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3.5 text-xs text-emerald-300 flex items-start gap-2.5 animate-fadeIn">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            className="h-4 w-4 shrink-0 text-emerald-400 mt-0.5"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M5 13l4 4L19 7"
+            />
+          </svg>
+          <div>
+            <p className="font-semibold text-emerald-200">비밀번호 설정 완료</p>
+            <p className="text-emerald-300/80 mt-0.5">
+              계정 활성화 및 비밀번호 설정이 완료되었습니다. 이메일과 새 비밀번호로 로그인해 주세요.
+            </p>
+          </div>
+        </div>
+      )}
 
       {isIdleLogout && (
         <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3.5 text-xs text-amber-300 flex items-start gap-2.5 animate-fadeIn">
@@ -52,6 +78,7 @@ export default async function PortalLoginPage({
           </div>
         </div>
       )}
+
 
       <div className="border-t border-zinc-800 pt-6">
         <LoginForm

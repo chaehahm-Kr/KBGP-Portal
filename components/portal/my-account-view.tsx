@@ -12,6 +12,8 @@ import { PASSWORD_RULE_DESCRIPTION } from "@/lib/auth/password";
 import { InternationalPhoneInput } from "@/components/shared/international-phone-input";
 import { getPersonDisplayName, getPersonStructuredNames } from "@/lib/user/name-helper";
 import { validateEnglishName } from "@/lib/validation/global-validators";
+import { resolveCompanyUserRole, ROLE_DISPLAY_CONFIG } from "@/lib/permissions/brand-portal-acl";
+
 
 interface MyAccountViewProps {
   initialData: MyAccountData;
@@ -282,7 +284,10 @@ export function MyAccountView({ initialData }: MyAccountViewProps) {
     });
   };
 
-  const roleText = data.companyRole === "company_admin" ? "관리자(Admin)" : "담당자(Staff)";
+  const rolePreset = resolveCompanyUserRole(data.companyRole, data.permissions || undefined);
+  const roleText = ROLE_DISPLAY_CONFIG[rolePreset]?.fullLabel || "담당자 (Staff)";
+
+
   const statusText =
     data.status === "active"
       ? "가입완료 · 정상이용"

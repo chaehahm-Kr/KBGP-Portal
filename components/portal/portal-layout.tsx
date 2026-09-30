@@ -76,7 +76,9 @@ export default function PortalLayout({
           userEmail={userEmail}
           userDisplayName={userDisplayName}
           companyRole={companyRole}
+          permissions={permissions}
         />
+
 
         {/* Scrollable Page Body */}
         <main className="flex-1 px-6 pt-24 pb-12 overflow-y-auto">

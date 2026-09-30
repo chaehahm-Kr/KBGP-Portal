@@ -37,7 +37,8 @@ import {
   formatEnglishFullName,
 } from "@/lib/user/name-helper";
 import { CompanyAclMatrixEditor } from "@/components/company/company-acl-matrix-editor";
-import { mapRoleToPreset, normalizePermissions, type BrandPortalRole } from "@/lib/permissions/brand-portal-acl";
+import { mapRoleToPreset, normalizePermissions, resolveCompanyUserRole, ROLE_DISPLAY_CONFIG, type BrandPortalRole } from "@/lib/permissions/brand-portal-acl";
+
 
 const STATUS_LABEL: Record<string, string> = {
   invited: "초대됨",
@@ -1354,10 +1355,17 @@ export function CompanyDetailManager({
                               )}
                             </td>
                             <td className="px-4 py-3">
-                              <span className="rounded bg-zinc-100 px-2 py-0.5 text-[10px] border border-zinc-200 text-zinc-700 dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-300">
-                                {ROLE_LABEL[row.company_role]}
-                              </span>
+                              {(() => {
+                                const preset = resolveCompanyUserRole(row);
+                                const config = ROLE_DISPLAY_CONFIG[preset];
+                                return (
+                                  <span className={`inline-block rounded px-2 py-0.5 text-[10px] font-bold border ${config?.badgeClass || ""}`}>
+                                    {config?.fullLabel || preset}
+                                  </span>
+                                );
+                              })()}
                             </td>
+
                             <td className="px-4 py-3">
                               <span className={`inline-block rounded px-2 py-0.5 text-[10px] font-bold border ${
                                 row.status === "active"
@@ -2632,19 +2640,8 @@ export function CompanyDetailManager({
                   </div>
                 </div>
 
-                {/* Row 4: 역할, 상태, 주 컨택 지정 */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-1">
-                  <div>
-                    <label className="text-[11px] font-bold text-zinc-600 dark:text-zinc-400 block mb-1.5">회사 내 역할 (Role)</label>
-                    <select
-                      value={editRole}
-                      onChange={(e) => setEditRole(e.target.value as any)}
-                      className="w-full rounded-md border border-zinc-200 p-2.5 text-xs outline-none bg-white dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
-                    >
-                      <option value="company_staff">담당자 (Staff)</option>
-                      <option value="company_admin">관리자 (Admin)</option>
-                    </select>
-                  </div>
+                {/* Row 4: 이용 상태 & 주 컨택 지정 */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
                   <div>
                     <label className="text-[11px] font-bold text-zinc-600 dark:text-zinc-400 block mb-1.5">이용 상태 (Status)</label>
                     <select
@@ -2673,6 +2670,7 @@ export function CompanyDetailManager({
                     </label>
                   </div>
                 </div>
+
               </div>
 
               {/* Section 2: 메뉴별 상세 권한 설정 (ACL) */}

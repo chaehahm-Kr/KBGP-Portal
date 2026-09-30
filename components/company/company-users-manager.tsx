@@ -790,29 +790,6 @@ export function CompanyUsersManager({ initialUsers, currentUserId }: CompanyUser
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
                   <div>
                     <label className="text-xs font-bold text-zinc-700 dark:text-zinc-300 block mb-1">
-                      회사 내 역할
-                    </label>
-                    <select
-                      value={formRole}
-                      onChange={(e) => setFormRole(e.target.value as any)}
-                      className={inputClass}
-                    >
-                      <option
-                        value="company_staff"
-                        className="bg-white text-zinc-900 dark:bg-zinc-900 dark:text-zinc-100"
-                      >
-                        담당자 (Staff)
-                      </option>
-                      <option
-                        value="company_admin"
-                        className="bg-white text-zinc-900 dark:bg-zinc-900 dark:text-zinc-100"
-                      >
-                        관리자 (Admin)
-                      </option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="text-xs font-bold text-zinc-700 dark:text-zinc-300 block mb-1">
                       이용 제한 상태
                     </label>
                     <select
@@ -844,6 +821,7 @@ export function CompanyUsersManager({ initialUsers, currentUserId }: CompanyUser
                     </select>
                   </div>
                 </div>
+
 
                 {/* Primary Contact Selector */}
                 <div className="flex items-center gap-2.5 py-2.5 px-3 bg-zinc-50 rounded-lg border border-zinc-200 dark:bg-zinc-950/40 dark:border-zinc-800">

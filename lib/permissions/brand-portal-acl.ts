@@ -177,6 +177,69 @@ export function normalizePermissions(
 }
 
 /**
+ * Canonical 5-Role Display Configuration & Badge Styles
+ */
+export const ROLE_DISPLAY_CONFIG: Record<BrandPortalRole, { labelKo: string; labelEn: string; fullLabel: string; badgeClass: string }> = {
+  restricted: {
+    labelKo: "접근 제한",
+    labelEn: "Restricted",
+    fullLabel: "접근 제한 (Restricted)",
+    badgeClass: "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/50 dark:text-rose-300 dark:border-rose-800",
+  },
+  viewer: {
+    labelKo: "조회 사용자",
+    labelEn: "Viewer",
+    fullLabel: "조회 사용자 (Viewer)",
+    badgeClass: "bg-zinc-100 text-zinc-700 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:border-zinc-700",
+  },
+  staff: {
+    labelKo: "담당자",
+    labelEn: "Staff",
+    fullLabel: "담당자 (Staff)",
+    badgeClass: "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/50 dark:text-blue-300 dark:border-blue-800",
+  },
+  manager: {
+    labelKo: "매니저",
+    labelEn: "Manager",
+    fullLabel: "매니저 (Manager)",
+    badgeClass: "bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/50 dark:text-purple-300 dark:border-purple-800",
+  },
+  admin: {
+    labelKo: "관리자",
+    labelEn: "Admin",
+    fullLabel: "관리자 (Admin)",
+    badgeClass: "bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-950/50 dark:text-indigo-300 dark:border-indigo-800",
+  },
+};
+
+/**
+ * Single Authoritative Source of Truth for resolving a company user's 5-level BrandPortalRole.
+ * Priorities:
+ * 1. permissions.preset
+ * 2. permissions.role
+ * 3. company_role / role property
+ */
+export function resolveCompanyUserRole(userObjOrRole: any, permissions?: Record<string, any>): BrandPortalRole {
+  if (!userObjOrRole) return "viewer";
+
+  if (typeof userObjOrRole === "string") {
+    if (permissions?.preset || permissions?.role) {
+      return mapRoleToPreset(permissions.preset || permissions.role);
+    }
+    return mapRoleToPreset(userObjOrRole);
+  }
+
+  if (typeof userObjOrRole === "object" && userObjOrRole !== null) {
+    const perms = userObjOrRole.permissions || (userObjOrRole.preset || userObjOrRole.role ? userObjOrRole : null);
+    const preset = perms?.preset || perms?.role || userObjOrRole.preset || userObjOrRole.role;
+    if (preset) return mapRoleToPreset(preset);
+    return mapRoleToPreset(userObjOrRole.company_role || userObjOrRole.role);
+  }
+
+  return "viewer";
+}
+
+/**
  * Maps a CompanyRole, permissions object, or BrandPortalRole to its canonical preset id
  */
 export function mapRoleToPreset(
@@ -209,24 +272,16 @@ export function mapPresetToMembershipRole(roleInput: string): "company_admin" | 
   return "company_staff";
 }
 
-export function getRoleKoreanTitle(companyRole: string, permissions?: Record<string, any>): string {
-  const preset = permissions?.preset || permissions?.role || mapRoleToPreset(permissions, companyRole);
-  if (preset === "admin" || companyRole === "company_admin") return "관리자";
-  if (preset === "manager") return "매니저";
-  if (preset === "staff") return "담당자";
-  if (preset === "viewer") return "조회 사용자";
-  if (preset === "restricted") return "접근 제한 사용자";
-  return "담당자";
+export function getRoleKoreanTitle(userOrRole: any, permissions?: Record<string, any>): string {
+  const preset = resolveCompanyUserRole(userOrRole, permissions);
+  return ROLE_DISPLAY_CONFIG[preset]?.labelKo || "담당자";
 }
 
-export function getRoleDisplayLabel(companyRole: string, permissions?: Record<string, any>): string {
-  const title = getRoleKoreanTitle(companyRole, permissions);
-  const preset = permissions?.preset || permissions?.role || mapRoleToPreset(permissions, companyRole);
-  if (preset === "admin" || companyRole === "company_admin") return `Admin (${title})`;
-  if (preset === "manager") return `Manager (${title})`;
-  if (preset === "staff") return `Staff (${title})`;
-  if (preset === "viewer") return `Viewer (${title})`;
-  if (preset === "restricted") return `Restricted (${title})`;
-  return `Staff (${title})`;
+export function getRoleDisplayLabel(userOrRole: any, permissions?: Record<string, any>): string {
+  const preset = resolveCompanyUserRole(userOrRole, permissions);
+  const config = ROLE_DISPLAY_CONFIG[preset];
+  if (!config) return "Staff (담당자)";
+  return `${config.labelEn} (${config.labelKo})`;
 }
+
 

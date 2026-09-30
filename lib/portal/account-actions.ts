@@ -24,7 +24,9 @@ export interface MyAccountData {
   title: string;
   position: string;
   companyRole: "company_admin" | "company_staff";
+  permissions?: Record<string, any> | null;
   status: "active" | "invited" | "suspended" | "removed";
+
   isPrimary: boolean;
   companyId: string;
   companyName: string;
@@ -137,6 +139,7 @@ export async function getMyAccountData(): Promise<MyAccountData> {
     title: userRecord?.title || "",
     position: userRecord?.position || "",
     companyRole: (userRecord?.company_role as any) || "company_staff",
+    permissions: userRecord?.permissions || null,
     status: (userRecord?.status as any) || "active",
     isPrimary: userRecord?.is_primary || false,
     companyId: userRecord?.company_id || "",
@@ -144,6 +147,7 @@ export async function getMyAccountData(): Promise<MyAccountData> {
     createdAt: userRecord?.created_at || profile?.created_at || "",
     joinedAt: userRecord?.joined_at || "",
   };
+
 }
 
 /**
