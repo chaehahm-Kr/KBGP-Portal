@@ -768,7 +768,7 @@ export function InvoiceDetail({ invoice, po, prevInvoicesTotal, poMerchandiseTot
               <button
                 onClick={handleVoid}
                 disabled={isActionLoading}
-                className="px-3 py-1.5 bg-rose-50 text-rose-600 hover:bg-rose-100 border border-rose-200 text-[10px] font-bold rounded-xl cursor-pointer transition-colors disabled:opacity-50"
+                className="px-3 py-1.5 bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-300 dark:bg-rose-950/40 dark:border-rose-600/50 dark:text-rose-300 dark:hover:bg-rose-900/60 dark:hover:text-white text-[10px] font-bold rounded-xl cursor-pointer transition-colors disabled:opacity-50"
               >
                 강제 무효화 (Void)
               </button>
@@ -1020,7 +1020,7 @@ export function InvoiceDetail({ invoice, po, prevInvoicesTotal, poMerchandiseTot
                               MATCH
                             </span>
                           ) : (
-                            <span className="inline-flex items-center rounded-md bg-rose-50 px-1.5 py-0.5 text-[8px] font-bold text-rose-700 border border-rose-150">
+                            <span className="inline-flex items-center rounded-md bg-rose-50 px-1.5 py-0.5 text-[8px] font-bold text-rose-700 border border-rose-150 dark:bg-rose-950/40 dark:border-rose-800/40 dark:text-rose-300">
                               VARIANCE
                             </span>
                           )}
@@ -1029,11 +1029,11 @@ export function InvoiceDetail({ invoice, po, prevInvoicesTotal, poMerchandiseTot
                         {/* Price Match */}
                         <td className="px-3 py-3 text-center">
                           {isPriceMatch ? (
-                            <span className="inline-flex items-center rounded-md bg-emerald-50 px-1.5 py-0.5 text-[8px] font-bold text-emerald-700 border border-emerald-100">
+                            <span className="inline-flex items-center rounded-md bg-emerald-50 px-1.5 py-0.5 text-[8px] font-bold text-emerald-700 border border-emerald-100 dark:bg-emerald-955/40 dark:border-emerald-800/40 dark:text-emerald-300">
                               MATCH
                             </span>
                           ) : (
-                            <span className="inline-flex items-center rounded-md bg-rose-50 px-1.5 py-0.5 text-[8px] font-bold text-rose-700 border border-rose-150">
+                            <span className="inline-flex items-center rounded-md bg-rose-50 px-1.5 py-0.5 text-[8px] font-bold text-rose-700 border border-rose-150 dark:bg-rose-950/40 dark:border-rose-800/40 dark:text-rose-300">
                               VARIANCE
                             </span>
                           )}
@@ -1042,11 +1042,11 @@ export function InvoiceDetail({ invoice, po, prevInvoicesTotal, poMerchandiseTot
                         {/* Final Result */}
                         <td className="px-3 py-3 text-center">
                           {isMatch ? (
-                            <span className="inline-flex items-center rounded-md bg-emerald-100 px-2 py-0.5 text-[9px] font-bold text-emerald-800 border border-emerald-200">
+                            <span className="inline-flex items-center rounded-md bg-emerald-100 px-2 py-0.5 text-[9px] font-bold text-emerald-800 border border-emerald-200 dark:bg-emerald-955/60 dark:border-emerald-700/60 dark:text-emerald-200">
                               MATCH
                             </span>
                           ) : (
-                            <span className="inline-flex items-center rounded-md bg-rose-100 px-2 py-0.5 text-[9px] font-bold text-rose-800 border border-rose-200">
+                            <span className="inline-flex items-center rounded-md bg-rose-100 px-2 py-0.5 text-[9px] font-bold text-rose-800 border border-rose-200 dark:bg-rose-950/60 dark:border-rose-700/60 dark:text-rose-200">
                               VARIANCE
                             </span>
                           )}
@@ -1116,7 +1116,7 @@ export function InvoiceDetail({ invoice, po, prevInvoicesTotal, poMerchandiseTot
                           {ADJ_TYPE_LABELS[adj.adjustment_type]}
                         </td>
                         <td className="px-3 py-2.5">
-                          <span className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[9px] font-bold border ${adj.adjustment_direction === "CREDIT" ? "bg-rose-50 text-rose-700 border-rose-100" : "bg-blue-50 text-blue-700 border-blue-100"}`}>
+                          <span className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[9px] font-bold border ${adj.adjustment_direction === "CREDIT" ? "bg-rose-50 text-rose-700 border-rose-100 dark:bg-rose-950/40 dark:border-rose-800/40 dark:text-rose-300" : "bg-blue-50 text-blue-700 border-blue-100 dark:bg-blue-955/40 dark:border-blue-800/40 dark:text-blue-300"}`}>
                             {adj.adjustment_direction === "CREDIT" ? "차감 (Credit)" : "가산 (Charge)"}
                           </span>
                         </td>
@@ -1150,19 +1150,19 @@ export function InvoiceDetail({ invoice, po, prevInvoicesTotal, poMerchandiseTot
                               <>
                                 <button
                                   onClick={() => handleEditAdjClick(adj)}
-                                  className="text-zinc-500 hover:text-zinc-800 font-bold"
+                                  className="text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200 font-bold"
                                 >
                                   수정
                                 </button>
                                 <button
                                   onClick={() => handleAdjStatusTransition(adj.id, "PENDING")}
-                                  className="text-blue-600 hover:text-blue-800 font-bold"
+                                  className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 font-bold"
                                 >
                                   제출
                                 </button>
                                 <button
                                   onClick={() => handleAdjStatusTransition(adj.id, "VOID")}
-                                  className="text-rose-600 hover:text-rose-800 font-bold"
+                                  className="text-rose-600 hover:text-rose-800 dark:text-rose-400 dark:hover:text-rose-300 font-bold"
                                 >
                                   무효
                                 </button>
@@ -1174,7 +1174,7 @@ export function InvoiceDetail({ invoice, po, prevInvoicesTotal, poMerchandiseTot
                               <>
                                 <button
                                   onClick={() => handleAdjStatusTransition(adj.id, "APPROVED")}
-                                  className="text-emerald-650 hover:text-emerald-800 font-bold"
+                                  className="text-emerald-650 hover:text-emerald-800 dark:text-emerald-400 dark:hover:text-emerald-300 font-bold"
                                 >
                                   승인
                                 </button>
@@ -1184,7 +1184,7 @@ export function InvoiceDetail({ invoice, po, prevInvoicesTotal, poMerchandiseTot
                                     setAdjRejectReason("");
                                     setShowAdjRejectModal(true);
                                   }}
-                                  className="text-rose-600 hover:text-rose-800 font-bold"
+                                  className="text-rose-600 hover:text-rose-800 dark:text-rose-400 dark:hover:text-rose-300 font-bold"
                                 >
                                   반려
                                 </button>

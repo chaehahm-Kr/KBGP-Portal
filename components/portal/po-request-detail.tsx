@@ -95,7 +95,7 @@ export function PoRequestDetailView({ request }: PoRequestDetailViewProps) {
               type="button"
               onClick={handleCancel}
               disabled={isCancelling}
-              className="px-3.5 py-2 border border-zinc-300 dark:border-zinc-700 hover:bg-rose-50 hover:border-rose-200 hover:text-rose-600 rounded-xl text-xs font-bold text-zinc-600 dark:text-zinc-400 transition-all cursor-pointer"
+              className="px-3.5 py-2 border border-zinc-300 dark:border-zinc-700 hover:bg-rose-50 hover:border-rose-200 hover:text-rose-600 dark:hover:bg-rose-950/40 dark:hover:border-rose-600/50 dark:hover:text-rose-300 rounded-xl text-xs font-bold text-zinc-600 dark:text-zinc-300 transition-all cursor-pointer"
             >
               {isCancelling ? "취소 중..." : "요청 취소"}
             </button>
@@ -104,7 +104,7 @@ export function PoRequestDetailView({ request }: PoRequestDetailViewProps) {
       </div>
 
       {cancelError && (
-        <div className="p-3.5 rounded-lg bg-rose-50 border border-rose-200 text-rose-600 font-bold text-xs">
+        <div className="p-3.5 rounded-lg bg-rose-50 border border-rose-200 text-rose-600 dark:bg-rose-950/40 dark:border-rose-800/50 dark:text-rose-300 font-bold text-xs">
           ⚠️ {cancelError}
         </div>
       )}

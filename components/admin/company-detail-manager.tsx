@@ -1682,12 +1682,12 @@ export function CompanyDetailManager({
                               <td className="px-4 py-3">
                                 <span className={`inline-block rounded px-2 py-0.5 text-[9px] font-bold border ${
                                   prod.selection_status === "SELECTED"
-                                    ? "bg-emerald-50 text-emerald-700 border-emerald-100 dark:bg-emerald-955/30 dark:text-emerald-400"
+                                    ? "bg-emerald-50 text-emerald-700 border-emerald-100 dark:bg-emerald-955/40 dark:border-emerald-800/40 dark:text-emerald-300"
                                     : prod.selection_status === "PENDING"
-                                    ? "bg-amber-50 text-amber-700 border-amber-100 dark:bg-emerald-955/30 dark:text-emerald-400"
+                                    ? "bg-amber-50 text-amber-700 border-amber-100 dark:bg-amber-955/40 dark:border-amber-800/40 dark:text-amber-300"
                                     : prod.selection_status === "REJECTED"
-                                    ? "bg-rose-50 text-rose-700 border-rose-100 dark:bg-emerald-955/30 dark:text-rose-400"
-                                    : "bg-zinc-50 text-zinc-600 border-zinc-150 dark:bg-zinc-950/40 dark:text-zinc-400"
+                                    ? "bg-rose-50 text-rose-700 border-rose-100 dark:bg-rose-950/40 dark:border-rose-800/40 dark:text-rose-300"
+                                    : "bg-zinc-50 text-zinc-600 border-zinc-150 dark:bg-zinc-900 dark:border-zinc-750 dark:text-zinc-400"
                                 }`}>
                                   {prod.selection_status === "SELECTED"
                                     ? "선정"
@@ -1701,12 +1701,12 @@ export function CompanyDetailManager({
                               <td className="px-4 py-3">
                                 <span className={`inline-block rounded px-2 py-0.5 text-[9px] font-bold border ${
                                   prod.sales_status === "SELLING"
-                                    ? "bg-emerald-50 text-emerald-700 border-emerald-100 dark:bg-emerald-955/30 dark:text-emerald-400"
+                                    ? "bg-emerald-50 text-emerald-700 border-emerald-100 dark:bg-emerald-955/40 dark:border-emerald-800/40 dark:text-emerald-300"
                                     : prod.sales_status === "PAUSED"
-                                    ? "bg-amber-50 text-amber-700 border-amber-100 dark:bg-emerald-955/30 dark:text-amber-400"
+                                    ? "bg-amber-50 text-amber-700 border-amber-100 dark:bg-amber-955/40 dark:border-amber-800/40 dark:text-amber-300"
                                     : prod.sales_status === "STOPPED"
-                                    ? "bg-rose-50 text-rose-700 border-rose-100 dark:bg-emerald-955/30 dark:text-rose-400"
-                                    : "bg-zinc-50 text-zinc-650 border-zinc-150 dark:bg-zinc-950/40 dark:text-zinc-400"
+                                    ? "bg-rose-50 text-rose-700 border-rose-100 dark:bg-rose-950/40 dark:border-rose-800/40 dark:text-rose-300"
+                                    : "bg-zinc-50 text-zinc-650 border-zinc-150 dark:bg-zinc-900 dark:border-zinc-750 dark:text-zinc-400"
                                 }`}>
                                   {prod.sales_status === "SELLING"
                                     ? "판매 중"
@@ -1749,12 +1749,12 @@ export function CompanyDetailManager({
                         </div>
                         <span className={`rounded border px-1.5 py-0.5 text-[9px] font-bold ${
                           app.status === "approved"
-                            ? "bg-emerald-50 text-emerald-700 border-emerald-100"
+                            ? "bg-emerald-50 text-emerald-700 border-emerald-100 dark:bg-emerald-955/40 dark:border-emerald-800/40 dark:text-emerald-300"
                             : app.status === "info_requested"
-                            ? "bg-amber-50 text-amber-700 border-amber-100"
+                            ? "bg-amber-50 text-amber-700 border-amber-100 dark:bg-amber-955/40 dark:border-amber-800/40 dark:text-amber-300"
                             : app.status === "under_review"
-                            ? "bg-blue-50 text-blue-700 border-blue-100"
-                            : "bg-rose-50 text-rose-700 border-rose-100"
+                            ? "bg-blue-50 text-blue-700 border-blue-100 dark:bg-blue-955/40 dark:border-blue-800/40 dark:text-blue-300"
+                            : "bg-rose-50 text-rose-700 border-rose-100 dark:bg-rose-950/40 dark:border-rose-800/40 dark:text-rose-300"
                         }`}>
                           {app.status === "approved"
                             ? "승인완료"
@@ -2504,14 +2504,14 @@ export function CompanyDetailManager({
                 <button
                   type="button"
                   onClick={() => setIsAddUserOpen(false)}
-                  className="rounded border border-zinc-200 px-4 py-2 font-bold text-zinc-550 hover:bg-zinc-50 dark:border-zinc-850 dark:hover:bg-zinc-950"
+                  className="rounded border border-zinc-200 px-4 py-2 font-bold text-zinc-600 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
                 >
                   취소
                 </button>
                 <button
                   type="submit"
                   disabled={isPending}
-                  className="rounded bg-zinc-900 px-4 py-2 font-bold text-white hover:bg-zinc-800 disabled:opacity-50 dark:bg-white dark:text-zinc-950"
+                  className="rounded bg-zinc-900 px-4 py-2 font-bold text-white hover:bg-zinc-800 disabled:opacity-50 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-100 transition-colors cursor-pointer"
                 >
                   {isPending ? "초대중..." : "초대 메일 발송"}
                 </button>
@@ -2747,7 +2747,7 @@ export function CompanyDetailManager({
                   type="button"
                   onClick={handleDeleteUser}
                   disabled={isPending}
-                  className="rounded-md border border-red-200 bg-rose-50 px-4 py-2 font-bold text-red-650 hover:bg-rose-100 disabled:opacity-50 text-xs transition-colors"
+                  className="rounded-md border border-rose-300 bg-rose-50 px-4 py-2 font-bold text-rose-700 hover:bg-rose-100 hover:border-rose-400 dark:border-rose-600/60 dark:bg-rose-950/50 dark:text-rose-300 dark:hover:bg-rose-900/70 dark:hover:border-rose-500 dark:hover:text-white disabled:opacity-40 text-xs transition-all shadow-2xs cursor-pointer"
                 >
                   담당자 삭제
                 </button>
@@ -2755,14 +2755,14 @@ export function CompanyDetailManager({
                   <button
                     type="button"
                     onClick={() => setIsEditUserOpen(false)}
-                    className="rounded-md border border-zinc-200 px-4 py-2 font-bold text-zinc-600 hover:bg-zinc-50 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-800 text-xs transition-colors"
+                    className="rounded-md border border-zinc-200 bg-white px-4 py-2 font-bold text-zinc-600 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-850 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-white text-xs transition-colors cursor-pointer"
                   >
                     취소
                   </button>
                   <button
                     type="submit"
                     disabled={isPending}
-                    className="rounded-md bg-zinc-900 px-5 py-2 font-bold text-white hover:bg-zinc-800 disabled:opacity-50 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-100 text-xs transition-colors shadow-sm"
+                    className="rounded-md bg-zinc-900 px-5 py-2 font-bold text-white hover:bg-zinc-800 disabled:opacity-50 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-100 text-xs transition-colors shadow-sm cursor-pointer"
                   >
                     {isPending ? "저장중..." : "변경 사항 저장"}
                   </button>
@@ -2918,14 +2918,14 @@ export function CompanyDetailManager({
                 <button
                   type="button"
                   onClick={() => setIsEditBrandOpen(false)}
-                  className="rounded border border-zinc-200 px-4 py-2 font-bold text-zinc-555 hover:bg-zinc-50 dark:border-zinc-850 dark:hover:bg-zinc-950 text-[11px]"
+                  className="rounded border border-zinc-200 bg-white px-4 py-2 font-bold text-zinc-600 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-850 dark:text-zinc-300 dark:hover:bg-zinc-800 text-[11px] transition-colors cursor-pointer"
                 >
                   취소
                 </button>
                 <button
                   type="submit"
                   disabled={isPending}
-                  className="rounded bg-zinc-955 px-4 py-2 font-bold text-white hover:bg-zinc-850 disabled:opacity-50 dark:bg-white dark:text-zinc-955 dark:hover:bg-zinc-100 text-[11px]"
+                  className="rounded bg-zinc-955 px-4 py-2 font-bold text-white hover:bg-zinc-850 disabled:opacity-50 dark:bg-white dark:text-zinc-955 dark:hover:bg-zinc-100 text-[11px] transition-colors cursor-pointer"
                 >
                   {isPending ? "저장중..." : "변경 사항 저장"}
                 </button>
@@ -2947,7 +2947,7 @@ export function CompanyDetailManager({
               <button
                 type="button"
                 onClick={() => setIsAddBrandOpen(false)}
-                className="rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-150"
+                className="rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-150 dark:hover:bg-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-100 transition-colors cursor-pointer"
               >
                 ✕
               </button>
@@ -3036,14 +3036,14 @@ export function CompanyDetailManager({
                 <button
                   type="button"
                   onClick={() => setIsAddBrandOpen(false)}
-                  className="rounded border border-zinc-200 px-4 py-2 font-bold text-zinc-555 hover:bg-zinc-50 dark:border-zinc-850 dark:hover:bg-zinc-950 text-[11px]"
+                  className="rounded border border-zinc-200 bg-white px-4 py-2 font-bold text-zinc-600 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-850 dark:text-zinc-300 dark:hover:bg-zinc-800 text-[11px] transition-colors cursor-pointer"
                 >
                   취소
                 </button>
                 <button
                   type="submit"
                   disabled={isPending}
-                  className="rounded bg-zinc-950 px-4 py-2 font-bold text-white hover:bg-zinc-855 disabled:opacity-50 dark:bg-white dark:text-zinc-955 dark:hover:bg-zinc-100 text-[11px]"
+                  className="rounded bg-zinc-950 px-4 py-2 font-bold text-white hover:bg-zinc-855 disabled:opacity-50 dark:bg-white dark:text-zinc-955 dark:hover:bg-zinc-100 text-[11px] transition-colors cursor-pointer"
                 >
                   {isPending ? "등록중..." : "브랜드 등록"}
                 </button>

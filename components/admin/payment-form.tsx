@@ -211,7 +211,7 @@ export function PaymentForm({ isEdit = false, payment, eligibleInvoices, presele
             </div>
 
             {isOverpayment && (
-              <div className="p-2.5 bg-rose-50 border border-rose-150 text-[10px] text-rose-700 rounded-lg font-bold">
+              <div className="p-2.5 bg-rose-50 border border-rose-150 text-[10px] text-rose-700 dark:bg-rose-950/40 dark:border-rose-800/50 dark:text-rose-300 rounded-lg font-bold">
                 ⚠️ 주의: 청구 잔액을 초과하여 {currency} {overpaymentAmount.toLocaleString()}만큼 과지급 상태가 예상됩니다. 송금 전액이 맞는지 검토하세요.
               </div>
             )}

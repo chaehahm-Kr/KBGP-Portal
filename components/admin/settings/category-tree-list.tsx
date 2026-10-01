@@ -413,7 +413,7 @@ export function CategoryTreeList({ initialTree }: { initialTree: CategoryNode[] 
 
             <form onSubmit={handleModalSubmit} className="p-6 space-y-4">
               {errorMsg && (
-                <div className="p-3.5 bg-rose-50 border border-rose-200 text-rose-600 rounded-xl text-xs font-semibold">
+                <div className="p-3.5 bg-rose-50 border border-rose-200 text-rose-600 dark:bg-rose-950/40 dark:border-rose-800/50 dark:text-rose-300 rounded-xl text-xs font-semibold">
                   ⚠️ {errorMsg}
                 </div>
               )}
@@ -536,7 +536,7 @@ export function CategoryTreeList({ initialTree }: { initialTree: CategoryNode[] 
                   type="button"
                   onClick={() => setIsModalOpen(false)}
                   disabled={isPending}
-                  className="px-4 py-2.5 rounded-xl border border-zinc-200 text-xs font-bold hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-950 disabled:opacity-50 cursor-pointer"
+                  className="px-4 py-2.5 rounded-xl border border-zinc-200 text-xs font-bold text-zinc-600 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800 disabled:opacity-50 cursor-pointer transition-colors"
                 >
                   취소
                 </button>

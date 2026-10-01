@@ -242,7 +242,7 @@ export function ShippingClient({
     <div className="space-y-6">
       {/* Messages */}
       {errorMessage && (
-        <div className="p-3.5 rounded-lg bg-rose-50 border border-rose-250 text-rose-700 font-bold text-xs">
+        <div className="p-3.5 rounded-lg bg-rose-50 border border-rose-250 text-rose-700 dark:bg-rose-950/40 dark:border-rose-800/50 dark:text-rose-300 font-bold text-xs">
           ⚠️ {errorMessage}
         </div>
       )}
@@ -564,7 +564,7 @@ export function ShippingClient({
               <div className="flex items-center justify-between">
                 <h4 className="font-bold text-zinc-700 dark:text-zinc-350">출고 준비 수량 리스트</h4>
                 {overageWarning && (
-                  <span className="px-2 py-1 bg-rose-50 text-rose-600 border border-rose-200 rounded font-bold text-[10px]">
+                  <span className="px-2 py-1 bg-rose-50 text-rose-600 border border-rose-200 dark:bg-rose-950/40 dark:border-rose-800/50 dark:text-rose-300 rounded font-bold text-[10px]">
                     ⚠️ 경고: 준비 가용 수량을 초과하는 Ready Qty가 존재합니다 (Admin 심사 대기 예정).
                   </span>
                 )}
@@ -613,7 +613,7 @@ export function ShippingClient({
                                 onChange={(e) => handleLineFieldChange(line.id, "readyQty", Number(e.target.value))}
                                 className={`w-20 text-right rounded-md text-xs font-mono shadow-sm focus:ring-zinc-500 focus:border-zinc-500 ${
                                   isOverage
-                                    ? "border-rose-300 bg-rose-50 text-rose-800 focus:border-rose-500 focus:ring-rose-500"
+                                    ? "border-rose-300 bg-rose-50 text-rose-800 focus:border-rose-500 focus:ring-rose-500 dark:border-rose-600/50 dark:bg-rose-950/40 dark:text-rose-200"
                                     : "border-zinc-300 dark:border-zinc-700 dark:bg-zinc-900"
                                 }`}
                               />

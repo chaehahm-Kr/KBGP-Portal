@@ -808,17 +808,17 @@ Outstanding Balance: ${formattedBalance}
 
                 {/* Action Required Banner */}
                 {selectedInquiry.status === "action_required" && (
-                  <div className="p-3.5 rounded-xl border border-rose-200 bg-rose-50/60 dark:border-rose-950/40 dark:bg-rose-950/10 space-y-2">
+                  <div className="p-3.5 rounded-xl border border-rose-200 bg-rose-50/60 dark:border-rose-800/50 dark:bg-rose-950/30 space-y-2">
                     <p className="text-xs font-extrabold text-rose-800 dark:text-rose-300 flex items-center gap-1">
                       ⚠️ 어드민에서 조치를 요청했습니다
                     </p>
-                    <p className="text-[10px] text-rose-700 dark:text-rose-400 leading-relaxed">
+                    <p className="text-[10px] text-rose-700 dark:text-rose-300/80 leading-relaxed">
                       대화 기록을 확인하신 후 필요한 조치를 완료해 주세요. 완료 후 아래 버튼을 눌러 주세요.
                     </p>
                     <button
                       onClick={() => setShowResolveModal(true)}
                       disabled={isResolving}
-                      className="w-full rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-bold py-2 text-[10px] tracking-wide transition-all disabled:opacity-50 cursor-pointer"
+                      className="w-full rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-bold py-2 text-[10px] tracking-wide transition-all disabled:opacity-50 cursor-pointer shadow-xs"
                     >
                       {isResolving ? "제출 중..." : "✅ 조치 완료 작성 및 검토 요청"}
                     </button>

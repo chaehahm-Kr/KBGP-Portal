@@ -299,7 +299,7 @@ export function ProfileList({ initialProfiles }: { initialProfiles: ProfileSumma
               <button onClick={() => setIsProfileModalOpen(false)} className="text-zinc-400 hover:text-zinc-650 text-sm font-bold cursor-pointer">닫기</button>
             </div>
             <form onSubmit={handleProfileSubmit} className="p-6 space-y-4">
-              {errorMsg && <div className="p-3 bg-rose-50 text-rose-600 rounded-xl text-xs font-bold">⚠️ {errorMsg}</div>}
+              {errorMsg && <div className="p-3 bg-rose-50 border border-rose-200 text-rose-600 dark:bg-rose-950/40 dark:border-rose-800/50 dark:text-rose-300 rounded-xl text-xs font-bold">⚠️ {errorMsg}</div>}
               <div className="flex flex-col gap-1">
                 <label className="text-xs font-bold text-zinc-500">프로필 코드 (대문자 영문 고유값)</label>
                 <input
@@ -334,7 +334,7 @@ export function ProfileList({ initialProfiles }: { initialProfiles: ProfileSumma
                 />
               </div>
               <div className="flex justify-end gap-2 pt-4 border-t border-zinc-100 dark:border-zinc-800">
-                <button type="button" onClick={() => setIsProfileModalOpen(false)} className="px-4 py-2.5 rounded-xl border border-zinc-200 text-xs font-bold cursor-pointer hover:bg-zinc-55">취소</button>
+                <button type="button" onClick={() => setIsProfileModalOpen(false)} className="px-4 py-2.5 rounded-xl border border-zinc-200 text-xs font-bold text-zinc-600 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800 cursor-pointer transition-colors">취소</button>
                 <button type="submit" disabled={isPending} className="px-5 py-2.5 bg-zinc-900 hover:bg-zinc-800 dark:bg-zinc-100 dark:hover:bg-zinc-200 text-white dark:text-zinc-950 border border-zinc-900 dark:border-zinc-100 text-xs font-bold rounded-xl cursor-pointer transition-all duration-150">저장</button>
               </div>
             </form>
@@ -355,7 +355,7 @@ export function ProfileList({ initialProfiles }: { initialProfiles: ProfileSumma
             </div>
             
             <form onSubmit={handleMappingSubmit} className="p-6 space-y-4">
-              {errorMsg && <div className="p-3 bg-rose-50 text-rose-600 rounded-xl text-xs font-bold">⚠️ {errorMsg}</div>}
+              {errorMsg && <div className="p-3 bg-rose-50 border border-rose-200 text-rose-600 dark:bg-rose-950/40 dark:border-rose-800/50 dark:text-rose-300 rounded-xl text-xs font-bold">⚠️ {errorMsg}</div>}
               
               <div className="text-xs text-zinc-400 dark:text-zinc-500 mb-2">
                 이 프로필이 적용되는 카테고리 제품들의 추가 속성 입력 필드로 노출시킬 마스터 속성들을 체크해 주십시오.
@@ -421,7 +421,7 @@ export function ProfileList({ initialProfiles }: { initialProfiles: ProfileSumma
               </div>
 
               <div className="flex justify-end gap-2 pt-4 border-t border-zinc-100 dark:border-zinc-800">
-                <button type="button" onClick={() => setIsMappingModalOpen(false)} className="px-4 py-2.5 rounded-xl border border-zinc-200 text-xs font-bold cursor-pointer hover:bg-zinc-55">취소</button>
+                <button type="button" onClick={() => setIsMappingModalOpen(false)} className="px-4 py-2.5 rounded-xl border border-zinc-200 text-xs font-bold text-zinc-600 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800 cursor-pointer transition-colors">취소</button>
                 <button type="submit" disabled={isPending} className="px-5 py-2.5 bg-zinc-900 hover:bg-zinc-800 dark:bg-zinc-100 dark:hover:bg-zinc-200 text-white dark:text-zinc-950 border border-zinc-900 dark:border-zinc-100 text-xs font-bold rounded-xl cursor-pointer transition-all duration-150">매핑 연동 저장</button>
               </div>
             </form>

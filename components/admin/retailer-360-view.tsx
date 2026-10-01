@@ -1299,7 +1299,7 @@ export function Retailer360View({ data, canImpersonate = true }: Retailer360View
                               window.location.reload();
                             });
                           }}
-                          className="px-2.5 py-1 rounded-lg border border-red-200 text-[10px] font-bold text-red-600 hover:bg-red-50 dark:border-red-900 cursor-pointer"
+                          className="px-2.5 py-1 rounded-lg border border-red-200 text-[10px] font-bold text-red-600 hover:bg-red-50 dark:border-rose-800/60 dark:bg-rose-950/40 dark:text-rose-300 dark:hover:bg-rose-900/60 dark:hover:text-white cursor-pointer transition-colors"
                         >
                           Revoke
                         </button>
@@ -2119,7 +2119,7 @@ export function Retailer360View({ data, canImpersonate = true }: Retailer360View
 
             <form onSubmit={handleCreateStore} className="space-y-4 pt-4 text-xs">
               {storeError && (
-                <div className="p-3 rounded-lg border border-red-200 bg-red-50 text-xs font-semibold text-red-800">
+                <div className="p-3 rounded-lg border border-red-200 bg-red-50 text-xs font-semibold text-red-800 dark:border-rose-800/50 dark:bg-rose-950/40 dark:text-rose-300">
                   {storeError}
                 </div>
               )}
@@ -2181,14 +2181,14 @@ export function Retailer360View({ data, canImpersonate = true }: Retailer360View
                 <button
                   type="button"
                   onClick={() => setShowAddStoreModal(false)}
-                  className="rounded-xl px-4 py-2 text-xs font-bold text-zinc-600 hover:bg-zinc-100 cursor-pointer"
+                  className="rounded-xl px-4 py-2 text-xs font-bold text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800 cursor-pointer transition-colors"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={isPending || !newStoreName.trim()}
-                  className="rounded-xl bg-zinc-900 px-5 py-2 text-xs font-bold text-white hover:bg-zinc-800 disabled:opacity-40 cursor-pointer shadow-xs"
+                  className="rounded-xl bg-zinc-900 px-5 py-2 text-xs font-bold text-white hover:bg-zinc-800 disabled:opacity-40 cursor-pointer shadow-xs dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-100 transition-colors"
                 >
                   {isPending ? "Creating..." : "Add Store"}
                 </button>
@@ -2217,7 +2217,7 @@ export function Retailer360View({ data, canImpersonate = true }: Retailer360View
 
             <form onSubmit={handleInviteUser} className="space-y-4 pt-4 text-xs">
               {inviteError && (
-                <div className="p-3 rounded-lg border border-red-200 bg-red-50 text-xs font-semibold text-red-800">
+                <div className="p-3 rounded-lg border border-red-200 bg-red-50 text-xs font-semibold text-red-800 dark:border-rose-800/50 dark:bg-rose-950/40 dark:text-rose-300">
                   {inviteError}
                 </div>
               )}
@@ -2281,14 +2281,14 @@ export function Retailer360View({ data, canImpersonate = true }: Retailer360View
                 <button
                   type="button"
                   onClick={() => setShowInviteModal(false)}
-                  className="rounded-xl px-4 py-2 text-xs font-bold text-zinc-600 hover:bg-zinc-100 cursor-pointer"
+                  className="rounded-xl px-4 py-2 text-xs font-bold text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800 cursor-pointer transition-colors"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={isPending || !inviteEmail.trim()}
-                  className="rounded-xl bg-zinc-900 px-5 py-2 text-xs font-bold text-white hover:bg-zinc-800 disabled:opacity-40 cursor-pointer shadow-xs"
+                  className="rounded-xl bg-zinc-900 px-5 py-2 text-xs font-bold text-white hover:bg-zinc-800 disabled:opacity-40 cursor-pointer shadow-xs dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-100 transition-colors"
                 >
                   {isPending ? "Sending..." : "Send Invitation"}
                 </button>
@@ -2322,7 +2322,7 @@ export function Retailer360View({ data, canImpersonate = true }: Retailer360View
 
             <form onSubmit={handleCreateFulfillmentSubmit} className="space-y-4 pt-4 text-xs">
               {fulfillmentError && (
-                <div className="p-3 rounded-lg border border-red-200 bg-red-50 text-xs font-semibold text-red-800">
+                <div className="p-3 rounded-lg border border-red-200 bg-red-50 text-xs font-semibold text-red-800 dark:border-rose-800/50 dark:bg-rose-950/40 dark:text-rose-300">
                   {fulfillmentError}
                 </div>
               )}
@@ -2416,14 +2416,14 @@ export function Retailer360View({ data, canImpersonate = true }: Retailer360View
                 <button
                   type="button"
                   onClick={() => setFulfillmentModalOrder(null)}
-                  className="rounded-xl px-4 py-2 text-xs font-bold text-zinc-600 hover:bg-zinc-100 cursor-pointer"
+                  className="rounded-xl px-4 py-2 text-xs font-bold text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800 cursor-pointer transition-colors"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={isPending}
-                  className="rounded-xl bg-zinc-900 px-5 py-2 text-xs font-bold text-white hover:bg-zinc-800 disabled:opacity-40 cursor-pointer shadow-xs"
+                  className="rounded-xl bg-zinc-900 px-5 py-2 text-xs font-bold text-white hover:bg-zinc-800 disabled:opacity-40 cursor-pointer shadow-xs dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-100 transition-colors"
                 >
                   {isPending ? "Creating..." : "Confirm & Dispatch Package"}
                 </button>
@@ -2457,7 +2457,7 @@ export function Retailer360View({ data, canImpersonate = true }: Retailer360View
 
             <form onSubmit={handleSaveCompanySubmit} className="space-y-4 pt-4 text-xs">
               {compModalError && (
-                <div className="p-3 rounded-lg border border-red-200 bg-red-50 text-xs font-semibold text-red-800">
+                <div className="p-3 rounded-lg border border-red-200 bg-red-50 text-xs font-semibold text-red-800 dark:border-rose-800/50 dark:bg-rose-950/40 dark:text-rose-300">
                   {compModalError}
                 </div>
               )}
@@ -2596,14 +2596,14 @@ export function Retailer360View({ data, canImpersonate = true }: Retailer360View
                 <button
                   type="button"
                   onClick={() => setShowCompanyModal(false)}
-                  className="rounded-xl px-4 py-2 text-xs font-bold text-zinc-600 hover:bg-zinc-100 cursor-pointer"
+                  className="rounded-xl px-4 py-2 text-xs font-bold text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800 cursor-pointer transition-colors"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={isPending || !editCompName.trim()}
-                  className="rounded-xl bg-zinc-900 px-5 py-2 text-xs font-bold text-white hover:bg-zinc-800 disabled:opacity-40 cursor-pointer shadow-xs"
+                  className="rounded-xl bg-zinc-900 px-5 py-2 text-xs font-bold text-white hover:bg-zinc-800 disabled:opacity-40 cursor-pointer shadow-xs dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-100 transition-colors"
                 >
                   {isPending ? "Saving..." : "Save Company Changes"}
                 </button>
@@ -2637,7 +2637,7 @@ export function Retailer360View({ data, canImpersonate = true }: Retailer360View
 
             <form onSubmit={handleSaveEditStoreSubmit} className="space-y-4 pt-4 text-xs">
               {editStoreError && (
-                <div className="p-3 rounded-lg border border-red-200 bg-red-50 text-xs font-semibold text-red-800">
+                <div className="p-3 rounded-lg border border-red-200 bg-red-50 text-xs font-semibold text-red-800 dark:border-rose-800/50 dark:bg-rose-950/40 dark:text-rose-300">
                   {editStoreError}
                 </div>
               )}
@@ -2773,14 +2773,14 @@ export function Retailer360View({ data, canImpersonate = true }: Retailer360View
                 <button
                   type="button"
                   onClick={() => setShowEditStoreModal(false)}
-                  className="rounded-xl px-4 py-2 text-xs font-bold text-zinc-600 hover:bg-zinc-100 cursor-pointer"
+                  className="rounded-xl px-4 py-2 text-xs font-bold text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800 cursor-pointer transition-colors"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={isPending || !editStoreName.trim()}
-                  className="rounded-xl bg-zinc-900 px-5 py-2 text-xs font-bold text-white hover:bg-zinc-800 disabled:opacity-40 cursor-pointer shadow-xs"
+                  className="rounded-xl bg-zinc-900 px-5 py-2 text-xs font-bold text-white hover:bg-zinc-800 disabled:opacity-40 cursor-pointer shadow-xs dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-100 transition-colors"
                 >
                   {isPending ? "Saving..." : "Save Store Changes"}
                 </button>
@@ -2814,7 +2814,7 @@ export function Retailer360View({ data, canImpersonate = true }: Retailer360View
 
             <form onSubmit={handleSaveUserRoleSubmit} className="space-y-4 pt-4 text-xs">
               {roleModalError && (
-                <div className="p-3 rounded-lg border border-red-200 bg-red-50 text-xs font-semibold text-red-800">
+                <div className="p-3 rounded-lg border border-red-200 bg-red-50 text-xs font-semibold text-red-800 dark:border-rose-800/50 dark:bg-rose-950/40 dark:text-rose-300">
                   {roleModalError}
                 </div>
               )}
@@ -2854,14 +2854,14 @@ export function Retailer360View({ data, canImpersonate = true }: Retailer360View
                 <button
                   type="button"
                   onClick={() => setShowRoleModal(false)}
-                  className="rounded-xl px-4 py-2 text-xs font-bold text-zinc-600 hover:bg-zinc-100 cursor-pointer"
+                  className="rounded-xl px-4 py-2 text-xs font-bold text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800 cursor-pointer transition-colors"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={isPending}
-                  className="rounded-xl bg-zinc-900 px-5 py-2 text-xs font-bold text-white hover:bg-zinc-800 disabled:opacity-40 cursor-pointer shadow-xs"
+                  className="rounded-xl bg-zinc-900 px-5 py-2 text-xs font-bold text-white hover:bg-zinc-800 disabled:opacity-40 cursor-pointer shadow-xs dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-100 transition-colors"
                 >
                   {isPending ? "Saving..." : "Update Role"}
                 </button>
@@ -2895,7 +2895,7 @@ export function Retailer360View({ data, canImpersonate = true }: Retailer360View
 
             <form onSubmit={handleSaveUserAccessSubmit} className="space-y-4 pt-4 text-xs">
               {accessModalError && (
-                <div className="p-3 rounded-lg border border-red-200 bg-red-50 text-xs font-semibold text-red-800">
+                <div className="p-3 rounded-lg border border-red-200 bg-red-50 text-xs font-semibold text-red-800 dark:border-rose-800/50 dark:bg-rose-950/40 dark:text-rose-300">
                   {accessModalError}
                 </div>
               )}
@@ -2950,14 +2950,14 @@ export function Retailer360View({ data, canImpersonate = true }: Retailer360View
                 <button
                   type="button"
                   onClick={() => setShowAccessModal(false)}
-                  className="rounded-xl px-4 py-2 text-xs font-bold text-zinc-600 hover:bg-zinc-100 cursor-pointer"
+                  className="rounded-xl px-4 py-2 text-xs font-bold text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800 cursor-pointer transition-colors"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={isPending}
-                  className="rounded-xl bg-zinc-900 px-5 py-2 text-xs font-bold text-white hover:bg-zinc-800 disabled:opacity-40 cursor-pointer shadow-xs"
+                  className="rounded-xl bg-zinc-900 px-5 py-2 text-xs font-bold text-white hover:bg-zinc-800 disabled:opacity-40 cursor-pointer shadow-xs dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-100 transition-colors"
                 >
                   {isPending ? "Saving..." : "Save Store Access"}
                 </button>

@@ -206,7 +206,7 @@ export function AdminPoRequestDetailView({ request }: AdminPoRequestDetailViewPr
       </div>
 
       {actionError && (
-        <div className="p-3.5 rounded-lg bg-rose-50 border border-rose-200 text-rose-600 font-bold text-xs">
+        <div className="p-3.5 rounded-lg bg-rose-50 border border-rose-200 text-rose-600 dark:bg-rose-950/40 dark:border-rose-800/50 dark:text-rose-300 font-bold text-xs">
           ⚠️ {actionError}
         </div>
       )}
