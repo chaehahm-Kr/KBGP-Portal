@@ -100,7 +100,6 @@ export default function PortalSidebar({
       category: "support",
       subItems: [
         { name: "Help Center", href: "/portal/help", category: "support" },
-        { name: "Ask K SELECT", href: "/portal/help/ask", category: "support" },
         { name: "문의 지원", href: "/portal/support", category: "support" },
       ],
     },
