@@ -127,7 +127,15 @@ export async function searchKnowledgeCore(
       candidatePool = candidatePool.filter(item => item.type === filters.type);
     }
     if (filters.audience && filters.audience !== "ALL") {
-      candidatePool = candidatePool.filter(item => item.audience.includes(filters.audience as AudienceType));
+      const targetAud = filters.audience.toUpperCase();
+      candidatePool = candidatePool.filter(item => {
+        const auds = (item.audience || []).map(a => a.toUpperCase());
+        if (targetAud === "BRAND") return auds.includes("BRAND");
+        if (targetAud === "RETAIL" || targetAud === "RETAILER") return auds.includes("RETAIL") || auds.includes("RETAILER");
+        if (targetAud === "INTERNAL") return auds.includes("INTERNAL") || auds.includes("ADMIN / MANAGEMENT");
+        if (targetAud === "PUBLIC") return auds.includes("PUBLIC");
+        return auds.includes(targetAud);
+      });
     }
     if (filters.module && filters.module !== "ALL") {
       const modLower = filters.module.toLowerCase();

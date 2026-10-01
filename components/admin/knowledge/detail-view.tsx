@@ -7,7 +7,8 @@ import {
   KnowledgeVersion,
   KnowledgeRelation,
   ManualAsset,
-  KnowledgeAuditLog
+  KnowledgeAuditLog,
+  AudienceType
 } from "@/lib/knowledge/types";
 import KnowledgeNavTabs from "./knowledge-nav-tabs";
 
@@ -34,6 +35,10 @@ export default function DetailView({ id }: { id: string }) {
   const [whatChanged, setWhatChanged] = useState("");
   const [whyChanged, setWhyChanged] = useState("");
   const [newVersionString, setNewVersionString] = useState("");
+
+  // No Update Needed Modal (Section 12 Governance)
+  const [noUpdateModal, setNoUpdateModal] = useState(false);
+  const [noUpdateReason, setNoUpdateReason] = useState("");
 
   useEffect(() => {
     fetchDetail();
@@ -95,7 +100,7 @@ export default function DetailView({ id }: { id: string }) {
         })
       });
       if (res.ok) {
-        alert("새 버전이 생성되었습니다!");
+        alert("새 버전 초안이 생성되었습니다!");
         setNewVersionModal(false);
         setWhatChanged("");
         setWhyChanged("");
@@ -111,7 +116,7 @@ export default function DetailView({ id }: { id: string }) {
   };
 
   const handlePublishVersion = async (versionStr: string) => {
-    if (!confirm(`버전 ${versionStr}을(를) 공식 배포(Publish)하시겠습니까? 기존 버전은 이전 버전으로 아카이빙됩니다.`)) return;
+    if (!confirm(`버전 ${versionStr}을(를) 공식 배포(Publish)하시겠습니까? 현재 버전이 공식 Source of Truth로 전환되며 기존 버전은 이력으로 보존됩니다.`)) return;
     try {
       const res = await fetch(`/api/admin/knowledge/${id}/versions`, {
         method: "POST",
@@ -122,27 +127,58 @@ export default function DetailView({ id }: { id: string }) {
         })
       });
       if (res.ok) {
-        alert("버전이 성공적으로 배포되었습니다!");
+        alert("버전이 성공적으로 공식 배포(Publish)되었습니다!");
         fetchDetail();
+      } else {
+        const err = await res.json();
+        alert(`배포 실패:\n${err.error}`);
       }
     } catch (e) {
       alert("버전 배포 중 오류가 발생했습니다.");
     }
   };
 
-  const handleMarkReviewed = async () => {
-    if (!confirm("본 지식/매뉴얼을 검토 완료(Mark as Reviewed) 처리하시겠습니까? 영향 상태가 NORMAL(정상)으로 복원됩니다.")) return;
+  const handlePublishItem = async () => {
+    if (!confirm(`본 지식 항목(${item?.title})을 공식 배포(Publish)하시겠습니까?`)) return;
     try {
       const res = await fetch(`/api/admin/knowledge/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          action: "resolve_impact",
-          reason: "Reviewed and validated by administrator without code changes"
+          action: "PUBLISH",
+          version: item?.current_version || "v1.0"
         })
       });
       if (res.ok) {
-        alert("검토 완료 처리되었습니다. 영향 상태가 정상(NORMAL)으로 복원되었습니다.");
+        alert("성공적으로 공식 배포(Publish)되었습니다!");
+        fetchDetail();
+      } else {
+        const err = await res.json();
+        alert(`배포 실패:\n${err.error}`);
+      }
+    } catch (e) {
+      alert("배포 처리 중 오류가 발생했습니다.");
+    }
+  };
+
+  const handleConfirmNoUpdateNeeded = async () => {
+    if (!noUpdateReason.trim()) {
+      alert("검토 사유를 반드시 입력해 주세요.");
+      return;
+    }
+    try {
+      const res = await fetch(`/api/admin/knowledge/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "no_update_needed",
+          reason: noUpdateReason
+        })
+      });
+      if (res.ok) {
+        alert("검토 완료(수정 불필요) 처리되었습니다. 영향 상태가 정상(NORMAL)으로 복원되었습니다.");
+        setNoUpdateModal(false);
+        setNoUpdateReason("");
         fetchDetail();
       } else {
         const err = await res.json();
@@ -151,6 +187,21 @@ export default function DetailView({ id }: { id: string }) {
     } catch (e) {
       alert("검토 처리 중 오류가 발생했습니다.");
     }
+  };
+
+  const toggleAudience = (aud: AudienceType) => {
+    const current = (editForm.audience || item?.audience || []) as AudienceType[];
+    let updated: AudienceType[];
+    if (current.includes(aud)) {
+      if (current.length === 1) {
+        alert("최소 1개 이상의 배포 대상(Audience)을 유지해야 합니다.");
+        return;
+      }
+      updated = current.filter(a => a !== aud);
+    } else {
+      updated = [...current, aud];
+    }
+    setEditForm({ ...editForm, audience: updated });
   };
 
   if (loading) {
@@ -193,6 +244,10 @@ export default function DetailView({ id }: { id: string }) {
         return <span className="rounded-full bg-zinc-100 px-2.5 py-0.5 text-xs font-bold text-zinc-700">{status}</span>;
     }
   };
+
+  const hasInternal = item.audience?.some(a => ["INTERNAL", "ADMIN / MANAGEMENT"].includes(a.toUpperCase()));
+  const hasBrand = item.audience?.some(a => a.toUpperCase() === "BRAND");
+  const hasRetail = item.audience?.some(a => ["RETAIL", "RETAILER"].includes(a.toUpperCase()));
 
   return (
     <div className="space-y-6 max-w-6xl">
@@ -250,6 +305,15 @@ export default function DetailView({ id }: { id: string }) {
             </>
           ) : (
             <>
+              {item.status === "DRAFT" && (
+                <button
+                  type="button"
+                  onClick={handlePublishItem}
+                  className="rounded-lg bg-emerald-600 px-3.5 py-1.5 text-xs font-bold text-white hover:bg-emerald-700 cursor-pointer shadow-xs"
+                >
+                  🚀 공식 배포 (Publish)
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => setIsEditing(true)}
@@ -269,7 +333,7 @@ export default function DetailView({ id }: { id: string }) {
         </div>
       </div>
 
-      {/* Prominent Impact Alert Banner */}
+      {/* Prominent Impact Alert Banner (Section 11 & 12 Governance) */}
       {(item.system_impact_status === "UPDATE_REQUIRED" || item.system_impact_status === "POTENTIALLY_OUTDATED") && (
         <div className="rounded-xl border-2 border-amber-400 bg-amber-50/90 dark:border-amber-600 dark:bg-amber-950/40 p-5 shadow-sm">
           <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
@@ -298,10 +362,10 @@ export default function DetailView({ id }: { id: string }) {
             <div className="flex sm:flex-col items-center sm:items-end gap-2 shrink-0">
               <button
                 type="button"
-                onClick={handleMarkReviewed}
+                onClick={() => setNoUpdateModal(true)}
                 className="w-full sm:w-auto rounded-lg bg-white dark:bg-zinc-900 border border-amber-300 dark:border-amber-700 px-3.5 py-1.5 text-xs font-bold text-amber-900 dark:text-amber-200 hover:bg-amber-100 dark:hover:bg-amber-900/60 shadow-xs cursor-pointer transition-colors"
               >
-                ✓ Mark as Reviewed (검토 완료)
+                ✓ 수정 불필요 확인 (No Update Needed)
               </button>
               <button
                 type="button"
@@ -312,7 +376,7 @@ export default function DetailView({ id }: { id: string }) {
                 }}
                 className="w-full sm:w-auto rounded-lg bg-amber-600 px-3.5 py-1.5 text-xs font-bold text-white hover:bg-amber-700 shadow-xs cursor-pointer transition-colors"
               >
-                + 새 버전 작성 &amp; Publish
+                + 개정 버전 작성 &amp; Publish (Update Required)
               </button>
             </div>
           </div>
@@ -339,7 +403,7 @@ export default function DetailView({ id }: { id: string }) {
               : "text-zinc-500 hover:text-zinc-900 dark:text-zinc-400"
           }`}
         >
-          Access & Audience (권한/대상)
+          Publication & Distribution (배포 대상)
         </button>
         <button
           onClick={() => setActiveTab("VERSIONS")}
@@ -382,7 +446,7 @@ export default function DetailView({ id }: { id: string }) {
               )}
             </div>
             <div>
-              <span className="text-zinc-400 block font-semibold text-[10px] uppercase">Owner</span>
+              <span className="text-zinc-400 block font-semibold text-[10px] uppercase">Owner / Publisher</span>
               <span className="font-bold text-zinc-900 dark:text-white">{item.owner_name || "Knowledge Admin"}</span>
             </div>
             <div>
@@ -402,7 +466,7 @@ export default function DetailView({ id }: { id: string }) {
               )}
             </div>
             <div>
-              <span className="text-zinc-400 block font-semibold text-[10px] uppercase">Last Updated</span>
+              <span className="text-zinc-400 block font-semibold text-[10px] uppercase">Effective / Updated</span>
               <span className="font-bold text-zinc-900 dark:text-white">{new Date(item.updated_at).toLocaleString()}</span>
             </div>
           </div>
@@ -518,39 +582,175 @@ export default function DetailView({ id }: { id: string }) {
         </div>
       )}
 
-      {/* Tab 2: Access & Audience */}
+      {/* Tab 2: Publication & Audience Distribution (Section 4, 5, 6) */}
       {activeTab === "ACCESS" && (
-        <div className="rounded-xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-900 shadow-sm space-y-6">
-          <h2 className="text-sm font-bold text-zinc-900 dark:text-white border-b border-zinc-100 dark:border-zinc-800 pb-3">
-            Access Control & Distribution Boundary
-          </h2>
-          <div className="space-y-4">
-            <p className="text-xs text-zinc-500">
-              본 지식이 노출 및 배포되는 권한 그룹과 보안 설정입니다.
-            </p>
+        <div className="space-y-6">
+          {/* Publication Info Card */}
+          <div className="rounded-xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-900 shadow-sm space-y-4">
+            <h2 className="text-sm font-bold text-zinc-900 dark:text-white border-b border-zinc-100 dark:border-zinc-800 pb-3">
+              Publication Status &amp; Authority
+            </h2>
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 text-xs">
+              <div className="p-3 bg-zinc-50 dark:bg-zinc-950 rounded-lg border border-zinc-200 dark:border-zinc-800">
+                <span className="text-zinc-400 block font-semibold text-[10px] uppercase">Publication Status</span>
+                <div className="mt-1 flex items-center gap-1.5">
+                  {getStatusBadge(item.status)}
+                </div>
+              </div>
+              <div className="p-3 bg-zinc-50 dark:bg-zinc-950 rounded-lg border border-zinc-200 dark:border-zinc-800">
+                <span className="text-zinc-400 block font-semibold text-[10px] uppercase">Current Official Version</span>
+                <span className="font-mono font-bold text-sm text-zinc-900 dark:text-white mt-1 block">
+                  {item.current_version || "v1.0"}
+                </span>
+              </div>
+              <div className="p-3 bg-zinc-50 dark:bg-zinc-950 rounded-lg border border-zinc-200 dark:border-zinc-800">
+                <span className="text-zinc-400 block font-semibold text-[10px] uppercase">Published / Effective Date</span>
+                <span className="font-bold text-xs text-zinc-900 dark:text-white mt-1 block">
+                  {item.effective_date || new Date(item.created_at).toLocaleDateString()}
+                </span>
+              </div>
+              <div className="p-3 bg-zinc-50 dark:bg-zinc-950 rounded-lg border border-zinc-200 dark:border-zinc-800">
+                <span className="text-zinc-400 block font-semibold text-[10px] uppercase">Owner / Publisher</span>
+                <span className="font-bold text-xs text-zinc-900 dark:text-white mt-1 block truncate">
+                  {item.owner_name || "K SELECT Operations"}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Distribution Audience Grid */}
+          <div className="rounded-xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-900 shadow-sm space-y-6">
+            <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-3">
+              <div>
+                <h2 className="text-sm font-bold text-zinc-900 dark:text-white">
+                  Audience Distribution Boundary
+                </h2>
+                <p className="text-xs text-zinc-500 mt-0.5">
+                  공식 배포(PUBLISHED) 상태의 지식이 조회될 수 있는 사용자 권한 및 포털 배포 경계입니다.
+                </p>
+              </div>
+              {isEditing && (
+                <span className="text-[11px] text-blue-600 dark:text-blue-400 font-semibold">
+                  체크박스를 클릭하여 배포 대상을 변경할 수 있습니다.
+                </span>
+              )}
+            </div>
+
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div className={`p-4 rounded-lg border ${item.audience?.includes("INTERNAL") ? "border-slate-300 bg-slate-50 dark:border-slate-700 dark:bg-slate-900" : "border-zinc-200 opacity-40"}`}>
-                <div className="flex items-center gap-2">
-                  <span className="font-bold text-xs">Internal / Admin</span>
-                  {item.audience?.includes("INTERNAL") && <span className="text-xs text-emerald-600 font-bold">✓ 허용</span>}
+              {/* Internal / Admin */}
+              <div
+                onClick={() => isEditing && toggleAudience("INTERNAL")}
+                className={`p-5 rounded-xl border transition-all ${
+                  isEditing ? "cursor-pointer hover:border-slate-400" : ""
+                } ${
+                  hasInternal
+                    ? "border-slate-300 bg-slate-50/80 dark:border-slate-700 dark:bg-slate-900/50 ring-1 ring-slate-400/30"
+                    : "border-zinc-200 bg-zinc-50/30 opacity-50 dark:border-zinc-800 dark:bg-zinc-950/30"
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg">🛡️</span>
+                    <span className="font-bold text-xs text-zinc-900 dark:text-white">Internal / Admin</span>
+                  </div>
+                  {hasInternal ? (
+                    <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
+                      ✓ 배포 활성 (Active)
+                    </span>
+                  ) : (
+                    <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] font-semibold text-zinc-400 dark:bg-zinc-800">
+                      — 미배포 (Inactive)
+                    </span>
+                  )}
                 </div>
-                <p className="mt-1 text-[11px] text-zinc-500">어드민 및 내부 임직원 전용 지식</p>
+                <p className="mt-2 text-[11px] text-zinc-600 dark:text-zinc-400 leading-relaxed">
+                  어드민 콘솔 및 내부 운영팀 전용 지식입니다.
+                </p>
+                <div className="mt-3 text-[10px] font-mono text-zinc-500">
+                  Distribution: {hasInternal && item.status === "PUBLISHED" ? "YES (Eligible)" : "NO"}
+                </div>
               </div>
 
-              <div className={`p-4 rounded-lg border ${item.audience?.includes("BRAND") ? "border-blue-300 bg-blue-50 dark:border-blue-700 dark:bg-blue-950/20" : "border-zinc-200 opacity-40"}`}>
-                <div className="flex items-center gap-2">
-                  <span className="font-bold text-xs">Brand Portal</span>
-                  {item.audience?.includes("BRAND") && <span className="text-xs text-emerald-600 font-bold">✓ 허용</span>}
+              {/* Brand Portal */}
+              <div
+                onClick={() => isEditing && toggleAudience("BRAND")}
+                className={`p-5 rounded-xl border transition-all ${
+                  isEditing ? "cursor-pointer hover:border-blue-400" : ""
+                } ${
+                  hasBrand
+                    ? "border-blue-300 bg-blue-50/60 dark:border-blue-700 dark:bg-blue-950/30 ring-1 ring-blue-400/30"
+                    : "border-zinc-200 bg-zinc-50/30 opacity-50 dark:border-zinc-800 dark:bg-zinc-950/30"
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg">🏢</span>
+                    <span className="font-bold text-xs text-zinc-900 dark:text-white">Brand Portal</span>
+                  </div>
+                  {hasBrand ? (
+                    <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
+                      ✓ 배포 활성 (Active)
+                    </span>
+                  ) : (
+                    <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] font-semibold text-zinc-400 dark:bg-zinc-800">
+                      — 미배포 (Inactive)
+                    </span>
+                  )}
                 </div>
-                <p className="mt-1 text-[11px] text-zinc-500">브랜드사 파트너 포털 배포 대상</p>
+                <p className="mt-2 text-[11px] text-zinc-600 dark:text-zinc-400 leading-relaxed">
+                  브랜드사 파트너 포털 및 브랜드 헬프 센터 배포 대상입니다.
+                </p>
+                <div className="mt-3 text-[10px] font-mono text-zinc-500">
+                  Distribution: {hasBrand && item.status === "PUBLISHED" && !item.is_sensitive_internal ? "YES (Eligible)" : "NO"}
+                </div>
               </div>
 
-              <div className={`p-4 rounded-lg border ${item.audience?.includes("RETAILER") ? "border-purple-300 bg-purple-50 dark:border-purple-700 dark:bg-purple-950/20" : "border-zinc-200 opacity-40"}`}>
-                <div className="flex items-center gap-2">
-                  <span className="font-bold text-xs">Retail Portal</span>
-                  {item.audience?.includes("RETAILER") && <span className="text-xs text-emerald-600 font-bold">✓ 허용</span>}
+              {/* Retail Portal */}
+              <div
+                onClick={() => isEditing && toggleAudience("RETAILER")}
+                className={`p-5 rounded-xl border transition-all ${
+                  isEditing ? "cursor-pointer hover:border-purple-400" : ""
+                } ${
+                  hasRetail
+                    ? "border-purple-300 bg-purple-50/60 dark:border-purple-700 dark:bg-purple-950/30 ring-1 ring-purple-400/30"
+                    : "border-zinc-200 bg-zinc-50/30 opacity-50 dark:border-zinc-800 dark:bg-zinc-950/30"
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg">🛒</span>
+                    <span className="font-bold text-xs text-zinc-900 dark:text-white">Retail Portal</span>
+                  </div>
+                  {hasRetail ? (
+                    <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
+                      ✓ 배포 활성 (Active)
+                    </span>
+                  ) : (
+                    <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] font-semibold text-zinc-400 dark:bg-zinc-800">
+                      — 미배포 (Inactive)
+                    </span>
+                  )}
                 </div>
-                <p className="mt-1 text-[11px] text-zinc-500">미국 리테일러/바이어 포털 배포 대상</p>
+                <p className="mt-2 text-[11px] text-zinc-600 dark:text-zinc-400 leading-relaxed">
+                  미국 리테일러/바이어 포털 및 리테일 헬프 센터 배포 대상입니다.
+                </p>
+                <div className="mt-3 text-[10px] font-mono text-zinc-500">
+                  Distribution: {hasRetail && item.status === "PUBLISHED" && !item.is_sensitive_internal ? "YES (Eligible)" : "NO"}
+                </div>
+              </div>
+            </div>
+
+            {/* Security Isolation Notice */}
+            <div className="p-4 rounded-xl bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 flex items-start gap-3">
+              <span className="text-base select-none mt-0.5">🔒</span>
+              <div className="space-y-1 text-xs">
+                <h4 className="font-bold text-zinc-900 dark:text-white">
+                  Audience Isolation &amp; Security Boundary (보안 격리 원칙)
+                </h4>
+                <p className="text-zinc-600 dark:text-zinc-400 leading-relaxed">
+                  PUBLISHED 상태인 지식만 배포 쿼리에 노출되며, BRAND 전용 지식은 RETAIL 사용자에게 노출되지 않고,
+                  INTERNAL 전용 지식 및 민감 정보(Sensitive)는 외부 포털 API 쿼리에서 원천 차단됩니다.
+                </p>
               </div>
             </div>
           </div>
@@ -611,7 +811,7 @@ export default function DetailView({ id }: { id: string }) {
       {activeTab === "ACTIVITY" && (
         <div className="rounded-xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-900 shadow-sm space-y-4">
           <h2 className="text-sm font-bold text-zinc-900 dark:text-white border-b border-zinc-100 dark:border-zinc-800 pb-3">
-            Activity & Audit Logs
+            Activity &amp; Audit Logs
           </h2>
           <div className="divide-y divide-zinc-100 dark:divide-zinc-800 text-xs">
             {auditLogs.length === 0 ? (
@@ -696,6 +896,48 @@ export default function DetailView({ id }: { id: string }) {
                 className="rounded bg-[#131E2E] px-4 py-1.5 text-xs font-semibold text-white hover:bg-[#1f3047] cursor-pointer"
               >
                 버전 생성
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: No Update Needed Confirmation (Section 12 Governance) */}
+      {noUpdateModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-md rounded-xl bg-white p-6 dark:bg-zinc-900 shadow-xl space-y-4">
+            <h3 className="text-sm font-bold text-zinc-900 dark:text-white">
+              ✓ 수정 불필요 확인 (No Update Needed)
+            </h3>
+            <p className="text-xs text-zinc-500">
+              시스템 변경사항을 검토하였으며, 본 매뉴얼의 내용 수정 없이 정상 상태(NORMAL)로 복구합니다.
+            </p>
+            <div>
+              <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                검토 사유 (Review Reason) <span className="text-rose-500">*</span>
+              </label>
+              <textarea
+                value={noUpdateReason}
+                onChange={(e) => setNoUpdateReason(e.target.value)}
+                rows={3}
+                placeholder="예: 변경된 화면 UI가 기존 매뉴얼 설명과 부합함을 확인하여 내용 개정 불필요로 판단함."
+                className="w-full rounded border border-zinc-300 p-2 text-xs dark:border-zinc-700 dark:bg-zinc-950"
+              />
+            </div>
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-zinc-100 dark:border-zinc-800">
+              <button
+                type="button"
+                onClick={() => setNoUpdateModal(false)}
+                className="rounded px-3 py-1.5 text-xs text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 cursor-pointer"
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmNoUpdateNeeded}
+                className="rounded bg-emerald-600 px-4 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 cursor-pointer"
+              >
+                검토 완료 및 NORMAL 복구
               </button>
             </div>
           </div>

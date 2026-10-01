@@ -7,9 +7,11 @@ import {
   getStoreAssets,
   getStoreAuditLogs,
   saveStoreRelation,
-  saveStoreAsset
+  saveStoreAsset,
+  addStoreAuditLog,
+  resolveKnowledgeImpact
 } from "@/lib/knowledge/store";
-import { logKnowledgeActivity } from "@/lib/knowledge/audit";
+import { publishDraftVersion, validateKnowledgeForPublish } from "@/lib/knowledge/versioning";
 import { KnowledgeItem, KnowledgeRelation, ManualAsset } from "@/lib/knowledge/types";
 
 export async function GET(
@@ -56,22 +58,83 @@ export async function PATCH(
 
     const body = await request.json();
     const now = new Date().toISOString();
-    const prevItem = { ...item };
+    const userName = body.user_name || "Knowledge Admin";
+    const userId = body.user_id || "usr-admin-system";
 
-    // Handle Mark as Reviewed / Resolve Impact Action
-    if (body.action === "resolve_impact" || body.action === "mark_reviewed" || (body.system_impact_status === "NORMAL" && item.system_impact_status === "UPDATE_REQUIRED")) {
-      const { resolveKnowledgeImpact } = await import("@/lib/knowledge/store");
-      const resolvedItem = await resolveKnowledgeImpact(item.id, {
-        resolvedBy: body.user_name || "Admin",
-        reason: body.reason || body.update_reason || "Admin confirmed manual is up-to-date with current system state.",
-        action: "NO_UPDATE_REQUIRED"
+    // 1. Direct Publish Action (ADM-KNW-002)
+    if (body.action === "PUBLISH" || body.action === "publish") {
+      const versionStr = body.version || item.current_version || "v1.0";
+      const publishedItem = await publishDraftVersion(
+        item.id,
+        { id: userId, name: userName },
+        versionStr
+      );
+      return NextResponse.json({
+        success: true,
+        item: publishedItem,
+        message: `Version ${versionStr} published successfully.`
       });
-      return NextResponse.json({ item: resolvedItem, success: true, message: "Impact marked as reviewed and status restored to NORMAL" });
     }
 
-    // Check if audience is changing to external
-    const newAudience = body.audience || item.audience;
-    const hasExternalAudience = newAudience.some((a: string) =>
+    // 2. Governance: Review - No Update Needed (Section 12)
+    if (body.action === "resolve_impact" || body.action === "no_update_needed" || body.action === "mark_reviewed") {
+      if (!body.reason || !body.reason.trim()) {
+        return NextResponse.json(
+          { error: "검토 사유(Reason)를 입력해야 정상화(No Update Needed) 처리가 가능합니다." },
+          { status: 400 }
+        );
+      }
+      const resolvedItem = await resolveKnowledgeImpact(item.id, {
+        resolvedBy: userName,
+        reason: body.reason,
+        action: "NO_UPDATE_REQUIRED"
+      });
+
+      await addStoreAuditLog({
+        id: `log-rev-no-${Date.now()}`,
+        knowledge_id: item.id,
+        user_id: userId,
+        user_name: userName,
+        action: "IMPACT_REVIEWED_NO_UPDATE_NEEDED",
+        previous_value: { system_impact_status: "UPDATE_REQUIRED" },
+        new_value: { system_impact_status: "NORMAL" },
+        reason: body.reason,
+        created_at: now
+      });
+
+      return NextResponse.json({
+        item: resolvedItem,
+        success: true,
+        message: "Impact marked as reviewed (No Update Needed). Status restored to NORMAL."
+      });
+    }
+
+    // 3. Governance: Review - Update Required (Section 12)
+    if (body.action === "update_required") {
+      await addStoreAuditLog({
+        id: `log-rev-upd-${Date.now()}`,
+        knowledge_id: item.id,
+        user_id: userId,
+        user_name: userName,
+        action: "IMPACT_REVIEWED_UPDATE_REQUIRED",
+        previous_value: { system_impact_status: item.system_impact_status },
+        new_value: { system_impact_status: "UPDATE_REQUIRED" },
+        reason: body.reason || "Admin confirmed that manual update is required following system change.",
+        created_at: now
+      });
+      return NextResponse.json({
+        item,
+        success: true,
+        message: "Impact reviewed: manual update confirmed."
+      });
+    }
+
+    // 4. General Item Update / Audience Update
+    const prevItem = { ...item };
+    const newAudience = body.audience !== undefined ? body.audience : item.audience;
+    const isAudienceChanged = JSON.stringify(prevItem.audience) !== JSON.stringify(newAudience);
+
+    const hasExternalAudience = (newAudience || []).some((a: string) =>
       ["BRAND", "RETAILER", "PUBLIC"].includes(a)
     );
 
@@ -83,7 +146,9 @@ export async function PATCH(
       external_review_status = "REQUESTED";
     }
 
-    const updatedModule = body.module !== undefined ? body.module : (body.category !== undefined ? body.category : (item.module || item.category || "General"));
+    const updatedModule = body.module !== undefined
+      ? body.module
+      : (body.category !== undefined ? body.category : (item.module || item.category || "General"));
 
     const updatedItem: KnowledgeItem = {
       ...item,
@@ -119,50 +184,32 @@ export async function PATCH(
 
     await saveStoreKnowledgeItem(updatedItem);
 
-    // Save relation if provided
-    if (body.relation) {
-      const rel: KnowledgeRelation = {
-        id: `rel-${Date.now()}`,
+    // Record Audience Audit Log if audience changed
+    if (isAudienceChanged) {
+      await addStoreAuditLog({
+        id: `log-aud-${Date.now()}`,
         knowledge_id: item.id,
-        related_portal: body.relation.related_portal || "Admin",
-        related_module: body.relation.related_module || item.category,
-        related_menu: body.relation.related_menu || null,
-        related_route: body.relation.related_route || null,
-        related_system_setting: body.relation.related_system_setting || null,
-        manual_title: body.relation.manual_title || null,
-        faq_question: body.relation.faq_question || null,
+        user_id: userId,
+        user_name: userName,
+        action: "AUDIENCE_UPDATED",
+        previous_value: { audience: prevItem.audience },
+        new_value: { audience: updatedItem.audience },
+        reason: body.update_reason || "Distribution audience updated by admin",
         created_at: now
-      };
-      await saveStoreRelation(rel);
-    }
-
-    // Save PDF manual asset if provided
-    if (body.manual_asset) {
-      const asset: ManualAsset = {
-        id: `asset-${Date.now()}`,
+      });
+    } else {
+      await addStoreAuditLog({
+        id: `log-edit-${Date.now()}`,
         knowledge_id: item.id,
-        manual_title: body.manual_asset.manual_title || item.title,
-        version: item.current_version,
-        language: body.manual_asset.language || "KO",
-        is_current: true,
-        file_url: body.manual_asset.file_url || "/manuals/sample.pdf",
-        file_name: body.manual_asset.file_name || "sample.pdf",
-        file_size: body.manual_asset.file_size || 1024000,
-        published_date: now.split("T")[0],
+        user_id: userId,
+        user_name: userName,
+        action: "KNOWLEDGE_EDITED",
+        previous_value: { status: prevItem.status, module: prevItem.module },
+        new_value: { status: updatedItem.status, module: updatedItem.module },
+        reason: body.update_reason || "Knowledge content updated",
         created_at: now
-      };
-      await saveStoreAsset(asset);
+      });
     }
-
-    // Audit log
-    await logKnowledgeActivity(
-      item.id,
-      { name: body.user_name || "Knowledge Operator" },
-      "Edited",
-      { audience: prevItem.audience, status: prevItem.status, sensitive: prevItem.is_sensitive_internal },
-      { audience: updatedItem.audience, status: updatedItem.status, sensitive: updatedItem.is_sensitive_internal },
-      body.update_reason || "Knowledge content updated"
-    );
 
     return NextResponse.json({ item: updatedItem });
   } catch (err: any) {
@@ -192,14 +239,17 @@ export async function DELETE(
 
     await saveStoreKnowledgeItem(archivedItem);
 
-    await logKnowledgeActivity(
-      item.id,
-      { name: "Knowledge Admin" },
-      "Archived",
-      { status: item.status },
-      { status: "ARCHIVED" },
-      "Knowledge record archived from active governance"
-    );
+    await addStoreAuditLog({
+      id: `log-arch-${Date.now()}`,
+      knowledge_id: item.id,
+      user_id: "usr-admin-system",
+      user_name: "Knowledge Admin",
+      action: "KNOWLEDGE_ARCHIVED",
+      previous_value: { status: item.status },
+      new_value: { status: "ARCHIVED" },
+      reason: "Knowledge record archived from active governance",
+      created_at: now
+    });
 
     return NextResponse.json({ item: archivedItem });
   } catch (err: any) {

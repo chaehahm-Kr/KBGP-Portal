@@ -166,6 +166,27 @@ export async function createBrand(
 
   const supabase = await createClient();
 
+  // Check for duplicate brand names within the company before inserting
+  const targetName = parsed.data.name.trim().toLowerCase();
+  const { data: existingBrands } = await supabase
+    .from("brands")
+    .select("id, name, is_active")
+    .eq("company_id", companyId);
+
+  const duplicateBrand = (existingBrands ?? []).find(
+    (b) => b.name.trim().toLowerCase() === targetName
+  );
+
+  if (duplicateBrand) {
+    if (duplicateBrand.is_active !== false) {
+      return { error: "이미 같은 이름의 활성 브랜드가 등록되어 있습니다." };
+    } else {
+      return {
+        error: "비활성화(사용 중단) 상태의 동일한 브랜드명이 존재합니다. 새로 등록하지 마시고 기존 브랜드를 [재활성화] 해주세요.",
+      };
+    }
+  }
+
   const insertPayload: Record<string, any> = {
     company_id: companyId,
     name: parsed.data.name,
@@ -646,6 +667,30 @@ export async function reactivateBrand(brandId: string) {
   const { companyId } = await requirePortalPermission("brands", "manage");
   const supabase = await createClient();
 
+  const { data: targetBrand } = await supabase
+    .from("brands")
+    .select("id, name")
+    .eq("id", brandId)
+    .single();
+
+  if (targetBrand) {
+    const targetName = targetBrand.name.trim().toLowerCase();
+    const { data: activeBrands } = await supabase
+      .from("brands")
+      .select("id, name")
+      .eq("company_id", companyId)
+      .eq("is_active", true)
+      .neq("id", brandId);
+
+    const duplicate = (activeBrands ?? []).find(
+      (b) => b.name.trim().toLowerCase() === targetName
+    );
+
+    if (duplicate) {
+      throw new Error("동일한 이름의 활성 브랜드가 이미 존재하여 재활성화할 수 없습니다.");
+    }
+  }
+
   await supabase
     .from("brands")
     .update({ is_active: true, updated_at: new Date().toISOString() })
@@ -706,6 +751,24 @@ export async function adminCreateBrand(
   await verifyAdminSession();
   const supabase = createAdminClient();
 
+  const targetName = name.trim().toLowerCase();
+  const { data: existingBrands } = await supabase
+    .from("brands")
+    .select("id, name, is_active")
+    .eq("company_id", companyId);
+
+  const duplicateBrand = (existingBrands ?? []).find(
+    (b) => b.name.trim().toLowerCase() === targetName
+  );
+
+  if (duplicateBrand) {
+    if (duplicateBrand.is_active !== false) {
+      throw new Error("이미 이 회사에 같은 이름의 활성 브랜드가 등록되어 있습니다.");
+    } else {
+      throw new Error("비활성화 상태의 동일한 브랜드명이 존재합니다. 새 브랜드를 생성하는 대신 기존 브랜드를 [재활성화] 해주세요.");
+    }
+  }
+
   const insertPayload = {
     company_id: companyId,
     name: name.trim(),
@@ -753,6 +816,30 @@ export async function adminDeactivateBrand(brandId: string, companyId: string) {
 export async function adminReactivateBrand(brandId: string, companyId: string) {
   await verifyAdminSession();
   const supabase = createAdminClient();
+
+  const { data: targetBrand } = await supabase
+    .from("brands")
+    .select("id, name")
+    .eq("id", brandId)
+    .single();
+
+  if (targetBrand) {
+    const targetName = targetBrand.name.trim().toLowerCase();
+    const { data: activeBrands } = await supabase
+      .from("brands")
+      .select("id, name")
+      .eq("company_id", companyId)
+      .eq("is_active", true)
+      .neq("id", brandId);
+
+    const duplicate = (activeBrands ?? []).find(
+      (b) => b.name.trim().toLowerCase() === targetName
+    );
+
+    if (duplicate) {
+      throw new Error("동일한 이름의 활성 브랜드가 이미 존재하여 재활성화할 수 없습니다.");
+    }
+  }
 
   await supabase
     .from("brands")
