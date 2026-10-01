@@ -50,7 +50,7 @@ export default async function AdminBrandsPage() {
       price_krw_retail, price_usd_fob, item_width, item_depth, item_height, item_weight,
       package_width, package_depth, package_height, package_weight,
       carton_pack_qty, carton_width, carton_depth, carton_height, carton_weight,
-      upc, ean, selling_online, sales_link_1, deleted_at, price_additional_info
+      upc, ean, selling_online, sales_link_1, price_additional_info
     `);
 
   const { data: productImages } = await supabase
