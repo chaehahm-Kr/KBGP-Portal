@@ -1817,7 +1817,7 @@ export function ProductDetailTabs({
                     const hasCurrentBrand = brands.some((b) => b.id === product.brand_id);
                     const selectableBrands = hasCurrentBrand
                       ? brands
-                      : [{ id: product.brand_id, name: brandName }, ...brands];
+                      : [{ id: product.brand_id, name: `${brandName || "브랜드"} (사용 중단 브랜드)` }, ...brands];
                     return selectableBrands.map((b) => (
                       <option key={b.id} value={b.id}>{b.name}</option>
                     ));

@@ -46,7 +46,6 @@ export default async function AdminCompanyDetailPage({
       .from("brands")
       .select("id, name, intro, logo_path, is_active, has_kr_trademark, kr_trademark_number, kr_trademark_path, has_us_trademark, us_trademark_number, us_trademark_path")
       .eq("company_id", id)
-      .eq("is_active", true)
       .order("created_at", { ascending: true });
 
     if (!brandsError && brandsWithTrademarks) {
@@ -57,7 +56,6 @@ export default async function AdminCompanyDetailPage({
         .from("brands")
         .select("id, name, intro, logo_path, is_active")
         .eq("company_id", id)
-        .eq("is_active", true)
         .order("created_at", { ascending: true });
       brandsData = coreBrands ?? [];
     }
@@ -80,6 +78,7 @@ export default async function AdminCompanyDetailPage({
           hasUs: tm.has_us_trademark,
           usNum: tm.us_trademark_number,
           usUrl,
+          isActive: brand.is_active !== false,
         };
       })
     );

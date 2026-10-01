@@ -235,15 +235,15 @@ export async function createProduct(
 
     const { data: brand } = await supabase
       .from("brands")
-      .select("id")
+      .select("id, is_active")
       .eq("id", rawBrandId)
       .eq("company_id", companyId)
       .single();
 
-    if (!brand) {
+    if (!brand || brand.is_active === false) {
       return {
-        error: "선택한 브랜드를 찾을 수 없습니다.",
-        fieldErrors: { brandId: "선택한 브랜드를 찾을 수 없습니다." },
+        error: "선택한 브랜드를 찾을 수 없거나 사용 중단(Inactive) 상태입니다. 활성화된 브랜드를 선택해 주세요.",
+        fieldErrors: { brandId: "유효한 활성 브랜드를 선택해 주세요." },
       };
     }
 
@@ -455,18 +455,18 @@ export async function createProduct(
     };
   }
 
-  // 브랜드 소유 확인
+  // 브랜드 소유 및 활성화 상태 확인
   const { data: brand } = await supabase
     .from("brands")
-    .select("id")
+    .select("id, is_active")
     .eq("id", rawBrandId)
     .eq("company_id", companyId)
     .single();
 
-  if (!brand) {
+  if (!brand || brand.is_active === false) {
     return {
-      error: "선택한 브랜드를 찾을 수 없습니다.",
-      fieldErrors: { brandId: "선택한 브랜드를 찾을 수 없습니다." },
+      error: "선택한 브랜드를 찾을 수 없거나 사용 중단(Inactive) 상태입니다. 활성화된 브랜드를 선택해 주세요.",
+      fieldErrors: { brandId: "유효한 활성 브랜드를 선택해 주세요." },
     };
   }
 

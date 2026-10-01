@@ -34,7 +34,7 @@ export default async function EditBrandPage({
   // Try fetching with new trademark columns first
   const { data: brandWithTrademarks, error: selectError } = await supabase
     .from("brands")
-    .select("id, name, intro, logo_path, has_kr_trademark, kr_trademark_number, kr_trademark_path, has_us_trademark, us_trademark_number, us_trademark_path")
+    .select("id, name, intro, logo_path, is_active, has_kr_trademark, kr_trademark_number, kr_trademark_path, has_us_trademark, us_trademark_number, us_trademark_path")
     .eq("id", id)
     .eq("company_id", companyId)
     .maybeSingle();
@@ -42,11 +42,12 @@ export default async function EditBrandPage({
   if (!selectError && brandWithTrademarks) {
     brandData = brandWithTrademarks;
   } else {
-    // Fallback to core columns if database migration hasn't been run yet
+    // Fallback if schema differs
     const { data: coreBrand } = await supabase
       .from("brands")
-      .select("id, name, intro, logo_path")
+      .select("id, name, intro, logo_path, is_active")
       .eq("id", id)
+      .eq("company_id", companyId)
       .single();
     brandData = coreBrand;
   }
@@ -61,12 +62,32 @@ export default async function EditBrandPage({
   const krTrademarkUrl = parsedTrademarks.kr_trademark_path ? await getSignedFileUrl(parsedTrademarks.kr_trademark_path) : undefined;
   const usTrademarkUrl = parsedTrademarks.us_trademark_path ? await getSignedFileUrl(parsedTrademarks.us_trademark_path) : undefined;
 
+  const isInactive = brandData.is_active === false;
+
   return (
     <div className="w-full max-w-7xl space-y-6">
       <div>
-        <h1 className="text-xl font-bold text-zinc-900 dark:text-white">브랜드 수정</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-xl font-bold text-zinc-900 dark:text-white">브랜드 수정</h1>
+          {isInactive && (
+            <span className="inline-flex items-center gap-1 rounded bg-amber-100/80 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300 px-2 py-0.5 text-[10px] font-bold border border-amber-300/60 dark:border-amber-800">
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+              <span>사용 중단 (Inactive)</span>
+            </span>
+          )}
+        </div>
         <p className="text-xs text-zinc-500 dark:text-zinc-400">등록된 브랜드 정보를 업데이트합니다.</p>
       </div>
+
+      {isInactive && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-4 dark:border-amber-900/60 dark:bg-amber-950/20 text-xs font-semibold text-amber-900 dark:text-amber-300 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span>⚠️</span>
+            <span>본 브랜드는 현재 사용 중단(Inactive) 상태입니다. 정보 수정은 가능하나 신규 상품 등록 브랜드 목록에는 노출되지 않습니다.</span>
+          </div>
+        </div>
+      )}
+
       <div className="rounded-lg border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-900 hover:border-[#131E2E]/80 transition-colors shadow-sm">
         <BrandForm
           action={updateBrand.bind(null, brandData.id)}

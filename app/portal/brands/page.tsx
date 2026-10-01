@@ -2,10 +2,10 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { getPortalTenantContext } from "@/lib/company/dal";
 import { getSignedFileUrl } from "@/lib/files/storage";
-import { deactivateBrand, parseBrandTrademarks } from "@/lib/brand/actions";
+import { parseBrandTrademarks } from "@/lib/brand/actions";
 import { parseCompanyMetadata } from "@/lib/company/admin-actions";
-import { ConfirmForm } from "@/components/common/confirm-form";
 import { BrandOnboardingBanner } from "@/components/brand/brand-onboarding-banner";
+import { BrandListClient, type BrandItemResolved } from "@/components/brand/brand-list-client";
 import { hasPortalPermission } from "@/lib/company/permissions";
 import { AccessDeniedView } from "@/components/portal/access-denied";
 
@@ -37,44 +37,61 @@ export default async function BrandsPage() {
     .single();
 
   const parsedMeta = await parseCompanyMetadata(company || {});
-  const isBrandConfirmed = Boolean(parsedMeta.brand_onboarding_confirmed_at);
 
-  // Safely fetch brands with trademark columns
+  // Fetch all brands (both active and inactive)
   let brandsData: any[] = [];
   const { data: brandsWithTrademarks, error: brandsError } = await supabase
     .from("brands")
-    .select("id, name, intro, logo_path, has_kr_trademark, kr_trademark_number, kr_trademark_path, has_us_trademark, us_trademark_number, us_trademark_path")
+    .select("id, name, intro, logo_path, is_active, has_kr_trademark, kr_trademark_number, kr_trademark_path, has_us_trademark, us_trademark_number, us_trademark_path")
     .eq("company_id", companyId)
-    .eq("is_active", true)
     .order("created_at", { ascending: true });
 
   if (!brandsError && brandsWithTrademarks) {
     brandsData = brandsWithTrademarks;
   } else {
-    // Fallback to core columns if database migration hasn't been run yet
+    // Fallback if schema differs
     const { data: coreBrands } = await supabase
       .from("brands")
-      .select("id, name, intro, logo_path")
+      .select("id, name, intro, logo_path, is_active")
       .eq("company_id", companyId)
-      .eq("is_active", true)
       .order("created_at", { ascending: true });
     brandsData = coreBrands ?? [];
   }
 
-  // Parse and resolve trademark information and logos
-  const resolvedBrands = await Promise.all(
+  // Fetch products to count connected products per brand
+  const { data: productsData } = await supabase
+    .from("products")
+    .select("id, brand_id")
+    .eq("company_id", companyId);
+
+  const productCountByBrandId = new Map<string, number>();
+  (productsData ?? []).forEach((p) => {
+    if (p.brand_id) {
+      productCountByBrandId.set(p.brand_id, (productCountByBrandId.get(p.brand_id) || 0) + 1);
+    }
+  });
+
+  // Resolve signed URLs and trademark information
+  const resolvedBrands: BrandItemResolved[] = await Promise.all(
     brandsData.map(async (brand) => {
       const tm = await parseBrandTrademarks(brand);
       const logoUrl = brand.logo_path ? await getSignedFileUrl(brand.logo_path) : null;
+      const productCount = productCountByBrandId.get(brand.id) || 0;
       return {
-        ...brand,
-        logoUrl,
+        id: brand.id,
+        name: brand.name,
         introText: tm.intro_text,
+        logoUrl,
         hasKr: tm.has_kr_trademark,
         hasUs: tm.has_us_trademark,
+        isActive: brand.is_active !== false,
+        productCount,
       };
     })
   );
+
+  const activeBrands = resolvedBrands.filter((b) => b.isActive);
+  const isBrandConfirmed = Boolean(parsedMeta.brand_onboarding_confirmed_at && activeBrands.length > 0);
 
   return (
     <div className="space-y-6 w-full max-w-7xl">
@@ -97,97 +114,14 @@ export default async function BrandsPage() {
       </div>
 
       {/* Onboarding Banner */}
-      {resolvedBrands.length > 0 && (
-        <BrandOnboardingBanner isConfirmed={isBrandConfirmed} />
-      )}
+      <BrandOnboardingBanner isConfirmed={isBrandConfirmed} />
 
-      {/* Brands Grid */}
-      {resolvedBrands.length === 0 ? (
-        <div className="rounded-lg border border-zinc-200 bg-white py-12 text-center text-zinc-400 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-500 text-xs">
-          {canWrite
-            ? "등록된 브랜드가 아직 존재하지 않습니다. 상단 '새 브랜드 추가' 단추를 이용해 첫 브랜드를 개설해 보세요."
-            : "등록된 브랜드가 존재하지 않습니다."}
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3">
-          {resolvedBrands.map((brand) => (
-            <div
-              key={brand.id}
-              className="flex flex-col justify-between rounded-lg border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 hover:shadow-md hover:border-[#131E2E] dark:hover:border-zinc-700 transition-all"
-            >
-              <div className="space-y-4">
-                <div className="flex items-center gap-3">
-                  {brand.logoUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={brand.logoUrl}
-                      alt=""
-                      className="h-10 w-10 rounded border border-zinc-200 dark:border-zinc-800 object-cover bg-zinc-50 dark:bg-zinc-950"
-                    />
-                  ) : (
-                    <div className="flex h-10 w-10 items-center justify-center rounded bg-zinc-100 dark:bg-zinc-850 text-[10px] font-bold text-zinc-400 select-none">
-                      LOGO
-                    </div>
-                  )}
-                  <div>
-                    <h3 className="text-xs font-bold text-zinc-900 dark:text-white">
-                      {brand.name}
-                    </h3>
-                  </div>
-                </div>
-
-                {/* Professional Trademark Statuses */}
-                <div className="pt-3 border-t border-zinc-100 dark:border-zinc-800 space-y-2 text-xs font-semibold text-zinc-550 dark:text-zinc-400">
-                  <div className="flex items-center justify-between">
-                    <span>대한민국 상표권 등록 여부</span>
-                    {brand.hasKr ? (
-                      <span className="text-[#131E2E] dark:text-[#a8c5eb] bg-[#F2F1EE] dark:bg-zinc-800/80 px-2 py-0.5 rounded text-[10px] font-extrabold border border-zinc-200/60 dark:border-zinc-700">보유</span>
-                    ) : (
-                      <span className="text-zinc-400 dark:text-zinc-400 font-medium px-2 py-0.5 rounded text-[10px] border border-transparent">미보유</span>
-                    )}
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span>미국 USPTO 상표권 등록 여부</span>
-                    {brand.hasUs ? (
-                      <span className="text-[#131E2E] dark:text-[#a8c5eb] bg-[#F2F1EE] dark:bg-zinc-800/80 px-2 py-0.5 rounded text-[10px] font-extrabold border border-zinc-200/60 dark:border-zinc-700">보유</span>
-                    ) : (
-                      <span className="text-zinc-400 dark:text-zinc-400 font-medium px-2 py-0.5 rounded text-[10px] border border-transparent">미보유</span>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {/* Actions */}
-              {(canWrite || canManage) && (
-                <div className="mt-4 flex items-center gap-2 border-t border-zinc-100 pt-4 dark:border-zinc-800">
-                  {canWrite && (
-                    <Link
-                      href={`/portal/brands/${brand.id}`}
-                      className="flex-1 text-center py-2 px-3 rounded-md bg-[#131E2E] text-white font-bold text-xs hover:bg-[#1f3047] dark:bg-white dark:text-[#131E2E] dark:hover:bg-zinc-100 transition-colors"
-                    >
-                      브랜드 수정
-                    </Link>
-                  )}
-                  {canManage && (
-                    <ConfirmForm
-                      action={deactivateBrand.bind(null, brand.id)}
-                      message="정말 이 브랜드를 사용 중단하시겠습니까?\n(사용 중단된 브랜드는 신청서 및 제품 목록에서 비활성화됩니다.)"
-                      className={canWrite ? "flex-1" : "w-full"}
-                    >
-                      <button
-                        type="submit"
-                        className="w-full text-center py-2 px-3 rounded-md border border-[#8C1C2B] text-[#8C1C2B] font-bold text-xs hover:bg-[#8C1C2B]/5 transition-colors dark:border-red-500 dark:text-red-400 dark:hover:bg-red-950/20 cursor-pointer"
-                      >
-                        사용 중단
-                      </button>
-                    </ConfirmForm>
-                  )}
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
+      {/* Interactive Brand List Client */}
+      <BrandListClient
+        brands={resolvedBrands}
+        canWrite={canWrite}
+        canManage={canManage}
+      />
     </div>
   );
 }

@@ -335,6 +335,17 @@ async function markBrandOnboardingConfirmed(supabase: any, companyId: string) {
 export async function confirmBrandOnboardingAction() {
   const { companyId } = await requirePortalPermission("brands", "write");
   const supabase = await createClient();
+
+  const { count } = await supabase
+    .from("brands")
+    .select("id", { count: "exact", head: true })
+    .eq("company_id", companyId)
+    .eq("is_active", true);
+
+  if (!count || count === 0) {
+    return { success: false, error: "최소 1개 이상의 활성(Active) 브랜드가 등록되어 있어야 온보딩 확인을 완료할 수 있습니다." };
+  }
+
   await markBrandOnboardingConfirmed(supabase, companyId);
   return { success: true };
 }
@@ -623,11 +634,64 @@ export async function deactivateBrand(brandId: string) {
 
   await supabase
     .from("brands")
-    .update({ is_active: false })
+    .update({ is_active: false, updated_at: new Date().toISOString() })
     .eq("id", brandId)
     .eq("company_id", companyId);
 
   revalidatePath("/portal/brands");
+  revalidatePath("/portal");
+}
+
+export async function reactivateBrand(brandId: string) {
+  const { companyId } = await requirePortalPermission("brands", "manage");
+  const supabase = await createClient();
+
+  await supabase
+    .from("brands")
+    .update({ is_active: true, updated_at: new Date().toISOString() })
+    .eq("id", brandId)
+    .eq("company_id", companyId);
+
+  revalidatePath("/portal/brands");
+  revalidatePath("/portal");
+}
+
+export async function deleteBrand(brandId: string): Promise<{ success: boolean; error?: string }> {
+  const { companyId } = await requirePortalPermission("brands", "manage");
+  const supabase = await createClient();
+
+  // Policy 05 Enforcement: Check if connected products exist before hard delete
+  const { count, error: countErr } = await supabase
+    .from("products")
+    .select("id", { count: "exact", head: true })
+    .eq("brand_id", brandId);
+
+  if (countErr) {
+    console.error("deleteBrand count check error:", countErr);
+    return { success: false, error: "연결된 상품 정보를 확인하는 중 오류가 발생했습니다." };
+  }
+
+  if (count && count > 0) {
+    return {
+      success: false,
+      error: `이 브랜드는 ${count}개의 상품에 연결되어 있어 삭제할 수 없습니다. 더 이상 신규 상품에 사용하지 않으려면 [사용 중단]을 선택하세요.`,
+    };
+  }
+
+  const { error: deleteError } = await supabase
+    .from("brands")
+    .delete()
+    .eq("id", brandId)
+    .eq("company_id", companyId);
+
+  if (deleteError) {
+    console.error("deleteBrand query error:", deleteError);
+    return { success: false, error: "브랜드 삭제 중 오류가 발생했습니다." };
+  }
+
+  revalidatePath("/portal/brands");
+  revalidatePath("/portal");
+  return { success: true };
 }
 
 export async function adminCreateBrand(
@@ -650,6 +714,7 @@ export async function adminCreateBrand(
     kr_trademark_number: krTrademarkNumber,
     has_us_trademark: hasUsTrademark,
     us_trademark_number: usTrademarkNumber,
+    is_active: true,
   };
 
   const { data: brand, error } = await supabase
@@ -670,3 +735,70 @@ export async function adminCreateBrand(
   revalidatePath("/admin/brands");
   return brand;
 }
+
+export async function adminDeactivateBrand(brandId: string, companyId: string) {
+  await verifyAdminSession();
+  const supabase = createAdminClient();
+
+  await supabase
+    .from("brands")
+    .update({ is_active: false, updated_at: new Date().toISOString() })
+    .eq("id", brandId)
+    .eq("company_id", companyId);
+
+  revalidatePath(`/admin/companies/${companyId}`);
+  revalidatePath("/admin/brands");
+}
+
+export async function adminReactivateBrand(brandId: string, companyId: string) {
+  await verifyAdminSession();
+  const supabase = createAdminClient();
+
+  await supabase
+    .from("brands")
+    .update({ is_active: true, updated_at: new Date().toISOString() })
+    .eq("id", brandId)
+    .eq("company_id", companyId);
+
+  revalidatePath(`/admin/companies/${companyId}`);
+  revalidatePath("/admin/brands");
+}
+
+export async function adminDeleteBrand(brandId: string, companyId: string): Promise<{ success: boolean; error?: string }> {
+  await verifyAdminSession();
+  const supabase = createAdminClient();
+
+  // Policy 05 Enforcement: Check if connected products exist before hard delete
+  const { count, error: countErr } = await supabase
+    .from("products")
+    .select("id", { count: "exact", head: true })
+    .eq("brand_id", brandId);
+
+  if (countErr) {
+    console.error("adminDeleteBrand count check error:", countErr);
+    return { success: false, error: "연결된 상품 정보를 확인하는 중 오류가 발생했습니다." };
+  }
+
+  if (count && count > 0) {
+    return {
+      success: false,
+      error: `이 브랜드는 ${count}개의 상품에 연결되어 있어 삭제할 수 없습니다. 더 이상 신규 상품에 사용하지 않으려면 [사용 중단]을 선택하세요.`,
+    };
+  }
+
+  const { error: deleteError } = await supabase
+    .from("brands")
+    .delete()
+    .eq("id", brandId)
+    .eq("company_id", companyId);
+
+  if (deleteError) {
+    console.error("adminDeleteBrand query error:", deleteError);
+    return { success: false, error: "브랜드 삭제 중 오류가 발생했습니다." };
+  }
+
+  revalidatePath(`/admin/companies/${companyId}`);
+  revalidatePath("/admin/brands");
+  return { success: true };
+}
+
