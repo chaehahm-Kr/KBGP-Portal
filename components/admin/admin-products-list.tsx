@@ -253,6 +253,17 @@ export function AdminProductsList({ initialProducts }: AdminProductsListProps) {
       product.companyName.toLowerCase().includes(searchLower) ||
       product.brandName.toLowerCase().includes(searchLower);
 
+    // 1.5. Brand filter (UUID, brand_code, or brand name)
+    const matchesBrand = (() => {
+      if (!selectedBrandFilter) return true;
+      const bLower = selectedBrandFilter.trim().toLowerCase();
+      return (
+        product.brand_id.toLowerCase() === bLower ||
+        (product.brandCode || "").toLowerCase() === bLower ||
+        product.brandName.toLowerCase().includes(bLower)
+      );
+    })();
+
     // 2. Category filter
     const matchesCategory =
       selectedCategory === "all" || product.category === selectedCategory;
@@ -273,7 +284,7 @@ export function AdminProductsList({ initialProducts }: AdminProductsListProps) {
     const matchesSalesStatus =
       selectedSalesStatus === "all" || product.sales_status === selectedSalesStatus;
 
-    return matchesSearch && matchesCategory && matchesRegStatus && matchesSelectionStatus && matchesSalesStatus;
+    return matchesSearch && matchesBrand && matchesCategory && matchesRegStatus && matchesSelectionStatus && matchesSalesStatus;
   });
 
   const allFilteredIds = filteredProducts.map((p) => p.id);
@@ -510,19 +521,36 @@ export function AdminProductsList({ initialProducts }: AdminProductsListProps) {
           </div>
         </div>
 
-        {/* Quick Filter Info */}
-        <div className="text-[10px] text-zinc-455 dark:text-zinc-500 flex justify-between items-center pt-2">
-          <span>검색 결과: <strong className="text-zinc-800 dark:text-zinc-200 font-bold">{filteredProducts.length}</strong> 건</span>
-          {(searchTerm || selectedCategory !== "all" || selectedRegStatuses.length !== 2 || !selectedRegStatuses.includes("active") || !selectedRegStatuses.includes("draft") || selectedSelectionStatus !== "all" || selectedSalesStatus !== "all") && (
+        {/* Quick Filter Info & Brand Tag */}
+        <div className="text-[10px] text-zinc-455 dark:text-zinc-500 flex flex-wrap justify-between items-center gap-2 pt-2 border-t border-zinc-100 dark:border-zinc-800/80">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span>검색 결과: <strong className="text-zinc-800 dark:text-zinc-200 font-bold">{filteredProducts.length}</strong> 건</span>
+            {selectedBrandFilter && (
+              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300 border border-indigo-200/80 dark:border-indigo-800/60 font-bold text-[11px]">
+                <span>브랜드 필터: {products.find(p => p.brand_id === selectedBrandFilter || p.brandCode === selectedBrandFilter)?.brandName || selectedBrandFilter}</span>
+                <button
+                  type="button"
+                  onClick={() => setSelectedBrandFilter("")}
+                  className="hover:text-indigo-900 dark:hover:text-white font-black ml-0.5 cursor-pointer"
+                  title="브랜드 필터 해제"
+                >
+                  ✕
+                </button>
+              </span>
+            )}
+          </div>
+          {(searchTerm || selectedBrandFilter || selectedCategory !== "all" || selectedRegStatuses.length !== 2 || !selectedRegStatuses.includes("active") || !selectedRegStatuses.includes("draft") || selectedSelectionStatus !== "all" || selectedSalesStatus !== "all") && (
             <button
+              type="button"
               onClick={() => {
                 setSearchTerm("");
+                setSelectedBrandFilter("");
                 setSelectedCategory("all");
                 setSelectedRegStatuses(["active", "draft"]);
                 setSelectedSelectionStatus("all");
                 setSelectedSalesStatus("all");
               }}
-              className="text-zinc-900 hover:underline dark:text-zinc-250 font-semibold"
+              className="text-zinc-900 hover:underline dark:text-zinc-250 font-semibold cursor-pointer"
             >
               필터 초기화
             </button>
