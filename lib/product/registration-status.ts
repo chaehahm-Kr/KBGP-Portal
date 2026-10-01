@@ -105,6 +105,12 @@ export const REGISTRATION_STATUS_STYLES: Record<RegistrationStatus, { bg: string
   },
 };
 
+export interface CategoryMissingStep {
+  code: "cat1" | "cat2" | "cat3";
+  label: string;
+  targetId: string;
+}
+
 export interface ProductRegistrationEvaluationInput {
   id?: string;
   name?: string | null;
@@ -137,9 +143,20 @@ export interface ProductRegistrationEvaluationInput {
   hasImages: boolean;
   categoryCompletion?: {
     categoryComplete: boolean;
+    categoryMissingStep?: CategoryMissingStep | null;
     requiredAttributesComplete: boolean;
     missingRequiredAttributes?: { code: string; nameKo: string }[];
   } | null;
+}
+
+export interface MissingFieldItem {
+  key: string;
+  section: string;
+  label: string;
+  displayTag: string;
+  tab: "basic" | "category_attributes" | "price" | "logistics" | "media" | "certs";
+  targetId: string;
+  inputName?: string;
 }
 
 export interface ProductRegistrationEvaluationResult {
@@ -148,6 +165,7 @@ export interface ProductRegistrationEvaluationResult {
   status: RegistrationStatus;
   statusLabel: string;
   missingFields: string[];
+  missingFieldItems: MissingFieldItem[];
 }
 
 function safeString(val: any): string {
@@ -169,6 +187,7 @@ export function evaluateProductRegistrationStatus(
       status: "DELETED",
       statusLabel: REGISTRATION_STATUS_LABELS.DELETED,
       missingFields: [],
+      missingFieldItems: [],
     };
   }
 
@@ -200,57 +219,161 @@ export function evaluateProductRegistrationStatus(
   const cartonWt = overrides.carton_weight !== undefined && overrides.carton_weight !== null ? Number(overrides.carton_weight) : Number(input.carton_weight || 0);
 
   const missingFields: string[] = [];
+  const missingFieldItems: MissingFieldItem[] = [];
 
   // 1. Brand
   if (!effectiveBrandId) {
-    missingFields.push("브랜드");
+    missingItemsPush({
+      key: "brand_id",
+      section: "기본 정보",
+      label: "브랜드",
+      displayTag: "[기본 정보: 브랜드]",
+      tab: "basic",
+      targetId: "brandId-field",
+      inputName: "brandId",
+    });
   }
 
   // 2. Category & Dynamic Required Attributes
   if (input.categoryCompletion) {
     if (!input.categoryCompletion.categoryComplete) {
-      missingFields.push("카테고리");
-    } else if (!input.categoryCompletion.requiredAttributesComplete) {
-      missingFields.push("카테고리 필수 속성");
+      const step = input.categoryCompletion.categoryMissingStep;
+      const stepLabel = step ? step.label : "카테고리 지정";
+      const targetId = step ? step.targetId : "category-depth-1";
+      missingItemsPush({
+        key: "category_step",
+        section: "카테고리",
+        label: stepLabel,
+        displayTag: `[카테고리: ${stepLabel}]`,
+        tab: "category_attributes",
+        targetId: targetId,
+        inputName: targetId,
+      });
+    }
+
+    if (input.categoryCompletion.missingRequiredAttributes && input.categoryCompletion.missingRequiredAttributes.length > 0) {
+      for (const reqAttr of input.categoryCompletion.missingRequiredAttributes) {
+        missingItemsPush({
+          key: `attr_${reqAttr.code}`,
+          section: "속성",
+          label: reqAttr.nameKo,
+          displayTag: `[속성: ${reqAttr.nameKo}]`,
+          tab: "category_attributes",
+          targetId: `attr-field-${reqAttr.code}`,
+          inputName: `attr-input-${reqAttr.code}`,
+        });
+      }
     }
   } else {
     if (!input.category_code) {
-      missingFields.push("카테고리");
+      missingItemsPush({
+        key: "category_code",
+        section: "카테고리",
+        label: "1Depth 대분류",
+        displayTag: "[카테고리: 1Depth 대분류]",
+        tab: "category_attributes",
+        targetId: "category-depth-1",
+        inputName: "categorySelect",
+      });
     }
   }
 
   // 3. Name (English / Display)
   if (!effectiveNameEn || effectiveNameEn === "[임시저장] 신규 제품") {
-    missingFields.push("영문 제품명");
+    missingItemsPush({
+      key: "name_en",
+      section: "기본 정보",
+      label: "영문 제품명",
+      displayTag: "[기본 정보: 영문 제품명]",
+      tab: "basic",
+      targetId: "nameEn-field",
+      inputName: "nameEn",
+    });
   }
 
   // 4. Manufacture SKU
   if (!effectiveManufactureSku || effectiveManufactureSku.startsWith("DRAFT-SKU-")) {
-    missingFields.push("제조사 SKU");
+    missingItemsPush({
+      key: "manufacture_sku",
+      section: "기본 정보",
+      label: "제조사 SKU",
+      displayTag: "[기본 정보: 제조사 SKU]",
+      tab: "basic",
+      targetId: "manufactureSku-field",
+      inputName: "manufactureSku",
+    });
   }
 
   // 5. Origin
   if (!effectiveOrigin) {
-    missingFields.push("원산지");
+    missingItemsPush({
+      key: "origin",
+      section: "기본 정보",
+      label: "원산지",
+      displayTag: "[기본 정보: 원산지]",
+      tab: "basic",
+      targetId: "origin-field",
+      inputName: "origin",
+    });
   }
 
   // 6. Pricing (Retail KRW & FOB USD)
   if (effectivePriceKrw <= 0) {
-    missingFields.push("소비자 판매가");
+    missingItemsPush({
+      key: "price_krw_retail",
+      section: "가격 정보",
+      label: "소비자 판매가",
+      displayTag: "[가격 정보: 소비자 판매가]",
+      tab: "price",
+      targetId: "priceKrwRetail-field",
+      inputName: "priceKrwRetail",
+    });
   }
   if (effectivePriceUsd <= 0) {
-    missingFields.push("FOB 수출 가격");
+    missingItemsPush({
+      key: "price_usd_fob",
+      section: "가격 정보",
+      label: "FOB 수출 가격",
+      displayTag: "[가격 정보: FOB 수출 가격]",
+      tab: "price",
+      targetId: "priceUsdFob-field",
+      inputName: "priceUsdFob",
+    });
   }
 
   // 7. Logistics Specifications (A. Item Spec, B. Package Spec, C. Carton Spec)
   if (itemW <= 0 || itemD <= 0 || itemH <= 0 || itemWt <= 0) {
-    missingFields.push("단품 규격");
+    missingItemsPush({
+      key: "item_spec",
+      section: "로지스틱스",
+      label: "단품 규격",
+      displayTag: "[로지스틱스: 단품 규격]",
+      tab: "logistics",
+      targetId: "itemWidth-field",
+      inputName: "itemWidth",
+    });
   }
   if (pkgW <= 0 || pkgD <= 0 || pkgH <= 0 || pkgWt <= 0) {
-    missingFields.push("단품 포장 패키지 규격");
+    missingItemsPush({
+      key: "package_spec",
+      section: "로지스틱스",
+      label: "단품 포장 패키지 규격",
+      displayTag: "[로지스틱스: 단품 포장 패키지 규격]",
+      tab: "logistics",
+      targetId: "packageWidth-field",
+      inputName: "packageWidth",
+    });
   }
   if (cartonQty <= 0 || cartonW <= 0 || cartonD <= 0 || cartonH <= 0 || cartonWt <= 0) {
-    missingFields.push("마스터 카톤 규격");
+    missingItemsPush({
+      key: "carton_spec",
+      section: "로지스틱스",
+      label: "마스터 카톤 규격",
+      displayTag: "[로지스틱스: 마스터 카톤 규격]",
+      tab: "logistics",
+      targetId: "cartonPackQty-field",
+      inputName: "cartonPackQty",
+    });
   }
 
   // 8. Barcode (UPC or EAN)
@@ -261,20 +384,49 @@ export function evaluateProductRegistrationStatus(
   const hasAtLeastOneValid = isValidUpc || isValidEan;
 
   if (!isUpcAcceptable || !isEanAcceptable || !hasAtLeastOneValid) {
-    missingFields.push("식별 바코드(UPC 또는 EAN)");
+    missingItemsPush({
+      key: "barcode",
+      section: "기본 정보",
+      label: "식별 바코드(UPC/EAN)",
+      displayTag: "[기본 정보: 식별 바코드(UPC/EAN)]",
+      tab: "basic",
+      targetId: "upc-field",
+      inputName: "upc",
+    });
   }
 
   // 9. Online sales link if selling online
   if (input.selling_online && !safeString(input.sales_link_1)) {
-    missingFields.push("온라인 판매 링크");
+    missingItemsPush({
+      key: "sales_link",
+      section: "기본 정보",
+      label: "온라인 판매 링크",
+      displayTag: "[기본 정보: 온라인 판매 링크]",
+      tab: "basic",
+      targetId: "salesLink1-field",
+      inputName: "salesLink1",
+    });
   }
 
   // 10. Representative Image
   if (!input.hasImages) {
-    missingFields.push("대표 이미지");
+    missingItemsPush({
+      key: "images",
+      section: "미디어",
+      label: "대표 이미지",
+      displayTag: "[미디어: 대표 이미지]",
+      tab: "media",
+      targetId: "product-images-dropzone",
+      inputName: "images",
+    });
   }
 
-  const isDraft = missingFields.length > 0;
+  function missingItemsPush(item: MissingFieldItem) {
+    missingFieldItems.push(item);
+    missingFields.push(`${item.section}: ${item.label}`);
+  }
+
+  const isDraft = missingFieldItems.length > 0;
 
   return {
     isDraft,
@@ -282,5 +434,6 @@ export function evaluateProductRegistrationStatus(
     status: isDraft ? "DRAFT" : "COMPLETE",
     statusLabel: isDraft ? REGISTRATION_STATUS_LABELS.DRAFT : REGISTRATION_STATUS_LABELS.COMPLETE,
     missingFields,
+    missingFieldItems,
   };
 }

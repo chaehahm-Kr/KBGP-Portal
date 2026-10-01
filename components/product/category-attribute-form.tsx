@@ -90,6 +90,7 @@ function getFlatFinalCategories(nodes: CategoryNode[], currentPath: string[] = [
 
 export interface CategoryCompletionStatus {
   categoryComplete: boolean;
+  categoryMissingStep?: { code: "cat1" | "cat2" | "cat3"; label: string; targetId: string } | null;
   requiredAttributesComplete: boolean;
   missingRequiredAttributes: { code: string; nameKo: string }[];
   completionPercent?: number;
@@ -590,12 +591,29 @@ export const CategoryAttributeForm = forwardRef<CategoryAttributeFormHandle, Cat
 
   const completeness = calculateCompleteness();
 
+  const getCategoryMissingStep = (): { code: "cat1" | "cat2" | "cat3"; label: string; targetId: string } | null => {
+    if (isFinalCategorySelected) return null;
+    if (!selectedCat1) {
+      return { code: "cat1", label: "1Depth 대분류", targetId: "category-depth-1" };
+    }
+    const cat2s = getActiveCat2Options();
+    if (!selectedCat2 && cat2s.length > 0) {
+      return { code: "cat2", label: "2Depth 중분류", targetId: "category-depth-2" };
+    }
+    const cat3s = getActiveCat3Options();
+    if (!selectedCat3 && cat3s.length > 0) {
+      return { code: "cat3", label: "3Depth 소분류", targetId: "category-depth-3" };
+    }
+    return { code: "cat1", label: "카테고리 지정", targetId: "category-depth-1" };
+  };
+
   // Sync completion state to parent component (e.g. ProductDetailTabs tab indicator & missing warning)
   useEffect(() => {
     if (!hasInitialized || loading) return;
     if (!onCompletionChangeRef.current) return;
 
     const isCategoryComplete = Boolean(isFinalCategorySelected);
+    const categoryMissingStep = getCategoryMissingStep();
     const missing: { code: string; nameKo: string }[] = [];
     if (isCategoryComplete) {
       attributes.forEach((attr) => {
@@ -613,6 +631,7 @@ export const CategoryAttributeForm = forwardRef<CategoryAttributeFormHandle, Cat
 
     const statusObj = {
       categoryComplete: isCategoryComplete,
+      categoryMissingStep,
       requiredAttributesComplete: isReqComplete,
       missingRequiredAttributes: missing,
       completionPercent: completeness,
@@ -623,7 +642,7 @@ export const CategoryAttributeForm = forwardRef<CategoryAttributeFormHandle, Cat
       lastEmittedCompletionRef.current = serialized;
       onCompletionChangeRef.current(statusObj);
     }
-  }, [isFinalCategorySelected, attributes, formValues, isAdmin, completeness, hasInitialized, loading]);
+  }, [isFinalCategorySelected, selectedCat1, selectedCat2, selectedCat3, attributes, formValues, isAdmin, completeness, hasInitialized, loading]);
 
   // 내부 공통 유효성 검사
   const validateInternal = () => {

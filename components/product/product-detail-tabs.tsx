@@ -56,6 +56,7 @@ import {
   type SelectionStatus,
   type SalesStatus,
   type RegistrationStatus,
+  type MissingFieldItem,
 } from "@/lib/product/registration-status";
 
 const MISSING_FIELD_TAB_MAP: Record<string, { tab: string; inputName: string }> = {
@@ -745,15 +746,37 @@ export function ProductDetailTabs({
     categoryCompletion: categoryCompletion || initialCategoryCompletion,
   });
 
-  const getMissingFieldsList = () => {
-    return registrationEval.missingFields.map((field) => {
-      const mapping = MISSING_FIELD_TAB_MAP[field] || { tab: "basic", inputName: "" };
-      return {
-        tab: mapping.tab,
-        field,
-        inputName: mapping.inputName,
-      };
-    });
+  const getMissingFieldsList = (): MissingFieldItem[] => {
+    return registrationEval.missingFieldItems || [];
+  };
+
+  const handleMissingBadgeClick = (item: MissingFieldItem) => {
+    setActiveTab(item.tab);
+    setTimeout(() => {
+      let el: HTMLElement | null = item.targetId ? document.getElementById(item.targetId) : null;
+      if (!el && item.inputName) {
+        el = (document.getElementsByName(item.inputName)[0] as HTMLElement) || null;
+      }
+
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+
+        el.classList.add("ring-4", "ring-rose-500/70", "border-rose-500", "bg-rose-50/70", "dark:bg-rose-950/40", "transition-all", "duration-500");
+        const targetEl = el;
+        setTimeout(() => {
+          targetEl.classList.remove("ring-4", "ring-rose-500/70", "border-rose-500", "bg-rose-50/70", "dark:bg-rose-950/40");
+        }, 2500);
+
+        const focusable = targetEl instanceof HTMLInputElement || targetEl instanceof HTMLSelectElement || targetEl instanceof HTMLTextAreaElement 
+          ? targetEl 
+          : (targetEl.querySelector("input, select, textarea") as HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement | null);
+        
+        if (focusable) {
+          focusable.focus();
+          if (focusable instanceof HTMLInputElement && focusable.select) focusable.select();
+        }
+      }
+    }, 80);
   };
 
   const getCriticalErrors = () => {
@@ -1492,46 +1515,20 @@ export function ProductDetailTabs({
             <div className="space-y-1.5">
               <h4 className="text-xs font-bold text-rose-900 dark:text-rose-400">필수 정보 보완 필요 (Draft 상태)</h4>
               <p className="text-[11px] leading-relaxed text-rose-700 dark:text-rose-455">
-                본 제품은 필수 정보가 누락되어 있습니다. 다음 탭으로 이동하여 해당 항목들을 모두 입력하고 전체 변경사항을 저장해 주세요:
+                본 제품은 필수 정보가 누락되어 있습니다. 배지를 클릭하면 해당 입력 항목의 위치로 즉시 이동합니다:
               </p>
               <div className="flex flex-wrap gap-2 mt-2">
-                {getMissingFieldsList().map((item, idx) => {
-                  const tabLabels: Record<string, string> = {
-                    basic: "기본 정보",
-                    category_attributes: "카테고리 & 속성",
-                    price: "가격 정보",
-                    logistics: "로지스틱스",
-                    media: "미디어",
-                    certs: "인허가 & 보증서",
-                  };
-                  return (
-                    <button 
-                      key={idx} 
-                      type="button"
-                      data-banner-jump={item.tab}
-                      onClick={() => {
-                        setActiveTab(item.tab as any);
-                        setTimeout(() => {
-                          if (item.tab === "category_attributes" && item.inputName.startsWith("attr-field-")) {
-                            const el = document.getElementById(item.inputName);
-                            if (el) {
-                              el.scrollIntoView({ behavior: "smooth", block: "center" });
-                              return;
-                            }
-                          }
-                          const inputElement = document.getElementsByName(item.inputName)[0] as HTMLInputElement | undefined;
-                          if (inputElement) {
-                            inputElement.focus();
-                            if (inputElement.select) inputElement.select();
-                          }
-                        }, 80);
-                      }}
-                      className="inline-flex items-center rounded-md bg-rose-100/70 hover:bg-rose-150 px-2.5 py-1 text-[10px] font-semibold text-rose-800 dark:bg-rose-900/30 dark:text-rose-300 border border-rose-200/50 dark:border-rose-800/40 transition-colors cursor-pointer"
-                    >
-                      [{tabLabels[item.tab] || item.tab}] {item.field}
-                    </button>
-                  );
-                })}
+                {getMissingFieldsList().map((item) => (
+                  <button 
+                    key={item.key} 
+                    type="button"
+                    data-banner-jump={item.tab}
+                    onClick={() => handleMissingBadgeClick(item)}
+                    className="inline-flex items-center rounded-md bg-rose-100/70 hover:bg-rose-150 px-2.5 py-1 text-[10px] font-semibold text-rose-800 dark:bg-rose-900/30 dark:text-rose-300 border border-rose-200/50 dark:border-rose-800/40 transition-all cursor-pointer hover:scale-105 active:scale-95 shadow-2xs"
+                  >
+                    {item.displayTag}
+                  </button>
+                ))}
               </div>
             </div>
           </div>
@@ -1755,7 +1752,7 @@ export function ProductDetailTabs({
             </h2>
             
             <div className="grid gap-6 sm:grid-cols-2">
-              <div>
+              <div id="manufactureSku-field">
                 <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1.5">제조사 SKU (Manufacture SKU) <span className="text-rose-600 dark:text-rose-400 font-bold ml-0.5">*</span></label>
                 <input
                   name="manufactureSku"
@@ -1785,7 +1782,7 @@ export function ProductDetailTabs({
                 />
               </div>
 
-              <div>
+              <div id="nameEn-field">
                 <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1.5">제품명 (영문) <span className="text-rose-600 dark:text-rose-400 font-bold ml-0.5">*</span></label>
                 <input
                   name="nameEn"
@@ -1808,7 +1805,7 @@ export function ProductDetailTabs({
                 />
               </div>
 
-              <div>
+              <div id="brandId-field">
                 <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1.5">브랜드 <span className="text-rose-600 dark:text-rose-400 font-bold ml-0.5">*</span></label>
                 <select
                   name="brandId"
@@ -1873,7 +1870,7 @@ export function ProductDetailTabs({
                 </div>
               </div>
 
-              <div>
+              <div id="origin-field">
                 <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1.5">원산지 (Origin) <span className="text-rose-600 dark:text-rose-400 font-bold ml-0.5">*</span></label>
                 <select
                   name="origin"
@@ -2215,7 +2212,7 @@ export function ProductDetailTabs({
                 </div>
               </div>
 
-              <div>
+              <div id="upc-field">
                 <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1.5">미국 바코드 (UPC) {!ean.trim() && <span className="text-rose-600 dark:text-rose-400 font-bold ml-0.5">*</span>}</label>
                 <input
                   name="upc"
@@ -2267,7 +2264,7 @@ export function ProductDetailTabs({
 
             {sellingOnline && (
               <div className="grid gap-6 md:grid-cols-2 p-4 rounded-lg border border-zinc-150 dark:border-zinc-850 bg-zinc-50/10">
-                <div>
+                <div id="salesLink1-field">
                   <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1.5">
                     온라인 판매 링크 1 *
                   </label>
@@ -2369,7 +2366,7 @@ export function ProductDetailTabs({
             </h2>
             
             <div className="grid gap-6 sm:grid-cols-2 md:grid-cols-4">
-              <div>
+              <div id="priceKrwRetail-field">
                 <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1.5">한국 소비자가 (₩, Retail KRW) <span className="text-rose-600 dark:text-rose-400 font-bold ml-0.5">*</span></label>
                 <div className="relative">
                   <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-xs text-zinc-400">₩</span>
@@ -2420,7 +2417,7 @@ export function ProductDetailTabs({
                 </div>
               </div>
 
-              <div>
+              <div id="priceUsdFob-field">
                 <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1.5">수출용 FOB 가격 ($, Export USD FOB) <span className="text-rose-600 dark:text-rose-400 font-bold ml-0.5">*</span></label>
                 <div className="relative">
                   <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-xs text-zinc-400">$</span>
@@ -2647,7 +2644,7 @@ export function ProductDetailTabs({
             </div>
             <div className="grid gap-4 sm:grid-cols-2 text-xs">
               {/* Width */}
-              <div className="space-y-1.5 p-3 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50/20">
+              <div id="packageWidth-field" className="space-y-1.5 p-3 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50/20">
                 <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300">가로 (Width, cm/inch) <span className="text-rose-600 dark:text-rose-400 font-bold ml-0.5">*</span></label>
                 <div className="grid grid-cols-2 gap-2">
                   <div>
@@ -2817,7 +2814,7 @@ export function ProductDetailTabs({
               </p>
             </div>
             <div className="grid gap-4 grid-cols-2 md:grid-cols-3 lg:grid-cols-6">
-              <div>
+              <div id="cartonPackQty-field">
                 <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-1">입수 수량 (Qty, 개) <span className="text-rose-600 dark:text-rose-400 font-bold ml-0.5">*</span></label>
                 <input
                   name="cartonPackQty"
@@ -3535,6 +3532,7 @@ export function ProductDetailTabs({
 
           {localImages.length + pendingImages.filter((p) => !p.error).length < 10 && (
             <div
+              id="product-images-dropzone"
               onDragOver={handleDropzoneDragOver}
               onDragLeave={handleDropzoneDragLeave}
               onDrop={handleDrop}

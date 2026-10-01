@@ -3,15 +3,20 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { verifyAdminSession, verifyPortalSession } from "@/lib/auth/dal";
+import { verifyAdminSession, verifyPortalSession, getCallerAppRole } from "@/lib/auth/dal";
 import { recordProductChangeLog, formatAuditValue } from "@/lib/product/audit";
 import { resolveRootCategoryEnum } from "@/lib/product/types";
 
 async function getEffectiveClient(customClient?: any) {
   if (customClient) return customClient;
   try {
-    const session = await verifyPortalSession();
-    return session.isImpersonating ? createAdminClient() : await createClient();
+    const role = await getCallerAppRole();
+    if (role === "admin") return createAdminClient();
+    if (role === "portal") {
+      const session = await verifyPortalSession();
+      return session.isImpersonating ? createAdminClient() : await createClient();
+    }
+    return await createClient();
   } catch {
     return await createClient();
   }
@@ -314,8 +319,15 @@ export async function saveProductAttributeValues(
   customClient?: any
 ) {
   if (!customClient) {
-    const { requirePortalPermission } = await import("@/lib/company/permissions");
-    await requirePortalPermission("products", "write");
+    const callerRole = await getCallerAppRole();
+    if (callerRole === "admin") {
+      await verifyAdminSession();
+    } else if (callerRole === "portal") {
+      const { requirePortalPermission } = await import("@/lib/company/permissions");
+      await requirePortalPermission("products", "write");
+    } else {
+      throw new Error("Unauthorized: Access denied.");
+    }
   }
 
   const admin = createAdminClient();
@@ -453,10 +465,11 @@ export async function saveProductAttributeValues(
       let actorEmail: string | null = null;
       let companyName: string | null = null;
 
-      try {
+      const role = await getCallerAppRole();
+      if (role === "admin") {
+        isAdmin = true;
         const adminSession = await verifyAdminSession();
         if (adminSession?.userId) {
-          isAdmin = true;
           actorUserId = adminSession.userId;
           companyName = "Letusto Admin";
           const { data: profile } = await admin
@@ -466,8 +479,8 @@ export async function saveProductAttributeValues(
             .maybeSingle();
           if (profile?.display_name) actorName = profile.display_name;
         }
-      } catch {
-        // Not admin session, check portal user
+      } else {
+        // Portal or Retailer user
         const { data: { user } } = await supabase.auth.getUser();
         if (user) {
           actorUserId = user.id;

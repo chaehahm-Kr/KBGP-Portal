@@ -112,6 +112,40 @@ async function verifySession(area: AppRole): Promise<VerifiedSession> {
   };
 }
 
+/**
+ * 안전하게 현재 호출자의 AppRole ("admin" | "portal" | "retailer")을 확인합니다.
+ * 세션이 없거나 유효하지 않으면 null을 반환하며 redirect를 발생시키지 않습니다.
+ */
+export async function getCallerAppRole(): Promise<AppRole | null> {
+  try {
+    const impSession = await getImpersonationSession();
+    if (impSession) {
+      if (impSession.portalType === "BRAND") return "portal";
+      if (impSession.portalType === "RETAILER") return "retailer";
+    }
+
+    const supabase = await createClient();
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser();
+
+    if (userError || !user) return null;
+
+    const adminClient = createAdminClient();
+    const { data: profile } = await adminClient
+      .from("profiles")
+      .select("role")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    if (!profile || !profile.role) return null;
+    return profile.role as AppRole;
+  } catch {
+    return null;
+  }
+}
+
 // React cache()로 같은 렌더 패스 안에서는 중복 호출해도 한 번만 실제 검증한다.
 export const verifyPortalSession = cache(() => verifySession("portal"));
 export const verifyRetailerSession = cache(() => verifySession("retailer"));

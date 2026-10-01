@@ -406,7 +406,7 @@ export default function Sidebar({
           // Determine parent-level unread count
           let parentBadgeCount = 0;
           if (item.name === "Applications") {
-            parentBadgeCount = unreadCounts.applications || pendingApplicationsCount;
+            parentBadgeCount = unreadCounts.applications;
           } else if (item.name === "Products") {
             parentBadgeCount = unreadCounts.products;
           } else if (item.name === "Purchasing") {
