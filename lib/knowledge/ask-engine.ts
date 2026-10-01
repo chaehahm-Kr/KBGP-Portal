@@ -332,7 +332,7 @@ export async function processAskQuestion(
   });
 
   scoredCandidates.sort((a, b) => b.score - a.score);
-  const best = scoredCandidates.length > 0 && scoredCandidates[0].score >= 20 ? scoredCandidates[0].item : null;
+  const best = scoredCandidates.length > 0 && scoredCandidates[0].score >= 50 ? scoredCandidates[0].item : null;
 
   // 9. If no candidate reached sufficient relevance score -> Insufficient Evidence Fallback
   if (!best) {
@@ -357,7 +357,7 @@ export async function processAskQuestion(
   }
 
   // 10. Build Grounded Answer from Best Matching Knowledge
-  return buildGroundedResponse(rawQ, cleanQ, best, scoredCandidates.filter(s => s.score >= 20).map(s => s.item), audience, helpBasePath, supportPath, now);
+  return buildGroundedResponse(rawQ, cleanQ, best, scoredCandidates.filter(s => s.score >= 50).map(s => s.item), audience, helpBasePath, supportPath, now);
 }
 
 /**
