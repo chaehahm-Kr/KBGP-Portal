@@ -75,6 +75,13 @@ export const RETAILER_NAV_ITEMS: NavItem[] = [
     isBottomNav: false,
   },
   {
+    name: "Ask K SELECT",
+    href: "/help/ask",
+    icon: "sparkles",
+    roles: ["owner", "buyer", "store_manager", "employee", "accounting"],
+    isBottomNav: false,
+  },
+  {
     name: "Support",
     href: "/support",
     icon: "life-buoy",

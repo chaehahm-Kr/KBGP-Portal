@@ -183,6 +183,33 @@ export function HelpCenterMainView({
         </div>
       </div>
 
+      {/* Ask K SELECT Intelligent Assistant Banner */}
+      <div className="rounded-xl border border-blue-200/80 bg-gradient-to-r from-blue-50 via-sky-50 to-indigo-50 dark:border-blue-900/50 dark:from-blue-950/30 dark:via-sky-950/20 dark:to-indigo-950/30 p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xs">
+        <div className="flex items-start sm:items-center gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-600 text-white shadow-xs text-lg">
+            ✨
+          </div>
+          <div>
+            <h3 className="text-xs sm:text-sm font-bold text-zinc-900 dark:text-white flex items-center gap-1.5">
+              <span>Ask K SELECT</span>
+              <span className="rounded-full bg-blue-100 dark:bg-blue-900/60 px-2 py-0.5 text-[10px] font-bold text-blue-700 dark:text-blue-300">
+                AI 도우미
+              </span>
+            </h3>
+            <p className="text-xs text-zinc-600 dark:text-zinc-400 mt-0.5">
+              공식 매뉴얼과 운영 정책에 관해 자연어로 질문하고 즉시 근거 문서를 확인해 보세요.
+            </p>
+          </div>
+        </div>
+        <Link
+          href={`${baseHelpPath}/ask`}
+          className="inline-flex items-center justify-center gap-1 rounded-lg bg-blue-600 px-4 py-2 text-xs font-bold text-white hover:bg-blue-700 transition-colors shadow-xs shrink-0 cursor-pointer"
+        >
+          <span>질문하러 가기</span>
+          <span>&rarr;</span>
+        </Link>
+      </div>
+
       {/* Topic & Type Filter Section */}
       <div className="space-y-3">
         {/* Topic Pills */}
