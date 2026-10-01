@@ -93,9 +93,11 @@ export async function POST(request: NextRequest) {
       ["BRAND", "RETAILER", "PUBLIC"].includes(a)
     );
 
-    const requires_external_approval = hasExternalAudience;
-    const external_review_status = hasExternalAudience ? "REQUESTED" : "NONE";
-    const initialStatus = hasExternalAudience ? "IN_REVIEW" : (body.status || "DRAFT");
+    const selectedModule = body.module || body.category || "General";
+    const status = body.status || "PUBLISHED";
+    const version = body.current_version || "v1.0";
+    const requires_external_approval = Boolean(body.requires_external_approval ?? hasExternalAudience);
+    const external_review_status = body.external_review_status || (hasExternalAudience ? "PENDING" : "NONE");
 
     const newItem: KnowledgeItem = {
       id: `kno-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
@@ -112,18 +114,23 @@ export async function POST(request: NextRequest) {
       linked_system_setting_key: body.linked_system_setting_key || null,
       linked_system_setting_name: body.linked_system_setting_name || null,
       linked_system_setting_value: body.linked_system_setting_value || null,
-      category,
+      module: selectedModule,
+      category: selectedModule,
       tags: body.tags || [],
       owner_id: body.owner_id || "admin-01",
       owner_name: body.owner_name || "Knowledge Admin",
-      status: initialStatus,
+      status: status as any,
       system_impact_status: "NORMAL",
       audience: selectedAudience,
       is_sensitive_internal: Boolean(body.is_sensitive_internal),
       requires_external_approval,
       external_review_status,
-      current_version: "v1.0 (Draft)",
+      current_version: version,
       effective_date: body.effective_date || today,
+      document_url: body.document_url || null,
+      document_name: body.document_name || null,
+      document_size: body.document_size || null,
+      document_type: body.document_type || null,
       created_at: now,
       updated_at: now
     };

@@ -20,16 +20,20 @@ export default function DetailView({ id }: { id: string }) {
     auditLogs: KnowledgeAuditLog[];
   } | null>(null);
 
-  const [activeTab, setActiveTab] = useState<"CONTENT" | "ACCESS" | "RELATIONS" | "VERSIONS" | "ACTIVITY">("CONTENT");
+  const [activeTab, setActiveTab] = useState<"CONTENT" | "ACCESS" | "VERSIONS" | "ACTIVITY">("CONTENT");
   const [language, setLanguage] = useState<"KO" | "EN">("KO");
   const [loading, setLoading] = useState(true);
+  const [isEditing, setIsEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
 
-  // Modals / Actions
-  const [previewAsModal, setPreviewAsModal] = useState<"Admin" | "Brand" | "Retailer" | null>(null);
+  // Edit form state
+  const [editForm, setEditForm] = useState<Partial<KnowledgeItem>>({});
+
+  // Version modal
   const [newVersionModal, setNewVersionModal] = useState(false);
-  const [compareModal, setCompareModal] = useState<KnowledgeVersion | null>(null);
   const [whatChanged, setWhatChanged] = useState("");
   const [whyChanged, setWhyChanged] = useState("");
+  const [newVersionString, setNewVersionString] = useState("");
 
   useEffect(() => {
     fetchDetail();
@@ -42,6 +46,7 @@ export default function DetailView({ id }: { id: string }) {
       if (res.ok) {
         const json = await res.json();
         setData(json);
+        setEditForm(json.item);
       }
     } catch (e) {
       console.error("Failed to load detail:", e);
@@ -50,9 +55,32 @@ export default function DetailView({ id }: { id: string }) {
     }
   };
 
+  const handleSaveEdit = async () => {
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/admin/knowledge/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(editForm)
+      });
+      if (res.ok) {
+        alert("수정사항이 저장되었습니다.");
+        setIsEditing(false);
+        fetchDetail();
+      } else {
+        const err = await res.json();
+        alert(`저장 실패: ${err.error}`);
+      }
+    } catch (e) {
+      alert("저장 중 오류가 발생했습니다.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const handleCreateNewVersion = async () => {
-    if (!whatChanged || !whyChanged) {
-      alert("Please describe what changed and why changed.");
+    if (!whatChanged.trim() || !whyChanged.trim()) {
+      alert("변경 내용(What changed)과 사유(Why changed)를 입력해 주세요.");
       return;
     }
     try {
@@ -61,24 +89,29 @@ export default function DetailView({ id }: { id: string }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           action: "CREATE_DRAFT",
+          version: newVersionString.trim() || undefined,
           what_changed: whatChanged,
           why_changed: whyChanged
         })
       });
       if (res.ok) {
-        alert("New Draft Version created successfully!");
+        alert("새 버전이 생성되었습니다!");
         setNewVersionModal(false);
         setWhatChanged("");
         setWhyChanged("");
+        setNewVersionString("");
         fetchDetail();
+      } else {
+        const err = await res.json();
+        alert(`버전 생성 실패: ${err.error}`);
       }
     } catch (e) {
-      alert("Failed to create version.");
+      alert("버전 생성 중 오류가 발생했습니다.");
     }
   };
 
   const handlePublishVersion = async (versionStr: string) => {
-    if (!confirm(`Are you sure you want to publish version ${versionStr}? Previous version will be marked SUPERSEDED.`)) return;
+    if (!confirm(`버전 ${versionStr}을(를) 공식 배포(Publish)하시겠습니까? 기존 버전은 이전 버전으로 아카이빙됩니다.`)) return;
     try {
       const res = await fetch(`/api/admin/knowledge/${id}/versions`, {
         method: "POST",
@@ -89,469 +122,503 @@ export default function DetailView({ id }: { id: string }) {
         })
       });
       if (res.ok) {
-        alert("Version Published successfully!");
+        alert("버전이 성공적으로 배포되었습니다!");
         fetchDetail();
       }
     } catch (e) {
-      alert("Failed to publish version.");
+      alert("버전 배포 중 오류가 발생했습니다.");
     }
   };
 
-  const handleApproveExternal = async () => {
-    if (!confirm("Approve External Publication? Knowledge will become visible to authorized external audiences.")) return;
-    try {
-      const res = await fetch(`/api/admin/knowledge/${id}/approve`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "APPROVE", comment: "External publication approved by Super Admin." })
-      });
-      if (res.ok) {
-        alert("External Publication Approved & Published!");
-        fetchDetail();
-      }
-    } catch (e) {
-      alert("Failed to approve.");
-    }
-  };
-
-  if (loading || !data) {
+  if (loading) {
     return (
       <div className="space-y-6">
-        <div className="h-8 w-48 bg-zinc-200 dark:bg-zinc-800 rounded animate-pulse" />
-        <div className="h-64 bg-zinc-100 dark:bg-zinc-900 rounded-xl animate-pulse" />
+        <KnowledgeNavTabs />
+        <div className="h-8 w-64 bg-zinc-200 dark:bg-zinc-800 rounded animate-pulse" />
+        <div className="h-96 bg-zinc-100 dark:bg-zinc-900 rounded-xl animate-pulse" />
       </div>
     );
   }
 
-  const { item, versions, relations, assets, auditLogs } = data;
+  const item = data?.item;
+  if (!item) {
+    return (
+      <div className="py-16 text-center">
+        <p className="text-sm font-semibold text-zinc-500">지식 항목을 찾을 수 없습니다.</p>
+        <Link href="/admin/knowledge/library" className="mt-3 inline-block text-xs text-blue-600 hover:underline">
+          &larr; 라이브러리로 돌아가기
+        </Link>
+      </div>
+    );
+  }
 
-  const isKoComplete = Boolean(item.title_ko && item.content_ko);
-  const isEnComplete = Boolean(item.title_en && item.content_en);
+  const versions = data?.versions || [];
+  const auditLogs = data?.auditLogs || [];
+  const assets = data?.assets || [];
+
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case "PUBLISHED":
+        return <span className="rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-bold text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">PUBLISHED</span>;
+      case "DRAFT":
+      case "IN_REVIEW":
+        return <span className="rounded-full bg-zinc-100 px-2.5 py-0.5 text-xs font-bold text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700">DRAFT</span>;
+      case "ARCHIVED":
+      case "SUPERSEDED":
+        return <span className="rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-bold text-amber-700 dark:bg-amber-950/50 dark:text-amber-300 border border-amber-200 dark:border-amber-800">ARCHIVED</span>;
+      default:
+        return <span className="rounded-full bg-zinc-100 px-2.5 py-0.5 text-xs font-bold text-zinc-700">{status}</span>;
+    }
+  };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 max-w-6xl">
       <KnowledgeNavTabs />
-      {/* Top Breadcrumb & Actions Header */}
-      <div className="flex items-center justify-between border-b border-zinc-200 dark:border-zinc-800 pb-5">
+
+      {/* Top Breadcrumb & Actions Bar */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-zinc-200 dark:border-zinc-800 pb-5">
         <div>
-          <div className="flex items-center gap-2 text-xs text-zinc-500 mb-1">
-            <Link href="/admin/knowledge/library" className="hover:underline">Library</Link>
+          <div className="flex items-center gap-2 text-xs text-zinc-500 mb-1.5">
+            <Link href="/admin/knowledge/library" className="hover:text-zinc-900 dark:hover:text-white">
+              Library
+            </Link>
             <span>/</span>
-            <span className="font-semibold text-zinc-800 dark:text-zinc-200">{item.category}</span>
+            <span>{item.module || item.category || "General"}</span>
+            <span>/</span>
+            <span className="font-mono text-zinc-400">{item.id}</span>
           </div>
-          <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-bold tracking-tight text-zinc-900 dark:text-white">
-              {item.title_ko || item.title}
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="text-xl font-bold tracking-tight text-zinc-900 dark:text-white">
+              {item.title}
             </h1>
-            <span className="font-mono text-sm font-bold bg-zinc-100 dark:bg-zinc-800 px-2.5 py-0.5 rounded text-zinc-900 dark:text-white border border-zinc-200 dark:border-zinc-700">
-              {item.current_version}
+            {getStatusBadge(item.status)}
+            <span className="rounded bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 text-xs font-semibold text-zinc-700 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700">
+              {item.type}
             </span>
-            <span className={`rounded-full px-3 py-0.5 text-xs font-semibold ${
-              item.status === "PUBLISHED"
-                ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
-                : "bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300"
-            }`}>
-              {item.status}
+            <span className="font-mono text-xs text-zinc-500 bg-zinc-50 dark:bg-zinc-950 px-2 py-0.5 rounded border border-zinc-200 dark:border-zinc-800">
+              {item.current_version || "v1.0"}
             </span>
           </div>
         </div>
 
         <div className="flex items-center gap-2">
-          {item.status === "PUBLISHED" && (
-            <button
-              onClick={() => setNewVersionModal(true)}
-              className="rounded-lg bg-zinc-900 px-4 py-2 text-xs font-semibold text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-100 transition-colors"
-            >
-              + Create New Version
-            </button>
-          )}
-
-          {item.status === "DRAFT" && (
-            <button
-              onClick={() => handlePublishVersion(item.current_version)}
-              className="rounded-lg bg-emerald-600 px-4 py-2 text-xs font-semibold text-white hover:bg-emerald-500 transition-colors"
-            >
-              Publish Version
-            </button>
-          )}
-
-          {item.external_review_status === "REQUESTED" && (
-            <button
-              onClick={handleApproveExternal}
-              className="rounded-lg bg-blue-600 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-500 transition-colors"
-            >
-              Approve External Publication
-            </button>
+          {isEditing ? (
+            <>
+              <button
+                type="button"
+                onClick={() => setIsEditing(false)}
+                className="rounded-lg border border-zinc-300 px-3 py-1.5 text-xs font-semibold text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 cursor-pointer"
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveEdit}
+                disabled={saving}
+                className="rounded-lg bg-[#131E2E] px-4 py-1.5 text-xs font-semibold text-white hover:bg-[#1f3047] dark:bg-white dark:text-[#131E2E] cursor-pointer"
+              >
+                {saving ? "저장 중..." : "저장 완료"}
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={() => setIsEditing(true)}
+                className="rounded-lg border border-zinc-300 bg-white px-3.5 py-1.5 text-xs font-semibold text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 cursor-pointer shadow-xs"
+              >
+                ✏️ 수정
+              </button>
+              <button
+                type="button"
+                onClick={() => setNewVersionModal(true)}
+                className="rounded-lg bg-[#131E2E] px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-[#1f3047] dark:bg-white dark:text-[#131E2E] cursor-pointer shadow-xs"
+              >
+                + 새 버전 생성
+              </button>
+            </>
           )}
         </div>
       </div>
 
-      {/* 5 Tabs Bar */}
-      <div className="flex items-center border-b border-zinc-200 dark:border-zinc-800 space-x-6 text-sm font-semibold select-none">
-        {(["CONTENT", "ACCESS", "RELATIONS", "VERSIONS", "ACTIVITY"] as const).map((tab) => (
-          <button
-            key={tab}
-            onClick={() => setActiveTab(tab)}
-            className={`pb-3 transition-colors relative ${
-              activeTab === tab
-                ? "text-zinc-900 dark:text-white border-b-2 border-zinc-900 dark:border-white font-bold"
-                : "text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white"
-            }`}
-          >
-            {tab}
-          </button>
-        ))}
+      {/* Tabs Navigation */}
+      <div className="flex items-center space-x-6 border-b border-zinc-200 dark:border-zinc-800 text-xs font-semibold select-none">
+        <button
+          onClick={() => setActiveTab("CONTENT")}
+          className={`pb-3 transition-colors relative cursor-pointer ${
+            activeTab === "CONTENT"
+              ? "text-zinc-900 dark:text-white border-b-2 border-zinc-900 dark:border-white font-bold"
+              : "text-zinc-500 hover:text-zinc-900 dark:text-zinc-400"
+          }`}
+        >
+          Overview & Content (본문)
+        </button>
+        <button
+          onClick={() => setActiveTab("ACCESS")}
+          className={`pb-3 transition-colors relative cursor-pointer ${
+            activeTab === "ACCESS"
+              ? "text-zinc-900 dark:text-white border-b-2 border-zinc-900 dark:border-white font-bold"
+              : "text-zinc-500 hover:text-zinc-900 dark:text-zinc-400"
+          }`}
+        >
+          Access & Audience (권한/대상)
+        </button>
+        <button
+          onClick={() => setActiveTab("VERSIONS")}
+          className={`pb-3 transition-colors relative cursor-pointer ${
+            activeTab === "VERSIONS"
+              ? "text-zinc-900 dark:text-white border-b-2 border-zinc-900 dark:border-white font-bold"
+              : "text-zinc-500 hover:text-zinc-900 dark:text-zinc-400"
+          }`}
+        >
+          Versions (버전 이력 {versions.length > 0 && `(${versions.length})`})
+        </button>
+        <button
+          onClick={() => setActiveTab("ACTIVITY")}
+          className={`pb-3 transition-colors relative cursor-pointer ${
+            activeTab === "ACTIVITY"
+              ? "text-zinc-900 dark:text-white border-b-2 border-zinc-900 dark:border-white font-bold"
+              : "text-zinc-500 hover:text-zinc-900 dark:text-zinc-400"
+          }`}
+        >
+          Activity Logs (변경 이력 {auditLogs.length > 0 && `(${auditLogs.length})`})
+        </button>
       </div>
 
-      {/* TAB 1: CONTENT */}
+      {/* Tab 1: Overview & Content */}
       {activeTab === "CONTENT" && (
         <div className="space-y-6">
-          {/* Language Toggle & Status */}
-          <div className="flex items-center justify-between bg-zinc-50 dark:bg-zinc-900 p-4 rounded-xl border border-zinc-200 dark:border-zinc-800">
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-semibold text-zinc-500">Language View:</span>
-              <div className="inline-flex rounded-lg bg-zinc-200 p-1 dark:bg-zinc-800">
-                <button
-                  onClick={() => setLanguage("KO")}
-                  className={`rounded-md px-3 py-1 text-xs font-semibold transition-colors ${
-                    language === "KO"
-                      ? "bg-white text-zinc-900 shadow dark:bg-zinc-950 dark:text-white"
-                      : "text-zinc-600 dark:text-zinc-400"
-                  }`}
-                >
-                  한국어 (KO)
-                </button>
-                <button
-                  onClick={() => setLanguage("EN")}
-                  className={`rounded-md px-3 py-1 text-xs font-semibold transition-colors ${
-                    language === "EN"
-                      ? "bg-white text-zinc-900 shadow dark:bg-zinc-950 dark:text-white"
-                      : "text-zinc-600 dark:text-zinc-400"
-                  }`}
-                >
-                  English (EN)
-                </button>
-              </div>
+          {/* Metadata Bar */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 rounded-xl border border-zinc-200 bg-white p-4 text-xs dark:border-zinc-800 dark:bg-zinc-900 shadow-sm">
+            <div>
+              <span className="text-zinc-400 block font-semibold text-[10px] uppercase">Module</span>
+              {isEditing ? (
+                <input
+                  type="text"
+                  value={editForm.module || editForm.category || ""}
+                  onChange={(e) => setEditForm({ ...editForm, module: e.target.value, category: e.target.value })}
+                  className="mt-1 w-full rounded border border-zinc-300 p-1 text-xs dark:border-zinc-700 dark:bg-zinc-950"
+                />
+              ) : (
+                <span className="font-bold text-zinc-900 dark:text-white">{item.module || item.category || "General"}</span>
+              )}
             </div>
-
-            <div className="flex items-center gap-3 text-xs">
-              <span className="flex items-center gap-1 font-medium">
-                KO Status: {isKoComplete ? <span className="text-emerald-600 font-bold">Complete</span> : <span className="text-amber-600 font-bold">Missing</span>}
-              </span>
-              <span className="flex items-center gap-1 font-medium">
-                EN Status: {isEnComplete ? <span className="text-emerald-600 font-bold">Complete</span> : <span className="text-amber-600 font-bold">Missing</span>}
-              </span>
+            <div>
+              <span className="text-zinc-400 block font-semibold text-[10px] uppercase">Owner</span>
+              <span className="font-bold text-zinc-900 dark:text-white">{item.owner_name || "Knowledge Admin"}</span>
+            </div>
+            <div>
+              <span className="text-zinc-400 block font-semibold text-[10px] uppercase">Status</span>
+              {isEditing ? (
+                <select
+                  value={editForm.status || item.status}
+                  onChange={(e) => setEditForm({ ...editForm, status: e.target.value as any })}
+                  className="mt-1 w-full rounded border border-zinc-300 p-1 text-xs dark:border-zinc-700 dark:bg-zinc-950"
+                >
+                  <option value="PUBLISHED">PUBLISHED</option>
+                  <option value="DRAFT">DRAFT</option>
+                  <option value="ARCHIVED">ARCHIVED</option>
+                </select>
+              ) : (
+                <span className="font-bold text-zinc-900 dark:text-white">{item.status}</span>
+              )}
+            </div>
+            <div>
+              <span className="text-zinc-400 block font-semibold text-[10px] uppercase">Last Updated</span>
+              <span className="font-bold text-zinc-900 dark:text-white">{new Date(item.updated_at).toLocaleString()}</span>
             </div>
           </div>
 
-          {/* Source Type / Live System Info */}
-          {item.source_type !== "CONTENT" && (
-            <div className="p-4 rounded-xl border border-indigo-200 bg-indigo-50/60 dark:border-indigo-900/50 dark:bg-indigo-950/20 text-xs text-indigo-900 dark:text-indigo-200 space-y-1">
-              <div className="font-bold uppercase tracking-wider flex items-center gap-2">
-                <span>⚡ Source Type: {item.source_type}</span>
+          {/* Official Document Banner if present */}
+          {(item.document_url || assets.length > 0) && (
+            <div className="flex items-center justify-between p-4 rounded-xl border border-emerald-200 bg-emerald-50/60 dark:border-emerald-900 dark:bg-emerald-950/30">
+              <div className="flex items-center gap-3">
+                <span className="text-2xl">📄</span>
+                <div>
+                  <h3 className="text-xs font-bold text-emerald-950 dark:text-emerald-200">
+                    Official Distribution Document (공식 배포 문서)
+                  </h3>
+                  <p className="text-[11px] text-emerald-700 dark:text-emerald-400">
+                    {item.document_name || assets[0]?.file_name || "Official_Manual.pdf"}
+                  </p>
+                </div>
               </div>
-              <p>
-                Linked System Setting: <strong className="font-mono">{item.linked_system_setting_name || item.linked_system_setting_key}</strong>
-              </p>
-              <p>
-                Current System Value: <span className="font-bold text-indigo-700 dark:text-indigo-300 font-mono text-sm">{item.linked_system_setting_value}</span>
-              </p>
+              <div className="flex items-center gap-2">
+                <a
+                  href={item.document_url || assets[0]?.file_url || "#"}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="rounded-md bg-white dark:bg-zinc-900 border border-emerald-300 dark:border-emerald-800 px-3 py-1.5 text-xs font-semibold text-emerald-800 dark:text-emerald-300 hover:bg-emerald-100 transition-colors"
+                >
+                  문서 보기 (View)
+                </a>
+                <a
+                  href={`${item.document_url || assets[0]?.file_url || "#"}?action=download`}
+                  download
+                  className="rounded-md bg-emerald-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-800 transition-colors"
+                >
+                  다운로드 (Download)
+                </a>
+              </div>
             </div>
           )}
 
-          {/* Main Content Body Card */}
-          <div className="rounded-xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-950 space-y-4 shadow-sm">
-            <h2 className="text-xl font-bold text-zinc-900 dark:text-white">
-              {language === "KO" ? item.title_ko || item.title : item.title_en || item.title}
-            </h2>
-            <p className="text-sm font-medium text-zinc-600 dark:text-zinc-300 border-l-4 border-zinc-400 dark:border-zinc-600 pl-3 py-1">
-              {language === "KO" ? item.summary_ko || "요약 정보가 없습니다." : item.summary_en || "No English summary available."}
-            </p>
-            <hr className="border-zinc-200 dark:border-zinc-800" />
-            <div className="prose prose-sm dark:prose-invert max-w-none text-zinc-800 dark:text-zinc-200 whitespace-pre-wrap font-mono leading-relaxed">
-              {language === "KO" ? item.content_ko || "국문 본문 내용이 없습니다." : item.content_en || "No English content body provided."}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* TAB 2: ACCESS */}
-      {activeTab === "ACCESS" && (
-        <div className="space-y-6">
-          <div className="rounded-xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-950 space-y-6 shadow-sm">
-            <div>
-              <h3 className="text-lg font-bold text-zinc-900 dark:text-white">Audience & Access Governance</h3>
-              <p className="text-xs text-zinc-500 mt-1">Default security is INTERNAL ONLY (Deny by Default).</p>
-            </div>
-
-            {/* Audience Badges */}
-            <div className="space-y-2">
-              <label className="text-xs font-semibold uppercase text-zinc-500">Configured Audiences</label>
-              <div className="flex flex-wrap gap-2">
-                {item.audience.map((aud) => (
-                  <span
-                    key={aud}
-                    className={`rounded-lg px-3 py-1 text-xs font-bold ${
-                      aud === "INTERNAL"
-                        ? "bg-zinc-900 text-white dark:bg-white dark:text-zinc-900"
-                        : "bg-emerald-100 text-emerald-900 dark:bg-emerald-950 dark:text-emerald-200 border border-emerald-300 dark:border-emerald-800"
-                    }`}
-                  >
-                    {aud}
-                  </span>
-                ))}
-              </div>
-            </div>
-
-            {/* Sensitive Internal Flag */}
-            <div className={`p-4 rounded-xl border ${
-              item.is_sensitive_internal
-                ? "border-amber-300 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/30"
-                : "border-zinc-200 dark:border-zinc-800"
-            }`}>
-              <div className="flex items-center justify-between">
-                <div>
-                  <h4 className="text-sm font-bold text-amber-900 dark:text-amber-300 flex items-center gap-2">
-                    ⚠️ SENSITIVE INTERNAL FLAG
-                  </h4>
-                  <p className="text-xs text-zinc-600 dark:text-zinc-400 mt-1">
-                    Contains proprietary algorithms, supplier cost, or internal evaluation logic. External audience changes require strong warning modal & approver verification.
-                  </p>
-                </div>
-                <span className="font-bold text-xs px-2.5 py-1 rounded bg-amber-200 text-amber-900 dark:bg-amber-900 dark:text-amber-200">
-                  {item.is_sensitive_internal ? "ENABLED" : "OFF"}
-                </span>
-              </div>
-            </div>
-
-            {/* Preview As Interactive Button */}
-            <div className="pt-4 border-t border-zinc-200 dark:border-zinc-800 flex items-center justify-between">
-              <div>
-                <h4 className="text-sm font-bold text-zinc-900 dark:text-white">Preview As Simulation</h4>
-                <p className="text-xs text-zinc-500">Simulate how this knowledge item is retrieved under different audience contexts.</p>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setPreviewAsModal("Admin")}
-                  className="rounded-lg border border-zinc-300 px-3 py-1.5 text-xs font-semibold text-zinc-800 hover:bg-zinc-100 dark:border-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-900"
-                >
-                  Preview As Admin
-                </button>
-                <button
-                  onClick={() => setPreviewAsModal("Brand")}
-                  className="rounded-lg border border-zinc-300 px-3 py-1.5 text-xs font-semibold text-zinc-800 hover:bg-zinc-100 dark:border-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-900"
-                >
-                  Preview As Brand
-                </button>
-                <button
-                  onClick={() => setPreviewAsModal("Retailer")}
-                  className="rounded-lg border border-zinc-300 px-3 py-1.5 text-xs font-semibold text-zinc-800 hover:bg-zinc-100 dark:border-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-900"
-                >
-                  Preview As Retailer
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* TAB 3: RELATIONS */}
-      {activeTab === "RELATIONS" && (
-        <div className="space-y-6">
-          <div className="rounded-xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-950 space-y-4 shadow-sm">
-            <h3 className="text-lg font-bold text-zinc-900 dark:text-white">Platform System Connections</h3>
-
-            {relations.length === 0 ? (
-              <p className="text-xs text-zinc-500">No explicit system relation maps defined yet.</p>
+          {/* Summary Box */}
+          <div className="rounded-xl border border-zinc-200 bg-zinc-50/50 p-4 dark:border-zinc-800 dark:bg-zinc-950/50">
+            <span className="text-[11px] font-bold text-zinc-500 uppercase tracking-wider block mb-1">
+              Summary (요약)
+            </span>
+            {isEditing ? (
+              <textarea
+                value={editForm.summary_ko || ""}
+                onChange={(e) => setEditForm({ ...editForm, summary_ko: e.target.value })}
+                rows={2}
+                className="w-full rounded border border-zinc-300 p-2 text-xs dark:border-zinc-700 dark:bg-zinc-950"
+              />
             ) : (
-              <div className="space-y-3">
-                {relations.map((rel) => (
-                  <div key={rel.id} className="p-4 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 text-xs space-y-1">
-                    <div className="font-bold text-zinc-900 dark:text-white">Portal: {rel.related_portal || "Admin"}</div>
-                    <div>Module: <span className="font-semibold">{rel.related_module}</span></div>
-                    {rel.related_menu && <div>Menu: {rel.related_menu}</div>}
-                    {rel.related_route && <div>Route: <code className="font-mono text-zinc-800 dark:text-zinc-200">{rel.related_route}</code></div>}
-                    {rel.related_system_setting && <div>System Setting: <code className="font-mono text-indigo-600 dark:text-indigo-400">{rel.related_system_setting}</code></div>}
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {assets.length > 0 && (
-              <div className="pt-4 border-t border-zinc-200 dark:border-zinc-800 space-y-3">
-                <h4 className="text-sm font-bold text-zinc-900 dark:text-white">Attached Manual PDF Assets</h4>
-                {assets.map((asset) => (
-                  <div key={asset.id} className="flex items-center justify-between p-3 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-xs">
-                    <div>
-                      <div className="font-bold text-zinc-900 dark:text-white">{asset.manual_title}</div>
-                      <div className="text-zinc-500">Version: {asset.version} ({asset.language})</div>
-                    </div>
-                    <a
-                      href={asset.file_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="rounded border border-zinc-300 px-3 py-1 font-semibold text-zinc-700 hover:bg-zinc-100 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-900"
-                    >
-                      Download PDF
-                    </a>
-                  </div>
-                ))}
-              </div>
+              <p className="text-xs text-zinc-800 dark:text-zinc-200 leading-relaxed font-medium">
+                {language === "KO" ? item.summary_ko || item.summary_en : item.summary_en || item.summary_ko}
+              </p>
             )}
           </div>
-        </div>
-      )}
 
-      {/* TAB 4: VERSIONS */}
-      {activeTab === "VERSIONS" && (
-        <div className="space-y-6">
-          <div className="rounded-xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-950 space-y-4 shadow-sm">
-            <div className="flex items-center justify-between">
-              <h3 className="text-lg font-bold text-zinc-900 dark:text-white">Version Snapshot History</h3>
-              {item.status === "PUBLISHED" && (
+          {/* Structured Content Box */}
+          <div className="rounded-xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-900 shadow-sm space-y-4">
+            <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-3">
+              <h2 className="text-sm font-bold text-zinc-900 dark:text-white">
+                Structured Content (본문)
+              </h2>
+              <div className="flex items-center gap-1 bg-zinc-100 dark:bg-zinc-800 p-0.5 rounded-lg text-xs font-semibold">
                 <button
-                  onClick={() => setNewVersionModal(true)}
-                  className="rounded-lg bg-zinc-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-900"
+                  type="button"
+                  onClick={() => setLanguage("KO")}
+                  className={`px-3 py-1 rounded-md transition-colors cursor-pointer ${
+                    language === "KO"
+                      ? "bg-white text-zinc-900 shadow-xs dark:bg-zinc-900 dark:text-white font-bold"
+                      : "text-zinc-500 hover:text-zinc-900 dark:text-zinc-400"
+                  }`}
                 >
-                  + Create New Version
+                  KO (한국어)
                 </button>
-              )}
-            </div>
-
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
-                <thead className="border-b border-zinc-200 bg-zinc-50 text-[10px] font-bold uppercase tracking-wider text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900">
-                  <tr>
-                    <th className="py-3 px-3">Version</th>
-                    <th className="py-3 px-3">Status</th>
-                    <th className="py-3 px-3">Effective Date</th>
-                    <th className="py-3 px-3">Changed By</th>
-                    <th className="py-3 px-3">What Changed</th>
-                    <th className="py-3 px-3 text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-zinc-100 dark:divide-zinc-900">
-                  {versions.map((ver) => (
-                    <tr key={ver.id}>
-                      <td className="py-3 px-3 font-mono font-bold">{ver.version}</td>
-                      <td className="py-3 px-3">
-                        <span className={`rounded px-2 py-0.5 text-[10px] font-bold ${
-                          ver.status === "PUBLISHED"
-                            ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
-                            : ver.status === "SUPERSEDED"
-                            ? "bg-zinc-200 text-zinc-500 line-through dark:bg-zinc-800 dark:text-zinc-500"
-                            : "bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300"
-                        }`}>
-                          {ver.status}
-                        </span>
-                      </td>
-                      <td className="py-3 px-3">{ver.effective_date}</td>
-                      <td className="py-3 px-3 font-medium">{ver.created_by_name}</td>
-                      <td className="py-3 px-3 text-zinc-600 dark:text-zinc-400">{ver.what_changed || "Initial version"}</td>
-                      <td className="py-3 px-3 text-right space-x-2">
-                        <button
-                          onClick={() => setCompareModal(ver)}
-                          className="text-xs font-semibold text-indigo-600 hover:underline dark:text-indigo-400"
-                        >
-                          Compare
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* TAB 5: ACTIVITY */}
-      {activeTab === "ACTIVITY" && (
-        <div className="space-y-6">
-          <div className="rounded-xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-950 space-y-4 shadow-sm">
-            <h3 className="text-lg font-bold text-zinc-900 dark:text-white">Governance Audit Log Timeline</h3>
-            <div className="space-y-4 relative pl-6 border-l-2 border-zinc-200 dark:border-zinc-800">
-              {auditLogs.map((log) => (
-                <div key={log.id} className="relative space-y-1">
-                  <div className="absolute -left-[31px] top-1 h-3 w-3 rounded-full bg-zinc-900 dark:bg-white" />
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="font-bold text-zinc-900 dark:text-white">{log.action}</span>
-                    <span className="text-zinc-500">{new Date(log.created_at).toLocaleString()}</span>
-                  </div>
-                  <div className="text-xs text-zinc-600 dark:text-zinc-400">By: <strong className="text-zinc-800 dark:text-zinc-200">{log.user_name}</strong></div>
-                  {log.reason && <p className="text-xs text-zinc-500 italic">"{log.reason}"</p>}
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* PREVIEW AS MODAL */}
-      {previewAsModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="w-full max-w-2xl rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-950 shadow-2xl space-y-4">
-            <div className="flex items-center justify-between border-b border-zinc-200 dark:border-zinc-800 pb-3">
-              <h3 className="text-lg font-bold text-zinc-900 dark:text-white flex items-center gap-2">
-                <span>👁️ Preview As: {previewAsModal}</span>
-              </h3>
-              <button onClick={() => setPreviewAsModal(null)} className="text-xs font-bold text-zinc-500 hover:text-zinc-800">✕ Close</button>
-            </div>
-
-            {/* Simulation Logic */}
-            {(previewAsModal === "Brand" || previewAsModal === "Retailer") && item.audience.includes("INTERNAL") && !item.audience.includes("PUBLIC") && !item.audience.includes(previewAsModal.toUpperCase() as any) ? (
-              <div className="p-8 text-center bg-rose-50 border border-rose-200 rounded-xl text-rose-800 dark:bg-rose-950/40 dark:border-rose-900 dark:text-rose-200 space-y-2">
-                <div className="text-xl font-bold">🚫 ACCESS DENIED</div>
-                <p className="text-xs">
-                  This knowledge record is configured as <strong>INTERNAL ONLY</strong>. It will be completely excluded from {previewAsModal} search & retrieval queries (0 Items returned).
-                </p>
+                <button
+                  type="button"
+                  onClick={() => setLanguage("EN")}
+                  className={`px-3 py-1 rounded-md transition-colors cursor-pointer ${
+                    language === "EN"
+                      ? "bg-white text-zinc-900 shadow-xs dark:bg-zinc-900 dark:text-white font-bold"
+                      : "text-zinc-500 hover:text-zinc-900 dark:text-zinc-400"
+                  }`}
+                >
+                  EN (English)
+                </button>
               </div>
-            ) : (
-              <div className="p-4 rounded-xl border border-zinc-200 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900 space-y-3 text-xs">
-                <div className="font-bold text-sm text-zinc-900 dark:text-white">{item.title_ko || item.title}</div>
-                <p className="text-zinc-600 dark:text-zinc-400">{item.summary_ko || item.summary_en}</p>
-                <div className="pt-2 text-[10px] text-emerald-600 font-bold">✅ Visible to {previewAsModal} audience</div>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
+            </div>
 
-      {/* CREATE NEW VERSION MODAL */}
-      {newVersionModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="w-full max-w-lg rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-950 shadow-2xl space-y-4">
-            <h3 className="text-lg font-bold text-zinc-900 dark:text-white">Create New Draft Version</h3>
-            <p className="text-xs text-zinc-500">Published version {item.current_version} will remain live until the new draft version is published.</p>
-
-            <div className="space-y-3">
+            {isEditing ? (
               <div>
-                <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-1">What Changed?</label>
-                <input
-                  type="text"
-                  value={whatChanged}
-                  onChange={(e) => setWhatChanged(e.target.value)}
-                  placeholder="e.g. Updated FOB margin threshold to 65%"
-                  className="w-full rounded-lg border border-zinc-300 p-2 text-xs dark:border-zinc-800 dark:bg-zinc-900 text-zinc-900 dark:text-white"
+                <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                  {language === "KO" ? "한국어 본문 수정 (Markdown)" : "English Content (Markdown)"}
+                </label>
+                <textarea
+                  value={language === "KO" ? (editForm.content_ko || "") : (editForm.content_en || "")}
+                  onChange={(e) => {
+                    if (language === "KO") setEditForm({ ...editForm, content_ko: e.target.value });
+                    else setEditForm({ ...editForm, content_en: e.target.value });
+                  }}
+                  rows={16}
+                  className="w-full font-mono text-xs rounded-md border border-zinc-300 p-3 dark:border-zinc-700 dark:bg-zinc-950 text-zinc-900 dark:text-white"
                 />
               </div>
+            ) : (
+              <div className="prose dark:prose-invert max-w-none text-xs text-zinc-800 dark:text-zinc-200 leading-relaxed whitespace-pre-wrap font-sans">
+                {language === "KO"
+                  ? item.content_ko || "한국어 본문이 아직 등록되지 않았습니다."
+                  : item.content_en || "English content is not yet available."}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
+      {/* Tab 2: Access & Audience */}
+      {activeTab === "ACCESS" && (
+        <div className="rounded-xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-900 shadow-sm space-y-6">
+          <h2 className="text-sm font-bold text-zinc-900 dark:text-white border-b border-zinc-100 dark:border-zinc-800 pb-3">
+            Access Control & Distribution Boundary
+          </h2>
+          <div className="space-y-4">
+            <p className="text-xs text-zinc-500">
+              본 지식이 노출 및 배포되는 권한 그룹과 보안 설정입니다.
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className={`p-4 rounded-lg border ${item.audience?.includes("INTERNAL") ? "border-slate-300 bg-slate-50 dark:border-slate-700 dark:bg-slate-900" : "border-zinc-200 opacity-40"}`}>
+                <div className="flex items-center gap-2">
+                  <span className="font-bold text-xs">Internal / Admin</span>
+                  {item.audience?.includes("INTERNAL") && <span className="text-xs text-emerald-600 font-bold">✓ 허용</span>}
+                </div>
+                <p className="mt-1 text-[11px] text-zinc-500">어드민 및 내부 임직원 전용 지식</p>
+              </div>
+
+              <div className={`p-4 rounded-lg border ${item.audience?.includes("BRAND") ? "border-blue-300 bg-blue-50 dark:border-blue-700 dark:bg-blue-950/20" : "border-zinc-200 opacity-40"}`}>
+                <div className="flex items-center gap-2">
+                  <span className="font-bold text-xs">Brand Portal</span>
+                  {item.audience?.includes("BRAND") && <span className="text-xs text-emerald-600 font-bold">✓ 허용</span>}
+                </div>
+                <p className="mt-1 text-[11px] text-zinc-500">브랜드사 파트너 포털 배포 대상</p>
+              </div>
+
+              <div className={`p-4 rounded-lg border ${item.audience?.includes("RETAILER") ? "border-purple-300 bg-purple-50 dark:border-purple-700 dark:bg-purple-950/20" : "border-zinc-200 opacity-40"}`}>
+                <div className="flex items-center gap-2">
+                  <span className="font-bold text-xs">Retail Portal</span>
+                  {item.audience?.includes("RETAILER") && <span className="text-xs text-emerald-600 font-bold">✓ 허용</span>}
+                </div>
+                <p className="mt-1 text-[11px] text-zinc-500">미국 리테일러/바이어 포털 배포 대상</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Tab 3: Versions */}
+      {activeTab === "VERSIONS" && (
+        <div className="rounded-xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-900 shadow-sm space-y-6">
+          <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-3">
+            <div>
+              <h2 className="text-sm font-bold text-zinc-900 dark:text-white">
+                Version History
+              </h2>
+              <p className="text-xs text-zinc-500">지식의 공식 버전 개정 이력입니다.</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setNewVersionModal(true)}
+              className="rounded-md bg-[#131E2E] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#1f3047] cursor-pointer"
+            >
+              + 새 버전 생성
+            </button>
+          </div>
+
+          <div className="space-y-4">
+            {versions.length === 0 ? (
+              <p className="text-xs text-zinc-400 py-6 text-center">버전 이력이 없습니다. 현재 버전: {item.current_version || "v1.0"}</p>
+            ) : (
+              versions.map((v) => (
+                <div key={v.id} className="p-4 rounded-lg border border-zinc-200 dark:border-zinc-800 flex items-center justify-between">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono font-bold text-xs text-zinc-900 dark:text-white">{v.version}</span>
+                      {getStatusBadge(v.status)}
+                      <span className="text-xs text-zinc-400">&bull; {new Date(v.created_at).toLocaleDateString()}</span>
+                    </div>
+                    <p className="text-xs text-zinc-700 dark:text-zinc-300 font-semibold mt-1">{v.what_changed || v.title_ko}</p>
+                    {v.why_changed && <p className="text-[11px] text-zinc-500 mt-0.5">사유: {v.why_changed}</p>}
+                  </div>
+                  {v.status === "DRAFT" && (
+                    <button
+                      type="button"
+                      onClick={() => handlePublishVersion(v.version)}
+                      className="rounded bg-emerald-600 px-3 py-1 text-xs font-semibold text-white hover:bg-emerald-700 cursor-pointer"
+                    >
+                      공식 배포 (Publish)
+                    </button>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Tab 4: Activity Logs */}
+      {activeTab === "ACTIVITY" && (
+        <div className="rounded-xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-900 shadow-sm space-y-4">
+          <h2 className="text-sm font-bold text-zinc-900 dark:text-white border-b border-zinc-100 dark:border-zinc-800 pb-3">
+            Activity & Audit Logs
+          </h2>
+          <div className="divide-y divide-zinc-100 dark:divide-zinc-800 text-xs">
+            {auditLogs.length === 0 ? (
+              <p className="py-6 text-center text-zinc-400">활동 기록이 없습니다.</p>
+            ) : (
+              auditLogs.map((log) => (
+                <div key={log.id} className="py-3 flex items-center justify-between">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-zinc-900 dark:text-white">{log.action}</span>
+                      <span className="text-zinc-400 text-[11px]">&bull; {log.user_name || "Admin"}</span>
+                    </div>
+                    {log.reason && <p className="text-zinc-500 text-[11px] mt-0.5">{log.reason}</p>}
+                  </div>
+                  <span className="text-zinc-400 text-[11px]">{new Date(log.created_at).toLocaleString()}</span>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Create New Version */}
+      {newVersionModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-md rounded-xl bg-white p-6 dark:bg-zinc-900 shadow-xl space-y-4">
+            <h3 className="text-sm font-bold text-zinc-900 dark:text-white">
+              + 새 버전 생성 (Create New Version)
+            </h3>
+            <p className="text-xs text-zinc-500">
+              기존 지식을 개정하기 위해 새 드래프트 버전을 생성합니다.
+            </p>
+            <div className="space-y-3">
               <div>
-                <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-1">Why Changed?</label>
+                <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                  버전 번호 (예: v1.1, v2.0)
+                </label>
+                <input
+                  type="text"
+                  value={newVersionString}
+                  onChange={(e) => setNewVersionString(e.target.value)}
+                  placeholder="v1.1"
+                  className="w-full rounded border border-zinc-300 p-2 text-xs dark:border-zinc-700 dark:bg-zinc-950 font-mono"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                  변경 내용 (What changed) <span className="text-rose-500">*</span>
+                </label>
+                <textarea
+                  value={whatChanged}
+                  onChange={(e) => setWhatChanged(e.target.value)}
+                  rows={2}
+                  placeholder="개정된 정책 및 수정 사항을 요약해 주세요."
+                  className="w-full rounded border border-zinc-300 p-2 text-xs dark:border-zinc-700 dark:bg-zinc-950"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                  개정 사유 (Why changed) <span className="text-rose-500">*</span>
+                </label>
                 <textarea
                   value={whyChanged}
                   onChange={(e) => setWhyChanged(e.target.value)}
-                  placeholder="e.g. Compliance adaptation under MoCRA rules"
-                  rows={3}
-                  className="w-full rounded-lg border border-zinc-300 p-2 text-xs dark:border-zinc-800 dark:bg-zinc-900 text-zinc-900 dark:text-white"
+                  rows={2}
+                  placeholder="정책 변경, 프로세스 개선 등 개정 사유를 입력해 주세요."
+                  className="w-full rounded border border-zinc-300 p-2 text-xs dark:border-zinc-700 dark:bg-zinc-950"
                 />
               </div>
             </div>
-
-            <div className="flex items-center justify-end gap-2 pt-2">
-              <button onClick={() => setNewVersionModal(false)} className="rounded-lg border border-zinc-300 px-3 py-1.5 text-xs font-semibold text-zinc-700">Cancel</button>
-              <button onClick={handleCreateNewVersion} className="rounded-lg bg-zinc-900 px-4 py-1.5 text-xs font-semibold text-white dark:bg-white dark:text-zinc-900">Create Draft</button>
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-zinc-100 dark:border-zinc-800">
+              <button
+                type="button"
+                onClick={() => setNewVersionModal(false)}
+                className="rounded px-3 py-1.5 text-xs text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 cursor-pointer"
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                onClick={handleCreateNewVersion}
+                className="rounded bg-[#131E2E] px-4 py-1.5 text-xs font-semibold text-white hover:bg-[#1f3047] cursor-pointer"
+              >
+                버전 생성
+              </button>
             </div>
           </div>
         </div>

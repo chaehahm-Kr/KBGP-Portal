@@ -9,7 +9,6 @@ export default function KnowledgeNavTabs() {
   const tabs = [
     { name: "Overview", href: "/admin/knowledge", isExact: true },
     { name: "Library", href: "/admin/knowledge/library", isExact: false },
-    { name: "Review & Updates", href: "/admin/knowledge/review", isExact: false },
   ];
 
   return (

@@ -130,7 +130,10 @@ export async function searchKnowledgeCore(
       candidatePool = candidatePool.filter(item => item.audience.includes(filters.audience as AudienceType));
     }
     if (filters.module && filters.module !== "ALL") {
-      candidatePool = candidatePool.filter(item => item.category === filters.module);
+      const modLower = filters.module.toLowerCase();
+      candidatePool = candidatePool.filter(
+        item => (item.module && item.module.toLowerCase() === modLower) || (item.category && item.category.toLowerCase() === modLower)
+      );
     }
     if (filters.language && filters.language !== "ALL") {
       if (filters.language === "KO") candidatePool = candidatePool.filter(i => Boolean(i.title_ko && i.content_ko));

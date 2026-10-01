@@ -30,6 +30,10 @@ export function initSeedData() {
   memoryItems = [
     {
       id: "kno-insights-manual-v10",
+      document_url: "/api/admin/knowledge/asset/asset-insights-manual-v10",
+      document_name: "K_SELECT_INSIGHTS_실무자_운영_메뉴얼_v1.0.pdf",
+      document_size: 7239179,
+      document_type: "application/pdf",
       slug: "k-select-insights-operational-manual-v1",
       title: "K SELECT INSIGHTS 실무자 운영 매뉴얼 v1.0",
       title_ko: "K SELECT INSIGHTS 실무자 운영 매뉴얼",
@@ -66,6 +70,7 @@ K SELECT INSIGHTS is a Daily Auto Insight Engine + Editorial Control Center scan
 > **One Sentence to Remember**: AI handles research and drafting; final Editorial Authority belongs to humans.`,
       type: "MANUAL",
       source_type: "CONTENT",
+      module: "INSIGHTS",
       category: "INSIGHTS",
       tags: ["INSIGHTS", "MANUAL", "OPERATIONS", "INTERNAL"],
       owner_id: "staff-admin-01",
@@ -115,6 +120,7 @@ Core system rule for K SELECT INSIGHTS Daily Auto Engine qualification and draft
       linked_system_setting_key: "insights_daily_auto_rule",
       linked_system_setting_name: "Insights Editorial Rules → Daily Auto Insight Configuration",
       linked_system_setting_value: "05:00 ET | Score 80+ | Max 3 Drafts",
+      module: "INSIGHTS",
       category: "INSIGHTS",
       tags: ["INSIGHTS", "SYSTEM_RULE", "HYBRID", "Topic Score", "Automation", "Quota"],
       owner_id: "staff-admin-01",
@@ -140,6 +146,7 @@ Core system rule for K SELECT INSIGHTS Daily Auto Engine qualification and draft
       summary_en: "Fact check and risk review policy categorizing HIGH, MEDIUM, and LOW risk claims.",
       type: "POLICY",
       source_type: "CONTENT",
+      module: "INSIGHTS",
       category: "INSIGHTS",
       tags: ["INSIGHTS", "POLICY", "Fact Check", "Risk Review", "Evidence"],
       owner_id: "staff-admin-01",
@@ -189,6 +196,7 @@ Fact Check & Risk Review guidelines for claims in K SELECT INSIGHTS.
       summary_en: "Detailed definitions for 6 Insight Claim Status types.",
       type: "DEFINITION",
       source_type: "CONTENT",
+      module: "INSIGHTS",
       category: "INSIGHTS",
       tags: ["INSIGHTS", "DEFINITION", "Claim Status", "Fact Check"],
       owner_id: "staff-admin-01",
@@ -233,6 +241,7 @@ Definitions for 6 Insight Claim Status types:
       summary_en: "Decision criteria for GO/FIX/STOP and specific revision request writing principles.",
       type: "SOP",
       source_type: "CONTENT",
+      module: "INSIGHTS",
       category: "INSIGHTS",
       tags: ["INSIGHTS", "SOP", "Approve", "Revision", "Reject"],
       owner_id: "staff-admin-01",
@@ -286,6 +295,7 @@ Do not ask to rewrite completely. Specify:
       summary_en: "Operational guide for Automation Run status codes and the \"0 Draft Day ≠ Failure\" principle.",
       type: "GUIDE",
       source_type: "CONTENT",
+      module: "INSIGHTS",
       category: "INSIGHTS",
       tags: ["INSIGHTS", "GUIDE", "Automation Run", "Automation"],
       owner_id: "staff-admin-01",
@@ -336,6 +346,7 @@ No qualifying candidates today is normal if no topic passes 80+ threshold.`
       summary_en: "Six strict prohibition rules for INSIGHTS internal editors.",
       type: "POLICY",
       source_type: "CONTENT",
+      module: "INSIGHTS",
       category: "INSIGHTS",
       tags: ["INSIGHTS", "POLICY", "Prohibitions", "Compliance", "Internal"],
       owner_id: "staff-admin-01",
@@ -385,6 +396,7 @@ Six strict prohibition rules for K SELECT INSIGHTS internal editors.
       linked_system_setting_key: "simulator_config_rule",
       linked_system_setting_name: "Growth Simulator Configuration Rules",
       linked_system_setting_value: "Default COGS 40% | Platform Fee 15% | Target Net Margin 20%",
+      module: "SIMULATOR",
       category: "SIMULATOR",
       tags: ["SIMULATOR", "Growth Simulator", "SYSTEM_RULE", "Margin", "Profitability"],
       owner_id: "staff-admin-01",
@@ -430,6 +442,7 @@ Growth Simulator guides K-Beauty brand profitability and margin modeling for US 
       summary_en: "Execution guide for profitability simulation, scenario analysis, and result interpretation.",
       type: "GUIDE",
       source_type: "CONTENT",
+      module: "SIMULATOR",
       category: "SIMULATOR",
       tags: ["SIMULATOR", "Growth Simulator", "GUIDE", "Profitability", "Scenario"],
       owner_id: "staff-admin-01",
@@ -469,6 +482,7 @@ Execution guide for Growth Simulator sandbox calculations.`
       content_en: `## 1. Overview\nStandard procedure for internal managers verifying new brand applications.`,
       type: "SOP",
       source_type: "CONTENT",
+      module: "OPERATIONS",
       category: "OPERATIONS",
       tags: ["SOP", "Internal", "Sourcing", "Verification"],
       owner_id: "staff-admin-01",
@@ -496,6 +510,7 @@ Execution guide for Growth Simulator sandbox calculations.`
       content_en: `## Q1. What are the qualification criteria?\nKorean cosmetic brands with FDA registration.`,
       type: "FAQ",
       source_type: "CONTENT",
+      module: "ONBOARDING",
       category: "ONBOARDING",
       tags: ["FAQ", "Brand", "Onboarding", "Registration"],
       owner_id: "staff-admin-02",
@@ -685,7 +700,14 @@ export async function getStoreKnowledgeItems(): Promise<KnowledgeItem[]> {
     if (!error && data) {
       const mergedMap = new Map<string, KnowledgeItem>();
       memoryItems.forEach((item) => mergedMap.set(item.id, item));
-      data.forEach((item: any) => mergedMap.set(item.id, item as KnowledgeItem));
+      data.forEach((item: any) => {
+        const fullItem = {
+          ...item,
+          module: item.module || item.category || "General",
+          category: item.category || item.module || "General"
+        } as KnowledgeItem;
+        mergedMap.set(item.id, fullItem);
+      });
       return Array.from(mergedMap.values()).sort(
         (a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
       );

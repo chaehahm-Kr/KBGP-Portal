@@ -11,9 +11,7 @@ export default function OverviewView() {
     metrics: {
       publishedCount: number;
       draftCount: number;
-      needsReviewCount: number;
-      externalApprovalCount: number;
-      outdatedCount: number;
+      archivedCount: number;
       totalCount: number;
     };
     needsAttention: KnowledgeItem[];
@@ -43,226 +41,217 @@ export default function OverviewView() {
   if (loading) {
     return (
       <div className="space-y-6">
+        <KnowledgeNavTabs />
         <div className="h-8 w-64 bg-zinc-200 dark:bg-zinc-800 rounded animate-pulse" />
-        <div className="grid grid-cols-5 gap-4">
-          {[1, 2, 3, 4, 5].map((i) => (
-            <div key={i} className="h-24 bg-zinc-100 dark:bg-zinc-900 rounded-lg animate-pulse" />
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="h-28 bg-zinc-100 dark:bg-zinc-900 rounded-xl animate-pulse" />
           ))}
         </div>
       </div>
     );
   }
 
-  const metrics = data?.metrics || {
-    publishedCount: 0,
-    draftCount: 0,
-    needsReviewCount: 0,
-    externalApprovalCount: 0,
-    outdatedCount: 0,
-    totalCount: 0
+  const items = data?.items || [];
+  const publishedCount = items.filter((i) => i.status === "PUBLISHED").length;
+  const draftCount = items.filter((i) => i.status === "DRAFT" || i.status === "IN_REVIEW").length;
+  const archivedCount = items.filter((i) => i.status === "ARCHIVED" || i.status === "SUPERSEDED").length;
+
+  const recentlyUpdated = data?.recentlyUpdated || items.slice(0, 6);
+  const needsAttention = data?.needsAttention || items.filter(i => i.status === "DRAFT" || i.status === "IN_REVIEW").slice(0, 6);
+
+  const getTypeBadge = (type: string) => {
+    return (
+      <span className="rounded-md bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 text-[11px] font-semibold text-zinc-750 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700">
+        {type}
+      </span>
+    );
   };
 
   return (
     <div className="space-y-8">
       <KnowledgeNavTabs />
+
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-zinc-200 dark:border-zinc-800 pb-5">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-zinc-200 dark:border-zinc-800 pb-5">
         <div>
           <div className="flex items-center gap-3">
             <h1 className="text-2xl font-bold tracking-tight text-zinc-900 dark:text-white">
-              Knowledge Center Overview
+              Knowledge Center
             </h1>
-            <span className="rounded-full bg-zinc-100 dark:bg-zinc-800 px-2.5 py-0.5 text-xs font-semibold text-zinc-700 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700">
-              Phase 1 Governance Foundation
+            <span className="rounded-full bg-emerald-50 dark:bg-emerald-950/40 px-2.5 py-0.5 text-xs font-semibold text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+              Source of Truth
             </span>
           </div>
           <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-            Source of Truth governance dashboard for platform Manuals, Policies, SOPs, FAQs & System Rules.
+            K SELECT NETWORK의 공식 매뉴얼, 정책, 가이드, FAQ를 관리하는 중앙 지식 센터입니다.
           </p>
         </div>
         <Link
           href="/admin/knowledge/new"
-          className="inline-flex items-center gap-2 rounded-lg bg-zinc-900 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-100 transition-colors"
+          className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#131E2E] px-4 py-2.5 text-xs font-semibold text-white shadow-sm hover:bg-[#1f3047] dark:bg-white dark:text-[#131E2E] dark:hover:bg-zinc-100 transition-colors shrink-0"
         >
           <span>+ Create Knowledge</span>
         </Link>
       </div>
 
-      {/* Metric Cards Summary */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4">
-        <div className="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-950 shadow-sm">
-          <div className="text-xs font-semibold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
-            Published
-          </div>
-          <div className="mt-2 flex items-baseline justify-between">
-            <span className="text-3xl font-bold text-zinc-900 dark:text-white">
-              {metrics.publishedCount}
+      {/* Simplified Metric Cards (Published / Draft / Archived) */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+        {/* Published */}
+        <Link
+          href="/admin/knowledge/library?status=PUBLISHED"
+          className="group rounded-xl border border-zinc-200 bg-white p-6 shadow-sm hover:shadow-md hover:border-emerald-500 transition-all dark:border-zinc-800 dark:bg-zinc-900"
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
+              Published
             </span>
-            <span className="text-xs text-zinc-500">Source of Truth</span>
+            <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
           </div>
-        </div>
+          <div className="mt-3 flex items-baseline justify-between">
+            <span className="text-3xl font-extrabold text-zinc-900 dark:text-white">
+              {publishedCount}
+            </span>
+            <span className="text-xs text-zinc-400 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 font-semibold transition-colors">
+              View All &rarr;
+            </span>
+          </div>
+          <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
+            현재 공식 배포 및 운영 중인 지식
+          </p>
+        </Link>
 
-        <div className="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-950 shadow-sm">
-          <div className="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
-            Draft
-          </div>
-          <div className="mt-2 flex items-baseline justify-between">
-            <span className="text-3xl font-bold text-zinc-900 dark:text-white">
-              {metrics.draftCount}
+        {/* Draft */}
+        <Link
+          href="/admin/knowledge/library?status=DRAFT"
+          className="group rounded-xl border border-zinc-200 bg-white p-6 shadow-sm hover:shadow-md hover:border-zinc-400 transition-all dark:border-zinc-800 dark:bg-zinc-900"
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold uppercase tracking-wider text-zinc-600 dark:text-zinc-400">
+              Draft
             </span>
-            <span className="text-xs text-zinc-500">In Progress</span>
+            <span className="h-2.5 w-2.5 rounded-full bg-zinc-400" />
           </div>
-        </div>
+          <div className="mt-3 flex items-baseline justify-between">
+            <span className="text-3xl font-extrabold text-zinc-900 dark:text-white">
+              {draftCount}
+            </span>
+            <span className="text-xs text-zinc-400 group-hover:text-zinc-700 dark:group-hover:text-zinc-200 font-semibold transition-colors">
+              View All &rarr;
+            </span>
+          </div>
+          <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
+            작성 중이거나 검토 대기 중인 지식
+          </p>
+        </Link>
 
-        <div className="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-950 shadow-sm">
-          <div className="text-xs font-semibold uppercase tracking-wider text-amber-600 dark:text-amber-400">
-            Needs Review
-          </div>
-          <div className="mt-2 flex items-baseline justify-between">
-            <span className="text-3xl font-bold text-zinc-900 dark:text-white">
-              {metrics.needsReviewCount}
+        {/* Archived */}
+        <Link
+          href="/admin/knowledge/library?status=ARCHIVED"
+          className="group rounded-xl border border-zinc-200 bg-white p-6 shadow-sm hover:shadow-md hover:border-amber-500 transition-all dark:border-zinc-800 dark:bg-zinc-900"
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">
+              Archived
             </span>
-            <span className="text-xs text-zinc-500">Queue Active</span>
+            <span className="h-2.5 w-2.5 rounded-full bg-amber-400" />
           </div>
-        </div>
-
-        <div className="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-950 shadow-sm">
-          <div className="text-xs font-semibold uppercase tracking-wider text-blue-600 dark:text-blue-400">
-            External Approval
-          </div>
-          <div className="mt-2 flex items-baseline justify-between">
-            <span className="text-3xl font-bold text-zinc-900 dark:text-white">
-              {metrics.externalApprovalCount}
+          <div className="mt-3 flex items-baseline justify-between">
+            <span className="text-3xl font-extrabold text-zinc-900 dark:text-white">
+              {archivedCount}
             </span>
-            <span className="text-xs text-zinc-500">Guard Required</span>
-          </div>
-        </div>
-
-        <div className="rounded-xl border border-amber-200 bg-amber-50/50 p-5 dark:border-amber-900/40 dark:bg-amber-950/20 shadow-sm">
-          <div className="text-xs font-semibold uppercase tracking-wider text-rose-600 dark:text-rose-400">
-            Outdated / Impacted
-          </div>
-          <div className="mt-2 flex items-baseline justify-between">
-            <span className="text-3xl font-bold text-rose-600 dark:text-rose-400">
-              {metrics.outdatedCount}
+            <span className="text-xs text-zinc-400 group-hover:text-amber-600 dark:group-hover:text-amber-400 font-semibold transition-colors">
+              View All &rarr;
             </span>
-            <span className="text-xs text-rose-500 font-medium">System Impact</span>
           </div>
-        </div>
+          <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
+            구버전 대체 또는 보관 처리된 지식
+          </p>
+        </Link>
       </div>
 
-      {/* Main Content Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Needs Your Attention List */}
-        <div className="lg:col-span-2 space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-bold text-zinc-900 dark:text-white flex items-center gap-2">
-              <span className="h-2 w-2 rounded-full bg-amber-500"></span>
-              Needs Your Attention
+      {/* Two Column Grid: Recently Updated & Needs Attention */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Recently Updated */}
+        <div className="rounded-xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-900 shadow-sm">
+          <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-4">
+            <h2 className="text-sm font-bold text-zinc-900 dark:text-white">
+              Recently Updated
             </h2>
-            <Link href="/admin/knowledge/review" className="text-xs font-semibold text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white">
-              View Review Queues →
+            <Link
+              href="/admin/knowledge/library"
+              className="text-xs font-semibold text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white"
+            >
+              전체 보기 &rarr;
             </Link>
           </div>
-
-          <div className="rounded-xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950 divide-y divide-zinc-100 dark:divide-zinc-900 shadow-sm overflow-hidden">
-            {data?.needsAttention && data.needsAttention.length > 0 ? (
-              data.needsAttention.map((item) => (
-                <div key={item.id} className="p-4 flex items-center justify-between hover:bg-zinc-50 dark:hover:bg-zinc-900/50 transition-colors">
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <span className="rounded px-2 py-0.5 text-[10px] font-bold bg-zinc-100 text-zinc-800 dark:bg-zinc-800 dark:text-zinc-200">
-                        {item.type}
-                      </span>
-                      {item.system_impact_status === "POTENTIALLY_OUTDATED" && (
-                        <span className="rounded px-2 py-0.5 text-[10px] font-bold bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300 border border-rose-200 dark:border-rose-800">
-                          SYSTEM CHANGE IMPACT
-                        </span>
-                      )}
-                      {item.external_review_status === "REQUESTED" && (
-                        <span className="rounded px-2 py-0.5 text-[10px] font-bold bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300">
-                          APPROVAL PENDING
-                        </span>
-                      )}
-                      {item.is_sensitive_internal && (
-                        <span className="rounded px-2 py-0.5 text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300">
-                          SENSITIVE INTERNAL
-                        </span>
-                      )}
-                    </div>
+          <div className="divide-y divide-zinc-100 dark:divide-zinc-800 mt-2">
+            {recentlyUpdated.length === 0 ? (
+              <p className="py-8 text-center text-xs text-zinc-400">업데이트 내역이 없습니다.</p>
+            ) : (
+              recentlyUpdated.slice(0, 5).map((item) => (
+                <div key={item.id} className="py-3.5 flex items-center justify-between gap-4">
+                  <div className="min-w-0 flex-1">
                     <Link
                       href={`/admin/knowledge/${item.id}`}
-                      className="text-sm font-semibold text-zinc-900 dark:text-white hover:underline block"
+                      className="text-xs font-bold text-zinc-900 hover:underline dark:text-white block truncate"
                     >
-                      {item.title_ko || item.title}
+                      {item.title}
                     </Link>
-                    <p className="text-xs text-zinc-500 dark:text-zinc-400 line-clamp-1">
-                      {item.system_impact_reason || item.summary_ko || item.summary_en || "Requires review"}
-                    </p>
+                    <div className="mt-1 flex items-center gap-2 text-[11px] text-zinc-500">
+                      <span>{item.module || item.category || "General"}</span>
+                      <span>&bull;</span>
+                      <span>{item.current_version || "v1.0"}</span>
+                      <span>&bull;</span>
+                      <span>{new Date(item.updated_at).toLocaleDateString()}</span>
+                    </div>
                   </div>
-                  <Link
-                    href={`/admin/knowledge/${item.id}`}
-                    className="shrink-0 rounded border border-zinc-200 px-3 py-1.5 text-xs font-semibold text-zinc-700 hover:bg-zinc-100 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-900"
-                  >
-                    Review
-                  </Link>
+                  {getTypeBadge(item.type)}
                 </div>
               ))
-            ) : (
-              <div className="p-8 text-center text-sm text-zinc-500">
-                ✨ No items currently require immediate attention!
-              </div>
             )}
           </div>
         </div>
 
-        {/* Recently Updated Column */}
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-bold text-zinc-900 dark:text-white flex items-center gap-2">
-              <span className="h-2 w-2 rounded-full bg-emerald-500"></span>
-              Recently Updated
+        {/* Needs Attention */}
+        <div className="rounded-xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-900 shadow-sm">
+          <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-4">
+            <h2 className="text-sm font-bold text-zinc-900 dark:text-white">
+              Needs Attention
             </h2>
-            <Link href="/admin/knowledge/library" className="text-xs font-semibold text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white">
-              View All Library →
-            </Link>
+            <span className="text-xs text-zinc-400 font-semibold">
+              {needsAttention.length}건
+            </span>
           </div>
-
-          <div className="rounded-xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950 divide-y divide-zinc-100 dark:divide-zinc-900 shadow-sm overflow-hidden">
-            {data?.recentlyUpdated && data.recentlyUpdated.length > 0 ? (
-              data.recentlyUpdated.map((item) => (
-                <Link
-                  key={item.id}
-                  href={`/admin/knowledge/${item.id}`}
-                  className="p-4 block hover:bg-zinc-50 dark:hover:bg-zinc-900/50 transition-colors"
-                >
-                  <div className="flex items-center justify-between text-xs text-zinc-500 mb-1">
-                    <span className="font-semibold text-zinc-700 dark:text-zinc-300">{item.current_version}</span>
-                    <span>{new Date(item.updated_at).toLocaleDateString()}</span>
-                  </div>
-                  <h3 className="text-sm font-semibold text-zinc-900 dark:text-white line-clamp-1">
-                    {item.title_ko || item.title}
-                  </h3>
-                  <div className="mt-2 flex items-center gap-1.5">
-                    {item.audience.map((aud) => (
-                      <span
-                        key={aud}
-                        className={`rounded px-1.5 py-0.5 text-[9px] font-bold ${
-                          aud === "INTERNAL"
-                            ? "bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300"
-                            : "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
-                        }`}
-                      >
-                        {aud}
-                      </span>
-                    ))}
-                  </div>
-                </Link>
-              ))
+          <div className="divide-y divide-zinc-100 dark:divide-zinc-800 mt-2">
+            {needsAttention.length === 0 ? (
+              <p className="py-8 text-center text-xs text-zinc-400">확인이 필요한 항목이 없습니다.</p>
             ) : (
-              <div className="p-8 text-center text-sm text-zinc-500">
-                No recent updates found.
-              </div>
+              needsAttention.slice(0, 5).map((item) => (
+                <div key={item.id} className="py-3.5 flex items-center justify-between gap-4">
+                  <div className="min-w-0 flex-1">
+                    <Link
+                      href={`/admin/knowledge/${item.id}`}
+                      className="text-xs font-bold text-zinc-900 hover:underline dark:text-white block truncate"
+                    >
+                      {item.title}
+                    </Link>
+                    <div className="mt-1 flex items-center gap-2 text-[11px] text-zinc-500">
+                      <span className="font-semibold text-amber-600 dark:text-amber-400">
+                        {item.status === "DRAFT" ? "작성 중" : item.status === "IN_REVIEW" ? "검토 대기" : "확인 필요"}
+                      </span>
+                      <span>&bull;</span>
+                      <span>{item.module || item.category || "General"}</span>
+                    </div>
+                  </div>
+                  <Link
+                    href={`/admin/knowledge/${item.id}`}
+                    className="rounded-md bg-zinc-100 dark:bg-zinc-800 px-2.5 py-1 text-xs font-semibold text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors shrink-0"
+                  >
+                    확인
+                  </Link>
+                </div>
+              ))
             )}
           </div>
         </div>

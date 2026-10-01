@@ -35,6 +35,7 @@ export interface KnowledgeItem {
   linked_system_setting_key?: string | null;
   linked_system_setting_name?: string | null;
   linked_system_setting_value?: string | null;
+  module: string;
   category: string;
   tags: string[];
   owner_id?: string | null;
@@ -51,6 +52,10 @@ export interface KnowledgeItem {
   external_reviewed_at?: string | null;
   current_version: string;
   effective_date: string;
+  document_url?: string | null;
+  document_name?: string | null;
+  document_size?: number | null;
+  document_type?: string | null;
   created_at: string;
   updated_at: string;
 }

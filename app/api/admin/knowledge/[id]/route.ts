@@ -72,6 +72,8 @@ export async function PATCH(
       external_review_status = "REQUESTED";
     }
 
+    const updatedModule = body.module !== undefined ? body.module : (body.category !== undefined ? body.category : (item.module || item.category || "General"));
+
     const updatedItem: KnowledgeItem = {
       ...item,
       title: body.title !== undefined ? body.title : item.title,
@@ -86,13 +88,18 @@ export async function PATCH(
       linked_system_setting_key: body.linked_system_setting_key !== undefined ? body.linked_system_setting_key : item.linked_system_setting_key,
       linked_system_setting_name: body.linked_system_setting_name !== undefined ? body.linked_system_setting_name : item.linked_system_setting_name,
       linked_system_setting_value: body.linked_system_setting_value !== undefined ? body.linked_system_setting_value : item.linked_system_setting_value,
-      category: body.category !== undefined ? body.category : item.category,
+      module: updatedModule,
+      category: updatedModule,
       tags: body.tags !== undefined ? body.tags : item.tags,
       status: body.status !== undefined ? body.status : item.status,
       audience: newAudience,
       is_sensitive_internal: body.is_sensitive_internal !== undefined ? Boolean(body.is_sensitive_internal) : item.is_sensitive_internal,
       requires_external_approval,
       external_review_status,
+      document_url: body.document_url !== undefined ? body.document_url : item.document_url,
+      document_name: body.document_name !== undefined ? body.document_name : item.document_name,
+      document_size: body.document_size !== undefined ? body.document_size : item.document_size,
+      document_type: body.document_type !== undefined ? body.document_type : item.document_type,
       updated_at: now
     };
 
