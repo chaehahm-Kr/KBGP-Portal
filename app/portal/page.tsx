@@ -398,7 +398,7 @@ export default async function PortalHomePage() {
     .from("brands")
     .select("id, name, is_active")
     .eq("company_id", companyId);
-  const brandList = rawBrands ?? [];
+  const brandList = (rawBrands ?? []).filter((b) => b.is_active !== false);
   const isBrandComplete = brandList.length > 0;
   const primaryBrandName = brandList[0]?.name || null;
 
@@ -432,7 +432,7 @@ export default async function PortalHomePage() {
   );
   const teamSkipped = Boolean(parsedMeta.team_onboarding_skipped);
   const isTeamComplete = teamCount > 1 || teamSkipped;
-  const isBrandConfirmed = Boolean(parsedMeta.brand_onboarding_confirmed_at);
+  const isBrandConfirmed = Boolean(parsedMeta.brand_onboarding_confirmed_at && brandList.length > 0);
 
   let taskSetupStatus = { completedCount: 0, totalCount: 6, percent: 0 };
   try {

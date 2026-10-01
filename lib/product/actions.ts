@@ -168,7 +168,20 @@ export async function createProduct(
   if (isDraft) {
     // DRAFT SAVE PATH: Enforce 4 minimum fields (brand, category, manufactureSku, nameEn)
     const fieldErrors: Record<string, string> = {};
-    if (!rawBrandId) fieldErrors.brandId = "임시 저장을 위해 브랜드를 선택해 주세요.";
+    if (!rawBrandId) {
+      fieldErrors.brandId = "임시 저장을 위해 브랜드를 선택해 주세요.";
+    } else {
+      const { data: brandCheck } = await supabase
+        .from("brands")
+        .select("id, is_active")
+        .eq("id", rawBrandId)
+        .eq("company_id", companyId)
+        .maybeSingle();
+
+      if (!brandCheck || brandCheck.is_active === false) {
+        fieldErrors.brandId = "선택하신 브랜드는 사용 중단(Inactive) 상태이거나 유효하지 않습니다. 활성 브랜드를 선택해 주세요.";
+      }
+    }
     if (!rawCategory || !validCategories.includes(rawCategory as ProductCategory)) {
       fieldErrors.category = "임시 저장을 위해 카테고리를 선택해 주세요.";
     }
