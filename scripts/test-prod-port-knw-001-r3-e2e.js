@@ -108,7 +108,7 @@ async function run() {
         await page.waitForTimeout(600);
 
         const expandedBody = await page.textContent('body');
-        const hasPolicyCitation = expandedBody.includes('MAN-BRAND-001') || expandedBody.includes('Policy 05');
+        const hasPolicyCitation = expandedBody.includes('K SELECT 브랜드 등록 및 관리 정책') || expandedBody.includes('Policy 05') || expandedBody.includes('MAN-BRAND-001');
         console.log('FAQ expanded with official citation:', hasPolicyCitation);
       }
     }
