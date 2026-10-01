@@ -620,99 +620,7 @@ export function HelpCenterMainView({
       )}
 
       {/* ========================================================================= */}
-      {/* SECTION 2: HIGH-VALUE APPROVED FAQS (자주 찾는 질문 - First-Class UX)   */}
-      {/* ========================================================================= */}
-      {faqs.length > 0 && (
-        <div className="space-y-4 pt-2">
-          <div className="flex items-center justify-between">
-            <div className="space-y-1">
-              <h2 className="text-base sm:text-lg font-bold text-zinc-900 dark:text-white flex items-center gap-2">
-                <span>💡 자주 묻는 질문</span>
-                <span className="rounded-full bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 px-2 py-0.5 text-xs font-mono font-bold">
-                  {faqs.length}
-                </span>
-              </h2>
-              <p className="text-xs text-zinc-500">
-                자주 묻는 질문에서 빠르게 해결해 보세요.
-              </p>
-            </div>
-          </div>
-
-          <div className="space-y-2.5">
-            {faqs.slice(0, 8).map((faq) => {
-              const isOpen = openFaqId === faq.id;
-              return (
-                <div
-                  key={faq.id}
-                  className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 overflow-hidden transition-all shadow-xs"
-                >
-                  <button
-                    type="button"
-                    onClick={() => setOpenFaqId(isOpen ? null : faq.id)}
-                    className="w-full text-left p-4 flex items-center justify-between gap-3 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 cursor-pointer transition-colors"
-                  >
-                    <div className="flex items-start gap-2.5">
-                      <span className="text-blue-600 dark:text-blue-400 font-mono font-bold text-sm select-none">
-                        Q.
-                      </span>
-                      <div>
-                        <h3 className="text-xs sm:text-sm font-bold text-zinc-900 dark:text-white leading-snug">
-                          {faq.question_ko}
-                        </h3>
-                        {faq.question_en && (
-                          <p className="text-[11px] text-zinc-400 mt-0.5 font-medium">{faq.question_en}</p>
-                        )}
-                      </div>
-                    </div>
-                    <span
-                      className={`text-zinc-400 text-xs shrink-0 font-bold transition-transform duration-200 ${
-                        isOpen ? "rotate-180" : ""
-                      }`}
-                    >
-                      ▼
-                    </span>
-                  </button>
-
-                  {isOpen && (
-                    <div className="px-4 pb-4 pt-1 text-xs text-zinc-700 dark:text-zinc-300 border-t border-zinc-100 dark:border-zinc-800/60 bg-zinc-50/50 dark:bg-zinc-900/40 space-y-3">
-                      <div className="flex items-start gap-2 pt-2">
-                        <span className="text-emerald-600 dark:text-emerald-400 font-mono font-bold text-sm select-none">
-                          A.
-                        </span>
-                        <div className="space-y-2 leading-relaxed whitespace-pre-wrap flex-1">
-                          <p>{faq.answer_ko}</p>
-                          {faq.answer_en && (
-                            <p className="text-[11px] text-zinc-500 dark:text-zinc-400 pt-1.5 border-t border-zinc-200/60 dark:border-zinc-700/60">
-                              {faq.answer_en}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-
-                      <div className="flex items-center justify-between text-[11px] text-zinc-400 pt-2 border-t border-zinc-200/50 dark:border-zinc-800">
-                        <span className="font-mono">
-                          출처: {faq.source_title || faq.source_knowledge_id} ({faq.source_version})
-                        </span>
-                        {faq.source_knowledge_id && (
-                          <Link
-                            href={`${baseHelpPath}/${faq.source_knowledge_id}`}
-                            className="text-blue-600 hover:text-blue-700 dark:text-blue-400 font-semibold"
-                          >
-                            공식 도움말 보기 &rarr;
-                          </Link>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* ========================================================================= */}
-      {/* SECTION 3: BROWSE BY TOPIC (주제별 도움말)                                */}
+      {/* SECTION 2: BROWSE BY TOPIC (주제별 도움말 - Primary Navigation Layer)      */}
       {/* ========================================================================= */}
       {activeTopics.length > 0 && (
         <div className="space-y-4 pt-2">
@@ -720,8 +628,8 @@ export function HelpCenterMainView({
             <h2 className="text-base sm:text-lg font-bold text-zinc-900 dark:text-white flex items-center gap-2">
               <span>📂 주제별 도움말</span>
             </h2>
-            <p className="text-xs text-zinc-500">
-              업무 영역별로 분류된 공식 가이드 및 정책 도움말을 탐색해 보세요.
+            <p className="text-xs text-zinc-500 dark:text-zinc-400">
+              업무 영역을 선택하면 관련 자주 묻는 질문과 공식 도움말을 확인할 수 있습니다.
             </p>
           </div>
 
@@ -730,11 +638,11 @@ export function HelpCenterMainView({
               const stat = topicStats[topic.id] || { knowledgeCount: 0, faqCount: 0, total: 0 };
               const isSelected = selectedTopicId === topic.id;
 
-              // Format specific count label (Section 15: e.g. "5개 FAQ · 1개 도움말")
+              // Format compact count badge (e.g. "5 FAQ · 1 도움말")
               const countBadgeParts: string[] = [];
-              if (stat.faqCount > 0) countBadgeParts.push(`${stat.faqCount}개 FAQ`);
-              if (stat.knowledgeCount > 0) countBadgeParts.push(`${stat.knowledgeCount}개 도움말`);
-              const countBadgeLabel = countBadgeParts.join(" · ") || `${stat.total}개`;
+              countBadgeParts.push(`${stat.faqCount} FAQ`);
+              countBadgeParts.push(`${stat.knowledgeCount} 도움말`);
+              const countBadgeLabel = countBadgeParts.join(" · ");
 
               return (
                 <button
@@ -750,7 +658,7 @@ export function HelpCenterMainView({
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
                       <span className="text-2xl">{topic.icon}</span>
-                      <span className="rounded-full bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 text-[10px] font-bold text-zinc-600 dark:text-zinc-300">
+                      <span className="rounded-full bg-zinc-100 dark:bg-zinc-800 px-2.5 py-0.5 text-[10px] font-bold text-zinc-600 dark:text-zinc-300">
                         {countBadgeLabel}
                       </span>
                     </div>
@@ -758,14 +666,14 @@ export function HelpCenterMainView({
                       <h3 className="text-sm font-bold text-zinc-900 dark:text-white leading-snug">
                         {topic.title_ko}
                       </h3>
-                      <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400 line-clamp-2 leading-relaxed">
-                        {topic.description_ko}
+                      <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400 font-medium line-clamp-1 leading-relaxed">
+                        {topic.short_desc_ko || topic.description_ko}
                       </p>
                     </div>
                   </div>
 
                   <div className="mt-3 pt-2.5 border-t border-zinc-100 dark:border-zinc-800/80 flex items-center justify-between text-[11px] text-blue-600 dark:text-blue-400 font-semibold">
-                    <span>도움말 보기</span>
+                    <span>자주 묻는 질문 & 도움말</span>
                     <span>&rarr;</span>
                   </div>
                 </button>
@@ -960,7 +868,7 @@ export function HelpCenterMainView({
       )}
 
       {/* ========================================================================= */}
-      {/* SECTION 5: ALL HELP CONTENT (모든 도움말 - Section 20 Simplification)    */}
+      {/* SECTION 4: ALL HELP CONTENT (모든 도움말 - Section 20 Simplification)    */}
       {/* ========================================================================= */}
       <div className="space-y-4 pt-4 border-t border-zinc-200 dark:border-zinc-800">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -971,7 +879,7 @@ export function HelpCenterMainView({
                 {filteredAllItems.length}
               </span>
             </h2>
-            <p className="text-xs text-zinc-500">
+            <p className="text-xs text-zinc-500 dark:text-zinc-400">
               K SELECT 공식 매뉴얼, 정책 및 가이드를 확인하세요.
             </p>
           </div>
@@ -1120,7 +1028,7 @@ export function HelpCenterMainView({
       </div>
 
       {/* ========================================================================= */}
-      {/* SECTION 6: STILL NEED HELP? (아직 해결되지 않았나요? - Support CTA)      */}
+      {/* SECTION 5: STILL NEED HELP? (아직 해결되지 않았나요? - Support CTA)      */}
       {/* ========================================================================= */}
       <div className="rounded-2xl border border-zinc-200 bg-zinc-50/80 p-6 sm:p-8 dark:border-zinc-800 dark:bg-zinc-900/50 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="space-y-1">

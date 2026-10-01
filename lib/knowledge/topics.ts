@@ -12,6 +12,8 @@ export interface CanonicalTopic {
   key: string;
   title_ko: string;
   title_en: string;
+  short_desc_ko: string;
+  short_desc_en: string;
   description_ko: string;
   description_en: string;
   icon: string;
@@ -26,6 +28,8 @@ export const CANONICAL_BRAND_TOPICS: CanonicalTopic[] = [
     key: "START",
     title_ko: "시작하기",
     title_en: "Getting Started",
+    short_desc_ko: "가입 · 계정 · 기본 온보딩",
+    short_desc_en: "Signup · Account · Onboarding",
     description_ko: "회원가입, 회사 등록, 초기 계정 설정 및 온보딩",
     description_en: "Account registration, company setup, and onboarding guides",
     icon: "🚀",
@@ -38,6 +42,8 @@ export const CANONICAL_BRAND_TOPICS: CanonicalTopic[] = [
     key: "BRAND",
     title_ko: "브랜드 관리",
     title_en: "Brand Management",
+    short_desc_ko: "등록 · 상표권 · 수정 · 사용 중단",
+    short_desc_en: "Registration · Trademark · Inactive",
     description_ko: "브랜드 등록, 상표권 정책, 브랜드 권한 및 사용 중단 정책",
     description_en: "Brand registration, trademark policy, ownership, and deactivation rules",
     icon: "🏷️",
@@ -50,6 +56,8 @@ export const CANONICAL_BRAND_TOPICS: CanonicalTopic[] = [
     key: "PRODUCT",
     title_ko: "상품 등록 & 관리",
     title_en: "Product Management",
+    short_desc_ko: "상품 등록 · SKU · 규격 · 승인",
+    short_desc_en: "Products · SKU · Specs · Approval",
     description_ko: "상품 신규 등록, SKU 관리, 상품 정보 수정 및 브랜드 연결",
     description_en: "Product registration, SKU management, catalog editing, and brand linking",
     icon: "📦",
@@ -62,6 +70,8 @@ export const CANONICAL_BRAND_TOPICS: CanonicalTopic[] = [
     key: "REGULATORY",
     title_ko: "인허가 & 규정",
     title_en: "Regulatory & Compliance",
+    short_desc_ko: "FDA · MoCRA · 라벨 · 통관 인증",
+    short_desc_en: "FDA · MoCRA · Labeling · US Compliance",
     description_ko: "미국 판매 요건, FDA, MoCRA, 라벨링 및 필수 인증 서류",
     description_en: "US market compliance, FDA, MoCRA, labeling, and required certificates",
     icon: "📜",
@@ -74,6 +84,8 @@ export const CANONICAL_BRAND_TOPICS: CanonicalTopic[] = [
     key: "RETAIL",
     title_ko: "입점 & 리테일 네트워크",
     title_en: "Retail Network",
+    short_desc_ko: "바이어 매칭 · 입점 신청 · 유통 채널",
+    short_desc_en: "Buyer Matching · Placement · Channels",
     description_ko: "바이어 매장 입점 신청, 리테일 네트워크 참여 및 테스트 프로그램",
     description_en: "Retail store applications, distribution network, and testing opportunities",
     icon: "🏬",
@@ -86,6 +98,8 @@ export const CANONICAL_BRAND_TOPICS: CanonicalTopic[] = [
     key: "ORDERS",
     title_ko: "발주 요청 & 오더",
     title_en: "Orders & PO",
+    short_desc_ko: "발주서 · PO 접수 · 납기 관리",
+    short_desc_en: "Purchase Orders · PO · Lead Time",
     description_ko: "리테일러 발주 요청(Request) 확인, 수락 및 정식 발주서(PO) 처리",
     description_en: "Retailer purchase requests, acceptance, and formal Purchase Order (PO) workflow",
     icon: "📋",
@@ -98,6 +112,8 @@ export const CANONICAL_BRAND_TOPICS: CanonicalTopic[] = [
     key: "LOGISTICS",
     title_ko: "재고 & 물류",
     title_en: "Inventory & Logistics",
+    short_desc_ko: "입고 · 출고지 · 3PL · 배송 정책",
+    short_desc_en: "Origin · Return · 3PL · Logistics",
     description_ko: "물류 출고지/반품지 관리, 재고 현황, 배송 및 트래킹 추적",
     description_en: "Shipping origin, return address, inventory levels, and logistics tracking",
     icon: "🚚",
@@ -110,6 +126,8 @@ export const CANONICAL_BRAND_TOPICS: CanonicalTopic[] = [
     key: "FINANCE",
     title_ko: "정산 & 결제",
     title_en: "Settlement & Finance",
+    short_desc_ko: "정산 주기 · 인보이스 · 세금계산서",
+    short_desc_en: "Settlement · Invoice · Payout",
     description_ko: "판매대금 정산 내역, 인보이스, 송금 계좌 및 수수료 안내",
     description_en: "Settlement reports, invoices, remittance accounts, and platform fees",
     icon: "💳",
@@ -122,6 +140,8 @@ export const CANONICAL_BRAND_TOPICS: CanonicalTopic[] = [
     key: "MARKETING",
     title_ko: "프로모션 & 마케팅",
     title_en: "Promotion & Marketing",
+    short_desc_ko: "기획전 · 할인 · 프로모션 가이드",
+    short_desc_en: "Promotions · Discounts · Campaigns",
     description_ko: "마케팅 지원 프로그램, 할인 프로모션 및 캠페인 참여 안내",
     description_en: "Marketing support programs, discount promotions, and campaign participation",
     icon: "📣",
@@ -134,6 +154,8 @@ export const CANONICAL_BRAND_TOPICS: CanonicalTopic[] = [
     key: "COMPANY",
     title_ko: "회사 & 사용자 관리",
     title_en: "Company & Users",
+    short_desc_ko: "사업자 정보 · 권한 · 팀원 초대",
+    short_desc_en: "Company Profile · Roles · Invitations",
     description_ko: "회사 정보 변경, 팀원 초대, 권한 설정 및 계정 관리",
     description_en: "Company details, team invitations, role permissions, and access settings",
     icon: "👥",
