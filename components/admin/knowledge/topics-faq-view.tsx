@@ -31,8 +31,8 @@ export default function TopicsFaqView() {
     setMessage(null);
     try {
       const [topicsRes, faqsRes, knwRes] = await Promise.all([
-        fetch(`/api/admin/knowledge/topics?portal_scope=${portalScope}&include_inactive=true`),
-        fetch(`/api/admin/knowledge/faqs?portal_scope=${portalScope}`),
+        fetch(`/api/admin/knowledge/topics?include_inactive=true`),
+        fetch(`/api/admin/knowledge/faqs`),
         fetch(`/api/admin/knowledge`)
       ]);
 
@@ -56,6 +56,11 @@ export default function TopicsFaqView() {
     }
   };
 
+  // Derived topics for current scope
+  const currentScopeTopics = topics.filter(t => t.portal_scope === portalScope);
+  const currentScopeFaqs = faqs.filter(f => (f.portal_scope || "BRAND") === portalScope);
+
+
   // Switch Portal Scope
   const handleScopeChange = (scope: PortalScope) => {
     setPortalScope(scope);
@@ -64,15 +69,14 @@ export default function TopicsFaqView() {
 
   // Reorder Topic Up/Down
   const handleMoveTopic = async (index: number, direction: "UP" | "DOWN") => {
-    const newTopics = [...topics];
+    const scopeTopicsList = [...currentScopeTopics];
     const targetIndex = direction === "UP" ? index - 1 : index + 1;
-    if (targetIndex < 0 || targetIndex >= newTopics.length) return;
+    if (targetIndex < 0 || targetIndex >= scopeTopicsList.length) return;
 
-    const [moved] = newTopics.splice(index, 1);
-    newTopics.splice(targetIndex, 0, moved);
+    const [moved] = scopeTopicsList.splice(index, 1);
+    scopeTopicsList.splice(targetIndex, 0, moved);
 
-    const orderedIds = newTopics.map(t => t.id);
-    setTopics(newTopics);
+    const orderedIds = scopeTopicsList.map(t => t.id);
 
     try {
       const res = await fetch("/api/admin/knowledge/topics", {
@@ -85,9 +89,8 @@ export default function TopicsFaqView() {
         })
       });
       if (res.ok) {
-        const data = await res.json();
-        setTopics(data.topics || newTopics);
         setMessage({ type: "success", text: "토픽 순서가 성공적으로 변경되었습니다." });
+        loadData();
       }
     } catch (e) {
       loadData();
@@ -113,6 +116,7 @@ export default function TopicsFaqView() {
       console.error(e);
     }
   };
+
 
   // Save Topic Modal
   const handleSaveTopic = async (e: React.FormEvent) => {
@@ -314,7 +318,7 @@ export default function TopicsFaqView() {
   };
 
   // Filtered FAQs
-  const filteredFaqs = faqs.filter(f => {
+  const filteredFaqs = currentScopeFaqs.filter(f => {
     if (selectedTopicId && f.topic_id !== selectedTopicId) return false;
     if (faqStatusFilter !== "ALL" && f.status !== faqStatusFilter) return false;
     return true;
@@ -408,7 +412,7 @@ export default function TopicsFaqView() {
             onClick={() => {
               setEditingFaq({
                 portal_scope: portalScope,
-                topic_id: selectedTopicId || topics[0]?.id || null,
+                topic_id: selectedTopicId || currentScopeTopics[0]?.id || null,
                 source_knowledge_id: eligibleKnowledgeForScope[0]?.id || "",
                 question_ko: "",
                 question_en: "",
@@ -453,7 +457,7 @@ export default function TopicsFaqView() {
                 {portalScope === "BRAND" ? "Brand Topics" : "Retail Topics"}
               </span>
               <span className="bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 text-xs px-2 py-0.5 rounded-full font-semibold">
-                {topics.length}개
+                {currentScopeTopics.length}개
               </span>
             </div>
             {selectedTopicId && (
@@ -468,7 +472,7 @@ export default function TopicsFaqView() {
 
           {loading ? (
             <div className="py-12 text-center text-zinc-400 text-sm">토픽 데이터를 불러오는 중...</div>
-          ) : topics.length === 0 ? (
+          ) : currentScopeTopics.length === 0 ? (
             <div className="py-12 text-center space-y-3">
               <div className="text-4xl">📂</div>
               <div className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">
@@ -482,7 +486,7 @@ export default function TopicsFaqView() {
             </div>
           ) : (
             <div className="space-y-2">
-              {topics.map((topic, index) => {
+              {currentScopeTopics.map((topic, index) => {
                 const isSelected = selectedTopicId === topic.id;
                 return (
                   <div
@@ -494,6 +498,7 @@ export default function TopicsFaqView() {
                         : "border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700 bg-white dark:bg-zinc-900"
                     }`}
                   >
+
                     <div className="flex items-center justify-between">
                       <div className="flex items-center space-x-2.5">
                         <span className="text-xl">{topic.icon || "📁"}</span>
@@ -929,7 +934,7 @@ export default function TopicsFaqView() {
                     required
                   >
                     <option value="">토픽을 선택하세요</option>
-                    {topics.map(t => (
+                    {currentScopeTopics.map(t => (
                       <option key={t.id} value={t.id}>
                         {t.icon} {t.name_ko}
                       </option>
