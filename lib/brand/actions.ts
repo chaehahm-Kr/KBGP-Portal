@@ -641,6 +641,9 @@ export async function adminUpdateBrand(
   }
 
   revalidatePath(`/admin/companies/${companyId}`);
+  revalidatePath("/admin/brands");
+  revalidatePath(`/admin/brands/${brandId}`);
+  revalidatePath("/portal/brands");
   return undefined;
 }
 
@@ -661,6 +664,8 @@ export async function deactivateBrand(brandId: string) {
 
   revalidatePath("/portal/brands");
   revalidatePath("/portal");
+  revalidatePath("/admin/brands");
+  revalidatePath(`/admin/brands/${brandId}`);
 }
 
 export async function reactivateBrand(brandId: string) {
@@ -699,6 +704,8 @@ export async function reactivateBrand(brandId: string) {
 
   revalidatePath("/portal/brands");
   revalidatePath("/portal");
+  revalidatePath("/admin/brands");
+  revalidatePath(`/admin/brands/${brandId}`);
 }
 
 export async function deleteBrand(brandId: string): Promise<{ success: boolean; error?: string }> {
@@ -736,6 +743,8 @@ export async function deleteBrand(brandId: string): Promise<{ success: boolean; 
 
   revalidatePath("/portal/brands");
   revalidatePath("/portal");
+  revalidatePath("/admin/brands");
+  revalidatePath(`/admin/brands/${brandId}`);
   return { success: true };
 }
 
@@ -796,6 +805,7 @@ export async function adminCreateBrand(
 
   revalidatePath(`/admin/companies/${companyId}`);
   revalidatePath("/admin/brands");
+  revalidatePath("/portal/brands");
   return brand;
 }
 
@@ -811,6 +821,8 @@ export async function adminDeactivateBrand(brandId: string, companyId: string) {
 
   revalidatePath(`/admin/companies/${companyId}`);
   revalidatePath("/admin/brands");
+  revalidatePath(`/admin/brands/${brandId}`);
+  revalidatePath("/portal/brands");
 }
 
 export async function adminReactivateBrand(brandId: string, companyId: string) {
@@ -849,6 +861,8 @@ export async function adminReactivateBrand(brandId: string, companyId: string) {
 
   revalidatePath(`/admin/companies/${companyId}`);
   revalidatePath("/admin/brands");
+  revalidatePath(`/admin/brands/${brandId}`);
+  revalidatePath("/portal/brands");
 }
 
 export async function adminDeleteBrand(brandId: string, companyId: string): Promise<{ success: boolean; error?: string }> {
@@ -886,6 +900,8 @@ export async function adminDeleteBrand(brandId: string, companyId: string): Prom
 
   revalidatePath(`/admin/companies/${companyId}`);
   revalidatePath("/admin/brands");
+  revalidatePath(`/admin/brands/${brandId}`);
+  revalidatePath("/portal/brands");
   return { success: true };
 }
 

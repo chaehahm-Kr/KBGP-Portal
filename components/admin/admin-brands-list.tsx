@@ -225,7 +225,7 @@ export function AdminBrandsList({ initialBrands }: AdminBrandsListProps) {
                   {/* Brand Name */}
                   <td className="px-6 py-3.5 font-bold text-zinc-950 dark:text-white">
                     <Link
-                      href={`/admin/companies/${brand.companyId}`}
+                      href={`/admin/brands/${brand.id}`}
                       className="hover:underline hover:text-zinc-900 dark:hover:text-zinc-300"
                     >
                       {brand.name}
@@ -349,7 +349,7 @@ export function AdminBrandsList({ initialBrands }: AdminBrandsListProps) {
                   {/* Management Action */}
                   <td className="px-6 py-3.5 text-right font-semibold text-zinc-900 dark:text-white">
                     <Link
-                      href={`/admin/companies/${brand.companyId}`}
+                      href={`/admin/brands/${brand.id}`}
                       className="hover:underline"
                     >
                       상세보기
