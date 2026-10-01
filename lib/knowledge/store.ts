@@ -599,6 +599,99 @@ Official operational guide for K SELECT NETWORK Brand Portal partners managing b
     }
   ];
 
+  memoryFaqs = [
+    {
+      id: "faq-brand-01",
+      source_knowledge_id: "kno-brand-policy-v10",
+      source_version: "v1.0",
+      source_title: "K SELECT 브랜드 등록 및 관리 정책",
+      question_ko: "브랜드는 어떻게 등록하나요?",
+      question_en: "How do I register a brand in the portal?",
+      answer_ko: "포털 내 브랜드 관리 메뉴(/portal/brands) 또는 신규 등록 화면(/portal/brands/new)에서 브랜드 국문/영문명, 사업자 등록번호, 대표 카테고리, 슬로건 및 물류 출고지/반품지 정보를 입력하여 등록합니다. 상품 등록 전 활성 브랜드 등록이 필수입니다. (Policy 01)",
+      answer_en: "Navigate to Brand Management (/portal/brands) or New Brand (/portal/brands/new) to enter brand names, business ID, category, and logistics origins. Brand registration is mandatory before product listings. (Policy 01)",
+      audience: ["BRAND", "INTERNAL", "ADMIN / MANAGEMENT"],
+      status: "APPROVED",
+      kind: "BOTH",
+      display_order: 1,
+      is_featured: true,
+      generated_by: "MANUAL",
+      created_at: now,
+      updated_at: now
+    },
+    {
+      id: "faq-brand-02",
+      source_knowledge_id: "kno-brand-policy-v10",
+      source_version: "v1.0",
+      source_title: "K SELECT 브랜드 등록 및 관리 정책",
+      question_ko: "상표권이 없어도 브랜드 등록이 가능한가요?",
+      question_en: "Can I register a brand without an official trademark?",
+      answer_ko: "네, 가능합니다. 포털 내 브랜드 등록은 카탈로그 분류를 위한 것이며, 특허청(KIPO/USPTO) 상표권 등록이 필수 전제 조건은 아닙니다. 상표권이 없거나 출원 중인 브랜드도 자유롭게 등록하여 입점할 수 있습니다. (Policy 02)",
+      answer_en: "Yes. Brand registration in the portal is for catalog classification and does not require official trademark registration. Brands without trademarks or with pending applications can be registered. (Policy 02)",
+      audience: ["BRAND", "INTERNAL", "ADMIN / MANAGEMENT"],
+      status: "APPROVED",
+      kind: "BOTH",
+      display_order: 2,
+      is_featured: true,
+      generated_by: "MANUAL",
+      created_at: now,
+      updated_at: now
+    },
+    {
+      id: "faq-brand-03",
+      source_knowledge_id: "kno-brand-policy-v10",
+      source_version: "v1.0",
+      source_title: "K SELECT 브랜드 등록 및 관리 정책",
+      question_ko: "상품이 연결된 브랜드를 삭제할 수 있나요?",
+      question_en: "Can I delete a brand that has associated products?",
+      answer_ko: "단 1건이라도 상품이 등록된 브랜드는 발주·통관·인보이스 무결성 보존을 위해 물리 삭제(Hard Delete)가 절대 불가합니다. 취급 중단 시 영구 삭제 대신 '사용 중단(Inactive)' 비활성화 처리를 적용하며, 언제든지 재활성화가 가능합니다. (Policy 05 & 06)",
+      answer_en: "Brands associated with even one product cannot be physically hard-deleted to preserve order, customs, and invoice audit integrity. Use Inactive status instead. (Policy 05 & 06)",
+      audience: ["BRAND", "INTERNAL", "ADMIN / MANAGEMENT"],
+      status: "APPROVED",
+      kind: "BOTH",
+      display_order: 3,
+      is_featured: true,
+      generated_by: "MANUAL",
+      created_at: now,
+      updated_at: now
+    },
+    {
+      id: "faq-brand-04",
+      source_knowledge_id: "kno-brand-policy-v10",
+      source_version: "v1.0",
+      source_title: "K SELECT 브랜드 등록 및 관리 정책",
+      question_ko: "동일한 브랜드를 여러 회사가 취급할 수 있나요?",
+      question_en: "Can multiple partner companies distribute the same brand?",
+      answer_ko: "네, 글로벌 B2B 유통 구조를 반영하여 동일 브랜드를 여러 회사(제조사, 공식 총판, 셀러)가 독립적으로 취급할 수 있습니다. 단, 지식재산권을 직접 보유한 원천 Brand Owner는 시스템상 1개사로 정의됩니다. (Policy 03 & 04)",
+      answer_en: "Yes. Multiple independent companies (manufacturers, distributors, sellers) can distribute the same brand, while authoritative Brand Ownership is maintained at 1 entity. (Policy 03 & 04)",
+      audience: ["BRAND", "INTERNAL", "ADMIN / MANAGEMENT"],
+      status: "APPROVED",
+      kind: "BOTH",
+      display_order: 4,
+      is_featured: false,
+      generated_by: "MANUAL",
+      created_at: now,
+      updated_at: now
+    },
+    {
+      id: "faq-brand-05",
+      source_knowledge_id: "kno-brand-policy-v10",
+      source_version: "v1.0",
+      source_title: "K SELECT 브랜드 등록 및 관리 정책",
+      question_ko: "사용하지 않는 브랜드는 어떻게 처리하나요?",
+      question_en: "How do I handle unused or discontinued brands?",
+      answer_ko: "취급을 중단하거나 사용하지 않는 브랜드는 브랜드 관리 목록에서 '사용 중단(Inactive)'으로 전환합니다. 비활성화된 브랜드는 신규 상품 등록 목록에서 제외되지만 기존 거래 내역은 안전하게 보존됩니다. (Policy 06)",
+      answer_en: "Set discontinued brands to Inactive in the Brand Management screen. Inactive brands are hidden from new product selection while preserving audit history. (Policy 06)",
+      audience: ["BRAND", "INTERNAL", "ADMIN / MANAGEMENT"],
+      status: "APPROVED",
+      kind: "BOTH",
+      display_order: 5,
+      is_featured: false,
+      generated_by: "MANUAL",
+      created_at: now,
+      updated_at: now
+    }
+  ];
+
   memoryVersions = [
     {
       id: "ver-insights-manual-v10",

@@ -64,15 +64,18 @@ export function HelpCenterMainView({
   const [askResponse, setAskResponse] = useState<AskAnswerResponse | null>(null);
   const [askError, setAskError] = useState<string | null>(null);
 
-  // Filters & Accordion State
-  const [selectedTopicId, setSelectedTopicId] = useState<string>("ALL");
+  // Filters & State
+  const [selectedTopicId, setSelectedTopicId] = useState<string | null>(null);
   const [selectedType, setSelectedType] = useState<string>("ALL");
   const [librarySearch, setLibrarySearch] = useState<string>("");
   const [openFaqId, setOpenFaqId] = useState<string | null>(null);
+  const [openTopicFaqId, setOpenTopicFaqId] = useState<string | null>(null);
 
-  // Ref for scrolling to sections
-  const contentSectionRef = useRef<HTMLDivElement>(null);
+  // Refs for smooth navigation
+  const questionInputRef = useRef<HTMLInputElement>(null);
+  const topicDetailSectionRef = useRef<HTMLDivElement>(null);
   const askResultRef = useRef<HTMLDivElement>(null);
+  const topHeroRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     fetchHelpItems();
@@ -100,7 +103,8 @@ export function HelpCenterMainView({
       const res = await fetch(`/api/knowledge/faqs?audience=${portalType}&kind=FAQ`);
       if (res.ok) {
         const json = await res.json();
-        setFaqs(json.faqs || []);
+        const list = json.items || json.faqs || [];
+        setFaqs(list);
       }
     } catch (e) {
       console.error("Failed to load FAQs:", e);
@@ -112,9 +116,10 @@ export function HelpCenterMainView({
       const res = await fetch(`/api/knowledge/faqs?audience=${portalType}&kind=SUGGESTED_QUESTION`);
       if (res.ok) {
         const json = await res.json();
-        if (json.faqs && Array.isArray(json.faqs)) {
-          const list = json.faqs.map((f: any) => f.question_ko).filter(Boolean);
-          setSuggestedQuestions(list);
+        const list = json.items || json.faqs || [];
+        if (Array.isArray(list)) {
+          const qList = list.map((f: any) => f.question_ko).filter(Boolean);
+          setSuggestedQuestions(qList);
         }
       }
     } catch (e) {
@@ -149,7 +154,6 @@ export function HelpCenterMainView({
       const data = await res.json();
       setAskResponse(data);
 
-      // Scroll smoothly to answer
       setTimeout(() => {
         askResultRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
       }, 100);
@@ -159,6 +163,14 @@ export function HelpCenterMainView({
     } finally {
       setIsAsking(false);
     }
+  };
+
+  // Focus and scroll to top question input
+  const handleFocusQuestionInput = () => {
+    topHeroRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    setTimeout(() => {
+      questionInputRef.current?.focus();
+    }, 400);
   };
 
   // Support Escalation Handler with Context Handoff (KNW-SUP-001)
@@ -199,8 +211,8 @@ export function HelpCenterMainView({
     }
   };
 
-  // Map knowledge items to canonical topics
-  const itemTopicMap = useMemo(() => {
+  // Primary Topic Mapping: Every knowledge item has exactly ONE Primary Topic (Section 13)
+  const itemPrimaryTopicMap = useMemo(() => {
     const map = new Map<string, CanonicalTopic>();
     items.forEach(item => {
       map.set(item.id, matchTopicForKnowledge(item));
@@ -208,8 +220,8 @@ export function HelpCenterMainView({
     return map;
   }, [items]);
 
-  // Map FAQs to canonical topics
-  const faqTopicMap = useMemo(() => {
+  // Primary Topic Mapping for FAQs
+  const faqPrimaryTopicMap = useMemo(() => {
     const map = new Map<string, CanonicalTopic>();
     faqs.forEach(faq => {
       const parentItem = items.find(i => i.id === faq.source_knowledge_id);
@@ -218,7 +230,7 @@ export function HelpCenterMainView({
     return map;
   }, [faqs, items]);
 
-  // Dynamic Topic Stats: Calculate content count per canonical topic
+  // Dynamic Topic Stats: Calculate unique count per canonical topic (Section 15)
   const topicStats = useMemo(() => {
     const counts: Record<string, { knowledgeCount: number; faqCount: number; total: number }> = {};
     CANONICAL_BRAND_TOPICS.forEach(topic => {
@@ -226,7 +238,7 @@ export function HelpCenterMainView({
     });
 
     items.forEach(item => {
-      const topic = itemTopicMap.get(item.id);
+      const topic = itemPrimaryTopicMap.get(item.id);
       if (topic && counts[topic.id]) {
         counts[topic.id].knowledgeCount += 1;
         counts[topic.id].total += 1;
@@ -234,7 +246,7 @@ export function HelpCenterMainView({
     });
 
     faqs.forEach(faq => {
-      const topic = faqTopicMap.get(faq.id);
+      const topic = faqPrimaryTopicMap.get(faq.id);
       if (topic && counts[topic.id]) {
         counts[topic.id].faqCount += 1;
         counts[topic.id].total += 1;
@@ -242,37 +254,46 @@ export function HelpCenterMainView({
     });
 
     return counts;
-  }, [items, faqs, itemTopicMap, faqTopicMap]);
+  }, [items, faqs, itemPrimaryTopicMap, faqPrimaryTopicMap]);
 
-  // Dynamic Topic Visibility: Topics with usable content (count > 0)
+  // Dynamic Topic Visibility: Topics with usable content (total > 0)
   const activeTopics = useMemo(() => {
     return CANONICAL_BRAND_TOPICS.filter(t => (topicStats[t.id]?.total || 0) > 0);
   }, [topicStats]);
 
-  // Filtered FAQs based on selected topic
-  const filteredFaqs = useMemo(() => {
-    if (selectedTopicId === "ALL") return faqs;
+  // Selected Topic Object
+  const currentSelectedTopic = useMemo(() => {
+    if (!selectedTopicId) return null;
+    return CANONICAL_BRAND_TOPICS.find(t => t.id === selectedTopicId) || null;
+  }, [selectedTopicId]);
+
+  // FAQs belonging to the selected Topic
+  const topicSpecificFaqs = useMemo(() => {
+    if (!selectedTopicId) return [];
     return faqs.filter(faq => {
-      const topic = faqTopicMap.get(faq.id);
+      const topic = faqPrimaryTopicMap.get(faq.id);
       return topic?.id === selectedTopicId;
     });
-  }, [faqs, selectedTopicId, faqTopicMap]);
+  }, [faqs, selectedTopicId, faqPrimaryTopicMap]);
 
-  // Filtered Knowledge Items based on Topic, Type, and Search
-  const filteredItems = useMemo(() => {
+  // Knowledge Items belonging to the selected Topic
+  const topicSpecificItems = useMemo(() => {
+    if (!selectedTopicId) return [];
     return items.filter(item => {
-      // Topic filter
-      if (selectedTopicId !== "ALL") {
-        const topic = itemTopicMap.get(item.id);
-        if (topic?.id !== selectedTopicId) return false;
-      }
+      const topic = itemPrimaryTopicMap.get(item.id);
+      return topic?.id === selectedTopicId;
+    });
+  }, [items, selectedTopicId, itemPrimaryTopicMap]);
 
+  // Filtered Knowledge Items for Section 5 (All Help Content)
+  const filteredAllItems = useMemo(() => {
+    return items.filter(item => {
       // Type filter
       if (selectedType !== "ALL" && item.type.toUpperCase() !== selectedType.toUpperCase()) {
         return false;
       }
 
-      // Search query filter
+      // Search filter
       const q = librarySearch.trim().toLowerCase();
       if (!q) return true;
 
@@ -287,7 +308,7 @@ export function HelpCenterMainView({
         item.category?.toLowerCase().includes(q)
       );
     });
-  }, [items, selectedTopicId, selectedType, librarySearch, itemTopicMap]);
+  }, [items, selectedType, librarySearch]);
 
   // Available unique types from published items
   const availableTypes = useMemo(() => {
@@ -298,7 +319,7 @@ export function HelpCenterMainView({
     return Array.from(set);
   }, [items]);
 
-  // Quick fallback questions if dynamic questions not loaded yet
+  // Quick fallback questions
   const defaultQuickQuestions = [
     "브랜드는 어떻게 등록하나요?",
     "상표권이 없어도 브랜드 등록이 가능한가요?",
@@ -329,7 +350,9 @@ export function HelpCenterMainView({
 
   const handleTopicCardClick = (topicId: string) => {
     setSelectedTopicId(topicId);
-    contentSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    setTimeout(() => {
+      topicDetailSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 100);
   };
 
   return (
@@ -337,7 +360,7 @@ export function HelpCenterMainView({
       {/* ========================================================================= */}
       {/* SECTION 1: PRIMARY QUESTION EXPERIENCE (Hero & Question Input)           */}
       {/* ========================================================================= */}
-      <div className="rounded-2xl bg-gradient-to-b from-zinc-900 via-[#131E2E] to-zinc-900 text-white p-6 sm:p-10 shadow-lg space-y-6 text-center">
+      <div ref={topHeroRef} className="rounded-2xl bg-gradient-to-b from-zinc-900 via-[#131E2E] to-zinc-900 text-white p-6 sm:p-10 shadow-lg space-y-6 text-center">
         <div className="space-y-2 max-w-2xl mx-auto">
           <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1 text-xs font-semibold tracking-wider text-cyan-300 backdrop-blur-xs">
             <span>🛡️</span> {heroBadgeText}
@@ -350,7 +373,7 @@ export function HelpCenterMainView({
           </p>
         </div>
 
-        {/* Primary Unified Question / Search Input */}
+        {/* Primary Unified Question Input Form */}
         <form
           onSubmit={(e) => {
             e.preventDefault();
@@ -361,6 +384,7 @@ export function HelpCenterMainView({
           <div className="relative flex items-center">
             <span className="absolute left-4 text-zinc-400 text-lg select-none">💬</span>
             <input
+              ref={questionInputRef}
               type="text"
               value={questionInput}
               onChange={(e) => setQuestionInput(e.target.value)}
@@ -596,26 +620,26 @@ export function HelpCenterMainView({
       )}
 
       {/* ========================================================================= */}
-      {/* SECTION 2: POPULAR / SUGGESTED QUESTIONS (자주 찾는 질문)                */}
+      {/* SECTION 2: HIGH-VALUE APPROVED FAQS (자주 찾는 질문 - First-Class UX)   */}
       {/* ========================================================================= */}
       {faqs.length > 0 && (
         <div className="space-y-4 pt-2">
           <div className="flex items-center justify-between">
             <div className="space-y-1">
               <h2 className="text-base sm:text-lg font-bold text-zinc-900 dark:text-white flex items-center gap-2">
-                <span>💡 자주 찾는 질문</span>
+                <span>💡 자주 묻는 질문</span>
                 <span className="rounded-full bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 px-2 py-0.5 text-xs font-mono font-bold">
                   {faqs.length}
                 </span>
               </h2>
               <p className="text-xs text-zinc-500">
-                공식 승인된 지식과 매뉴얼에서 가장 자주 묻는 주요 질문입니다.
+                자주 묻는 질문에서 빠르게 해결해 보세요.
               </p>
             </div>
           </div>
 
           <div className="space-y-2.5">
-            {faqs.map((faq) => {
+            {faqs.slice(0, 8).map((faq) => {
               const isOpen = openFaqId === faq.id;
               return (
                 <div
@@ -674,7 +698,7 @@ export function HelpCenterMainView({
                             href={`${baseHelpPath}/${faq.source_knowledge_id}`}
                             className="text-blue-600 hover:text-blue-700 dark:text-blue-400 font-semibold"
                           >
-                            원문 매뉴얼 보기 &rarr;
+                            공식 도움말 보기 &rarr;
                           </Link>
                         )}
                       </div>
@@ -706,6 +730,12 @@ export function HelpCenterMainView({
               const stat = topicStats[topic.id] || { knowledgeCount: 0, faqCount: 0, total: 0 };
               const isSelected = selectedTopicId === topic.id;
 
+              // Format specific count label (Section 15: e.g. "5개 FAQ · 1개 도움말")
+              const countBadgeParts: string[] = [];
+              if (stat.faqCount > 0) countBadgeParts.push(`${stat.faqCount}개 FAQ`);
+              if (stat.knowledgeCount > 0) countBadgeParts.push(`${stat.knowledgeCount}개 도움말`);
+              const countBadgeLabel = countBadgeParts.join(" · ") || `${stat.total}개`;
+
               return (
                 <button
                   key={topic.id}
@@ -721,7 +751,7 @@ export function HelpCenterMainView({
                     <div className="flex items-center justify-between">
                       <span className="text-2xl">{topic.icon}</span>
                       <span className="rounded-full bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 text-[10px] font-bold text-zinc-600 dark:text-zinc-300">
-                        {stat.knowledgeCount > 0 ? `${stat.knowledgeCount}개 문서` : `${stat.faqCount}개 FAQ`}
+                        {countBadgeLabel}
                       </span>
                     </div>
                     <div>
@@ -746,19 +776,203 @@ export function HelpCenterMainView({
       )}
 
       {/* ========================================================================= */}
-      {/* SECTION 4: HELP CONTENT DISCOVERY (도움말 둘러보기)                       */}
+      {/* SECTION 4: TOPIC DETAIL / TOPIC FAQS (Section 10 & 16: FAQ First)       */}
       {/* ========================================================================= */}
-      <div ref={contentSectionRef} className="space-y-4 pt-4 border-t border-zinc-200 dark:border-zinc-800">
+      {currentSelectedTopic && (
+        <div ref={topicDetailSectionRef} className="space-y-6 pt-4 border-t border-zinc-200 dark:border-zinc-800">
+          {/* Topic Banner Header */}
+          <div className="rounded-xl border border-blue-200 dark:border-blue-900/60 bg-blue-50/50 dark:bg-blue-950/20 p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-start sm:items-center gap-3">
+              <span className="text-3xl">{currentSelectedTopic.icon}</span>
+              <div>
+                <h3 className="text-base font-extrabold text-zinc-900 dark:text-white flex items-center gap-2">
+                  <span>{currentSelectedTopic.title_ko}</span>
+                  <span className="rounded-full bg-blue-100 dark:bg-blue-900/60 px-2.5 py-0.5 text-[11px] font-bold text-blue-700 dark:text-blue-300">
+                    주제별 도움말
+                  </span>
+                </h3>
+                <p className="text-xs text-zinc-600 dark:text-zinc-400 mt-0.5">
+                  {currentSelectedTopic.description_ko}
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setSelectedTopicId(null)}
+              className="rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 px-3 py-1.5 text-xs font-semibold text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-700 transition-colors shrink-0 cursor-pointer"
+            >
+              ✕ 전체 주제 보기
+            </button>
+          </div>
+
+          {/* 1. Topic FAQs First (Section 10 & 16) */}
+          {topicSpecificFaqs.length > 0 && (
+            <div className="space-y-3">
+              <h4 className="text-sm font-bold text-zinc-900 dark:text-white flex items-center gap-2">
+                <span>💡 {currentSelectedTopic.title_ko} 자주 묻는 질문</span>
+                <span className="rounded-full bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 px-2 py-0.5 text-[11px] font-mono font-bold">
+                  {topicSpecificFaqs.length}
+                </span>
+              </h4>
+
+              <div className="space-y-2.5">
+                {topicSpecificFaqs.map((faq) => {
+                  const isOpen = openTopicFaqId === faq.id;
+                  return (
+                    <div
+                      key={faq.id}
+                      className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 overflow-hidden transition-all shadow-xs"
+                    >
+                      <button
+                        type="button"
+                        onClick={() => setOpenTopicFaqId(isOpen ? null : faq.id)}
+                        className="w-full text-left p-4 flex items-center justify-between gap-3 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 cursor-pointer transition-colors"
+                      >
+                        <div className="flex items-start gap-2.5">
+                          <span className="text-blue-600 dark:text-blue-400 font-mono font-bold text-sm select-none">
+                            Q.
+                          </span>
+                          <h3 className="text-xs sm:text-sm font-bold text-zinc-900 dark:text-white leading-snug">
+                            {faq.question_ko}
+                          </h3>
+                        </div>
+                        <span
+                          className={`text-zinc-400 text-xs shrink-0 font-bold transition-transform duration-200 ${
+                            isOpen ? "rotate-180" : ""
+                          }`}
+                        >
+                          ▼
+                        </span>
+                      </button>
+
+                      {isOpen && (
+                        <div className="px-4 pb-4 pt-1 text-xs text-zinc-700 dark:text-zinc-300 border-t border-zinc-100 dark:border-zinc-800/60 bg-zinc-50/50 dark:bg-zinc-900/40 space-y-3">
+                          <div className="flex items-start gap-2 pt-2">
+                            <span className="text-emerald-600 dark:text-emerald-400 font-mono font-bold text-sm select-none">
+                              A.
+                            </span>
+                            <div className="space-y-2 leading-relaxed whitespace-pre-wrap flex-1">
+                              <p>{faq.answer_ko}</p>
+                              {faq.answer_en && (
+                                <p className="text-[11px] text-zinc-500 dark:text-zinc-400 pt-1.5 border-t border-zinc-200/60 dark:border-zinc-700/60">
+                                  {faq.answer_en}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="flex items-center justify-between text-[11px] text-zinc-400 pt-2 border-t border-zinc-200/50 dark:border-zinc-800">
+                            <span className="font-mono">
+                              출처: {faq.source_title || faq.source_knowledge_id} ({faq.source_version})
+                            </span>
+                            {faq.source_knowledge_id && (
+                              <Link
+                                href={`${baseHelpPath}/${faq.source_knowledge_id}`}
+                                className="text-blue-600 hover:text-blue-700 dark:text-blue-400 font-semibold"
+                              >
+                                공식 도움말 보기 &rarr;
+                              </Link>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* 2. Ask K SELECT In-Topic CTA (Section 17) */}
+          <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 p-4.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+            <div className="space-y-0.5">
+              <h5 className="text-xs sm:text-sm font-bold text-zinc-900 dark:text-white">
+                찾으시는 답변이 없나요?
+              </h5>
+              <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                궁금한 내용을 직접 질문해 주시면 공식 지식에서 즉시 찾아 안내해 드립니다.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={handleFocusQuestionInput}
+              className="rounded-lg bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 text-xs font-bold transition-colors shrink-0 shadow-xs cursor-pointer flex items-center gap-1.5"
+            >
+              <span>직접 질문하기</span>
+              <span>&uarr;</span>
+            </button>
+          </div>
+
+          {/* 3. Related Official Documents Second (Section 10 & 16) */}
+          {topicSpecificItems.length > 0 && (
+            <div className="space-y-3">
+              <h4 className="text-sm font-bold text-zinc-900 dark:text-white flex items-center gap-2">
+                <span>📚 관련 공식 도움말</span>
+                <span className="rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 px-2 py-0.5 text-[11px] font-mono font-bold">
+                  {topicSpecificItems.length}
+                </span>
+              </h4>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {topicSpecificItems.map((item) => (
+                  <Link
+                    key={item.id}
+                    href={`${baseHelpPath}/${item.slug || item.id}`}
+                    className="group flex flex-col justify-between rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-5 shadow-xs hover:border-zinc-400 dark:hover:border-zinc-600 hover:shadow-md transition-all cursor-pointer"
+                  >
+                    <div className="space-y-2.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          {getTypeBadge(item.type)}
+                          <span className="text-[11px] font-semibold text-zinc-500">
+                            {currentSelectedTopic.title_ko}
+                          </span>
+                        </div>
+                        {item.document_url && (
+                          <span className="inline-flex items-center gap-1 rounded bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 text-[10px] font-bold text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                            📄 PDF 문서
+                          </span>
+                        )}
+                      </div>
+
+                      <div>
+                        <h3 className="text-sm font-bold text-zinc-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors leading-snug">
+                          {item.title_ko || item.title}
+                        </h3>
+                        <p className="mt-1.5 text-xs text-zinc-600 dark:text-zinc-400 line-clamp-2 leading-relaxed">
+                          {item.summary_ko || item.summary_en || "자세한 가이드 및 정책 내용을 확인해 보세요."}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="mt-4 pt-3 border-t border-zinc-100 dark:border-zinc-800/80 flex items-center justify-between text-[11px] text-zinc-400">
+                      <span>버전 {item.current_version || "v1.0"}</span>
+                      <span className="group-hover:translate-x-0.5 transition-transform font-semibold text-blue-600 dark:text-blue-400">
+                        자세히 보기 &rarr;
+                      </span>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* SECTION 5: ALL HELP CONTENT (모든 도움말 - Section 20 Simplification)    */}
+      {/* ========================================================================= */}
+      <div className="space-y-4 pt-4 border-t border-zinc-200 dark:border-zinc-800">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="space-y-1">
             <h2 className="text-base sm:text-lg font-bold text-zinc-900 dark:text-white flex items-center gap-2">
-              <span>📖 도움말 둘러보기</span>
+              <span>📖 모든 도움말</span>
               <span className="rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 px-2 py-0.5 text-xs font-mono font-bold">
-                {filteredItems.length}
+                {filteredAllItems.length}
               </span>
             </h2>
             <p className="text-xs text-zinc-500">
-              K SELECT 공식 매뉴얼, 운영 정책, 표준 가이드를 확인하세요.
+              K SELECT 공식 매뉴얼, 정책 및 가이드를 확인하세요.
             </p>
           </div>
 
@@ -768,14 +982,14 @@ export function HelpCenterMainView({
               type="text"
               value={librarySearch}
               onChange={(e) => setLibrarySearch(e.target.value)}
-              placeholder="문서명, 태그 검색..."
+              placeholder="문서명 또는 키워드 검색..."
               className="w-full rounded-lg bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 px-3 py-1.5 text-xs text-zinc-900 dark:text-white placeholder:text-zinc-400 focus:outline-hidden focus:ring-1 focus:ring-blue-500"
             />
             {librarySearch && (
               <button
                 type="button"
                 onClick={() => setLibrarySearch("")}
-                className="absolute right-2.5 top-1.5 text-zinc-400 hover:text-zinc-600 text-xs"
+                className="absolute right-2.5 top-1.5 text-zinc-400 hover:text-zinc-600 text-xs cursor-pointer"
               >
                 ✕
               </button>
@@ -783,79 +997,46 @@ export function HelpCenterMainView({
           </div>
         </div>
 
-        {/* Topic & Type Filter Section */}
-        <div className="space-y-2.5">
-          {/* Topic Pills */}
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none text-xs font-semibold select-none">
+        {/* Secondary Type Filter Pills */}
+        {availableTypes.length > 1 && (
+          <div className="flex items-center gap-1.5 text-xs text-zinc-500">
+            <span className="text-[11px] font-semibold text-zinc-400 shrink-0">유형:</span>
             <button
               type="button"
-              onClick={() => setSelectedTopicId("ALL")}
-              className={`px-3 py-1 rounded-full transition-colors shrink-0 cursor-pointer ${
-                selectedTopicId === "ALL"
-                  ? "bg-[#131E2E] text-white dark:bg-white dark:text-[#131E2E] shadow-xs font-bold"
-                  : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
+              onClick={() => setSelectedType("ALL")}
+              className={`px-2.5 py-0.5 rounded text-[11px] font-semibold transition-colors cursor-pointer ${
+                selectedType === "ALL"
+                  ? "bg-zinc-800 text-white dark:bg-zinc-200 dark:text-zinc-900 font-bold"
+                  : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-200"
               }`}
             >
-              전체 주제
+              전체
             </button>
-            {activeTopics.map((topic) => (
+            {availableTypes.map((t) => (
               <button
-                key={topic.id}
+                key={t}
                 type="button"
-                onClick={() => setSelectedTopicId(topic.id)}
-                className={`px-3 py-1 rounded-full transition-colors shrink-0 cursor-pointer flex items-center gap-1 ${
-                  selectedTopicId === topic.id
-                    ? "bg-[#131E2E] text-white dark:bg-white dark:text-[#131E2E] shadow-xs font-bold"
-                    : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
-                }`}
-              >
-                <span>{topic.icon}</span>
-                <span>{topic.title_ko}</span>
-              </button>
-            ))}
-          </div>
-
-          {/* Secondary Type Filter Pills */}
-          {availableTypes.length > 1 && (
-            <div className="flex items-center gap-1.5 text-xs text-zinc-500">
-              <span className="text-[11px] font-semibold text-zinc-400 shrink-0">유형:</span>
-              <button
-                type="button"
-                onClick={() => setSelectedType("ALL")}
-                className={`px-2 py-0.5 rounded text-[11px] font-semibold transition-colors cursor-pointer ${
-                  selectedType === "ALL"
-                    ? "bg-zinc-800 text-white dark:bg-zinc-200 dark:text-zinc-900"
+                onClick={() => setSelectedType(t)}
+                className={`px-2.5 py-0.5 rounded text-[11px] font-semibold transition-colors cursor-pointer ${
+                  selectedType === t
+                    ? "bg-zinc-800 text-white dark:bg-zinc-200 dark:text-zinc-900 font-bold"
                     : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-200"
                 }`}
               >
-                전체
+                {t}
               </button>
-              {availableTypes.map((t) => (
-                <button
-                  key={t}
-                  type="button"
-                  onClick={() => setSelectedType(t)}
-                  className={`px-2 py-0.5 rounded text-[11px] font-semibold transition-colors cursor-pointer ${
-                    selectedType === t
-                      ? "bg-zinc-800 text-white dark:bg-zinc-200 dark:text-zinc-900"
-                      : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-200"
-                  }`}
-                >
-                  {t}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
+            ))}
+          </div>
+        )}
 
         {/* Knowledge Cards Grid */}
         {loading ? (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {[1, 2, 3, 4].map((i) => (
+            {[1, 2].map((i) => (
               <div key={i} className="h-44 rounded-xl bg-zinc-100 dark:bg-zinc-900 animate-pulse" />
             ))}
           </div>
-        ) : filteredItems.length === 0 ? (
+        ) : filteredAllItems.length === 0 ? (
           /* Empty Search / No Result UX */
           <div className="rounded-2xl border border-dashed border-zinc-300 dark:border-zinc-800 p-10 text-center space-y-4">
             <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-zinc-100 dark:bg-zinc-800 text-2xl">
@@ -873,7 +1054,6 @@ export function HelpCenterMainView({
               <button
                 type="button"
                 onClick={() => {
-                  setSelectedTopicId("ALL");
                   setSelectedType("ALL");
                   setLibrarySearch("");
                 }}
@@ -892,8 +1072,8 @@ export function HelpCenterMainView({
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {filteredItems.map((item) => {
-              const topic = itemTopicMap.get(item.id);
+            {filteredAllItems.map((item) => {
+              const primaryTopic = itemPrimaryTopicMap.get(item.id);
 
               return (
                 <Link
@@ -906,7 +1086,7 @@ export function HelpCenterMainView({
                       <div className="flex items-center gap-2">
                         {getTypeBadge(item.type)}
                         <span className="text-[11px] font-semibold text-zinc-500 flex items-center gap-1">
-                          {topic?.icon} {topic?.title_ko || item.module}
+                          {primaryTopic?.icon} {primaryTopic?.title_ko || item.module}
                         </span>
                       </div>
                       {item.document_url && (
@@ -940,7 +1120,7 @@ export function HelpCenterMainView({
       </div>
 
       {/* ========================================================================= */}
-      {/* SECTION 5: STILL NEED HELP? (아직 해결되지 않았나요? - Support CTA)      */}
+      {/* SECTION 6: STILL NEED HELP? (아직 해결되지 않았나요? - Support CTA)      */}
       {/* ========================================================================= */}
       <div className="rounded-2xl border border-zinc-200 bg-zinc-50/80 p-6 sm:p-8 dark:border-zinc-800 dark:bg-zinc-900/50 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="space-y-1">
