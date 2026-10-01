@@ -77,15 +77,15 @@ export function resolveServerAudience(
     return "INTERNAL";
   }
 
-  if (userRole === "brand") {
+  if (userRole === "brand" || requestedAudience === "BRAND") {
     return "BRAND";
   }
 
-  if (userRole === "retailer") {
+  if (userRole === "retailer" || requestedAudience === "RETAILER" || requestedAudience === "RETAIL" as any) {
     return "RETAILER";
   }
 
-  return "PUBLIC";
+  return "BRAND";
 }
 
 /**
@@ -304,7 +304,7 @@ export async function processAskQuestion(
     });
 
     // Specific Domain Intent Matches for Brand Policy (MAN-BRAND-001)
-    if (item.id === "kno-brand-policy-v10" || item.slug === "brand-registration-and-management-policy-v1") {
+    if (item.id === "kno-brand-policy-v10" || item.slug === "brand-registration-and-management-policy-v1" || item.slug === "man-brand-001-brand-policy") {
       if (cleanQ.includes("브랜드") || cleanQ.includes("brand")) score += 40;
       if (cleanQ.includes("등록") || cleanQ.includes("전제조건") || cleanQ.includes("신규") || cleanQ.includes("생성")) score += 50;
       if (cleanQ.includes("상표권") || cleanQ.includes("trademark") || cleanQ.includes("특허청")) score += 60;
@@ -435,7 +435,7 @@ function buildGroundedResponse(
   }
 
   // --- BRAND PORTAL KNOWLEDGE TAILORING (MAN-BRAND-001) ---
-  if (primary.id === "kno-brand-policy-v10" || primary.slug === "brand-registration-and-management-policy-v1") {
+  if (primary.id === "kno-brand-policy-v10" || primary.slug === "brand-registration-and-management-policy-v1" || primary.slug === "man-brand-001-brand-policy") {
     if (cleanQ.includes("상표권") || cleanQ.includes("trademark")) {
       directAnswer = "포털 내 브랜드 등록은 카탈로그 분류를 위한 것이며, **특허청(KIPO/USPTO) 상표권 등록이 필수 전제 조건은 아닙니다.** (Policy 02)";
       bullets = [
