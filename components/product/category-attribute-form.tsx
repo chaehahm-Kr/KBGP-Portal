@@ -119,6 +119,7 @@ export interface CategoryAttributeFormProps {
   volume: string | null;
   colorMap?: string | null;
   isAdmin: boolean;
+  readOnly?: boolean;
   initialCategoriesTree?: CategoryNode[];
   initialAttributeValues?: Record<string, { value: any; text: string | null }>;
   initialCategoryAttributes?: AttributeMasterItem[];
@@ -141,6 +142,7 @@ export const CategoryAttributeForm = forwardRef<CategoryAttributeFormHandle, Cat
       volume,
       colorMap,
       isAdmin,
+      readOnly = false,
       initialCategoriesTree,
       initialAttributeValues,
       initialCategoryAttributes,
@@ -650,6 +652,10 @@ export const CategoryAttributeForm = forwardRef<CategoryAttributeFormHandle, Cat
 
   // 공통 저장 실행 로직 (Global Save 및 개별 저장 버튼에서 공통 재사용)
   const performSave = async (): Promise<{ success: boolean; error?: string; missingRequired?: string[] }> => {
+    if (readOnly) {
+      return { success: true };
+    }
+
     const getSelectedCatCode = (): string | null => {
       if (selectedCat3) return selectedCat3;
       if (selectedCat2) return selectedCat2;
@@ -799,10 +805,11 @@ export const CategoryAttributeForm = forwardRef<CategoryAttributeFormHandle, Cat
               type="text"
               placeholder="카테고리명 또는 키워드를 입력해 보세요..."
               value={catSearchQuery}
+              disabled={readOnly}
               onChange={(e) => setCatSearchQuery(e.target.value)}
-              className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 text-zinc-900 dark:text-zinc-100 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:bg-white dark:focus:bg-zinc-950 focus:border-zinc-900 dark:focus:border-zinc-100 focus:ring-1 focus:ring-zinc-900 dark:focus:ring-zinc-100"
+              className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 text-zinc-900 dark:text-zinc-100 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:bg-white dark:focus:bg-zinc-950 focus:border-zinc-900 dark:focus:border-zinc-100 focus:ring-1 focus:ring-zinc-900 dark:focus:ring-zinc-100 disabled:opacity-50 disabled:cursor-not-allowed"
             />
-            {catSearchQuery && (
+            {catSearchQuery && !readOnly && (
               <button
                 type="button"
                 onClick={() => setCatSearchQuery("")}
@@ -814,7 +821,7 @@ export const CategoryAttributeForm = forwardRef<CategoryAttributeFormHandle, Cat
           </div>
 
           {/* 검색 추천 결과 목록 */}
-          {searchResults.length > 0 && (
+          {searchResults.length > 0 && !readOnly && (
             <div className="mt-3 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl max-h-60 overflow-y-auto divide-y divide-zinc-100 dark:divide-zinc-900 shadow-2xl z-30 relative">
               {searchResults.map((result) => (
                 <div key={result.code} className="p-3 flex items-center justify-between hover:bg-zinc-50 dark:hover:bg-zinc-900/40 transition-colors">
@@ -824,12 +831,13 @@ export const CategoryAttributeForm = forwardRef<CategoryAttributeFormHandle, Cat
                   </div>
                   <button
                     type="button"
+                    disabled={readOnly}
                     onClick={async () => {
                       setupCategorySelectors(categoriesTree, result.code);
                       await loadAttributes(result.code, storedValues);
                       setCatSearchQuery(""); // 검색창 리셋
                     }}
-                    className="bg-[#18181b] hover:bg-[#27272a] dark:bg-[#f4f4f5] dark:hover:bg-[#e4e4e7] active:scale-95 transition-all text-white dark:text-[#09090b] border border-[#18181b] dark:border-[#f4f4f5] font-bold text-[11px] px-3 py-1.5 rounded-lg shadow cursor-pointer"
+                    className="bg-[#18181b] hover:bg-[#27272a] dark:bg-[#f4f4f5] dark:hover:bg-[#e4e4e7] active:scale-95 transition-all text-white dark:text-[#09090b] border border-[#18181b] dark:border-[#f4f4f5] font-bold text-[11px] px-3 py-1.5 rounded-lg shadow cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     선택 적용
                   </button>
@@ -853,8 +861,9 @@ export const CategoryAttributeForm = forwardRef<CategoryAttributeFormHandle, Cat
             <select
               id="category-depth-1"
               value={selectedCat1}
+              disabled={readOnly}
               onChange={(e) => handleCat1Change(e.target.value)}
-              className="bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 text-zinc-900 dark:text-zinc-100 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:bg-white dark:focus:bg-zinc-950 focus:border-zinc-900 dark:focus:border-zinc-100 focus:ring-1"
+              className="bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 text-zinc-900 dark:text-zinc-100 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:bg-white dark:focus:bg-zinc-950 focus:border-zinc-900 dark:focus:border-zinc-100 focus:ring-1 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <option value="">대분류 선택</option>
               {categoriesTree.map(c => (
@@ -870,7 +879,7 @@ export const CategoryAttributeForm = forwardRef<CategoryAttributeFormHandle, Cat
               id="category-depth-2"
               value={selectedCat2}
               onChange={(e) => handleCat2Change(e.target.value)}
-              disabled={!selectedCat1}
+              disabled={readOnly || !selectedCat1}
               className="bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 text-zinc-900 dark:text-zinc-100 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:bg-white dark:focus:bg-zinc-950 focus:border-zinc-900 dark:focus:border-zinc-100 focus:ring-1 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <option value="">중분류 선택</option>
@@ -887,7 +896,7 @@ export const CategoryAttributeForm = forwardRef<CategoryAttributeFormHandle, Cat
               id="category-depth-3"
               value={selectedCat3}
               onChange={(e) => handleCat3Change(e.target.value)}
-              disabled={!selectedCat2}
+              disabled={readOnly || !selectedCat2}
               className="bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 text-zinc-900 dark:text-zinc-100 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:bg-white dark:focus:bg-zinc-950 focus:border-zinc-900 dark:focus:border-zinc-100 focus:ring-1 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <option value="">소분류 선택</option>
@@ -1002,7 +1011,7 @@ export const CategoryAttributeForm = forwardRef<CategoryAttributeFormHandle, Cat
 
   // 개별 필드 렌더러 함수
   function renderField(attr: AttributeMasterItem) {
-    const isEditable = isAdmin ? true : (attr.brandEditable && !attr.adminOnly);
+    const isEditable = readOnly ? false : (isAdmin ? true : (attr.brandEditable && !attr.adminOnly));
     const val = formValues[attr.code];
     const textVal = formTextValues[attr.code] || "";
     const isHighlighted = highlightedAttrCode === attr.code;

@@ -950,7 +950,7 @@ export async function updateProduct(
   _prevState: ProductFormState,
   formData: FormData
 ): Promise<ProductFormState> {
-  const { companyId } = await requireCompanyMembership();
+  const { companyId } = await requirePortalPermission("products", "write");
   const supabase = await createClient();
 
   const bulletPoints = formData
@@ -1310,7 +1310,7 @@ export async function updateProduct(
 }
 
 export async function addProductVideoUrl(productId: string, videoUrl: string) {
-  const { companyId } = await requireCompanyMembership();
+  const { companyId } = await requirePortalPermission("products", "write");
   const supabase = await createClient();
 
   if (!videoUrl || !videoUrl.trim()) {
@@ -1344,7 +1344,7 @@ export async function addProductVideoUrl(productId: string, videoUrl: string) {
 }
 
 export async function addProductVideoFile(productId: string, formData: FormData) {
-  const { companyId } = await requireCompanyMembership();
+  const { companyId } = await requirePortalPermission("products", "write");
   const supabase = await createClient();
 
   const file = formData.get("videoFile");
@@ -1396,7 +1396,7 @@ export async function addProductVideoFile(productId: string, formData: FormData)
 }
 
 export async function removeProductVideo(productId: string, videoId: string) {
-  const { companyId } = await requireCompanyMembership();
+  const { companyId } = await requirePortalPermission("products", "write");
   const supabase = await createClient();
 
   const { data: video } = await supabase
@@ -1439,7 +1439,7 @@ export async function removeProductVideo(productId: string, videoId: string) {
 }
 
 export async function uploadIngredientsFile(productId: string, language: "ko" | "en", formData: FormData) {
-  const { companyId } = await requireCompanyMembership();
+  const { companyId } = await requirePortalPermission("products", "write");
   const supabase = await createClient();
 
   const file = formData.get("ingredientsFile");
@@ -1551,7 +1551,7 @@ export async function uploadIngredientsFile(productId: string, language: "ko" | 
 }
 
 export async function deleteIngredientsFile(productId: string, language: "ko" | "en") {
-  const { companyId } = await requireCompanyMembership();
+  const { companyId } = await requirePortalPermission("products", "write");
   const supabase = await createClient();
 
   const columnName = language === "en" ? "ingredients_file_path_en" : "ingredients_file_path";
@@ -1617,7 +1617,7 @@ export async function deleteIngredientsFile(productId: string, language: "ko" | 
 }
 
 export async function updateProductImagesOrder(productId: string, imageIdsInOrder: string[]) {
-  const { companyId } = await requireCompanyMembership();
+  const { companyId } = await requirePortalPermission("products", "write");
   const supabase = await createClient();
 
   const { data: currentImages } = await supabase
@@ -1672,7 +1672,7 @@ export async function updateProductImagesOrder(productId: string, imageIdsInOrde
  */
 export async function deleteProduct(productId: string): Promise<{ success: boolean; error?: string }> {
   try {
-    const { companyId } = await requireCompanyMembership();
+    const { companyId } = await requirePortalPermission("products", "write");
     const supabase = await createClient();
 
     // 1. 제품 조회 (존재 여부 및 소속 회사 검증 분리)
@@ -1806,7 +1806,7 @@ export async function bulkDeleteProducts(productIds: string[]): Promise<{ succes
       return { success: false, error: "삭제할 제품이 선택되지 않았습니다." };
     }
 
-    const { companyId } = await requireCompanyMembership();
+    const { companyId } = await requirePortalPermission("products", "write");
     const supabase = await createClient();
 
     // 1. 소속 회사 제품들만 필터링하여 조회

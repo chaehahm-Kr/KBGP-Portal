@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import crypto from "crypto";
 import { verifyAdminSession } from "@/lib/auth/dal";
 import { requireCompanyMembership } from "@/lib/company/dal";
+import { requirePortalPermission } from "@/lib/company/permissions";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { resolveEffectiveSku } from "@/lib/product/types";

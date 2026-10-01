@@ -13,9 +13,10 @@ import { formatEasternDate, formatEasternDateTime } from "@/lib/utils/timezone";
 
 interface PoRequestDetailViewProps {
   request: PoRequestDetail;
+  canWrite?: boolean;
 }
 
-export function PoRequestDetailView({ request }: PoRequestDetailViewProps) {
+export function PoRequestDetailView({ request, canWrite = false }: PoRequestDetailViewProps) {
   const router = useRouter();
   const [isCancelling, setIsCancelling] = useState(false);
   const [cancelError, setCancelError] = useState("");
@@ -72,7 +73,7 @@ export function PoRequestDetailView({ request }: PoRequestDetailViewProps) {
 
         {/* Top Actions */}
         <div className="flex items-center gap-2.5">
-          {(request.status === "DRAFT" || request.status === "CHANGE_REQUESTED") && (
+          {canWrite && (request.status === "DRAFT" || request.status === "CHANGE_REQUESTED") && (
             <Link
               href={`/portal/orders/requests/${request.id}/edit`}
               className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm"
@@ -90,7 +91,7 @@ export function PoRequestDetailView({ request }: PoRequestDetailViewProps) {
             </Link>
           )}
 
-          {request.status !== "CONVERTED_TO_PO" && request.status !== "CANCELLED" && (
+          {canWrite && request.status !== "CONVERTED_TO_PO" && request.status !== "CANCELLED" && (
             <button
               type="button"
               onClick={handleCancel}

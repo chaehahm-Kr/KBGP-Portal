@@ -123,6 +123,7 @@ interface ProductDetailTabsProps {
   initialCategoriesTree?: CategoryNode[];
   initialAttributeValues?: Record<string, { value: any; text: string | null }>;
   initialCategoryAttributes?: AttributeMasterItem[];
+  canWrite?: boolean;
 }
 
 export function ProductDetailTabs({
@@ -141,7 +142,9 @@ export function ProductDetailTabs({
   initialCategoriesTree,
   initialAttributeValues,
   initialCategoryAttributes,
+  canWrite = true,
 }: ProductDetailTabsProps) {
+  const readOnly = !canWrite;
   const router = useRouter();
   const isDeleted = Boolean(product.deleted_at || (product.price_additional_info as any)?.deleted_at);
   const [activeTab, setActiveTab] = useState<"basic" | "category_attributes" | "price" | "logistics" | "media" | "certs">("basic");
@@ -1082,6 +1085,9 @@ export function ProductDetailTabs({
   };
 
   const saveAllData = async (): Promise<{ success: boolean; error?: string }> => {
+    if (readOnly) {
+      return { success: false, error: "조회 권한에서는 제품 정보를 수정할 수 없습니다." };
+    }
     if (isSaving) return { success: false, error: "저장 중입니다." };
     setIsSaving(true);
     setStatusMessage(null);
@@ -1437,6 +1443,14 @@ export function ProductDetailTabs({
     <div data-active-tab={activeTab} className="space-y-6 w-full max-w-7xl">
       {guardModalNode}
 
+      {/* ReadOnly Access Notice Banner */}
+      {readOnly && (
+        <div className="rounded-xl border border-amber-200/80 bg-amber-50/70 p-4 text-xs font-semibold text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-300 flex items-center gap-2 shadow-xs">
+          <span className="text-base">🔒</span>
+          <span>조회 전용 권한입니다. (Product Read Only) 제품 정보를 수정하거나 저장할 수 없습니다.</span>
+        </div>
+      )}
+
       {/* Dynamic Status Banner */}
       {statusMessage && (
         <div 
@@ -1685,8 +1699,9 @@ export function ProductDetailTabs({
             <button
               type="button"
               onClick={handleSaveClick}
-              disabled={isSaving}
-              className="w-full sm:w-auto text-center rounded-lg bg-zinc-900 hover:bg-zinc-850 px-5 py-2.5 text-xs font-bold text-white transition-all shadow dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-100 cursor-pointer disabled:opacity-50"
+              disabled={isSaving || readOnly}
+              title={readOnly ? "조회 권한에서는 제품 정보를 수정할 수 없습니다." : undefined}
+              className="w-full sm:w-auto text-center rounded-lg bg-zinc-900 hover:bg-zinc-850 px-5 py-2.5 text-xs font-bold text-white transition-all shadow dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-100 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isSaving ? "저장 중..." : "변경사항 저장"}
             </button>
@@ -2336,6 +2351,7 @@ export function ProductDetailTabs({
             volume={formatVolume(volumeValue, volumeUnit) || null}
             colorMap={colorMap || null}
             isAdmin={false}
+            readOnly={readOnly}
             initialCategoriesTree={initialCategoriesTree}
             initialAttributeValues={initialAttributeValues}
             initialCategoryAttributes={initialCategoryAttributes}
@@ -3715,7 +3731,7 @@ export function ProductDetailTabs({
           )}
 
           <div className="mt-6 border-t border-zinc-100 dark:border-zinc-800 pt-6">
-            <AddCertificateForm action={addProductCertificate.bind(null, product.id)} />
+            <AddCertificateForm action={addProductCertificate.bind(null, product.id)} readOnly={readOnly} />
           </div>
         </div>
       </div>
@@ -3733,8 +3749,9 @@ export function ProductDetailTabs({
         <button
           type="button"
           onClick={handleSaveClick}
-          disabled={isSaving}
-          className="rounded bg-zinc-950 px-6 py-2.5 text-xs font-bold text-white hover:bg-zinc-800 disabled:opacity-50 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-100 transition-colors shadow-md cursor-pointer flex items-center gap-1.5"
+          disabled={isSaving || readOnly}
+          title={readOnly ? "조회 권한에서는 제품 정보를 수정할 수 없습니다." : undefined}
+          className="rounded bg-zinc-950 px-6 py-2.5 text-xs font-bold text-white hover:bg-zinc-800 disabled:opacity-50 disabled:cursor-not-allowed dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-100 transition-colors shadow-md cursor-pointer flex items-center gap-1.5"
         >
           {isSaving ? "저장 중..." : "변경사항 저장"}
         </button>

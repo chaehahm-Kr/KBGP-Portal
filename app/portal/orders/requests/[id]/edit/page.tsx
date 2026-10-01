@@ -6,6 +6,8 @@ import { getCompanyShippingOrigins } from "@/lib/company/shipping-origin-actions
 import { getProductsForSupplier } from "@/lib/purchase-order/actions";
 import { getPortalPoRequestDetail } from "@/lib/purchase-order/request-actions";
 import { PoRequestForm } from "@/components/portal/po-request-form";
+import { hasPortalPermission } from "@/lib/company/permissions";
+import { AccessDeniedView } from "@/components/portal/access-denied";
 
 export const metadata: Metadata = {
   title: "발주 요청 수정 | K SELECT NETWORK 파트너 포털",
@@ -16,6 +18,16 @@ export default async function PortalEditPoRequestPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
+  const canWrite = await hasPortalPermission("orders", "write");
+  if (!canWrite) {
+    return (
+      <AccessDeniedView
+        title="접근 권한이 없습니다."
+        message="발주 요청서를 수정할 권한이 없습니다. 권한 조정을 원하시면 회사 관리자에게 문의해주세요."
+      />
+    );
+  }
+
   const { id } = await params;
   const membership = await requireCompanyMembership();
   const companyId = membership.companyId;

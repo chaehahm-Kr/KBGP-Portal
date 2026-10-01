@@ -21,6 +21,7 @@ export default async function PortalPoRequestsPage() {
     );
   }
 
+  const canWrite = await hasPortalPermission("orders", "write");
   const membership = await requireCompanyMembership();
   const admin = createAdminClient();
   const { data: comp } = await admin
@@ -33,7 +34,11 @@ export default async function PortalPoRequestsPage() {
 
   return (
     <div className="space-y-6">
-      <PoRequestList requests={requests} companyName={comp?.name || "파트너사"} />
+      <PoRequestList
+        requests={requests}
+        companyName={comp?.name || "파트너사"}
+        canWrite={canWrite}
+      />
     </div>
   );
 }

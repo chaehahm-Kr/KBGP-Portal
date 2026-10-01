@@ -24,6 +24,9 @@ export default async function BrandsPage() {
     );
   }
 
+  const canWrite = await hasPortalPermission("brands", "write");
+  const canManage = await hasPortalPermission("brands", "manage");
+
   const { companyId, supabase } = await getPortalTenantContext();
 
   // Fetch company intro to check onboarding confirmation
@@ -83,12 +86,14 @@ export default async function BrandsPage() {
             K SELECT NETWORK 입점 신청 및 제품 등록에서 활용할 브랜드 목록을 구성합니다.
           </p>
         </div>
-        <Link
-          href="/portal/brands/new"
-          className="w-full sm:w-auto text-center rounded-md bg-[#131E2E] hover:bg-[#1f3047] px-4 py-2 text-xs font-semibold text-white transition-colors dark:bg-white dark:text-[#131E2E] dark:hover:bg-zinc-100"
-        >
-          새 브랜드 추가
-        </Link>
+        {canWrite && (
+          <Link
+            href="/portal/brands/new"
+            className="w-full sm:w-auto text-center rounded-md bg-[#131E2E] hover:bg-[#1f3047] px-4 py-2 text-xs font-semibold text-white transition-colors dark:bg-white dark:text-[#131E2E] dark:hover:bg-zinc-100"
+          >
+            새 브랜드 추가
+          </Link>
+        )}
       </div>
 
       {/* Onboarding Banner */}
@@ -99,7 +104,9 @@ export default async function BrandsPage() {
       {/* Brands Grid */}
       {resolvedBrands.length === 0 ? (
         <div className="rounded-lg border border-zinc-200 bg-white py-12 text-center text-zinc-400 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-500 text-xs">
-          등록된 브랜드가 아직 존재하지 않습니다. 상단 '새 브랜드 추가' 단추를 이용해 첫 브랜드를 개설해 보세요.
+          {canWrite
+            ? "등록된 브랜드가 아직 존재하지 않습니다. 상단 '새 브랜드 추가' 단추를 이용해 첫 브랜드를 개설해 보세요."
+            : "등록된 브랜드가 존재하지 않습니다."}
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3">
@@ -151,26 +158,32 @@ export default async function BrandsPage() {
               </div>
 
               {/* Actions */}
-              <div className="mt-4 flex items-center gap-2 border-t border-zinc-100 pt-4 dark:border-zinc-800">
-                <Link
-                  href={`/portal/brands/${brand.id}`}
-                  className="flex-1 text-center py-2 px-3 rounded-md bg-[#131E2E] text-white font-bold text-xs hover:bg-[#1f3047] dark:bg-white dark:text-[#131E2E] dark:hover:bg-zinc-100 transition-colors"
-                >
-                  브랜드 수정
-                </Link>
-                <ConfirmForm
-                  action={deactivateBrand.bind(null, brand.id)}
-                  message="정말 이 브랜드를 사용 중단하시겠습니까?\n(사용 중단된 브랜드는 신청서 및 제품 목록에서 비활성화됩니다.)"
-                  className="flex-1"
-                >
-                  <button
-                    type="submit"
-                    className="w-full text-center py-2 px-3 rounded-md border border-[#8C1C2B] text-[#8C1C2B] font-bold text-xs hover:bg-[#8C1C2B]/5 transition-colors dark:border-red-500 dark:text-red-400 dark:hover:bg-red-950/20 cursor-pointer"
-                  >
-                    사용 중단
-                  </button>
-                </ConfirmForm>
-              </div>
+              {(canWrite || canManage) && (
+                <div className="mt-4 flex items-center gap-2 border-t border-zinc-100 pt-4 dark:border-zinc-800">
+                  {canWrite && (
+                    <Link
+                      href={`/portal/brands/${brand.id}`}
+                      className="flex-1 text-center py-2 px-3 rounded-md bg-[#131E2E] text-white font-bold text-xs hover:bg-[#1f3047] dark:bg-white dark:text-[#131E2E] dark:hover:bg-zinc-100 transition-colors"
+                    >
+                      브랜드 수정
+                    </Link>
+                  )}
+                  {canManage && (
+                    <ConfirmForm
+                      action={deactivateBrand.bind(null, brand.id)}
+                      message="정말 이 브랜드를 사용 중단하시겠습니까?\n(사용 중단된 브랜드는 신청서 및 제품 목록에서 비활성화됩니다.)"
+                      className={canWrite ? "flex-1" : "w-full"}
+                    >
+                      <button
+                        type="submit"
+                        className="w-full text-center py-2 px-3 rounded-md border border-[#8C1C2B] text-[#8C1C2B] font-bold text-xs hover:bg-[#8C1C2B]/5 transition-colors dark:border-red-500 dark:text-red-400 dark:hover:bg-red-950/20 cursor-pointer"
+                      >
+                        사용 중단
+                      </button>
+                    </ConfirmForm>
+                  )}
+                </div>
+              )}
             </div>
           ))}
         </div>

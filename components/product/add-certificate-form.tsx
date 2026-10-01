@@ -10,9 +10,10 @@ const inputClass =
 
 type AddCertificateFormProps = {
   action: (state: ProductFormState, formData: FormData) => Promise<ProductFormState>;
+  readOnly?: boolean;
 };
 
-export function AddCertificateForm({ action }: AddCertificateFormProps) {
+export function AddCertificateForm({ action, readOnly = false }: AddCertificateFormProps) {
   const [state, formAction, pending] = useActionState<
     ProductFormState,
     FormData
@@ -20,6 +21,14 @@ export function AddCertificateForm({ action }: AddCertificateFormProps) {
 
   const [clientError, setClientError] = useState<string | null>(null);
   const [compressing, setCompressing] = useState(false);
+
+  if (readOnly) {
+    return (
+      <div className="rounded-md border border-zinc-200 bg-zinc-50 p-3 text-xs text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900/40">
+        🔒 인증서 및 문서 추가 권한이 없습니다 (조회 전용).
+      </div>
+    );
+  }
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();

@@ -333,7 +333,7 @@ async function markBrandOnboardingConfirmed(supabase: any, companyId: string) {
 }
 
 export async function confirmBrandOnboardingAction() {
-  const { companyId } = await requireCompanyMembership();
+  const { companyId } = await requirePortalPermission("brands", "write");
   const supabase = await createClient();
   await markBrandOnboardingConfirmed(supabase, companyId);
   return { success: true };

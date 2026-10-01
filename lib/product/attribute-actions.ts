@@ -313,6 +313,11 @@ export async function saveProductAttributeValues(
   textValues: Record<string, string>,
   customClient?: any
 ) {
+  if (!customClient) {
+    const { requirePortalPermission } = await import("@/lib/company/permissions");
+    await requirePortalPermission("products", "write");
+  }
+
   const admin = createAdminClient();
   const supabase = await getEffectiveClient(customClient);
 

@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { requireCompanyMembership, getPortalTenantContext } from "@/lib/company/dal";
+import { getPortalTenantContext } from "@/lib/company/dal";
 import { BrandForm } from "@/components/brand/brand-form";
 import { updateBrand, parseBrandTrademarks } from "@/lib/brand/actions";
 import { getSignedFileUrl } from "@/lib/files/storage";
+import { hasPortalPermission } from "@/lib/company/permissions";
+import { AccessDeniedView } from "@/components/portal/access-denied";
 
 export const metadata: Metadata = {
   title: "브랜드 수정 | 파트너 포털",
@@ -14,6 +16,16 @@ export default async function EditBrandPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
+  const canWrite = await hasPortalPermission("brands", "write");
+  if (!canWrite) {
+    return (
+      <AccessDeniedView
+        title="접근 권한이 없습니다."
+        message="브랜드 정보를 수정할 권한이 없습니다. 권한 조정을 원하시면 회사 관리자에게 문의해주세요."
+      />
+    );
+  }
+
   const { id } = await params;
   const { companyId, supabase } = await getPortalTenantContext();
 
