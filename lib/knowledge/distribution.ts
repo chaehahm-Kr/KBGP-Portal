@@ -158,11 +158,12 @@ export async function getPublishedKnowledgeForAudience(
 }
 
 /**
- * Retrieves full detail of a single Published Knowledge Item for Brand Portal.
+ * Retrieves full detail of a single Published Knowledge Item scoped to a specific audience.
  * Enforces strict server-side audience isolation:
- * If item does not exist or is not eligible for BRAND audience, returns null.
+ * If item does not exist, is not PUBLISHED, or is not eligible for the requested audience, returns null.
  */
-export async function getPublishedBrandKnowledgeDetail(
+export async function getPublishedKnowledgeDetailForAudience(
+  audience: AudienceType,
   slugOrId: string
 ): Promise<{
   item: {
@@ -213,7 +214,7 @@ export async function getPublishedBrandKnowledgeDetail(
     i => i.id === slugOrId || i.slug === slugOrId || i.slug?.toLowerCase() === slugOrId.toLowerCase()
   );
 
-  if (!found || !isEligibleForAudience(found, "BRAND")) {
+  if (!found || !isEligibleForAudience(found, audience)) {
     return null;
   }
 
@@ -221,12 +222,12 @@ export async function getPublishedBrandKnowledgeDetail(
   const allAssets = await getStoreAssets(found.id);
   const currentAssets = allAssets.filter(a => a.is_current !== false);
 
-  // Fetch related published brand items (same module or category)
+  // Fetch related published items for this audience (same module or category)
   const relatedItems = allItems
     .filter(
       i =>
         i.id !== found.id &&
-        isEligibleForAudience(i, "BRAND") &&
+        isEligibleForAudience(i, audience) &&
         (i.module === found.module || i.category === found.category)
     )
     .slice(0, 4)
@@ -277,3 +278,18 @@ export async function getPublishedBrandKnowledgeDetail(
     related: relatedItems
   };
 }
+
+/**
+ * Retrieves full detail of a single Published Knowledge Item for Brand Portal.
+ */
+export async function getPublishedBrandKnowledgeDetail(slugOrId: string) {
+  return getPublishedKnowledgeDetailForAudience("BRAND", slugOrId);
+}
+
+/**
+ * Retrieves full detail of a single Published Knowledge Item for Retailer Portal.
+ */
+export async function getPublishedRetailKnowledgeDetail(slugOrId: string) {
+  return getPublishedKnowledgeDetailForAudience("RETAILER", slugOrId);
+}
+
