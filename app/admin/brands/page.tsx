@@ -18,12 +18,11 @@ export default async function AdminBrandsPage() {
   const { data: brandsWithTrademarks, error: brandsError } = await supabase
     .from("brands")
     .select(`
-      id, name, intro, logo_path, company_id, created_at, updated_at,
+      id, name, intro, logo_path, company_id, is_active, created_at, updated_at,
       companies (id, name),
       has_kr_trademark, kr_trademark_number, kr_trademark_path,
       has_us_trademark, us_trademark_number, us_trademark_path
     `)
-    .eq("is_active", true)
     .order("created_at", { ascending: false });
 
   if (!brandsError && brandsWithTrademarks) {
@@ -33,10 +32,9 @@ export default async function AdminBrandsPage() {
     const { data: coreBrands } = await supabase
       .from("brands")
       .select(`
-        id, name, intro, logo_path, company_id, created_at, updated_at,
+        id, name, intro, logo_path, company_id, is_active, created_at, updated_at,
         companies (id, name)
       `)
-      .eq("is_active", true)
       .order("created_at", { ascending: false });
     brandsData = coreBrands ?? [];
   }
@@ -54,6 +52,7 @@ export default async function AdminBrandsPage() {
         companyId: brand.companies?.id || brand.company_id,
         hasKr: tm.has_kr_trademark,
         hasUs: tm.has_us_trademark,
+        isActive: brand.is_active !== false,
         lastUpdated: new Date(brand.updated_at || brand.created_at).toLocaleDateString(),
       };
     })
@@ -78,6 +77,7 @@ export default async function AdminBrandsPage() {
                 <th className="px-6 py-3 font-semibold w-16">로고</th>
                 <th className="px-6 py-3 font-semibold">브랜드명</th>
                 <th className="px-6 py-3 font-semibold">보유 회사</th>
+                <th className="px-6 py-3 font-semibold text-center">상태</th>
                 <th className="px-6 py-3 font-semibold text-center">대한민국 상표권 등록 여부</th>
                 <th className="px-6 py-3 font-semibold text-center">미국 USPTO 상표권 등록 여부</th>
                 <th className="px-6 py-3 font-semibold">최근 업데이트일</th>
@@ -118,6 +118,17 @@ export default async function AdminBrandsPage() {
                     </Link>
                   </td>
                   <td className="px-6 py-3.5 text-center">
+                    {brand.isActive ? (
+                      <span className="inline-block rounded bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-705 dark:bg-emerald-950/40 dark:text-emerald-300">
+                        사용 중
+                      </span>
+                    ) : (
+                      <span className="inline-block rounded bg-zinc-100 px-2 py-0.5 text-[10px] font-medium text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">
+                        사용 중단
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-6 py-3.5 text-center">
                     {brand.hasKr ? (
                       <span className="inline-block rounded bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-705 dark:bg-emerald-950/40 dark:text-emerald-300">
                         보유
@@ -154,7 +165,7 @@ export default async function AdminBrandsPage() {
               ))}
               {resolvedBrands.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="py-12 text-center text-sm text-zinc-400">
+                  <td colSpan={8} className="py-12 text-center text-sm text-zinc-400">
                     등록된 브랜드 정보가 존재하지 않습니다.
                   </td>
                 </tr>
