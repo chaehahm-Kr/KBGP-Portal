@@ -3,8 +3,9 @@ import { redirect } from "next/navigation";
 import { getPortalPurchaseOrderById, getPortalPoChangeRequests } from "@/lib/portal/actions";
 import { getCompanyShippingOrigins } from "@/lib/company/shipping-origin-actions";
 import { getPoDocuments } from "@/lib/purchase-order/document-actions";
-import PoDetailClient from "@/components/portal/po-detail-client";
 import { requireCompanyMembership, getPortalTenantContext } from "@/lib/company/dal";
+import { hasPortalPermission } from "@/lib/company/permissions";
+import { AccessDeniedView } from "@/components/portal/access-denied";
 
 export const metadata: Metadata = {
   title: "발주 상세 정보 | 파트너 포털",
@@ -15,6 +16,17 @@ interface PortalPoDetailPageProps {
 }
 
 export default async function PortalPoDetailPage({ params }: PortalPoDetailPageProps) {
+  const canRead = await hasPortalPermission("orders", "read");
+  if (!canRead) {
+    return (
+      <AccessDeniedView
+        title="접근 권한이 없습니다."
+        message="주문 / 발주서 메뉴를 이용할 권한이 없습니다. 권한 조정을 원하시면 회사 관리자에게 문의해주세요."
+      />
+    );
+  }
+
+  const canWrite = await hasPortalPermission("orders", "write");
   const resolvedParams = await params;
   const { id } = resolvedParams;
   const { companyId, supabase } = await getPortalTenantContext();
@@ -98,6 +110,8 @@ export default async function PortalPoDetailPage({ params }: PortalPoDetailPageP
   const finalReceivings = (po?.receivings && po.receivings.length > 0) ? po.receivings : receivings;
   const finalGoodsReadiness = (po?.goodsReadiness && po.goodsReadiness.length > 0) ? po.goodsReadiness : goodsReadiness;
 
+  const PoDetailClient = (await import("@/components/portal/po-detail-client")).default;
+
   return (
     <PoDetailClient 
       po={po} 
@@ -109,6 +123,7 @@ export default async function PortalPoDetailPage({ params }: PortalPoDetailPageP
       warehouses={warehouses}
       shippingOrigins={shippingOrigins}
       linkedCases={linkedCases}
+      canWrite={canWrite}
     />
   );
 }

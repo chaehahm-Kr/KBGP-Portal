@@ -21,6 +21,8 @@ export default async function ApplicationsPage() {
     );
   }
 
+  const canWrite = await hasPortalPermission("application", "write");
+
   const { companyId, supabase } = await getPortalTenantContext();
 
   const { data: applications } = await supabase
@@ -69,14 +71,16 @@ export default async function ApplicationsPage() {
             제출하신 K SELECT NETWORK 참가 신청서 목록 및 상태를 확인합니다.
           </p>
         </div>
-        <form action={createDraftApplication}>
-          <button
-            type="submit"
-            className="w-full sm:w-auto rounded-md bg-zinc-900 px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-zinc-800 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-100"
-          >
-            새 신청서 작성
-          </button>
-        </form>
+        {canWrite && (
+          <form action={createDraftApplication}>
+            <button
+              type="submit"
+              className="w-full sm:w-auto rounded-md bg-zinc-900 px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-zinc-800 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-100"
+            >
+              새 신청서 작성
+            </button>
+          </form>
+        )}
       </div>
 
       {/* Table Card Container */}

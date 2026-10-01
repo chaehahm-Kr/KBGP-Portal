@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { requireCompanyAdmin, requireCompanyMembership } from "./dal";
+import { requirePortalPermission } from "./permissions";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { type CompanyContact } from "./admin-actions";
@@ -24,8 +25,8 @@ export async function updateCompanyPortalMetadata(
     contacts: CompanyContact[];
   }
 ) {
-  // 1. Verify that the user is an admin of this specific company
-  const membership = await requireCompanyAdmin();
+  // 1. Verify that the user has company_info write permission for this specific company
+  const membership = await requirePortalPermission("company_info", "write");
   if (membership.companyId !== companyId) {
     throw new Error("소속 회사 정보만 변경할 수 있습니다.");
   }
@@ -155,7 +156,7 @@ export async function updateCompanyPortalMetadata(
 }
 
 export async function portalUploadCompanyLogo(companyId: string, formData: FormData) {
-  const membership = await requireCompanyAdmin();
+  const membership = await requirePortalPermission("company_info", "write");
   if (membership.companyId !== companyId) {
     throw new Error("소속 회사 정보의 로고만 변경할 수 있습니다.");
   }
@@ -239,7 +240,7 @@ export async function portalUpdateSupplierProfile(
     default_shipping_responsibility?: string;
   }
 ) {
-  const membership = await requireCompanyAdmin();
+  const membership = await requirePortalPermission("company_info", "write");
   if (membership.companyId !== companyId) {
     throw new Error("소속 회사 정보만 변경할 수 있습니다.");
   }
@@ -299,7 +300,7 @@ export async function portalUpdateSupplierRemittance(
     remittance_note?: string;
   }
 ) {
-  const membership = await requireCompanyAdmin();
+  const membership = await requirePortalPermission("bank_info", "write");
   if (membership.companyId !== companyId) {
     throw new Error("소속 회사 정보만 변경할 수 있습니다.");
   }

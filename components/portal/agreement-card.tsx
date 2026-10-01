@@ -28,9 +28,10 @@ interface AgreementCardProps {
   };
   companyUsers?: any[];
   userEmail: string;
+  canWrite?: boolean;
 }
 
-export function AgreementCard({ agreement: initialAgreement, companyInfo, companyUsers, userEmail }: AgreementCardProps) {
+export function AgreementCard({ agreement: initialAgreement, companyInfo, companyUsers, userEmail, canWrite = true }: AgreementCardProps) {
   const [agreement, setAgreement] = useState<CompanyAgreementItem>(initialAgreement);
   const [isSigningModalOpen, setIsSigningModalOpen] = useState(false);
   const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false);
@@ -199,14 +200,20 @@ export function AgreementCard({ agreement: initialAgreement, companyInfo, compan
 
           <div className="flex items-center gap-2">
             {agreement.status === "pending" || agreement.status === "re_signature_required" ? (
-              <button
-                type="button"
-                onClick={() => setIsSigningModalOpen(true)}
-                className="rounded-xl bg-indigo-600 hover:bg-indigo-700 px-5 py-2.5 text-xs font-bold text-white transition-colors shadow-sm cursor-pointer flex items-center gap-1.5"
-              >
-                <span>✍️</span>
-                <span>계약서 확인 / 서명</span>
-              </button>
+              canWrite ? (
+                <button
+                  type="button"
+                  onClick={() => setIsSigningModalOpen(true)}
+                  className="rounded-xl bg-indigo-600 hover:bg-indigo-700 px-5 py-2.5 text-xs font-bold text-white transition-colors shadow-sm cursor-pointer flex items-center gap-1.5"
+                >
+                  <span>✍️</span>
+                  <span>계약서 확인 / 서명</span>
+                </button>
+              ) : (
+                <span className="text-xs text-zinc-500 italic bg-zinc-100 dark:bg-zinc-800 px-3 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-700">
+                  서명 권한이 없습니다 (조회 전용)
+                </span>
+              )
             ) : (
               <div className="flex flex-wrap items-center gap-2">
                 <button
@@ -329,25 +336,29 @@ export function AgreementCard({ agreement: initialAgreement, companyInfo, compan
                           </span>
                         </td>
                         <td className="py-2.5 px-3 text-right">
-                          <div className="flex items-center justify-end gap-2">
-                            {r.recipient_type === "additional_recipient" && (
+                          {canWrite ? (
+                            <div className="flex items-center justify-end gap-2">
+                              {r.recipient_type === "additional_recipient" && (
+                                <button
+                                  type="button"
+                                  onClick={() => setEditingRecipient(r)}
+                                  className="text-[11px] font-bold text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100 hover:underline cursor-pointer"
+                                >
+                                  수정
+                                </button>
+                              )}
                               <button
                                 type="button"
-                                onClick={() => setEditingRecipient(r)}
-                                className="text-[11px] font-bold text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100 hover:underline cursor-pointer"
+                                onClick={() => handleResendEmail(r.id)}
+                                disabled={resendingId === r.id}
+                                className="text-[11px] font-bold text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 cursor-pointer disabled:opacity-50"
                               >
-                                수정
+                                {resendingId === r.id ? "발송 중..." : "메일 재발송"}
                               </button>
-                            )}
-                            <button
-                              type="button"
-                              onClick={() => handleResendEmail(r.id)}
-                              disabled={resendingId === r.id}
-                              className="text-[11px] font-bold text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 cursor-pointer disabled:opacity-50"
-                            >
-                              {resendingId === r.id ? "발송 중..." : "메일 재발송"}
-                            </button>
-                          </div>
+                            </div>
+                          ) : (
+                            <span className="text-zinc-400">-</span>
+                          )}
                         </td>
                       </tr>
                     ))}

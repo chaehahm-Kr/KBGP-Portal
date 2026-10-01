@@ -4,6 +4,7 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { verifyAdminSession } from "@/lib/auth/dal";
 import { requireCompanyMembership } from "@/lib/company/dal";
+import { requirePortalPermission } from "@/lib/company/permissions";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendTemplatedEmail } from "@/lib/notifications/templates";
@@ -145,6 +146,7 @@ export async function replyToInfoRequest(
   _prevState: InfoRequestFormState,
   formData: FormData
 ): Promise<InfoRequestFormState> {
+  await requirePortalPermission("application", "write");
   const { companyId } = await requireCompanyMembership();
 
   const replyContent = String(formData.get("replyContent") ?? "").trim();

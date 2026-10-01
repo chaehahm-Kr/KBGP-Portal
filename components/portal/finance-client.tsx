@@ -7,6 +7,7 @@ interface FinanceClientProps {
   initialInvoices: any[];
   initialAdjustments: any[];
   initialPayments: any[];
+  canWrite?: boolean;
 }
 
 export function getCanonicalPaymentStatus(inv: {
@@ -27,7 +28,8 @@ export function getCanonicalPaymentStatus(inv: {
 export function FinanceClient({
   initialInvoices,
   initialAdjustments,
-  initialPayments
+  initialPayments,
+  canWrite = true,
 }: FinanceClientProps) {
   const [activeTab, setActiveTab] = useState<"invoices" | "settlements" | "payments">("invoices");
 
@@ -143,7 +145,7 @@ export function FinanceClient({
           </button>
         </div>
 
-        {activeTab === "invoices" && (
+        {activeTab === "invoices" && canWrite && (
           <Link
             href="/portal/finance/new"
             className="px-3.5 py-1.5 bg-zinc-950 hover:bg-zinc-900 text-white dark:bg-zinc-100 dark:hover:bg-white dark:text-zinc-950 text-xs font-bold rounded-lg cursor-pointer transition-colors"

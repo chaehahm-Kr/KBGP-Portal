@@ -357,6 +357,22 @@ export async function signCompanyAgreementAction(input: SignAgreementInput): Pro
     };
   }
 
+  try {
+    const { requirePortalPermission } = await import("@/lib/company/permissions");
+    await requirePortalPermission("agreements", "write");
+  } catch (permErr: any) {
+    const adminClient = createAdminClient();
+    const { data: profile } = await adminClient
+      .from("profiles")
+      .select("role, is_staff")
+      .eq("id", user.id)
+      .maybeSingle();
+    const isAdminOrStaff = profile?.role === "admin" || profile?.is_staff === true;
+    if (!isAdminOrStaff) {
+      return { success: false, error: permErr.message || "계약 체결 권한이 없습니다." };
+    }
+  }
+
   const admin = createAdminClient();
 
   // 1. Fetch agreement & company with clean PostgREST select query (using existing companies columns)
@@ -811,6 +827,14 @@ export async function resendAgreementRecipientEmailAction(recipientId: string): 
       if (rcu) isRetailerMember = true;
     }
 
+    if (cu) {
+      const { hasPortalPermission } = await import("@/lib/company/permissions");
+      const canWrite = await hasPortalPermission("agreements", "write");
+      if (!canWrite) {
+        return { success: false, error: "해당 계약서 사본을 재발송할 권한이 없습니다 (조회 전용)." };
+      }
+    }
+
     if (!cu && !isRetailerMember) {
       return { success: false, error: "해당 계약서 사본을 재발송할 권한이 없습니다." };
     }
@@ -1029,6 +1053,14 @@ export async function updateAgreementAdditionalRecipientAction(
       if (rcu) isRetailerMember = true;
     }
 
+    if (cu) {
+      const { hasPortalPermission } = await import("@/lib/company/permissions");
+      const canWrite = await hasPortalPermission("agreements", "write");
+      if (!canWrite) {
+        return { success: false, error: "해당 회사의 계약 수신자를 수정할 권한이 없습니다 (조회 전용)." };
+      }
+    }
+
     if (!cu && !isRetailerMember) {
       return { success: false, error: "해당 회사의 계약 수신자를 수정할 권한이 없습니다." };
     }
@@ -1211,6 +1243,12 @@ export async function getSignedExecutedPdfUrlAction(
 
       if (!isCompanyMember) {
         return { url: null, error: "해당 계약서에 접근할 권한이 없습니다." };
+      }
+
+      const { hasPortalPermission } = await import("@/lib/company/permissions");
+      const canWrite = await hasPortalPermission("agreements", "write");
+      if (!canWrite) {
+        return { url: null, error: "계약서 원문 보기 및 PDF 다운로드 권한이 없습니다. (조회 전용 권한)" };
       }
     }
   }

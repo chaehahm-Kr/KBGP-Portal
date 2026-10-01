@@ -2,6 +2,8 @@ import React from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getPortalReadinessById, getShippingAttachmentUrl } from "@/lib/portal/actions";
+import { hasPortalPermission } from "@/lib/company/permissions";
+import { AccessDeniedView } from "@/components/portal/access-denied";
 import { DetailClient } from "./detail-client";
 
 export default async function PortalReadinessDetailPage({
@@ -9,6 +11,17 @@ export default async function PortalReadinessDetailPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
+  const canRead = await hasPortalPermission("orders", "read");
+  if (!canRead) {
+    return (
+      <AccessDeniedView
+        title="접근 권한이 없습니다."
+        message="선적 & 출고 관리 메뉴를 이용할 권한이 없습니다. 권한 조정을 원하시면 회사 관리자에게 문의해주세요."
+      />
+    );
+  }
+
+  const canWrite = await hasPortalPermission("orders", "write");
   const resolvedParams = await params;
   const { id } = resolvedParams;
   const readiness = await getPortalReadinessById(id);
@@ -51,6 +64,7 @@ export default async function PortalReadinessDetailPage({
         readiness={readiness}
         packingListUrl={packingListUrl}
         invoiceUrl={invoiceUrl}
+        canWrite={canWrite}
       />
     </div>
   );

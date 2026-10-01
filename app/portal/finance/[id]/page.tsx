@@ -3,12 +3,14 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getPortalInvoiceDetail, getPortalInvoiceAttachmentUrl } from "@/lib/portal/actions";
 import { InvoiceDetail } from "@/components/portal/invoice-detail";
+import { hasPortalPermission } from "@/lib/company/permissions";
 
 export default async function PortalInvoiceDetailPage({
   params
 }: {
   params: Promise<{ id: string }>;
 }) {
+  const canWrite = await hasPortalPermission("finance", "write");
   const resolvedParams = await params;
   const { id } = resolvedParams;
 
@@ -41,7 +43,7 @@ export default async function PortalInvoiceDetailPage({
         </div>
       </div>
 
-      <InvoiceDetail invoice={invoice} attachmentUrl={attachmentUrl} />
+      <InvoiceDetail invoice={invoice} attachmentUrl={attachmentUrl} canWrite={canWrite} />
     </div>
   );
 }

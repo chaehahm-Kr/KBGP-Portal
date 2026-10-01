@@ -164,6 +164,7 @@ export default async function PortalCompanyInfoPage() {
   // Fetch shipping origins
   const shippingOrigins = await getCompanyShippingOrigins(membership.companyId);
   const canEditCompanyInfo = isCompanyAdmin || (await hasMenuPermission("company_info", "write"));
+  const canWriteAgreements = isCompanyAdmin || (await hasPortalPermission("agreements", "write"));
 
   // Fetch Company Agreement only if user has agreements read permission
   let initialAgreement = null;
@@ -189,6 +190,7 @@ export default async function PortalCompanyInfoPage() {
       canEditCompanyInfo={canEditCompanyInfo}
       canReadBankInfo={canReadBankInfo}
       canReadAgreements={canReadAgreements}
+      canWriteAgreements={canWriteAgreements}
       initialAgreement={initialAgreement}
       userEmail={user?.email || ""}
     />

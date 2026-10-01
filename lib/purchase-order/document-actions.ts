@@ -113,6 +113,14 @@ export async function getPoDocuments(poId: string): Promise<PoDocument[]> {
  * Upload a PO / Shipping document
  */
 export async function uploadPoDocument(formData: FormData) {
+  try {
+    const { verifyAdminSession } = await import("@/lib/auth/dal");
+    await verifyAdminSession();
+  } catch {
+    const { requirePortalPermission } = await import("@/lib/company/permissions");
+    await requirePortalPermission("orders", "write");
+  }
+
   const poId = formData.get("poId") as string;
   const documentType = (formData.get("documentType") as PoDocumentType) || "OTHER";
   const relatedType = (formData.get("relatedType") as "PO" | "GOODS_READY" | "SHIPMENT") || "PO";

@@ -114,6 +114,7 @@ interface PoDetailClientProps {
   shippingOrigins?: any[];
   documents?: PoDocument[];
   linkedCases?: any[];
+  canWrite?: boolean;
 }
 
 export default function PoDetailClient({
@@ -126,6 +127,7 @@ export default function PoDetailClient({
   shippingOrigins = [],
   documents = [],
   linkedCases = [],
+  canWrite = true,
 }: PoDetailClientProps) {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState("overview");
@@ -844,59 +846,65 @@ export default function PoDetailClient({
         cancellationRejectReason={po.cancellation_reject_reason}
         cancellationRejectedAt={po.cancellation_rejected_at}
         nextActionSlot={
-          <div className="flex items-center flex-wrap gap-2">
-            {po.cancellation_status === "CANCELLATION_REQUESTED" && (
-              <>
-                <button
-                  type="button"
-                  onClick={handleApproveCancellation}
-                  disabled={isRespondingCancel}
-                  className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-lg transition-colors cursor-pointer shadow-sm disabled:opacity-50"
-                >
-                  ✓ 취소 요청 동의 (Approve)
-                </button>
-                <button
-                  type="button"
-                  onClick={handleRejectCancellation}
-                  disabled={isRespondingCancel}
-                  className="px-3 py-1.5 bg-zinc-200 hover:bg-zinc-300 text-zinc-800 font-bold text-xs rounded-lg transition-colors cursor-pointer disabled:opacity-50"
-                >
-                  ✕ 취소 거절 (Reject)
-                </button>
-              </>
-            )}
+          canWrite ? (
+            <div className="flex items-center flex-wrap gap-2">
+              {po.cancellation_status === "CANCELLATION_REQUESTED" && (
+                <>
+                  <button
+                    type="button"
+                    onClick={handleApproveCancellation}
+                    disabled={isRespondingCancel}
+                    className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-lg transition-colors cursor-pointer shadow-sm disabled:opacity-50"
+                  >
+                    ✓ 취소 요청 동의 (Approve)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleRejectCancellation}
+                    disabled={isRespondingCancel}
+                    className="px-3 py-1.5 bg-zinc-200 hover:bg-zinc-300 text-zinc-800 font-bold text-xs rounded-lg transition-colors cursor-pointer disabled:opacity-50"
+                  >
+                    ✕ 취소 거절 (Reject)
+                  </button>
+                </>
+              )}
 
-            <button
-              type="button"
-              onClick={() => {
-                const url = buildPoChangeInquiryUrl({
-                  po_id: po.id,
-                  po_no: po.po_number,
-                  order_date: po.order_date,
-                  company_name: po.supplier?.name || po.company?.name || "",
-                  po_status: po.po_status,
-                  revision_no: po.revision_no || 1,
-                });
-                router.push(url);
-              }}
-              disabled={isConfirming}
-              className="px-3.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 font-bold text-xs rounded-lg transition-colors cursor-pointer flex items-center gap-1.5"
-            >
-              <span>📝</span>
-              <span>PO 변경 요청</span>
-            </button>
-
-            {po.po_status === "SENT" && po.supplier_confirmation_status === "PENDING" && (
               <button
                 type="button"
-                onClick={() => setShowConfirmModal(true)}
+                onClick={() => {
+                  const url = buildPoChangeInquiryUrl({
+                    po_id: po.id,
+                    po_no: po.po_number,
+                    order_date: po.order_date,
+                    company_name: po.supplier?.name || po.company?.name || "",
+                    po_status: po.po_status,
+                    revision_no: po.revision_no || 1,
+                  });
+                  router.push(url);
+                }}
                 disabled={isConfirming}
-                className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-lg transition-colors cursor-pointer shadow-sm"
+                className="px-3.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 font-bold text-xs rounded-lg transition-colors cursor-pointer flex items-center gap-1.5"
               >
-                ✓ 발주 확인 (Confirm PO)
+                <span>📝</span>
+                <span>PO 변경 요청</span>
               </button>
-            )}
-          </div>
+
+              {po.po_status === "SENT" && po.supplier_confirmation_status === "PENDING" && (
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmModal(true)}
+                  disabled={isConfirming}
+                  className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-lg transition-colors cursor-pointer shadow-sm"
+                >
+                  ✓ 발주 확인 (Confirm PO)
+                </button>
+              )}
+            </div>
+          ) : (
+            <span className="text-xs text-zinc-500 italic bg-zinc-100 dark:bg-zinc-800 px-3 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-700">
+              조회 전용 (View Only)
+            </span>
+          )
         }
       />
 
@@ -1216,7 +1224,7 @@ export default function PoDetailClient({
               </div>
             )}
           </div>
-        )}
+        )}
 
         {/* Tab 3: Shipment */}
         {activeTab === "shipments" && (
@@ -1228,7 +1236,7 @@ export default function PoDetailClient({
                   총 발주 확정 수량: <strong>{totalTargetQty.toLocaleString()}</strong> PCS | 등록된 출고 준비 수량: <strong className="text-indigo-600">{totalReadyCommitted.toLocaleString()}</strong> PCS {remainingTargetQty > 0 ? `| 잔여 수량: ${remainingTargetQty.toLocaleString()} PCS` : ''}
                 </p>
               </div>
-              {po.po_status === "SENT" && po.supplier_confirmation_status === "CONFIRMED" && !showGoodsReadyForm && (
+              {canWrite && po.po_status === "SENT" && po.supplier_confirmation_status === "CONFIRMED" && !showGoodsReadyForm && (
                 <div>
                   {totalReadyCommitted === 0 ? (
                     <button
@@ -1618,7 +1626,7 @@ export default function PoDetailClient({
                     )}
                   </div>
                   <div className="flex items-center gap-2">
-                    {!isLocked && !showGoodsReadyForm && (
+                    {canWrite && !isLocked && !showGoodsReadyForm && (
                       <button
                         onClick={() => initGoodsReadinessForm(gr)}
                         className="px-2.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-300 font-bold rounded text-xs cursor-pointer transition-colors flex items-center gap-1"
@@ -1626,7 +1634,7 @@ export default function PoDetailClient({
                         ✏️ 수정 (Edit)
                       </button>
                     )}
-                    {po.shipping_responsibility === "SUPPLIER_ARRANGED" && gr.handover_status === "READY_SUBMITTED" && (
+                    {canWrite && po.shipping_responsibility === "SUPPLIER_ARRANGED" && gr.handover_status === "READY_SUBMITTED" && (
                       <button
                         onClick={() => setShowSupplierShipmentForm(gr.id)}
                         className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded cursor-pointer transition-colors"
@@ -1940,12 +1948,14 @@ export default function PoDetailClient({
                   출고 준비, 선적, 통관 및 원산지 증명 관련 모든 서류가 실시간 동기화되어 통합 관리됩니다.
                 </p>
               </div>
-              <button
-                onClick={() => setShowDocUploadModal(true)}
-                className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg transition-colors cursor-pointer text-xs flex items-center gap-1.5 shadow-sm"
-              >
-                + 문서 업로드 (Upload Document)
-              </button>
+              {canWrite && (
+                <button
+                  onClick={() => setShowDocUploadModal(true)}
+                  className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg transition-colors cursor-pointer text-xs flex items-center gap-1.5 shadow-sm"
+                >
+                  + 문서 업로드 (Upload Document)
+                </button>
+              )}
             </div>
 
             {/* Document Upload Modal */}

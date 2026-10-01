@@ -15,6 +15,8 @@ export default async function PortalFinancePage() {
     );
   }
 
+  const canWrite = await hasPortalPermission("finance", "write");
+
   const invoices = await getPortalInvoices();
   const adjustments = await getPortalAdjustments();
   const payments = await getPortalPayments();
@@ -32,6 +34,7 @@ export default async function PortalFinancePage() {
         initialInvoices={invoices}
         initialAdjustments={adjustments}
         initialPayments={payments}
+        canWrite={canWrite}
       />
     </div>
   );

@@ -21,12 +21,14 @@ interface ShippingClientProps {
   initialReadinessList: any[];
   initialShipments: any[];
   confirmedPos: PoOption[];
+  canWrite?: boolean;
 }
 
 export function ShippingClient({
   initialReadinessList,
   initialShipments,
-  confirmedPos
+  confirmedPos,
+  canWrite = true,
 }: ShippingClientProps) {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<"readiness" | "shipments">("readiness");
@@ -279,12 +281,14 @@ export function ShippingClient({
               </button>
             </div>
 
-            <button
-              onClick={() => setIsCreating(true)}
-              className="px-3.5 py-1.5 bg-zinc-950 hover:bg-zinc-900 text-white dark:bg-white dark:text-zinc-950 text-xs font-bold rounded-lg cursor-pointer transition-colors"
-            >
-              + 새 출고 준비 등록 (New Goods Ready)
-            </button>
+            {canWrite && (
+              <button
+                onClick={() => setIsCreating(true)}
+                className="px-3.5 py-1.5 bg-zinc-950 hover:bg-zinc-900 text-white dark:bg-white dark:text-zinc-950 text-xs font-bold rounded-lg cursor-pointer transition-colors"
+              >
+                + 새 출고 준비 등록 (New Goods Ready)
+              </button>
+            )}
           </div>
 
           {/* TAB 1: READINESS LIST */}

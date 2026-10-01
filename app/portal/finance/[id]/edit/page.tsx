@@ -2,12 +2,24 @@ import React from "react";
 import { notFound, redirect } from "next/navigation";
 import { getPortalInvoiceDetail, getEligiblePosForInvoice } from "@/lib/portal/actions";
 import { InvoiceForm } from "@/components/portal/invoice-form";
+import { hasPortalPermission } from "@/lib/company/permissions";
+import { AccessDeniedView } from "@/components/portal/access-denied";
 
 export default async function EditPortalInvoicePage({
   params
 }: {
   params: Promise<{ id: string }>;
 }) {
+  const canWrite = await hasPortalPermission("finance", "write");
+  if (!canWrite) {
+    return (
+      <AccessDeniedView
+        title="접근 권한이 없습니다."
+        message="인보이스 정보를 수정할 권한이 없습니다. 권한 조정을 원하시면 회사 관리자에게 문의해주세요."
+      />
+    );
+  }
+
   const resolvedParams = await params;
   const { id } = resolvedParams;
 

@@ -35,6 +35,7 @@ interface CompanyProfileManagerProps {
   canEditCompanyInfo?: boolean;
   canReadBankInfo?: boolean;
   canReadAgreements?: boolean;
+  canWriteAgreements?: boolean;
   initialAgreement?: CompanyAgreementItem | null;
   userEmail?: string;
 }
@@ -52,6 +53,7 @@ export function CompanyProfileManager({
   canEditCompanyInfo = true,
   canReadBankInfo = true,
   canReadAgreements = true,
+  canWriteAgreements = true,
   initialAgreement,
   userEmail = "",
 }: CompanyProfileManagerProps) {
@@ -472,7 +474,7 @@ export function CompanyProfileManager({
               <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">
                 회사 정보 설정
               </span>
-              {isCompanyAdmin && (
+              {canEdit && (
                 !isEditingMeta ? (
                   <button
                     onClick={() => {
@@ -855,6 +857,7 @@ export function CompanyProfileManager({
                 }}
                 userEmail={userEmail}
                 companyUsers={companyUsers}
+                canWrite={canWriteAgreements}
               />
             );
           })()}
@@ -863,7 +866,7 @@ export function CompanyProfileManager({
             <div className="rounded-lg border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 relative">
             <div className="flex items-center justify-between mb-4 pb-2 border-b border-zinc-100 dark:border-zinc-800">
               <h3 className="text-sm font-bold text-zinc-950 dark:text-white">거래 정보 (Supplier / Trading Info)</h3>
-              {isCompanyAdmin && (
+              {canEdit && (
                 !isEditingSupplier ? (
                   <button
                     onClick={() => {
@@ -1449,7 +1452,7 @@ export function CompanyProfileManager({
                     회사 운영 6대 핵심 영역별 주 담당자 및 알림 수신인을 지정합니다.
                   </p>
                 </div>
-                {isCompanyAdmin && (
+                {canEdit && (
                   <div className="flex items-center gap-2 flex-wrap">
                     {hasUnsavedTaskChanges && (
                       <span className="text-[11px] font-semibold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 px-2.5 py-1 rounded-md border border-amber-200 dark:border-amber-800">
@@ -1510,7 +1513,7 @@ export function CompanyProfileManager({
                       <th className="px-4 py-3">주 담당자 정보</th>
                       <th className="px-4 py-3">알림 수신인</th>
                       <th className="px-4 py-3 text-center w-28">지정 상태</th>
-                      {isCompanyAdmin && (
+                      {canEdit && (
                         <th className="px-4 py-3 text-right">
                           <span className="inline-flex items-center gap-1 rounded bg-indigo-100 dark:bg-indigo-900/60 text-indigo-800 dark:text-indigo-200 px-2 py-0.5 text-[10px] font-bold border border-indigo-200 dark:border-indigo-800">
                             주 담당자 지정
@@ -1560,7 +1563,7 @@ export function CompanyProfileManager({
                             )}
                           </td>
                           <td className="px-4 py-3.5 text-zinc-500 dark:text-zinc-400">
-                            {isCompanyAdmin ? (
+                            {canEdit ? (
                               <div className="flex flex-col gap-1 max-h-24 overflow-y-auto p-1.5 rounded border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 w-[140px] shadow-2xs">
                                 {activeMembers.map((u) => {
                                   const isNotified = notifyIds.includes(u.id);
@@ -1592,7 +1595,7 @@ export function CompanyProfileManager({
                               </span>
                             )}
                           </td>
-                          {isCompanyAdmin && (
+                          {canEdit && (
                             <td className="px-4 py-3.5 text-right">
                               <select
                                 value={assignedUserId || ""}
@@ -1615,7 +1618,7 @@ export function CompanyProfileManager({
                 </table>
               </div>
 
-              {isCompanyAdmin && hasUnsavedTaskChanges && (
+              {canEdit && hasUnsavedTaskChanges && (
                 <div className="mt-4 pt-3 border-t border-zinc-100 dark:border-zinc-800 flex justify-end gap-2">
                   <button
                     type="button"

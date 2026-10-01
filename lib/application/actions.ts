@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { requireCompanyMembership } from "@/lib/company/dal";
+import { requirePortalPermission } from "@/lib/company/permissions";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendTemplatedEmail } from "@/lib/notifications/templates";
@@ -22,6 +23,7 @@ export type ApplicationFormState = { error: string } | undefined;
  * 만들고 편집 화면으로 보낸다 — 편집 중 이탈해도 임시저장된 상태로 남는다.
  */
 export async function createDraftApplication() {
+  await requirePortalPermission("application", "write");
   const { companyId, userId } = await requireCompanyMembership();
   const supabase = await createClient();
 
@@ -60,6 +62,7 @@ export async function saveDraftApplication(
   _prevState: ApplicationFormState,
   formData: FormData
 ): Promise<ApplicationFormState> {
+  await requirePortalPermission("application", "write");
   const { companyId } = await requireCompanyMembership();
   const supabase = await createClient();
 
@@ -128,6 +131,7 @@ export async function submitApplication(
   applicationId: string,
   _prevState: ApplicationFormState
 ): Promise<ApplicationFormState> {
+  await requirePortalPermission("application", "write");
   const { companyId, userId } = await requireCompanyMembership();
   const supabase = await createClient();
 

@@ -2538,7 +2538,7 @@ export async function updatePortalInvoiceDraft(input: {
     category?: string;
   }>;
 }) {
-  const { companyId, userId } = await requireCompanyMembership();
+  const { companyId, userId } = await requirePortalPermission("finance", "write");
   const supabase = await createClient();
   const adminDb = createAdminClient();
 

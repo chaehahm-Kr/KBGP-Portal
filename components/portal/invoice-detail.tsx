@@ -9,9 +9,10 @@ import { buildSettlementInquiryUrl } from "@/lib/inquiry/types";
 interface InvoiceDetailProps {
   invoice: any;
   attachmentUrl: string | null;
+  canWrite?: boolean;
 }
 
-export function InvoiceDetail({ invoice, attachmentUrl }: InvoiceDetailProps) {
+export function InvoiceDetail({ invoice, attachmentUrl, canWrite = true }: InvoiceDetailProps) {
   const router = useRouter();
   const [isActionLoading, setIsActionLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
@@ -283,7 +284,7 @@ export function InvoiceDetail({ invoice, attachmentUrl }: InvoiceDetailProps) {
             )}
           </div>
 
-          {invoice.invoiceStatus === "DRAFT" ? (
+          {invoice.invoiceStatus === "DRAFT" && canWrite ? (
             <div className="flex flex-col gap-2 pt-4">
               <button
                 onClick={handleSubmitInvoice}
@@ -308,17 +309,17 @@ export function InvoiceDetail({ invoice, attachmentUrl }: InvoiceDetailProps) {
                 </button>
               </div>
             </div>
-          ) : (
-            <div className="pt-3 border-t border-zinc-150 dark:border-zinc-800">
-              <Link
-                href={settlementInquiryUrl}
-                className="w-full py-2 px-3 rounded-lg bg-zinc-100 hover:bg-zinc-200 text-zinc-800 dark:bg-zinc-800 dark:hover:bg-zinc-700 dark:text-zinc-200 text-xs font-bold transition-colors flex items-center justify-center gap-1.5 border border-zinc-200 dark:border-zinc-700"
-              >
-                <span>💬</span>
-                <span>정산 및 인보이스 문의하기</span>
-              </Link>
-            </div>
-          )}
+          ) : null}
+
+          <div className="pt-3 border-t border-zinc-150 dark:border-zinc-800">
+            <Link
+              href={settlementInquiryUrl}
+              className="w-full py-2 px-3 rounded-lg bg-zinc-100 hover:bg-zinc-200 text-zinc-800 dark:bg-zinc-800 dark:hover:bg-zinc-700 dark:text-zinc-200 text-xs font-bold transition-colors flex items-center justify-center gap-1.5 border border-zinc-200 dark:border-zinc-700"
+            >
+              <span>💬</span>
+              <span>정산 및 인보이스 문의하기</span>
+            </Link>
+          </div>
         </div>
       </div>
 

@@ -406,9 +406,12 @@ export async function saveCompanyTaskAssignmentsBatch(
         const sess = await verifyAdminSession();
         changerId = sess.userId;
       } else {
-        const supabase = await createClient();
-        const { data: { user } } = await supabase.auth.getUser();
-        changerId = user?.id || null;
+        const { requirePortalPermission } = await import("@/lib/company/permissions");
+        const membership = await requirePortalPermission("company_info", "write");
+        if (membership.companyId !== companyId) {
+          throw new Error("소속 회사의 담당 업무만 변경할 수 있습니다.");
+        }
+        changerId = membership.userId;
       }
     } catch (e) {}
 

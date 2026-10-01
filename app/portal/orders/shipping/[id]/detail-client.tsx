@@ -8,9 +8,10 @@ interface DetailClientProps {
   readiness: any;
   packingListUrl: string | null;
   invoiceUrl: string | null;
+  canWrite?: boolean;
 }
 
-export function DetailClient({ readiness, packingListUrl, invoiceUrl }: DetailClientProps) {
+export function DetailClient({ readiness, packingListUrl, invoiceUrl, canWrite = true }: DetailClientProps) {
   const router = useRouter();
   const [isActionLoading, setIsActionLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
@@ -195,7 +196,11 @@ export function DetailClient({ readiness, packingListUrl, invoiceUrl }: DetailCl
           <div className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 space-y-4">
             <h3 className="text-sm font-bold text-zinc-800 dark:text-white">물류 액션 패널</h3>
             
-            {readiness.handoverStatus !== "HANDED_OVER" ? (
+            {!canWrite ? (
+              <div className="p-3 text-center bg-zinc-50 border border-zinc-200 text-zinc-500 rounded font-semibold dark:bg-zinc-800 dark:border-zinc-700">
+                조회 전용 권한입니다 (선적 및 인계 작업 불가).
+              </div>
+            ) : readiness.handoverStatus !== "HANDED_OVER" ? (
               readiness.shippingResponsibility === "SUPPLIER_ARRANGED" ? (
                 /* SUPPLIER ARRANGED SHIPPED DISPATCH FORM */
                 <form onSubmit={handleSupplierShipment} className="space-y-3">
