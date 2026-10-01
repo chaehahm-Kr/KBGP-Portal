@@ -12,6 +12,7 @@ export default function OverviewView() {
       publishedCount: number;
       draftCount: number;
       archivedCount: number;
+      updateRequiredCount?: number;
       totalCount: number;
     };
     needsAttention: KnowledgeItem[];
@@ -53,10 +54,10 @@ export default function OverviewView() {
   }
 
   const items = data?.items || [];
-  const publishedCount = items.filter((i) => i.status === "PUBLISHED").length;
-  const draftCount = items.filter((i) => i.status === "DRAFT" || i.status === "IN_REVIEW").length;
-  const archivedCount = items.filter((i) => i.status === "ARCHIVED" || i.status === "SUPERSEDED").length;
-  const updateRequiredCount = items.filter((i) => i.system_impact_status === "UPDATE_REQUIRED" || i.system_impact_status === "POTENTIALLY_OUTDATED").length;
+  const publishedCount = data?.metrics?.publishedCount ?? items.filter((i) => i.status === "PUBLISHED").length;
+  const draftCount = data?.metrics?.draftCount ?? items.filter((i) => i.status === "DRAFT" || i.status === "IN_REVIEW").length;
+  const archivedCount = data?.metrics?.archivedCount ?? items.filter((i) => i.status === "ARCHIVED" || i.status === "SUPERSEDED").length;
+  const updateRequiredCount = data?.metrics?.updateRequiredCount ?? items.filter((i) => i.system_impact_status === "UPDATE_REQUIRED" || i.system_impact_status === "POTENTIALLY_OUTDATED").length;
 
   const recentlyUpdated = data?.recentlyUpdated || items.slice(0, 6);
   const needsAttention = data?.needsAttention || items.filter(i => i.system_impact_status === "UPDATE_REQUIRED" || i.status === "DRAFT" || i.status === "IN_REVIEW").slice(0, 6);
