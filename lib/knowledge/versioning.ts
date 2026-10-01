@@ -256,6 +256,12 @@ export async function publishDraftVersion(
     created_at: now
   });
 
+  // Source Version Governance: Trigger review for linked FAQs (Section 17 & 18)
+  try {
+    const { triggerSourceVersionFaqImpact } = await import("./faq-engine");
+    await triggerSourceVersionFaqImpact(knowledgeId, cleanVerStr, user.name);
+  } catch (e) {}
+
   return publishedItem;
 }
 

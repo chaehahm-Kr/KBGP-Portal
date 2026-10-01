@@ -54,6 +54,8 @@ export function HelpCenterMainView({
 }: HelpCenterMainViewProps) {
   const router = useRouter();
   const [items, setItems] = useState<HelpItem[]>([]);
+  const [faqs, setFaqs] = useState<any[]>([]);
+  const [openFaqId, setOpenFaqId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedTopic, setSelectedTopic] = useState("ALL");
@@ -61,7 +63,8 @@ export function HelpCenterMainView({
 
   useEffect(() => {
     fetchHelpItems();
-  }, [apiEndpoint]);
+    fetchFaqs();
+  }, [apiEndpoint, portalType]);
 
   const fetchHelpItems = async () => {
     setLoading(true);
@@ -75,6 +78,18 @@ export function HelpCenterMainView({
       console.error("Failed to load help items:", e);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchFaqs = async () => {
+    try {
+      const res = await fetch(`/api/knowledge/faqs?audience=${portalType}&kind=FAQ`);
+      if (res.ok) {
+        const json = await res.json();
+        setFaqs(json.faqs || []);
+      }
+    } catch (e) {
+      console.error("Failed to load FAQs:", e);
     }
   };
 
@@ -365,6 +380,96 @@ export function HelpCenterMainView({
               </div>
             </Link>
           ))}
+        </div>
+      )}
+
+      {/* Frequently Asked Questions (FAQ) Section */}
+      {faqs.length > 0 && (
+        <div className="space-y-4 pt-4">
+          <div className="flex items-center justify-between">
+            <div className="space-y-1">
+              <h2 className="text-base font-bold text-zinc-900 dark:text-white flex items-center gap-2">
+                <span>💡 자주 묻는 질문 (FAQ)</span>
+                <span className="rounded bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 px-2 py-0.5 text-xs font-mono font-bold">
+                  {faqs.length}
+                </span>
+              </h2>
+              <p className="text-xs text-zinc-500">
+                공식 승인된 지식과 매뉴얼에서 가장 자주 문의되는 주요 질문과 답변입니다.
+              </p>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            {faqs.map((faq) => {
+              const isOpen = openFaqId === faq.id;
+              return (
+                <div
+                  key={faq.id}
+                  className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 overflow-hidden transition-all shadow-xs"
+                >
+                  <button
+                    type="button"
+                    onClick={() => setOpenFaqId(isOpen ? null : faq.id)}
+                    className="w-full text-left p-4.5 flex items-center justify-between gap-3 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 cursor-pointer transition-colors"
+                  >
+                    <div className="flex items-start gap-2.5">
+                      <span className="text-blue-600 dark:text-blue-400 font-mono font-bold text-sm select-none">
+                        Q.
+                      </span>
+                      <div>
+                        <h3 className="text-xs sm:text-sm font-bold text-zinc-900 dark:text-white leading-snug">
+                          {faq.question_ko}
+                        </h3>
+                        {faq.question_en && (
+                          <p className="text-[11px] text-zinc-400 mt-0.5 font-medium">{faq.question_en}</p>
+                        )}
+                      </div>
+                    </div>
+                    <span
+                      className={`text-zinc-400 text-xs shrink-0 font-bold transition-transform duration-200 ${
+                        isOpen ? "rotate-180" : ""
+                      }`}
+                    >
+                      ▼
+                    </span>
+                  </button>
+
+                  {isOpen && (
+                    <div className="px-4.5 pb-4.5 pt-1 text-xs text-zinc-700 dark:text-zinc-300 border-t border-zinc-100 dark:border-zinc-800/60 bg-zinc-50/50 dark:bg-zinc-900/40 space-y-3">
+                      <div className="flex items-start gap-2 pt-2">
+                        <span className="text-emerald-600 dark:text-emerald-400 font-mono font-bold text-sm select-none">
+                          A.
+                        </span>
+                        <div className="space-y-2 leading-relaxed whitespace-pre-wrap flex-1">
+                          <p>{faq.answer_ko}</p>
+                          {faq.answer_en && (
+                            <p className="text-[11px] text-zinc-500 dark:text-zinc-400 pt-1.5 border-t border-zinc-200/60 dark:border-zinc-700/60">
+                              {faq.answer_en}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-between text-[11px] text-zinc-400 pt-2 border-t border-zinc-200/50 dark:border-zinc-800">
+                        <span className="font-mono">
+                          출처: {faq.source_title || faq.source_knowledge_id} ({faq.source_version})
+                        </span>
+                        {faq.source_knowledge_id && (
+                          <Link
+                            href={`${baseHelpPath}/${faq.source_knowledge_id}`}
+                            className="text-blue-600 hover:text-blue-700 dark:text-blue-400 font-semibold"
+                          >
+                            원문 매뉴얼 보기 &rarr;
+                          </Link>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
 

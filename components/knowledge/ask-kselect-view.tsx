@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { AskAnswerResponse, AskSourceCitation } from "@/lib/knowledge/ask-engine";
 
@@ -21,26 +21,7 @@ export function AskKSelectView({
   baseHelpPath,
   baseSupportPath,
   apiEndpoint = "/api/knowledge/ask",
-  quickQuestions = portalType === "BRAND"
-    ? [
-        "브랜드 등록 전제조건이 무엇인가요?",
-        "상표권이 없어도 등록할 수 있나요?",
-        "상품이 연결된 브랜드를 삭제할 수 있나요?",
-        "동일 브랜드를 여러 회사가 취급할 수 있나요?"
-      ]
-    : portalType === "RETAILER"
-    ? [
-        "바이어 발주 절차는 어떻게 되나요?",
-        "결제 및 정산 주기 안내",
-        "매장 추가 및 권한 설정 방법",
-        "1:1 문의하기 안내"
-      ]
-    : [
-        "INSIGHTS Topic Score 기준은?",
-        "HIGH Risk 검증 기준은?",
-        "0 Draft Day 운영 원칙",
-        "지식 개정(Version) 절차"
-      ],
+  quickQuestions,
   placeholderText = portalType === "BRAND"
     ? "브랜드 등록, 상표권, 삭제 정책 등 궁금한 점을 질문해 보세요..."
     : portalType === "RETAILER"
@@ -62,6 +43,32 @@ export function AskKSelectView({
   const [loading, setLoading] = useState(false);
   const [response, setResponse] = useState<AskAnswerResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [dynamicQuestions, setDynamicQuestions] = useState<string[]>([]);
+  const [hasFetchedDynamic, setHasFetchedDynamic] = useState(false);
+
+  useEffect(() => {
+    async function loadDynamicQuestions() {
+      try {
+        const res = await fetch(`/api/knowledge/faqs?audience=${portalType}&kind=SUGGESTED_QUESTION`);
+        if (res.ok) {
+          const json = await res.json();
+          if (json.faqs && Array.isArray(json.faqs)) {
+            const list = json.faqs.map((f: any) => f.question_ko).filter(Boolean);
+            setDynamicQuestions(list);
+          }
+        }
+      } catch (e) {
+        console.error("Failed to load suggested questions:", e);
+      } finally {
+        setHasFetchedDynamic(true);
+      }
+    }
+    loadDynamicQuestions();
+  }, [portalType]);
+
+  const activeQuestions = hasFetchedDynamic
+    ? dynamicQuestions
+    : (quickQuestions || []);
 
   const handleAsk = async (questionToAsk?: string) => {
     const q = (questionToAsk || query).trim();
@@ -173,19 +180,21 @@ export function AskKSelectView({
           </div>
 
           {/* Quick Question Pills */}
-          <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none text-xs">
-            <span className="text-zinc-400 text-[11px] shrink-0 font-medium">추천 질문:</span>
-            {quickQuestions.map((qText, idx) => (
-              <button
-                key={idx}
-                type="button"
-                onClick={() => handleAsk(qText)}
-                className="rounded-full bg-white/10 hover:bg-white/20 text-zinc-200 hover:text-white px-3 py-1 text-[11px] font-medium transition-all shrink-0 cursor-pointer border border-white/10"
-              >
-                {qText}
-              </button>
-            ))}
-          </div>
+          {activeQuestions.length > 0 && (
+            <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none text-xs">
+              <span className="text-zinc-400 text-[11px] shrink-0 font-medium">추천 질문:</span>
+              {activeQuestions.map((qText, idx) => (
+                <button
+                  key={idx}
+                  type="button"
+                  onClick={() => handleAsk(qText)}
+                  className="rounded-full bg-white/10 hover:bg-white/20 text-zinc-200 hover:text-white px-3 py-1 text-[11px] font-medium transition-all shrink-0 cursor-pointer border border-white/10"
+                >
+                  {qText}
+                </button>
+              ))}
+            </div>
+          )}
         </form>
       </div>
 

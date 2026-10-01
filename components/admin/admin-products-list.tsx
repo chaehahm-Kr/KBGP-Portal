@@ -22,6 +22,7 @@ interface AdminProductItem {
   company_id: string;
   companyName: string;
   brandName: string;
+  brandCode?: string | null;
   photoUrl: string | null;
   is_draft: boolean;
   deleted_at: string | null;
@@ -82,9 +83,24 @@ const SALES_LABELS: Record<string, string> = {
 export function AdminProductsList({ initialProducts }: AdminProductsListProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const initialSearch = searchParams.get("search") || searchParams.get("brand") || "";
+  const paramBrandId = searchParams.get("brand_id") || searchParams.get("brandId") || "";
+  const paramBrandCode = searchParams.get("brand_code") || searchParams.get("brandCode") || "";
+  const paramBrandRaw = searchParams.get("brand") || "";
+  const paramRegStatus = searchParams.get("reg_status") || searchParams.get("status") || "";
+  const paramSearch = searchParams.get("search") || "";
+
+  const initialBrandFilter = paramBrandId || paramBrandCode || paramBrandRaw || "";
+  const initialRegStatuses = (() => {
+    if (paramRegStatus === "active" || paramRegStatus === "complete") return ["active"];
+    if (paramRegStatus === "draft") return ["draft"];
+    if (paramRegStatus === "deleted") return ["deleted"];
+    if (paramRegStatus === "all") return ["active", "draft", "deleted"];
+    return ["active", "draft"];
+  })();
+
   const [products, setProducts] = useState<AdminProductItem[]>(initialProducts);
-  const [searchTerm, setSearchTerm] = useState(initialSearch);
+  const [searchTerm, setSearchTerm] = useState(paramSearch);
+  const [selectedBrandFilter, setSelectedBrandFilter] = useState<string>(initialBrandFilter);
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [isPending, startTransition] = useTransition();
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
@@ -106,7 +122,7 @@ export function AdminProductsList({ initialProducts }: AdminProductsListProps) {
   }, [router]);
 
   // 1. 제품 등록 상태 (복수 선택 가능, 디폴트: Active + Draft)
-  const [selectedRegStatuses, setSelectedRegStatuses] = useState<string[]>(["active", "draft"]);
+  const [selectedRegStatuses, setSelectedRegStatuses] = useState<string[]>(initialRegStatuses);
 
   // 2. 제품 선정 상태 필터 (디폴트: All)
   const [selectedSelectionStatus, setSelectedSelectionStatus] = useState<string>("all");

@@ -8,7 +8,10 @@ import {
   KnowledgeRelation,
   ManualAsset,
   KnowledgeAuditLog,
-  AudienceType
+  AudienceType,
+  KnowledgeFaqItem,
+  FaqStatus,
+  FaqKind
 } from "@/lib/knowledge/types";
 import KnowledgeNavTabs from "./knowledge-nav-tabs";
 
@@ -21,11 +24,38 @@ export default function DetailView({ id }: { id: string }) {
     auditLogs: KnowledgeAuditLog[];
   } | null>(null);
 
-  const [activeTab, setActiveTab] = useState<"CONTENT" | "ACCESS" | "VERSIONS" | "ACTIVITY">("CONTENT");
+  const [activeTab, setActiveTab] = useState<"CONTENT" | "ACCESS" | "VERSIONS" | "FAQS" | "ACTIVITY">("CONTENT");
   const [language, setLanguage] = useState<"KO" | "EN">("KO");
   const [loading, setLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
   const [saving, setSaving] = useState(false);
+
+  // FAQ state
+  const [faqs, setFaqs] = useState<KnowledgeFaqItem[]>([]);
+  const [loadingFaqs, setLoadingFaqs] = useState(false);
+  const [faqStatusFilter, setFaqStatusFilter] = useState<string>("ALL");
+  const [faqKindFilter, setFaqKindFilter] = useState<string>("ALL");
+  const [generatingFaqs, setGeneratingFaqs] = useState(false);
+
+  // Edit FAQ Modal State
+  const [editingFaq, setEditingFaq] = useState<KnowledgeFaqItem | null>(null);
+  const [editFaqForm, setEditFaqForm] = useState<Partial<KnowledgeFaqItem>>({});
+
+  // Manual FAQ Modal State
+  const [manualFaqModal, setManualFaqModal] = useState(false);
+  const [manualFaqForm, setManualFaqForm] = useState<{
+    question_ko: string;
+    question_en: string;
+    answer_ko: string;
+    answer_en: string;
+    kind: FaqKind;
+  }>({
+    question_ko: "",
+    question_en: "",
+    answer_ko: "",
+    answer_en: "",
+    kind: "BOTH"
+  });
 
   // Edit form state
   const [editForm, setEditForm] = useState<Partial<KnowledgeItem>>({});
@@ -42,6 +72,7 @@ export default function DetailView({ id }: { id: string }) {
 
   useEffect(() => {
     fetchDetail();
+    fetchFaqs();
   }, [id]);
 
   const fetchDetail = async () => {
@@ -57,6 +88,146 @@ export default function DetailView({ id }: { id: string }) {
       console.error("Failed to load detail:", e);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchFaqs = async () => {
+    setLoadingFaqs(true);
+    try {
+      const res = await fetch(`/api/admin/knowledge/${id}/faqs`);
+      if (res.ok) {
+        const json = await res.json();
+        setFaqs(json.faqs || []);
+      }
+    } catch (e) {
+      console.error("Failed to load FAQs:", e);
+    } finally {
+      setLoadingFaqs(false);
+    }
+  };
+
+  const handleGenerateFaqs = async () => {
+    setGeneratingFaqs(true);
+    try {
+      const res = await fetch(`/api/admin/knowledge/${id}/faqs`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "GENERATE" })
+      });
+      const json = await res.json();
+      if (res.ok) {
+        alert(json.message || `${json.createdCount}개의 질문 후보가 생성되었습니다.`);
+        fetchFaqs();
+      } else {
+        alert(`생성 실패: ${json.error}`);
+      }
+    } catch (e) {
+      alert("질문 후보 생성 중 오류가 발생했습니다.");
+    } finally {
+      setGeneratingFaqs(false);
+    }
+  };
+
+  const handleApproveFaq = async (faqId: string) => {
+    try {
+      const res = await fetch(`/api/admin/knowledge/${id}/faqs`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "APPROVE", faqId })
+      });
+      if (res.ok) {
+        fetchFaqs();
+      } else {
+        const err = await res.json();
+        alert(`승인 실패: ${err.error}`);
+      }
+    } catch (e) {
+      alert("승인 처리 중 오류가 발생했습니다.");
+    }
+  };
+
+  const handleRejectFaq = async (faqId: string) => {
+    try {
+      const res = await fetch(`/api/admin/knowledge/${id}/faqs`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "REJECT", faqId })
+      });
+      if (res.ok) {
+        fetchFaqs();
+      } else {
+        const err = await res.json();
+        alert(`거절 실패: ${err.error}`);
+      }
+    } catch (e) {
+      alert("거절 처리 중 오류가 발생했습니다.");
+    }
+  };
+
+  const handleDeactivateFaq = async (faqId: string) => {
+    try {
+      const res = await fetch(`/api/admin/knowledge/${id}/faqs`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "DEACTIVATE", faqId })
+      });
+      if (res.ok) {
+        fetchFaqs();
+      }
+    } catch (e) {}
+  };
+
+  const handleNoUpdateNeededFaq = async (faqId: string) => {
+    try {
+      const res = await fetch(`/api/admin/knowledge/${id}/faqs`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "NO_UPDATE_NEEDED", faqId, reason: "Admin verified FAQ content remains valid for current version." })
+      });
+      if (res.ok) {
+        alert("수정 불필요 확인 완료: FAQ가 현재 버전으로 승인 유지되었습니다.");
+        fetchFaqs();
+      }
+    } catch (e) {}
+  };
+
+  const handleSaveEditFaq = async () => {
+    if (!editingFaq) return;
+    try {
+      const res = await fetch(`/api/admin/knowledge/${id}/faqs`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "EDIT", faqId: editingFaq.id, updates: editFaqForm })
+      });
+      if (res.ok) {
+        alert("FAQ 수정이 저장되었습니다.");
+        setEditingFaq(null);
+        fetchFaqs();
+      }
+    } catch (e) {
+      alert("저장 중 오류가 발생했습니다.");
+    }
+  };
+
+  const handleCreateManualFaq = async () => {
+    if (!manualFaqForm.question_ko.trim() || !manualFaqForm.answer_ko.trim()) {
+      alert("한글 질문과 답변을 입력해 주세요.");
+      return;
+    }
+    try {
+      const res = await fetch(`/api/admin/knowledge/${id}/faqs`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "CREATE_MANUAL", manualFaq: manualFaqForm })
+      });
+      if (res.ok) {
+        alert("수동 FAQ 후보가 생성되었습니다.");
+        setManualFaqModal(false);
+        setManualFaqForm({ question_ko: "", question_en: "", answer_ko: "", answer_en: "", kind: "BOTH" });
+        fetchFaqs();
+      }
+    } catch (e) {
+      alert("생성 중 오류가 발생했습니다.");
     }
   };
 
@@ -414,6 +585,16 @@ export default function DetailView({ id }: { id: string }) {
           }`}
         >
           Versions (버전 이력 {versions.length > 0 && `(${versions.length})`})
+        </button>
+        <button
+          onClick={() => setActiveTab("FAQS")}
+          className={`pb-3 transition-colors relative cursor-pointer ${
+            activeTab === "FAQS"
+              ? "text-zinc-900 dark:text-white border-b-2 border-zinc-900 dark:border-white font-bold"
+              : "text-zinc-500 hover:text-zinc-900 dark:text-zinc-400"
+          }`}
+        >
+          FAQ &amp; Questions {faqs.length > 0 && `(${faqs.length})`}
         </button>
         <button
           onClick={() => setActiveTab("ACTIVITY")}
@@ -807,6 +988,385 @@ export default function DetailView({ id }: { id: string }) {
         </div>
       )}
 
+      {/* Tab: FAQs & Suggested Questions */}
+      {activeTab === "FAQS" && (
+        <div className="space-y-6">
+          {/* Header Action Bar */}
+          <div className="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+            <div>
+              <h2 className="text-sm font-bold text-zinc-900 dark:text-white flex items-center gap-2">
+                <span>FAQ &amp; Suggested Questions Engine</span>
+                <span className="rounded bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 text-xs font-mono font-medium text-zinc-600 dark:text-zinc-300">
+                  {faqs.length} Items
+                </span>
+              </h2>
+              <p className="text-xs text-zinc-500 mt-1">
+                본 지식(출처: {item.slug || item.id} {item.current_version || "v1.0"})에 기반한 FAQ 및 추천 질문을 관리합니다.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                type="button"
+                onClick={() => setManualFaqModal(true)}
+                className="rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 px-3.5 py-1.5 text-xs font-semibold text-zinc-700 dark:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-700 cursor-pointer transition-colors shadow-xs"
+              >
+                + 수동 FAQ 등록
+              </button>
+              <button
+                type="button"
+                onClick={handleGenerateFaqs}
+                disabled={generatingFaqs}
+                className="rounded-lg bg-[#131E2E] dark:bg-zinc-100 px-3.5 py-1.5 text-xs font-semibold text-white dark:text-zinc-900 hover:bg-[#1f3047] dark:hover:bg-zinc-200 cursor-pointer disabled:opacity-50 transition-colors shadow-xs flex items-center gap-1.5"
+              >
+                {generatingFaqs ? (
+                  <>
+                    <span className="inline-block w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
+                    <span>추출 &amp; 생성 중...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>✨ AI 질문 후보 생성</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+
+          {/* Status Metrics Bar */}
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+            <div
+              onClick={() => setFaqStatusFilter("ALL")}
+              className={`p-3 rounded-lg border cursor-pointer transition-all ${
+                faqStatusFilter === "ALL"
+                  ? "border-zinc-900 bg-zinc-50 dark:border-zinc-100 dark:bg-zinc-800/80 shadow-xs"
+                  : "border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900 hover:border-zinc-300"
+              }`}
+            >
+              <span className="text-[11px] font-semibold text-zinc-500">전체 질문</span>
+              <p className="text-lg font-bold text-zinc-900 dark:text-white mt-0.5">{faqs.length}</p>
+            </div>
+            <div
+              onClick={() => setFaqStatusFilter("APPROVED")}
+              className={`p-3 rounded-lg border cursor-pointer transition-all ${
+                faqStatusFilter === "APPROVED"
+                  ? "border-emerald-600 bg-emerald-50 dark:border-emerald-500 dark:bg-emerald-950/40 shadow-xs"
+                  : "border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900 hover:border-emerald-200"
+              }`}
+            >
+              <span className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">승인됨 (공식 배포)</span>
+              <p className="text-lg font-bold text-emerald-700 dark:text-emerald-300 mt-0.5">
+                {faqs.filter((f) => f.status === "APPROVED").length}
+              </p>
+            </div>
+            <div
+              onClick={() => setFaqStatusFilter("CANDIDATE")}
+              className={`p-3 rounded-lg border cursor-pointer transition-all ${
+                faqStatusFilter === "CANDIDATE"
+                  ? "border-amber-500 bg-amber-50 dark:border-amber-500 dark:bg-amber-950/40 shadow-xs"
+                  : "border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900 hover:border-amber-200"
+              }`}
+            >
+              <span className="text-[11px] font-semibold text-amber-600 dark:text-amber-400">검토 대기 (후보)</span>
+              <p className="text-lg font-bold text-amber-700 dark:text-amber-300 mt-0.5">
+                {faqs.filter((f) => f.status === "CANDIDATE").length}
+              </p>
+            </div>
+            <div
+              onClick={() => setFaqStatusFilter("UPDATE_REQUIRED")}
+              className={`p-3 rounded-lg border cursor-pointer transition-all ${
+                faqStatusFilter === "UPDATE_REQUIRED"
+                  ? "border-rose-500 bg-rose-50 dark:border-rose-500 dark:bg-rose-950/40 shadow-xs"
+                  : "border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900 hover:border-rose-200"
+              }`}
+            >
+              <span className="text-[11px] font-semibold text-rose-600 dark:text-rose-400">수정 필요</span>
+              <p className="text-lg font-bold text-rose-700 dark:text-rose-300 mt-0.5">
+                {faqs.filter((f) => f.status === "UPDATE_REQUIRED").length}
+              </p>
+            </div>
+            <div
+              onClick={() => setFaqStatusFilter("REJECTED")}
+              className={`p-3 rounded-lg border cursor-pointer transition-all ${
+                faqStatusFilter === "REJECTED"
+                  ? "border-zinc-400 bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-800 shadow-xs"
+                  : "border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900 hover:border-zinc-300"
+              }`}
+            >
+              <span className="text-[11px] font-semibold text-zinc-500">거절 / 비활성</span>
+              <p className="text-lg font-bold text-zinc-700 dark:text-zinc-300 mt-0.5">
+                {faqs.filter((f) => f.status === "REJECTED" || f.status === "INACTIVE").length}
+              </p>
+            </div>
+          </div>
+
+          {/* Filter Pills */}
+          <div className="flex flex-wrap items-center justify-between gap-3 text-xs border-b border-zinc-200 dark:border-zinc-800 pb-3">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="text-zinc-400 font-medium mr-1 text-[11px]">상태:</span>
+              {(["ALL", "APPROVED", "CANDIDATE", "UPDATE_REQUIRED", "REJECTED", "INACTIVE"] as const).map((st) => (
+                <button
+                  key={st}
+                  type="button"
+                  onClick={() => setFaqStatusFilter(st)}
+                  className={`px-2.5 py-1 rounded-md font-medium text-xs cursor-pointer transition-colors ${
+                    faqStatusFilter === st
+                      ? "bg-zinc-900 text-white dark:bg-white dark:text-zinc-900 font-bold"
+                      : "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300 hover:bg-zinc-200"
+                  }`}
+                >
+                  {st === "ALL" && "전체"}
+                  {st === "APPROVED" && "승인됨"}
+                  {st === "CANDIDATE" && "후보 (검토필요)"}
+                  {st === "UPDATE_REQUIRED" && "수정필요 (Outdated)"}
+                  {st === "REJECTED" && "거절됨"}
+                  {st === "INACTIVE" && "비활성"}
+                </button>
+              ))}
+            </div>
+
+            <div className="flex items-center gap-1.5">
+              <span className="text-zinc-400 font-medium mr-1 text-[11px]">유형:</span>
+              {(["ALL", "FAQ", "SUGGESTED_QUESTION", "BOTH"] as const).map((kd) => (
+                <button
+                  key={kd}
+                  type="button"
+                  onClick={() => setFaqKindFilter(kd)}
+                  className={`px-2.5 py-1 rounded-md font-medium text-xs cursor-pointer transition-colors ${
+                    faqKindFilter === kd
+                      ? "bg-zinc-900 text-white dark:bg-white dark:text-zinc-900 font-bold"
+                      : "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300 hover:bg-zinc-200"
+                  }`}
+                >
+                  {kd === "ALL" && "전체"}
+                  {kd === "FAQ" && "Help FAQ"}
+                  {kd === "SUGGESTED_QUESTION" && "Ask 추천질문"}
+                  {kd === "BOTH" && "공통 (Both)"}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Card Listing */}
+          <div className="space-y-3">
+            {loadingFaqs ? (
+              <div className="p-8 text-center text-xs text-zinc-400">FAQ 목록 로딩 중...</div>
+            ) : faqs.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-zinc-300 p-8 text-center dark:border-zinc-700">
+                <p className="text-xs font-semibold text-zinc-600 dark:text-zinc-400">
+                  등록된 FAQ 또는 추천 질문이 없습니다.
+                </p>
+                <p className="text-[11px] text-zinc-400 mt-1">
+                  상단의 [✨ AI 질문 후보 생성] 버튼을 눌러 본문 기반 질문 후보를 자동 생성하세요.
+                </p>
+              </div>
+            ) : (
+              faqs
+                .filter((f) => {
+                  if (faqStatusFilter !== "ALL" && f.status !== faqStatusFilter) return false;
+                  if (faqKindFilter !== "ALL" && f.kind !== faqKindFilter) return false;
+                  return true;
+                })
+                .map((faq) => (
+                  <div
+                    key={faq.id}
+                    className={`rounded-xl border p-4.5 transition-all ${
+                      faq.status === "UPDATE_REQUIRED"
+                        ? "border-amber-300 bg-amber-50/40 dark:border-amber-700/60 dark:bg-amber-950/20"
+                        : faq.status === "CANDIDATE"
+                        ? "border-zinc-200 bg-zinc-50/50 dark:border-zinc-800 dark:bg-zinc-900/40"
+                        : faq.status === "APPROVED"
+                        ? "border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900 shadow-xs"
+                        : "border-zinc-200 bg-zinc-100/40 dark:border-zinc-800 dark:bg-zinc-900/20 opacity-70"
+                    }`}
+                  >
+                    <div className="flex flex-col md:flex-row md:items-start justify-between gap-3">
+                      <div className="space-y-2 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap text-xs">
+                          {/* Status Badge */}
+                          {faq.status === "APPROVED" && (
+                            <span className="rounded bg-emerald-100 dark:bg-emerald-900/60 px-2 py-0.5 text-[10px] font-bold text-emerald-700 dark:text-emerald-300">
+                              ✓ 승인됨 (APPROVED)
+                            </span>
+                          )}
+                          {faq.status === "CANDIDATE" && (
+                            <span className="rounded bg-amber-100 dark:bg-amber-900/60 px-2 py-0.5 text-[10px] font-bold text-amber-800 dark:text-amber-300">
+                              ⏳ 검토 대기 (CANDIDATE)
+                            </span>
+                          )}
+                          {faq.status === "UPDATE_REQUIRED" && (
+                            <span className="rounded bg-rose-100 dark:bg-rose-900/60 px-2 py-0.5 text-[10px] font-bold text-rose-700 dark:text-rose-300">
+                              ⚠️ 소스 개정 감지 (UPDATE REQUIRED)
+                            </span>
+                          )}
+                          {faq.status === "REJECTED" && (
+                            <span className="rounded bg-zinc-200 dark:bg-zinc-800 px-2 py-0.5 text-[10px] font-bold text-zinc-600 dark:text-zinc-400">
+                              ✗ 거절됨 (REJECTED)
+                            </span>
+                          )}
+                          {faq.status === "INACTIVE" && (
+                            <span className="rounded bg-zinc-200 dark:bg-zinc-800 px-2 py-0.5 text-[10px] font-bold text-zinc-600 dark:text-zinc-400">
+                              비활성 (INACTIVE)
+                            </span>
+                          )}
+
+                          {/* Kind Badge */}
+                          <span className="rounded bg-blue-100 dark:bg-blue-900/50 px-2 py-0.5 text-[10px] font-semibold text-blue-800 dark:text-blue-300">
+                            {faq.kind === "FAQ" && "Help Center FAQ"}
+                            {faq.kind === "SUGGESTED_QUESTION" && "Ask K SELECT 추천질문"}
+                            {faq.kind === "BOTH" && "FAQ + 추천질문 공용"}
+                          </span>
+
+                          {/* Audience */}
+                          <span className="rounded bg-purple-100 dark:bg-purple-900/50 px-2 py-0.5 text-[10px] font-semibold text-purple-800 dark:text-purple-300">
+                            {faq.audience}
+                          </span>
+
+                          <span className="text-[11px] text-zinc-400 font-mono">
+                            Ver: {faq.source_version}
+                          </span>
+                        </div>
+
+                        {/* Question */}
+                        <div>
+                          <h3 className="text-sm font-bold text-zinc-900 dark:text-white flex items-start gap-1.5">
+                            <span className="text-blue-600 font-mono">Q.</span>
+                            <span>{faq.question_ko}</span>
+                          </h3>
+                          {faq.question_en && (
+                            <p className="text-xs text-zinc-500 font-medium ml-4 mt-0.5">
+                              {faq.question_en}
+                            </p>
+                          )}
+                        </div>
+
+                        {/* Answer */}
+                        <div className="bg-zinc-50 dark:bg-zinc-800/60 rounded-lg p-3 text-xs text-zinc-700 dark:text-zinc-300 space-y-1">
+                          <div className="flex items-start gap-1.5">
+                            <span className="text-emerald-600 font-mono font-bold">A.</span>
+                            <span className="leading-relaxed whitespace-pre-wrap">{faq.answer_ko}</span>
+                          </div>
+                          {faq.answer_en && (
+                            <p className="text-[11px] text-zinc-500 dark:text-zinc-400 ml-4 pt-1 border-t border-zinc-200/60 dark:border-zinc-700/60">
+                              {faq.answer_en}
+                            </p>
+                          )}
+                        </div>
+
+                        {/* Update Required / Impact Note */}
+                        {faq.impact_reason && (
+                          <div className="text-[11px] text-amber-800 dark:text-amber-300 bg-amber-100/60 dark:bg-amber-950/40 p-2 rounded">
+                            <span className="font-bold">변경 사유: </span>
+                            {faq.impact_reason}
+                          </div>
+                        )}
+                        {faq.review_note && (
+                          <p className="text-[11px] text-zinc-500 italic">
+                            메모: {faq.review_note}
+                          </p>
+                        )}
+                      </div>
+
+                      {/* Action Buttons */}
+                      <div className="flex flex-row md:flex-col items-center md:items-end gap-1.5 shrink-0 pt-2 md:pt-0">
+                        {faq.status === "CANDIDATE" && (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => handleApproveFaq(faq.id)}
+                              className="rounded bg-emerald-600 px-3 py-1 text-xs font-semibold text-white hover:bg-emerald-700 cursor-pointer shadow-xs"
+                            >
+                              ✓ 승인 (Approve)
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingFaq(faq);
+                                setEditFaqForm(faq);
+                              }}
+                              className="rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 px-3 py-1 text-xs font-semibold text-zinc-700 dark:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-700 cursor-pointer"
+                            >
+                              ✏️ 수정
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleRejectFaq(faq.id)}
+                              className="rounded border border-rose-200 dark:border-rose-900/60 bg-rose-50 dark:bg-rose-950/30 px-3 py-1 text-xs font-semibold text-rose-700 dark:text-rose-300 hover:bg-rose-100 cursor-pointer"
+                            >
+                              ✗ 거절
+                            </button>
+                          </>
+                        )}
+
+                        {faq.status === "UPDATE_REQUIRED" && (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => handleNoUpdateNeededFaq(faq.id)}
+                              className="rounded bg-emerald-600 px-3 py-1 text-xs font-semibold text-white hover:bg-emerald-700 cursor-pointer shadow-xs"
+                            >
+                              ✓ 수정 불필요 유지
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingFaq(faq);
+                                setEditFaqForm(faq);
+                              }}
+                              className="rounded bg-[#131E2E] px-3 py-1 text-xs font-semibold text-white hover:bg-[#1f3047] cursor-pointer"
+                            >
+                              ✏️ 수정 후 승인
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeactivateFaq(faq.id)}
+                              className="rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 px-3 py-1 text-xs font-semibold text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 cursor-pointer"
+                            >
+                              비활성화
+                            </button>
+                          </>
+                        )}
+
+                        {faq.status === "APPROVED" && (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingFaq(faq);
+                                setEditFaqForm(faq);
+                              }}
+                              className="rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 px-3 py-1 text-xs font-semibold text-zinc-700 dark:text-zinc-200 hover:bg-zinc-50 cursor-pointer"
+                            >
+                              ✏️ 수정
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeactivateFaq(faq.id)}
+                              className="rounded border border-zinc-200 dark:border-zinc-700 px-3 py-1 text-xs font-semibold text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800 cursor-pointer"
+                            >
+                              비활성화
+                            </button>
+                          </>
+                        )}
+
+                        {(faq.status === "REJECTED" || faq.status === "INACTIVE") && (
+                          <button
+                            type="button"
+                            onClick={() => handleApproveFaq(faq.id)}
+                            className="rounded bg-emerald-600 px-3 py-1 text-xs font-semibold text-white hover:bg-emerald-700 cursor-pointer"
+                          >
+                            ✓ 다시 승인
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Tab 4: Activity Logs */}
       {activeTab === "ACTIVITY" && (
         <div className="rounded-xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-900 shadow-sm space-y-4">
@@ -938,6 +1498,199 @@ export default function DetailView({ id }: { id: string }) {
                 className="rounded bg-emerald-600 px-4 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 cursor-pointer"
               >
                 검토 완료 및 NORMAL 복구
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Edit FAQ / Question */}
+      {editingFaq && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-lg rounded-xl bg-white p-6 dark:bg-zinc-900 shadow-xl space-y-4 max-h-[90vh] overflow-y-auto">
+            <h3 className="text-sm font-bold text-zinc-900 dark:text-white">
+              ✏️ FAQ / 추천 질문 수정 (Edit FAQ)
+            </h3>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                  질문 (한글) <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={editFaqForm.question_ko || ""}
+                  onChange={(e) => setEditFaqForm({ ...editFaqForm, question_ko: e.target.value })}
+                  className="w-full rounded border border-zinc-300 p-2 text-xs dark:border-zinc-700 dark:bg-zinc-950 font-medium"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                  질문 (영문)
+                </label>
+                <input
+                  type="text"
+                  value={editFaqForm.question_en || ""}
+                  onChange={(e) => setEditFaqForm({ ...editFaqForm, question_en: e.target.value })}
+                  className="w-full rounded border border-zinc-300 p-2 text-xs dark:border-zinc-700 dark:bg-zinc-950"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                  답변 (한글) <span className="text-rose-500">*</span>
+                </label>
+                <textarea
+                  rows={4}
+                  value={editFaqForm.answer_ko || ""}
+                  onChange={(e) => setEditFaqForm({ ...editFaqForm, answer_ko: e.target.value })}
+                  className="w-full rounded border border-zinc-300 p-2 text-xs dark:border-zinc-700 dark:bg-zinc-950"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                  답변 (영문)
+                </label>
+                <textarea
+                  rows={3}
+                  value={editFaqForm.answer_en || ""}
+                  onChange={(e) => setEditFaqForm({ ...editFaqForm, answer_en: e.target.value })}
+                  className="w-full rounded border border-zinc-300 p-2 text-xs dark:border-zinc-700 dark:bg-zinc-950"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                  노출 유형 (Kind)
+                </label>
+                <select
+                  value={editFaqForm.kind || "BOTH"}
+                  onChange={(e) => setEditFaqForm({ ...editFaqForm, kind: e.target.value as FaqKind })}
+                  className="w-full rounded border border-zinc-300 p-2 text-xs dark:border-zinc-700 dark:bg-zinc-950"
+                >
+                  <option value="BOTH">FAQ + Ask 추천질문 공용 (BOTH)</option>
+                  <option value="FAQ">Help Center FAQ 전용</option>
+                  <option value="SUGGESTED_QUESTION">Ask K SELECT 추천질문 전용</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                  검토 및 수정 메모 (Review Notes)
+                </label>
+                <input
+                  type="text"
+                  placeholder="수정 사유 또는 검토 메모를 남기세요."
+                  value={editFaqForm.review_note || ""}
+                  onChange={(e) => setEditFaqForm({ ...editFaqForm, review_note: e.target.value })}
+                  className="w-full rounded border border-zinc-300 p-2 text-xs dark:border-zinc-700 dark:bg-zinc-950"
+                />
+              </div>
+            </div>
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-zinc-100 dark:border-zinc-800">
+              <button
+                type="button"
+                onClick={() => setEditingFaq(null)}
+                className="rounded px-3 py-1.5 text-xs text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 cursor-pointer"
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveEditFaq}
+                className="rounded bg-emerald-600 px-4 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 cursor-pointer"
+              >
+                수정사항 저장 &amp; 승인
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Manual FAQ Creation */}
+      {manualFaqModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-lg rounded-xl bg-white p-6 dark:bg-zinc-900 shadow-xl space-y-4 max-h-[90vh] overflow-y-auto">
+            <h3 className="text-sm font-bold text-zinc-900 dark:text-white">
+              + 수동 FAQ / 질문 등록 (Add Manual FAQ)
+            </h3>
+            <p className="text-xs text-zinc-500">
+              이 지식({item.title_ko})에 연결될 새 FAQ를 직접 작성합니다. 작성된 FAQ는 CANDIDATE(후보) 상태로 생성됩니다.
+            </p>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                  질문 (한글) <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  placeholder="예: 브랜드 등록 승인은 얼마나 걸리나요?"
+                  value={manualFaqForm.question_ko}
+                  onChange={(e) => setManualFaqForm({ ...manualFaqForm, question_ko: e.target.value })}
+                  className="w-full rounded border border-zinc-300 p-2 text-xs dark:border-zinc-700 dark:bg-zinc-950 font-medium"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                  질문 (영문)
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. How long does brand approval take?"
+                  value={manualFaqForm.question_en}
+                  onChange={(e) => setManualFaqForm({ ...manualFaqForm, question_en: e.target.value })}
+                  className="w-full rounded border border-zinc-300 p-2 text-xs dark:border-zinc-700 dark:bg-zinc-950"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                  답변 (한글) <span className="text-rose-500">*</span>
+                </label>
+                <textarea
+                  rows={4}
+                  placeholder="본문 지식에 부합하는 정확한 답변을 입력해 주세요."
+                  value={manualFaqForm.answer_ko}
+                  onChange={(e) => setManualFaqForm({ ...manualFaqForm, answer_ko: e.target.value })}
+                  className="w-full rounded border border-zinc-300 p-2 text-xs dark:border-zinc-700 dark:bg-zinc-950"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                  답변 (영문)
+                </label>
+                <textarea
+                  rows={3}
+                  placeholder="English answer translation"
+                  value={manualFaqForm.answer_en}
+                  onChange={(e) => setManualFaqForm({ ...manualFaqForm, answer_en: e.target.value })}
+                  className="w-full rounded border border-zinc-300 p-2 text-xs dark:border-zinc-700 dark:bg-zinc-950"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                  노출 유형 (Kind)
+                </label>
+                <select
+                  value={manualFaqForm.kind}
+                  onChange={(e) => setManualFaqForm({ ...manualFaqForm, kind: e.target.value as FaqKind })}
+                  className="w-full rounded border border-zinc-300 p-2 text-xs dark:border-zinc-700 dark:bg-zinc-950"
+                >
+                  <option value="BOTH">FAQ + Ask 추천질문 공용 (BOTH)</option>
+                  <option value="FAQ">Help Center FAQ 전용</option>
+                  <option value="SUGGESTED_QUESTION">Ask K SELECT 추천질문 전용</option>
+                </select>
+              </div>
+            </div>
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-zinc-100 dark:border-zinc-800">
+              <button
+                type="button"
+                onClick={() => setManualFaqModal(false)}
+                className="rounded px-3 py-1.5 text-xs text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 cursor-pointer"
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                onClick={handleCreateManualFaq}
+                className="rounded bg-[#131E2E] px-4 py-1.5 text-xs font-semibold text-white hover:bg-[#1f3047] cursor-pointer"
+              >
+                후보 생성 (CANDIDATE)
               </button>
             </div>
           </div>

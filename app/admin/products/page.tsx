@@ -27,11 +27,12 @@ export default async function AdminProductsPage() {
     .select("id, name");
   const companyNameById = new Map((companies ?? []).map((c) => [c.id, c.name]));
 
-  // 3. Fetch all brands for name mapping
+  // 3. Fetch all brands for name & code mapping
   const { data: brands } = await admin
     .from("brands")
-    .select("id, name");
+    .select("id, name, brand_code");
   const brandNameById = new Map((brands ?? []).map((b) => [b.id, b.name]));
+  const brandCodeById = new Map((brands ?? []).map((b) => [b.id, (b as any).brand_code || null]));
 
   // 4. Fetch all categories to build full path mappings
   const { data: dbCategories } = await admin
@@ -143,6 +144,7 @@ export default async function AdminProductsPage() {
           company_id: p.company_id,
           companyName: companyNameById.get(p.company_id) || "(미지정 회사)",
           brandName: brandNameById.get(p.brand_id) || "(미지정 브랜드)",
+          brandCode: brandCodeById.get(p.brand_id) || null,
           photoUrl,
           is_draft: registrationEvaluation.isDraft,
           missing_fields: registrationEvaluation.missingFields,
@@ -176,6 +178,7 @@ export default async function AdminProductsPage() {
           company_id: p.company_id || "",
           companyName: companyNameById.get(p.company_id) || "(미지정 회사)",
           brandName: brandNameById.get(p.brand_id) || "(미지정 브랜드)",
+          brandCode: brandCodeById.get(p.brand_id) || null,
           photoUrl: null,
           is_draft: true,
           missing_fields: [],

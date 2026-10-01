@@ -6,7 +6,11 @@ import {
   KnowledgeAuditLog,
   SystemImpactTrigger,
   KnowledgeFilterOptions,
-  SecurityUserContext
+  SecurityUserContext,
+  KnowledgeFaqItem,
+  FaqStatus,
+  FaqKind,
+  AudienceType
 } from "./types";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -19,6 +23,7 @@ let memoryRelations: KnowledgeRelation[] = [];
 let memoryAssets: ManualAsset[] = [];
 let memoryLogs: KnowledgeAuditLog[] = [];
 let memoryTriggers: SystemImpactTrigger[] = [];
+let memoryFaqs: KnowledgeFaqItem[] = [];
 
 export function initSeedData() {
   if (INITIALIZED) return;
@@ -1251,4 +1256,109 @@ export async function resolveKnowledgeImpact(
 
   return updatedItem;
 }
+
+// --------------------------------------------------
+// FAQ & Suggested Questions Store Methods (KNW-FAQ-001)
+// --------------------------------------------------
+
+export async function getStoreFaqs(
+  knowledgeId?: string,
+  status?: FaqStatus,
+  audience?: AudienceType
+): Promise<KnowledgeFaqItem[]> {
+  initSeedData();
+  try {
+    const supabase = createAdminClient();
+    let query = supabase.from("knowledge_faqs").select("*");
+
+    if (knowledgeId) {
+      query = query.eq("source_knowledge_id", knowledgeId);
+    }
+    if (status) {
+      query = query.eq("status", status);
+    }
+
+    const { data } = await query.order("display_order", { ascending: true });
+    if (data && data.length > 0) {
+      // Sync in-memory store
+      data.forEach((dbFaq: KnowledgeFaqItem) => {
+        const idx = memoryFaqs.findIndex(f => f.id === dbFaq.id);
+        if (idx >= 0) memoryFaqs[idx] = dbFaq;
+        else memoryFaqs.push(dbFaq);
+      });
+    }
+  } catch (e) {}
+
+  let list = [...memoryFaqs];
+  if (knowledgeId) {
+    list = list.filter(f => f.source_knowledge_id === knowledgeId);
+  }
+  if (status) {
+    list = list.filter(f => f.status === status);
+  }
+  if (audience) {
+    const target = audience.toUpperCase();
+    list = list.filter(f => {
+      const auds = (f.audience || []).map(a => a.toUpperCase());
+      if (target === "BRAND") return auds.includes("BRAND");
+      if (target === "RETAIL" || target === "RETAILER") return auds.includes("RETAIL") || auds.includes("RETAILER");
+      if (target === "INTERNAL") return auds.includes("INTERNAL") || auds.includes("ADMIN / MANAGEMENT");
+      if (target === "PUBLIC") return auds.includes("PUBLIC");
+      return auds.includes(target);
+    });
+  }
+
+  list.sort((a, b) => {
+    if (a.is_featured && !b.is_featured) return -1;
+    if (!a.is_featured && b.is_featured) return 1;
+    if (a.display_order !== b.display_order) return a.display_order - b.display_order;
+    return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+  });
+
+  return list;
+}
+
+export async function getStoreFaqById(id: string): Promise<KnowledgeFaqItem | null> {
+  initSeedData();
+  try {
+    const supabase = createAdminClient();
+    const { data } = await supabase.from("knowledge_faqs").select("*").eq("id", id).maybeSingle();
+    if (data) {
+      const idx = memoryFaqs.findIndex(f => f.id === data.id);
+      if (idx >= 0) memoryFaqs[idx] = data as KnowledgeFaqItem;
+      else memoryFaqs.push(data as KnowledgeFaqItem);
+      return data as KnowledgeFaqItem;
+    }
+  } catch (e) {}
+
+  return memoryFaqs.find(f => f.id === id) || null;
+}
+
+export async function saveStoreFaq(faq: KnowledgeFaqItem): Promise<KnowledgeFaqItem> {
+  initSeedData();
+  const idx = memoryFaqs.findIndex(f => f.id === faq.id);
+  if (idx >= 0) {
+    memoryFaqs[idx] = faq;
+  } else {
+    memoryFaqs.unshift(faq);
+  }
+
+  try {
+    const supabase = createAdminClient();
+    await supabase.from("knowledge_faqs").upsert(faq);
+  } catch (e) {}
+
+  return faq;
+}
+
+export async function deleteStoreFaq(id: string): Promise<boolean> {
+  initSeedData();
+  memoryFaqs = memoryFaqs.filter(f => f.id !== id);
+  try {
+    const supabase = createAdminClient();
+    await supabase.from("knowledge_faqs").delete().eq("id", id);
+  } catch (e) {}
+  return true;
+}
+
 

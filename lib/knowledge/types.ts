@@ -218,3 +218,31 @@ export interface GuideFeedbackRecord {
   reason?: string | null;
   created_at: string;
 }
+
+export type FaqStatus = "CANDIDATE" | "APPROVED" | "REJECTED" | "INACTIVE" | "UPDATE_REQUIRED";
+
+export type FaqKind = "FAQ" | "SUGGESTED_QUESTION" | "BOTH";
+
+export interface KnowledgeFaqItem {
+  id: string;
+  source_knowledge_id: string;
+  source_version: string;
+  source_title: string;
+  question_ko: string;
+  question_en: string;
+  answer_ko: string;
+  answer_en: string;
+  audience: AudienceType[];
+  status: FaqStatus;
+  kind: FaqKind;
+  display_order: number;
+  is_featured: boolean;
+  generated_by: "AI" | "MANUAL";
+  created_at: string;
+  updated_at: string;
+  reviewed_at?: string | null;
+  reviewed_by?: string | null;
+  review_note?: string | null;
+  impact_reason?: string | null;
+}
+
