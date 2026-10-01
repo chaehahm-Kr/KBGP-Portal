@@ -10,7 +10,9 @@ import {
   KnowledgeFaqItem,
   FaqStatus,
   FaqKind,
-  AudienceType
+  AudienceType,
+  PortalScope,
+  KnowledgeTopic
 } from "./types";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -24,6 +26,8 @@ let memoryAssets: ManualAsset[] = [];
 let memoryLogs: KnowledgeAuditLog[] = [];
 let memoryTriggers: SystemImpactTrigger[] = [];
 let memoryFaqs: KnowledgeFaqItem[] = [];
+let memoryTopics: KnowledgeTopic[] = [];
+
 
 export function initSeedData() {
   if (INITIALIZED) return;
@@ -599,9 +603,184 @@ Official operational guide for K SELECT NETWORK Brand Portal partners managing b
     }
   ];
 
+  memoryTopics = [
+    {
+      id: "topic-start",
+      portal_scope: "BRAND",
+      name_ko: "시작하기",
+      name_en: "Getting Started",
+      short_desc_ko: "가입 · 계정 · 기본 온보딩",
+      short_desc_en: "Signup · Account · Onboarding",
+      description_ko: "회원가입, 회사 등록, 초기 계정 설정 및 온보딩",
+      description_en: "Account registration, company setup, and onboarding guides",
+      icon: "🚀",
+      display_order: 1,
+      is_active: true,
+      match_modules: ["ONBOARDING", "SIGNUP", "ACCOUNT", "START", "SETUP"],
+      match_keywords: ["가입", "시작", "온보딩", "초기 설정", "계정", "onboarding", "signup", "start", "account"],
+      created_at: now,
+      updated_at: now
+    },
+    {
+      id: "topic-brand",
+      portal_scope: "BRAND",
+      name_ko: "브랜드 관리",
+      name_en: "Brand Management",
+      short_desc_ko: "등록 · 상표권 · 수정 · 사용 중단",
+      short_desc_en: "Registration · Trademark · Inactive",
+      description_ko: "브랜드 등록, 상표권 정책, 브랜드 권한 및 사용 중단 정책",
+      description_en: "Brand registration, trademark policy, ownership, and deactivation rules",
+      icon: "🏷️",
+      display_order: 2,
+      is_active: true,
+      match_modules: ["BRAND", "BRANDS", "BRAND_POLICY"],
+      match_keywords: ["브랜드", "상표권", "브랜드 삭제", "브랜드 비활성화", "brand", "trademark", "ownership", "man-brand-001"],
+      created_at: now,
+      updated_at: now
+    },
+    {
+      id: "topic-product",
+      portal_scope: "BRAND",
+      name_ko: "상품 등록 & 관리",
+      name_en: "Product Management",
+      short_desc_ko: "상품 등록 · SKU · 규격 · 승인",
+      short_desc_en: "Products · SKU · Specs · Approval",
+      description_ko: "상품 신규 등록, SKU 관리, 상품 정보 수정 및 브랜드 연결",
+      description_en: "Product registration, SKU management, catalog editing, and brand linking",
+      icon: "📦",
+      display_order: 3,
+      is_active: true,
+      match_modules: ["PRODUCTS", "PRODUCT", "SKU", "CATALOG"],
+      match_keywords: ["상품", "제품", "sku", "카탈로그", "바코드", "product", "item"],
+      created_at: now,
+      updated_at: now
+    },
+    {
+      id: "topic-regulatory",
+      portal_scope: "BRAND",
+      name_ko: "인허가 & 규정",
+      name_en: "Regulatory & Compliance",
+      short_desc_ko: "FDA · MoCRA · 라벨 · 통관 인증",
+      short_desc_en: "FDA · MoCRA · Labeling · US Compliance",
+      description_ko: "미국 판매 요건, FDA, MoCRA, 라벨링 및 필수 인증 서류",
+      description_en: "US market compliance, FDA, MoCRA, labeling, and required certificates",
+      icon: "📜",
+      display_order: 4,
+      is_active: true,
+      match_modules: ["REGULATORY", "COMPLIANCE", "FDA", "MOCRA"],
+      match_keywords: ["인허가", "규정", "fda", "mocra", "라벨링", "성분", "certification", "compliance"],
+      created_at: now,
+      updated_at: now
+    },
+    {
+      id: "topic-retail",
+      portal_scope: "BRAND",
+      name_ko: "입점 & 리테일 네트워크",
+      name_en: "Retail Network",
+      short_desc_ko: "바이어 매칭 · 입점 신청 · 유통 채널",
+      short_desc_en: "Buyer Matching · Placement · Channels",
+      description_ko: "바이어 매장 입점 신청, 리테일 네트워크 참여 및 테스트 프로그램",
+      description_en: "Retail store applications, distribution network, and testing opportunities",
+      icon: "🏬",
+      display_order: 5,
+      is_active: true,
+      match_modules: ["RETAIL", "RETAILER", "STORE", "NETWORK"],
+      match_keywords: ["입점", "리테일", "매장", "네트워크", "스토어", "retail", "store", "network"],
+      created_at: now,
+      updated_at: now
+    },
+    {
+      id: "topic-orders",
+      portal_scope: "BRAND",
+      name_ko: "발주 요청 & 오더",
+      name_en: "Orders & PO",
+      short_desc_ko: "발주서 · PO 접수 · 납기 관리",
+      short_desc_en: "Purchase Orders · PO · Lead Time",
+      description_ko: "리테일러 발주 요청(Request) 확인, 수락 및 정식 발주서(PO) 처리",
+      description_en: "Retailer purchase requests, acceptance, and formal Purchase Order (PO) workflow",
+      icon: "📋",
+      display_order: 6,
+      is_active: true,
+      match_modules: ["ORDERS", "PURCHASE_ORDER", "ORDER", "PO"],
+      match_keywords: ["발주", "오더", "po", "발주서", "발주 요청", "purchase order", "order", "request"],
+      created_at: now,
+      updated_at: now
+    },
+    {
+      id: "topic-logistics",
+      portal_scope: "BRAND",
+      name_ko: "재고 & 물류",
+      name_en: "Inventory & Logistics",
+      short_desc_ko: "입고 · 출고지 · 3PL · 배송 정책",
+      short_desc_en: "Origin · Return · 3PL · Logistics",
+      description_ko: "물류 출고지/반품지 관리, 재고 현황, 배송 및 트래킹 추적",
+      description_en: "Shipping origin, return address, inventory levels, and logistics tracking",
+      icon: "🚚",
+      display_order: 7,
+      is_active: true,
+      match_modules: ["LOGISTICS", "INVENTORY", "SHIPPING", "WAREHOUSE", "FULFILLMENT"],
+      match_keywords: ["물류", "재고", "출고지", "반품지", "배송", "창고", "shipping", "inventory", "warehouse"],
+      created_at: now,
+      updated_at: now
+    },
+    {
+      id: "topic-finance",
+      portal_scope: "BRAND",
+      name_ko: "정산 & 결제",
+      name_en: "Settlement & Finance",
+      short_desc_ko: "정산 주기 · 인보이스 · 세금계산서",
+      short_desc_en: "Settlement · Invoice · Payout",
+      description_ko: "판매대금 정산 내역, 인보이스, 송금 계좌 및 수수료 안내",
+      description_en: "Settlement reports, invoices, remittance accounts, and platform fees",
+      icon: "💳",
+      display_order: 8,
+      is_active: true,
+      match_modules: ["FINANCE", "SETTLEMENT", "PAYMENT", "INVOICE"],
+      match_keywords: ["정산", "결제", "인보이스", "송금", "수수료", "finance", "settlement", "payment", "invoice"],
+      created_at: now,
+      updated_at: now
+    },
+    {
+      id: "topic-marketing",
+      portal_scope: "BRAND",
+      name_ko: "프로모션 & 마케팅",
+      name_en: "Promotion & Marketing",
+      short_desc_ko: "기획전 · 할인 · 프로모션 가이드",
+      short_desc_en: "Promotions · Discounts · Campaigns",
+      description_ko: "마케팅 지원 프로그램, 할인 프로모션 및 캠페인 참여 안내",
+      description_en: "Marketing support programs, discount promotions, and campaign participation",
+      icon: "📣",
+      display_order: 9,
+      is_active: true,
+      match_modules: ["PROMOTION", "MARKETING", "CAMPAIGN"],
+      match_keywords: ["프로모션", "마케팅", "캠페인", "할인", "이벤트", "promotion", "marketing", "campaign"],
+      created_at: now,
+      updated_at: now
+    },
+    {
+      id: "topic-company",
+      portal_scope: "BRAND",
+      name_ko: "회사 & 사용자 관리",
+      name_en: "Company & Users",
+      short_desc_ko: "사업자 정보 · 권한 · 팀원 초대",
+      short_desc_en: "Company Profile · Roles · Invitations",
+      description_ko: "회사 정보 변경, 팀원 초대, 권한 설정 및 계정 관리",
+      description_en: "Company details, team invitations, role permissions, and access settings",
+      icon: "👥",
+      display_order: 10,
+      is_active: true,
+      match_modules: ["COMPANY", "USERS", "SETTINGS", "MEMBERS"],
+      match_keywords: ["회사", "사용자", "팀원", "권한", "초대", "company", "user", "permission", "member"],
+      created_at: now,
+      updated_at: now
+    }
+  ];
+
   memoryFaqs = [
     {
       id: "faq-brand-01",
+      portal_scope: "BRAND",
+      topic_id: "topic-brand",
       source_knowledge_id: "kno-brand-policy-v10",
       source_version: "v1.0",
       source_title: "K SELECT 브랜드 등록 및 관리 정책",
@@ -620,6 +799,8 @@ Official operational guide for K SELECT NETWORK Brand Portal partners managing b
     },
     {
       id: "faq-brand-02",
+      portal_scope: "BRAND",
+      topic_id: "topic-brand",
       source_knowledge_id: "kno-brand-policy-v10",
       source_version: "v1.0",
       source_title: "K SELECT 브랜드 등록 및 관리 정책",
@@ -638,6 +819,8 @@ Official operational guide for K SELECT NETWORK Brand Portal partners managing b
     },
     {
       id: "faq-brand-03",
+      portal_scope: "BRAND",
+      topic_id: "topic-brand",
       source_knowledge_id: "kno-brand-policy-v10",
       source_version: "v1.0",
       source_title: "K SELECT 브랜드 등록 및 관리 정책",
@@ -656,6 +839,8 @@ Official operational guide for K SELECT NETWORK Brand Portal partners managing b
     },
     {
       id: "faq-brand-04",
+      portal_scope: "BRAND",
+      topic_id: "topic-brand",
       source_knowledge_id: "kno-brand-policy-v10",
       source_version: "v1.0",
       source_title: "K SELECT 브랜드 등록 및 관리 정책",
@@ -674,6 +859,8 @@ Official operational guide for K SELECT NETWORK Brand Portal partners managing b
     },
     {
       id: "faq-brand-05",
+      portal_scope: "BRAND",
+      topic_id: "topic-brand",
       source_knowledge_id: "kno-brand-policy-v10",
       source_version: "v1.0",
       source_title: "K SELECT 브랜드 등록 및 관리 정책",
@@ -691,6 +878,7 @@ Official operational guide for K SELECT NETWORK Brand Portal partners managing b
       updated_at: now
     }
   ];
+
 
   memoryVersions = [
     {
@@ -1351,13 +1539,15 @@ export async function resolveKnowledgeImpact(
 }
 
 // --------------------------------------------------
-// FAQ & Suggested Questions Store Methods (KNW-FAQ-001)
+// FAQ & Suggested Questions Store Methods (KNW-FAQ-001 & ADM-KNW-003)
 // --------------------------------------------------
 
 export async function getStoreFaqs(
   knowledgeId?: string,
   status?: FaqStatus,
-  audience?: AudienceType
+  audience?: AudienceType,
+  portalScope?: PortalScope,
+  topicId?: string
 ): Promise<KnowledgeFaqItem[]> {
   initSeedData();
   try {
@@ -1369,6 +1559,12 @@ export async function getStoreFaqs(
     }
     if (status) {
       query = query.eq("status", status);
+    }
+    if (portalScope) {
+      query = query.eq("portal_scope", portalScope);
+    }
+    if (topicId) {
+      query = query.eq("topic_id", topicId);
     }
 
     const { data } = await query.order("display_order", { ascending: true });
@@ -1388,6 +1584,12 @@ export async function getStoreFaqs(
   }
   if (status) {
     list = list.filter(f => f.status === status);
+  }
+  if (portalScope) {
+    list = list.filter(f => (f.portal_scope || "BRAND") === portalScope);
+  }
+  if (topicId) {
+    list = list.filter(f => f.topic_id === topicId);
   }
   if (audience) {
     const target = audience.toUpperCase();
@@ -1453,5 +1655,193 @@ export async function deleteStoreFaq(id: string): Promise<boolean> {
   } catch (e) {}
   return true;
 }
+
+// --------------------------------------------------
+// Topic Management Store Methods (ADM-KNW-003)
+// --------------------------------------------------
+
+export async function getStoreTopics(
+  portalScope?: PortalScope,
+  includeInactive: boolean = false
+): Promise<KnowledgeTopic[]> {
+  initSeedData();
+  try {
+    const supabase = createAdminClient();
+    let query = supabase.from("knowledge_topics").select("*");
+    if (portalScope) {
+      query = query.eq("portal_scope", portalScope);
+    }
+    if (!includeInactive) {
+      query = query.eq("is_active", true);
+    }
+
+    const { data } = await query.order("display_order", { ascending: true });
+    if (data && data.length > 0) {
+      data.forEach((dbTopic: KnowledgeTopic) => {
+        const idx = memoryTopics.findIndex(t => t.id === dbTopic.id);
+        if (idx >= 0) memoryTopics[idx] = dbTopic;
+        else memoryTopics.push(dbTopic);
+      });
+    }
+  } catch (e) {}
+
+  let list = [...memoryTopics];
+  if (portalScope) {
+    list = list.filter(t => t.portal_scope === portalScope);
+  }
+  if (!includeInactive) {
+    list = list.filter(t => t.is_active);
+  }
+
+  list.sort((a, b) => a.display_order - b.display_order);
+
+  // Compute counts for topics
+  const allFaqs = memoryFaqs;
+  const allKnowledge = memoryItems.filter(k => k.status === "PUBLISHED");
+
+  return list.map(t => {
+    const topicFaqs = allFaqs.filter(f => f.topic_id === t.id && (f.portal_scope || "BRAND") === t.portal_scope);
+    // Count knowledge items matching this topic
+    const topicKnowledge = allKnowledge.filter(k => {
+      const mod = (k.module || "").toUpperCase();
+      const cat = (k.category || "").toUpperCase();
+      if (t.match_modules && t.match_modules.length > 0) {
+        if (t.match_modules.some(m => mod.includes(m.toUpperCase()) || cat.includes(m.toUpperCase()))) {
+          return true;
+        }
+      }
+      if (t.match_keywords && t.match_keywords.length > 0) {
+        const title = `${k.title_ko || ""} ${k.title || ""}`.toLowerCase();
+        if (t.match_keywords.some(kw => title.includes(kw.toLowerCase()))) {
+          return true;
+        }
+      }
+      return false;
+    });
+
+    return {
+      ...t,
+      faq_count: topicFaqs.length,
+      knowledge_count: topicKnowledge.length
+    };
+  });
+}
+
+export async function getStoreTopicById(id: string): Promise<KnowledgeTopic | null> {
+  initSeedData();
+  try {
+    const supabase = createAdminClient();
+    const { data } = await supabase.from("knowledge_topics").select("*").eq("id", id).maybeSingle();
+    if (data) {
+      const idx = memoryTopics.findIndex(t => t.id === data.id);
+      if (idx >= 0) memoryTopics[idx] = data as KnowledgeTopic;
+      else memoryTopics.push(data as KnowledgeTopic);
+      return data as KnowledgeTopic;
+    }
+  } catch (e) {}
+
+  return memoryTopics.find(t => t.id === id) || null;
+}
+
+export async function saveStoreTopic(topic: KnowledgeTopic): Promise<KnowledgeTopic> {
+  initSeedData();
+  const idx = memoryTopics.findIndex(t => t.id === topic.id);
+  if (idx >= 0) {
+    memoryTopics[idx] = topic;
+  } else {
+    memoryTopics.push(topic);
+  }
+
+  try {
+    const supabase = createAdminClient();
+    await supabase.from("knowledge_topics").upsert(topic);
+  } catch (e) {}
+
+  return topic;
+}
+
+export async function createStoreTopic(data: Partial<KnowledgeTopic>): Promise<KnowledgeTopic> {
+  initSeedData();
+  const now = new Date().toISOString();
+  const portalScope = data.portal_scope || "BRAND";
+  
+  // Calculate next display_order
+  const scopeTopics = memoryTopics.filter(t => t.portal_scope === portalScope);
+  const maxOrder = scopeTopics.reduce((max, t) => Math.max(max, t.display_order || 0), 0);
+
+  const slugId = data.id || `topic-${portalScope.toLowerCase()}-${Date.now().toString(36)}`;
+
+  const newTopic: KnowledgeTopic = {
+    id: slugId,
+    portal_scope: portalScope,
+    name_ko: data.name_ko || "새로운 토픽",
+    name_en: data.name_en || null,
+    short_desc_ko: data.short_desc_ko || null,
+    short_desc_en: data.short_desc_en || null,
+    description_ko: data.description_ko || null,
+    description_en: data.description_en || null,
+    icon: data.icon || "📁",
+    display_order: data.display_order ?? (maxOrder + 1),
+    is_active: data.is_active ?? true,
+    match_modules: data.match_modules || [],
+    match_keywords: data.match_keywords || [],
+    created_at: now,
+    updated_at: now
+  };
+
+  return await saveStoreTopic(newTopic);
+}
+
+export async function updateStoreTopic(
+  id: string,
+  updates: Partial<KnowledgeTopic>
+): Promise<KnowledgeTopic | null> {
+  initSeedData();
+  const existing = await getStoreTopicById(id);
+  if (!existing) return null;
+
+  const updated: KnowledgeTopic = {
+    ...existing,
+    ...updates,
+    updated_at: new Date().toISOString()
+  };
+
+  return await saveStoreTopic(updated);
+}
+
+export async function deleteStoreTopic(id: string): Promise<boolean> {
+  initSeedData();
+  memoryTopics = memoryTopics.filter(t => t.id !== id);
+  try {
+    const supabase = createAdminClient();
+    await supabase.from("knowledge_topics").delete().eq("id", id);
+  } catch (e) {}
+  return true;
+}
+
+export async function reorderStoreTopics(
+  portalScope: PortalScope,
+  orderedIds: string[]
+): Promise<KnowledgeTopic[]> {
+  initSeedData();
+  const updatedTopics: KnowledgeTopic[] = [];
+
+  for (let i = 0; i < orderedIds.length; i++) {
+    const id = orderedIds[i];
+    const topic = memoryTopics.find(t => t.id === id && t.portal_scope === portalScope);
+    if (topic) {
+      topic.display_order = i + 1;
+      topic.updated_at = new Date().toISOString();
+      updatedTopics.push(topic);
+      try {
+        const supabase = createAdminClient();
+        await supabase.from("knowledge_topics").update({ display_order: i + 1, updated_at: topic.updated_at }).eq("id", id);
+      } catch (e) {}
+    }
+  }
+
+  return await getStoreTopics(portalScope, true);
+}
+
 
 

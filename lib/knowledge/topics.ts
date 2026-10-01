@@ -9,18 +9,28 @@
 
 export interface CanonicalTopic {
   id: string;
-  key: string;
+  key?: string;
   title_ko: string;
-  title_en: string;
-  short_desc_ko: string;
-  short_desc_en: string;
-  description_ko: string;
-  description_en: string;
+  title_en?: string;
+  name_ko?: string;
+  name_en?: string | null;
+  short_desc_ko?: string | null;
+  short_desc_en?: string | null;
+  description_ko?: string | null;
+  description_en?: string | null;
   icon: string;
-  order: number;
-  matchModules: string[];
-  matchKeywords: string[];
+  order?: number;
+  display_order?: number;
+  is_active?: boolean;
+  portal_scope?: "BRAND" | "RETAILER";
+  matchModules?: string[];
+  matchKeywords?: string[];
+  match_modules?: string[];
+  match_keywords?: string[];
+  faq_count?: number;
+  knowledge_count?: number;
 }
+
 
 export const CANONICAL_BRAND_TOPICS: CanonicalTopic[] = [
   {
@@ -179,17 +189,22 @@ const AUTHORITATIVE_PRIMARY_TOPIC_MAP: Record<string, string> = {
  * Matches a knowledge item to exactly ONE canonical Primary Topic.
  * Enforces Section 13 (One Primary Topic per Knowledge item).
  */
-export function matchTopicForKnowledge(item: {
-  id?: string;
-  module?: string;
-  category?: string;
-  tags?: string[];
-  title?: string;
-  title_ko?: string;
-}): CanonicalTopic {
+export function matchTopicForKnowledge(
+  item: {
+    id?: string;
+    module?: string;
+    category?: string;
+    tags?: string[];
+    title?: string;
+    title_ko?: string;
+  },
+  availableTopics: CanonicalTopic[] = CANONICAL_BRAND_TOPICS
+): CanonicalTopic {
+  const topics = availableTopics.length > 0 ? availableTopics : CANONICAL_BRAND_TOPICS;
+
   // 1. Authoritative Override
   if (item.id && AUTHORITATIVE_PRIMARY_TOPIC_MAP[item.id]) {
-    const found = CANONICAL_BRAND_TOPICS.find(t => t.id === AUTHORITATIVE_PRIMARY_TOPIC_MAP[item.id!]);
+    const found = topics.find(t => t.id === AUTHORITATIVE_PRIMARY_TOPIC_MAP[item.id!]);
     if (found) return found;
   }
 
@@ -199,8 +214,9 @@ export function matchTopicForKnowledge(item: {
 
   // 2. Direct Module Match (Exact Primary Module)
   if (mod) {
-    for (const topic of CANONICAL_BRAND_TOPICS) {
-      if (topic.matchModules.includes(mod) || topic.matchModules.some(m => mod.includes(m))) {
+    for (const topic of topics) {
+      const matchMods = (topic.matchModules || topic.match_modules || []).map(m => m.toUpperCase());
+      if (matchMods.includes(mod) || matchMods.some(m => mod.includes(m))) {
         return topic;
       }
     }
@@ -208,51 +224,67 @@ export function matchTopicForKnowledge(item: {
 
   // 3. Direct Category Match
   if (cat) {
-    for (const topic of CANONICAL_BRAND_TOPICS) {
-      if (topic.matchModules.includes(cat) || topic.matchModules.some(m => cat.includes(m))) {
+    for (const topic of topics) {
+      const matchMods = (topic.matchModules || topic.match_modules || []).map(m => m.toUpperCase());
+      if (matchMods.includes(cat) || matchMods.some(m => cat.includes(m))) {
         return topic;
       }
     }
   }
 
   // 4. Keyword Match from Title
-  for (const topic of CANONICAL_BRAND_TOPICS) {
-    if (topic.matchKeywords.some(kw => title.includes(kw.toLowerCase()))) {
+  for (const topic of topics) {
+    const keywords = (topic.matchKeywords || topic.match_keywords || []).map(k => k.toLowerCase());
+    if (keywords.some(kw => title.includes(kw))) {
       return topic;
     }
   }
 
-  // Default fallback: 시작하기 (Getting Started)
-  return CANONICAL_BRAND_TOPICS[0];
+  // Default fallback
+  return topics[0] || CANONICAL_BRAND_TOPICS[0];
 }
 
 /**
  * Matches an FAQ to exactly ONE canonical Primary Topic.
  */
-export function matchTopicForFaq(faq: {
-  id?: string;
-  source_knowledge_id?: string;
-  source_title?: string;
-  question_ko?: string;
-  question_en?: string;
-}, parentKnowledgeItem?: any): CanonicalTopic {
+export function matchTopicForFaq(
+  faq: {
+    id?: string;
+    topic_id?: string | null;
+    source_knowledge_id?: string;
+    source_title?: string;
+    question_ko?: string;
+    question_en?: string;
+  },
+  parentKnowledgeItem?: any,
+  availableTopics: CanonicalTopic[] = CANONICAL_BRAND_TOPICS
+): CanonicalTopic {
+  const topics = availableTopics.length > 0 ? availableTopics : CANONICAL_BRAND_TOPICS;
+
+  // 0. Direct Topic ID Link
+  if (faq.topic_id) {
+    const directTopic = topics.find(t => t.id === faq.topic_id);
+    if (directTopic) return directTopic;
+  }
+
   // If parent knowledge item exists, match to parent's Primary Topic
   if (parentKnowledgeItem) {
-    return matchTopicForKnowledge(parentKnowledgeItem);
+    return matchTopicForKnowledge(parentKnowledgeItem, topics);
   }
 
   if (faq.source_knowledge_id && AUTHORITATIVE_PRIMARY_TOPIC_MAP[faq.source_knowledge_id]) {
-    const found = CANONICAL_BRAND_TOPICS.find(t => t.id === AUTHORITATIVE_PRIMARY_TOPIC_MAP[faq.source_knowledge_id!]);
+    const found = topics.find(t => t.id === AUTHORITATIVE_PRIMARY_TOPIC_MAP[faq.source_knowledge_id!]);
     if (found) return found;
   }
 
   const q = `${faq.question_ko || ""} ${faq.question_en || ""} ${faq.source_title || ""}`.toLowerCase();
 
-  for (const topic of CANONICAL_BRAND_TOPICS) {
-    if (topic.matchKeywords.some(kw => q.includes(kw.toLowerCase()))) {
+  for (const topic of topics) {
+    const keywords = (topic.matchKeywords || topic.match_keywords || []).map(k => k.toLowerCase());
+    if (keywords.some(kw => q.includes(kw))) {
       return topic;
     }
   }
 
-  return CANONICAL_BRAND_TOPICS[1]; // Default to 브랜드 관리 for brand FAQs
+  return topics[1] || topics[0] || CANONICAL_BRAND_TOPICS[1]; // Default
 }

@@ -55,6 +55,9 @@ export function HelpCenterMainView({
   // Knowledge & FAQ Data State
   const [items, setItems] = useState<HelpItem[]>([]);
   const [faqs, setFaqs] = useState<any[]>([]);
+  const [topics, setTopics] = useState<CanonicalTopic[]>(
+    portalType === "BRAND" ? CANONICAL_BRAND_TOPICS : []
+  );
   const [suggestedQuestions, setSuggestedQuestions] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -78,9 +81,38 @@ export function HelpCenterMainView({
 
   useEffect(() => {
     fetchHelpItems();
+    fetchTopics();
     fetchFaqs();
     fetchSuggestedQuestions();
   }, [apiEndpoint, portalType]);
+
+  const fetchTopics = async () => {
+    try {
+      const res = await fetch(`/api/knowledge/topics?portal_scope=${portalType}`);
+      if (res.ok) {
+        const json = await res.json();
+        if (Array.isArray(json.topics)) {
+          const mapped: CanonicalTopic[] = json.topics.map((t: any) => ({
+            id: t.id,
+            key: t.id.replace("topic-", "").toUpperCase(),
+            title_ko: t.name_ko || t.title_ko,
+            title_en: t.name_en || t.title_en || "",
+            short_desc_ko: t.short_desc_ko || "",
+            short_desc_en: t.short_desc_en || "",
+            description_ko: t.description_ko || "",
+            description_en: t.description_en || "",
+            icon: t.icon || "📁",
+            order: t.display_order || 0,
+            matchModules: t.match_modules || [],
+            matchKeywords: t.match_keywords || []
+          }));
+          setTopics(mapped);
+        }
+      }
+    } catch (e) {
+      console.error("Failed to load topics:", e);
+    }
+  };
 
   const fetchHelpItems = async () => {
     setLoading(true);
@@ -210,24 +242,24 @@ export function HelpCenterMainView({
   const itemPrimaryTopicMap = useMemo(() => {
     const map = new Map<string, CanonicalTopic>();
     items.forEach(item => {
-      map.set(item.id, matchTopicForKnowledge(item));
+      map.set(item.id, matchTopicForKnowledge(item, topics));
     });
     return map;
-  }, [items]);
+  }, [items, topics]);
 
   const faqPrimaryTopicMap = useMemo(() => {
     const map = new Map<string, CanonicalTopic>();
     faqs.forEach(faq => {
       const parentItem = items.find(i => i.id === faq.source_knowledge_id);
-      map.set(faq.id, matchTopicForFaq(faq, parentItem));
+      map.set(faq.id, matchTopicForFaq(faq, parentItem, topics));
     });
     return map;
-  }, [faqs, items]);
+  }, [faqs, items, topics]);
 
   // Topic Statistics
   const topicStats = useMemo(() => {
     const counts: Record<string, { knowledgeCount: number; faqCount: number; total: number }> = {};
-    CANONICAL_BRAND_TOPICS.forEach(t => {
+    topics.forEach(t => {
       counts[t.id] = { knowledgeCount: 0, faqCount: 0, total: 0 };
     });
 
@@ -248,18 +280,19 @@ export function HelpCenterMainView({
     });
 
     return counts;
-  }, [items, faqs, itemPrimaryTopicMap, faqPrimaryTopicMap]);
+  }, [items, faqs, itemPrimaryTopicMap, faqPrimaryTopicMap, topics]);
 
   // Dynamic Topic Visibility: Topics with usable content (total > 0)
   const activeTopics = useMemo(() => {
-    return CANONICAL_BRAND_TOPICS.filter(t => (topicStats[t.id]?.total || 0) > 0);
-  }, [topicStats]);
+    return topics.filter(t => (topicStats[t.id]?.total || 0) > 0);
+  }, [topics, topicStats]);
 
   // Selected Topic Object
   const currentSelectedTopic = useMemo(() => {
     if (!selectedTopicId) return null;
-    return CANONICAL_BRAND_TOPICS.find(t => t.id === selectedTopicId) || null;
-  }, [selectedTopicId]);
+    return topics.find(t => t.id === selectedTopicId) || null;
+  }, [selectedTopicId, topics]);
+
 
   // FAQs belonging to the selected Topic
   const topicSpecificFaqs = useMemo(() => {

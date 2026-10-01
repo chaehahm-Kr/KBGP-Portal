@@ -219,12 +219,36 @@ export interface GuideFeedbackRecord {
   created_at: string;
 }
 
+export type PortalScope = "BRAND" | "RETAILER";
+
+export interface KnowledgeTopic {
+  id: string;
+  portal_scope: PortalScope;
+  name_ko: string;
+  name_en?: string | null;
+  short_desc_ko?: string | null;
+  short_desc_en?: string | null;
+  description_ko?: string | null;
+  description_en?: string | null;
+  icon: string;
+  display_order: number;
+  is_active: boolean;
+  match_modules?: string[];
+  match_keywords?: string[];
+  faq_count?: number;
+  knowledge_count?: number;
+  created_at: string;
+  updated_at: string;
+}
+
 export type FaqStatus = "CANDIDATE" | "APPROVED" | "REJECTED" | "INACTIVE" | "UPDATE_REQUIRED";
 
 export type FaqKind = "FAQ" | "SUGGESTED_QUESTION" | "BOTH";
 
 export interface KnowledgeFaqItem {
   id: string;
+  portal_scope?: PortalScope;
+  topic_id?: string | null;
   source_knowledge_id: string;
   source_version: string;
   source_title: string;
@@ -245,4 +269,5 @@ export interface KnowledgeFaqItem {
   review_note?: string | null;
   impact_reason?: string | null;
 }
+
 

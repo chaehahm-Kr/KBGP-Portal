@@ -353,7 +353,7 @@ export async function editFaqItem(
     ...faq,
     ...updates,
     id: faq.id,
-    source_knowledge_id: faq.source_knowledge_id,
+    source_knowledge_id: updates.source_knowledge_id || faq.source_knowledge_id,
     updated_at: now
   };
 
@@ -364,9 +364,9 @@ export async function editFaqItem(
     knowledge_id: faq.source_knowledge_id,
     user_name: editorName,
     action: "FAQ Edited",
-    previous_value: { question: faq.question_ko, answer: faq.answer_ko },
-    new_value: { question: updatedFaq.question_ko, answer: updatedFaq.answer_ko },
-    reason: "Admin edited FAQ content.",
+    previous_value: { question: faq.question_ko, answer: faq.answer_ko, status: faq.status, topic_id: faq.topic_id },
+    new_value: { question: updatedFaq.question_ko, answer: updatedFaq.answer_ko, status: updatedFaq.status, topic_id: updatedFaq.topic_id },
+    reason: "Admin edited FAQ item.",
     created_at: now
   });
 
@@ -374,42 +374,67 @@ export async function editFaqItem(
 }
 
 /**
- * Manually creates a new FAQ item linked to an authoritative Published Knowledge item.
+ * Manually creates a new FAQ item linked to an authoritative Published Knowledge item or standalone.
  */
 export async function createManualFaqItem(params: {
-  source_knowledge_id: string;
+  source_knowledge_id?: string;
+  portal_scope?: "BRAND" | "RETAILER";
+  topic_id?: string | null;
   question_ko: string;
   question_en?: string;
   answer_ko: string;
   answer_en?: string;
   audience?: AudienceType[];
+  status?: FaqStatus;
   kind?: FaqKind;
+  display_order?: number;
+  is_featured?: boolean;
   createdBy?: string;
 }): Promise<KnowledgeFaqItem> {
-  const item = await getStoreKnowledgeById(params.source_knowledge_id);
-  if (!item) {
-    throw new Error(`Source knowledge '${params.source_knowledge_id}' not found.`);
-  }
+  let sourceId = params.source_knowledge_id;
+  let sourceTitle = "Direct Admin FAQ";
+  let sourceVersion = "v1.0";
+  let itemAudience: AudienceType[] = params.portal_scope === "RETAILER" ? ["RETAILER"] : ["BRAND"];
 
-  if (item.status !== "PUBLISHED") {
-    throw new Error(`Cannot attach FAQ to non-published source (Status: ${item.status}).`);
+  if (sourceId) {
+    const item = await getStoreKnowledgeById(sourceId);
+    if (item) {
+      sourceTitle = item.title_ko || item.title;
+      sourceVersion = item.current_version || "v1.0";
+      itemAudience = item.audience;
+    }
+  } else {
+    // Default fallback to knowledge item if any
+    const allKnowledge = await getStoreKnowledgeItems();
+    const defaultItem = allKnowledge.find(k => k.status === "PUBLISHED");
+    if (defaultItem) {
+      sourceId = defaultItem.id;
+      sourceTitle = defaultItem.title_ko || defaultItem.title;
+      sourceVersion = defaultItem.current_version || "v1.0";
+    } else {
+      sourceId = "kno-brand-policy-v10";
+    }
   }
 
   const now = new Date().toISOString();
+  const portalScope = params.portal_scope || (params.audience?.some(a => a.includes("RETAIL")) ? "RETAILER" : "BRAND");
+
   const newFaq: KnowledgeFaqItem = {
     id: `faq-man-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-    source_knowledge_id: item.id,
-    source_version: item.current_version || "v1.0",
-    source_title: item.title_ko || item.title,
+    portal_scope: portalScope,
+    topic_id: params.topic_id || null,
+    source_knowledge_id: sourceId!,
+    source_version: sourceVersion,
+    source_title: sourceTitle,
     question_ko: params.question_ko.trim(),
     question_en: params.question_en?.trim() || "",
     answer_ko: params.answer_ko.trim(),
     answer_en: params.answer_en?.trim() || "",
-    audience: params.audience || item.audience,
-    status: "CANDIDATE",
+    audience: params.audience || (portalScope === "RETAILER" ? ["RETAILER", "INTERNAL"] : ["BRAND", "INTERNAL", "ADMIN / MANAGEMENT"]),
+    status: params.status || "APPROVED",
     kind: params.kind || "BOTH",
-    display_order: 0,
-    is_featured: false,
+    display_order: params.display_order ?? 0,
+    is_featured: params.is_featured ?? false,
     generated_by: "MANUAL",
     created_at: now,
     updated_at: now
@@ -419,17 +444,18 @@ export async function createManualFaqItem(params: {
 
   await addStoreAuditLog({
     id: `log-faq-man-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-    knowledge_id: item.id,
+    knowledge_id: sourceId!,
     user_name: params.createdBy || "Admin",
     action: "Manual FAQ Created",
     previous_value: undefined,
-    new_value: { faqId: newFaq.id, question: newFaq.question_ko },
-    reason: "Admin manually created FAQ linked to published source.",
+    new_value: { faqId: newFaq.id, question: newFaq.question_ko, portal_scope: portalScope, topic_id: newFaq.topic_id },
+    reason: "Admin manually created FAQ.",
     created_at: now
   });
 
   return newFaq;
 }
+
 
 /**
  * Source Version Governance: Triggers UPDATE_REQUIRED review for linked approved FAQs
@@ -524,6 +550,7 @@ export async function getApprovedFaqsForAudience(
   audience: AudienceType,
   options?: {
     kind?: FaqKind;
+    topic_id?: string;
     search?: string;
     limit?: number;
   }
@@ -553,7 +580,10 @@ export async function getApprovedFaqsForAudience(
     if ((target === "RETAIL" || target === "RETAILER") && (!auds.includes("RETAIL") && !auds.includes("RETAILER"))) return false;
     if (target === "PUBLIC" && !auds.includes("PUBLIC")) return false;
 
-    // Rule 4: Kind filter (FAQ, SUGGESTED_QUESTION, BOTH)
+    // Rule 4: Topic filter
+    if (options?.topic_id && faq.topic_id !== options.topic_id) return false;
+
+    // Rule 5: Kind filter (FAQ, SUGGESTED_QUESTION, BOTH)
     if (options?.kind) {
       if (options.kind === "FAQ" && faq.kind !== "FAQ" && faq.kind !== "BOTH") return false;
       if (options.kind === "SUGGESTED_QUESTION" && faq.kind !== "SUGGESTED_QUESTION" && faq.kind !== "BOTH") return false;
@@ -588,3 +618,4 @@ export async function getApprovedFaqsForAudience(
 
   return filtered;
 }
+

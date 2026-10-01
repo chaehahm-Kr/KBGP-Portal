@@ -12,6 +12,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const requestedAudience = searchParams.get("audience") as AudienceType | null;
     const kind = searchParams.get("kind") as FaqKind | null;
+    const topicId = searchParams.get("topic_id") || undefined;
     const search = searchParams.get("search") || undefined;
     const limit = searchParams.get("limit") ? parseInt(searchParams.get("limit")!) : undefined;
 
@@ -48,6 +49,7 @@ export async function GET(request: NextRequest) {
 
     const items = await getApprovedFaqsForAudience(audience, {
       kind: kind || undefined,
+      topic_id: topicId,
       search,
       limit
     });
@@ -58,6 +60,8 @@ export async function GET(request: NextRequest) {
       count: items.length,
       items: items.map(f => ({
         id: f.id,
+        portal_scope: f.portal_scope || (f.audience?.some(a => a.includes("RETAIL")) ? "RETAILER" : "BRAND"),
+        topic_id: f.topic_id || null,
         source_knowledge_id: f.source_knowledge_id,
         source_version: f.source_version,
         source_title: f.source_title,
@@ -76,3 +80,4 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: error.message || "Failed to fetch approved FAQs" }, { status: 500 });
   }
 }
+
