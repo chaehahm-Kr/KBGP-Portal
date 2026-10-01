@@ -45,8 +45,8 @@ export function HelpCenterMainView({
   apiEndpoint,
   heroBadgeText = "Official Knowledge & Policy",
   heroTitle = "무엇을 도와드릴까요?",
-  heroSubtitle = "K SELECT 이용 방법이나 정책에 대해 궁금한 내용을 질문해 주세요.",
-  searchPlaceholder = "궁금한 내용을 입력해 주세요... (예: 브랜드 등록, 상표권, 출고지, FAQ 등)",
+  heroSubtitle = "궁금한 내용을 검색하거나 업무 주제를 선택하세요.",
+  searchPlaceholder = "궁금한 내용을 입력해 주세요... (예: 브랜드 등록, 상표권, 출고지 등)",
   supportCtaText = "1:1 문의하기",
   supportDescription = "도움말에서 해결되지 않은 문제는 담당자에게 문의해 주세요."
 }: HelpCenterMainViewProps) {
@@ -68,7 +68,6 @@ export function HelpCenterMainView({
   const [selectedTopicId, setSelectedTopicId] = useState<string | null>(null);
   const [selectedType, setSelectedType] = useState<string>("ALL");
   const [librarySearch, setLibrarySearch] = useState<string>("");
-  const [openFaqId, setOpenFaqId] = useState<string | null>(null);
   const [openTopicFaqId, setOpenTopicFaqId] = useState<string | null>(null);
 
   // Refs for smooth navigation
@@ -179,39 +178,35 @@ export function HelpCenterMainView({
       try {
         const askResult = askResponse?.isUnknown
           ? "NO_ANSWER"
-          : ((askResponse?.sources?.length ?? 0) > 0 ? "ANSWERED" : "PARTIAL");
+          : (askResponse?.sources && askResponse.sources.length > 0)
+          ? "GROUNDED_ANSWER"
+          : "NO_ANSWER";
 
-        const handoffSources = (askResponse?.sources || []).map((src: AskSourceCitation) => ({
-          id: src.id,
-          title: src.title,
-          version: src.version,
-          url: src.url,
-          type: src.type
-        }));
-
-        const contextPayload = {
-          origin: "ASK_KSELECT",
-          portalType,
-          question: questionInput || askResponse?.question || "",
-          askResult,
-          answerSummary: askResponse?.directAnswer || "",
-          sources: handoffSources,
+        const escalationContext = {
+          origin: "HELP_CENTER_ASK",
+          question: questionInput.trim() || askResponse?.question || "",
+          askResult: askResult,
+          suggestedAnswer: askResponse?.directAnswer || "",
+          sources: (askResponse?.sources || []).map((s: AskSourceCitation) => ({
+            id: s.id,
+            title: s.title,
+            version: s.version
+          })),
           timestamp: new Date().toISOString()
         };
 
-        if (typeof window !== "undefined" && window.sessionStorage) {
-          window.sessionStorage.setItem("kselect_ask_escalation_context", JSON.stringify(contextPayload));
+        if (typeof window !== "undefined") {
+          sessionStorage.setItem("kselect_support_handoff", JSON.stringify(escalationContext));
         }
       } catch (e) {
-        console.error("Failed to store ask escalation context in sessionStorage:", e);
+        console.error("Failed to save escalation context:", e);
       }
-      router.push(`${baseSupportPath}?new=1&origin=ASK_KSELECT`);
-    } else {
-      router.push(baseSupportPath);
     }
+
+    router.push(baseSupportPath);
   };
 
-  // Primary Topic Mapping: Every knowledge item has exactly ONE Primary Topic (Section 13)
+  // Authoritative Primary Topic Maps
   const itemPrimaryTopicMap = useMemo(() => {
     const map = new Map<string, CanonicalTopic>();
     items.forEach(item => {
@@ -220,7 +215,6 @@ export function HelpCenterMainView({
     return map;
   }, [items]);
 
-  // Primary Topic Mapping for FAQs
   const faqPrimaryTopicMap = useMemo(() => {
     const map = new Map<string, CanonicalTopic>();
     faqs.forEach(faq => {
@@ -230,11 +224,11 @@ export function HelpCenterMainView({
     return map;
   }, [faqs, items]);
 
-  // Dynamic Topic Stats: Calculate unique count per canonical topic (Section 15)
+  // Topic Statistics
   const topicStats = useMemo(() => {
     const counts: Record<string, { knowledgeCount: number; faqCount: number; total: number }> = {};
-    CANONICAL_BRAND_TOPICS.forEach(topic => {
-      counts[topic.id] = { knowledgeCount: 0, faqCount: 0, total: 0 };
+    CANONICAL_BRAND_TOPICS.forEach(t => {
+      counts[t.id] = { knowledgeCount: 0, faqCount: 0, total: 0 };
     });
 
     items.forEach(item => {
@@ -285,15 +279,13 @@ export function HelpCenterMainView({
     });
   }, [items, selectedTopicId, itemPrimaryTopicMap]);
 
-  // Filtered Knowledge Items for Section 5 (All Help Content)
+  // Filtered Knowledge Items for All Help Content
   const filteredAllItems = useMemo(() => {
     return items.filter(item => {
-      // Type filter
       if (selectedType !== "ALL" && item.type.toUpperCase() !== selectedType.toUpperCase()) {
         return false;
       }
 
-      // Search filter
       const q = librarySearch.trim().toLowerCase();
       if (!q) return true;
 
@@ -334,17 +326,17 @@ export function HelpCenterMainView({
   const getTypeBadge = (type: string) => {
     switch (type?.toUpperCase()) {
       case "MANUAL":
-        return <span className="rounded-full bg-blue-50 px-2.5 py-0.5 text-[11px] font-bold text-blue-700 dark:bg-blue-950/40 dark:text-blue-300 border border-blue-200 dark:border-blue-800">MANUAL</span>;
+        return <span className="rounded-md bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-700 dark:bg-blue-950/40 dark:text-blue-300 border border-blue-200 dark:border-blue-800">MANUAL</span>;
       case "POLICY":
-        return <span className="rounded-full bg-purple-50 px-2.5 py-0.5 text-[11px] font-bold text-purple-700 dark:bg-purple-950/40 dark:text-purple-300 border border-purple-200 dark:border-purple-800">POLICY</span>;
+        return <span className="rounded-md bg-purple-50 px-2 py-0.5 text-[10px] font-bold text-purple-700 dark:bg-purple-950/40 dark:text-purple-300 border border-purple-200 dark:border-purple-800">POLICY</span>;
       case "FAQ":
-        return <span className="rounded-full bg-emerald-50 px-2.5 py-0.5 text-[11px] font-bold text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">FAQ</span>;
+        return <span className="rounded-md bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">FAQ</span>;
       case "SOP":
-        return <span className="rounded-full bg-amber-50 px-2.5 py-0.5 text-[11px] font-bold text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border border-amber-200 dark:border-amber-800">SOP</span>;
+        return <span className="rounded-md bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border border-amber-200 dark:border-amber-800">SOP</span>;
       case "GUIDE":
-        return <span className="rounded-full bg-sky-50 px-2.5 py-0.5 text-[11px] font-bold text-sky-700 dark:bg-sky-950/40 dark:text-sky-300 border border-sky-200 dark:border-sky-800">GUIDE</span>;
+        return <span className="rounded-md bg-sky-50 px-2 py-0.5 text-[10px] font-bold text-sky-700 dark:bg-sky-950/40 dark:text-sky-300 border border-sky-200 dark:border-sky-800">GUIDE</span>;
       default:
-        return <span className="rounded-full bg-zinc-100 px-2.5 py-0.5 text-[11px] font-bold text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">{type}</span>;
+        return <span className="rounded-md bg-zinc-100 px-2 py-0.5 text-[10px] font-bold text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">{type}</span>;
     }
   };
 
@@ -356,21 +348,23 @@ export function HelpCenterMainView({
   };
 
   return (
-    <div className="space-y-10 max-w-5xl mx-auto px-4 sm:px-6 py-6 select-text">
+    <div className="space-y-6 w-full max-w-6xl px-4 sm:px-6 py-4 select-text">
       {/* ========================================================================= */}
-      {/* SECTION 1: PRIMARY QUESTION EXPERIENCE (Hero & Question Input)           */}
+      {/* SECTION 1: PRIMARY QUESTION EXPERIENCE (Compact Functional Hero)          */}
       {/* ========================================================================= */}
-      <div ref={topHeroRef} className="rounded-2xl bg-gradient-to-b from-zinc-900 via-[#131E2E] to-zinc-900 text-white p-6 sm:p-10 shadow-lg space-y-6 text-center">
-        <div className="space-y-2 max-w-2xl mx-auto">
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1 text-xs font-semibold tracking-wider text-cyan-300 backdrop-blur-xs">
+      <div ref={topHeroRef} className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-gradient-to-r from-zinc-900 via-[#131E2E] to-zinc-900 text-white p-4 sm:p-5 shadow-sm space-y-3.5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
+          <div>
+            <h1 className="text-lg sm:text-xl font-bold tracking-tight text-white flex items-center gap-2">
+              <span>{heroTitle}</span>
+            </h1>
+            <p className="text-xs text-zinc-300">
+              {heroSubtitle}
+            </p>
+          </div>
+          <span className="inline-flex items-center gap-1.5 self-start sm:self-auto rounded-md bg-white/10 px-2.5 py-1 text-[11px] font-semibold text-cyan-300">
             <span>🛡️</span> {heroBadgeText}
           </span>
-          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white">
-            {heroTitle}
-          </h1>
-          <p className="text-xs sm:text-sm text-zinc-300 leading-relaxed">
-            {heroSubtitle}
-          </p>
         </div>
 
         {/* Primary Unified Question Input Form */}
@@ -379,10 +373,10 @@ export function HelpCenterMainView({
             e.preventDefault();
             handleAskQuestion();
           }}
-          className="max-w-2xl mx-auto space-y-3"
+          className="space-y-2.5"
         >
           <div className="relative flex items-center">
-            <span className="absolute left-4 text-zinc-400 text-lg select-none">💬</span>
+            <span className="absolute left-3.5 text-zinc-400 text-base select-none">💬</span>
             <input
               ref={questionInputRef}
               type="text"
@@ -390,12 +384,12 @@ export function HelpCenterMainView({
               onChange={(e) => setQuestionInput(e.target.value)}
               placeholder={searchPlaceholder}
               disabled={isAsking}
-              className="w-full rounded-xl bg-white text-zinc-900 dark:bg-zinc-900 dark:text-white pl-12 pr-28 py-3.5 text-sm font-medium shadow-lg border border-zinc-200 dark:border-zinc-700 focus:outline-hidden focus:ring-2 focus:ring-blue-500 transition-all placeholder:text-zinc-400 disabled:opacity-60"
+              className="w-full rounded-lg bg-white/10 text-white dark:bg-zinc-800/90 pl-10 pr-24 py-2.5 text-xs sm:text-sm font-medium border border-white/20 dark:border-zinc-700 focus:outline-hidden focus:ring-2 focus:ring-blue-500 placeholder:text-zinc-400 disabled:opacity-60 transition-all"
             />
             <button
               type="submit"
               disabled={isAsking || !questionInput.trim()}
-              className="absolute right-2 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all shadow-xs disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer flex items-center gap-1"
+              className="absolute right-1.5 px-3 py-1.5 rounded-md bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all shadow-xs disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer flex items-center gap-1"
             >
               {isAsking ? (
                 <span>조회 중...</span>
@@ -409,14 +403,14 @@ export function HelpCenterMainView({
           </div>
 
           {/* Quick Question Pills */}
-          <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none text-xs">
-            <span className="text-zinc-400 text-[11px] shrink-0 font-medium">추천 질문:</span>
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 scrollbar-none text-xs">
+            <span className="text-zinc-400 text-[11px] shrink-0 font-medium">추천:</span>
             {displayQuickQuestions.map((qText, idx) => (
               <button
                 key={idx}
                 type="button"
                 onClick={() => handleAskQuestion(qText)}
-                className="rounded-full bg-white/10 hover:bg-white/20 text-zinc-200 hover:text-white px-3 py-1 text-[11px] font-medium transition-all shrink-0 cursor-pointer border border-white/10"
+                className="rounded-md bg-white/10 hover:bg-white/20 text-zinc-200 hover:text-white px-2.5 py-1 text-[11px] font-medium transition-all shrink-0 cursor-pointer border border-white/10"
               >
                 {qText}
               </button>
@@ -427,19 +421,19 @@ export function HelpCenterMainView({
 
       {/* Loading Skeleton for Question */}
       {isAsking && (
-        <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-6 sm:p-8 shadow-sm space-y-4 animate-pulse">
+        <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-5 shadow-xs space-y-3 animate-pulse">
           <div className="h-4 bg-zinc-200 dark:bg-zinc-800 rounded w-1/4" />
-          <div className="h-6 bg-zinc-200 dark:bg-zinc-800 rounded w-3/4" />
-          <div className="space-y-2 pt-2">
-            <div className="h-4 bg-zinc-100 dark:bg-zinc-800/60 rounded w-full" />
-            <div className="h-4 bg-zinc-100 dark:bg-zinc-800/60 rounded w-5/6" />
+          <div className="h-5 bg-zinc-200 dark:bg-zinc-800 rounded w-3/4" />
+          <div className="space-y-2 pt-1">
+            <div className="h-3.5 bg-zinc-100 dark:bg-zinc-800/60 rounded w-full" />
+            <div className="h-3.5 bg-zinc-100 dark:bg-zinc-800/60 rounded w-5/6" />
           </div>
         </div>
       )}
 
       {/* Error Message */}
       {askError && (
-        <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-xs text-red-700 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-300 flex items-center justify-between">
+        <div className="rounded-xl border border-red-200 bg-red-50 p-3.5 text-xs text-red-700 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-300 flex items-center justify-between">
           <span>⚠️ {askError}</span>
           <button
             type="button"
@@ -453,12 +447,12 @@ export function HelpCenterMainView({
 
       {/* Grounded Answer Card (Integrated In-Place Result) */}
       {askResponse && !isAsking && (
-        <div ref={askResultRef} className="space-y-6 transition-all duration-300">
-          <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-6 sm:p-8 shadow-md space-y-6">
+        <div ref={askResultRef} className="space-y-4 transition-all duration-300">
+          <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-5 shadow-sm space-y-4">
             {/* Answer Header */}
-            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-100 dark:border-zinc-800 pb-4">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-100 dark:border-zinc-800 pb-3">
               <div className="flex items-center gap-2">
-                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 dark:bg-emerald-950/40 px-2.5 py-1 text-[11px] font-bold text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                <span className="inline-flex items-center gap-1 rounded-md bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 text-[11px] font-bold text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
                   <span>🛡️</span>
                   <span>{askResponse.isUnknown ? "안내 (Notice)" : "공식 승인 지식 기반 답변"}</span>
                 </span>
@@ -482,20 +476,20 @@ export function HelpCenterMainView({
             </div>
 
             {/* Direct Answer */}
-            <div className="space-y-3">
-              <h3 className="text-base sm:text-lg font-extrabold text-zinc-900 dark:text-white leading-snug">
+            <div className="space-y-2.5">
+              <h3 className="text-sm sm:text-base font-bold text-zinc-900 dark:text-white leading-snug">
                 {askResponse.directAnswer}
               </h3>
 
               {/* Core Rule Bullets */}
               {askResponse.currentRuleBullets && askResponse.currentRuleBullets.length > 0 && (
-                <div className="rounded-xl bg-zinc-50 dark:bg-zinc-950 p-4 space-y-2.5 border border-zinc-100 dark:border-zinc-800/80">
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-500 block">
+                <div className="rounded-lg bg-zinc-50 dark:bg-zinc-950 p-3 space-y-1.5 border border-zinc-100 dark:border-zinc-800/80">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-500 block">
                     📌 핵심 정책 및 운영 규칙 (Core Rules)
                   </span>
-                  <ul className="space-y-1.5 text-xs text-zinc-700 dark:text-zinc-300">
+                  <ul className="space-y-1 text-xs text-zinc-700 dark:text-zinc-300">
                     {askResponse.currentRuleBullets.map((b, i) => (
-                      <li key={i} className="flex items-start gap-2">
+                      <li key={i} className="flex items-start gap-1.5">
                         <span className="text-blue-500 font-bold mt-0.5">•</span>
                         <span className="leading-relaxed">{b}</span>
                       </li>
@@ -507,18 +501,18 @@ export function HelpCenterMainView({
 
             {/* Official Source Citations */}
             {askResponse.sources && askResponse.sources.length > 0 && (
-              <div className="space-y-3 pt-2 border-t border-zinc-100 dark:border-zinc-800">
-                <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-500 block">
+              <div className="space-y-2 pt-2 border-t border-zinc-100 dark:border-zinc-800">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-500 block">
                   📚 관련 공식 도움말 출처
                 </span>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                   {askResponse.sources.map((src: AskSourceCitation) => (
                     <Link
                       key={src.id}
                       href={src.url}
-                      className="group flex flex-col justify-between rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/80 p-4 hover:border-blue-400 dark:hover:border-blue-500 transition-all shadow-xs"
+                      className="group flex flex-col justify-between rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/80 p-3 hover:border-blue-400 dark:hover:border-blue-500 transition-all shadow-2xs"
                     >
-                      <div className="space-y-1.5">
+                      <div className="space-y-1">
                         <div className="flex items-center justify-between gap-1">
                           {getTypeBadge(src.type)}
                           <span className="text-[10px] font-semibold text-zinc-400">
@@ -529,10 +523,10 @@ export function HelpCenterMainView({
                           {src.title}
                         </h4>
                       </div>
-                      <div className="mt-3 pt-2 border-t border-zinc-100 dark:border-zinc-800/60 flex items-center justify-between text-[10px] text-zinc-400">
+                      <div className="mt-2 pt-1.5 border-t border-zinc-100 dark:border-zinc-800/60 flex items-center justify-between text-[10px] text-zinc-400">
                         <span>시행일: {src.effectiveDate}</span>
                         <span className="font-semibold text-blue-600 dark:text-blue-400 group-hover:translate-x-0.5 transition-transform">
-                          자세히 보기 &rarr;
+                          보기 &rarr;
                         </span>
                       </div>
                     </Link>
@@ -544,17 +538,17 @@ export function HelpCenterMainView({
             {/* Related PDF Manuals */}
             {askResponse.relatedManuals && askResponse.relatedManuals.length > 0 && (
               <div className="space-y-2 pt-2 border-t border-zinc-100 dark:border-zinc-800">
-                <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-500 block">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-500 block">
                   📄 첨부 공식 PDF 매뉴얼
                 </span>
-                <div className="space-y-2">
+                <div className="space-y-1.5">
                   {askResponse.relatedManuals.map((man, i) => (
                     <div
                       key={i}
-                      className="flex items-center justify-between gap-3 rounded-xl border border-emerald-200 dark:border-emerald-900/50 bg-emerald-50/50 dark:bg-emerald-950/20 p-3"
+                      className="flex items-center justify-between gap-3 rounded-lg border border-emerald-200 dark:border-emerald-900/50 bg-emerald-50/50 dark:bg-emerald-950/20 p-2.5"
                     >
-                      <div className="flex items-center gap-2.5 min-w-0">
-                        <span className="text-lg shrink-0">📄</span>
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="text-base shrink-0">📄</span>
                         <div className="min-w-0">
                           <p className="text-xs font-bold text-zinc-900 dark:text-white truncate">
                             {man.title}
@@ -568,7 +562,7 @@ export function HelpCenterMainView({
                         href={man.viewUrl}
                         target="_blank"
                         rel="noreferrer"
-                        className="rounded-lg bg-emerald-600 hover:bg-emerald-700 px-3 py-1.5 text-[11px] font-bold text-white shadow-xs transition-colors shrink-0 cursor-pointer"
+                        className="rounded-md bg-emerald-600 hover:bg-emerald-700 px-2.5 py-1 text-[11px] font-bold text-white shadow-2xs transition-colors shrink-0 cursor-pointer"
                       >
                         PDF 보기
                       </a>
@@ -580,20 +574,20 @@ export function HelpCenterMainView({
 
             {/* No Answer Escalation Notice */}
             {askResponse.isUnknown && (
-              <div className="rounded-xl border border-amber-200 dark:border-amber-900/60 bg-amber-50/80 dark:bg-amber-950/30 p-4.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div className="space-y-1">
-                  <h4 className="text-xs sm:text-sm font-bold text-amber-900 dark:text-amber-200 flex items-center gap-1.5">
+              <div className="rounded-lg border border-amber-200 dark:border-amber-900/60 bg-amber-50/80 dark:bg-amber-950/30 p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                <div className="space-y-0.5">
+                  <h4 className="text-xs font-bold text-amber-900 dark:text-amber-200 flex items-center gap-1.5">
                     <span>💬</span>
                     <span>공식 도움말에서 충분한 정보를 찾지 못하셨나요?</span>
                   </h4>
                   <p className="text-xs text-amber-800/90 dark:text-amber-300">
-                    운영팀 1:1 문의로 전달하시면 질문 내용이 자동 연계되어 빠르고 정확하게 안내받으실 수 있습니다.
+                    운영팀 1:1 문의로 전달하시면 질문 내용이 자동 연계되어 신속하게 안내해 드립니다.
                   </p>
                 </div>
                 <button
                   type="button"
                   onClick={() => handleEscalateToSupport("NO_ANSWER")}
-                  className="rounded-lg bg-[#131E2E] dark:bg-zinc-100 text-white dark:text-zinc-900 px-4 py-2 text-xs font-bold hover:bg-[#1f3047] dark:hover:bg-zinc-200 transition-colors shrink-0 shadow-xs cursor-pointer flex items-center gap-1.5"
+                  className="rounded-md bg-[#131E2E] dark:bg-zinc-100 text-white dark:text-zinc-900 px-3.5 py-1.5 text-xs font-bold hover:bg-[#1f3047] dark:hover:bg-zinc-200 transition-colors shrink-0 shadow-2xs cursor-pointer flex items-center gap-1"
                 >
                   <span>1:1 문의하기</span>
                   <span>&rarr;</span>
@@ -603,8 +597,8 @@ export function HelpCenterMainView({
 
             {/* Answered Additional Help Link */}
             {!askResponse.isUnknown && (
-              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 pt-3 border-t border-zinc-100 dark:border-zinc-800 text-xs text-zinc-500">
-                <span>원하는 답을 찾지 못하셨거나 추가 세부 문의가 필요하신가요?</span>
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 pt-2 border-t border-zinc-100 dark:border-zinc-800 text-xs text-zinc-500">
+                <span>추가 세부 문의가 필요하신가요?</span>
                 <button
                   type="button"
                   onClick={() => handleEscalateToSupport("ANSWERED")}
@@ -620,61 +614,67 @@ export function HelpCenterMainView({
       )}
 
       {/* ========================================================================= */}
-      {/* SECTION 2: BROWSE BY TOPIC (주제별 도움말 - Primary Navigation Layer)      */}
+      {/* SECTION 2: BROWSE BY TOPIC (주제별 도움말 - Compact Selectors Grid)         */}
       {/* ========================================================================= */}
       {activeTopics.length > 0 && (
-        <div className="space-y-4 pt-2">
-          <div className="space-y-1">
-            <h2 className="text-base sm:text-lg font-bold text-zinc-900 dark:text-white flex items-center gap-2">
-              <span>📂 주제별 도움말</span>
-            </h2>
-            <p className="text-xs text-zinc-500 dark:text-zinc-400">
-              업무 영역을 선택하면 관련 자주 묻는 질문과 공식 도움말을 확인할 수 있습니다.
-            </p>
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <h2 className="text-sm font-bold text-zinc-900 dark:text-white flex items-center gap-1.5">
+                <span>📂 주제별 도움말</span>
+              </h2>
+              <span className="text-xs text-zinc-500 dark:text-zinc-400 hidden sm:inline">
+                업무 영역을 선택하면 관련 자주 묻는 질문과 공식 도움말을 확인할 수 있습니다.
+              </span>
+            </div>
+            {selectedTopicId && (
+              <button
+                type="button"
+                onClick={() => setSelectedTopicId(null)}
+                className="text-xs text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 font-medium cursor-pointer"
+              >
+                ✕ 전체 주제 보기
+              </button>
+            )}
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3.5">
+          {/* Compact Topic Selector Tiles (Dynamic, Scales smoothly) */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2.5">
             {activeTopics.map((topic) => {
               const stat = topicStats[topic.id] || { knowledgeCount: 0, faqCount: 0, total: 0 };
               const isSelected = selectedTopicId === topic.id;
-
-              // Format compact count badge (e.g. "5 FAQ · 1 도움말")
-              const countBadgeParts: string[] = [];
-              countBadgeParts.push(`${stat.faqCount} FAQ`);
-              countBadgeParts.push(`${stat.knowledgeCount} 도움말`);
-              const countBadgeLabel = countBadgeParts.join(" · ");
+              const countBadgeLabel = `${stat.faqCount} FAQ · ${stat.knowledgeCount} 도움말`;
 
               return (
                 <button
                   key={topic.id}
                   type="button"
                   onClick={() => handleTopicCardClick(topic.id)}
-                  className={`text-left rounded-xl p-4.5 border transition-all cursor-pointer flex flex-col justify-between shadow-xs ${
+                  className={`text-left p-3 rounded-xl border transition-all cursor-pointer flex flex-col justify-between ${
                     isSelected
-                      ? "border-blue-500 bg-blue-50/50 dark:bg-blue-950/20 ring-2 ring-blue-500/20"
-                      : "border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 hover:border-zinc-400 dark:hover:border-zinc-600 hover:shadow-md"
+                      ? "border-blue-600 bg-blue-50/80 dark:bg-blue-950/40 text-blue-900 dark:text-blue-100 ring-2 ring-blue-500/20 shadow-xs"
+                      : "border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-zinc-800 dark:text-zinc-200 hover:border-zinc-300 dark:hover:border-zinc-700 hover:bg-zinc-50/80 dark:hover:bg-zinc-850 shadow-2xs"
                   }`}
                 >
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-2xl">{topic.icon}</span>
-                      <span className="rounded-full bg-zinc-100 dark:bg-zinc-800 px-2.5 py-0.5 text-[10px] font-bold text-zinc-600 dark:text-zinc-300">
-                        {countBadgeLabel}
-                      </span>
-                    </div>
-                    <div>
-                      <h3 className="text-sm font-bold text-zinc-900 dark:text-white leading-snug">
-                        {topic.title_ko}
-                      </h3>
-                      <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400 font-medium line-clamp-1 leading-relaxed">
-                        {topic.short_desc_ko || topic.description_ko}
-                      </p>
-                    </div>
+                  <div className="flex items-center justify-between gap-1.5">
+                    <span className="text-lg">{topic.icon}</span>
+                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                      isSelected
+                        ? "bg-blue-200/80 dark:bg-blue-900/60 text-blue-800 dark:text-blue-200"
+                        : "bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400"
+                    }`}>
+                      {countBadgeLabel}
+                    </span>
                   </div>
-
-                  <div className="mt-3 pt-2.5 border-t border-zinc-100 dark:border-zinc-800/80 flex items-center justify-between text-[11px] text-blue-600 dark:text-blue-400 font-semibold">
-                    <span>자주 묻는 질문 & 도움말</span>
-                    <span>&rarr;</span>
+                  <div className="mt-2">
+                    <div className="text-xs font-bold leading-tight">
+                      {topic.title_ko}
+                    </div>
+                    {topic.short_desc_ko && (
+                      <div className="text-[10px] text-zinc-400 dark:text-zinc-500 mt-0.5 truncate font-normal">
+                        {topic.short_desc_ko}
+                      </div>
+                    )}
                   </div>
                 </button>
               );
@@ -684,22 +684,22 @@ export function HelpCenterMainView({
       )}
 
       {/* ========================================================================= */}
-      {/* SECTION 4: TOPIC DETAIL / TOPIC FAQS (Section 10 & 16: FAQ First)       */}
+      {/* SECTION 3: TOPIC DETAIL / TOPIC FAQS (Revealed Immediately Below Topics)  */}
       {/* ========================================================================= */}
       {currentSelectedTopic && (
-        <div ref={topicDetailSectionRef} className="space-y-6 pt-4 border-t border-zinc-200 dark:border-zinc-800">
-          {/* Topic Banner Header */}
-          <div className="rounded-xl border border-blue-200 dark:border-blue-900/60 bg-blue-50/50 dark:bg-blue-950/20 p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div className="flex items-start sm:items-center gap-3">
-              <span className="text-3xl">{currentSelectedTopic.icon}</span>
+        <div ref={topicDetailSectionRef} className="space-y-4 pt-3 border-t border-zinc-200 dark:border-zinc-800">
+          {/* Compact Topic Header */}
+          <div className="rounded-xl border border-blue-200 dark:border-blue-900/60 bg-blue-50/40 dark:bg-blue-950/20 px-4 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div className="flex items-center gap-2.5">
+              <span className="text-2xl">{currentSelectedTopic.icon}</span>
               <div>
-                <h3 className="text-base font-extrabold text-zinc-900 dark:text-white flex items-center gap-2">
+                <h3 className="text-sm font-extrabold text-zinc-900 dark:text-white flex items-center gap-2">
                   <span>{currentSelectedTopic.title_ko}</span>
-                  <span className="rounded-full bg-blue-100 dark:bg-blue-900/60 px-2.5 py-0.5 text-[11px] font-bold text-blue-700 dark:text-blue-300">
-                    주제별 도움말
+                  <span className="rounded-md bg-blue-100 dark:bg-blue-900/60 px-2 py-0.5 text-[10px] font-bold text-blue-700 dark:text-blue-300">
+                    {topicSpecificFaqs.length} FAQ · {topicSpecificItems.length} 도움말
                   </span>
                 </h3>
-                <p className="text-xs text-zinc-600 dark:text-zinc-400 mt-0.5">
+                <p className="text-[11px] text-zinc-600 dark:text-zinc-400 font-normal">
                   {currentSelectedTopic.description_ko}
                 </p>
               </div>
@@ -707,45 +707,40 @@ export function HelpCenterMainView({
             <button
               type="button"
               onClick={() => setSelectedTopicId(null)}
-              className="rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 px-3 py-1.5 text-xs font-semibold text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-700 transition-colors shrink-0 cursor-pointer"
+              className="rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 px-2.5 py-1 text-xs font-semibold text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-700 transition-colors shrink-0 cursor-pointer self-end sm:self-auto"
             >
-              ✕ 전체 주제 보기
+              ✕ 닫기
             </button>
           </div>
 
-          {/* 1. Topic FAQs First (Section 10 & 16) */}
+          {/* 1. Topic FAQs First (Compact Rows in Card Container) */}
           {topicSpecificFaqs.length > 0 && (
-            <div className="space-y-3">
-              <h4 className="text-sm font-bold text-zinc-900 dark:text-white flex items-center gap-2">
-                <span>💡 {currentSelectedTopic.title_ko} 자주 묻는 질문</span>
-                <span className="rounded-full bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 px-2 py-0.5 text-[11px] font-mono font-bold">
-                  {topicSpecificFaqs.length}
-                </span>
-              </h4>
+            <div className="space-y-2">
+              <div className="text-xs font-bold text-zinc-700 dark:text-zinc-300 flex items-center gap-1.5">
+                <span>💡 자주 묻는 질문</span>
+                <span className="text-[11px] font-mono text-zinc-400">({topicSpecificFaqs.length})</span>
+              </div>
 
-              <div className="space-y-2.5">
+              <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 divide-y divide-zinc-100 dark:divide-zinc-800 overflow-hidden shadow-xs">
                 {topicSpecificFaqs.map((faq) => {
                   const isOpen = openTopicFaqId === faq.id;
                   return (
-                    <div
-                      key={faq.id}
-                      className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 overflow-hidden transition-all shadow-xs"
-                    >
+                    <div key={faq.id} className="transition-colors">
                       <button
                         type="button"
                         onClick={() => setOpenTopicFaqId(isOpen ? null : faq.id)}
-                        className="w-full text-left p-4 flex items-center justify-between gap-3 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 cursor-pointer transition-colors"
+                        className="w-full text-left px-4 py-3 flex items-center justify-between gap-3 hover:bg-zinc-50 dark:hover:bg-zinc-800/40 cursor-pointer transition-colors"
                       >
-                        <div className="flex items-start gap-2.5">
-                          <span className="text-blue-600 dark:text-blue-400 font-mono font-bold text-sm select-none">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <span className="text-blue-600 dark:text-blue-400 font-mono font-bold text-xs shrink-0">
                             Q.
                           </span>
-                          <h3 className="text-xs sm:text-sm font-bold text-zinc-900 dark:text-white leading-snug">
+                          <span className="text-xs sm:text-sm font-semibold text-zinc-900 dark:text-white truncate">
                             {faq.question_ko}
-                          </h3>
+                          </span>
                         </div>
                         <span
-                          className={`text-zinc-400 text-xs shrink-0 font-bold transition-transform duration-200 ${
+                          className={`text-zinc-400 text-[11px] shrink-0 font-bold transition-transform duration-150 ${
                             isOpen ? "rotate-180" : ""
                           }`}
                         >
@@ -754,15 +749,15 @@ export function HelpCenterMainView({
                       </button>
 
                       {isOpen && (
-                        <div className="px-4 pb-4 pt-1 text-xs text-zinc-700 dark:text-zinc-300 border-t border-zinc-100 dark:border-zinc-800/60 bg-zinc-50/50 dark:bg-zinc-900/40 space-y-3">
+                        <div className="px-4 pb-4 pt-1 text-xs text-zinc-700 dark:text-zinc-300 bg-zinc-50/60 dark:bg-zinc-900/60 space-y-2.5 border-t border-zinc-100 dark:border-zinc-800/60">
                           <div className="flex items-start gap-2 pt-2">
-                            <span className="text-emerald-600 dark:text-emerald-400 font-mono font-bold text-sm select-none">
+                            <span className="text-emerald-600 dark:text-emerald-400 font-mono font-bold text-xs shrink-0">
                               A.
                             </span>
-                            <div className="space-y-2 leading-relaxed whitespace-pre-wrap flex-1">
-                              <p>{faq.answer_ko}</p>
+                            <div className="space-y-1.5 leading-relaxed flex-1">
+                              <p className="font-normal">{faq.answer_ko}</p>
                               {faq.answer_en && (
-                                <p className="text-[11px] text-zinc-500 dark:text-zinc-400 pt-1.5 border-t border-zinc-200/60 dark:border-zinc-700/60">
+                                <p className="text-[11px] text-zinc-500 dark:text-zinc-400 pt-1 border-t border-zinc-200/50 dark:border-zinc-800">
                                   {faq.answer_en}
                                 </p>
                               )}
@@ -791,75 +786,61 @@ export function HelpCenterMainView({
             </div>
           )}
 
-          {/* 2. Ask K SELECT In-Topic CTA (Section 17) */}
-          <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 p-4.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
-            <div className="space-y-0.5">
-              <h5 className="text-xs sm:text-sm font-bold text-zinc-900 dark:text-white">
-                찾으시는 답변이 없나요?
-              </h5>
-              <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                궁금한 내용을 직접 질문해 주시면 공식 지식에서 즉시 찾아 안내해 드립니다.
-              </p>
+          {/* 2. Compact In-Topic Ask CTA */}
+          <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/60 px-4 py-3 flex items-center justify-between gap-3 text-xs shadow-2xs">
+            <div className="flex items-center gap-2">
+              <span className="text-zinc-600 dark:text-zinc-300 font-medium">찾으시는 답변이 없나요?</span>
+              <span className="text-zinc-400 hidden sm:inline">궁금한 내용을 직접 질문해 주세요.</span>
             </div>
             <button
               type="button"
               onClick={handleFocusQuestionInput}
-              className="rounded-lg bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 text-xs font-bold transition-colors shrink-0 shadow-xs cursor-pointer flex items-center gap-1.5"
+              className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold transition-colors shrink-0 shadow-xs cursor-pointer flex items-center gap-1 text-xs"
             >
               <span>직접 질문하기</span>
               <span>&uarr;</span>
             </button>
           </div>
 
-          {/* 3. Related Official Documents Second (Section 10 & 16) */}
+          {/* 3. Related Official Help Content (Compact Row Presentation) */}
           {topicSpecificItems.length > 0 && (
-            <div className="space-y-3">
-              <h4 className="text-sm font-bold text-zinc-900 dark:text-white flex items-center gap-2">
+            <div className="space-y-2 pt-1">
+              <div className="text-xs font-bold text-zinc-700 dark:text-zinc-300 flex items-center gap-1.5">
                 <span>📚 관련 공식 도움말</span>
-                <span className="rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 px-2 py-0.5 text-[11px] font-mono font-bold">
-                  {topicSpecificItems.length}
-                </span>
-              </h4>
+                <span className="text-[11px] font-mono text-zinc-400">({topicSpecificItems.length})</span>
+              </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 divide-y divide-zinc-100 dark:divide-zinc-800 overflow-hidden shadow-xs">
                 {topicSpecificItems.map((item) => (
-                  <Link
-                    key={item.id}
-                    href={`${baseHelpPath}/${item.slug || item.id}`}
-                    className="group flex flex-col justify-between rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-5 shadow-xs hover:border-zinc-400 dark:hover:border-zinc-600 hover:shadow-md transition-all cursor-pointer"
-                  >
-                    <div className="space-y-2.5">
-                      <div className="flex items-center justify-between gap-2">
+                  <div key={item.id} className="p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-zinc-50 dark:hover:bg-zinc-800/30 transition-colors">
+                    <div className="flex items-start sm:items-center gap-3 min-w-0">
+                      {getTypeBadge(item.type)}
+                      <div className="min-w-0">
                         <div className="flex items-center gap-2">
-                          {getTypeBadge(item.type)}
-                          <span className="text-[11px] font-semibold text-zinc-500">
-                            {currentSelectedTopic.title_ko}
-                          </span>
+                          <h4 className="text-xs sm:text-sm font-bold text-zinc-900 dark:text-white truncate">
+                            {item.title_ko || item.title}
+                          </h4>
+                          {item.document_url && (
+                            <span className="px-1.5 py-0.5 text-[10px] font-bold rounded bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 shrink-0">
+                              PDF
+                            </span>
+                          )}
                         </div>
-                        {item.document_url && (
-                          <span className="inline-flex items-center gap-1 rounded bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 text-[10px] font-bold text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
-                            📄 PDF 문서
-                          </span>
-                        )}
-                      </div>
-
-                      <div>
-                        <h3 className="text-sm font-bold text-zinc-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors leading-snug">
-                          {item.title_ko || item.title}
-                        </h3>
-                        <p className="mt-1.5 text-xs text-zinc-600 dark:text-zinc-400 line-clamp-2 leading-relaxed">
-                          {item.summary_ko || item.summary_en || "자세한 가이드 및 정책 내용을 확인해 보세요."}
+                        <p className="text-[11px] text-zinc-500 dark:text-zinc-400 truncate max-w-xl">
+                          {item.summary_ko || item.summary_en || "공식 도움말 내용을 확인하세요."}
                         </p>
                       </div>
                     </div>
-
-                    <div className="mt-4 pt-3 border-t border-zinc-100 dark:border-zinc-800/80 flex items-center justify-between text-[11px] text-zinc-400">
+                    <div className="flex items-center gap-3 shrink-0 self-end sm:self-auto text-[11px] text-zinc-400">
                       <span>버전 {item.current_version || "v1.0"}</span>
-                      <span className="group-hover:translate-x-0.5 transition-transform font-semibold text-blue-600 dark:text-blue-400">
-                        자세히 보기 &rarr;
-                      </span>
+                      <Link
+                        href={`${baseHelpPath}/${item.slug || item.id}`}
+                        className="px-2.5 py-1 rounded bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-200 font-bold transition-colors"
+                      >
+                        보기 &rarr;
+                      </Link>
                     </div>
-                  </Link>
+                  </div>
                 ))}
               </div>
             </div>
@@ -868,159 +849,125 @@ export function HelpCenterMainView({
       )}
 
       {/* ========================================================================= */}
-      {/* SECTION 4: ALL HELP CONTENT (모든 도움말 - Section 20 Simplification)    */}
+      {/* SECTION 4: ALL HELP CONTENT (Compact Document Browser)                   */}
       {/* ========================================================================= */}
-      <div className="space-y-4 pt-4 border-t border-zinc-200 dark:border-zinc-800">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="space-y-1">
-            <h2 className="text-base sm:text-lg font-bold text-zinc-900 dark:text-white flex items-center gap-2">
-              <span>📖 모든 도움말</span>
-              <span className="rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 px-2 py-0.5 text-xs font-mono font-bold">
-                {filteredAllItems.length}
-              </span>
-            </h2>
-            <p className="text-xs text-zinc-500 dark:text-zinc-400">
-              K SELECT 공식 매뉴얼, 정책 및 가이드를 확인하세요.
-            </p>
+      <div className="space-y-3 pt-3 border-t border-zinc-200 dark:border-zinc-800">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+          <div className="flex items-center gap-2">
+            <h2 className="text-sm font-bold text-zinc-900 dark:text-white">📖 모든 도움말</h2>
+            <span className="rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 px-2 py-0.5 text-[10px] font-mono font-bold">
+              {filteredAllItems.length}
+            </span>
           </div>
 
-          {/* Search within library */}
-          <div className="relative w-full sm:w-64">
-            <input
-              type="text"
-              value={librarySearch}
-              onChange={(e) => setLibrarySearch(e.target.value)}
-              placeholder="문서명 또는 키워드 검색..."
-              className="w-full rounded-lg bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 px-3 py-1.5 text-xs text-zinc-900 dark:text-white placeholder:text-zinc-400 focus:outline-hidden focus:ring-1 focus:ring-blue-500"
-            />
-            {librarySearch && (
-              <button
-                type="button"
-                onClick={() => setLibrarySearch("")}
-                className="absolute right-2.5 top-1.5 text-zinc-400 hover:text-zinc-600 text-xs cursor-pointer"
-              >
-                ✕
-              </button>
+          {/* Search & Type Filters */}
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            {availableTypes.length > 1 && (
+              <div className="flex items-center gap-1 text-[11px]">
+                <button
+                  type="button"
+                  onClick={() => setSelectedType("ALL")}
+                  className={`px-2 py-0.5 rounded font-semibold transition-colors cursor-pointer ${
+                    selectedType === "ALL"
+                      ? "bg-zinc-800 text-white dark:bg-zinc-200 dark:text-zinc-900"
+                      : "text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-300"
+                  }`}
+                >
+                  전체
+                </button>
+                {availableTypes.map((t) => (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => setSelectedType(t)}
+                    className={`px-2 py-0.5 rounded font-semibold transition-colors cursor-pointer ${
+                      selectedType === t
+                        ? "bg-zinc-800 text-white dark:bg-zinc-200 dark:text-zinc-900"
+                        : "text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-300"
+                    }`}
+                  >
+                    {t}
+                  </button>
+                ))}
+              </div>
             )}
+            <div className="relative w-full sm:w-56">
+              <input
+                type="text"
+                value={librarySearch}
+                onChange={(e) => setLibrarySearch(e.target.value)}
+                placeholder="문서 검색..."
+                className="w-full rounded-md bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 px-2.5 py-1 text-xs text-zinc-900 dark:text-white placeholder:text-zinc-400 focus:outline-hidden focus:ring-1 focus:ring-blue-500"
+              />
+              {librarySearch && (
+                <button
+                  type="button"
+                  onClick={() => setLibrarySearch("")}
+                  className="absolute right-2 top-1 text-zinc-400 hover:text-zinc-600 text-xs cursor-pointer"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
           </div>
         </div>
 
-        {/* Secondary Type Filter Pills */}
-        {availableTypes.length > 1 && (
-          <div className="flex items-center gap-1.5 text-xs text-zinc-500">
-            <span className="text-[11px] font-semibold text-zinc-400 shrink-0">유형:</span>
-            <button
-              type="button"
-              onClick={() => setSelectedType("ALL")}
-              className={`px-2.5 py-0.5 rounded text-[11px] font-semibold transition-colors cursor-pointer ${
-                selectedType === "ALL"
-                  ? "bg-zinc-800 text-white dark:bg-zinc-200 dark:text-zinc-900 font-bold"
-                  : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-200"
-              }`}
-            >
-              전체
-            </button>
-            {availableTypes.map((t) => (
-              <button
-                key={t}
-                type="button"
-                onClick={() => setSelectedType(t)}
-                className={`px-2.5 py-0.5 rounded text-[11px] font-semibold transition-colors cursor-pointer ${
-                  selectedType === t
-                    ? "bg-zinc-800 text-white dark:bg-zinc-200 dark:text-zinc-900 font-bold"
-                    : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-200"
-                }`}
-              >
-                {t}
-              </button>
-            ))}
-          </div>
-        )}
-
-        {/* Knowledge Cards Grid */}
+        {/* Compact Document Rows List */}
         {loading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="space-y-2">
             {[1, 2].map((i) => (
-              <div key={i} className="h-44 rounded-xl bg-zinc-100 dark:bg-zinc-900 animate-pulse" />
+              <div key={i} className="h-14 rounded-xl bg-zinc-100 dark:bg-zinc-900 animate-pulse" />
             ))}
           </div>
         ) : filteredAllItems.length === 0 ? (
-          /* Empty Search / No Result UX */
-          <div className="rounded-2xl border border-dashed border-zinc-300 dark:border-zinc-800 p-10 text-center space-y-4">
-            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-zinc-100 dark:bg-zinc-800 text-2xl">
-              🔍
-            </div>
-            <div className="space-y-1 max-w-md mx-auto">
-              <h3 className="text-base font-bold text-zinc-900 dark:text-white">
-                관련 도움말을 찾지 못했습니다.
-              </h3>
-              <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                선택하신 조건에 해당하는 공식 도움말 문서가 없습니다. 검색 조건을 변경하시거나 운영팀에 직접 문의해 주세요.
-              </p>
-            </div>
-            <div className="pt-2 flex items-center justify-center gap-3">
-              <button
-                type="button"
-                onClick={() => {
-                  setSelectedType("ALL");
-                  setLibrarySearch("");
-                }}
-                className="rounded-lg border border-zinc-300 dark:border-zinc-700 px-4 py-2 text-xs font-semibold text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-900 cursor-pointer"
-              >
-                전체 목록 보기
-              </button>
-              <button
-                type="button"
-                onClick={() => handleEscalateToSupport("GENERAL")}
-                className="rounded-lg bg-[#131E2E] px-4 py-2 text-xs font-semibold text-white hover:bg-[#1f3047] dark:bg-white dark:text-[#131E2E] cursor-pointer shadow-xs"
-              >
-                {supportCtaText} &rarr;
-              </button>
-            </div>
+          <div className="rounded-xl border border-dashed border-zinc-300 dark:border-zinc-800 p-6 text-center space-y-2">
+            <div className="text-xl">🔍</div>
+            <h3 className="text-xs sm:text-sm font-bold text-zinc-900 dark:text-white">
+              관련 도움말을 찾지 못했습니다.
+            </h3>
+            <p className="text-xs text-zinc-500 dark:text-zinc-400">
+              검색 조건을 변경하시거나 운영팀에 직접 문의해 주세요.
+            </p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 divide-y divide-zinc-100 dark:divide-zinc-800 overflow-hidden shadow-xs">
             {filteredAllItems.map((item) => {
               const primaryTopic = itemPrimaryTopicMap.get(item.id);
-
               return (
-                <Link
-                  key={item.id}
-                  href={`${baseHelpPath}/${item.slug || item.id}`}
-                  className="group flex flex-col justify-between rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-5 shadow-xs hover:border-zinc-400 dark:hover:border-zinc-600 hover:shadow-md transition-all cursor-pointer"
-                >
-                  <div className="space-y-2.5">
-                    <div className="flex items-center justify-between gap-2">
+                <div key={item.id} className="p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-zinc-50 dark:hover:bg-zinc-800/30 transition-colors">
+                  <div className="flex items-start sm:items-center gap-3 min-w-0">
+                    {getTypeBadge(item.type)}
+                    <div className="min-w-0">
                       <div className="flex items-center gap-2">
-                        {getTypeBadge(item.type)}
-                        <span className="text-[11px] font-semibold text-zinc-500 flex items-center gap-1">
-                          {primaryTopic?.icon} {primaryTopic?.title_ko || item.module}
-                        </span>
+                        <h4 className="text-xs sm:text-sm font-bold text-zinc-900 dark:text-white truncate">
+                          {item.title_ko || item.title}
+                        </h4>
+                        {primaryTopic && (
+                          <span className="text-[10px] text-zinc-400 dark:text-zinc-500 hidden md:inline">
+                            · {primaryTopic.icon} {primaryTopic.title_ko}
+                          </span>
+                        )}
+                        {item.document_url && (
+                          <span className="px-1.5 py-0.5 text-[10px] font-bold rounded bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 shrink-0">
+                            PDF
+                          </span>
+                        )}
                       </div>
-                      {item.document_url && (
-                        <span className="inline-flex items-center gap-1 rounded bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 text-[10px] font-bold text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
-                          📄 PDF 문서
-                        </span>
-                      )}
-                    </div>
-
-                    <div>
-                      <h3 className="text-sm font-bold text-zinc-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors leading-snug">
-                        {item.title_ko || item.title}
-                      </h3>
-                      <p className="mt-1.5 text-xs text-zinc-600 dark:text-zinc-400 line-clamp-2 leading-relaxed">
-                        {item.summary_ko || item.summary_en || "자세한 가이드 및 정책 내용을 확인해 보세요."}
+                      <p className="text-[11px] text-zinc-500 dark:text-zinc-400 truncate max-w-xl">
+                        {item.summary_ko || item.summary_en || "공식 도움말 내용을 확인하세요."}
                       </p>
                     </div>
                   </div>
-
-                  <div className="mt-4 pt-3 border-t border-zinc-100 dark:border-zinc-800/80 flex items-center justify-between text-[11px] text-zinc-400">
+                  <div className="flex items-center gap-3 shrink-0 self-end sm:self-auto text-[11px] text-zinc-400">
                     <span>버전 {item.current_version || "v1.0"}</span>
-                    <span className="group-hover:translate-x-0.5 transition-transform font-semibold text-blue-600 dark:text-blue-400">
-                      자세히 보기 &rarr;
-                    </span>
+                    <Link
+                      href={`${baseHelpPath}/${item.slug || item.id}`}
+                      className="px-2.5 py-1 rounded bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-200 font-bold transition-colors"
+                    >
+                      보기 &rarr;
+                    </Link>
                   </div>
-                </Link>
+                </div>
               );
             })}
           </div>
@@ -1028,24 +975,24 @@ export function HelpCenterMainView({
       </div>
 
       {/* ========================================================================= */}
-      {/* SECTION 5: STILL NEED HELP? (아직 해결되지 않았나요? - Support CTA)      */}
+      {/* SECTION 5: STILL NEED HELP? (Compact Support Escalation CTA)              */}
       {/* ========================================================================= */}
-      <div className="rounded-2xl border border-zinc-200 bg-zinc-50/80 p-6 sm:p-8 dark:border-zinc-800 dark:bg-zinc-900/50 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="space-y-1">
-          <div className="flex items-center gap-2">
-            <span className="text-lg">💬</span>
-            <h3 className="text-sm font-bold text-zinc-900 dark:text-white">
+      <div className="rounded-xl border border-zinc-200 bg-zinc-50/80 p-4 sm:p-5 dark:border-zinc-800 dark:bg-zinc-900/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
+        <div className="space-y-0.5">
+          <div className="flex items-center gap-1.5">
+            <span className="text-base">💬</span>
+            <h3 className="text-xs sm:text-sm font-bold text-zinc-900 dark:text-white">
               아직 해결되지 않았나요?
             </h3>
           </div>
-          <p className="text-xs text-zinc-500 dark:text-zinc-400 leading-relaxed">
+          <p className="text-xs text-zinc-500 dark:text-zinc-400">
             {supportDescription}
           </p>
         </div>
         <button
           type="button"
           onClick={() => handleEscalateToSupport("GENERAL")}
-          className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-[#131E2E] px-5 py-2.5 text-xs font-semibold text-white hover:bg-[#1f3047] dark:bg-white dark:text-[#131E2E] transition-colors shrink-0 shadow-xs cursor-pointer"
+          className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-[#131E2E] px-4 py-2 text-xs font-semibold text-white hover:bg-[#1f3047] dark:bg-white dark:text-[#131E2E] transition-colors shrink-0 shadow-xs cursor-pointer"
         >
           <span>{supportCtaText}</span>
           <span>&rarr;</span>
