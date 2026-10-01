@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useState, useMemo, useTransition } from "react";
+import React, { useState, useMemo, useTransition, useEffect } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import {
   PartnerInquiryItem,
   RETAILER_CASE_CATEGORIES,
@@ -33,6 +34,7 @@ export function SupportView({
   userRole = "owner",
   userStoreId,
 }: SupportViewProps) {
+  const searchParams = useSearchParams();
   const [inquiries, setInquiries] = useState<PartnerInquiryItem[]>(initialInquiries);
   const [selectedInquiryId, setSelectedInquiryId] = useState<string | null>(
     inquiries.length > 0 ? inquiries[0].id : null
@@ -54,6 +56,57 @@ export function SupportView({
   const [newPriority, setNewPriority] = useState<"normal" | "high" | "urgent">("normal");
   const [newFile, setNewFile] = useState<File | null>(null);
   const [formError, setFormError] = useState("");
+
+  // Ask K SELECT Escalation & URL Query Prefill
+  useEffect(() => {
+    const newParam = searchParams.get("new");
+    const originParam = searchParams.get("origin");
+    const titleParam = searchParams.get("title") || searchParams.get("subject");
+    const bodyParam = searchParams.get("body") || searchParams.get("content");
+    const categoryParam = searchParams.get("category");
+
+    let askContext: any = null;
+    if (typeof window !== "undefined" && window.sessionStorage) {
+      const stored = window.sessionStorage.getItem("kselect_ask_escalation_context");
+      if (stored) {
+        try {
+          askContext = JSON.parse(stored);
+        } catch (e) {}
+      }
+    }
+
+    if (originParam === "ASK_KSELECT" || (newParam === "1" && askContext) || newParam === "1" || !!titleParam || !!bodyParam) {
+      setShowNewModal(true);
+      if (categoryParam) setNewCategory(categoryParam);
+
+      const q = askContext?.question || titleParam || "";
+      const qExcerpt = q ? (q.length > 35 ? q.slice(0, 35) + "..." : q) : "General Inquiry";
+      setNewTitle(titleParam || `[Ask K SELECT Inquiry] ${qExcerpt}`);
+
+      const answerSummary = askContext?.answerSummary || "";
+      // Strict audience isolation: Only include sources if explicitly eligible for retailer
+      const sourcesText = (askContext?.portalType === "RETAILER" && askContext?.sources && askContext.sources.length > 0)
+        ? `\n[Official Citations]\n${askContext.sources.map((s: any) => `- ${s.title} (${s.version})`).join("\n")}\n`
+        : "";
+
+      setNewContent(
+        bodyParam ||
+`[User Question / Inquiry]
+${q || "(Please specify your question)"}
+
+[Ask K SELECT Result]
+${answerSummary || "No sufficient information was found in official published guides."}
+${sourcesText}
+[Additional Details]
+(Please freely edit or add your details here.)
+`
+      );
+
+      if (typeof window !== "undefined" && window.sessionStorage) {
+        window.sessionStorage.removeItem("kselect_ask_escalation_context");
+      }
+    }
+  }, [searchParams]);
 
   // Reply Form State
   const [replyContent, setReplyContent] = useState("");

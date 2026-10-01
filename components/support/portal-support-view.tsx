@@ -107,6 +107,51 @@ export function PortalSupportView({ initialInquiries, createAction }: PortalSupp
       }
     }
 
+    // 1.5. If Ask K SELECT Escalation requested
+    const originParam = searchParams.get("origin");
+    let askContext: any = null;
+    if (typeof window !== "undefined" && window.sessionStorage) {
+      const stored = window.sessionStorage.getItem("kselect_ask_escalation_context");
+      if (stored) {
+        try {
+          askContext = JSON.parse(stored);
+        } catch (e) {}
+      }
+    }
+
+    if (originParam === "ASK_KSELECT" || (newParam === "1" && askContext)) {
+      setIsWriteOpen(true);
+      setSelectedInquiry(null);
+      setCategory(categoryParam || "general");
+
+      const q = askContext?.question || titleParam || "";
+      const qExcerpt = q ? (q.length > 35 ? q.slice(0, 35) + "..." : q) : "추가 문의";
+      setTitle(titleParam || `[Ask K SELECT 문의] ${qExcerpt}`);
+
+      const answerSummary = askContext?.answerSummary || "";
+      const sourcesText = askContext?.sources && askContext.sources.length > 0
+        ? `\n[관련 공식 도움말 출처]\n${askContext.sources.map((s: any) => `- ${s.title} (${s.version})`).join("\n")}\n`
+        : "";
+
+      setContent(
+        bodyParam ||
+`[문의 질문]
+${q || "(질문 내용)"}
+
+[Ask K SELECT 확인 결과]
+${answerSummary || "공식 도움말에서 충분한 정보를 찾지 못했습니다."}
+${sourcesText}
+[추가 문의 사항]
+(상세 문의 내용을 여기에 자유롭게 수정/작성해 주세요.)
+`
+      );
+
+      if (typeof window !== "undefined" && window.sessionStorage) {
+        window.sessionStorage.removeItem("kselect_ask_escalation_context");
+      }
+      return;
+    }
+
     // 2. If Agreement Inquiry requested
     const agreementIdParam = searchParams.get("agreement_id") || searchParams.get("agreementId");
     const agreementVersionParam = searchParams.get("agreement_version") || searchParams.get("agreementVersion");

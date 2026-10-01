@@ -568,6 +568,12 @@ export function AdminPartnerInquiries({
                           <span className="truncate">Invoice #{item.related_invoice_number || item.related_ap_number || "연계"}</span>
                         </div>
                       )}
+                      {(item.title?.includes("[Ask K SELECT") || item.content?.includes("[Ask K SELECT")) && (
+                        <div className="mt-1 flex items-center gap-1 text-[9px] font-mono font-medium text-cyan-700 dark:text-cyan-400">
+                          <span>✨</span>
+                          <span className="truncate">Ask K SELECT 지식 연계</span>
+                        </div>
+                      )}
                       {norm === "ACTION_REQUIRED" && (
                         <div className="mt-1.5 flex items-center gap-1 text-[9px] font-bold text-rose-600 dark:text-rose-400">
                           <span>⚠️</span><span>조치 요청 중</span>
@@ -708,6 +714,22 @@ export function AdminPartnerInquiries({
                         [이전 문의 보기]
                       </button>
                     )}
+                  </div>
+                )}
+
+                {/* Ask K SELECT Escalation Origin Banner */}
+                {(selectedInquiry.title?.includes("[Ask K SELECT") || selectedInquiry.content?.includes("[Ask K SELECT")) && (
+                  <div className="rounded-xl border border-cyan-200 bg-cyan-50/70 p-3 dark:border-cyan-900/40 dark:bg-cyan-950/20 text-xs text-cyan-900 dark:text-cyan-200 space-y-1">
+                    <div className="flex items-center gap-1.5 font-bold">
+                      <span className="text-sm">✨</span>
+                      <span>Ask K SELECT 지식 연계 문의 (Knowledge Escalation)</span>
+                      <span className="rounded bg-cyan-200/80 dark:bg-cyan-900 px-1.5 py-0.2 text-[9px] font-mono">
+                        ASK_KSELECT
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-cyan-800 dark:text-cyan-300">
+                      사용자가 Ask K SELECT 지능형 도움말 이용 중 추가 확인을 위해 1:1 문의로 직접 연계한 케이스입니다.
+                    </p>
                   </div>
                 )}
 

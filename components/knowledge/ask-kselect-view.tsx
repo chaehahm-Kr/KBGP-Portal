@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { AskAnswerResponse, AskSourceCitation } from "@/lib/knowledge/ask-engine";
 
 export interface AskKSelectViewProps {
@@ -39,12 +40,44 @@ export function AskKSelectView({
     ? "K SELECT Retail Portal 공식 도움말에 기반하여 실시간으로 안내해 드립니다."
     : "검증된 공식 지식 및 Live System Rule을 기반으로 실시간 운영 가이드를 제공합니다."
 }: AskKSelectViewProps) {
+  const router = useRouter();
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(false);
   const [response, setResponse] = useState<AskAnswerResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [dynamicQuestions, setDynamicQuestions] = useState<string[]>([]);
   const [hasFetchedDynamic, setHasFetchedDynamic] = useState(false);
+
+  const handleEscalateToSupport = (actionType: "NO_ANSWER" | "PARTIAL" | "ANSWERED" | "GENERAL" = "GENERAL") => {
+    try {
+      const askResult = response?.isUnknown ? "NO_ANSWER" : ((response?.sources?.length ?? 0) > 0 ? "ANSWERED" : "PARTIAL");
+      const handoffSources = (response?.sources || []).map((src: AskSourceCitation) => ({
+        id: src.id,
+        title: src.title,
+        version: src.version,
+        url: src.url,
+        type: src.type
+      }));
+
+      const contextPayload = {
+        origin: "ASK_KSELECT",
+        portalType,
+        question: query || response?.question || "",
+        askResult,
+        answerSummary: response?.directAnswer || "",
+        sources: handoffSources,
+        timestamp: new Date().toISOString()
+      };
+
+      if (typeof window !== "undefined" && window.sessionStorage) {
+        window.sessionStorage.setItem("kselect_ask_escalation_context", JSON.stringify(contextPayload));
+      }
+    } catch (e) {
+      console.error("Failed to store ask escalation context in sessionStorage:", e);
+    }
+
+    router.push(`${baseSupportPath}?new=1&origin=ASK_KSELECT`);
+  };
 
   useEffect(() => {
     async function loadDynamicQuestions() {
@@ -356,6 +389,44 @@ export function AskKSelectView({
               </div>
             )}
 
+            {/* No Answer Escalation Banner */}
+            {response.isUnknown && (
+              <div className="rounded-xl border border-amber-200 dark:border-amber-900/60 bg-amber-50/80 dark:bg-amber-950/30 p-4.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="space-y-1">
+                  <h4 className="text-xs sm:text-sm font-bold text-amber-900 dark:text-amber-200 flex items-center gap-1.5">
+                    <span>💬</span>
+                    <span>공식 도움말에서 충분한 정보를 찾지 못하셨나요?</span>
+                  </h4>
+                  <p className="text-xs text-amber-800/90 dark:text-amber-300">
+                    운영팀 1:1 문의로 전달하시면 질문 내용이 자동 연계되어 빠르고 정확하게 안내받으실 수 있습니다.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleEscalateToSupport("NO_ANSWER")}
+                  className="rounded-lg bg-[#131E2E] dark:bg-zinc-100 text-white dark:text-zinc-900 px-4 py-2 text-xs font-bold hover:bg-[#1f3047] dark:hover:bg-zinc-200 transition-colors shrink-0 shadow-xs cursor-pointer flex items-center gap-1.5"
+                >
+                  <span>1:1 문의하기</span>
+                  <span>&rarr;</span>
+                </button>
+              </div>
+            )}
+
+            {/* Answered / Partial Additional Help Link */}
+            {!response.isUnknown && (
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 pt-3 border-t border-zinc-100 dark:border-zinc-800 text-xs text-zinc-500">
+                <span>원하는 답을 찾지 못하셨거나 추가 세부 문의가 필요하신가요?</span>
+                <button
+                  type="button"
+                  onClick={() => handleEscalateToSupport("ANSWERED")}
+                  className="text-blue-600 dark:text-blue-400 font-bold hover:underline cursor-pointer flex items-center gap-1"
+                >
+                  <span>1:1 추가 문의하기</span>
+                  <span>&rarr;</span>
+                </button>
+              </div>
+            )}
+
             {/* Action Buttons */}
             {response.actions && response.actions.length > 0 && (
               <div className="flex flex-wrap items-center gap-2 pt-4 border-t border-zinc-100 dark:border-zinc-800">
@@ -391,13 +462,14 @@ export function AskKSelectView({
             K SELECT 운영팀에 1:1 문의를 남겨주시면 담당자가 신속히 확인하여 안내해 드립니다.
           </p>
         </div>
-        <Link
-          href={baseSupportPath}
+        <button
+          type="button"
+          onClick={() => handleEscalateToSupport("GENERAL")}
           className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-[#131E2E] px-5 py-2.5 text-xs font-semibold text-white hover:bg-[#1f3047] dark:bg-white dark:text-[#131E2E] transition-colors shrink-0 shadow-xs cursor-pointer"
         >
           <span>1:1 문의하기</span>
           <span>&rarr;</span>
-        </Link>
+        </button>
       </div>
     </div>
   );
