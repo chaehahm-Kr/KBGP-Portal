@@ -892,7 +892,7 @@ export function HelpCenterMainView({
                         href={`${baseHelpPath}/${item.slug || item.id}`}
                         className="px-2.5 py-1 rounded bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-200 font-bold transition-colors"
                       >
-                        보기 &rarr;
+                        자세히 보기 &rarr;
                       </Link>
                     </div>
                   </div>
@@ -930,29 +930,31 @@ export function HelpCenterMainView({
       )}
 
       {/* ========================================================================= */}
-      {/* SECTION 4: STILL NEED HELP? (Support Escalation CTA)                      */}
+      {/* SECTION 4: STILL NEED HELP? (Support Escalation CTA - Default Home Only)  */}
       {/* ========================================================================= */}
-      <div className="rounded-xl border border-zinc-200 bg-zinc-50/80 p-4 sm:p-5 dark:border-zinc-800 dark:bg-zinc-900/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
-        <div className="space-y-0.5">
-          <div className="flex items-center gap-1.5">
-            <span className="text-base">💬</span>
-            <h3 className="text-xs sm:text-sm font-bold text-zinc-900 dark:text-white">
-              아직 해결되지 않았나요?
-            </h3>
+      {!selectedTopicId && (
+        <div className="rounded-xl border border-zinc-200 bg-zinc-50/80 p-4 sm:p-5 dark:border-zinc-800 dark:bg-zinc-900/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
+          <div className="space-y-0.5">
+            <div className="flex items-center gap-1.5">
+              <span className="text-base">💬</span>
+              <h3 className="text-xs sm:text-sm font-bold text-zinc-900 dark:text-white">
+                아직 해결되지 않았나요?
+              </h3>
+            </div>
+            <p className="text-xs text-zinc-500 dark:text-zinc-400">
+              {supportDescription}
+            </p>
           </div>
-          <p className="text-xs text-zinc-500 dark:text-zinc-400">
-            {supportDescription}
-          </p>
+          <button
+            type="button"
+            onClick={() => handleEscalateToSupport("GENERAL")}
+            className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-[#131E2E] px-4 py-2 text-xs font-semibold text-white hover:bg-[#1f3047] dark:bg-white dark:text-[#131E2E] transition-colors shrink-0 shadow-xs cursor-pointer"
+          >
+            <span>{supportCtaText}</span>
+            <span>&rarr;</span>
+          </button>
         </div>
-        <button
-          type="button"
-          onClick={() => handleEscalateToSupport("GENERAL")}
-          className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-[#131E2E] px-4 py-2 text-xs font-semibold text-white hover:bg-[#1f3047] dark:bg-white dark:text-[#131E2E] transition-colors shrink-0 shadow-xs cursor-pointer"
-        >
-          <span>{supportCtaText}</span>
-          <span>&rarr;</span>
-        </button>
-      </div>
+      )}
     </div>
   );
 }

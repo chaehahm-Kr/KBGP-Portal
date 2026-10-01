@@ -46,12 +46,7 @@ export function isAuthorizedForAudience(
     return true;
   }
 
-  const audience = item.audience || [];
-
-  // Internal Knowledge: Brand / Retailer / Public / Anonymous CANNOT access
-  if (audience.includes("INTERNAL") && !audience.includes("PUBLIC")) {
-    return false;
-  }
+  const audience = (item.audience || []).map(a => a.toUpperCase());
 
   if (context.role === "brand") {
     // Brand can access items marked with BRAND or PUBLIC
@@ -59,6 +54,11 @@ export function isAuthorizedForAudience(
 
     // Must be Published to be visible externally
     const isPublished = item.status === "PUBLISHED";
+
+    // Sensitive internal documents are strictly forbidden for external users
+    if (item.is_sensitive_internal) {
+      return false;
+    }
 
     // Unapproved external items are strictly hidden
     if (item.requires_external_approval && item.external_review_status !== "APPROVED") {
@@ -69,11 +69,15 @@ export function isAuthorizedForAudience(
   }
 
   if (context.role === "retailer") {
-    // Retailer can access items marked with RETAILER or PUBLIC
-    const isRetailerAllowed = audience.includes("RETAILER") || audience.includes("PUBLIC");
+    // Retailer can access items marked with RETAILER, RETAIL, or PUBLIC
+    const isRetailerAllowed = audience.includes("RETAILER") || audience.includes("RETAIL") || audience.includes("PUBLIC");
 
     // Must be Published to be visible externally
     const isPublished = item.status === "PUBLISHED";
+
+    if (item.is_sensitive_internal) {
+      return false;
+    }
 
     if (item.requires_external_approval && item.external_review_status !== "APPROVED") {
       return false;
@@ -85,7 +89,7 @@ export function isAuthorizedForAudience(
   if (context.role === "public" || context.role === "anonymous") {
     const isPublicAllowed = audience.includes("PUBLIC");
     const isPublished = item.status === "PUBLISHED";
-    return isPublicAllowed && isPublished && item.external_review_status === "APPROVED";
+    return isPublicAllowed && isPublished && !item.is_sensitive_internal && (!item.requires_external_approval || item.external_review_status === "APPROVED");
   }
 
   return false;

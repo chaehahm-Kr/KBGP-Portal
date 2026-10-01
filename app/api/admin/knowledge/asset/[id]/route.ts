@@ -116,30 +116,46 @@ export async function GET(
     let targetFilePath = path.join(privateDir, asset.file_name);
 
     if (!fs.existsSync(targetFilePath)) {
-      const fallbackEnglish = path.join(privateDir, "K_SELECT_INSIGHTS_Operations_Manual_v1.0.pdf");
-      if (fs.existsSync(fallbackEnglish)) {
-        targetFilePath = fallbackEnglish;
+      const underscoreName = asset.file_name.replace(/ /g, "_");
+      const spaceName = asset.file_name.replace(/_/g, " ");
+      if (fs.existsSync(path.join(privateDir, underscoreName))) {
+        targetFilePath = path.join(privateDir, underscoreName);
+      } else if (fs.existsSync(path.join(privateDir, spaceName))) {
+        targetFilePath = path.join(privateDir, spaceName);
+      } else if (asset.id.includes("brand-policy") || asset.file_name.includes("MAN-BRAND-001")) {
+        const brandFiles = fs.existsSync(privateDir)
+          ? fs.readdirSync(privateDir).filter(f => f.includes("MAN-BRAND-001") || f.toLowerCase().includes("brand"))
+          : [];
+        if (brandFiles.length > 0) {
+          targetFilePath = path.join(privateDir, brandFiles[0]);
+        }
       } else {
-        const files = fs.existsSync(privateDir) ? fs.readdirSync(privateDir).filter(f => f.endsWith(".pdf")) : [];
-        if (files.length > 0) {
-          targetFilePath = path.join(privateDir, files[0]);
+        const fallbackEnglish = path.join(privateDir, "K_SELECT_INSIGHTS_Operations_Manual_v1.0.pdf");
+        if (fs.existsSync(fallbackEnglish)) {
+          targetFilePath = fallbackEnglish;
         } else {
-          return NextResponse.json(
-            { error: "Asset file not found in secure storage" },
-            { status: 404 }
-          );
+          const files = fs.existsSync(privateDir) ? fs.readdirSync(privateDir).filter(f => f.endsWith(".pdf")) : [];
+          if (files.length > 0) {
+            targetFilePath = path.join(privateDir, files[0]);
+          } else {
+            return NextResponse.json(
+              { error: "Asset file not found in secure storage" },
+              { status: 404 }
+            );
+          }
         }
       }
     }
 
     const fileBuffer = await fs.promises.readFile(targetFilePath);
     const disposition = action === "download" ? "attachment" : "inline";
+    const downloadFilename = asset.file_name.endsWith(".pdf") ? asset.file_name : `${asset.file_name}.pdf`;
 
     return new NextResponse(fileBuffer, {
       status: 200,
       headers: {
         "Content-Type": "application/pdf",
-        "Content-Disposition": `${disposition}; filename="${encodeURIComponent(asset.file_name)}"`,
+        "Content-Disposition": `${disposition}; filename="${encodeURIComponent(downloadFilename)}"`,
         "Content-Length": fileBuffer.length.toString(),
         "Cache-Control": "private, no-store, no-cache, max-age=0, must-revalidate",
         "Pragma": "no-cache"

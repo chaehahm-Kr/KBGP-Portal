@@ -1,5 +1,5 @@
 import { KnowledgeItem, AudienceType, SecurityUserContext } from "./types";
-import { getStoreKnowledgeItems, getStoreAssets } from "./store";
+import { getStoreKnowledgeItems, getStoreAssets, getStoreFaqs } from "./store";
 
 export interface AudienceDistributionResult {
   success: boolean;
@@ -208,6 +208,15 @@ export async function getPublishedKnowledgeDetailForAudience(
     type: string;
     module: string;
   }>;
+  faqs?: Array<{
+    id: string;
+    question_ko: string;
+    question_en?: string;
+    answer_ko: string;
+    answer_en?: string;
+    source_title?: string;
+    source_version?: string;
+  }>;
 } | null> {
   const allItems = await getStoreKnowledgeItems();
   const found = allItems.find(
@@ -221,6 +230,9 @@ export async function getPublishedKnowledgeDetailForAudience(
   // Fetch official assets for this published knowledge item
   const allAssets = await getStoreAssets(found.id);
   const currentAssets = allAssets.filter(a => a.is_current !== false);
+
+  // Fetch approved FAQs linked to this knowledge item
+  const linkedFaqs = await getStoreFaqs(found.id, "APPROVED", audience);
 
   // Fetch related published items for this audience (same module or category)
   const relatedItems = allItems
@@ -275,7 +287,16 @@ export async function getPublishedKnowledgeDetailForAudience(
       file_size: a.file_size,
       published_date: a.published_date
     })),
-    related: relatedItems
+    related: relatedItems,
+    faqs: linkedFaqs.map(f => ({
+      id: f.id,
+      question_ko: f.question_ko,
+      question_en: f.question_en,
+      answer_ko: f.answer_ko,
+      answer_en: f.answer_en,
+      source_title: f.source_title,
+      source_version: f.source_version
+    }))
   };
 }
 
