@@ -1125,5 +1125,7 @@ function formatSingleRequest(r: any, companyMap?: Map<string, string>): PoReques
     total_estimated_amount: totalEstimatedAmount,
     total_final_qty: totalFinalQty,
     total_final_amount: totalFinalAmount,
+    admin_read_at: r.admin_read_at || null,
+    admin_read_by: r.admin_read_by || null,
   };
 }

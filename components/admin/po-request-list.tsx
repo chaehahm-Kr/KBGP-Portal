@@ -9,6 +9,7 @@ import {
   PO_REQUEST_STATUS_COLORS,
 } from "@/lib/purchase-order/request-types";
 import { formatEasternDate } from "@/lib/utils/timezone";
+import { NewBadge } from "@/components/admin/new-badge";
 
 interface AdminPoRequestListProps {
   initialRequests: PoRequestDetail[];
@@ -146,13 +147,16 @@ export function AdminPoRequestList({
               {filtered.map((req) => (
                 <tr key={req.id} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-850/20 transition-colors">
                   {/* Request Number */}
-                  <td className="px-4 py-3.5 font-mono font-bold text-zinc-900 dark:text-white">
-                    <Link
-                      href={`/admin/purchasing/requests/${req.id}`}
-                      className="text-blue-600 hover:text-blue-700 dark:text-blue-400 hover:underline"
-                    >
-                      {req.request_number}
-                    </Link>
+                  <td className="px-4 py-3.5 font-mono font-bold text-zinc-900 dark:text-white whitespace-nowrap">
+                    <div className="flex items-center gap-1.5">
+                      {!req.admin_read_at && <NewBadge />}
+                      <Link
+                        href={`/admin/purchasing/requests/${req.id}`}
+                        className="text-blue-600 hover:text-blue-700 dark:text-blue-400 hover:underline"
+                      >
+                        {req.request_number}
+                      </Link>
+                    </div>
                   </td>
 
                   {/* Company */}

@@ -29,11 +29,14 @@ import {
   CurationSettingsIcon,
 } from "./icons";
 
+import type { AdminUnreadCounts } from "@/lib/notifications/admin-read-state";
+
 interface SidebarProps {
   isCollapsed: boolean;
   toggleCollapse: () => void;
   pendingInquiriesCount?: number;
   pendingApplicationsCount?: number;
+  unreadCounts?: AdminUnreadCounts;
 }
 
 interface SubItem {
@@ -125,6 +128,15 @@ export default function Sidebar({
   toggleCollapse,
   pendingInquiriesCount = 0,
   pendingApplicationsCount = 0,
+  unreadCounts = {
+    applications: 0,
+    poRequests: 0,
+    products: 0,
+    supplierInvoices: 0,
+    totalPurchasing: 0,
+    totalFinance: 0,
+    totalProducts: 0,
+  },
 }: SidebarProps) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -391,12 +403,26 @@ export default function Sidebar({
           const hasSubItems = !!item.subItems;
           const isExpanded = expandedMenus[item.name] && !isCollapsed;
 
+          // Determine parent-level unread count
+          let parentBadgeCount = 0;
+          if (item.name === "Applications") {
+            parentBadgeCount = unreadCounts.applications || pendingApplicationsCount;
+          } else if (item.name === "Products") {
+            parentBadgeCount = unreadCounts.products;
+          } else if (item.name === "Purchasing") {
+            parentBadgeCount = unreadCounts.poRequests;
+          } else if (item.name === "Finance") {
+            parentBadgeCount = unreadCounts.supplierInvoices;
+          } else if (item.name === "Tasks & Communication") {
+            parentBadgeCount = pendingInquiriesCount;
+          }
+
           return (
             <div key={item.name} className="space-y-1">
               {hasSubItems ? (
                 <button
                   onClick={() => handleToggleExpand(item.name)}
-                  className={`flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+                  className={`flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors relative ${
                     isActive
                       ? "bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-white font-semibold"
                       : "text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-900 dark:hover:text-white"
@@ -404,10 +430,13 @@ export default function Sidebar({
                 >
                   <item.icon className="h-5 w-5 shrink-0" />
                   {!isCollapsed && <span className="flex-1 text-left">{item.name}</span>}
-                  {!isCollapsed && item.name === "Tasks & Communication" && pendingInquiriesCount > 0 && (
-                    <span className="mr-1 inline-flex items-center justify-center rounded-full bg-amber-500 text-white text-[10px] font-extrabold px-1.5 py-0.2">
-                      {pendingInquiriesCount}
+                  {!isCollapsed && parentBadgeCount > 0 && !isExpanded && (
+                    <span className="mr-1 inline-flex items-center justify-center rounded-full bg-amber-500 text-white text-[10px] font-extrabold px-1.5 py-0.2 shadow-xs">
+                      {parentBadgeCount}
                     </span>
+                  )}
+                  {isCollapsed && parentBadgeCount > 0 && (
+                    <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-amber-500 ring-2 ring-white dark:ring-zinc-950" />
                   )}
                   {!isCollapsed &&
                     (isExpanded ? (
@@ -427,12 +456,12 @@ export default function Sidebar({
                 >
                   <item.icon className="h-5 w-5 shrink-0" />
                   {!isCollapsed && <span className="flex-1">{item.name}</span>}
-                  {!isCollapsed && item.name === "Applications" && pendingApplicationsCount > 0 && (
+                  {!isCollapsed && parentBadgeCount > 0 && (
                     <span className="rounded-full bg-amber-500 text-white px-2 py-0.5 text-[10px] font-extrabold shadow-xs">
-                      {pendingApplicationsCount}
+                      {parentBadgeCount}
                     </span>
                   )}
-                  {isCollapsed && item.name === "Applications" && pendingApplicationsCount > 0 && (
+                  {isCollapsed && parentBadgeCount > 0 && (
                     <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-amber-500 ring-2 ring-white dark:ring-zinc-950" />
                   )}
                 </Link>
@@ -446,6 +475,18 @@ export default function Sidebar({
                     const subKey = `${item.name}->${sub.name}`;
                     const isSubExpanded = expandedSubMenus[subKey] !== false;
                     const isSubActive = isSubItemActive(sub);
+
+                    // Determine subitem unread count
+                    let subBadgeCount = 0;
+                    if (sub.name === "PO Requests") {
+                      subBadgeCount = unreadCounts.poRequests;
+                    } else if (sub.name === "Product Catalog") {
+                      subBadgeCount = unreadCounts.products;
+                    } else if (sub.name === "Supplier Invoices") {
+                      subBadgeCount = unreadCounts.supplierInvoices;
+                    } else if (sub.name === "Partner Inquiries") {
+                      subBadgeCount = pendingInquiriesCount;
+                    }
 
                     if (hasNested) {
                       return (
@@ -508,9 +549,9 @@ export default function Sidebar({
                       >
                         {sub.icon && <sub.icon size={14} className="text-zinc-400 dark:text-zinc-500 shrink-0" />}
                         <span className="flex-1">{sub.name}</span>
-                        {sub.name === "Partner Inquiries" && pendingInquiriesCount > 0 && (
+                        {subBadgeCount > 0 && (
                           <span className="rounded-full bg-amber-500 text-white px-2 py-0.2 text-[10px] font-extrabold shadow-xs">
-                            {pendingInquiriesCount}
+                            {subBadgeCount}
                           </span>
                         )}
                       </Link>

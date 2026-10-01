@@ -4,6 +4,7 @@ import { verifyAdminSession } from "@/lib/auth/dal";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getSupplierInvoiceById, getPurchaseOrderForInvoice } from "@/lib/supplier-invoice/actions";
 import { InvoiceDetail } from "@/components/admin/invoice-detail";
+import { markAdminItemAsRead } from "@/lib/notifications/admin-read-state";
 
 export const metadata: Metadata = {
   title: "인보이스 상세 보기 | K SELECT NETWORK 어드민",
@@ -14,7 +15,7 @@ interface DetailPageProps {
 }
 
 export default async function InvoiceDetailPage({ params }: DetailPageProps) {
-  await verifyAdminSession();
+  const session = await verifyAdminSession();
   const { id } = await params;
 
   let invoice: any = null;
@@ -22,6 +23,11 @@ export default async function InvoiceDetailPage({ params }: DetailPageProps) {
     invoice = await getSupplierInvoiceById(id);
   } catch (err) {
     notFound();
+  }
+
+  // Mark invoice as read for admin notification system
+  if (invoice && !invoice.admin_read_at) {
+    await markAdminItemAsRead("supplier_invoice", invoice.id, session.userId);
   }
 
   // Load PO details (including receiving summary resolved quantities)

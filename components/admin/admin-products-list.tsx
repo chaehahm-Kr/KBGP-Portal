@@ -6,6 +6,7 @@ import Link from "next/link";
 import { PRODUCT_CATEGORY_LABEL, type ProductCategory } from "@/lib/product/types";
 import { adminUpdateProductOverrides, adminBulkSoftDeleteProducts, adminRestoreProduct } from "@/lib/product/admin-actions";
 import { formatEasternDate } from "@/lib/utils/timezone";
+import { NewBadge } from "@/components/admin/new-badge";
 
 interface AdminProductItem {
   id: string;
@@ -40,6 +41,7 @@ interface AdminProductItem {
   updated_at?: string | null;
   last_updated_by_name?: string | null;
   last_updated_source?: string | null;
+  admin_read_at?: string | null;
 }
 
 interface AdminProductsListProps {
@@ -624,12 +626,15 @@ export function AdminProductsList({ initialProducts }: AdminProductsListProps) {
                     {/* Product Name */}
                     <td className="px-5 py-4 align-middle font-bold text-zinc-900 dark:text-white min-w-[200px]">
                       <div className="flex flex-col gap-1">
-                        <Link
-                          href={`/admin/products/${product.id}`}
-                          className="hover:text-zinc-950 dark:hover:text-white hover:underline transition-all block text-sm"
-                        >
-                          {product.display_name}
-                        </Link>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          {!product.admin_read_at && <NewBadge />}
+                          <Link
+                            href={`/admin/products/${product.id}`}
+                            className="hover:text-zinc-950 dark:hover:text-white hover:underline transition-all block text-sm"
+                          >
+                            {product.display_name}
+                          </Link>
+                        </div>
                         {product.category_code && product.category_full_path ? (
                           <span className="text-[10px] font-semibold text-zinc-500 dark:text-zinc-400 block pt-0.5">
                             {product.category_full_path}

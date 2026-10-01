@@ -749,6 +749,8 @@ export async function getSupplierInvoices() {
       balance_due,
       invoice_status,
       payment_status,
+      admin_read_at,
+      admin_read_by,
       supplier:companies!supplier_company_id (id, name),
       po:purchase_orders!purchase_order_id (id, po_number)
     `)
@@ -801,6 +803,8 @@ export async function getSupplierInvoiceById(id: string) {
       created_by,
       updated_at,
       updated_by,
+      admin_read_at,
+      admin_read_by,
       supplier:companies!supplier_company_id (id, name),
       po:purchase_orders!purchase_order_id (id, po_number),
       lines:supplier_invoice_lines (

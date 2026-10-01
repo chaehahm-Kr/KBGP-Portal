@@ -5,16 +5,20 @@ import { usePathname } from "next/navigation";
 import Sidebar from "./sidebar";
 import Header from "./header";
 
+import type { AdminUnreadCounts } from "@/lib/notifications/admin-read-state";
+
 interface AdminLayoutProps {
   children: React.ReactNode;
   pendingInquiriesCount?: number;
   pendingApplicationsCount?: number;
+  unreadCounts?: AdminUnreadCounts;
 }
 
 export default function AdminLayout({
   children,
   pendingInquiriesCount = 0,
   pendingApplicationsCount = 0,
+  unreadCounts,
 }: AdminLayoutProps) {
   const pathname = usePathname();
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
@@ -52,6 +56,7 @@ export default function AdminLayout({
         toggleCollapse={toggleSidebar}
         pendingInquiriesCount={pendingInquiriesCount}
         pendingApplicationsCount={pendingApplicationsCount}
+        unreadCounts={unreadCounts}
       />
 
       {/* Main Content Area */}

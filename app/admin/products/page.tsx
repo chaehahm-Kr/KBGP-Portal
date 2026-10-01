@@ -157,6 +157,7 @@ export default async function AdminProductsPage() {
           category_full_path: p.category_code ? getCategoryFullPath(p.category_code) : null,
           completeness_rate: catCompletion?.completionPercent ?? 0,
           category_completion: catCompletion,
+          admin_read_at: (p as any).admin_read_at || null,
         };
       } catch (prodErr) {
         console.error("Error resolving product for admin list:", p?.id, prodErr);
@@ -189,6 +190,7 @@ export default async function AdminProductsPage() {
           category_full_path: null,
           completeness_rate: 0,
           category_completion: null,
+          admin_read_at: (p as any)?.admin_read_at || null,
         };
       }
     })

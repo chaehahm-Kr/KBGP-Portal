@@ -7,6 +7,7 @@ import { ProductOverrideTabs } from "@/components/admin/product-override-tabs";
 import type { Product, ProductVideo } from "@/lib/product/types";
 import { adminGetProductCuration, getProductChangeHistory } from "@/lib/product/admin-actions";
 import { getProductCategoryCompletion } from "@/lib/product/attribute-completion";
+import { markAdminItemAsRead } from "@/lib/notifications/admin-read-state";
 
 export const metadata: Metadata = {
   title: "제품 오버라이드 관리 | K SELECT NETWORK 어드민",
@@ -18,7 +19,7 @@ export default async function AdminProductDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  await verifyAdminSession();
+  const session = await verifyAdminSession();
   const adminSupabase = createAdminClient();
 
   const { data: product } = await adminSupabase
@@ -34,13 +35,18 @@ export default async function AdminProductDetailPage({
       palette_carton_qty, palette_width, palette_depth, palette_height, palette_weight,
       container_20ft_qty, container_20ft_weight, container_20ft_cbm,
       container_40fthc_qty, container_40fthc_weight, container_40fthc_cbm,
-      selection_status, sales_status, category_code, status, created_at, updated_at
+      selection_status, sales_status, category_code, status, created_at, updated_at, admin_read_at
     `)
     .eq("id", id)
     .maybeSingle();
 
   if (!product) {
     notFound();
+  }
+
+  // Mark product as read for admin notification system
+  if (!(product as any).admin_read_at) {
+    await markAdminItemAsRead("product", product.id, session.userId);
   }
 
   const { data: brand } = await adminSupabase

@@ -119,4 +119,6 @@ export interface PoRequestDetail {
   total_final_amount: number | null;
   lines: PoRequestLine[];
   history: PoRequestHistoryEntry[];
+  admin_read_at?: string | null;
+  admin_read_by?: string | null;
 }

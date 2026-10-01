@@ -20,6 +20,7 @@ import {
   resendApplicationRejectionEmail,
 } from "@/lib/application/invitation-actions";
 import ApplicationWorkspace from "@/components/application/application-workspace";
+import { markAdminItemAsRead } from "@/lib/notifications/admin-read-state";
 
 export const metadata: Metadata = {
   title: "신청서 상세 | K SELECT NETWORK 어드민",
@@ -37,13 +38,18 @@ export default async function AdminApplicationDetailPage({
   const { data: application } = await supabase
     .from("applications")
     .select(
-      "id, application_number, partner_type, entry_mode, status, company_id, onboarded_company_id, invitation_id, applicant_company_name, applicant_contact_name, applicant_contact_email, applicant_contact_phone, applicant_address, review_notes, motivation_note, self_check_answers, eligibility_responses, submitted_at, created_at"
+      "id, application_number, partner_type, entry_mode, status, company_id, onboarded_company_id, invitation_id, applicant_company_name, applicant_contact_name, applicant_contact_email, applicant_contact_phone, applicant_address, review_notes, motivation_note, self_check_answers, eligibility_responses, submitted_at, created_at, admin_read_at"
     )
     .eq("id", id)
     .single();
 
   if (!application || application.status === "draft" || application.status === "deleted") {
     notFound();
+  }
+
+  // Mark application as read for admin notification system
+  if (!application.admin_read_at) {
+    await markAdminItemAsRead("application", application.id, session.userId);
   }
 
   let company: any = null;

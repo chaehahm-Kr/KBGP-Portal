@@ -2,6 +2,7 @@
 
 import React, { useState, useMemo } from "react";
 import Link from "next/link";
+import { NewBadge } from "@/components/admin/new-badge";
 
 interface SupplierInvoiceItem {
   id: string;
@@ -17,6 +18,7 @@ interface SupplierInvoiceItem {
   payment_status: "UNPAID" | "PARTIALLY_PAID" | "PAID";
   supplier: { id: string; name: string };
   po: { id: string; po_number: string };
+  admin_read_at?: string | null;
 }
 
 interface SupplierOption {
@@ -616,10 +618,13 @@ export function InvoicesList({ initialInvoices, suppliers }: InvoicesListProps) 
                   return (
                     <tr key={inv.id} className="hover:bg-zinc-50/30 dark:hover:bg-zinc-850/5 transition-colors">
                       {/* AP Number */}
-                      <td className="px-5 py-3.5 font-mono font-bold text-indigo-650 hover:underline">
-                        <Link href={`/admin/finance/invoices/${inv.id}`}>
-                          {inv.internal_ap_number}
-                        </Link>
+                      <td className="px-5 py-3.5 font-mono font-bold text-indigo-650 hover:underline whitespace-nowrap">
+                        <div className="flex items-center gap-1.5">
+                          {!inv.admin_read_at && <NewBadge />}
+                          <Link href={`/admin/finance/invoices/${inv.id}`}>
+                            {inv.internal_ap_number}
+                          </Link>
+                        </div>
                       </td>
 
                       {/* Invoice Number */}

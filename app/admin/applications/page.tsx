@@ -16,6 +16,7 @@ import { parseCompanyMetadata } from "@/lib/company/admin-actions";
 import { evaluateCompanyOnboarding } from "@/lib/company/onboarding-status";
 import { CompanyOnboardingPopover } from "@/components/admin/company-onboarding-popover";
 import { getPersonDisplayName } from "@/lib/user/name-helper";
+import { NewBadge } from "@/components/admin/new-badge";
 
 export const metadata: Metadata = {
   title: "신청서 및 파트너 초대 관리 | K SELECT NETWORK 어드민",
@@ -74,7 +75,7 @@ export default async function AdminApplicationsPage({
   let query = supabase
     .from("applications")
     .select(
-      "id, application_number, partner_type, entry_mode, status, company_id, onboarded_company_id, applicant_company_name, applicant_contact_name, applicant_contact_email, applicant_contact_phone, submitted_at, created_at, eligibility_responses, self_check_answers"
+      "id, application_number, partner_type, entry_mode, status, company_id, onboarded_company_id, applicant_company_name, applicant_contact_name, applicant_contact_email, applicant_contact_phone, submitted_at, created_at, eligibility_responses, self_check_answers, admin_read_at"
     )
     .neq("status", "draft")
     .order("created_at", { ascending: false });
@@ -459,12 +460,15 @@ export default async function AdminApplicationsPage({
                 return (
                   <tr key={app.id} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-900/50">
                     <td className="px-5 py-3.5 font-bold font-mono text-zinc-950 dark:text-white whitespace-nowrap">
-                      <Link
-                        href={`/admin/applications/${app.id}`}
-                        className="hover:underline hover:text-zinc-900 dark:hover:text-zinc-300"
-                      >
-                        {app.application_number}
-                      </Link>
+                      <div className="flex items-center gap-1.5">
+                        <Link
+                          href={`/admin/applications/${app.id}`}
+                          className="hover:underline hover:text-zinc-900 dark:hover:text-zinc-300"
+                        >
+                          {app.application_number}
+                        </Link>
+                        {!(app as any).admin_read_at && <NewBadge />}
+                      </div>
                     </td>
 
                     <td className="px-4 py-3.5 whitespace-nowrap">

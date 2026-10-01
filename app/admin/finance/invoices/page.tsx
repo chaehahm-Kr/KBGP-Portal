@@ -43,7 +43,8 @@ export default async function AdminInvoicesPage() {
     po: {
       id: inv.po?.id || "",
       po_number: inv.po?.po_number || "-"
-    }
+    },
+    admin_read_at: inv.admin_read_at || null,
   }));
 
   return (
