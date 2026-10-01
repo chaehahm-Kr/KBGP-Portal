@@ -16,7 +16,7 @@ export type KnowledgeStatus = "DRAFT" | "IN_REVIEW" | "APPROVED" | "PUBLISHED" |
 
 export type AudienceType = "INTERNAL" | "ADMIN / MANAGEMENT" | "BRAND" | "RETAILER" | "PUBLIC";
 
-export type SystemImpactStatus = "NORMAL" | "POTENTIALLY_OUTDATED";
+export type SystemImpactStatus = "NORMAL" | "UPDATE_REQUIRED" | "POTENTIALLY_OUTDATED";
 
 export type ExternalReviewStatus = "NONE" | "REQUESTED" | "APPROVED" | "REJECTED";
 
@@ -151,6 +151,7 @@ export interface KnowledgeFilterOptions {
   audience?: string;
   module?: string;
   status?: string;
+  impact_status?: string;
   language?: string;
   search?: string;
   sortBy?: "latest" | "title" | "updated";

@@ -9,6 +9,7 @@ import KnowledgeNavTabs from "./knowledge-nav-tabs";
 export default function LibraryView() {
   const searchParams = useSearchParams();
   const initialStatus = searchParams.get("status") || "ALL";
+  const initialImpact = searchParams.get("impact") || searchParams.get("impact_status") || "ALL";
 
   const [items, setItems] = useState<KnowledgeItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -17,11 +18,12 @@ export default function LibraryView() {
   const [audienceFilter, setAudienceFilter] = useState("ALL");
   const [moduleFilter, setModuleFilter] = useState("ALL");
   const [statusFilter, setStatusFilter] = useState(initialStatus);
+  const [impactFilter, setImpactFilter] = useState(initialImpact);
   const [langFilter, setLangFilter] = useState("ALL");
 
   useEffect(() => {
     fetchLibrary();
-  }, [typeFilter, audienceFilter, moduleFilter, statusFilter, langFilter, search]);
+  }, [typeFilter, audienceFilter, moduleFilter, statusFilter, impactFilter, langFilter, search]);
 
   const fetchLibrary = async () => {
     setLoading(true);
@@ -31,6 +33,7 @@ export default function LibraryView() {
       if (audienceFilter !== "ALL") params.set("audience", audienceFilter);
       if (moduleFilter !== "ALL") params.set("module", moduleFilter);
       if (statusFilter !== "ALL") params.set("status", statusFilter);
+      if (impactFilter !== "ALL") params.set("impact_status", impactFilter);
       if (langFilter !== "ALL") params.set("language", langFilter);
       if (search.trim()) params.set("search", search.trim());
 
@@ -52,6 +55,7 @@ export default function LibraryView() {
     setAudienceFilter("ALL");
     setModuleFilter("ALL");
     setStatusFilter("ALL");
+    setImpactFilter("ALL");
     setLangFilter("ALL");
   };
 
@@ -253,6 +257,22 @@ export default function LibraryView() {
             </select>
           </div>
 
+          {/* Impact Status Filter */}
+          <div>
+            <label className="block text-[11px] font-bold text-zinc-500 uppercase tracking-wider mb-1">
+              Impact (영향 상태)
+            </label>
+            <select
+              value={impactFilter}
+              onChange={(e) => setImpactFilter(e.target.value)}
+              className="w-full rounded-md border border-zinc-200 bg-white px-2.5 py-1.5 text-xs text-zinc-800 focus:border-[#131E2E] focus:outline-none dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-200"
+            >
+              <option value="ALL">All Impacts</option>
+              <option value="UPDATE_REQUIRED">⚠️ Update Required</option>
+              <option value="NORMAL">Normal</option>
+            </select>
+          </div>
+
           {/* Language Filter */}
           <div>
             <label className="block text-[11px] font-bold text-zinc-500 uppercase tracking-wider mb-1">
@@ -322,12 +342,14 @@ export default function LibraryView() {
                   >
                     {/* Title & Short Summary */}
                     <td className="py-3.5 px-4 max-w-sm sm:max-w-md">
-                      <Link
-                        href={`/admin/knowledge/${item.id}`}
-                        className="font-bold text-zinc-900 hover:text-blue-600 dark:text-white dark:hover:text-blue-400 block truncate"
-                      >
-                        {item.title}
-                      </Link>
+                      <div className="flex items-center gap-2">
+                        <Link
+                          href={`/admin/knowledge/${item.id}`}
+                          className="font-bold text-zinc-900 hover:text-blue-600 dark:text-white dark:hover:text-blue-400 block truncate"
+                        >
+                          {item.title}
+                        </Link>
+                      </div>
                       <p className="text-[11px] text-zinc-500 truncate mt-0.5">
                         {item.summary_ko || item.summary_en || item.id}
                       </p>
@@ -355,9 +377,19 @@ export default function LibraryView() {
                       {item.current_version || "v1.0"}
                     </td>
 
-                    {/* Status */}
+                    {/* Status & Impact */}
                     <td className="py-3.5 px-3 text-center whitespace-nowrap">
-                      {getStatusBadge(item.status)}
+                      <div className="flex flex-col items-center gap-1">
+                        {getStatusBadge(item.status)}
+                        {(item.system_impact_status === "UPDATE_REQUIRED" || item.system_impact_status === "POTENTIALLY_OUTDATED") && (
+                          <span
+                            className="inline-flex items-center gap-0.5 rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-bold text-amber-600 dark:text-amber-400 border border-amber-300 dark:border-amber-700"
+                            title={item.system_impact_reason || "시스템 변경 영향 감지 (업데이트 필요)"}
+                          >
+                            ⚠️ UPDATE REQUIRED
+                          </span>
+                        )}
+                      </div>
                     </td>
 
                     {/* Updated */}

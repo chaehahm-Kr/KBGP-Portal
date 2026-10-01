@@ -56,9 +56,10 @@ export default function OverviewView() {
   const publishedCount = items.filter((i) => i.status === "PUBLISHED").length;
   const draftCount = items.filter((i) => i.status === "DRAFT" || i.status === "IN_REVIEW").length;
   const archivedCount = items.filter((i) => i.status === "ARCHIVED" || i.status === "SUPERSEDED").length;
+  const updateRequiredCount = items.filter((i) => i.system_impact_status === "UPDATE_REQUIRED" || i.system_impact_status === "POTENTIALLY_OUTDATED").length;
 
   const recentlyUpdated = data?.recentlyUpdated || items.slice(0, 6);
-  const needsAttention = data?.needsAttention || items.filter(i => i.status === "DRAFT" || i.status === "IN_REVIEW").slice(0, 6);
+  const needsAttention = data?.needsAttention || items.filter(i => i.system_impact_status === "UPDATE_REQUIRED" || i.status === "DRAFT" || i.status === "IN_REVIEW").slice(0, 6);
 
   const getTypeBadge = (type: string) => {
     return (
@@ -94,6 +95,33 @@ export default function OverviewView() {
           <span>+ Create Knowledge</span>
         </Link>
       </div>
+
+      {/* UPDATE REQUIRED Notification Card if any exist */}
+      {updateRequiredCount > 0 && (
+        <div className="rounded-xl border border-amber-300 bg-amber-50/90 p-5 dark:border-amber-700/60 dark:bg-amber-950/30 shadow-xs">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-amber-500 text-white font-bold text-base shadow-xs">
+                ⚠️
+              </span>
+              <div>
+                <h3 className="text-sm font-bold text-amber-900 dark:text-amber-200">
+                  {updateRequiredCount}건의 지식 문서에 시스템 변경 영향(UPDATE REQUIRED)이 감지되었습니다.
+                </h3>
+                <p className="text-xs text-amber-800 dark:text-amber-300 mt-0.5">
+                  관련 메뉴, 워크플로우 또는 설정 변경이 감지되었습니다. 매뉴얼 내용 일치 여부를 검토해 주세요.
+                </p>
+              </div>
+            </div>
+            <Link
+              href="/admin/knowledge/library?impact=UPDATE_REQUIRED"
+              className="inline-flex items-center justify-center rounded-lg bg-amber-600 px-4 py-2 text-xs font-bold text-white hover:bg-amber-700 transition-colors shadow-xs shrink-0"
+            >
+              검토 대상 보기 ({updateRequiredCount}건) &rarr;
+            </Link>
+          </div>
+        </div>
+      )}
 
       {/* Simplified Metric Cards (Published / Draft / Archived) */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">

@@ -11,6 +11,7 @@ export async function GET(request: NextRequest) {
     const audience = searchParams.get("audience") || "ALL";
     const module = searchParams.get("module") || "ALL";
     const status = searchParams.get("status") || "ALL";
+    const impact_status = searchParams.get("impact_status") || searchParams.get("impact") || "ALL";
     const language = searchParams.get("language") || "ALL";
     const search = searchParams.get("search") || "";
     const sortBy = (searchParams.get("sortBy") as any) || "latest";
@@ -26,6 +27,7 @@ export async function GET(request: NextRequest) {
       audience,
       module,
       status,
+      impact_status,
       language,
       search,
       sortBy
@@ -37,17 +39,20 @@ export async function GET(request: NextRequest) {
     const metrics = {
       publishedCount: allRawItems.filter(i => i.status === "PUBLISHED").length,
       draftCount: allRawItems.filter(i => i.status === "DRAFT").length,
+      archivedCount: allRawItems.filter(i => i.status === "ARCHIVED" || i.status === "SUPERSEDED").length,
       needsReviewCount: allRawItems.filter(i => i.status === "IN_REVIEW").length,
       externalApprovalCount: allRawItems.filter(i => i.external_review_status === "REQUESTED").length,
-      outdatedCount: allRawItems.filter(i => i.system_impact_status === "POTENTIALLY_OUTDATED").length,
+      updateRequiredCount: allRawItems.filter(i => i.system_impact_status === "UPDATE_REQUIRED" || i.system_impact_status === "POTENTIALLY_OUTDATED").length,
+      outdatedCount: allRawItems.filter(i => i.system_impact_status === "UPDATE_REQUIRED" || i.system_impact_status === "POTENTIALLY_OUTDATED").length,
       totalCount: allRawItems.length
     };
 
     // Needs Your Attention Items
     const needsAttention = allRawItems.filter(
       i =>
-        i.external_review_status === "REQUESTED" ||
+        i.system_impact_status === "UPDATE_REQUIRED" ||
         i.system_impact_status === "POTENTIALLY_OUTDATED" ||
+        i.external_review_status === "REQUESTED" ||
         i.status === "IN_REVIEW" ||
         i.is_sensitive_internal
     );

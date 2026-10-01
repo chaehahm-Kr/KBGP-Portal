@@ -527,6 +527,70 @@ Execution guide for Growth Simulator sandbox calculations.`
       effective_date: today,
       created_at: "2026-08-05T09:00:00Z",
       updated_at: now
+    },
+    {
+      id: "kno-brand-policy-v10",
+      document_url: "/api/admin/knowledge/asset/asset-brand-policy-v10",
+      document_name: "MAN-BRAND-001_Brand_Policy_v1.0.pdf",
+      document_size: 1391802,
+      document_type: "application/pdf",
+      slug: "brand-registration-and-management-policy-v1",
+      title: "K SELECT 브랜드 등록 및 관리 정책 (MAN-BRAND-001)",
+      title_ko: "K SELECT 브랜드 등록 및 관리 정책",
+      title_en: "K SELECT Brand Registration & Management Policy",
+      summary_ko: "K SELECT 파트너 포털 브랜드 등록 6대 핵심 원칙, 상표권과의 차이, 다중 입점사 지원 및 화면별 운영 가이드",
+      summary_en: "Brand registration policies, multi-company rules, trademark differentiation, and screen guides for K SELECT Brand Portal.",
+      content_ko: `## 1. 개요 및 매뉴얼 목적 (Introduction & Purpose)
+본 매뉴얼은 **K SELECT NETWORK 파트너 포털(Brand Portal)**을 이용하는 모든 파트너사(브랜드 원소유사, 제조사, 공식 총판, 유통사, 셀러)가 브랜드를 올바르게 등록하고 효율적으로 관리할 수 있도록 수립된 표준 운영 가이드입니다.
+
+K SELECT의 상품 큐레이션, 바이어 발주, 물류 풀필먼트, 미국 현지 통관 및 정산 시스템은 포털에 등록된 authoritative 브랜드 정보를 기반으로 유기적으로 동작합니다.
+
+## 2. 브랜드 관리 6대 핵심 정책 (Core Policies)
+- **Policy 01 (상품 등록 전 브랜드 등록 필수)**: 모든 상품은 반드시 등록된 활성(Active) 브랜드에 귀속되어야 합니다. 브랜드가 0개인 경우 상품 등록 진입 시 브랜드 생성 화면(\`/portal/brands/new\`)으로 자동 리다이렉트됩니다.
+- **Policy 02 (브랜드 등록과 상표권 등록의 구분)**: 포털 내 브랜드 등록은 카탈로그 분류를 위한 것이며, 특허청(KIPO/USPTO) 상표권 등록이 필수 전제 조건은 아닙니다 (미등록/출원 중 입점 가능).
+- **Policy 03 (동일 브랜드 다중 파트너 취급 가능)**: 글로벌 B2B 유통 구조를 반영하여 동일 브랜드를 여러 회사(제조사, 총판, 셀러)가 독립적으로 취급할 수 있습니다.
+- **Policy 04 (Brand Owner는 원천 1개사)**: 동일 브랜드를 여러 유통사가 취급하더라도 지식재산권을 직접 보유한 Brand Owner는 시스템상 1개사로 정의됩니다.
+- **Policy 05 (상품 연결 브랜드 물리 삭제 불가)**: 단 1건이라도 상품이 등록된 브랜드는 발주·통관·인보이스 무결성 보존을 위해 물리 삭제(Hard Delete)가 절대 불가합니다.
+- **Policy 06 (미사용 브랜드 비활성화 처리)**: 취급 중단 시 영구 삭제 대신 '사용 중단(Inactive)' 논리 삭제를 적용하며, 언제든지 재활성화가 가능합니다.
+
+## 3. 관련 화면 및 기능 (Step-by-Step)
+1. **브랜드 관리 메인** (\`/portal/brands\`): 회사 등록 브랜드 목록 조회, 상표권 배지, 사용 중단
+2. **신규 브랜드 등록** (\`/portal/brands/new\`): 브랜드 기본 정보, 한글/영문명, 상표권 보유 여부 입력
+3. **상품 등록** (\`/portal/products/new\`): 브랜드 선택 필수 및 유효성 검증`,
+      content_en: `## 1. Introduction & Purpose
+Official operational guide for K SELECT NETWORK Brand Portal partners managing brand registrations.
+
+## 2. Six Core Policies
+- **Policy 01 (Brand Required Prior to Products)**: Products must belong to an active registered brand.
+- **Policy 02 (Brand Registration vs Trademark)**: Trademark registration is optional; brands without trademarks can be onboarded.
+- **Policy 03 (Multi-Company Support)**: Multiple independent partners can distribute the same brand.
+- **Policy 04 (Single Brand Owner)**: Only one authoritative brand owner per brand.
+- **Policy 05 (No Physical Deletion with Associated Products)**: Brands with products cannot be hard-deleted.
+- **Policy 06 (Deactivation / Logical Deletion)**: Unused brands are set to Inactive to preserve audit integrity.
+
+## 3. Related Routes
+- \`/portal/brands\` (Brand List)
+- \`/portal/brands/new\` (New Brand)
+- \`/portal/products/new\` (Product Registration with Brand Selection)`,
+      type: "MANUAL",
+      source_type: "CONTENT",
+      module: "BRAND",
+      category: "BRAND",
+      tags: ["MANUAL", "POLICY", "BRAND", "PRODUCTS", "ONBOARDING", "MAN-BRAND-001"],
+      owner_id: "staff-admin-01",
+      owner_name: "Brand Operations Desk",
+      status: "PUBLISHED",
+      system_impact_status: "NORMAL",
+      audience: ["BRAND", "INTERNAL", "ADMIN / MANAGEMENT"],
+      is_sensitive_internal: false,
+      requires_external_approval: true,
+      external_review_status: "APPROVED",
+      external_reviewer_id: "staff-superadmin-01",
+      external_reviewed_at: "2026-10-01T12:00:00Z",
+      current_version: "v1.0",
+      effective_date: "2026-10-01",
+      created_at: "2026-10-01T09:00:00Z",
+      updated_at: now
     }
   ];
 
@@ -564,6 +628,24 @@ Execution guide for Growth Simulator sandbox calculations.`
       why_changed: "운영 기준 공식화",
       effective_date: today,
       created_by_name: "INSIGHTS Editorial Desk",
+      published_at: now,
+      created_at: now
+    },
+    {
+      id: "ver-brand-policy-v10",
+      knowledge_id: "kno-brand-policy-v10",
+      version: "v1.0",
+      status: "PUBLISHED",
+      title_ko: "K SELECT 브랜드 등록 및 관리 정책 (MAN-BRAND-001 v1.0)",
+      title_en: "K SELECT Brand Registration & Management Policy v1.0",
+      summary_ko: "최초 공식 발행 버전 (Claude Design Word & PDF 배포)",
+      summary_en: "Initial official published manual version",
+      content_ko: memoryItems[memoryItems.length - 1]?.content_ko || "",
+      content_en: memoryItems[memoryItems.length - 1]?.content_en || "",
+      what_changed: "MAN-BRAND-001 Brand Registration & Management Policy 최초 공식 등록",
+      why_changed: "브랜드 등록 6대 핵심 정책 및 포털 운영 표준 지침 공식화",
+      effective_date: "2026-10-01",
+      created_by_name: "Brand Operations Desk",
       published_at: now,
       created_at: now
     }
@@ -646,6 +728,96 @@ Execution guide for Growth Simulator sandbox calculations.`
       target_knowledge_id: "kno-insights-manual-v10",
       manual_title: "K SELECT INSIGHTS 실무자 운영 매뉴얼 v1.0",
       created_at: now
+    },
+    {
+      id: "rel-brand-portal-brands",
+      knowledge_id: "kno-brand-policy-v10",
+      related_portal: "Brand Portal",
+      related_module: "BRAND",
+      related_menu: "Brand Management",
+      related_route: "/portal/brands",
+      manual_title: "K SELECT 브랜드 등록 및 관리 정책 (MAN-BRAND-001)",
+      created_at: now
+    },
+    {
+      id: "rel-brand-portal-brands-new",
+      knowledge_id: "kno-brand-policy-v10",
+      related_portal: "Brand Portal",
+      related_module: "BRAND",
+      related_menu: "New Brand Registration",
+      related_route: "/portal/brands/new",
+      manual_title: "K SELECT 브랜드 등록 및 관리 정책 (MAN-BRAND-001)",
+      created_at: now
+    },
+    {
+      id: "rel-brand-portal-brands-id",
+      knowledge_id: "kno-brand-policy-v10",
+      related_portal: "Brand Portal",
+      related_module: "BRAND",
+      related_menu: "Brand Detail & Edit",
+      related_route: "/portal/brands/[id]",
+      manual_title: "K SELECT 브랜드 등록 및 관리 정책 (MAN-BRAND-001)",
+      created_at: now
+    },
+    {
+      id: "rel-brand-portal-products",
+      knowledge_id: "kno-brand-policy-v10",
+      related_portal: "Brand Portal",
+      related_module: "PRODUCTS",
+      related_menu: "Products List",
+      related_route: "/portal/products",
+      manual_title: "K SELECT 브랜드 등록 및 관리 정책 (MAN-BRAND-001)",
+      created_at: now
+    },
+    {
+      id: "rel-brand-portal-products-new",
+      knowledge_id: "kno-brand-policy-v10",
+      related_portal: "Brand Portal",
+      related_module: "PRODUCTS",
+      related_menu: "New Product Registration",
+      related_route: "/portal/products/new",
+      manual_title: "K SELECT 브랜드 등록 및 관리 정책 (MAN-BRAND-001)",
+      created_at: now
+    },
+    {
+      id: "rel-brand-portal-applications",
+      knowledge_id: "kno-brand-policy-v10",
+      related_portal: "Brand Portal",
+      related_module: "ONBOARDING",
+      related_menu: "Brand Applications",
+      related_route: "/portal/applications",
+      manual_title: "K SELECT 브랜드 등록 및 관리 정책 (MAN-BRAND-001)",
+      created_at: now
+    },
+    {
+      id: "rel-admin-brands",
+      knowledge_id: "kno-brand-policy-v10",
+      related_portal: "Admin",
+      related_module: "BRAND",
+      related_menu: "Brands Management",
+      related_route: "/admin/brands",
+      manual_title: "K SELECT 브랜드 등록 및 관리 정책 (MAN-BRAND-001)",
+      created_at: now
+    },
+    {
+      id: "rel-admin-companies",
+      knowledge_id: "kno-brand-policy-v10",
+      related_portal: "Admin",
+      related_module: "ONBOARDING",
+      related_menu: "Companies & Brands",
+      related_route: "/admin/companies",
+      manual_title: "K SELECT 브랜드 등록 및 관리 정책 (MAN-BRAND-001)",
+      created_at: now
+    },
+    {
+      id: "rel-admin-products",
+      knowledge_id: "kno-brand-policy-v10",
+      related_portal: "Admin",
+      related_module: "PRODUCTS",
+      related_menu: "Products Management",
+      related_route: "/admin/products",
+      manual_title: "K SELECT 브랜드 등록 및 관리 정책 (MAN-BRAND-001)",
+      created_at: now
     }
   ];
 
@@ -662,6 +834,19 @@ Execution guide for Growth Simulator sandbox calculations.`
       file_size: 7239179,
       published_date: today,
       created_at: now
+    },
+    {
+      id: "asset-brand-policy-v10",
+      knowledge_id: "kno-brand-policy-v10",
+      manual_title: "K SELECT 브랜드 등록 및 관리 정책 (MAN-BRAND-001)",
+      version: "v1.0",
+      language: "KO",
+      is_current: true,
+      file_url: "/api/admin/knowledge/asset/asset-brand-policy-v10",
+      file_name: "MAN-BRAND-001_Brand_Policy_v1.0.pdf",
+      file_size: 1391802,
+      published_date: "2026-10-01",
+      created_at: now
     }
   ];
 
@@ -675,6 +860,17 @@ Execution guide for Growth Simulator sandbox calculations.`
       previous_value: {},
       new_value: { title: "K SELECT INSIGHTS 실무자 운영 매뉴얼 v1.0", audience: ["INTERNAL"] },
       reason: "Knowledge Center Phase 1.1 Official Seed Manual Upload",
+      created_at: now
+    },
+    {
+      id: "log-brand-policy-v10",
+      knowledge_id: "kno-brand-policy-v10",
+      user_id: "user-admin-01",
+      user_name: "Brand Operations Desk",
+      action: "Published",
+      previous_value: {},
+      new_value: { title: "K SELECT 브랜드 등록 및 관리 정책", audience: ["BRAND", "INTERNAL"] },
+      reason: "MAN-BRAND-001 Official Publication",
       created_at: now
     }
   ];
@@ -767,6 +963,21 @@ export async function saveStoreVersion(version: KnowledgeVersion): Promise<Knowl
     const supabase = createAdminClient();
     await supabase.from("knowledge_versions").insert(version);
   } catch (e) {}
+
+  // Auto-resolve any active UPDATE_REQUIRED impact when a new published version is created
+  if (version.status === "PUBLISHED") {
+    try {
+      const item = await getStoreKnowledgeById(version.knowledge_id);
+      if (item && (item.system_impact_status === "UPDATE_REQUIRED" || item.system_impact_status === "POTENTIALLY_OUTDATED")) {
+        await resolveKnowledgeImpact(version.knowledge_id, {
+          resolvedBy: version.created_by_name || "Admin",
+          action: "VERSION_CREATED",
+          reason: `Resolved via New Version Publish (${version.version}): ${version.what_changed || "Manual content updated"}`
+        });
+      }
+    } catch (e) {}
+  }
+
   return version;
 }
 
@@ -897,3 +1108,147 @@ export async function addStoreTrigger(trigger: SystemImpactTrigger): Promise<Sys
   } catch (e) {}
   return trigger;
 }
+
+// --------------------------------------------------
+// System Impact Engine (ADM-KNW-001-R1)
+// --------------------------------------------------
+
+export async function triggerKnowledgeImpact(params: {
+  knowledgeId?: string;
+  route?: string;
+  module?: string;
+  settingKey?: string;
+  taskId?: string;
+  reason: string;
+  triggeredBy?: string;
+}): Promise<{ impactedCount: number; impactedIds: string[] }> {
+  initSeedData();
+  const allItems = await getStoreKnowledgeItems();
+  const matchedIds = new Set<string>();
+
+  if (params.knowledgeId) {
+    matchedIds.add(params.knowledgeId);
+  }
+
+  // Match by route or module or setting via relations
+  if (params.route || params.module || params.settingKey) {
+    for (const item of allItems) {
+      const rels = await getStoreRelations(item.id);
+      const isRouteMatch = Boolean(
+        params.route &&
+        rels.some(r => r.related_route && (params.route?.includes(r.related_route) || r.related_route.includes(params.route || "")))
+      );
+      const isModuleMatch = Boolean(
+        params.module && (
+          (item.module && item.module.toLowerCase() === params.module.toLowerCase()) ||
+          rels.some(r => r.related_module && r.related_module.toLowerCase() === params.module?.toLowerCase())
+        )
+      );
+      const isSettingMatch = Boolean(
+        params.settingKey && (
+          item.linked_system_setting_key === params.settingKey ||
+          rels.some(r => r.related_system_setting === params.settingKey)
+        )
+      );
+
+      if (isRouteMatch || isModuleMatch || isSettingMatch) {
+        matchedIds.add(item.id);
+      }
+    }
+  }
+
+  const impactedIds = Array.from(matchedIds);
+  const now = new Date().toISOString();
+  const reasonText = params.taskId ? `[${params.taskId}] ${params.reason}` : params.reason;
+
+  for (const id of impactedIds) {
+    const item = allItems.find(i => i.id === id);
+    if (item) {
+      const prevImpact = item.system_impact_status;
+      const updatedItem: KnowledgeItem = {
+        ...item,
+        system_impact_status: "UPDATE_REQUIRED",
+        system_impact_reason: reasonText,
+        system_impact_updated_at: now,
+        updated_at: now
+      };
+      await saveStoreKnowledgeItem(updatedItem);
+
+      await addStoreAuditLog({
+        id: `log-impact-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+        knowledge_id: id,
+        user_name: params.triggeredBy || "System Impact Engine",
+        action: "Impact Detected: UPDATE_REQUIRED",
+        previous_value: { system_impact_status: prevImpact },
+        new_value: { system_impact_status: "UPDATE_REQUIRED", reason: reasonText },
+        reason: reasonText,
+        created_at: now
+      });
+    }
+  }
+
+  // Create system impact trigger record
+  if (impactedIds.length > 0) {
+    const trigger: SystemImpactTrigger = {
+      id: `trig-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      setting_key: params.settingKey || params.route || params.module || "SYSTEM_CHANGE",
+      setting_name: params.taskId || params.reason,
+      old_value: "PREVIOUS_STATE",
+      new_value: reasonText,
+      status: "PENDING",
+      created_at: now
+    };
+    await addStoreTrigger(trigger);
+  }
+
+  return { impactedCount: impactedIds.length, impactedIds };
+}
+
+export async function resolveKnowledgeImpact(
+  knowledgeId: string,
+  options?: { resolvedBy?: string; reason?: string; action?: "VERSION_CREATED" | "NO_UPDATE_REQUIRED" }
+): Promise<KnowledgeItem | null> {
+  initSeedData();
+  const item = await getStoreKnowledgeById(knowledgeId);
+  if (!item) return null;
+
+  const now = new Date().toISOString();
+  const prevReason = item.system_impact_reason;
+  const updatedItem: KnowledgeItem = {
+    ...item,
+    system_impact_status: "NORMAL",
+    system_impact_reason: null,
+    system_impact_updated_at: now,
+    updated_at: now
+  };
+
+  await saveStoreKnowledgeItem(updatedItem);
+
+  // Mark pending triggers as RESOLVED
+  try {
+    const supabase = createAdminClient();
+    await supabase
+      .from("knowledge_system_impact_triggers")
+      .update({
+        status: "RESOLVED",
+        resolved_by: options?.resolvedBy || "Admin",
+        resolution_action: options?.action || "NO_UPDATE_REQUIRED",
+        resolution_reason: options?.reason || "Admin confirmed manual is up-to-date."
+      })
+      .eq("status", "PENDING");
+  } catch (e) {}
+
+  await addStoreAuditLog({
+    id: `log-resolve-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+    knowledge_id: knowledgeId,
+    user_name: options?.resolvedBy || "Admin",
+    action: options?.action === "VERSION_CREATED" ? "Resolved via New Version Publish" : "Marked as Reviewed: NORMAL",
+    previous_value: { system_impact_status: "UPDATE_REQUIRED", reason: prevReason },
+    new_value: { system_impact_status: "NORMAL" },
+    reason: options?.reason || "Admin review completed. Manual matches current system specifications.",
+    created_at: now
+  });
+
+  return updatedItem;
+}
+

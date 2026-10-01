@@ -130,6 +130,29 @@ export default function DetailView({ id }: { id: string }) {
     }
   };
 
+  const handleMarkReviewed = async () => {
+    if (!confirm("본 지식/매뉴얼을 검토 완료(Mark as Reviewed) 처리하시겠습니까? 영향 상태가 NORMAL(정상)으로 복원됩니다.")) return;
+    try {
+      const res = await fetch(`/api/admin/knowledge/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "resolve_impact",
+          reason: "Reviewed and validated by administrator without code changes"
+        })
+      });
+      if (res.ok) {
+        alert("검토 완료 처리되었습니다. 영향 상태가 정상(NORMAL)으로 복원되었습니다.");
+        fetchDetail();
+      } else {
+        const err = await res.json();
+        alert(`처리 실패: ${err.error}`);
+      }
+    } catch (e) {
+      alert("검토 처리 중 오류가 발생했습니다.");
+    }
+  };
+
   if (loading) {
     return (
       <div className="space-y-6">
@@ -192,6 +215,11 @@ export default function DetailView({ id }: { id: string }) {
               {item.title}
             </h1>
             {getStatusBadge(item.status)}
+            {item.system_impact_status === "UPDATE_REQUIRED" && (
+              <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-bold text-amber-800 dark:bg-amber-900/60 dark:text-amber-200 border border-amber-300 dark:border-amber-700 animate-pulse">
+                ⚠️ UPDATE REQUIRED
+              </span>
+            )}
             <span className="rounded bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 text-xs font-semibold text-zinc-700 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700">
               {item.type}
             </span>
@@ -240,6 +268,56 @@ export default function DetailView({ id }: { id: string }) {
           )}
         </div>
       </div>
+
+      {/* Prominent Impact Alert Banner */}
+      {(item.system_impact_status === "UPDATE_REQUIRED" || item.system_impact_status === "POTENTIALLY_OUTDATED") && (
+        <div className="rounded-xl border-2 border-amber-400 bg-amber-50/90 dark:border-amber-600 dark:bg-amber-950/40 p-5 shadow-sm">
+          <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+            <div className="flex items-start gap-3.5">
+              <span className="text-2xl mt-0.5 select-none">⚠️</span>
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm font-bold text-amber-900 dark:text-amber-200">
+                    시스템 변경 감지: 매뉴얼/지식 개정 필요 (UPDATE REQUIRED)
+                  </h3>
+                  <span className="rounded bg-amber-200/80 dark:bg-amber-900 px-2 py-0.5 text-[10px] font-mono font-bold text-amber-900 dark:text-amber-200">
+                    {item.system_impact_status}
+                  </span>
+                </div>
+                <p className="text-xs text-amber-800 dark:text-amber-300 leading-relaxed font-medium">
+                  {item.system_impact_reason || "관련 기능 또는 연동 화면의 시스템 변경이 감지되었습니다. 운영자는 매뉴얼 내용을 검토하고 필요시 새 버전을 발행해 주세요."}
+                </p>
+                {item.system_impact_updated_at && (
+                  <p className="text-[11px] text-amber-700/80 dark:text-amber-400 font-mono">
+                    감지 시점: {new Date(item.system_impact_updated_at).toLocaleString()}
+                  </p>
+                )}
+              </div>
+            </div>
+
+            <div className="flex sm:flex-col items-center sm:items-end gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={handleMarkReviewed}
+                className="w-full sm:w-auto rounded-lg bg-white dark:bg-zinc-900 border border-amber-300 dark:border-amber-700 px-3.5 py-1.5 text-xs font-bold text-amber-900 dark:text-amber-200 hover:bg-amber-100 dark:hover:bg-amber-900/60 shadow-xs cursor-pointer transition-colors"
+              >
+                ✓ Mark as Reviewed (검토 완료)
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setWhatChanged(`[시스템 변경 반영] ${item.system_impact_reason || "화면 및 기능 변경에 따른 매뉴얼 개정"}`);
+                  setWhyChanged("관련 시스템 및 라우트 변경사항 반영");
+                  setNewVersionModal(true);
+                }}
+                className="w-full sm:w-auto rounded-lg bg-amber-600 px-3.5 py-1.5 text-xs font-bold text-white hover:bg-amber-700 shadow-xs cursor-pointer transition-colors"
+              >
+                + 새 버전 작성 &amp; Publish
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Tabs Navigation */}
       <div className="flex items-center space-x-6 border-b border-zinc-200 dark:border-zinc-800 text-xs font-semibold select-none">

@@ -58,6 +58,17 @@ export async function PATCH(
     const now = new Date().toISOString();
     const prevItem = { ...item };
 
+    // Handle Mark as Reviewed / Resolve Impact Action
+    if (body.action === "resolve_impact" || body.action === "mark_reviewed" || (body.system_impact_status === "NORMAL" && item.system_impact_status === "UPDATE_REQUIRED")) {
+      const { resolveKnowledgeImpact } = await import("@/lib/knowledge/store");
+      const resolvedItem = await resolveKnowledgeImpact(item.id, {
+        resolvedBy: body.user_name || "Admin",
+        reason: body.reason || body.update_reason || "Admin confirmed manual is up-to-date with current system state.",
+        action: "NO_UPDATE_REQUIRED"
+      });
+      return NextResponse.json({ item: resolvedItem, success: true, message: "Impact marked as reviewed and status restored to NORMAL" });
+    }
+
     // Check if audience is changing to external
     const newAudience = body.audience || item.audience;
     const hasExternalAudience = newAudience.some((a: string) =>
@@ -76,6 +87,9 @@ export async function PATCH(
 
     const updatedItem: KnowledgeItem = {
       ...item,
+      system_impact_status: body.system_impact_status !== undefined ? body.system_impact_status : item.system_impact_status,
+      system_impact_reason: body.system_impact_reason !== undefined ? body.system_impact_reason : item.system_impact_reason,
+      system_impact_updated_at: body.system_impact_status !== undefined ? now : item.system_impact_updated_at,
       title: body.title !== undefined ? body.title : item.title,
       title_ko: body.title_ko !== undefined ? body.title_ko : item.title_ko,
       title_en: body.title_en !== undefined ? body.title_en : item.title_en,
