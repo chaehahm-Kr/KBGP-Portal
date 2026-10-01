@@ -4,7 +4,7 @@
 CREATE TABLE IF NOT EXISTS public.po_requests (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   request_number TEXT NOT NULL UNIQUE,
-  company_id UUID NOT NULL REFERENCES public.companies(id) ON DELETE RESTRICTED,
+  company_id UUID NOT NULL REFERENCES public.companies(id) ON DELETE RESTRICT,
   contact_user_id UUID REFERENCES public.company_users(id) ON DELETE SET NULL,
   contact_name TEXT,
   contact_email TEXT,
@@ -35,7 +35,7 @@ CREATE INDEX IF NOT EXISTS idx_po_requests_converted_po_id ON public.po_requests
 CREATE TABLE IF NOT EXISTS public.po_request_lines (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   po_request_id UUID NOT NULL REFERENCES public.po_requests(id) ON DELETE CASCADE,
-  product_id UUID NOT NULL REFERENCES public.products(id) ON DELETE RESTRICTED,
+  product_id UUID NOT NULL REFERENCES public.products(id) ON DELETE RESTRICT,
   product_name_snapshot TEXT NOT NULL,
   letusto_sku_snapshot TEXT,
   manufacture_sku_snapshot TEXT,

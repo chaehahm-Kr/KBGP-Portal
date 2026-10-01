@@ -13,7 +13,7 @@ CREATE INDEX IF NOT EXISTS idx_applications_admin_read_at ON public.applications
 CREATE TABLE IF NOT EXISTS public.po_requests (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   request_number TEXT NOT NULL UNIQUE,
-  company_id UUID NOT NULL REFERENCES public.companies(id) ON DELETE RESTRICTED,
+  company_id UUID NOT NULL REFERENCES public.companies(id) ON DELETE RESTRICT,
   contact_user_id UUID REFERENCES public.company_users(id) ON DELETE SET NULL,
   contact_name TEXT,
   contact_email TEXT,
