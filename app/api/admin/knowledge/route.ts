@@ -35,30 +35,32 @@ export async function GET(request: NextRequest) {
 
     const allRawItems = await getStoreKnowledgeItems();
 
-    // Summary Metrics
+    // Authoritative Summary Metrics across entire DB
     const metrics = {
       publishedCount: allRawItems.filter(i => i.status === "PUBLISHED").length,
       draftCount: allRawItems.filter(i => i.status === "DRAFT").length,
-      archivedCount: allRawItems.filter(i => i.status === "ARCHIVED" || i.status === "SUPERSEDED").length,
+      archivedCount: allRawItems.filter(i => i.status === "ARCHIVED").length,
       needsReviewCount: allRawItems.filter(i => i.status === "IN_REVIEW").length,
-      externalApprovalCount: allRawItems.filter(i => i.external_review_status === "REQUESTED").length,
-      updateRequiredCount: allRawItems.filter(i => i.system_impact_status === "UPDATE_REQUIRED" || i.system_impact_status === "POTENTIALLY_OUTDATED").length,
-      outdatedCount: allRawItems.filter(i => i.system_impact_status === "UPDATE_REQUIRED" || i.system_impact_status === "POTENTIALLY_OUTDATED").length,
+      externalApprovalCount: allRawItems.filter(i => (i.status === "PUBLISHED" || i.status === "DRAFT") && i.external_review_status === "REQUESTED").length,
+      updateRequiredCount: allRawItems.filter(i => (i.status === "PUBLISHED" || i.status === "DRAFT") && (i.system_impact_status === "UPDATE_REQUIRED" || i.system_impact_status === "POTENTIALLY_OUTDATED")).length,
+      outdatedCount: allRawItems.filter(i => (i.status === "PUBLISHED" || i.status === "DRAFT") && (i.system_impact_status === "UPDATE_REQUIRED" || i.system_impact_status === "POTENTIALLY_OUTDATED")).length,
       totalCount: allRawItems.length
     };
 
-    // Needs Your Attention Items
-    const needsAttention = allRawItems.filter(
+    // Active Operational Knowledge Items (PUBLISHED or DRAFT only, excluding ARCHIVED)
+    const activeItems = allRawItems.filter(i => i.status === "PUBLISHED" || i.status === "DRAFT");
+
+    // Needs Your Attention Items: Actionable active knowledge only with attention triggers
+    const needsAttention = activeItems.filter(
       i =>
         i.system_impact_status === "UPDATE_REQUIRED" ||
         i.system_impact_status === "POTENTIALLY_OUTDATED" ||
         i.external_review_status === "REQUESTED" ||
-        i.status === "IN_REVIEW" ||
-        i.is_sensitive_internal
+        i.status === "IN_REVIEW"
     );
 
-    // Recently Updated Items
-    const recentlyUpdated = [...allRawItems]
+    // Recently Updated Items: Active operational knowledge only (status IN ('PUBLISHED', 'DRAFT'))
+    const recentlyUpdated = [...activeItems]
       .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
       .slice(0, 6);
 

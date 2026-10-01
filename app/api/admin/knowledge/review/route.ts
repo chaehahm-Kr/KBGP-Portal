@@ -4,21 +4,23 @@ import { resolveSystemImpact } from "@/lib/knowledge/system-impact";
 
 export async function GET() {
   try {
-    const items = await getStoreKnowledgeItems();
+    const allItems = await getStoreKnowledgeItems();
     const triggers = await getStoreTriggers();
 
-    const awaitingApproval = items.filter(
+    const activeItems = allItems.filter(i => i.status !== "ARCHIVED" && i.status !== "SUPERSEDED");
+
+    const awaitingApproval = activeItems.filter(
       i => i.external_review_status === "REQUESTED" || i.status === "IN_REVIEW"
     );
 
-    const needsReview = items.filter(
+    const needsReview = activeItems.filter(
       i =>
         i.status === "DRAFT" ||
         i.system_impact_status === "POTENTIALLY_OUTDATED" ||
         i.is_sensitive_internal
     );
 
-    const systemChangeImpact = items.filter(
+    const systemChangeImpact = activeItems.filter(
       i => i.system_impact_status === "POTENTIALLY_OUTDATED"
     );
 

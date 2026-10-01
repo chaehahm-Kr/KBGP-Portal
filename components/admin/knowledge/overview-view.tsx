@@ -53,14 +53,13 @@ export default function OverviewView() {
     );
   }
 
-  const items = data?.items || [];
-  const publishedCount = data?.metrics?.publishedCount ?? items.filter((i) => i.status === "PUBLISHED").length;
-  const draftCount = data?.metrics?.draftCount ?? items.filter((i) => i.status === "DRAFT" || i.status === "IN_REVIEW").length;
-  const archivedCount = data?.metrics?.archivedCount ?? items.filter((i) => i.status === "ARCHIVED" || i.status === "SUPERSEDED").length;
-  const updateRequiredCount = data?.metrics?.updateRequiredCount ?? items.filter((i) => i.system_impact_status === "UPDATE_REQUIRED" || i.system_impact_status === "POTENTIALLY_OUTDATED").length;
+  const publishedCount = data?.metrics?.publishedCount ?? 0;
+  const draftCount = data?.metrics?.draftCount ?? 0;
+  const archivedCount = data?.metrics?.archivedCount ?? 0;
+  const updateRequiredCount = data?.metrics?.updateRequiredCount ?? 0;
 
-  const recentlyUpdated = data?.recentlyUpdated || items.slice(0, 6);
-  const needsAttention = data?.needsAttention || items.filter(i => i.system_impact_status === "UPDATE_REQUIRED" || i.status === "DRAFT" || i.status === "IN_REVIEW").slice(0, 6);
+  const recentlyUpdated = data?.recentlyUpdated || [];
+  const needsAttention = data?.needsAttention || [];
 
   const getTypeBadge = (type: string) => {
     return (
@@ -254,7 +253,7 @@ export default function OverviewView() {
           </div>
           <div className="divide-y divide-zinc-100 dark:divide-zinc-800 mt-2">
             {needsAttention.length === 0 ? (
-              <p className="py-8 text-center text-xs text-zinc-400">확인이 필요한 항목이 없습니다.</p>
+              <p className="py-8 text-center text-xs text-zinc-400">현재 확인이 필요한 지식이 없습니다.</p>
             ) : (
               needsAttention.slice(0, 5).map((item) => (
                 <div key={item.id} className="py-3.5 flex items-center justify-between gap-4">
