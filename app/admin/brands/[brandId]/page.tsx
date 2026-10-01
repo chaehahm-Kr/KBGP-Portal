@@ -205,7 +205,7 @@ export default async function AdminBrandDetailPage({ params }: AdminBrandDetailP
     id: targetBrand.id,
     brandCode,
     name: targetBrand.name,
-    intro: targetBrand.intro,
+    intro: tm.intro_text,
     logoUrl,
     companyId: companyRel?.id || targetBrand.company_id,
     companyName: companyRel?.name || "알 수 없음",

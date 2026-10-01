@@ -283,7 +283,11 @@ export function AdminBrandDetail({ brand }: AdminBrandDetailProps) {
           <div className="md:col-span-2">
             <span className="text-zinc-400 dark:text-zinc-500 block mb-1 font-medium">브랜드 소개</span>
             <div className="p-3 rounded-lg bg-zinc-50 dark:bg-zinc-950 text-zinc-700 dark:text-zinc-300 whitespace-pre-wrap leading-relaxed border border-zinc-150 dark:border-zinc-850">
-              {brand.intro || "등록된 브랜드 소개가 없습니다."}
+              {brand.intro && brand.intro.trim() && !brand.intro.startsWith("__JSON_METADATA__:") ? (
+                brand.intro.trim()
+              ) : (
+                <span className="text-zinc-400 dark:text-zinc-500 italic">등록된 브랜드 소개가 없습니다.</span>
+              )}
             </div>
           </div>
 
@@ -516,6 +520,7 @@ export function AdminBrandDetail({ brand }: AdminBrandDetailProps) {
                   type="text"
                   value={brand.brandCode}
                   disabled
+                  readOnly
                   className="w-full rounded-lg border border-zinc-200 bg-zinc-100 px-3 py-2 font-mono font-bold text-zinc-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-500 cursor-not-allowed"
                 />
                 <span className="text-[10px] text-zinc-400 mt-0.5 block">

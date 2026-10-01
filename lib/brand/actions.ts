@@ -27,7 +27,31 @@ export interface BrandTrademarks {
   intro_text: string | null;
 }
 
+export async function getCleanBrandIntro(rawIntro: string | null | undefined): Promise<string | null> {
+  if (!rawIntro) return null;
+  const trimmed = rawIntro.trim();
+  if (!trimmed) return null;
+
+  if (trimmed.startsWith("__JSON_METADATA__:")) {
+    try {
+      const jsonStr = trimmed.substring("__JSON_METADATA__:".length);
+      const data = JSON.parse(jsonStr);
+      const desc = data?.description;
+      if (typeof desc === "string" && desc.trim().length > 0) {
+        return desc.trim();
+      }
+      return null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  return trimmed;
+}
+
 export async function parseBrandTrademarks(brand: any): Promise<BrandTrademarks> {
+  const cleanIntro = await getCleanBrandIntro(brand.intro);
+
   // If database columns exist and are loaded
   if (brand.has_kr_trademark !== undefined && brand.has_kr_trademark !== null) {
     return {
@@ -37,7 +61,7 @@ export async function parseBrandTrademarks(brand: any): Promise<BrandTrademarks>
       has_us_trademark: brand.has_us_trademark,
       us_trademark_number: brand.us_trademark_number || null,
       us_trademark_path: brand.us_trademark_path || null,
-      intro_text: brand.intro || null
+      intro_text: cleanIntro,
     };
   }
 
@@ -54,7 +78,7 @@ export async function parseBrandTrademarks(brand: any): Promise<BrandTrademarks>
         has_us_trademark: !!data.trademarks?.has_us_trademark,
         us_trademark_number: data.trademarks?.us_trademark_number || null,
         us_trademark_path: data.trademarks?.us_trademark_path || null,
-        intro_text: data.description || null
+        intro_text: cleanIntro,
       };
     } catch (e) {
       // Ignore and fallback
@@ -69,7 +93,7 @@ export async function parseBrandTrademarks(brand: any): Promise<BrandTrademarks>
     has_us_trademark: false,
     us_trademark_number: null,
     us_trademark_path: null,
-    intro_text: brand.intro || null
+    intro_text: cleanIntro,
   };
 }
 
