@@ -48,7 +48,9 @@ export function isAuthorizedForAudience(
 
   const audience = (item.audience || []).map(a => a.toUpperCase());
 
-  if (context.role === "brand") {
+  const roleStr = (context.role || "").toString().toLowerCase();
+
+  if (roleStr === "brand" || roleStr === "portal" || roleStr === "company") {
     // Brand can access items marked with BRAND or PUBLIC
     const isBrandAllowed = audience.includes("BRAND") || audience.includes("PUBLIC");
 
@@ -68,7 +70,7 @@ export function isAuthorizedForAudience(
     return isBrandAllowed && isPublished;
   }
 
-  if (context.role === "retailer") {
+  if (roleStr === "retailer" || roleStr === "retail" || roleStr === "buyer") {
     // Retailer can access items marked with RETAILER, RETAIL, or PUBLIC
     const isRetailerAllowed = audience.includes("RETAILER") || audience.includes("RETAIL") || audience.includes("PUBLIC");
 

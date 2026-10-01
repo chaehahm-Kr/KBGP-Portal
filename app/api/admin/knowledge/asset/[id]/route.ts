@@ -70,10 +70,15 @@ export async function GET(
             .eq("id", user.id)
             .maybeSingle();
 
-          if (profile?.role) {
-            userRole = profile.role as UserRole;
+          const rawRole = (profile?.role || user.app_metadata?.role || user.user_metadata?.role || "brand").toString().toLowerCase();
+          if (rawRole === "portal" || rawRole === "brand" || rawRole === "company") {
+            userRole = "brand";
+          } else if (rawRole === "retailer" || rawRole === "retail" || rawRole === "buyer") {
+            userRole = "retailer";
+          } else if (rawRole === "admin" || rawRole === "staff" || rawRole === "superadmin") {
+            userRole = "admin";
           } else {
-            userRole = (user.app_metadata?.role || user.user_metadata?.role || "admin") as UserRole;
+            userRole = "brand";
           }
         }
       } catch (e) {
