@@ -296,7 +296,7 @@ async function validatePoProductsEligibility(admin: any, productIds: string[]) {
  * PORTAL: Create a new PO Request (Draft or Submitted)
  */
 export async function createPoRequest(input: PoRequestInput): Promise<{ id: string; request_number: string }> {
-  const membership = await requireCompanyMembership();
+  const membership = await requirePortalPermission("orders", "write");
   const companyId = membership.companyId;
   const admin = createAdminClient();
 
@@ -430,7 +430,7 @@ export async function updatePoRequest(
   requestId: string,
   input: PoRequestInput
 ): Promise<{ success: boolean }> {
-  const membership = await requireCompanyMembership();
+  const membership = await requirePortalPermission("orders", "write");
   const companyId = membership.companyId;
   const admin = createAdminClient();
 
@@ -544,7 +544,7 @@ export async function updatePoRequest(
  * PORTAL: Cancel a PO Request
  */
 export async function cancelPoRequest(requestId: string): Promise<{ success: boolean }> {
-  const membership = await requireCompanyMembership();
+  const membership = await requirePortalPermission("orders", "write");
   const companyId = membership.companyId;
   const admin = createAdminClient();
 
