@@ -100,6 +100,10 @@ export default async function PortalCompanyInfoPage() {
   const { getCompanyTaskAssignments } = await import("@/lib/company/task-actions");
   const taskAssignments = await getCompanyTaskAssignments(membership.companyId);
 
+  // Check category-specific permissions for sensitive tabs
+  const canReadBankInfo = await hasPortalPermission("bank_info", "read");
+  const canReadAgreements = await hasPortalPermission("agreements", "read");
+
   const adminDb = createAdminClient();
 
   // Query supplier profile
@@ -110,41 +114,43 @@ export default async function PortalCompanyInfoPage() {
     .maybeSingle();
 
   // Query supplier remittance and mask it if user is not admin
-  const { data: dbRemittance } = await adminDb
-    .from("supplier_remittances")
-    .select("*")
-    .eq("company_id", membership.companyId)
-    .maybeSingle();
-
   let supplierRemittance = null;
   const isCompanyAdmin = membership.companyRole === "company_admin";
 
-  if (dbRemittance) {
-    if (isCompanyAdmin) {
-      supplierRemittance = dbRemittance;
-    } else {
-      const rawAcc = dbRemittance.account_number || "";
-      const maskedAcc = rawAcc.length > 4
-        ? "••••••••" + rawAcc.slice(-4)
-        : rawAcc ? "••••" : "";
+  if (canReadBankInfo) {
+    const { data: dbRemittance } = await adminDb
+      .from("supplier_remittances")
+      .select("*")
+      .eq("company_id", membership.companyId)
+      .maybeSingle();
 
-      supplierRemittance = {
-        company_id: dbRemittance.company_id,
-        bank_name: dbRemittance.bank_name || null,
-        account_number: maskedAcc || null,
-        payment_method: dbRemittance.payment_method || null,
-        beneficiary_name: null,
-        beneficiary_address: null,
-        bank_address: null,
-        bank_country: null,
-        swift_bic: null,
-        routing_number: null,
-        account_currency: dbRemittance.account_currency || "USD",
-        intermediary_bank_info: null,
-        remittance_note: null,
-        created_at: dbRemittance.created_at,
-        updated_at: dbRemittance.updated_at,
-      };
+    if (dbRemittance) {
+      if (isCompanyAdmin) {
+        supplierRemittance = dbRemittance;
+      } else {
+        const rawAcc = dbRemittance.account_number || "";
+        const maskedAcc = rawAcc.length > 4
+          ? "••••••••" + rawAcc.slice(-4)
+          : rawAcc ? "••••" : "";
+
+        supplierRemittance = {
+          company_id: dbRemittance.company_id,
+          bank_name: dbRemittance.bank_name || null,
+          account_number: maskedAcc || null,
+          payment_method: dbRemittance.payment_method || null,
+          beneficiary_name: null,
+          beneficiary_address: null,
+          bank_address: null,
+          bank_country: null,
+          swift_bic: null,
+          routing_number: null,
+          account_currency: dbRemittance.account_currency || "USD",
+          intermediary_bank_info: null,
+          remittance_note: null,
+          created_at: dbRemittance.created_at,
+          updated_at: dbRemittance.updated_at,
+        };
+      }
     }
   }
 
@@ -159,9 +165,13 @@ export default async function PortalCompanyInfoPage() {
   const shippingOrigins = await getCompanyShippingOrigins(membership.companyId);
   const canEditCompanyInfo = isCompanyAdmin || (await hasMenuPermission("company_info", "write"));
 
-  // Fetch Company Agreement
-  const { getCompanyAgreement } = await import("@/lib/agreement/actions");
-  const { agreement: initialAgreement } = await getCompanyAgreement(membership.companyId);
+  // Fetch Company Agreement only if user has agreements read permission
+  let initialAgreement = null;
+  if (canReadAgreements) {
+    const { getCompanyAgreement } = await import("@/lib/agreement/actions");
+    const { agreement } = await getCompanyAgreement(membership.companyId);
+    initialAgreement = agreement;
+  }
 
   const { data: { user } } = await supabase.auth.getUser();
 
@@ -177,6 +187,8 @@ export default async function PortalCompanyInfoPage() {
       warehouses={warehouses || []}
       initialShippingOrigins={shippingOrigins}
       canEditCompanyInfo={canEditCompanyInfo}
+      canReadBankInfo={canReadBankInfo}
+      canReadAgreements={canReadAgreements}
       initialAgreement={initialAgreement}
       userEmail={user?.email || ""}
     />

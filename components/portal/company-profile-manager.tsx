@@ -33,6 +33,8 @@ interface CompanyProfileManagerProps {
   warehouses: any[];
   initialShippingOrigins?: CompanyShippingOrigin[];
   canEditCompanyInfo?: boolean;
+  canReadBankInfo?: boolean;
+  canReadAgreements?: boolean;
   initialAgreement?: CompanyAgreementItem | null;
   userEmail?: string;
 }
@@ -48,6 +50,8 @@ export function CompanyProfileManager({
   warehouses,
   initialShippingOrigins = [],
   canEditCompanyInfo = true,
+  canReadBankInfo = true,
+  canReadAgreements = true,
   initialAgreement,
   userEmail = "",
 }: CompanyProfileManagerProps) {
@@ -121,13 +125,20 @@ export function CompanyProfileManager({
   const [tempWebsite, setTempWebsite] = useState(website);
   const searchParams = useSearchParams();
   const tabParam = searchParams.get("tab");
-  const initialTabVal = (tabParam === "agreements" || tabParam === "agreement")
+  let resolvedTabVal = (tabParam === "agreements" || tabParam === "agreement")
     ? "agreements"
     : (tabParam && ["members", "tasks", "trading", "shipping-origin", "remittance", "agreements"].includes(tabParam) ? tabParam : "members");
 
+  if (resolvedTabVal === "remittance" && !canReadBankInfo) {
+    resolvedTabVal = "members";
+  }
+  if (resolvedTabVal === "agreements" && !canReadAgreements) {
+    resolvedTabVal = "members";
+  }
+
   // Right column tab state: 'members' | 'tasks' | 'trading' | 'shipping-origin' | 'remittance' | 'agreements'
   const [activeTab, setActiveTab] = useState<"members" | "tasks" | "trading" | "shipping-origin" | "remittance" | "agreements">(
-    initialTabVal as any
+    resolvedTabVal as any
   );
 
   // [신규 기능]: 담당 업무 상태 로컬 관리
@@ -776,32 +787,56 @@ export function CompanyProfileManager({
             >
               출고지 정보
             </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab("remittance")}
-              className={`px-4 py-2.5 text-xs font-bold transition-all border-b-2 whitespace-nowrap cursor-pointer ${
-                activeTab === "remittance"
-                  ? "border-zinc-950 text-zinc-950 dark:border-white dark:text-white"
-                  : "border-transparent text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white"
-              }`}
-            >
-              송금 계좌 정보
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab("agreements")}
-              className={`px-4 py-2.5 text-xs font-bold transition-all border-b-2 whitespace-nowrap cursor-pointer ${
-                activeTab === "agreements"
-                  ? "border-zinc-950 text-zinc-950 dark:border-white dark:text-white"
-                  : "border-transparent text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white"
-              }`}
-            >
-              계약 및 문서
-            </button>
+            {canReadBankInfo ? (
+              <button
+                type="button"
+                onClick={() => setActiveTab("remittance")}
+                className={`px-4 py-2.5 text-xs font-bold transition-all border-b-2 whitespace-nowrap cursor-pointer ${
+                  activeTab === "remittance"
+                    ? "border-zinc-950 text-zinc-950 dark:border-white dark:text-white"
+                    : "border-transparent text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white"
+                }`}
+              >
+                송금 계좌 정보
+              </button>
+            ) : (
+              <button
+                type="button"
+                disabled
+                title="접근 권한이 없습니다"
+                className="px-4 py-2.5 text-xs font-bold transition-all border-b-2 border-transparent text-zinc-400 dark:text-zinc-600 cursor-not-allowed opacity-60 flex items-center gap-1 whitespace-nowrap"
+              >
+                <span>🔒</span>
+                <span>송금 계좌 정보</span>
+              </button>
+            )}
+            {canReadAgreements ? (
+              <button
+                type="button"
+                onClick={() => setActiveTab("agreements")}
+                className={`px-4 py-2.5 text-xs font-bold transition-all border-b-2 whitespace-nowrap cursor-pointer ${
+                  activeTab === "agreements"
+                    ? "border-zinc-950 text-zinc-950 dark:border-white dark:text-white"
+                    : "border-transparent text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white"
+                }`}
+              >
+                계약 및 문서
+              </button>
+            ) : (
+              <button
+                type="button"
+                disabled
+                title="접근 권한이 없습니다"
+                className="px-4 py-2.5 text-xs font-bold transition-all border-b-2 border-transparent text-zinc-400 dark:text-zinc-600 cursor-not-allowed opacity-60 flex items-center gap-1 whitespace-nowrap"
+              >
+                <span>🔒</span>
+                <span>계약 및 문서</span>
+              </button>
+            )}
           </div>
 
           {/* 계약 및 문서 (Agreement & Documents) Card */}
-          {activeTab === "agreements" && initialAgreement && (() => {
+          {activeTab === "agreements" && canReadAgreements && initialAgreement && (() => {
             const primaryContact = parsedMeta.contacts?.find((c: any) => c.isPrimary) || parsedMeta.contacts?.[0];
             const currentUserObj = companyUsers?.find((u: any) => u.email === userEmail || u.id === userEmail);
             const resolvedSignerName = currentUserObj ? getPersonDisplayName(currentUserObj) : (primaryContact ? getPersonDisplayName(primaryContact) : "");
@@ -1097,7 +1132,7 @@ export function CompanyProfileManager({
           )}
 
           {/* Payment & Remittance Card */}
-          {activeTab === "remittance" && (
+          {activeTab === "remittance" && canReadBankInfo && (
             <div className="rounded-lg border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 relative">
             <div className="flex items-center justify-between mb-4 pb-2 border-b border-zinc-100 dark:border-zinc-800">
               <h3 className="text-sm font-bold text-zinc-950 dark:text-white">송금 계좌 정보 (Payment & Remittance)</h3>

@@ -86,10 +86,10 @@ export const ROLE_PRESETS: Record<BrandPortalRole, Record<AclCategory, AclLevel>
     support: "read",
     company_info: "read",
     bank_info: "none",
-    agreements: "read",
+    agreements: "none",
   },
   staff: {
-    application: "read",
+    application: "write",
     brands: "write",
     products: "write",
     orders: "write",
@@ -97,10 +97,10 @@ export const ROLE_PRESETS: Record<BrandPortalRole, Record<AclCategory, AclLevel>
     support: "write",
     company_info: "read",
     bank_info: "none",
-    agreements: "read",
+    agreements: "none",
   },
   manager: {
-    application: "read",
+    application: "write",
     brands: "write",
     products: "manage",
     orders: "manage",
@@ -161,17 +161,6 @@ export function normalizePermissions(
       result[cat.id] = parseAclLevel(permissionsObj[cat.id]);
     }
   });
-
-  // Backward compatibility split for company_info -> bank_info, agreements
-  if (permissionsObj.company_info !== undefined) {
-    const legacyLevel = parseAclLevel(permissionsObj.company_info);
-    if (permissionsObj.bank_info === undefined) {
-      result.bank_info = legacyLevel === "manage" ? "write" : legacyLevel === "write" ? "read" : "none";
-    }
-    if (permissionsObj.agreements === undefined) {
-      result.agreements = legacyLevel === "none" ? "none" : "read";
-    }
-  }
 
   return result;
 }
