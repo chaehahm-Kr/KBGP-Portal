@@ -66,11 +66,10 @@ export function HelpCenterMainView({
   const [isAsking, setIsAsking] = useState(false);
   const [askResponse, setAskResponse] = useState<AskAnswerResponse | null>(null);
   const [askError, setAskError] = useState<string | null>(null);
+  const [openAskFaqId, setOpenAskFaqId] = useState<string | null>(null);
 
-  // Filters & State
+  // Selected Topic State & Accordion
   const [selectedTopicId, setSelectedTopicId] = useState<string | null>(null);
-  const [selectedType, setSelectedType] = useState<string>("ALL");
-  const [librarySearch, setLibrarySearch] = useState<string>("");
   const [openTopicFaqId, setOpenTopicFaqId] = useState<string | null>(null);
 
   // Refs for smooth navigation
@@ -293,7 +292,6 @@ export function HelpCenterMainView({
     return topics.find(t => t.id === selectedTopicId) || null;
   }, [selectedTopicId, topics]);
 
-
   // FAQs belonging to the selected Topic
   const topicSpecificFaqs = useMemo(() => {
     if (!selectedTopicId) return [];
@@ -303,7 +301,7 @@ export function HelpCenterMainView({
     });
   }, [faqs, selectedTopicId, faqPrimaryTopicMap]);
 
-  // Knowledge Items belonging to the selected Topic
+  // Knowledge Items belonging to the selected Topic (Only relevant published docs)
   const topicSpecificItems = useMemo(() => {
     if (!selectedTopicId) return [];
     return items.filter(item => {
@@ -312,37 +310,26 @@ export function HelpCenterMainView({
     });
   }, [items, selectedTopicId, itemPrimaryTopicMap]);
 
-  // Filtered Knowledge Items for All Help Content
-  const filteredAllItems = useMemo(() => {
-    return items.filter(item => {
-      if (selectedType !== "ALL" && item.type.toUpperCase() !== selectedType.toUpperCase()) {
-        return false;
+  // Relevant FAQs for the search / asked question (Contextual FAQ matching)
+  const questionRelevantFaqs = useMemo(() => {
+    if (!askResponse && !questionInput.trim()) return [];
+    const query = (questionInput || askResponse?.question || "").toLowerCase().trim();
+    if (!query) return [];
+
+    const citedKnowledgeIds = new Set((askResponse?.sources || []).map(s => s.id));
+    const queryWords = query.split(/\s+/).filter(w => w.length >= 2);
+
+    return faqs.filter(faq => {
+      // Direct link to cited knowledge
+      if (faq.source_knowledge_id && citedKnowledgeIds.has(faq.source_knowledge_id)) {
+        return true;
       }
-
-      const q = librarySearch.trim().toLowerCase();
-      if (!q) return true;
-
-      return (
-        item.title?.toLowerCase().includes(q) ||
-        item.title_ko?.toLowerCase().includes(q) ||
-        item.title_en?.toLowerCase().includes(q) ||
-        item.summary_ko?.toLowerCase().includes(q) ||
-        item.summary_en?.toLowerCase().includes(q) ||
-        item.tags?.some(t => t.toLowerCase().includes(q)) ||
-        item.module?.toLowerCase().includes(q) ||
-        item.category?.toLowerCase().includes(q)
-      );
-    });
-  }, [items, selectedType, librarySearch]);
-
-  // Available unique types from published items
-  const availableTypes = useMemo(() => {
-    const set = new Set<string>();
-    items.forEach(i => {
-      if (i.type) set.add(i.type);
-    });
-    return Array.from(set);
-  }, [items]);
+      // Keyword match in question or answer
+      const qText = (faq.question_ko || faq.question_en || "").toLowerCase();
+      const aText = (faq.answer_ko || faq.answer_en || "").toLowerCase();
+      return queryWords.some(w => qText.includes(w) || aText.includes(w));
+    }).slice(0, 4);
+  }, [faqs, questionInput, askResponse]);
 
   // Quick fallback questions
   const defaultQuickQuestions = [
@@ -478,7 +465,7 @@ export function HelpCenterMainView({
         </div>
       )}
 
-      {/* Grounded Answer Card (Integrated In-Place Result) */}
+      {/* Grounded Answer Card (Contextual Search / Question Results) */}
       {askResponse && !isAsking && (
         <div ref={askResultRef} className="space-y-4 transition-all duration-300">
           <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-5 shadow-sm space-y-4">
@@ -532,11 +519,62 @@ export function HelpCenterMainView({
               )}
             </div>
 
-            {/* Official Source Citations */}
+            {/* Contextual FAQs Related to Search / Answer */}
+            {questionRelevantFaqs.length > 0 && (
+              <div className="space-y-2 pt-2 border-t border-zinc-100 dark:border-zinc-800">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-500 block">
+                  💡 관련 자주 묻는 질문 (FAQ)
+                </span>
+                <div className="rounded-lg border border-zinc-200 dark:border-zinc-800 divide-y divide-zinc-100 dark:divide-zinc-800 overflow-hidden bg-zinc-50/40 dark:bg-zinc-900/40">
+                  {questionRelevantFaqs.map((faq) => {
+                    const isOpen = openAskFaqId === faq.id;
+                    return (
+                      <div key={faq.id}>
+                        <button
+                          type="button"
+                          onClick={() => setOpenAskFaqId(isOpen ? null : faq.id)}
+                          className="w-full text-left px-3.5 py-2.5 flex items-center justify-between gap-3 hover:bg-zinc-100/60 dark:hover:bg-zinc-800/60 cursor-pointer transition-colors"
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="text-blue-600 dark:text-blue-400 font-mono font-bold text-xs shrink-0">Q.</span>
+                            <span className="text-xs font-semibold text-zinc-900 dark:text-white truncate">
+                              {faq.question_ko}
+                            </span>
+                          </div>
+                          <span className={`text-zinc-400 text-[10px] shrink-0 font-bold transition-transform ${isOpen ? "rotate-180" : ""}`}>
+                            ▼
+                          </span>
+                        </button>
+                        {isOpen && (
+                          <div className="px-3.5 pb-3 pt-1 text-xs text-zinc-700 dark:text-zinc-300 bg-white dark:bg-zinc-900/80 space-y-2 border-t border-zinc-100 dark:border-zinc-800">
+                            <div className="flex items-start gap-2 pt-1.5">
+                              <span className="text-emerald-600 dark:text-emerald-400 font-mono font-bold text-xs shrink-0">A.</span>
+                              <p className="leading-relaxed flex-1 font-normal">{faq.answer_ko}</p>
+                            </div>
+                            {faq.source_knowledge_id && (
+                              <div className="text-right pt-1">
+                                <Link
+                                  href={`${baseHelpPath}/${faq.source_knowledge_id}`}
+                                  className="text-[11px] text-blue-600 hover:text-blue-700 dark:text-blue-400 font-semibold"
+                                >
+                                  공식 문서 확인 &rarr;
+                                </Link>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Official Source Citations / 관련 공식 도움말 (Only relevant documents) */}
             {askResponse.sources && askResponse.sources.length > 0 && (
               <div className="space-y-2 pt-2 border-t border-zinc-100 dark:border-zinc-800">
                 <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-500 block">
-                  📚 관련 공식 도움말 출처
+                  📚 관련 공식 도움말
                 </span>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                   {askResponse.sources.map((src: AskSourceCitation) => (
@@ -657,7 +695,7 @@ export function HelpCenterMainView({
                 <span>📂 주제별 도움말</span>
               </h2>
               <span className="text-xs text-zinc-500 dark:text-zinc-400 hidden sm:inline">
-                업무 영역을 선택하면 관련 자주 묻는 질문과 공식 도움말을 확인할 수 있습니다.
+                업무 주제를 선택하시면 관련 FAQ 및 공식 도움말이 표시됩니다.
               </span>
             </div>
             {selectedTopicId && (
@@ -666,12 +704,12 @@ export function HelpCenterMainView({
                 onClick={() => setSelectedTopicId(null)}
                 className="text-xs text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 font-medium cursor-pointer"
               >
-                ✕ 전체 주제 보기
+                ✕ 선택 해제
               </button>
             )}
           </div>
 
-          {/* Compact Topic Selector Tiles (Dynamic, Scales smoothly) */}
+          {/* Compact Topic Selector Tiles */}
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2.5">
             {activeTopics.map((topic) => {
               const stat = topicStats[topic.id] || { knowledgeCount: 0, faqCount: 0, total: 0 };
@@ -717,7 +755,7 @@ export function HelpCenterMainView({
       )}
 
       {/* ========================================================================= */}
-      {/* SECTION 3: TOPIC DETAIL / TOPIC FAQS (Revealed Immediately Below Topics)  */}
+      {/* SECTION 3: TOPIC DETAIL (Topic FAQs First -> Topic Official Knowledge)    */}
       {/* ========================================================================= */}
       {currentSelectedTopic && (
         <div ref={topicDetailSectionRef} className="space-y-4 pt-3 border-t border-zinc-200 dark:border-zinc-800">
@@ -746,7 +784,7 @@ export function HelpCenterMainView({
             </button>
           </div>
 
-          {/* 1. Topic FAQs First (Compact Rows in Card Container) */}
+          {/* 1. Topic FAQs First */}
           {topicSpecificFaqs.length > 0 && (
             <div className="space-y-2">
               <div className="text-xs font-bold text-zinc-700 dark:text-zinc-300 flex items-center gap-1.5">
@@ -819,23 +857,7 @@ export function HelpCenterMainView({
             </div>
           )}
 
-          {/* 2. Compact In-Topic Ask CTA */}
-          <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/60 px-4 py-3 flex items-center justify-between gap-3 text-xs shadow-2xs">
-            <div className="flex items-center gap-2">
-              <span className="text-zinc-600 dark:text-zinc-300 font-medium">찾으시는 답변이 없나요?</span>
-              <span className="text-zinc-400 hidden sm:inline">궁금한 내용을 직접 질문해 주세요.</span>
-            </div>
-            <button
-              type="button"
-              onClick={handleFocusQuestionInput}
-              className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold transition-colors shrink-0 shadow-xs cursor-pointer flex items-center gap-1 text-xs"
-            >
-              <span>직접 질문하기</span>
-              <span>&uarr;</span>
-            </button>
-          </div>
-
-          {/* 3. Related Official Help Content (Compact Row Presentation) */}
+          {/* 2. Topic Relevant Official Knowledge Items (Only published knowledge belonging to this Topic) */}
           {topicSpecificItems.length > 0 && (
             <div className="space-y-2 pt-1">
               <div className="text-xs font-bold text-zinc-700 dark:text-zinc-300 flex items-center gap-1.5">
@@ -878,137 +900,37 @@ export function HelpCenterMainView({
               </div>
             </div>
           )}
+
+          {/* 3. In-Topic Ask & Support Action Bar */}
+          <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/60 px-4 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs shadow-2xs">
+            <div className="flex items-center gap-2">
+              <span className="text-zinc-600 dark:text-zinc-300 font-medium">원하는 답변을 찾지 못하셨나요?</span>
+              <span className="text-zinc-400 hidden sm:inline">직접 질문하거나 운영팀에 1:1 문의를 남겨주세요.</span>
+            </div>
+            <div className="flex items-center gap-2 self-end sm:self-auto">
+              <button
+                type="button"
+                onClick={handleFocusQuestionInput}
+                className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold transition-colors shrink-0 shadow-xs cursor-pointer flex items-center gap-1 text-xs"
+              >
+                <span>직접 질문하기</span>
+                <span>&uarr;</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleEscalateToSupport("GENERAL")}
+                className="px-3 py-1.5 rounded-lg bg-zinc-200 hover:bg-zinc-300 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-800 dark:text-zinc-200 font-bold transition-colors shrink-0 shadow-xs cursor-pointer flex items-center gap-1 text-xs"
+              >
+                <span>1:1 문의하기</span>
+                <span>&rarr;</span>
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
       {/* ========================================================================= */}
-      {/* SECTION 4: ALL HELP CONTENT (Compact Document Browser)                   */}
-      {/* ========================================================================= */}
-      <div className="space-y-3 pt-3 border-t border-zinc-200 dark:border-zinc-800">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-          <div className="flex items-center gap-2">
-            <h2 className="text-sm font-bold text-zinc-900 dark:text-white">📖 모든 도움말</h2>
-            <span className="rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 px-2 py-0.5 text-[10px] font-mono font-bold">
-              {filteredAllItems.length}
-            </span>
-          </div>
-
-          {/* Search & Type Filters */}
-          <div className="flex items-center gap-2 w-full sm:w-auto">
-            {availableTypes.length > 1 && (
-              <div className="flex items-center gap-1 text-[11px]">
-                <button
-                  type="button"
-                  onClick={() => setSelectedType("ALL")}
-                  className={`px-2 py-0.5 rounded font-semibold transition-colors cursor-pointer ${
-                    selectedType === "ALL"
-                      ? "bg-zinc-800 text-white dark:bg-zinc-200 dark:text-zinc-900"
-                      : "text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-300"
-                  }`}
-                >
-                  전체
-                </button>
-                {availableTypes.map((t) => (
-                  <button
-                    key={t}
-                    type="button"
-                    onClick={() => setSelectedType(t)}
-                    className={`px-2 py-0.5 rounded font-semibold transition-colors cursor-pointer ${
-                      selectedType === t
-                        ? "bg-zinc-800 text-white dark:bg-zinc-200 dark:text-zinc-900"
-                        : "text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-300"
-                    }`}
-                  >
-                    {t}
-                  </button>
-                ))}
-              </div>
-            )}
-            <div className="relative w-full sm:w-56">
-              <input
-                type="text"
-                value={librarySearch}
-                onChange={(e) => setLibrarySearch(e.target.value)}
-                placeholder="문서 검색..."
-                className="w-full rounded-md bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 px-2.5 py-1 text-xs text-zinc-900 dark:text-white placeholder:text-zinc-400 focus:outline-hidden focus:ring-1 focus:ring-blue-500"
-              />
-              {librarySearch && (
-                <button
-                  type="button"
-                  onClick={() => setLibrarySearch("")}
-                  className="absolute right-2 top-1 text-zinc-400 hover:text-zinc-600 text-xs cursor-pointer"
-                >
-                  ✕
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Compact Document Rows List */}
-        {loading ? (
-          <div className="space-y-2">
-            {[1, 2].map((i) => (
-              <div key={i} className="h-14 rounded-xl bg-zinc-100 dark:bg-zinc-900 animate-pulse" />
-            ))}
-          </div>
-        ) : filteredAllItems.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-zinc-300 dark:border-zinc-800 p-6 text-center space-y-2">
-            <div className="text-xl">🔍</div>
-            <h3 className="text-xs sm:text-sm font-bold text-zinc-900 dark:text-white">
-              관련 도움말을 찾지 못했습니다.
-            </h3>
-            <p className="text-xs text-zinc-500 dark:text-zinc-400">
-              검색 조건을 변경하시거나 운영팀에 직접 문의해 주세요.
-            </p>
-          </div>
-        ) : (
-          <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 divide-y divide-zinc-100 dark:divide-zinc-800 overflow-hidden shadow-xs">
-            {filteredAllItems.map((item) => {
-              const primaryTopic = itemPrimaryTopicMap.get(item.id);
-              return (
-                <div key={item.id} className="p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-zinc-50 dark:hover:bg-zinc-800/30 transition-colors">
-                  <div className="flex items-start sm:items-center gap-3 min-w-0">
-                    {getTypeBadge(item.type)}
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <h4 className="text-xs sm:text-sm font-bold text-zinc-900 dark:text-white truncate">
-                          {item.title_ko || item.title}
-                        </h4>
-                        {primaryTopic && (
-                          <span className="text-[10px] text-zinc-400 dark:text-zinc-500 hidden md:inline">
-                            · {primaryTopic.icon} {primaryTopic.title_ko}
-                          </span>
-                        )}
-                        {item.document_url && (
-                          <span className="px-1.5 py-0.5 text-[10px] font-bold rounded bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 shrink-0">
-                            PDF
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-[11px] text-zinc-500 dark:text-zinc-400 truncate max-w-xl">
-                        {item.summary_ko || item.summary_en || "공식 도움말 내용을 확인하세요."}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-3 shrink-0 self-end sm:self-auto text-[11px] text-zinc-400">
-                    <span>버전 {item.current_version || "v1.0"}</span>
-                    <Link
-                      href={`${baseHelpPath}/${item.slug || item.id}`}
-                      className="px-2.5 py-1 rounded bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-200 font-bold transition-colors"
-                    >
-                      보기 &rarr;
-                    </Link>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
-
-      {/* ========================================================================= */}
-      {/* SECTION 5: STILL NEED HELP? (Compact Support Escalation CTA)              */}
+      {/* SECTION 4: STILL NEED HELP? (Support Escalation CTA)                      */}
       {/* ========================================================================= */}
       <div className="rounded-xl border border-zinc-200 bg-zinc-50/80 p-4 sm:p-5 dark:border-zinc-800 dark:bg-zinc-900/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
         <div className="space-y-0.5">
