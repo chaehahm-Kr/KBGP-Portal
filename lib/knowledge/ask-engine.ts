@@ -295,22 +295,36 @@ export async function processAskQuestion(
     const itemTags = (item.tags || []).map(t => t.toLowerCase());
 
     const tokens = cleanQ.split(" ").filter(t => t.length >= 2);
+    let hasTitleMatch = false;
+    let hasTagMatch = false;
+    let domainIntentMatch = false;
 
     tokens.forEach(token => {
-      if (titleText.includes(token)) score += 60;
-      if (itemTags.some(tag => tag.includes(token))) score += 40;
+      if (titleText.includes(token)) {
+        score += 60;
+        hasTitleMatch = true;
+      }
+      if (itemTags.some(tag => tag.includes(token))) {
+        score += 40;
+        hasTagMatch = true;
+      }
       if (summaryText.includes(token)) score += 30;
       if (contentText.includes(token)) score += 15;
     });
 
     // Specific Domain Intent Matches for Brand Policy (MAN-BRAND-001)
     if (item.id === "kno-brand-policy-v10" || item.slug === "brand-registration-and-management-policy-v1" || item.slug === "man-brand-001-brand-policy") {
-      if (cleanQ.includes("브랜드") || cleanQ.includes("brand")) score += 40;
-      if (cleanQ.includes("등록") || cleanQ.includes("전제조건") || cleanQ.includes("신규") || cleanQ.includes("생성")) score += 50;
-      if (cleanQ.includes("상표권") || cleanQ.includes("trademark") || cleanQ.includes("특허청")) score += 60;
-      if (cleanQ.includes("삭제") || cleanQ.includes("delete") || cleanQ.includes("비활성화") || cleanQ.includes("inactive")) score += 60;
-      if (cleanQ.includes("다중") || cleanQ.includes("여러 회사") || cleanQ.includes("총판") || cleanQ.includes("owner")) score += 50;
-      if (cleanQ.includes("상품 등록") || cleanQ.includes("귀속")) score += 40;
+      if (cleanQ.includes("브랜드") || cleanQ.includes("brand")) { score += 50; domainIntentMatch = true; }
+      if (cleanQ.includes("등록") || cleanQ.includes("전제조건") || cleanQ.includes("신규") || cleanQ.includes("생성")) { score += 50; domainIntentMatch = true; }
+      if (cleanQ.includes("상표권") || cleanQ.includes("trademark") || cleanQ.includes("특허청")) { score += 60; domainIntentMatch = true; }
+      if (cleanQ.includes("삭제") || cleanQ.includes("delete") || cleanQ.includes("비활성화") || cleanQ.includes("inactive")) { score += 60; domainIntentMatch = true; }
+      if (cleanQ.includes("다중") || cleanQ.includes("여러 회사") || cleanQ.includes("총판") || cleanQ.includes("owner")) { score += 50; domainIntentMatch = true; }
+      if (cleanQ.includes("상품 등록") || cleanQ.includes("귀속")) { score += 40; domainIntentMatch = true; }
+    }
+
+    // Require title, tag, or domain intent match to qualify as grounded candidate
+    if (!hasTitleMatch && !hasTagMatch && !domainIntentMatch) {
+      score = 0;
     }
 
     // Specific Domain Intent Matches for Brand FAQ (kno-002-brand-faq)
