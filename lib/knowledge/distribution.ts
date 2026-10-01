@@ -129,10 +129,10 @@ export async function getPublishedKnowledgeForAudience(
 
   const resultItems = eligibleItems.map(item => ({
     id: item.id,
-    slug: item.slug,
+    slug: item.slug || item.id,
     title: item.title,
-    title_ko: item.title_ko,
-    title_en: item.title_en,
+    title_ko: item.title_ko || item.title,
+    title_en: item.title_en || item.title,
     summary_ko: item.summary_ko,
     summary_en: item.summary_en,
     type: item.type,
@@ -154,5 +154,126 @@ export async function getPublishedKnowledgeForAudience(
     audience,
     totalCount: resultItems.length,
     items: resultItems
+  };
+}
+
+/**
+ * Retrieves full detail of a single Published Knowledge Item for Brand Portal.
+ * Enforces strict server-side audience isolation:
+ * If item does not exist or is not eligible for BRAND audience, returns null.
+ */
+export async function getPublishedBrandKnowledgeDetail(
+  slugOrId: string
+): Promise<{
+  item: {
+    id: string;
+    slug: string;
+    title: string;
+    title_ko: string;
+    title_en: string;
+    summary_ko: string;
+    summary_en: string;
+    content_ko: string;
+    content_en: string;
+    type: string;
+    module: string;
+    category: string;
+    tags: string[];
+    current_version: string;
+    effective_date: string;
+    document_url?: string | null;
+    document_name?: string | null;
+    document_size?: number | null;
+    document_type?: string | null;
+    updated_at: string;
+  };
+  assets: Array<{
+    id: string;
+    manual_title: string;
+    version: string;
+    language: string;
+    file_url: string;
+    file_name: string;
+    file_size: number;
+    published_date: string;
+  }>;
+  related: Array<{
+    id: string;
+    slug: string;
+    title: string;
+    title_ko: string;
+    title_en: string;
+    summary_ko: string;
+    type: string;
+    module: string;
+  }>;
+} | null> {
+  const allItems = await getStoreKnowledgeItems();
+  const found = allItems.find(
+    i => i.id === slugOrId || i.slug === slugOrId || i.slug?.toLowerCase() === slugOrId.toLowerCase()
+  );
+
+  if (!found || !isEligibleForAudience(found, "BRAND")) {
+    return null;
+  }
+
+  // Fetch official assets for this published knowledge item
+  const allAssets = await getStoreAssets(found.id);
+  const currentAssets = allAssets.filter(a => a.is_current !== false);
+
+  // Fetch related published brand items (same module or category)
+  const relatedItems = allItems
+    .filter(
+      i =>
+        i.id !== found.id &&
+        isEligibleForAudience(i, "BRAND") &&
+        (i.module === found.module || i.category === found.category)
+    )
+    .slice(0, 4)
+    .map(i => ({
+      id: i.id,
+      slug: i.slug || i.id,
+      title: i.title,
+      title_ko: i.title_ko || i.title,
+      title_en: i.title_en || i.title,
+      summary_ko: i.summary_ko,
+      type: i.type,
+      module: i.module || i.category || "General"
+    }));
+
+  return {
+    item: {
+      id: found.id,
+      slug: found.slug || found.id,
+      title: found.title,
+      title_ko: found.title_ko || found.title,
+      title_en: found.title_en || found.title,
+      summary_ko: found.summary_ko,
+      summary_en: found.summary_en,
+      content_ko: found.content_ko,
+      content_en: found.content_en,
+      type: found.type,
+      module: found.module || found.category || "General",
+      category: found.category || found.module || "General",
+      tags: found.tags || [],
+      current_version: found.current_version || "v1.0",
+      effective_date: found.effective_date || found.created_at.split("T")[0],
+      document_url: found.document_url,
+      document_name: found.document_name,
+      document_size: found.document_size,
+      document_type: found.document_type,
+      updated_at: found.updated_at
+    },
+    assets: currentAssets.map(a => ({
+      id: a.id,
+      manual_title: a.manual_title,
+      version: a.version,
+      language: a.language,
+      file_url: a.file_url,
+      file_name: a.file_name,
+      file_size: a.file_size,
+      published_date: a.published_date
+    })),
+    related: relatedItems
   };
 }

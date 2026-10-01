@@ -51,6 +51,10 @@ export default function PortalSidebar({
     return pathname.startsWith("/portal/orders");
   });
 
+  const [isHelpOpen, setIsHelpOpen] = useState(() => {
+    return pathname.startsWith("/portal/help") || pathname.startsWith("/portal/support");
+  });
+
   const [isSettingsOpen, setIsSettingsOpen] = useState(() => {
     return (
       pathname.startsWith("/portal/company/") ||
@@ -72,6 +76,9 @@ export default function PortalSidebar({
     if (pathname.startsWith("/portal/orders")) {
       setIsOrdersOpen(true);
     }
+    if (pathname.startsWith("/portal/help") || pathname.startsWith("/portal/support")) {
+      setIsHelpOpen(true);
+    }
   }, [pathname]);
 
   const menuItems: MenuItem[] = [
@@ -87,7 +94,15 @@ export default function PortalSidebar({
       ],
     },
     { name: "정산 관리", icon: ReportsIcon, href: "/portal/finance", category: "finance" },
-    { name: "문의 지원", icon: SupportIcon, href: "/portal/support", category: "support" },
+    {
+      name: "Help & Support",
+      icon: SupportIcon,
+      category: "support",
+      subItems: [
+        { name: "Help Center", href: "/portal/help", category: "support" },
+        { name: "문의 지원", href: "/portal/support", category: "support" },
+      ],
+    },
   ];
 
   const settingsPages: { name: string; href: string; category?: AclCategory }[] = [
@@ -133,7 +148,15 @@ export default function PortalSidebar({
           const isLocked = isCategoryLocked(item.category);
 
           if (item.subItems) {
-            const isGroupActive = pathname.startsWith("/portal/orders");
+            const isGroupActive = item.name === "Help & Support"
+              ? (pathname.startsWith("/portal/help") || pathname.startsWith("/portal/support"))
+              : pathname.startsWith("/portal/orders");
+            const isOpen = item.name === "Help & Support" ? isHelpOpen : isOrdersOpen;
+            const toggleOpen = () => {
+              if (item.name === "Help & Support") setIsHelpOpen(!isHelpOpen);
+              else setIsOrdersOpen(!isOrdersOpen);
+            };
+
             return (
               <div key={item.name} className="space-y-1">
                 {isCollapsed ? (
@@ -162,7 +185,7 @@ export default function PortalSidebar({
                     <button
                       type="button"
                       disabled={isLocked}
-                      onClick={() => !isLocked && setIsOrdersOpen(!isOrdersOpen)}
+                      onClick={() => !isLocked && toggleOpen()}
                       title={isLocked ? "접근 권한이 없습니다." : undefined}
                       className={`flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
                         isLocked
@@ -178,16 +201,16 @@ export default function PortalSidebar({
                         <span className="text-[11px]">🔒</span>
                       ) : (
                         <span className="text-[10px] text-zinc-400 font-mono">
-                          {isOrdersOpen ? "▼" : "▶"}
+                          {isOpen ? "▼" : "▶"}
                         </span>
                       )}
                     </button>
 
-                    {!isLocked && isOrdersOpen && (
+                    {!isLocked && isOpen && (
                       <div className="pl-4 space-y-1 border-l border-zinc-200 dark:border-zinc-800 ml-5 mt-1">
                         {item.subItems.map((sub) => {
                           const isSubLocked = isCategoryLocked(sub.category);
-                          const isSubActive = pathname === sub.href || (sub.href !== "/portal/orders" && pathname.startsWith(sub.href));
+                          const isSubActive = pathname === sub.href || (sub.href !== "/portal/orders" && sub.href !== "/portal/help" && pathname.startsWith(sub.href)) || (sub.href === "/portal/help" && pathname.startsWith("/portal/help"));
 
                           if (isSubLocked) {
                             return (
