@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { verifyAdminSession } from "@/lib/auth/dal";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { parseBrandTrademarks } from "@/lib/brand/actions";
 import { getSignedFileUrl } from "@/lib/files/storage";
+import { AdminBrandsList, type AdminBrandItem } from "@/components/admin/admin-brands-list";
 
 export const metadata: Metadata = {
   title: "브랜드 관리 | K SELECT NETWORK 어드민",
@@ -13,39 +13,66 @@ export default async function AdminBrandsPage() {
   await verifyAdminSession();
   const supabase = createAdminClient();
 
-  // Safely fetch brands with trademark columns
+  // Safely fetch brands with brand_code and trademark columns
   let brandsData: any[] = [];
-  const { data: brandsWithTrademarks, error: brandsError } = await supabase
+  const { data: brandsWithCode, error: brandsError } = await supabase
     .from("brands")
     .select(`
-      id, name, intro, logo_path, company_id, is_active, created_at, updated_at,
+      id, brand_code, name, intro, logo_path, company_id, is_active, created_at, updated_at,
       companies (id, name),
       has_kr_trademark, kr_trademark_number, kr_trademark_path,
       has_us_trademark, us_trademark_number, us_trademark_path
     `)
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: true });
 
-  if (!brandsError && brandsWithTrademarks) {
-    brandsData = brandsWithTrademarks;
+  if (!brandsError && brandsWithCode) {
+    brandsData = brandsWithCode;
   } else {
-    // Fallback to core columns if database migration hasn't been run yet
+    // Fallback if brand_code column or trademark columns differ
     const { data: coreBrands } = await supabase
       .from("brands")
       .select(`
         id, name, intro, logo_path, company_id, is_active, created_at, updated_at,
         companies (id, name)
       `)
-      .order("created_at", { ascending: false });
+      .order("created_at", { ascending: true });
     brandsData = coreBrands ?? [];
   }
 
-  // Parse and resolve trademark information and logos
-  const resolvedBrands = await Promise.all(
-    brandsData.map(async (brand) => {
+  // Fetch product counts per brand in a single aggregate query (N+1 query prevention)
+  const { data: productsData } = await supabase
+    .from("products")
+    .select("id, brand_id");
+
+  const productCountByBrandId = new Map<string, number>();
+  (productsData ?? []).forEach((p) => {
+    if (p.brand_id) {
+      productCountByBrandId.set(p.brand_id, (productCountByBrandId.get(p.brand_id) || 0) + 1);
+    }
+  });
+
+  // Sort existing brands deterministically by created_at ASC, id ASC for fallback code indexing
+  const sortedBrandsData = [...brandsData].sort((a, b) => {
+    const tA = new Date(a.created_at || 0).getTime();
+    const tB = new Date(b.created_at || 0).getTime();
+    if (tA !== tB) return tA - tB;
+    return String(a.id).localeCompare(String(b.id));
+  });
+
+  // Parse and resolve trademark information, logos, and product counts
+  const resolvedBrands: AdminBrandItem[] = await Promise.all(
+    sortedBrandsData.map(async (brand, index) => {
       const tm = await parseBrandTrademarks(brand);
       const logoUrl = brand.logo_path ? await getSignedFileUrl(brand.logo_path) : null;
+      const productCount = productCountByBrandId.get(brand.id) || 0;
+      
+      // Fallback display format if DB migration is pending execution
+      const fallbackCode = `BR-${String(index + 1).padStart(6, "0")}`;
+      const brandCode = brand.brand_code || fallbackCode;
+
       return {
         id: brand.id,
+        brandCode,
         name: brand.name,
         logoUrl,
         companyName: brand.companies?.name || "알 수 없음",
@@ -53,6 +80,7 @@ export default async function AdminBrandsPage() {
         hasKr: tm.has_kr_trademark,
         hasUs: tm.has_us_trademark,
         isActive: brand.is_active !== false,
+        productCount,
         lastUpdated: new Date(brand.updated_at || brand.created_at).toLocaleDateString(),
       };
     })
@@ -64,116 +92,12 @@ export default async function AdminBrandsPage() {
       <div>
         <h1 className="text-xl font-bold text-zinc-955 dark:text-white">브랜드 관리</h1>
         <p className="text-xs text-zinc-500 dark:text-zinc-400">
-          K SELECT NETWORK 플랫폼에 파트너사들이 등록하고 보유 중인 브랜드들의 상표권 및 정보 현황을 조회합니다.
+          K SELECT NETWORK 플랫폼의 파트너사 브랜드 레지스트리를 통합 관리하고 상표권 및 연결 상품 현황을 조회합니다.
         </p>
       </div>
 
-      {/* Brands Table */}
-      <div className="rounded-lg border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full border-collapse text-left text-xs text-zinc-500 dark:text-zinc-400">
-            <thead>
-              <tr className="border-b border-zinc-150 bg-zinc-55/40 font-bold text-zinc-950 dark:border-zinc-800 dark:bg-zinc-900/50 dark:text-white">
-                <th className="px-6 py-3 font-semibold w-16">로고</th>
-                <th className="px-6 py-3 font-semibold">브랜드명</th>
-                <th className="px-6 py-3 font-semibold">보유 회사</th>
-                <th className="px-6 py-3 font-semibold text-center">상태</th>
-                <th className="px-6 py-3 font-semibold text-center">대한민국 상표권 등록 여부</th>
-                <th className="px-6 py-3 font-semibold text-center">미국 USPTO 상표권 등록 여부</th>
-                <th className="px-6 py-3 font-semibold">최근 업데이트일</th>
-                <th className="px-6 py-3 font-semibold text-right">관리</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
-              {resolvedBrands.map((brand) => (
-                <tr key={brand.id} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-900/50">
-                  <td className="px-6 py-3">
-                    {brand.logoUrl ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={brand.logoUrl}
-                        alt=""
-                        className="h-8 w-8 rounded-md border border-zinc-200 object-cover bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950"
-                      />
-                    ) : (
-                      <div className="flex h-8 w-8 items-center justify-center rounded-md bg-zinc-100 dark:bg-zinc-800 text-[9px] font-bold text-zinc-400 select-none">
-                        LOGO
-                      </div>
-                    )}
-                  </td>
-                  <td className="px-6 py-3.5 font-bold text-zinc-950 dark:text-white">
-                    <Link
-                      href={`/admin/companies/${brand.companyId}`}
-                      className="hover:underline hover:text-zinc-900 dark:hover:text-zinc-300"
-                    >
-                      {brand.name}
-                    </Link>
-                  </td>
-                  <td className="px-6 py-3.5 text-zinc-700 dark:text-zinc-300">
-                    <Link
-                      href={`/admin/companies/${brand.companyId}`}
-                      className="hover:underline text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white"
-                    >
-                      {brand.companyName}
-                    </Link>
-                  </td>
-                  <td className="px-6 py-3.5 text-center">
-                    {brand.isActive ? (
-                      <span className="inline-block rounded bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-705 dark:bg-emerald-950/40 dark:text-emerald-300">
-                        사용 중
-                      </span>
-                    ) : (
-                      <span className="inline-block rounded bg-zinc-100 px-2 py-0.5 text-[10px] font-medium text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">
-                        사용 중단
-                      </span>
-                    )}
-                  </td>
-                  <td className="px-6 py-3.5 text-center">
-                    {brand.hasKr ? (
-                      <span className="inline-block rounded bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-705 dark:bg-emerald-950/40 dark:text-emerald-300">
-                        보유
-                      </span>
-                    ) : (
-                      <span className="inline-block rounded bg-zinc-50 px-2 py-0.5 text-[10px] font-medium text-zinc-400 dark:bg-zinc-850 dark:text-zinc-600">
-                        미보유
-                      </span>
-                    )}
-                  </td>
-                  <td className="px-6 py-3.5 text-center">
-                    {brand.hasUs ? (
-                      <span className="inline-block rounded bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-705 dark:bg-emerald-950/40 dark:text-emerald-300">
-                        보유
-                      </span>
-                    ) : (
-                      <span className="inline-block rounded bg-zinc-50 px-2 py-0.5 text-[10px] font-medium text-zinc-400 dark:bg-zinc-850 dark:text-zinc-600">
-                        미보유
-                      </span>
-                    )}
-                  </td>
-                  <td className="px-6 py-3.5 text-zinc-400">
-                    {brand.lastUpdated}
-                  </td>
-                  <td className="px-6 py-3.5 text-right font-semibold text-zinc-900 dark:text-white">
-                    <Link
-                      href={`/admin/companies/${brand.companyId}`}
-                      className="hover:underline"
-                    >
-                      상세보기
-                    </Link>
-                  </td>
-                </tr>
-              ))}
-              {resolvedBrands.length === 0 && (
-                <tr>
-                  <td colSpan={8} className="py-12 text-center text-sm text-zinc-400">
-                    등록된 브랜드 정보가 존재하지 않습니다.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      {/* Interactive Brand Registry List */}
+      <AdminBrandsList initialBrands={resolvedBrands} />
     </div>
   );
 }

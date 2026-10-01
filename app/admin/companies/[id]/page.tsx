@@ -44,7 +44,7 @@ export default async function AdminCompanyDetailPage({
     let brandsData: any[] = [];
     const { data: brandsWithTrademarks, error: brandsError } = await supabase
       .from("brands")
-      .select("id, name, intro, logo_path, is_active, has_kr_trademark, kr_trademark_number, kr_trademark_path, has_us_trademark, us_trademark_number, us_trademark_path")
+      .select("id, brand_code, name, intro, logo_path, is_active, has_kr_trademark, kr_trademark_number, kr_trademark_path, has_us_trademark, us_trademark_number, us_trademark_path")
       .eq("company_id", id)
       .order("created_at", { ascending: true });
 
@@ -54,7 +54,7 @@ export default async function AdminCompanyDetailPage({
       // Fallback to core columns if database migration hasn't been run yet
       const { data: coreBrands } = await supabase
         .from("brands")
-        .select("id, name, intro, logo_path, is_active")
+        .select("id, brand_code, name, intro, logo_path, is_active")
         .eq("company_id", id)
         .order("created_at", { ascending: true });
       brandsData = coreBrands ?? [];
@@ -69,6 +69,7 @@ export default async function AdminCompanyDetailPage({
         const usUrl = tm.us_trademark_path ? await getSignedFileUrl(tm.us_trademark_path) : null;
         return {
           id: brand.id,
+          brandCode: brand.brand_code || null,
           name: brand.name,
           logoUrl,
           introText: tm.intro_text,

@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { PRODUCT_CATEGORY_LABEL, type ProductCategory } from "@/lib/product/types";
 import { adminUpdateProductOverrides, adminBulkSoftDeleteProducts, adminRestoreProduct } from "@/lib/product/admin-actions";
@@ -81,8 +81,10 @@ const SALES_LABELS: Record<string, string> = {
 
 export function AdminProductsList({ initialProducts }: AdminProductsListProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const initialSearch = searchParams.get("search") || searchParams.get("brand") || "";
   const [products, setProducts] = useState<AdminProductItem[]>(initialProducts);
-  const [searchTerm, setSearchTerm] = useState("");
+  const [searchTerm, setSearchTerm] = useState(initialSearch);
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [isPending, startTransition] = useTransition();
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);

@@ -65,6 +65,7 @@ interface CompanyDetailManagerProps {
   companyUsers: any[];
   brands: {
     id: string;
+    brandCode?: string | null;
     name: string;
     logoUrl: string | null;
     introText: string | null;
@@ -1548,6 +1549,11 @@ export function CompanyDetailManager({
                           <div className="flex-1">
                             <div className="flex items-center gap-3">
                               <h4 className="text-sm font-bold text-zinc-900 dark:text-white">{brand.name}</h4>
+                              {brand.brandCode && (
+                                <span className="font-mono text-[11px] font-bold px-2 py-0.5 rounded bg-zinc-100 text-zinc-800 dark:bg-zinc-800 dark:text-zinc-200 border border-zinc-200 dark:border-zinc-700">
+                                  {brand.brandCode}
+                                </span>
+                              )}
                               <button
                                 onClick={() => handleOpenEditBrand(brand)}
                                 className="text-[10px] font-semibold text-zinc-555 hover:underline dark:text-zinc-400 flex items-center gap-0.5 border border-zinc-250 px-1.5 py-0.5 rounded cursor-pointer transition-colors"
