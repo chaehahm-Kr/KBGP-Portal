@@ -1,0 +1,729 @@
+{
+  "timestamp": "2026-10-01T22:14:56.850Z",
+  "routesAudit": [
+    {
+      "name": "Dashboard",
+      "route": "/portal",
+      "status": 200,
+      "currentUrl": "https://portal.kselectnetwork.com/portal",
+      "headings": [
+        "안녕하세요, QA Portal님",
+        "Brand Portal 시작하기",
+        "회사 정보 확인",
+        "관리자 정보 확인",
+        "브랜드 정보 확인",
+        "팀원 초대",
+        "담당업무 및 주 담당자 지정",
+        "상품 등록 완료",
+        "상품공급 및 플랫폼 이용 약관 확인·서명",
+        "Action Required — 조치 필요 항목",
+        "빠른 작업 (Quick Actions)",
+        "최근 발주서 (Recent Purchase Orders)",
+        "정산 요약 (Finance Summary)",
+        "제품 현황 (Product Operational Summary)",
+        "1:1 문의 현황 (Support & Cases)",
+        "최근 운영 활동 (Recent Activity)"
+      ],
+      "buttons": [
+        "주문 관리\n▶",
+        "Help & Support\n▶",
+        "설정\n▲",
+        "← Collapse Sidebar",
+        "4",
+        "Q"
+      ],
+      "inputCount": 0,
+      "inputs": []
+    },
+    {
+      "name": "Brand List",
+      "route": "/portal/brands",
+      "status": 200,
+      "currentUrl": "https://portal.kselectnetwork.com/portal/brands",
+      "headings": [
+        "브랜드 관리",
+        "Natural Shoes Inc",
+        "K SELECT LAB"
+      ],
+      "buttons": [
+        "주문 관리\n▶",
+        "Help & Support\n▶",
+        "설정\n▼",
+        "← Collapse Sidebar",
+        "4",
+        "Q",
+        "브랜드 정보 확인 완료 ✓",
+        "전체 (2)"
+      ],
+      "inputCount": 6,
+      "inputs": [
+        {
+          "name": "$ACTION_REF_2",
+          "type": "input"
+        },
+        {
+          "name": "$ACTION_2:0",
+          "type": "input"
+        },
+        {
+          "name": "$ACTION_2:1",
+          "type": "input"
+        },
+        {
+          "name": "$ACTION_REF_3",
+          "type": "input"
+        },
+        {
+          "name": "$ACTION_3:0",
+          "type": "input"
+        },
+        {
+          "name": "$ACTION_3:1",
+          "type": "input"
+        }
+      ]
+    },
+    {
+      "name": "Brand Registration",
+      "route": "/portal/brands/new",
+      "status": 200,
+      "currentUrl": "https://portal.kselectnetwork.com/portal/brands/new",
+      "headings": [
+        "새 브랜드 등록"
+      ],
+      "buttons": [
+        "주문 관리\n▶",
+        "Help & Support\n▶",
+        "설정\n▼",
+        "← Collapse Sidebar",
+        "4",
+        "Q",
+        "등록"
+      ],
+      "inputCount": 7,
+      "inputs": [
+        {
+          "name": "name",
+          "type": "input"
+        },
+        {
+          "name": "intro",
+          "type": "textarea"
+        },
+        {
+          "name": "logo",
+          "type": "input"
+        },
+        {
+          "name": "krTrademarkChoice",
+          "type": "input"
+        },
+        {
+          "name": "krTrademarkChoice",
+          "type": "input"
+        },
+        {
+          "name": "usTrademarkChoice",
+          "type": "input"
+        },
+        {
+          "name": "usTrademarkChoice",
+          "type": "input"
+        }
+      ]
+    },
+    {
+      "name": "Product List",
+      "route": "/portal/products",
+      "status": 200,
+      "currentUrl": "https://portal.kselectnetwork.com/portal/products",
+      "headings": [
+        "제품 관리"
+      ],
+      "buttons": [
+        "주문 관리\n▶",
+        "Help & Support\n▶",
+        "설정\n▲",
+        "← Collapse Sidebar",
+        "4",
+        "Q",
+        "All",
+        "스킨케어"
+      ],
+      "inputCount": 10,
+      "inputs": [
+        {
+          "name": "제품명, Letusto SKU, 제조사 SKU, 브랜드명 등으로 검색...",
+          "type": "input"
+        },
+        {
+          "name": "",
+          "type": "input"
+        },
+        {
+          "name": "",
+          "type": "input"
+        },
+        {
+          "name": "",
+          "type": "input"
+        },
+        {
+          "name": "",
+          "type": "input"
+        },
+        {
+          "name": "",
+          "type": "input"
+        },
+        {
+          "name": "",
+          "type": "input"
+        },
+        {
+          "name": "",
+          "type": "input"
+        },
+        {
+          "name": "",
+          "type": "input"
+        },
+        {
+          "name": "",
+          "type": "input"
+        }
+      ]
+    },
+    {
+      "name": "Product Registration",
+      "route": "/portal/products/new",
+      "status": 200,
+      "currentUrl": "https://portal.kselectnetwork.com/portal/products/new",
+      "headings": [
+        "새 제품 등록",
+        "1. 제품 기본 정보",
+        "2. 가격 정보\n?",
+        "3. 판매 채널 및 정보",
+        "4. 단품 포장 패키지 정보 (배송 규격)\n?"
+      ],
+      "buttons": [
+        "주문 관리\n▶",
+        "Help & Support\n▶",
+        "설정\n▲",
+        "← Collapse Sidebar",
+        "4",
+        "Q",
+        "제품 등록 및 계속",
+        "임시 저장 후 나중에 등록"
+      ],
+      "inputCount": 10,
+      "inputs": [
+        {
+          "name": "$ACTION_REF_1",
+          "type": "input"
+        },
+        {
+          "name": "$ACTION_1:0",
+          "type": "input"
+        },
+        {
+          "name": "$ACTION_1:1",
+          "type": "input"
+        },
+        {
+          "name": "$ACTION_KEY",
+          "type": "input"
+        },
+        {
+          "name": "submitAction",
+          "type": "input"
+        },
+        {
+          "name": "brandId",
+          "type": "select"
+        },
+        {
+          "name": "category",
+          "type": "select"
+        },
+        {
+          "name": "manufactureSku",
+          "type": "input"
+        },
+        {
+          "name": "nameEn",
+          "type": "input"
+        },
+        {
+          "name": "upc",
+          "type": "input"
+        }
+      ]
+    },
+    {
+      "name": "Retail Applications",
+      "route": "/portal/applications",
+      "status": 200,
+      "currentUrl": "https://portal.kselectnetwork.com/portal/applications",
+      "headings": [
+        "입점 신청 현황"
+      ],
+      "buttons": [
+        "주문 관리\n▶",
+        "Help & Support\n▶",
+        "설정\n▼",
+        "← Collapse Sidebar",
+        "4",
+        "Q",
+        "새 신청서 작성"
+      ],
+      "inputCount": 1,
+      "inputs": [
+        {
+          "name": "$ACTION_ID_005406fb4c71493c74a5a27755e0a2cfcccfbf7b7b",
+          "type": "input"
+        }
+      ]
+    },
+    {
+      "name": "Orders Overview",
+      "route": "/portal/orders",
+      "status": 200,
+      "currentUrl": "https://portal.kselectnetwork.com/portal/orders/purchase-orders",
+      "headings": [
+        "발주 관리 (Purchase Orders)"
+      ],
+      "buttons": [
+        "주문 관리\n▼",
+        "Help & Support\n▶",
+        "설정\n▲",
+        "← Collapse Sidebar",
+        "4",
+        "Q",
+        "전체 (All)",
+        "생산/접수중"
+      ],
+      "inputCount": 4,
+      "inputs": [
+        {
+          "name": "PO 번호, 상품명, Letusto SKU, 제조사 SKU 검색...",
+          "type": "input"
+        },
+        {
+          "type": "select"
+        },
+        {
+          "name": "",
+          "type": "input"
+        },
+        {
+          "name": "",
+          "type": "input"
+        }
+      ]
+    },
+    {
+      "name": "Purchase Orders",
+      "route": "/portal/orders/purchase-orders",
+      "status": 200,
+      "currentUrl": "https://portal.kselectnetwork.com/portal/orders/purchase-orders",
+      "headings": [
+        "발주 관리 (Purchase Orders)"
+      ],
+      "buttons": [
+        "주문 관리\n▼",
+        "Help & Support\n▶",
+        "설정\n▲",
+        "← Collapse Sidebar",
+        "4",
+        "Q",
+        "전체 (All)",
+        "생산/접수중"
+      ],
+      "inputCount": 4,
+      "inputs": [
+        {
+          "name": "PO 번호, 상품명, Letusto SKU, 제조사 SKU 검색...",
+          "type": "input"
+        },
+        {
+          "type": "select"
+        },
+        {
+          "name": "",
+          "type": "input"
+        },
+        {
+          "name": "",
+          "type": "input"
+        }
+      ]
+    },
+    {
+      "name": "Order Requests",
+      "route": "/portal/orders/requests",
+      "status": 200,
+      "currentUrl": "https://portal.kselectnetwork.com/portal/orders/requests",
+      "headings": [
+        "발주 요청 (PO Requests)"
+      ],
+      "buttons": [
+        "주문 관리\n▼",
+        "Help & Support\n▶",
+        "설정\n▲",
+        "← Collapse Sidebar",
+        "4",
+        "Q"
+      ],
+      "inputCount": 2,
+      "inputs": [
+        {
+          "name": "요청 번호, PO 번호, 제품명, SKU 검색...",
+          "type": "input"
+        },
+        {
+          "type": "select"
+        }
+      ]
+    },
+    {
+      "name": "Shipping & Logistics",
+      "route": "/portal/orders/shipping",
+      "status": 200,
+      "currentUrl": "https://portal.kselectnetwork.com/portal/orders/shipping",
+      "headings": [
+        "선적 & 출고 관리 (Shipping & Goods Ready)"
+      ],
+      "buttons": [
+        "주문 관리\n▼",
+        "Help & Support\n▶",
+        "설정\n▲",
+        "← Collapse Sidebar",
+        "4",
+        "Q",
+        "출고 준비 등록 내역 (Goods Readiness)",
+        "선적 추적 내역 (Shipments)"
+      ],
+      "inputCount": 0,
+      "inputs": []
+    },
+    {
+      "name": "Finance / Settlement",
+      "route": "/portal/finance",
+      "status": 200,
+      "currentUrl": "https://portal.kselectnetwork.com/portal/finance",
+      "headings": [
+        "정산 관리 (Finance & Invoices)"
+      ],
+      "buttons": [
+        "주문 관리\n▶",
+        "Help & Support\n▶",
+        "설정\n▲",
+        "← Collapse Sidebar",
+        "4",
+        "Q",
+        "인보이스 (Invoices)",
+        "정산 (Settlements / Adjustments)"
+      ],
+      "inputCount": 5,
+      "inputs": [
+        {
+          "name": "인보이스 번호, PO 번호, AP 번호 검색...",
+          "type": "input"
+        },
+        {
+          "name": "",
+          "type": "input"
+        },
+        {
+          "name": "",
+          "type": "input"
+        },
+        {
+          "type": "select"
+        },
+        {
+          "type": "select"
+        }
+      ]
+    },
+    {
+      "name": "Company Info",
+      "route": "/portal/company/info",
+      "error": "page.goto: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - navigating to \"https://portal.kselectnetwork.com/portal/company/info\", waiting until \"networkidle\"\u001b[22m\n"
+    },
+    {
+      "name": "Company Users",
+      "route": "/portal/company/users",
+      "error": "page.goto: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - navigating to \"https://portal.kselectnetwork.com/portal/company/users\", waiting until \"networkidle\"\u001b[22m\n"
+    },
+    {
+      "name": "Help Center",
+      "route": "/portal/help",
+      "status": 200,
+      "currentUrl": "https://portal.kselectnetwork.com/portal/help",
+      "headings": [
+        "무엇을 도와드릴까요?",
+        "📂 주제별 도움말",
+        "📖 모든 도움말",
+        "아직 해결되지 않았나요?"
+      ],
+      "buttons": [
+        "주문 관리\n▶",
+        "Help & Support\n▼",
+        "설정\n▲",
+        "← Collapse Sidebar",
+        "4",
+        "Q",
+        "질문하기\n→",
+        "브랜드는 어떻게 등록하나요?"
+      ],
+      "inputCount": 2,
+      "inputs": [
+        {
+          "name": "궁금한 내용을 입력해 주세요... (예: 브랜드 등록, 상표권, 출고지, FAQ 등)",
+          "type": "input"
+        },
+        {
+          "name": "문서 검색...",
+          "type": "input"
+        }
+      ]
+    },
+    {
+      "name": "Support Inquiries",
+      "route": "/portal/support",
+      "status": 200,
+      "currentUrl": "https://portal.kselectnetwork.com/portal/support",
+      "headings": [
+        "문의 지원",
+        "문의를 선택하세요"
+      ],
+      "buttons": [
+        "주문 관리\n▶",
+        "Help & Support\n▼",
+        "설정\n▲",
+        "← Collapse Sidebar",
+        "4",
+        "Q",
+        "+ 새 문의 작성",
+        "전체(15)"
+      ],
+      "inputCount": 1,
+      "inputs": [
+        {
+          "name": "케이스 검색 (번호, 제목, 내용)... / Search cases...",
+          "type": "input"
+        }
+      ]
+    }
+  ],
+  "knowledgeItems": [
+    {
+      "id": "kno-insights-manual-v10",
+      "title_ko": "K SELECT INSIGHTS 실무자 운영 매뉴얼",
+      "module": "INSIGHTS",
+      "audience": [
+        "INTERNAL"
+      ],
+      "status": "PUBLISHED"
+    },
+    {
+      "id": "kno-insights-rule-daily-auto",
+      "title_ko": "INSIGHTS Daily Auto Insight 운영 기준",
+      "module": "INSIGHTS",
+      "audience": [
+        "INTERNAL",
+        "ADMIN / MANAGEMENT"
+      ],
+      "status": "PUBLISHED"
+    },
+    {
+      "id": "kno-insights-policy-factcheck-risk",
+      "title_ko": "INSIGHTS Fact Check & Risk Review 기준",
+      "module": "INSIGHTS",
+      "audience": [
+        "INTERNAL"
+      ],
+      "status": "PUBLISHED"
+    },
+    {
+      "id": "kno-insights-def-claim-status",
+      "title_ko": "INSIGHTS Claim Status 정의",
+      "module": "INSIGHTS",
+      "audience": [
+        "INTERNAL"
+      ],
+      "status": "PUBLISHED"
+    },
+    {
+      "id": "kno-insights-sop-review-decision",
+      "title_ko": "INSIGHTS Approve / Revision / Reject 판단 기준",
+      "module": "INSIGHTS",
+      "audience": [
+        "INTERNAL"
+      ],
+      "status": "PUBLISHED"
+    },
+    {
+      "id": "kno-insights-guide-automation-run-status",
+      "title_ko": "INSIGHTS Automation Run Status Guide",
+      "module": "INSIGHTS",
+      "audience": [
+        "INTERNAL"
+      ],
+      "status": "PUBLISHED"
+    },
+    {
+      "id": "kno-insights-policy-prohibitions",
+      "title_ko": "INSIGHTS 실무자 금지사항",
+      "module": "INSIGHTS",
+      "audience": [
+        "INTERNAL"
+      ],
+      "status": "PUBLISHED"
+    },
+    {
+      "id": "kno-simulator-rule-config",
+      "title_ko": "Growth Simulator 모형 설정 및 마진 시뮬레이션 기준",
+      "module": "SIMULATOR",
+      "audience": [
+        "INTERNAL",
+        "ADMIN / MANAGEMENT"
+      ],
+      "status": "ARCHIVED"
+    },
+    {
+      "id": "kno-simulator-guide-execution",
+      "title_ko": "Growth Simulator Profitability 시뮬레이션 실행 가이드",
+      "module": "SIMULATOR",
+      "audience": [
+        "INTERNAL"
+      ],
+      "status": "ARCHIVED"
+    },
+    {
+      "id": "kno-001-internal-manual",
+      "title_ko": "관리자 브랜드 소싱 및 검증 표준 운영 절차 (SOP)",
+      "module": "OPERATIONS",
+      "audience": [
+        "INTERNAL"
+      ],
+      "status": "PUBLISHED"
+    },
+    {
+      "id": "kno-002-brand-faq",
+      "title_ko": "브랜드 파트너 온보딩 및 제품 등록 안내 FAQ",
+      "module": "ONBOARDING",
+      "audience": [
+        "BRAND",
+        "PUBLIC"
+      ],
+      "status": "PUBLISHED"
+    },
+    {
+      "id": "kno-brand-policy-v10",
+      "title_ko": "K SELECT 브랜드 등록 및 관리 정책",
+      "module": "Brand & Products",
+      "audience": [
+        "INTERNAL",
+        "BRAND"
+      ],
+      "status": "PUBLISHED"
+    }
+  ],
+  "knowledgeFaqs": [
+    {
+      "id": "faq-brand-01",
+      "topic_id": "topic-brand",
+      "question_ko": "브랜드는 어떻게 등록하나요?",
+      "status": "APPROVED"
+    },
+    {
+      "id": "faq-brand-02",
+      "topic_id": "topic-brand",
+      "question_ko": "상표권이 없어도 브랜드 등록이 가능한가요?",
+      "status": "APPROVED"
+    },
+    {
+      "id": "faq-brand-03",
+      "topic_id": "topic-brand",
+      "question_ko": "상품이 연결된 브랜드를 삭제할 수 있나요?",
+      "status": "APPROVED"
+    },
+    {
+      "id": "faq-brand-04",
+      "topic_id": "topic-brand",
+      "question_ko": "동일한 브랜드를 여러 회사가 취급할 수 있나요?",
+      "status": "APPROVED"
+    },
+    {
+      "id": "faq-brand-05",
+      "topic_id": "topic-brand",
+      "question_ko": "사용하지 않는 브랜드는 어떻게 처리하나요?",
+      "status": "APPROVED"
+    }
+  ],
+  "knowledgeTopics": [
+    {
+      "id": "topic-start",
+      "name_ko": "시작하기",
+      "portal_scope": "BRAND",
+      "is_active": true
+    },
+    {
+      "id": "topic-brand",
+      "name_ko": "브랜드 관리",
+      "portal_scope": "BRAND",
+      "is_active": true
+    },
+    {
+      "id": "topic-product",
+      "name_ko": "상품 등록 & 관리",
+      "portal_scope": "BRAND",
+      "is_active": true
+    },
+    {
+      "id": "topic-regulatory",
+      "name_ko": "인허가 & 규정",
+      "portal_scope": "BRAND",
+      "is_active": true
+    },
+    {
+      "id": "topic-retail",
+      "name_ko": "입점 & 리테일 네트워크",
+      "portal_scope": "BRAND",
+      "is_active": true
+    },
+    {
+      "id": "topic-orders",
+      "name_ko": "발주 요청 & 오더",
+      "portal_scope": "BRAND",
+      "is_active": true
+    },
+    {
+      "id": "topic-logistics",
+      "name_ko": "재고 & 물류",
+      "portal_scope": "BRAND",
+      "is_active": true
+    },
+    {
+      "id": "topic-finance",
+      "name_ko": "정산 & 결제",
+      "portal_scope": "BRAND",
+      "is_active": true
+    },
+    {
+      "id": "topic-marketing",
+      "name_ko": "프로모션 & 마케팅",
+      "portal_scope": "BRAND",
+      "is_active": true
+    },
+    {
+      "id": "topic-company",
+      "name_ko": "회사 & 사용자 관리",
+      "portal_scope": "BRAND",
+      "is_active": true
+    }
+  ]
+}
