@@ -45,7 +45,7 @@ export const CANONICAL_BRAND_TOPICS: CanonicalTopic[] = [
     icon: "🚀",
     order: 1,
     matchModules: ["ONBOARDING", "SIGNUP", "ACCOUNT", "START", "SETUP"],
-    matchKeywords: ["가입", "시작", "온보딩", "초기 설정", "계정", "onboarding", "signup", "start", "account"]
+    matchKeywords: ["가입", "시작", "온보딩", "초기 설정", "계정", "onboarding", "signup", "start", "account", "man-onb-001", "man-b-onb-001"]
   },
   {
     id: "topic-brand",
@@ -59,7 +59,7 @@ export const CANONICAL_BRAND_TOPICS: CanonicalTopic[] = [
     icon: "🏷️",
     order: 2,
     matchModules: ["BRAND", "BRANDS", "BRAND_POLICY"],
-    matchKeywords: ["브랜드", "상표권", "브랜드 삭제", "브랜드 비활성화", "brand", "trademark", "ownership", "man-brand-001"]
+    matchKeywords: ["브랜드", "상표권", "브랜드 삭제", "브랜드 비활성화", "brand", "trademark", "ownership", "man-brand-001", "man-b-brand-001"]
   },
   {
     id: "topic-product",
@@ -73,7 +73,7 @@ export const CANONICAL_BRAND_TOPICS: CanonicalTopic[] = [
     icon: "📦",
     order: 3,
     matchModules: ["PRODUCTS", "PRODUCT", "SKU", "CATALOG"],
-    matchKeywords: ["상품", "제품", "sku", "카탈로그", "바코드", "product", "item"]
+    matchKeywords: ["상품", "제품", "sku", "카탈로그", "바코드", "product", "item", "man-prod-001", "man-b-prod-001"]
   },
   {
     id: "topic-regulatory",

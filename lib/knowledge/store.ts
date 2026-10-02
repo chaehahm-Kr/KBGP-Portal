@@ -585,7 +585,7 @@ Official operational guide for K SELECT NETWORK Brand Portal partners managing b
       source_type: "CONTENT",
       module: "BRAND",
       category: "BRAND",
-      tags: ["MANUAL", "POLICY", "BRAND", "PRODUCTS", "ONBOARDING", "MAN-BRAND-001"],
+      tags: ["MANUAL", "POLICY", "BRAND", "PRODUCTS", "ONBOARDING", "MAN-BRAND-001", "MAN-B-BRAND-001"],
       owner_id: "staff-admin-01",
       owner_name: "Brand Operations Desk",
       status: "PUBLISHED",
