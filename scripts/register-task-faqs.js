@@ -1,0 +1,232 @@
+const fs = require('fs');
+const path = require('path');
+const { createClient } = require('@supabase/supabase-js');
+
+const envPath = path.join(process.cwd(), '.env.local');
+const envText = fs.readFileSync(envPath, 'utf8');
+const env = {};
+envText.split('\n').forEach(line => {
+  const match = line.match(/^\s*([\w.-]+)\s*=\s*(.*)?\s*$/);
+  if (match) {
+    let value = match[2] || '';
+    if (value.startsWith('"') && value.endsWith('"')) value = value.slice(1, -1);
+    if (value.startsWith("'") && value.endsWith("'")) value = value.slice(1, -1);
+    env[match[1]] = value.trim();
+  }
+});
+
+const supabaseUrl = env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseSecretKey = env.SUPABASE_SECRET_KEY || env.SUPABASE_SERVICE_ROLE_KEY;
+const admin = createClient(supabaseUrl, supabaseSecretKey);
+
+async function publishTaskFaqs() {
+  console.log('====================================================');
+  console.log('MAN-B-TASK-001 KNOWLEDGE CENTER FAQS PUBLISH');
+  console.log('====================================================');
+
+  const taskFaqs = [
+    {
+      id: "faq-task-01",
+      kind: "FAQ",
+      topic_id: "topic-company",
+      source_knowledge_id: "kno-task-communication-v10",
+      source_version: "v1.0",
+      source_title: "K SELECT Brand Portal 1:1 문의 및 비즈니스 소통 관리 매뉴얼 (MAN-B-TASK-001)",
+      portal_scope: "BRAND",
+      audience: ["BRAND"],
+      status: "APPROVED",
+      is_featured: true,
+      display_order: 1,
+      generated_by: "MANUAL",
+      question_ko: "1:1 지원 센터(Support Center)에서 문의 및 이슈를 접수하려면 어떻게 해야 하나요?",
+      question_en: "How do I submit a 1:1 support inquiry in the Brand Portal Support Center?",
+      answer_ko: "브랜드 포털 상단 지원 센터 메뉴(/portal/support)에서 [+ 신규 문의 접수] 버튼을 클릭하여 9개 카테고리 중 하나를 선택하고 제목, 상세 내용 및 증빙 파일(최대 20MB)을 첨부하여 등록합니다.",
+      answer_en: "Navigate to Support Center (/portal/support), click [+ New Inquiry], select one of the 9 categories, enter title and details, and attach files (up to 20MB per file)."
+    },
+    {
+      id: "faq-task-02",
+      kind: "FAQ",
+      topic_id: "topic-company",
+      source_knowledge_id: "kno-task-communication-v10",
+      source_version: "v1.0",
+      source_title: "K SELECT Brand Portal 1:1 문의 및 비즈니스 소통 관리 매뉴얼 (MAN-B-TASK-001)",
+      portal_scope: "BRAND",
+      audience: ["BRAND"],
+      status: "APPROVED",
+      is_featured: true,
+      display_order: 2,
+      generated_by: "MANUAL",
+      question_ko: "접수된 문의(Support Case)의 진행 상태(Status) 라이프사이클은 어떻게 관리되나요?",
+      question_en: "How does the support case status lifecycle progress?",
+      answer_ko: "문의 접수 완료(RECEIVED) → K SELECT 운영팀 담당자 심사 진행(UNDER_REVIEW) → 필요 시 추가 정보 또는 보완 서류 요청(ACTION_REQUIRED) → 보완 제출 후 조치 완료 시 케이스 종결(CLOSED) 순으로 진행됩니다.",
+      answer_en: "Cases move through: RECEIVED -> UNDER_REVIEW -> ACTION_REQUIRED (if supplementation is requested) -> UNDER_REVIEW -> CLOSED upon resolution."
+    },
+    {
+      id: "faq-task-03",
+      kind: "FAQ",
+      topic_id: "topic-company",
+      source_knowledge_id: "kno-task-communication-v10",
+      source_version: "v1.0",
+      source_title: "K SELECT Brand Portal 1:1 문의 및 비즈니스 소통 관리 매뉴얼 (MAN-B-TASK-001)",
+      portal_scope: "BRAND",
+      audience: ["BRAND"],
+      status: "APPROVED",
+      is_featured: true,
+      display_order: 3,
+      generated_by: "MANUAL",
+      question_ko: "운영팀으로부터 조치 요청(ACTION_REQUIRED)을 받았을 때 보완 회신은 어떻게 제출하나요?",
+      question_en: "How do I respond when a case status is set to ACTION_REQUIRED?",
+      answer_ko: "해당 케이스 상세 화면에서 운영팀의 보완 요청 메시지를 확인한 후, 메시지 입력창에 회신 내용을 작성하고 보완 서류를 첨부하여 [보완 완료 제출] 버튼을 클릭합니다. 제출 즉시 상태가 UNDER_REVIEW로 환원됩니다.",
+      answer_en: "Review the admin request in case details, enter reply text, attach requested documents, and click [Submit Supplement]. Status automatically returns to UNDER_REVIEW."
+    },
+    {
+      id: "faq-task-04",
+      kind: "FAQ",
+      topic_id: "topic-company",
+      source_knowledge_id: "kno-task-communication-v10",
+      source_version: "v1.0",
+      source_title: "K SELECT Brand Portal 1:1 문의 및 비즈니스 소통 관리 매뉴얼 (MAN-B-TASK-001)",
+      portal_scope: "BRAND",
+      audience: ["BRAND"],
+      status: "APPROVED",
+      is_featured: true,
+      display_order: 4,
+      generated_by: "MANUAL",
+      question_ko: "문의 케이스 종결(CLOSED)과 서비스 만족도 평가(CSAT)는 어떤 관계인가요?",
+      question_en: "What is the relationship between Case Closing (CLOSED) and CSAT survey evaluation?",
+      answer_ko: "케이스 종결(CLOSED)과 만족도 평가(CSAT)는 독립된 별개의 절차입니다 (CLOSE ≠ CSAT). 케이스가 종결된 후 브랜드 사용자는 5점 만점 별점 평가 및 피드백을 자율적으로 작성하여 제출할 수 있습니다.",
+      answer_en: "Case closing and CSAT submission are separate steps (CLOSE ≠ CSAT). After a case is CLOSED, brand users can voluntarily submit a 5-star rating and feedback."
+    },
+    {
+      id: "faq-task-05",
+      kind: "FAQ",
+      topic_id: "topic-company",
+      source_knowledge_id: "kno-task-communication-v10",
+      source_version: "v1.0",
+      source_title: "K SELECT Brand Portal 1:1 문의 및 비즈니스 소통 관리 매뉴얼 (MAN-B-TASK-001)",
+      portal_scope: "BRAND",
+      audience: ["BRAND"],
+      status: "APPROVED",
+      is_featured: false,
+      display_order: 5,
+      generated_by: "MANUAL",
+      question_ko: "지원 센터 문의 접수 시 선택할 수 있는 9개 업무 카테고리는 무엇인가요?",
+      question_en: "What are the 9 inquiry categories available in the Support Center?",
+      answer_ko: "일반 문의(general_inquiry), 브랜드 정책(brand_policy), 상품 등록(product_listing), 발주 이행(order_fulfillment), 물류 배송(logistics_shipping), 정산 결제(finance_settlement), 인허가 규정(regulatory_compliance), 입점 신청(retail_placement), 계정 보안(account_security) 9가지입니다.",
+      answer_en: "The 9 categories are: General Inquiry, Brand Policy, Product Listing, Order Fulfillment, Logistics & Shipping, Finance & Settlement, Regulatory Compliance, Retail Placement, and Account Security."
+    },
+    {
+      id: "faq-task-06",
+      kind: "FAQ",
+      topic_id: "topic-company",
+      source_knowledge_id: "kno-task-communication-v10",
+      source_version: "v1.0",
+      source_title: "K SELECT Brand Portal 1:1 문의 및 비즈니스 소통 관리 매뉴얼 (MAN-B-TASK-001)",
+      portal_scope: "BRAND",
+      audience: ["BRAND"],
+      status: "APPROVED",
+      is_featured: false,
+      display_order: 6,
+      generated_by: "MANUAL",
+      question_ko: "문의 등록 시 첨부 가능한 파일의 스펙과 보안 다운로드 방식은 무엇인가요?",
+      question_en: "What are the attachment file specifications and security download rules?",
+      answer_ko: "이미지(PNG, JPEG, WEBP) 및 문서(PDF) 형식을 지원하며 파일당 최대 20MB로 제한됩니다. 모든 첨부파일은 독립된 Private 스토리지(company-uploads)에 암호화 저장되며, 시간 제한 서명 URL(Signed URL)을 통해서만 다운로드할 수 있습니다.",
+      answer_en: "Supports PNG, JPEG, WEBP, and PDF up to 20MB per file. Files are stored in private bucket company-uploads and downloaded strictly via temporary Signed URLs."
+    },
+    {
+      id: "faq-task-07",
+      kind: "FAQ",
+      topic_id: "topic-company",
+      source_knowledge_id: "kno-task-communication-v10",
+      source_version: "v1.0",
+      source_title: "K SELECT Brand Portal 1:1 문의 및 비즈니스 소통 관리 매뉴얼 (MAN-B-TASK-001)",
+      portal_scope: "BRAND",
+      audience: ["BRAND"],
+      status: "APPROVED",
+      is_featured: false,
+      display_order: 7,
+      generated_by: "MANUAL",
+      question_ko: "발주, 정산, 계약 메뉴에서 지원 센터로 문의 이동 시 교차 도메인 연동은 어떻게 동작하나요?",
+      question_en: "How does cross-domain linking work when navigating to Support from Order, Finance, or Agreement pages?",
+      answer_ko: "발주 변경 문의 시에는 발주서 데이터베이스 외래키(related_po_id real DB FK)가 직접 바인딩되며, 정산 및 계약 문의의 경우 사전 입력 컨텍스트(kselect_support_handoff context prefill)가 문의 작성 폼에 자동 삽입됩니다.",
+      answer_en: "PO Change inquiries bind the actual DB foreign key (related_po_id FK), while Settlement and Agreement inquiries automatically pre-fill context via kselect_support_handoff."
+    },
+    {
+      id: "faq-task-08",
+      kind: "FAQ",
+      topic_id: "topic-company",
+      source_knowledge_id: "kno-task-communication-v10",
+      source_version: "v1.0",
+      source_title: "K SELECT Brand Portal 1:1 문의 및 비즈니스 소통 관리 매뉴얼 (MAN-B-TASK-001)",
+      portal_scope: "BRAND",
+      audience: ["BRAND"],
+      status: "APPROVED",
+      is_featured: false,
+      display_order: 8,
+      generated_by: "MANUAL",
+      question_ko: "사용자의 포털 권한(ACL) 레벨에 따라 1:1 문의 기능 이용 범위가 어떻게 달라지나요?",
+      question_en: "How do support ACL permission levels restrict Support Center actions?",
+      answer_ko: "support:none(접근 차단), support:read(문의 및 대화 단순 열람), support:write(신규 문의 작성, 회신 및 보완 제출), support:manage(작성/회신 + 케이스 직접 종결 closeCase) 권한 범위로 정밀제어됩니다.",
+      answer_en: "support:none blocks access, support:read grants read-only viewing, support:write enables creation and replies, and support:manage allows case closing (closeCase)."
+    },
+    {
+      id: "faq-task-09",
+      kind: "FAQ",
+      topic_id: "topic-company",
+      source_knowledge_id: "kno-task-communication-v10",
+      source_version: "v1.0",
+      source_title: "K SELECT Brand Portal 1:1 문의 및 비즈니스 소통 관리 매뉴얼 (MAN-B-TASK-001)",
+      portal_scope: "BRAND",
+      audience: ["BRAND"],
+      status: "APPROVED",
+      is_featured: false,
+      display_order: 9,
+      generated_by: "MANUAL",
+      question_ko: "문의 상태 변경 및 답변 등록 시 인앱 알림과 이메일 알림은 어떻게 발송되나요?",
+      question_en: "How are in-app and transactional email notifications routed for support inquiries?",
+      answer_ko: "인앱 알림은 6대 주요 이벤트 발생 시 항상 생성됩니다. 반면 이메일은 운영팀의 긴급 조치 요청(isActionRequired=true 및 이메일 발송 옵션 선택) 시에만 제한적으로 발송되어 피로도를 방지합니다.",
+      answer_en: "In-app notifications are always generated for all 6 events. Transactional emails are sent strictly when urgent action is required (isActionRequired=true and email option selected)."
+    },
+    {
+      id: "faq-task-10",
+      kind: "FAQ",
+      topic_id: "topic-company",
+      source_knowledge_id: "kno-task-communication-v10",
+      source_version: "v1.0",
+      source_title: "K SELECT Brand Portal 1:1 문의 및 비즈니스 소통 관리 매뉴얼 (MAN-B-TASK-001)",
+      portal_scope: "BRAND",
+      audience: ["BRAND"],
+      status: "APPROVED",
+      is_featured: false,
+      display_order: 10,
+      generated_by: "MANUAL",
+      question_ko: "사용자 관리의 주 담당자 배정(PERM)과 지원 센터 1:1 문의(TASK)는 어떻게 구분되나요?",
+      question_en: "How is Primary Task Owner Routing (PERM) disambiguated from Dynamic 1:1 Support Cases (TASK)?",
+      answer_ko: "PERM(company_task_assignments)의 6대 담당 업무 설정은 운영 소통 책임자 지정 및 알림 수신용 정적 라우팅입니다. TASK(partner_inquiries)는 실시간 1:1 대화 및 상태 추적을 다루는 독립 도메인입니다.",
+      answer_en: "PERM task assignment specifies static primary contact routing for email notifications, while TASK manages dynamic 1:1 inquiry cases independently."
+    }
+  ];
+
+  // Insert/Upsert FAQs into DB
+  for (const faq of taskFaqs) {
+    const { error: faqErr } = await admin
+      .from('knowledge_faqs')
+      .upsert(faq, { onConflict: 'id' });
+
+    if (faqErr) {
+      console.error(`Error upserting ${faq.id}:`, faqErr);
+      process.exit(1);
+    } else {
+      console.log(`✓ ${faq.id} (${faq.is_featured ? '⭐ Featured' : 'Normal'}) registered in DB`);
+    }
+  }
+
+  console.log('\n====================================================');
+  console.log('MAN-B-TASK-001 FAQS PUBLISH COMPLETE');
+  console.log('====================================================');
+}
+
+publishTaskFaqs().catch(err => {
+  console.error('Publish failed:', err);
+  process.exit(1);
+});
