@@ -16,12 +16,12 @@ flowchart TD
         A1[브랜드사: 지원 센터 접속 /portal/support] --> A2{문의 경로 선택}
         A2 -->|직접 등록| A3[카테고리 선택 및 문의 작성]
         A2 -->|도메인 딥링크| A4["타 화면에서 '문의하기' 클릭<br/>(PO / 정산 / 계약 컨텍스트 자동 바인딩)"]
-        A3 & A4 --> A5[첨부파일 업로드 P/L, C/I, 캡처]
+        A3 & A4 --> A5[첨부파일 업로드 P/L, C/I, 캡처 - 최대 20MB]
         A5 --> A6["문의 제출 (Submit Case)<br/>상태: RECEIVED (접수됨)"]
     end
 
     subgraph TRIAGE["2. 어드민 분류 및 검토 (Admin Triage)"]
-        A6 --> B1[K SELECT 어드민 알림 수신]
+        A6 --> B1[K SELECT 어드민 인앱 알림 수신]
         B1 --> B2[담당 팀 및 담당자 배정 assigned_to]
         B2 --> B3["케이스 검토 개시<br/>상태: UNDER_REVIEW (검토중)"]
     end
@@ -30,15 +30,15 @@ flowchart TD
         B3 --> C1{추가 정보/조치 필요 여부?}
         
         %% Action Required Branch
-        C1 -->|조치 필요| C2["어드민: 조치 요청 발송 (isActionRequired=true)<br/>상태: ACTION_REQUIRED (조치필요)"]
-        C2 --> C3[브랜드사: 인앱 알림 및 이메일 수신]
+        C1 -->|조치 필요| C2["어드민: 조치 요청 발송 (isActionRequired=true, sendEmail)<br/>상태: ACTION_REQUIRED (조치필요)"]
+        C2 --> C3[브랜드사: 인앱 알림 및 조건부 이메일 수신]
         C3 --> C4[브랜드사: 보완 서류 제출 및 답변 등록]
-        C4 --> C5["조치 완료 처리<br/>상태: UNDER_REVIEW (검토중)"]
+        C4 --> C5["조치 완료 처리 (resolvePartnerInquiryAction)<br/>상태: UNDER_REVIEW (검토중)"]
         C5 --> B3
         
         %% Normal Resolution Branch
-        C1 -->|일반 답변 / 문제 해결| D1[어드민: 답변 작성 및 발송]
-        D1 --> D2[브랜드사: 답변 확인]
+        C1 -->|일반 답변 / 문제 해결| D1[어드민: 일반 스레드 답변 작성]
+        D1 --> D2[브랜드사: 인앱 알림 확인 및 답변 열람]
     end
 
     subgraph CLOSURE["4. 케이스 종결 및 만족도 평가 (Closure & CSAT)"]
@@ -82,7 +82,7 @@ flowchart LR
     end
 
     subgraph SUPPORT_PORTAL["[MAN-B-TASK-001] 1:1 케이스 센터"]
-        S1["새 문의 모달 자동 오픈<br/>• 관련 발주서 배지 자동 바인딩<br/>• 카테고리 자동 설정<br/>• 관련 전표 식별자 즉시 연동"]
+        S1["새 문의 모달 자동 오픈<br/>• 관련 발주서 FK 배지 자동 바인딩<br/>• 카테고리 자동 설정<br/>• 관련 전표 식별자 즉시 연동"]
     end
 
     D1 --> B1 --> U1 --> S1
@@ -109,27 +109,27 @@ sequenceDiagram
 
     Brand->>Portal: 1:1 문의 등록 (제목, 본문, 첨부파일)
     Portal->>Portal: partner_inquiries 생성 (status: open, CASE-XXXX)
-    Portal->>Admin: 어드민 인바운드 알림 발생
+    Portal->>Admin: 어드민 인앱 알림 발생 (notifications)
     Admin->>Portal: 문의 확인 및 검토중 전환 (status -> in_review)
     
     rect rgb(254, 242, 242)
         Note over Admin, Brand: 조치 필요 (Action Required) 시나리오
-        Admin->>Portal: 조치 요청 메시지 작성 (isActionRequired=true)
+        Admin->>Portal: 조치 요청 메시지 작성 (isActionRequired=true, sendEmail=true)
         Portal->>Portal: partner_inquiry_messages 기록 (message_type: action_required)
         Portal->>Portal: partner_inquiries.status -> action_required
         Portal->>Brand: 인앱 알림 발생 (헤더 알림 센터 배지)
         Portal->>Resend: 주 담당자(Primary Contact)에게 이메일 알림 전송
         Resend-->>Brand: 이메일 도착 ("조치가 필요한 문의가 있습니다")
         Brand->>Portal: 포털 접속 후 추가 서류 업로드 및 답변 제출
-        Portal->>Portal: partner_inquiries.status -> in_review (조치 완료 복귀)
+        Portal->>Portal: resolvePartnerInquiryAction 실행 -> status: in_review (조치 완료 복귀)
     end
 
     rect rgb(240, 253, 244)
         Note over Admin, Brand: 케이스 해결 및 종결 시나리오
-        Admin->>Portal: 최종 해결 답변 등록 및 케이스 종결 처리
+        Admin->>Portal: 최종 해결 답변 등록 및 케이스 종결 (closeCaseAdmin)
         Portal->>Portal: partner_inquiries.status -> closed
-        Brand->>Portal: 해결 내용 확인 및 만족도 평가 제출 (5점 만점)
-        Portal->>Portal: satisfaction_score 기록 및 케이스 최종 마감
+        Brand->>Portal: 해결 내용 확인 및 만족도 평가 제출 (submitSatisfactionRating)
+        Portal->>Portal: satisfaction_score 기록 및 satisfaction 메시지 스레드 추가
     end
 ```
 
@@ -139,17 +139,17 @@ sequenceDiagram
 
 ```mermaid
 stateDiagram-v2
-    [*] --> RECEIVED : 신규 문의 제출 (Submit Case)
+    [*] --> RECEIVED : 신규 문의 제출 (open / pending)
     
-    RECEIVED --> UNDER_REVIEW : 어드민 담당자 배정 및 검토 개시
+    RECEIVED --> UNDER_REVIEW : 어드민 담당자 배정 및 검토 개시 (in_review)
     
     UNDER_REVIEW --> ACTION_REQUIRED : 어드민 조치 요청 (isActionRequired = true)
-    ACTION_REQUIRED --> UNDER_REVIEW : 브랜드사 보완 답변 제출 또는 조치 완료
+    ACTION_REQUIRED --> UNDER_REVIEW : 브랜드사 보완 답변 제출 (resolvePartnerInquiryAction)
     
-    UNDER_REVIEW --> CLOSED : 문제 해결 및 케이스 종결 (Admin 또는 Brand)
+    UNDER_REVIEW --> CLOSED : 문제 해결 및 케이스 종결 (closeCase / closeCaseAdmin)
     RECEIVED --> CLOSED : 단순 확인 후 즉시 종결
     
-    CLOSED --> UNDER_REVIEW : 추가 질문 등록으로 케이스 재오픈 (Reopen)
+    CLOSED --> UNDER_REVIEW : 추가 질문 등록으로 케이스 재오픈 (reopened)
     
     CLOSED --> [*] : 만족도 평가 제출 및 영구 마감
 ```
@@ -160,16 +160,16 @@ stateDiagram-v2
 
 ```mermaid
 flowchart TD
-    A[이벤트 발생: 조치 요청 / 답변 등록 / 상태 변경] --> B{"회사 6대 업무 라우팅 매핑<br/>(company_task_assignments)"}
+    A[이벤트 발생: 조치 요청 isActionRequired=true] --> B{"회사 6대 업무 라우팅 매핑<br/>(company_task_assignments)"}
     
-    B -->|문의 카테고리에 해당하는 task_code 조회| C[해당 업무의 주 담당자 is_primary=true 식별]
+    B -->|해당 카테고리 task_code 조회| C["주 담당자(is_primary=true) 식별<br/>(company_apply, contract, product_cert,<br/>pricing_quote, logistics_inventory, settlement_inquiry)"]
     B -->|추가 알림 수신 동의자 email_notify=true 조회| D[동의 직원 목록 추출]
     
     C & D --> E[Resend Transactional Email 엔진 호출]
     E --> F["담당자 업무 이메일 수신<br/>(제목: [K SELECT] 조치 요청 안내 - CASE-XXXX)"]
     
     A --> G[인앱 알림 notifications 레코드 생성]
-    G --> H["브랜드 포털 헤더 알림 센터 피드 노출<br/>(미확인 알림 뱃지 카운트 표시)"]
+    G --> H["브랜드 포털 헤더 알림 센터 피드 노출<br/>(read_notification_ids 기준 읽음 추적)"]
 
     style A fill:#f8fafc,stroke:#64748b
     style B fill:#eff6ff,stroke:#3b82f6
@@ -192,7 +192,7 @@ flowchart TD
     
     Check -->|write / 2단계| P2["생성 및 대화 참여 모드 (Standard Staff)<br/>• 신규 1:1 문의 작성 및 첨부파일 업로드<br/>• 스레드 답변 작성 및 조치 보완 제출"]
     
-    Check -->|manage / 3단계| P3["관리 및 종결 모드 (Full Admin/Manager)<br/>• 케이스 직접 종결 (Close Case)<br/>• 만족도 평가 제출 (CSAT)<br/>• 전 기능 제어 권한"]
+    Check -->|manage / 3단계| P3["관리 및 종결 모드 (Full Admin/Manager)<br/>• 케이스 직접 종결 (closeCase)<br/>• 만족도 평가 제출 (CSAT)<br/>• 전 기능 제어 권한"]
 
     style P0 fill:#fef2f2,stroke:#ef4444
     style P1 fill:#f8fafc,stroke:#94a3b8
@@ -222,7 +222,7 @@ flowchart TD
     end
 
     subgraph PERM["MAN-B-PERM-001: 권한 & 조직"]
-        P1[회사 6대 업무별 주 담당자 지정]
+        P1["회사 6대 업무별 주 담당자 지정<br/>(company_apply, contract, product_cert,<br/>pricing_quote, logistics_inventory, settlement_inquiry)"]
     end
 
     subgraph TASK["MAN-B-TASK-001: 할 일 & 1:1 소통 (본 매뉴얼)"]
@@ -232,7 +232,7 @@ flowchart TD
         T4[케이스 종결 및 만족도 평가]
     end
 
-    O2 -.->|po_change 카테고리 딥링크| T1
+    O2 -.->|po_change 카테고리 딥링크 & FK 연동| T1
     L2 -.->|logistics 카테고리 문의| T1
     F2 -.->|settlement 카테고리 딥링크| T1
     P1 ==>|시스템 이메일 알림 수신인 라우팅 제공| T1
