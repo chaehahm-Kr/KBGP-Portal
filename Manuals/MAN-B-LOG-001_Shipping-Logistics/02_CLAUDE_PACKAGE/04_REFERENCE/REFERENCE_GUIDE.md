@@ -97,6 +97,6 @@ $$\text{CBM} = \text{카톤 가로(m)} \times \text{카톤 세로(m)} \times \te
 
 ## 4. Support & Inquiry Channels (고객지원)
 
-- **Ask K SELECT (AI 지식 센터)**: Brand Portal 우측 상단 `Ask K SELECT` 메뉴를 통해 24시간 실시간 정책 및 물류 가이드 검색 가능.
+- **Ask K SELECT (Knowledge Assistant)**: Brand Portal의 `Ask K SELECT`에서 Published Knowledge를 기반으로 정책 및 물류 가이드를 검색하고 관련 안내를 확인할 수 있습니다.
 - **1:1 운영 문의 (Support Center)**: `https://portal.kselectnetwork.com/portal/support` 에서 물류/선적 문의 티켓 발행.
 - **긴급 물류 핫라인**: `logistics@letusto.com` / 본사 물류운영본부.
