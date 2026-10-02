@@ -24,7 +24,7 @@ flowchart TD
     end
 
     subgraph Phase3["3. FAQ Generation & Review"]
-        K2 --> F1["Draft FAQs Grounded 1:1 in Manual Chapters"]
+        K2 --> F1["Draft FAQs Grounded in Canonical Manual Sources"]
         F1 --> F2["Admin Review (/admin/knowledge/topics-faq)"]
         F2 --> F3["Review Status: APPROVED & Set is_featured"]
     end
