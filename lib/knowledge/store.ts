@@ -3220,6 +3220,46 @@ Official user manual for K SELECT Brand Portal partners submitting shipping read
       related_route: "/portal/orders/shipping/new",
       manual_title: "K SELECT Brand Portal 선적 및 국제 물류 관리 매뉴얼 (MAN-B-LOG-001)",
       created_at: now
+    },
+    {
+      id: "rel-log-shipping-detail",
+      knowledge_id: "kno-shipping-logistics-v10",
+      related_portal: "Brand Portal",
+      related_module: "LOGISTICS",
+      related_menu: "Goods Readiness Detail & Handover",
+      related_route: "/portal/orders/shipping/[id]",
+      manual_title: "K SELECT Brand Portal 선적 및 국제 물류 관리 매뉴얼 (MAN-B-LOG-001)",
+      created_at: now
+    },
+    {
+      id: "rel-admin-shipments-mgmt",
+      knowledge_id: "kno-shipping-logistics-v10",
+      related_portal: "Admin",
+      related_module: "LOGISTICS",
+      related_menu: "Admin Shipments Management",
+      related_route: "/admin/orders/shipments",
+      manual_title: "K SELECT Brand Portal 선적 및 국제 물류 관리 매뉴얼 (MAN-B-LOG-001)",
+      created_at: now
+    },
+    {
+      id: "rel-admin-shipment-detail",
+      knowledge_id: "kno-shipping-logistics-v10",
+      related_portal: "Admin",
+      related_module: "LOGISTICS",
+      related_menu: "Admin Inbound Shipment Detail",
+      related_route: "/admin/orders/shipments/[id]",
+      manual_title: "K SELECT Brand Portal 선적 및 국제 물류 관리 매뉴얼 (MAN-B-LOG-001)",
+      created_at: now
+    },
+    {
+      id: "rel-admin-warehouse-receiving",
+      knowledge_id: "kno-shipping-logistics-v10",
+      related_portal: "Admin",
+      related_module: "LOGISTICS",
+      related_menu: "Admin Warehouse Receiving Inspection",
+      related_route: "/admin/warehouse/receiving/[id]",
+      manual_title: "K SELECT Brand Portal 선적 및 국제 물류 관리 매뉴얼 (MAN-B-LOG-001)",
+      created_at: now
     }
   ];
 
