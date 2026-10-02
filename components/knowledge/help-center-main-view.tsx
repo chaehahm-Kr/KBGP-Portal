@@ -301,6 +301,17 @@ export function HelpCenterMainView({
     });
   }, [faqs, selectedTopicId, faqPrimaryTopicMap]);
 
+  // Auto-select first FAQ in selected topic if none selected or topic changed
+  useEffect(() => {
+    if (topicSpecificFaqs.length > 0) {
+      if (!openTopicFaqId || !topicSpecificFaqs.some(f => f.id === openTopicFaqId)) {
+        setOpenTopicFaqId(topicSpecificFaqs[0].id);
+      }
+    } else {
+      setOpenTopicFaqId(null);
+    }
+  }, [selectedTopicId, topicSpecificFaqs]);
+
   // Knowledge Items belonging to the selected Topic (Only relevant published docs)
   const topicSpecificItems = useMemo(() => {
     if (!selectedTopicId) return [];
@@ -787,12 +798,100 @@ export function HelpCenterMainView({
           {/* 1. Topic FAQs First */}
           {topicSpecificFaqs.length > 0 && (
             <div className="space-y-2">
-              <div className="text-xs font-bold text-zinc-700 dark:text-zinc-300 flex items-center gap-1.5">
-                <span>💡 자주 묻는 질문</span>
-                <span className="text-[11px] font-mono text-zinc-400">({topicSpecificFaqs.length})</span>
+              <div className="text-xs font-bold text-zinc-700 dark:text-zinc-300 flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                  <span>💡 자주 묻는 질문</span>
+                  <span className="text-[11px] font-mono text-zinc-400">({topicSpecificFaqs.length})</span>
+                </div>
+                <span className="hidden md:inline text-[11px] text-zinc-400">
+                  질문을 선택하면 오른쪽에 답변이 표시됩니다.
+                </span>
               </div>
 
-              <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 divide-y divide-zinc-100 dark:divide-zinc-800 overflow-hidden shadow-xs">
+              {/* DESKTOP SPLIT VIEW: md:grid md:grid-cols-12 */}
+              <div className="hidden md:grid md:grid-cols-12 gap-4 items-start">
+                {/* Left Column: Questions List (span 5) */}
+                <div className="md:col-span-5 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 overflow-hidden shadow-xs">
+                  <div className="px-3.5 py-2.5 bg-zinc-50/80 dark:bg-zinc-950/60 border-b border-zinc-200/80 dark:border-zinc-800 flex items-center justify-between">
+                    <span className="text-xs font-bold text-zinc-700 dark:text-zinc-300 flex items-center gap-1.5">
+                      <span>Q. 질문 목록</span>
+                      <span className="text-[10px] font-mono font-normal text-zinc-400">({topicSpecificFaqs.length})</span>
+                    </span>
+                  </div>
+                  <div className="max-h-[460px] overflow-y-auto divide-y divide-zinc-100 dark:divide-zinc-800/80">
+                    {topicSpecificFaqs.map((faq) => {
+                      const isActive = (openTopicFaqId || topicSpecificFaqs[0]?.id) === faq.id;
+                      return (
+                        <button
+                          key={faq.id}
+                          type="button"
+                          onClick={() => setOpenTopicFaqId(faq.id)}
+                          className={`w-full text-left transition-colors cursor-pointer flex items-start gap-2.5 ${
+                            isActive
+                              ? "bg-blue-50/90 dark:bg-blue-950/50 text-blue-900 dark:text-blue-200 font-bold border-l-4 border-blue-600 dark:border-blue-500 pl-3 pr-3.5 py-3"
+                              : "hover:bg-zinc-50 dark:hover:bg-zinc-800/40 text-zinc-700 dark:text-zinc-300 font-medium border-l-4 border-transparent pl-3 pr-3.5 py-3"
+                          }`}
+                        >
+                          <span className={`font-mono font-bold text-xs shrink-0 mt-0.5 ${isActive ? "text-blue-600 dark:text-blue-400" : "text-zinc-400"}`}>
+                            Q.
+                          </span>
+                          <span className="text-xs leading-snug line-clamp-2">
+                            {faq.question_ko}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Right Column: Active Answer Detail View (span 7) */}
+                <div className="md:col-span-7">
+                  {(() => {
+                    const activeFaq = topicSpecificFaqs.find(f => f.id === openTopicFaqId) || topicSpecificFaqs[0];
+                    if (!activeFaq) return null;
+                    return (
+                      <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-5 shadow-xs flex flex-col justify-between min-h-[320px] space-y-4">
+                        <div className="space-y-4">
+                          <div className="flex items-start gap-2.5 pb-3 border-b border-zinc-100 dark:border-zinc-800">
+                            <span className="text-blue-600 dark:text-blue-400 font-mono font-bold text-base shrink-0 mt-0.5">
+                              Q.
+                            </span>
+                            <h4 className="text-sm sm:text-base font-bold text-zinc-900 dark:text-white leading-snug">
+                              {activeFaq.question_ko}
+                            </h4>
+                          </div>
+
+                          <div className="flex items-start gap-2.5 pt-1">
+                            <span className="text-emerald-600 dark:text-emerald-400 font-mono font-bold text-sm shrink-0 mt-0.5">
+                              A.
+                            </span>
+                            <div className="text-xs sm:text-sm text-zinc-700 dark:text-zinc-300 leading-relaxed font-normal whitespace-pre-line space-y-2 flex-1">
+                              {activeFaq.answer_ko}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center justify-between text-[11px] text-zinc-400 pt-3 border-t border-zinc-100 dark:border-zinc-800 mt-auto">
+                          <span className="font-mono truncate max-w-[260px] sm:max-w-[340px]">
+                            출처: {activeFaq.source_title || activeFaq.source_knowledge_id} ({activeFaq.source_version})
+                          </span>
+                          {activeFaq.source_knowledge_id && (
+                            <Link
+                              href={`${baseHelpPath}/${activeFaq.source_knowledge_id}`}
+                              className="text-blue-600 hover:text-blue-700 dark:text-blue-400 font-semibold shrink-0"
+                            >
+                              공식 도움말 보기 &rarr;
+                            </Link>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+              </div>
+
+              {/* MOBILE ACCORDION VIEW: md:hidden */}
+              <div className="block md:hidden rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 divide-y divide-zinc-100 dark:divide-zinc-800 overflow-hidden shadow-xs">
                 {topicSpecificFaqs.map((faq) => {
                   const isOpen = openTopicFaqId === faq.id;
                   return (
@@ -827,11 +926,6 @@ export function HelpCenterMainView({
                             </span>
                             <div className="space-y-1.5 leading-relaxed flex-1">
                               <p className="font-normal">{faq.answer_ko}</p>
-                              {faq.answer_en && (
-                                <p className="text-[11px] text-zinc-500 dark:text-zinc-400 pt-1 border-t border-zinc-200/50 dark:border-zinc-800">
-                                  {faq.answer_en}
-                                </p>
-                              )}
                             </div>
                           </div>
 

@@ -561,11 +561,6 @@ export function HelpCenterDetailView({
                         </span>
                         <div className="space-y-1.5 leading-relaxed flex-1">
                           <p className="font-normal">{faq.answer_ko}</p>
-                          {faq.answer_en && (
-                            <p className="text-[11px] text-zinc-500 dark:text-zinc-400 pt-1 border-t border-zinc-200/50 dark:border-zinc-800">
-                              {faq.answer_en}
-                            </p>
-                          )}
                         </div>
                       </div>
                     </div>
