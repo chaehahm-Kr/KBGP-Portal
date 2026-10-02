@@ -45,7 +45,7 @@ export const CANONICAL_BRAND_TOPICS: CanonicalTopic[] = [
     icon: "🚀",
     order: 1,
     matchModules: ["ONBOARDING", "SIGNUP", "ACCOUNT", "START", "SETUP"],
-    matchKeywords: ["가입", "시작", "온보딩", "초기 설정", "계정", "onboarding", "signup", "start", "account"]
+    matchKeywords: ["가입", "시작", "온보딩", "초기 설정", "계정", "onboarding", "signup", "start", "account", "man-onb-001", "man-b-onb-001"]
   },
   {
     id: "topic-brand",
@@ -59,7 +59,7 @@ export const CANONICAL_BRAND_TOPICS: CanonicalTopic[] = [
     icon: "🏷️",
     order: 2,
     matchModules: ["BRAND", "BRANDS", "BRAND_POLICY"],
-    matchKeywords: ["브랜드", "상표권", "브랜드 삭제", "브랜드 비활성화", "brand", "trademark", "ownership", "man-brand-001"]
+    matchKeywords: ["브랜드", "상표권", "브랜드 삭제", "브랜드 비활성화", "brand", "trademark", "ownership", "man-brand-001", "man-b-brand-001"]
   },
   {
     id: "topic-product",
@@ -73,7 +73,11 @@ export const CANONICAL_BRAND_TOPICS: CanonicalTopic[] = [
     icon: "📦",
     order: 3,
     matchModules: ["PRODUCTS", "PRODUCT", "SKU", "CATALOG"],
-    matchKeywords: ["상품", "제품", "sku", "카탈로그", "바코드", "product", "item"]
+    matchKeywords: [
+      "상품", "제품", "sku", "카탈로그", "바코드", "product", "item", "man-prod-001", "man-b-prod-001",
+      "상품 등록", "상품 수정", "이미지", "가격", "물류", "인증서", "cbm", "fob", "draft", "moq", "upc", "ean", "단품", "카톤",
+      "add product", "draft product", "product image", "pricing", "logistics", "package", "certification"
+    ]
   },
   {
     id: "topic-regulatory",
@@ -179,8 +183,10 @@ export const CANONICAL_BRAND_TOPICS: CanonicalTopic[] = [
  * Authoritative Primary Topic mapping for known Knowledge IDs.
  */
 const AUTHORITATIVE_PRIMARY_TOPIC_MAP: Record<string, string> = {
-  "kno-brand-policy-v10": "topic-brand", // MAN-BRAND-001 -> 브랜드 관리
-  "kno-002-brand-faq": "topic-start",   // Onboarding FAQ -> 시작하기
+  "kno-brand-policy-v10": "topic-brand", // MAN-B-BRAND-001 -> 브랜드 관리
+  "kno-onboarding-guide-v10": "topic-start", // MAN-B-ONB-001 -> 시작하기
+  "kno-product-management-v10": "topic-product", // MAN-B-PROD-001 -> 상품 등록 & 관리
+  "kno-002-brand-faq": "topic-start", // Onboarding FAQ -> 시작하기
   "kno-insights-manual-v10": "topic-start",
   "kno-insights-policy-prohibitions": "topic-start"
 };
