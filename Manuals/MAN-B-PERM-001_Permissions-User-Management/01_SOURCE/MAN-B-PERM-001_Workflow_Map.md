@@ -3,7 +3,7 @@
 
 **Manual ID:** `MAN-B-PERM-001`  
 **Topic:** Verified Workflows for Identity, Invitation, ACL Enforcement & Multi-Tenant Security  
-**Phase:** `01_SOURCE`  
+**Phase:** `01_SOURCE — FINAL SOURCE INTEGRITY REVIEW (R1)`  
 **Authoritative Reference:** Production Middleware, DAL, Server Actions & PostgreSQL RLS Policies
 
 ---
@@ -121,20 +121,27 @@ flowchart TD
 
 ---
 
-## 5. Server Action Authorization & Protected Execution Flow
+## 5. Server Action Authorization Enforcement Flow
 
 ```mermaid
 flowchart TD
     A["Brand Portal User Triggers Server Action<br/>(e.g., createProduct, updatePORequest, submitApplication)"] --> B["requireCompanyMembership()"]
     B --> C{"User Active in Company?"}
     C -->|No| D["Throw Membership Inactive Error"]
-    C -->|Yes| E["requirePortalPermission(category, requiredLevel)"]
+    C -->|Yes| E{"Requires Category ACL Check?"}
     
-    E --> F{"User's ACL Level >= Required Level?<br/>(none:0, read:1, write:2, manage:3)"}
-    F -->|No| G["Throw Unauthorized Error:<br/>'이 작업을 수행할 권한이 없습니다.'"]
-    F -->|Yes| H["Execute Business Action with Target company_id Context"]
-    H --> I["PostgreSQL RLS Safety Check"]
-    I --> J["Return Action Result to Client"]
+    E -->|Yes (e.g. products:write)| F["requirePortalPermission(category, requiredLevel)"]
+    F --> G{"User ACL Level >= Required Level?<br/>(none:0, read:1, write:2, manage:3)"}
+    G -->|No| H["Throw Unauthorized Error:<br/>'이 작업을 수행할 권한이 없습니다.'"]
+    G -->|Yes| I["Execute Business Action with Target company_id Context"]
+    
+    E -->|No (Admin-only action)| J["requireCompanyAdmin()"]
+    J --> K{"companyRole === 'company_admin'?"}
+    K -->|No| L["Throw Admin Role Required Error"]
+    K -->|Yes| I
+    
+    I --> M["PostgreSQL Database RLS Validation"]
+    M --> N["Return Action Result to Client"]
 ```
 
 ---
@@ -154,7 +161,7 @@ flowchart TD
         F2["public.auth_is_admin()<br/>Returns true if caller is Letusto Staff"]
     end
 
-    subgraph DatabaseLayer ["PostgreSQL Database Tables with FORCE RLS"]
+    subgraph DatabaseLayer ["PostgreSQL Database Tables with RLS"]
         T1[("companies")]
         T2[("company_users")]
         T3[("brands")]
@@ -204,4 +211,4 @@ flowchart TD
 ```
 
 ---
-*End of MAN-B-PERM-001 Workflow Map*
+*End of MAN-B-PERM-001 Workflow Map (R1)*

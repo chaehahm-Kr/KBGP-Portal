@@ -3,7 +3,7 @@
 
 **Manual ID:** `MAN-B-PERM-001`  
 **Topic:** Field Inventory for User Management, ACL Matrix, Task Assignments & My Account  
-**Phase:** `01_SOURCE`  
+**Phase:** `01_SOURCE — FINAL SOURCE INTEGRITY REVIEW (R1)`  
 **Authoritative Reference:** Live UI Components, Server Actions & PostgreSQL Database Schema
 
 ---
@@ -29,7 +29,7 @@
 | :--- | :--- | :--- | :--- | :---: | :---: | :--- | :--- | :--- | :--- |
 | **기본 정보** | 영문 성 (English Last Name) | `englishLastName` | String | ✅ | ✅ | 영문자(A-Z, a-z), 공백, 하이픈(-), 아포스트로피(')만 허용 | Empty | `company_users.permissions->english_last_name` | 필수 입력. 해외 바이어/리테일러 커뮤니케이션용. |
 | **기본 정보** | 영문 이름 (English First Name) | `englishFirstName` | String | ✅ | ✅ | 영문자(A-Z, a-z), 공백, 하이픈(-), 아포스트로피(')만 허용 | Empty | `company_users.permissions->english_first_name` | 필수 입력. |
-| **기본 정보** | 한글 성 (Korean Last Name) | `koreanLastName` | String | ❌ | ✅ | 1~2자 한글 권장 | Empty | `company_users.permissions->korean_last_name` | 선택 입력. |
+| **기본 정보** | 한글 성 (Korean Last Name) | `koreanLastName` | String | ❌ | ✅ | 한글 문자 | Empty | `company_users.permissions->korean_last_name` | 선택 입력. |
 | **기본 정보** | 한글 이름 (Korean First Name) | `koreanFirstName` | String | ❌ | ✅ | 한글 문자 | Empty | `company_users.permissions->korean_first_name` | 선택 입력. |
 | **기본 정보** | 이메일 (Login Email) | `email` | String (Email) | ✅ | ✅ | RFC 5322 이메일 규격 + 전사 중복 체크 | Empty | `company_users.email`, `auth.users.email` | 고유 계정 식별자. 초대 이메일 수신 주소. |
 | **역할 설정** | 회사 내 역할 (Company Role) | `rawRolePreset` | Select / Preset | ✅ | ✅ | 5 Role Presets 중 선택 | `viewer` | `company_users.company_role`, `permissions->preset` | 역할 선택 시 오른쪽 ACL 매트릭스가 자동 세팅됨. |
@@ -46,8 +46,8 @@
 | **1. 기본 정보** | 영문 성 (English Last Name) | `formEnglishLastName` | String | ❌ | ✅ | 영문자 규격 (`isPureEnglishName`) | `company_users.permissions->english_last_name` |
 | **1. 기본 정보** | 영문 이름 (English First Name) | `formEnglishFirstName` | String | ❌ | ✅ | 영문자 규격 (`isPureEnglishName`) | `company_users.permissions->english_first_name` |
 | **1. 기본 정보** | 이메일 (Login Email) | `formEmail` | String (Email) | ✅ | ✅ | 유효 이메일 규격, 타사 중복 불가 | `company_users.email`, `auth.users.email` |
-| **1. 기본 정보** | 직함 (Job Title) | `formTitle` | String | ❌ | ✅ | 최대 50자 | `company_users.title` |
-| **1. 기본 정보** | 포지션 / 부서 (Department) | `formPosition` | String | ❌ | ✅ | 최대 50자 | `company_users.position` |
+| **1. 기본 정보** | 직함 (Job Title) | `formTitle` | String | ❌ | ✅ | 문자열 | `company_users.title` |
+| **1. 기본 정보** | 포지션 / 부서 (Department) | `formPosition` | String | ❌ | ✅ | 문자열 | `company_users.position` |
 | **1. 기본 정보** | 연락처 (Phone Number) | `formPhone` | String (E.164) | ❌ | ✅ | 국제 표준 전화번호 포맷 | `company_users.phone` |
 | **1. 기본 정보** | 이용 제한 상태 | `formStatus` | Enum Select | ✅ | ✅ | `active` (정상 이용) vs `suspended` (이용 일시정지) | `company_users.status` |
 | **1. 기본 정보** | 대표 담당자 지정 | `formIsPrimary` | Checkbox | ❌ | ✅ | Boolean (회사당 1명만 대표 지정 시 타사원 해제) | `company_users.is_primary` |
@@ -113,4 +113,4 @@
 | `updated_path` | `text` | NOT NULL, CHECK in (`portal`, `admin`) | None | Update Origin Channel |
 
 ---
-*End of MAN-B-PERM-001 Field Inventory*
+*End of MAN-B-PERM-001 Field Inventory (R1)*

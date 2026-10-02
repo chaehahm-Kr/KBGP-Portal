@@ -3,8 +3,8 @@
 
 **Manual ID:** `MAN-B-PERM-001`  
 **Topic:** Production Screenshot Inventory & Annotation Requirements  
-**Phase:** `01_SOURCE`  
-**Target Manual Standard:** High-Resolution Crisp Desktop (1440×900) & Mobile (390×844) Visual Documentation
+**Phase:** `01_SOURCE — FINAL SOURCE INTEGRITY REVIEW (R1)`  
+**Target Manual Standard:** High-Resolution Desktop (1440×900) & Mobile (390×844) Visual Documentation
 
 ---
 
@@ -59,4 +59,4 @@
 - **Annotation 2 (Password Change Card)**: `[보안 비밀번호 변경]` — 현재 비밀번호 재인증 및 새 비밀번호 설정.
 
 ---
-*End of MAN-B-PERM-001 Screenshot Requirements*
+*End of MAN-B-PERM-001 Screenshot Requirements (R1)*
