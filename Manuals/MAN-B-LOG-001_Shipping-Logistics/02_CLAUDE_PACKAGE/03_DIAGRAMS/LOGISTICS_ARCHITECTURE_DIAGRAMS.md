@@ -147,19 +147,20 @@ stateDiagram-v2
 
 ```mermaid
 stateDiagram-v2
-    [*] --> CREATED : 선적 생성 (Draft/Booking)
-    
-    CREATED --> IN_TRANSIT : 출항 / 운송 개시 (Shipped)
-    IN_TRANSIT --> ARRIVED : 미국 물류센터 도착 (Delivered)
-    
-    ARRIVED --> PARTIALLY_RECEIVED : 일부 품목/수량 실물 검수 완료
-    ARRIVED --> RECEIVED : 전체 품목 전수 실물 검수 완료
-    PARTIALLY_RECEIVED --> RECEIVED : 잔여 품목 입고 검수 완료
-    
-    RECEIVED --> COMPLETED : 최종 입고 승인 및 행정 종결
-    
-    CREATED --> CANCELLED : 선적 취소
-    IN_TRANSIT --> CANCELLED : 운송 사고 / 선적 취소
+    state "MAN-B-LOG-001: 물류 & 선적 관할 (Logistics Transport)" as LOGISTICS {
+        [*] --> CREATED : 선적 생성 (Draft/Booking)
+        CREATED --> IN_TRANSIT : 출항 / 운송 개시 (Shipped)
+        IN_TRANSIT --> ARRIVED : 미국 물류센터 도착 (Delivered)
+        CREATED --> CANCELLED : 선적 취소
+        IN_TRANSIT --> CANCELLED : 운송 사고 / 선적 취소
+    }
+
+    state "Warehouse Receiving: 창고 입고 검수 관할 (Admin/창고)" as WAREHOUSE_RECEIVING {
+        ARRIVED --> PARTIALLY_RECEIVED : 일부 품목 실물 검수
+        ARRIVED --> RECEIVED : 전체 품목 전수 실물 검수 완료
+        PARTIALLY_RECEIVED --> RECEIVED : 잔여 품목 입고 검수 완료
+        RECEIVED --> COMPLETED : 최종 입고 승인 및 행정 종결
+    }
 ```
 
 ---

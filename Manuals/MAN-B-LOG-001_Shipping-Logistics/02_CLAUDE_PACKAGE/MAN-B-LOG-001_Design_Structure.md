@@ -23,7 +23,7 @@
 - **Visual Composition:**
   - 상단: `K SELECT NETWORK` 공식 로고 (Black / Deep Navy)
   - 중앙 메인 타이틀: `K SELECT Brand Portal Manual Series: Shipping & International Logistics Guide` (28pt Bold)
-  - 서브 타이틀: `출고 준비, 카고 규격 등록, 운송 분기 및 미국 창고 입고 인계 완벽 가이드` (14pt Medium)
+  - 서브 타이틀: `출고 준비, 카고 규격 등록, 운송 분기 및 미국 창고 입고 인계 종합 가이드` (14pt Medium)
   - 우측/중앙 그래픽: 현대적인 국제 물류 컨테이너/화물 추적 인포그래픽 심볼
   - 하단 메타데이터 박스:
     - Manual ID: `MAN-B-LOG-001` | Version: `1.0.0` | Audience: `Brand Portal (B)`
@@ -35,7 +35,7 @@
 - **Left Column:** Table of Contents (Chapter 1 to Chapter 6 with page numbers & dotted leader lines)
 - **Right Column:** Executive Summary Card
   - K SELECT의 4대 비즈니스 도메인(발주 확정 $\rightarrow$ 물류/출고 $\rightarrow$ 창고 검수 $\rightarrow$ 재무 정산) 개요.
-  - 핵심 가치 제안: "출고 준비 스펙의 사전 등록을 통한 국제 운송 지연 제로화 및 입고 검수 투명성 확보".
+  - 핵심 가치 제안: "출고 준비 스펙의 사전 등록을 통한 국제 운송 지연 감소 및 입고 검수 투명성 확보".
 - **Bottom Banner:** `Important Terminology Disambiguation` (ARRIVED ≠ RECEIVED, RECEIVED ≠ COMPLETED).
 
 ---
@@ -114,7 +114,7 @@
 
 ### [Page 9] Chapter 5. 선적 추적 및 미국 창고 입고 인계 (Inbound & Warehouse)
 - **Section 5.1:** 국제 선적 진행 상태 모니터링
-  - 다이어그램: `Diagram 5 — Inbound Shipment State Machine` (CREATED $\rightarrow$ IN_TRANSIT $\rightarrow$ ARRIVED $\rightarrow$ RECEIVED $\rightarrow$ COMPLETED)
+  - 다이어그램: `Diagram 5 — Inbound Shipment State Machine` (Logistics: `CREATED` $\rightarrow$ `IN_TRANSIT` $\rightarrow$ `ARRIVED` | Handoff | Warehouse Receiving: `PARTIALLY_RECEIVED` / `RECEIVED` $\rightarrow$ `COMPLETED`)
   - 스크린샷: `SCR-B-LOG-010.png` (Admin Inbound Shipment Detail — Reference)
 - **Section 5.2:** 미국 창고 도착(Arrival) 및 입고 검수(Receiving Handoff)
   - 다이어그램: `Diagram 6 — Shipping to Warehouse Receiving Handoff Boundary`

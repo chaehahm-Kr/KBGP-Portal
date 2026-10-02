@@ -5,13 +5,13 @@
 
 ```markdown
 당신은 K SELECT의 수석 출판물 디자이너입니다.
-제공된 `MAN-B-LOG-001_Order-Management/02_CLAUDE_PACKAGE` 패키지를 바탕으로, 브랜드사 물류 실무자를 위한 **공식 K SELECT 선적 & 출고 관리(Shipping & Logistics) 매뉴얼 PDF 및 최종 디자인**을 제작해 주십시오.
+제공된 `MAN-B-LOG-001_Shipping-Logistics/02_CLAUDE_PACKAGE` 패키지를 바탕으로, 브랜드사 물류 실무자를 위한 **공식 K SELECT 선적 & 출고 관리(Shipping & Logistics) 매뉴얼 PDF 및 최종 디자인**을 제작해 주십시오.
 
 ### 1. Master Design Reference
-- `MAN-B-BRAND-001_Brand-Policy_V1.pdf`의 디자인 시스템(12-컬럼 그리드, 타이포그래피, 여백, 콜아웃, 다이어그램, 캡션 박스, 러닝 헤더/푸터)을 100% 동일하게 계승하여 제작하십시오.
+- `MAN-B-BRAND-001_Brand-Policy_V1.pdf`의 디자인 시스템(12-컬럼 그리드, 타이포그래피, 여백, 콜아웃, 다이어그램, 캡션 박스, 러닝 헤더/푸터)을 일관되게 계승하여 제작하십시오.
 
 ### 2. Mandatory Content & Chapter Structure
-- `01_CONTENT/MAN-B-LOG-001_Manual_Content.md`의 본문 텍스트 전체를 한 글자도 누락 없이 완벽히 배치하십시오.
+- `01_CONTENT/MAN-B-LOG-001_Manual_Content.md`의 본문 텍스트 전체를 한 글자도 누락 없이 정확히 배치하십시오.
   - Chapter 1: 선적 및 국제 물류 개요 (Logistics Overview & Domain Alignment)
   - Chapter 2: 선적 & 출고 관리 허브 둘러보기 (Shipping Hub UI)
   - Chapter 3: 출고 준비 완료 등록 (Goods Readiness Submission & Cargo Spec)

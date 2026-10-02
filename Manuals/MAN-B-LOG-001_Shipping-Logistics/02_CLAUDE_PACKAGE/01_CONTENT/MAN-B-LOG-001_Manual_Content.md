@@ -81,7 +81,7 @@ Brand Portal 좌측 메뉴에서 **`주문 관리 > 선적 & 출고 관리`**(`/
   - **배송사 (Carrier)**: 선박사, 항공사, 또는 특송사 명칭 (예: Maersk, FedEx, DHL).
   - **ETD (Estimated Time of Departure)**: 출항/출발 예정일.
   - **ETA (Estimated Time of Arrival)**: 미국 현지 도착 예정일.
-  - **선적 상태**: `CREATED` $\rightarrow$ `IN_TRANSIT` $\rightarrow$ `ARRIVED` $\rightarrow$ `RECEIVED` $\rightarrow$ `COMPLETED`.
+  - **선적 상태**: 물류 운송 단계(`CREATED` $\rightarrow$ `IN_TRANSIT` $\rightarrow$ `ARRIVED`) 및 창고 입고 인계 후 상태(`PARTIALLY_RECEIVED` / `RECEIVED` $\rightarrow$ `COMPLETED`).
 
 ---
 
@@ -185,13 +185,18 @@ Brand Portal 좌측 메뉴에서 **`주문 관리 > 선적 & 출고 관리`**(`/
 선적이 개시되면 Brand Portal의 **선적 추적 내역 (Shipments)** 탭에서 실시간 운송 상태를 모니터링할 수 있습니다.
 
 ```
-[ CREATED ] (선적 생성) ──► [ IN_TRANSIT ] (운송 중) ──► [ ARRIVED ] (창고 도착) ──► [ RECEIVED ] (입고 검수 완료) ──► [ COMPLETED ] (종결)
+[ LOGISTICS 관할 (브랜드 포털 물류) ]                    [ WAREHOUSE RECEIVING 관할 (Admin/창고) ]
+[ CREATED ] (선적 생성) ──► [ IN_TRANSIT ] (국제 운송 중) ──► [ ARRIVED ] (도착) ──► [ HANDOFF ] ──► [ PARTIALLY_RECEIVED / RECEIVED ] ──► [ COMPLETED ]
 ```
 
-- **상태별 의미**:
-  - `IN_TRANSIT`: 항공기 또는 선박이 출항하여 태평양을 횡단 중인 상태.
-  - `ARRIVED / DELIVERED`: 미국 현지 통관을 마치고 최종 목적지인 Letusto 물류센터 도크에 화물이 도착한 상태.
-  - *(참조 관리자 화면: `SCR-B-LOG-010.png` — Admin Inbound Shipment Detail)*
+- **물류 운송 단계 (Brand Logistics Responsibility)**:
+  - `CREATED`: 선적 번호 생성 및 부킹/스케줄 확정.
+  - `IN_TRANSIT`: 항공기 또는 선박이 출항하여 국제 운송 중인 상태.
+  - `ARRIVED / DELIVERED`: 미국 현지 통관을 마치고 목적지인 Letusto 물류센터 도크에 화물이 도착한 상태 (브랜드 포털 물류 책임 종료 및 창고 인계).
+- **창고 입고 검수 단계 (Warehouse Receiving Domain / Admin 관할)**:
+  - `PARTIALLY_RECEIVED / RECEIVED`: 창고 관리자가 카톤을 개봉하고 바코드를 스캔하여 실물 검수를 완료한 상태.
+  - `COMPLETED`: 입고 검수 및 행정 절차가 최종 종결된 상태.
+- *(참조 관리자 화면: `SCR-B-LOG-010.png` — Admin Inbound Shipment Detail)*
 
 ---
 
@@ -208,7 +213,8 @@ Brand Portal 좌측 메뉴에서 **`주문 관리 > 선적 & 출고 관리`**(`/
    - **파손 수량 (`damaged_qty`)**: 운송 중 찌그러짐, 파손, 오염 등으로 불량 격리되는 수량.
    - **보류 수량 (`hold_qty`)**: 라벨 오부착, 바코드 인식 불가, 수량 불일치로 판정 보류된 수량.
 3. **입고 전표 확정 (`FINALIZED / RECEIVED`)**:
-   - 검수가 종료되면 최종 입고 실적이 발주서 이행 실적에 반영되며, 정상 입고된 수량을 기준으로 재무 도메인(`MAN-B-FIN-001`)의 정산 확정이 연계됩니다.
+   - 창고 실물 검수가 완료되면 최종 입고 실적이 발주서 이행 실적에 공식 반영되어 입고 처리가 종결됩니다.
+   - *(참고: 재무 도메인(`MAN-B-FIN-001`)은 공식 발주 확정 이후 계약 조건에 따라 병렬로 작동하는 독립 도메인이며, 물류 및 입고 단계와 독립적으로 관리됩니다.)*
 
 ---
 
@@ -244,7 +250,7 @@ K SELECT Brand Portal은 회사 구성원의 역할에 따라 엄격한 기능 �
 **A:** 국제 운송 및 미국 세관 통관을 위해 P/L과 C/I 첨부는 강력히 권장됩니다. 서류가 누락될 경우 포워더 픽업이나 현지 세관 통관이 지연될 수 있습니다.
 
 ### Q5. 가용 수량을 초과하여 출고해야 하는 특별한 사정이 있는 경우 어떻게 하나요?
-**A:** 시스템상 계약 가용량을 초과하는 수량 입력은 원천 차단됩니다. 생산 수량 증가 등으로 추가 출고가 필요한 경우, 먼저 관리자에게 발주 수량 증액(PO Revision)을 요청하여 확정된 후 출고를 진행하셔야 합니다.
+**A:** 시스템상 계약 가용량을 초과하는 수량은 입력되지 않도록 유효성 검증(Validation)이 적용됩니다. 생산 수량 증가 등으로 추가 출고가 필요한 경우, 먼저 관리자에게 발주 수량 증액(PO Revision)을 요청하여 확정된 후 출고를 진행하셔야 합니다.
 
 ### Q6. 인보이스 청구는 반드시 물류 도착이나 입고 검수 후에만 가능한가요?
 **A:** 아닙니다. 공식 발주서 확정(`po_status IN ('APPROVED', 'SENT')` AND `supplier_confirmation_status = 'CONFIRMED'`) 이후에는 양사 간 체결된 계약 조건(선급금 조건, 선적 시 청구 조건, 입고 후 청구 조건 등)에 따라 `MAN-B-FIN-001` 재무 메뉴에서 독립적으로 인보이스를 발행할 수 있습니다.

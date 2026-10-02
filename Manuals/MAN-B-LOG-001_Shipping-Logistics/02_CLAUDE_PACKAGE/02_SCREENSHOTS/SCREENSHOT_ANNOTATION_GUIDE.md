@@ -41,7 +41,7 @@
   - `(1)` **Shipment Number**: K SELECT 국제 선적 고유 번호 (`SHP-XXXX`).
   - `(2)` **운송 주체**: `Letusto 배송` vs `공급사 배송` 구분.
   - `(3)` **배송사 및 일정**: Carrier 명칭 및 출항(ETD) / 도착(ETA) 예정일.
-  - `(4)` **선적 상태**: `CREATED`, `IN_TRANSIT`, `ARRIVED`, `RECEIVED` 선적 진행 단계 뱃지.
+  - `(4)` **선적 상태**: `CREATED`, `IN_TRANSIT`, `ARRIVED` 등 운송 및 입고 단계 뱃지.
 
 ---
 
