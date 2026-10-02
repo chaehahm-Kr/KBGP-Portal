@@ -736,7 +736,7 @@ All 10 mandatory spec domains must be 100% fulfilled.
       id: "kno-order-management-v10",
       document_url: "/api/admin/knowledge/asset/asset-order-management-v10",
       document_name: "MAN-B-ORD-001_Order-Management_V1.pdf",
-      document_size: 4188373,
+      document_size: 4188914,
       document_type: "application/pdf",
       slug: "man-b-ord-001-order-management-guide",
       title: "MAN-B-ORD-001: Brand Portal Order Management & Purchase Order Guide",
@@ -2048,7 +2048,7 @@ Official user guide for K SELECT Brand Portal partners to review Retailer Purcha
       is_current: true,
       file_url: "/api/admin/knowledge/asset/asset-order-management-v10",
       file_name: "MAN-B-ORD-001_Order-Management_V1.pdf",
-      file_size: 4188373,
+      file_size: 4188914,
       published_date: "2026-10-01",
       created_at: now
     }

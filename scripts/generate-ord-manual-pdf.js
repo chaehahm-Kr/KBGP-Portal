@@ -1377,8 +1377,8 @@ async function buildHtml() {
         <div class="card" style="background:#FDF2F8; border-color:#FBCFE8;">
           <div class="card-title" style="color:#9D174D;">💳 공급사 인보이스(Supplier Invoice) 생성 조건</div>
           <p style="font-size:7pt; color:#831843;">
-            <code>supplier_confirmation_status = 'CONFIRMED'</code><br/>
-            공급사가 발주서를 수락한 시점부터 재무 도메인(<code>MAN-B-FIN-001</code>)에서 해당 PO에 대한 공급사 인보이스를 생성할 수 있는 자격(Eligible)이 부여됩니다.
+            <code>po_status IN ('APPROVED', 'SENT') &amp;&amp; supplier_confirmation_status = 'CONFIRMED'</code><br/>
+            공급사가 발주서를 정식 수락하고 PO가 유효 상태(APPROVED/SENT)인 시점부터 재무 도메인(<code>MAN-B-FIN-001</code>)에서 해당 PO에 대한 공급사 인보이스를 생성할 수 있는 자격(Eligible)이 부여됩니다.
           </p>
         </div>
         
