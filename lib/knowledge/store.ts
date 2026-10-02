@@ -855,6 +855,63 @@ Real-time proof verification in Admin and immutable diff change history logging.
       effective_date: "2026-10-01",
       created_at: "2026-10-01T09:00:00Z",
       updated_at: now
+    },
+    {
+      id: "kno-retail-applications-v10",
+      document_url: "/api/admin/knowledge/asset/asset-retail-applications-v10",
+      document_name: "MAN-B-RET-001_Retail-Applications_V1.pdf",
+      document_size: 1129760,
+      document_type: "application/pdf",
+      slug: "man-b-ret-001-retail-applications-guide",
+      title: "MAN-B-RET-001: Retail Applications & Placement User Guide",
+      title_ko: "K SELECT Brand Portal 리테일 입점 신청 및 관리 매뉴얼 (MAN-B-RET-001)",
+      title_en: "K SELECT Brand Portal Retail Applications & Placement User Guide (MAN-B-RET-001)",
+      summary_ko: "미국 메이저 온/오프라인 리테일 네트워크(TJX, Nordstrom Rack, Ross, Marshalls, Burlington, Target, Ulta 등) 입점 신청, 카탈로그 선택, 공급 역량 및 리드타임 선언, Readiness 검증, MD 팀 추가 정보 요청(Info Request) 소통 및 승인 심사 프로세스를 체계적으로 안내하는 공식 사용자 매뉴얼입니다.",
+      summary_en: "Official user manual for K SELECT Brand Portal covering retail network placement applications, product catalog selection, capacity and lead time declaration, Readiness validation, MD Info Request response workflow, and approval review processes.",
+      content_ko: `## 1. 개요 및 매뉴얼 목적 (Introduction & Purpose)
+본 매뉴얼은 **K SELECT NETWORK Brand Portal**을 이용하는 브랜드 파트너사가 미국 메이저 온/오프라인 리테일러 입점 신청을 준비하고, 제품 카탈로그 선택, 공급 역량 및 리드타임 선언, Readiness 자격 검증, MD 팀 추가 정보 요청(Info Request) 대응 및 최종 승인 결과를 관리할 수 있도록 지원하는 공식 실무 가이드입니다.
+
+## 2. 5단계 입점 신청 라이프사이클
+1. **DRAFT (임시저장)**: 리테일러 선택, 희망 제품군 선택, 공급 가능 수량/MOQ/리드타임/제안 단가 입력.
+2. **SUBMITTED (제출완료)**: Readiness Check 통과 후 MD 심사팀으로 정식 접수.
+3. **UNDER_REVIEW (심사중)**: K SELECT MD 팀의 카테고리 적합성, 바코드/서류 상태 및 납기 역량 정밀 평가.
+4. **INFO_REQUESTED (추가 정보 요청)**: MD 팀의 보완 요청 확인 및 회신/보완 서류 제출.
+5. **APPROVED / REJECTED (승인 / 거절)**: 최종 입점 확정 및 후속 PO 연계, 또는 명확한 사유 확인.
+
+## 3. 핵심 주의사항
+- "협의 필요" 상태는 탈락 사유가 아니며, MD 팀과 공급 일정 및 물량을 사전 조율하는 협의 단계입니다.
+- 필수 규제 서류 및 UPC 바코드가 준비된 상품만 입점 승인율이 높습니다.`,
+      content_en: `## 1. Introduction & Purpose
+Official user guide for K SELECT Brand Portal partners to prepare retail placement applications, select product catalogs, declare capacity and lead time, validate readiness, respond to MD Info Requests, and manage approval results.
+
+## 2. 5-Stage Retail Application Lifecycle
+1. **DRAFT**: Retailer selection, product catalog selection, capacity/MOQ/lead time/pricing input.
+2. **SUBMITTED**: Formal submission after Readiness Check.
+3. **UNDER_REVIEW**: K SELECT MD team review on category fit, barcodes, documents, and lead time capacity.
+4. **INFO_REQUESTED**: Brand response and document upload for MD inquiries.
+5. **APPROVED / REJECTED**: Final placement decision and next steps.
+
+## 3. Core Policy Reminders
+- '협의 필요' (Negotiation Needed) is not a rejection reason; it is an active coordination step with the MD team.`,
+      type: "MANUAL",
+      source_type: "CONTENT",
+      module: "RETAIL",
+      category: "Brand Portal",
+      tags: ["MANUAL", "RETAIL", "APPLICATION", "PLACEMENT", "READINESS", "INFO_REQUEST", "MD_REVIEW", "CATALOG", "TJX", "ROSS", "TARGET", "ULTA", "MAN-B-RET-001", "OFFICIAL", "리테일", "입점신청", "입점관리"],
+      owner_id: "staff-admin-01",
+      owner_name: "Brand Operations Desk",
+      status: "PUBLISHED",
+      system_impact_status: "NORMAL",
+      audience: ["BRAND", "INTERNAL", "ADMIN / MANAGEMENT"],
+      is_sensitive_internal: false,
+      requires_external_approval: true,
+      external_review_status: "APPROVED",
+      external_reviewer_id: "staff-superadmin-01",
+      external_reviewed_at: "2026-10-02T12:00:00Z",
+      current_version: "v1.0",
+      effective_date: "2026-10-02",
+      created_at: "2026-10-02T09:00:00Z",
+      updated_at: now
     }
   ];
 
@@ -2205,6 +2262,24 @@ Real-time proof verification in Admin and immutable diff change history logging.
       created_by_name: "Brand Operations Desk",
       published_at: now,
       created_at: now
+    },
+    {
+      id: "ver-retail-applications-v10",
+      knowledge_id: "kno-retail-applications-v10",
+      version: "v1.0",
+      status: "PUBLISHED",
+      title_ko: "K SELECT Brand Portal 리테일 입점 신청 및 관리 매뉴얼 (MAN-B-RET-001 v1.0)",
+      title_en: "K SELECT Brand Portal Retail Applications & Placement User Guide v1.0",
+      summary_ko: "최초 공식 발행 버전 (12-Page Published PDF 배포)",
+      summary_en: "Initial official published manual version",
+      content_ko: memoryItems.find(i => i.id === "kno-retail-applications-v10")?.content_ko || "",
+      content_en: memoryItems.find(i => i.id === "kno-retail-applications-v10")?.content_en || "",
+      what_changed: "MAN-B-RET-001 Retail Applications & Placement User Guide 공식 배포 (v1.0)",
+      why_changed: "미국 메이저 리테일러 입점 신청, 카탈로그 선택, 공급 역량 선언 및 MD 심사 프로세스 표준화",
+      effective_date: "2026-10-02",
+      created_by_name: "Brand Operations Desk",
+      published_at: now,
+      created_at: now
     }
   ];
 
@@ -2585,6 +2660,56 @@ Real-time proof verification in Admin and immutable diff change history logging.
       related_route: "/admin/products/[id]",
       manual_title: "K SELECT Brand Portal 인허가, 상표권 및 증빙 서류 관리 매뉴얼 (MAN-B-REG-001)",
       created_at: now
+    },
+    {
+      id: "rel-ret-app-dashboard",
+      knowledge_id: "kno-retail-applications-v10",
+      related_portal: "Brand Portal",
+      related_module: "RETAIL",
+      related_menu: "Retail Applications Dashboard",
+      related_route: "/portal/applications",
+      manual_title: "K SELECT Brand Portal 리테일 입점 신청 및 관리 매뉴얼 (MAN-B-RET-001)",
+      created_at: now
+    },
+    {
+      id: "rel-ret-app-new",
+      knowledge_id: "kno-retail-applications-v10",
+      related_portal: "Brand Portal",
+      related_module: "RETAIL",
+      related_menu: "New Retail Application",
+      related_route: "/portal/applications/new",
+      manual_title: "K SELECT Brand Portal 리테일 입점 신청 및 관리 매뉴얼 (MAN-B-RET-001)",
+      created_at: now
+    },
+    {
+      id: "rel-ret-app-detail",
+      knowledge_id: "kno-retail-applications-v10",
+      related_portal: "Brand Portal",
+      related_module: "RETAIL",
+      related_menu: "Retail Application Detail & Info Reply",
+      related_route: "/portal/applications/[id]",
+      manual_title: "K SELECT Brand Portal 리테일 입점 신청 및 관리 매뉴얼 (MAN-B-RET-001)",
+      created_at: now
+    },
+    {
+      id: "rel-admin-ret-apps",
+      knowledge_id: "kno-retail-applications-v10",
+      related_portal: "Admin",
+      related_module: "RETAIL",
+      related_menu: "Admin Retail Applications Review",
+      related_route: "/admin/applications",
+      manual_title: "K SELECT Brand Portal 리테일 입점 신청 및 관리 매뉴얼 (MAN-B-RET-001)",
+      created_at: now
+    },
+    {
+      id: "rel-admin-ret-app-detail",
+      knowledge_id: "kno-retail-applications-v10",
+      related_portal: "Admin",
+      related_module: "RETAIL",
+      related_menu: "Admin Retail Application Evaluation & Info Request",
+      related_route: "/admin/applications/[id]",
+      manual_title: "K SELECT Brand Portal 리테일 입점 신청 및 관리 매뉴얼 (MAN-B-RET-001)",
+      created_at: now
     }
   ];
 
@@ -2666,6 +2791,19 @@ Real-time proof verification in Admin and immutable diff change history logging.
       file_size: 1915000,
       published_date: "2026-10-01",
       created_at: now
+    },
+    {
+      id: "asset-retail-applications-v10",
+      knowledge_id: "kno-retail-applications-v10",
+      manual_title: "K SELECT Brand Portal 리테일 입점 신청 및 관리 매뉴얼 (MAN-B-RET-001)",
+      version: "v1.0",
+      language: "KO",
+      is_current: true,
+      file_url: "/api/admin/knowledge/asset/asset-retail-applications-v10",
+      file_name: "MAN-B-RET-001_Retail-Applications_V1.pdf",
+      file_size: 1129760,
+      published_date: "2026-10-02",
+      created_at: now
     }
   ];
 
@@ -2734,6 +2872,17 @@ Real-time proof verification in Admin and immutable diff change history logging.
       previous_value: {},
       new_value: { title: "K SELECT Brand Portal 인허가, 상표권 및 증빙 서류 관리 매뉴얼", audience: ["BRAND", "INTERNAL"] },
       reason: "MAN-B-REG-001 Official Publication",
+      created_at: now
+    },
+    {
+      id: "log-retail-applications-v10",
+      knowledge_id: "kno-retail-applications-v10",
+      user_id: "user-admin-01",
+      user_name: "Brand Operations Desk",
+      action: "Published",
+      previous_value: {},
+      new_value: { title: "K SELECT Brand Portal 리테일 입점 신청 및 관리 매뉴얼", audience: ["BRAND", "INTERNAL"] },
+      reason: "MAN-B-RET-001 Official Publication",
       created_at: now
     }
   ];
