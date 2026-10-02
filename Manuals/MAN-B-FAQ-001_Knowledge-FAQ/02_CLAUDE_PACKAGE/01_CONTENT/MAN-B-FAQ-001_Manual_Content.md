@@ -103,7 +103,7 @@ K SELECT Knowledge Center에 등록된 모든 FAQ는 임의로 작성된 가상�
 
 ![1:1 문의 연계 시 질문 사전 입력 화면](file:///c:/Users/ChaeHahm/OneDrive%20-%20Letusto%20Inc/Developement/Claude_Dev/KSelectNetwork-Portal/Manuals/MAN-B-FAQ-001_Knowledge-FAQ/02_CLAUDE_PACKAGE/02_SCREENSHOTS/SCR-B-FAQ-007.png)
 
-- **질문 컨텍스트 자동 연계**: 사용자가 도움말 센터에서 검색했던 질문 내용과 조회 이력이 1:1 문의 작성 폼에 자동으로 채워져 담당자와의 신속한 상담이 가능합니다.
+- **질문 컨텍스트 자동 연계**: 도움말 센터에서 1:1 문의로 이동하면 `kselect_support_handoff`를 통해 질문 컨텍스트가 문의 작성 화면에 사전 입력됩니다.
 
 ---
 
