@@ -46,6 +46,9 @@
 | `logistics_inventory` | **발주·물류·재고** | Purchase order fulfillment, ASN notices, carton labels, and warehouse deliveries |
 | `settlement_inquiry` | **정산·문의** | Monthly payout statements, accounts payable (AP), and tax invoice inquiries |
 
+> [!NOTE]
+> **Boundary Classification**: The early admin task model (`public.tasks` / `/admin/tasks`) is an `Internal Admin Task Prototype / Not connected to Brand Portal Support Cases`.
+
 ---
 
 ## 4. Cross-Domain Deep Link Query Parameters

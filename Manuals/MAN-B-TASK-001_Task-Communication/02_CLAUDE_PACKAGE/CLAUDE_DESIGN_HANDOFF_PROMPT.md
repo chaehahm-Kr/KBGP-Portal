@@ -32,7 +32,7 @@
 │   ├── SCR-B-TASK-009.png  (Viewer Role Read-Only Restriction)
 │   ├── SCR-B-TASK-010.png  (Access Denied View - support:none)
 │   ├── SCR-B-TASK-011.png  (Admin Partner Inquiries Console)
-│   └── SCR-B-TASK-012.png  (Admin Internal Tasks Console)
+│   └── SCR-B-TASK-012.png  (Internal Admin Task Prototype / Not connected to Brand Portal Support Cases)
 ├── 03_DIAGRAMS/
 │   └── TASK_COMMUNICATION_ARCHITECTURE_DIAGRAMS.md (7 Verified Diagrams)
 └── 04_REFERENCE/
@@ -46,9 +46,9 @@
 1. **PERM Tasks vs Dynamic Case Communication**:
    - `MAN-B-PERM-001` contact tasks are static routing points (`company_apply`, `contract`, `product_cert`, `pricing_quote`, `logistics_inventory`, `settlement_inquiry`).
    - `MAN-B-TASK-001` is the dynamic case lifecycle (`partner_inquiries`).
-   - `public.tasks` / `/admin/tasks` is an unlinked early admin monitoring schema (System Gap) and NOT an active brand workflow.
+   - `public.tasks` / `/admin/tasks` is an unlinked early admin monitoring schema (Internal Admin Task Prototype / Not connected to Brand Portal Support Cases) and NOT an active brand workflow.
 2. **Status Normalization**:
-   - Always display the 4 official presentation states: `RECEIVED` (Amber), `UNDER_REVIEW` (Blue), `ACTION_REQUIRED` (Rose), `CLOSED` (Zinc).
+   - Consistently display the 4 official presentation states: `RECEIVED` (Amber), `UNDER_REVIEW` (Blue), `ACTION_REQUIRED` (Rose), `CLOSED` (Zinc).
 3. **Cross-Domain Linking**:
    - PO Change binds the real `related_po_id` DB foreign key to `purchase_orders`.
    - Settlement and Agreements use Context Prefill (No DB FK).

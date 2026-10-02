@@ -144,13 +144,13 @@
 
 ---
 
-### [SCR-B-TASK-012] 어드민 내부 일감 콘솔 (Reference)
+### [SCR-B-TASK-012] 어드민 내부 일감 콘솔 (Internal Admin Task Prototype / Not connected to Brand Portal Support Cases)
 - **File:** `02_SCREENSHOTS/SCR-B-TASK-012.png`
 - **Chapter Mapping:** Chapter 8 — 부록: 어드민 운영 콘솔 연계
-- **UI State:** 어드민 내부 일감 스키마(`public.tasks`)를 모니터링하는 내부 관리 화면.
+- **UI State:** 어드민 내부 일감 스키마(`public.tasks`)를 모니터링하는 내부 관리 화면 (Internal Admin Task Prototype / Not connected to Brand Portal Support Cases).
 - **Callout Pins & Explanations:**
   - `(1)` **내부 작업 목록**: 운영팀 내부 할 일 및 진행률 모니터링 뷰.
-  - `(2)` **파트너 문의와의 분리**: `partner_inquiries`와는 상호 독립된 별개 스키마로 운영됨을 확인.
+  - `(2)` **파트너 문의와의 분리**: `partner_inquiries`와는 상호 독립된 별개 스키마로 운영됨을 확인 (Not connected to Brand Portal Support Cases).
 
 ---
 *End of SCREENSHOT_ANNOTATION_GUIDE.md*

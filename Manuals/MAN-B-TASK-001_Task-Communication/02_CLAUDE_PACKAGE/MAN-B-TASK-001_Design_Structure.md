@@ -50,7 +50,7 @@
 │ • Chapter 1: System Overview & Core Principles                                         │
 │   - Philosophy of structured 1:1 case communication (official support & changes)       │
 │   - Architectural separation: PERM 6 contact tasks vs Dynamic Case Tickets             │
-│   - Admin tasks table (public.tasks) system gap / unlinked model note                  │
+│   - Admin tasks table (public.tasks) note: Internal Admin Task Prototype / Not connected to Brand Portal Support Cases │
 ├────────────────────────────────────────────────────────────────────────────────────────┤
 │ • Chapter 2: Support Hub UI & Case List (SCR-B-TASK-001)                               │
 │   - Action bar, 4 normalized status filter tabs, case card items, urgent highlight     │
@@ -71,8 +71,8 @@
 │   - 6 in-app notification events, conditional Resend email, company-uploads signed URLs│
 │   - 4-tier ACL matrix (none/read/write/manage)                                         │
 ├────────────────────────────────────────────────────────────────────────────────────────┤
-│ • Chapter 8: Appendix: Admin Operations Console (SCR-B-TASK-011, SCR-B-TASK-012)       │
-│   - Admin partner inquiries management, unlinked internal tasks console distinction    │
+│ • Chapter 8: Appendix: Admin Operations Console (SCR-B-TASK-011, SCR-B-TASK-012: Internal Admin Task Prototype / Not connected to Brand Portal Support Cases) │
+│   - Admin partner inquiries management vs internal tasks console (Internal Admin Task Prototype / Not connected to Brand Portal Support Cases) │
 └────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 

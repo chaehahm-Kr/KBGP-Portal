@@ -34,7 +34,7 @@ graph TD
         style DomainB fill:#eef2ff,stroke:#6366f1,stroke-width:2px
     end
 
-    subgraph DomainC["System Gap Note: Early Admin Tasks (public.tasks)"]
+    subgraph DomainC["Internal Admin Task Prototype / Not connected to Brand Portal Support Cases (public.tasks)"]
         C1["Unlinked Admin Internal Mock Schema<br/>(No Brand Portal Interaction)"]
         style DomainC fill:#fafafa,stroke:#d4d4d8,stroke-dasharray: 5 5
     end

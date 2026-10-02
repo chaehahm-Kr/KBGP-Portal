@@ -35,7 +35,7 @@
 │   ├── SCR-B-TASK-009.png                           # 뷰어 역할 읽기 전용 모드
 │   ├── SCR-B-TASK-010.png                           # 권한 없음 접근 차단 화면
 │   ├── SCR-B-TASK-011.png                           # 어드민 파트너 문의 관리 콘솔 (Reference)
-│   └── SCR-B-TASK-012.png                           # 어드민 내부 일감 콘솔 (Reference)
+│   └── SCR-B-TASK-012.png                           # Internal Admin Task Prototype / Not connected to Brand Portal Support Cases
 ├── 03_DIAGRAMS/
 │   └── TASK_COMMUNICATION_ARCHITECTURE_DIAGRAMS.md  # 7대 프로덕션 아키텍처 다이어그램
 └── 04_REFERENCE/

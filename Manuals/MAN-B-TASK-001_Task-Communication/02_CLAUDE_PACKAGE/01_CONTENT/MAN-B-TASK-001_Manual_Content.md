@@ -26,8 +26,8 @@ K SELECT 시스템에는 업무(Task)라는 명칭을 공유하지만 목적과 
    - 특정 비즈니스 안건(발주 수량 변경, 정산 질의, 서류 보완 등)에 대해 티켓을 발행하고, 양방향 스레드 대화와 상태 전이를 거쳐 해결 및 종결(Close)하는 동적 케이스 라이프사이클입니다.
 
 > [!NOTE]
-> **어드민 내부 일감 스키마(`public.tasks`)와의 경계 (System Gap Note)**:
-> 데이터베이스 내 `public.tasks` 및 `/admin/tasks`는 초기 어드민 내부 업무 모니터링 목적으로 설계된 독립 스키마(현재 목업 데이터 기반)이며, 브랜드 포털의 `partner_inquiries`와는 상호 종속성이나 자동 트리거가 연결되어 있지 않습니다. 브랜드사의 모든 공식 지원 요청과 소통은 `partner_inquiries` 기반의 지원 센터를 통해 전담 처리됩니다.
+> **어드민 내부 일감 스키마(`public.tasks`)와의 경계 (Internal Admin Task Prototype / Not connected to Brand Portal Support Cases)**:
+> 데이터베이스 내 `public.tasks` 및 `/admin/tasks`는 초기 어드민 내부 업무 모니터링 목적으로 설계된 독립 스키마(현재 목업 데이터 기반)이며, 브랜드 포털의 `partner_inquiries`와는 상호 종속성이나 자동 트리거가 연결되어 있지 않습니다. 브랜드사의 공식 지원 요청, 변경 신청 및 1:1 문의는 `partner_inquiries` 기반의 지원 센터를 통해 전담 처리됩니다.
 
 ---
 
@@ -181,7 +181,7 @@ K SELECT 시스템에는 업무(Task)라는 명칭을 공유하지만 목적과 
   - **운영팀의 긴급 조치 요청(`isActionRequired=true` 및 이메일 발송 옵션 활성화 시)** 또는 **어드민 신규 케이스 생성 시 이메일 옵션 선택 시**에만 제한적으로 발송되어 알림 피로도를 최소화합니다.
 
 ### 7.2 파일 첨부 보안 및 스토리지 규격
-- **스토리지 버킷**: 격리된 Private 버킷인 `"company-uploads"`를 사용합니다.
+- **스토리지 버킷**: 독립된 Private 버킷인 `"company-uploads"`를 사용합니다.
 - **저장 경로**: `${company_id}/inquiries/${uuid}.${ext}` 구조로 회사별 디렉토리가 분리됩니다.
 - **크기 및 형식 제한**: 파일당 최대 **20MB**까지 업로드 가능하며, 이미지(`PNG`, `JPEG`, `WEBP`) 및 문서(`PDF`) 형식을 지원합니다.
 - **다운로드 보안**: 공용 URL 대신 시간 제한이 적용된 서명 URL(Signed URL)을 통해서만 다운로드가 허용됩니다.
@@ -193,7 +193,7 @@ K SELECT 시스템에는 업무(Task)라는 명칭을 공유하지만 목적과 
 | **`support:none (0)`** | ❌ | ❌ | ❌ | 접근 차단 (`AccessDeniedView` 표시) |
 | **`support:read (1)`** | ✅ | ❌ | ❌ | 읽기 전용 (신규 작성 버튼 미노출, 입력창 비활성화) |
 | **`support:write (2)`** | ✅ | ✅ | ❌ | 문의 등록, 대화 회신, 보완 서류 제출 가능 |
-| **`support:manage (3)`** | ✅ | ✅ | ✅ | 모든 작성 기능 + 케이스 직접 종결(`closeCase`) 권한 |
+| **`support:manage (3)`** | ✅ | ✅ | ✅ | 신규 작성, 회신 및 보완 서류 제출 + 케이스 직접 종결(`closeCase`) 권한 |
 
 ![뷰어 역할 읽기 전용 모드](file:///c:/Users/ChaeHahm/OneDrive%20-%20Letusto%20Inc/Developement/Claude_Dev/KSelectNetwork-Portal/Manuals/MAN-B-TASK-001_Task-Communication/02_CLAUDE_PACKAGE/02_SCREENSHOTS/SCR-B-TASK-009.png)
 
@@ -208,10 +208,10 @@ K SELECT 시스템에는 업무(Task)라는 명칭을 공유하지만 목적과 
 ![어드민 파트너 문의 관리 콘솔](file:///c:/Users/ChaeHahm/OneDrive%20-%20Letusto%20Inc/Developement/Claude_Dev/KSelectNetwork-Portal/Manuals/MAN-B-TASK-001_Task-Communication/02_CLAUDE_PACKAGE/02_SCREENSHOTS/SCR-B-TASK-011.png)
 
 > [!NOTE]
-> **어드민 내부 일감 콘솔(`/admin/tasks`) 참고**:  
-> 어드민 내 `/admin/tasks` 화면은 초기 내부 작업 모니터링용 독립 화면(현재 목업 데이터 기반)이며, 브랜드 포털의 공식 1:1 소통 워크플로우와는 직접 연계되지 않습니다. 브랜드사의 모든 실무 지원은 `/admin/partner-inquiries`를 통해 이루어집니다.
+> **어드민 내부 일감 콘솔(`/admin/tasks`) 참고 (Internal Admin Task Prototype / Not connected to Brand Portal Support Cases)**:  
+> 어드민 내 `/admin/tasks` 화면은 초기 내부 작업 모니터링용 프로토타입 화면(현재 목업 데이터 기반)이며, 브랜드 포털의 공식 1:1 소통 워크플로우와는 직접 연계되지 않습니다. 브랜드사의 공식 지원 케이스 및 1:1 문의 관리는 `/admin/partner-inquiries`를 통해 이루어집니다.
 
-![어드민 내부 일감 콘솔](file:///c:/Users/ChaeHahm/OneDrive%20-%20Letusto%20Inc/Developement/Claude_Dev/KSelectNetwork-Portal/Manuals/MAN-B-TASK-001_Task-Communication/02_CLAUDE_PACKAGE/02_SCREENSHOTS/SCR-B-TASK-012.png)
+![어드민 내부 일감 콘솔 (Internal Admin Task Prototype / Not connected to Brand Portal Support Cases)](file:///c:/Users/ChaeHahm/OneDrive%20-%20Letusto%20Inc/Developement/Claude_Dev/KSelectNetwork-Portal/Manuals/MAN-B-TASK-001_Task-Communication/02_CLAUDE_PACKAGE/02_SCREENSHOTS/SCR-B-TASK-012.png)
 
 ---
 *End of MAN-B-TASK-001_Manual_Content.md*

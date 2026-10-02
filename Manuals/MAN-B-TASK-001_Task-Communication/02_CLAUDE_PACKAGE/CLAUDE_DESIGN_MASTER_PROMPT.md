@@ -16,7 +16,7 @@ Master Reference: MAN-B-BRAND-001_Brand-Policy_V1.pdf
 1. Strict Domain Separation:
    - MAN-B-PERM-001: Static 6 Primary Contact Tasks (company_apply, contract, product_cert, pricing_quote, logistics_inventory, settlement_inquiry) on table company_task_assignments.
    - MAN-B-TASK-001: Dynamic 1:1 Case Communication on table partner_inquiries and partner_inquiry_messages.
-   - public.tasks / /admin/tasks is an early unlinked admin internal monitoring schema (System Gap) and NOT a brand workflow.
+   - public.tasks / /admin/tasks is an early unlinked admin internal monitoring schema (Internal Admin Task Prototype / Not connected to Brand Portal Support Cases) and NOT a brand workflow.
 2. Presentation Status Normalization:
    - Normalize the 10 internal DB statuses into the 4 official presentation states:
      • RECEIVED (접수됨) — Amber (#F59E0B)
@@ -59,7 +59,7 @@ Master Reference: MAN-B-BRAND-001_Brand-Policy_V1.pdf
 - Section 5: Action Required Escalation & Resolution Lifecycle (SCR-B-TASK-004, SCR-B-TASK-005)
 - Section 6: Cross-Domain Deep Linking Inflow (SCR-B-TASK-006, SCR-B-TASK-007)
 - Section 7: ACL, Storage Security & Notifications (SCR-B-TASK-008 ~ SCR-B-TASK-010)
-- Section 8: Appendix: Admin Operations Console (SCR-B-TASK-011, SCR-B-TASK-012)
+- Section 8: Appendix: Admin Operations Console (SCR-B-TASK-011, SCR-B-TASK-012: Internal Admin Task Prototype / Not connected to Brand Portal Support Cases)
 ```
 
 ---
