@@ -12,7 +12,7 @@
 | **Topic Sequence** | Order 6 (Follows `topic-retail` / `MAN-B-RET-001`) |
 | **Visual Design Standard** | **`MAN-BRAND-001 Brand Policy.pdf`** (Authoritative Master Style Reference) |
 | **Content Source of Truth** | `01_SOURCE` & `01_CONTENT/MAN-B-ORD-001_Manual_Content.md` |
-| **Current Status** | `PACKAGE CREATED — READY FOR CHATGPT PACKAGE QA & CHAE EXPLORER CONFIRMATION` |
+| **Current Status** | `READY FOR CHATGPT FINAL PACKAGE QA` |
 
 ---
 
@@ -33,18 +33,18 @@ MAN-B-ORD-001_Order-Management/
     │   ├── SCREENSHOT_ANNOTATION_GUIDE.md                # Annotation & mapping guide for production screenshots
     │   ├── SCR-B-ORD-001.png                             # PO Request List View (/portal/orders/requests)
     │   ├── SCR-B-ORD-002.png                             # New PO Request Form Header (/portal/orders/requests/new)
-    │   ├── SCR-B-ORD-003.png                             # Product Selection Modal & FOB Tiers
+    │   ├── SCR-B-ORD-003.png                             # Product Selection Modal OPEN & FOB Tiers
     │   ├── SCR-B-ORD-004.png                             # PO Request Summary & Submission
     │   ├── SCR-B-ORD-005.png                             # PO Request Detail & Change Requested Banner
     │   ├── SCR-B-ORD-006.png                             # PO Request Converted to PO View
     │   ├── SCR-B-ORD-007.png                             # Official PO List View (/portal/orders/purchase-orders)
     │   ├── SCR-B-ORD-008.png                             # Official PO Detail Overview & Confirmation Action
     │   ├── SCR-B-ORD-009.png                             # PO Detail Item Flow & Variance Table
-    │   ├── SCR-B-ORD-010.png                             # Shipments Tab & Goods Ready Entry
-    │   ├── SCR-B-ORD-011.png                             # Goods Ready Registration Modal
+    │   ├── SCR-B-ORD-010.png                             # Shipments Tab Active & Goods Ready Entry
+    │   ├── SCR-B-ORD-011.png                             # Goods Ready Registration Modal OPEN
     │   ├── SCR-B-ORD-012.png                             # Forwarder Handover & Supplier Arranged Shipment Form
-    │   ├── SCR-B-ORD-013.png                             # Warehouse Receiving & Inspection Tab
-    │   ├── SCR-B-ORD-014.png                             # PO Documents Management Tab
+    │   ├── SCR-B-ORD-013.png                             # Warehouse Receiving & Inspection Tab Active
+    │   ├── SCR-B-ORD-014.png                             # PO Documents Management Tab Active
     │   └── SCR-B-ORD-015.png                             # Global Shipping & Inbound Hub (/portal/orders/shipping)
     │
     ├── 03_DIAGRAMS/
@@ -65,7 +65,7 @@ MAN-B-ORD-001_Order-Management/
      - *Track A (Brand PO Request)*: Brand Request $\rightarrow$ Admin Review $\rightarrow$ Convert to PO $\rightarrow$ Official PO.
      - *Track B (Admin Direct PO)*: Admin Direct PO $\rightarrow$ Official PO.
    - **Independence of Retail Application**: `Retail Application Approval ≠ Automatic Purchase Order Creation`.
-   - **Post-PO Fulfillment Flow**: `Supplier Confirmation` $\rightarrow$ `Goods Ready` $\rightarrow$ `Shipping/Handover` $\rightarrow$ `Receiving/Inspection` $\rightarrow$ `Completed`.
+   - **Post-PO Fulfillment Flow**: `Supplier Confirmation` $\rightarrow$ `Goods Ready` $\rightarrow$ `Shipping/Handover` $\rightarrow$ `Receiving/Inspection` $\rightarrow$ `Completed (오더 이행 완료)`.
    - **Inquiry & MOQ Grounding**: Inquiry is a separate support channel (not auto-triggered); MOQ is a guideline warning (not a blocking error).
-4. **Cross-Manual Separation**: Keep logistics execution details referenced to `MAN-B-LOG-001` and invoice/settlement details referenced to `MAN-B-FIN-001`.
+4. **Cross-Manual Separation**: Keep logistics execution details referenced to separate logistics guides and invoice/settlement details referenced to separate finance guides.
 5. **Screenshots**: Place and annotate the physical screenshot PNG files from `02_SCREENSHOTS/` according to `SCREENSHOT_ANNOTATION_GUIDE.md`.

@@ -18,5 +18,6 @@ Please generate the official PDF publication for **K SELECT Brand Portal Purchas
    - Clearly state that `Retail Application Approval ≠ Automatic Purchase Order Creation`.
    - PO Rejection / Change Request does NOT trigger automatic inquiry ticket creation (Inquiry is a separate 1:1 support channel).
    - Product MOQ is an advisory guideline / warning, not a blocking system error.
+   - 6th step is `오더 이행 완료 (Completed)` (입고 검수 및 오더 처리 완료).
 4. **Screenshots & Callouts**: Insert and annotate production screenshots from `02_SCREENSHOTS/` according to `SCREENSHOT_ANNOTATION_GUIDE.md`.
 5. **Target Output**: Output the finalized PDF document to `Manuals/MAN-B-ORD-001_Order-Management/03_PUBLISHED/MAN-B-ORD-001_Order_Management_Guide.pdf`.

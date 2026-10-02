@@ -26,8 +26,8 @@
 
 ---
 
-### 3. `SCR-B-ORD-003.png` — 품목 추가 모달 및 FOB 티어 가격
-- **촬영 규격**: 1440 × 900 (Modal Overlay Viewport)
+### 3. `SCR-B-ORD-003.png` — 품목 추가 모달 및 FOB 티어 가격 (Modal OPEN)
+- **촬영 규격**: 1440 × 900 (Modal Overlay Viewport - Modal 실제로 열린 상태)
 - **주요 콜아웃**:
   - ① **제품 검색 필터**: 자사 승인 완료 카탈로그 품목 검색바.
   - ② **FOB 티어 단가표**: 주문 수량 구간별 차등 단가 테이블.
@@ -46,8 +46,8 @@
 
 ---
 
-### 5. `SCR-B-ORD-005.png` — 본사 수정 요청 배너 및 상세 (`/portal/orders/requests/[id]`)
-- **촬영 규격**: 1440 × 900 (Desktop Viewport)
+### 5. `SCR-B-ORD-005.png` — 본사 수정 요청 배너 및 상세 (`CHANGE_REQUESTED` 상태)
+- **촬영 규격**: 1440 × 900 (Desktop Viewport - 실제 `CHANGE_REQUESTED` 화면)
 - **주요 콜아웃**:
   - ① **수정 요청 알림 배너**: 본사 MD의 수량/일정 조정 요청 사유 박스.
   - ② **4단계 심사 진행 스테퍼**: Draft $\rightarrow$ Submitted $\rightarrow$ Under Review $\rightarrow$ Converted to PO.
@@ -56,10 +56,10 @@
 
 ---
 
-### 6. `SCR-B-ORD-006.png` — 공식 발주서(PO) 전환 완료 상세
-- **촬영 규격**: 1440 × 900 (Desktop Viewport)
+### 6. `SCR-B-ORD-006.png` — 공식 발주서(PO) 전환 완료 상세 (`CONVERTED_TO_PO` 상태)
+- **촬영 규격**: 1440 × 900 (Desktop Viewport - 실제 `CONVERTED_TO_PO` 화면)
 - **주요 콜아웃**:
-  - ① **전환 완료 배지**: `CONVERTED_TO_PO` 상태 및 완료 안내.
+  - ① **전환 완료 배지**: `CONVERTED_TO_PO` 상태 및 녹색 축하 안내.
   - ② **공식 발주서 번호 링크**: 생성된 `PO-XXXX-XXXX` 하이퍼링크.
   - ③ **공식 발주서 바로가기 버튼**: 발주서 상세 페이지 즉시 이동 버튼.
 - **본문 배치**: Chapter 3.2 공식 발주서 전환
@@ -96,8 +96,8 @@
 
 ---
 
-### 10. `SCR-B-ORD-010.png` — 선적 및 출고 탭 & Goods Ready 버튼
-- **촬영 규격**: 1440 × 900 (Desktop Viewport)
+### 10. `SCR-B-ORD-010.png` — 선적 및 출고 탭 & Goods Ready 버튼 (Shipments Tab ACTIVE)
+- **촬영 규격**: 1440 × 900 (Desktop Viewport - 선적 및 출고 탭 활성 뷰)
 - **주요 콜아웃**:
   - ① **[선적 및 출고] 탭**: 발주 상세 내 선적 관리 전용 뷰.
   - ② **선적 책임 배지**: `LETUSTO_ARRANGED` 또는 `SUPPLIER_ARRANGED`.
@@ -106,8 +106,8 @@
 
 ---
 
-### 11. `SCR-B-ORD-011.png` — Goods Ready 등록 모달
-- **촬영 규격**: 1440 × 900 (Modal Overlay Viewport)
+### 11. `SCR-B-ORD-011.png` — Goods Ready 등록 모달 (Modal OPEN)
+- **촬영 규격**: 1440 × 900 (Modal Overlay Viewport - Modal 실제로 열린 상태)
 - **주요 콜아웃**:
   - ① **실측 패킹 규격 입력**: 품목별 준비수량, 총 카톤 수, 총 중량(kg), 총 부피(CBM).
   - ② **필수 서류 업로더**: 패킹리스트(P/L) 및 상업송장(C/I) 첨부 필드.
@@ -126,8 +126,8 @@
 
 ---
 
-### 13. `SCR-B-ORD-013.png` — 물류센터 실물 입고 검수 결과 탭
-- **촬영 규격**: 1440 × 900 (Desktop Viewport)
+### 13. `SCR-B-ORD-013.png` — 물류센터 실물 입고 검수 결과 탭 (Receiving Tab ACTIVE)
+- **촬영 규격**: 1440 × 900 (Desktop Viewport - 입고 내역 탭 활성 뷰)
 - **주요 콜아웃**:
   - ① **[입고 내역] 탭**: 미국 현지 물류센터 검수 전용 뷰.
   - ② **검수 요약 카드**: 정상 입고(Accepted), 파손(Damaged), 홀드(Hold) 수량.
@@ -136,8 +136,8 @@
 
 ---
 
-### 14. `SCR-B-ORD-014.png` — 무역 및 계약 문서 보관함 탭
-- **촬영 규격**: 1440 × 900 (Desktop Viewport)
+### 14. `SCR-B-ORD-014.png` — 무역 및 계약 문서 보관함 탭 (Documents Tab ACTIVE)
+- **촬영 규격**: 1440 × 900 (Desktop Viewport - 문서 보관함 탭 활성 뷰)
 - **주요 콜아웃**:
   - ① **[문서 보관함] 탭**: PO 관련 모든 서류 통합 보관소.
   - ② **문서 카테고리 목록**: 발주서 PDF, P/L, C/I, B/L, 검수 보고서.

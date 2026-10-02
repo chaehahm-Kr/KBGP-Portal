@@ -68,15 +68,15 @@ stateDiagram-v2
 
 ## 3. Official Purchase Order 6-Step Integrated Lifecycle
 
-공식 발주서(`purchase_orders`)는 생성부터 정산/완료까지 6단계 라이프사이클로 추적됩니다.
+공식 발주서(`purchase_orders`)는 생성부터 오더 종결까지 6단계 라이프사이클로 추적됩니다.
 
 ```mermaid
 graph LR
     S1["1. PO Sent<br/>(발주서 발송)"] --> S2["2. Supplier Confirmed<br/>(공급사 수락)"]
     S2 --> S3["3. Goods Ready<br/>(출고 준비 완료)"]
     S3 --> S4["4. In Transit<br/>(선적/운송 중)"]
-    S4 --> S5["5. Delivered<br/>(물류센터 입고)"]
-    S5 --> S6["6. Completed<br/>(검수 및 정산 완료)"]
+    S4 --> S5["5. Delivered<br/>(물류센터 도착/입고)"]
+    S5 --> S6["6. Completed<br/>(오더 이행 완료)"]
 
     classDef active fill:#059669,stroke:#047857,color:#fff;
     classDef transit fill:#3b82f6,stroke:#1d4ed8,color:#fff;
@@ -122,6 +122,6 @@ sequenceDiagram
     System->>Admin: 선적 및 운송 상태 동기화
     Admin->>System: 미국 창고 입고 검수 결과 등록 (Accepted, Damaged)
     
-    Note over Brand, Portal: 정산 및 대금 지급은 MAN-B-FIN-001 (Finance Guide)에서 진행
+    Note over Brand, Portal: 정산 및 대금 지급은 별도 재무/정산 가이드에서 진행
     Brand->>Portal: 확정된 발주서 기준 Supplier Invoice 생성 및 제출
 ```

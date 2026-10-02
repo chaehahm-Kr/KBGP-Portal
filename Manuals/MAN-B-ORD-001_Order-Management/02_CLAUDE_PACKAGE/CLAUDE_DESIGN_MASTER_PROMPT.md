@@ -37,13 +37,13 @@ Your task is to design and generate the official PDF User Manual for **Brand Por
 All source assets are available in `02_CLAUDE_PACKAGE/`:
 
 1. **Content**: `01_CONTENT/MAN-B-ORD-001_Manual_Content.md` (Authoritative text, field descriptions, business logic, callouts, and FAQ).
-2. **Screenshots**: `02_SCREENSHOTS/` (Production PNG captures + `SCREENSHOT_ANNOTATION_GUIDE.md`).
+2. **Screenshots**: `02_SCREENSHOTS/` (15 Production PNG captures + `SCREENSHOT_ANNOTATION_GUIDE.md`).
 3. **Diagrams**: `03_DIAGRAMS/ORDER_ARCHITECTURE_DIAGRAMS.md` (Dual-Track PO Architecture, State Machines, and Step-by-Step Flowcharts).
 4. **Reference**: `04_REFERENCE/REFERENCE_GUIDE.md` (Status definitions, RBAC matrix, and technical data rules).
 
 ---
 
-## 4. Document Structure Blueprint (Target: 7–8 Pages)
+## 4. Document Structure Blueprint (Target: 7 Pages)
 
 - **Header / Meta**: Title: `브랜드 포털 발주 요청 & 오더 관리 가이드`, Manual ID: `MAN-B-ORD-001`, Version: `v1.0`, Audience: `Brand Portal User`.
 - **Page 1: 1. 개요 및 오더 아키텍처 (Order Architecture & Overview)**
@@ -65,7 +65,7 @@ All source assets are available in `02_CLAUDE_PACKAGE/`:
   - 발주서 상세 Overview 및 6단계 진행 바 (`SCR-B-ORD-008.png`)
   - 공급사 발주 수락(Confirm PO) 및 조건 변경 요청(Request Change) 절차
   - 품목별 수량 대조(Variance) 테이블 확인 (`SCR-B-ORD-009.png`)
-- **Page 5: 5. 출고 준비 등록(Goods Ready) 및 선적 책임별 처리**
+- **Page 5: 5. 출고 준비 등록(Goods Ready) 및 선적 책임별 물류 처리**
   - 출고 준비 등록(Goods Ready) 진입 및 모달 (`SCR-B-ORD-010.png`, `SCR-B-ORD-011.png`)
   - 카톤 수량, 총중량, CBM 입력 및 패킹리스트/상업송장 첨부
   - **선적 책임 분기**:
@@ -75,7 +75,7 @@ All source assets are available in `02_CLAUDE_PACKAGE/`:
   - 미국 물류센터 실물 입고 검수 결과 확인 (`SCR-B-ORD-013.png`)
   - 정상 입고(Accepted), 파손(Damaged), 불일치(Variance) 확인
   - 발주 관련 무역/통관 서류 통합 보관함 (`SCR-B-ORD-014.png`)
-  - Finance(Supplier Invoice) 연계 조건 및 Handoff 기준 (`supplier_confirmation_status = 'CONFIRMED'`)
+  - Finance(공급사 인보이스) 연계 조건 및 Handoff 기준 (`supplier_confirmation_status = 'CONFIRMED'`)
 - **Page 7: 7. 글로벌 선적 허브 & 자주 묻는 질문 (FAQ)**
   - 통합 출고 & 선적 관리 허브 (`SCR-B-ORD-015.png`)
   - 자주 묻는 질문 (FAQ 8선)
@@ -85,7 +85,7 @@ All source assets are available in `02_CLAUDE_PACKAGE/`:
 
 ## 5. Visual Execution Quality Checklist
 
-- [ ] All production screenshots placed with crisp 1:1 or 2:1 aspect ratio.
+- [ ] All 15 production screenshots placed with crisp 1:1 or 2:1 aspect ratio.
 - [ ] Numbered badge callouts (①, ②, ③, etc.) mapped directly according to `SCREENSHOT_ANNOTATION_GUIDE.md`.
 - [ ] Status badges match official production styling and hex codes.
 - [ ] Header and Footer contain `K SELECT NETWORK` | `MAN-B-ORD-001` | `Page X of Y`.

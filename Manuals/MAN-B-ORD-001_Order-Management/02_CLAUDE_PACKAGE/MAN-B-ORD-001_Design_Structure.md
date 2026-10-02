@@ -69,7 +69,7 @@
   - 입고 수량(Accepted), 파손(Damaged), 불일치(Variance) 및 검수 완료 상태.
 - **Section 6.2**: 발주 관련 무역/통관 서류 통합 보관함 (`SCR-B-ORD-014.png`).
 - **Section 6.3**: Finance(공급사 인보이스) 연계 조건 및 Handoff 기준:
-  - `supplier_confirmation_status = 'CONFIRMED'` 조건 충족 시 정산 인보이스 생성 가능 (`MAN-B-FIN-001` 참조).
+  - `supplier_confirmation_status = 'CONFIRMED'` 조건 충족 시 정산 인보이스 생성 가능 (별도 재무/정산 가이드 참조).
 
 ---
 
