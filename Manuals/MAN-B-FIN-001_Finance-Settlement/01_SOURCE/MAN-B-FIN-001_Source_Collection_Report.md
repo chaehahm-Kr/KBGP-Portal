@@ -9,142 +9,124 @@
 
 본 감사를 통해 확정된 핵심 도메인 아키텍처는 다음과 같다:
 
-1. **발주(ORD) ➔ 정산(FIN) 이관 자격 원칙 (ORD-to-FIN Eligibility)**:
-   - 인보이스 발행이 가능한 발주서(PO)는 공급사 확인이 완료된 상태(`supplier_confirmation_status = 'CONFIRMED'`)이고 발주 상태가 승인/발송 완료(`po_status IN ('APPROVED', 'SENT')`)된 발주서로 한정됨 (`VERIFIED SYSTEM BEHAVIOR`).
-2. **단일 활성 인보이스 제약 (Single Active Invoice Rule)**:
-   - 동일 발주서(PO)에 대해 진행 중인(무효/반려 제외: `invoice_status NOT IN ('VOID', 'REJECTED')`) 인보이스는 시스템적으로 **단 1개만 생성 가능**함. 중복 생성을 시도할 경우 예외 메시지와 함께 작성이 차단됨 (`VERIFIED SYSTEM BEHAVIOR`).
-3. **3단계 통합 정산 탭 및 캔버스 (Unified Finance Hub)**:
-   - **탭 1: 인보이스 (Invoices)**: 청구 인보이스 발행, 상태 조회, 수신/due 일자 추적, PDF 첨부.
-   - **탭 2: 정산 (Settlements / Adjustments)**: 수량 부족(`SHORTAGE`), 파손(`DAMAGE`), 단가 차액(`PRICE_DIFFERENCE`), 기타(`OTHER`) 사유에 따른 대금 감액(`CREDIT`) 및 증액(`CHARGE`) 조정 내역 관리.
-   - **탭 3: 지급 내역 (Payments)**: K SELECT 본사의 실제 대금 송금 및 지급 완료 내역(은행, 계좌 마스킹 정보, 지급 수단, 마스킹 SWIFT) 확인.
-4. **동적 정산 지표 및 3중 수식 엔진 (Triple Financial Calculation Engine)**:
+1. **병렬 도메인 전환 아키텍처 (Parallel Domain Handoff Architecture)**:
+   - 공식 발주 수락(`po_status IN ('APPROVED', 'SENT')` AND `supplier_confirmation_status = 'CONFIRMED'`) 완료 시, 도메인은 **물류(LOG / Shipping & Logistics)**와 **정산(FIN / Invoice & Settlement)** 두 축으로 **병렬 분기(Parallel Handoff)**함 (`VERIFIED SYSTEM BEHAVIOR`).
+   - 정산(FIN) 진입 및 인보이스 발행은 물류/입고(LOG) 완료를 필수 직렬 전제조건(Universal Prerequisite)으로 요구하지 않으며, 발주 수락 직후 정산 프로세스를 독립적으로 시작할 수 있음.
+2. **이중 메커니즘 단일 활성 인보이스 제약 (Single Active Invoice Rule — Enforcement: BOTH)**:
+   - 동일 발주서(PO)에 대해 진행 중인(무효/반려 제외: `invoice_status NOT IN ('VOID', 'REJECTED')`) 인보이스는 **단 1개만 허용**함.
+   - **DB Level**: 부분 유일 인덱스 (`CREATE UNIQUE INDEX idx_supplier_invoices_one_active_per_po ON supplier_invoices(purchase_order_id) WHERE invoice_status NOT IN ('VOID', 'REJECTED')`)로 비가역적 보장 (`VERIFIED SYSTEM BEHAVIOR`).
+   - **Application Level**: `createPortalInvoiceDraft` 및 `createInvoice` 서버 액션 내 사전 검화 쿼리로 이중 검증 및 사용자 친화적 에러 메시지 반환 (`VERIFIED SYSTEM BEHAVIOR`).
+3. **독립 4대 상태 도메인 명확 분리 (4 Disambiguated Status Domains)**:
+   - **Invoice Status (문서 결재 상태)**: `DRAFT`, `SUBMITTED`, `APPROVED`, `REJECTED`, `VOID`
+   - **Payment Status (대금 이행 상태)**: `UNPAID`, `PARTIALLY_PAID`, `PAID` (`balance_due` 및 `amount_paid` 기반 동적 산출)
+   - **Settlement Status (정산 종결 상태)**: `OPEN`, `SETTLED` (`closeSettlement`에 의한 행정 마감/동결)
+   - **PO Status (발주 진행 상태)**: `DRAFT`, `APPROVED`, `SENT`, `COMPLETED`, `CANCELLED`
+   - **독립 경계 원칙**: `Invoice Status ≠ Payment Status`, `Payment Status ≠ Settlement Status`, `PO Completed ≠ Invoice Paid`, `Shipping Completed ≠ Settlement Completed`.
+4. **정산 조정 수식 엔진 (Adjustment & Payable Calculation Engine)**:
    - `subtotal = SUM(invoiced_qty * unit_price)`
-   - `adjustmentTotal = SUM(PLUS / CHARGE) - SUM(MINUS / CREDIT)`
-   - `invoice_total = subtotal + adjustmentTotal` (최종 청구 금액 < 0 일 경우 저장 차단)
+   - `adjustmentTotal = SUM(CHARGE) - SUM(CREDIT)`
+     - `CREDIT` (감액): payable amount 감소 (-)
+     - `CHARGE` (증액): payable amount 증가 (+)
+   - `invoice_total = subtotal + adjustmentTotal` (`invoice_total < 0` 일 경우 저장 차단)
    - `amount_paid = SUM(supplier_payments.payment_amount WHERE status = 'COMPLETED')`
    - `balance_due = invoice_total - amount_paid`
-5. **정기 및 실시간 계산 상태 동기화 (Canonical Computed Payment Status)**:
-   - DB에 저장된 `payment_status`와 별개로, 클라이언트 UI 및 조회 액션은 `balance_due`와 `amount_paid`를 기준으로 실시간 상태(`UNPAID`, `PARTIALLY_PAID`, `PAID`)를 동적 도출함 (`VERIFIED SYSTEM BEHAVIOR`).
-6. **권한 및 보안 격리 (Multi-Tenant & RBAC Isolation)**:
-   - Brand Portal: `finance:read` (조회), `finance:write` (DRAFT 작성/수정/SUBMIT), `finance:manage` (DRAFT 삭제). 권한 부재 시 `<AccessDeniedView>` 렌더링.
-   - Admin Portal: `executive_viewer` 단독 계정은 모든 수정/승인 차단, `super_admin`, `operations`, `reviewer`에 한하여 승인/반려 권한 부여.
+5. **Brand vs Admin 역할 경계 확립 (Brand Portal vs Admin Scope)**:
+   - Brand Portal User: 인보이스 작성/수정/제출/삭제 (`DRAFT` 상태 한정), 인보이스/조정/지급 현황 조회.
+   - Admin User (참조): 인보이스 승인/반려/무효화, 조정 항목 검토, 대금 송금 집행 및 지급 확정 (`COMPLETED`), 정산 종결 (`closeSettlement`).
 
 ---
 
 ## 2. Production Routes & URL Inventory
 
-### 2.1 Brand Portal Routes (`portal.kselectnetwork.com`)
+### 2.1 Brand Portal Routes (`portal.kselectnetwork.com`) — Main Scope
 | Route | Access Guard | Page Component | Functional Scope |
 | :--- | :--- | :--- | :--- |
-| `/portal/finance` | `finance:read` | `app/portal/finance/page.tsx` | 정산 메인 허브 (Invoices / Settlements / Payments 3개 탭, 지표 카드가, 검색/필터) |
+| `/portal/finance` | `finance:read` | `app/portal/finance/page.tsx` | 정산 메인 허브 (Invoices / Settlements / Payments 3개 탭, 지표 카드, 검색/필터) |
 | `/portal/finance/new` | `finance:write` | `app/portal/finance/new/page.tsx` | 신규 인보이스 발행 (자격 부여 PO 선택, 품목별 청구수량/단가 입력, 조정 항목, 첨부파일) |
 | `/portal/finance/[id]` | `finance:read` | `app/portal/finance/[id]/page.tsx` | 인보이스 상세 조회 (헤더, 품목 청구 현황, 정산 조정 내역, 지급 이력, 증빙 다운로드) |
-| `/portal/finance/[id]/edit` | `finance:write` | `app/portal/finance/[id]/edit/page.tsx` | 인보이스 초안 수정 (`DRAFT` 상태에 한함) |
+| `/portal/finance/[id]/edit` | `finance:write` | `app/portal/finance/[id]/edit/page.tsx` | 인보이스 초안 수정 (`DRAFT` 상태일 때만 접근 및 수정 허용) |
 
-### 2.2 Admin Portal Routes (`admin.kselectnetwork.com`)
+### 2.2 Admin System Routes (`admin.kselectnetwork.com`) — Reference Scope Only
 | Route | Access Guard | Page Component | Functional Scope |
 | :--- | :--- | :--- | :--- |
-| `/admin/finance/invoices` | `staff_roles` | `app/admin/finance/invoices/page.tsx` | 어드민 공급사 인보이스 전체 목록 조회, 공급사별/상태별 검색 |
+| `/admin/finance/invoices` | `staff_roles` | `app/admin/finance/invoices/page.tsx` | 어드민 인보이스 전체 목록 조회 및 검토 |
 | `/admin/finance/invoices/new` | `admin:write` | `app/admin/finance/invoices/new/page.tsx` | 어드민 대리 인보이스 생성 |
-| `/admin/finance/invoices/[id]` | `staff_roles` | `app/admin/finance/invoices/[id]/page.tsx` | 어드민 인보이스 상세 (검토, 승인 `approveInvoice`, 반려 `rejectInvoice`, 무효화 `voidInvoice`) |
-| `/admin/finance/invoices/[id]/edit` | `admin:write` | `app/admin/finance/invoices/[id]/edit/page.tsx` | 어드민 인보이스 수정 (`DRAFT` 상태에 한함) |
-| `/admin/finance/payments` | `staff_roles` | `app/admin/finance/payments/page.tsx` | 대금 지급 관리 목록 (지급 등록, 집행 완료, 수표/전송 수단별 추적) |
-| `/admin/finance/payments/new` | `admin:write` | `app/admin/finance/payments/new/page.tsx` | 신규 대금 지급 등록 (`createPayment`, 송금 증빙 첨부) |
-| `/admin/finance/payments/[id]` | `staff_roles` | `app/admin/finance/payments/[id]/page.tsx` | 대금 지급 상세 (지급 확정 `transitionPaymentStatus('COMPLETED')`, 무효 `VOID`) |
+| `/admin/finance/invoices/[id]` | `staff_roles` | `app/admin/finance/invoices/[id]/page.tsx` | 어드민 인보이스 상세 (승인 `approveInvoice`, 반려 `rejectInvoice`, 무효화 `voidInvoice`) |
+| `/admin/finance/invoices/[id]/edit` | `admin:write` | `app/admin/finance/invoices/[id]/edit/page.tsx` | 어드민 인보이스 수정 (`DRAFT` 상태 한정) |
+| `/admin/finance/payments` | `staff_roles` | `app/admin/finance/payments/page.tsx` | 대금 지급 관리 목록 |
+| `/admin/finance/payments/new` | `admin:write` | `app/admin/finance/payments/new/page.tsx` | 신규 대금 지급 등록 (`createPayment`) |
+| `/admin/finance/payments/[id]` | `staff_roles` | `app/admin/finance/payments/[id]/page.tsx` | 대금 지급 상세 및 지급 확정 (`transitionPaymentStatus('COMPLETED')`) |
 | `/admin/finance/payments/[id]/edit` | `admin:write` | `app/admin/finance/payments/[id]/edit/page.tsx` | 초안 지급 내역 수정 |
-| `/admin/finance/landed-cost` | `staff_roles` | `app/admin/finance/landed-cost/page.tsx` | 부대비용 및 랜디드 코스트 배부 관리 (`getEligibleShipmentsForLandedCost`) |
+| `/admin/finance/landed-cost` | `staff_roles` | `app/admin/finance/landed-cost/page.tsx` | 부대비용 및 랜디드 코스트 배부 관리 |
 
 ---
 
-## 3. Canonical Status Dictionary
+## 3. Invoice Status Lifecycle & Action Matrix
 
-### 3.1 인보이스 문서 상태 (`InvoiceStatus`)
-| DB Status | Portal Display Label | 영문 라벨 | 비즈니스 정의 | 전이 Trigger | 다음 가능한 상태 |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| `DRAFT` | 임시저장 | Draft | 브랜드사가 인보이스 작성 중인 임시 상태 | '임시저장' 클릭 | `SUBMITTED`, 삭제(`DELETED`) |
-| `SUBMITTED` | 제출됨 | Submitted | 본사 검토 및 승인을 위해 제출된 상태 | '인보이스 제출' 클릭 | `APPROVED`, `REJECTED`, `VOID` |
-| `APPROVED` | 승인됨 | Approved | 본사 매니저에 의해 인보이스가 채무로 확정 승인된 상태 | Admin '승인 (Approve)' | `VOID` |
-| `REJECTED` | 반려됨 | Rejected | 입력 오류 또는 조건 불일치로 반려된 상태 (사유 필수) | Admin '반려 (Reject)' | `[*]` (종결) |
-| `VOID` | 무효 | Void | 발행 후 취소/무효 처리된 상태 | Admin '무효화 (Void)' | `[*]` (종결) |
+Production Code (`lib/portal/actions.ts` & `lib/supplier-invoice/actions.ts`) 기준 검증된 상태별 액션 매트릭스:
 
-### 3.2 지급 상태 (`PaymentStatus` & Computed Canonical Status)
-| DB / Computed | UI Display Label | 계산 / 판정 조건 | 비즈니스 정의 |
-| :--- | :--- | :--- | :--- |
-| `UNPAID` | 미지급 (Unpaid) | `amountPaid == 0 && balanceDue == invoiceTotal` | 지급액이 전혀 없는 초기 청구 상태 |
-| `PARTIALLY_PAID` | 일부 지급 (Partially Paid) | `amountPaid > 0 && balanceDue > 0` | 인보이스 총액 중 일부만 대금 송금이 완료된 상태 |
-| `PAID` | 지급 완료 (Paid) | `balanceDue <= 0 && invoiceTotal > 0` | 청구 총액 전체에 대해 송금이 완납된 상태 |
-
-### 3.3 정산 상태 (`SettlementStatus`)
-| DB Status | Display Label | 비즈니스 정의 | 상태 전이 Trigger |
-| :--- | :--- | :--- | :--- |
-| `OPEN` | 정산 진행 중 | 지급 및 정산 조정을 계속 수용할 수 있는 열린 상태 | 인보이스 생성 시 기본값 |
-| `SETTLED` | 정산 종결 | 완납 또는 본사 관리에 의해 정산이 마감된 동결 상태 | `closeSettlement` 실행 |
-
-### 3.4 정산 조정 타입 및 방향 (`AdjustmentType` & `AdjustmentDirection`)
-| Adjustment Type | Korean Label | Adjustment Direction | Effect on Invoice Total |
-| :--- | :--- | :--- | :--- |
-| `SHORTAGE` | 수량 부족 | `CREDIT` (감액) | 청구 금액 차감 (-) |
-| `DAMAGE` | 파손 | `CREDIT` (감액) | 청구 금액 차감 (-) |
-| `PRICE_DIFFERENCE` | 단가 차액 | `CREDIT` / `CHARGE` | 차액 방향에 따라 감액/증액 |
-| `OTHER` | 기타 | `CREDIT` / `CHARGE` | 사유에 따라 감액/증액 |
-
-### 3.5 대금 지급 수단 (`PaymentMethod`)
-| Enum Code | Display Label | 설명 |
-| :--- | :--- | :--- |
-| `WIRE` | 계좌이체 (Wire Transfer) | 은행 전신환 송금 |
-| `ACH` | ACH 자동이체 | 자동 계좌 이체 |
-| `CHECK` | 수표 (Check) | 당좌/수표 지급 |
-| `OTHER` | 기타 | 기타 지급 방식 |
+| InvoiceStatus | Brand Portal User Allowed Actions | Admin User Allowed Actions | Permitted Action Triggers | Disallowed Actions (Strictly Enforced) |
+| :--- | :--- | :--- | :--- | :--- |
+| `DRAFT` | View, Edit, Delete, Submit | View, Edit, Delete, Submit | `updatePortalInvoiceDraft`<br/>`deletePortalInvoiceDraft`<br/>`submitPortalInvoice` | Approve / Reject / Void 불가 (제출 전 상태) |
+| `SUBMITTED` | View Only (Read-Only) | View, Approve, Reject, Void | `approveInvoice`<br/>`rejectInvoice`<br/>`voidInvoice` | Brand User의 수정(`Edit`), 삭제(`Delete`), 제출 취소 불가 |
+| `APPROVED` | View Only (Read-Only) | View, Void | `voidInvoice` | Brand User/Admin의 수정(`Edit`), 삭제(`Delete`), 승인 취소 불가 |
+| `REJECTED` | View Only (Rejection Reason) | View | None (Terminal Status) | 제자리 수정(`Edit`), 재제출(`Resubmit`), 삭제 불가. (단, PO의 활성 상태가 해제되어 **새 인보이스 작성** 가능) |
+| `VOID` | View Only (Void Status) | View | None (Terminal Status) | 수정, 삭제, 승인, 지급 처리 불가 |
 
 ---
 
-## 4. ORD ➔ FIN Handoff Rules & Eligibility Audit
+## 4. Status Domain Disambiguation Matrix
 
-### 4.1 발주서(PO) 대상 자격 검증 (`getEligiblePosForInvoice`)
-```typescript
-// lib/portal/actions.ts
-.from("purchase_orders")
-.select("id, po_number, order_date, currency")
-.eq("supplier_id", companyId)
-.in("po_status", ["APPROVED", "SENT"])
-.eq("supplier_confirmation_status", "CONFIRMED")
-.order("created_at", { ascending: false });
-```
-- **자격 요건 1**: 발주서가 공급사에 할당되어 있어야 함 (`supplier_id = companyId`).
-- **자격 요건 2**: 발주 상태가 승인/발송 완료(`APPROVED`, `SENT`)이어야 함.
-- **자격 요건 3**: 공급사가 포털에서 공식 수락(`CONFIRMED`)을 완료해야 함.
-
-### 4.2 1 PO : 1 Active Invoice 규칙
-- 시스템은 하나의 PO당 오직 **1개의 활성 인보이스**만 허용함.
-- `invoice_status NOT IN ('VOID', 'REJECTED')` 조건으로 활성 인보이스 존재 여부를 검사하며, 이미 활성 인보이스가 존재할 경우 신규 생성을 엄격히 차단함 (`VERIFIED SYSTEM BEHAVIOR`).
+| Domain | Status Enum | Primary Controlling Entity | Calculation / Value Origin | Business Meaning |
+| :--- | :--- | :--- | :--- | :--- |
+| **Invoice Status** | `DRAFT`, `SUBMITTED`, `APPROVED`, `REJECTED`, `VOID` | `supplier_invoices.invoice_status` | 결재 및 검토 워크플로우 액션 | 인보이스 문서의 법적/행정적 결재 및 채무 승인 상태 |
+| **Payment Status** | `UNPAID`, `PARTIALLY_PAID`, `PAID` | Computed Canonical UI Status / `supplier_invoices.payment_status` | `balance_due` & `amount_paid` | 인보이스 청구액 대비 실제 금전 송금 집행 완납 현황 |
+| **Settlement Status** | `OPEN`, `SETTLED` | `supplier_invoices.settlement_status` | `closeSettlement(invoiceId)` | 정산 파일의 행정적 최종 마감 및 수정 동결 상태 |
+| **PO Status** | `DRAFT`, `APPROVED`, `SENT`, `COMPLETED`, `CANCELLED` | `purchase_orders.po_status` | 발주 및 물류 이행 프로세스 | 발주서 계약 및 물류 수불 완료 현황 |
 
 ---
 
-## 5. Storage & File Attachment Audit
+## 5. Adjustments & Financial Math Rules
 
-### 5.1 파일 버킷 및 경로 세부 사항
-- **Storage Bucket Name**: `company-uploads`
-- **Brand Portal 업로드 경로**: `[companyId]/invoice/[uuid].pdf` (`uploadPortalInvoiceAttachment`)
-- **Admin Portal 업로드 경로**: `invoices/[uuid].[ext]` (`uploadInvoiceAttachment`)
-- **접근 권한 및 보안**:
-  - 서명된 URL(`getSignedFileUrl`)을 통해서만 다운로드 가능.
-  - Brand Portal에서는 `pathCompanyId === companyId` 테넌트 소유권 검사 후 URL을 발급하여 타사 문서 접근을 원천 차단함 (`VERIFIED SYSTEM BEHAVIOR`).
+### 5.1 Adjustment Properties & Behavior
+- **`AdjustmentType`**: `SHORTAGE` (수량부족), `DAMAGE` (파손), `PRICE_DIFFERENCE` (단가차액), `OTHER` (기타)
+- **`AdjustmentDirection`**:
+  - `CREDIT`: 감액 처리 ➔ 청구 금액 차감 (-). 공급사 채무액을 줄임.
+  - `CHARGE`: 증액 처리 ➔ 청구 금액 추가 (+). 공급사 채무액을 늘림.
+- **수식 산출 경로**:
+  - `subtotal = SUM(supplier_invoice_lines.line_amount)`
+  - `adjustmentTotal = SUM(CHARGE) - SUM(CREDIT)`
+  - `invoice_total = subtotal + adjustmentTotal`
+  - `amount_paid = SUM(supplier_payments.payment_amount WHERE status = 'COMPLETED')`
+  - `balance_due = invoice_total - amount_paid`
+  - **결과 연동**: `balance_due` 감소 시 `PAID` 상태 도달 속도가 가속화되며, `balance_due = 0` 달성 시 `closeSettlement`에 의해 `settlement_status = 'SETTLED'`로 종결할 수 있음.
 
 ---
 
-## 6. Empirical System Findings & Classification
+## 6. Single Active Invoice Rule (Enforcement: BOTH)
 
-### 6.1 Verified System Behavior (검증된 시스템 동작)
-1. **발주 수락 필수성**: `supplier_confirmation_status = 'CONFIRMED'`가 아닌 발주서는 인보이스 발행 목록에 나타나지 않음.
-2. **단일 인보이스 제한**: 동일 PO에 복수 활성 인보이스 생성이 시도되면 에러 반환.
-3. **음수 청구 금지**: 조정 내역을 적용한 최종 `invoice_total < 0` 일 경우 제출이 차단됨.
-4. **마스킹 처리**: 공급사 송금 계좌 정보는 뒷 4자리(`remittance_account_last4`) 및 마스킹 SWIFT 코드만 포털에 노출됨.
+- **Claim**: 하나의 PO 당 진행 중인 활성 인보이스(`invoice_status NOT IN ('VOID', 'REJECTED')`)는 오직 1개만 존재할 수 있다.
+- **Enforcement Type**: **`BOTH` (DB Partial Unique Index + Application-Level Validation)**
+  - **DB Level**: `CREATE UNIQUE INDEX idx_supplier_invoices_one_active_per_po ON public.supplier_invoices(purchase_order_id) WHERE invoice_status NOT IN ('VOID', 'REJECTED');` (`supabase/migrations/0095_invoice_remittance_and_case_link.sql`).
+  - **App Level**: `lib/portal/actions.ts: createPortalInvoiceDraft` 내 `not("invoice_status", "in", '("VOID","REJECTED")')` 쿼리로 사전에 검사 후 명시적 오류 메시지 반환.
 
-### 6.2 System Gap / Not Implemented (시스템 미구현 사항)
-1. **분할 인보이스 (Partial Invoicing)**: 1개 PO에 대해 2회 이상으로 나누어 인보이스를 발행하는 1:N 분할 청구 기능은 현재 미지원됨.
-2. **포털 내 PDF 자동 생성 (PDF Export)**: 발행된 인보이스 데이터를 양식화된 PDF 파일로 자동 변환/다운로드하는 엔진은 미구현됨 (외부 PDF 직접 첨부 방식).
+---
 
-### 6.3 Decision Required (의사결정 필요 사항)
-1. **통화 환율 처리 (Currency Exchange Rates)**: PO 통화와 Payment 통화가 상이할 경우의 환율 적용 및 외환 차손익 처리 규칙 정의 필요.
+## 7. Source Classification & Evidence Mapping
+
+### 7.1 VERIFIED SYSTEM BEHAVIOR (코드/DB 검증 완료)
+1. **병렬 발주 전환**: PO confirmation 완료 후 LOG와 FIN 도메인 병렬 전환.
+2. **이중 단일 활성 인보이스 제약**: DB partial unique index 및 app pre-check 지원.
+3. **DRAFT 상태 한정 수정/삭제**: `updatePortalInvoiceDraft`, `deletePortalInvoiceDraft`, `submitPortalInvoice` 모두 `invoice_status === 'DRAFT'` 검사.
+4. **REJECTED 상태의 수정/재제출 불가**: REJECTED 인보이스는 제자리 수정/재제출이 불가하며, PO 활성이 해제되어 새 인보이스를 생성해야 함.
+5. **동적 지급 상태 도출**: `getCanonicalPaymentStatus`를 통한 실시간 `UNPAID`, `PARTIALLY_PAID`, `PAID` 렌더링.
+6. **마스킹 계좌 정보**: `remittance_account_last4` 및 마스킹 SWIFT 제공.
+
+### 7.2 SYSTEM GAP / NOT IMPLEMENTED (미구현 사항)
+1. **1:N 분할 인보이스 (Partial Invoicing)**: 1개 PO에 복수 인보이스를 나누어 발행하는 기능 미지원 (`Single Active Invoice` 제한).
+2. **포털 내 PDF 양식 자동 변환 (PDF Export)**: 제출된 데이터를 PDF 문서로 자동 생성하는 엔진 미구현 (사용자가 외부 PDF 파일 첨부).
+
+### 7.3 DECISION REQUIRED (의사결정 필요 사항)
+1. **이종 통화 결제 (Multi-Currency Settlement)**: PO/Invoice 통화와 Payment 송금 통화가 다를 경우 적용할 환율 산정 기준 정의 필요.
 
 ---
