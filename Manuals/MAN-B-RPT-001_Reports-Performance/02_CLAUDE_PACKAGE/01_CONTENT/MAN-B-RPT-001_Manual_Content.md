@@ -11,13 +11,13 @@
 ## 1. 시스템 개요 및 지표 측정 원칙 (Overview & Measurement Principles)
 
 ### 1.1 K SELECT Reports & Performance 모듈의 역할
-K SELECT 성과 분석 및 지표 모듈은 브랜드 파트너사가 플랫폼을 통해 진행하는 모든 비즈니스 활동—발주 이행, 대금 정산, 제품 카탈로그 등록, 고객지원 문의 처리—의 현황을 실시간으로 집계하여 한눈에 파악할 수 있도록 돕는 **통합 측정 및 분석 계층(Measurement & Reporting Layer)**입니다.
+K SELECT 성과 분석 및 지표 모듈은 브랜드 파트너사가 플랫폼을 통해 진행하는 모든 비즈니스 활동—발주 이행, 대금 정산, 제품 카탈로그 등록, 고객지원 문의 처리—의 현황을 종합 집계하여 한눈에 파악할 수 있도록 돕는 **통합 측정 및 분석 계층(Measurement & Reporting Layer)**입니다.
 
 파트너사는 별도의 복잡한 데이터 취합 없이 포털 메인 대시보드 및 각 기능별 허브를 통해 브랜드의 일일 운영 건전성(Operational Health)을 진단하고, 긴급하게 조치해야 할 업무 병목을 사전에 파악하여 처리할 수 있습니다.
 
 ### 1.2 핵심 데이터 거버넌스 원칙
-1. **단일 원천 실시간 집계 (Single Authoritative Real-Time Data)**:
-   - 모든 성과 지표는 가상의 모의 데이터가 아니며, 실제 운영 중인 발주서(PO), 정산 인보이스, 등록 제품 및 1:1 지원 티켓의 최신 상태를 실시간 연산하여 제공합니다.
+1. **단일 원천 운영 데이터 집계 (Single Authoritative Operational Data)**:
+   - 모든 성과 지표는 가상의 모의 데이터가 아니며, 실제 운영 중인 발주서(PO), 정산 인보이스, 등록 제품 및 1:1 지원 티켓의 최신 상태를 페이지 조회 시점에 직접 집계·연산하여 제공합니다.
 2. **엄격한 테넌트 격리 (Multi-Tenant Isolation)**:
    - 브랜드사는 자사에 배정된 고유 회사 ID(`company_id`)의 데이터만 독립적으로 조회할 수 있으며, 타 파트너사의 거래 내역이나 기밀 정보는 철저히 격리됩니다.
 3. **분석 계층과 운영 계층의 분리 (Reporting vs Operational Boundary)**:
@@ -53,7 +53,7 @@ K SELECT 성과 분석 및 지표 모듈은 브랜드 파트너사가 플랫폼�
 ![실시간 긴급 조치 큐](file:///c:/Users/ChaeHahm/OneDrive%20-%20Letusto%20Inc/Developement/Claude_Dev/KSelectNetwork-Portal/Manuals/MAN-B-RPT-001_Reports-Performance/02_CLAUDE_PACKAGE/02_SCREENSHOTS/SCR-B-RPT-002.png)
 
 ### 2.2 실행 필요 큐 (Action Required Queue)
-대시보드 상단의 **[실행 필요(Action Required)]** 영역은 업무 병목을 방지하기 위해 실시간으로 감지된 긴급 작업 목록을 우선순위별로 표시합니다:
+대시보드 상단의 **[실행 필요(Action Required)]** 영역은 업무 병목을 방지하기 위해 최신 운영 데이터를 바탕으로 감지된 긴급 작업 목록을 우선순위별로 표시합니다:
 
 - **🔴 URGENT (빨간색 뱃지)**:
   - 공급사 수락이 필요한 신규 발주서 (`발주서 확인` 버튼 클릭 시 즉시 수락 화면 이동)
@@ -65,29 +65,29 @@ K SELECT 성과 분석 및 지표 모듈은 브랜드 파트너사가 플랫폼�
 - **🔵 NORMAL (회색/파란색 뱃지)**:
   - 필수 스펙이 미비하여 등록 완료되지 않은 Draft 상태의 제품
 
-각 카드의 우측 액션 버튼을 클릭하면 해당 업무를 즉시 처리할 수 있는 상세 화면으로 바로 이동하며, 처리가 완료되면 큐에서 실시간으로 자동 제거됩니다.
+각 카드의 우측 액션 버튼을 클릭하면 해당 업무를 즉시 처리할 수 있는 상세 화면으로 바로 이동하며, 처리가 완료되면 페이지 재조회 및 캐시 재검증 시 큐에서 자동 제거됩니다.
 
 ---
 
 ## 3. 발주 성과 및 파이프라인 분석 (PO Pipeline Performance & Filtering)
 
-좌측 메뉴의 **[발주 관리] > [발주서 목록]** (`/portal/orders/purchase-orders`) 메뉴에서는 발주 진행 현황을 공정 단계별로 정밀 분석할 수 있습니다.
+좌측 메뉴의 **[발주 관리] > [발주서 목록]** (`/portal/orders/purchase-orders`) 메뉴에서는 발주 진행 현황을 공정 단계별로 분석할 수 있습니다.
 
 ![발주 파이프라인 성과 요약 카드](file:///c:/Users/ChaeHahm/OneDrive%20-%20Letusto%20Inc/Developement/Claude_Dev/KSelectNetwork-Portal/Manuals/MAN-B-RPT-001_Reports-Performance/02_CLAUDE_PACKAGE/02_SCREENSHOTS/SCR-B-RPT-003.png)
 
-### 3.1 5대 라이프사이클 집계 카드
-발주 관리 상단에는 전체 발주 라이프사이클을 5단계로 구분한 집계 카드가 제공됩니다:
-- **전체 진행 중**: 현재 종료되지 않은 모든 활성 발주서 합계
-- **생산 중 (In Production)**: 발주서 수락 완료 후 공장에서 생산 중인 건수
+### 3.1 5대 성과 집계 요약 카드 (PO Reporting Aggregation)
+발주 관리 상단에는 발주 데이터를 5대 주요 진행 구간으로 그룹화한 성과 요약 카드가 제공됩니다 (이는 ORD의 권위적 6단계 상태 전이 라이프사이클을 파트너사 관점에서 집계한 리포팅 그룹입니다):
+- **전체 진행 중 (Total Open)**: 현재 완료 또는 취소되지 않은 모든 활성 발주서 합계
+- **생산 중 (In Production)**: 발주서 발송, 수락 및 공장 생산 진행 단계의 건수
 - **출고 준비 (Ready to Ship)**: 생산이 완료되어 수출 선적 서류 준비 단계인 건수
-- **입고/검수 (Receiving)**: 미국 현지 물류창고 입고 및 실물 검수 단계인 건수
+- **입고/검수 (Receiving)**: 운송 중이거나 미국 현지 물류창고 입고/검수 단계인 건수
 - **완료 (Completed)**: 모든 입고 및 검수가 성공적으로 종료된 누적 건수
 
 ![발주 상태 필터 칩 및 테이블 정렬](file:///c:/Users/ChaeHahm/OneDrive%20-%20Letusto%20Inc/Developement/Claude_Dev/KSelectNetwork-Portal/Manuals/MAN-B-RPT-001_Reports-Performance/02_CLAUDE_PACKAGE/02_SCREENSHOTS/SCR-B-RPT-004.png)
 
 ### 3.2 다차원 필터링 및 테이블 정렬
 - **기간 선택기 (Date Preset)**: 기본값으로 최근 90일(`Last 90 Days`)이 적용되며, 커스텀 시작일/종료일 지정이 가능합니다.
-- **상태 카테고리 칩 (Filter Chips)**: `생산 중`, `출고 준비`, `선적 운송`, `입고 검수`, `완료`, `취소` 칩을 클릭하여 원하는 상태의 발주서만 즉시 필터링합니다.
+- **상태 카테고리 칩 (Filter Chips)**: `생산 중`, `출고 준비`, `선적 운송`, `입고 검수`, `완료`, `취소` 칩을 클릭하여 원하는 상태의 발주서만 필터링합니다.
 - **다양한 정렬 옵션**: 최신 등록순, 과거순, 발주 금액 높은순, 금액 낮은순 정렬을 지원하여 대형 발주 건을 우선적으로 모니터링할 수 있습니다.
 
 ---
@@ -130,11 +130,11 @@ K SELECT의 제품 등록 평가 엔진은 다음 28대 기준을 자동 검증�
 
 ![1:1 고객지원 문의 처리 현황](file:///c:/Users/ChaeHahm/OneDrive%20-%20Letusto%20Inc/Developement/Claude_Dev/KSelectNetwork-Portal/Manuals/MAN-B-RPT-001_Reports-Performance/02_CLAUDE_PACKAGE/02_SCREENSHOTS/SCR-B-RPT-007.png)
 
-- **전체 / 답변 대기 / 처리 중 / 완료** 탭 필터를 통해 운영팀의 회신 여부와 처리 진행 상태를 실시간 점검합니다.
-- 운영팀의 추가 자료 요청이 있을 경우 대시보드의 `URGENT` 큐에 즉시 반영되어 빠른 소통을 돕습니다.
+- **전체 / 답변 대기 / 처리 중 / 완료** 탭 필터를 통해 운영팀의 회신 여부와 처리 진행 상태를 점검합니다.
+- 운영팀의 추가 자료 요청이 있을 경우 대시보드의 `URGENT` 큐에 반영되어 신속한 확인을 돕습니다.
 
 ### 6.2 어드민 발주 대시보드 동기화 (Admin Purchasing Dashboard)
-브랜드 포털에서 발생하는 모든 발주 수락, 출고 정보 및 인보이스 내역은 K SELECT 운영팀의 어드민 콘솔(`/admin/purchasing/dashboard`)과 실시간 양방향 동기화됩니다.
+브랜드 포털에서 발생하는 모든 발주 수락, 출고 정보 및 인보이스 내역은 데이터베이스를 통해 K SELECT 운영팀의 어드민 콘솔(`/admin/purchasing/dashboard`)과 일관되게 동기화되어 집계됩니다.
 
 ![어드민 전사 발주 대시보드](file:///c:/Users/ChaeHahm/OneDrive%20-%20Letusto%20Inc/Developement/Claude_Dev/KSelectNetwork-Portal/Manuals/MAN-B-RPT-001_Reports-Performance/02_CLAUDE_PACKAGE/02_SCREENSHOTS/SCR-B-RPT-008.png)
 
@@ -142,7 +142,7 @@ K SELECT의 제품 등록 평가 엔진은 다음 28대 기준을 자동 검증�
 
 > [!NOTE]
 > **시스템 기능 범위 안내 (System Boundary Notice)**:
-> - 현재 K SELECT 포털은 대시보드 및 각 전용 모듈에서 실시간 지표 분석을 제공하며, 별도의 독립 메뉴(`/portal/reports`)는 제공되지 않습니다.
+> - 현재 K SELECT 포털은 대시보드 및 각 전용 모듈에서 운영 지표 분석을 제공하며, 별도의 독립 메뉴(`/portal/reports`)는 제공되지 않습니다.
 > - 개별 발주서 PDF 및 인보이스 명세서는 각 상세 페이지에서 다운로드할 수 있으며, 일괄 대량 보고서 생성 기능 및 AI 성과 예측 기능은 지원되지 않습니다.
 > - 어드민 리포트 다운로드 센터(`/admin/reports`)는 현재 준비 중인 플레이스홀더 화면입니다.
 

@@ -18,9 +18,9 @@ Master Reference: MAN-B-BRAND-001_Brand-Policy_V1.pdf
    - RPT does NOT mutate business state or create transactions directly.
 2. Strict Domain Boundary Formulas:
    - RPT ↔ PROD: PROD is Authoritative Source of Attributes; RPT aggregates 28-criteria Completeness (COMPLETE vs Draft).
-   - RPT ↔ ORD: ORD controls 6-step PO Lifecycle; RPT aggregates PO Pipeline Status (Open, Ready, Receiving, Completed).
+   - RPT ↔ ORD: ORD controls authoritative 6-step PO Lifecycle; RPT aggregates 5-stage PO Pipeline Status (Open, In Production, Ready to Ship, Receiving, Completed). RPT 5-Stage Aggregation ≠ ORD 6-Step Lifecycle Transition.
    - RPT ↔ FIN: FIN controls Invoices and Payments; RPT aggregates Invoiced, Paid, Balance Due, and Overdue amounts.
-   - RPT ↔ RET: RET manages Store Inventory; RPT tracks Sales Movement and WOS (Weeks of Supply).
+   - RPT ↔ RET: RET manages Store Inventory & Weekly Audits; RPT displays verified retail performance metrics (/retailer/sales is a separate retailer portal surface).
 3. System Gap & Unimplemented Features Protection:
    - Do NOT describe a dedicated "/portal/reports" page as existing (KPIs live in /portal, /portal/orders/purchase-orders, /portal/finance, /portal/products, /portal/support).
    - Do NOT describe automated Bulk Excel/PDF Report Export in Brand Portal.

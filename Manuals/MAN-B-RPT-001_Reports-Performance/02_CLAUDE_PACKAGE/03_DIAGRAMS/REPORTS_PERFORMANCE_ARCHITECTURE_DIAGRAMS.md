@@ -46,7 +46,7 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-    START([포털 로그인 /portal]) --> LOAD_DATA[세션 company_id 기준 실시간 운영 데이터 로드]
+    START([포털 로그인 /portal]) --> LOAD_DATA[세션 company_id 기준 최신 운영 데이터 로드]
     LOAD_DATA --> SCAN_KPIS[4대 영역 대시보드 KPI 카드 스캔]
     
     SCAN_KPIS --> EVAL_ACTION{긴급 조치 항목 존재 여부}
@@ -63,7 +63,7 @@ flowchart TD
     NORMAL_BOX --> ONE_CLICK_ACT
     
     ONE_CLICK_ACT --> TASK_RESOLVE[업무 처리 완료]
-    TASK_RESOLVE --> CACHE_REVALIDATE[revalidatePath 실행 → 실시간 큐에서 자동 제거]
+    TASK_RESOLVE --> CACHE_REVALIDATE[revalidatePath 실행 → 대시보드 큐에서 자동 제거]
     CACHE_REVALIDATE --> COMPLETE([일일 건강성 진단 완료])
     STABLE_MONITORING --> COMPLETE
 ```
@@ -71,6 +71,7 @@ flowchart TD
 ---
 
 ## 3. Diagram 3: 5-Stage PO Pipeline Aggregation & Filter Flow
+*(RPT 5-Stage Reporting Aggregation ≠ ORD 6-Step Lifecycle Transition Model)*
 
 ```mermaid
 flowchart TD
@@ -122,7 +123,7 @@ flowchart TD
 
 ---
 
-## 5. Diagram 5: Brand Portal to Admin Backoffice Real-Time Sync Flow
+## 5. Diagram 5: Brand Portal to Admin Backoffice Data Synchronization Flow
 
 ```mermaid
 sequenceDiagram
@@ -136,7 +137,7 @@ sequenceDiagram
     Brand->>Portal: 발주 수락 / 출고 서류 등록 / 인보이스 발행
     Portal->>Supabase: 트랜잭션 기록 및 RLS 검증
     Supabase-->>Portal: DB 커밋 완료 & revalidatePath()
-    Portal-->>Brand: 대시보드 KPI 카드 및 Action Required 큐 실시간 업데이트
+    Portal-->>Brand: 대시보드 KPI 카드 및 Action Required 큐 갱신
 
     AdminStaff->>Admin: 어드민 발주 현황 대시보드 진입 (/admin/purchasing/dashboard)
     Admin->>Supabase: getPurchasingDashboardData(filters)

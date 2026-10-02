@@ -23,7 +23,7 @@
 ## 2. SCR-B-RPT-002: Action Required Queue & Priority Badges
 - **File:** `SCR-B-RPT-002.png`
 - **Route:** `/portal`
-- **Title:** 실시간 긴급 조치 큐 (Action Required Queue)
+- **Title:** 긴급 조치 큐 (Action Required Queue)
 - **Callout Pins:**
   - `(1)`: `URGENT` 빨간색 우선순위 뱃지 (발주서 미확정, 연체 인보이스)
   - `(2)`: `DUE_SOON` 주황색 뱃지 (출고 패킹 정보 등록 대기)
@@ -37,7 +37,7 @@
 - **Route:** `/portal/orders/purchase-orders`
 - **Title:** 발주 파이프라인 성과 요약 카드 (PO Pipeline Hub)
 - **Callout Pins:**
-  - `(1)`: 상단 5대 라이프사이클 집계 카드 (전체 진행, 생산 중, 출고 준비, 입고 검수, 완료)
+  - `(1)`: 상단 5대 발주 성과 집계 카드 (전체 진행, 생산 중, 출고 준비, 입고 검수, 완료)
   - `(2)`: 기본 90일 기간 필터 (`Last 90 Days`) 및 커스텀 날짜 선택기
   - `(3)`: 발주 목록 테이블 헤더 및 상태 칩 요약
   - `(4)`: 공급사별 총 발주 금액 및 미입고 잔량 표시

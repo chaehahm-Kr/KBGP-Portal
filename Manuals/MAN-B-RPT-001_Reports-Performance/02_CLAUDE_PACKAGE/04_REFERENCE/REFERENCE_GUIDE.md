@@ -13,7 +13,7 @@
 | Group ID | Metric Group Name | Primary Surface / Route | Core Subject & Key Indicators |
 | :---: | :--- | :--- | :--- |
 | **G1** | **대시보드 총괄 KPI** | `/portal` | 진행 중 발주서, 미지급 정산 잔액, 제품 완성도, 미종결 문의 건수 |
-| **G2** | **실시간 긴급 조치 큐** | `/portal` | 3단계 우선순위(`URGENT`, `DUE_SOON`, `NORMAL`) 기반 업무 병목 큐 |
+| **G2** | **긴급 조치 큐** | `/portal` | 3단계 우선순위(`URGENT`, `DUE_SOON`, `NORMAL`) 기반 업무 병목 큐 |
 | **G3** | **발주 파이프라인 성과** | `/portal/orders/purchase-orders` | 5대 라이프사이클 집계, 90일 기간 필터, 6대 상태 칩, 다중 정렬 |
 | **G4** | **재무 및 정산 실적** | `/portal/finance` | 총 청구액, 지급 완료액, 미지급 잔액, 지급 기한 초과(Overdue) 잔액 |
 | **G5** | **카탈로그 완성도 지표** | `/portal/products` | 28대 기준 평가기 기반 `COMPLETE` vs `Draft (Incomplete)` 분류 |
@@ -32,9 +32,9 @@
 
 ---
 
-## 3. Order Pipeline Status Mapping Matrix
+## 3. Order Pipeline Status Mapping Matrix (RPT Aggregation vs ORD Lifecycle)
 
-| Pipeline Stage Card | Overall Statuses Included | Business Definition |
+| Pipeline Stage Card (RPT) | Overall Statuses Included | Business Definition |
 | :--- | :--- | :--- |
 | **전체 진행 중 (Total Open)** | `Sent to Supplier`, `Supplier Confirmed`, `In Production`, `Change Requested`, `Ready to Ship`, `Shipped`, `Arrived`, `Receiving` | 완료(Completed) 또는 취소(Cancelled)되지 않은 모든 활성 발주서 |
 | **생산 중 (In Production)** | `Sent to Supplier`, `Supplier Confirmed`, `In Production`, `Change Requested` | 발주 수락 및 공장 생산 진행 단계 |
@@ -78,9 +78,9 @@
 ## 6. Authoritative Cross-Domain Boundary Formulas
 
 1. **`RPT ↔ PROD`**: `PROD Spec Completeness Definition ≠ RPT Dashboard Display` (PROD is the Authoritative Attribute Source; RPT only evaluates and displays completeness).
-2. **`RPT ↔ ORD`**: `PO Lifecycle Execution ≠ Performance Aggregation` (ORD manages state transitions; RPT computes counts, timelines, and backlog).
+2. **`RPT ↔ ORD`**: `PO Lifecycle Execution (ORD 6-Step) ≠ Performance Aggregation (RPT 5-Stage)` (ORD manages authoritative state transitions; RPT computes counts, timelines, and backlog).
 3. **`RPT ↔ FIN`**: `Invoice Settlement Processing ≠ Cash Flow Reporting` (FIN executes bank transfers and adjustments; RPT aggregates balances and overdue totals).
-4. **`RPT ↔ RET`**: `Store Placement Operations ≠ Retail Performance Tracking` (RET manages store audits; RPT estimates weekly movement and WOS).
+4. **`RPT ↔ RET`**: `Store Placement Operations (RET) ≠ Performance Aggregation (RPT)` (RET manages operational store audits; /retailer/sales is a separate retailer surface, RPT only displays verified performance metrics).
 5. **`RPT ↔ PERM`**: `Role & ACL Enforcement ≠ Metric Visibility` (PERM enforces multi-tenant RLS; RPT respects session company isolation).
 
 ---

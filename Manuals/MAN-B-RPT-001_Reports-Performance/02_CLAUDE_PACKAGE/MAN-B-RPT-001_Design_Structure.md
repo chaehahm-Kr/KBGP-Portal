@@ -48,7 +48,7 @@
 │ PAGE LAYOUT BLUEPRINT: 6 CORE CHAPTERS                                                 │
 ├────────────────────────────────────────────────────────────────────────────────────────┤
 │ • Chapter 1: Reports & Performance Module Overview (시스템 개요 및 지표 원칙)             │
-│   - Role of Reporting Layer & Real-time Measurement                                    │
+│   - Role of Reporting Layer & Operational Data Measurement                             │
 │   - Multi-tenant data isolation and authoritative data flow                            │
 ├────────────────────────────────────────────────────────────────────────────────────────┤
 │ • Chapter 2: Brand Portal Operational Dashboard & Action Queue (SCR-B-RPT-001, 002)    │
@@ -56,7 +56,7 @@
 │   - Action Required Queue 3-level priority bottleneck engine (URGENT / DUE_SOON)       │
 ├────────────────────────────────────────────────────────────────────────────────────────┤
 │ • Chapter 3: PO Pipeline Performance & Filtering (SCR-B-RPT-003, SCR-B-RPT-004)        │
-│   - 5-stage lifecycle summary cards, 90-day time window filter                         │
+│   - 5-stage PO reporting summary cards, 90-day time window filter                      │
 │   - Status chip filtering and multi-column table sorting                               │
 ├────────────────────────────────────────────────────────────────────────────────────────┤
 │ • Chapter 4: Finance & Settlement Cash Flow Tracking (SCR-B-RPT-005)                   │
