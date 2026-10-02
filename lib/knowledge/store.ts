@@ -731,6 +731,76 @@ All 10 mandatory spec domains must be 100% fulfilled.
       effective_date: "2026-10-01",
       created_at: "2026-10-01T09:00:00Z",
       updated_at: now
+    },
+    {
+      id: "kno-order-management-v10",
+      document_url: "/api/admin/knowledge/asset/asset-order-management-v10",
+      document_name: "MAN-B-ORD-001_Order-Management_V1.pdf",
+      document_size: 4188373,
+      document_type: "application/pdf",
+      slug: "man-b-ord-001-order-management-guide",
+      title: "MAN-B-ORD-001: Brand Portal Order Management & Purchase Order Guide",
+      title_ko: "K SELECT Brand Portal 발주 요청 및 오더 관리 매뉴얼 (MAN-B-ORD-001)",
+      title_en: "K SELECT Brand Portal Order Management & Purchase Order Guide (MAN-B-ORD-001)",
+      summary_ko: "K SELECT Brand Portal의 발주 요청(PO Request) 승인/거절, 정식 발주서(Official Purchase Order) 6단계 라이프사이클(ISSUED → SUPPLIER_CONFIRMED → PRODUCTION → PREPARING_SHIPMENT → SHIPPED → COMPLETED), 공급자 주문 확정, 물류 출고 연결, 인보이스(Invoice) 청구 자격 및 물류센터 입고/검수 종결을 위한 공식 사용자 매뉴얼입니다.",
+      summary_en: "Official user manual for K SELECT Brand Portal covering Retailer Purchase Requests, Official Purchase Order 6-step lifecycle (ISSUED -> SUPPLIER_CONFIRMED -> PRODUCTION -> PREPARING_SHIPMENT -> SHIPPED -> COMPLETED), supplier confirmation, logistics shipment, invoice eligibility, and warehouse receiving completion.",
+      content_ko: `## 1. 개요 및 매뉴얼 목적 (Introduction & Purpose)
+본 매뉴얼은 **K SELECT NETWORK Brand Portal**을 이용하는 입점 브랜드 파트너사가 바이어/리테일러의 구매 의사 타진 단계인 **발주 요청(PO Request)**을 검토하고, 정식 계약 문서인 **발주서(Official Purchase Order)**의 6단계 라이프사이클에 따라 납기 확인, 공급자 승인, 물류 출고 및 정산 인보이스 청구까지 안전하게 완수할 수 있도록 제작된 공식 실무 가이드입니다.
+
+## 2. 2-Phase 오더 아키텍처 (Two-Phase Order Architecture)
+- **Phase 1: 발주 요청 (Purchase Order Request)**: 바이어의 사전 구매 의사 타진 (PENDING, APPROVED, REJECTED 3대 상태 관리 및 상태 불변 원칙 적용).
+- **Phase 2: 정식 발주서 (Official Purchase Order)**: 법적 구속력을 갖는 정식 납품 계약 (Approved 발주 요청에 대해 정식 PO-YYYYMMDD-XXXX 번호 발행).
+
+## 3. 정식 PO 6단계 표준 라이프사이클 (Official PO 6-Step Lifecycle)
+1. **발주서 발행 (ISSUED)**: Admin이 정식 PO 발행, 품목/단가/수량/납기 검토.
+2. **공급자 주문 확정 (SUPPLIER_CONFIRMED)**: 브랜드의 납기 및 생산 최종 승낙. **MAN-B-FIN-001 도메인 공급자 인보이스(Supplier Invoice) 청구 자격 활성화**.
+3. **생산 중 (PRODUCTION)**: 제품 생산 및 1차 포장 진행.
+4. **출고 준비 (PREPARING_SHIPMENT)**: 마스터 카톤 패킹, 라벨링, 선적 서류 준비.
+5. **배송 중 (SHIPPED)**: 3PL 배송 인계 및 B/L·운송장 등록.
+6. **입고/오더 완료 (COMPLETED)**: 물류센터 실물 도착 및 입고 검수 완료, **오더 이행 최종 종결(Order Fulfillment Completed)**. (정산 대금 지급 PAID는 MAN-B-FIN-001에서 병렬 독립 관리).
+
+## 4. 4대 독립 상태 차원
+- **발주 요청 상태**: PENDING / APPROVED / REJECTED
+- **공급자 확정 상태**: DRAFT / PENDING_CONFIRMATION / CONFIRMED / REJECTED
+- **오더 이행 상태**: ISSUED → SUPPLIER_CONFIRMED → PRODUCTION → PREPARING_SHIPMENT → SHIPPED → COMPLETED
+- **결제 및 정산 상태**: UNPAID / PARTIALLY_PAID / PAID (MAN-B-FIN-001 연계)`,
+      content_en: `## 1. Introduction & Purpose
+Official user guide for K SELECT Brand Portal partners to review Retailer Purchase Requests and execute Official Purchase Orders through the 6-step lifecycle.
+
+## 2. Two-Phase Order Architecture
+- Phase 1: Purchase Order Requests (/portal/orders/requests)
+- Phase 2: Official Purchase Orders (/portal/orders/purchase-orders)
+
+## 3. Official PO 6-Step Lifecycle
+1. ISSUED
+2. SUPPLIER_CONFIRMED (Eligible for Supplier Invoice in MAN-B-FIN-001)
+3. PRODUCTION
+4. PREPARING_SHIPMENT
+5. SHIPPED
+6. COMPLETED (Order Fulfillment Completed upon warehouse receiving inspection)
+
+## 4. Status Dimensions & Domain Boundaries
+- Parallel domain operation: Logistics (MAN-B-LOG-001) & Finance (MAN-B-FIN-001)
+- COMPLETED means order fulfillment closed; PAID is managed in Finance.`,
+      type: "MANUAL",
+      source_type: "CONTENT",
+      module: "ORDERS",
+      category: "Brand Portal",
+      tags: ["MANUAL", "ORDERS", "PURCHASE_ORDER", "PO", "PO_REQUEST", "ORDER_MANAGEMENT", "LOGISTICS", "GUIDE", "BRAND", "MAN-B-ORD-001", "OFFICIAL", "발주", "오더", "발주관리", "발주서", "PURCHASING"],
+      owner_id: "staff-admin-01",
+      owner_name: "Brand Operations Desk",
+      status: "PUBLISHED",
+      system_impact_status: "NORMAL",
+      audience: ["BRAND", "INTERNAL", "ADMIN / MANAGEMENT"],
+      is_sensitive_internal: false,
+      requires_external_approval: true,
+      external_review_status: "APPROVED",
+      external_reviewer_id: "staff-superadmin-01",
+      external_reviewed_at: "2026-10-01T12:00:00Z",
+      current_version: "v1.0",
+      effective_date: "2026-10-01",
+      created_at: "2026-10-01T09:00:00Z",
+      updated_at: now
     }
   ];
 
@@ -1565,6 +1635,24 @@ All 10 mandatory spec domains must be 100% fulfilled.
       created_by_name: "Brand Operations Desk",
       published_at: now,
       created_at: now
+    },
+    {
+      id: "ver-order-management-v10",
+      knowledge_id: "kno-order-management-v10",
+      version: "v1.0",
+      status: "PUBLISHED",
+      title_ko: "K SELECT Brand Portal 발주 요청 및 오더 관리 매뉴얼 (MAN-B-ORD-001 v1.0)",
+      title_en: "K SELECT Brand Portal Order Management & Purchase Order Guide v1.0",
+      summary_ko: "최초 공식 발행 버전 (20-Page Published PDF 배포)",
+      summary_en: "Initial official published manual version",
+      content_ko: memoryItems.find(i => i.id === "kno-order-management-v10")?.content_ko || "",
+      content_en: memoryItems.find(i => i.id === "kno-order-management-v10")?.content_en || "",
+      what_changed: "MAN-B-ORD-001 Brand Portal Order Management Guide 최초 공식 배포 (2-Phase 아키텍처 및 6단계 PO 라이프사이클)",
+      why_changed: "브랜드 파트너사 발주 요청 검토 및 정식 PO 이행 표준 절차 가이드 정립",
+      effective_date: "2026-10-01",
+      created_by_name: "Brand Operations Desk",
+      published_at: now,
+      created_at: now
     }
   ];
 
@@ -1855,6 +1943,46 @@ All 10 mandatory spec domains must be 100% fulfilled.
       related_route: "/admin/products",
       manual_title: "K SELECT Brand Portal 상품 등록 및 관리 매뉴얼 (MAN-B-PROD-001)",
       created_at: now
+    },
+    {
+      id: "rel-order-requests",
+      knowledge_id: "kno-order-management-v10",
+      related_portal: "Brand Portal",
+      related_module: "ORDERS",
+      related_menu: "Purchase Order Requests",
+      related_route: "/portal/orders/requests",
+      manual_title: "K SELECT Brand Portal 발주 요청 및 오더 관리 매뉴얼 (MAN-B-ORD-001)",
+      created_at: now
+    },
+    {
+      id: "rel-order-purchase-orders",
+      knowledge_id: "kno-order-management-v10",
+      related_portal: "Brand Portal",
+      related_module: "ORDERS",
+      related_menu: "Purchase Orders",
+      related_route: "/portal/orders/purchase-orders",
+      manual_title: "K SELECT Brand Portal 발주 요청 및 오더 관리 매뉴얼 (MAN-B-ORD-001)",
+      created_at: now
+    },
+    {
+      id: "rel-order-shipping",
+      knowledge_id: "kno-order-management-v10",
+      related_portal: "Brand Portal",
+      related_module: "ORDERS",
+      related_menu: "Shipments & Tracking",
+      related_route: "/portal/orders/shipping",
+      manual_title: "K SELECT Brand Portal 발주 요청 및 오더 관리 매뉴얼 (MAN-B-ORD-001)",
+      created_at: now
+    },
+    {
+      id: "rel-admin-orders-mgmt",
+      knowledge_id: "kno-order-management-v10",
+      related_portal: "Admin",
+      related_module: "ORDERS",
+      related_menu: "Purchase Orders Management",
+      related_route: "/admin/orders",
+      manual_title: "K SELECT Brand Portal 발주 요청 및 오더 관리 매뉴얼 (MAN-B-ORD-001)",
+      created_at: now
     }
   ];
 
@@ -1910,6 +2038,19 @@ All 10 mandatory spec domains must be 100% fulfilled.
       file_size: 3296047,
       published_date: "2026-10-01",
       created_at: now
+    },
+    {
+      id: "asset-order-management-v10",
+      knowledge_id: "kno-order-management-v10",
+      manual_title: "K SELECT Brand Portal 발주 요청 및 오더 관리 매뉴얼 (MAN-B-ORD-001)",
+      version: "v1.0",
+      language: "KO",
+      is_current: true,
+      file_url: "/api/admin/knowledge/asset/asset-order-management-v10",
+      file_name: "MAN-B-ORD-001_Order-Management_V1.pdf",
+      file_size: 4188373,
+      published_date: "2026-10-01",
+      created_at: now
     }
   ];
 
@@ -1956,6 +2097,17 @@ All 10 mandatory spec domains must be 100% fulfilled.
       previous_value: {},
       new_value: { title: "K SELECT Brand Portal 상품 등록 및 관리 매뉴얼", audience: ["BRAND", "INTERNAL"] },
       reason: "MAN-B-PROD-001 Official Publication",
+      created_at: now
+    },
+    {
+      id: "log-order-management-v10",
+      knowledge_id: "kno-order-management-v10",
+      user_id: "user-admin-01",
+      user_name: "Brand Operations Desk",
+      action: "Published",
+      previous_value: {},
+      new_value: { title: "K SELECT Brand Portal 발주 요청 및 오더 관리 매뉴얼", audience: ["BRAND", "INTERNAL"] },
+      reason: "MAN-B-ORD-001 Official Publication",
       created_at: now
     }
   ];
