@@ -32,7 +32,7 @@
 │   ├── SCR-B-FAQ-009.png  (Admin FAQ Candidate Review & Publishing Console)
 │   └── SCR-B-FAQ-010.png  (Admin Knowledge Library Management Console)
 ├── 03_DIAGRAMS/
-│   └── KNOWLEDGE_FAQ_ARCHITECTURE_DIAGRAMS.md (5 Verified Diagrams)
+│   └── FAQ_KNOWLEDGE_ARCHITECTURE_DIAGRAMS.md (5 Verified Diagrams)
 └── 04_REFERENCE/
     └── REFERENCE_GUIDE.md (Tables, Topics, Scoring, Boundary Formulas)
 ```

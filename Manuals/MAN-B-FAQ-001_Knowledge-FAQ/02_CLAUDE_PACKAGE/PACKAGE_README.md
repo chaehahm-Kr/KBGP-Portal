@@ -35,7 +35,7 @@
 │   ├── SCR-B-FAQ-009.png                           # 어드민 FAQ 심사 및 배포 관리 콘솔
 │   └── SCR-B-FAQ-010.png                           # 어드민 지식 라이브러리 관리 콘솔
 ├── 03_DIAGRAMS/
-│   └── KNOWLEDGE_FAQ_ARCHITECTURE_DIAGRAMS.md      # 5대 프로덕션 아키텍처 다이어그램
+│   └── FAQ_KNOWLEDGE_ARCHITECTURE_DIAGRAMS.md        # 5대 프로덕션 아키텍처 다이어그램
 └── 04_REFERENCE/
     └── REFERENCE_GUIDE.md                          # 63개 FAQ 매트릭스, 토픽, 검색 스코어링 퀵 레퍼런스
 ```
@@ -47,7 +47,7 @@
 1. **63개 프로덕션 FAQ 기준 작성**:
    - BRAND (5), ONB (9), PROD (14), ORD (12), REG (12), RET (11) 총 63건의 공식 FAQ만을 정본으로 다룹니다.
 2. **미발행 도메인 관리**:
-   - LOG, FIN, PERM, TASK, RPT, INT는 현재 FAQ가 발행되지 않았으므로 활성 FAQ처럼 표현하지 않고 배포 예정 상태로 명시합니다.
+   - LOG, FIN, PERM, TASK, RPT, INT는 현재 공식 FAQ가 발행되지 않은 Pending Domain으로 명시합니다.
 3. **Featured FAQ 모델**:
    - 시스템 강제 제약이 아닌 **Editorial Policy 및 Data Pattern**으로 정의합니다 (현재 26건 배정).
 4. **교차 도메인 경계 수호**:

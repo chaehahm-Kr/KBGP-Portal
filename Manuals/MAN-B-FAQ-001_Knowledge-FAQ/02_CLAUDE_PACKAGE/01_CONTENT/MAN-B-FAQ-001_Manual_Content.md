@@ -19,7 +19,7 @@ K SELECT 도움말 센터(`/portal/help`)는 브랜드 파트너사가 플랫폼
 K SELECT Knowledge Center에 등록된 모든 FAQ는 임의로 작성된 가상의 문답이 아니며, 다음 엄격한 거버넌스 원칙을 따릅니다:
 
 1. **정본 매뉴얼 연계 (Canonical Manual Grounding)**:
-   - 모든 FAQ는 K SELECT 운영팀의 정식 심사를 거쳐 발행된 공식 정책 매뉴얼(`PUBLISHED` 상태의 Knowledge Items)의 조항과 1:1로 직결되어 있습니다.
+   - 등록된 모든 FAQ는 Published Knowledge Manual 및 검증된 운영 기준을 근거로 관리됩니다.
 2. **도메인 경계 분리 (Strict Domain Boundaries)**:
    - 각 FAQ는 배정된 단 하나의 업무 도메인과 표준 토픽에 귀속되며, 인접 도메인의 비즈니스 규칙을 임의로 확장하거나 침범하지 않습니다.
 3. **지속적 정합성 유지 (Living Documentation)**:
@@ -56,7 +56,7 @@ K SELECT Knowledge Center에 등록된 모든 FAQ는 임의로 작성된 가상�
 
 > [!NOTE]
 > **미발행 도메인 안내**:
-> 재고·물류(LOG), 정산·재무(FIN), 권한 관리(PERM), 할 일·소통(TASK), 리포트(RPT), 인텔리전스(INT) 도메인은 상위 정본 매뉴얼 발행 일정에 맞추어 공식 FAQ가 순차적으로 배포될 예정입니다.
+> 재고·물류(LOG), 정산·재무(FIN), 권한 관리(PERM), 할 일·소통(TASK), 리포트(RPT), 인텔리전스(INT) 도메인은 현재 공식 FAQ가 발행되지 않은 Pending Domain입니다.
 
 ---
 
@@ -103,7 +103,7 @@ K SELECT Knowledge Center에 등록된 모든 FAQ는 임의로 작성된 가상�
 
 ![1:1 문의 연계 시 질문 사전 입력 화면](file:///c:/Users/ChaeHahm/OneDrive%20-%20Letusto%20Inc/Developement/Claude_Dev/KSelectNetwork-Portal/Manuals/MAN-B-FAQ-001_Knowledge-FAQ/02_CLAUDE_PACKAGE/02_SCREENSHOTS/SCR-B-FAQ-007.png)
 
-- **컨텍스트 자동 전달 (`kselect_support_handoff`)**: 사용자가 도움말 센터에서 검색했던 질문 내용과 조회 이력이 1:1 문의 작성 폼에 자동으로 채워져 담당자와의 신속한 상담이 가능합니다.
+- **질문 컨텍스트 자동 연계**: 사용자가 도움말 센터에서 검색했던 질문 내용과 조회 이력이 1:1 문의 작성 폼에 자동으로 채워져 담당자와의 신속한 상담이 가능합니다.
 
 ---
 

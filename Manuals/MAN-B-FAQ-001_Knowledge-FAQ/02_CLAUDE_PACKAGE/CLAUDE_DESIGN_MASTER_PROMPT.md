@@ -21,7 +21,7 @@ Master Reference: MAN-B-BRAND-001_Brand-Policy_V1.pdf
      • ORD (12 FAQs, 5 Featured) — topic-orders
      • REG (12 FAQs, 4 Featured) — topic-regulatory
      • RET (11 FAQs, 4 Featured) — topic-retail
-   - LOG, FIN, PERM, TASK, RPT, INT are pending publication (0 published FAQs). Do NOT invent FAQs for pending domains.
+   - LOG, FIN, PERM, TASK, RPT, INT are Pending Domains (0 published FAQs). Do NOT invent FAQs for pending domains.
 2. Featured FAQ Model:
    - Present Featured FAQs as an Editorial Policy and Data Pattern (is_featured: true), not a hard system constraint.
 3. Domain Boundary Formulas:
