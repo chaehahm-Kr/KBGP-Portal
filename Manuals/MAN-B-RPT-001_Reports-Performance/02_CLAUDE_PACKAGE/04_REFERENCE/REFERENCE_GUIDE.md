@@ -36,7 +36,7 @@
 
 | Pipeline Stage Card (RPT) | Overall Statuses Included | Business Definition |
 | :--- | :--- | :--- |
-| **전체 진행 중 (Total Open)** | `Sent to Supplier`, `Supplier Confirmed`, `In Production`, `Change Requested`, `Ready to Ship`, `Shipped`, `Arrived`, `Receiving` | 완료(Completed) 또는 취소(Cancelled)되지 않은 모든 활성 발주서 |
+| **전체 진행 중 (Total Open)** | `Sent to Supplier`, `Supplier Confirmed`, `In Production`, `Change Requested`, `Ready to Ship`, `Shipped`, `Arrived`, `Receiving` | 완료(Completed) 또는 취소(Cancelled) 상태를 제외한 활성 발주서 합계 |
 | **생산 중 (In Production)** | `Sent to Supplier`, `Supplier Confirmed`, `In Production`, `Change Requested` | 발주 수락 및 공장 생산 진행 단계 |
 | **출고 준비 (Ready to Ship)** | `Ready to Ship` | 생산 완료 후 수출 패킹리스트 등록 대기 단계 |
 | **입고/검수 (Receiving)** | `Shipped`, `Arrived`, `Receiving` | 수출 선적 운송 중 및 미국 물류센터 입고/검수 단계 |

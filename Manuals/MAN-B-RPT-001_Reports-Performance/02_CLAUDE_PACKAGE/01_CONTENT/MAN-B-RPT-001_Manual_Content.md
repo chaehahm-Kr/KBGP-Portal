@@ -11,13 +11,13 @@
 ## 1. 시스템 개요 및 지표 측정 원칙 (Overview & Measurement Principles)
 
 ### 1.1 K SELECT Reports & Performance 모듈의 역할
-K SELECT 성과 분석 및 지표 모듈은 브랜드 파트너사가 플랫폼을 통해 진행하는 모든 비즈니스 활동—발주 이행, 대금 정산, 제품 카탈로그 등록, 고객지원 문의 처리—의 현황을 종합 집계하여 한눈에 파악할 수 있도록 돕는 **통합 측정 및 분석 계층(Measurement & Reporting Layer)**입니다.
+K SELECT 성과 분석 및 지표 모듈은 브랜드 파트너사가 플랫폼을 통해 진행하는 비즈니스 활동—발주 이행, 대금 정산, 제품 카탈로그 등록, 고객지원 문의 처리—의 현황을 종합 집계하여 한눈에 파악할 수 있도록 돕는 **통합 측정 및 분석 계층(Measurement & Reporting Layer)**입니다.
 
 파트너사는 별도의 복잡한 데이터 취합 없이 포털 메인 대시보드 및 각 기능별 허브를 통해 브랜드의 일일 운영 건전성(Operational Health)을 진단하고, 긴급하게 조치해야 할 업무 병목을 사전에 파악하여 처리할 수 있습니다.
 
 ### 1.2 핵심 데이터 거버넌스 원칙
 1. **단일 원천 운영 데이터 집계 (Single Authoritative Operational Data)**:
-   - 모든 성과 지표는 가상의 모의 데이터가 아니며, 실제 운영 중인 발주서(PO), 정산 인보이스, 등록 제품 및 1:1 지원 티켓의 최신 상태를 페이지 조회 시점에 직접 집계·연산하여 제공합니다.
+   - 본 매뉴얼에서 다루는 검증된 운영 지표는 발주서(PO), 정산 인보이스, 등록 제품 및 1:1 지원 티켓 등의 최신 운영 데이터를 페이지 조회 시점에 직접 집계·연산하여 제공합니다.
 2. **엄격한 테넌트 격리 (Multi-Tenant Isolation)**:
    - 브랜드사는 자사에 배정된 고유 회사 ID(`company_id`)의 데이터만 독립적으로 조회할 수 있으며, 타 파트너사의 거래 내역이나 기밀 정보는 철저히 격리됩니다.
 3. **분석 계층과 운영 계층의 분리 (Reporting vs Operational Boundary)**:
@@ -77,11 +77,11 @@ K SELECT 성과 분석 및 지표 모듈은 브랜드 파트너사가 플랫폼�
 
 ### 3.1 5대 성과 집계 요약 카드 (PO Reporting Aggregation)
 발주 관리 상단에는 발주 데이터를 5대 주요 진행 구간으로 그룹화한 성과 요약 카드가 제공됩니다 (이는 ORD의 권위적 6단계 상태 전이 라이프사이클을 파트너사 관점에서 집계한 리포팅 그룹입니다):
-- **전체 진행 중 (Total Open)**: 현재 완료 또는 취소되지 않은 모든 활성 발주서 합계
+- **전체 진행 중 (Total Open)**: 현재 완료 또는 취소되지 않은 활성 발주서 합계
 - **생산 중 (In Production)**: 발주서 발송, 수락 및 공장 생산 진행 단계의 건수
 - **출고 준비 (Ready to Ship)**: 생산이 완료되어 수출 선적 서류 준비 단계인 건수
 - **입고/검수 (Receiving)**: 운송 중이거나 미국 현지 물류창고 입고/검수 단계인 건수
-- **완료 (Completed)**: 모든 입고 및 검수가 성공적으로 종료된 누적 건수
+- **완료 (Completed)**: 입고 및 검수가 성공적으로 종료된 누적 건수
 
 ![발주 상태 필터 칩 및 테이블 정렬](file:///c:/Users/ChaeHahm/OneDrive%20-%20Letusto%20Inc/Developement/Claude_Dev/KSelectNetwork-Portal/Manuals/MAN-B-RPT-001_Reports-Performance/02_CLAUDE_PACKAGE/02_SCREENSHOTS/SCR-B-RPT-004.png)
 

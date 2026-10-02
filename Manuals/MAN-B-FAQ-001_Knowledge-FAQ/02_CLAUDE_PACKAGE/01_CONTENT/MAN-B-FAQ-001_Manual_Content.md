@@ -13,7 +13,7 @@
 ### 1.1 K SELECT 지식 센터의 역할
 K SELECT 도움말 센터(`/portal/help`)는 브랜드 파트너사가 플랫폼을 이용하면서 발생하는 다양한 업무 규정, 운영 정책, 시스템 기능 및 절차에 대한 공식 안내를 제공하는 통합 지식 허브입니다.
 
-파트너사는 1:1 지원 센터에 문의하기 전에 지식 센터의 토픽별 FAQ 탐색 및 자연어 지식 검색(Ask K SELECT)을 통해 실시간으로 신뢰할 수 있는 공식 답변을 즉시 확인할 수 있습니다.
+파트너사는 1:1 지원 센터에 문의하기 전에 지식 센터의 토픽별 FAQ 탐색 및 지식 검색(Ask K SELECT)을 통해 게시된 공식 지식 문서(Published Knowledge) 및 FAQ를 기반으로 관련 답변과 안내 지침을 확인할 수 있습니다.
 
 ### 1.2 소스 근거성 및 거버넌스 원칙 (Source Grounding Principle)
 K SELECT Knowledge Center에 등록된 모든 FAQ는 임의로 작성된 가상의 문답이 아니며, 다음 엄격한 거버넌스 원칙을 따릅니다:
@@ -75,7 +75,7 @@ K SELECT Knowledge Center에 등록된 모든 FAQ는 임의로 작성된 가상�
 
 ## 4. 자연어 질의응답 (Ask K SELECT) 및 출처 인용 (Grounded Search)
 
-검색창에 문장 형태나 키워드로 질문을 입력하면, 지식 검색 엔진이 정책 매뉴얼 본문을 실시간 대조하여 직접 답변을 구성합니다.
+검색창에 문장 형태나 키워드로 질문을 입력하면, 지식 검색 엔진이 게시된 지식 콘텐츠(Published Knowledge)를 검색·매칭하여 관련 답변과 공식 출처(Source Citations)를 제공합니다.
 
 ![Ask K SELECT 자연어 질문 답변 카드](file:///c:/Users/ChaeHahm/OneDrive%20-%20Letusto%20Inc/Developement/Claude_Dev/KSelectNetwork-Portal/Manuals/MAN-B-FAQ-001_Knowledge-FAQ/02_CLAUDE_PACKAGE/02_SCREENSHOTS/SCR-B-FAQ-004.png)
 
