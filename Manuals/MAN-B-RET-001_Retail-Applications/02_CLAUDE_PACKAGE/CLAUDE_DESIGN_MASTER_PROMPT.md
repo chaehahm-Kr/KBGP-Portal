@@ -7,11 +7,11 @@ Your task is to design and generate the official PDF User Manual for **Brand Por
 
 ---
 
-## 2. Master Visual Standard: `MAN-BRAND-001 Brand Policy.pdf`
+## 2. Master Visual Standard: `MAN-B-BRAND-001_Brand-Policy_V1.pdf`
 
 > [!IMPORTANT]
 > **STRICT DESIGN MASTER REFERENCE**:
-> You MUST strictly emulate the exact visual design language, grid layout, header/footer structure, typography scales, badge color tokens, and table styles established in **`MAN-BRAND-001 Brand Policy.pdf`**.
+> You MUST strictly emulate the exact visual design language, grid layout, header/footer structure, typography scales, badge color tokens, and table styles established in **`MAN-B-BRAND-001_Brand-Policy_V1.pdf`**.
 > Do NOT create alternative design systems or modify brand colors.
 
 ### Key Design Tokens
@@ -39,7 +39,17 @@ You will find all necessary assets within `02_CLAUDE_PACKAGE/`:
 
 ---
 
-## 4. Document Structure (Target: 6–8 Pages)
+## 4. Strict Domain Rules
+1. **Retail Approval ≠ PO Creation**:
+   - Retail application approval enables retail network partnership and business discussions; actual purchase orders are issued and executed through the separate `MAN-B-ORD-001` process.
+2. **No arbitrary 300-unit requirement**:
+   - Use "초기 시장 테스트를 위한 일정 수준의 테스트 물량 공급".
+3. **Re-application policy**:
+   - Kept as a future policy notice without asserting active re-application features.
+
+---
+
+## 5. Document Structure (Target: 6–8 Pages)
 
 - **Cover & Header**: Manual Title, Manual ID `MAN-B-RET-001`, Version `v1.0`, Canonical Category `입점 & 리테일 네트워크 (topic-retail)`.
 - **Page 1: 1. 개요 및 파트너십 프로세스**
@@ -69,7 +79,7 @@ You will find all necessary assets within `02_CLAUDE_PACKAGE/`:
 
 ---
 
-## 5. Visual Execution Quality Checklist
+## 6. Visual Execution Quality Checklist
 
 - [ ] All 9 screenshots from `02_SCREENSHOTS/` embedded with crisp 1:1 or 2:1 aspect ratio.
 - [ ] Numbered badge callouts placed accurately as specified in `SCREENSHOT_ANNOTATION_GUIDE.md`.

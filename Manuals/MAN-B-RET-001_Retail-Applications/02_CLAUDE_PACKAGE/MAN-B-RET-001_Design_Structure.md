@@ -6,7 +6,7 @@
 - **Manual ID**: `MAN-B-RET-001`
 - **Manual Title**: Brand Portal Retail Placement & Application Guide (입점 신청 및 리테일 네트워크 가이드)
 - **Target Audience**: Brand Users, Brand Admins, Operations Managers
-- **Visual Reference**: `MAN-BRAND-001 Brand Policy.pdf`
+- **Visual Reference**: `MAN-B-BRAND-001_Brand-Policy_V1.pdf`
 - **Total Estimated Pages**: 6 Pages (A4 Portrait)
 
 ---
@@ -87,6 +87,8 @@
   - Screenshot Placement: `SCR-B-RET-008.png`
   - Review of the right sidebar cards
 - **Section 6.2: 심사 결과별 후속 조치**:
-  - Approved (`approved`) / Partial Approved (`partial_approved`) / On Hold (`on_hold`) / Rejected (`rejected`)
+  - Approved (`approved`) / Partial Approved (`partial_approved`) $\rightarrow$ 리테일 네트워크 후속 협의 및 `MAN-B-ORD-001` 독립적 발주 연계
+  - On Hold (`on_hold`) $\rightarrow$ MD 추가 조율
+  - Rejected (`rejected`) $\rightarrow$ 사유 확인 및 스펙 보완
 - **Section 6.3: 자주 묻는 질문 (FAQ 7선)**:
   - 7 Grounded Q&A items covering multi-brand applications, post-submission editing, readiness options, partial approval, info request replies, rejection reasons, and next steps.

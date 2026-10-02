@@ -10,7 +10,7 @@
 | **Audience** | `B — Brand Portal User` (Brand Owner, Manager, Operations Team) |
 | **Topic Category** | `topic-retail` (입점 & 리테일 네트워크 / Retail Network) |
 | **Topic Sequence** | Order 5 (Follows `topic-regulatory` / `MAN-B-REG-001`) |
-| **Visual Design Standard** | **`MAN-BRAND-001 Brand Policy.pdf`** (Authoritative Master Style Reference) |
+| **Visual Design Standard** | **`MAN-B-BRAND-001_Brand-Policy_V1.pdf`** (Authoritative Master Style Reference) |
 | **Content Source of Truth** | `01_SOURCE` & `01_CONTENT/MAN-B-RET-001_Manual_Content.md` |
 | **Current Status** | `READY FOR CHATGPT PACKAGE QA` |
 
@@ -47,7 +47,11 @@ Manuals/MAN-B-RET-001_Retail-Applications/02_CLAUDE_PACKAGE/
 
 ## Instructions for Claude Design Execution
 
-1. **Visual Style Reference**: Strictly adopt the visual design system, typography hierarchy, margins, badge styling, and table aesthetics defined in `MAN-BRAND-001 Brand Policy.pdf`. Do NOT invent new design themes.
+1. **Visual Style Reference**: Strictly adopt the visual design system, typography hierarchy, margins, badge styling, and table aesthetics defined in **`MAN-B-BRAND-001_Brand-Policy_V1.pdf`**. Do NOT invent new design themes.
 2. **Text Authority**: Use only the text and structured data in `01_CONTENT/MAN-B-RET-001_Manual_Content.md`.
-3. **Screenshots**: Place and annotate the 9 physical screenshot PNG files from `02_SCREENSHOTS/` according to `SCREENSHOT_ANNOTATION_GUIDE.md`.
-4. **Target Output**: Compile into high-quality PDF format and save to `Manuals/MAN-B-RET-001_Retail-Applications/03_PUBLISHED/` upon approval.
+3. **Domain Boundaries**:
+   - `Retail Application Approval ≠ Automatic Purchase Order Creation`: Retail application approval enables retail network partnership and business discussions; actual purchase orders are issued and executed through the separate `MAN-B-ORD-001` process.
+   - `No arbitrary 300-unit requirement`: Use "초기 시장 테스트를 위한 일정 수준의 테스트 물량 공급".
+   - `Re-application policy`: Kept as a future policy notice without asserting active re-application features.
+4. **Screenshots**: Place and annotate the 9 physical screenshot PNG files from `02_SCREENSHOTS/` according to `SCREENSHOT_ANNOTATION_GUIDE.md`.
+5. **Target Output**: Compile into high-quality PDF format and save to `Manuals/MAN-B-RET-001_Retail-Applications/03_PUBLISHED/` upon approval.
