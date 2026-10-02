@@ -179,8 +179,9 @@ export const CANONICAL_BRAND_TOPICS: CanonicalTopic[] = [
  * Authoritative Primary Topic mapping for known Knowledge IDs.
  */
 const AUTHORITATIVE_PRIMARY_TOPIC_MAP: Record<string, string> = {
-  "kno-brand-policy-v10": "topic-brand", // MAN-BRAND-001 -> 브랜드 관리
-  "kno-002-brand-faq": "topic-start",   // Onboarding FAQ -> 시작하기
+  "kno-brand-policy-v10": "topic-brand", // MAN-B-BRAND-001 -> 브랜드 관리
+  "kno-onboarding-guide-v10": "topic-start", // MAN-B-ONB-001 -> 시작하기
+  "kno-002-brand-faq": "topic-start", // Onboarding FAQ -> 시작하기
   "kno-insights-manual-v10": "topic-start",
   "kno-insights-policy-prohibitions": "topic-start"
 };
