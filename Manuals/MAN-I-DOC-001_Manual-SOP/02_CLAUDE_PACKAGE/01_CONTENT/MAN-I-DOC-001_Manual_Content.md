@@ -18,7 +18,7 @@
 ### 0.1 목적 및 적용 범위 (Executive Summary)
 본 운영 가이드(SOP)는 K SELECT 엔터프라이즈 시스템 내에서 사용되는 모든 매뉴얼(브랜드 포털 사용자용 `MAN-B-*`, 사내 운영용 `MAN-I-*`, 어드민 관리자용 `MAN-A-*`)의 **기획, 사실 조사(Ground Truth Reconnaissance), 디자인 패키징, PDF 발행, 지식 센터(Knowledge Center) 연동, FAQ 배포, 그리고 개정 및 버전 관리**에 이르는 전 과정을 표준화하기 위해 제정되었습니다.
 
-K SELECT의 모든 문서는 **"실제 Production 코드베이스 및 데이터베이스 스키마와 100% 일치하는 사실"**만을 기술해야 하며, 개발 미완료 기능, 추측성 로직, 과장된 보증(Absolute Claims)은 철저히 배제됩니다.
+K SELECT의 모든 문서는 **"실제 Production 코드베이스 및 데이터베이스 스키마와 직접 검증된 사실"**만을 기술해야 하며, 개발 미완료 기능, 추측성 로직, 과장된 보증(Absolute Claims)은 철저히 배제됩니다.
 
 ---
 
@@ -87,7 +87,7 @@ K SELECT 매뉴얼 제작은 기획부터 배포까지 엄격한 13단계 순차
 ### 2.2 5대 품질 게이트(Quality Gates)와 엄격한 차단 원칙 (Strict Blocking)
 > [!IMPORTANT]
 > **Strict Gate Blocking Rule**:
-> 각 QA 게이트를 100% 만족하지 못한 상태에서는 다음 단계로의 진입이 원천 차단됩니다.
+> 각 QA 게이트의 모든 항목을 통과하지 못한 상태에서는 다음 단계로의 진입이 원천 차단됩니다.
 > - **Gate 1 (Source QA)** 미통과 시 ➔ 패키지 생성 금지
 > - **Gate 2 (Package QA)** 미통과 시 ➔ 디자인 생성 금지
 > - **Gate 3 (PDF QA)** 미통과 시 ➔ Publish 금지
@@ -141,7 +141,7 @@ K SELECT의 Q&A 어시스턴트(`/portal/help/ask`)는 환각(Hallucination)을 
 ## Chapter 4. 어드민 지식 운영 허브 & 버전 관리
 
 ### 4.1 어드민 지식 허브 대시보드 지표
-어드민 지식 허브(`/admin/knowledge`)는 시스템 전체의 지식 아이템 수, 배포 완료 상태, 등록된 FAQ 수 및 토픽 매핑 상태를 실시간으로 모니터링합니다.
+어드민 지식 허브(`/admin/knowledge`)는 시스템 전체의 지식 아이템 수, 배포 완료 상태, 등록된 FAQ 수 및 토픽 매핑 상태 등 현재 운영 데이터를 조회/집계하여 표시합니다.
 
 > **[스크린샷 삽입: SCR-I-DOC-006]**
 > *Admin 지식 허브 대시보드 화면 (`/admin/knowledge`)*
@@ -172,7 +172,7 @@ K SELECT의 Q&A 어시스턴트(`/portal/help/ask`)는 환각(Hallucination)을 
 ## Chapter 5. 마스터 디자인 시스템 규격 & Claude AI 패키징
 
 ### 5.1 MAN-B-BRAND-001 마스터 디자인 시스템 규격
-모든 공식 매뉴얼 PDF는 `MAN-B-BRAND-001_Brand-Policy_V1.pdf`의 디자인 토큰을 100% 준수합니다:
+모든 공식 매뉴얼 PDF는 `MAN-B-BRAND-001_Brand-Policy_V1.pdf`의 디자인 토큰을 엄격히 준수합니다:
 - **Canvas Background**: `#09090B` (Dark Slate/Zinc-950)
 - **Card Containers**: `#18181B` (Zinc-900), 테두리 `#27272A` (Zinc-800)
 - **Primary Accent**: `#4F46E5` (Indigo-600)
@@ -211,14 +211,14 @@ K SELECT의 Q&A 어시스턴트(`/portal/help/ask`)는 환각(Hallucination)을 
 ### 6.1 자동화 스크립트 기반 무결성 검증
 매뉴얼 배포 전 실행하는 표준 검증 명령어 스위트입니다:
 1. `npx tsc --noEmit` ➔ TypeScript 컴파일 0 에러 확인
-2. `node scripts/verify-screenshots-hash.js` ➔ 스크린샷 11장 100% Unique 해시 확인
+2. `node scripts/verify-screenshots-hash.js` ➔ 스크린샷 11장 전수 Unique 해시 확인
 3. `node scripts/verify-[domain]-faqs-publish.js` ➔ FAQ 90개 전수 무결성 및 Search Discovery 확인
 4. `git rev-parse HEAD; git rev-parse origin/main` ➔ Local HEAD === origin/main 일치 확인
 
 > **[스크린샷 삽입: SCR-I-DOC-011]**
 > *터미널 자동화 QA 스크립트 실행 및 전 항목 PASS 결과 화면*
 > - **Pin 1**: TypeScript 무결성 검증 (`npx tsc --noEmit` -> 0 errors)
-> - **Pin 2**: 스크린샷 전수 실재 및 100% Unique SHA-256 해시 검증 로그
+> - **Pin 2**: 스크린샷 전수 실재 및 전수 Unique SHA-256 해시 검증 로그
 > - **Pin 3**: 키워드 검색 디스커버리(Search Discovery) 테스트 성공 출력문
 > - **Pin 4**: `Local HEAD === origin/main` Git 동기화 확인 라인
 
@@ -245,7 +245,7 @@ K SELECT의 Q&A 어시스턴트(`/portal/help/ask`)는 환각(Hallucination)을 
 ## Appendix (부록)
 
 ### Appendix A. 6대 Production Grounding 상태 사전
-- `VERIFIED`: 프로덕션 코드/DB에서 100% 확인된 기능
+- `VERIFIED`: 프로덕션 코드/DB에서 직접 확인된 기능
 - `NOT IMPLEMENTED`: 사용자가 기대할 수 있으나 현재 미구현된 기능 (오해 방지용 명시)
 - `SYSTEM GAP`: 정책 요구사항과 시스템 구현 간의 괴리가 있는 부분
 - `LEGACY`: 과거 사용되었으나 현재는 권장되지 않는 기능
@@ -259,11 +259,11 @@ K SELECT의 Q&A 어시스턴트(`/portal/help/ask`)는 환각(Hallucination)을 
 4. `ORD Status` (트랜잭션 생애주기) ≠ `RPT Views` (통계적 집계 데이터)
 5. `PERM Assignment` (계정 권한) ≠ `TASK Support Ticket` (1:1 브랜드 문의 스레드)
 
-### Appendix C. 7대 완료 기준 (Definition of Done)
+### Appendix C. 7대 완료 기준 (Definition of Done) Checklist Template
 - [✓] 1. Source Documents Created & Verified (4/4 in `01_SOURCE/`)
 - [✓] 2. Package QA Passed (8 Markdowns & 11 Unique Screenshots in `02_CLAUDE_PACKAGE/`)
-- [✓] 3. Claude Design & Layout Generated (MAN-B-BRAND-001 Aligned)
-- [✓] 4. PDF QA Passed (0 Overflow, 0 TODOs, 100% Verified)
-- [✓] 5. Published Artifacts Stored (`03_PUBLISHED/` & `private_assets/manuals/`)
-- [✓] 6. Knowledge Center Registered (Public Manual Only)
-- [✓] 7. FAQs Published & Verified (Public Manual Only)
+- [ ] 3. Claude Design & Layout Generated (MAN-B-BRAND-001 Aligned) — Template
+- [ ] 4. PDF QA Passed (0 Overflow, 0 TODOs, Production Grounding QA Passed) — Template
+- [ ] 5. Published Artifacts Stored (`03_PUBLISHED/` & `private_assets/manuals/`) — Template
+- [ ] 6. Knowledge Center Registered (NOT APPLICABLE for Internal SOP) — Template
+- [ ] 7. FAQs Published & Verified (NOT APPLICABLE for Internal SOP) — Template

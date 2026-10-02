@@ -102,6 +102,6 @@
 - **매뉴얼 위치**: Chapter 6 · Section 6.1
 - **어노테이션 핀 상세**:
   - **Pin 1 [TypeScript 무결성]**: `npx tsc --noEmit` 실행 결과 0 Errors 통과 로그
-  - **Pin 2 [스크린샷 고유 해시]**: `verify-screenshots-hash.js` 11장 100% Unique SHA-256 검증 로그
+  - **Pin 2 [스크린샷 고유 해시]**: `verify-screenshots-hash.js` 11장 전수 Unique SHA-256 검증 로그
   - **Pin 3 [Search Discovery 쿼리]**: `verify-fin-faqs-publish.js` 90개 FAQ 전수 무결성 및 검색 통과
   - **Pin 4 [Git 동기화 검증]**: `git rev-parse HEAD; git rev-parse origin/main` 일치 확인 라인

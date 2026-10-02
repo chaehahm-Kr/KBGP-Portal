@@ -17,7 +17,7 @@ flowchart TD
 
     subgraph STAGE_B["2. Claude Packaging & Asset Audit"]
         B1 --> B2["Write Package Markdowns\n(README, Prompts, Structure, Content)"]
-        B2 --> B3["Capture Production Screenshots\n(11~14 Images, 100% Unique SHA-256)"]
+        B2 --> B3["Capture Production Screenshots\n(11~14 Images, All Unique SHA-256)"]
         B3 --> B4["Write Diagrams & Reference Guide"]
         B4 --> B5{"Gate 2: Package QA Gate\n(Source ↔ Package 1:1 Match)"}
         B5 -- "Mismatch / Corrupted / Dup Hash" --> B2
@@ -26,7 +26,7 @@ flowchart TD
 
     subgraph STAGE_C["3. Design & PDF Publishing"]
         C1 --> C2["Render High-Fidelity PDF\n(MAN-B-BRAND-001 Master Ref)"]
-        C2 --> C3{"Gate 3: PDF QA Gate\n(0 Overflow, 0 TODOs, 100% Grounded)"}
+        C2 --> C3{"Gate 3: PDF QA Gate\n(0 Overflow, 0 TODOs, Production Grounding Passed)"}
         C3 -- "Visual / Text Defects" --> C1
         C3 -- "PDF Approved" --> C4["Store in 03_PUBLISHED/\n& Copy to private_assets/manuals/"]
     end
@@ -147,7 +147,7 @@ erDiagram
 
 ---
 
-## 4. FAQ Dual-Store Zero-Downtime Synchronization Architecture
+## 4. FAQ Dual-Store Synchronization Architecture
 
 ```mermaid
 flowchart LR
@@ -159,5 +159,5 @@ flowchart LR
     DB --> TEST["Search Discovery & Regression Suite\n(scripts/verify-*-faqs-publish.js)"]
     MEM --> TEST
     
-    TEST --> PASS["Verified Zero-Downtime Production Ready"]
+    TEST --> PASS["Production Grounding QA Passed"]
 ```

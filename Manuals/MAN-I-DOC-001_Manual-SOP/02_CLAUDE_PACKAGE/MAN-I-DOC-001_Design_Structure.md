@@ -38,7 +38,7 @@ MAN-I-DOC-001_Manual-SOP Guide
 │   │   └── [Screenshot SCR-I-DOC-009]
 │   ├── 5.2 Claude Design Package 8-File 번들 구성 및 빌드 지침
 │   │   └── [Screenshot SCR-I-DOC-010]
-│   └── 5.3 스크린샷 핀(Pin) 어노테이션 매핑 및 100% 고유 해시 검증
+│   └── 5.3 스크린샷 핀(Pin) 어노테이션 매핑 및 전수 고유 해시 검증
 ├── Chapter 6. 자동화 QA 검증 스위트 & Git 릴리즈 파이프라인
 │   ├── 6.1 TypeScript, 패키지 파일, DB 무결성 자동 검증 스크립트
 │   │   └── [Screenshot SCR-I-DOC-011]

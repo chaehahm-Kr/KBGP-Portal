@@ -52,4 +52,4 @@
    `Source Creation` ➔ `Source QA (Gate 1)` ➔ `Package Creation` ➔ `Package File Check` ➔ `Package QA (Gate 2)` ➔ `Claude Design Generation` ➔ `PDF QA (Gate 3)` ➔ `Publish` ➔ `Publish QA` (Internal SOP 완료 지점) ➔ `[Public Only: Knowledge Center Publish` ➔ `Knowledge QA (Gate 4)` ➔ `FAQ Publish` ➔ `FAQ QA (Gate 5)]`.
 2. **Strict QA Gate Blocking**: 어떤 단계든 지정된 QA Gate를 공식 Pass하지 못한 상태에서 다음 단계로의 진입은 엄격히 금지됩니다.
 3. **Internal vs Public Boundary**: 본 매뉴얼(`MAN-I-DOC-001`)은 사내 직원 전용 Internal SOP이므로 Public Knowledge Center 및 Public FAQ 배포는 `NOT APPLICABLE`로 처리됩니다.
-4. **Zero Mismatch Guarantee**: 스크린샷 11장은 전수 고유 SHA-256 해시를 보유하며 `SCREENSHOT_ANNOTATION_GUIDE.md`의 Pin 번호와 100% 대응합니다.
+4. **Screenshot / Annotation Integrity Check**: 스크린샷 11장은 전수 고유 SHA-256 해시를 보유하며 `SCREENSHOT_ANNOTATION_GUIDE.md`의 Pin 번호와 1:1 매핑됩니다.

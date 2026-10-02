@@ -28,6 +28,6 @@ Prior to publishing, verify that all 11 production screenshot assets exist in `0
 1. Save final compiled PDF to `Manuals/MAN-I-DOC-001_Manual-SOP/03_PUBLISHED/MAN-I-DOC-001_Manual-SOP_V1.pdf`.
 2. Synchronize PDF to `private_assets/manuals/MAN-I-DOC-001_Manual-SOP_V1.pdf`.
 3. Compute and record the authoritative SHA-256 hash.
-4. Execute PDF QA Checklist (0 overflow, 0 TODOs, 100% ground truth verified).
+4. Execute PDF QA Checklist (0 overflow, 0 TODOs, production grounding verified).
 5. As an **INTERNAL SOP**, this document terminates at Publish QA (Public Knowledge Center and Public FAQ publication are NOT APPLICABLE).
 ```
