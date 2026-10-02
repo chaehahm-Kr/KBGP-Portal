@@ -15,11 +15,6 @@
 - **Body Text**: `#27272A` (Zinc 800 Charcoal)
 - **Muted Text / Meta Info**: `#71717A` (Zinc 500)
 - **Border Dividers**: `#E4E4E7` (Zinc 200)
-- **Callout Backgrounds**:
-  - Note: `#F4F4F5` (Zinc 100)
-  - Tip: `#EEF2FF` (Indigo 50)
-  - Important: `#FEF3C7` (Amber 50)
-  - Warning: `#FFE4E6` (Rose 50)
 
 ### Typography Hierarchy
 - **Title (H1)**: 24pt Bold, Navy (`#131E2E`)
@@ -60,36 +55,4 @@ Document Root
     ├── 6.1 Admin Verification Views & Proof File Inspection
     ├── 6.2 Screenshot SCR-B-REG-008 & Change History Audit
     └── 6.3 Appendix & Help Center Navigation
-```
-
----
-
-## 3. Visual Callout Component Specifications
-
-### Note Callout (`> [!NOTE]`)
-Used for explaining system file formats, bucket security, or database behavior.
-```markdown
-> [!NOTE]
-> All uploaded trademark and certificate files are stored securely in the `company-uploads` private bucket. Access links expire automatically after 1 hour (3600 seconds) to protect sensitive brand documents.
-```
-
-### Tip Callout (`> [!TIP]`)
-Used for operational shortcuts, such as the AI translation widget.
-```markdown
-> [!TIP]
-> After entering Korean ingredients, click **[번역하기 (Translate)]** to automatically generate standard English INCI ingredient names. Click **[리뷰 완료 및 적용 (Apply to field)]** to populate the English field instantly.
-```
-
-### Important Callout (`> [!IMPORTANT]`)
-Used for barcode formatting or required export fields.
-```markdown
-> [!IMPORTANT]
-> A valid 12-digit UPC or 13-digit EAN barcode is required for products to reach `COMPLETE (등록 완료)` status. Products with missing or invalid barcodes remain in `DRAFT (보완 대기)` status.
-```
-
-### Warning Callout (`> [!WARNING]`)
-Used for alerts regarding versioning or document overrides.
-```markdown
-> [!WARNING]
-> Uploading a new certificate file under the same category will set the previous file's status to inactive (`is_current: false`) and increment the version number by +1. Ensure you upload official PDF or image documents.
 ```
