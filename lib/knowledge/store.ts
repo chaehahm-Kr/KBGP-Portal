@@ -801,6 +801,60 @@ Official user guide for K SELECT Brand Portal partners to review Retailer Purcha
       effective_date: "2026-10-01",
       created_at: "2026-10-01T09:00:00Z",
       updated_at: now
+    },
+    {
+      id: "kno-regulatory-compliance-v11",
+      document_url: "/api/admin/knowledge/asset/asset-regulatory-compliance-v11",
+      document_name: "MAN-B-REG-001_Regulatory-Compliance_V1.pdf",
+      document_size: 1915000,
+      document_type: "application/pdf",
+      slug: "man-b-reg-001-regulatory-compliance-guide",
+      title: "MAN-B-REG-001: Regulatory, Certification & Compliance User Guide",
+      title_ko: "K SELECT Brand Portal 인허가, 상표권 및 증빙 서류 관리 매뉴얼 (MAN-B-REG-001)",
+      title_en: "K SELECT Brand Portal Regulatory, Certification & Compliance User Guide (MAN-B-REG-001)",
+      summary_ko: "미국 화장품 규제 현대화법(MoCRA) 및 FDA 기준에 맞춘 한/미 상표권(KIPO/USPTO), 전성분 실시간 영문 INCI 번역기, 5대 인허가 서류(FDA 등록증, 상표권, COA/MSDS 성분인증, 특허, 기타) 버전 관리 및 식별 바코드(UPC/EAN) 유효성 검증을 위한 공식 사용자 매뉴얼입니다.",
+      summary_en: "Official user manual for K SELECT Brand Portal covering KIPO/USPTO trademark declarations, dual-language ingredient declarations with real-time AI INCI translation, 5 certificate categories with lossless versioning, and UPC/EAN barcode validation.",
+      content_ko: `## 1. 개요 및 매뉴얼 목적 (Introduction & Purpose)
+본 매뉴얼은 **K SELECT NETWORK Brand Portal**을 이용하는 브랜드 파트너사가 미국 화장품 규제 현대화법(MoCRA) 및 FDA 규정에 부합하도록 상표권 증빙, 이중언어 전성분(INCI), 5대 인허가 서류(FDA 등록, 상표권, MSDS/COA 성분인증, 특허, 기타) 및 식별 바코드(UPC/EAN)를 체계적으로 관리할 수 있도록 안내하는 공식 실무 가이드입니다.
+
+## 2. 4대 규제 관리 영역
+1. **상표권 관리 (Policy 02)**: 상표권 미보유 브랜드도 포털 개설 가능, 한국(KIPO)/미국(USPTO) 번호 및 증빙 서류 관리.
+2. **이중언어 전성분 선언 & AI 번역기**: 국문 성분 입력 시 국제 표준 INCI 영문명 실시간 AI 번역 및 원클릭 적용.
+3. **5대 인허가 서류 버전 관리**: fda_registration, trademark, ingredient_certification(MSDS/COA), patent, other 서류 업로드 및 v1 -> v2 무손실 버전 관리.
+4. **글로벌 식별 바코드 검증**: 12자리 UPC / 13자리 EAN 유효성 검증 및 새 바코드 문의 지원.
+
+## 3. 어드민 심사 및 변경 이력 감사
+어드민 실시간 서류 대조 검증 및 product_change_history 불변 감사 로그 기록.`,
+      content_en: `## 1. Introduction & Purpose
+Official user guide for K SELECT Brand Portal partners to comply with US MoCRA and FDA cosmetic regulations.
+
+## 2. 4 Core Pillars
+- Trademark Management (KIPO / USPTO with Policy 02)
+- Dual-Language Ingredients & Real-Time AI INCI Translator
+- 5 Certificate Categories with Lossless Versioning
+- UPC (12-digit) / EAN (13-digit) Barcode Validation
+
+## 3. Admin Verification & Audit History
+Real-time proof verification in Admin and immutable diff change history logging.`,
+      type: "MANUAL",
+      source_type: "CONTENT",
+      module: "REGULATORY",
+      category: "Brand Portal",
+      tags: ["MANUAL", "REGULATORY", "COMPLIANCE", "CERTIFICATION", "TRADEMARK", "KIPO", "USPTO", "INGREDIENTS", "INCI", "FDA", "CERTIFICATE", "BARCODE", "MAN-B-REG-001", "OFFICIAL", "인허가", "상표권", "전성분"],
+      owner_id: "staff-admin-01",
+      owner_name: "Brand Operations Desk",
+      status: "PUBLISHED",
+      system_impact_status: "NORMAL",
+      audience: ["BRAND", "INTERNAL", "ADMIN / MANAGEMENT"],
+      is_sensitive_internal: false,
+      requires_external_approval: true,
+      external_review_status: "APPROVED",
+      external_reviewer_id: "staff-superadmin-01",
+      external_reviewed_at: "2026-10-01T12:00:00Z",
+      current_version: "v1.1.0",
+      effective_date: "2026-10-01",
+      created_at: "2026-10-01T09:00:00Z",
+      updated_at: now
     }
   ];
 
@@ -1893,6 +1947,24 @@ Official user guide for K SELECT Brand Portal partners to review Retailer Purcha
       created_by_name: "Brand Operations Desk",
       published_at: now,
       created_at: now
+    },
+    {
+      id: "ver-regulatory-compliance-v11",
+      knowledge_id: "kno-regulatory-compliance-v11",
+      version: "v1.1.0",
+      status: "PUBLISHED",
+      title_ko: "K SELECT Brand Portal 인허가, 상표권 및 증빙 서류 관리 매뉴얼 (MAN-B-REG-001 v1.1.0)",
+      title_en: "K SELECT Brand Portal Regulatory, Certification & Compliance User Guide v1.1.0",
+      summary_ko: "최초 공식 발행 버전 (15-Page Published PDF 배포)",
+      summary_en: "Initial official published manual version",
+      content_ko: memoryItems.find(i => i.id === "kno-regulatory-compliance-v11")?.content_ko || "",
+      content_en: memoryItems.find(i => i.id === "kno-regulatory-compliance-v11")?.content_en || "",
+      what_changed: "MAN-B-REG-001 Regulatory, Certification & Compliance User Guide 공식 배포 (v1.1.0)",
+      why_changed: "미국 MoCRA 및 FDA 화장품 수출 규정 준수, 상표권 및 인허가 서류 버전 관리 표준화",
+      effective_date: "2026-10-01",
+      created_by_name: "Brand Operations Desk",
+      published_at: now,
+      created_at: now
     }
   ];
 
@@ -2223,6 +2295,56 @@ Official user guide for K SELECT Brand Portal partners to review Retailer Purcha
       related_route: "/admin/orders",
       manual_title: "K SELECT Brand Portal 발주 요청 및 오더 관리 매뉴얼 (MAN-B-ORD-001)",
       created_at: now
+    },
+    {
+      id: "rel-reg-brand-new",
+      knowledge_id: "kno-regulatory-compliance-v11",
+      related_portal: "Brand Portal",
+      related_module: "REGULATORY",
+      related_menu: "New Brand Trademark Registration",
+      related_route: "/portal/brands/new",
+      manual_title: "K SELECT Brand Portal 인허가, 상표권 및 증빙 서류 관리 매뉴얼 (MAN-B-REG-001)",
+      created_at: now
+    },
+    {
+      id: "rel-reg-brand-detail",
+      knowledge_id: "kno-regulatory-compliance-v11",
+      related_portal: "Brand Portal",
+      related_module: "REGULATORY",
+      related_menu: "Brand Trademark & Document Edit",
+      related_route: "/portal/brands/[id]",
+      manual_title: "K SELECT Brand Portal 인허가, 상표권 및 증빙 서류 관리 매뉴얼 (MAN-B-REG-001)",
+      created_at: now
+    },
+    {
+      id: "rel-reg-product-detail",
+      knowledge_id: "kno-regulatory-compliance-v11",
+      related_portal: "Brand Portal",
+      related_module: "REGULATORY",
+      related_menu: "Product Ingredients & Certificates (Tab 1 & 6)",
+      related_route: "/portal/products/[id]",
+      manual_title: "K SELECT Brand Portal 인허가, 상표권 및 증빙 서류 관리 매뉴얼 (MAN-B-REG-001)",
+      created_at: now
+    },
+    {
+      id: "rel-admin-reg-brand",
+      knowledge_id: "kno-regulatory-compliance-v11",
+      related_portal: "Admin",
+      related_module: "REGULATORY",
+      related_menu: "Admin Brand Trademark Inspection",
+      related_route: "/admin/brands/[brandId]",
+      manual_title: "K SELECT Brand Portal 인허가, 상표권 및 증빙 서류 관리 매뉴얼 (MAN-B-REG-001)",
+      created_at: now
+    },
+    {
+      id: "rel-admin-reg-product",
+      knowledge_id: "kno-regulatory-compliance-v11",
+      related_portal: "Admin",
+      related_module: "REGULATORY",
+      related_menu: "Admin Product Certificates Audit",
+      related_route: "/admin/products/[id]",
+      manual_title: "K SELECT Brand Portal 인허가, 상표권 및 증빙 서류 관리 매뉴얼 (MAN-B-REG-001)",
+      created_at: now
     }
   ];
 
@@ -2291,6 +2413,19 @@ Official user guide for K SELECT Brand Portal partners to review Retailer Purcha
       file_size: 4188914,
       published_date: "2026-10-01",
       created_at: now
+    },
+    {
+      id: "asset-regulatory-compliance-v11",
+      knowledge_id: "kno-regulatory-compliance-v11",
+      manual_title: "K SELECT Brand Portal 인허가, 상표권 및 증빙 서류 관리 매뉴얼 (MAN-B-REG-001)",
+      version: "v1.1.0",
+      language: "KO",
+      is_current: true,
+      file_url: "/api/admin/knowledge/asset/asset-regulatory-compliance-v11",
+      file_name: "MAN-B-REG-001_Regulatory-Compliance_V1.pdf",
+      file_size: 1915000,
+      published_date: "2026-10-01",
+      created_at: now
     }
   ];
 
@@ -2348,6 +2483,17 @@ Official user guide for K SELECT Brand Portal partners to review Retailer Purcha
       previous_value: {},
       new_value: { title: "K SELECT Brand Portal 발주 요청 및 오더 관리 매뉴얼", audience: ["BRAND", "INTERNAL"] },
       reason: "MAN-B-ORD-001 Official Publication",
+      created_at: now
+    },
+    {
+      id: "log-regulatory-compliance-v11",
+      knowledge_id: "kno-regulatory-compliance-v11",
+      user_id: "user-admin-01",
+      user_name: "Brand Operations Desk",
+      action: "Published",
+      previous_value: {},
+      new_value: { title: "K SELECT Brand Portal 인허가, 상표권 및 증빙 서류 관리 매뉴얼", audience: ["BRAND", "INTERNAL"] },
+      reason: "MAN-B-REG-001 Official Publication",
       created_at: now
     }
   ];

@@ -187,6 +187,7 @@ const AUTHORITATIVE_PRIMARY_TOPIC_MAP: Record<string, string> = {
   "kno-onboarding-guide-v10": "topic-start", // MAN-B-ONB-001 -> 시작하기
   "kno-product-management-v10": "topic-product", // MAN-B-PROD-001 -> 상품 등록 & 관리
   "kno-order-management-v10": "topic-orders", // MAN-B-ORD-001 -> 발주 요청 & 오더
+  "kno-regulatory-compliance-v11": "topic-regulatory", // MAN-B-REG-001 -> 인허가 & 규정
   "kno-002-brand-faq": "topic-start", // Onboarding FAQ -> 시작하기
   "kno-insights-manual-v10": "topic-start",
   "kno-insights-policy-prohibitions": "topic-start"
