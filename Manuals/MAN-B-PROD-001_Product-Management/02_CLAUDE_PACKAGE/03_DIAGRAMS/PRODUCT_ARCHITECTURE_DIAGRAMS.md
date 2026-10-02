@@ -4,12 +4,13 @@
 **Topic:** 상품 등록 & 관리 / Product Registration & Management  
 **Manual ID:** `MAN-B-PROD-001`  
 **Audience:** `B — Brand`  
+**Location:** `Manuals/MAN-B-PROD-001_Product-Management/02_CLAUDE_PACKAGE/03_DIAGRAMS/`  
 
 ---
 
 ## 1. Diagram A: Product Registration Journey (전체 상품 라이프사이클)
 
-사용자가 신규 상품을 등록하고, 상세 6개 탭 정보를 보완하여 등록 완료(`COMPLETE`) 후 K SELECT MD 검토 및 채널 판매로 이어지는 전체 엔드투엔드 여정입니다.
+사용자가 신규 상품을 등록하고, 상세 6대 탭 정보를 보완하여 등록 완료(`COMPLETE`) 후 K SELECT MD 검토 및 채널 판매로 이어지는 전체 엔드투엔드 여정입니다.
 
 ```mermaid
 flowchart TD
@@ -24,17 +25,16 @@ flowchart TD
         BRANCH -->|"제품 등록 및 계속<br>(정식 필수값 검증 완료)"| CONT_SAVE["정식 상품 레코드 생성<br>(/portal/products/[id] 로 즉시 이동)"]
     end
 
-    subgraph Phase2["3. Phase 2: 상품 상세 관리 다중 탭 (/portal/products/[id])"]
+    subgraph Phase2["3. Phase 2: 상품 상세 관리 6대 탭 (/portal/products/[id])"]
         CONT_SAVE --> TABS["6대 전문 관리 탭"]
         DRAFT_SAVE -.->|"목록에서 선택하여 상세 진입"| TABS
         
         TABS --> T1["탭 1: 기본 정보 (Basic Info)"]
         TABS --> T2["탭 2: 카테고리 & 속성 (Category & Attributes)"]
         TABS --> T3["탭 3: 가격 정보 (Pricing Info)"]
-        TABS --> T4["탭 4: 로지스틱스 3단계 규격 (Logistics)"]
-        TABS --> T5["탭 5: 미디어 (Media - 이미지/비디오)"]
-        TABS --> T6["탭 6: 인증 및 서류 (Certificates)"]
-        TABS --> T7["탭 7: 변경 이력 (Audit Log)"]
+        TABS --> T4["탭 4: 로지스틱스 3단계 규격 (Logistics Specs)"]
+        TABS --> T5["탭 5: 미디어 (Media & Images)"]
+        TABS --> T6["탭 6: 인허가 & 보증서 (Certificates & Documents)"]
     end
 
     subgraph Engine["4. 등록 완료 판정 엔진 (evaluateProductRegistrationStatus)"]
@@ -57,7 +57,7 @@ flowchart TD
 
 ## 2. Diagram B: Product Detail Tabs Architecture (6대 전문 탭 아키텍처)
 
-상품 상세 화면(`/portal/products/[id]`)에서 제공하는 6대 전문 입력 탭과 변경 이력의 기능 구조도입니다.
+상품 상세 화면(`/portal/products/[id]`)에서 제공하는 6대 전문 관리 탭의 기능 구조도입니다.
 
 ```mermaid
 graph TD
@@ -66,17 +66,16 @@ graph TD
     ROOT --> TAB1["탭 1: 기본 정보<br>(Basic Info)"]
     ROOT --> TAB2["탭 2: 카테고리 & 속성<br>(Category & Attributes)"]
     ROOT --> TAB3["탭 3: 가격 정보<br>(Pricing Info)"]
-    ROOT --> TAB4["탭 4: 로지스틱스<br>(Logistics)"]
-    ROOT --> TAB5["탭 5: 미디어<br>(Media)"]
-    ROOT --> TAB6["탭 6: 인증 및 서류<br>(Certificates)"]
-    ROOT --> TAB7["탭 7: 변경 이력<br>(Audit Change Log)"]
+    ROOT --> TAB4["탭 4: 로지스틱스<br>(Logistics Specs)"]
+    ROOT --> TAB5["탭 5: 미디어<br>(Media & Images)"]
+    ROOT --> TAB6["탭 6: 인허가 & 보증서<br>(Certificates & Documents)"]
 
     TAB1 --> T1_1["국문 / 영문 제품명"]
     TAB1 --> T1_2["원산지, 용량, 납기(리드타임)"]
     TAB1 --> T1_3["식별 바코드 (UPC 12자리 / EAN 13자리)"]
     TAB1 --> T1_4["온라인 판매 링크 1, 2"]
     TAB1 --> T1_5["영문 불릿 포인트 (Bullet Points)"]
-    TAB1 --> T1_6["전성분 텍스트 & MyMemory 실시간 영문 번역기"]
+    TAB1 --> T1_6["전성분 텍스트 & 실시간 영문 번역기"]
 
     TAB2 --> T2_1["3-Depth 카테고리 선택기 (대 → 중 → 소)"]
     TAB2 --> T2_2["동의어 / 연관 검색어 자동 완성 사전"]
@@ -84,9 +83,9 @@ graph TD
     TAB2 --> T2_4["제품군 프로필 속성 (Profile Scope)"]
     TAB2 --> T2_5["필수 속성 실시간 완성도 지표"]
 
-    TAB3 --> T3_1["4대 기준 가격 (KRW소비자가, KRW도매가, FOB USD, MSRP USD)"]
+    TAB3 --> T3_1["4대 기준 가격 (KRW소비자가, FOB USD, MSRP USD, Retail USD)"]
     TAB3 --> T3_2["실시간 FOB 대비 MSRP 배수 산출 (MSRP ÷ FOB)"]
-    TAB3 --> T3_3["실시간 FOB 공급율 산출 ((FOB × 환율) ÷ Retail KRW)"]
+    TAB3 --> T3_3["실시간 FOB 마진율 및 공급 지표 산출"]
     TAB3 --> T3_4["수량별 B2B 공급 가격 (Tiered Pricing) 테이블"]
 
     TAB4 --> T4_1["Tier 1: 단품 본품 규격 (Unit W, D, H, Wt)"]
@@ -101,9 +100,7 @@ graph TD
     TAB5 --> T5_5["홍보 동영상 연동 (URL / MP4 파일)"]
 
     TAB6 --> T6_1["국문 / 영문 전성분표 원본 파일 업로드"]
-    TAB6 --> T6_2["상표권 / FDA 서류 버전 관리 (v1, v2...)"]
-
-    TAB7 --> T7_1["불변(Immutable) 감사 이력 (시간, 작업자, 섹션, Diff)"]
+    TAB6 --> T6_2["상표권 / 시험성적서 / 인증 서류 자동 버전 관리 (v1, v2...)"]
 ```
 
 ---

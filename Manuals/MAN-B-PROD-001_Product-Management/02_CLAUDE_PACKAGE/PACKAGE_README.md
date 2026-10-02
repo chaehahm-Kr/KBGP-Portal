@@ -52,7 +52,7 @@ Manuals/MAN-B-PROD-001_Product-Management/02_CLAUDE_PACKAGE/
 │   ├── PROD-SCR-011_Tab4_Logistics_3Tier_Specs.png # 탭 4: 단품/패키지/마스터 카톤 3단계 규격 & CBM
 │   ├── PROD-SCR-012_Tab4_Container_Simulator.png # 탭 4: 20FT/40FT/40HQ 컨테이너 적재 시뮬레이터
 │   ├── PROD-SCR-013_Tab5_Media_Images_Reorder.png # 탭 5: 미디어 드래그앤드롭 순서변경 & 고해상도 줌
-│   ├── PROD-SCR-014_Tab6_Tab7_Certs_And_Audit_Log.png # 탭 6: 서류 버전관리 & 탭 7: 불변 감사 이력
+│   ├── PROD-SCR-014_Tab6_Tab7_Certs_And_Audit_Log.png # 탭 6: 인허가 & 보증서 서류 업로드 및 파일 버전 관리
 │   └── SCREENSHOT_ANNOTATION_GUIDE.md        # 스크린샷별 번호 콜아웃(①, ②, ③, ④) 및 캡션 가이드
 ├── 03_DIAGRAMS/
 │   └── PRODUCT_ARCHITECTURE_DIAGRAMS.md      # 4대 핵심 아키텍처 다이어그램 (Mermaid)
@@ -74,5 +74,5 @@ Manuals/MAN-B-PROD-001_Product-Management/02_CLAUDE_PACKAGE/
 
 1. `Manuals/MAN-B-PROD-001_Product-Management/02_CLAUDE_PACKAGE/` 폴더 전체를 Claude Design 세션에 첨부합니다.
 2. `CLAUDE_DESIGN_HANDOFF_PROMPT.md` 파일에 작성된 짧은 지시문을 복사하여 Claude Design 채팅창에 입력합니다.
-3. Claude Design이 `CLAUDE_DESIGN_MASTER_PROMPT.md`와 `MAN-B-PROD-001_Manual_Content.md`를 기반으로 매뉴얼 문서를 제작합니다.
+3. Claude Design이 `CLAUDE_DESIGN_MASTER_PROMPT.md`와 `01_CONTENT/MAN-B-PROD-001_Manual_Content.md`를 기반으로 매뉴얼 문서를 제작합니다.
 4. Chae의 최종 검토 및 승인이 완료되면 최종 PDF가 `03_PUBLISHED/`에 저장됩니다.

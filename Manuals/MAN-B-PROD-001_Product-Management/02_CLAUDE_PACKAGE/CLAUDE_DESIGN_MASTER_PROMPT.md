@@ -55,8 +55,9 @@ You must strictly build the manual from the files located in this package:
 > [!CRITICAL] **Source Priority & Policy Integrity Rule**  
 > 1. Do NOT invent new policies, artificial requirements, or non-existent UI buttons.  
 > 2. All text, field definitions, and calculations must strictly match `MAN-B-PROD-001_Manual_Content.md`.  
-> 3. Do NOT convert unresolved items (e.g. restoring soft-deleted products directly in Brand Portal UI without admin) into official system features. State clearly that deleted products are safely preserved in the `Deleted` tab and support is available via 1:1 Help Center.  
-> 4. For brand policy details, refer users to `MAN-B-BRAND-001` without duplicating the full policy text.
+> 3. Product Manual describes the **6 management tabs** in Brand Portal UI (Basic Info, Category & Attributes, Pricing, Logistics, Media, Certificates).  
+> 4. Do NOT convert unresolved items (e.g. self-restore buttons) into official system features. State clearly that deleted products are safely preserved in the `Deleted` tab and support is available via 1:1 Help Center.  
+> 5. For detailed regulatory compliance (FDA/MoCRA legal mandates), refer users to `MAN-B-REG-001` without duplicating full regulatory interpretations.
 
 ---
 
@@ -124,10 +125,10 @@ Render the complete manual adhering to the Table of Contents in `MAN-B-PROD-001_
 7. Chapter 6. 탭 3: 가격 정보 (Pricing Info & Tiered B2B Rates)
 8. Chapter 7. 탭 4: 로지스틱스 3단계 물리 규격 (3-Tier Specs)
 9. Chapter 8. 탭 4: 컨테이너 선적 시뮬레이터 (Container Simulator & Loading)
-10. Chapter 9. 탭 5: 미디어 관리 & 탭 6: 인증 및 서류 (Media & Certificates)
+10. Chapter 9. 탭 5: 미디어 관리 & 탭 6: 인허가 및 보증서 (Media & Certificates)
 11. Chapter 10. 10대 상품 등록 완료 조건 & 인터랙티브 자동 포커스 (Autofocus Navigation)
 12. Chapter 11. 3대 독립 상태 차원의 이해 (Product Status Dimensions)
-13. Chapter 12. 상품 소프트 삭제 및 일괄 관리 (Soft Delete & Bulk Actions)
+13. Chapter 12. 상품 소프트 삭제 및 관리 정책 (Soft Delete & Lifecycle)
 14. Chapter 13. 문제 해결 및 자주 묻는 질문 (Troubleshooting & FAQ)
 15. Chapter 14. 실무자 퀵 체크리스트 (Operator Quick Checklist)
 

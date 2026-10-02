@@ -21,10 +21,10 @@
 | 매뉴얼 섹션 | 핵심 다루는 주제 | 01_SOURCE 기준 근거 파일 |
 | :--- | :--- | :--- |
 | **Section 1 ~ 3** | 상품 목록, Phase 1 신규 등록 폼, Draft vs Complete 분기 | `MAN-B-PROD-001_Source_Collection_Report.md` (Sec 2.A)<br>`MAN-B-PROD-001_Field_Inventory.md` (Sec 2)<br>`MAN-B-PROD-001_Workflow_Map.md` (Sec 1, 2) |
-| **Section 4 ~ 9** | Phase 2 6대 전문 탭 (기본정보, 카테고리 3Depth+속성, 가격/FOB마진, 로지스틱스 3단계+시뮬레이터, 미디어 순서변경, 인증/서류 버전관리) | `MAN-B-PROD-001_Source_Collection_Report.md` (Sec 2.B)<br>`MAN-B-PROD-001_Field_Inventory.md` (Sec 3.1 ~ 3.7)<br>`MAN-B-PROD-001_Workflow_Map.md` (Sec 4) |
-| **Section 10 ~ 11** | 10대 등록 완료 필수조건, 누락 항목 자동 포커스 네비게이션 | `MAN-B-PROD-001_Source_Collection_Report.md` (Sec 3.B)<br>`lib/product/validation.ts` (`evaluateProductRegistrationStatus`) |
+| **Section 4 ~ 9** | Phase 2 6대 전문 관리 탭 (기본정보, 카테고리 3Depth+속성, 가격/FOB마진, 로지스틱스 3단계+시뮬레이터, 미디어 순서변경, 인허가/서류 버전관리) | `MAN-B-PROD-001_Source_Collection_Report.md` (Sec 2.B)<br>`MAN-B-PROD-001_Field_Inventory.md` (Sec 3.1 ~ 3.6)<br>`MAN-B-PROD-001_Workflow_Map.md` (Sec 4) |
+| **Section 10 ~ 11** | 10대 등록 완료 필수조건, 누락 항목 자동 포커스 네비게이션 | `MAN-B-PROD-001_Source_Collection_Report.md` (Sec 3.B)<br>`lib/product/registration-status.ts` (`evaluateProductRegistrationStatus`) |
 | **Section 12** | 3대 독립 상태 차원 (등록 / 선정 / 판매) | `MAN-B-PROD-001_Source_Collection_Report.md` (Sec 3.A)<br>`MAN-B-PROD-001_Workflow_Map.md` (Sec 3) |
-| **Section 13** | 소프트 삭제 및 복구, 일괄 삭제, 이중 지속성 | `MAN-B-PROD-001_Source_Collection_Report.md` (Sec 5)<br>`MAN-B-PROD-001_Workflow_Map.md` (Sec 5) |
+| **Section 13** | 소프트 삭제 및 격리 보관, 일괄 삭제, 복구 문의 절차 | `MAN-B-PROD-001_Source_Collection_Report.md` (Sec 5)<br>`MAN-B-PROD-001_Workflow_Map.md` (Sec 5) |
 | **Section 14 ~ 15** | FAQ, 문제 해결 및 실무자 퀵 체크리스트 | `MAN-B-PROD-001_Source_Collection_Report.md` (Sec 8)<br>`MAN-B-PROD-001_Field_Inventory.md` (Sec 4) |
 
 ---
@@ -38,12 +38,14 @@
 - **`MAN-B-ONB-001` (Brand Portal Onboarding Guide):**
   - 브랜드 포털 초기 7단계 온보딩 중 **STEP 6: 상품 등록 완료**와 직접 연계.
   - 온보딩 100% 완료를 위해 최소 1개 이상의 상품이 `COMPLETE (등록 완료)` 상태여야 함.
-- **`MAN-SETTLE-001` (정산 및 대금 관리):**
-  - 상품 대금 정산, 마진 분배, 지급 주기 등 (본 매뉴얼에서는 제외).
-- **`MAN-REG-001` (미국 인허가 및 MoCRA 가이드):**
-  - FDA 시설 등록, MoCRA 라벨링 법률 해석 등 (본 매뉴얼에서는 전성분/서류 업로드 기능만 설명).
-- **`MAN-WHS-001` (창고 및 재고 관리):**
-  - 미국 현지 창고 입고 및 실시간 재고 이동 (본 매뉴얼에서는 물리적 규격 스펙만 설명).
+- **`MAN-B-REG-001` (Regulatory Compliance & MoCRA Manual):**
+  - FDA 시설 등록(Facility Registration), 화장품 제품 리스팅(Product Listing), 라벨링 법률 규제 및 안전성 증빙 상세 요건.
+  - *(상품 매뉴얼 `MAN-B-PROD-001`에서는 포털 내 서류 업로드 및 파일 버전 관리 기능만 다루며, 규제 법률 해석은 `MAN-B-REG-001`이 authoritative source임.)*
+- **`MAN-B-WHS-001` (Warehouse & Inventory Operations Manual):**
+  - 미국 현지 물류 창고 입고, 실시간 재고 이동 및 FBA 연계.
+  - *(상품 매뉴얼 `MAN-B-PROD-001`에서는 3단계 물리적 규격 스펙 입력만 다룸.)*
+- **`MAN-B-SETTLE-001` (Settlement & Finance Operations Manual):**
+  - 상품 판매 대금 정산, 마진 분배, 지급 주기 등.
 
 ---
 
