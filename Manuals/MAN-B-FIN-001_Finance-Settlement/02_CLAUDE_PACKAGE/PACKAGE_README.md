@@ -7,7 +7,9 @@
 
 본 패키지(`02_CLAUDE_PACKAGE/`)는 **K SELECT Brand Portal**의 Finance & Settlement 모듈(**MAN-B-FIN-001**)에 대한 Claude Design 기반 고품질 웹/PDF 매뉴얼 제작을 위해 구축된 최신 디자인 패키지이다.
 
-본 패키지의 모든 기술 명세, 데이터 사전, 워크플로우 맵 및 스크린샷 요구사항은 프로덕션 코드 감사를 거쳐 검증된 **`01_SOURCE` (Commit: `2785c341077363cad06c87c6e8afa22623e95208`)** 자료에 근거하여 작성되었다.
+- **Task ID**: `MAN-B-FIN-001-PKG-001`
+- **Source Review Basis**: `MAN-B-FIN-001-SRC-001-R1` (Commit: `2785c341077363cad06c87c6e8afa22623e95208`)
+- **Master Design System Reference**: `MAN-B-BRAND-001_Brand-Policy_V1.pdf`
 
 ---
 
@@ -32,7 +34,7 @@
 │   ├── SCR-B-FIN-007.png                   # 7. Invoice Detail (APPROVED & PAID State)
 │   ├── SCR-B-FIN-008.png                   # 8. Invoice Detail (REJECTED State)
 │   ├── SCR-B-FIN-009.png                   # 9. Finance Hub Settlements Tab
-│   ├── SCR-B-FIN-10.png                   # 10. Finance Hub Payments Tab
+│   ├── SCR-B-FIN-010.png                   # 10. Finance Hub Payments Tab
 │   ├── SCR-B-FIN-011.png                   # 11. Admin Invoices List (Reference)
 │   ├── SCR-B-FIN-012.png                   # 12. Admin Invoice Approval (Reference)
 │   └── SCR-B-FIN-013.png                   # 13. Admin Payment Execution (Reference)
@@ -46,15 +48,15 @@
 
 ## 3. Master Design System Reference
 
-본 매뉴얼의 모든 visual design, 서체, 색상 팔레트, 표 서식, 호출 카드(Callout Cards) 및 레이아웃 스펙은 **`MAN-B-BRAND-001_Brand-Policy_V1.pdf`**를 **MASTER DESIGN REFERENCE**로 사용한다.
+본 매뉴얼의 모든 visual design, 서체, 색상 팔레트, 표 서식, 호출 카드(Callout Cards) 및 레이아웃 스펙은 **`MAN-B-BRAND-001_Brand-Policy_V1.pdf`**를 **MASTER DESIGN REFERENCE**로 사용합니다.
 
 ---
 
 ## 4. Key Domain Principles (Core Handoff Rules)
 
 1. **ORD ➔ FIN 병렬 전환 (Parallel Domain Handoff)**:
-   - 공식 발주 수락(`po_status IN ('APPROVED', 'SENT')` AND `supplier_confirmation_status = 'CONFIRMED'`) 완료 시, 물류(LOG)와 정산(FIN)은 병렬로 동시 진입함.
-   - 입고/검수(LOG)는 결제 조건에 따른 참조 항목일 뿐, FIN 진입 및 인보이스 생성의 직렬 전제조건이 아님.
+   - 공식 발주 수락(`po_status IN ('APPROVED', 'SENT')` AND `supplier_confirmation_status = 'CONFIRMED'`) 완료 시, 물류(LOG)와 정산(FIN)은 병렬로 동시 진입합니다.
+   - 입고/검수(LOG)는 결제 조건에 따른 참조 항목일 뿐, FIN 진입 및 인보이스 생성의 직렬 전제조건이 아닙니다.
 2. **독립 4대 상태 도메인 분리**:
    - `Invoice Status` (`DRAFT`, `SUBMITTED`, `APPROVED`, `REJECTED`, `VOID`)
    - `Payment Status` (`UNPAID`, `PARTIALLY_PAID`, `PAID`)
