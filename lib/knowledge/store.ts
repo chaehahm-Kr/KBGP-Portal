@@ -1023,6 +1023,116 @@ Official user manual for K SELECT Brand Portal partners managing team invitation
       effective_date: "2026-10-02",
       created_at: now,
       updated_at: now
+    },
+    {
+      id: "kno-finance-settlement-v10",
+      document_url: "/api/admin/knowledge/asset/asset-finance-settlement-v10",
+      document_name: "MAN-B-FIN-001_Finance-Settlement_V1.pdf",
+      document_size: 4716798,
+      document_type: "application/pdf",
+      slug: "man-b-fin-001-finance-settlement-guide",
+      title: "MAN-B-FIN-001: Finance & Settlement User Guide",
+      title_ko: "K SELECT Brand Portal 정산 관리 및 인보이스 발행 매뉴얼 (MAN-B-FIN-001)",
+      title_en: "K SELECT Brand Portal Finance & Settlement User Guide (MAN-B-FIN-001)",
+      summary_ko: "K SELECT Brand Portal의 공식 발주 확정(PO Confirmed) 후 인보이스 발행, 3대 독립 상태 분리(Invoice ≠ Payment ≠ Settlement), Single Active Invoice 단일 활성 인보이스 규칙, 실시간 미지급 잔액(balance_due) 연산, 단가/수량/파손 정산 조정(Adjustment) 및 본사 대금 결재/송금 집행을 위한 공식 사용자 매뉴얼입니다.",
+      summary_en: "Official user manual for K SELECT Brand Portal covering post-PO confirmation invoice creation, strict tri-state disambiguation (Invoice ≠ Payment ≠ Settlement), Single Active Invoice dual enforcement, real-time balance_due calculation, settlement adjustments (shortage, damage, price differences), and admin remittance payout execution.",
+      content_ko: `# K SELECT Brand Portal 정산 관리 및 인보이스 발행 매뉴얼 (MAN-B-FIN-001 v1.0)
+
+## 1. 개요 및 파이프라인 구조 (Introduction & Pipeline)
+본 매뉴얼은 **K SELECT NETWORK Brand Portal**을 이용하는 입점 브랜드 파트너사가 공식 발주 확정(PO Status: APPROVED / SENT 및 supplier_confirmation: CONFIRMED) 완료 후 대금 청구를 위한 공급사 인보이스(Supplier Invoice)를 작성·제출하고, 3대 독립 상태 차원(Invoice ≠ Payment ≠ Settlement) 및 실시간 미지급 잔액(balance_due)을 관리하며 본사 대금 결재/송금 집행을 완수할 수 있도록 안내하는 공식 실무 가이드입니다.
+
+---
+
+## 2. 3대 핵심 도메인 경계 원칙 (Core Governance & Disambiguation)
+1. **발주 확정 병렬 전환 (ORD → FIN Parallel Handoff)**:
+   - 공식 발주 확정 완료 시 물류(LOG)와 정산(FIN) 도메인으로 동시 전환되며, 인보이스 작성은 물류 입고 검수 완료를 직렬 전제조건으로 기다리지 않습니다.
+2. **물류 완료 ≠ 정산 완료 (FIN ↔ LOG Boundary)**:
+   - 물류 도메인의 배송 상태(SHIPPED / ARRIVED / RECEIVED)와 정산 도메인의 상태(Invoice, Payment, Settlement)는 상호 독립적인 상태 머신으로 작동합니다 (**Shipping Complete ≠ Settlement Complete**).
+3. **3대 독립 상태 차원 (Tri-State Disambiguation: Invoice ≠ Payment ≠ Settlement)**:
+   - **문서 상태 (Invoice Status)**: DRAFT(초안) → SUBMITTED(제출완료) → APPROVED(승인) / REJECTED(반려) / VOID(무효화)
+   - **지급 상태 (Payment Status)**: 실시간 잔액 기반 동적 산출 UNPAID(미지급) → PARTIALLY_PAID(일부지급) → PAID(지급완료)
+   - **정산 상태 (Settlement Status)**: 행정적 마감 상태 OPEN(정산대기) → SETTLED(정산종결)
+
+---
+
+## 3. 핵심 비즈니스 규칙 및 안전장치 (Key Business Rules)
+1. **Single Active Invoice 단일 활성 인보이스 규칙**:
+   - 1개 발주서(PO)에는 최대 1건의 활성 인보이스(invoice_status NOT IN ('VOID', 'REJECTED'))만 존재할 수 있으며, Application 사전 검증과 Database Partial Unique Index(\`idx_supplier_invoices_one_active_per_po\`) 양단계에서 중복 생성이 원천 차단됩니다.
+2. **실시간 정산 및 잔액 연산 수식 (Real-Time Calculation Formulas)**:
+   - \`subtotal = SUM(invoiced_qty * unit_price)\`
+   - \`adjustmentTotal = SUM(CHARGE) - SUM(CREDIT)\`
+   - \`invoice_total = subtotal + adjustmentTotal\`
+   - \`amount_paid = SUM(supplier_payments.payment_amount WHERE status = 'COMPLETED')\`
+   - \`balance_due = invoice_total - amount_paid\`
+3. **System Gaps (현재 미지원 / 미구현 기능 명시)**:
+   - \`1:N 분할 인보이스 (Partial Invoicing)\`: 1개 PO에 대해 여러 차례 나누어 인보이스를 분할 발행하는 기능은 **지원되지 않습니다 (NOT SUPPORTED)**.
+   - \`포털 내 PDF 자동 변환 (PDF Export)\`: 입력 데이터를 PDF로 자동 변환하는 기능은 **구현되어 있지 않으며 (NOT IMPLEMENTED)**, 공급사가 외부 작성 송장 PDF를 직접 첨부합니다.
+
+---
+
+## 4. 관련 화면 및 기능 (Related Routes)
+- \`/portal/finance\` (정산 & 인보이스 관리 허브)
+- \`/portal/finance/new\` (새 인보이스 작성 및 발주서 선택)
+- \`/portal/finance/[id]\` (인보이스 상세 조회 및 실시간 잔액 확인)
+- \`/portal/finance/[id]/edit\` (인보이스 초안 수정)
+- \`/admin/finance/invoices\` (어드민 전체 인보이스 관리)
+- \`/admin/finance/invoices/[id]\` (어드민 인보이스 심사 및 승인/반려/무효화)
+- \`/admin/finance/payments\` (어드민 대금 송금 집행 관리)
+- \`/admin/finance/payments/new\` (어드민 대금 이체 내역 등록)
+- \`/admin/finance/payments/[id]\` (어드민 지급 내역 상세)`,
+      content_en: `# K SELECT Brand Portal Finance & Settlement User Guide (MAN-B-FIN-001 v1.0)
+
+## 1. Overview & Pipeline Structure
+Official user manual for K SELECT Brand Portal partners to create supplier invoices following official PO Confirmation, track tri-state dimensions (Invoice ≠ Payment ≠ Settlement), manage settlement adjustments, monitor real-time balance_due, and verify headquarters payout remittances.
+
+## 2. Core Operational Governance
+1. **Parallel Domain Handoff (ORD → FIN)**: Official PO Confirmation immediately unlocks invoice creation without serial dependency on warehouse receiving.
+2. **FIN ↔ LOG Boundary**: Shipping Complete ≠ Settlement Complete. Logistics shipping status operates independently from finance settlement status.
+3. **Tri-State Disambiguation**:
+   - Invoice Status: DRAFT / SUBMITTED / APPROVED / REJECTED / VOID
+   - Payment Status (Computed): UNPAID / PARTIALLY_PAID / PAID
+   - Settlement Status: OPEN / SETTLED
+
+## 3. Business Rules & Safety Mechanisms
+1. **Single Active Invoice**: Only 1 active invoice per PO enforced by application logic and database partial unique index (\`idx_supplier_invoices_one_active_per_po\`).
+2. **Formulas**:
+   - \`subtotal = SUM(invoiced_qty * unit_price)\`
+   - \`adjustmentTotal = SUM(CHARGE) - SUM(CREDIT)\`
+   - \`invoice_total = subtotal + adjustmentTotal\`
+   - \`balance_due = invoice_total - amount_paid\`
+3. **System Gaps (Explicitly Classified)**:
+   - 1:N Partial Invoicing: NOT SUPPORTED
+   - Portal PDF Auto Export: NOT IMPLEMENTED (Suppliers attach external PDF invoices).
+
+## 4. Related Routes
+- \`/portal/finance\`
+- \`/portal/finance/new\`
+- \`/portal/finance/[id]\`
+- \`/portal/finance/[id]/edit\`
+- \`/admin/finance/invoices\`
+- \`/admin/finance/invoices/[id]\`
+- \`/admin/finance/payments\`
+- \`/admin/finance/payments/new\`
+- \`/admin/finance/payments/[id]\``,
+      type: "MANUAL",
+      source_type: "CONTENT",
+      module: "FINANCE",
+      category: "Brand Portal",
+      tags: ["MANUAL", "FINANCE", "SETTLEMENT", "INVOICE", "PAYMENT", "BALANCE_DUE", "Balance Due", "PARTIAL_PAYMENT", "Partial Payment", "ADJUSTMENT", "SINGLE_ACTIVE_INVOICE", "Single Active Invoice", "MAN-B-FIN-001", "OFFICIAL", "정산", "인보이스", "송장", "대금지급", "미지급잔액", "분할지급"],
+      owner_id: "staff-finance-01",
+      owner_name: "Finance Operations Desk",
+      status: "PUBLISHED",
+      system_impact_status: "NORMAL",
+      audience: ["BRAND", "INTERNAL", "ADMIN / MANAGEMENT"],
+      is_sensitive_internal: false,
+      requires_external_approval: true,
+      external_review_status: "APPROVED",
+      external_reviewer_id: "staff-superadmin-01",
+      external_reviewed_at: "2026-10-02T12:00:00Z",
+      current_version: "v1.0",
+      effective_date: "2026-10-02",
+      created_at: now,
+      updated_at: now
     }
   ];
 
@@ -2663,6 +2773,146 @@ Official user manual for K SELECT Brand Portal partners managing team invitation
       generated_by: "MANUAL",
       created_at: now,
       updated_at: now
+    },
+    {
+      id: "faq-perm-01",
+      portal_scope: "BRAND",
+      topic_id: "topic-company",
+      source_knowledge_id: "kno-permissions-user-management-v10",
+      source_version: "v1.0",
+      source_title: "K SELECT Brand Portal 사용자, 역할 및 권한 관리 가이드 (MAN-B-PERM-001)",
+      question_ko: "한 명의 직원이 여러 회사의 포털 계정에 동시에 소속될 수 있나요?",
+      question_en: "Can a single user belong to multiple company portal accounts simultaneously?",
+      answer_ko: "아니오. 1 사용자 이메일 = 1 회사 계정의 1:1 바인딩 원칙을 적용합니다. 다른 회사에 참여하려면 별도의 비즈니스 이메일로 초대받아야 합니다.",
+      answer_en: "No, a strict 1 user email = 1 company binding rule applies. To join a different company, invitation to a separate business email address is required.",
+      audience: ["BRAND", "INTERNAL", "ADMIN / MANAGEMENT"],
+      status: "APPROVED",
+      kind: "BOTH",
+      display_order: 1,
+      is_featured: true,
+      generated_by: "MANUAL",
+      created_at: now,
+      updated_at: now
+    },
+    {
+      id: "faq-perm-02",
+      portal_scope: "BRAND",
+      topic_id: "topic-company",
+      source_knowledge_id: "kno-permissions-user-management-v10",
+      source_version: "v1.0",
+      source_title: "K SELECT Brand Portal 사용자, 역할 및 권한 관리 가이드 (MAN-B-PERM-001)",
+      question_ko: "역할 템플릿(Preset)을 선택한 뒤 특정 메뉴의 권한만 따로 바꿀 수 있나요?",
+      question_en: "Can I customize individual menu permissions after selecting a Role Preset?",
+      answer_ko: "네, 가능합니다. 역할 프리셋(restricted / viewer / staff / manager / admin)으로 기본 권한을 불러온 후, 매트릭스에서 원하는 9대 카테고리의 접근 레벨(none / read / write / manage) 라디오 버튼을 개별 클릭하여 커스텀 권한으로 지정할 수 있습니다.",
+      answer_en: "Yes. After loading default permissions with a Role Preset, individual category levels (none / read / write / manage) can be customized via the ACL matrix.",
+      audience: ["BRAND", "INTERNAL", "ADMIN / MANAGEMENT"],
+      status: "APPROVED",
+      kind: "BOTH",
+      display_order: 2,
+      is_featured: true,
+      generated_by: "MANUAL",
+      created_at: now,
+      updated_at: now
+    },
+    {
+      id: "faq-perm-03",
+      portal_scope: "BRAND",
+      topic_id: "topic-company",
+      source_knowledge_id: "kno-permissions-user-management-v10",
+      source_version: "v1.0",
+      source_title: "K SELECT Brand Portal 사용자, 역할 및 권한 관리 가이드 (MAN-B-PERM-001)",
+      question_ko: "발송된 초대 링크가 만료되었다고 표시됩니다.",
+      question_en: "Why does the invitation link show as expired?",
+      answer_ko: "초대 링크는 보안을 위해 발송 후 7일간 1회만 유효합니다. 만료된 경우 회사 관리자에게 소속 멤버 목록에서 [재초대]를 실행해 새 초대장을 발송해 달라고 요청하세요.",
+      answer_en: "Invitation links expire after 7 days for security. If expired, request a company admin to click [Re-invite] from the member list to issue a new link.",
+      audience: ["BRAND", "INTERNAL", "ADMIN / MANAGEMENT"],
+      status: "APPROVED",
+      kind: "BOTH",
+      display_order: 3,
+      is_featured: true,
+      generated_by: "MANUAL",
+      created_at: now,
+      updated_at: now
+    },
+    {
+      id: "faq-perm-04",
+      portal_scope: "BRAND",
+      topic_id: "topic-company",
+      source_knowledge_id: "kno-permissions-user-management-v10",
+      source_version: "v1.0",
+      source_title: "K SELECT Brand Portal 사용자, 역할 및 권한 관리 가이드 (MAN-B-PERM-001)",
+      question_ko: "주 담당자로 지정되면 포털 권한도 자동으로 부여되나요?",
+      question_en: "Does being assigned as a Primary Task Owner automatically grant portal ACL permissions?",
+      answer_ko: "아닙니다. 6대 담당 업무 배정(company_apply, contract, product_cert, pricing_quote, logistics_inventory, settlement_inquiry)은 K SELECT 운영팀 소통 책임자 지정 및 이메일 알림 수신 라우팅 용도입니다. 실제 포털 메뉴 접근 및 수정 권한은 오직 ACL 매트릭스에 의해서만 결정됩니다.",
+      answer_en: "No. Primary task assignments serve communication and email notification routing purposes only. Actual menu access and edit rights are governed solely by the ACL matrix.",
+      audience: ["BRAND", "INTERNAL", "ADMIN / MANAGEMENT"],
+      status: "APPROVED",
+      kind: "BOTH",
+      display_order: 4,
+      is_featured: true,
+      generated_by: "MANUAL",
+      created_at: now,
+      updated_at: now
+    },
+    {
+      id: "faq-perm-05",
+      portal_scope: "BRAND",
+      topic_id: "topic-company",
+      source_knowledge_id: "kno-permissions-user-management-v10",
+      source_version: "v1.0",
+      source_title: "K SELECT Brand Portal 사용자, 역할 및 권한 관리 가이드 (MAN-B-PERM-001)",
+      question_ko: "최초 관리자 계정을 다른 담당자로 변경하거나 삭제할 수 있나요?",
+      question_en: "Can the Initial Owner admin account be deleted or transferred?",
+      answer_ko: "회사를 최초 개설한 초기 관리자(Initial Owner) 계정은 시스템 세이프티 차단 규칙에 의해 임의 삭제가 불가능합니다. 권한 이양이나 대표자 변경은 K SELECT 지원팀으로 서면 문의하시기 바랍니다.",
+      answer_en: "The Initial Owner account that created the company cannot be deleted due to system safety rules. Contact Support for official ownership transfer.",
+      audience: ["BRAND", "INTERNAL", "ADMIN / MANAGEMENT"],
+      status: "APPROVED",
+      kind: "BOTH",
+      display_order: 5,
+      is_featured: false,
+      generated_by: "MANUAL",
+      created_at: now,
+      updated_at: now
+    },
+    {
+      id: "faq-perm-06",
+      portal_scope: "BRAND",
+      topic_id: "topic-company",
+      source_knowledge_id: "kno-permissions-user-management-v10",
+      source_version: "v1.0",
+      source_title: "K SELECT Brand Portal 사용자, 역할 및 권한 관리 가이드 (MAN-B-PERM-001)",
+      question_ko: "퇴사한 팀원의 계정을 삭제하면 등록한 제품이나 발주 내역도 삭제되나요?",
+      question_en: "Will products or order records be deleted if a team member account is removed?",
+      answer_ko: "아니오. 등록된 브랜드, 제품, 발주서, 인보이스 데이터는 회사(company_id) 자산으로 귀속되어 보존되므로 멤버를 제거해도 회사의 비즈니스 데이터는 유지됩니다.",
+      answer_en: "No. All brands, products, purchase orders, and financial data belong to the company asset scope (company_id) and remain preserved when a member is removed.",
+      audience: ["BRAND", "INTERNAL", "ADMIN / MANAGEMENT"],
+      status: "APPROVED",
+      kind: "BOTH",
+      display_order: 6,
+      is_featured: false,
+      generated_by: "MANUAL",
+      created_at: now,
+      updated_at: now
+    },
+    {
+      id: "faq-perm-07",
+      portal_scope: "BRAND",
+      topic_id: "topic-company",
+      source_knowledge_id: "kno-permissions-user-management-v10",
+      source_version: "v1.0",
+      source_title: "K SELECT Brand Portal 사용자, 역할 및 권한 관리 가이드 (MAN-B-PERM-001)",
+      question_ko: "이용 상태를 이용 일시정지(Deactive)로 변경하면 어떻게 되나요?",
+      question_en: "What happens when a user status is changed to Suspended (Deactive)?",
+      answer_ko: "해당 사용자의 활성 로그인 세션이 즉시 무효화되어 포털 접속이 차단됩니다. 추후 관리자가 Active(정상 이용) 상태로 재활성화하여 접속을 재개할 수 있습니다.",
+      answer_en: "Active login sessions are immediately invalidated, blocking portal access. A company admin can reactivate the account status to Active later.",
+      audience: ["BRAND", "INTERNAL", "ADMIN / MANAGEMENT"],
+      status: "APPROVED",
+      kind: "BOTH",
+      display_order: 7,
+      is_featured: false,
+      generated_by: "MANUAL",
+      created_at: now,
+      updated_at: now
     }
   ];
 
@@ -2845,6 +3095,24 @@ Official user manual for K SELECT Brand Portal partners managing team invitation
       why_changed: "브랜드 파트너사 사용자 초대, 권한 설정, 업무 배정 및 안전 계정 정책 가이드 정립",
       effective_date: "2026-10-02",
       created_by_name: "Brand Operations Desk",
+      published_at: now,
+      created_at: now
+    },
+    {
+      id: "ver-finance-settlement-v10",
+      knowledge_id: "kno-finance-settlement-v10",
+      version: "v1.0",
+      status: "PUBLISHED",
+      title_ko: "K SELECT Brand Portal 정산 관리 및 인보이스 발행 매뉴얼 (MAN-B-FIN-001 v1.0)",
+      title_en: "K SELECT Brand Portal Finance & Settlement User Guide v1.0",
+      summary_ko: "최초 공식 발행 버전 (21-Page Published PDF 배포)",
+      summary_en: "Initial official published manual version",
+      content_ko: memoryItems.find(i => i.id === "kno-finance-settlement-v10")?.content_ko || "",
+      content_en: memoryItems.find(i => i.id === "kno-finance-settlement-v10")?.content_en || "",
+      what_changed: "MAN-B-FIN-001 Finance & Settlement User Guide 공식 배포 (v1.0)",
+      why_changed: "B2B 공급망 인보이스 발행, 3대 독립 상태 차원(Invoice ≠ Payment ≠ Settlement), Single Active Invoice 및 정산 조정 프로세스 표준화",
+      effective_date: "2026-10-02",
+      created_by_name: "Finance Operations Desk",
       published_at: now,
       created_at: now
     }
@@ -3367,6 +3635,96 @@ Official user manual for K SELECT Brand Portal partners managing team invitation
       related_route: "/portal/account",
       manual_title: "K SELECT Brand Portal 사용자, 역할 및 권한 관리 가이드 (MAN-B-PERM-001)",
       created_at: now
+    },
+    {
+      id: "rel-fin-hub",
+      knowledge_id: "kno-finance-settlement-v10",
+      related_portal: "Brand Portal",
+      related_module: "FINANCE",
+      related_menu: "Finance & Invoices Hub",
+      related_route: "/portal/finance",
+      manual_title: "K SELECT Brand Portal 정산 관리 및 인보이스 발행 매뉴얼 (MAN-B-FIN-001)",
+      created_at: now
+    },
+    {
+      id: "rel-fin-new-invoice",
+      knowledge_id: "kno-finance-settlement-v10",
+      related_portal: "Brand Portal",
+      related_module: "FINANCE",
+      related_menu: "New Supplier Invoice",
+      related_route: "/portal/finance/new",
+      manual_title: "K SELECT Brand Portal 정산 관리 및 인보이스 발행 매뉴얼 (MAN-B-FIN-001)",
+      created_at: now
+    },
+    {
+      id: "rel-fin-invoice-detail",
+      knowledge_id: "kno-finance-settlement-v10",
+      related_portal: "Brand Portal",
+      related_module: "FINANCE",
+      related_menu: "Invoice Detail View",
+      related_route: "/portal/finance/[id]",
+      manual_title: "K SELECT Brand Portal 정산 관리 및 인보이스 발행 매뉴얼 (MAN-B-FIN-001)",
+      created_at: now
+    },
+    {
+      id: "rel-fin-invoice-edit",
+      knowledge_id: "kno-finance-settlement-v10",
+      related_portal: "Brand Portal",
+      related_module: "FINANCE",
+      related_menu: "Edit Invoice Draft",
+      related_route: "/portal/finance/[id]/edit",
+      manual_title: "K SELECT Brand Portal 정산 관리 및 인보이스 발행 매뉴얼 (MAN-B-FIN-001)",
+      created_at: now
+    },
+    {
+      id: "rel-admin-fin-invoices",
+      knowledge_id: "kno-finance-settlement-v10",
+      related_portal: "Admin",
+      related_module: "FINANCE",
+      related_menu: "Admin Invoices Management",
+      related_route: "/admin/finance/invoices",
+      manual_title: "K SELECT Brand Portal 정산 관리 및 인보이스 발행 매뉴얼 (MAN-B-FIN-001)",
+      created_at: now
+    },
+    {
+      id: "rel-admin-fin-invoice-detail",
+      knowledge_id: "kno-finance-settlement-v10",
+      related_portal: "Admin",
+      related_module: "FINANCE",
+      related_menu: "Admin Invoice Review & Approval",
+      related_route: "/admin/finance/invoices/[id]",
+      manual_title: "K SELECT Brand Portal 정산 관리 및 인보이스 발행 매뉴얼 (MAN-B-FIN-001)",
+      created_at: now
+    },
+    {
+      id: "rel-admin-fin-payments",
+      knowledge_id: "kno-finance-settlement-v10",
+      related_portal: "Admin",
+      related_module: "FINANCE",
+      related_menu: "Admin Payments Management",
+      related_route: "/admin/finance/payments",
+      manual_title: "K SELECT Brand Portal 정산 관리 및 인보이스 발행 매뉴얼 (MAN-B-FIN-001)",
+      created_at: now
+    },
+    {
+      id: "rel-admin-fin-payment-new",
+      knowledge_id: "kno-finance-settlement-v10",
+      related_portal: "Admin",
+      related_module: "FINANCE",
+      related_menu: "Admin New Payment Execution Form",
+      related_route: "/admin/finance/payments/new",
+      manual_title: "K SELECT Brand Portal 정산 관리 및 인보이스 발행 매뉴얼 (MAN-B-FIN-001)",
+      created_at: now
+    },
+    {
+      id: "rel-admin-fin-payment-detail",
+      knowledge_id: "kno-finance-settlement-v10",
+      related_portal: "Admin",
+      related_module: "FINANCE",
+      related_menu: "Admin Payment Detail View",
+      related_route: "/admin/finance/payments/[id]",
+      manual_title: "K SELECT Brand Portal 정산 관리 및 인보이스 발행 매뉴얼 (MAN-B-FIN-001)",
+      created_at: now
     }
   ];
 
@@ -3485,6 +3843,19 @@ Official user manual for K SELECT Brand Portal partners managing team invitation
       file_url: "/api/admin/knowledge/asset/asset-permissions-user-management-v10",
       file_name: "MAN-B-PERM-001_Permissions-User-Management_V1.pdf",
       file_size: 1441842,
+      published_date: "2026-10-02",
+      created_at: now
+    },
+    {
+      id: "asset-finance-settlement-v10",
+      knowledge_id: "kno-finance-settlement-v10",
+      manual_title: "K SELECT Brand Portal 정산 관리 및 인보이스 발행 매뉴얼 (MAN-B-FIN-001)",
+      version: "v1.0",
+      language: "KO",
+      is_current: true,
+      file_url: "/api/admin/knowledge/asset/asset-finance-settlement-v10",
+      file_name: "MAN-B-FIN-001_Finance-Settlement_V1.pdf",
+      file_size: 4716798,
       published_date: "2026-10-02",
       created_at: now
     }
