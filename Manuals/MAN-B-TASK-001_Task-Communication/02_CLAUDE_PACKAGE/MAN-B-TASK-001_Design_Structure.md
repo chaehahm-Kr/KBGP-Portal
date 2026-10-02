@@ -48,9 +48,9 @@
 │ PAGE LAYOUT BLUEPRINT: 7 CORE CHAPTERS                                                 │
 ├────────────────────────────────────────────────────────────────────────────────────────┤
 │ • Chapter 1: System Overview & Core Principles                                         │
-│   - Philosophy of structured 1:1 case communication                                    │
+│   - Philosophy of structured 1:1 case communication (official support & changes)       │
 │   - Architectural separation: PERM 6 contact tasks vs Dynamic Case Tickets             │
-│   - Admin tasks table (public.tasks) independence note                                 │
+│   - Admin tasks table (public.tasks) system gap / unlinked model note                  │
 ├────────────────────────────────────────────────────────────────────────────────────────┤
 │ • Chapter 2: Support Hub UI & Case List (SCR-B-TASK-001)                               │
 │   - Action bar, 4 normalized status filter tabs, case card items, urgent highlight     │
@@ -65,14 +65,14 @@
 │   - Rose alert banner, supplement submission flow, case close, 5-star CSAT rating      │
 ├────────────────────────────────────────────────────────────────────────────────────────┤
 │ • Chapter 6: Cross-Domain Deep Linking Inflow (SCR-B-TASK-006, SCR-B-TASK-007)         │
-│   - PO details prefill (related_po_id FK), settlement AP prefill, agreements prefill   │
+│   - PO details (related_po_id DB FK), settlement AP prefill, agreements prefill (No FK)│
 ├────────────────────────────────────────────────────────────────────────────────────────┤
 │ • Chapter 7: ACL, Storage Security & Notifications (SCR-B-TASK-008 ~ SCR-B-TASK-010)   │
-│   - In-app notification feed, conditional Resend email, company-uploads signed URLs,   │
-│     4-tier ACL matrix (none/read/write/manage)                                         │
+│   - 6 in-app notification events, conditional Resend email, company-uploads signed URLs│
+│   - 4-tier ACL matrix (none/read/write/manage)                                         │
 ├────────────────────────────────────────────────────────────────────────────────────────┤
 │ • Chapter 8: Appendix: Admin Operations Console (SCR-B-TASK-011, SCR-B-TASK-012)       │
-│   - Admin partner inquiries management, internal tasks console distinction             │
+│   - Admin partner inquiries management, unlinked internal tasks console distinction    │
 └────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 

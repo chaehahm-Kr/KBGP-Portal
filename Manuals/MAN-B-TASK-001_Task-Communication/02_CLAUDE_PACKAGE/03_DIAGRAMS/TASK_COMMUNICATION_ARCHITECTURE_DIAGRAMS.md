@@ -34,13 +34,13 @@ graph TD
         style DomainB fill:#eef2ff,stroke:#6366f1,stroke-width:2px
     end
 
-    subgraph DomainC["Admin Internal Work Monitoring (public.tasks)"]
-        C1["Early Admin Mock Schema"]
+    subgraph DomainC["System Gap Note: Early Admin Tasks (public.tasks)"]
+        C1["Unlinked Admin Internal Mock Schema<br/>(No Brand Portal Interaction)"]
         style DomainC fill:#fafafa,stroke:#d4d4d8,stroke-dasharray: 5 5
     end
 
     A1 -. "Independent Schemas" .- B1
-    B1 -. "No Automatic Trigger" .- C1
+    B1 -. "No Direct Link / Unlinked" .- C1
 ```
 
 ---
@@ -112,15 +112,16 @@ sequenceDiagram
     PortalUI->>ServerAction: createPartnerInquiry(data, attachmentPath)
     ServerAction->>DB: INSERT INTO partner_inquiries (status='open')
     DB-->>PortalUI: Case Created (CASE-2026-XXXX)
+    Note over PortalUI,DB: In-App Event 1: New Inquiry Notification Dispatched
 
     AdminStaff->>DB: Admin Reads & Assigns Case (status='under_review')
     AdminStaff->>DB: Admin Replies (INSERT INTO partner_inquiry_messages)
-    DB-->>PortalUI: In-App Notification Generated
+    DB-->>PortalUI: In-App Event 2: Admin Reply Notification Dispatched
 
     BrandUser->>PortalUI: View Thread & Reply / Close Case
     BrandUser->>ServerAction: closeCase(inquiryId) / submitSatisfactionRating(score)
     ServerAction->>DB: UPDATE partner_inquiries (status='closed', satisfaction_score=5)
-    DB-->>PortalUI: Case Closed UI & CSAT Logged
+    DB-->>PortalUI: Case Closed UI & In-App Event 5 & 6 (Closed / CSAT Logged)
 ```
 
 ---
@@ -129,29 +130,29 @@ sequenceDiagram
 
 ```mermaid
 stateDiagram-v2
-    [*] --> RECEIVED: New Inquiry Created
+    [*] --> RECEIVED: New Inquiry Created (Event 1)
     RECEIVED --> UNDER_REVIEW: Admin Reviews Case
 
-    UNDER_REVIEW --> ACTION_REQUIRED: Admin Flag: isActionRequired = true
+    UNDER_REVIEW --> ACTION_REQUIRED: Admin Flag: isActionRequired = true (Event 3)
     note right of ACTION_REQUIRED
         • Rose Badge Highlight
-        • Header Notification Generated
-        • Transactional Email Sent (if sendEmail=true)
+        • In-App Event 3: Action Required Generated
+        • Transactional Email Sent (Condition: isActionRequired && sendEmail)
     end note
 
-    ACTION_REQUIRED --> UNDER_REVIEW: Brand User Submits Supplement Reply
+    ACTION_REQUIRED --> UNDER_REVIEW: Brand User Submits Supplement Reply (Event 4)
     note left of UNDER_REVIEW
         • Automatic state transition to UNDER_REVIEW
-        • In-App Notification sent to Admin
+        • In-App Event 4: Action Resolved sent to Admin
     end note
 
-    UNDER_REVIEW --> CLOSED: Admin or Brand User Closes Case
-    CLOSED --> [*]: Optional CSAT Submitted
+    UNDER_REVIEW --> CLOSED: Admin or Brand User Closes Case (Event 5)
+    CLOSED --> [*]: CSAT Submitted (Event 6)
 ```
 
 ---
 
-## Diagram 5: Cross-Domain Deep Linking Inflow (PO, Settlement, Agreements)
+## Diagram 5: Cross-Domain Deep Linking Inflow (PO FK vs Context Prefill)
 
 ```mermaid
 graph TD
@@ -168,9 +169,9 @@ graph TD
     end
 
     subgraph InflowHandler["/portal/support Modal Prefill Engine"]
-        M1["Auto-Select Category: po_change<br/>Auto-Bind FK: related_po_id"]
-        M2["Auto-Select Category: settlement<br/>Auto-Insert Title: [AP-XXXX] Settlement Inquiry"]
-        M3["Auto-Select Category: agreement_change<br/>Auto-Insert Context: Contract Amendment"]
+        M1["Auto-Select Category: po_change<br/>Auto-Bind DB FK: related_po_id"]
+        M2["Auto-Select Category: settlement<br/>Context Prefill (No DB FK): [AP-XXXX] Settlement Inquiry"]
+        M3["Auto-Select Category: agreement_change<br/>Context Prefill (No DB FK): Contract Amendment Context"]
     end
 
     PO --> P1 --> M1
@@ -203,17 +204,18 @@ flowchart TD
         L3["Level 3 (manage) --> All Write + closeCase() Allowed"]
     end
 
-    subgraph NotificationDispatch["Notification Dispatch Engine"]
+    subgraph NotificationDispatch["6 Canonical In-App Notification Events & Conditional Email"]
+        N_EVENTS["1. New Inquiry<br/>2. Admin Reply<br/>3. Action Required<br/>4. Action Resolved<br/>5. Case Closed<br/>6. CSAT Submission"]
         N_INAPP["Create In-App Notification (public.notifications)"]
         N_READ["Independent User Read Tracking via read_notification_ids"]
-        N_EMAIL["Transactional Email via Resend (Condition: isActionRequired && sendEmail)"]
+        N_EMAIL["Transactional Email via Resend<br/>(Strictly Conditional: isActionRequired && sendEmail, or Admin Case Email)"]
     end
 
     REQ --> AuthLayer
     AUTH2 --> L0 & L1 & L2 & L3
     L2 & L3 --> NotificationDispatch
-    NotificationDispatch --> N_INAPP --> N_READ
-    NotificationDispatch --> N_EMAIL
+    N_EVENTS --> N_INAPP --> N_READ
+    N_EVENTS --> N_EMAIL
 ```
 
 ---

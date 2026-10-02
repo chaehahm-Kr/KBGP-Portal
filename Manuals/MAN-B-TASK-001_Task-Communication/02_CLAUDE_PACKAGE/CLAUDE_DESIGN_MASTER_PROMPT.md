@@ -16,7 +16,7 @@ Master Reference: MAN-B-BRAND-001_Brand-Policy_V1.pdf
 1. Strict Domain Separation:
    - MAN-B-PERM-001: Static 6 Primary Contact Tasks (company_apply, contract, product_cert, pricing_quote, logistics_inventory, settlement_inquiry) on table company_task_assignments.
    - MAN-B-TASK-001: Dynamic 1:1 Case Communication on table partner_inquiries and partner_inquiry_messages.
-   - public.tasks is an early admin internal monitoring table and NOT linked to partner inquiries.
+   - public.tasks / /admin/tasks is an early unlinked admin internal monitoring schema (System Gap) and NOT a brand workflow.
 2. Presentation Status Normalization:
    - Normalize the 10 internal DB statuses into the 4 official presentation states:
      • RECEIVED (접수됨) — Amber (#F59E0B)
@@ -29,9 +29,12 @@ Master Reference: MAN-B-BRAND-001_Brand-Policy_V1.pdf
    - Bucket: "company-uploads", Path: ${companyId}/inquiries/..., Max Size: 20MB, Types: Images & PDF, Time-limited Signed URLs.
 5. Cross-Domain Deep Links:
    - PO inquiries bind the foreign key `related_po_id` to purchase_orders.
-   - Settlement and Agreement inquiries prefill context parameters.
-6. Absolute Claim Restrictions:
-   - Maintain objective, fact-based technical prose and avoid unverified absolute claims.
+   - Settlement and Agreement inquiries prefill context parameters (No DB FK).
+6. 6 Canonical In-App Notification Events & Conditional Email:
+   - 1. New Inquiry, 2. Admin Reply, 3. Action Required, 4. Action Resolved, 5. Case Closed, 6. CSAT Submission.
+   - Transactional Email sent strictly on `isActionRequired && sendEmail` or admin case creation with email option (never on routine replies).
+7. Absolute Claim Restrictions:
+   - Prohibit broad absolute claims like "모든 비즈니스 문의/모든 소통". Use precise wording: "브랜드 포털 내 공식 지원 문의, 변경 요청 및 관련 커뮤니케이션".
 
 ==================================================
 2. VISUAL LAYOUT & TYPOGRAPHY SYSTEM

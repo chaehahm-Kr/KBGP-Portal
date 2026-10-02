@@ -48,15 +48,26 @@
 
 1. **PERM Tasks vs Dynamic Case Communication**:
    - `MAN-B-PERM-001`의 6대 주 담당자 업무(`company_apply`, `contract`, `product_cert`, `pricing_quote`, `logistics_inventory`, `settlement_inquiry`)는 회사 단위의 정적 알림 라우팅 구조입니다.
-   - `MAN-B-TASK-001`의 케이스 소통은 `partner_inquiries` 기반의 동적 티켓/이슈 라이프사이클입니다.
+   - `MAN-B-TASK-001`의 케이스 소통은 `partner_inquiries` 및 `partner_inquiry_messages` 기반의 동적 티켓/이슈 라이프사이클입니다.
+   - 어드민의 레거시 `public.tasks`(`/admin/tasks`)는 파트너 문의와 연동되지 않은 초기 프로토타입/시스템 갭(Unlinked System Gap)이며, 실제 브랜드 파트너 문의 관리는 `/admin/partner-inquiries`에서 전담합니다.
+
 2. **상태 정규화 (Status Normalization)**:
-   - 10개의 내부 DB 상태는 사용자 UI에서 4개의 직관적인 표시 상태(`RECEIVED`, `UNDER_REVIEW`, `ACTION_REQUIRED`, `CLOSED`)로 정규화되어 일관되게 제공됩니다.
-3. **스토리지 및 첨부파일 규격**:
-   - 버킷명: `"company-uploads"`, 경로: `${companyId}/inquiries/...`, 최대 크기: 20MB, 이미지 및 PDF 지원, 서명 URL(Signed URL) 다운로드.
-4. **교차 도메인 연계**:
-   - PO 발주 상세에서 인입 시 외래키 `related_po_id`가 실제 DB에 바인딩되며, 정산 및 계약 인입 시 식별 번호가 제목과 설명에 자동 구성됩니다.
-5. **엄격한 기술적 서술**:
-   - 과장되거나 검증되지 않은 절대적 표현을 배제하고 프로덕션 실제 동작에 기반하여 기술되었습니다.
+   - 10개의 내부 DB 상태(`draft`, `submitted`, `assigned`, `in_progress`, `waiting_on_partner`, `action_required`, `partner_action_required`, `under_review`, `resolved`, `closed`)는 사용자 UI에서 4개의 직관적인 표시 상태(`RECEIVED`, `UNDER_REVIEW`, `ACTION_REQUIRED`, `CLOSED`)로 정규화되어 일관되게 제공됩니다.
+
+3. **6대 정규 인앱 알림 & 조건부 이메일 발송 규칙**:
+   - **인앱 알림 이벤트 (6종)**: `New Inquiry`, `Admin Reply`, `Action Required`, `Action Resolved`, `Case Closed`, `CSAT Submission`.
+   - **트랜잭션 이메일 발송 (Resend)**: 일상적인 단순 댓글/답변에는 이메일이 발송되지 않으며, 관리자가 '추가 정보/조치 필요(`isActionRequired=true`)'를 설정하고 '이메일 알림 전송(`sendEmail=true`)'을 명시적으로 체크한 경우 또는 신규 케이스 생성 시 이메일 옵션을 선택한 경우에만 엄격히 조건부로 발송됩니다.
+
+4. **스토리지 및 첨부파일 규격**:
+   - 버킷명: `"company-uploads"`, 경로: `${companyId}/inquiries/...`, 최대 크기: 20MB, 이미지(PNG/JPEG/WEBP) 및 PDF 지원, 서명 URL(Signed URL) 다운로드.
+
+5. **교차 도메인 연계 (DB FK vs Context Prefill)**:
+   - **PO 발주 변경 (`orders`)**: 모달에서 특정 발주 선택 시 실제 외래키 `related_po_id`가 DB 컬럼에 물리적으로 바인딩됩니다.
+   - **정산(`settlements`) 및 약관/계약(`agreements`)**: 전용 DB 외래키 컬럼이 없으며, 인입 시 식별 번호가 제목과 설명에 텍스트로 자동 사전 입력(Context Prefill)되어 안내됩니다.
+
+6. **엄격한 기술적 서술 (Zero Absolute Claims)**:
+   - "모든 비즈니스 문의", "모든 소통" 등 검증되지 않은 과장된 절대적 표현을 배제하고, "브랜드 포털 내 공식 지원 문의, 변경 요청 및 관련 커뮤니케이션"으로 명확히 한정하여 기술되었습니다.
 
 ---
 *End of PACKAGE_README.md*
+

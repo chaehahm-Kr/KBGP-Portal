@@ -46,12 +46,19 @@
 1. **PERM Tasks vs Dynamic Case Communication**:
    - `MAN-B-PERM-001` contact tasks are static routing points (`company_apply`, `contract`, `product_cert`, `pricing_quote`, `logistics_inventory`, `settlement_inquiry`).
    - `MAN-B-TASK-001` is the dynamic case lifecycle (`partner_inquiries`).
+   - `public.tasks` / `/admin/tasks` is an unlinked early admin monitoring schema (System Gap) and NOT an active brand workflow.
 2. **Status Normalization**:
    - Always display the 4 official presentation states: `RECEIVED` (Amber), `UNDER_REVIEW` (Blue), `ACTION_REQUIRED` (Rose), `CLOSED` (Zinc).
-3. **Storage Specs**:
+3. **Cross-Domain Linking**:
+   - PO Change binds the real `related_po_id` DB foreign key to `purchase_orders`.
+   - Settlement and Agreements use Context Prefill (No DB FK).
+4. **6 Canonical Notification Events & Conditional Email**:
+   - In-app events: 1. New Inquiry, 2. Admin Reply, 3. Action Required, 4. Action Resolved, 5. Case Closed, 6. CSAT Submission.
+   - Transactional email is sent strictly on `isActionRequired && sendEmail` or admin case creation with email option (never on routine replies).
+5. **Storage Specs**:
    - Bucket: `"company-uploads"`, Max 20MB, Images & PDF, Signed URLs.
-4. **No Hyperbolic Statements**:
-   - All text maintains strict technical neutrality and accuracy.
+6. **No Unsupported Absolute Statements**:
+   - Prohibit broad claims like "모든 비즈니스 문의/모든 소통". Use precise wording: "브랜드 포털 내 공식 지원 문의, 변경 요청 및 관련 커뮤니케이션".
 
 ---
 *End of CLAUDE_DESIGN_HANDOFF_PROMPT.md*

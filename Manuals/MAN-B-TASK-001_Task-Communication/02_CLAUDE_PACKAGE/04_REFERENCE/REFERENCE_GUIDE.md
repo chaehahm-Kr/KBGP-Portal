@@ -23,13 +23,13 @@
 
 | Category Code | Korean Name | English Name | Integration & Key Fields | Primary Use Cases |
 | :--- | :--- | :--- | :--- | :--- |
-| `po_change` | **PO 변경 요청** | PO Change Request | `related_po_id` (FK to `purchase_orders`) | Quantity, price, or shipment origin modifications |
-| `agreement_change` | **계약 변경 및 서명** | Agreement Change Request | Agreement ID prefill | Contract clause review, signing officer updates |
+| `po_change` | **PO 변경 요청** | PO Change Request | `related_po_id` (**Real DB FK** to `purchase_orders`) | Quantity, price, or shipment origin modifications |
+| `agreement_change` | **계약 변경 및 서명** | Agreement Change Request | Agreement ID (**Context Prefill Only**, No DB FK) | Contract clause review, signing officer updates |
 | `product` | **제품 등록 및 정보수정** | Product Registration | Product ID context | Barcode, ingredients, package spec revisions |
 | `onboarding` | **입점 신청 및 심사** | Onboarding Review | Company onboarding context | Supplemental application document submissions |
 | `logistics` | **물류 공급 및 패키징** | Logistics & Packaging | Logistics specifications | Carton labeling, CBM measurement, port coordination |
 | `translation` | **번역 및 전성분표** | Translation & Ingredients | Regulatory compliance | FDA label English translations, ingredient audits |
-| `settlement` | **정산 / 인보이스 문의** | Settlement / Invoice | `related_invoice_id` / AP No. | Payment schedules, tax invoice discrepancies |
+| `settlement` | **정산 / 인보이스 문의** | Settlement / Invoice | AP No. (**Context Prefill Only**, No DB FK) | Payment schedules, tax invoice discrepancies |
 | `system` | **시스템 오류 및 제안** | System & Tech Support | Portal UI error context | Feature bugs, user permission escalation requests |
 | `general` | **기타 일반 문의** | General Inquiry | None | General partnership or operational questions |
 
@@ -52,9 +52,9 @@
 
 | Source Page | Action / Button | Constructed URL Parameters | Behavior in `/portal/support` |
 | :--- | :--- | :--- | :--- |
-| `/portal/orders/[id]` | `[발주 문의 / 변경 요청]` | `?new=1&category=po_change&po_id={id}&po_no={po_no}` | Auto-locks category to `po_change`, binds FK `related_po_id`, prefills title with `[{po_no}]` |
-| `/portal/settlement` | `[정산 문의하기]` | `?new=1&category=settlement&invoice_id={id}&ap_no={ap_no}` | Auto-selects `settlement`, prefills title with `[{ap_no}]` |
-| `/portal/agreements` | `[계약 조항 문의]` | `?new=1&category=agreement_change&agreement_id={id}` | Auto-selects `agreement_change`, injects contract reference |
+| `/portal/orders/[id]` | `[발주 문의 / 변경 요청]` | `?new=1&category=po_change&po_id={id}&po_no={po_no}` | Auto-locks category to `po_change`, binds **DB FK** `related_po_id`, prefills title with `[{po_no}]` |
+| `/portal/settlement` | `[정산 문의하기]` | `?new=1&category=settlement&invoice_id={id}&ap_no={ap_no}` | Auto-selects `settlement`, prefills title with `[{ap_no}]` (**Context Prefill**, No DB FK) |
+| `/portal/agreements` | `[계약 조항 문의]` | `?new=1&category=agreement_change&agreement_id={id}` | Auto-selects `agreement_change`, injects contract reference (**Context Prefill**, No DB FK) |
 
 ---
 
@@ -78,6 +78,19 @@
 | **`support:read`** | `1` | ✅ Allowed | ✅ | ❌ | ❌ | ❌ | ❌ |
 | **`support:write`** | `2` | ✅ Allowed | ✅ | ✅ | ✅ | ✅ | ❌ |
 | **`support:manage`** | `3` | ✅ Allowed | ✅ | ✅ | ✅ | ✅ | ✅ |
+
+---
+
+## 7. Notification Events & Conditional Email Rules
+
+| Event Number | Canonical Event Name | Target Audience | In-App Notification | Transactional Email Rule |
+| :---: | :--- | :--- | :---: | :--- |
+| **1** | `New Inquiry` | Brand & Admin Staff | ✅ Yes | Admin case creation with email option only |
+| **2** | `Admin Reply` | Brand Company Users | ✅ Yes | ❌ No (Routine replies do not send email) |
+| **3** | `Action Required` | Brand Company Users | ✅ Yes | ✅ **Sent ONLY when `isActionRequired=true` && `sendEmail=true`** |
+| **4** | `Action Resolved` | Admin Assigned Staff | ✅ Yes | ❌ No |
+| **5** | `Case Closed` | Brand Company Users | ✅ Yes | ❌ No |
+| **6** | `CSAT Submission` | Admin Staff & Quality Logs | ✅ Yes | ❌ No |
 
 ---
 *End of REFERENCE_GUIDE.md*

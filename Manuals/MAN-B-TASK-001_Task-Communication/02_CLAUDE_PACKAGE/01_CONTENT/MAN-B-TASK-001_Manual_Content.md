@@ -11,9 +11,9 @@
 ## 1. 시스템 개요 및 핵심 원칙 (System Overview & Principles)
 
 ### 1.1 K SELECT 업무 소통의 기본 철학
-K SELECT 플랫폼의 **Task & Communication(지원 센터 / 1:1 문의)** 시스템은 브랜드사와 K SELECT 운영팀 간의 모든 비즈니스 문의, 변경 요청, 서류 보완 및 일감 조율을 투명하고 추적 가능하게 관리하는 공식 소통 허브입니다.
+K SELECT 플랫폼의 **Task & Communication(지원 센터 / 1:1 문의)** 시스템은 **브랜드 포털 내 공식 지원 문의, 변경 요청 및 관련 커뮤니케이션**을 투명하고 추적 가능하게 관리하는 공식 소통 허브입니다.
 
-파편화되기 쉬운 외부 메신저나 개별 이메일 대신, 모든 소통을 단일 케이스 티켓 단위로 구조화하여 이력 보존과 정확한 역할 기반 협업을 지원합니다.
+파편화되기 쉬운 외부 메신저나 개별 이메일 대신, 공식 지원 및 변경 요청을 단일 케이스 티켓 단위로 구조화하여 이력 보존과 정확한 역할 기반 협업을 지원합니다.
 
 ### 1.2 핵심 아키텍처 경계: 6대 업무 라우팅 vs 1:1 케이스 소통
 K SELECT 시스템에는 업무(Task)라는 명칭을 공유하지만 목적과 생명주기가 명확히 분리된 두 가지 구조가 존재합니다:
@@ -26,8 +26,8 @@ K SELECT 시스템에는 업무(Task)라는 명칭을 공유하지만 목적과 
    - 특정 비즈니스 안건(발주 수량 변경, 정산 질의, 서류 보완 등)에 대해 티켓을 발행하고, 양방향 스레드 대화와 상태 전이를 거쳐 해결 및 종결(Close)하는 동적 케이스 라이프사이클입니다.
 
 > [!NOTE]
-> **어드민 내부 일감 스키마(`public.tasks`)와의 관계**:
-> 데이터베이스 내 `public.tasks` 테이블은 초기 어드민 내부 업무 모니터링 목적으로 설계되었으며, 브랜드 포털의 `partner_inquiries`와는 상호 종속성이나 자동 트리거가 연결되어 있지 않습니다. 브랜드사의 모든 공식 지원 요청과 소통은 `partner_inquiries` 기반의 지원 센터를 통해 일원화되어 처리됩니다.
+> **어드민 내부 일감 스키마(`public.tasks`)와의 경계 (System Gap Note)**:
+> 데이터베이스 내 `public.tasks` 및 `/admin/tasks`는 초기 어드민 내부 업무 모니터링 목적으로 설계된 독립 스키마(현재 목업 데이터 기반)이며, 브랜드 포털의 `partner_inquiries`와는 상호 종속성이나 자동 트리거가 연결되어 있지 않습니다. 브랜드사의 모든 공식 지원 요청과 소통은 `partner_inquiries` 기반의 지원 센터를 통해 전담 처리됩니다.
 
 ---
 
@@ -148,13 +148,15 @@ K SELECT 시스템에는 업무(Task)라는 명칭을 공유하지만 목적과 
 - **URL 파라미터**: `/portal/support?new=1&category=po_change&po_id=...&po_no=PO-2026-0008`
 - **데이터베이스 연계**: `partner_inquiries.related_po_id`에 실제 `purchase_orders.id` 외래키가 기록되어 운영팀 콘솔에서도 해당 발주서와 직결됩니다.
 
-### 6.2 정산 및 계약 연계 문의
+### 6.2 정산 및 계약 연계 문의 (Context Prefill)
 정산 내역(`/portal/settlement`)이나 계약서 관리(`/portal/agreements`) 화면에서도 동일하게 사전 컨텍스트가 주입된 문의 창이 실행됩니다.
 
 ![정산 문의 딥링크 사전 입력](file:///c:/Users/ChaeHahm/OneDrive%20-%20Letusto%20Inc/Developement/Claude_Dev/KSelectNetwork-Portal/Manuals/MAN-B-TASK-001_Task-Communication/02_CLAUDE_PACKAGE/02_SCREENSHOTS/SCR-B-TASK-007.png)
 
 - **URL 파라미터**: `/portal/support?new=1&category=settlement&ap_no=AP-2026-0012`
-- **동작 방식**: 제목과 본문에 매입전표 번호(AP No.) 또는 계약서 고유 식별자가 자동으로 삽입되어 신속한 상담이 가능합니다.
+- **동작 방식 (Context Prefill vs DB FK)**:
+  - 발주 문의(`po_change`)는 DB 레벨의 실제 외래키(`related_po_id`)를 연결합니다.
+  - 반면 정산(`settlement`) 및 계약(`agreement_change`) 문의는 DB 외래키 대신 **문맥 사전 입력(Context Prefill)** 방식으로 제목과 본문에 매입전표 번호(AP No.) 또는 계약 식별자를 자동 삽입하여 신속한 상담을 지원합니다.
 
 ---
 
@@ -165,11 +167,18 @@ K SELECT 시스템에는 업무(Task)라는 명칭을 공유하지만 목적과 
 
 ![헤더 인앱 알림 피드](file:///c:/Users/ChaeHahm/OneDrive%20-%20Letusto%20Inc/Developement/Claude_Dev/KSelectNetwork-Portal/Manuals/MAN-B-TASK-001_Task-Communication/02_CLAUDE_PACKAGE/02_SCREENSHOTS/SCR-B-TASK-008.png)
 
-- **인앱 알림 (`notifications`)**:
-  - 케이스 접수, 운영팀 답변, 조치 요청, 종결 시 소속 회사 계정에 인앱 알림이 자동 생성됩니다.
-  - 각 사용자별 읽음 여부는 `company_users.permissions.read_notification_ids`에 독립적으로 저장되어 여러 담당자가 협업할 때 혼선을 방지합니다.
-- **트랜잭션 이메일 발송**:
-  - 불필요한 이메일 피로도를 낮추기 위해, **운영팀의 긴급 조치 요청(`ACTION_REQUIRED`) 및 이메일 발송 플래그가 활성화된 경우**에 한하여 회사 담당자 이메일로 안내 메일이 발송됩니다.
+- **6대 표준 인앱 알림 이벤트 (`notifications`)**:
+  1. **New Inquiry (신규 문의 접수)**: 문의 생성 시 회사 계정 및 운영팀에 접수 알림 전달.
+  2. **Admin Reply (운영팀 답변 등록)**: 운영팀 메시지 등록 시 브랜드 담당자에게 알림 생성.
+  3. **Action Required (조치 요청)**: 서류 보완이나 긴급 확인 필요 시 상단 배너와 함께 생성.
+  4. **Action Resolved (조치 회신 완료)**: 브랜드사가 보완 회신 제출 시 운영팀에 전달.
+  5. **Case Closed (케이스 공식 종결)**: 문의 종결 시 최종 처리 결과 알림.
+  6. **CSAT Submission (만족도 평가 완료)**: 5점 만족도 평가 제출 이력 기록.
+  - 각 사용자별 읽음 여부는 `company_users.permissions.read_notification_ids`에 독립적으로 저장되어 다중 담당자 협업 시 읽음 상태를 개별 관리합니다.
+
+- **조건부 트랜잭션 이메일 발송 규칙 (Conditional Email)**:
+  - 일상적인 메시지 교환에는 이메일이 발송되지 않습니다.
+  - **운영팀의 긴급 조치 요청(`isActionRequired=true` 및 이메일 발송 옵션 활성화 시)** 또는 **어드민 신규 케이스 생성 시 이메일 옵션 선택 시**에만 제한적으로 발송되어 알림 피로도를 최소화합니다.
 
 ### 7.2 파일 첨부 보안 및 스토리지 규격
 - **스토리지 버킷**: 격리된 Private 버킷인 `"company-uploads"`를 사용합니다.
@@ -194,9 +203,13 @@ K SELECT 시스템에는 업무(Task)라는 명칭을 공유하지만 목적과 
 
 ## 8. 부록: 어드민 운영 콘솔 연계 (Admin Console Reference)
 
-운영팀 관리자는 어드민 콘솔(`/admin/partner-inquiries`)을 통해 브랜드사가 제출한 모든 티켓을 통합 모니터링하고 담당 심사관 배정, 조치 요청 발송, 종결 처리를 수행합니다.
+운영팀 관리자는 어드민 콘솔(`/admin/partner-inquiries`)을 통해 브랜드사가 제출한 공식 케이스를 통합 모니터링하고 담당 심사관 배정, 조치 요청 발송, 종결 처리를 수행합니다.
 
 ![어드민 파트너 문의 관리 콘솔](file:///c:/Users/ChaeHahm/OneDrive%20-%20Letusto%20Inc/Developement/Claude_Dev/KSelectNetwork-Portal/Manuals/MAN-B-TASK-001_Task-Communication/02_CLAUDE_PACKAGE/02_SCREENSHOTS/SCR-B-TASK-011.png)
+
+> [!NOTE]
+> **어드민 내부 일감 콘솔(`/admin/tasks`) 참고**:  
+> 어드민 내 `/admin/tasks` 화면은 초기 내부 작업 모니터링용 독립 화면(현재 목업 데이터 기반)이며, 브랜드 포털의 공식 1:1 소통 워크플로우와는 직접 연계되지 않습니다. 브랜드사의 모든 실무 지원은 `/admin/partner-inquiries`를 통해 이루어집니다.
 
 ![어드민 내부 일감 콘솔](file:///c:/Users/ChaeHahm/OneDrive%20-%20Letusto%20Inc/Developement/Claude_Dev/KSelectNetwork-Portal/Manuals/MAN-B-TASK-001_Task-Communication/02_CLAUDE_PACKAGE/02_SCREENSHOTS/SCR-B-TASK-012.png)
 
