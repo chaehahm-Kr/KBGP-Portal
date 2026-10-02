@@ -22,7 +22,7 @@ flowchart TD
         PARALLEL_GATE --> Inv_Eligible["인보이스 발행 가능 발주로 식별<br/>(getEligiblePosForInvoice)"]
         Inv_Eligible --> Draft["인보이스 초안 작성<br/>(createPortalInvoiceDraft)"]
         Draft --> Submit["인보이스 제출<br/>(submitPortalInvoice)"]
-        Submit --> Approve["본사 승인 / 채무 확정<br/>(approveInvoice)"]
+        Submit --> Approve["본사 승인 완료<br/>(approveInvoice ➔ APPROVED)"]
         Approve --> Payment["본사 대금 송금 집행<br/>(createPayment ➔ COMPLETED)"]
         Payment --> Settlement["정산 최종 마감 종결<br/>(closeSettlement: SETTLED)"]
     end

@@ -35,7 +35,7 @@ flowchart TD
     subgraph ADMIN_SYSTEM["FIN / Admin Reference Operations (Internal Staff Only)"]
         Inv_Submit --> Admin_Review{"3. 본사 담당자 검토"}
         Admin_Review -- "수정 필요 / 조건 불일치" --> Admin_Reject["인보이스 반려<br/>(rejectInvoice + 사유 입력 ➔ REJECTED)"]
-        Admin_Review -- "채무 확정 승인" --> Admin_Approve["인보이스 승인<br/>(approveInvoice ➔ APPROVED)"]
+        Admin_Review -- "본사 승인" --> Admin_Approve["인보이스 승인<br/>(approveInvoice ➔ APPROVED)"]
         
         Admin_Approve --> Adj_Review["4. 수량부족/파손 정산 조정 수립<br/>(supplier_invoice_adjustments)"]
         Adj_Review --> Pmt_Register["5. 대금 지급 등록 및 증빙 첨부<br/>(createPayment)"]
@@ -90,7 +90,7 @@ flowchart TD
 ### 3.4 Step 4: Admin Audit, Approval & Rejection (Admin Reference)
 - **행위 주체**: K SELECT Admin Manager (`super_admin`, `operations`, `reviewer`)
 - **서버 액션**: `approveInvoice` / `rejectInvoice` / `voidInvoice`
-- **승인 (Approve)**: `SUBMITTED` ➔ `APPROVED` (매입 채무로 공식 확정).
+- **승인 (Approve)**: `SUBMITTED` ➔ `APPROVED` (본사 승인 완료).
 - **반려 (Reject)**: `SUBMITTED` ➔ `REJECTED` (`rejection_reason` 필수 작성).
   - REJECTED 상태의 인보이스는 브랜드 포털에서 제자리 수정/재제출이 불가함 (Terminal Status).
   - 단, REJECTED 인보이스는 더 이상 활성 인보이스가 아니므로, PO의 활성 상태가 해제되어 브랜드 포털 사용자가 **새 인보이스(/portal/finance/new)**를 정상적으로 작성할 수 있음.

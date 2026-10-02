@@ -63,7 +63,7 @@
    - `Settlement Status` (`OPEN`, `SETTLED`)
    - `PO Status` (`DRAFT`, `APPROVED`, `SENT`, `COMPLETED`, `CANCELLED`)
 3. **단일 활성 인보이스 제약 (Enforcement: BOTH)**:
-   - 1개 PO당 오직 1개의 활성 인보이스(`invoice_status NOT IN ('VOID', 'REJECTED')`)만 허용. DB Partial Unique Index 및 App Validation 이중 보장.
+   - 1개 PO당 오직 1개의 활성 인보이스(`invoice_status NOT IN ('VOID', 'REJECTED')`)만 허용. DB Partial Unique Index와 Application 사전 검증 양쪽에서 검증됨.
 4. **정산 조정 (Adjustments)**:
    - `SHORTAGE`, `DAMAGE`, `PRICE_DIFFERENCE`, `OTHER`
    - `CREDIT` (감액 -), `CHARGE` (증액 +)

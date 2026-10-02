@@ -33,9 +33,9 @@
 ## 3. Approved Terminology Glossary
 
 - **Supplier Invoice (청구 인보이스 / 송장)**: 공급사(Brand)가 본사에 대금을 청구하기 위해 작성 및 발행하는 문서.
-- **Internal AP Number (내부 AP 번호)**: 본사 시스템에서 매입 채무(Accounts Payable) 관리를 위해 자동 부여하는 번호.
+- **Internal AP Number (내부 AP 번호)**: 본사 시스템 내부에서 인보이스 관리를 위해 자동 부여하는 관리 번호.
 - **Adjustment (정산 조정)**: 입고 검수 시 발생한 수량 부족(`SHORTAGE`), 파손(`DAMAGE`), 단가 차액(`PRICE_DIFFERENCE`)에 대한 감액(`CREDIT`) 또는 증액(`CHARGE`) 처리.
-- **Balance Due (미지급 잔액)**: 인보이스 청구 총액(`invoice_total`) 중 본사가 아직 이체하지 않은 잔여 채무액.
+- **Balance Due (미지급 잔액)**: 인보이스 청구 총액(`invoice_total`) 중 본사가 아직 이체하지 않은 잔여 미지급 금액.
 - **Settlement Closing (정산 종결)**: 인보이스 대금 완납 및 조정 처리가 완료되어 정산 파일을 마감/동결하는 행정적 절차.
 
 ---

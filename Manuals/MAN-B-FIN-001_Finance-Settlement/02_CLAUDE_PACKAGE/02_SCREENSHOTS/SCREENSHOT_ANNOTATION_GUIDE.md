@@ -95,7 +95,7 @@
 - **Manual Chapter**: Chapter 4.1 승인 완료(APPROVED) 및 완납(PAID) 수령 확인
 - **Visible State**: `APPROVED` 승인 및 `PAID` 대금 완납 상태 상세 화면.
 - **Callout Annotations**:
-  1. `[1] Approval Badge`: '승인됨' 채무 확정 태그.
+  1. `[1] Approval Badge`: '승인됨' 문서 상태 태그.
   2. `[2] Payment Status Badge`: '지급 완료 (Paid)' 실시간 갱신 태그.
   3. `[3] Payment History`: 본사 송금 일자, 지급 수단 및 마스킹 수령 계좌 (`**** 1234`).
 

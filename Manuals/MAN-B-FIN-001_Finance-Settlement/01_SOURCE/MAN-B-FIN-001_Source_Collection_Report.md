@@ -14,7 +14,7 @@
    - 정산(FIN) 진입 및 인보이스 발행은 물류/입고(LOG) 완료를 필수 직렬 전제조건(Universal Prerequisite)으로 요구하지 않으며, 발주 수락 직후 정산 프로세스를 독립적으로 시작할 수 있음.
 2. **이중 메커니즘 단일 활성 인보이스 제약 (Single Active Invoice Rule — Enforcement: BOTH)**:
    - 동일 발주서(PO)에 대해 진행 중인(무효/반려 제외: `invoice_status NOT IN ('VOID', 'REJECTED')`) 인보이스는 **단 1개만 허용**함.
-   - **DB Level**: 부분 유일 인덱스 (`CREATE UNIQUE INDEX idx_supplier_invoices_one_active_per_po ON supplier_invoices(purchase_order_id) WHERE invoice_status NOT IN ('VOID', 'REJECTED')`)로 비가역적 보장 (`VERIFIED SYSTEM BEHAVIOR`).
+   - **DB Level**: 부분 유일 인덱스 (`CREATE UNIQUE INDEX idx_supplier_invoices_one_active_per_po ON supplier_invoices(purchase_order_id) WHERE invoice_status NOT IN ('VOID', 'REJECTED')`)로 DB 레벨 제약 처리 (`VERIFIED SYSTEM BEHAVIOR`).
    - **Application Level**: `createPortalInvoiceDraft` 및 `createInvoice` 서버 액션 내 사전 검화 쿼리로 이중 검증 및 사용자 친화적 에러 메시지 반환 (`VERIFIED SYSTEM BEHAVIOR`).
 3. **독립 4대 상태 도메인 명확 분리 (4 Disambiguated Status Domains)**:
    - **Invoice Status (문서 결재 상태)**: `DRAFT`, `SUBMITTED`, `APPROVED`, `REJECTED`, `VOID`
@@ -79,7 +79,7 @@ Production Code (`lib/portal/actions.ts` & `lib/supplier-invoice/actions.ts`) �
 
 | Domain | Status Enum | Primary Controlling Entity | Calculation / Value Origin | Business Meaning |
 | :--- | :--- | :--- | :--- | :--- |
-| **Invoice Status** | `DRAFT`, `SUBMITTED`, `APPROVED`, `REJECTED`, `VOID` | `supplier_invoices.invoice_status` | 결재 및 검토 워크플로우 액션 | 인보이스 문서의 법적/행정적 결재 및 채무 승인 상태 |
+| **Invoice Status** | `DRAFT`, `SUBMITTED`, `APPROVED`, `REJECTED`, `VOID` | `supplier_invoices.invoice_status` | 결재 및 검토 워크플로우 액션 | 인보이스 문서의 검토 및 결재 승인 상태 |
 | **Payment Status** | `UNPAID`, `PARTIALLY_PAID`, `PAID` | Computed Canonical UI Status / `supplier_invoices.payment_status` | `balance_due` & `amount_paid` | 인보이스 청구액 대비 실제 금전 송금 집행 완납 현황 |
 | **Settlement Status** | `OPEN`, `SETTLED` | `supplier_invoices.settlement_status` | `closeSettlement(invoiceId)` | 정산 파일의 행정적 최종 마감 및 수정 동결 상태 |
 | **PO Status** | `DRAFT`, `APPROVED`, `SENT`, `COMPLETED`, `CANCELLED` | `purchase_orders.po_status` | 발주 및 물류 이행 프로세스 | 발주서 계약 및 물류 수불 완료 현황 |
@@ -91,8 +91,8 @@ Production Code (`lib/portal/actions.ts` & `lib/supplier-invoice/actions.ts`) �
 ### 5.1 Adjustment Properties & Behavior
 - **`AdjustmentType`**: `SHORTAGE` (수량부족), `DAMAGE` (파손), `PRICE_DIFFERENCE` (단가차액), `OTHER` (기타)
 - **`AdjustmentDirection`**:
-  - `CREDIT`: 감액 처리 ➔ 청구 금액 차감 (-). 공급사 채무액을 줄임.
-  - `CHARGE`: 증액 처리 ➔ 청구 금액 추가 (+). 공급사 채무액을 늘림.
+  - `CREDIT`: 감액 처리 ➔ 청구 금액 차감 (-). 공급사 청구 금액을 줄임.
+  - `CHARGE`: 증액 처리 ➔ 청구 금액 추가 (+). 공급사 청구 금액을 늘림.
 - **수식 산출 경로**:
   - `subtotal = SUM(supplier_invoice_lines.line_amount)`
   - `adjustmentTotal = SUM(CHARGE) - SUM(CREDIT)`

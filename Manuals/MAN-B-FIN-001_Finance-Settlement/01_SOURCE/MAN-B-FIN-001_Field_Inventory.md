@@ -17,7 +17,7 @@
 | `id` | - | Both | UUID | No | Primary Key | 시스템 고유 식별자 |
 | `supplier_company_id` | 공급사 | Brand Portal | UUID | No | FK -> `companies.id` | 테넌트 멀티사 격리용 공급사 ID |
 | `purchase_order_id` | 관련 PO 번호 | Brand Portal | UUID | No | FK -> `purchase_orders.id` | 청구 대상이 되는 발주서 ID (1 PO : 1 Active Inv) |
-| `internal_ap_number` | AP 번호 | Both | Text | Yes | Unique per tenant | 본사 내부 생성 채무(Accounts Payable) 관리 번호 |
+| `internal_ap_number` | AP 번호 | Both | Text | Yes | Unique per tenant | 본사 내부 생성 AP 관리 번호 |
 | `supplier_invoice_number` | 공급사 인보이스 번호 | Brand Portal | Text | No | Required | 공급사가 자체 발행한 청구 송장 번호 |
 | `invoice_date` | 발행 일자 | Brand Portal | Date | No | YYYY-MM-DD | 공급사가 송장을 공식 발행한 날짜 |
 | `received_date` | 수신 일자 | Admin Ref | Date | Yes | YYYY-MM-DD | 본사가 송장을 수령/접수한 날짜 |
@@ -30,7 +30,7 @@
 | `other_charges` | 기타 부대비용 | Both | Numeric(15,2) | Yes | Default 0.00 | 기타 추가 청구금 |
 | `invoice_total` | 송장 총액 | Both | Numeric(15,2) | No | >= 0 | 최종 청구 총액 (`subtotal + adjustmentTotal`) |
 | `amount_paid` | 지급 완료 금액 | Both | Numeric(15,2) | No | Default 0.00 | 누적 대금 송금 완료 금액 |
-| `balance_due` | 미지급 잔액 | Both | Numeric(15,2) | No | `>= 0` | 잔여 대금 채무 (`invoice_total - amount_paid`) |
+| `balance_due` | 미지급 잔액 | Both | Numeric(15,2) | No | `>= 0` | 잔여 미지급 금액 (`invoice_total - amount_paid`) |
 | `invoice_status` | 문서 상태 | Both | Enum | No | `DRAFT`, `SUBMITTED`, `APPROVED`, `REJECTED`, `VOID` | 인보이스의 결재/검토 승인 상태 |
 | `payment_status` | 지급 상태 | Both | Enum | No | `UNPAID`, `PARTIALLY_PAID`, `PAID` | 대금 지급 이행 현황 상태 (동적 렌더링) |
 | `settlement_status` | 정산 상태 | Both | Enum | No | `OPEN`, `SETTLED` | 정산 마감 및 이행 동결 상태 |
@@ -92,7 +92,7 @@
 ### 3.1 Finance Hub Header Summary Cards (`/portal/finance`)
 - **총 인보이스 금액 Card**: 현재 적용된 필터 조건 기준 전체 인보이스 청구 총액 합계 (`formatCurrency(totalInvoiceAmount)`).
 - **총 지급 금액 (Paid) Card**: 현재 적용된 필터 조건 기준 누적 집행 완료된 대금 합계 (`formatCurrency(totalPaidAmount)`).
-- **총 잔액 (Balance Due) Card**: 현재 적용된 필터 조건 기준 지급 예정 잔여 채무 총액 합계 (`formatCurrency(totalBalanceDue)`).
+- **총 잔액 (Balance Due) Card**: 현재 적용된 필터 조건 기준 지급 예정 잔여 미지급 총액 합계 (`formatCurrency(totalBalanceDue)`).
 
 ### 3.2 Invoices Tab Controls (`/portal/finance` — Invoices Tab)
 - **검색어 입력 (Search Input)**: 인보이스 번호(`supplierInvoiceNumber`), PO 번호(`poNumber`), AP 번호(`internalApNumber`) 키워드 검색.

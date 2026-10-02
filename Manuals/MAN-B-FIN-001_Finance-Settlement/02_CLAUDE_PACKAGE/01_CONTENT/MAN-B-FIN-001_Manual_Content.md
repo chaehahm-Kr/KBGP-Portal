@@ -29,7 +29,7 @@
    - 정산 진입 및 인보이스 발행은 물류 입고 검수를 필수 직렬 전제조건으로 요구하지 않으며, 발주 수락 직후 청구 절차를 즉시 개시할 수 있습니다.
 2. **단일 활성 인보이스 제약 (Single Active Invoice Rule — Enforcement: BOTH)**:
    - 1개의 발주서(PO)당 진행 중인 활성 인보이스(`invoice_status NOT IN ('VOID', 'REJECTED')`)는 **오직 1개만 허용**됩니다.
-   - 데이터베이스 부분 유일 인덱스(`idx_supplier_invoices_one_active_per_po`)와 애플리케이션 사전 검증(`createPortalInvoiceDraft`) 이중 메커니즘으로 엄격히 보장됩니다.
+   - 데이터베이스 부분 유일 인덱스(`idx_supplier_invoices_one_active_per_po`)와 애플리케이션 사전 검증(`createPortalInvoiceDraft`) 양쪽에서 검증됩니다.
 3. **4대 상태 도메인의 명확한 분리**:
    - `Invoice Status` (DRAFT / SUBMITTED / APPROVED / REJECTED / VOID)
    - `Payment Status` (UNPAID / PARTIALLY_PAID / PAID — 실시간 잔액 기반 동적 산출)
@@ -48,7 +48,7 @@
 ### 1.1 상단 요약 지표 카드 (Summary Cards)
 - **총 인보이스 금액 (Total Invoice Amount)**: 현재 적용된 검색/필터 조건에 해당하는 인보이스 청구 총액 합계입니다.
 - **총 지급 금액 (Total Paid Amount)**: 본사에서 송금집행 완료(`COMPLETED`) 처리된 대금 누적 총액입니다.
-- **총 잔액 (Total Balance Due)**: 지급 만기 예정이거나 미지급 상태인 잔여 채무 총액입니다.
+- **총 잔액 (Total Balance Due)**: 지급 만기 예정이거나 미지급 상태인 잔여 미지급 총액입니다.
 
 ### 1.2 3대 메인 탭 구조 (3 Main Tabs)
 1. **인보이스 (Invoices)**: 발행된 청구 송장 목록 조회, 신규 인보이스 작성 진입, 제출 및 상세 내역 확인.
@@ -106,7 +106,7 @@
 
 ![SCR-B-FIN-007: Invoice Detail APPROVED & PAID State](../02_SCREENSHOTS/SCR-B-FIN-007.png)
 
-- **승인 완료 (APPROVED)**: 본사 매니저 검토 결과 승인되면 문서 상태가 `APPROVED`로 변경되며, 본사 채무(Accounts Payable)로 확정됩니다.
+- **승인 완료 (APPROVED)**: 본사 매니저 검토 결과 승인되면 문서 상태가 `APPROVED` 상태로 전환됩니다.
 - **지급 상태 (Payment Status)**: 본사 송금 집행에 따라 `UNPAID` ➔ `PARTIALLY_PAID` ➔ `PAID`로 실시간 자동 재계산되어 표시됩니다.
 - **송금 이력 및 마스킹 계좌**: 본사가 대금 지급을 완료하면 송금 일자, 금액, 지급 수단(WIRE/ACH) 및 수령 계좌 뒷 4자리가 표시됩니다.
 
@@ -145,7 +145,7 @@
 > - `balance_due = invoice_total - amount_paid`
 
 > [!IMPORTANT] 단일 활성 인보이스 제약 (Enforcement: BOTH)
-> - 동일 PO에 대해 `invoice_status NOT IN ('VOID', 'REJECTED')` 인 인보이스가 이미 존재하는 경우 신규 인보이스 생성이 시도되면 DB 유일 인덱스(`idx_supplier_invoices_one_active_per_po`) 및 앱 사전 검증에 의해 즉시 거부됩니다.
+> - 동일 PO에 대해 `invoice_status NOT IN ('VOID', 'REJECTED')` 인 인보이스가 이미 존재하는 경우 신규 인보이스 생성이 시도되면 DB Partial Unique Index(`idx_supplier_invoices_one_active_per_po`)와 Application 사전 검증 양쪽에서 검증되어 거부됩니다.
 
 > [!SYSTEM GAP] 현재 미구현 및 미지원 기능 (System Gaps)
 > 1. **1:N 분할 인보이스 (Partial Invoicing)**: 1개 PO에 대해 수회로 나뉘어 인보이스를 청구하는 기능은 현재 지원되지 않습니다.
