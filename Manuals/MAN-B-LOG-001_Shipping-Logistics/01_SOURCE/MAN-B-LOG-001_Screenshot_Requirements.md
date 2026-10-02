@@ -14,6 +14,7 @@
 1. **Production Grounding**: 모든 스크린샷은 실제 Production 브라우저 환경에서 실제 UI 컴포넌트를 직접 렌더링하여 캡처해야 합니다.
 2. **Semantic Uniqueness**: 각 스크린샷은 고유한 비즈니스 상태와 UI 요소를 명확히 대변해야 하며, 단순 반복 캡처를 엄격히 금지합니다.
 3. **Clean Presentation**: 뷰포트는 데스크톱 표준 1440x900(또는 1280x800)을 유지하며, 중요한 상호작용 지점에 포커스를 둡니다.
+4. **Strict Domain Scope**: 본 매뉴얼(`MAN-B-LOG-001`)은 출고 준비, 카고 규격/패킹 서류, 선적 추적 및 창고 도착에 집중하며, 재무/인보이스 화면(`MAN-B-FIN-001`)은 포함하지 않습니다.
 
 ---
 
@@ -44,7 +45,7 @@
 - **화면명:** 출고 준비 완료 등록 — 기본 정보 및 카고 헤더 입력
 - **대상 경로:** `/portal/orders/shipping` (`isCreating === true`)
 - **필수 상태 / 조건:**
-  - 대상 발주서(PO) 드롭다운 선택 완료 상태
+  - 대상 발주서(PO: `po_status IN ('APPROVED', 'SENT')` AND `supplier_confirmation_status = 'CONFIRMED'`) 드롭다운 선택 완료 상태
   - 출고 준비 완료 예정일, FOB Port, 상세 픽업 주소, 현장 연락처가 정상 입력된 상태
 - **강조 영역 (Highlight):** 발주서 선택 드롭다운, 준비 예정일 및 픽업지 주소 입력 필드
 - **매뉴얼 배치:** Chapter 3.1 발주서 선택 및 기본 물류 정보 입력

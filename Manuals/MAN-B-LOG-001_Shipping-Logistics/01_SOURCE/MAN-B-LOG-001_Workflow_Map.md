@@ -13,9 +13,9 @@
 
 ```mermaid
 flowchart TD
-    subgraph ORD["[MAN-B-ORD-001] 발주 확정 도메인"]
-        A[정식 발주서 PO 수신] --> B{PO 검토}
-        B -->|수락| C[PO 확정 CONFIRMED]
+    subgraph ORD["[MAN-B-ORD-001] 발주 및 계약 도메인"]
+        A[정식 발주서 PO 수신] --> B{공급사 수락 검토}
+        B -->|수락 확정| C["공식 발주 확정<br/>(po_status: APPROVED/SENT<br/>supplier_confirmation: CONFIRMED)"]
     end
 
     subgraph LOG_READY["[MAN-B-LOG-001] 출고 준비 등록"]
@@ -27,7 +27,7 @@ flowchart TD
         H --> I{저장 모드 선택}
         I -->|임시저장| J[상태: DRAFT]
         J -->|추후 수정| E
-        I -->|제출| K[상태: READY_SUBMITTED<br/>PO 상태: READY_TO_SHIP]
+        I -->|제출| K[상태: READY_SUBMITTED<br/>PO fulfillment_status: READY_TO_SHIP]
     end
 
     subgraph LOG_BRANCH["[MAN-B-LOG-001] 운송 책임별 선적 분기"]
@@ -53,13 +53,16 @@ flowchart TD
         P --> Q[미국 물류센터 도착 ARRIVED / DELIVERED]
     end
 
-    subgraph WHS_RCV["창고 입고 검수 및 정산 연계"]
-        Q --> R[미국 창고 물리적 바코드 스캔 검수]
-        R --> S{검수 결과 판정}
-        S -->|정상 입고| T1[입고 완료 RECEIVED]
-        S -->|파손 / 보류| T2[파손 Damaged / 보류 Hold 격리]
-        T1 --> U["[MAN-B-FIN-001] 정산 인보이스 발행 및 대금 정산"]
-        T2 --> U
+    subgraph WHS_RCV["[창고 도메인] 입고 검수 인계 (Receiving Handoff)"]
+        Q --> R[화물 실물 인계 및 입고 검수 개시]
+        R --> S{실물 바코드 스캔 검수}
+        S -->|정상 입고| T1[received_qty 확정]
+        S -->|파손 / 보류| T2[damaged_qty / hold_qty 격리]
+        T1 & T2 --> T3[입고 전표 종결 및 PO 실적 갱신]
+    end
+
+    subgraph FIN_REF["[MAN-B-FIN-001] 재무 & 정산 (병렬 도메인)"]
+        C -.->|계약 조건에 따른 청구| F1[인보이스 발행 및 정산 프로세스]
     end
 
     style ORD fill:#f8fafc,stroke:#94a3b8
@@ -67,6 +70,7 @@ flowchart TD
     style LOG_BRANCH fill:#f5f3ff,stroke:#8b5cf6
     style LOG_TRACK fill:#f0fdf4,stroke:#22c55e
     style WHS_RCV fill:#fffbeb,stroke:#f59e0b
+    style FIN_REF fill:#fdf2f8,stroke:#ec4899,stroke-dasharray: 5 5
 ```
 
 ---
@@ -81,7 +85,7 @@ sequenceDiagram
     actor Letusto as Letusto 물류팀 (Admin)
     actor Forwarder as Letusto 지정 포워더
 
-    Note over Brand, Letusto: 전제 조건: PO 상태가 CONFIRMED 상태
+    Note over Brand, Letusto: 전제 조건: po_status IN ('APPROVED', 'SENT') & supplier_confirmation_status = 'CONFIRMED'
     Brand->>Portal: 출고 준비 등록 (Ready Qty, Cartons, Weight, CBM, P/L, C/I)
     Portal->>Portal: goods_readiness 레코드 생성 (상태: READY_SUBMITTED)
     Portal->>Portal: PO fulfillment_status -> READY_TO_SHIP 갱신
@@ -91,7 +95,7 @@ sequenceDiagram
     Brand->>Portal: 출고 상세 화면(/portal/orders/shipping/[id])에서 [물품 인계 완료] 클릭
     Portal->>Portal: goods_readiness.handover_status -> HANDED_OVER 갱신
     Letusto->>Portal: Admin에서 Inbound Shipment 생성 (SHP-XXXX) & 선적 진행
-    Note over Brand, Portal: 브랜드사는 [선적 추적 내역] 탭에서 ETD/ETA 및 선적 상태 확인
+    Note over Brand, Portal: 브랜드사는 [선적 추적 내역] 탭에서 ETD/ETA 및 선적 상태 모니터링
 ```
 
 ---
@@ -106,6 +110,7 @@ sequenceDiagram
     actor Courier as 브랜드사 자체 특송/운송사 (FedEx/DHL 등)
     actor Warehouse as 미국 물류센터 (Letusto Warehouse)
 
+    Note over Brand, Courier: 전제 조건: po_status IN ('APPROVED', 'SENT') & supplier_confirmation_status = 'CONFIRMED'
     Brand->>Portal: 출고 준비 등록 (Ready Qty, Cartons, Weight, CBM, P/L, C/I)
     Portal->>Portal: goods_readiness 생성 (상태: READY_SUBMITTED)
     Brand->>Courier: 화물 발송 및 B/L 또는 Tracking Number 발급
@@ -115,7 +120,7 @@ sequenceDiagram
     Portal->>Portal: goods_readiness.handover_status -> HANDED_OVER 갱신
     Portal->>Portal: PO fulfillment_status -> SHIPPED 갱신
     Courier->>Warehouse: 미국 물류센터로 화물 배송 및 도착 (ARRIVED)
-    Warehouse->>Portal: Admin 입고 검수(Receiving) 개시
+    Warehouse->>Portal: Admin 창고 입고 검수(Receiving) 개시
 ```
 
 ---
@@ -136,7 +141,7 @@ stateDiagram-v2
     HANDOVER_PENDING --> HANDED_OVER : [LETUSTO] 물품 인계 완료 클릭
     READY_SUBMITTED --> HANDED_OVER : [SUPPLIER] 배송 출발 및 선적 등록
     
-    HANDED_OVER --> [*] : 선적 및 입고 단계로 전이
+    HANDED_OVER --> [*] : 선적 및 운송 단계로 전이
 ```
 
 ---
@@ -150,11 +155,11 @@ stateDiagram-v2
     CREATED --> IN_TRANSIT : 출항 / 운송 개시 (Shipped)
     IN_TRANSIT --> ARRIVED : 미국 물류센터 도착 (Delivered)
     
-    ARRIVED --> PARTIALLY_RECEIVED : 일부 품목/수량 검수 완료
-    ARRIVED --> RECEIVED : 전체 품목 전수 검수 완료
+    ARRIVED --> PARTIALLY_RECEIVED : 일부 품목/수량 실물 검수 완료
+    ARRIVED --> RECEIVED : 전체 품목 전수 실물 검수 완료
     PARTIALLY_RECEIVED --> RECEIVED : 잔여 품목 입고 검수 완료
     
-    RECEIVED --> COMPLETED : 최종 입고 승인 및 정산 인계
+    RECEIVED --> COMPLETED : 최종 입고 승인 및 행정 종결
     
     CREATED --> CANCELLED : 선적 취소
     IN_TRANSIT --> CANCELLED : 운송 사고 / 선적 취소
@@ -171,12 +176,12 @@ flowchart LR
         L2 --> L3[창고 입하 도크 도착 ARRIVED]
     end
 
-    subgraph RC_BOUNDARY["책임 및 시스템 Handoff 지점"]
+    subgraph RC_BOUNDARY["물리적 및 시스템 Handoff 지점"]
         L3 --> B1{화물 실물 인계 확인}
         B1 --> B2[인바운드 선적 번호 SHP-XXXX 대조]
     end
 
-    subgraph WHS_SCOPE["창고 입고 검수 관할 (Receiving Domain)"]
+    subgraph WHS_SCOPE["[창고 도메인] 입고 검수 관할 (Warehouse Receiving)"]
         B2 --> W1[카톤 바코드 스캔 & 외관 파손 검사]
         W1 --> W2[실물 피스 카운팅 Piece Count]
         W2 --> W3[정상 입고 received_qty 기록]
@@ -192,36 +197,36 @@ flowchart LR
 
 ---
 
-## 7. Multi-Manual Alignment & Data Handoff (`MAN-B-ORD-001` $\leftrightarrow$ `MAN-B-LOG-001` $\leftrightarrow$ `MAN-B-FIN-001`)
+## 7. Multi-Manual Architecture & Domain Relationship (`MAN-B-ORD-001` $\leftrightarrow$ `MAN-B-LOG-001` $\leftrightarrow$ `MAN-B-FIN-001`)
 
 ```mermaid
 flowchart TD
-    subgraph M1["MAN-B-ORD-001: 발주 및 계약"]
-        O1[PO 발행 및 승인] --> O2[공급사 확정 CONFIRMED]
-        O2 --> O3[계약 수량 확정 confirmed_qty]
+    subgraph ORD["MAN-B-ORD-001: 발주 및 계약 도메인"]
+        O1[PO 발행 및 내부 승인] --> O2[공급사 발주 수락]
+        O2 --> O3["공식 발주 확정<br/>(po_status: APPROVED/SENT<br/>supplier_confirmation: CONFIRMED)"]
     end
 
-    subgraph M2["MAN-B-LOG-001: 출고 및 선적"]
+    subgraph LOG_TRACK["MAN-B-LOG-001: 물류 & 선적 도메인"]
         O3 --> L1[출고 준비 등록 ready_qty / CBM / 중량]
         L1 --> L2[패킹 서류 P/L & C/I 등록]
         L2 --> L3[운송 책임 분기 LETUSTO vs SUPPLIER]
-        L3 --> L4[국제 운송 및 선적 추적 SHP]
+        L3 --> L4[국제 운송 및 선적 추적 IN_TRANSIT]
         L4 --> L5[미국 창고 도착 ARRIVED]
     end
 
-    subgraph M3["창고 검수: 수량 대조 (Discrepancy Check)"]
-        L5 --> R1[실물 검수 received_qty]
-        R1 --> R2[수량 대조: confirmed_qty vs received_qty]
+    subgraph WHS_RCV["창고 도메인: 실물 입고 검수"]
+        L5 --> R1[실물 검수 piece count]
+        R1 --> R2["검수 결과 기록<br/>(received_qty / damaged_qty / hold_qty)"]
+        R2 --> R3[입고 확정 종결 RECEIVED]
     end
 
-    subgraph M4["MAN-B-FIN-001: 대금 정산 및 송금"]
-        R2 --> F1[최종 정상 입고 수량 확정]
-        F1 --> F2[공식 매입 인보이스 발행]
-        F2 --> F3[지급 승인 및 대금 송금 Wire Transfer]
+    subgraph FIN_TRACK["MAN-B-FIN-001: 재무 & 인보이스 도메인"]
+        O3 -.->|상업 계약 조건에 따른 청구| F1[인보이스 발행 작성]
+        F1 --> F2[청구 승인 및 대금 정산/송금]
     end
 
-    style M1 fill:#f8fafc,stroke:#64748b
-    style M2 fill:#eff6ff,stroke:#2563eb
-    style M3 fill:#fffbeb,stroke:#d97706
-    style M4 fill:#f0fdf4,stroke:#16a34a
+    style ORD fill:#f8fafc,stroke:#64748b
+    style LOG_TRACK fill:#eff6ff,stroke:#2563eb
+    style WHS_RCV fill:#fffbeb,stroke:#d97706
+    style FIN_TRACK fill:#fdf2f8,stroke:#ec4899
 ```

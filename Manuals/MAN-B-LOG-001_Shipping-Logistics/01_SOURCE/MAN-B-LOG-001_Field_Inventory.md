@@ -42,16 +42,16 @@
 | **배송사** | String | `inbound_shipments.carrier` | Monospace text (미입력 시 `-`) | 특송사 또는 해운/항공 운송사명 |
 | **ETD** | Date (`YYYY-MM-DD`) | `inbound_shipments.etd` | Monospace text (미입력 시 `-`) | 출발 예정일 (Estimated Time of Departure) |
 | **ETA** | Date (`YYYY-MM-DD`) | `inbound_shipments.eta` | Monospace text (미입력 시 `-`) | 도착 예정일 (Estimated Time of Arrival) |
-| **선적 상태** | Badge Enum | `inbound_shipments.status` | Gray rounded badge (`CREATED`, `IN_TRANSIT`, `ARRIVED`, `RECEIVED`, etc.) | 국제 선적 진행 상태 |
+| **선적 상태** | Badge Enum | `inbound_shipments.status` | Gray rounded badge (`CREATED`, `IN_TRANSIT`, `ARRIVED`, `RECEIVED`, `COMPLETED`, etc.) | 국제 선적 진행 상태 |
 
 ---
 
 ## 2. Goods Readiness Creation Form (`isCreating === true`)
 
 ### 2.1 Header & Basic Logistics Information
-| 필드 라벨 | HTML 입력 타입 | DB 매핑 필드 | 필수 여부 | 유효성 검증 규칙 및 Placeholder |
+| 필드 라벨 | HTML 입력 타입 | DB 매핑 필드 | 필수 여부 | 유효성 검증 규칙 및 조건 |
 | :--- | :--- | :--- | :---: | :--- |
-| **대상 발주서 선택 (PO)** | `<select>` Dropdown | `goods_readiness.purchase_order_id` | **필수 (Required)** | - 공급사 확정(`CONFIRMED`) 완료 PO만 노출<br>- 미선택 시 저장 불가 에러 발생 |
+| **대상 발주서 선택 (PO)** | `<select>` Dropdown | `goods_readiness.purchase_order_id` | **필수 (Required)** | - Eligibility: `po_status IN ('APPROVED', 'SENT')` AND `supplier_confirmation_status = 'CONFIRMED'`<br>- 미선택 시 저장 불가 에러 발생 |
 | **출고 준비 완료 예정일** | `<input type="date">` | `goods_readiness.goods_ready_date` | **필수 (Required)** | - 유효한 날짜 선택 필수<br>- 미입력 시 "출고 준비 완료 예정일을 입력해 주세요" 에러 |
 | **FOB Port / Port of Loading**| `<input type="text">` | `goods_readiness.fob_port` | 선택 (Optional) | 예: `Busan`, `Port of LA`, `Incheon` |
 | **상세 픽업 주소 / 공장 출고지**| `<input type="text">` | `goods_readiness.pickup_location` | 선택 (Optional) | 공장 또는 출고 창고의 실제 도로명/지번 주소 |
