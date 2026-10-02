@@ -44,13 +44,13 @@ K SELECT 성과 분석 및 지표 모듈은 브랜드 파트너사가 플랫폼�
    - **미지급 잔액**: 아직 정산이 완료되지 않은 잔여 청구액
    - **지급 기한 초과**: 계약 지급일을 경과한 연체 잔액 (0원 이상 시 긴급 조치 대상)
 3. **카탈로그 완성도 지표 (Products)**:
-   - **등록 완료 (Complete)**: 28대 필수 스펙 및 바코드 검증을 통과하여 즉시 발주 가능한 정상 SKU 수
+   - **등록 완료 (Complete)**: 28대 등록 완성도 기준을 충족한 COMPLETE 상태의 SKU 수
    - **보완 필요 (Draft)**: 필수 규격이나 인증 정보가 누락되어 보완이 필요한 SKU 수
 4. **고객지원 문의 현황 (Support)**:
    - **미종결 문의**: 현재 처리가 진행 중인 1:1 문의 건수
    - **파트너 회신 대기**: K SELECT 운영팀의 요청에 대해 브랜드사의 추가 답변이 필요한 긴급 건수
 
-![실시간 긴급 조치 큐](file:///c:/Users/ChaeHahm/OneDrive%20-%20Letusto%20Inc/Developement/Claude_Dev/KSelectNetwork-Portal/Manuals/MAN-B-RPT-001_Reports-Performance/02_CLAUDE_PACKAGE/02_SCREENSHOTS/SCR-B-RPT-002.png)
+![긴급 조치 큐](file:///c:/Users/ChaeHahm/OneDrive%20-%20Letusto%20Inc/Developement/Claude_Dev/KSelectNetwork-Portal/Manuals/MAN-B-RPT-001_Reports-Performance/02_CLAUDE_PACKAGE/02_SCREENSHOTS/SCR-B-RPT-002.png)
 
 ### 2.2 실행 필요 큐 (Action Required Queue)
 대시보드 상단의 **[실행 필요(Action Required)]** 영역은 업무 병목을 방지하기 위해 최신 운영 데이터를 바탕으로 감지된 긴급 작업 목록을 우선순위별로 표시합니다:
@@ -99,9 +99,9 @@ K SELECT 성과 분석 및 지표 모듈은 브랜드 파트너사가 플랫폼�
 ![정산 및 인보이스 실적 요약](file:///c:/Users/ChaeHahm/OneDrive%20-%20Letusto%20Inc/Developement/Claude_Dev/KSelectNetwork-Portal/Manuals/MAN-B-RPT-001_Reports-Performance/02_CLAUDE_PACKAGE/02_SCREENSHOTS/SCR-B-RPT-005.png)
 
 ### 4.1 정산 요약 지표
-- **총 청구액 (Total Invoiced)**: 수출 공급 완료 후 K SELECT에 정식 청구된 인보이스 총 합계
-- **지급 완료액 (Total Paid)**: K SELECT 정산 프로세스를 거쳐 브랜드사 계좌로 송금 완료된 실지급액
-- **미지급 잔액 (Balance Due)**: 지급 예정 스케줄에 따라 결제 대기 중인 잔여 채권
+- **총 청구액 (Total Invoiced)**: 발행된 인보이스 총 청구 금액 합계
+- **지급 완료액 (Total Paid)**: 인보이스 정산 완료 처리된 누적 지급액
+- **미지급 잔액 (Balance Due)**: 지급 처리 대기 중인 잔여 인보이스 잔액
 - **지급 기한(Due Date) 초과 건수**: 계약된 여신 지급 기한을 넘긴 인보이스 건수
 
 각 인보이스 상세 페이지로 이동하면 발주서(PO) 번호 매칭 여부, 품목별 단가/수량 및 물류 손실·차액 공제 내역(Adjustments)을 투명하게 대조할 수 있습니다.
@@ -110,7 +110,7 @@ K SELECT 성과 분석 및 지표 모듈은 브랜드 파트너사가 플랫폼�
 
 ## 5. 제품 카탈로그 완성도 감사 (Product Catalog Completeness Audit)
 
-좌측 메뉴의 **[상품 관리]** (`/portal/products`) 메뉴에서는 브랜드사의 전체 상품 SKU가 글로벌 바이어 및 리테일러에게 즉시 제안될 수 있는 준비 상태인지 진단합니다.
+좌측 메뉴의 **[상품 관리]** (`/portal/products`) 메뉴에서는 브랜드사의 전체 상품 SKU에 대한 필수 규격 및 등록 완성도 상태를 진단합니다.
 
 ![제품 등록 완성도 지표 및 보완 알림](file:///c:/Users/ChaeHahm/OneDrive%20-%20Letusto%20Inc/Developement/Claude_Dev/KSelectNetwork-Portal/Manuals/MAN-B-RPT-001_Reports-Performance/02_CLAUDE_PACKAGE/02_SCREENSHOTS/SCR-B-RPT-006.png)
 
@@ -134,11 +134,11 @@ K SELECT의 제품 등록 평가 엔진은 다음 28대 기준을 자동 검증�
 - 운영팀의 추가 자료 요청이 있을 경우 대시보드의 `URGENT` 큐에 반영되어 신속한 확인을 돕습니다.
 
 ### 6.2 어드민 발주 대시보드 동기화 (Admin Purchasing Dashboard)
-브랜드 포털에서 발생하는 모든 발주 수락, 출고 정보 및 인보이스 내역은 데이터베이스를 통해 K SELECT 운영팀의 어드민 콘솔(`/admin/purchasing/dashboard`)과 일관되게 동기화되어 집계됩니다.
+브랜드 포털의 발주, 출고 및 인보이스 운영 데이터는 데이터베이스를 통해 K SELECT 운영팀의 어드민 콘솔(`/admin/purchasing/dashboard`)과 동기화되어 집계됩니다.
 
 ![어드민 전사 발주 대시보드](file:///c:/Users/ChaeHahm/OneDrive%20-%20Letusto%20Inc/Developement/Claude_Dev/KSelectNetwork-Portal/Manuals/MAN-B-RPT-001_Reports-Performance/02_CLAUDE_PACKAGE/02_SCREENSHOTS/SCR-B-RPT-008.png)
 
-- 운영팀은 전사 발주 총액, 미입고 수량, 공급사별(Supplier Summary) 및 SKU별(Product Summary) 납기 달성률을 종합 모니터링하여 파트너사의 원활한 수출 이행을 지원합니다.
+- 운영팀은 전사 발주 총액, 미입고 수량, 공급사별 실적(Supplier Summary) 및 SKU별 미입고 잔량(Product Summary)을 종합 모니터링하여 파트너사의 원활한 발주 이행을 지원합니다.
 
 > [!NOTE]
 > **시스템 기능 범위 안내 (System Boundary Notice)**:

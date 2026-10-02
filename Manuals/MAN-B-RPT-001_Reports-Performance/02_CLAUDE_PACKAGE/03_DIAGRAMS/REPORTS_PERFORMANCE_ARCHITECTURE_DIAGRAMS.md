@@ -113,7 +113,7 @@ flowchart TD
     
     C_BASIC & C_PRICE & C_UNIT & C_PKG & C_CTN & C_BAR & C_IMG --> CRITERIA_CHECK{28대 기준 전체 충족?}
     
-    CRITERIA_CHECK -- YES --> STATUS_COMPLETE["🟢 COMPLETE (등록 완료)<br>바이어 제안 및 발주서 생성 가능"]
+    CRITERIA_CHECK -- YES --> STATUS_COMPLETE["🟢 COMPLETE (등록 완료)<br>28대 등록 완성도 기준 충족"]
     CRITERIA_CHECK -- NO --> STATUS_DRAFT["🟠 Draft (보완 대기)<br>누락 필드 알림 배너 생성 및 Action Required 연계"]
     
     STATUS_DRAFT --> EDIT_PAGE[제품 수정 페이지 진입]
@@ -142,7 +142,7 @@ sequenceDiagram
     AdminStaff->>Admin: 어드민 발주 현황 대시보드 진입 (/admin/purchasing/dashboard)
     Admin->>Supabase: getPurchasingDashboardData(filters)
     Supabase-->>Admin: 공급사별 발주액, 미입고 잔량, 지급/미지급 실적 집계
-    Admin-->>AdminStaff: 전사 공급사 성과 매트릭스 및 SKU별 납기 달성률 차트 표시
+    Admin-->>AdminStaff: 전사 공급사 성과 매트릭스 및 SKU별 주문/미입고 실적 표시
 ```
 
 ---
