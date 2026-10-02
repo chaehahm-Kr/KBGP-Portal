@@ -4,7 +4,7 @@
 **Manual ID:** `MAN-B-REG-001`  
 **Title:** `Regulatory, Certification & Compliance User Guide`  
 **Audience:** `B` (Brand Portal Users — 브랜드사 담당자 및 관리자)  
-**Package Version:** `1.0.0`  
+**Package Version:** `1.1.0`  
 **Source of Truth:** Production Codebase & `01_SOURCE/` Verification Reports  
 
 ---
@@ -13,7 +13,7 @@
 
 본 패키지(`02_CLAUDE_PACKAGE`)는 K SELECT NETWORK 공식 브랜드 포털 사용자를 위한 **MAN-B-REG-001 — Regulatory, Certification & Compliance Guide**를 Claude Design 환경에서 최종 퍼블리싱 문서로 변환하기 위해 작성된 생산용 패키지이다.
 
-본 패키지에 수록된 모든 설명과 가이드는 Production 시스템에서 실제 작동하는 소프트웨어 기능(브랜드 상표권 정보, 이중 언어 전성분, AI 번역, 인허가 보증서 파일 업로드, 버전 관리, UPC/EAN 바코드 검증)에 100% 기반한다.
+본 패키지에 수록된 모든 설명과 가이드는 Production 시스템에서 실제 작동하는 소프트웨어 기능(브랜드 상표권 정보, 이중 언어 전성분, AI 기반 영문 번역 도구, 인허가 보증서 파일 업로드, 버전 관리, UPC/EAN 바코드 검증)에 100% 기반한다.
 
 ---
 

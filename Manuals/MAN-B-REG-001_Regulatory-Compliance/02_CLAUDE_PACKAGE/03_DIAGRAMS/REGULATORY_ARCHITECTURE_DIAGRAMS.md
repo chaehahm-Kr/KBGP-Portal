@@ -19,7 +19,7 @@ flowchart TD
     TMUpload --> Step2["Step 2: Product Creation & Catalog Identification"]
     SkipTM --> Step2
     
-    Step2 --> RegInputs["Input Identification Data: UPC/EAN, Origin, FOB Price"]
+    Step2 --> RegInputs["Input Identification Data: UPC/EAN"]
     RegInputs --> IngInput["Input Ingredients (Korean Text / PDF)"]
     IngInput --> AITrans["Click AI Translation Widget (Korean -> English INCI)"]
     AITrans --> ApplyEN["Apply English INCI Text & Upload English PDF"]
@@ -29,7 +29,7 @@ flowchart TD
     CertSelect --> FileUpload["Upload PDF/Image to company-uploads Bucket"]
     
     FileUpload --> EvalCheck{"Registration Evaluator Check"}
-    EvalCheck -- "Missing UPC/FOB/Ingredients" --> StatusDraft["Status: DRAFT (보완 대기)"]
+    EvalCheck -- "Missing UPC / Ingredients" --> StatusDraft["Status: DRAFT (보완 대기)"]
     EvalCheck -- "All Identification & Catalog Fields Valid" --> StatusComplete["Status: COMPLETE (등록 완료)"]
     
     StatusDraft --> Revisit["Brand User Updates Required Fields"]

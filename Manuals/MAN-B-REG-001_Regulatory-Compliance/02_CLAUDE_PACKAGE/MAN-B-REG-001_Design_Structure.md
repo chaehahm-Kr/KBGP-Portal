@@ -39,18 +39,18 @@ Document Root
 │   ├── 2.1 Trademark Declaration Policy (Policy 02)
 │   ├── 2.2 Registering KIPO / USPTO Numbers & Proof Files
 │   └── 2.3 Screenshots SCR-B-REG-001 & SCR-B-REG-002 Walkthrough
-├── Chapter 3: Dual-Language Ingredient Declaration & AI Translation
+├── Chapter 3: Dual-Language Ingredient Declaration & AI Translation Tool
 │   ├── 3.1 Korean & English Ingredient Text Declaration
-│   ├── 3.2 Claude AI Translation Widget Usage (KR -> EN)
+│   ├── 3.2 AI-Based Ingredients Translator Usage (KR -> EN)
 │   └── 3.3 Screenshots SCR-B-REG-003 & SCR-B-REG-004 Walkthrough
 ├── Chapter 4: Product Certificates Upload & Version Control (Tab 6 #certs)
 │   ├── 4.1 Certificate Categories (fda_registration, trademark, ingredient_certification, patent, other)
 │   ├── 4.2 Document Versioning Rules (version, is_current)
 │   └── 4.3 Screenshots SCR-B-REG-005 & SCR-B-REG-006 Walkthrough
-├── Chapter 5: Product Barcode & Commercial Export Specifications
+├── Chapter 5: Product Barcode Specifications & Barcode Inquiry Channel
 │   ├── 5.1 UPC (12-digit) & EAN (13-digit) Barcode Formatting
-│   ├── 5.2 FOB USD Price, Origin & Registration Evaluator Check
-│   └── 5.3 Screenshot SCR-B-REG-007 & Barcode Inquiry Channel
+│   ├── 5.2 Registration Evaluator Check & Barcode Inquiry Channel
+│   └── 5.3 Screenshot SCR-B-REG-007 Barcode Section Walkthrough
 └── Chapter 6: Admin Audit History & System Status Revalidation
     ├── 6.1 Admin Verification Views & Proof File Inspection
     ├── 6.2 Screenshot SCR-B-REG-008 & Change History Audit

@@ -55,7 +55,10 @@
 - **URL**: `https://portal.kselectnetwork.com/portal/products/[id]`
 - **Screen**: Basic Info — Logistics & Barcode Section
 - **Target Chapter**: Chapter 5 (Section 5.1 & 5.2)
-- **Caption**: `그림 5.1: 식별 바코드(UPC/EAN) 및 바코드 문의 링크`
+- **Callout Highlights**:
+  1. Red callout box around `[식별 관리 번호 (UPC / EAN)]` inputs (`12자리 UPC` / `13자리 EAN`).
+  2. Circle around `[💬 바코드 문의]` support link.
+- **Caption**: `그림 5.1: 식별 바코드(UPC/EAN) 입력란 및 바코드 문의 지원 링크`
 
 ### Asset 8: `SCR-B-REG-008.png`
 - **URL**: `https://admin.kselectnetwork.com/admin/brands/[brandId]`

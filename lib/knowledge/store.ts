@@ -585,69 +585,7 @@ Official operational guide for K SELECT NETWORK Brand Portal partners managing b
       source_type: "CONTENT",
       module: "BRAND",
       category: "BRAND",
-      tags: ["MANUAL", "POLICY", "BRAND", "PRODUCTS", "ONBOARDING", "MAN-BRAND-001", "MAN-B-BRAND-001"],
-      owner_id: "staff-admin-01",
-      owner_name: "Brand Operations Desk",
-      status: "PUBLISHED",
-      system_impact_status: "NORMAL",
-      audience: ["BRAND", "INTERNAL", "ADMIN / MANAGEMENT"],
-      is_sensitive_internal: false,
-      requires_external_approval: true,
-      external_review_status: "APPROVED",
-      external_reviewer_id: "staff-superadmin-01",
-      external_reviewed_at: "2026-10-01T12:00:00Z",
-      current_version: "v1.0",
-      effective_date: "2026-10-01",
-      created_at: "2026-10-01T09:00:00Z",
-      updated_at: now
-    },
-    {
-      id: "kno-onboarding-guide-v10",
-      document_url: "/api/admin/knowledge/asset/asset-onboarding-guide-v10",
-      document_name: "MAN-B-ONB-001_Onboarding_Guide_v1.0.pdf",
-      document_size: 3948614,
-      document_type: "application/pdf",
-      slug: "man-b-onb-001-onboarding-guide",
-      title: "K SELECT Brand Portal 온보딩 가이드 (MAN-B-ONB-001)",
-      title_ko: "K SELECT Brand Portal 온보딩 가이드",
-      title_en: "K SELECT Brand Portal Onboarding Guide",
-      summary_ko: "K SELECT Brand Portal 가입 후 7단계 온보딩(회사정보, 관리자프로필, 브랜드, 팀원초대, 6대담당업무, 상품등록, 기본공급계약 전자서명)을 완수하기 위한 공식 가이드입니다.",
-      summary_en: "Official 7-step onboarding guide for K SELECT Brand Portal partners covering company info, admin profile, brand verification, task owners, product listing, and master agreement signing.",
-      content_ko: `## 1. 개요 및 매뉴얼 목적 (Introduction & Purpose)
-본 매뉴얼은 **K SELECT NETWORK Brand Portal**에 입점한 브랜드 파트너사가 최초 가입 후 포털 내 필수 기업·브랜드·상품 정보를 구성하고 기본 계약을 체결하기까지 필요한 7단계 온보딩(Onboarding) 절차를 안내하는 공식 사용자 가이드입니다.
-
-온보딩 7단계를 완료하면 파트너사의 법인 정보, 관리자 프로필, 브랜드 상표권 점검, 담당 업무 지정, 최소 1개 상품 등록 및 공급 기본계약 체결이 완료되어 Brand Portal의 운영 기능을 정상적으로 이용할 수 있습니다.
-
-## 2. 7-Step 온보딩 로드맵 (7-Step Roadmap)
-- **STEP 1 (회사 정보 확인)**: 공식 법인명, 대표 연락처, 필수 4대 주소(기본주소, 시, 주/도, 우편번호) 등록 (\`/portal/company/info\`)
-- **STEP 2 (관리자 정보 확인)**: 대표 관리자의 국문/영문 성명, 직함(Job Title), 대표 연락처 등록 (\`/portal/account\`)
-- **STEP 3 (브랜드 정보 확인)**: 대표 브랜드명, 로고 및 대한민국(KIPO)/미국(USPTO) 상표권 보유 현황 확인 (\`/portal/brands\`)
-- **STEP 4 (팀원 초대 - 선택)**: 포털을 함께 운영할 사내 동료 초대 및 권한 설정 (1인 기업의 경우 '나중에 하기' 건너뛰기 가능) (\`/portal/company/users\`)
-- **STEP 5 (6대 담당업무 지정)**: 회사·계약·제품·가격·물류·정산 6대 핵심 업무별 사내 주 담당자(Primary Owner) 및 알림 수신인 지정 (\`/portal/company/info?tab=tasks\`)
-- **STEP 6 (상품 등록 완료)**: 대표 상품을 최소 1개 이상 등록 완료(COMPLETE) 상태로 등록 (\`/portal/products\`)
-- **STEP 7 (기본계약 체결)**: 브랜드 공급 및 플랫폼 이용 기본계약서 검토 및 자필 전자서명 체결 (\`/portal/company/info?tab=agreements\`)
-
-## 3. 온보딩 완료 판정 기준 (Completion Criteria)
-대시보드 상단의 7개 단계가 모두 충족되면 **7 / 7 완료 (100%)** 녹색 배지가 표시되며 정식 운영 단계로 전환됩니다.`,
-      content_en: `## 1. Introduction & Purpose
-Official step-by-step user manual for partner brands to complete the 7-step onboarding process on K SELECT Brand Portal.
-
-## 2. 7-Step Onboarding Roadmap
-- STEP 1 (Company Info): Corporate address, city, state, zip code (/portal/company/info)
-- STEP 2 (Admin Profile): Full legal KR/EN name, title, contact (/portal/account)
-- STEP 3 (Brand Info): Brand name, logo, KIPO/USPTO trademarks (/portal/brands)
-- STEP 4 (Team Members - Optional): Invite colleagues or skip (/portal/company/users)
-- STEP 5 (Task Owners): Assign primary owners across 6 operational areas (/portal/company/info?tab=tasks)
-- STEP 6 (Product Registration): Register at least 1 COMPLETE product (/portal/products)
-- STEP 7 (Master Agreement): Review terms and execute electronic signature (/portal/company/info?tab=agreements)
-
-## 3. Completion Criteria
-Achieving 7 / 7 (100%) unlocks regular portal operations.`,
-      type: "MANUAL",
-      source_type: "CONTENT",
-      module: "ONBOARDING",
-      category: "ONBOARDING",
-      tags: ["MANUAL", "ONBOARDING", "GUIDE", "BRAND", "MAN-B-ONB-001", "OFFICIAL", "START"],
+      tags: ["MANUAL", "POLICY", "BRAND", "PRODUCTS", "ONBOARDING", "MAN-BRAND-001"],
       owner_id: "staff-admin-01",
       owner_name: "Brand Operations Desk",
       status: "PUBLISHED",
@@ -938,186 +876,6 @@ Achieving 7 / 7 (100%) unlocks regular portal operations.`,
       generated_by: "MANUAL",
       created_at: now,
       updated_at: now
-    },
-    {
-      id: "faq-onb-01",
-      portal_scope: "BRAND",
-      topic_id: "topic-start",
-      source_knowledge_id: "kno-onboarding-guide-v10",
-      source_version: "v1.0",
-      source_title: "K SELECT Brand Portal 온보딩 가이드 (MAN-B-ONB-001)",
-      question_ko: "처음 가입하면 무엇부터 해야 하나요? 온보딩 절차가 어떻게 되나요?",
-      question_en: "What should I do first after signing up? What is the onboarding process?",
-      answer_ko: "포털 로그인 후 대시보드(/portal)의 7단계 온보딩 로드맵에 따라 회사 정보 확인 ➔ 관리자 프로필 ➔ 브랜드 정보 ➔ 팀원 초대(선택) ➔ 6대 담당업무 지정 ➔ 상품 등록 ➔ 기본계약 전자서명을 진행합니다. 각 단계는 서류 및 정보 준비 상황에 따라 원하는 순서대로 자유롭게 선택하여 진행할 수 있습니다. (Chapter 02 · 7-Step Roadmap)",
-      answer_en: "After logging in, follow the 7-step onboarding roadmap on the dashboard (/portal): Company Info -> Admin Profile -> Brand Info -> Team Invitation (Optional) -> 6 Task Owners -> Product Listing -> Master Agreement. Steps can be completed in any flexible order based on your document readiness. (Chapter 02 · 7-Step Roadmap)",
-      audience: ["BRAND", "INTERNAL", "ADMIN / MANAGEMENT"],
-      status: "APPROVED",
-      kind: "BOTH",
-      display_order: 1,
-      is_featured: true,
-      generated_by: "MANUAL",
-      created_at: now,
-      updated_at: now
-    },
-    {
-      id: "faq-onb-02",
-      portal_scope: "BRAND",
-      topic_id: "topic-start",
-      source_knowledge_id: "kno-onboarding-guide-v10",
-      source_version: "v1.0",
-      source_title: "K SELECT Brand Portal 온보딩 가이드 (MAN-B-ONB-001)",
-      question_ko: "회사 정보 등록 시 필수 입력 항목은 무엇인가요?",
-      question_en: "What are the mandatory fields when registering company information?",
-      answer_ko: "회사 정보 관리 메뉴(/portal/company/info)에서 공식 법인명, 대표 연락처와 함께 필수 4대 주소(기본 주소 address_1, 시 City, 주/도 State/Province, 우편번호 Zip Code)를 입력해야 합니다. 4개 주소 필드가 모두 저장되어야 온보딩 1단계(STEP 1)가 완료 처리됩니다. (Chapter 04 · STEP 1)",
-      answer_en: "In Company Information (/portal/company/info), you must provide legal corporate name, contact phone, and all 4 mandatory address fields: Address 1, City, State/Province, and Zip Code. All 4 address fields must be saved to complete STEP 1. (Chapter 04 · STEP 1)",
-      audience: ["BRAND", "INTERNAL", "ADMIN / MANAGEMENT"],
-      status: "APPROVED",
-      kind: "BOTH",
-      display_order: 2,
-      is_featured: true,
-      generated_by: "MANUAL",
-      created_at: now,
-      updated_at: now
-    },
-    {
-      id: "faq-onb-03",
-      portal_scope: "BRAND",
-      topic_id: "topic-start",
-      source_knowledge_id: "kno-onboarding-guide-v10",
-      source_version: "v1.0",
-      source_title: "K SELECT Brand Portal 온보딩 가이드 (MAN-B-ONB-001)",
-      question_ko: "관리자 정보에서 영문 이름은 왜 필수이며 어떻게 입력해야 하나요?",
-      question_en: "Why is English name required in admin profile and how should it be entered?",
-      answer_ko: "내 계정 메뉴(/portal/account)에서 등록하는 대표 관리자의 영문 성명(First Name, Last Name)은 글로벌 무역 서류 및 통관, 공식 파트너십 커뮤니케이션에 활용되므로 여권상 영문 표기와 동일하게 입력해야 합니다. 국문 성명, 직함(Job Title), 연락처와 함께 저장하면 2단계(STEP 2)가 완료됩니다. (Chapter 05 · STEP 2)",
-      answer_en: "The administrator's English name (First Name, Last Name) in My Account (/portal/account) is used for global trade documents, customs, and official partnership communications, so it must match your passport exactly. Save along with Korean name, Job Title, and phone to complete STEP 2. (Chapter 05 · STEP 2)",
-      audience: ["BRAND", "INTERNAL", "ADMIN / MANAGEMENT"],
-      status: "APPROVED",
-      kind: "BOTH",
-      display_order: 3,
-      is_featured: false,
-      generated_by: "MANUAL",
-      created_at: now,
-      updated_at: now
-    },
-    {
-      id: "faq-onb-04",
-      portal_scope: "BRAND",
-      topic_id: "topic-start",
-      source_knowledge_id: "kno-onboarding-guide-v10",
-      source_version: "v1.0",
-      source_title: "K SELECT Brand Portal 온보딩 가이드 (MAN-B-ONB-001)",
-      question_ko: "브랜드 정보 확인 단계(STEP 3)에서는 무엇을 확인하나요?",
-      question_en: "What should I verify during the Brand Information step (STEP 3)?",
-      answer_ko: "브랜드 관리 메뉴(/portal/brands)에서 등록된 대표 브랜드명, 브랜드 로고, 대한민국(KIPO)/미국(USPTO) 상표권 보유 현황을 점검하고 상단 배너의 '브랜드 정보 확인 완료 ✓' 버튼을 클릭합니다. 신규 브랜드 추가 및 상표권 상세 정책은 MAN-BRAND-001 문서를 참고해 주시기 바랍니다. (Chapter 06 · STEP 3)",
-      answer_en: "In Brand Management (/portal/brands), check your registered brand name, logo, and KIPO/USPTO trademark registration status, then click 'Confirm Brand Information ✓'. For detailed brand registration and trademark policies, refer to MAN-BRAND-001. (Chapter 06 · STEP 3)",
-      audience: ["BRAND", "INTERNAL", "ADMIN / MANAGEMENT"],
-      status: "APPROVED",
-      kind: "BOTH",
-      display_order: 4,
-      is_featured: false,
-      generated_by: "MANUAL",
-      created_at: now,
-      updated_at: now
-    },
-    {
-      id: "faq-onb-05",
-      portal_scope: "BRAND",
-      topic_id: "topic-start",
-      source_knowledge_id: "kno-onboarding-guide-v10",
-      source_version: "v1.0",
-      source_title: "K SELECT Brand Portal 온보딩 가이드 (MAN-B-ONB-001)",
-      question_ko: "팀원 초대는 필수인가요? 1인 기업은 어떻게 하나요?",
-      question_en: "Is team invitation mandatory? How do solo/single-person businesses proceed?",
-      answer_ko: "팀원 초대는 선택 사항(Optional)입니다. 사내 동료가 있는 경우 소속 사용자 관리(/portal/company/users)에서 이메일로 초대할 수 있으며, 1인 기업이거나 즉시 초대가 불필요한 경우 대시보드 온보딩 체크리스트 STEP 4 카드의 '나중에 하기' 버튼을 누르면 본 단계를 건너뛰고 완료할 수 있습니다. (Chapter 07 · STEP 4)",
-      answer_en: "Team invitation is optional. If you have colleagues, you can invite them via email in Team Management (/portal/company/users). For solo entrepreneurs or if immediate invitations are not needed, click 'Do this later' on the STEP 4 dashboard card to skip and complete this step. (Chapter 07 · STEP 4)",
-      audience: ["BRAND", "INTERNAL", "ADMIN / MANAGEMENT"],
-      status: "APPROVED",
-      kind: "BOTH",
-      display_order: 5,
-      is_featured: true,
-      generated_by: "MANUAL",
-      created_at: now,
-      updated_at: now
-    },
-    {
-      id: "faq-onb-06",
-      portal_scope: "BRAND",
-      topic_id: "topic-start",
-      source_knowledge_id: "kno-onboarding-guide-v10",
-      source_version: "v1.0",
-      source_title: "K SELECT Brand Portal 온보딩 가이드 (MAN-B-ONB-001)",
-      question_ko: "6대 담당업무는 어떻게 지정하며, 한 사람이 여러 업무를 담당할 수 있나요?",
-      question_en: "How are the 6 core task owners assigned, and can one person hold multiple roles?",
-      answer_ko: "회사 정보 관리 > 담당 업무 탭(/portal/company/info?tab=tasks)에서 6대 핵심 업무(회사·신청, 계약, 제품·콘텐츠·인증, 가격·견적, 발주·물류·재고, 정산·문의)별 사내 주 담당자(Primary Owner)를 드롭다운에서 지정합니다. 1인 기업 또는 소규모 팀의 경우 대표 관리자 1인이 6개 업무를 모두 겸임하여 지정할 수 있습니다. (Chapter 08 · STEP 5)",
-      answer_en: "Navigate to Company Info > Task Owners tab (/portal/company/info?tab=tasks) to assign Primary Owners across 6 operational areas (Company, Contract, Product/Cert, Pricing/Quote, Orders/Logistics, Settlement/Inquiry). For solo or small teams, a single admin can hold all 6 primary owner roles. (Chapter 08 · STEP 5)",
-      audience: ["BRAND", "INTERNAL", "ADMIN / MANAGEMENT"],
-      status: "APPROVED",
-      kind: "BOTH",
-      display_order: 6,
-      is_featured: true,
-      generated_by: "MANUAL",
-      created_at: now,
-      updated_at: now
-    },
-    {
-      id: "faq-onb-07",
-      portal_scope: "BRAND",
-      topic_id: "topic-start",
-      source_knowledge_id: "kno-onboarding-guide-v10",
-      source_version: "v1.0",
-      source_title: "K SELECT Brand Portal 온보딩 가이드 (MAN-B-ONB-001)",
-      question_ko: "온보딩을 완료하려면 상품을 몇 개 등록해야 하며, 어떤 상태여야 하나요?",
-      question_en: "How many products must be registered to complete onboarding, and what status is required?",
-      answer_ko: "대표 상품을 최소 1개 이상 '등록 완료(COMPLETE)' 상태로 등록(/portal/products)해야 합니다. 단순 임시저장(Draft) 상태는 인정되지 않으며, 기본정보, 카테고리 필수 속성, 가격(소비자가/FOB가), 3단계 로지스틱스 규격(단품/패키지/카톤), 바코드(UPC/EAN), 대표 이미지가 모두 입력되어야 합니다. (Chapter 09 · STEP 6)",
-      answer_en: "You must register at least 1 representative product in 'COMPLETE' status in Product Management (/portal/products). Draft status is not accepted. All requirements including basic info, category attributes, pricing (Retail/FOB), 3-tier specs (Item/Package/Carton), barcode (UPC/EAN), and image must be filled. (Chapter 09 · STEP 6)",
-      audience: ["BRAND", "INTERNAL", "ADMIN / MANAGEMENT"],
-      status: "APPROVED",
-      kind: "BOTH",
-      display_order: 7,
-      is_featured: true,
-      generated_by: "MANUAL",
-      created_at: now,
-      updated_at: now
-    },
-    {
-      id: "faq-onb-08",
-      portal_scope: "BRAND",
-      topic_id: "topic-start",
-      source_knowledge_id: "kno-onboarding-guide-v10",
-      source_version: "v1.0",
-      source_title: "K SELECT Brand Portal 온보딩 가이드 (MAN-B-ONB-001)",
-      question_ko: "기본계약 체결은 언제 어떻게 진행하나요? 계약 전에도 상품 등록이 가능한가요?",
-      question_en: "When and how is the Master Agreement signed? Can products be listed before signing?",
-      answer_ko: "회사 정보 관리 > 공급 및 이용 약관 탭(/portal/company/info?tab=agreements)에서 비독점 기본공급계약서 전문을 검토한 후 서명 패드에 자필 전자서명을 작성하여 체결합니다. 계약 체결 전이라도 상품 등록 및 기본 정보 입력 등 사전 준비 작업은 자유롭게 진행하실 수 있습니다. (Chapter 10 · STEP 7)",
-      answer_en: "In Company Info > Agreements tab (/portal/company/info?tab=agreements), review the Non-Exclusive Master Agreement terms and execute electronic signature on the pad. Product listing and preparatory tasks can be conducted freely even before agreement execution. (Chapter 10 · STEP 7)",
-      audience: ["BRAND", "INTERNAL", "ADMIN / MANAGEMENT"],
-      status: "APPROVED",
-      kind: "BOTH",
-      display_order: 8,
-      is_featured: false,
-      generated_by: "MANUAL",
-      created_at: now,
-      updated_at: now
-    },
-    {
-      id: "faq-onb-09",
-      portal_scope: "BRAND",
-      topic_id: "topic-start",
-      source_knowledge_id: "kno-onboarding-guide-v10",
-      source_version: "v1.0",
-      source_title: "K SELECT Brand Portal 온보딩 가이드 (MAN-B-ONB-001)",
-      question_ko: "온보딩 7단계를 모두 완료하면 어떻게 되나요?",
-      question_en: "What happens after completing all 7 onboarding steps?",
-      answer_ko: "7개 단계가 모두 완료되면 대시보드 상단에 '7 / 7 완료 (100%)' 녹색 배지가 표시되며 Brand Portal의 정식 운영 기능이 활성화됩니다. 온보딩 완료 후에도 회사 주소, 담당자, 계좌, 상품 정보 등 변경 사항이 발생하면 언제든지 해당 메뉴에서 실시간으로 수정할 수 있습니다. (Chapter 11 · Onboarding Complete)",
-      answer_en: "Once all 7 steps are complete, the '7 / 7 Complete (100%)' green badge appears on the dashboard, unlocking standard Brand Portal operations. Even after completion, company details, owners, and product specs can be updated in real time whenever changes occur. (Chapter 11 · Onboarding Complete)",
-      audience: ["BRAND", "INTERNAL", "ADMIN / MANAGEMENT"],
-      status: "APPROVED",
-      kind: "BOTH",
-      display_order: 9,
-      is_featured: false,
-      generated_by: "MANUAL",
-      created_at: now,
-      updated_at: now
     }
   ];
 
@@ -1172,24 +930,6 @@ Achieving 7 / 7 (100%) unlocks regular portal operations.`,
       content_en: memoryItems[memoryItems.length - 1]?.content_en || "",
       what_changed: "MAN-BRAND-001 Brand Registration & Management Policy 최초 공식 등록",
       why_changed: "브랜드 등록 6대 핵심 정책 및 포털 운영 표준 지침 공식화",
-      effective_date: "2026-10-01",
-      created_by_name: "Brand Operations Desk",
-      published_at: now,
-      created_at: now
-    },
-    {
-      id: "ver-onboarding-guide-v10",
-      knowledge_id: "kno-onboarding-guide-v10",
-      version: "v1.0",
-      status: "PUBLISHED",
-      title_ko: "K SELECT Brand Portal 온보딩 가이드 (MAN-B-ONB-001 v1.0)",
-      title_en: "K SELECT Brand Portal Onboarding Guide v1.0",
-      summary_ko: "최초 공식 발행 버전 (Claude Design PDF 배포)",
-      summary_en: "Initial official published manual version",
-      content_ko: memoryItems[memoryItems.length - 1]?.content_ko || "",
-      content_en: memoryItems[memoryItems.length - 1]?.content_en || "",
-      what_changed: "MAN-B-ONB-001 Brand Portal Onboarding Guide 최초 공식 배포",
-      why_changed: "파트너사 온보딩 7단계 표준 절차 가이드 정립",
       effective_date: "2026-10-01",
       created_by_name: "Brand Operations Desk",
       published_at: now,
@@ -1364,86 +1104,6 @@ Achieving 7 / 7 (100%) unlocks regular portal operations.`,
       related_route: "/admin/products",
       manual_title: "K SELECT 브랜드 등록 및 관리 정책 (MAN-BRAND-001)",
       created_at: now
-    },
-    {
-      id: "rel-onboarding-dashboard",
-      knowledge_id: "kno-onboarding-guide-v10",
-      related_portal: "Brand Portal",
-      related_module: "ONBOARDING",
-      related_menu: "Dashboard Onboarding Checklist",
-      related_route: "/portal",
-      manual_title: "K SELECT Brand Portal 온보딩 가이드 (MAN-B-ONB-001)",
-      created_at: now
-    },
-    {
-      id: "rel-onboarding-company",
-      knowledge_id: "kno-onboarding-guide-v10",
-      related_portal: "Brand Portal",
-      related_module: "COMPANY",
-      related_menu: "Company Information",
-      related_route: "/portal/company/info",
-      manual_title: "K SELECT Brand Portal 온보딩 가이드 (MAN-B-ONB-001)",
-      created_at: now
-    },
-    {
-      id: "rel-onboarding-account",
-      knowledge_id: "kno-onboarding-guide-v10",
-      related_portal: "Brand Portal",
-      related_module: "ACCOUNT",
-      related_menu: "Admin Profile",
-      related_route: "/portal/account",
-      manual_title: "K SELECT Brand Portal 온보딩 가이드 (MAN-B-ONB-001)",
-      created_at: now
-    },
-    {
-      id: "rel-onboarding-brands",
-      knowledge_id: "kno-onboarding-guide-v10",
-      related_portal: "Brand Portal",
-      related_module: "BRAND",
-      related_menu: "Brand Management",
-      related_route: "/portal/brands",
-      manual_title: "K SELECT Brand Portal 온보딩 가이드 (MAN-B-ONB-001)",
-      created_at: now
-    },
-    {
-      id: "rel-onboarding-users",
-      knowledge_id: "kno-onboarding-guide-v10",
-      related_portal: "Brand Portal",
-      related_module: "COMPANY",
-      related_menu: "Team Members",
-      related_route: "/portal/company/users",
-      manual_title: "K SELECT Brand Portal 온보딩 가이드 (MAN-B-ONB-001)",
-      created_at: now
-    },
-    {
-      id: "rel-onboarding-tasks",
-      knowledge_id: "kno-onboarding-guide-v10",
-      related_portal: "Brand Portal",
-      related_module: "COMPANY",
-      related_menu: "Task Owners",
-      related_route: "/portal/company/info?tab=tasks",
-      manual_title: "K SELECT Brand Portal 온보딩 가이드 (MAN-B-ONB-001)",
-      created_at: now
-    },
-    {
-      id: "rel-onboarding-products",
-      knowledge_id: "kno-onboarding-guide-v10",
-      related_portal: "Brand Portal",
-      related_module: "PRODUCTS",
-      related_menu: "Product Registration",
-      related_route: "/portal/products",
-      manual_title: "K SELECT Brand Portal 온보딩 가이드 (MAN-B-ONB-001)",
-      created_at: now
-    },
-    {
-      id: "rel-onboarding-agreements",
-      knowledge_id: "kno-onboarding-guide-v10",
-      related_portal: "Brand Portal",
-      related_module: "COMPANY",
-      related_menu: "Agreement Signing",
-      related_route: "/portal/company/info?tab=agreements",
-      manual_title: "K SELECT Brand Portal 온보딩 가이드 (MAN-B-ONB-001)",
-      created_at: now
     }
   ];
 
@@ -1473,19 +1133,6 @@ Achieving 7 / 7 (100%) unlocks regular portal operations.`,
       file_size: 1391802,
       published_date: "2026-10-01",
       created_at: now
-    },
-    {
-      id: "asset-onboarding-guide-v10",
-      knowledge_id: "kno-onboarding-guide-v10",
-      manual_title: "K SELECT Brand Portal 온보딩 가이드 (MAN-B-ONB-001)",
-      version: "v1.0",
-      language: "KO",
-      is_current: true,
-      file_url: "/api/admin/knowledge/asset/asset-onboarding-guide-v10",
-      file_name: "MAN-B-ONB-001_Onboarding_Guide_v1.0.pdf",
-      file_size: 3948614,
-      published_date: "2026-10-01",
-      created_at: now
     }
   ];
 
@@ -1510,17 +1157,6 @@ Achieving 7 / 7 (100%) unlocks regular portal operations.`,
       previous_value: {},
       new_value: { title: "K SELECT 브랜드 등록 및 관리 정책", audience: ["BRAND", "INTERNAL"] },
       reason: "MAN-BRAND-001 Official Publication",
-      created_at: now
-    },
-    {
-      id: "log-onboarding-guide-v10",
-      knowledge_id: "kno-onboarding-guide-v10",
-      user_id: "user-admin-01",
-      user_name: "Brand Operations Desk",
-      action: "Published",
-      previous_value: {},
-      new_value: { title: "K SELECT Brand Portal 온보딩 가이드", audience: ["BRAND", "INTERNAL"] },
-      reason: "MAN-B-ONB-001 Official Publication",
       created_at: now
     }
   ];

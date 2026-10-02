@@ -8,6 +8,12 @@ const baseDir = path.join(
   '02_CLAUDE_PACKAGE'
 );
 
+// Ensure test file is removed
+const testFilePath = path.join(baseDir, 'MANUAL_FILESYSTEM_TEST.txt');
+if (fs.existsSync(testFilePath)) {
+  fs.unlinkSync(testFilePath);
+}
+
 function writeAndFlush(filePath, content) {
   fs.writeFileSync(filePath, content, 'utf8');
   const fd = fs.openSync(filePath, 'r+');
@@ -22,7 +28,7 @@ writeAndFlush(path.join(baseDir, 'PACKAGE_README.md'), `# MAN-B-REG-001 — Clau
 **Manual ID:** \`MAN-B-REG-001\`  
 **Title:** \`Regulatory, Certification & Compliance User Guide\`  
 **Audience:** \`B\` (Brand Portal Users — 브랜드사 담당자 및 관리자)  
-**Package Version:** \`1.0.0\`  
+**Package Version:** \`1.1.0\`  
 **Source of Truth:** Production Codebase & \`01_SOURCE/\` Verification Reports  
 
 ---
@@ -31,7 +37,7 @@ writeAndFlush(path.join(baseDir, 'PACKAGE_README.md'), `# MAN-B-REG-001 — Clau
 
 본 패키지(\`02_CLAUDE_PACKAGE\`)는 K SELECT NETWORK 공식 브랜드 포털 사용자를 위한 **MAN-B-REG-001 — Regulatory, Certification & Compliance Guide**를 Claude Design 환경에서 최종 퍼블리싱 문서로 변환하기 위해 작성된 생산용 패키지이다.
 
-본 패키지에 수록된 모든 설명과 가이드는 Production 시스템에서 실제 작동하는 소프트웨어 기능(브랜드 상표권 정보, 이중 언어 전성분, AI 번역, 인허가 보증서 파일 업로드, 버전 관리, UPC/EAN 바코드 검증)에 100% 기반한다.
+본 패키지에 수록된 모든 설명과 가이드는 Production 시스템에서 실제 작동하는 소프트웨어 기능(브랜드 상표권 정보, 이중 언어 전성분, AI 기반 영문 번역 도구, 인허가 보증서 파일 업로드, 버전 관리, UPC/EAN 바코드 검증)에 100% 기반한다.
 
 ---
 
@@ -120,7 +126,7 @@ Your task is to take the provided verified manual content (\`01_CONTENT/MAN-B-RE
 ### Visual Callout Boxes
 Use GitHub-style alert callouts strategically (matching \`MAN-BRAND-001\` design):
 > [!NOTE] Background context, file storage specifications, or system behavior notes.
-> [!TIP] Operational efficiency tips, such as using the AI translation button for quick English INCI conversion.
+> [!TIP] Operational efficiency tips, such as using the AI-based translation button for quick English INCI conversion.
 > [!IMPORTANT] Essential requirements, such as exact 12-digit UPC or 13-digit EAN barcode digit formatting.
 > [!WARNING] Critical alerts, such as incomplete barcode formatting leading to \`Draft\` status.
 
@@ -139,9 +145,9 @@ Use GitHub-style alert callouts strategically (matching \`MAN-BRAND-001\` design
 - Registration number entry and PDF proof file attachment.
 - Screenshot \`SCR-B-REG-001\` and \`SCR-B-REG-002\` integration with callouts.
 
-### Chapter 3: Dual-Language Ingredients & AI Translation
+### Chapter 3: Dual-Language Ingredients & AI Translation Tool
 - Korean ingredient text entry and PDF upload.
-- Step-by-step guide for using the AI Translation widget (\`Translate\` -> Review -> \`Apply to field\`).
+- Step-by-step guide for using the AI-based translation widget (\`Translate\` -> Review -> \`Apply to field\`).
 - English ingredient PDF upload.
 - Screenshot \`SCR-B-REG-003\` and \`SCR-B-REG-004\` integration with step callouts.
 
@@ -152,12 +158,11 @@ Use GitHub-style alert callouts strategically (matching \`MAN-BRAND-001\` design
 - Version control rules (\`version\` increment, \`is_current\` active flag).
 - Screenshot \`SCR-B-REG-005\` and \`SCR-B-REG-006\` integration with version callouts.
 
-### Chapter 5: Barcode Format Validation & Commercial Export Specifications
+### Chapter 5: Barcode Format Validation & Commercial Specifications
 - 12-digit UPC and 13-digit EAN formatting rules and validation.
-- FOB USD Export Price, Country of Origin, and package dimension requirements.
 - Status evaluator logic (\`DRAFT\` vs \`COMPLETE\`).
 - \`[💬 바코드 문의]\` support channel reference.
-- Screenshot \`SCR-B-REG-007\` integration.
+- Screenshot \`SCR-B-REG-007\` integration (focusing on UPC/EAN inputs and inquiry channel).
 
 ### Chapter 6: Admin Audit History & System Status Revalidation
 - How Admin reviews trademark proof files and certificate attachments (\`/admin/brands/[brandId]\`).
@@ -240,18 +245,18 @@ Document Root
 │   ├── 2.1 Trademark Declaration Policy (Policy 02)
 │   ├── 2.2 Registering KIPO / USPTO Numbers & Proof Files
 │   └── 2.3 Screenshots SCR-B-REG-001 & SCR-B-REG-002 Walkthrough
-├── Chapter 3: Dual-Language Ingredient Declaration & AI Translation
+├── Chapter 3: Dual-Language Ingredient Declaration & AI Translation Tool
 │   ├── 3.1 Korean & English Ingredient Text Declaration
-│   ├── 3.2 Claude AI Translation Widget Usage (KR -> EN)
+│   ├── 3.2 AI-Based Ingredients Translator Usage (KR -> EN)
 │   └── 3.3 Screenshots SCR-B-REG-003 & SCR-B-REG-004 Walkthrough
 ├── Chapter 4: Product Certificates Upload & Version Control (Tab 6 #certs)
 │   ├── 4.1 Certificate Categories (fda_registration, trademark, ingredient_certification, patent, other)
 │   ├── 4.2 Document Versioning Rules (version, is_current)
 │   └── 4.3 Screenshots SCR-B-REG-005 & SCR-B-REG-006 Walkthrough
-├── Chapter 5: Product Barcode & Commercial Export Specifications
+├── Chapter 5: Product Barcode Specifications & Barcode Inquiry Channel
 │   ├── 5.1 UPC (12-digit) & EAN (13-digit) Barcode Formatting
-│   ├── 5.2 FOB USD Price, Origin & Registration Evaluator Check
-│   └── 5.3 Screenshot SCR-B-REG-007 & Barcode Inquiry Channel
+│   ├── 5.2 Registration Evaluator Check & Barcode Inquiry Channel
+│   └── 5.3 Screenshot SCR-B-REG-007 Barcode Section Walkthrough
 └── Chapter 6: Admin Audit History & System Status Revalidation
     ├── 6.1 Admin Verification Views & Proof File Inspection
     ├── 6.2 Screenshot SCR-B-REG-008 & Change History Audit
@@ -267,7 +272,7 @@ writeAndFlush(path.join(baseDir, '01_CONTENT', 'MAN-B-REG-001_Manual_Content.md'
 **Manual Title:** \`Regulatory, Certification & Compliance User Guide\`  
 **Audience:** \`B\` (Brand Portal Users — 브랜드사 담당자 및 관리자)  
 **Effective Date:** 2026-10-01  
-**Version:** \`1.0.0\`  
+**Version:** \`1.1.0\`  
 **System Scope:** K SELECT NETWORK 소프트웨어 시스템 (\`https://portal.kselectnetwork.com\`)  
 
 ---
@@ -277,7 +282,7 @@ writeAndFlush(path.join(baseDir, '01_CONTENT', 'MAN-B-REG-001_Manual_Content.md'
 2. [제2장: 브랜드 상표권 정보 및 증빙 서류 관리](#제2장-브랜드-상표권-정보-및-증빙-서류-관리)
 3. [제3장: 전성분 선언 및 AI 영문 번역기 활용](#제3장-전성분-선언-및-ai-영문-번역기-활용)
 4. [제4장: 상품 인증 서류 업로드 및 버전 관리](#제4장-상품-인증-서류-업로드-및-버전-관리)
-5. [제5장: 바코드 검증 및 수출 상업 규격 관리](#제5장-바코드-검증-및-수출-상업-규격-관리)
+5. [제5장: 바코드 검증 및 문의 채널 안내](#제5장-바코드-검증-및-문의-채널-안내)
 6. [제6장: 어드민 서류 확인 및 상태 동기화](#제6장-어드민-서류-확인-및-상태-동기화)
 
 ---
@@ -334,10 +339,10 @@ K SELECT 포털은 상표권을 미보유한 브랜드라도 카탈로그 구성
 - **전성분 텍스트**: 제품에 함유된 전체 성분을 함량순으로 작성합니다.
 - **국문/영문 전성분표 파일**: PDF 또는 이미지 파일 형태로 전성분표 문서를 업로드합니다.
 
-### 3.2 Claude AI 기반 실시간 영문 번역기 활용
+### 3.2 AI 기반 실시간 영문 번역기 활용
 1. **[전성분 텍스트 (국문)]** 필드에 한국어 전성분 목록을 작성합니다.
 2. 하단의 **[번역하기 (Translate)]** 버튼을 클릭합니다.
-3. 시스템이 Claude AI 엔진을 통해 화장품 표준 **INCI (International Nomenclature of Cosmetic Ingredients)** 명칭으로 자동 번역하여 프리뷰 상자에 표시합니다.
+3. 시스템이 AI 번역 엔진을 통해 화장품 표준 **INCI (International Nomenclature of Cosmetic Ingredients)** 명칭으로 자동 번역하여 프리뷰 상자에 표시합니다.
 4. 번역 결과를 확인한 후 **[리뷰 완료 및 적용 (Apply to field)]** 버튼을 누르면 영문 전성분 텍스트 필드에 자동으로 입력됩니다.
 
 ![SCR-B-REG-003: 전성분 입력 및 번역 버튼](../02_SCREENSHOTS/SCR-B-REG-003.png)  
@@ -346,8 +351,8 @@ K SELECT 포털은 상표권을 미보유한 브랜드라도 카탈로그 구성
 ![SCR-B-REG-004: AI 번역 결과 프리뷰 및 적용](../02_SCREENSHOTS/SCR-B-REG-004.png)  
 *그림 3.2: AI 영문 INCI 번역 완료 결과 확인 및 적용*
 
-> [!TIP]
-> **전성분 파일 자동 동기화**: 국문 또는 영문 전성분표 파일(\`PDF\`)을 업로드하면, 인허가 서류 모듈(\`product_certificates\`)의 \`성분 인증 (ingredient_certification)\` 카테고리로 자동 연동되어 등록됩니다.
+> [!NOTE]
+> **전성분 서류 관리 안내**: 전성분 관련 증빙 문서(전성분 분석표, MSDS, COA 등)는 **[인허가 & 보증서]** 탭(Tab 6)의 **[성분 인증]** (\`ingredient_certification\`) 카테고리를 이용하여 별도로 업로드하고 관리할 수 있습니다.
 
 ---
 
@@ -381,7 +386,7 @@ K SELECT 포털은 상표권을 미보유한 브랜드라도 카탈로그 구성
 
 ---
 
-## 제5장: 바코드 검증 및 수출 상업 규격 관리
+## 제5장: 바코드 검증 및 문의 채널 안내
 
 ### 5.1 UPC / EAN 바코드 유효성 검증
 상품의 최종 등록 상태가 \`COMPLETE (등록 완료)\`가 되기 위해서는 식별 바코드가 필수적으로 검증되어야 합니다.
@@ -391,12 +396,8 @@ K SELECT 포털은 상표권을 미보유한 브랜드라도 카탈로그 구성
 > [!IMPORTANT]
 > **바코드 포맷 오류**: 12자리/13자리 규칙에 맞지 않는 문자나 자리수가 입력되면 등록 평가기(Registration Evaluator)에 의해 제품 상태가 \`Draft (보완 대기)\`로 지정됩니다. 바코드가 없는 경우 입력란 우측의 **[💬 바코드 문의]** 링크를 클릭하여 지원을 요청하십시오.
 
-### 5.2 수출 상업 규격 (FOB / Origin)
-- **FOB 수출 가격 ($)**: $0보다 큰 유효한 숫자여야 합니다.
-- **원산지 (Origin)**: \`Made in Korea\` 등 정확한 원산지 국가 정보가 입력되어야 합니다.
-
-![SCR-B-REG-007: 바코드 및 수출 상업 규격 입력란](../02_SCREENSHOTS/SCR-B-REG-007.png)  
-*그림 5.1: 식별 바코드(UPC/EAN) 및 바코드 문의 링크*
+![SCR-B-REG-007: 바코드 및 식별 관리 번호 입력란](../02_SCREENSHOTS/SCR-B-REG-007.png)  
+*그림 5.1: 식별 바코드(UPC/EAN) 입력란 및 바코드 문의 지원 링크*
 
 ---
 
@@ -471,7 +472,10 @@ writeAndFlush(path.join(baseDir, '02_SCREENSHOTS', 'SCREENSHOT_ANNOTATION_GUIDE.
 - **URL**: \`https://portal.kselectnetwork.com/portal/products/[id]\`
 - **Screen**: Basic Info — Logistics & Barcode Section
 - **Target Chapter**: Chapter 5 (Section 5.1 & 5.2)
-- **Caption**: \`그림 5.1: 식별 바코드(UPC/EAN) 및 바코드 문의 링크\`
+- **Callout Highlights**:
+  1. Red callout box around \`[식별 관리 번호 (UPC / EAN)]\` inputs (\`12자리 UPC\` / \`13자리 EAN\`).
+  2. Circle around \`[💬 바코드 문의]\` support link.
+- **Caption**: \`그림 5.1: 식별 바코드(UPC/EAN) 입력란 및 바코드 문의 지원 링크\`
 
 ### Asset 8: \`SCR-B-REG-008.png\`
 - **URL**: \`https://admin.kselectnetwork.com/admin/brands/[brandId]\`
@@ -502,7 +506,7 @@ flowchart TD
     TMUpload --> Step2["Step 2: Product Creation & Catalog Identification"]
     SkipTM --> Step2
     
-    Step2 --> RegInputs["Input Identification Data: UPC/EAN, Origin, FOB Price"]
+    Step2 --> RegInputs["Input Identification Data: UPC/EAN"]
     RegInputs --> IngInput["Input Ingredients (Korean Text / PDF)"]
     IngInput --> AITrans["Click AI Translation Widget (Korean -> English INCI)"]
     AITrans --> ApplyEN["Apply English INCI Text & Upload English PDF"]
@@ -512,7 +516,7 @@ flowchart TD
     CertSelect --> FileUpload["Upload PDF/Image to company-uploads Bucket"]
     
     FileUpload --> EvalCheck{"Registration Evaluator Check"}
-    EvalCheck -- "Missing UPC/FOB/Ingredients" --> StatusDraft["Status: DRAFT (보완 대기)"]
+    EvalCheck -- "Missing UPC / Ingredients" --> StatusDraft["Status: DRAFT (보완 대기)"]
     EvalCheck -- "All Identification & Catalog Fields Valid" --> StatusComplete["Status: COMPLETE (등록 완료)"]
     
     StatusDraft --> Revisit["Brand User Updates Required Fields"]
@@ -581,4 +585,4 @@ writeAndFlush(path.join(baseDir, '04_REFERENCE', 'REFERENCE_GUIDE.md'), `# REFER
 - **Future Enhancements (Excluded)**: FDA Listing Number 텍스트 필드, Compliance Status 뱃지 시각화, US Agent Agreement 전용 타입 등 미구현 기능은 이번 매뉴얼 범위에 포함되지 않습니다.
 `);
 
-console.log("=== WRITING FULL MARKDOWN CONTENT COMPLETE ===");
+console.log("=== PACKAGE CORRECTIONS WRITTEN & FLUSHED SUCCESSFULLY ===");

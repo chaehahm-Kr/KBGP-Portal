@@ -35,7 +35,7 @@ Your task is to take the provided verified manual content (`01_CONTENT/MAN-B-REG
 ### Visual Callout Boxes
 Use GitHub-style alert callouts strategically (matching `MAN-BRAND-001` design):
 > [!NOTE] Background context, file storage specifications, or system behavior notes.
-> [!TIP] Operational efficiency tips, such as using the AI translation button for quick English INCI conversion.
+> [!TIP] Operational efficiency tips, such as using the AI-based translation button for quick English INCI conversion.
 > [!IMPORTANT] Essential requirements, such as exact 12-digit UPC or 13-digit EAN barcode digit formatting.
 > [!WARNING] Critical alerts, such as incomplete barcode formatting leading to `Draft` status.
 
@@ -54,9 +54,9 @@ Use GitHub-style alert callouts strategically (matching `MAN-BRAND-001` design):
 - Registration number entry and PDF proof file attachment.
 - Screenshot `SCR-B-REG-001` and `SCR-B-REG-002` integration with callouts.
 
-### Chapter 3: Dual-Language Ingredients & AI Translation
+### Chapter 3: Dual-Language Ingredients & AI Translation Tool
 - Korean ingredient text entry and PDF upload.
-- Step-by-step guide for using the AI Translation widget (`Translate` -> Review -> `Apply to field`).
+- Step-by-step guide for using the AI-based translation widget (`Translate` -> Review -> `Apply to field`).
 - English ingredient PDF upload.
 - Screenshot `SCR-B-REG-003` and `SCR-B-REG-004` integration with step callouts.
 
@@ -67,12 +67,11 @@ Use GitHub-style alert callouts strategically (matching `MAN-BRAND-001` design):
 - Version control rules (`version` increment, `is_current` active flag).
 - Screenshot `SCR-B-REG-005` and `SCR-B-REG-006` integration with version callouts.
 
-### Chapter 5: Barcode Format Validation & Commercial Export Specifications
+### Chapter 5: Barcode Format Validation & Commercial Specifications
 - 12-digit UPC and 13-digit EAN formatting rules and validation.
-- FOB USD Export Price, Country of Origin, and package dimension requirements.
 - Status evaluator logic (`DRAFT` vs `COMPLETE`).
 - `[💬 바코드 문의]` support channel reference.
-- Screenshot `SCR-B-REG-007` integration.
+- Screenshot `SCR-B-REG-007` integration (focusing on UPC/EAN inputs and inquiry channel).
 
 ### Chapter 6: Admin Audit History & System Status Revalidation
 - How Admin reviews trademark proof files and certificate attachments (`/admin/brands/[brandId]`).

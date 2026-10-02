@@ -322,19 +322,6 @@ export async function processAskQuestion(
       if (cleanQ.includes("상품 등록") || cleanQ.includes("귀속")) { score += 40; domainIntentMatch = true; }
     }
 
-    // Specific Domain Intent Matches for Onboarding Guide (MAN-B-ONB-001)
-    if (item.id === "kno-onboarding-guide-v10" || item.slug === "man-b-onb-001-onboarding-guide") {
-      if (cleanQ.includes("온보딩") || cleanQ.includes("onboarding") || cleanQ.includes("시작") || cleanQ.includes("가입")) { score += 60; domainIntentMatch = true; }
-      if (cleanQ.includes("무엇부터") || cleanQ.includes("절차") || cleanQ.includes("진행") || cleanQ.includes("처음")) { score += 60; domainIntentMatch = true; }
-      if (cleanQ.includes("회사 정보") || cleanQ.includes("법인 주소") || cleanQ.includes("주소")) { score += 60; domainIntentMatch = true; }
-      if (cleanQ.includes("관리자") || cleanQ.includes("영문 이름") || cleanQ.includes("프로필")) { score += 50; domainIntentMatch = true; }
-      if (cleanQ.includes("팀원") || cleanQ.includes("초대") || cleanQ.includes("나중에 하기") || cleanQ.includes("건너뛰기")) { score += 60; domainIntentMatch = true; }
-      if (cleanQ.includes("담당 업무") || cleanQ.includes("6대 업무") || cleanQ.includes("주 담당자") || cleanQ.includes("owner")) { score += 60; domainIntentMatch = true; }
-      if (cleanQ.includes("상품") && (cleanQ.includes("몇 개") || cleanQ.includes("필수") || cleanQ.includes("요건") || cleanQ.includes("완료 조건"))) { score += 60; domainIntentMatch = true; }
-      if (cleanQ.includes("계약") || cleanQ.includes("기본계약") || cleanQ.includes("서명") || cleanQ.includes("전자서명")) { score += 60; domainIntentMatch = true; }
-      if (cleanQ.includes("완료 조건") || cleanQ.includes("100%") || cleanQ.includes("7/7") || cleanQ.includes("7단계")) { score += 60; domainIntentMatch = true; }
-    }
-
     // Require title, tag, or domain intent match to qualify as grounded candidate
     if (!hasTitleMatch && !hasTagMatch && !domainIntentMatch) {
       score = 0;
@@ -342,7 +329,7 @@ export async function processAskQuestion(
 
     // Specific Domain Intent Matches for Brand FAQ (kno-002-brand-faq)
     if (item.id === "kno-002-brand-faq") {
-      if (cleanQ.includes("입점") || cleanQ.includes("자격")) score += 50;
+      if (cleanQ.includes("입점") || cleanQ.includes("자격") || cleanQ.includes("온보딩") || cleanQ.includes("onboarding")) score += 50;
       if (cleanQ.includes("요건") || cleanQ.includes("fda")) score += 40;
     }
 
@@ -521,123 +508,6 @@ function buildGroundedResponse(
       ];
       actions.push({ label: "공식 매뉴얼 자세히 보기", url: detailUrlFor(primary), type: "knowledge" });
       actions.push({ label: "신규 브랜드 등록하기", url: "/portal/brands/new", type: "route" });
-    }
-  } else if (primary.id === "kno-onboarding-guide-v10" || primary.slug === "man-b-onb-001-onboarding-guide") {
-    // --- BRAND PORTAL ONBOARDING GUIDE (MAN-B-ONB-001) ---
-    if (cleanQ.includes("회사 정보") || cleanQ.includes("주소") || cleanQ.includes("법인")) {
-      directAnswer = "회사 정보는 **회사 정보 관리 메뉴(/portal/company/info)**에서 입력합니다. 기본 주소, 시, 주/도, 우편번호 4개 필수 주소가 모두 저장되어야 1단계가 완료됩니다. (STEP 1)";
-      bullets = [
-        "필수 주소 4대 항목: 기본 주소, 시(City), 주/도(State/Province), 우편번호(Zip Code)",
-        "완료 처리: 정보 입력 후 상단의 '저장' 버튼을 누르고 '회사 정보 확인 완료 ✓' 버튼을 클릭합니다.",
-        "수정 안내: 저장된 회사 정보는 향후 언제든지 실시간으로 업데이트할 수 있습니다."
-      ];
-      relatedQuestions = [
-        "온보딩은 어떻게 진행하나요?",
-        "관리자 정보는 어디에서 등록하나요?",
-        "온보딩 완료 조건은 무엇인가요?"
-      ];
-      actions.push({ label: "공식 매뉴얼 자세히 보기", url: detailUrlFor(primary), type: "knowledge" });
-      actions.push({ label: "회사 정보 입력하기", url: "/portal/company/info", type: "route" });
-    } else if (cleanQ.includes("관리자") || cleanQ.includes("영문 이름") || cleanQ.includes("프로필")) {
-      directAnswer = "관리자 정보는 **내 계정 메뉴(/portal/account)**에서 등록합니다. 소통 및 수출입 서류 작성을 위해 국문 성명, 영문 성명(여권 표기 일치), 직함, 연락처를 입력합니다. (STEP 2)";
-      bullets = [
-        "필수 정보: 국문 성명, 영문 First Name/Last Name, 직함(Job Title), 대표 연락처",
-        "영문 이름 원칙: 공식 무역 서류 및 통관에 활용되므로 여권상 표기와 동일하게 입력해야 합니다.",
-        "저장: 입력 후 하단의 '프로필 정보 저장' 버튼을 클릭하면 반영됩니다."
-      ];
-      relatedQuestions = [
-        "회사 정보는 어디에서 입력하나요?",
-        "팀원 초대는 필수인가요?",
-        "온보딩 완료 조건은 무엇인가요?"
-      ];
-      actions.push({ label: "공식 매뉴얼 자세히 보기", url: detailUrlFor(primary), type: "knowledge" });
-      actions.push({ label: "관리자 프로필 바로가기", url: "/portal/account", type: "route" });
-    } else if (cleanQ.includes("팀원") || cleanQ.includes("초대") || cleanQ.includes("나중에")) {
-      directAnswer = "팀원 초대는 **선택 사항(Optional)**입니다. 1인 기업이거나 즉시 초대가 불필요한 경우 대시보드에서 **'나중에 하기'**를 눌러 건너뛸 수 있습니다. (STEP 4)";
-      bullets = [
-        "팀원 초대 메뉴: 소속 사용자 관리(/portal/company/users)에서 이메일로 사내 동료를 초대하고 권한(관리자/멤버)을 부여합니다.",
-        "건너뛰기: 대시보드 온보딩 체크리스트 STEP 4 카드의 '나중에 하기' 버튼을 클릭하면 즉시 완료 처리됩니다.",
-        "추후 초대: 온보딩 완료 후에도 언제든지 팀원을 추가 초대할 수 있습니다."
-      ];
-      relatedQuestions = [
-        "담당 업무는 어떻게 지정하나요?",
-        "1인 기업도 온보딩을 완료할 수 있나요?",
-        "온보딩 전체 절차는 어떻게 되나요?"
-      ];
-      actions.push({ label: "공식 매뉴얼 자세히 보기", url: detailUrlFor(primary), type: "knowledge" });
-      actions.push({ label: "팀원 관리 바로가기", url: "/portal/company/users", type: "route" });
-    } else if (cleanQ.includes("담당 업무") || cleanQ.includes("6대") || cleanQ.includes("주 담당자") || cleanQ.includes("owner")) {
-      directAnswer = "담당 업무는 **회사 정보 관리 > 담당 업무 및 주 담당자 탭(/portal/company/info?tab=tasks)**에서 6대 핵심 업무별 사내 주 담당자(Primary Owner)를 매칭하여 지정합니다. (STEP 5)";
-      bullets = [
-        "6대 핵심 업무: 회사·신청, 계약, 제품·콘텐츠·인증, 가격·견적, 발주·물류·재고, 정산·문의",
-        "주 담당자 매칭: 각 업무 드롭다운에서 담당자를 선택하고 이메일 알림 수신인을 체크합니다.",
-        "1인 기업 겸임 지원: 1인 기업의 경우 대표 관리자 1인이 6개 업무를 모두 겸임하여 지정할 수 있습니다."
-      ];
-      relatedQuestions = [
-        "팀원 초대는 필수인가요?",
-        "상품은 몇 개 등록해야 하나요?",
-        "기본계약 체결은 언제 하나요?"
-      ];
-      actions.push({ label: "공식 매뉴얼 자세히 보기", url: detailUrlFor(primary), type: "knowledge" });
-      actions.push({ label: "담당 업무 지정 바로가기", url: "/portal/company/info?tab=tasks", type: "route" });
-    } else if (cleanQ.includes("상품") || cleanQ.includes("몇 개")) {
-      directAnswer = "온보딩 완수를 위해서는 대표 상품을 **최소 1개 이상 '등록 완료(COMPLETE)' 상태로 등록**해야 합니다. 단순 임시저장(Draft) 상태는 인정되지 않습니다. (STEP 6)";
-      bullets = [
-        "필수 요건: 기본정보, 카테고리 필수 속성, 한국소비자가/FOB가격, 3단계 로지스틱스 규격(단품/패키지/카톤), UPC/EAN 바코드, 대표 이미지 1장 이상",
-        "임시저장과의 차이: 10대 필수 영역이 모두 충족되어 상태 배지가 '등록 완료(COMPLETE)'로 변경되어야 합니다.",
-        "추가 등록: 온보딩 완료 후 나머지 제품 라인업을 자유롭게 추가 등록할 수 있습니다."
-      ];
-      relatedQuestions = [
-        "온보딩 완료 조건은 무엇인가요?",
-        "기본계약은 어떻게 서명하나요?",
-        "브랜드 정보는 어떻게 등록하나요?"
-      ];
-      actions.push({ label: "공식 매뉴얼 자세히 보기", url: detailUrlFor(primary), type: "knowledge" });
-      actions.push({ label: "상품 등록 바로가기", url: "/portal/products", type: "route" });
-    } else if (cleanQ.includes("계약") || cleanQ.includes("서명") || cleanQ.includes("전자서명")) {
-      directAnswer = "기본계약은 **회사 정보 관리 > 공급 및 이용 약관 탭(/portal/company/info?tab=agreements)**에서 약관 전문을 검토한 후 자필 전자서명을 작성하여 체결합니다. (STEP 7)";
-      bullets = [
-        "계약 내용: 비독점 브랜드 공급, 미국 유통 및 플랫폼 이용에 관한 기본공급계약",
-        "서명 절차: '✍ 계약서 확인 / 서명' 클릭 ➔ 조항 검토 ➔ 서명 패드에 자필 서명 ➔ '전자서명 완료 및 계약 체결'",
-        "체결 후: 체결 완료 즉시 Active 상태로 전환되며 서명된 PDF 계약서를 다운로드할 수 있습니다."
-      ];
-      relatedQuestions = [
-        "온보딩 완료 조건은 무엇인가요?",
-        "계약 체결 전 상품 등록이 가능한가요?",
-        "온보딩은 어떻게 진행하나요?"
-      ];
-      actions.push({ label: "공식 매뉴얼 자세히 보기", url: detailUrlFor(primary), type: "knowledge" });
-      actions.push({ label: "기본계약 확인 바로가기", url: "/portal/company/info?tab=agreements", type: "route" });
-    } else if (cleanQ.includes("완료 조건") || cleanQ.includes("100%") || cleanQ.includes("7/7") || cleanQ.includes("완료")) {
-      directAnswer = "온보딩 완료 조건은 **7개 단계(회사, 관리자, 브랜드, 팀원, 업무, 상품, 계약)가 모두 완료되어 7 / 7 (100%)를 달성**하는 것입니다. (Chapter 11)";
-      bullets = [
-        "7단계 필수 완료: 회사 4대 주소, 관리자 영문 성명, 브랜드 확인, 팀원(또는 나중에하기), 6대 담당업무 매칭, 상품 1개 이상 COMPLETE, 기본계약 전자서명",
-        "완료 후 혜택: 7/7 완료 시 대시보드 녹색 배지가 켜지며 Brand Portal의 정식 운영 기능이 활성화됩니다.",
-        "정보 변경: 완료 후에도 주소, 담당자, 상품 정보는 언제든지 자유롭게 수정할 수 있습니다."
-      ];
-      relatedQuestions = [
-        "온보딩 전체 절차는 어떻게 되나요?",
-        "처음 가입했는데 무엇부터 해야 하나요?",
-        "도움이 필요한 경우 어떻게 하나요?"
-      ];
-      actions.push({ label: "공식 매뉴얼 자세히 보기", url: detailUrlFor(primary), type: "knowledge" });
-      actions.push({ label: "대시보드 온보딩 현황 보기", url: "/portal", type: "route" });
-    } else {
-      // General Onboarding Roadmap
-      directAnswer = "K SELECT Brand Portal 온보딩은 **7단계 표준 절차(회사 ➔ 관리자 ➔ 브랜드 ➔ 팀원 ➔ 업무 ➔ 상품 ➔ 계약)**로 구성되며, 준비된 순서에 따라 자유롭게 진행하실 수 있습니다. (MAN-B-ONB-001)";
-      bullets = [
-        "STEP 1~3 (기본 설정): 법인 필수 4대 주소, 관리자 국문/영문 프로필, 대표 브랜드 및 상표권 확인",
-        "STEP 4~5 (운영 조직): 팀원 초대(선택/나중에하기 가능) 및 6대 핵심 업무별 주 담당자 지정",
-        "STEP 6~7 (공급 체결): 대표 상품 1개 이상 등록 완료(COMPLETE) 및 기본공급계약 자필 전자서명",
-        "완료 기준: 7단계 100% 충족 시 정식 운영 기능 활성화"
-      ];
-      relatedQuestions = [
-        "회사 정보는 어디에서 입력하나요?",
-        "팀원 초대는 필수인가요?",
-        "온보딩 완료 조건은 무엇인가요?"
-      ];
-      actions.push({ label: "공식 매뉴얼 자세히 보기", url: detailUrlFor(primary), type: "knowledge" });
-      actions.push({ label: "온보딩 대시보드 바로가기", url: "/portal", type: "route" });
     }
   } else if (primary.id === "kno-002-brand-faq") {
     directAnswer = "K SELECT NETWORK는 미국 시장 진출을 희망하는 정식 등록 한국 화장품 브랜드사를 대상으로 입점 및 파트너 온보딩을 지원합니다.";
