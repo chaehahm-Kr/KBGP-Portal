@@ -1238,6 +1238,101 @@ Official operational manual for K SELECT Brand Portal partners covering main das
       effective_date: "2026-10-02",
       created_at: now,
       updated_at: now
+    },
+    {
+      id: "kno-intelligence-insights-v10",
+      document_url: "/api/admin/knowledge/asset/asset-intelligence-insights-v10",
+      document_name: "MAN-B-INT-001_Intelligence_V1.pdf",
+      document_size: 2640379,
+      document_type: "application/pdf",
+      slug: "man-b-int-001-intelligence-guide",
+      title: "MAN-B-INT-001: Intelligence & Insights Guide",
+      title_ko: "K SELECT Brand Portal 시장 인텔리전스, 데일리 인사이트 및 지식 검색 가이드 (MAN-B-INT-001)",
+      title_en: "K SELECT Brand Portal Market Intelligence, Daily Insights & Knowledge Assistant Guide (MAN-B-INT-001)",
+      summary_ko: "K SELECT Brand Portal 시장 인텔리전스 및 지식 검색(/portal/help/ask), 매일 05:00 ET Daily Auto-Engine, 6개 가중치 Topic Score 80점 이상 엄격 선별, Network 3 + Hub 3 쿼터, 3단계 Claim Risk 감사(HIGH, MEDIUM, LOW) 및 SIGNAL 완화 다운그레이드, Human Approval Gate(AI_DRAFT → IN_REVIEW → PUBLISHED, auto_publish = false), 독자 피드백 HMAC-SHA256 24시간 중복 방지, 그리고 RPT 성과 지표와의 도메인 분리 및 시스템 한계(ML 수요예측, 다이내믹 프라이싱, 자동 재고 할당 미지원)를 수록한 공식 통합 가이드입니다.",
+      summary_en: "Official operational manual for K SELECT Brand Portal Market Intelligence & Grounded Knowledge Assistant (/portal/help/ask), daily 05:00 ET Auto-Engine, 6-weighted topic qualification (Score 80+), Network 3 + Hub 3 quota, 3-tier Claim Risk audit (HIGH, MEDIUM, LOW) with safe downgrade to SIGNAL, mandatory Human Approval Gate (AI_DRAFT -> IN_REVIEW -> PUBLISHED, auto_publish = false), reader feedback HMAC-SHA256 24h deduplication, strict separation from RPT operational KPI metrics, and explicit system boundaries.",
+      content_ko: `# K SELECT Brand Portal 시장 인텔리전스, 데일리 인사이트 및 지식 검색 가이드 (MAN-B-INT-001 v1.0)
+
+## 1. 개요 및 인텔리전스 계층 원칙 (Overview & Intelligence Principles)
+본 매뉴얼은 **K SELECT NETWORK Brand Portal** 파트너사와 내부 운영팀이 미국 K-Beauty 시장 시그널을 신속하게 파악하고, 검증된 공식 지식에 기반한 Grounded Knowledge Assistant를 활용할 수 있도록 제작된 시장 인텔리전스 및 지식 검색 통합 가이드입니다.
+
+---
+
+## 2. 핵심 경계 정의 (Critical Boundaries)
+- **INT ↔ RPT 경계**: INT는 외부 시장 트렌드, 리테일러 수요 시그널, 정책 Q&A를 다루는 거시적 인텔리전스 계층이며, RPT가 다루는 파트너사 내부 발주 파이프라인, 정산 잔액, 카탈로그 완성도 등 트랜잭션 KPI 측정 계층과 엄격히 분리됩니다.
+- **NETWORK ↔ HUB 경계**: 한국 브랜드 파트너 대상 Brand Portal(NETWORK) 채널과 미국 현지 바이어/스토어 오너 대상 Retail Hub(HUB) 채널은 독자 맞춤형 권고 행동을 제공하며, 공통 분석 코어(Shared Core)는 중복 페널티 없이 양 채널에 유기적으로 배포됩니다.
+- **Grounded Knowledge Assistant 경계**: \`/portal/help/ask\`는 등록 및 검증된 Published Knowledge와 FAQ만을 검색하는 Read-only 결정론적 검색 어시스턴트이며, 자율적 AI 판단이나 권한 없는 데이터 조작을 수행하지 않습니다.
+
+---
+
+## 3. 핵심 운영 기준 및 파이프라인 (Core Operations)
+- **Daily Auto-Engine**: 매일 **05:00 ET** (America/New_York)에 자동 실행되어 6개 가중치 기준에 따라 평가합니다.
+- **Topic Qualification Score**: **80점 이상**의 고품질 시그널만 Candidate로 선정하며, 기준 미달 시 **0건 Draft 생성도 정상(0 Draft Day ≠ Failure)**으로 처리됩니다.
+- **Draft Quota (3+3 Rule)**: 1일 최대 Draft 생성량은 **NETWORK 3건 + HUB 3건**으로 제한됩니다.
+- **3-Tier Claim Risk Audit**:
+  - \`HIGH Risk\`: 규제, 정확한 수치(%, $), 강한 인과관계 → Tier A 공식 Source 필수 검증.
+  - \`MEDIUM Risk\`: 시장 트렌드, 검색량 증가 → 표현 강도 완화 및 근거 확인.
+  - \`LOW Risk\`: 내부 의견, 운영 가이드 → 객관적 사실로 오인되지 않도록 표기.
+- **Safe Downgrade to SIGNAL**: 근거가 완벽히 입증되지 않은 주장은 임의 과장하지 않고 어조를 완화하여 **SIGNAL** 상태로 안전하게 다운그레이드합니다.
+- **Human Approval Gate**: \`AI_DRAFT → IN_REVIEW → PUBLISHED\` 단계를 거치며, **auto_publish = false** 원칙에 따라 사람(Editor)의 최종 검토 및 승인 없이는 어떠한 기사도 발행되지 않습니다.
+- **Reader Feedback Deduplication**: \`HMAC-SHA256(IP + UserAgent + ArticleID + Date)\` 해시 기반으로 24시간 내 동일 사용자의 중복 투표를 차단하며, 피드백은 모델 재학습에 자동 반영되지 않습니다.
+
+---
+
+## 4. 시스템 기능 범위 및 한계 (System Gaps)
+- **ML 기반 수요 예측(Demand Forecasting)**: 미지원 (NOT IMPLEMENTED)
+- **동적 가격 책정(Dynamic Pricing)**: 미지원 (NOT IMPLEMENTED)
+- **자동 재고 최적화 및 할당(Automated Inventory Allocation)**: 미지원 (NOT IMPLEMENTED)
+- **자율 무검토 자동 발행(Unmoderated Auto-Publish)**: 엄격히 금지 (FORBIDDEN)`,
+      content_en: `# K SELECT Brand Portal Market Intelligence, Daily Insights & Knowledge Assistant Guide (MAN-B-INT-001 v1.0)
+
+## 1. Overview & Intelligence Principles
+Official operational guide for K SELECT Brand Portal partners and internal operations to leverage US K-Beauty market intelligence and the Grounded Knowledge Assistant.
+
+## 2. Critical Boundaries
+- INT vs RPT: Market Intelligence & Policy Q&A (external/macro) vs Operational Transaction KPI Reporting (internal/micro).
+- NETWORK vs HUB: Targeted recommendations for Brand Portal vs Retail Hub with unified Shared Core research.
+- Grounded Knowledge Assistant: Read-only deterministic Q&A (/portal/help/ask) grounded strictly in Published Knowledge and FAQs.
+
+## 3. Verified Production Behavior
+- Daily Auto-Engine: 05:00 ET cron execution.
+- Topic Score: Minimum 80 points threshold (0 draft day is normal).
+- Draft Quota: NETWORK 3 + HUB 3 maximum drafts.
+- Claim Risk Audit: HIGH / MEDIUM / LOW risk assessment with Safe Downgrade to SIGNAL.
+- Human Approval Gate: Mandatory AI_DRAFT -> IN_REVIEW -> PUBLISHED workflow (auto_publish = false).
+- Reader Feedback: HMAC-SHA256 24h deduplication without automated model retraining.
+
+## 4. Explicit System Gaps
+- Machine Learning Demand Forecasting: NOT IMPLEMENTED
+- Dynamic Pricing Algorithms: NOT IMPLEMENTED
+- Automated Inventory Allocation: NOT IMPLEMENTED
+- Autonomous Publishing: FORBIDDEN`,
+      type: "MANUAL",
+      source_type: "CONTENT",
+      module: "INSIGHTS",
+      category: "Brand Portal",
+      tags: [
+        "MANUAL", "INTELLIGENCE", "INSIGHTS", "MARKET_INTELLIGENCE", "DAILY_INSIGHTS",
+        "AUTO_ENGINE", "Auto-Engine", "3+3", "CLAIM_RISK", "Claim Risk", "SIGNAL", "Signal",
+        "HUMAN_GATE", "Human Gate", "KNOWLEDGE_ASSISTANT", "Knowledge Assistant",
+        "PUBLISHED_KNOWLEDGE", "Published Knowledge", "READER_FEEDBACK", "Reader Feedback",
+        "MAN-B-INT-001", "OFFICIAL", "시장인텔리전스", "시장 인텔리전스", "인사이트", "지식검색",
+        "팩트체크", "데일리인사이트", "인텔리전스"
+      ],
+      owner_id: "staff-editorial-01",
+      owner_name: "INSIGHTS Editorial Desk",
+      status: "PUBLISHED",
+      system_impact_status: "NORMAL",
+      audience: ["BRAND", "INTERNAL", "ADMIN / MANAGEMENT"],
+      is_sensitive_internal: false,
+      requires_external_approval: true,
+      external_review_status: "APPROVED",
+      external_reviewer_id: "staff-superadmin-01",
+      external_reviewed_at: "2026-10-02T12:00:00Z",
+      current_version: "v1.0",
+      effective_date: "2026-10-02",
+      created_at: now,
+      updated_at: now
     }
   ];
 
@@ -3856,6 +3951,24 @@ Official operational manual for K SELECT Brand Portal partners covering main das
       created_by_name: "Operations Analytics Desk",
       published_at: now,
       created_at: now
+    },
+    {
+      id: "ver-intelligence-insights-v10",
+      knowledge_id: "kno-intelligence-insights-v10",
+      version: "v1.0",
+      status: "PUBLISHED",
+      title_ko: "K SELECT Brand Portal 시장 인텔리전스, 데일리 인사이트 및 지식 검색 가이드 (MAN-B-INT-001 v1.0)",
+      title_en: "K SELECT Brand Portal Market Intelligence, Daily Insights & Knowledge Assistant Guide v1.0",
+      summary_ko: "최초 공식 발행 버전 (23-Page Published PDF 배포)",
+      summary_en: "Initial official published manual version",
+      content_ko: memoryItems.find(i => i.id === "kno-intelligence-insights-v10")?.content_ko || "",
+      content_en: memoryItems.find(i => i.id === "kno-intelligence-insights-v10")?.content_en || "",
+      what_changed: "MAN-B-INT-001 Intelligence & Insights Guide 최초 공식 배포 (v1.0)",
+      why_changed: "브랜드 파트너사 시장 인텔리전스, Grounded Knowledge Assistant(/portal/help/ask), Daily Auto-Engine, Claim Risk 팩트체크 및 휴먼 승인 게이트 운영 가이드 정립",
+      effective_date: "2026-10-02",
+      created_by_name: "INSIGHTS Editorial Desk",
+      published_at: now,
+      created_at: now
     }
   ];
 
@@ -4546,6 +4659,96 @@ Official operational manual for K SELECT Brand Portal partners covering main das
       related_route: "/admin/purchasing/dashboard",
       manual_title: "K SELECT Brand Portal 성과 분석, 대시보드 KPI 및 운영 지표 활용 가이드 (MAN-B-RPT-001)",
       created_at: now
+    },
+    {
+      id: "rel-int-help-ask",
+      knowledge_id: "kno-intelligence-insights-v10",
+      related_portal: "Brand Portal",
+      related_module: "INSIGHTS",
+      related_menu: "Grounded Knowledge Assistant",
+      related_route: "/portal/help/ask",
+      manual_title: "K SELECT Brand Portal 시장 인텔리전스, 데일리 인사이트 및 지식 검색 가이드 (MAN-B-INT-001)",
+      created_at: now
+    },
+    {
+      id: "rel-int-help-main",
+      knowledge_id: "kno-intelligence-insights-v10",
+      related_portal: "Brand Portal",
+      related_module: "INSIGHTS",
+      related_menu: "Knowledge & Help Center",
+      related_route: "/portal/help",
+      manual_title: "K SELECT Brand Portal 시장 인텔리전스, 데일리 인사이트 및 지식 검색 가이드 (MAN-B-INT-001)",
+      created_at: now
+    },
+    {
+      id: "rel-admin-int-overview",
+      knowledge_id: "kno-intelligence-insights-v10",
+      related_portal: "Admin",
+      related_module: "INSIGHTS",
+      related_menu: "Insights Overview Dashboard",
+      related_route: "/admin/insights",
+      manual_title: "K SELECT Brand Portal 시장 인텔리전스, 데일리 인사이트 및 지식 검색 가이드 (MAN-B-INT-001)",
+      created_at: now
+    },
+    {
+      id: "rel-admin-int-queue",
+      knowledge_id: "kno-intelligence-insights-v10",
+      related_portal: "Admin",
+      related_module: "INSIGHTS",
+      related_menu: "AI Draft Review Queue",
+      related_route: "/admin/insights/queue",
+      manual_title: "K SELECT Brand Portal 시장 인텔리전스, 데일리 인사이트 및 지식 검색 가이드 (MAN-B-INT-001)",
+      created_at: now
+    },
+    {
+      id: "rel-admin-int-detail",
+      knowledge_id: "kno-intelligence-insights-v10",
+      related_portal: "Admin",
+      related_module: "INSIGHTS",
+      related_menu: "Insight Article Editor",
+      related_route: "/admin/insights/[id]",
+      manual_title: "K SELECT Brand Portal 시장 인텔리전스, 데일리 인사이트 및 지식 검색 가이드 (MAN-B-INT-001)",
+      created_at: now
+    },
+    {
+      id: "rel-admin-int-all",
+      knowledge_id: "kno-intelligence-insights-v10",
+      related_portal: "Admin",
+      related_module: "INSIGHTS",
+      related_menu: "All Insights Library",
+      related_route: "/admin/insights/all",
+      manual_title: "K SELECT Brand Portal 시장 인텔리전스, 데일리 인사이트 및 지식 검색 가이드 (MAN-B-INT-001)",
+      created_at: now
+    },
+    {
+      id: "rel-admin-int-runs",
+      knowledge_id: "kno-intelligence-insights-v10",
+      related_portal: "Admin",
+      related_module: "INSIGHTS",
+      related_menu: "Automation Runs & Logs",
+      related_route: "/admin/insights/automation-runs",
+      manual_title: "K SELECT Brand Portal 시장 인텔리전스, 데일리 인사이트 및 지식 검색 가이드 (MAN-B-INT-001)",
+      created_at: now
+    },
+    {
+      id: "rel-admin-int-rules",
+      knowledge_id: "kno-intelligence-insights-v10",
+      related_portal: "Admin",
+      related_module: "INSIGHTS",
+      related_menu: "Editorial Rules & Quotas",
+      related_route: "/admin/insights/rules",
+      manual_title: "K SELECT Brand Portal 시장 인텔리전스, 데일리 인사이트 및 지식 검색 가이드 (MAN-B-INT-001)",
+      created_at: now
+    },
+    {
+      id: "rel-admin-int-categories",
+      knowledge_id: "kno-intelligence-insights-v10",
+      related_portal: "Admin",
+      related_module: "INSIGHTS",
+      related_menu: "Category & Tag Management",
+      related_route: "/admin/insights/categories",
+      manual_title: "K SELECT Brand Portal 시장 인텔리전스, 데일리 인사이트 및 지식 검색 가이드 (MAN-B-INT-001)",
+      created_at: now
     }
   ];
 
@@ -4703,6 +4906,19 @@ Official operational manual for K SELECT Brand Portal partners covering main das
       file_url: "/api/admin/knowledge/asset/asset-reports-performance-v10",
       file_name: "MAN-B-RPT-001_Reports-Performance_V1.pdf",
       file_size: 2503532,
+      published_date: "2026-10-02",
+      created_at: now
+    },
+    {
+      id: "asset-intelligence-insights-v10",
+      knowledge_id: "kno-intelligence-insights-v10",
+      manual_title: "K SELECT Brand Portal 시장 인텔리전스, 데일리 인사이트 및 지식 검색 가이드 (MAN-B-INT-001)",
+      version: "v1.0",
+      language: "KO",
+      is_current: true,
+      file_url: "/api/admin/knowledge/asset/asset-intelligence-insights-v10",
+      file_name: "MAN-B-INT-001_Intelligence_V1.pdf",
+      file_size: 2640379,
       published_date: "2026-10-02",
       created_at: now
     }

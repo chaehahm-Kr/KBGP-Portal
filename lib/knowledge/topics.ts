@@ -186,11 +186,19 @@ const AUTHORITATIVE_PRIMARY_TOPIC_MAP: Record<string, string> = {
   "kno-brand-policy-v10": "topic-brand", // MAN-B-BRAND-001 -> 브랜드 관리
   "kno-onboarding-guide-v10": "topic-start", // MAN-B-ONB-001 -> 시작하기
   "kno-product-management-v10": "topic-product", // MAN-B-PROD-001 -> 상품 등록 & 관리
-  "kno-order-management-v10": "topic-orders", // MAN-B-ORD-001 -> 발주 요청 & 오더
   "kno-regulatory-compliance-v11": "topic-regulatory", // MAN-B-REG-001 -> 인허가 & 규정
+  "kno-retail-applications-v10": "topic-retail", // MAN-B-RET-001 -> 입점 & 리테일 네트워크
+  "kno-order-management-v10": "topic-orders", // MAN-B-ORD-001 -> 발주 요청 & 오더
+  "kno-shipping-logistics-v10": "topic-logistics", // MAN-B-LOG-001 -> 재고 & 물류
+  "kno-finance-settlement-v10": "topic-finance", // MAN-B-FIN-001 -> 정산 & 결제
+  "kno-marketing-promotion-v10": "topic-marketing",
+  "kno-intelligence-insights-v10": "topic-marketing", // MAN-B-INT-001 -> 프로모션 & 마케팅 / 시장 인텔리전스
+  "kno-permissions-user-management-v10": "topic-company", // MAN-B-PERM-001 -> 회사 & 사용자 관리
+  "kno-task-communication-v10": "topic-company", // MAN-B-TASK-001 -> 회사 & 사용자 관리
+  "kno-reports-performance-v10": "topic-company", // MAN-B-RPT-001 -> 성과 지표 & 회사 관리
   "kno-002-brand-faq": "topic-start", // Onboarding FAQ -> 시작하기
-  "kno-insights-manual-v10": "topic-start",
-  "kno-insights-policy-prohibitions": "topic-start"
+  "kno-insights-manual-v10": "topic-marketing",
+  "kno-insights-policy-prohibitions": "topic-marketing"
 };
 
 /**
