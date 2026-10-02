@@ -75,7 +75,11 @@ Manuals/[MANUAL_ID]_[Title]/
 
 ## 3. End-to-End Manual Lifecycle (13 Sequential Stages)
 
-K SELECT 매뉴얼 엔지니어링은 단순한 "문서 작성"이 아닌 소프트웨어 엔지니어링과 동일한 엄격성을 갖는 13단계의 라이프사이클 파이프라인으로 실행됩니다:
+K SELECT 매뉴얼 엔지니어링은 단순한 "문서 작성"이 아닌 소프트웨어 엔지니어링과 동일한 엄격성을 갖는 13단계의 순차적 라이프사이클 파이프라인으로 실행됩니다.
+
+> [!IMPORTANT]
+> **Strict QA Gate Blocking Principle**:
+> 모든 단계는 이전 단계의 품질 게이트(QA Gate)를 공식 통과(PASS)해야만 다음 단계로 진입할 수 있습니다. QA를 통과하지 않은 상태에서 패키지 생성, 디자인 렌더링, 또는 DB 배포를 진행하는 행위는 엄격히 금지됩니다.
 
 ```text
 [1. Source Creation] ➔ [2. Source Review (R1)] ➔ [3. Claude Package Creation] ➔ [4. Package File Check]
@@ -83,104 +87,26 @@ K SELECT 매뉴얼 엔지니어링은 단순한 "문서 작성"이 아닌 소프
 [5. Package QA] ➔ [6. Claude Design Generation] ➔ [7. PDF QA] ➔ [8. Publish] ➔ [9. Publish QA]
          ↓
 [10. Knowledge Center Publish]* ➔ [11. Knowledge Publish QA]* ➔ [12. FAQ Publish]* ➔ [13. FAQ QA]*
-(*Public/Brand Portal 대상 매뉴얼에 한함. Internal SOP는 9단계에서 완료 가능)
+(*Public Brand Portal 대상 매뉴얼에 한함. Internal SOP는 9단계에서 완료)
 ```
 
-### 3.1 Stage 01: Source Creation (코드 & DB 기반 조사)
-- **목적**: 프로덕션 UI 경로, 컴포넌트, 서버 액션, API 라우트, DB 스키마, 상태 머신을 전수 조사하여 4대 표준 기획 문서를 작성.
-- **필수 입력**: 실서비스 환경(`portal.kselectnetwork.com`, `admin.kselectnetwork.com`), 소스코드(`app/`, `components/`, `lib/`), 마이그레이션 SQL(`supabase/migrations/`).
-- **필수 산출물**: `01_SOURCE/` 하위 4개 문서 (`_Source.md`, `_Field_Inventory.md`, `_Workflow_Map.md`, `_Screenshot_Requirements.md`).
-- **완료 기준**: 4개 문서 작성 완료, 모든 기술 용어 및 상태 코드가 코드와 1:1 일치.
+### 3.1 Stage-by-Stage Comprehensive Execution Specification
 
-### 3.2 Stage 02: Source Review & Canonical Correction (SRC-QA / R1)
-- **목적**: 작성된 Source 문서의 사실 무결성(Ground Truth)을 감사하고 미구현 기능, 과장된 표현, 도메인 경계 오류를 교정.
-- **검증 방법**: 코드 라인 단위 추적, DB 쿼리 실행, 실서비스 UI 대조.
-- **산출물**: Source Review Report 및 승인된 R1 문서.
-- **완료 기준**: 사실 검증 상태 태그 부여 완료 (`VERIFIED`, `NOT IMPLEMENTED`, `SYSTEM GAP`, `LEGACY`, `PENDING`).
-
-### 3.3 Stage 03: Claude Design Package Creation (PKG)
-- **목적**: Claude Design AI가 고품질 레이아웃과 디자인을 직접 생성할 수 있도록 완결된 디자인 패키지 폴더 구성.
-- **필수 산출물**: `02_CLAUDE_PACKAGE/` 하위 4개 루트 마크다운 + 4개 하위 디렉터리(`01_CONTENT/`, `02_SCREENSHOTS/`, `03_DIAGRAMS/`, `04_REFERENCE/`).
-- **완료 기준**: 마스터 디자인(`MAN-B-BRAND-001`) 명세 연계, 본문 텍스트 내 스크린샷 핀 콜아웃 완벽 매핑.
-
-### 3.4 Stage 04: Package File Check
-- **목적**: 물리적 파일 누락, OneDrive 동기화 지연, 빈 파일(0 bytes) 발생 여부를 사전 검사.
-- **검증 스크립트**: `node scripts/readback-verify-physical-files.js` 또는 `verify-package-files.ps1`.
-- **완료 기준**: 패키지 내 모든 파일의 `File Size > 0 bytes`, 읽기/쓰기 권한 정상.
-
-### 3.5 Stage 05: Package QA (PKG-QA)
-- **목적**: Source 4개 문서와 Package 8개 마크다운의 1:1 정합성, 스크린샷 11~14장의 고유 해시(Unique SHA-256) 검증.
-- **검증 항목**:
-  1. Source ↔ Package 내용 일치율 100%.
-  2. 스크린샷 손상 없음, 중복 해시 0건(Unique SHA-256 = N/N).
-  3. `SCREENSHOT_ANNOTATION_GUIDE.md`의 Pin 번호와 UI 컨트롤 의미 일치.
-- **완료 기준**: Package QA All Green 통과.
-
-### 3.6 Stage 06: Claude Design Generation (디자인 렌더링)
-- **목적**: Claude Design 프롬프트를 실행하여 마스터 가이드에 부합하는 웹/PDF 렌더링 산출물 생성.
-- **디자인 표준**: Dark Slate/Zinc 테마, 피그마 수준의 카드 그리드, 인디고/에메랄드/앰버/로즈 액센트, 명확한 타이포그래피.
-- **완료 기준**: 디자인 초안 PDF 생성 완료.
-
-### 3.7 Stage 07: PDF QA (최종 PDF 검수)
-- **목적**: 렌더링된 PDF의 모든 페이지를 시각적·구조적으로 전수 감사.
-- **검사 체크리스트**:
-  - [ ] 페이지 누락, 중복, 잘림(Cut-off) 여부
-  - [ ] 텍스트 오버플로우(Overflow) 및 테이블 줄바꿈 깨짐 여부
-  - [ ] 스크린샷 및 다이어그램 가독성, 해상도 저하 여부
-  - [ ] 어노테이션 핀(Pin 1, 2, 3...) 위치와 콜아웃 텍스트 정합성
-  - [ ] 내부 개발자 메모(`TODO`, `FIXME`, `Developer Note`, 임시 데이터) 잔존 여부
-  - [ ] 과장된 보증 표현(`100%`, `Always`, `Real-time`) 존재 여부
-- **완료 기준**: PDF QA 검수 보고서 승인.
-
-### 3.8 Stage 08: Publish (공식 배포 자산화)
-- **목적**: 승인된 최종 PDF를 배포 디렉터리에 격리 저장하고 프로덕션 제공 자산 폴더로 동기화.
-- **배포 경로**:
-  - 1차: `Manuals/[MANUAL_ID]/03_PUBLISHED/[MANUAL_ID]_[Title]_V1.pdf`
-  - 2차: `private_assets/manuals/[MANUAL_ID]_[Title]_V1.pdf` (서버 API 제공용 자산)
-- **완료 기준**: 파일 복사 완료 및 소스/배포 파일 간 SHA-256 일치 확인.
-
-### 3.9 Stage 09: Publish QA (배포 무결성 검증)
-- **목적**: Git 저장소 커밋 전 파일 손상 및 메타데이터 일치 검증.
-- **검증 항목**: 파일 크기, 페이지 수, PDF 렌더러 파싱 정상 여부, SHA-256 해시 기록.
-- **완료 기준**: Publish QA PASS.
-
-### 3.10 Stage 10: Knowledge Center Production Publish (지식 센터 등록)
-- **목적**: 배포된 PDF 매뉴얼을 프로덕션 Supabase 데이터베이스의 Knowledge Center 스키마에 공식 등록.
-- **대상 테이블**:
-  1. `knowledge_items`: 매뉴얼 메타데이터 및 한국어/영어 개요 등록 (`status = 'PUBLISHED'`).
-  2. `knowledge_versions`: 버전 이력 및 변경 사유 등록 (`version = 'v1.0'`).
-  3. `knowledge_manual_assets`: 실물 PDF 자산 엔드포인트 연동 (`file_url = '/api/admin/knowledge/asset/[asset_id]'`).
-  4. `knowledge_relations`: 연관 포털 메뉴 및 URL 라우트 매핑 (`related_route = '/portal/...'`).
-- **완료 기준**: Supabase 4대 테이블 upsert 완료.
-
-### 3.11 Stage 11: Knowledge Publish QA
-- **목적**: 등록된 지식 아이템이 포털 및 어드민에서 정상 조회·다운로드되는지 검증.
-- **검증 항목**:
-  - `knowledge_items`에서 `status = 'PUBLISHED'` 확인.
-  - `knowledge_topics`와의 모듈 매칭 및 검색 키워드 바인딩 확인.
-  - 인증된 브라우저 세션에서 `/api/admin/knowledge/asset/[asset_id]` 다운로드 응답 코드 `200 OK` 및 `Content-Type: application/pdf` 확인.
-- **완료 기준**: Knowledge Center 연동 무결성 확인.
-
-### 3.12 Stage 12: Knowledge Center FAQ Publish (FAQ 생성 및 배포)
-- **목적**: Published PDF를 Authoritative Source로 삼아 브랜드사 핵심 질문 8~12개를 작성하고 배포.
-- **DB 테이블**: `knowledge_faqs`
-  - `portal_scope = 'BRAND'`
-  - `source_knowledge_id = [kno-id]`
-  - `topic_id = [topic-id]`
-  - `status = 'APPROVED'`, `kind = 'BOTH'`
-  - 한국어(`question_ko`, `answer_ko`) 및 영어(`question_en`, `answer_en`) 병기
-  - 편집자 추천 `is_featured = true` 3~4건 선정
-- **인메모리 동기화**: `lib/knowledge/store.ts` 내 `memoryFaqs` 배열에 동일 데이터 반영 (DB 장애 시 Fallback 보장).
-- **완료 기준**: DB upsert 및 `store.ts` 동기화 완료.
-
-### 3.13 Stage 13: FAQ QA (최종 FAQ 검수 및 검색 검증)
-- **목적**: 배포된 FAQ의 중복성, 기존 FAQ 그룹 회귀(Regression), 키워드 검색 노출성을 전수 감사.
-- **검증 항목**:
-  1. 전체 FAQ 카운트 증가 확인 (기존 N개 ➔ 신규 N+M개 정상 반영).
-  2. 기존 모든 FAQ 그룹(BRAND, ONB, PROD, ORD, REG, RET, LOG, PERM, FIN 등) 100% 온전성 유지.
-  3. 중복 FAQ ID 및 중복 질문 0건 (Zero duplicates).
-  4. 핵심 키워드(5~8개) Search Discovery 테스트 실행 및 통과.
-- **완료 기준**: FAQ QA Audit Script All Pass ➔ Git Commit & Push ➔ `Local HEAD === origin/main` 일치.
+| 단계 번호 및 명칭 | Purpose (목적) | Input (필수 입력) | Required Actions & Files | QA Gate / Verification Method | Output (산출물) | Next Step Entry Criteria (진입 조건) |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **01. Source Creation** | 프로덕션 UI, 코드, DB 스키마를 전수 조사하여 4대 기획 문서 작성 | 실서비스 환경, 코드베이스(`app/`, `lib/`), DB 마이그레이션 SQL | `01_SOURCE/` 하위 4개 문서 작성 | 소스코드/DB 교차 대조 | `01_SOURCE/` 4개 문서 초안 | 4개 문서 작성 완료 및 사실 정합성 1차 확인 |
+| **02. Source Review (R1)** | 사실 무결성 감사 및 미구현 기능/도메인 경계 오류 교정 | Source 4개 문서 초안, 소스코드 라인 | Ground Truth 감사 및 R1 수정 반영 | **Gate 1: Source QA Gate** (코드 라인 단위 감사) | 승인된 `01_SOURCE/` R1 문서군 | Source Review All Green 승인 |
+| **03. Claude Package Creation** | Claude Design AI가 고품질 PDF를 생성할 수 있는 번들 구성 | 승인된 Source R1 문서군 | `02_CLAUDE_PACKAGE/` 8개 마크다운 작성 및 스크린샷 캡처 | 패키지 파일 구조 정합성 검사 | `02_CLAUDE_PACKAGE/` 초기 번들 | 패키지 구성 파일 및 이미지 준비 완료 |
+| **04. Package File Check** | 물리적 파일 누락, 0바이트 파일, 동기화 지연 사전 검사 | `02_CLAUDE_PACKAGE/` 디렉터리 | 파일 시스템 실재성 및 크기 전수 스캔 | `readback-verify-physical-files.js` | 파일 물리적 무결성 확인 로그 | 모든 파일 `Size > 0 bytes` 확인 |
+| **05. Package QA** | Source ↔ Package 1:1 대조 및 스크린샷 해시 감사 | `01_SOURCE/` 및 `02_CLAUDE_PACKAGE/` | 1:1 내용 정합성 검증, 스크린샷 Unique 해시 검사 | **Gate 2: Package QA Gate** (`verify-screenshots-hash.js`) | Package QA Audit Report | Source ↔ Package 일치율 100%, 해시 100% Unique |
+| **06. Claude Design Generation** | 마스터 디자인 시스템에 따른 고품질 PDF/HTML 렌더링 | `CLAUDE_DESIGN_MASTER_PROMPT.md`, `MAN-B-BRAND-001` Ref | Claude AI 디자인 실행 및 PDF 렌더링 | 디자인 렌더러 실행 | PDF 초안 아티팩트 | PDF 렌더링 완료 |
+| **07. PDF QA** | 렌더링된 PDF의 전 페이지 시각적·구조적 전수 감사 | PDF 초안, 마스터 디자인 가이드 | 10대 검사항목 전수 검수 (오버플로우, 핀 매핑, TODO 등) | **Gate 3: PDF QA Gate** (전 페이지 시각/텍스트 감사) | Approved Final PDF | 10대 검사 체크리스트 전원 PASS |
+| **08. Publish** | 최종 승인된 PDF를 공식 배포 디렉터리 및 자산 폴더로 복제 | Approved Final PDF | `03_PUBLISHED/` 저장 및 `private_assets/manuals/` 동기화 | SHA-256 해시 일치 확인 | Published PDF 자산 | 파일 복제 및 해시 일치 확인 |
+| **09. Publish QA** | 배포된 PDF의 바이너리 무결성 및 Git 추적 상태 검증 | `03_PUBLISHED/` 내 PDF | 파일 크기, 페이지 수, 파싱 정상 여부 확인 | Binary Parser / PDF Inspector Script | Publish QA Report | Publish QA All Pass (**Internal SOP 종료 지점**) |
+| **10. Knowledge Center Publish** | 프로덕션 Supabase Knowledge Center에 공식 등록 (Brand Portal 전용) | Published PDF, 메타데이터 | Supabase 4대 테이블(`knowledge_items`, `versions`, `assets`, `relations`) upsert | Supabase SQL / Script Execution | 등록된 Knowledge Item Record | Supabase upsert 성공 확인 |
+| **11. Knowledge Publish QA** | 지식 아이템 상태 및 실물 자산 다운로드 API 검증 | Supabase DB, 포털 라우트 | `status = 'PUBLISHED'` 및 `/api/admin/knowledge/asset/[id]` 200 OK 확인 | **Gate 4: Knowledge Publish Gate** (인증 세션 API 검증) | Knowledge Center QA Report | Knowledge Item 정상 활성화 및 다운로드 성공 |
+| **12. FAQ Publish** | Published PDF를 근거로 8~12개 공식 FAQ 생성 및 배포 | Published PDF, 등록된 Knowledge Item | `knowledge_faqs` upsert 및 `lib/knowledge/store.ts` 동기화 | DB upsert & TypeScript Typecheck | 등록된 8~12개 FAQ Record | DB upsert 및 `store.ts` 동기화 완료 |
+| **13. FAQ QA** | FAQ 검색 디스커버리, 중복 감사, 기존 FAQ 그룹 회귀 검증 | Supabase `knowledge_faqs`, `store.ts` | Search Discovery 쿼리 테스트, 중복 0건 감사, 회귀 테스트 | **Gate 5: FAQ Publish Gate** (`verify-[domain]-faqs-publish.js`) | FAQ QA Final Report | 0 Duplicates, All Queries Pass, `Local HEAD === origin/main` |
 
 ---
 
@@ -189,23 +115,25 @@ K SELECT 매뉴얼 엔지니어링은 단순한 "문서 작성"이 아닌 소프
 K SELECT 매뉴얼의 신뢰성은 엄격한 **Production Grounding Rules**에서 비롯됩니다. 작성자는 다음 원칙을 반드시 준수해야 합니다.
 
 ### 4.1 Strict Grounding Taxonomy (사실성 분류 체계)
-모든 기능과 설명은 다음 6대 상태 중 하나로 명확히 분류되어야 합니다:
+모든 기능과 설명은 다음 6대 상태 중 하나로 명확히 분류되어야 하며 상호 중복되어서는 안 됩니다:
 
 | 상태 태그 | 정의 및 작성 원칙 |
 | :--- | :--- |
 | `VERIFIED` | Production 코드베이스, DB 스키마, 실제 동작 UI에서 100% 확인된 기능. 사실 그대로 기술. |
 | `NOT IMPLEMENTED` | UI 버튼이나 필드는 없으나 사용자가 기대할 수 있는 기능. "미구현" 상태임을 명시하여 오해 방지. |
 | `SYSTEM GAP` | 정책적 요구사항과 현재 시스템 구현 사이에 괴리가 있는 부분. 우회 절차나 현재 한계를 솔직히 기술. |
-| `LEGACY` | 과거에 사용되었으나 현재는 사용되지 않거나 폐기 예정인 기능. 현재 권장 워크플로우와 구분 기술. |
-| `PENDING` | 배포 예정이나 현재 브랜치/DB에 완전히 반영되지 않은 상태. 사용자 매뉴얼에서는 제외하거나 사전 고지. |
+| `LEGACY` | 과거에 사용되었으나 현재는 사용되지 않거나 폐기 예정인 기능. 현재 권장 워크플로우와 명확히 구분. |
+| `PENDING` | 향후 배포 예정이나 현재 브랜치/DB에 완전히 반영되지 않은 상태. 사용자 매뉴얼에서는 제외하거나 사전 고지. |
 | `NOT APPLICABLE` | 특정 역할(Role), 특정 권한, 또는 특정 계약 형태(예: FOB vs DDP)에 적용되지 않는 항목. 적용 제외 범위를 명시. |
 
-### 4.2 Prohibition of Absolute & Unsupported Claims (과장 및 허위 보증 금지)
-다음과 같은 입증되지 않은 절대적 표현은 매뉴얼 및 FAQ에서 **사용이 엄격히 금지**됩니다:
-- ❌ **"100% 보장", "항상 즉시 처리", "완벽한 자동화"**: 시스템 장애, 심사 대기, 네트워크 지연 가능성이 있으므로 "조건 충족 시 자동 연산", "영업일 기준 순차 처리" 등으로 기술.
-- ❌ **"실시간(Real-time) 동기화"**: 주기적 폴링이나 비동기 트리거로 작동하는 경우 "이벤트 발생 시 자동 갱신" 등으로 정확히 표현.
-- ❌ **Mock/더미 데이터를 실제 데이터처럼 설명**: 테스트용 가상 데이터를 실서비스의 법적·재무적 기준으로 설명하지 말 것.
-- ❌ **미지원 기능을 지원되는 것처럼 설명**: (예: 포털 내 PDF 인보이스 자동 생성 기능 미구현 ➔ "외부 회계 시스템 PDF 파일 첨부 필수"로 기술).
+### 4.2 Prohibited Anti-Patterns (엄격 금지 사항)
+다음과 같은 작성 행위는 Ground Truth를 훼손하므로 엄격히 금지됩니다:
+1. ❌ **추측성 기능 기술**: 소스코드에 존재하지 않는 가상의 백오피스 자동화 로직을 있는 것처럼 작성하는 행위.
+2. ❌ **미존재 DB 테이블/컬럼 인용**: 마이그레이션 SQL에 정의되지 않은 가상의 스키마를 필드 인벤토리에 기재하는 행위.
+3. ❌ **가공의 API 엔드포인트/URL 라우트 기재**: 실제 라우트 핸들러가 없는 가상 URL을 안내하는 행위.
+4. ❌ **미래 기획을 현재 기능으로 둔갑**: 로드맵 상의 기획을 현재 운영 중인 기능으로 표현하는 행위.
+5. ❌ **Mock/더미 데이터를 실제 데이터처럼 기술**: 시뮬레이션용 임시 수치를 실제 재무/정산 기준으로 설명하는 행위.
+6. ❌ **근거 없는 절대적 표현 (Absolute Claims)**: "100% 즉시 처리", "완벽한 실시간 보장", "오류 없는 자동 연산" 등 과장 보증 표현.
 
 ### 4.3 Production Domain Boundary Disambiguation (도메인 상태 경계 구분)
 서로 다른 도메인의 상태를 혼용하여 기술하면 중대한 운영 사고를 유발하므로 다음 경계를 엄격히 구분합니다:
@@ -271,15 +199,15 @@ Claude Design AI가 일관된 K SELECT 엔터프라이즈 디자인 표준에 �
 ### 6.2 Mandatory PDF QA Inspection Checklist
 PDF 검수 담당자는 다음 10대 검사항목에 대해 체크를 수행해야 합니다:
 1. **페이지 수(Page Count)**: 기획된 챕터 분량과 실제 렌더링 페이지 수가 정확히 일치하는가?
-2. **레이아웃 오버플로우**: 텍스트나 테이블이 페이지 경계를 벗어나 잘리지 않았는가?
-3. **타이포그래피 위계**: H1, H2, H3 헤딩 및 본문 폰트 크기 비율이 적절한가?
-4. **이미지 해상도**: 스크린샷의 텍스트와 UI 요소가 선명하게 식별 가능한가?
-5. **어노테이션 핀 일치**: 스크린샷 위의 핀 번호와 하단 콜아웃 설명 번호가 정확히 일치하는가?
-6. **다이어그램 무결성**: Mermaid/ASCII 다이어그램의 선과 텍스트가 깨지지 않고 렌더링되었는가?
-7. **개발자 잔존물 검사**: `TODO`, `FIXME`, `Developer Note`, `lorem ipsum` 등 임시 텍스트가 전무한가?
-8. **도메인 경계 일치**: 수량, 금액, 상태 코드, URL 경로가 프로덕션 코드와 100% 일치하는가?
-9. **바닥글/헤더 일치**: 매뉴얼 ID, 버전 번호, 배포 일자, 페이지 번호(예: `12 / 21`)가 전 페이지에 정확한가?
-10. **PDF 파일 무결성**: 파일 손상 없이 Adobe Acrobat, 브라우저, Preview에서 완벽히 열리는가?
+2. **페이지 누락/중복**: 페이지 순서가 올바르고 중복 렌더링되거나 누락된 페이지가 없는가?
+3. **레이아웃 오버플로우/클리핑**: 텍스트, 테이블, 카드가 페이지 경계를 벗어나 잘리지 않았는가?
+4. **타이포그래피 위계 및 자간**: H1, H2, H3 헤딩 및 본문 폰트 크기 비율이 적절하며 줄간격이 깨지지 않았는가?
+5. **이미지 해상도 및 의미적 정확성**: 스크린샷이 선명하며, 해당 챕터에서 설명하는 실제 화면과 100% 일치하는가?
+6. **어노테이션 핀 및 콜아웃 일치**: 스크린샷 위의 핀 번호와 하단 콜아웃 설명 번호가 정확히 1:1로 매핑되는가?
+7. **다이어그램 무결성**: Mermaid/ASCII 다이어그램의 선과 텍스트가 깨지지 않고 완벽히 렌더링되었는가?
+8. **개발자 잔존물 검사**: `TODO`, `FIXME`, `Developer Note`, `lorem ipsum` 등 임시 텍스트가 전무한가?
+9. **바닥글/헤더 및 메타데이터 일치**: 매뉴얼 ID, 버전 번호, 배포 일자, 페이지 번호(예: `12 / 21`)가 전 페이지에 정확한가?
+10. **PDF 파일 무결성 및 SHA-256 기록**: 파일 손상 없이 뷰어에서 열리며 고유 SHA-256 해시가 기록되었는가?
 
 ---
 
@@ -309,7 +237,13 @@ K SELECT Knowledge Center는 Supabase PostgreSQL 데이터베이스의 다음 �
                                └───────────────────┘
 ```
 
-### 7.2 FAQ Creation & Grounding Rules
+### 7.2 Strict Knowledge Center ➔ FAQ Precondition & Boundary Rule
+> [!CAUTION]
+> **FAQ Creation Hard Prerequisite**:
+> FAQ는 반드시 **해당 매뉴얼의 Knowledge Item이 Supabase `knowledge_items` 테이블에 `status = 'PUBLISHED'`로 사전에 등록되어 있어야만** 생성 및 배포할 수 있습니다.
+> 연계할 Knowledge Item이 존재하지 않는 상태에서 임의의 가상 `source_knowledge_id`를 부여하여 FAQ를 단독 배포하는 행위는 엄격히 금지되며, 이 경우 즉시 FAQ 배포 작업을 중단(STOP)하고 선행 Knowledge Center 등록을 완료해야 합니다.
+
+### 7.3 FAQ Grounding & Fallback Synchronization Rules
 - **작성 수량**: 매뉴얼당 8~12개의 실무 중심 핵심 FAQ 작성.
 - **필수 필드**:
   - `id`: `faq-[domain]-[seq]` (예: `faq-fin-01`, `faq-log-01`)
@@ -337,13 +271,17 @@ K SELECT Knowledge Center는 Supabase PostgreSQL 데이터베이스의 다음 �
 | **Major Version** | `v1.0` ➔ `v2.0.0` | 핵심 비즈니스 로직 변경, 워크플로우 전면 개편, 도메인 분리, 권한 체계 대개편. | 전체 13단계 라이프사이클 재수행, 기존 Knowledge Item `ARCHIVED` 처리 후 신규 버전 발행. |
 
 ### 8.2 Cascading Update Impact Checklist
+> [!WARNING]
+> **Prohibited Anti-Pattern: Partial PDF-Only Update**:
+> PDF 파일만 수정하고 Knowledge Item, Knowledge Version, Knowledge Asset 및 FAQ를 갱신하지 않고 방치하는 행위는 지식 베이스의 불일치를 초래하는 엄격한 금지 행위입니다.
+
 시스템 변경 시 매뉴얼 담당자는 다음 연쇄 영향(Cascading Impact)을 순서대로 반영해야 합니다:
 1. **Source Impact**: `01_SOURCE/` 하위 4개 문서에 변경된 필드, 라우트, 워크플로우 반영.
 2. **Screenshot Impact**: 변경된 UI 화면을 프로덕션에서 즉시 재촬영하여 `02_SCREENSHOTS/` 갱신.
 3. **Package & Design Impact**: `Manual_Content.md` 및 `Design_Structure.md` 수정 후 PDF 재렌더링.
 4. **Publish & Asset Impact**: `03_PUBLISHED/` 및 `private_assets/manuals/`의 PDF 교체.
 5. **Knowledge Version Impact**: Supabase `knowledge_versions`에 변경 내역(`what_changed`, `why_changed`) 등록.
-6. **FAQ Impact**: 변경된 워크플로우와 모순되는 기존 FAQ 답변을 수정하고 필요 시 신규 FAQ 추가.
+6. **FAQ Impact**: 변경된 워크플로우와 모순되는 기존 FAQ 답변을 수정하고 필요 시 신규 FAQ 추가 및 `store.ts` 동기화.
 
 ---
 
@@ -353,7 +291,7 @@ K SELECT Knowledge Center는 Supabase PostgreSQL 데이터베이스의 다음 �
 | :--- | :--- | :--- | :--- |
 | **대상 독자** | 브랜드 파트너사 임직원, 공급사 운영자 | K SELECT 본사 직원, 개발자, 운영팀 | K SELECT 최고 관리자, 시스템 감사관 |
 | **공개 범위** | Brand Portal 지식 센터 (`/portal/help`) | 내부 문서 보관소 (`Manuals/MAN-I-*`) | Admin 시스템 전용 (`/admin/knowledge`) |
-| **Knowledge Center 등록** | **필수 (MANDATORY)** | **선택적 (내부 전용 태그 시 등록 가능)** | **필수 (ADMIN 전용 스코프)** |
+| **Knowledge Center 등록** | **필수 (MANDATORY)** | **원칙적 제외 (NOT APPLICABLE / Internal Only)** | **필수 (ADMIN 전용 스코프)** |
 | **공개 FAQ 배포** | **필수 (8~12개 배포)** | **원칙적 제외 (NOT APPLICABLE)** | 필요 시 내부 관리자 FAQ로 제한 배포 |
 | **스크린샷 스코프** | `SCR-B-*` (브랜드 화면 우선) | `SCR-I-*` (내부 도구 및 워크플로우) | `SCR-A-*` (어드민 백오피스 화면 전용) |
 

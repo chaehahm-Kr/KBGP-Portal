@@ -53,12 +53,12 @@ Knowledge Center에 등록되는 Supabase PostgreSQL 데이터베이스의 테�
 | `type` | `VARCHAR(50)` | `NOT NULL` | 문서 유형: `MANUAL`, `GUIDE`, `POLICY`, `SOP`, `FAQ` |
 | `source_type` | `VARCHAR(50)` | `DEFAULT 'DOCUMENT'` | 원본 출처 유형: `DOCUMENT`, `SYSTEM`, `INLINE` |
 | `module` | `VARCHAR(50)` | `NOT NULL` | 연관 시스템 모듈 (예: `FINANCE`, `LOGISTICS`, `PRODUCTS`, `ORDERS`) |
-| `category` | `VARCHAR(50)` | `NOT NULL` | 카테고리 (예: `Brand Portal`, `Admin`, `Retail Network`) |
+| `category` | `VARCHAR(50)` | `NOT NULL` | 카테고리 (예: `Brand Portal`, `Admin`, `Retail Network`, `Internal SOP`) |
 | `tags` | `TEXT[]` | `DEFAULT '{}'` | 검색 키워드 태그 배열 |
 | `audience` | `TEXT[]` | `NOT NULL` | 대상 독자 배열: `['BRAND', 'INTERNAL', 'ADMIN / MANAGEMENT']` |
 | `current_version` | `VARCHAR(20)` | `DEFAULT 'v1.0'` | 현재 유효 버전 태그 |
 | `status` | `VARCHAR(30)` | `NOT NULL` | 배포 상태: `DRAFT`, `UNDER_REVIEW`, `PUBLISHED`, `ARCHIVED` |
-| `portal_scope` | `VARCHAR(30)` | `DEFAULT 'BRAND'` | 노출 포털 범위: `BRAND`, `ADMIN`, `RETAIL`, `INTERNAL` |
+| `portal_scope` | `VARCHAR(30)` | `DEFAULT 'BRAND'` | 노출 포털 범위: `BRAND` (브랜드 공개), `ADMIN` (관리자 전용), `INTERNAL` (내부 전용) |
 | `document_url` | `VARCHAR(255)` | `NULLABLE` | PDF 서빙 API 엔드포인트 (`/api/admin/knowledge/asset/[asset_id]`) |
 | `document_name` | `VARCHAR(255)` | `NULLABLE` | 실물 PDF 파일명 (예: `MAN-B-FIN-001_Finance-Settlement_V1.pdf`) |
 | `document_size` | `BIGINT` | `NULLABLE` | 파일 크기 (Bytes) |
@@ -127,7 +127,7 @@ Knowledge Center에 등록되는 Supabase PostgreSQL 데이터베이스의 테�
 | `id` | `VARCHAR(100)` | `PRIMARY KEY` | FAQ 고유 ID (예: `faq-fin-01`, `faq-log-01`) |
 | `portal_scope` | `VARCHAR(30)` | `DEFAULT 'BRAND'` | 포털 범위 (`BRAND`, `ADMIN`, `RETAIL`) |
 | `topic_id` | `VARCHAR(100)` | `FK -> knowledge_topics.id` | 연관 토픽 ID (예: `topic-finance`, `topic-logistics`) |
-| `source_knowledge_id` | `VARCHAR(100)` | `FK -> knowledge_items.id` | 연계 매뉴얼 ID (예: `kno-finance-settlement-v10`) |
+| `source_knowledge_id` | `VARCHAR(100)` | `FK -> knowledge_items.id` | **[필수 선행 조건]** 연계 매뉴얼 ID (반드시 `status = 'PUBLISHED'`인 Item 참조) |
 | `source_version` | `VARCHAR(20)` | `DEFAULT 'v1.0'` | 인용 기준 버전 |
 | `source_title` | `VARCHAR(255)` | `NOT NULL` | 인용 매뉴얼 명칭 |
 | `question_ko` | `TEXT` | `NOT NULL` | 한국어 질문 문장 |
@@ -151,12 +151,12 @@ Knowledge Center에 등록되는 Supabase PostgreSQL 데이터베이스의 테�
 
 | 필드명 | 데이터 타입 | 설명 / 예시 |
 | :--- | :--- | :--- |
-| `Screenshot ID` | `VARCHAR(50)` | `SCR-B-[DOMAIN]-[SEQ]` (예: `SCR-B-FIN-001`) |
+| `Screenshot ID` | `VARCHAR(50)` | `SCR-[SCOPE]-[DOMAIN]-[SEQ]` (예: `SCR-I-DOC-001`, `SCR-B-FIN-001`) |
 | `Page / Chapter Anchor` | `VARCHAR(100)` | 매뉴얼 본문 챕터 및 섹션 (예: `Chapter 1 · Section 1.2`) |
-| `Target Route` | `VARCHAR(255)` | 캡처 화면의 URL (예: `https://portal.kselectnetwork.com/portal/finance`) |
+| `Target Route` | `VARCHAR(255)` | 캡처 화면의 URL (예: `https://portal.kselectnetwork.com/portal/help/manuals`) |
 | `Pin Identifier` | `VARCHAR(20)` | `Pin 1`, `Pin 2`, `Pin 3` ... 시각적 원형 뱃지 |
-| `UI Element Name` | `VARCHAR(100)` | 대상 UI 컴포넌트 명칭 (예: `Summary Metrics Header Card`) |
-| `Technical Code Path` | `VARCHAR(255)` | 컴포넌트 소스 경로 (예: `components/finance/finance-summary-cards.tsx`) |
+| `UI Element Name` | `VARCHAR(100)` | 대상 UI 컴포넌트 명칭 (예: `Manuals Library Card Grid`) |
+| `Technical Code Path` | `VARCHAR(255)` | 컴포넌트 소스 경로 (예: `app/portal/help/manuals/page.tsx`) |
 | `User Action / Meaning` | `TEXT` | 사용자가 해당 영역에서 취해야 할 행동 및 화면 데이터의 비즈니스적 의미 |
 
 ---
