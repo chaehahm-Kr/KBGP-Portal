@@ -221,21 +221,31 @@ export async function requestRetailerPasswordReset(
     const emailStr = email.trim().toLowerCase();
     const adminClient = createAdminClient();
 
-    // 1. Verify if the account exists as a retailer user
-    const { data: profile } = await adminClient
-      .from("profiles")
-      .select("id, role")
-      .eq("email", emailStr)
-      .eq("role", "retailer")
-      .maybeSingle();
+    // 1. Verify if the account exists as a retailer user in Auth & Profiles
+    const { data: usersData } = await adminClient.auth.admin.listUsers();
+    const user = usersData?.users?.find(
+      (u) => u.email?.toLowerCase() === emailStr
+    );
 
-    if (profile) {
-      // Get canonical Retailer site URL dynamically from headers
+    let isRetailer = false;
+    if (user) {
+      const { data: profile } = await adminClient
+        .from("profiles")
+        .select("id, role")
+        .eq("id", user.id)
+        .maybeSingle();
+      if (profile?.role === "retailer") {
+        isRetailer = true;
+      }
+    }
+
+    if (user && isRetailer) {
+      // Get canonical site URL dynamically from headers
       const headersList = await headers();
-      const host = headersList.get("host") || "portal.kselecthub.com";
+      const host = headersList.get("host") || "portal.kselectnetwork.com";
       const isLocal = host.includes("localhost") || host.includes("127.0.0.1");
-      const siteUrl = isLocal ? `http://${host}` : "https://portal.kselecthub.com";
-      const targetRedirect = `${siteUrl}/reset-password`;
+      const siteUrl = isLocal ? `http://${host}` : "https://portal.kselectnetwork.com";
+      const targetRedirect = `${siteUrl}/retailer/reset-password`;
 
       // 2. Generate Supabase recovery link
       const { data, error } = await adminClient.auth.admin.generateLink({
