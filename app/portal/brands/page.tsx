@@ -8,6 +8,7 @@ import { BrandOnboardingBanner } from "@/components/brand/brand-onboarding-banne
 import { BrandListClient, type BrandItemResolved } from "@/components/brand/brand-list-client";
 import { hasPortalPermission } from "@/lib/company/permissions";
 import { AccessDeniedView } from "@/components/portal/access-denied";
+import { COMPANY_PROFILE_SELECT } from "@/lib/company/profile-columns";
 
 export const metadata: Metadata = {
   title: "브랜드 관리 | 파트너 포털",
@@ -32,7 +33,7 @@ export default async function BrandsPage() {
   // Fetch company intro to check onboarding confirmation
   const { data: company } = await supabase
     .from("companies")
-    .select("intro")
+    .select(`intro, ${COMPANY_PROFILE_SELECT}`)
     .eq("id", companyId)
     .single();
 

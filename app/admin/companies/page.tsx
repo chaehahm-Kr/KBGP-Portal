@@ -7,6 +7,7 @@ import { getSystemCompanyConfigs } from "@/lib/settings/actions";
 import { CompaniesTableClient } from "@/components/admin/companies-table-client";
 import { formatCanonicalCountryName } from "@/lib/constants/countries";
 import { evaluateCompanyOnboarding } from "@/lib/company/onboarding-status";
+import { COMPANY_PROFILE_SELECT } from "@/lib/company/profile-columns";
 
 export const dynamic = "force-dynamic";
 
@@ -30,7 +31,7 @@ export default async function AdminCompaniesPage() {
     supabase
       .from("companies")
       .select(`
-        id, name, country, status, intro, created_at,
+        id, name, country, status, intro, created_at, ${COMPANY_PROFILE_SELECT},
         brands (id, is_active),
         products (id, name, selection_status, status, price_usd_fob, price_krw_retail)
       `)

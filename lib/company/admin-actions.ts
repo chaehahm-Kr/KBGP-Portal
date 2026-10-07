@@ -61,7 +61,70 @@ export interface CompanyParsedMetadata {
   brand_onboarding_confirmed_at?: string | null;
 }
 
+/**
+ * DATA-JSON-MIG-003: 회사 행에 profile_migrated_at 이 있으면 companies 칸(0134)을 우선하고,
+ * company_contacts 가 함께 조회됐으면 연락처도 테이블 값을 쓴다. 없으면 intro JSON 그대로.
+ * 칸을 쓰려면 select 에 COMPANY_PROFILE_SELECT(lib/company/profile-columns.ts)를 덧붙인다.
+ */
 export async function parseCompanyMetadata(company: any): Promise<CompanyParsedMetadata> {
+  const fromIntro = await parseCompanyMetadataFromIntro(company);
+  if (!company?.profile_migrated_at) return fromIntro;
+
+  const addr1 = company.address_1 || "";
+  const addr2 = company.address_2 || "";
+  const cityVal = company.city || "";
+  const stateVal = company.state || "";
+  const zipVal = company.zip_code || "";
+  const fullAddress = addr1
+    ? `${addr1}${addr2 ? " " + addr2 : ""}${cityVal ? ", " + cityVal : ""}${stateVal ? ", " + stateVal : ""}${zipVal ? " (" + zipVal + ")" : ""}`
+    : "";
+
+  const logoPath = company.logo_path || null;
+  const logoUrl = logoPath === (fromIntro.logoPath || null)
+    ? fromIntro.logoUrl ?? null
+    : logoPath ? await getSignedFileUrl(logoPath) : null;
+
+  const contacts: CompanyContact[] = Array.isArray(company.company_contacts)
+    ? [...company.company_contacts]
+        .sort((a: any, b: any) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
+        .map((c: any) => ({
+          id: c.id,
+          name: c.name || "",
+          englishName: c.english_name || "",
+          koreanLastName: c.korean_last_name || "",
+          koreanFirstName: c.korean_first_name || "",
+          englishFirstName: c.english_first_name || "",
+          englishLastName: c.english_last_name || "",
+          phone: c.phone || "",
+          email: c.email || "",
+          title: c.title || "",
+          position: c.position || "",
+          isPrimary: Boolean(c.is_primary),
+        }))
+    : fromIntro.contacts;
+
+  return {
+    ...fromIntro,
+    description: company.description ?? "",
+    address: fullAddress,
+    address_1: addr1,
+    address_2: addr2,
+    city: cityVal,
+    state: stateVal,
+    zip_code: zipVal,
+    website: company.website ?? "",
+    adminMemo: company.admin_memo ?? "",
+    contacts,
+    logoPath,
+    logoUrl,
+    team_onboarding_skipped: Boolean(company.team_onboarding_skipped),
+    company_onboarding_confirmed_at: company.company_onboarding_confirmed_at || null,
+    admin_profile_onboarding_confirmed_at: company.admin_profile_onboarding_confirmed_at || null,
+    brand_onboarding_confirmed_at: company.brand_onboarding_confirmed_at || null,
+  };
+}
+
+async function parseCompanyMetadataFromIntro(company: any): Promise<CompanyParsedMetadata> {
   const intro = company.intro || "";
   let types: string[] = ["Brand Owner"];
   let companyCode = company.company_code || "";

@@ -8,6 +8,7 @@ import { getCompanyShippingOrigins } from "@/lib/company/shipping-origin-actions
 import { hasMenuPermission, hasPortalPermission } from "@/lib/company/permissions";
 import { CompanyProfileManager } from "@/components/portal/company-profile-manager";
 import { AccessDeniedView } from "@/components/portal/access-denied";
+import { COMPANY_PROFILE_SELECT } from "@/lib/company/profile-columns";
 
 export const dynamic = "force-dynamic";
 
@@ -31,7 +32,7 @@ export default async function PortalCompanyInfoPage() {
 
   const { data: company } = await supabase
     .from("companies")
-    .select("id, name, business_registration_number, country, contact_name, contact_phone, intro, status, created_at")
+    .select(`id, name, business_registration_number, country, contact_name, contact_phone, intro, status, created_at, ${COMPANY_PROFILE_SELECT}`)
     .eq("id", membership.companyId)
     .single();
 

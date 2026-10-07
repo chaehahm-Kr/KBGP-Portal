@@ -10,6 +10,7 @@ import { getSystemCompanyConfigs } from "@/lib/settings/actions";
 import { getCompanyShippingOrigins } from "@/lib/company/shipping-origin-actions";
 import { CompanyDetailManager } from "@/components/admin/company-detail-manager";
 import { resolveEffectiveSku } from "@/lib/product/types";
+import { COMPANY_PROFILE_SELECT } from "@/lib/company/profile-columns";
 
 export const metadata: Metadata = {
   title: "회사 상세 정보 | K SELECT NETWORK 어드민",
@@ -28,7 +29,7 @@ export default async function AdminCompanyDetailPage({
     const { data: company } = await supabase
       .from("companies")
       .select(
-        "id, name, business_registration_number, country, contact_name, contact_phone, intro, status, created_at, company_code, company_roles(role)"
+        `id, name, business_registration_number, country, contact_name, contact_phone, intro, status, created_at, company_code, company_roles(role), ${COMPANY_PROFILE_SELECT}`
       )
       .eq("id", id)
       .single();

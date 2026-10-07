@@ -17,6 +17,7 @@ import { evaluateCompanyOnboarding } from "@/lib/company/onboarding-status";
 import { CompanyOnboardingPopover } from "@/components/admin/company-onboarding-popover";
 import { getPersonDisplayName } from "@/lib/user/name-helper";
 import { NewBadge } from "@/components/admin/new-badge";
+import { COMPANY_PROFILE_SELECT } from "@/lib/company/profile-columns";
 
 export const metadata: Metadata = {
   title: "신청서 및 파트너 초대 관리 | K SELECT NETWORK 어드민",
@@ -103,7 +104,7 @@ export default async function AdminApplicationsPage({
     supabase
       .from("companies")
       .select(`
-        id, name, country, status, intro, created_at, contact_name, contact_phone,
+        id, name, country, status, intro, created_at, contact_name, contact_phone, ${COMPANY_PROFILE_SELECT},
         brands (id, is_active),
         products (id, name, selection_status, status, price_usd_fob, price_krw_retail)
       `),

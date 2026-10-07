@@ -18,6 +18,7 @@ import { getBatchProductCategoryCompletions } from "@/lib/product/attribute-comp
 import { resolveEffectiveSku } from "@/lib/product/types";
 import { getPersonGreetingName } from "@/lib/user/name-helper";
 import { hasPortalPermission } from "@/lib/company/permissions";
+import { COMPANY_PROFILE_SELECT } from "@/lib/company/profile-columns";
 
 export const dynamic = "force-dynamic";
 
@@ -40,7 +41,7 @@ export default async function PortalHomePage() {
 
   const { data: company } = await supabase
     .from("companies")
-    .select("name, business_registration_number, intro, country, contact_name, contact_phone")
+    .select(`name, business_registration_number, intro, country, contact_name, contact_phone, ${COMPANY_PROFILE_SELECT}`)
     .eq("id", companyId)
     .single();
 
