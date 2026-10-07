@@ -2,6 +2,7 @@ import { cookies } from "next/headers";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { verifyAdminSession } from "@/lib/auth/dal";
 import crypto from "crypto";
+import { serverEnv } from "@/lib/env/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 export interface ImpersonationSessionData {
@@ -23,8 +24,25 @@ export interface ImpersonationSessionData {
 export const COOKIE_NAME = "ksn_impersonation_session";
 export const SESSION_DURATION_SECONDS = 3600; // 60 minutes maximum
 
-export function getSecretKey(): string {
-  return process.env.SUPABASE_SERVICE_ROLE_KEY || "KSN_SECURE_IMPERSONATION_SECRET_2026";
+/**
+ * 대리 로그인 토큰 서명 키 (PORT-SEC-IMP-001).
+ *
+ * 예전에는 운영에 없는 SUPABASE_SERVICE_ROLE_KEY 를 읽고, 없으면 코드에 적힌 고정
+ * 문자열을 키로 썼다 — 저장소를 본 사람은 누구나 대리 로그인 쿠키를 위조할 수 있었다.
+ * 이제 운영에 반드시 설정된 SUPABASE_SECRET_KEY 에서 용도별 키를 파생한다.
+ * 세션 쿠키와 도메인 이동용 handoff 토큰은 서로 다른 키를 써서 바꿔 쓸 수 없게 한다.
+ */
+export function getSecretKey(purpose: "session" | "handoff" = "session"): string {
+  return crypto
+    .createHmac("sha256", serverEnv.SUPABASE_SECRET_KEY)
+    .update(`ksn-impersonation:${purpose}`)
+    .digest("hex");
+}
+
+function signatureMatches(actual: string, expected: string): boolean {
+  const a = Buffer.from(actual);
+  const b = Buffer.from(expected);
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
 }
 
 /**
@@ -152,7 +170,7 @@ export function parseAndVerifyToken(token: string): ImpersonationSessionData | n
     hmac.update(base64Payload);
     const expectedSignature = hmac.digest("base64url");
 
-    if (signature !== expectedSignature) {
+    if (!signatureMatches(signature, expectedSignature)) {
       console.warn("[Auth Security Audit] Impersonation token signature mismatch");
       return null;
     }
@@ -180,7 +198,7 @@ export function createHandoffToken(sessionData: ImpersonationSessionData): strin
     createdAt: Date.now(),
   };
   const base64Str = Buffer.from(JSON.stringify(payload)).toString("base64url");
-  const hmac = crypto.createHmac("sha256", getSecretKey());
+  const hmac = crypto.createHmac("sha256", getSecretKey("handoff"));
   hmac.update(base64Str);
   const sig = hmac.digest("base64url");
   return `${base64Str}.${sig}`;
@@ -195,9 +213,9 @@ export function verifyHandoffToken(token: string): ImpersonationSessionData | nu
     if (parts.length !== 2) return null;
     const [base64Str, sig] = parts;
 
-    const hmac = crypto.createHmac("sha256", getSecretKey());
+    const hmac = crypto.createHmac("sha256", getSecretKey("handoff"));
     hmac.update(base64Str);
-    if (sig !== hmac.digest("base64url")) {
+    if (!signatureMatches(sig, hmac.digest("base64url"))) {
       console.warn("[Auth Security Audit] IMPERSONATION_HANDOFF_TOKEN_INVALID_SIG");
       return null;
     }
