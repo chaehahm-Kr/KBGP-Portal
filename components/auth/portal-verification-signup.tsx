@@ -60,6 +60,7 @@ export function PortalVerificationSignup() {
   const [otpNotice, setOtpNotice] = useState<string | null>(null);
   const [inviteToken, setInviteToken] = useState<string | null>(null);
 
+  const [verificationProof, setVerificationProof] = useState<string | null>(null);
   const [verifiedUser, setVerifiedUser] = useState<{
     userId: string;
     companyName: string;
@@ -128,7 +129,9 @@ export function PortalVerificationSignup() {
           contactName: res.contactName,
           email: res.email,
         });
-        setStep("setPassword");
+        // 사업자등록번호·이메일만으로는 본인 확인이 되지 않으므로, 비밀번호 설정 전에
+        // 반드시 이메일 인증번호를 거친다 (PORT-SEC-OTP-001).
+        setStep("email_confirm");
       } else {
         // Case A, B, C 분기
         if (res.case === "A") {
@@ -183,6 +186,7 @@ export function PortalVerificationSignup() {
       const res = await verifyInvitationCodeAction(verifiedUser.email, otpCode);
       setPending(false);
       if (res.success) {
+        setVerificationProof(res.verificationProof ?? null);
         setStep("setPassword");
       } else {
         setError(res.error || "인증 번호가 일치하지 않습니다.");
@@ -215,7 +219,7 @@ export function PortalVerificationSignup() {
       if (inviteToken) {
         res = await activatePartnerAccountWithTokenAction(inviteToken, password);
       } else {
-        res = await activatePartnerAccountAction(verifiedUser.userId, password);
+        res = await activatePartnerAccountAction(verifiedUser.userId, password, verificationProof ?? "");
       }
       setPending(false);
 
@@ -365,7 +369,7 @@ export function PortalVerificationSignup() {
       <div className="space-y-6">
         <div className="space-y-2">
           <div className="inline-flex items-center rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2.5 py-1 text-[11px] font-bold">
-            어드민 직접 초청 파트너
+            {inviteToken ? "어드민 직접 초청 파트너" : "입점 승인 파트너"}
           </div>
           <h1 className="text-xl font-bold text-white">
             브랜드 포털 계정 활성화

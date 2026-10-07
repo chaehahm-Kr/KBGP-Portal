@@ -4,6 +4,13 @@ import crypto from "crypto";
 import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { passwordSchema } from "@/lib/auth/password";
+import {
+  issueEmailVerificationProof,
+  verifyEmailVerificationProof,
+} from "@/lib/auth/email-verification-proof";
+
+const OTP_MAX_ATTEMPTS = 5;
+const OTP_RESEND_COOLDOWN_MS = 60 * 1000;
 
 const verificationSchema = z.object({
   businessRegistrationNumber: z
@@ -158,8 +165,17 @@ export async function verifyPartnerApplicationAction(
  */
 export async function activatePartnerAccountAction(
   userId: string,
-  password: string
+  password: string,
+  verificationProof: string
 ): Promise<{ success: boolean; error?: string }> {
+  // 이메일 인증번호 확인을 통과한 경우에만 비밀번호를 설정할 수 있다 (PORT-SEC-OTP-001).
+  if (!verifyEmailVerificationProof(verificationProof, userId)) {
+    return {
+      success: false,
+      error: "이메일 인증이 확인되지 않았거나 유효 시간이 지났습니다. 인증 번호를 다시 요청해 주세요.",
+    };
+  }
+
   // 비밀번호 안전성 검사
   const parsed = passwordSchema.safeParse(password);
   if (!parsed.success) {
@@ -326,7 +342,7 @@ export async function sendInvitationVerificationCodeAction(
     return { success: false, error: "올바른 이메일 주소를 입력해 주세요." };
   }
 
-  const code = Math.floor(100000 + Math.random() * 900000).toString();
+  const code = crypto.randomInt(100000, 1000000).toString();
   const expiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString();
 
   const { data: user } = await admin
@@ -340,6 +356,11 @@ export async function sendInvitationVerificationCodeAction(
   }
 
   const currentPerms = (user.permissions || {}) as Record<string, any>;
+  const lastSentAt = currentPerms.otp_sent_at ? new Date(currentPerms.otp_sent_at).getTime() : 0;
+  if (lastSentAt && Date.now() - lastSentAt < OTP_RESEND_COOLDOWN_MS) {
+    return { success: false, error: "인증 번호는 1분에 한 번만 요청할 수 있습니다. 잠시 후 다시 시도해 주세요." };
+  }
+
   await admin
     .from("company_users")
     .update({
@@ -347,6 +368,8 @@ export async function sendInvitationVerificationCodeAction(
         ...currentPerms,
         otp_code: code,
         otp_expires_at: expiresAt,
+        otp_sent_at: new Date().toISOString(),
+        otp_attempts: 0,
       },
     })
     .eq("id", user.id);
@@ -377,7 +400,7 @@ export async function sendInvitationVerificationCodeAction(
 export async function verifyInvitationCodeAction(
   email: string,
   inputCode: string
-): Promise<{ success: boolean; error?: string }> {
+): Promise<{ success: boolean; error?: string; verificationProof?: string }> {
   const admin = createAdminClient();
   const normalized = (email || "").trim().toLowerCase();
   const code = (inputCode || "").trim();
@@ -400,8 +423,34 @@ export async function verifyInvitationCodeAction(
   const storedOtp = perms.otp_code;
   const expStr = perms.otp_expires_at;
 
-  if (!storedOtp || storedOtp !== code) {
-    return { success: false, error: "인증 번호가 일치하지 않습니다. 다시 확인해 주세요." };
+  const attempts = Number(perms.otp_attempts) || 0;
+  if (!storedOtp || attempts >= OTP_MAX_ATTEMPTS) {
+    return { success: false, error: "유효한 인증 번호가 없습니다. 인증 번호를 다시 요청해 주세요." };
+  }
+
+  const matches =
+    storedOtp.length === code.length &&
+    crypto.timingSafeEqual(Buffer.from(storedOtp), Buffer.from(code));
+  if (!matches) {
+    // 틀린 횟수가 한도에 닿으면 코드를 폐기해 무차별 대입을 막는다.
+    const nextAttempts = attempts + 1;
+    const exhausted = nextAttempts >= OTP_MAX_ATTEMPTS;
+    await admin
+      .from("company_users")
+      .update({
+        permissions: {
+          ...perms,
+          otp_attempts: nextAttempts,
+          ...(exhausted ? { otp_code: null, otp_expires_at: null } : {}),
+        },
+      })
+      .eq("id", user.id);
+    return {
+      success: false,
+      error: exhausted
+        ? "인증 번호를 5회 잘못 입력했습니다. 인증 번호를 다시 요청해 주세요."
+        : `인증 번호가 일치하지 않습니다. (남은 시도 ${OTP_MAX_ATTEMPTS - nextAttempts}회)`,
+    };
   }
 
   if (expStr) {
@@ -419,11 +468,12 @@ export async function verifyInvitationCodeAction(
         email_verified: true,
         otp_code: null,
         otp_expires_at: null,
+        otp_attempts: 0,
       },
     })
     .eq("id", user.id);
 
-  return { success: true };
+  return { success: true, verificationProof: issueEmailVerificationProof(user.id) };
 }
 
 /**
