@@ -2,6 +2,10 @@
 
 import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
+import {
+  countUnreadMetaPoRequests,
+  markMetaPoRequestAsRead,
+} from "@/lib/purchase-order/request-meta-read-state";
 
 export interface AdminUnreadCounts {
   applications: number;
@@ -17,7 +21,8 @@ export interface AdminUnreadCounts {
  * PO 요청 워크플로(0092_po_requests_workflow)는 아직 운영 DB에 적용되지 않았다.
  * 현재 po_requests 는 0127 이 만든 임시 테이블(id, created_at, admin_read_at,
  * admin_read_by)뿐이라 status 로 필터하면 매 폴링마다 "column does not exist"
- * 오류가 난다. 0092 를 적용한 뒤 true 로 바꾸면 배지 집계가 다시 켜진다.
+ * 오류가 난다. 그동안 PO 요청은 companies 메타데이터(JSON)에 저장되므로 배지와
+ * 읽음 처리도 그쪽을 본다. 0092 를 적용한 뒤 true 로 바꾸면 테이블 기준으로 돌아간다.
  */
 const PO_REQUESTS_WORKFLOW_ENABLED = false;
 
@@ -51,7 +56,7 @@ export async function getAdminUnreadCounts(): Promise<AdminUnreadCounts> {
             .select("id", { count: "exact", head: true })
             .in("status", ["SUBMITTED", "UNDER_REVIEW", "CHANGE_REQUESTED"])
             .is("admin_read_at", null)
-        : Promise.resolve({ count: 0 }),
+        : countUnreadMetaPoRequests().then((count) => ({ count })),
 
       // 3. Products: Registered / submitted products for admin review where admin_read_at is NULL
       admin
@@ -152,6 +157,18 @@ export async function markAdminItemAsRead(
       break;
     default:
       return false;
+  }
+
+  if (entity === "po_request" && !PO_REQUESTS_WORKFLOW_ENABLED) {
+    const ok = await markMetaPoRequestAsRead(id, adminUserId);
+    if (ok) {
+      pathsToRevalidate.forEach((p) => {
+        try {
+          revalidatePath(p);
+        } catch {}
+      });
+    }
+    return ok;
   }
 
   try {
