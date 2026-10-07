@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { verifyAdminSession } from "@/lib/auth/dal";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { syncCompanyUserAclRow } from "@/lib/company/permission-store";
 import { publicEnv } from "@/lib/env/public";
 
 import { getPersonStructuredNames } from "@/lib/user/name-helper";
@@ -147,6 +148,14 @@ export async function convertInquiryToCompany(
   if (companyUserError) {
     return { error: "계정 정보를 저장하지 못했습니다. 잠시 후 다시 시도해주세요." };
   }
+
+  await syncCompanyUserAclRow(admin, {
+    userId: invited.user.id,
+    companyId: company.id,
+    permissionsJson: permissionsObj,
+    companyRole: "company_admin",
+    updatedBy: session.userId,
+  });
 
   await admin
     .from("inquiries")

@@ -6,6 +6,7 @@ import { createNotification } from "@/lib/notification/actions";
 import { serverEnv } from "@/lib/env/server";
 import { publicEnv } from "@/lib/env/public";
 import { validateUploadedFile } from "@/lib/files/validate";
+import { syncCompanyUserAclRow } from "@/lib/company/permission-store";
 import { getPersonStructuredNames, getPersonGreetingName, getPersonDisplayName } from "@/lib/user/name-helper";
 import { generateNextApplicationNumber } from "@/lib/application/number-generator";
 import { isPureEnglishName, isNumericPrice, normalizePrice } from "@/lib/validation/global-validators";
@@ -395,6 +396,13 @@ export async function POST(request: Request) {
       { status: 500 }
     );
   }
+
+  await syncCompanyUserAclRow(admin, {
+    userId: invited.user.id,
+    companyId: company.id,
+    permissionsJson: permissionsObj,
+    companyRole: "company_admin",
+  });
 
   // 4. 브랜드(Brands) 레코드 생성
   const { data: brand, error: brandError } = await admin

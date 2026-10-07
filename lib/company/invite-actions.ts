@@ -8,6 +8,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { deactivateUserSessions } from "@/lib/auth/admin-actions";
 import { publicEnv } from "@/lib/env/public";
 import { requireCompanyAdmin } from "@/lib/company/dal";
+import { syncCompanyUserAclRow } from "@/lib/company/permission-store";
 import { normalizeEmail, checkUserEmailDuplicate, isPureEnglishName } from "@/lib/user/validation";
 import { getBilingualError } from "@/lib/errors/bilingual-messages";
 import { mapPresetToMembershipRole, mapRoleToPreset, getRoleKoreanTitle, getRoleDisplayLabel } from "@/lib/permissions/brand-portal-acl";
@@ -218,6 +219,14 @@ export async function inviteCompanyUser(
     }
     return { error: getBilingualError("SAVE_FAILED") };
   }
+
+  await syncCompanyUserAclRow(admin, {
+    userId: invitedUserId,
+    companyId: companyId,
+    permissionsJson: permissions,
+    companyRole: companyRole,
+    updatedBy: userId,
+  });
 
   // 3. Dispatch custom K SELECT NETWORK Branded Invitation Email via Resend
   const roleLabel = getRoleDisplayLabel(companyRole, permissions);
@@ -633,6 +642,14 @@ export async function updateCompanyUser(
     }
     throw new Error(`사용자 정보 업데이트 실패: ${updateError.message}`);
   }
+
+  await syncCompanyUserAclRow(admin, {
+    userId: targetUserId,
+    companyId: companyId,
+    permissionsJson: payload.permissions,
+    companyRole: payload.companyRole,
+    updatedBy: userId,
+  });
 
   // 6. 비활성화 또는 역할 변경 시 세션 무효화
   const roleChanged = target.company_role !== payload.companyRole;

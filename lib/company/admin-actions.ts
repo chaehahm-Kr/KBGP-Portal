@@ -8,6 +8,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { verifyAdminSession } from "@/lib/auth/dal";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { syncCompanyUserAclRow } from "@/lib/company/permission-store";
 import { getSignedFileUrl } from "@/lib/files/storage";
 import { validateUploadedFile } from "@/lib/files/validate";
 import { publicEnv } from "@/lib/env/public";
@@ -427,7 +428,7 @@ export async function adminInviteCompanyUser(
     permissions?: Record<string, any>;
   }
 ) {
-  await verifyAdminSession();
+  const adminSession = await verifyAdminSession();
   const admin = createAdminClient();
 
   const normalizedEmail = normalizeEmail(payload.email);
@@ -535,6 +536,14 @@ export async function adminInviteCompanyUser(
     throw new Error(getBilingualError("SAVE_FAILED"));
   }
 
+  await syncCompanyUserAclRow(admin, {
+    userId: invitedUser.id,
+    companyId: companyId,
+    permissionsJson: permissionsObj,
+    companyRole: payload.companyRole,
+    updatedBy: adminSession.userId,
+  });
+
   revalidatePath(`/admin/companies/${companyId}`);
 }
 
@@ -557,7 +566,7 @@ export async function adminUpdateCompanyUser(
     permissions?: Record<string, any>;
   }
 ) {
-  await verifyAdminSession();
+  const adminSession = await verifyAdminSession();
   const admin = createAdminClient();
 
   // 1. Fetch current status to detect changes
@@ -648,6 +657,14 @@ export async function adminUpdateCompanyUser(
   if (updateError) {
     throw new Error(`담당자 정보 업데이트 실패: ${updateError.message}`);
   }
+
+  await syncCompanyUserAclRow(admin, {
+    userId: targetUserId,
+    companyId: companyId,
+    permissionsJson: permissionsObj,
+    companyRole: payload.companyRole,
+    updatedBy: adminSession.userId,
+  });
 
   // 4. Force log out sessions if suspended or role changed
   const deactivated = payload.status === "suspended" && target.status !== "suspended";

@@ -2,6 +2,7 @@ import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireCompanyMembership, type CompanyMembership } from "./dal";
+import { readCompanyUserAclRow } from "./permission-store";
 import {
   AclCategory,
   AclLevel,
@@ -31,6 +32,13 @@ export async function getPortalUserAcl(): Promise<{
   }
 
   const supabase = createAdminClient();
+
+  // DATA-JSON-MIG-002: 테이블 우선, 행이 없으면 JSON 으로 대체
+  const tableAcl = await readCompanyUserAclRow(supabase, membership.userId);
+  if (tableAcl) {
+    return { membership, permissions: tableAcl };
+  }
+
   const { data: user } = await supabase
     .from("company_users")
     .select("permissions, company_role")
