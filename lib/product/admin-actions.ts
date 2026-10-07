@@ -12,6 +12,7 @@ import { type ProductCategory, resolveAuthoritativeCategoryCode } from "@/lib/pr
 import { recordProductChangeLog, getProductChangeHistory, computeProductFieldDiffs, type AuditActionType } from "@/lib/product/audit";
 import { formatEasternDate, getEasternTodayString } from "@/lib/utils/timezone";
 import { validatePrice, isNumericPrice, normalizePrice } from "@/lib/validation/global-validators";
+import { unstageFormData } from "@/lib/files/staged-upload";
 
 export { getProductChangeHistory };
 
@@ -1046,6 +1047,7 @@ export interface ImageUploadResponse {
 }
 
 export async function adminAddProductImages(productId: string, formData: FormData): Promise<ImageUploadResponse> {
+  formData = await unstageFormData(formData);
   try {
     const session = await verifyAdminSession();
     const supabase = createAdminClient();
@@ -1345,6 +1347,7 @@ export async function adminAddProductVideoUrl(productId: string, videoUrl: strin
 }
 
 export async function adminAddProductVideoFile(productId: string, formData: FormData) {
+  formData = await unstageFormData(formData);
   const session = await verifyAdminSession();
   const supabase = createAdminClient();
 
@@ -1446,6 +1449,7 @@ export async function adminAddProductCertificate(
   originalFilename: string,
   formData: FormData
 ) {
+  formData = await unstageFormData(formData);
   const session = await verifyAdminSession();
   const supabase = createAdminClient();
 
@@ -1542,6 +1546,7 @@ export async function adminUploadIngredientsFile(
   language: "ko" | "en",
   formData: FormData
 ) {
+  formData = await unstageFormData(formData);
   const session = await verifyAdminSession();
   const supabase = createAdminClient();
 

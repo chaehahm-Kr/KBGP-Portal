@@ -10,6 +10,7 @@ import {
   uploadShippingAttachment,
   getShippingAttachmentUrl
 } from "@/lib/portal/actions";
+import { stageLargeFiles } from "@/lib/files/stage-form-files";
 
 interface PoOption {
   id: string;
@@ -163,7 +164,7 @@ export function ShippingClient({
     formData.append("file", file);
 
     try {
-      const res = await uploadShippingAttachment(formData);
+      const res = await uploadShippingAttachment(await stageLargeFiles(formData));
       if (res.error) throw new Error(res.error);
 
       if (type === "packing") {

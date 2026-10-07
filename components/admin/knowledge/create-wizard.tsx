@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import KnowledgeNavTabs from "./knowledge-nav-tabs";
+import { stageLargeFiles } from "@/lib/files/stage-form-files";
 
 export default function CreateWizard() {
   const router = useRouter();
@@ -56,7 +57,7 @@ export default function CreateWizard() {
 
       const res = await fetch("/api/admin/knowledge/upload", {
         method: "POST",
-        body
+        body: await stageLargeFiles(body)
       });
 
       if (res.ok) {

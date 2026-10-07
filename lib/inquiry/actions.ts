@@ -12,6 +12,7 @@ import { sendEmail } from "@/lib/notifications/email";
 import { publicEnv } from "@/lib/env/public";
 import type { CaseStatus, MessageType, InquiryMessageItem, PartnerInquiryItem } from "@/lib/inquiry/types";
 import { CASE_STATUS_LABEL } from "@/lib/inquiry/types";
+import { resolveStagedFile, unstageFormData } from "@/lib/files/staged-upload";
 
 // Re-export types only (plain objects cannot be exported from 'use server' files)
 export type { CaseStatus, MessageType, InquiryMessageItem, PartnerInquiryItem } from "@/lib/inquiry/types";
@@ -168,6 +169,7 @@ async function getMessagesForInquiry(
  * 포털에서 새 케이스(1:1 문의)를 등록합니다.
  */
 export async function createPartnerInquiry(formData: FormData) {
+  formData = await unstageFormData(formData);
   try {
     const { companyId, userId } = await requireCompanyMembership();
     const supabase = await createClient();
@@ -375,6 +377,7 @@ export async function getCompaniesAndUsersForCaseCreation(): Promise<{
  * 어드민에서 특정 파트너/브랜드사 담당자 앞으로 새 케이스를 직접 등록합니다.
  */
 export async function createAdminPartnerInquiry(formData: FormData) {
+  formData = await unstageFormData(formData);
   try {
     const session = await verifyAdminSession();
     const adminSupabase = createAdminClient();
@@ -1281,8 +1284,9 @@ export async function updateCaseStatus(inquiryId: string, newStatus: CaseStatus)
 export async function resolvePartnerInquiryAction(
   inquiryId: string,
   resolveContent?: string | null,
-  resolveFile?: File | null
+  resolveFileInput?: File | string | null
 ) {
+  const resolveFile = await resolveStagedFile(resolveFileInput);
   try {
     const { companyId, userId } = await requireCompanyMembership();
     const supabase = await createClient();
@@ -1412,8 +1416,9 @@ export async function resolvePartnerInquiryAction(
 export async function replyToPartnerInquiry(
   inquiryId: string,
   replyContent: string,
-  attachmentFile?: File | null
+  attachmentFileInput?: File | string | null
 ) {
+  const attachmentFile = await resolveStagedFile(attachmentFileInput);
   try {
     const { companyId, userId } = await requireCompanyMembership();
     const supabase = await createClient();

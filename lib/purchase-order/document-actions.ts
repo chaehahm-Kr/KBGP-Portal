@@ -11,6 +11,7 @@ import {
   PO_DOCUMENT_TYPE_BADGES,
   PoDocument,
 } from "@/lib/purchase-order/document-types";
+import { unstageFormData } from "@/lib/files/staged-upload";
 
 /**
  * Fetch all documents associated with a PO (combining goods_readiness uploads and direct document uploads)
@@ -113,6 +114,7 @@ export async function getPoDocuments(poId: string): Promise<PoDocument[]> {
  * Upload a PO / Shipping document
  */
 export async function uploadPoDocument(formData: FormData) {
+  formData = await unstageFormData(formData);
   try {
     const { verifyAdminSession } = await import("@/lib/auth/dal");
     await verifyAdminSession();

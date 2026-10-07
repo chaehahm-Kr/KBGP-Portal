@@ -3,6 +3,7 @@
 import { useActionState, useState, startTransition } from "react";
 import type { BrandFormState } from "@/lib/brand/actions";
 import { compressImageIfNeeded } from "@/lib/files/client-compress";
+import { stageLargeFiles } from "@/lib/files/stage-form-files";
 
 const inputClass =
   "mt-1 block w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 outline-none transition-all focus:border-zinc-500 focus:ring-1 focus:ring-zinc-400 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:placeholder:text-zinc-500 dark:focus:border-zinc-500 dark:focus:ring-zinc-600";
@@ -140,9 +141,18 @@ export function BrandForm({
     if (defaultKrTrademarkPath) formData.set("currentKrTrademarkPath", defaultKrTrademarkPath);
     if (defaultUsTrademarkPath) formData.set("currentUsTrademarkPath", defaultUsTrademarkPath);
 
+    let submitData = formData;
+    try {
+      submitData = await stageLargeFiles(formData);
+    } catch (err) {
+      setClientError(err instanceof Error ? err.message : "파일 업로드에 실패했습니다.");
+      setCompressing(false);
+      return;
+    }
+
     setCompressing(false);
     startTransition(() => {
-      formAction(formData);
+      formAction(submitData);
     });
   };
 

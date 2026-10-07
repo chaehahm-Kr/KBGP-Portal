@@ -16,6 +16,7 @@ import type {
   AdditionalRecipientInput,
   UpdateAdditionalRecipientInput,
 } from "@/lib/agreement/types";
+import { unstageFormData } from "@/lib/files/staged-upload";
 
 export interface SignAgreementInput {
   companyAgreementId?: string;
@@ -1528,6 +1529,7 @@ export async function adminUploadAgreementTemplateAction(formData: FormData): Pr
   template?: AgreementTemplateItem;
   error?: string;
 }> {
+  formData = await unstageFormData(formData);
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { success: false, error: "인증되지 않은 사용자입니다." };

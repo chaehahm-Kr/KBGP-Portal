@@ -4,6 +4,7 @@ import { useActionState, useState, startTransition } from "react";
 import type { ProductFormState } from "@/lib/product/actions";
 import { CERTIFICATE_TYPE_LABEL, type CertificateType } from "@/lib/product/types";
 import { compressImageIfNeeded } from "@/lib/files/client-compress";
+import { stageLargeFiles } from "@/lib/files/stage-form-files";
 
 const inputClass =
   "mt-1 block w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 outline-none transition-all focus:border-zinc-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white dark:focus:border-zinc-700";
@@ -67,9 +68,18 @@ export function AddCertificateForm({ action, readOnly = false }: AddCertificateF
       }
     }
 
+    let submitData = formData;
+    try {
+      submitData = await stageLargeFiles(formData);
+    } catch (err) {
+      setClientError(err instanceof Error ? err.message : "파일 업로드에 실패했습니다.");
+      setCompressing(false);
+      return;
+    }
+
     setCompressing(false);
     startTransition(() => {
-      formAction(formData);
+      formAction(submitData);
     });
   };
 

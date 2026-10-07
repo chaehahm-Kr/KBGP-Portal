@@ -19,6 +19,7 @@ import {
 } from "@/lib/supplier-invoice/actions";
 import { recordInvoicePayment, normalizePaymentMethod } from "@/lib/supplier-payment/actions";
 import { formatActionError } from "@/lib/utils/error-formatter";
+import { stageLargeFiles } from "@/lib/files/stage-form-files";
 
 interface InvoiceLine {
   id: string;
@@ -437,7 +438,7 @@ export function InvoiceDetail({ invoice, po, prevInvoicesTotal, poMerchandiseTot
       if (paymentFile) {
         const formData = new FormData();
         formData.append("file", paymentFile);
-        const uploadRes = await uploadInvoiceAttachment(formData);
+        const uploadRes = await uploadInvoiceAttachment(await stageLargeFiles(formData));
         if (uploadRes.path) {
           attachmentPath = uploadRes.path;
         }

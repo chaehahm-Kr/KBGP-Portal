@@ -341,6 +341,7 @@ export async function updateCompanyAdminMetadata(
 }
 
 export async function adminUploadCompanyLogo(companyId: string, formData: FormData) {
+  formData = await unstageFormData(formData);
   await verifyAdminSession();
   const supabase = createAdminClient();
 
@@ -406,6 +407,7 @@ export async function adminUploadCompanyLogo(companyId: string, formData: FormDa
 }
 
 import { deactivateUserSessions } from "@/lib/auth/admin-actions";
+import { unstageFormData } from "@/lib/files/staged-upload";
 
 export async function adminInviteCompanyUser(
   companyId: string,

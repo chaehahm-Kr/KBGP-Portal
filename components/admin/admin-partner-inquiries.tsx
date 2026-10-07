@@ -11,6 +11,7 @@ import {
   ALL_CASE_CATEGORY_LABELS,
 } from "@/lib/inquiry/types";
 import { updateCaseStatus, closeCaseAdmin, answerAndClosePartnerInquiry } from "@/lib/inquiry/actions";
+import { stageLargeFiles } from "@/lib/files/stage-form-files";
 
 export interface CaseCreationCompany {
   id: string;
@@ -189,7 +190,7 @@ export function AdminPartnerInquiries({
       if (!createCaseAction) {
         throw new Error("케이스 생성 액션이 설정되지 않았습니다.");
       }
-      const res = await createCaseAction(fd);
+      const res = await createCaseAction(await stageLargeFiles(fd));
       if (res.success) {
         setShowCreateCaseModal(false);
         setNewTitle("");

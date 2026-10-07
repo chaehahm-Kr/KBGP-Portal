@@ -2,6 +2,7 @@
 
 import { useActionState } from "react";
 import type { InfoRequestFormState } from "@/lib/application/info-request-actions";
+import { stageLargeFiles } from "@/lib/files/stage-form-files";
 
 type ReplyInfoRequestFormProps = {
   action: (
@@ -14,7 +15,13 @@ export function ReplyInfoRequestForm({ action }: ReplyInfoRequestFormProps) {
   const [state, formAction, pending] = useActionState<
     InfoRequestFormState,
     FormData
-  >(action, undefined);
+  >(async (prevState, formData) => {
+    try {
+      return await action(prevState, await stageLargeFiles(formData));
+    } catch (err) {
+      return { error: err instanceof Error ? err.message : "파일 업로드에 실패했습니다." };
+    }
+  }, undefined);
 
   return (
     <form action={formAction} className="mt-3 space-y-3">

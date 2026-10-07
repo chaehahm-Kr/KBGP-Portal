@@ -43,6 +43,7 @@ import { evaluateProductRegistrationStatus } from "@/lib/product/registration-st
 import type { CategoryCompletionResult } from "@/lib/product/attribute-completion";
 import { formatEasternDate, getEasternTodayString } from "@/lib/utils/timezone";
 import { LogisticsHelpModal, type LogisticsHelpSectionKey } from "@/components/product/logistics-help-modal";
+import { stageLargeFiles } from "@/lib/files/stage-form-files";
 
 interface PendingImageFile {
   id: string;
@@ -305,7 +306,7 @@ export function ProductOverrideTabs({
       validPending.forEach((item) => {
         formData.append("images", item.file);
       });
-      const res = await adminAddProductImages(product.id, formData);
+      const res = await adminAddProductImages(product.id, await stageLargeFiles(formData));
 
       if (res.results && res.results.length > 0) {
         const succeededNames = new Set(res.results.filter((r) => r.success).map((r) => r.fileName));
@@ -385,7 +386,7 @@ export function ProductOverrideTabs({
       try {
         const formData = new FormData();
         formData.append("video", file);
-        await adminAddProductVideoFile(product.id, formData);
+        await adminAddProductVideoFile(product.id, await stageLargeFiles(formData));
         form.reset();
         router.refresh();
       } catch (err: any) {
@@ -442,7 +443,7 @@ export function ProductOverrideTabs({
       try {
         const formData = new FormData();
         formData.append("file", file);
-        await adminUploadIngredientsFile(product.id, lang, formData);
+        await adminUploadIngredientsFile(product.id, lang, await stageLargeFiles(formData));
         router.refresh();
       } catch (err: any) {
         setMediaError(err.message || "성분표 업로드 실패");
@@ -484,7 +485,7 @@ export function ProductOverrideTabs({
       try {
         const formData = new FormData();
         formData.append("file", file);
-        await adminAddProductCertificate(product.id, certTypeInput, file.name, formData);
+        await adminAddProductCertificate(product.id, certTypeInput, file.name, await stageLargeFiles(formData));
         form.reset();
         router.refresh();
       } catch (err: any) {
@@ -1180,7 +1181,7 @@ export function ProductOverrideTabs({
         validPending.forEach((item) => {
           formData.append("images", item.file);
         });
-        const uploadRes = await adminAddProductImages(product.id, formData);
+        const uploadRes = await adminAddProductImages(product.id, await stageLargeFiles(formData));
         if (uploadRes.results && uploadRes.results.length > 0) {
           const succeededNames = new Set(uploadRes.results.filter((r) => r.success).map((r) => r.fileName));
           pendingImages.forEach((item) => {

@@ -13,6 +13,7 @@ import type {
   PartnerInquiryItem,
 } from "@/lib/inquiry/types";
 import { ALL_CASE_CATEGORY_LABELS } from "@/lib/inquiry/types";
+import { unstageFormData } from "@/lib/files/staged-upload";
 
 export interface RetailerStoreItem {
   id: string;
@@ -361,6 +362,7 @@ export async function createRetailerSupportInquiryAction(formData: FormData): Pr
   caseNumber?: string;
   error?: string;
 }> {
+  formData = await unstageFormData(formData);
   try {
     const session = await verifyRetailerSession();
     const adminClient = createAdminClient();
@@ -542,6 +544,7 @@ export async function addRetailerInquiryReplyAction(formData: FormData): Promise
   success: boolean;
   error?: string;
 }> {
+  formData = await unstageFormData(formData);
   try {
     const session = await verifyRetailerSession();
     const adminClient = createAdminClient();

@@ -39,6 +39,7 @@ import {
   } from "@/lib/purchase-order/document-types";
 import { uploadPoDocument } from "@/lib/purchase-order/document-actions";
 import { getEasternTodayString } from "@/lib/utils/timezone";
+import { stageLargeFiles } from "@/lib/files/stage-form-files";
 
 function formatEasternDate(dStr: string | null | undefined): string {
   if (!dStr) return "-";
@@ -221,7 +222,7 @@ export function PurchaseOrderDetail({
       if (uploadNote) formData.append("note", uploadNote);
       formData.append("file", selectedDocFile);
 
-      await uploadPoDocument(formData);
+      await uploadPoDocument(await stageLargeFiles(formData));
       setSuccessMessage("증빙 서류가 성공적으로 업로드되었습니다.");
       setShowDocUploadModal(false);
       setSelectedDocFile(null);

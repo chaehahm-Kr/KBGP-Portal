@@ -33,6 +33,7 @@ import {
   OFFICIAL_STATUS_LABEL,
   OFFICIAL_STATUS_COLOR,
 } from "@/lib/inquiry/types";
+import { stageLargeFiles } from "@/lib/files/stage-form-files";
 
 interface PoLine {
   id: string;
@@ -469,7 +470,7 @@ export default function PoDetailClient({
       if (uploadNote) formData.append("note", uploadNote);
       formData.append("file", selectedDocFile);
 
-      await uploadPoDocument(formData);
+      await uploadPoDocument(await stageLargeFiles(formData));
       setGeneralSuccess("증빙 서류가 성공적으로 업로드되었습니다.");
       setShowDocUploadModal(false);
       setSelectedDocFile(null);

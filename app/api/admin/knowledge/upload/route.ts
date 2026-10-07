@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { validateUploadedFile } from "@/lib/files/validate";
+import { unstageFormData } from "@/lib/files/staged-upload";
 
 export async function POST(request: NextRequest) {
   try {
-    const formData = await request.formData();
+    const formData = await unstageFormData(await request.formData());
     const file = formData.get("file") as File | null;
     const knowledgeId = (formData.get("knowledgeId") as string) || "general";
 

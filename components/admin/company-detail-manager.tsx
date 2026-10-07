@@ -38,6 +38,7 @@ import {
 } from "@/lib/user/name-helper";
 import { CompanyAclMatrixEditor } from "@/components/company/company-acl-matrix-editor";
 import { mapRoleToPreset, mapPresetToMembershipRole, normalizePermissions, resolveCompanyUserRole, ROLE_DISPLAY_CONFIG, type BrandPortalRole } from "@/lib/permissions/brand-portal-acl";
+import { stageLargeFiles } from "@/lib/files/stage-form-files";
 
 
 const STATUS_LABEL: Record<string, string> = {
@@ -429,7 +430,7 @@ export function CompanyDetailManager({
           formData.append("usTrademarkFile", editBrandUsFile);
         }
 
-        const res = await adminUpdateBrand(selectedBrand.id, company.id, undefined, formData);
+        const res = await adminUpdateBrand(selectedBrand.id, company.id, undefined, await stageLargeFiles(formData));
         if (res && res.error) {
           alert(res.error);
         } else {
@@ -845,7 +846,7 @@ export function CompanyDetailManager({
         if (tempLogoFile) {
           const formData = new FormData();
           formData.append("logo", tempLogoFile);
-          await adminUploadCompanyLogo(company.id, formData);
+          await adminUploadCompanyLogo(company.id, await stageLargeFiles(formData));
         }
 
         const mergedAddress = tempAddress1

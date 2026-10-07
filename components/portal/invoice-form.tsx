@@ -11,6 +11,7 @@ import {
   getPortalSupplierRemittance
 } from "@/lib/portal/actions";
 import { formatActionError } from "@/lib/utils/error-formatter";
+import { stageLargeFiles } from "@/lib/files/stage-form-files";
 
 interface PoOption {
   id: string;
@@ -199,7 +200,7 @@ export function InvoiceForm({ eligiblePos, initialInvoice }: InvoiceFormProps) {
     formData.append("file", file);
 
     try {
-      const res = await uploadPortalInvoiceAttachment(formData);
+      const res = await uploadPortalInvoiceAttachment(await stageLargeFiles(formData));
       if (res.error) throw new Error(res.error);
 
       setAttachmentPath(res.path || null);

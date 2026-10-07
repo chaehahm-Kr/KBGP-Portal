@@ -14,6 +14,7 @@ import {
 } from "@/lib/product/types";
 import { recordProductChangeLog, computeProductFieldDiffs } from "@/lib/product/audit";
 import { validatePrice, isNumericPrice, normalizePrice } from "@/lib/validation/global-validators";
+import { unstageFormData } from "@/lib/files/staged-upload";
 
 export type ProductFormState = {
   error?: string;
@@ -568,6 +569,7 @@ export interface ImageUploadResponse {
 }
 
 export async function addProductImages(productId: string, formData: FormData): Promise<ImageUploadResponse> {
+  formData = await unstageFormData(formData);
   try {
     const { companyId } = await requirePortalPermission("products", "write");
     const supabase = await createClient();
@@ -755,6 +757,7 @@ export async function addProductCertificate(
   _prevState: ProductFormState,
   formData: FormData
 ): Promise<ProductFormState> {
+  formData = await unstageFormData(formData);
   const { companyId } = await requirePortalPermission("products", "write");
 
   const certificateType = formData.get("certificateType");
@@ -1357,6 +1360,7 @@ export async function addProductVideoUrl(productId: string, videoUrl: string) {
 }
 
 export async function addProductVideoFile(productId: string, formData: FormData) {
+  formData = await unstageFormData(formData);
   const { companyId } = await requirePortalPermission("products", "write");
   const supabase = await createClient();
 
@@ -1452,6 +1456,7 @@ export async function removeProductVideo(productId: string, videoId: string) {
 }
 
 export async function uploadIngredientsFile(productId: string, language: "ko" | "en", formData: FormData) {
+  formData = await unstageFormData(formData);
   const { companyId } = await requirePortalPermission("products", "write");
   const supabase = await createClient();
 

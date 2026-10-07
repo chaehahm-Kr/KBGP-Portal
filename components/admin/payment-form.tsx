@@ -6,6 +6,7 @@ import Link from "next/link";
 import { createPayment, updatePayment } from "@/lib/supplier-payment/actions";
 import { uploadInvoiceAttachment } from "@/lib/supplier-invoice/actions";
 import { getEasternTodayString } from "@/lib/utils/timezone";
+import { stageLargeFiles } from "@/lib/files/stage-form-files";
 
 interface EligibleInvoice {
   id: string;
@@ -72,7 +73,7 @@ export function PaymentForm({ isEdit = false, payment, eligibleInvoices, presele
     formData.append("file", file);
 
     try {
-      const res = await uploadInvoiceAttachment(formData);
+      const res = await uploadInvoiceAttachment(await stageLargeFiles(formData));
       if (res.path) {
         setAttachmentPath(res.path);
       }

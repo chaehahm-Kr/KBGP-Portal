@@ -18,6 +18,7 @@ import {
   addRetailerInquiryReplyAction,
   RetailerCaseContext,
 } from "@/lib/retailer/support-actions";
+import { stageLargeFiles } from "@/lib/files/stage-form-files";
 
 interface SupportViewProps {
   initialInquiries: PartnerInquiryItem[];
@@ -191,7 +192,7 @@ ${sourcesText}
     if (newFile) fd.append("file", newFile);
 
     startTransition(async () => {
-      const res = await createRetailerSupportInquiryAction(fd);
+      const res = await createRetailerSupportInquiryAction(await stageLargeFiles(fd));
       if (res.success) {
         setShowNewModal(false);
         setNewTitle("");
@@ -221,7 +222,7 @@ ${sourcesText}
     if (replyFile) fd.append("file", replyFile);
 
     startTransition(async () => {
-      const res = await addRetailerInquiryReplyAction(fd);
+      const res = await addRetailerInquiryReplyAction(await stageLargeFiles(fd));
       if (res.success) {
         setReplyContent("");
         setReplyFile(null);

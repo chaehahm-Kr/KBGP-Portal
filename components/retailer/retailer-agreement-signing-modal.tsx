@@ -4,6 +4,7 @@ import React, { useState, useTransition } from "react";
 import { signCompanyAgreementAction } from "@/lib/agreement/actions";
 import { createRetailerSupportInquiryAction } from "@/lib/retailer/support-actions";
 import type { CompanyAgreementItem, AdditionalRecipientInput } from "@/lib/agreement/types";
+import { stageLargeFiles } from "@/lib/files/stage-form-files";
 
 interface RetailerAgreementSigningModalProps {
   isOpen: boolean;
@@ -115,7 +116,7 @@ export function RetailerAgreementSigningModal({
       if (inquiryFile) {
         fd.append("file", inquiryFile);
       }
-      const res = await createRetailerSupportInquiryAction(fd);
+      const res = await createRetailerSupportInquiryAction(await stageLargeFiles(fd));
       if (res.success) {
         setInquirySuccess(
           `Inquiry submitted successfully! Case #${res.caseNumber || "LOGGED"}. Our support team will review and respond promptly.`

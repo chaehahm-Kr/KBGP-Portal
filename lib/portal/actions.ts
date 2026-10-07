@@ -8,6 +8,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { revalidatePath } from "next/cache";
 import { getInvoiceQuantitiesForPoLines } from "@/lib/supplier-invoice/actions";
 import { formatEasternDateTime } from "@/lib/utils/timezone";
+import { unstageFormData } from "@/lib/files/staged-upload";
 
 /**
  * Fetch all purchase orders belonging to the logged-in supplier company.
@@ -1333,6 +1334,7 @@ export async function getPortalPoChangeRequests(poId: string) {
  * Upload a document to company-uploads bucket under the shipping/ path.
  */
 export async function uploadShippingAttachment(formData: FormData) {
+  formData = await unstageFormData(formData);
   const { companyId } = await requireCompanyMembership();
   const supabase = await createClient(); // run upload as authenticated user to verify storage RLS
 
@@ -2765,6 +2767,7 @@ export async function deletePortalInvoiceDraft(invoiceId: string) {
 }
 
 export async function uploadPortalInvoiceAttachment(formData: FormData) {
+  formData = await unstageFormData(formData);
   const { companyId } = await requireCompanyMembership();
   const supabase = await createClient();
 

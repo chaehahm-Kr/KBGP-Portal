@@ -13,6 +13,7 @@ import { AgreementCard } from "@/components/portal/agreement-card";
 import { type CompanyAgreementItem } from "@/lib/agreement/types";
 import { useSearchParams } from "next/navigation";
 import { getPersonDisplayName } from "@/lib/user/name-helper";
+import { stageLargeFiles } from "@/lib/files/stage-form-files";
 
 interface CompanyProfileManagerProps {
   company: {
@@ -299,7 +300,7 @@ export function CompanyProfileManager({
         if (tempLogoFile) {
           const formData = new FormData();
           formData.append("logo", tempLogoFile);
-          await portalUploadCompanyLogo(company.id, formData);
+          await portalUploadCompanyLogo(company.id, await stageLargeFiles(formData));
         }
 
         const fullAddress = tempAddress1.trim()

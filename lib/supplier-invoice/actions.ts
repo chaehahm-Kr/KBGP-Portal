@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { verifyAdminSession } from "@/lib/auth/dal";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { unstageFormData } from "@/lib/files/staged-upload";
 
 // Role-based write permission validator
 async function verifyWritePermission(supabase: any, userId: string) {
@@ -967,6 +968,7 @@ export async function getSupplierInvoiceById(id: string) {
 }
 
 export async function uploadInvoiceAttachment(formData: FormData) {
+  formData = await unstageFormData(formData);
   const { userId } = await verifyAdminSession();
   const supabase = createAdminClient();
   

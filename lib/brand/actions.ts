@@ -9,6 +9,7 @@ import { verifyAdminSession } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { validateUploadedFile } from "@/lib/files/validate";
+import { unstageFormData } from "@/lib/files/staged-upload";
 
 export type BrandFormState = { error: string } | undefined;
 
@@ -172,6 +173,7 @@ export async function createBrand(
   _prevState: BrandFormState,
   formData: FormData
 ): Promise<BrandFormState> {
+  formData = await unstageFormData(formData);
   const { companyId } = await requirePortalPermission("brands", "write");
 
   const parsed = brandSchema.safeParse({
@@ -400,6 +402,7 @@ export async function updateBrand(
   _prevState: BrandFormState,
   formData: FormData
 ): Promise<BrandFormState> {
+  formData = await unstageFormData(formData);
   const { companyId } = await requirePortalPermission("brands", "write");
 
   const parsed = brandSchema.safeParse({
@@ -538,6 +541,7 @@ export async function adminUpdateBrand(
   _prevState: BrandFormState,
   formData: FormData
 ): Promise<BrandFormState> {
+  formData = await unstageFormData(formData);
   await verifyAdminSession();
   const supabase = createAdminClient();
 

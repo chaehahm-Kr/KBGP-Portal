@@ -10,6 +10,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { sendTemplatedEmail } from "@/lib/notifications/templates";
 import { validateUploadedFile } from "@/lib/files/validate";
 import { createNotification } from "@/lib/notification/actions";
+import { unstageFormData } from "@/lib/files/staged-upload";
 
 export type InfoRequestFormState = { error: string } | undefined;
 
@@ -146,6 +147,7 @@ export async function replyToInfoRequest(
   _prevState: InfoRequestFormState,
   formData: FormData
 ): Promise<InfoRequestFormState> {
+  formData = await unstageFormData(formData);
   await requirePortalPermission("application", "write");
   const { companyId } = await requireCompanyMembership();
 

@@ -10,6 +10,7 @@ import {
   uploadInvoiceAttachment
 } from "@/lib/supplier-invoice/actions";
 import { getEasternTodayString } from "@/lib/utils/timezone";
+import { stageLargeFiles } from "@/lib/files/stage-form-files";
 
 interface PoOption {
   id: string;
@@ -214,7 +215,7 @@ export function InvoiceForm({ invoice, eligiblePos, suppliers }: InvoiceFormProp
     try {
       const formData = new FormData();
       formData.append("file", file);
-      const res = await uploadInvoiceAttachment(formData);
+      const res = await uploadInvoiceAttachment(await stageLargeFiles(formData));
       if (res.path) {
         setAttachmentPath(res.path);
       }

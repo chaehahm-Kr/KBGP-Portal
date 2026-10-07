@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { stageLargeFiles } from "@/lib/files/stage-form-files";
 
 const NEW_BRAND_ACTION = "__NEW_BRAND_SHORTCUT__";
 import { CategoryAttributeForm, type CategoryAttributeFormHandle } from "@/components/product/category-attribute-form";
@@ -600,7 +601,7 @@ export function ProductDetailTabs({
       validPending.forEach((item) => {
         formData.append("images", item.file);
       });
-      const res = await addProductImages(product.id, formData);
+      const res = await addProductImages(product.id, await stageLargeFiles(formData));
 
       if (res.results && res.results.length > 0) {
         const succeededNames = new Set(res.results.filter((r) => r.success).map((r) => r.fileName));
@@ -1358,7 +1359,7 @@ export function ProductDetailTabs({
     try {
       const fd = new FormData();
       fd.append("ingredientsFile", file);
-      await uploadIngredientsFile(product.id, "ko", fd);
+      await uploadIngredientsFile(product.id, "ko", await stageLargeFiles(fd));
       setStatusMessage({ type: "success", text: "한글 성분 인증 문서가 성공적으로 첨부되었습니다." });
     } catch (err: any) {
       setIngredientsErrorKo(err.message || "파일 업로드에 실패했습니다.");
@@ -1404,7 +1405,7 @@ export function ProductDetailTabs({
     setVideoFilePending(true);
     try {
       const fd = new FormData(e.currentTarget);
-      await addProductVideoFile(product.id, fd);
+      await addProductVideoFile(product.id, await stageLargeFiles(fd));
       setStatusMessage({ type: "success", text: "동영상 파일이 성공적으로 업로드되었습니다." });
       e.currentTarget.reset();
     } catch (err: any) {

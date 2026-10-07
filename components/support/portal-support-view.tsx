@@ -16,6 +16,7 @@ import {
   closeCase,
   submitSatisfactionRating
 } from "@/lib/inquiry/actions";
+import { stageLargeFile, stageLargeFiles } from "@/lib/files/stage-form-files";
 
 interface PortalSupportViewProps {
   initialInquiries: PartnerInquiryItem[];
@@ -352,7 +353,7 @@ Outstanding Balance: ${formattedBalance}
       fd.append("related_po_id", relatedPoId);
     }
     try {
-      const res = await createAction(fd);
+      const res = await createAction(await stageLargeFiles(fd));
       if (res.success) {
         setIsWriteOpen(false);
         setTitle(""); setContent(""); setCategory("general"); setPreviousCaseId(null);
@@ -402,7 +403,7 @@ Outstanding Balance: ${formattedBalance}
     if (!replyText.trim()) { setReplyError("내용을 입력해주세요."); return; }
     setIsReplying(true);
     try {
-      const res = await replyToPartnerInquiry(selectedInquiry.id, replyText, replyFile);
+      const res = await replyToPartnerInquiry(selectedInquiry.id, replyText, await stageLargeFile(replyFile));
       if (res.success) {
         setReplyText(""); setReplyFile(null);
         window.location.reload();
@@ -421,7 +422,7 @@ Outstanding Balance: ${formattedBalance}
     if (!selectedInquiry) return;
     setIsResolving(true);
     try {
-      const res = await resolvePartnerInquiryAction(selectedInquiry.id, resolveText, resolveFile);
+      const res = await resolvePartnerInquiryAction(selectedInquiry.id, resolveText, await stageLargeFile(resolveFile));
       if (res.success) {
         setShowResolveModal(false);
         setResolveText("");

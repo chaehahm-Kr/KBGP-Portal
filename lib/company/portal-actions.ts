@@ -8,6 +8,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { type CompanyContact } from "./admin-actions";
 import { validateUploadedFile } from "@/lib/files/validate";
 import { logRemittanceChanges } from "@/lib/company/remittance-log";
+import { unstageFormData } from "@/lib/files/staged-upload";
 
 export async function updateCompanyPortalMetadata(
   companyId: string,
@@ -156,6 +157,7 @@ export async function updateCompanyPortalMetadata(
 }
 
 export async function portalUploadCompanyLogo(companyId: string, formData: FormData) {
+  formData = await unstageFormData(formData);
   const membership = await requirePortalPermission("company_info", "write");
   if (membership.companyId !== companyId) {
     throw new Error("소속 회사 정보의 로고만 변경할 수 있습니다.");

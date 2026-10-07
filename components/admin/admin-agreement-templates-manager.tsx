@@ -12,6 +12,7 @@ import {
   adminDeleteAgreementTemplateAction,
   getSignedExecutedPdfUrlAction,
 } from "@/lib/agreement/actions";
+import { stageLargeFiles } from "@/lib/files/stage-form-files";
 
 interface AdminAgreementTemplatesManagerProps {
   initialTemplates: AgreementTemplateItem[];
@@ -250,7 +251,7 @@ export function AdminAgreementTemplatesManager({ initialTemplates }: AdminAgreem
       formData.append("setActive", uploadSetActive ? "true" : "false");
       formData.append("pdfFile", selectedFile);
 
-      const res = await adminUploadAgreementTemplateAction(formData);
+      const res = await adminUploadAgreementTemplateAction(await stageLargeFiles(formData));
       if (res.success) {
         setIsUploadModalOpen(false);
         setSelectedFile(null);

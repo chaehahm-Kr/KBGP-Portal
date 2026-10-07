@@ -9,6 +9,7 @@ import {
   adminReactivateBrand,
   adminDeleteBrand,
 } from "@/lib/brand/actions";
+import { stageLargeFiles } from "@/lib/files/stage-form-files";
 
 export interface AdminBrandDetailData {
   id: string;
@@ -129,7 +130,7 @@ export function AdminBrandDetail({ brand }: AdminBrandDetailProps) {
       if (brand.krPath) formData.set("currentKrTrademarkPath", brand.krPath);
       if (brand.usPath) formData.set("currentUsTrademarkPath", brand.usPath);
 
-      const errRes = await adminUpdateBrand(brand.id, brand.companyId, undefined, formData);
+      const errRes = await adminUpdateBrand(brand.id, brand.companyId, undefined, await stageLargeFiles(formData));
       if (errRes && errRes.error) {
         setErrorMsg(errRes.error);
         setIsSubmitting(false);
