@@ -18,13 +18,10 @@ export interface AdminUnreadCounts {
 }
 
 /**
- * PO 요청 워크플로(0092_po_requests_workflow)는 아직 운영 DB에 적용되지 않았다.
- * 현재 po_requests 는 0127 이 만든 임시 테이블(id, created_at, admin_read_at,
- * admin_read_by)뿐이라 status 로 필터하면 매 폴링마다 "column does not exist"
- * 오류가 난다. 그동안 PO 요청은 companies 메타데이터(JSON)에 저장되므로 배지와
- * 읽음 처리도 그쪽을 본다. 0092 를 적용한 뒤 true 로 바꾸면 테이블 기준으로 돌아간다.
+ * DATA-JSON-MIG-004: 0136 이 po_requests 워크플로 칸을 만들고 JSON 요청을 복사했다.
+ * 배지와 읽음 처리는 테이블 기준이다. false 로 바꾸면 companies 메타데이터(JSON) 기준으로 돌아간다.
  */
-const PO_REQUESTS_WORKFLOW_ENABLED = false;
+const PO_REQUESTS_WORKFLOW_ENABLED = true;
 
 export type AdminNotificationEntity =
   | "application"

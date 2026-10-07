@@ -11,7 +11,7 @@
 |---|---|---|
 | 2 | 사용자 권한(9개 메뉴 ACL + preset) → `company_user_permissions` | **0133 DB 적용·검증 완료 (2026-10-07, SQL Editor 수동 실행 — MCP 마이그레이션 히스토리 미기록). 코드 전환(테이블 우선 읽기 + 이중 쓰기) 완료. JSON 권한 키 제거는 별도 승인 대기** |
 | 3 | 회사 기본 정보(주소, 메모, 웹사이트, 로고, 온보딩) → `companies` 칸, 연락처 → `company_contacts` | **0134(칸·테이블·복사) + 0135(intro→칸 동기화 트리거) SQL Editor 적용·검증 완료. 코드는 칸 우선 읽기. 유형=company_roles, 상태=companies.status 유지. JSON 제거 시 쓰기 코드를 칸 직접 쓰기로 바꾸고 0135 트리거 제거** |
-| 4 | PO 요청 → 0092 테이블 적용 후 데이터 이전 | 미착수 (`po_requests` 는 0127 의 4칸짜리 임시 테이블, 데이터 0행) |
+| 4 | PO 요청 → `po_requests` + lines/history/attachments | **0136 SQL Editor 적용·검증 완료(요청 2, 이력 5, 품목 0). 0092 의 USING(true) 정책 대신 같은 회사/Admin 읽기만. shipping_origin_id FK 는 5단계에서. 배지는 테이블 기준(PO_REQUESTS_WORKFLOW_ENABLED=true). 코드는 원래 테이블 우선 + JSON 백업 쓰기** |
 | 5 | 출고지 → 0086 테이블 적용 후 이전 | 미착수 |
 | 6 | 브랜드 상표권 → 0015 칸 적용 후 이전 | 미착수 (6개 브랜드가 intro JSON 에 상표권 보유) |
 
