@@ -288,16 +288,10 @@ export default async function AdminCompanyDetailPage({
       .eq("staff_id", session.userId);
     const isSuperAdmin = (userRoles ?? []).some((r) => r.role === "super_admin");
 
-    // Check if user is assigned settlement_inquiry for this company (Finance User check)
-    const { data: assignment } = await admin
-      .from("company_task_assignments")
-      .select("id")
-      .eq("company_id", id)
-      .eq("staff_id", session.userId)
-      .eq("task_code", "settlement_inquiry")
-      .maybeSingle();
-    
-    const isFinanceUser = !!assignment;
+    // company_task_assignments 는 브랜드 회사 내부 담당자(company_users)의 업무 배정이라
+    // Admin 직원이 들어갈 수 없다. 예전 조회는 없는 칸(id, staff_id)을 써서 항상 실패했고
+    // 결과도 항상 false 였다. 동작은 그대로(super_admin 만 송금 정보 접근) 두고 조회만 뺀다.
+    const isFinanceUser = false;
 
     // Fetch Supplier Profile
     const { data: supplierProfile } = await admin
