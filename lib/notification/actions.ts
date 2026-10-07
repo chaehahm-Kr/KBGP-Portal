@@ -15,6 +15,14 @@ export interface NotificationItem {
   created_at: string;
 }
 
+/**
+ * notifications 테이블(0020/0093)은 아직 운영 DB에 없다. 그래서 Admin 직원이
+ * 로그인하면 헤더가 30초마다 조회하면서 404 가 났다. 브랜드 포털 사용자는
+ * company 메타데이터·문의 메시지로 알림을 받으므로 이 테이블과 무관하다.
+ * 테이블을 만든 뒤 true 로 바꾸면 생성·조회·읽음 처리가 다시 켜진다.
+ */
+const NOTIFICATIONS_TABLE_ENABLED = false;
+
 const CATEGORY_LABELS: Record<string, string> = {
   po_change:   "PO 변경 요청",
   product:     "제품 등록 및 스펙 수정",
@@ -37,6 +45,7 @@ export async function createNotification(
   content: string,
   linkUrl: string | null = null
 ) {
+  if (!NOTIFICATIONS_TABLE_ENABLED) return { success: true };
   try {
     const adminSupabase = createAdminClient();
     const { data, error } = await adminSupabase
@@ -245,6 +254,7 @@ export async function getNotifications(): Promise<NotificationItem[]> {
     }
 
     // 2. Fallback for staff or system notifications table
+    if (!NOTIFICATIONS_TABLE_ENABLED) return [];
     const { data, error } = await supabase
       .from("notifications")
       .select("*")
@@ -307,6 +317,7 @@ export async function markNotificationAsRead(id: string) {
     }
 
     // Fallback for notifications table
+    if (!NOTIFICATIONS_TABLE_ENABLED) return { success: true };
     await supabase
       .from("notifications")
       .update({ is_read: true })
@@ -365,6 +376,7 @@ export async function markAllNotificationsAsRead() {
     }
 
     // Fallback for notifications table
+    if (!NOTIFICATIONS_TABLE_ENABLED) return { success: true };
     await supabase
       .from("notifications")
       .update({ is_read: true })
