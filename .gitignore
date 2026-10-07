@@ -50,3 +50,8 @@ scratch/
 Manual/
 public/manuals/
 supabase/.temp/
+
+# build logs / backup copies (keep repo root clean)
+*.log
+*-Chae_2024*
+*.zip
