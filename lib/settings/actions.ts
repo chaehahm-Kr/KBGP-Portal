@@ -45,7 +45,7 @@ export async function getSystemCompanyConfigs(): Promise<CompanyConfigsPayload> 
       .from("system_settings")
       .select("value")
       .eq("key", "company_configs")
-      .single();
+      .maybeSingle();
 
     if (!error && data && data.value) {
       const val = data.value as any;
@@ -77,16 +77,9 @@ export async function updateSystemCompanyConfigs(payload: CompanyConfigsPayload)
     });
 
   if (error) {
-    console.warn("Failed to save configs to database system_settings table, falling back to local file:", error);
-    
-    // Fallback: Write directly to default-settings.json file!
-    try {
-      const filePath = path.join(process.cwd(), "lib/settings/default-settings.json");
-      fs.writeFileSync(filePath, JSON.stringify(payload, null, 2), "utf8");
-    } catch (fsErr) {
-      console.error("Failed to write fallback settings file:", fsErr);
-      throw new Error("설정 저장에 실패했습니다. DB 마이그레이션이 적용되었는지 확인해주세요.");
-    }
+    // Vercel 서버리스는 파일시스템이 읽기 전용이라 파일로 대신 저장할 수 없다 — DB 저장 실패를 그대로 알린다.
+    console.error("Failed to save configs to system_settings:", error);
+    throw new Error("설정 저장에 실패했습니다. 잠시 후 다시 시도해주세요.");
   }
 
   revalidatePath("/admin/settings/company-configs");
