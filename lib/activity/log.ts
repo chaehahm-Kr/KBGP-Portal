@@ -1,7 +1,12 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 
-export type ActivityEntityType = "application" | "application_product" | "assignment";
+export type ActivityEntityType =
+  | "application"
+  | "application_product"
+  | "assignment"
+  | "company"
+  | "brand";
 
 type RecordActivityInput = {
   entityType: ActivityEntityType;

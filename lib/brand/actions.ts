@@ -9,6 +9,8 @@ import { verifyAdminSession } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { validateUploadedFile } from "@/lib/files/validate";
+import { removeStorageFolder } from "@/lib/files/storage-folder";
+import { recordActivity } from "@/lib/activity/log";
 import { unstageFormData } from "@/lib/files/staged-upload";
 
 export type BrandFormState = { error: string } | undefined;
@@ -894,8 +896,15 @@ export async function adminReactivateBrand(brandId: string, companyId: string) {
 }
 
 export async function adminDeleteBrand(brandId: string, companyId: string): Promise<{ success: boolean; error?: string }> {
-  await verifyAdminSession();
+  const session = await verifyAdminSession();
   const supabase = createAdminClient();
+
+  const { data: targetBrand } = await supabase
+    .from("brands")
+    .select("name, brand_code")
+    .eq("id", brandId)
+    .eq("company_id", companyId)
+    .maybeSingle();
 
   // Policy 05 Enforcement: Check if connected products exist before hard delete
   const { count, error: countErr } = await supabase
@@ -925,6 +934,17 @@ export async function adminDeleteBrand(brandId: string, companyId: string): Prom
     console.error("adminDeleteBrand query error:", deleteError);
     return { success: false, error: "브랜드 삭제 중 오류가 발생했습니다." };
   }
+
+  // 로고·상표권 증빙 파일 정리 (경로: {companyId}/brands/{brandId}/...)
+  await removeStorageFolder(supabase, "company-uploads", `${companyId}/brands/${brandId}`);
+
+  await recordActivity({
+    entityType: "brand",
+    entityId: brandId,
+    beforeState: targetBrand ? `${targetBrand.brand_code ?? ""} ${targetBrand.name}`.trim() : null,
+    afterState: "deleted",
+    changedBy: session.userId,
+  });
 
   revalidatePath(`/admin/companies/${companyId}`);
   revalidatePath("/admin/brands");

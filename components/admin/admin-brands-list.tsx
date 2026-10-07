@@ -2,6 +2,8 @@
 
 import React, { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { adminDeleteBrand } from "@/lib/brand/actions";
 
 export interface AdminBrandItem {
   id: string;
@@ -27,7 +29,32 @@ interface AdminBrandsListProps {
 }
 
 export function AdminBrandsList({ initialBrands }: AdminBrandsListProps) {
+  const router = useRouter();
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
+
+  // 등록 상품이 하나도 없는 브랜드만 삭제할 수 있다 (서버에서도 다시 확인).
+  const handleDelete = async (brand: AdminBrandItem) => {
+    if (brand.productCount.total > 0) return;
+    if (!confirm(`"${brand.name}" (${brand.brandCode}) 브랜드를 영구 삭제하시겠습니까?
+
+로고·상표권 증빙 파일도 함께 삭제되며 되돌릴 수 없습니다.`)) {
+      return;
+    }
+    setDeletingId(brand.id);
+    try {
+      const res = await adminDeleteBrand(brand.id, brand.companyId);
+      if (!res.success) {
+        alert(res.error || "브랜드 삭제에 실패했습니다.");
+        return;
+      }
+      router.refresh();
+    } catch (err: any) {
+      alert(err?.message || "브랜드 삭제에 실패했습니다.");
+    } finally {
+      setDeletingId(null);
+    }
+  };
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
   const [krFilter, setKrFilter] = useState<"all" | "registered" | "unregistered">("all");
   const [usFilter, setUsFilter] = useState<"all" | "registered" | "unregistered">("all");
@@ -348,12 +375,24 @@ export function AdminBrandsList({ initialBrands }: AdminBrandsListProps) {
 
                   {/* Management Action */}
                   <td className="px-6 py-3.5 text-right font-semibold text-zinc-900 dark:text-white">
-                    <Link
-                      href={`/admin/brands/${brand.id}`}
-                      className="hover:underline"
-                    >
-                      상세보기
-                    </Link>
+                    <div className="flex items-center justify-end gap-3">
+                      <Link
+                        href={`/admin/brands/${brand.id}`}
+                        className="hover:underline"
+                      >
+                        상세보기
+                      </Link>
+                      {brand.productCount.total === 0 && (
+                        <button
+                          type="button"
+                          onClick={() => handleDelete(brand)}
+                          disabled={deletingId === brand.id}
+                          className="text-rose-600 hover:underline disabled:opacity-50 dark:text-rose-400 cursor-pointer"
+                        >
+                          {deletingId === brand.id ? "삭제 중..." : "삭제"}
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}

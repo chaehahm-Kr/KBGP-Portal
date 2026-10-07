@@ -12,7 +12,9 @@ import {
   type CompanyContact,
   type CompanyParsedMetadata
 } from "@/lib/company/admin-actions";
-import { adminUpdateBrand, adminCreateBrand } from "@/lib/brand/actions";
+import { adminUpdateBrand, adminCreateBrand, adminDeleteBrand } from "@/lib/brand/actions";
+import { useRouter } from "next/navigation";
+import { CompanyDeleteCard } from "@/components/admin/company-delete-card";
 import { type PartnerStatusConfig } from "@/lib/settings/actions";
 import { 
   updateUserTaskAssignments, 
@@ -128,6 +130,34 @@ export function CompanyDetailManager({
   warehouses,
   initialShippingOrigins = [],
 }: CompanyDetailManagerProps) {
+  const router = useRouter();
+  const [deletingBrandId, setDeletingBrandId] = useState<string | null>(null);
+  const productCountByBrand = new Map<string, number>();
+  for (const p of products) {
+    productCountByBrand.set(p.brand_id, (productCountByBrand.get(p.brand_id) ?? 0) + 1);
+  }
+
+  // 등록 상품이 없는 브랜드만 삭제 (서버에서도 다시 확인한다).
+  const handleDeleteBrand = async (brand: { id: string; name: string; brandCode?: string | null }) => {
+    if (!confirm(`"${brand.name}"${brand.brandCode ? ` (${brand.brandCode})` : ""} 브랜드를 영구 삭제하시겠습니까?
+
+로고·상표권 증빙 파일도 함께 삭제되며 되돌릴 수 없습니다.`)) {
+      return;
+    }
+    setDeletingBrandId(brand.id);
+    try {
+      const res = await adminDeleteBrand(brand.id, company.id);
+      if (!res.success) {
+        alert(res.error || "브랜드 삭제에 실패했습니다.");
+        return;
+      }
+      router.refresh();
+    } catch (err: any) {
+      alert(err?.message || "브랜드 삭제에 실패했습니다.");
+    } finally {
+      setDeletingBrandId(null);
+    }
+  };
     const [companyCode, setCompanyCode] = useState(parsedMeta.companyCode || "");
   const [tempCompanyCode, setTempCompanyCode] = useState(companyCode);
   const [types, setTypes] = useState<string[]>(parsedMeta.types || ["Brand Owner"]);
@@ -1241,6 +1271,8 @@ export function CompanyDetailManager({
               </div>
             </div>
           </div>
+
+          <CompanyDeleteCard companyId={company.id} companyName={company.name} />
         </div>
 
         {/* Right Column: Integrated Tabs Container */}
@@ -1561,6 +1593,15 @@ export function CompanyDetailManager({
                               >
                                 ✏️ 수정
                               </button>
+                              {(productCountByBrand.get(brand.id) ?? 0) === 0 && (
+                                <button
+                                  onClick={() => handleDeleteBrand(brand)}
+                                  disabled={deletingBrandId === brand.id}
+                                  className="text-[10px] font-semibold text-rose-600 hover:underline dark:text-rose-400 flex items-center gap-0.5 border border-rose-200 px-1.5 py-0.5 rounded cursor-pointer transition-colors disabled:opacity-50 dark:border-rose-900"
+                                >
+                                  {deletingBrandId === brand.id ? "삭제 중..." : "🗑 삭제"}
+                                </button>
+                              )}
                             </div>
                             <p className="text-[10px] text-zinc-400 mt-1">{brand.introText || "브랜드 소개글이 등록되지 않았습니다."}</p>
                           </div>
