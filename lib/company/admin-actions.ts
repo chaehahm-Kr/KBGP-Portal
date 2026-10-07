@@ -207,11 +207,14 @@ export async function updateCompanyAdminMetadata(
 
   let baseDescription = "";
   let baseLogoPath = null;
+  // ADM-CMP-META-001: 같은 JSON 에 있는 PO 요청·출고지·알림·온보딩 시각 등을 보존한다
+  let parsedExisting: Record<string, any> = {};
   if (company) {
     if (company.intro && company.intro.startsWith("__COMPANY_METADATA__:")) {
       try {
         const jsonStr = company.intro.substring("__COMPANY_METADATA__:".length);
         const parsed = JSON.parse(jsonStr);
+        if (parsed && typeof parsed === "object") parsedExisting = parsed;
         baseDescription = parsed.description || "";
         baseLogoPath = parsed.logo_path || null;
       } catch (e) {}
@@ -221,6 +224,7 @@ export async function updateCompanyAdminMetadata(
   }
 
   const metaObj = {
+    ...parsedExisting,
     description: baseDescription,
     address: payload.address,
     address_1: payload.address_1 || "",
@@ -234,6 +238,7 @@ export async function updateCompanyAdminMetadata(
     type: payload.types[0] || "",
     types: payload.types,
     logo_path: baseLogoPath,
+    status: payload.status,
   };
 
   const introString = `__COMPANY_METADATA__:${JSON.stringify(metaObj)}`;
