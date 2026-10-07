@@ -484,6 +484,9 @@ export function CompanyDetailManager({
     const canonicalRole = resolveCompanyUserRole(user);
     setEditRolePreset(canonicalRole);
     setEditRole(mapPresetToMembershipRole(canonicalRole));
+    setEditTitle(user.title || "");
+    setEditPosition(user.position || "");
+    setEditPhone(user.phone || "");
     setEditStatus(user.status || "active");
     setEditIsPrimary(user.is_primary || false);
     setEditPermissions(normalizePermissions(user.permissions || {}, user.company_role));
@@ -676,6 +679,21 @@ export function CompanyDetailManager({
       !editEnglishLastName.trim()
     ) {
       alert("이름은 필수 입력 사항입니다.");
+      return;
+    }
+
+    // 폼은 noValidate: 브라우저 기본 검사는 빈 칸으로 말없이 스크롤만 올려 저장이 안 된 것처럼
+    // 보였다. 필수 칸(* 표시)을 여기서 확인하고 무엇이 비었는지 알려준다.
+    const missingNameFields = [
+      [editKoreanLastName, "한글 성"],
+      [editKoreanFirstName, "한글 이름"],
+      [editEnglishLastName, "영문 성"],
+      [editEnglishFirstName, "영문 이름"],
+    ]
+      .filter(([value]) => !value.trim())
+      .map(([, label]) => label);
+    if (missingNameFields.length > 0) {
+      alert(`필수 입력 항목을 채워 주세요: ${missingNameFields.join(", ")}`);
       return;
     }
 
@@ -2587,7 +2605,7 @@ export function CompanyDetailManager({
               </button>
             </div>
 
-            <form onSubmit={handleUpdateUserSubmit} className="p-6 space-y-6 max-h-[80vh] overflow-y-auto">
+            <form onSubmit={handleUpdateUserSubmit} noValidate className="p-6 space-y-6 max-h-[80vh] overflow-y-auto">
               {/* Section 1: 담당자 기본 정보 */}
               <div className="space-y-4">
                 <h4 className="font-bold text-xs text-zinc-900 dark:text-zinc-100 flex items-center gap-1.5">
