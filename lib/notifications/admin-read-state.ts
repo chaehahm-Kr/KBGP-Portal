@@ -13,6 +13,14 @@ export interface AdminUnreadCounts {
   totalProducts: number;
 }
 
+/**
+ * PO 요청 워크플로(0092_po_requests_workflow)는 아직 운영 DB에 적용되지 않았다.
+ * 현재 po_requests 는 0127 이 만든 임시 테이블(id, created_at, admin_read_at,
+ * admin_read_by)뿐이라 status 로 필터하면 매 폴링마다 "column does not exist"
+ * 오류가 난다. 0092 를 적용한 뒤 true 로 바꾸면 배지 집계가 다시 켜진다.
+ */
+const PO_REQUESTS_WORKFLOW_ENABLED = false;
+
 export type AdminNotificationEntity =
   | "application"
   | "po_request"
@@ -37,11 +45,13 @@ export async function getAdminUnreadCounts(): Promise<AdminUnreadCounts> {
         .is("admin_read_at", null),
 
       // 2. PO Requests: Submitted/Under Review PO requests where admin_read_at is NULL
-      admin
-        .from("po_requests")
-        .select("id", { count: "exact", head: true })
-        .in("status", ["SUBMITTED", "UNDER_REVIEW", "CHANGE_REQUESTED"])
-        .is("admin_read_at", null),
+      PO_REQUESTS_WORKFLOW_ENABLED
+        ? admin
+            .from("po_requests")
+            .select("id", { count: "exact", head: true })
+            .in("status", ["SUBMITTED", "UNDER_REVIEW", "CHANGE_REQUESTED"])
+            .is("admin_read_at", null)
+        : Promise.resolve({ count: 0 }),
 
       // 3. Products: Registered / submitted products for admin review where admin_read_at is NULL
       admin
