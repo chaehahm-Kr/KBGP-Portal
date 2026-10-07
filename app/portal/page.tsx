@@ -47,7 +47,7 @@ export default async function PortalHomePage() {
   // 2. Fetch Applications (Scoped to this company)
   const { data: applications } = await supabase
     .from("applications")
-    .select("id, application_number, status, submitted_at, reviewed_at, created_at")
+    .select("id, application_number, status, submitted_at, created_at")
     .eq("company_id", companyId)
     .order("created_at", { ascending: false });
 
@@ -60,7 +60,7 @@ export default async function PortalHomePage() {
   // 3. Fetch Pending Info Requests
   const { data: pendingRequests } = await supabase
     .from("additional_info_requests")
-    .select("id, application_id, request_content, reply_due_at, created_at")
+    .select("id, application_id, request_content, reply_due_at, requested_at")
     .eq("status", "pending")
     .order("reply_due_at", { ascending: true });
 
@@ -309,7 +309,7 @@ export default async function PortalHomePage() {
       referenceNumber: "APP-REQ",
       title: `입점 심사 추가 서류 요청 회신 대기`,
       description: req.request_content.slice(0, 80),
-      updatedAt: req.created_at,
+      updatedAt: req.requested_at,
       href: `/portal/applications/${req.application_id}`,
       actionLabel: "서류 제출",
     });

@@ -62,7 +62,7 @@ export default async function AdminBrandDetailPage({ params }: AdminBrandDetailP
     const { data: fallbackBrand } = await supabase
       .from("brands")
       .select(`
-        id, name, intro, logo_path, company_id, is_active, created_at, updated_at,
+        id, brand_code, name, intro, logo_path, company_id, is_active, created_at, updated_at,
         companies (id, name)
       `)
       .eq("id", brandId)

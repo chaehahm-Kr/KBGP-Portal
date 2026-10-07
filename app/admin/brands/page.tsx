@@ -35,7 +35,7 @@ export default async function AdminBrandsPage() {
     const { data: coreBrands } = await supabase
       .from("brands")
       .select(`
-        id, name, intro, logo_path, company_id, is_active, created_at, updated_at,
+        id, brand_code, name, intro, logo_path, company_id, is_active, created_at, updated_at,
         companies (id, name)
       `)
       .order("created_at", { ascending: true });
