@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireCompanyAdmin, requireCompanyMembership } from "./dal";
+import { requireCompanyAdmin } from "./dal";
 import { requirePortalPermission } from "./permissions";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -399,7 +399,7 @@ export async function skipTeamOnboardingAction(companyId: string) {
 }
 
 export async function confirmCompanyOnboardingAction(companyId: string) {
-  const membership = await requireCompanyMembership();
+  const membership = await requirePortalPermission("company_info", "write");
   if (membership.companyId !== companyId) {
     throw new Error("소속 회사 권한이 없습니다.");
   }

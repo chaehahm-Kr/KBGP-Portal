@@ -456,14 +456,16 @@ export function CompanyProfileManager({
                 : "기본 법인 정보, 주소, 대표 연락처 및 회사 로고를 검토하신 후 확인 완료 버튼을 눌러주세요."}
             </p>
           </div>
-          <button
-            type="button"
-            onClick={handleConfirmOnboarding}
-            disabled={isPending}
-            className="px-4 py-2 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs shadow-sm cursor-pointer whitespace-nowrap transition-colors disabled:opacity-50"
-          >
-            {isPending ? "처리중..." : "회사 정보 확인 완료 ✓"}
-          </button>
+          {canEdit && (
+            <button
+              type="button"
+              onClick={handleConfirmOnboarding}
+              disabled={isPending}
+              className="px-4 py-2 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs shadow-sm cursor-pointer whitespace-nowrap transition-colors disabled:opacity-50"
+            >
+              {isPending ? "처리중..." : "회사 정보 확인 완료 ✓"}
+            </button>
+          )}
         </div>
       )}
 
