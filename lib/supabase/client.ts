@@ -6,10 +6,21 @@ import { publicEnv } from "@/lib/env/public";
 /** 브라우저(클라이언트 컴포넌트)에서 사용하는 Supabase 클라이언트. */
 export function createClient() {
   const pathname = typeof window !== "undefined" ? window.location.pathname : "";
-  let prefix = pathname.startsWith("/admin") ? "admin-" : pathname.startsWith("/portal") ? "portal-" : "";
+  const host = typeof window !== "undefined" ? window.location.host : "";
+  
+  let prefix = "";
+  if (host.includes("admin.kselectnetwork.com") || pathname.startsWith("/admin")) {
+    prefix = "admin-";
+  } else if (host.includes("portal.kselectnetwork.com") || pathname.startsWith("/portal")) {
+    prefix = "portal-";
+  } else if (host.includes("portal.kselecthub.com") || pathname.startsWith("/retailer")) {
+    prefix = "retailer-";
+  }
   
   if (!prefix && typeof document !== "undefined") {
-    if (document.cookie.includes("portal-sb-")) {
+    if (document.cookie.includes("retailer-sb-")) {
+      prefix = "retailer-";
+    } else if (document.cookie.includes("portal-sb-")) {
       prefix = "portal-";
     } else if (document.cookie.includes("admin-sb-")) {
       prefix = "admin-";
@@ -32,11 +43,14 @@ export function createClient() {
             });
 
           if (!prefix) return parsed;
+          const hasPrefixed = parsed.some((c) => c.name.startsWith(`${prefix}sb-`));
+
           return parsed
             .filter((c) => {
-              if (c.name.startsWith("sb-")) return false;
+              if (c.name.startsWith("sb-") && hasPrefixed) return false;
               if (c.name.startsWith("admin-sb-") && prefix !== "admin-") return false;
               if (c.name.startsWith("portal-sb-") && prefix !== "portal-") return false;
+              if (c.name.startsWith("retailer-sb-") && prefix !== "retailer-") return false;
               return true;
             })
             .map((c) => {
