@@ -86,3 +86,49 @@ export async function syncCompanyUserAclRow(
     await admin.from(TABLE).delete().eq("user_id", params.userId);
   }
 }
+
+/** company_users.permissions JSON 에서 지울 권한 키(DATA-JSON-CLEAN-002). 이름·OTP·알림 기록은 남긴다. */
+const ACL_JSON_KEYS = new Set<string>([...ACL_COLUMNS, "preset", "role"]);
+
+/** JSON 에 쓰기 전에 권한 키를 뺀다. 권한은 company_user_permissions 테이블에만 둔다. */
+export function stripAclFromPermissionsJson(json: Record<string, any> | null | undefined): Record<string, any> {
+  const result: Record<string, any> = {};
+  if (!json || typeof json !== "object") return result;
+  for (const [key, value] of Object.entries(json)) {
+    if (!ACL_JSON_KEYS.has(key)) result[key] = value;
+  }
+  return result;
+}
+
+/**
+ * 사용자 목록의 permissions 에 테이블 권한(preset/role + 9개 메뉴)을 덮어쓴다.
+ * 화면 코드(normalizePermissions, resolveCompanyUserRole)는 permissions 객체를 그대로 읽으므로
+ * 서버에서 목록을 읽는 곳에서만 부르면 된다. 테이블 행이 없는 사용자는 JSON 그대로 둔다.
+ */
+export async function attachAclToUsers<T extends { id: string; permissions?: any }>(
+  client: SupabaseClient,
+  users: T[]
+): Promise<T[]> {
+  if (users.length === 0) return users;
+  const { data, error } = await client
+    .from(TABLE)
+    .select(["user_id", "preset", ...ACL_COLUMNS].join(", "))
+    .in("user_id", users.map((u) => u.id));
+
+  if (error) {
+    console.warn("[permission-store] attach failed, keeping JSON permissions:", error.message);
+    return users;
+  }
+
+  const byUser = new Map<string, Record<string, any>>();
+  for (const row of (data ?? []) as unknown as Record<string, any>[]) byUser.set(row.user_id, row);
+
+  return users.map((u) => {
+    const row = byUser.get(u.id);
+    if (!row) return u;
+    const acl: Record<string, any> = { preset: row.preset, role: row.preset };
+    for (const col of ACL_COLUMNS) acl[col] = row[col];
+    const base = u.permissions && typeof u.permissions === "object" ? u.permissions : {};
+    return { ...u, permissions: { ...base, ...acl } };
+  });
+}

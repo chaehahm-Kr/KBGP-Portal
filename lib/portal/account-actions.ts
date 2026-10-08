@@ -10,6 +10,7 @@ import { requestPasswordReset } from "@/lib/auth/reset-password";
 
 import { getPersonStructuredNames, ResolvablePersonName } from "@/lib/user/name-helper";
 import { validateEnglishName } from "@/lib/validation/global-validators";
+import { attachAclToUsers } from "@/lib/company/permission-store";
 
 export interface MyAccountData {
   userId: string;
@@ -100,6 +101,11 @@ export async function getMyAccountData(): Promise<MyAccountData> {
 
   if (userError) {
     console.error("[getMyAccountData] Error loading company user:", userError);
+  }
+
+  // DATA-JSON-CLEAN-002: 역할 표시는 company_user_permissions 테이블 값을 쓴다
+  if (userRecord?.id) {
+    [userRecord] = await attachAclToUsers(adminClient, [userRecord]);
   }
 
   let companyName = "소속 회사";

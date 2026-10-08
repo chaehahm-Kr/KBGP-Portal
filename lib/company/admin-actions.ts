@@ -8,7 +8,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { verifyAdminSession } from "@/lib/auth/dal";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { syncCompanyUserAclRow } from "@/lib/company/permission-store";
+import { syncCompanyUserAclRow, stripAclFromPermissionsJson } from "@/lib/company/permission-store";
 import { getSignedFileUrl } from "@/lib/files/storage";
 import { validateUploadedFile } from "@/lib/files/validate";
 import { publicEnv } from "@/lib/env/public";
@@ -583,7 +583,7 @@ export async function adminInviteCompanyUser(
     position: payload.position,
     phone: payload.phone,
     is_primary: payload.isPrimary,
-    permissions: permissionsObj,
+    permissions: stripAclFromPermissionsJson(permissionsObj),
     invited_at: new Date().toISOString(),
   };
 
@@ -700,7 +700,7 @@ export async function adminUpdateCompanyUser(
     company_role: payload.companyRole,
     status: payload.status,
     is_primary: payload.isPrimary,
-    permissions: permissionsObj,
+    permissions: stripAclFromPermissionsJson(permissionsObj),
   };
 
   if (finalEnglishFullName !== undefined) {
@@ -726,13 +726,17 @@ export async function adminUpdateCompanyUser(
     throw new Error(`담당자 정보 업데이트 실패: ${updateError.message}`);
   }
 
-  await syncCompanyUserAclRow(admin, {
-    userId: targetUserId,
-    companyId: companyId,
-    permissionsJson: permissionsObj,
-    companyRole: payload.companyRole,
-    updatedBy: adminSession.userId,
-  });
+  // 권한이 함께 넘어온 저장에서만 테이블을 갱신한다. JSON 에는 더 이상 권한이 없으므로,
+  // 권한 없이 부르면 역할 기본값으로 덮어써질 수 있다.
+  if (payload.permissions) {
+    await syncCompanyUserAclRow(admin, {
+      userId: targetUserId,
+      companyId: companyId,
+      permissionsJson: permissionsObj,
+      companyRole: payload.companyRole,
+      updatedBy: adminSession.userId,
+    });
+  }
 
   // 4. Force log out sessions if suspended or role changed
   const deactivated = payload.status === "suspended" && target.status !== "suspended";

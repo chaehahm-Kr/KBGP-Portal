@@ -8,7 +8,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { deactivateUserSessions } from "@/lib/auth/admin-actions";
 import { publicEnv } from "@/lib/env/public";
 import { requireCompanyAdmin } from "@/lib/company/dal";
-import { syncCompanyUserAclRow } from "@/lib/company/permission-store";
+import { syncCompanyUserAclRow, attachAclToUsers, stripAclFromPermissionsJson } from "@/lib/company/permission-store";
 import { normalizeEmail, checkUserEmailDuplicate, isPureEnglishName } from "@/lib/user/validation";
 import { getBilingualError } from "@/lib/errors/bilingual-messages";
 import { mapPresetToMembershipRole, mapRoleToPreset, getRoleKoreanTitle, getRoleDisplayLabel } from "@/lib/permissions/brand-portal-acl";
@@ -207,7 +207,7 @@ export async function inviteCompanyUser(
     status: "invited",
     invited_by: userId,
     invited_at: new Date().toISOString(),
-    permissions,
+    permissions: stripAclFromPermissionsJson(permissions),
   });
 
   if (companyUserError) {
@@ -278,13 +278,15 @@ export async function reinviteCompanyUser(targetUserId: string) {
 
   const { data: target } = await admin
     .from("company_users")
-    .select("email, name, company_id, company_role, permissions, status")
+    .select("id, email, name, company_id, company_role, permissions, status")
     .eq("id", targetUserId)
     .single();
 
   if (!target || target.company_id !== companyId || target.status !== "invited") {
     return;
   }
+  // DATA-JSON-CLEAN-002: 초대 메일의 역할 표시는 테이블 권한 기준
+  const [targetWithAcl] = await attachAclToUsers(admin, [target]);
 
   // Fetch inviter user info
   const { data: inviterUser } = await admin
@@ -308,8 +310,8 @@ export async function reinviteCompanyUser(targetUserId: string) {
   const companyDisplayName = company.name;
   const inviterName = inviterUser?.name || "회사 관리자";
   const inviterEmail = inviterUser?.email || "";
-  const roleLabel = getRoleDisplayLabel(target.company_role, target.permissions);
-  const roleKoreanTitle = getRoleKoreanTitle(target.company_role, target.permissions);
+  const roleLabel = getRoleDisplayLabel(target.company_role, targetWithAcl.permissions);
+  const roleKoreanTitle = getRoleKoreanTitle(target.company_role, targetWithAcl.permissions);
 
   const targetRedirect = `${getCanonicalPortalUrl()}/portal/invite/accept`;
   const { data: linkData } = await admin.auth.admin.generateLink({
@@ -631,7 +633,7 @@ export async function updateCompanyUser(
       company_role: payload.companyRole,
       status: payload.status,
       is_primary: payload.isPrimary,
-      permissions: payload.permissions,
+      permissions: stripAclFromPermissionsJson(payload.permissions),
     })
     .eq("id", targetUserId)
     .eq("company_id", companyId);

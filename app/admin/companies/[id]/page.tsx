@@ -11,6 +11,7 @@ import { getCompanyShippingOrigins } from "@/lib/company/shipping-origin-actions
 import { CompanyDetailManager } from "@/components/admin/company-detail-manager";
 import { resolveEffectiveSku } from "@/lib/product/types";
 import { COMPANY_PROFILE_SELECT } from "@/lib/company/profile-columns";
+import { attachAclToUsers } from "@/lib/company/permission-store";
 
 export const metadata: Metadata = {
   title: "회사 상세 정보 | K SELECT NETWORK 어드민",
@@ -263,7 +264,9 @@ export default async function AdminCompanyDetailPage({
       console.warn("company_task_assignments table not ready in admin detail page", e);
     }
 
-    const hydratedUsers = (companyUsers ?? []).map((u: any) => {
+    // DATA-JSON-CLEAN-002: 권한은 company_user_permissions 테이블 값으로 보여준다
+    const companyUsersWithAcl = await attachAclToUsers(admin, (companyUsers ?? []) as any[]);
+    const hydratedUsers = companyUsersWithAcl.map((u: any) => {
       const lastLogin =
         authMapById.get(u.id) ??
         (u.email ? authMapByEmail.get(u.email.toLowerCase().trim()) : null) ??

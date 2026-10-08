@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { requireCompanyAdmin, getPortalTenantContext } from "@/lib/company/dal";
 import { CompanyUsersManager } from "@/components/company/company-users-manager";
+import { attachAclToUsers } from "@/lib/company/permission-store";
 
 export const metadata: Metadata = {
   title: "소속 사용자 관리 | 파트너 포털",
@@ -37,7 +38,8 @@ export default async function CompanyUsersPage() {
     }));
   }
 
-  const rows = users ?? [];
+  // DATA-JSON-CLEAN-002: 권한은 company_user_permissions 테이블 값으로 보여준다
+  const rows = await attachAclToUsers(supabase, (users ?? []) as any[]);
 
   // Query all task assignments for this company to hydrate the users manager component
   let assignments: any[] = [];
