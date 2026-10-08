@@ -14,6 +14,7 @@ import { AddReviewNoteForm } from "@/components/application/add-review-note-form
 import { CreateInfoRequestForm } from "@/components/application/create-info-request-form";
 import { sendPortalInvitationAction } from "@/lib/company/admin-actions";
 import { getPersonDisplayName } from "@/lib/user/name-helper";
+import { COMPANY_META_PREFIX, companyMetaFromRow } from "@/lib/company/profile-columns";
 
 interface ApplicationWorkspaceProps {
   application: any;
@@ -273,10 +274,10 @@ export default function ApplicationWorkspace({
     type: "Brand Owner",
   };
 
-  if (company?.intro && company.intro.startsWith("__COMPANY_METADATA__:")) {
+  // DATA-JSON-CLEAN-004: 회사 기본 정보는 companies 칸/company_contacts 에서 읽는다(page 에서 함께 조회)
+  if (company?.profile_migrated_at || (company?.intro && company.intro.startsWith(COMPANY_META_PREFIX))) {
     try {
-      const jsonStr = company.intro.substring("__COMPANY_METADATA__:".length);
-      const data = JSON.parse(jsonStr);
+      const data = companyMetaFromRow(company);
       parsedMeta = {
         description: data.description || "",
         address: data.address || "",

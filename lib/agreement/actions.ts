@@ -17,6 +17,7 @@ import type {
   UpdateAdditionalRecipientInput,
 } from "@/lib/agreement/types";
 import { unstageFormData } from "@/lib/files/staged-upload";
+import { companyMetaFromRow } from "@/lib/company/profile-columns";
 
 export interface SignAgreementInput {
   companyAgreementId?: string;
@@ -32,7 +33,7 @@ export interface SignAgreementInput {
 
 /**
  * Helper to parse company metadata (address, representativeName) from companies.intro.
- * Fixes column mismatch since companies table stores address/contacts in intro metadata JSON.
+ * Address/contacts come from companies profile columns and company_contacts (DATA-JSON-CLEAN-004).
  */
 function parseCompanyMetadata(comp: any): {
   id: string;
@@ -43,15 +44,14 @@ function parseCompanyMetadata(comp: any): {
   let fullAddress = "";
   let representativeName = comp?.contact_name || "";
 
-  if (comp?.intro && typeof comp.intro === "string" && comp.intro.startsWith("__COMPANY_METADATA__:")) {
-    try {
-      const parsed = JSON.parse(comp.intro.substring("__COMPANY_METADATA__:".length));
-      fullAddress = parsed.address || [parsed.address_1, parsed.address_2, parsed.city, parsed.state, parsed.zip_code].filter(Boolean).join(" ").trim();
-      if (parsed.contacts && Array.isArray(parsed.contacts)) {
-        const primary = parsed.contacts.find((c: any) => c.isPrimary) || parsed.contacts[0];
-        if (primary?.name) representativeName = primary.name;
-      }
-    } catch (e) {}
+  // DATA-JSON-CLEAN-004: 주소·연락처는 companies 칸과 company_contacts 에서 읽는다(조회에 칸을 포함해야 한다)
+  if (comp) {
+    const parsed = companyMetaFromRow(comp);
+    fullAddress = parsed.address || [parsed.address_1, parsed.address_2, parsed.city, parsed.state, parsed.zip_code].filter(Boolean).join(" ").trim();
+    if (Array.isArray(parsed.contacts)) {
+      const primary = parsed.contacts.find((c: any) => c.isPrimary) || parsed.contacts[0];
+      if (primary?.name) representativeName = primary.name;
+    }
   }
 
   return {
@@ -201,7 +201,7 @@ export async function getCompanyAgreement(
   const admin = createAdminClient();
   const { data: comp, error: compErr } = await admin
     .from("companies")
-    .select("id, name, country, contact_name, contact_phone, intro, company_code")
+    .select("id, name, country, contact_name, contact_phone, intro, company_code, address_1, address_2, city, state, zip_code, profile_migrated_at, company_contacts(name, is_primary, sort_order)")
     .eq("id", targetCompanyId)
     .single();
 
@@ -383,7 +383,7 @@ export async function signCompanyAgreementAction(input: SignAgreementInput): Pro
   if (input.companyAgreementId) {
     const { data: fetchCa, error: err } = await admin
       .from("company_agreements")
-      .select("*, companies(id, name, country, contact_name, contact_phone, intro), agreement_templates(id, name, version, agreement_type)")
+      .select("*, companies(id, name, country, contact_name, contact_phone, intro, address_1, address_2, city, state, zip_code, profile_migrated_at, company_contacts(name, is_primary, sort_order)), agreement_templates(id, name, version, agreement_type)")
       .eq("id", input.companyAgreementId)
       .maybeSingle();
 
@@ -397,7 +397,7 @@ export async function signCompanyAgreementAction(input: SignAgreementInput): Pro
   if (!ca && targetCompanyId) {
     const { data: companyCa } = await admin
       .from("company_agreements")
-      .select("*, companies(id, name, country, contact_name, contact_phone, intro), agreement_templates(id, name, version, agreement_type)")
+      .select("*, companies(id, name, country, contact_name, contact_phone, intro, address_1, address_2, city, state, zip_code, profile_migrated_at, company_contacts(name, is_primary, sort_order)), agreement_templates(id, name, version, agreement_type)")
       .eq("company_id", targetCompanyId)
       .order("created_at", { ascending: false })
       .limit(1)
@@ -418,7 +418,7 @@ export async function signCompanyAgreementAction(input: SignAgreementInput): Pro
     if (cu?.company_id) {
       const { data: userCa } = await admin
         .from("company_agreements")
-        .select("*, companies(id, name, country, contact_name, contact_phone, intro), agreement_templates(id, name, version, agreement_type)")
+        .select("*, companies(id, name, country, contact_name, contact_phone, intro, address_1, address_2, city, state, zip_code, profile_migrated_at, company_contacts(name, is_primary, sort_order)), agreement_templates(id, name, version, agreement_type)")
         .eq("company_id", cu.company_id)
         .order("created_at", { ascending: false })
         .limit(1)
@@ -790,7 +790,7 @@ export async function resendAgreementRecipientEmailAction(recipientId: string): 
   const { data: rec } = await admin
     .from("company_agreement_recipients")
     .select(
-      "*, company_agreements(id, company_id, agreement_id, version, final_pdf_path, agreement_templates(name, agreement_type), companies(id, name, country, contact_name, contact_phone, intro))"
+      "*, company_agreements(id, company_id, agreement_id, version, final_pdf_path, agreement_templates(name, agreement_type), companies(id, name, country, contact_name, contact_phone, intro, address_1, address_2, city, state, zip_code, profile_migrated_at, company_contacts(name, is_primary, sort_order)))"
     )
     .eq("id", recipientId)
     .single();
@@ -1361,7 +1361,7 @@ export async function adminGetTemplateUsageCompaniesAction(templateId: string): 
 
   const { data, error } = await admin
     .from("company_agreements")
-    .select("*, companies(id, name, country, contact_name, contact_phone, intro)")
+    .select("*, companies(id, name, country, contact_name, contact_phone, intro, address_1, address_2, city, state, zip_code, profile_migrated_at, company_contacts(name, is_primary, sort_order))")
     .order("created_at", { ascending: false });
 
   if (error) return { template: tmpl, agreements: [], error: error.message };
@@ -1675,7 +1675,7 @@ export async function adminListCompanyAgreementsAction(companyIdFilter?: string)
   const admin = createAdminClient();
   let query = admin
     .from("company_agreements")
-    .select("*, companies(id, name, country, contact_name, contact_phone, intro)")
+    .select("*, companies(id, name, country, contact_name, contact_phone, intro, address_1, address_2, city, state, zip_code, profile_migrated_at, company_contacts(name, is_primary, sort_order))")
     .order("created_at", { ascending: false });
 
   if (companyIdFilter) {

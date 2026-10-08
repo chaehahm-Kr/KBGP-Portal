@@ -6,6 +6,8 @@ import { requirePortalPermission } from "./permissions";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { type CompanyContact } from "./admin-actions";
+import { COMPANY_PROFILE_SELECT, companyMetaFromRow } from "./profile-columns";
+import { saveCompanyMeta, companyIntroRest } from "./company-meta-store";
 import { validateUploadedFile } from "@/lib/files/validate";
 import { logRemittanceChanges } from "@/lib/company/remittance-log";
 import { unstageFormData } from "@/lib/files/staged-upload";
@@ -35,30 +37,17 @@ export async function updateCompanyPortalMetadata(
   const supabase = await createClient();
 
   // 2. Fetch the current company record to preserve the original intro description and other metadata fields
+  // DATA-JSON-CLEAN-004: 회사 기본 정보는 companies 칸에서, type/status 등은 intro JSON 에서 읽는다
   const { data: company } = await supabase
     .from("companies")
-    .select("intro")
+    .select(`intro, ${COMPANY_PROFILE_SELECT}`)
     .eq("id", companyId)
     .single();
 
-  let baseDescription = "";
-  let currentType = "Brand Owner";
-  let currentStatus = "Active";
-  let parsedExisting: any = {};
-
-  if (company && company.intro) {
-    if (company.intro.startsWith("__COMPANY_METADATA__:")) {
-      try {
-        const jsonStr = company.intro.substring("__COMPANY_METADATA__:".length);
-        parsedExisting = JSON.parse(jsonStr);
-        baseDescription = parsedExisting.description || "";
-        currentType = parsedExisting.type || "Brand Owner";
-        currentStatus = parsedExisting.status || "Active";
-      } catch (e) {}
-    } else {
-      baseDescription = company.intro;
-    }
-  }
+  const parsedExisting: any = company ? companyMetaFromRow(company) : {};
+  const baseDescription = parsedExisting.description || "";
+  const currentType = parsedExisting.type || "Brand Owner";
+  const currentStatus = parsedExisting.status || "Active";
 
   // 3. Construct the serialized metadata object.
   // Note: We preserve the 'type' and 'status' that were configured by Letusto Admins.
@@ -72,19 +61,16 @@ export async function updateCompanyPortalMetadata(
     state: payload.state || "",
     zip_code: payload.zip_code || "",
     website: payload.website,
-    admin_memo: company && (company as any).admin_memo ? (company as any).admin_memo : (parsedExisting.admin_memo || ""),
+    admin_memo: parsedExisting.admin_memo || "",
     contacts: payload.contacts,
     type: currentType,
     status: currentStatus,
     company_onboarding_confirmed_at: new Date().toISOString(),
   };
 
-  const introString = `__COMPANY_METADATA__:${JSON.stringify(metaObj)}`;
-
   // Find the primary contact or fall back to the first contact
   const primaryContact = payload.contacts.find((c) => c.isPrimary) || payload.contacts[0];
   const updatePayload: Record<string, any> = {
-    intro: introString,
     updated_at: new Date().toISOString(),
   };
 
@@ -108,10 +94,8 @@ export async function updateCompanyPortalMetadata(
     updatePayload.contact_name = null;
   }
 
-  const { error } = await supabase
-    .from("companies")
-    .update(updatePayload)
-    .eq("id", companyId);
+  // company_contacts 는 쓰기 RLS 정책이 없어 서버(service role)로 쓴다. 권한은 위에서 확인했다.
+  const { error } = await saveCompanyMeta(createAdminClient(), companyId, metaObj, updatePayload);
 
   if (error) {
     console.error("Portal company update database error:", error);
@@ -193,30 +177,10 @@ export async function portalUploadCompanyLogo(companyId: string, formData: FormD
     .eq("id", companyId)
     .single();
 
-  let metaObj: any = {
-    description: "",
-    address: "",
-    website: "",
-    admin_memo: "",
-    contacts: [],
-    type: "Brand Owner",
-    status: "Active",
-    logo_path: null
-  };
-
-  if (company && company.intro && company.intro.startsWith("__COMPANY_METADATA__:")) {
-    try {
-      metaObj = JSON.parse(company.intro.substring("__COMPANY_METADATA__:".length));
-    } catch (e) {}
-  }
-
-  metaObj.logo_path = path;
-  const introString = `__COMPANY_METADATA__:${JSON.stringify(metaObj)}`;
-
-  const { error: updateError } = await supabase
-    .from("companies")
-    .update({ intro: introString })
-    .eq("id", companyId);
+  const { error: updateError } = await saveCompanyMeta(createAdminClient(), companyId, {
+    ...companyIntroRest(company?.intro),
+    logo_path: path,
+  });
 
   if (updateError) {
     throw new Error(`로고 메타데이터 DB 저장 실패: ${updateError.message}`);
@@ -374,21 +338,12 @@ export async function skipTeamOnboardingAction(companyId: string) {
     .eq("id", companyId)
     .single();
 
-  let metaObj: Record<string, any> = {};
-  if (company?.intro && company.intro.startsWith("__COMPANY_METADATA__:")) {
-    try {
-      metaObj = JSON.parse(company.intro.substring("__COMPANY_METADATA__:".length));
-    } catch {}
-  }
-  metaObj.team_onboarding_skipped = true;
-
-  const { error } = await supabase
-    .from("companies")
-    .update({
-      intro: `__COMPANY_METADATA__:${JSON.stringify(metaObj)}`,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", companyId);
+  const { error } = await saveCompanyMeta(
+    supabase,
+    companyId,
+    { ...companyIntroRest(company?.intro), team_onboarding_skipped: true },
+    { updated_at: new Date().toISOString() }
+  );
 
   if (error) {
     throw new Error(`팀원 초대 건너뛰기 실패: ${error.message}`);
@@ -411,21 +366,12 @@ export async function confirmCompanyOnboardingAction(companyId: string) {
     .eq("id", companyId)
     .single();
 
-  let metaObj: Record<string, any> = {};
-  if (company?.intro && company.intro.startsWith("__COMPANY_METADATA__:")) {
-    try {
-      metaObj = JSON.parse(company.intro.substring("__COMPANY_METADATA__:".length));
-    } catch {}
-  }
-  metaObj.company_onboarding_confirmed_at = new Date().toISOString();
-
-  const { error } = await supabase
-    .from("companies")
-    .update({
-      intro: `__COMPANY_METADATA__:${JSON.stringify(metaObj)}`,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", companyId);
+  const { error } = await saveCompanyMeta(
+    supabase,
+    companyId,
+    { ...companyIntroRest(company?.intro), company_onboarding_confirmed_at: new Date().toISOString() },
+    { updated_at: new Date().toISOString() }
+  );
 
   if (error) {
     throw new Error(`회사 정보 확인 처리 실패: ${error.message}`);

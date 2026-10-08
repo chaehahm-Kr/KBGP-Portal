@@ -11,6 +11,8 @@ import { requestPasswordReset } from "@/lib/auth/reset-password";
 import { getPersonStructuredNames, ResolvablePersonName } from "@/lib/user/name-helper";
 import { validateEnglishName } from "@/lib/validation/global-validators";
 import { attachAclToUsers } from "@/lib/company/permission-store";
+import { COMPANY_PROFILE_SELECT, companyMetaFromRow } from "@/lib/company/profile-columns";
+import { saveCompanyMeta, companyIntroRest } from "@/lib/company/company-meta-store";
 
 export interface MyAccountData {
   userId: string;
@@ -310,16 +312,15 @@ export async function updateMyAccountProfileAction(
     if (targetCompanyId) {
       const { data: comp } = await adminClient
         .from("companies")
-        .select("intro, contact_name, contact_phone")
+        .select(`intro, contact_name, contact_phone, ${COMPANY_PROFILE_SELECT}`)
         .eq("id", targetCompanyId)
         .single();
 
-      let metaObj: Record<string, any> = {};
-      if (comp?.intro && comp.intro.startsWith("__COMPANY_METADATA__:")) {
-        try {
-          metaObj = JSON.parse(comp.intro.substring("__COMPANY_METADATA__:".length));
-        } catch {}
-      }
+      // DATA-JSON-CLEAN-004: 연락처는 company_contacts, 온보딩 시각은 companies 칸에서 읽고 쓴다
+      const metaObj: Record<string, any> = {
+        ...companyIntroRest(comp?.intro),
+        contacts: comp ? companyMetaFromRow(comp).contacts ?? [] : [],
+      };
       metaObj.admin_profile_onboarding_confirmed_at = new Date().toISOString();
 
       // Synchronize contacts in company intro metadata JSON
@@ -360,15 +361,11 @@ export async function updateMyAccountProfileAction(
         }
       }
 
-      await adminClient
-        .from("companies")
-        .update({
-          intro: `__COMPANY_METADATA__:${JSON.stringify(metaObj)}`,
-          contact_name: computedKoreanName,
-          contact_phone: trimmedPhone,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", targetCompanyId);
+      await saveCompanyMeta(adminClient, targetCompanyId, metaObj, {
+        contact_name: computedKoreanName,
+        contact_phone: trimmedPhone,
+        updated_at: new Date().toISOString(),
+      });
 
       revalidatePath(`/admin/companies/${targetCompanyId}`);
     }

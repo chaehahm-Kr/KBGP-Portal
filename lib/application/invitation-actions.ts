@@ -17,6 +17,7 @@ import { sendPortalInvitationAction } from "@/lib/company/admin-actions";
 import { generateNextApplicationNumber } from "@/lib/application/number-generator";
 import { buildBrandPortalInvitationUrl, getCanonicalBrandPortalDomain } from "@/lib/utils/url-builder";
 import { syncCompanyUserAclRow } from "@/lib/company/permission-store";
+import { companyInsertFieldsFromMeta, replaceCompanyContacts } from "@/lib/company/company-meta-store";
 
 function formatSubmittedDateKo(submittedAt?: string | null): string {
   if (!submittedAt) return "-";
@@ -236,7 +237,7 @@ export async function adminInviteBrandPartner(payload: {
   if (existingComp) {
     companyId = existingComp.id;
   } else {
-    const introStr = `__COMPANY_METADATA__:${JSON.stringify({
+    const { fields: profileFields, contacts: profileContacts } = companyInsertFieldsFromMeta({
       description: "",
       address: "",
       website: "",
@@ -252,7 +253,7 @@ export async function adminInviteBrandPartner(payload: {
       ],
       type: "Brand Owner",
       status: "Active",
-    })}`;
+    });
 
     const { data: newComp, error: compErr } = await admin
       .from("companies")
@@ -263,7 +264,7 @@ export async function adminInviteBrandPartner(payload: {
         status: "active",
         contact_name: payload.contactName.trim(),
         contact_phone: payload.phone?.trim() || null,
-        intro: introStr,
+        ...profileFields,
       })
       .select("id")
       .single();
@@ -273,6 +274,7 @@ export async function adminInviteBrandPartner(payload: {
       return { success: false, error: "Failed to create company record." };
     }
     companyId = newComp.id;
+    if (profileContacts) await replaceCompanyContacts(admin, companyId, profileContacts);
   }
 
   // 2. Generate Secure Invitation Token (PORT-ONB-003)
@@ -435,7 +437,7 @@ export async function adminInviteRetailerPartner(payload: {
   if (existingComp) {
     companyId = existingComp.id;
   } else {
-    const introStr = `__COMPANY_METADATA__:${JSON.stringify({
+    const { fields: profileFields, contacts: profileContacts } = companyInsertFieldsFromMeta({
       description: "",
       address: payload.companyAddress || "",
       website: "",
@@ -451,7 +453,7 @@ export async function adminInviteRetailerPartner(payload: {
       ],
       type: "Retailer Partner",
       status: "Active",
-    })}`;
+    });
 
     const { data: newComp, error: compErr } = await admin
       .from("companies")
@@ -462,7 +464,7 @@ export async function adminInviteRetailerPartner(payload: {
         status: "active",
         contact_name: payload.contactName.trim(),
         contact_phone: payload.phone?.trim() || null,
-        intro: introStr,
+        ...profileFields,
       })
       .select("id")
       .single();
@@ -472,6 +474,7 @@ export async function adminInviteRetailerPartner(payload: {
       return { success: false, error: "Failed to create company record." };
     }
     companyId = newComp.id;
+    if (profileContacts) await replaceCompanyContacts(admin, companyId, profileContacts);
   }
 
   // 2. Generate Application number

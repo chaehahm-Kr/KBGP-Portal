@@ -21,6 +21,7 @@ import {
 } from "@/lib/application/invitation-actions";
 import ApplicationWorkspace from "@/components/application/application-workspace";
 import { markAdminItemAsRead } from "@/lib/notifications/admin-read-state";
+import { COMPANY_PROFILE_SELECT } from "@/lib/company/profile-columns";
 
 export const metadata: Metadata = {
   title: "신청서 상세 | K SELECT NETWORK 어드민",
@@ -56,7 +57,7 @@ export default async function AdminApplicationDetailPage({
   if (application.company_id) {
     const { data: cData } = await supabase
       .from("companies")
-      .select("id, name, business_registration_number, country, intro, contact_name, contact_phone")
+      .select(`id, name, business_registration_number, country, intro, contact_name, contact_phone, ${COMPANY_PROFILE_SELECT}`)
       .eq("id", application.company_id)
       .maybeSingle();
     company = cData;

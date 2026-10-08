@@ -12,6 +12,7 @@ import { validateUploadedFile } from "@/lib/files/validate";
 import { removeStorageFolder } from "@/lib/files/storage-folder";
 import { recordActivity } from "@/lib/activity/log";
 import { unstageFormData } from "@/lib/files/staged-upload";
+import { saveCompanyMeta, companyIntroRest } from "@/lib/company/company-meta-store";
 
 export type BrandFormState = { error: string } | undefined;
 
@@ -288,24 +289,13 @@ async function markBrandOnboardingConfirmed(supabase: any, companyId: string) {
       .eq("id", companyId)
       .single();
 
-    let parsed: any = {};
-    if (company?.intro?.startsWith("__COMPANY_METADATA__:")) {
-      try {
-        parsed = JSON.parse(company.intro.substring("__COMPANY_METADATA__:".length));
-      } catch (e) {}
-    } else if (company?.intro) {
-      parsed.description = company.intro;
-    }
-
-    parsed.brand_onboarding_confirmed_at = new Date().toISOString();
-
-    await supabase
-      .from("companies")
-      .update({
-        intro: `__COMPANY_METADATA__:${JSON.stringify(parsed)}`,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", companyId);
+    // DATA-JSON-CLEAN-004: 온보딩 시각은 companies 칸에 쓴다
+    await saveCompanyMeta(
+      supabase,
+      companyId,
+      { ...companyIntroRest(company?.intro), brand_onboarding_confirmed_at: new Date().toISOString() },
+      { updated_at: new Date().toISOString() }
+    );
 
     revalidatePath("/portal");
     revalidatePath("/portal/brands");

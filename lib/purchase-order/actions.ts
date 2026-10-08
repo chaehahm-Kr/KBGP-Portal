@@ -9,6 +9,7 @@ import { resolveEffectiveSku } from "@/lib/product/types";
 import { formatEasternDateTime } from "@/lib/utils/timezone";
 import { createPoNotification } from "@/lib/notification/actions";
 import { evaluateProductRegistrationStatus } from "@/lib/product/registration-status";
+import { COMPANY_PROFILE_SELECT, companyMetaFromRow } from "@/lib/company/profile-columns";
 
 async function verifyWritePermission(supabase: any, userId: string) {
   const { data: userRoles } = await supabase
@@ -251,7 +252,7 @@ export async function getPurchaseOrderDetail(poId: string) {
     .from("purchase_orders")
     .select(`
       *,
-      supplier:supplier_id (*),
+      supplier:supplier_id (*, company_contacts(*)),
       warehouse:destination_warehouse_id (id, name, code, address1, city, state, zip_code, country),
       ship_from_warehouse:ship_from_warehouse_id (id, name, code, address1, city, state, zip_code, country)
     `)
@@ -281,12 +282,8 @@ export async function getPurchaseOrderDetail(poId: string) {
   }
 
   // Parse supplier company metadata if present
-  let supplierMetadata: any = {};
-  if (po.supplier?.intro && po.supplier.intro.startsWith("__COMPANY_METADATA__:")) {
-    try {
-      supplierMetadata = JSON.parse(po.supplier.intro.substring("__COMPANY_METADATA__:".length));
-    } catch {}
-  }
+  // DATA-JSON-CLEAN-004: 주소·연락처는 companies 칸과 company_contacts 에서 읽는다
+  const supplierMetadata: any = po.supplier ? companyMetaFromRow(po.supplier) : {};
 
   // Fetch company users to match contact names
   const { data: compUsers } = await supabase
@@ -624,12 +621,12 @@ export async function getCompanyOriginsAndContacts(companyId: string) {
       try {
         const { data: comp } = await supabase
           .from("companies")
-          .select("intro")
+          .select(`intro, ${COMPANY_PROFILE_SELECT}`)
           .eq("id", companyId)
           .maybeSingle();
 
-        if (comp && comp.intro && comp.intro.startsWith("__COMPANY_METADATA__:")) {
-          const metaObj = JSON.parse(comp.intro.substring("__COMPANY_METADATA__:".length));
+        if (comp) {
+          const metaObj = companyMetaFromRow(comp);
           if (Array.isArray(metaObj.contacts)) {
             activeUsers = metaObj.contacts.map((c: any) => ({
               id: c.id || c.email || "meta-contact",

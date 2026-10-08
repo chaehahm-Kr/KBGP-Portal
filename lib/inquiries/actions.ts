@@ -9,6 +9,7 @@ import { syncCompanyUserAclRow } from "@/lib/company/permission-store";
 import { publicEnv } from "@/lib/env/public";
 
 import { getPersonStructuredNames } from "@/lib/user/name-helper";
+import { companyInsertFieldsFromMeta, replaceCompanyContacts } from "@/lib/company/company-meta-store";
 
 export type InquiryFormState = { error: string } | undefined;
 
@@ -78,15 +79,7 @@ export async function convertInquiryToCompany(
     };
   }
 
-  const { data: company, error: companyError } = await admin
-    .from("companies")
-    .insert({
-      name: inquiry.company_name,
-      business_registration_number: inquiry.business_registration_number,
-      country: parsed.data.country || "대한민국",
-      contact_name: resolvedContactName,
-      contact_phone: inquiry.contact_phone,
-      intro: `__COMPANY_METADATA__:${JSON.stringify({
+  const { fields: profileFields, contacts: profileContacts } = companyInsertFieldsFromMeta({
         description: "",
         address: inquiry.company_address || "",
         website: inquiry.homepage || "",
@@ -106,7 +99,17 @@ export async function convertInquiryToCompany(
           },
         ],
         type: "Brand Owner",
-      })}`,
+      });
+
+  const { data: company, error: companyError } = await admin
+    .from("companies")
+    .insert({
+      name: inquiry.company_name,
+      business_registration_number: inquiry.business_registration_number,
+      country: parsed.data.country || "대한민국",
+      contact_name: resolvedContactName,
+      contact_phone: inquiry.contact_phone,
+      ...profileFields,
     })
     .select("id")
     .single();
@@ -118,6 +121,8 @@ export async function convertInquiryToCompany(
     await admin.auth.admin.deleteUser(invited.user.id);
     return { error: "회사 정보를 저장하지 못했습니다. 잠시 후 다시 시도해주세요." };
   }
+
+  if (profileContacts) await replaceCompanyContacts(admin, company.id, profileContacts);
 
   const permissionsObj = {
     korean_last_name: structuredName.koreanLastName,

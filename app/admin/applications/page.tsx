@@ -18,6 +18,7 @@ import { CompanyOnboardingPopover } from "@/components/admin/company-onboarding-
 import { getPersonDisplayName } from "@/lib/user/name-helper";
 import { NewBadge } from "@/components/admin/new-badge";
 import { COMPANY_PROFILE_SELECT } from "@/lib/company/profile-columns";
+import { COMPANY_META_PREFIX, companyMetaFromRow } from "@/lib/company/profile-columns";
 
 export const metadata: Metadata = {
   title: "신청서 및 파트너 초대 관리 | K SELECT NETWORK 어드민",
@@ -182,10 +183,10 @@ export default async function AdminApplicationsPage({
       contactPhone = dbPrimary.phone || contactPhone;
       contactTitle = dbPrimary.title || "";
       contactPosition = dbPrimary.position || "";
-    } else if (c.intro && c.intro.startsWith("__COMPANY_METADATA__:")) {
+    } else if (c.profile_migrated_at || (c.intro && c.intro.startsWith(COMPANY_META_PREFIX))) {
       try {
-        const jsonStr = c.intro.substring("__COMPANY_METADATA__:".length);
-        const data = JSON.parse(jsonStr);
+        // DATA-JSON-CLEAN-004: 연락처는 company_contacts 에서 읽는다
+        const data = companyMetaFromRow(c);
         const contacts = data.contacts || [];
         const primary = contacts.find((x: any) => x.isPrimary) || contacts[0];
         if (primary) {
@@ -200,12 +201,8 @@ export default async function AdminApplicationsPage({
       contactName = getPersonDisplayName({ name: c.contact_name, email: c.contact_phone }) || c.contact_name;
     }
 
-    if (c.intro && c.intro.startsWith("__COMPANY_METADATA__:")) {
-      try {
-        const jsonStr = c.intro.substring("__COMPANY_METADATA__:".length);
-        const data = JSON.parse(jsonStr);
-        description = data.description || "";
-      } catch (e) {}
+    if (c.profile_migrated_at || (c.intro && c.intro.startsWith(COMPANY_META_PREFIX))) {
+      description = companyMetaFromRow(c).description || "";
     } else {
       description = c.intro || "";
     }

@@ -9,6 +9,8 @@ import { z } from "zod";
 import { verifyAdminSession } from "@/lib/auth/dal";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { syncCompanyUserAclRow, stripAclFromPermissionsJson } from "@/lib/company/permission-store";
+import { COMPANY_PROFILE_SELECT, companyMetaFromRow } from "@/lib/company/profile-columns";
+import { saveCompanyMeta, companyIntroRest, companyInsertFieldsFromMeta, replaceCompanyContacts } from "@/lib/company/company-meta-store";
 import { getSignedFileUrl } from "@/lib/files/storage";
 import { validateUploadedFile } from "@/lib/files/validate";
 import { publicEnv } from "@/lib/env/public";
@@ -264,27 +266,15 @@ export async function updateCompanyAdminMetadata(
   // Fetch current company record to preserve the original intro description, logo path, and company_code
   const { data: company } = await supabase
     .from("companies")
-    .select("intro, company_code")
+    .select(`intro, company_code, ${COMPANY_PROFILE_SELECT}`)
     .eq("id", companyId)
     .single();
 
-  let baseDescription = "";
-  let baseLogoPath = null;
-  // ADM-CMP-META-001: 같은 JSON 에 있는 PO 요청·출고지·알림·온보딩 시각 등을 보존한다
-  let parsedExisting: Record<string, any> = {};
-  if (company) {
-    if (company.intro && company.intro.startsWith("__COMPANY_METADATA__:")) {
-      try {
-        const jsonStr = company.intro.substring("__COMPANY_METADATA__:".length);
-        const parsed = JSON.parse(jsonStr);
-        if (parsed && typeof parsed === "object") parsedExisting = parsed;
-        baseDescription = parsed.description || "";
-        baseLogoPath = parsed.logo_path || null;
-      } catch (e) {}
-    } else {
-      baseDescription = company.intro || "";
-    }
-  }
+  // ADM-CMP-META-001 / DATA-JSON-CLEAN-004: 기존 값(소개·로고·온보딩 시각·알림 등)을 보존한다.
+  // 회사 기본 정보는 companies 칸에서, 나머지는 intro JSON 에서 읽는다.
+  const parsedExisting: Record<string, any> = company ? companyMetaFromRow(company) : {};
+  const baseDescription = parsedExisting.description || "";
+  const baseLogoPath = parsedExisting.logo_path || null;
 
   const metaObj = {
     ...parsedExisting,
@@ -304,12 +294,9 @@ export async function updateCompanyAdminMetadata(
     status: payload.status,
   };
 
-  const introString = `__COMPANY_METADATA__:${JSON.stringify(metaObj)}`;
-
   // Find the primary contact or fall back to the first contact
   const primaryContact = payload.contacts.find((c) => c.isPrimary) || payload.contacts[0];
   const updatePayload: Record<string, any> = {
-    intro: introString,
     // Sync native status column: check (status in ('active', 'inactive'))
     status: payload.status === "Active" ? "active" : "inactive",
     updated_at: new Date().toISOString(),
@@ -371,10 +358,7 @@ export async function updateCompanyAdminMetadata(
     updatePayload.contact_name = null;
   }
 
-  const { error } = await supabase
-    .from("companies")
-    .update(updatePayload)
-    .eq("id", companyId);
+  const { error } = await saveCompanyMeta(supabase, companyId, metaObj, updatePayload);
 
   if (error) {
     throw new Error(`회사 정보 수정 실패: ${error.message}`);
@@ -442,30 +426,10 @@ export async function adminUploadCompanyLogo(companyId: string, formData: FormDa
     .eq("id", companyId)
     .single();
 
-  let metaObj: any = {
-    description: "",
-    address: "",
-    website: "",
-    admin_memo: "",
-    contacts: [],
-    type: "Brand Owner",
-    status: "Active",
-    logo_path: null
-  };
-
-  if (company && company.intro && company.intro.startsWith("__COMPANY_METADATA__:")) {
-    try {
-      metaObj = JSON.parse(company.intro.substring("__COMPANY_METADATA__:".length));
-    } catch (e) {}
-  }
-
-  metaObj.logo_path = path;
-  const introString = `__COMPANY_METADATA__:${JSON.stringify(metaObj)}`;
-
-  const { error: updateError } = await supabase
-    .from("companies")
-    .update({ intro: introString })
-    .eq("id", companyId);
+  const { error: updateError } = await saveCompanyMeta(supabase, companyId, {
+    ...companyIntroRest(company?.intro),
+    logo_path: path,
+  });
 
   if (updateError) {
     throw new Error(`로고 메타데이터 DB 저장 실패: ${updateError.message}`);
@@ -872,7 +836,7 @@ export async function adminCreateCompany(
     ? `${data.address1}${data.address2 ? " " + data.address2 : ""}${data.city ? ", " + data.city : ""}${data.state ? ", " + data.state : ""}${data.zipCode ? " (" + data.zipCode + ")" : ""}`
     : "";
 
-  const intro = `__COMPANY_METADATA__:${JSON.stringify({
+  const { fields: profileFields, contacts: profileContacts } = companyInsertFieldsFromMeta({
     description: "",
     address: fullAddress,
     address_1: data.address1 || "",
@@ -896,7 +860,7 @@ export async function adminCreateCompany(
     type: data.type,
     status: data.status,
     logo_path: null,
-  })}`;
+  });
 
   const { data: newCompany, error: insertError } = await admin
     .from("companies")
@@ -905,7 +869,7 @@ export async function adminCreateCompany(
       business_registration_number: data.businessNumber,
       country: data.country,
       status: data.status === "Active" ? "active" : "inactive",
-      intro: intro,
+      ...profileFields,
       contact_name: data.contactName,
       contact_phone: data.contactPhone,
     })
@@ -919,6 +883,8 @@ export async function adminCreateCompany(
     }
     return { error: "회사 등록에 실패했습니다. 잠시 후 다시 시도해주세요." };
   }
+
+  if (profileContacts) await replaceCompanyContacts(admin, newCompany.id, profileContacts);
 
   revalidatePath("/admin/companies");
   redirect(`/admin/companies/${newCompany.id}`);

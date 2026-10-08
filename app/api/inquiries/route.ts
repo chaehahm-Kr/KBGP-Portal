@@ -10,6 +10,7 @@ import { syncCompanyUserAclRow } from "@/lib/company/permission-store";
 import { getPersonStructuredNames, getPersonGreetingName, getPersonDisplayName } from "@/lib/user/name-helper";
 import { generateNextApplicationNumber } from "@/lib/application/number-generator";
 import { isPureEnglishName, isNumericPrice, normalizePrice } from "@/lib/validation/global-validators";
+import { companyInsertFieldsFromMeta, replaceCompanyContacts } from "@/lib/company/company-meta-store";
 
 export const runtime = "nodejs";
 
@@ -307,15 +308,7 @@ export async function POST(request: Request) {
   }
 
   // 2. 회사(Companies) 레코드 생성
-  const { data: company, error: companyError } = await admin
-    .from("companies")
-    .insert({
-      name: input.companyName,
-      business_registration_number: input.businessNumber,
-      country: input.country?.trim() || "대한민국",
-      contact_name: resolvedContactName,
-      contact_phone: input.phone,
-      intro: `__COMPANY_METADATA__:${JSON.stringify({
+  const { fields: profileFields, contacts: profileContacts } = companyInsertFieldsFromMeta({
         description: "",
         address: input.companyAddress,
         address_1: input.addressLine1 || "",
@@ -343,7 +336,17 @@ export async function POST(request: Request) {
           },
         ],
         type: "Brand Owner",
-      })}`,
+      });
+
+  const { data: company, error: companyError } = await admin
+    .from("companies")
+    .insert({
+      name: input.companyName,
+      business_registration_number: input.businessNumber,
+      country: input.country?.trim() || "대한민국",
+      contact_name: resolvedContactName,
+      contact_phone: input.phone,
+      ...profileFields,
     })
     .select("id")
     .single();
@@ -356,6 +359,8 @@ export async function POST(request: Request) {
       { status: 500 }
     );
   }
+
+  if (profileContacts) await replaceCompanyContacts(admin, company.id, profileContacts);
 
   // 3. 회사 유저 권한 매핑(Company Users) 생성
   const permissionsObj = {
