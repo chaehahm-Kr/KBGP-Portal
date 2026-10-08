@@ -57,10 +57,10 @@ export default async function AdminHomePage() {
             </div>
             <div>
               <h3 className="text-xs font-bold text-amber-950 dark:text-amber-200">
-                처리 대기 Partner 문의 {pendingInquiriesCount}건
+                읽지 않은 Partner 문의 {pendingInquiriesCount}건
               </h3>
               <p className="text-[11px] text-amber-800 dark:text-amber-400 mt-0.5">
-                Partner inquiries awaiting review: {pendingInquiriesCount}. 파트너사의 신규 문의 및 답변 요청을 확인해주세요.
+                Unread partner inquiries: {pendingInquiriesCount}. 파트너사의 신규 문의 및 새 메시지를 확인해주세요.
               </p>
             </div>
           </div>

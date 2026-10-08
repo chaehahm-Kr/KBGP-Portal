@@ -1883,21 +1883,45 @@ export async function reopenCase(
 /**
  * Fetch total count of pending/unread partner inquiries for Admin notification badges
  */
+/**
+ * ADM-INQ-UNREAD-001: Admin 이 안 읽은 문의 수(처음 열지 않았거나, 연 뒤 파트너 새 메시지가 있는 문의).
+ * 계산은 DB 함수 admin_unread_partner_inquiry_count(0148)가 한다.
+ */
 export async function getPendingPartnerInquiriesCount(): Promise<number> {
   try {
     const supabase = await createClient();
-    const { count, error } = await supabase
-      .from("partner_inquiries")
-      .select("*", { count: "exact", head: true })
-      .or("status.in.(open,pending,in_review,replied,action_required,reopened),is_action_required.eq.true");
+    const { data, error } = await supabase.rpc("admin_unread_partner_inquiry_count");
 
     if (error) {
       console.warn("⚠️ getPendingPartnerInquiriesCount error:", error);
       return 0;
     }
-    return count ?? 0;
+    return typeof data === "number" ? data : 0;
   } catch (err) {
     console.warn("⚠️ getPendingPartnerInquiriesCount error:", err);
     return 0;
+  }
+}
+
+/**
+ * ADM-INQ-UNREAD-001: Admin 이 문의를 열면 읽음 시각을 기록한다(사이드바 배지 갱신).
+ */
+export async function markAdminPartnerInquiryRead(inquiryId: string): Promise<{ success: boolean }> {
+  try {
+    await verifyAdminSession();
+    const adminSupabase = createAdminClient();
+    const { error } = await adminSupabase
+      .from("partner_inquiries")
+      .update({ admin_last_read_at: new Date().toISOString() })
+      .eq("id", inquiryId);
+    if (error) {
+      console.warn("markAdminPartnerInquiryRead failed:", error.message);
+      return { success: false };
+    }
+    revalidatePath("/admin", "layout");
+    return { success: true };
+  } catch (err) {
+    console.warn("markAdminPartnerInquiryRead failed:", err);
+    return { success: false };
   }
 }

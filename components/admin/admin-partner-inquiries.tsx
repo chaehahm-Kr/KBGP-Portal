@@ -10,7 +10,7 @@ import {
   OFFICIAL_STATUS_EMOJI,
   ALL_CASE_CATEGORY_LABELS,
 } from "@/lib/inquiry/types";
-import { updateCaseStatus, closeCaseAdmin, answerAndClosePartnerInquiry } from "@/lib/inquiry/actions";
+import { updateCaseStatus, closeCaseAdmin, answerAndClosePartnerInquiry, markAdminPartnerInquiryRead } from "@/lib/inquiry/actions";
 import { stageLargeFiles } from "@/lib/files/stage-form-files";
 
 export interface CaseCreationCompany {
@@ -490,6 +490,7 @@ export function AdminPartnerInquiries({
                       key={item.id}
                       onClick={() => {
                         setSelectedInquiry(item);
+                        void markAdminPartnerInquiryRead(item.id);
                         setReplyText("");
                         setIsActionRequired(false);
                         setSubmitError("");
