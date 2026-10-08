@@ -5,6 +5,7 @@ import { signCompanyAgreementAction } from "@/lib/agreement/actions";
 import { createRetailerSupportInquiryAction } from "@/lib/retailer/support-actions";
 import type { CompanyAgreementItem, AdditionalRecipientInput } from "@/lib/agreement/types";
 import { stageLargeFiles } from "@/lib/files/stage-form-files";
+import { useTranslation } from "@/lib/i18n";
 
 interface RetailerAgreementSigningModalProps {
   isOpen: boolean;
@@ -33,6 +34,7 @@ export function RetailerAgreementSigningModal({
   currentUser,
   onOpenCompanyEdit,
 }: RetailerAgreementSigningModalProps) {
+  const { locale } = useTranslation();
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
   const [isPending, startTransition] = useTransition();
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -771,7 +773,7 @@ export function RetailerAgreementSigningModal({
                 </label>
                 <input
                   type="text"
-                  value="Agreement / Contract Inquiry (계약 및 약관 문의)"
+                  value={locale === "ko" ? "계약 및 약관 문의 (Agreement Inquiry)" : "Agreement / Contract Inquiry"}
                   readOnly
                   disabled
                   className="w-full rounded-xl border border-zinc-200 bg-zinc-100 px-3 py-2 text-xs text-zinc-600 dark:border-zinc-800 dark:bg-zinc-800 dark:text-zinc-400"

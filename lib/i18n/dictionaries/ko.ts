@@ -60,6 +60,7 @@ export const koDictionary: Dictionary = {
     tags: "가격표 태그",
     stores: "매장 관리",
     training: "교육",
+    helpSupport: "도움말 및 지원",
     helpCenter: "도움말 센터",
     askKSelect: "Ask K SELECT",
     support: "문의 지원",

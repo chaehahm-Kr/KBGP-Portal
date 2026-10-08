@@ -64,6 +64,7 @@ export interface Dictionary {
     tags: string;
     stores: string;
     training: string;
+    helpSupport: string;
     helpCenter: string;
     askKSelect: string;
     support: string;

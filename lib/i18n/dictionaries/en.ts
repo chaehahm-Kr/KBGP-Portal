@@ -60,6 +60,7 @@ export const enDictionary: Dictionary = {
     tags: "Price Tags",
     stores: "Stores",
     training: "Training",
+    helpSupport: "Help & Support",
     helpCenter: "Help Center",
     askKSelect: "Ask K SELECT",
     support: "Support",

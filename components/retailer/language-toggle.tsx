@@ -74,7 +74,7 @@ export function LanguageToggle({ variant = "compact", className = "" }: Language
         type="button"
         onClick={() => handleSelect("ko")}
         disabled={isPending}
-        title="한국어로 전환"
+        title={locale === "ko" ? "한국어로 전환" : "Switch to Korean"}
         className={`px-2 py-1 rounded-md transition-all text-[11px] ${
           locale === "ko"
             ? "bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white font-bold shadow-2xs"

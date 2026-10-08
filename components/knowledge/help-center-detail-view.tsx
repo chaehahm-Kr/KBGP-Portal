@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
+import { useLanguage } from "@/lib/i18n";
 
 export interface HelpDetailData {
   item: {
@@ -246,18 +247,31 @@ export function HelpCenterDetailView({
   baseHelpPath,
   baseSupportPath,
   apiDetailBaseEndpoint,
-  supportCtaText = "1:1 문의하기",
-  supportDescription = "문서에 기재되지 않은 특수 사례나 추가 문의사항은 K SELECT 운영팀에 남겨주시면 안내해 드립니다."
+  supportCtaText: customSupportCta,
+  supportDescription: customSupportDesc
 }: HelpCenterDetailViewProps) {
   const params = useParams();
   const router = useRouter();
   const slug = params?.slug as string;
+  const { locale } = useLanguage();
+  const isEn = portalType === "RETAILER" && locale !== "ko";
+
+  const supportCtaText = customSupportCta || (isEn ? "Submit Inquiry" : "1:1 문의하기");
+  const supportDescription = customSupportDesc || (isEn
+    ? "If you have additional questions or special cases not covered in this guide, contact the K SELECT support team."
+    : "문서에 기재되지 않은 특수 사례나 추가 문의사항은 K SELECT 운영팀에 남겨주시면 안내해 드립니다.");
 
   const [data, setData] = useState<HelpDetailData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [language, setLanguage] = useState<"KO" | "EN">("KO");
+  const [language, setLanguage] = useState<"KO" | "EN">(isEn ? "EN" : "KO");
   const [notFound, setNotFound] = useState(false);
   const [openFaqId, setOpenFaqId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (isEn) {
+      setLanguage("EN");
+    }
+  }, [isEn]);
 
   useEffect(() => {
     if (slug) {
@@ -273,7 +287,7 @@ export function HelpCenterDetailView({
       if (res.ok) {
         const json = await res.json();
         setData(json);
-        if (!json.item.content_ko && json.item.content_en) {
+        if (isEn || (!json.item.content_ko && json.item.content_en)) {
           setLanguage("EN");
         }
       } else {
@@ -293,7 +307,7 @@ export function HelpCenterDetailView({
         const escalationContext = {
           origin: "HELP_CENTER_MANUAL",
           knowledgeId: data.item.id,
-          title: data.item.title_ko || data.item.title,
+          title: isEn ? (data.item.title_en || data.item.title_ko || data.item.title) : (data.item.title_ko || data.item.title),
           version: data.item.current_version || "v1.0",
           module: data.item.module || data.item.category,
           currentUrl: typeof window !== "undefined" ? window.location.href : "",

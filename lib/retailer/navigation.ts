@@ -1,5 +1,13 @@
 export type RetailerRole = "owner" | "buyer" | "store_manager" | "employee" | "accounting";
 
+export interface NavSubItem {
+  key: string;
+  name: string;
+  href: string;
+  roles: RetailerRole[];
+  badge?: string;
+}
+
 export interface NavItem {
   key: string;
   name: string;
@@ -8,6 +16,7 @@ export interface NavItem {
   roles: RetailerRole[];
   badge?: string;
   isBottomNav?: boolean;
+  subItems?: NavSubItem[];
 }
 
 export const RETAILER_NAV_ITEMS: NavItem[] = [
@@ -77,28 +86,26 @@ export const RETAILER_NAV_ITEMS: NavItem[] = [
     isBottomNav: false,
   },
   {
-    key: "helpCenter",
-    name: "Help Center",
+    key: "helpSupport",
+    name: "Help & Support",
     href: "/help",
     icon: "help-circle",
     roles: ["owner", "buyer", "store_manager", "employee", "accounting"],
     isBottomNav: false,
-  },
-  {
-    key: "askKSelect",
-    name: "Ask K SELECT",
-    href: "/help/ask",
-    icon: "sparkles",
-    roles: ["owner", "buyer", "store_manager", "employee", "accounting"],
-    isBottomNav: false,
-  },
-  {
-    key: "support",
-    name: "Support",
-    href: "/support",
-    icon: "life-buoy",
-    roles: ["owner", "buyer", "store_manager", "employee", "accounting"],
-    isBottomNav: false,
+    subItems: [
+      {
+        key: "helpCenter",
+        name: "Help Center",
+        href: "/help",
+        roles: ["owner", "buyer", "store_manager", "employee", "accounting"],
+      },
+      {
+        key: "support",
+        name: "Support",
+        href: "/support",
+        roles: ["owner", "buyer", "store_manager", "employee", "accounting"],
+      },
+    ],
   },
   {
     key: "account",
@@ -112,9 +119,19 @@ export const RETAILER_NAV_ITEMS: NavItem[] = [
 
 export function getNavItemsForRole(role: string = "owner"): NavItem[] {
   const normalizedRole = (role.toLowerCase().replace(/ /g, "_") as RetailerRole) || "owner";
-  return RETAILER_NAV_ITEMS.filter((item) =>
-    item.roles.includes(normalizedRole) || normalizedRole === "owner"
-  );
+  return RETAILER_NAV_ITEMS
+    .filter((item) => item.roles.includes(normalizedRole) || normalizedRole === "owner")
+    .map((item) => {
+      if (item.subItems) {
+        return {
+          ...item,
+          subItems: item.subItems.filter(
+            (sub) => sub.roles.includes(normalizedRole) || normalizedRole === "owner"
+          ),
+        };
+      }
+      return item;
+    });
 }
 
 export function getBottomNavItems(role: string = "owner"): NavItem[] {

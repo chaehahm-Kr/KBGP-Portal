@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AskAnswerResponse, AskSourceCitation } from "@/lib/knowledge/ask-engine";
 import { CANONICAL_BRAND_TOPICS, CanonicalTopic, matchTopicForKnowledge, matchTopicForFaq } from "@/lib/knowledge/topics";
+import { useTranslation } from "@/lib/i18n";
 
 export interface HelpItem {
   id: string;
@@ -51,6 +52,8 @@ export function HelpCenterMainView({
   supportDescription = "도움말에서 해결되지 않은 문제는 담당자에게 문의해 주세요."
 }: HelpCenterMainViewProps) {
   const router = useRouter();
+  const { locale } = useTranslation();
+  const isEn = portalType === "RETAILER" && locale !== "ko";
 
   // Knowledge & FAQ Data State
   const [items, setItems] = useState<HelpItem[]>([]);
@@ -83,7 +86,7 @@ export function HelpCenterMainView({
     fetchTopics();
     fetchFaqs();
     fetchSuggestedQuestions();
-  }, [apiEndpoint, portalType]);
+  }, [apiEndpoint, portalType, isEn]);
 
   const fetchTopics = async () => {
     try {
@@ -148,7 +151,7 @@ export function HelpCenterMainView({
         const json = await res.json();
         const list = json.items || json.faqs || [];
         if (Array.isArray(list)) {
-          const qList = list.map((f: any) => f.question_ko).filter(Boolean);
+          const qList = list.map((f: any) => (isEn ? (f.question_en || f.question_ko) : (f.question_ko || f.question_en))).filter(Boolean);
           setSuggestedQuestions(qList);
         }
       }
@@ -343,12 +346,19 @@ export function HelpCenterMainView({
   }, [faqs, questionInput, askResponse]);
 
   // Quick fallback questions
-  const defaultQuickQuestions = [
-    "브랜드는 어떻게 등록하나요?",
-    "상표권이 없어도 브랜드 등록이 가능한가요?",
-    "상품이 연결된 브랜드를 삭제할 수 있나요?",
-    "동일한 브랜드를 여러 회사가 취급할 수 있나요?"
-  ];
+  const defaultQuickQuestions = isEn
+    ? [
+        "How do I place a store purchase order?",
+        "How are wholesale prices and margins calculated?",
+        "How do I add a new retail store branch?",
+        "How do I review and sign the retailer agreement?"
+      ]
+    : [
+        "브랜드는 어떻게 등록하나요?",
+        "상표권이 없어도 브랜드 등록이 가능한가요?",
+        "상품이 연결된 브랜드를 삭제할 수 있나요?",
+        "동일한 브랜드를 여러 회사가 취급할 수 있나요?"
+      ];
 
   const displayQuickQuestions = suggestedQuestions.length > 0
     ? suggestedQuestions.slice(0, 4)
@@ -423,10 +433,10 @@ export function HelpCenterMainView({
               className="absolute right-1.5 px-3 py-1.5 rounded-md bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all shadow-xs disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer flex items-center gap-1"
             >
               {isAsking ? (
-                <span>조회 중...</span>
+                <span>{isEn ? "Searching..." : "조회 중..."}</span>
               ) : (
                 <>
-                  <span>질문하기</span>
+                  <span>{isEn ? "Ask" : "질문하기"}</span>
                   <span>&rarr;</span>
                 </>
               )}
@@ -435,7 +445,7 @@ export function HelpCenterMainView({
 
           {/* Quick Question Pills */}
           <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 scrollbar-none text-xs">
-            <span className="text-zinc-400 text-[11px] shrink-0 font-medium">추천:</span>
+            <span className="text-zinc-400 text-[11px] shrink-0 font-medium">{isEn ? "Suggested:" : "추천:"}</span>
             {displayQuickQuestions.map((qText, idx) => (
               <button
                 key={idx}
@@ -485,23 +495,23 @@ export function HelpCenterMainView({
               <div className="flex items-center gap-2">
                 <span className="inline-flex items-center gap-1 rounded-md bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 text-[11px] font-bold text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
                   <span>🛡️</span>
-                  <span>{askResponse.isUnknown ? "안내 (Notice)" : "공식 승인 지식 기반 답변"}</span>
+                  <span>{askResponse.isUnknown ? (isEn ? "Notice" : "안내 (Notice)") : (isEn ? "Verified Knowledge Answer" : "공식 승인 지식 기반 답변")}</span>
                 </span>
                 <span className="text-xs text-zinc-400">
-                  대상: {askResponse.audience}
+                  {isEn ? `Audience: ${askResponse.audience}` : `대상: ${askResponse.audience}`}
                 </span>
               </div>
               <div className="flex items-center gap-3">
                 <span className="text-[11px] text-zinc-400">
-                  {new Date(askResponse.createdAt).toLocaleTimeString()} 기준
+                  {new Date(askResponse.createdAt).toLocaleTimeString()}
                 </span>
                 <button
                   type="button"
                   onClick={() => setAskResponse(null)}
                   className="text-xs text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 cursor-pointer font-semibold"
-                  title="답변 닫기"
+                  title={isEn ? "Close Answer" : "답변 닫기"}
                 >
-                  ✕ 닫기
+                  {isEn ? "✕ Close" : "✕ 닫기"}
                 </button>
               </div>
             </div>
@@ -516,7 +526,7 @@ export function HelpCenterMainView({
               {askResponse.currentRuleBullets && askResponse.currentRuleBullets.length > 0 && (
                 <div className="rounded-lg bg-zinc-50 dark:bg-zinc-950 p-3 space-y-1.5 border border-zinc-100 dark:border-zinc-800/80">
                   <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-500 block">
-                    📌 핵심 정책 및 운영 규칙 (Core Rules)
+                    {isEn ? "📌 Core Rules & Operational Policies" : "📌 핵심 정책 및 운영 규칙 (Core Rules)"}
                   </span>
                   <ul className="space-y-1 text-xs text-zinc-700 dark:text-zinc-300">
                     {askResponse.currentRuleBullets.map((b, i) => (
@@ -534,11 +544,13 @@ export function HelpCenterMainView({
             {questionRelevantFaqs.length > 0 && (
               <div className="space-y-2 pt-2 border-t border-zinc-100 dark:border-zinc-800">
                 <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-500 block">
-                  💡 관련 자주 묻는 질문 (FAQ)
+                  {isEn ? "💡 Related Frequently Asked Questions (FAQ)" : "💡 관련 자주 묻는 질문 (FAQ)"}
                 </span>
                 <div className="rounded-lg border border-zinc-200 dark:border-zinc-800 divide-y divide-zinc-100 dark:divide-zinc-800 overflow-hidden bg-zinc-50/40 dark:bg-zinc-900/40">
                   {questionRelevantFaqs.map((faq) => {
                     const isOpen = openAskFaqId === faq.id;
+                    const qText = isEn ? (faq.question_en || faq.question_ko) : (faq.question_ko || faq.question_en);
+                    const aText = isEn ? (faq.answer_en || faq.answer_ko) : (faq.answer_ko || faq.answer_en);
                     return (
                       <div key={faq.id}>
                         <button
@@ -549,7 +561,7 @@ export function HelpCenterMainView({
                           <div className="flex items-center gap-2 min-w-0">
                             <span className="text-blue-600 dark:text-blue-400 font-mono font-bold text-xs shrink-0">Q.</span>
                             <span className="text-xs font-semibold text-zinc-900 dark:text-white truncate">
-                              {faq.question_ko}
+                              {qText}
                             </span>
                           </div>
                           <span className={`text-zinc-400 text-[10px] shrink-0 font-bold transition-transform ${isOpen ? "rotate-180" : ""}`}>
@@ -560,7 +572,7 @@ export function HelpCenterMainView({
                           <div className="px-3.5 pb-3 pt-1 text-xs text-zinc-700 dark:text-zinc-300 bg-white dark:bg-zinc-900/80 space-y-2 border-t border-zinc-100 dark:border-zinc-800">
                             <div className="flex items-start gap-2 pt-1.5">
                               <span className="text-emerald-600 dark:text-emerald-400 font-mono font-bold text-xs shrink-0">A.</span>
-                              <p className="leading-relaxed flex-1 font-normal">{faq.answer_ko}</p>
+                              <p className="leading-relaxed flex-1 font-normal">{aText}</p>
                             </div>
                             {faq.source_knowledge_id && (
                               <div className="text-right pt-1">
@@ -568,7 +580,7 @@ export function HelpCenterMainView({
                                   href={`${baseHelpPath}/${faq.source_knowledge_id}`}
                                   className="text-[11px] text-blue-600 hover:text-blue-700 dark:text-blue-400 font-semibold"
                                 >
-                                  공식 문서 확인 &rarr;
+                                  {isEn ? "View Official Document →" : "공식 문서 확인 →"}
                                 </Link>
                               </div>
                             )}
@@ -585,7 +597,7 @@ export function HelpCenterMainView({
             {askResponse.sources && askResponse.sources.length > 0 && (
               <div className="space-y-2 pt-2 border-t border-zinc-100 dark:border-zinc-800">
                 <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-500 block">
-                  📚 관련 공식 도움말
+                  {isEn ? "📚 Related Official Knowledge" : "📚 관련 공식 도움말"}
                 </span>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                   {askResponse.sources.map((src: AskSourceCitation) => (
@@ -598,7 +610,7 @@ export function HelpCenterMainView({
                         <div className="flex items-center justify-between gap-1">
                           {getTypeBadge(src.type)}
                           <span className="text-[10px] font-semibold text-zinc-400">
-                            버전 {src.version}
+                            {isEn ? `Version ${src.version}` : `버전 ${src.version}`}
                           </span>
                         </div>
                         <h4 className="text-xs font-bold text-zinc-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors line-clamp-1">
@@ -606,9 +618,9 @@ export function HelpCenterMainView({
                         </h4>
                       </div>
                       <div className="mt-2 pt-1.5 border-t border-zinc-100 dark:border-zinc-800/60 flex items-center justify-between text-[10px] text-zinc-400">
-                        <span>시행일: {src.effectiveDate}</span>
+                        <span>{isEn ? `Effective: ${src.effectiveDate}` : `시행일: ${src.effectiveDate}`}</span>
                         <span className="font-semibold text-blue-600 dark:text-blue-400 group-hover:translate-x-0.5 transition-transform">
-                          보기 &rarr;
+                          {isEn ? "View →" : "보기 →"}
                         </span>
                       </div>
                     </Link>
@@ -621,7 +633,7 @@ export function HelpCenterMainView({
             {askResponse.relatedManuals && askResponse.relatedManuals.length > 0 && (
               <div className="space-y-2 pt-2 border-t border-zinc-100 dark:border-zinc-800">
                 <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-500 block">
-                  📄 첨부 공식 PDF 매뉴얼
+                  {isEn ? "📄 Attached Official PDF Manuals" : "📄 첨부 공식 PDF 매뉴얼"}
                 </span>
                 <div className="space-y-1.5">
                   {askResponse.relatedManuals.map((man, i) => (
@@ -636,7 +648,7 @@ export function HelpCenterMainView({
                             {man.title}
                           </p>
                           <p className="text-[10px] text-emerald-700 dark:text-emerald-400 font-medium">
-                            공식 배포본 ({man.version})
+                            {isEn ? `Official Release (${man.version})` : `공식 배포본 (${man.version})`}
                           </p>
                         </div>
                       </div>
@@ -646,7 +658,7 @@ export function HelpCenterMainView({
                         rel="noreferrer"
                         className="rounded-md bg-emerald-600 hover:bg-emerald-700 px-2.5 py-1 text-[11px] font-bold text-white shadow-2xs transition-colors shrink-0 cursor-pointer"
                       >
-                        PDF 보기
+                        {isEn ? "View PDF" : "PDF 보기"}
                       </a>
                     </div>
                   ))}
@@ -660,10 +672,10 @@ export function HelpCenterMainView({
                 <div className="space-y-0.5">
                   <h4 className="text-xs font-bold text-amber-900 dark:text-amber-200 flex items-center gap-1.5">
                     <span>💬</span>
-                    <span>공식 도움말에서 충분한 정보를 찾지 못하셨나요?</span>
+                    <span>{isEn ? "Couldn't find what you need in official knowledge?" : "공식 도움말에서 충분한 정보를 찾지 못하셨나요?"}</span>
                   </h4>
                   <p className="text-xs text-amber-800/90 dark:text-amber-300">
-                    운영팀 1:1 문의로 전달하시면 질문 내용이 자동 연계되어 신속하게 안내해 드립니다.
+                    {isEn ? "Forward your question to our operations support team for direct guidance." : "운영팀 1:1 문의로 전달하시면 질문 내용이 자동 연계되어 신속하게 안내해 드립니다."}
                   </p>
                 </div>
                 <button
@@ -671,7 +683,7 @@ export function HelpCenterMainView({
                   onClick={() => handleEscalateToSupport("NO_ANSWER")}
                   className="rounded-md bg-[#131E2E] dark:bg-zinc-100 text-white dark:text-zinc-900 px-3.5 py-1.5 text-xs font-bold hover:bg-[#1f3047] dark:hover:bg-zinc-200 transition-colors shrink-0 shadow-2xs cursor-pointer flex items-center gap-1"
                 >
-                  <span>1:1 문의하기</span>
+                  <span>{isEn ? "Contact Support" : "1:1 문의하기"}</span>
                   <span>&rarr;</span>
                 </button>
               </div>
@@ -680,13 +692,13 @@ export function HelpCenterMainView({
             {/* Answered Additional Help Link */}
             {!askResponse.isUnknown && (
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 pt-2 border-t border-zinc-100 dark:border-zinc-800 text-xs text-zinc-500">
-                <span>추가 세부 문의가 필요하신가요?</span>
+                <span>{isEn ? "Need further assistance?" : "추가 세부 문의가 필요하신가요?"}</span>
                 <button
                   type="button"
                   onClick={() => handleEscalateToSupport("ANSWERED")}
                   className="text-blue-600 dark:text-blue-400 font-bold hover:underline cursor-pointer flex items-center gap-1"
                 >
-                  <span>1:1 추가 문의하기</span>
+                  <span>{isEn ? "Submit Support Inquiry" : "1:1 추가 문의하기"}</span>
                   <span>&rarr;</span>
                 </button>
               </div>
@@ -703,10 +715,10 @@ export function HelpCenterMainView({
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <h2 className="text-sm font-bold text-zinc-900 dark:text-white flex items-center gap-1.5">
-                <span>📂 주제별 도움말</span>
+                <span>📂 {isEn ? "Browse by Topic" : "주제별 도움말"}</span>
               </h2>
               <span className="text-xs text-zinc-500 dark:text-zinc-400 hidden sm:inline">
-                업무 주제를 선택하시면 관련 FAQ 및 공식 도움말이 표시됩니다.
+                {isEn ? "Select a business topic to view related FAQs and official policies." : "업무 주제를 선택하시면 관련 FAQ 및 공식 도움말이 표시됩니다."}
               </span>
             </div>
             {selectedTopicId && (
@@ -715,7 +727,7 @@ export function HelpCenterMainView({
                 onClick={() => setSelectedTopicId(null)}
                 className="text-xs text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 font-medium cursor-pointer"
               >
-                ✕ 선택 해제
+                {isEn ? "✕ Clear Selection" : "✕ 선택 해제"}
               </button>
             )}
           </div>
@@ -725,7 +737,11 @@ export function HelpCenterMainView({
             {activeTopics.map((topic) => {
               const stat = topicStats[topic.id] || { knowledgeCount: 0, faqCount: 0, total: 0 };
               const isSelected = selectedTopicId === topic.id;
-              const countBadgeLabel = `${stat.faqCount} FAQ · ${stat.knowledgeCount} 도움말`;
+              const countBadgeLabel = isEn
+                ? `${stat.faqCount} FAQ · ${stat.knowledgeCount} Guides`
+                : `${stat.faqCount} FAQ · ${stat.knowledgeCount} 도움말`;
+              const topicTitle = isEn ? (topic.title_en || topic.title_ko) : (topic.title_ko || topic.title_en);
+              const topicDesc = isEn ? (topic.short_desc_en || topic.short_desc_ko) : (topic.short_desc_ko || topic.short_desc_en);
 
               return (
                 <button
@@ -750,11 +766,11 @@ export function HelpCenterMainView({
                   </div>
                   <div className="mt-2">
                     <div className="text-xs font-bold leading-tight">
-                      {topic.title_ko}
+                      {topicTitle}
                     </div>
-                    {topic.short_desc_ko && (
+                    {topicDesc && (
                       <div className="text-[10px] text-zinc-400 dark:text-zinc-500 mt-0.5 truncate font-normal">
-                        {topic.short_desc_ko}
+                        {topicDesc}
                       </div>
                     )}
                   </div>
@@ -776,13 +792,15 @@ export function HelpCenterMainView({
               <span className="text-2xl">{currentSelectedTopic.icon}</span>
               <div>
                 <h3 className="text-sm font-extrabold text-zinc-900 dark:text-white flex items-center gap-2">
-                  <span>{currentSelectedTopic.title_ko}</span>
+                  <span>{isEn ? (currentSelectedTopic.title_en || currentSelectedTopic.title_ko) : (currentSelectedTopic.title_ko || currentSelectedTopic.title_en)}</span>
                   <span className="rounded-md bg-blue-100 dark:bg-blue-900/60 px-2 py-0.5 text-[10px] font-bold text-blue-700 dark:text-blue-300">
-                    {topicSpecificFaqs.length} FAQ · {topicSpecificItems.length} 도움말
+                    {isEn
+                      ? `${topicSpecificFaqs.length} FAQ · ${topicSpecificItems.length} Guides`
+                      : `${topicSpecificFaqs.length} FAQ · ${topicSpecificItems.length} 도움말`}
                   </span>
                 </h3>
                 <p className="text-[11px] text-zinc-600 dark:text-zinc-400 font-normal">
-                  {currentSelectedTopic.description_ko}
+                  {isEn ? (currentSelectedTopic.description_en || currentSelectedTopic.description_ko) : (currentSelectedTopic.description_ko || currentSelectedTopic.description_en)}
                 </p>
               </div>
             </div>
@@ -791,7 +809,7 @@ export function HelpCenterMainView({
               onClick={() => setSelectedTopicId(null)}
               className="rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 px-2.5 py-1 text-xs font-semibold text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-700 transition-colors shrink-0 cursor-pointer self-end sm:self-auto"
             >
-              ✕ 닫기
+              {isEn ? "✕ Close" : "✕ 닫기"}
             </button>
           </div>
 
@@ -800,11 +818,11 @@ export function HelpCenterMainView({
             <div className="space-y-2">
               <div className="text-xs font-bold text-zinc-700 dark:text-zinc-300 flex items-center justify-between">
                 <div className="flex items-center gap-1.5">
-                  <span>💡 자주 묻는 질문</span>
+                  <span>{isEn ? "💡 Frequently Asked Questions" : "💡 자주 묻는 질문"}</span>
                   <span className="text-[11px] font-mono text-zinc-400">({topicSpecificFaqs.length})</span>
                 </div>
                 <span className="hidden md:inline text-[11px] text-zinc-400">
-                  질문을 선택하면 오른쪽에 답변이 표시됩니다.
+                  {isEn ? "Select a question to view the answer." : "질문을 선택하면 오른쪽에 답변이 표시됩니다."}
                 </span>
               </div>
 
@@ -814,13 +832,14 @@ export function HelpCenterMainView({
                 <div className="md:col-span-5 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 overflow-hidden shadow-xs">
                   <div className="px-3.5 py-2.5 bg-zinc-50/80 dark:bg-zinc-950/60 border-b border-zinc-200/80 dark:border-zinc-800 flex items-center justify-between">
                     <span className="text-xs font-bold text-zinc-700 dark:text-zinc-300 flex items-center gap-1.5">
-                      <span>Q. 질문 목록</span>
+                      <span>{isEn ? "Q. Questions" : "Q. 질문 목록"}</span>
                       <span className="text-[10px] font-mono font-normal text-zinc-400">({topicSpecificFaqs.length})</span>
                     </span>
                   </div>
                   <div className="max-h-[460px] overflow-y-auto divide-y divide-zinc-100 dark:divide-zinc-800/80">
                     {topicSpecificFaqs.map((faq) => {
                       const isActive = (openTopicFaqId || topicSpecificFaqs[0]?.id) === faq.id;
+                      const qText = isEn ? (faq.question_en || faq.question_ko) : (faq.question_ko || faq.question_en);
                       return (
                         <button
                           key={faq.id}
@@ -836,7 +855,7 @@ export function HelpCenterMainView({
                             Q.
                           </span>
                           <span className="text-xs leading-snug line-clamp-2">
-                            {faq.question_ko}
+                            {qText}
                           </span>
                         </button>
                       );
@@ -849,6 +868,8 @@ export function HelpCenterMainView({
                   {(() => {
                     const activeFaq = topicSpecificFaqs.find(f => f.id === openTopicFaqId) || topicSpecificFaqs[0];
                     if (!activeFaq) return null;
+                    const qText = isEn ? (activeFaq.question_en || activeFaq.question_ko) : (activeFaq.question_ko || activeFaq.question_en);
+                    const aText = isEn ? (activeFaq.answer_en || activeFaq.answer_ko) : (activeFaq.answer_ko || activeFaq.answer_en);
                     return (
                       <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-5 shadow-xs flex flex-col justify-between min-h-[320px] space-y-4">
                         <div className="space-y-4">
@@ -857,7 +878,7 @@ export function HelpCenterMainView({
                               Q.
                             </span>
                             <h4 className="text-sm sm:text-base font-bold text-zinc-900 dark:text-white leading-snug">
-                              {activeFaq.question_ko}
+                              {qText}
                             </h4>
                           </div>
 
@@ -866,21 +887,21 @@ export function HelpCenterMainView({
                               A.
                             </span>
                             <div className="text-xs sm:text-sm text-zinc-700 dark:text-zinc-300 leading-relaxed font-normal whitespace-pre-line space-y-2 flex-1">
-                              {activeFaq.answer_ko}
+                              {aText}
                             </div>
                           </div>
                         </div>
 
                         <div className="flex items-center justify-between text-[11px] text-zinc-400 pt-3 border-t border-zinc-100 dark:border-zinc-800 mt-auto">
                           <span className="font-mono truncate max-w-[260px] sm:max-w-[340px]">
-                            출처: {activeFaq.source_title || activeFaq.source_knowledge_id} ({activeFaq.source_version})
+                            {isEn ? "Source: " : "출처: "}{activeFaq.source_title || activeFaq.source_knowledge_id} ({activeFaq.source_version})
                           </span>
                           {activeFaq.source_knowledge_id && (
                             <Link
                               href={`${baseHelpPath}/${activeFaq.source_knowledge_id}`}
                               className="text-blue-600 hover:text-blue-700 dark:text-blue-400 font-semibold shrink-0"
                             >
-                              공식 도움말 보기 &rarr;
+                              {isEn ? "View Official Guide →" : "공식 도움말 보기 →"}
                             </Link>
                           )}
                         </div>
@@ -894,6 +915,8 @@ export function HelpCenterMainView({
               <div className="block md:hidden rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 divide-y divide-zinc-100 dark:divide-zinc-800 overflow-hidden shadow-xs">
                 {topicSpecificFaqs.map((faq) => {
                   const isOpen = openTopicFaqId === faq.id;
+                  const qText = isEn ? (faq.question_en || faq.question_ko) : (faq.question_ko || faq.question_en);
+                  const aText = isEn ? (faq.answer_en || faq.answer_ko) : (faq.answer_ko || faq.answer_en);
                   return (
                     <div key={faq.id} className="transition-colors">
                       <button
@@ -906,7 +929,7 @@ export function HelpCenterMainView({
                             Q.
                           </span>
                           <span className="text-xs sm:text-sm font-semibold text-zinc-900 dark:text-white truncate">
-                            {faq.question_ko}
+                            {qText}
                           </span>
                         </div>
                         <span
@@ -925,20 +948,20 @@ export function HelpCenterMainView({
                               A.
                             </span>
                             <div className="space-y-1.5 leading-relaxed flex-1">
-                              <p className="font-normal">{faq.answer_ko}</p>
+                              <p className="font-normal">{aText}</p>
                             </div>
                           </div>
 
                           <div className="flex items-center justify-between text-[11px] text-zinc-400 pt-2 border-t border-zinc-200/50 dark:border-zinc-800">
                             <span className="font-mono">
-                              출처: {faq.source_title || faq.source_knowledge_id} ({faq.source_version})
+                              {isEn ? "Source: " : "출처: "}{faq.source_title || faq.source_knowledge_id} ({faq.source_version})
                             </span>
                             {faq.source_knowledge_id && (
                               <Link
                                 href={`${baseHelpPath}/${faq.source_knowledge_id}`}
                                 className="text-blue-600 hover:text-blue-700 dark:text-blue-400 font-semibold"
                               >
-                                공식 도움말 보기 &rarr;
+                                {isEn ? "View Official Guide →" : "공식 도움말 보기 →"}
                               </Link>
                             )}
                           </div>
@@ -955,7 +978,7 @@ export function HelpCenterMainView({
           {topicSpecificItems.length > 0 && (
             <div className="space-y-2 pt-1">
               <div className="text-xs font-bold text-zinc-700 dark:text-zinc-300 flex items-center gap-1.5">
-                <span>📚 관련 공식 도움말</span>
+                <span>{isEn ? "📚 Related Official Guides" : "📚 관련 공식 도움말"}</span>
                 <span className="text-[11px] font-mono text-zinc-400">({topicSpecificItems.length})</span>
               </div>
 
@@ -967,7 +990,7 @@ export function HelpCenterMainView({
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
                           <h4 className="text-xs sm:text-sm font-bold text-zinc-900 dark:text-white truncate">
-                            {item.title_ko || item.title}
+                            {isEn ? (item.title_en || item.title_ko || item.title) : (item.title_ko || item.title)}
                           </h4>
                           {item.document_url && (
                             <span className="px-1.5 py-0.5 text-[10px] font-bold rounded bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 shrink-0">
@@ -976,17 +999,19 @@ export function HelpCenterMainView({
                           )}
                         </div>
                         <p className="text-[11px] text-zinc-500 dark:text-zinc-400 truncate max-w-xl">
-                          {item.summary_ko || item.summary_en || "공식 도움말 내용을 확인하세요."}
+                          {isEn
+                            ? (item.summary_en || item.summary_ko || "Refer to the official guide for details.")
+                            : (item.summary_ko || item.summary_en || "공식 도움말 내용을 확인하세요.")}
                         </p>
                       </div>
                     </div>
                     <div className="flex items-center gap-3 shrink-0 self-end sm:self-auto text-[11px] text-zinc-400">
-                      <span>버전 {item.current_version || "v1.0"}</span>
+                      <span>{isEn ? `Version ${item.current_version || "v1.0"}` : `버전 ${item.current_version || "v1.0"}`}</span>
                       <Link
                         href={`${baseHelpPath}/${item.slug || item.id}`}
                         className="px-2.5 py-1 rounded bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-200 font-bold transition-colors"
                       >
-                        자세히 보기 &rarr;
+                        {isEn ? "Read More →" : "자세히 보기 →"}
                       </Link>
                     </div>
                   </div>
@@ -998,8 +1023,12 @@ export function HelpCenterMainView({
           {/* 3. In-Topic Ask & Support Action Bar */}
           <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/60 px-4 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs shadow-2xs">
             <div className="flex items-center gap-2">
-              <span className="text-zinc-600 dark:text-zinc-300 font-medium">원하는 답변을 찾지 못하셨나요?</span>
-              <span className="text-zinc-400 hidden sm:inline">직접 질문하거나 운영팀에 1:1 문의를 남겨주세요.</span>
+              <span className="text-zinc-600 dark:text-zinc-300 font-medium">
+                {isEn ? "Couldn't find what you're looking for?" : "원하는 답변을 찾지 못하셨나요?"}
+              </span>
+              <span className="text-zinc-400 hidden sm:inline">
+                {isEn ? "Ask directly or submit an inquiry to the support team." : "직접 질문하거나 운영팀에 1:1 문의를 남겨주세요."}
+              </span>
             </div>
             <div className="flex items-center gap-2 self-end sm:self-auto">
               <button
@@ -1007,7 +1036,7 @@ export function HelpCenterMainView({
                 onClick={handleFocusQuestionInput}
                 className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold transition-colors shrink-0 shadow-xs cursor-pointer flex items-center gap-1 text-xs"
               >
-                <span>직접 질문하기</span>
+                <span>{isEn ? "Ask a Question" : "직접 질문하기"}</span>
                 <span>&uarr;</span>
               </button>
               <button
@@ -1015,7 +1044,7 @@ export function HelpCenterMainView({
                 onClick={() => handleEscalateToSupport("GENERAL")}
                 className="px-3 py-1.5 rounded-lg bg-zinc-200 hover:bg-zinc-300 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-800 dark:text-zinc-200 font-bold transition-colors shrink-0 shadow-xs cursor-pointer flex items-center gap-1 text-xs"
               >
-                <span>1:1 문의하기</span>
+                <span>{isEn ? "Submit Inquiry" : "1:1 문의하기"}</span>
                 <span>&rarr;</span>
               </button>
             </div>
@@ -1032,7 +1061,7 @@ export function HelpCenterMainView({
             <div className="flex items-center gap-1.5">
               <span className="text-base">💬</span>
               <h3 className="text-xs sm:text-sm font-bold text-zinc-900 dark:text-white">
-                아직 해결되지 않았나요?
+                {isEn ? "Still need help?" : "아직 해결되지 않았나요?"}
               </h3>
             </div>
             <p className="text-xs text-zinc-500 dark:text-zinc-400">
