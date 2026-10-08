@@ -1,40 +1,28 @@
 const fs = require('fs');
-const path = require('path');
+const { createClient } = require('@supabase/supabase-js');
 
-const envFile = fs.readFileSync(path.join(__dirname, '..', '.env.local'), 'utf8');
+const envText = fs.readFileSync('.env.local', 'utf8');
 const env = {};
-envFile.split('\n').forEach(line => {
+envText.split('\n').forEach(line => {
   const match = line.match(/^\s*([\w.-]+)\s*=\s*(.*)?\s*$/);
   if (match) {
-    let value = (match[2] || '').trim();
+    let value = match[2] || '';
     if (value.startsWith('"') && value.endsWith('"')) value = value.slice(1, -1);
     if (value.startsWith("'") && value.endsWith("'")) value = value.slice(1, -1);
-    env[match[1]] = value;
+    env[match[1]] = value.trim();
   }
 });
 
-const { createClient } = require('@supabase/supabase-js');
-const admin = createClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SECRET_KEY || env.SUPABASE_SERVICE_ROLE_KEY);
+const adminClient = createClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SECRET_KEY || env.SUPABASE_SERVICE_ROLE_KEY);
 
-async function check() {
-  const { data: authUsers, error: authErr } = await admin.auth.admin.listUsers();
-  const tammyAuth = authUsers.users.find(u => u.email === 'tammyhahm77@gmail.com');
-  console.log('AUTH USER:', tammyAuth ? { id: tammyAuth.id, email: tammyAuth.email, user_metadata: tammyAuth.user_metadata } : 'Not found');
+async function checkFK() {
+  const res = await adminClient
+    .from('company_users')
+    .select('company_id, company_role, companies!company_users_company_id_fkey(id, name)')
+    .eq('id', '7c3c4899-fa85-4cf0-94c8-6d497b36f82f')
+    .maybeSingle();
 
-  const { data: cuList, error: cuErr } = await admin.from('company_users').select('*').ilike('email', '%tammyhahm77%');
-  console.log('COMPANY USERS LIST for tammy:', cuList);
-
-  if (tammyAuth) {
-    const { data: profiles } = await admin.from('profiles').select('*').eq('id', tammyAuth.id);
-    console.log('PROFILES for tammyAuth.id:', profiles);
-
-    const { data: cuByAuthId } = await admin.from('company_users').select('*').eq('id', tammyAuth.id);
-    console.log('COMPANY USERS by auth id:', cuByAuthId);
-  }
-
-  // Also check all company_users
-  const { data: allCu } = await admin.from('company_users').select('id, company_id, name, email, title, position, phone, permissions');
-  console.log('ALL COMPANY USERS:', allCu);
+  console.log('Result with explicit FK:', res);
 }
 
-check().catch(console.error);
+checkFK().catch(console.error);
