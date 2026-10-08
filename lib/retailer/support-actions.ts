@@ -12,7 +12,7 @@ import type {
   InquiryMessageItem,
   PartnerInquiryItem,
 } from "@/lib/inquiry/types";
-import { ALL_CASE_CATEGORY_LABELS } from "@/lib/inquiry/types";
+import { ALL_CASE_CATEGORY_LABELS, getNormalizedStatus } from "@/lib/inquiry/types";
 import { unstageFormData } from "@/lib/files/staged-upload";
 
 export interface RetailerStoreItem {
@@ -213,6 +213,12 @@ export async function getRetailerSupportInquiries(): Promise<PartnerInquiryItem[
       return [];
     }
 
+    // Build lookup map for parent/follow-up case details
+    const inquiryMap = new Map<string, { case_number?: string | null; title?: string | null }>();
+    data.forEach((i: any) => {
+      inquiryMap.set(i.id, { case_number: i.case_number, title: i.title });
+    });
+
     // Map items
     const items: PartnerInquiryItem[] = await Promise.all(
       data.map(async (item: any) => {
@@ -231,6 +237,7 @@ export async function getRetailerSupportInquiries(): Promise<PartnerInquiryItem[
         const order = item.retailer_orders;
         const ful = item.retailer_order_fulfillments;
         const prod = item.products;
+        const prevInfo = item.previous_case_id ? inquiryMap.get(item.previous_case_id) : null;
 
         return {
           id: item.id,
@@ -254,6 +261,11 @@ export async function getRetailerSupportInquiries(): Promise<PartnerInquiryItem[
           closed_by_side: item.closed_by_side,
           created_source: item.created_source,
           priority: item.priority || "normal",
+          previous_case_id: item.previous_case_id || null,
+          previous_case_number: prevInfo?.case_number || null,
+          previous_case_title: prevInfo?.title || null,
+          satisfaction_score: item.satisfaction_score ?? null,
+          satisfaction_comment: item.satisfaction_comment ?? null,
           created_at: item.created_at,
           updated_at: item.updated_at,
           companyName: item.companies?.name || "Retailer",
@@ -381,14 +393,42 @@ export async function createRetailerSupportInquiryAction(formData: FormData): Pr
     const category = String(formData.get("category") || "general").trim();
     const title = String(formData.get("title") || "").trim();
     const content = String(formData.get("content") || "").trim();
-    const storeId = (formData.get("store_id") as string)?.trim() || null;
-    const relatedOrderId = (formData.get("related_order_id") as string)?.trim() || null;
-    const relatedProductId = (formData.get("related_product_id") as string)?.trim() || null;
+    let storeId = (formData.get("store_id") as string)?.trim() || null;
+    let relatedOrderId = (formData.get("related_order_id") as string)?.trim() || null;
+    let relatedProductId = (formData.get("related_product_id") as string)?.trim() || null;
     const relatedProtectionId = (formData.get("related_protection_id") as string)?.trim() || null;
+    const previousCaseId = (formData.get("previous_case_id") as string)?.trim() || null;
+    const priority = (formData.get("priority") as string)?.trim() || "normal";
     const file = formData.get("file");
 
     if (!title) return { success: false, error: "Please enter a subject title." };
     if (!content) return { success: false, error: "Please enter your message details." };
+
+    // If follow-up case, verify parent case and auto-inherit context if not specified
+    let parentCaseNumber: string | null = null;
+    let parentCaseTitle: string | null = null;
+    if (previousCaseId) {
+      const { data: parentInq } = await adminClient
+        .from("partner_inquiries")
+        .select("id, case_number, title, store_id, related_order_id, related_product_id")
+        .eq("id", previousCaseId)
+        .eq("company_id", companyId)
+        .maybeSingle();
+
+      if (parentInq) {
+        parentCaseNumber = parentInq.case_number || null;
+        parentCaseTitle = parentInq.title || null;
+        if (!storeId && parentInq.store_id) {
+          storeId = parentInq.store_id;
+        }
+        if (!relatedOrderId && parentInq.related_order_id) {
+          relatedOrderId = parentInq.related_order_id;
+        }
+        if (!relatedProductId && parentInq.related_product_id) {
+          relatedProductId = parentInq.related_product_id;
+        }
+      }
+    }
 
     // Validate Store scope authorization if a specific store is selected
     if (storeId) {
@@ -424,6 +464,20 @@ export async function createRetailerSupportInquiryAction(formData: FormData): Pr
         if (!accessRow) {
           return { success: false, error: "You do not have access permissions for the selected store." };
         }
+      }
+    }
+
+    // Validate Order scope authorization
+    if (relatedOrderId) {
+      const { data: orderCheck } = await adminClient
+        .from("retailer_orders")
+        .select("id")
+        .eq("id", relatedOrderId)
+        .eq("company_id", companyId)
+        .maybeSingle();
+
+      if (!orderCheck) {
+        return { success: false, error: "Selected order does not belong to your company." };
       }
     }
 
@@ -466,10 +520,12 @@ export async function createRetailerSupportInquiryAction(formData: FormData): Pr
       attachment_filename: attachmentFilename,
       status: "open",
       is_action_required: false,
+      priority: ["normal", "high", "urgent"].includes(priority) ? priority : "normal",
       store_id: storeId,
       related_order_id: relatedOrderId,
       related_product_id: relatedProductId,
       related_protection_id: relatedProtectionId,
+      previous_case_id: previousCaseId || null,
     };
 
     const { data: newInquiry, error: insertError } = await adminClient
@@ -507,6 +563,18 @@ export async function createRetailerSupportInquiryAction(formData: FormData): Pr
         await adminClient.storage.from("company-uploads").remove([attachmentPath]);
       }
       return { success: false, error: "We couldn't submit your inquiry. Please try again." };
+    }
+
+    // If follow-up, record linkage event in thread
+    if (previousCaseId && parentCaseNumber) {
+      await adminClient.from("partner_inquiry_messages").insert({
+        inquiry_id: newInquiry.id,
+        sender_type: "system",
+        sender_name: "System",
+        content: `Follow-up inquiry created referencing Case #${parentCaseNumber}${parentCaseTitle ? ` ("${parentCaseTitle}")` : ""}`,
+        message_type: "status_change",
+        is_action_flag: false,
+      });
     }
 
     // Notify Active Admin Staff
@@ -660,5 +728,176 @@ export async function addRetailerInquiryReplyAction(formData: FormData): Promise
   } catch (err: any) {
     console.error("addRetailerInquiryReplyAction error:", err);
     return { success: false, error: err.message || "An unexpected error occurred." };
+  }
+}
+
+/**
+ * Submit customer satisfaction rating for a closed retailer case
+ */
+export async function submitRetailerSatisfactionRatingAction(
+  inquiryId: string,
+  satisfactionScore: number,
+  satisfactionComment?: string | null
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const session = await verifyRetailerSession();
+    const adminClient = createAdminClient();
+
+    const { data: companyUser } = await adminClient
+      .from("company_users")
+      .select("company_id, name")
+      .eq("id", session.userId)
+      .maybeSingle();
+
+    const companyId = companyUser?.company_id;
+    if (!companyId) {
+      return { success: false, error: "Authenticated company not found." };
+    }
+
+    const { data: inquiry, error: inqErr } = await adminClient
+      .from("partner_inquiries")
+      .select("id, status, satisfaction_score")
+      .eq("id", inquiryId)
+      .eq("company_id", companyId)
+      .maybeSingle();
+
+    if (inqErr || !inquiry) {
+      return { success: false, error: "Support case not found." };
+    }
+
+    const norm = getNormalizedStatus(inquiry.status);
+    if (norm !== "CLOSED") {
+      return { success: false, error: "Satisfaction rating can only be submitted for closed cases." };
+    }
+
+    const now = new Date().toISOString();
+    const { error: updateError } = await adminClient
+      .from("partner_inquiries")
+      .update({
+        satisfaction_score: satisfactionScore,
+        satisfaction_comment: satisfactionComment?.trim() || null,
+        satisfaction_at: now,
+        updated_at: now,
+      })
+      .eq("id", inquiryId)
+      .eq("company_id", companyId);
+
+    if (updateError) {
+      return { success: false, error: updateError.message };
+    }
+
+    // Insert satisfaction log into thread
+    await adminClient.from("partner_inquiry_messages").insert({
+      inquiry_id: inquiryId,
+      sender_type: "partner",
+      sender_id: session.userId,
+      sender_name: companyUser?.name || "Retailer Member",
+      content: `Satisfaction rating: ${"★".repeat(satisfactionScore)}${"☆".repeat(5 - satisfactionScore)} (${satisfactionScore}/5)${satisfactionComment ? ` "${satisfactionComment.trim()}"` : ""}`,
+      message_type: "satisfaction",
+      is_action_flag: false,
+    });
+
+    revalidatePath("/retailer/support");
+    revalidatePath("/support");
+    revalidatePath("/admin/partner-inquiries");
+
+    return { success: true };
+  } catch (err: any) {
+    console.error("[Retailer Support] submitRetailerSatisfactionRatingAction error:", err);
+    return { success: false, error: err.message || "Failed to submit satisfaction rating." };
+  }
+}
+
+/**
+ * Close a retailer support inquiry case directly by the retailer user
+ */
+export async function closeRetailerCaseAction(
+  inquiryId: string,
+  satisfactionScore?: number | null,
+  satisfactionComment?: string | null
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const session = await verifyRetailerSession();
+    const adminClient = createAdminClient();
+
+    const { data: companyUser } = await adminClient
+      .from("company_users")
+      .select("company_id, name")
+      .eq("id", session.userId)
+      .maybeSingle();
+
+    const companyId = companyUser?.company_id;
+    if (!companyId) {
+      return { success: false, error: "Authenticated company not found." };
+    }
+
+    const { data: inquiry, error: inqErr } = await adminClient
+      .from("partner_inquiries")
+      .select("id, status, case_number, title")
+      .eq("id", inquiryId)
+      .eq("company_id", companyId)
+      .maybeSingle();
+
+    if (inqErr || !inquiry) {
+      return { success: false, error: "Support case not found." };
+    }
+
+    const now = new Date().toISOString();
+    const updatePayload: any = {
+      status: "closed",
+      closed_at: now,
+      closed_by: session.userId,
+      closed_by_side: "portal",
+      is_action_required: false,
+      updated_at: now,
+    };
+
+    if (satisfactionScore && satisfactionScore > 0) {
+      updatePayload.satisfaction_score = satisfactionScore;
+      updatePayload.satisfaction_comment = satisfactionComment?.trim() || null;
+      updatePayload.satisfaction_at = now;
+    }
+
+    const { error: updateError } = await adminClient
+      .from("partner_inquiries")
+      .update(updatePayload)
+      .eq("id", inquiryId)
+      .eq("company_id", companyId);
+
+    if (updateError) {
+      return { success: false, error: updateError.message };
+    }
+
+    // Insert close event into thread
+    await adminClient.from("partner_inquiry_messages").insert({
+      inquiry_id: inquiryId,
+      sender_type: "partner",
+      sender_id: session.userId,
+      sender_name: companyUser?.name || "Retailer Member",
+      content: "Case closed by retailer member",
+      message_type: "case_closed",
+      is_action_flag: false,
+    });
+
+    if (satisfactionScore && satisfactionScore > 0) {
+      await adminClient.from("partner_inquiry_messages").insert({
+        inquiry_id: inquiryId,
+        sender_type: "partner",
+        sender_id: session.userId,
+        sender_name: companyUser?.name || "Retailer Member",
+        content: `Satisfaction rating: ${"★".repeat(satisfactionScore)}${"☆".repeat(5 - satisfactionScore)} (${satisfactionScore}/5)${satisfactionComment ? ` "${satisfactionComment.trim()}"` : ""}`,
+        message_type: "satisfaction",
+        is_action_flag: false,
+      });
+    }
+
+    revalidatePath("/retailer/support");
+    revalidatePath("/support");
+    revalidatePath("/admin/partner-inquiries");
+
+    return { success: true };
+  } catch (err: any) {
+    console.error("[Retailer Support] closeRetailerCaseAction error:", err);
+    return { success: false, error: err.message || "Failed to close inquiry case." };
   }
 }

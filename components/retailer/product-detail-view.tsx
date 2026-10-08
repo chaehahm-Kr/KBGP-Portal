@@ -317,19 +317,28 @@ export function RetailerProductDetailView({ product }: ProductDetailViewProps) {
                   )}
                 </div>
 
-                {/* Product Training Link */}
-                <div className="pt-3 border-t border-zinc-200/80 dark:border-zinc-800/80 flex items-center justify-between gap-3">
+                {/* Product Training & Support Links */}
+                <div className="pt-3 border-t border-zinc-200/80 dark:border-zinc-800/80 flex items-center justify-between gap-3 flex-wrap">
                   <span className="text-xs text-zinc-500 dark:text-zinc-400">
-                    Store staff selling guide & benefits:
+                    Store staff selling guide & support:
                   </span>
-                  <Link
-                    href={`/training/${product.id}`}
-                    className="py-2 px-3.5 rounded-xl text-xs font-bold bg-blue-50 dark:bg-blue-950/80 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800 hover:bg-blue-100 dark:hover:bg-blue-900 transition-colors inline-flex items-center gap-1.5 shrink-0"
-                  >
-                    <span>🎓</span>
-                    <span>Product Training</span>
-                    <span>→</span>
-                  </Link>
+                  <div className="flex items-center gap-2">
+                    <Link
+                      href={`/retailer/support?new=1&category=product_pricing&product_id=${product.id}&title=${encodeURIComponent(`[Product Inquiry] ${product.name}`)}`}
+                      className="py-2 px-3 rounded-xl text-xs font-semibold bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700 transition-colors inline-flex items-center gap-1.5 shrink-0"
+                    >
+                      <span>🛟</span>
+                      <span>Support</span>
+                    </Link>
+                    <Link
+                      href={`/training/${product.id}`}
+                      className="py-2 px-3.5 rounded-xl text-xs font-bold bg-blue-50 dark:bg-blue-950/80 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800 hover:bg-blue-100 dark:hover:bg-blue-900 transition-colors inline-flex items-center gap-1.5 shrink-0"
+                    >
+                      <span>🎓</span>
+                      <span>Product Training</span>
+                      <span>→</span>
+                    </Link>
+                  </div>
                 </div>
               </div>
             ) : (
