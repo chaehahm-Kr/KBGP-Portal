@@ -9,12 +9,29 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 /**
- * company_shipping_origins 테이블(0086)은 아직 운영 DB에 없다. 출고지는 실제로
- * companies.intro 메타데이터(JSON)에 저장되고 테이블 접근은 모두 try 안의 "있으면
- * 쓰는" 경로라, 회사 상세를 열 때마다 404 만 남았다. 테이블을 만든 뒤 true 로 바꾸면
- * 다시 테이블에도 읽고 쓴다. false 인 동안에는 요청을 보내지 않고 "결과 없음"을 돌려준다.
+ * DATA-JSON-MIG-005: 0137 이 company_shipping_origins 테이블을 만들고 JSON 출고지를 복사했다.
+ * 테이블을 먼저 읽고, 쓸 때는 테이블과 companies.intro 메타데이터(JSON 백업)에 함께 쓴다.
+ * false 로 바꾸면 테이블 요청을 보내지 않고 JSON 만 쓴다.
  */
-const SHIPPING_ORIGINS_TABLE_ENABLED = false;
+const SHIPPING_ORIGINS_TABLE_ENABLED = true;
+
+const ORIGIN_TABLE_COLUMNS = [
+  "id", "company_id", "name", "is_default", "contact_name", "phone", "email", "country",
+  "address_line1", "address_line2", "city", "state_province", "postal_code", "status", "notes",
+  "created_at", "updated_at", "created_by", "updated_by",
+] as const;
+
+/**
+ * 테이블에 쓸 칸만 남긴다. 목록 조회 때 덧붙는 warehouse_* 같은 표시용 값이 섞이면
+ * update 가 "column does not exist" 로 조용히 실패해 테이블만 예전 값으로 남는다.
+ */
+function toOriginRow(record: CompanyShippingOrigin): Record<string, unknown> {
+  const row: Record<string, unknown> = {};
+  for (const col of ORIGIN_TABLE_COLUMNS) {
+    if (record[col] !== undefined) row[col] = record[col];
+  }
+  return row;
+}
 
 const SKIPPED_RESULT = { data: null, error: { message: "company_shipping_origins table disabled" } };
 
@@ -264,7 +281,7 @@ export async function adminCreateShippingOrigin(
     }
 
     const { error } = await originsTable(admin)
-      .insert(newRecord);
+      .insert(toOriginRow(newRecord));
 
     if (!error) {
       savedToDb = true;
@@ -331,7 +348,7 @@ export async function portalCreateShippingOrigin(
     }
 
     await originsTable(admin)
-      .insert(newRecord);
+      .insert(toOriginRow(newRecord));
   } catch (e) {}
 
   let updatedList = existingOrigins;
@@ -394,7 +411,7 @@ export async function adminUpdateShippingOrigin(
     }
 
     await originsTable(admin)
-      .update(updatedRecord)
+      .update(toOriginRow(updatedRecord))
       .eq("id", id);
   } catch (e) {}
 
@@ -462,7 +479,7 @@ export async function portalUpdateShippingOrigin(
     }
 
     await originsTable(admin)
-      .update(updatedRecord)
+      .update(toOriginRow(updatedRecord))
       .eq("id", id);
   } catch (e) {}
 
