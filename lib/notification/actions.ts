@@ -16,12 +16,10 @@ export interface NotificationItem {
 }
 
 /**
- * notifications 테이블(0020/0093)은 아직 운영 DB에 없다. 그래서 Admin 직원이
- * 로그인하면 헤더가 30초마다 조회하면서 404 가 났다. 브랜드 포털 사용자는
- * company 메타데이터·문의 메시지로 알림을 받으므로 이 테이블과 무관하다.
- * 테이블을 만든 뒤 true 로 바꾸면 생성·조회·읽음 처리가 다시 켜진다.
+ * DATA-JSON-MIG-007: 알림은 notifications 테이블(0146), 읽음 기록은 notification_reads 에 둔다.
+ * 예전에는 PO 알림을 companies.intro JSON, 읽음 기록을 company_users.permissions JSON 에 저장했다.
+ * 두 테이블 모두 쓰기 RLS 정책이 없으므로 쓰기는 로그인 확인 후 service role 로 한다.
  */
-const NOTIFICATIONS_TABLE_ENABLED = false;
 
 const CATEGORY_LABELS: Record<string, string> = {
   po_change:   "PO 변경 요청",
@@ -36,7 +34,7 @@ const CATEGORY_LABELS: Record<string, string> = {
 
 /**
  * 시스템 혹은 다른 행위자가 특정 사용자에게 새 알림을 생성합니다.
- * RLS 우회를 위해 admin 클라이언트를 사용합니다.
+ * 알림 생성 실패가 원래 작업을 막지 않도록 오류는 기록만 하고 성공으로 돌려준다.
  */
 export async function createNotification(
   userId: string,
@@ -45,7 +43,6 @@ export async function createNotification(
   content: string,
   linkUrl: string | null = null
 ) {
-  if (!NOTIFICATIONS_TABLE_ENABLED) return { success: true };
   try {
     const adminSupabase = createAdminClient();
     const { data, error } = await adminSupabase
@@ -53,27 +50,30 @@ export async function createNotification(
       .insert({
         user_id: userId,
         sender_id: senderId,
-        title,
+        type: "GENERAL",
+        title: title.slice(0, 200),
         content,
         link_url: linkUrl,
-        is_read: false
+        is_read: false,
       })
       .select()
       .single();
 
     if (error) {
+      console.warn("[notifications] create failed:", error.message);
       return { success: true };
     }
 
     return { success: true, data };
-  } catch {
+  } catch (e) {
+    console.warn("[notifications] create failed:", e);
     return { success: true };
   }
 }
 
 /**
- * PO 관련 이벤트(PO_RECEIVED, PO_REVISED, PO_CANCELLATION_REQUESTED, PO_CANCELLED)에 대한 알림을 생성합니다.
- * 중복 생성을 방지하며 회사 메타데이터 및 notifications 테이블에 안전하게 기록합니다.
+ * PO 관련 이벤트(PO_RECEIVED, PO_REVISED, PO_CANCELLATION_REQUESTED, PO_CANCELLED)에 대한
+ * 회사 전체 알림을 생성합니다. 같은 이벤트(같은 type·PO, 수정이면 같은 revision)는 한 번만 만든다.
  */
 export async function createPoNotification(params: {
   companyId: string;
@@ -87,58 +87,32 @@ export async function createPoNotification(params: {
 }) {
   try {
     const adminSupabase = createAdminClient();
-    const notificationId = `po-${params.type.toLowerCase()}-${params.poId}-${Date.now()}`;
+    const metadata = { ...(params.metadata || {}), poId: params.poId, poNumber: params.poNumber };
 
-    // 1. Fetch company intro JSON
-    const { data: comp } = await adminSupabase
-      .from("companies")
-      .select("intro")
-      .eq("id", params.companyId)
-      .maybeSingle();
-
-    let metaObj: any = {};
-    if (comp && comp.intro && comp.intro.startsWith("__COMPANY_METADATA__:")) {
-      try {
-        metaObj = JSON.parse(comp.intro.substring("__COMPANY_METADATA__:".length));
-      } catch (e) {}
-    }
-
-    const existingNotifs: any[] = Array.isArray(metaObj.notifications) ? metaObj.notifications : [];
-    
-    // Deduplication check for identical event (same type, poId, and revision if revised)
+    let dupQuery = adminSupabase
+      .from("notifications")
+      .select("id")
+      .eq("company_id", params.companyId)
+      .eq("type", params.type)
+      .eq("metadata->>poId", params.poId)
+      .limit(1);
     const revNo = params.metadata?.revision_no;
-    const isDuplicate = existingNotifs.some((n: any) => {
-      if (n.type !== params.type || n.poId !== params.poId) return false;
-      if (params.type === "PO_REVISED" && revNo !== undefined) {
-        return n.metadata?.revision_no === revNo;
-      }
-      return true;
-    });
+    if (params.type === "PO_REVISED" && revNo !== undefined) {
+      dupQuery = dupQuery.eq("metadata->>revision_no", String(revNo));
+    }
+    const { data: existing, error: dupError } = await dupQuery;
+    if (dupError) throw new Error(dupError.message);
 
-    if (!isDuplicate) {
-      const newNotif = {
-        id: notificationId,
-        companyId: params.companyId,
+    if (!existing || existing.length === 0) {
+      const { error } = await adminSupabase.from("notifications").insert({
+        company_id: params.companyId,
         type: params.type,
-        title: params.title,
+        title: params.title.slice(0, 200),
         content: params.content,
         link_url: params.linkUrl,
-        poNumber: params.poNumber,
-        poId: params.poId,
-        metadata: params.metadata || {},
-        created_at: new Date().toISOString(),
-      };
-
-      existingNotifs.unshift(newNotif);
-      // Keep up to 100 recent notifications
-      metaObj.notifications = existingNotifs.slice(0, 100);
-
-      await adminSupabase
-        .from("companies")
-        .update({
-          intro: `__COMPANY_METADATA__:${JSON.stringify(metaObj)}`,
-        })
-        .eq("id", params.companyId);
+        metadata,
+      });
+      if (error) throw new Error(error.message);
     }
 
     revalidatePath("/portal", "layout");
@@ -149,11 +123,32 @@ export async function createPoNotification(params: {
   }
 }
 
+async function getReadItemIds(adminSupabase: ReturnType<typeof createAdminClient>, userId: string): Promise<Set<string>> {
+  const { data, error } = await adminSupabase
+    .from("notification_reads")
+    .select("item_id")
+    .eq("user_id", userId);
+  if (error) {
+    console.warn("[notifications] read-state load failed:", error.message);
+    return new Set();
+  }
+  return new Set((data ?? []).map((r: any) => r.item_id));
+}
+
+async function markItemsRead(adminSupabase: ReturnType<typeof createAdminClient>, userId: string, itemIds: string[]) {
+  if (itemIds.length === 0) return;
+  const { error } = await adminSupabase
+    .from("notification_reads")
+    .upsert(itemIds.map((item_id) => ({ user_id: userId, item_id })), { onConflict: "user_id,item_id", ignoreDuplicates: true });
+  if (error) throw new Error(error.message);
+}
+
 /**
  * 로그인한 사용자의 모든 알림을 최신순으로 가져옵니다.
  * Brand Portal 사용자의 경우:
- * 1. PO 관련 이벤트 알림 (발주 수신, 수정, 취소 등)
+ * 1. 회사 전체 알림(PO 발주 수신, 수정, 취소 등)과 본인 대상 알림
  * 2. Action Required 문의 메시지 알림
+ * Admin 직원 등 회사 소속이 아니면 본인 대상 알림만.
  */
 export async function getNotifications(): Promise<NotificationItem[]> {
   try {
@@ -163,47 +158,38 @@ export async function getNotifications(): Promise<NotificationItem[]> {
 
     const adminSupabase = createAdminClient();
 
-    // 1. Check if user belongs to a company (Brand Portal User)
     const { data: companyUser } = await adminSupabase
       .from("company_users")
-      .select("company_id, permissions")
+      .select("company_id")
       .eq("id", user.id)
       .maybeSingle();
 
     if (companyUser && companyUser.company_id) {
       const companyId = companyUser.company_id;
-      const readIds: string[] = Array.isArray(companyUser.permissions?.read_notification_ids)
-        ? companyUser.permissions.read_notification_ids
-        : [];
-
+      const readIds = await getReadItemIds(adminSupabase, user.id);
       const resultNotifications: NotificationItem[] = [];
 
-      // 1-A. Fetch PO notifications from Company Metadata
-      const { data: comp } = await adminSupabase
-        .from("companies")
-        .select("intro")
-        .eq("id", companyId)
-        .maybeSingle();
+      // 1-A. 회사 전체 알림 + 본인 대상 알림
+      const { data: rows, error: rowsError } = await adminSupabase
+        .from("notifications")
+        .select("id, user_id, sender_id, title, content, link_url, metadata, created_at")
+        .or(`company_id.eq.${companyId},user_id.eq.${user.id}`)
+        .order("created_at", { ascending: false })
+        .limit(100);
+      if (rowsError) console.warn("[notifications] load failed:", rowsError.message);
 
-      if (comp && comp.intro && comp.intro.startsWith("__COMPANY_METADATA__:")) {
-        try {
-          const parsed = JSON.parse(comp.intro.substring("__COMPANY_METADATA__:".length));
-          if (Array.isArray(parsed.notifications)) {
-            parsed.notifications.forEach((n: any) => {
-              resultNotifications.push({
-                id: n.id,
-                user_id: user.id,
-                sender_id: null,
-                title: n.title,
-                content: n.content,
-                link_url: n.link_url || `/portal/orders/purchase-orders/${n.poId}`,
-                is_read: readIds.includes(n.id),
-                created_at: n.created_at,
-              });
-            });
-          }
-        } catch (e) {}
-      }
+      (rows ?? []).forEach((n: any) => {
+        resultNotifications.push({
+          id: n.id,
+          user_id: user.id,
+          sender_id: n.sender_id,
+          title: n.title,
+          content: n.content,
+          link_url: n.link_url || (n.metadata?.poId ? `/portal/orders/purchase-orders/${n.metadata.poId}` : null),
+          is_read: readIds.has(n.id),
+          created_at: n.created_at,
+        });
+      });
 
       // 1-B. Fetch Action Required messages sent by Admin for company cases
       const { data: inquiries } = await adminSupabase
@@ -238,14 +224,13 @@ export async function getNotifications(): Promise<NotificationItem[]> {
               title: "조치가 필요한 문의가 있습니다.",
               content: `${caseNum} · ${catLabel}`,
               link_url: `/portal/support?case=${linkCaseIdentifier}`,
-              is_read: readIds.includes(msg.id),
+              is_read: readIds.has(msg.id),
               created_at: msg.created_at,
             });
           });
         }
       }
 
-      // Sort all notifications by created_at descending
       resultNotifications.sort(
         (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
       );
@@ -253,20 +238,20 @@ export async function getNotifications(): Promise<NotificationItem[]> {
       return resultNotifications;
     }
 
-    // 2. Fallback for staff or system notifications table
-    if (!NOTIFICATIONS_TABLE_ENABLED) return [];
-    const { data, error } = await supabase
+    // 2. 회사 소속이 아닌 사용자(Admin 직원 등): 본인 대상 알림
+    const { data, error } = await adminSupabase
       .from("notifications")
-      .select("*")
+      .select("id, user_id, sender_id, title, content, link_url, is_read, created_at")
       .eq("user_id", user.id)
       .order("created_at", { ascending: false })
       .limit(50);
 
     if (error) {
+      console.warn("[notifications] load failed:", error.message);
       return [];
     }
 
-    return data || [];
+    return (data || []) as NotificationItem[];
   } catch (e) {
     console.error("Failed to fetch notifications:", e);
     return [];
@@ -283,46 +268,22 @@ export async function markNotificationAsRead(id: string) {
     if (!user) return { success: false, error: "로그인이 필요합니다." };
 
     const adminSupabase = createAdminClient();
-
-    // Check company user
     const { data: companyUser } = await adminSupabase
       .from("company_users")
-      .select("permissions")
+      .select("id")
       .eq("id", user.id)
       .maybeSingle();
 
     if (companyUser) {
-      const currentPerms = (companyUser.permissions && typeof companyUser.permissions === "object")
-        ? companyUser.permissions
-        : {};
-      const currentReadIds: string[] = Array.isArray(currentPerms.read_notification_ids)
-        ? currentPerms.read_notification_ids
-        : [];
-
-      if (!currentReadIds.includes(id)) {
-        const nextReadIds = [...currentReadIds, id];
-        await adminSupabase
-          .from("company_users")
-          .update({
-            permissions: {
-              ...currentPerms,
-              read_notification_ids: nextReadIds
-            }
-          })
-          .eq("id", user.id);
-      }
-
-      revalidatePath("/portal", "layout");
-      return { success: true };
+      await markItemsRead(adminSupabase, user.id, [id]);
+    } else {
+      const { error } = await adminSupabase
+        .from("notifications")
+        .update({ is_read: true })
+        .eq("id", id)
+        .eq("user_id", user.id);
+      if (error) throw new Error(error.message);
     }
-
-    // Fallback for notifications table
-    if (!NOTIFICATIONS_TABLE_ENABLED) return { success: true };
-    await supabase
-      .from("notifications")
-      .update({ is_read: true })
-      .eq("id", id)
-      .eq("user_id", user.id);
 
     revalidatePath("/portal", "layout");
     return { success: true };
@@ -341,47 +302,24 @@ export async function markAllNotificationsAsRead() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return { success: false, error: "로그인이 필요합니다." };
 
-    const notifications = await getNotifications();
-    const allIds = notifications.map((n) => n.id);
-
     const adminSupabase = createAdminClient();
     const { data: companyUser } = await adminSupabase
       .from("company_users")
-      .select("permissions")
+      .select("id")
       .eq("id", user.id)
       .maybeSingle();
 
     if (companyUser) {
-      const currentPerms = (companyUser.permissions && typeof companyUser.permissions === "object")
-        ? companyUser.permissions
-        : {};
-      const currentReadIds: string[] = Array.isArray(currentPerms.read_notification_ids)
-        ? currentPerms.read_notification_ids
-        : [];
-
-      const mergedReadIds = Array.from(new Set([...currentReadIds, ...allIds]));
-
-      await adminSupabase
-        .from("company_users")
-        .update({
-          permissions: {
-            ...currentPerms,
-            read_notification_ids: mergedReadIds
-          }
-        })
-        .eq("id", user.id);
-
-      revalidatePath("/portal", "layout");
-      return { success: true };
+      const notifications = await getNotifications();
+      await markItemsRead(adminSupabase, user.id, notifications.filter((n) => !n.is_read).map((n) => n.id));
+    } else {
+      const { error } = await adminSupabase
+        .from("notifications")
+        .update({ is_read: true })
+        .eq("user_id", user.id)
+        .eq("is_read", false);
+      if (error) throw new Error(error.message);
     }
-
-    // Fallback for notifications table
-    if (!NOTIFICATIONS_TABLE_ENABLED) return { success: true };
-    await supabase
-      .from("notifications")
-      .update({ is_read: true })
-      .eq("user_id", user.id)
-      .eq("is_read", false);
 
     revalidatePath("/portal", "layout");
     return { success: true };
