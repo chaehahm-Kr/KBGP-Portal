@@ -46,12 +46,15 @@ export const viewport: Viewport = {
 
 import { getImpersonationSession } from "@/lib/auth/impersonation";
 import { ImpersonationBanner } from "@/components/shared/impersonation-banner";
+import { LanguageProvider } from "@/lib/i18n/context";
+import { getServerLocale } from "@/lib/i18n/server";
 
 export default async function RetailerLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const serverLocale = await getServerLocale();
   const impSession = await getImpersonationSession();
   const supabase = await createClient();
   const {
@@ -61,9 +64,11 @@ export default async function RetailerLayout({
   // 1. Unauthenticated view (e.g. /retailer/login)
   if (!user && !impSession) {
     return (
-      <div className="min-h-screen bg-zinc-950 flex items-center justify-center p-4 sm:p-6 selection:bg-zinc-800 selection:text-white">
-        {children}
-      </div>
+      <LanguageProvider initialLocale={serverLocale}>
+        <div className="min-h-screen bg-zinc-950 flex items-center justify-center p-4 sm:p-6 selection:bg-zinc-800 selection:text-white">
+          {children}
+        </div>
+      </LanguageProvider>
     );
   }
 
@@ -131,37 +136,39 @@ export default async function RetailerLayout({
   }
 
   return (
-    <CartProvider>
-      <div className="min-h-screen flex flex-col bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 font-sans transition-colors">
-        {impSession && <ImpersonationBanner session={impSession} />}
-        <div className="flex-1 flex min-w-0">
-          {/* Desktop Sidebar */}
-          <RetailerSidebar
-            role={role}
-            companyName={companyName}
-            storeName={storeName}
-            userName={userName}
-          />
-
-          {/* Main Content Column */}
-          <div className="flex-1 flex flex-col min-w-0">
-            <RetailerHeader
-              userName={userName}
-              userEmail={userEmail}
-              companyName={companyName}
+    <LanguageProvider initialLocale={serverLocale}>
+      <CartProvider>
+        <div className="min-h-screen flex flex-col bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 font-sans transition-colors">
+          {impSession && <ImpersonationBanner session={impSession} />}
+          <div className="flex-1 flex min-w-0">
+            {/* Desktop Sidebar */}
+            <RetailerSidebar
               role={role}
+              companyName={companyName}
               storeName={storeName}
+              userName={userName}
             />
 
-            <main className="flex-1 p-4 sm:p-6 lg:p-8 pb-24 lg:pb-8 overflow-y-auto">
-              <div className="w-full max-w-7xl">{children}</div>
-            </main>
+            {/* Main Content Column */}
+            <div className="flex-1 flex flex-col min-w-0">
+              <RetailerHeader
+                userName={userName}
+                userEmail={userEmail}
+                companyName={companyName}
+                role={role}
+                storeName={storeName}
+              />
 
-            {/* Mobile Bottom Navigation */}
-            <RetailerBottomNav role={role} />
+              <main className="flex-1 p-4 sm:p-6 lg:p-8 pb-24 lg:pb-8 overflow-y-auto">
+                <div className="w-full max-w-7xl">{children}</div>
+              </main>
+
+              {/* Mobile Bottom Navigation */}
+              <RetailerBottomNav role={role} />
+            </div>
           </div>
         </div>
-      </div>
-    </CartProvider>
+      </CartProvider>
+    </LanguageProvider>
   );
 }

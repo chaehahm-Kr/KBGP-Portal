@@ -4,6 +4,7 @@ import React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { NavIcon } from "@/components/retailer/nav-icon";
+import { useTranslation } from "@/lib/i18n/context";
 
 interface RetailerBottomNavProps {
   role?: string;
@@ -11,13 +12,14 @@ interface RetailerBottomNavProps {
 
 export function RetailerBottomNav({ }: RetailerBottomNavProps) {
   const pathname = usePathname();
+  const { t } = useTranslation();
 
   const items = [
-    { name: "Home", href: "/", icon: "home" },
-    { name: "Products", href: "/products", icon: "package" },
-    { name: "Check", href: "/check", icon: "clipboard-check", highlight: true },
-    { name: "Orders", href: "/orders", icon: "shopping-cart" },
-    { name: "Account", href: "/account", icon: "user" },
+    { name: t.nav.home, href: "/", icon: "home" },
+    { name: t.nav.products, href: "/products", icon: "package" },
+    { name: t.nav.weeklyCheck, href: "/check", icon: "clipboard-check", highlight: true },
+    { name: t.nav.orders, href: "/orders", icon: "shopping-cart" },
+    { name: t.nav.account, href: "/account", icon: "user" },
   ];
 
   return (
@@ -48,7 +50,7 @@ export function RetailerBottomNav({ }: RetailerBottomNavProps) {
                   <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
                 )}
               </div>
-              <span className="text-[10px] tracking-tight">{item.name}</span>
+              <span className="text-[10px] tracking-tight truncate max-w-[56px] text-center">{item.name}</span>
             </Link>
           );
         })}
@@ -56,3 +58,4 @@ export function RetailerBottomNav({ }: RetailerBottomNavProps) {
     </nav>
   );
 }
+

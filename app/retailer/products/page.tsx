@@ -4,6 +4,7 @@ import { verifyRetailerSession } from "@/lib/auth/dal";
 import { getRetailerProducts } from "@/lib/retailer/products";
 import { RetailerProductCard } from "@/components/retailer/product-card";
 import { RetailerProductFilterBar } from "@/components/retailer/product-filter-bar";
+import { getServerTranslations } from "@/lib/i18n/server";
 
 export const dynamic = "force-dynamic";
 
@@ -23,6 +24,7 @@ interface RetailerProductsPageProps {
 export default async function RetailerProductsPage({ searchParams }: RetailerProductsPageProps) {
   await verifyRetailerSession();
   const resolvedParams = await searchParams;
+  const { t } = await getServerTranslations();
 
   const catalog = await getRetailerProducts({
     search: resolvedParams.search,
@@ -36,13 +38,13 @@ export default async function RetailerProductsPage({ searchParams }: RetailerPro
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-zinc-200 dark:border-zinc-800 pb-5">
         <div>
           <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-md text-[11px] font-semibold bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-400 border border-indigo-200/50 dark:border-indigo-800/50 mb-2">
-            <span>✨</span> B2B Wholesale Catalog
+            <span>✨</span> {t.products.b2bCatalogBadge}
           </div>
           <h1 className="text-2xl sm:text-3xl font-bold text-zinc-900 dark:text-white tracking-tight">
-            Product Discovery
+            {t.products.title}
           </h1>
           <p className="text-xs sm:text-sm text-zinc-500 dark:text-zinc-400 mt-1 max-w-2xl">
-            Browse verified Korean beauty brands, analyze retail margins, and explore high-demand SKUs ready for store shelves.
+            {t.products.subtitle}
           </p>
         </div>
 
@@ -50,11 +52,11 @@ export default async function RetailerProductsPage({ searchParams }: RetailerPro
         <div className="flex items-center gap-3 text-xs text-zinc-600 dark:text-zinc-300">
           <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 shadow-2xs">
             <span className="w-2 h-2 rounded-full bg-emerald-500" />
-            <span className="font-semibold text-zinc-900 dark:text-white">~50%</span> Avg Margin
+            <span className="font-semibold text-zinc-900 dark:text-white">~50%</span> {t.products.avgMargin}
           </div>
           <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 shadow-2xs">
             <span className="w-2 h-2 rounded-full bg-indigo-500" />
-            <span>Case Pack MOQ</span>
+            <span>{t.products.casePackMoq}</span>
           </div>
         </div>
       </div>
@@ -84,10 +86,10 @@ export default async function RetailerProductsPage({ searchParams }: RetailerPro
           </div>
           <div className="max-w-sm mx-auto space-y-1">
             <h3 className="text-base font-bold text-zinc-900 dark:text-white">
-              No products found
+              {t.products.noProductsFound}
             </h3>
             <p className="text-xs text-zinc-500 dark:text-zinc-400">
-              We couldn’t find any products matching your search criteria. Try adjusting your search query or clearing filters.
+              {t.products.noProductsDesc}
             </p>
           </div>
           <div className="pt-2">
@@ -95,7 +97,7 @@ export default async function RetailerProductsPage({ searchParams }: RetailerPro
               href="/products"
               className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 hover:opacity-90 transition-opacity"
             >
-              Reset All Filters
+              {t.products.resetFilters}
             </a>
           </div>
         </div>

@@ -6,6 +6,7 @@ import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { getNavItemsForRole } from "@/lib/retailer/navigation";
 import { NavIcon } from "@/components/retailer/nav-icon";
+import { useTranslation } from "@/lib/i18n/context";
 
 interface RetailerSidebarProps {
   role: string;
@@ -21,6 +22,7 @@ export function RetailerSidebar({
   userName,
 }: RetailerSidebarProps) {
   const pathname = usePathname();
+  const { t } = useTranslation();
   const navItems = getNavItemsForRole(role);
 
   return (
@@ -43,7 +45,7 @@ export function RetailerSidebar({
               K SELECT HUB
             </span>
             <span className="text-[10px] font-semibold text-zinc-600 dark:text-zinc-400 block tracking-wider uppercase">
-              Retailer Portal
+              {t.header.retailerPortal}
             </span>
           </div>
         </Link>
@@ -75,6 +77,8 @@ export function RetailerSidebar({
                 pathname === `/retailer${item.href}` ||
                 pathname.startsWith(`/retailer${item.href}/`);
 
+          const translatedName = t.nav[item.key as keyof typeof t.nav] || item.name;
+
           return (
             <Link
               key={item.href}
@@ -87,7 +91,7 @@ export function RetailerSidebar({
             >
               <div className="flex items-center gap-3">
                 <NavIcon name={item.icon} className="w-4 h-4 shrink-0" />
-                <span>{item.name}</span>
+                <span>{translatedName}</span>
               </div>
               {item.badge && (
                 <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
@@ -110,7 +114,7 @@ export function RetailerSidebar({
               {userName}
             </p>
             <p className="text-[10px] font-semibold text-zinc-600 dark:text-zinc-400 capitalize">
-              Role: {role.replace(/_/g, " ")}
+              {t.header.role}: {role.replace(/_/g, " ")}
             </p>
           </div>
         </div>
@@ -118,3 +122,4 @@ export function RetailerSidebar({
     </aside>
   );
 }
+

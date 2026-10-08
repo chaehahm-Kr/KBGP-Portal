@@ -2,6 +2,7 @@
 
 import React, { useTransition } from "react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
+import { useTranslation } from "@/lib/i18n";
 
 interface FilterBarProps {
   categories: Array<{ code: string; label: string; count: number }>;
@@ -24,6 +25,7 @@ export function RetailerProductFilterBar({
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [isPending, startTransition] = useTransition();
+  const { t, locale } = useTranslation();
 
   const handleSearchChange = (term: string) => {
     const params = new URLSearchParams(searchParams.toString());
@@ -95,7 +97,7 @@ export function RetailerProductFilterBar({
           </div>
           <input
             type="text"
-            placeholder="Search by product name, brand, SKU, or keywords..."
+            placeholder={t.products.searchPlaceholder}
             defaultValue={currentSearch}
             onChange={(e) => handleSearchChange(e.target.value)}
             className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-sm text-zinc-900 dark:text-white placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all shadow-xs"
@@ -110,7 +112,7 @@ export function RetailerProductFilterBar({
               onChange={(e) => handleBrandChange(e.target.value)}
               className="w-full px-3.5 py-2.5 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-sm text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all shadow-xs cursor-pointer"
             >
-              <option value="all">All Brands ({brands.reduce((a, b) => a + b.count, 0)})</option>
+              <option value="all">{t.products.allBrands} ({brands.reduce((a, b) => a + b.count, 0)})</option>
               {brands.map((b) => (
                 <option key={b.id} value={b.id}>
                   {b.name} ({b.count})
@@ -128,7 +130,7 @@ export function RetailerProductFilterBar({
               onChange={(e) => handleCategoryChange(e.target.value)}
               className="w-full px-3.5 py-2.5 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-sm text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all shadow-xs cursor-pointer"
             >
-              <option value="all">All Categories ({categories.reduce((a, b) => a + b.count, 0)})</option>
+              <option value="all">{t.products.allCategories} ({categories.reduce((a, b) => a + b.count, 0)})</option>
               {categories.map((c) => (
                 <option key={c.code} value={c.code}>
                   {c.label} ({c.count})
@@ -151,7 +153,7 @@ export function RetailerProductFilterBar({
                 : "bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700"
             }`}
           >
-            All Products
+            {t.common.all}
           </button>
           {categories.map((cat) => {
             const isSelected = currentCategory === cat.code;
@@ -177,12 +179,16 @@ export function RetailerProductFilterBar({
       <div className="flex items-center justify-between text-xs text-zinc-500 dark:text-zinc-400 pt-1">
         <div className="flex items-center gap-2">
           <span>
-            Showing <strong className="text-zinc-900 dark:text-white font-semibold">{totalCount}</strong> verified {totalCount === 1 ? "product" : "products"}
+            {locale === "ko" ? (
+              <>총 <strong className="text-zinc-900 dark:text-white font-semibold">{totalCount}</strong>개의 검증된 상품</>
+            ) : (
+              <>Showing <strong className="text-zinc-900 dark:text-white font-semibold">{totalCount}</strong> verified {totalCount === 1 ? "product" : "products"}</>
+            )}
           </span>
           {isPending && (
             <span className="inline-flex items-center gap-1 text-indigo-600 dark:text-indigo-400 animate-pulse">
               <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-ping" />
-              Updating...
+              {t.common.loading}
             </span>
           )}
         </div>
@@ -193,7 +199,7 @@ export function RetailerProductFilterBar({
             onClick={handleResetFilters}
             className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline inline-flex items-center gap-1 cursor-pointer"
           >
-            Clear all filters ✕
+            {t.products.resetFilters} ✕
           </button>
         )}
       </div>

@@ -17,6 +17,8 @@ import { RetailerAgreementCard } from "@/components/retailer/retailer-agreement-
 import type { CompanyAgreementItem } from "@/lib/agreement/types";
 import { PwaInstallAffordance } from "@/components/retailer/pwa-install-manager";
 import { changeRetailerPasswordAction } from "@/lib/auth/password-actions";
+import { useTranslation } from "@/lib/i18n";
+import { LanguageToggle } from "@/components/retailer/language-toggle";
 
 export interface StoreLocationItem {
   id: string;
@@ -89,6 +91,7 @@ export function AccountOrganizationView({
   documents = [],
 }: AccountOrganizationViewProps) {
   const [isPending, startTransition] = useTransition();
+  const { t, locale } = useTranslation();
 
   // 1. Personal Profile Modal State
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
@@ -416,10 +419,10 @@ export function AccountOrganizationView({
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-zinc-200 dark:border-zinc-800 pb-5">
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-zinc-900 dark:text-white tracking-tight">
-            Account & Organization Settings
+            {t.account.title}
           </h1>
           <p className="text-xs sm:text-sm text-zinc-500 dark:text-zinc-400 mt-1">
-            Manage your personal credentials, retail organization information, store locations, and team staff access.
+            {t.account.subtitle}
           </p>
         </div>
       </div>
@@ -437,7 +440,7 @@ export function AccountOrganizationView({
             }`}
           >
             <span>👤</span>
-            <span>Account Information</span>
+            <span>{t.account.tabPersonal}</span>
           </Link>
 
           {/* Tab 2: Company & Store Locations */}
@@ -450,7 +453,7 @@ export function AccountOrganizationView({
             }`}
           >
             <span>🏢</span>
-            <span>Company & Store Locations</span>
+            <span>{t.account.tabOrg}</span>
             <span className="ml-0.5 px-1.5 py-0.2 rounded-full text-[10px] font-mono bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400">
               {stores.length}
             </span>
@@ -467,7 +470,7 @@ export function AccountOrganizationView({
               }`}
             >
               <span>👥</span>
-              <span>Team & Staff Access</span>
+              <span>{t.account.tabTeam}</span>
               {pendingInvitations.length > 0 && (
                 <span className="ml-0.5 px-1.5 py-0.2 rounded-full text-[10px] font-extrabold bg-amber-500 text-white">
                   {pendingInvitations.length}
@@ -486,7 +489,7 @@ export function AccountOrganizationView({
             }`}
           >
             <span>📄</span>
-            <span>Agreements & Documents</span>
+            <span>{t.account.tabDocuments}</span>
             {agreements.length > 0 && (
               <span className="ml-0.5 px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-zinc-200 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300">
                 {agreements.length}
@@ -510,7 +513,7 @@ export function AccountOrganizationView({
                     </div>
                     <div>
                       <h2 className="text-sm font-bold text-zinc-900 dark:text-white">
-                        Personal Profile
+                        {t.account.tabPersonal}
                       </h2>
                       <p className="text-[11px] text-zinc-500 dark:text-zinc-400">Authenticated user identity</p>
                     </div>
@@ -525,25 +528,25 @@ export function AccountOrganizationView({
                     }}
                     className="px-3 py-1 text-xs font-bold rounded-lg border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-300 transition-colors cursor-pointer"
                   >
-                    Edit Profile
+                    {t.account.editProfile}
                   </button>
                 </div>
 
                 <div className="space-y-3 text-xs pt-3">
                   <div>
-                    <span className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400 block">Display Name</span>
+                    <span className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400 block">{t.account.displayName}</span>
                     <span className="font-semibold text-zinc-900 dark:text-white">{profile.displayName}</span>
                   </div>
                   <div>
-                    <span className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400 block">Login / Email Address</span>
+                    <span className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400 block">{t.account.email}</span>
                     <span className="font-mono text-zinc-900 dark:text-white">{profile.email}</span>
                   </div>
                   <div>
-                    <span className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400 block">Contact Phone</span>
+                    <span className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400 block">{t.account.phone}</span>
                     <span className="text-zinc-900 dark:text-white font-mono">{profile.phone || "Not recorded"}</span>
                   </div>
                   <div>
-                    <span className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400 block">Assigned Retailer Role</span>
+                    <span className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400 block">{t.account.role}</span>
                     <div className="inline-flex items-center gap-1.5 mt-0.5 px-2.5 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800 text-[11px] font-semibold text-indigo-700 dark:text-indigo-300 capitalize">
                       <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
                       {roleTitle}
@@ -611,7 +614,7 @@ export function AccountOrganizationView({
                   className="w-full py-2 px-4 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800/80 hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-800 dark:text-zinc-200 text-xs font-bold transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-2xs"
                 >
                   <span>🔑</span>
-                  <span>Change Password</span>
+                  <span>{t.account.changePassword}</span>
                 </button>
 
                 <form action={logoutRetailer}>
@@ -620,10 +623,41 @@ export function AccountOrganizationView({
                     className="w-full py-2 px-4 rounded-xl border border-rose-200 dark:border-rose-900/60 bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 text-xs font-bold hover:bg-rose-100 dark:hover:bg-rose-900/60 transition-colors flex items-center justify-center gap-2 cursor-pointer"
                   >
                     <span>🚪</span>
-                    <span>Sign Out of Retailer Portal</span>
+                    <span>{t.header.signOut}</span>
                   </button>
                 </form>
               </div>
+            </div>
+          </div>
+
+          {/* Language Preference Card */}
+          <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-5 sm:p-6 shadow-xs space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-zinc-100 dark:border-zinc-800 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center text-lg">
+                  🌐
+                </div>
+                <div>
+                  <h2 className="text-sm font-bold text-zinc-900 dark:text-white">
+                    {t.account.languagePreference}
+                  </h2>
+                  <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                    {t.account.languageSubtitle}
+                  </p>
+                </div>
+              </div>
+
+              <div className="shrink-0">
+                <LanguageToggle variant="buttons" />
+              </div>
+            </div>
+            <div className="text-[11px] text-zinc-500 dark:text-zinc-400 flex items-center gap-2">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+              <span>
+                {locale === "ko"
+                  ? "선택한 언어는 브라우저 쿠키 및 계정 프로필에 안전하게 동기화되어 저장됩니다."
+                  : "Your selected language is automatically saved to your browser and account profile."}
+              </span>
             </div>
           </div>
 
@@ -661,7 +695,7 @@ export function AccountOrganizationView({
                   onClick={handleOpenCompanyModal}
                   className="px-3.5 py-1.5 text-xs font-bold rounded-xl border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-300 transition-colors cursor-pointer shrink-0"
                 >
-                  Edit Company Information
+                  {t.account.editCompany}
                 </button>
               )}
             </div>
@@ -746,8 +780,7 @@ export function AccountOrganizationView({
                   onClick={handleOpenAddStoreModal}
                   className="inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 text-xs font-bold hover:bg-zinc-800 dark:hover:bg-zinc-100 transition-colors shadow-2xs cursor-pointer shrink-0"
                 >
-                  <span>+</span>
-                  <span>Add Store</span>
+                  <span>{t.account.addStore}</span>
                 </button>
               )}
             </div>

@@ -5,10 +5,12 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getRetailerPerformanceData } from "@/lib/retailer/performance";
 import { getCompanyAgreement } from "@/lib/agreement/actions";
 import { RetailerAgreementBanner } from "@/components/retailer/retailer-agreement-banner";
+import { getServerTranslations } from "@/lib/i18n/server";
 
 export const dynamic = "force-dynamic";
 
 export default async function RetailerHomePage() {
+  const { t } = await getServerTranslations();
   const session = await verifyRetailerSession();
   const adminClient = createAdminClient();
 
@@ -124,13 +126,13 @@ export default async function RetailerHomePage() {
         <div className="max-w-2xl space-y-2">
           <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-[11px] font-semibold text-emerald-400">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            Verified Wholesale Partner
+            {t.dashboard.verifiedWholesalePartner}
           </div>
           <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">
-            Welcome, {displayName}
+            {t.dashboard.welcome}, {displayName}
           </h1>
           <p className="text-xs sm:text-sm text-zinc-300">
-            Explore verified K-Beauty brands, check store merchandising status, and manage wholesale replenishment for your stores.
+            {t.dashboard.welcomeSubtitle}
           </p>
         </div>
       </div>
@@ -139,32 +141,32 @@ export default async function RetailerHomePage() {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-5 shadow-sm space-y-1">
           <p className="text-[11px] font-bold text-zinc-600 dark:text-zinc-400 uppercase tracking-wider">
-            Retail Organization
+            {t.dashboard.retailOrganization}
           </p>
           <p className="text-base font-bold text-zinc-900 dark:text-white truncate">
             {companyName}
           </p>
-          <p className="text-[11px] text-zinc-500 dark:text-zinc-400">Authorized Account</p>
+          <p className="text-[11px] text-zinc-500 dark:text-zinc-400">{t.dashboard.authorizedAccount}</p>
         </div>
 
         <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-5 shadow-sm space-y-1">
           <p className="text-[11px] font-bold text-zinc-600 dark:text-zinc-400 uppercase tracking-wider">
-            User Role
+            {t.dashboard.userRole}
           </p>
           <p className="text-base font-bold text-zinc-900 dark:text-white capitalize">
             {roleTitle}
           </p>
-          <p className="text-[11px] text-zinc-500 dark:text-zinc-400">Wholesale Authority</p>
+          <p className="text-[11px] text-zinc-500 dark:text-zinc-400">{t.dashboard.wholesaleAuthority}</p>
         </div>
 
         <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-5 shadow-sm space-y-1">
           <p className="text-[11px] font-bold text-zinc-600 dark:text-zinc-400 uppercase tracking-wider">
-            Store Access
+            {t.dashboard.storeAccess}
           </p>
           <p className="text-base font-bold text-zinc-900 dark:text-white truncate">
             📍 {storeNames.join(", ")}
           </p>
-          <p className="text-[11px] text-zinc-500 dark:text-zinc-400">Assigned Location</p>
+          <p className="text-[11px] text-zinc-500 dark:text-zinc-400">{t.dashboard.assignedLocation}</p>
         </div>
       </div>
 
@@ -174,30 +176,30 @@ export default async function RetailerHomePage() {
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-sm sm:text-base font-bold text-zinc-900 dark:text-white">
-                30-Day Demand & Sales Summary
+                {t.dashboard.demandSummaryTitle}
               </h2>
               <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
-                Overview derived from submitted weekly check counts
+                {t.dashboard.demandSummarySubtitle}
               </p>
             </div>
             <Link
               href="/sales"
               className="text-xs font-bold text-purple-600 dark:text-purple-400 hover:underline"
             >
-              Full Analytics →
+              {t.dashboard.fullAnalytics}
             </Link>
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
             <div className="p-3 bg-zinc-50 dark:bg-zinc-800/50 rounded-xl">
-              <span className="text-[10px] uppercase font-bold text-zinc-400">Est. Units Moved</span>
+              <span className="text-[10px] uppercase font-bold text-zinc-400">{t.dashboard.estUnitsMoved}</span>
               <div className="text-lg font-bold text-zinc-900 dark:text-white mt-0.5">
                 {performanceSummary.totalEstimatedMovement.toLocaleString()}
               </div>
             </div>
 
             <div className="p-3 bg-zinc-50 dark:bg-zinc-800/50 rounded-xl">
-              <span className="text-[10px] uppercase font-bold text-zinc-400">Est. Retail Value</span>
+              <span className="text-[10px] uppercase font-bold text-zinc-400">{t.dashboard.estRetailValue}</span>
               <div className="text-lg font-bold text-zinc-900 dark:text-white mt-0.5">
                 {performanceSummary.isFinancialsHidden
                   ? "—"
@@ -206,7 +208,7 @@ export default async function RetailerHomePage() {
             </div>
 
             <div className="p-3 bg-zinc-50 dark:bg-zinc-800/50 rounded-xl">
-              <span className="text-[10px] uppercase font-bold text-zinc-400">Est. Gross Profit</span>
+              <span className="text-[10px] uppercase font-bold text-zinc-400">{t.dashboard.estGrossProfit}</span>
               <div className="text-lg font-bold text-emerald-600 dark:text-emerald-400 mt-0.5">
                 {performanceSummary.isFinancialsHidden
                   ? "—"
@@ -216,7 +218,7 @@ export default async function RetailerHomePage() {
 
             <div className="p-3 bg-purple-50 dark:bg-purple-950/40 rounded-xl border border-purple-100 dark:border-purple-900/40">
               <span className="text-[10px] uppercase font-bold text-purple-700 dark:text-purple-300">
-                Reorder Alerts
+                {t.dashboard.reorderAlerts}
               </span>
               <div className="text-lg font-extrabold text-purple-700 dark:text-purple-300 mt-0.5">
                 {performanceSummary.productsNeedingReorderCount} SKUs
@@ -230,10 +232,10 @@ export default async function RetailerHomePage() {
       <div className="space-y-4">
         <div>
           <h2 className="text-base font-bold text-zinc-900 dark:text-white tracking-tight">
-            Retailer Quick Actions
+            {t.dashboard.quickActionsTitle}
           </h2>
           <p className="text-xs text-zinc-500 dark:text-zinc-400">
-            Access your core retail workflows and product discovery tools
+            {t.dashboard.quickActionsSubtitle}
           </p>
         </div>
 
@@ -248,10 +250,10 @@ export default async function RetailerHomePage() {
             </div>
             <div>
               <h3 className="text-sm font-bold text-zinc-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
-                Product Discovery
+                {t.dashboard.cardProductsTitle}
               </h3>
               <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1 leading-relaxed">
-                Browse verified K-Beauty brands, view wholesale tier pricing, and check inventory.
+                {t.dashboard.cardProductsDesc}
               </p>
             </div>
           </Link>
@@ -266,10 +268,10 @@ export default async function RetailerHomePage() {
             </div>
             <div>
               <h3 className="text-sm font-bold text-zinc-900 dark:text-white group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
-                Weekly Product Check
+                {t.dashboard.cardCheckTitle}
               </h3>
               <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1 leading-relaxed">
-                Submit weekly shelf presence and retail stock counts directly from your store.
+                {t.dashboard.cardCheckDesc}
               </p>
             </div>
           </Link>
@@ -284,10 +286,10 @@ export default async function RetailerHomePage() {
             </div>
             <div>
               <h3 className="text-sm font-bold text-zinc-900 dark:text-white group-hover:text-amber-600 dark:group-hover:text-amber-400 transition-colors">
-                Order History & Reorder
+                {t.dashboard.cardOrdersTitle}
               </h3>
               <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1 leading-relaxed">
-                Track submitted purchase orders, shipment tracking numbers, and delivery confirmations.
+                {t.dashboard.cardOrdersDesc}
               </p>
             </div>
           </Link>
@@ -302,10 +304,10 @@ export default async function RetailerHomePage() {
             </div>
             <div>
               <h3 className="text-sm font-bold text-zinc-900 dark:text-white group-hover:text-purple-600 dark:group-hover:text-purple-400 transition-colors">
-                Sales & Reorder Analytics
+                {t.dashboard.cardSalesTitle}
               </h3>
               <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1 leading-relaxed">
-                Review store replenishment suggestions, estimated stock runout, and reorder alerts.
+                {t.dashboard.cardSalesDesc}
               </p>
             </div>
           </Link>
@@ -321,16 +323,16 @@ export default async function RetailerHomePage() {
               </div>
               {trainingStats.totalCount > 0 && (
                 <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-900">
-                  {trainingStats.completedCount}/{trainingStats.totalCount} Completed ({trainingStats.percent}%)
+                  {trainingStats.completedCount}/{trainingStats.totalCount} {t.dashboard.completed} ({trainingStats.percent}%)
                 </span>
               )}
             </div>
             <div>
               <h3 className="text-sm font-bold text-zinc-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
-                Product Training & Guides
+                {t.dashboard.cardTrainingTitle}
               </h3>
               <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1 leading-relaxed">
-                Access product selling points, customer talk-tracks, and usage cheat-sheets for your store.
+                {t.dashboard.cardTrainingDesc}
               </p>
             </div>
           </Link>
@@ -345,10 +347,10 @@ export default async function RetailerHomePage() {
             </div>
             <div>
               <h3 className="text-sm font-bold text-zinc-900 dark:text-white group-hover:text-rose-600 dark:group-hover:text-rose-400 transition-colors">
-                Store Locations & Staff
+                {t.dashboard.cardStoresTitle}
               </h3>
               <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1 leading-relaxed">
-                Manage branch store locations, assign store managers, and review store compliance.
+                {t.dashboard.cardStoresDesc}
               </p>
             </div>
           </Link>

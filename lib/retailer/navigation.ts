@@ -1,6 +1,7 @@
 export type RetailerRole = "owner" | "buyer" | "store_manager" | "employee" | "accounting";
 
 export interface NavItem {
+  key: string;
   name: string;
   href: string;
   icon: string;
@@ -11,13 +12,15 @@ export interface NavItem {
 
 export const RETAILER_NAV_ITEMS: NavItem[] = [
   {
-    name: "Home",
+    key: "home",
+    name: "Dashboard",
     href: "/",
     icon: "home",
     roles: ["owner", "buyer", "store_manager", "employee", "accounting"],
     isBottomNav: true,
   },
   {
+    key: "products",
     name: "Products",
     href: "/products",
     icon: "package",
@@ -25,6 +28,7 @@ export const RETAILER_NAV_ITEMS: NavItem[] = [
     isBottomNav: true,
   },
   {
+    key: "weeklyCheck",
     name: "Weekly Check",
     href: "/check",
     icon: "clipboard-check",
@@ -33,6 +37,7 @@ export const RETAILER_NAV_ITEMS: NavItem[] = [
     isBottomNav: true,
   },
   {
+    key: "orders",
     name: "Orders",
     href: "/orders",
     icon: "shopping-cart",
@@ -40,6 +45,7 @@ export const RETAILER_NAV_ITEMS: NavItem[] = [
     isBottomNav: true,
   },
   {
+    key: "sales",
     name: "Sales & Reorder",
     href: "/sales",
     icon: "trending-up",
@@ -47,6 +53,7 @@ export const RETAILER_NAV_ITEMS: NavItem[] = [
     isBottomNav: false,
   },
   {
+    key: "tags",
     name: "Price Tags",
     href: "/tags",
     icon: "tag",
@@ -54,6 +61,7 @@ export const RETAILER_NAV_ITEMS: NavItem[] = [
     isBottomNav: false,
   },
   {
+    key: "stores",
     name: "Stores",
     href: "/stores",
     icon: "store",
@@ -61,6 +69,7 @@ export const RETAILER_NAV_ITEMS: NavItem[] = [
     isBottomNav: false,
   },
   {
+    key: "training",
     name: "Training",
     href: "/training",
     icon: "graduation-cap",
@@ -68,6 +77,7 @@ export const RETAILER_NAV_ITEMS: NavItem[] = [
     isBottomNav: false,
   },
   {
+    key: "helpCenter",
     name: "Help Center",
     href: "/help",
     icon: "help-circle",
@@ -75,6 +85,7 @@ export const RETAILER_NAV_ITEMS: NavItem[] = [
     isBottomNav: false,
   },
   {
+    key: "askKSelect",
     name: "Ask K SELECT",
     href: "/help/ask",
     icon: "sparkles",
@@ -82,6 +93,7 @@ export const RETAILER_NAV_ITEMS: NavItem[] = [
     isBottomNav: false,
   },
   {
+    key: "support",
     name: "Support",
     href: "/support",
     icon: "life-buoy",
@@ -89,6 +101,7 @@ export const RETAILER_NAV_ITEMS: NavItem[] = [
     isBottomNav: false,
   },
   {
+    key: "account",
     name: "Account",
     href: "/account",
     icon: "user",
