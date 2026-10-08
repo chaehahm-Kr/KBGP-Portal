@@ -37,12 +37,12 @@ export function RetailerLoginForm({ action }: RetailerLoginFormProps) {
       (hash.includes("access_token=") && hash.includes("refresh_token="));
 
     if (isInvite) {
-      window.location.replace(`/retailer/invite/accept${search}${hash}`);
+      window.location.replace(`/invite/accept${search}${hash}`);
       return;
     }
 
     if (isRecovery) {
-      window.location.replace(`/retailer/reset-password${search}${hash}`);
+      window.location.replace(`/reset-password${search}${hash}`);
     }
   }, []);
 

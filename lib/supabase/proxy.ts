@@ -103,7 +103,12 @@ export async function updateSession(request: NextRequest) {
       return createRedirectWithCookies(url);
     }
   } else if (host.includes("portal.kselectnetwork.com")) {
-    if (pathname.startsWith("/admin") || pathname.startsWith("/retailer")) {
+    if (pathname.startsWith("/retailer")) {
+      const cleanPath = pathname === "/retailer" ? "/" : pathname.replace(/^\/retailer/, "");
+      const targetUrl = new URL(`https://portal.kselecthub.com${cleanPath}${request.nextUrl.search}`);
+      return createRedirectWithCookies(targetUrl);
+    }
+    if (pathname.startsWith("/admin")) {
       const url = request.nextUrl.clone();
       url.pathname = "/portal/login";
       return createRedirectWithCookies(url);

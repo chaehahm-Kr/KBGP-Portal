@@ -242,10 +242,10 @@ export async function requestRetailerPasswordReset(
     if (user && isRetailer) {
       // Get canonical site URL dynamically from headers
       const headersList = await headers();
-      const host = headersList.get("host") || "portal.kselectnetwork.com";
+      const host = headersList.get("host") || "portal.kselecthub.com";
       const isLocal = host.includes("localhost") || host.includes("127.0.0.1");
-      const siteUrl = isLocal ? `http://${host}` : "https://portal.kselectnetwork.com";
-      const targetRedirect = `${siteUrl}/retailer/reset-password`;
+      const siteUrl = isLocal ? `http://${host}` : "https://portal.kselecthub.com";
+      const targetRedirect = isLocal ? `${siteUrl}/retailer/reset-password` : "https://portal.kselecthub.com/reset-password";
 
       // 2. Generate Supabase recovery link
       const { data, error } = await adminClient.auth.admin.generateLink({
@@ -280,7 +280,9 @@ If you did not request a password reset, you can safely ignore this email.`;
         const { subject, text, html } = renderEmailHtml(subjectTemplate, bodyTemplate, {
           link: actionLink,
           buttonLabel: "Reset Password",
-          key: "password_reset",
+          key: "hub_password_reset",
+          portalUrl: "https://portal.kselecthub.com",
+          supportEmail: "support@kselecthub.com",
         });
 
         // Send the email via Resend

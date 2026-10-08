@@ -479,8 +479,8 @@ export const TEMPLATE_SAMPLE_VARIABLES: Record<TemplateKey, Record<string, strin
   hub_password_reset: {
     contactName: "Sarah Jenkins",
     email: "sarah@luxebeautybar.com",
-    portalUrl: "https://portal.kselecthub.com/retailer/reset-password",
-    link: "https://portal.kselecthub.com/retailer/reset-password",
+    portalUrl: "https://portal.kselecthub.com/reset-password",
+    link: "https://portal.kselecthub.com/reset-password",
     supportEmail: "support@kselecthub.com",
   },
   hub_order_confirmed: {
