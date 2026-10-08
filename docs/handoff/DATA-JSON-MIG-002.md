@@ -53,4 +53,4 @@ ADM-CMP-DEL-001(회사·브랜드 삭제), ADM-SET-001(system_settings 테이블
 |---|---|---|
 | ① | brands.intro `__JSON_METADATA__` | **완료**: 코드 JSON 대체 경로 제거(87bf70d), 0140 으로 원본 백업(brands_intro_json_backup 5행) 후 소개 문구만 남김. 브렌드 테스트는 QA 저장으로 이미 일반 텍스트였음 |
 | ② | company_users.permissions ACL 키 | 미착수: Admin/포털 권한 편집 화면이 JSON 에서 읽음 → 테이블 읽기로 전환 후 키 삭제 |
-| ③ | companies.intro 메타데이터 | 미착수: 17개 파일이 JSON 직접 읽기/쓰기 → 칸/테이블 전환, 0135 트리거 제거 후 정리 |
+| ③ | companies.intro 메타데이터 | 3b·3c **완료**(881e1e7, 0143: po_requests/shipping_origins 키 삭제, 원본 companies_intro_json_backup 8행). 3a(회사 기본 정보, 0135 트리거 제거) 미착수. 3d(PO 알림 notifications → 테이블 신설) 보류 |
