@@ -8,7 +8,7 @@ import { LanguageToggle } from "@/components/retailer/language-toggle";
 import { logoutRetailer } from "@/lib/auth/actions";
 import { NavIcon } from "@/components/retailer/nav-icon";
 import { getNavItemsForRole } from "@/lib/retailer/navigation";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useTranslation } from "@/lib/i18n/context";
 
 import { useCart } from "@/components/retailer/cart-context";
@@ -30,6 +30,7 @@ export function RetailerHeader({
   storeName,
 }: RetailerHeaderProps) {
   const pathname = usePathname();
+  const router = useRouter();
   const { t } = useTranslation();
   const { totalSkus } = useCart();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -203,6 +204,11 @@ export function RetailerHeader({
                   <div className="border-t border-zinc-100 dark:border-zinc-800 pt-2">
                     <Link
                       href="/account"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        setUserDropdownOpen(false);
+                        router.push("/account");
+                      }}
                       className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
                     >
                       <NavIcon name="user" className="w-3.5 h-3.5" />
