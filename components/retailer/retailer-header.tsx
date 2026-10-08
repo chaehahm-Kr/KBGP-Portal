@@ -57,6 +57,11 @@ export function RetailerHeader({
     setOpenSections((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
+  React.useEffect(() => {
+    setUserDropdownOpen(false);
+    setMobileMenuOpen(false);
+  }, [pathname]);
+
   return (
     <>
       <header className="sticky top-0 z-40 h-16 border-b border-zinc-200 dark:border-zinc-800 bg-white/90 dark:bg-zinc-950/90 backdrop-blur-md px-4 sm:px-6 flex items-center justify-between">
@@ -141,6 +146,7 @@ export function RetailerHeader({
           <div className="relative">
             <button
               type="button"
+              aria-label="User menu"
               onClick={() => setUserDropdownOpen(!userDropdownOpen)}
               className="flex items-center gap-2 p-1.5 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-900 transition-colors"
             >
@@ -197,7 +203,6 @@ export function RetailerHeader({
                   <div className="border-t border-zinc-100 dark:border-zinc-800 pt-2">
                     <Link
                       href="/account"
-                      onClick={() => setUserDropdownOpen(false)}
                       className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
                     >
                       <NavIcon name="user" className="w-3.5 h-3.5" />
