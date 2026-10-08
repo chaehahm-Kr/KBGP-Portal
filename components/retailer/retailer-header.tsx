@@ -202,18 +202,13 @@ export function RetailerHeader({
                   </div>
 
                   <div className="border-t border-zinc-100 dark:border-zinc-800 pt-2">
-                    <Link
+                    <a
                       href="/account"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        setUserDropdownOpen(false);
-                        router.push("/account");
-                      }}
                       className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
                     >
                       <NavIcon name="user" className="w-3.5 h-3.5" />
                       {t.header.accountSettings}
-                    </Link>
+                    </a>
 
                     <form action={logoutRetailer} className="mt-1">
                       <button
