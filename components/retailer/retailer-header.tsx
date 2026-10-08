@@ -290,10 +290,10 @@ export function RetailerHeader({
                       <button
                         type="button"
                         onClick={() => toggleSection(item.key)}
-                        className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-xs font-semibold transition-all ${
-                          isGroupActive
-                            ? "text-zinc-900 dark:text-white bg-zinc-100 dark:bg-zinc-900"
-                            : "text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-900"
+                        className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                          isOpen
+                            ? "text-zinc-900 dark:text-white hover:bg-zinc-100 dark:hover:bg-zinc-900"
+                            : "text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-900 hover:text-zinc-900 dark:hover:text-zinc-100"
                         }`}
                       >
                         <div className="flex items-center gap-3">

@@ -1,9 +1,10 @@
+import { cache } from "react";
 import { cookies } from "next/headers";
 import type { Locale } from "./types";
 import { DEFAULT_LOCALE, LOCALE_COOKIE_NAME, SUPPORTED_LOCALES } from "./types";
 import { getDictionary } from "./index";
 
-export async function getServerLocale(): Promise<Locale> {
+export const getServerLocale = cache(async (): Promise<Locale> => {
   try {
     const cookieStore = await cookies();
     const cookieVal = cookieStore.get(LOCALE_COOKIE_NAME)?.value as Locale | undefined;
@@ -14,9 +15,9 @@ export async function getServerLocale(): Promise<Locale> {
     // Fallback if cookies() unavailable
   }
   return DEFAULT_LOCALE;
-}
+});
 
-export async function getServerTranslations() {
+export const getServerTranslations = cache(async () => {
   const locale = await getServerLocale();
   const dict = getDictionary(locale);
   return {
@@ -24,4 +25,4 @@ export async function getServerTranslations() {
     dict,
     t: dict,
   };
-}
+});

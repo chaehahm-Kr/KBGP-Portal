@@ -45,6 +45,7 @@ export const viewport: Viewport = {
 };
 
 import { getImpersonationSession } from "@/lib/auth/impersonation";
+import { getRetailerUserContext } from "@/lib/auth/dal";
 import { ImpersonationBanner } from "@/components/shared/impersonation-banner";
 import { LanguageProvider } from "@/lib/i18n/context";
 import { getServerLocale } from "@/lib/i18n/server";
@@ -56,84 +57,27 @@ export default async function RetailerLayout({
 }) {
   const serverLocale = await getServerLocale();
   const impSession = await getImpersonationSession();
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
 
   // 1. Unauthenticated view (e.g. /retailer/login)
-  if (!user && !impSession) {
-    return (
-      <LanguageProvider initialLocale={serverLocale}>
-        <div className="min-h-screen bg-zinc-950 flex items-center justify-center p-4 sm:p-6 selection:bg-zinc-800 selection:text-white">
-          {children}
-        </div>
-      </LanguageProvider>
-    );
-  }
+  if (!impSession) {
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
 
-  // 2. Authenticated layout: Fetch user, company & store metadata
-  const adminClient = createAdminClient();
-  const effectiveUserId = impSession ? impSession.targetUserId : user?.id;
-
-  // Profile
-  let userName = impSession ? impSession.targetUserName : "Retailer User";
-  let userEmail = impSession ? impSession.targetUserEmail : (user?.email || "");
-
-  if (effectiveUserId && !impSession) {
-    const { data: profile } = await adminClient
-      .from("profiles")
-      .select("display_name, role")
-      .eq("id", effectiveUserId)
-      .maybeSingle();
-
-    userName = profile?.display_name || user?.email?.split("@")[0] || "Retailer User";
-  }
-
-  // Company Membership
-  let companyName = impSession ? impSession.targetCompanyName : "K SELECT Retailer";
-  let companyId = impSession ? impSession.targetCompanyId : undefined;
-
-  if (effectiveUserId && !impSession) {
-    const { data: companyUser } = await adminClient
-      .from("company_users")
-      .select("company_id, company_role, companies(id, name)")
-      .eq("id", effectiveUserId)
-      .maybeSingle();
-
-    const company = companyUser?.companies as any;
-    companyName = company?.name || "K SELECT Retailer";
-    companyId = company?.id || companyUser?.company_id;
-  }
-
-  // Retailer Specific Role
-  let role = "owner";
-  if (effectiveUserId) {
-    const { data: retailerRole } = await adminClient
-      .from("retailer_user_roles")
-      .select("role, has_all_stores_access")
-      .eq("user_id", effectiveUserId)
-      .maybeSingle();
-
-    if (retailerRole?.role) {
-      role = retailerRole.role;
+    if (!user) {
+      return (
+        <LanguageProvider initialLocale={serverLocale}>
+          <div className="min-h-screen bg-zinc-950 flex items-center justify-center p-4 sm:p-6 selection:bg-zinc-800 selection:text-white">
+            {children}
+          </div>
+        </LanguageProvider>
+      );
     }
   }
 
-  // Store Name
-  let storeName = "Main Store";
-  if (companyId) {
-    const { data: store } = await adminClient
-      .from("stores")
-      .select("name")
-      .eq("company_id", companyId)
-      .limit(1)
-      .maybeSingle();
-
-    if (store?.name) {
-      storeName = store.name;
-    }
-  }
+  // 2. Authenticated layout: Fetch cached user, company & store metadata (single parallel pass, memoized)
+  const userContext = await getRetailerUserContext();
 
   return (
     <LanguageProvider initialLocale={serverLocale}>
@@ -143,20 +87,20 @@ export default async function RetailerLayout({
           <div className="flex-1 flex min-w-0">
             {/* Desktop Sidebar */}
             <RetailerSidebar
-              role={role}
-              companyName={companyName}
-              storeName={storeName}
-              userName={userName}
+              role={userContext.role}
+              companyName={userContext.companyName}
+              storeName={userContext.storeName}
+              userName={userContext.userName}
             />
 
             {/* Main Content Column */}
             <div className="flex-1 flex flex-col min-w-0">
               <RetailerHeader
-                userName={userName}
-                userEmail={userEmail}
-                companyName={companyName}
-                role={role}
-                storeName={storeName}
+                userName={userContext.userName}
+                userEmail={userContext.userEmail}
+                companyName={userContext.companyName}
+                role={userContext.role}
+                storeName={userContext.storeName}
               />
 
               <main className="flex-1 p-4 sm:p-6 lg:p-8 pb-24 lg:pb-8 overflow-y-auto">
@@ -164,7 +108,7 @@ export default async function RetailerLayout({
               </main>
 
               {/* Mobile Bottom Navigation */}
-              <RetailerBottomNav role={role} />
+              <RetailerBottomNav role={userContext.role} />
             </div>
           </div>
         </div>

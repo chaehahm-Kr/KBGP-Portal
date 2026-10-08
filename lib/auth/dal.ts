@@ -24,8 +24,9 @@ const LOGIN_PATH: Record<AppRole, string> = {
 
 /**
  * Data Access Layer의 핵심 함수. area("portal", "admin", "retailer")별로 세션을 검증한다.
+ * React cache()로 동일 요청 내 중복 네트워크 및 DB 호출을 방지합니다.
  */
-async function verifySession(area: AppRole): Promise<VerifiedSession> {
+const verifySession = cache(async (area: AppRole): Promise<VerifiedSession> => {
   // Check Admin Impersonation override for portal and retailer areas
   if (area === "portal" || area === "retailer") {
     const impSession = await getImpersonationSession();
@@ -110,7 +111,7 @@ async function verifySession(area: AppRole): Promise<VerifiedSession> {
     email: user.email ?? "",
     role: profile.role as AppRole,
   };
-}
+});
 
 /**
  * 안전하게 현재 호출자의 AppRole ("admin" | "portal" | "retailer")을 확인합니다.
@@ -149,6 +150,86 @@ export async function getCallerAppRole(): Promise<AppRole | null> {
 // React cache()로 같은 렌더 패스 안에서는 중복 호출해도 한 번만 실제 검증한다.
 export const verifyPortalSession = cache(() => verifySession("portal"));
 export const verifyRetailerSession = cache(() => verifySession("retailer"));
+
+export type RetailerUserContext = {
+  userId: string;
+  userEmail: string;
+  userName: string;
+  companyId?: string;
+  companyName: string;
+  role: string;
+  storeName: string;
+  isImpersonating?: boolean;
+};
+
+/**
+ * React cache()로 감싼 Retailer 공통 세션 및 조직/매장 메타데이터 조회 함수.
+ * layout 및 각 페이지에서 중복 호출해도 한 요청당 1회만 병렬 DB 조회(Promise.all)를 수행합니다.
+ */
+export const getRetailerUserContext = cache(async (): Promise<RetailerUserContext> => {
+  const impSession = await getImpersonationSession();
+  if (impSession && impSession.portalType === "RETAILER") {
+    return {
+      userId: impSession.targetUserId,
+      userEmail: impSession.targetUserEmail,
+      userName: impSession.targetUserName || "Retailer Partner",
+      companyId: impSession.targetCompanyId,
+      companyName: impSession.targetCompanyName || "K SELECT Retailer",
+      role: "owner",
+      storeName: "Main Store",
+      isImpersonating: true,
+    };
+  }
+
+  const session = await verifyRetailerSession();
+  const adminClient = createAdminClient();
+
+  const [profileRes, companyUserRes, retailerRoleRes] = await Promise.all([
+    adminClient
+      .from("profiles")
+      .select("display_name, role")
+      .eq("id", session.userId)
+      .maybeSingle(),
+    adminClient
+      .from("company_users")
+      .select("company_id, company_role, companies!company_users_company_id_fkey(id, name)")
+      .eq("id", session.userId)
+      .maybeSingle(),
+    adminClient
+      .from("retailer_user_roles")
+      .select("role, has_all_stores_access")
+      .eq("user_id", session.userId)
+      .maybeSingle(),
+  ]);
+
+  const company = companyUserRes.data?.companies as any;
+  const companyId = company?.id || companyUserRes.data?.company_id;
+  const companyName = company?.name || "K SELECT Retailer";
+
+  let storeName = "Main Store";
+  if (companyId) {
+    const storeRes = await adminClient
+      .from("stores")
+      .select("name")
+      .eq("company_id", companyId)
+      .limit(1)
+      .maybeSingle();
+
+    if (storeRes.data?.name) {
+      storeName = storeRes.data.name;
+    }
+  }
+
+  return {
+    userId: session.userId,
+    userEmail: session.email,
+    userName: profileRes.data?.display_name || session.email.split("@")[0] || "Retailer User",
+    companyId,
+    companyName,
+    role: retailerRoleRes.data?.role || companyUserRes.data?.company_role || "owner",
+    storeName,
+  };
+});
 
 /**
  * 활성화된 일반 직원(Active)만 접근을 허용합니다.
