@@ -19,6 +19,7 @@ import {
   RetailerCaseContext,
 } from "@/lib/retailer/support-actions";
 import { stageLargeFiles } from "@/lib/files/stage-form-files";
+import { useTranslation } from "@/lib/i18n";
 
 interface SupportViewProps {
   initialInquiries: PartnerInquiryItem[];
@@ -35,6 +36,7 @@ export function SupportView({
   userRole = "owner",
   userStoreId,
 }: SupportViewProps) {
+  const { t, locale } = useTranslation();
   const searchParams = useSearchParams();
   const [inquiries, setInquiries] = useState<PartnerInquiryItem[]>(initialInquiries);
   const [selectedInquiryId, setSelectedInquiryId] = useState<string | null>(
@@ -245,11 +247,11 @@ ${sourcesText}
             <div className="flex items-center gap-2 mb-1">
               <span className="text-xl">🛟</span>
               <h1 className="text-lg font-bold text-zinc-900 dark:text-white">
-                Retailer Support & Inquiries
+                {t.support.title}
               </h1>
             </div>
             <p className="text-xs text-zinc-500 dark:text-zinc-400">
-              Get assistance with orders, shipping, pricing, shelf tags, weekly reporting, or technical questions.
+              {t.support.subtitle}
             </p>
           </div>
 
@@ -260,7 +262,7 @@ ${sourcesText}
               className="inline-flex items-center justify-center gap-2 rounded-xl bg-zinc-900 px-4 py-2.5 text-xs font-bold text-white shadow-xs hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-100 transition-colors cursor-pointer"
             >
               <span>+</span>
-              <span>New Inquiry</span>
+              <span>{t.support.newInquiry}</span>
             </button>
           </div>
         </div>
@@ -268,19 +270,19 @@ ${sourcesText}
         {/* Stats Strip */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-6 pt-5 border-t border-zinc-100 dark:border-zinc-800">
           <div className="rounded-xl bg-zinc-50 dark:bg-zinc-800/50 p-3">
-            <span className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400">Total Inquiries</span>
+            <span className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400">{t.support.totalInquiries}</span>
             <p className="text-lg font-bold text-zinc-900 dark:text-white mt-0.5">{counts.total}</p>
           </div>
           <div className="rounded-xl bg-blue-50/60 dark:bg-blue-950/20 p-3">
-            <span className="text-[11px] font-medium text-blue-700 dark:text-blue-300">Under Review</span>
+            <span className="text-[11px] font-medium text-blue-700 dark:text-blue-300">{t.support.underReview}</span>
             <p className="text-lg font-bold text-blue-700 dark:text-blue-300 mt-0.5">{counts.underReview}</p>
           </div>
           <div className="rounded-xl bg-rose-50/60 dark:bg-rose-950/20 p-3">
-            <span className="text-[11px] font-medium text-rose-700 dark:text-rose-300">Action Required</span>
+            <span className="text-[11px] font-medium text-rose-700 dark:text-rose-300">{t.support.actionRequired}</span>
             <p className="text-lg font-bold text-rose-700 dark:text-rose-300 mt-0.5">{counts.actionRequired}</p>
           </div>
           <div className="rounded-xl bg-zinc-50 dark:bg-zinc-800/50 p-3">
-            <span className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400">Closed</span>
+            <span className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400">{t.support.closed}</span>
             <p className="text-lg font-bold text-zinc-700 dark:text-zinc-300 mt-0.5">{counts.closed}</p>
           </div>
         </div>
@@ -298,7 +300,7 @@ ${sourcesText}
                 type="text"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="Search cases by #, title, store, order, product..."
+                placeholder={t.support.searchPlaceholder}
                 className="w-full rounded-xl border border-zinc-200 bg-white py-2 pl-9 pr-3 text-xs outline-none focus:border-zinc-400 dark:border-zinc-800 dark:bg-zinc-900 dark:text-white shadow-2xs"
               />
               {searchTerm && (
@@ -307,7 +309,7 @@ ${sourcesText}
                   onClick={() => setSearchTerm("")}
                   className="absolute inset-y-0 right-0 flex items-center pr-3 text-[10px] font-bold text-zinc-400 hover:text-zinc-700 dark:hover:text-white"
                 >
-                  Clear
+                  {t.common.reset}
                 </button>
               )}
             </div>
@@ -315,10 +317,10 @@ ${sourcesText}
             {/* Status Tabs */}
             <div className="flex flex-wrap items-center gap-1.5">
               {[
-                { id: "ALL", label: "All", count: counts.total },
-                { id: "UNDER_REVIEW", label: "Under Review", count: counts.underReview },
-                { id: "ACTION_REQUIRED", label: "Action Req.", count: counts.actionRequired },
-                { id: "CLOSED", label: "Closed", count: counts.closed },
+                { id: "ALL", label: t.common.all, count: counts.total },
+                { id: "UNDER_REVIEW", label: t.support.underReview, count: counts.underReview },
+                { id: "ACTION_REQUIRED", label: t.support.actionRequired, count: counts.actionRequired },
+                { id: "CLOSED", label: t.support.closed, count: counts.closed },
               ].map((tab) => (
                 <button
                   key={tab.id}
@@ -343,7 +345,7 @@ ${sourcesText}
                   onChange={(e) => setStoreFilter(e.target.value)}
                   className="w-full rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-xs text-zinc-700 outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300"
                 >
-                  <option value="ALL">All Stores</option>
+                  <option value="ALL">{t.support.allStores}</option>
                   {context.stores.map((s) => (
                     <option key={s.id} value={s.id}>
                       🏪 {s.name}
@@ -361,6 +363,8 @@ ${sourcesText}
                 const norm = getNormalizedStatus(item.status);
                 const isSelected = selectedInquiryId === item.id;
                 const catMeta = ALL_CASE_CATEGORY_LABELS[item.category] || { en: item.category, ko: item.category };
+                const catLabel = locale === "ko" ? (catMeta.ko || catMeta.en) : catMeta.en;
+                const statusLabel = locale === "ko" ? OFFICIAL_STATUS_LABEL[norm].ko : OFFICIAL_STATUS_LABEL[norm].en;
 
                 return (
                   <div
@@ -379,7 +383,7 @@ ${sourcesText}
                       <div className="flex items-center gap-1.5 min-w-0 flex-wrap">
                         <span className="text-xs">{OFFICIAL_STATUS_EMOJI[norm]}</span>
                         <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold border ${OFFICIAL_STATUS_COLOR[norm]}`}>
-                          {OFFICIAL_STATUS_LABEL[norm].en}
+                          {statusLabel}
                         </span>
                         {item.case_number && (
                           <span className="text-[10px] font-mono font-bold text-zinc-500 dark:text-zinc-400">
@@ -396,7 +400,7 @@ ${sourcesText}
 
                     <div className="flex items-center gap-2 text-[11px] text-zinc-500 dark:text-zinc-400 mb-1 flex-wrap">
                       <span className="rounded bg-zinc-100 dark:bg-zinc-800 px-1.5 py-0.5 text-[10px] font-medium text-zinc-600 dark:text-zinc-300">
-                        {catMeta.en}
+                        {catLabel}
                       </span>
                       {item.store_name && (
                         <span className="text-[10px] font-medium text-emerald-700 dark:text-emerald-400">
@@ -428,7 +432,7 @@ ${sourcesText}
                     {norm === "ACTION_REQUIRED" && (
                       <div className="mt-2 flex items-center gap-1 text-[10px] font-bold text-rose-600 dark:text-rose-400">
                         <span>⚠️</span>
-                        <span>Action requested by Support</span>
+                        <span>{locale === "ko" ? "운영팀 추가 조치 요청" : "Action requested by Support"}</span>
                       </div>
                     )}
                   </div>
@@ -437,13 +441,13 @@ ${sourcesText}
             ) : (
               <div className="p-8 text-center text-xs text-zinc-400 dark:text-zinc-500 space-y-2">
                 <span className="text-2xl block">💬</span>
-                <p>No support inquiries found.</p>
+                <p>{t.support.noInquiriesTitle}</p>
                 <button
                   type="button"
                   onClick={() => setShowNewModal(true)}
                   className="text-xs font-bold text-zinc-900 underline hover:text-zinc-700 dark:text-white"
                 >
-                  Create your first inquiry
+                  {t.support.createFirstInquiry}
                 </button>
               </div>
             )}
@@ -628,16 +632,16 @@ ${sourcesText}
                   <div className="rounded-xl border border-zinc-200 bg-white p-4 text-center dark:border-zinc-800 dark:bg-zinc-900 space-y-1">
                     <span className="text-base block">🔒</span>
                     <p className="text-xs font-bold text-zinc-800 dark:text-zinc-200">
-                      This case has been resolved and closed.
+                      {t.support.resolvedNotice}
                     </p>
                     <p className="text-[11px] text-zinc-400">
-                      If you have further questions, please submit a new inquiry.
+                      {t.support.resolvedSubNotice}
                     </p>
                   </div>
                 ) : (
                   <form onSubmit={handleSendReply} className="space-y-3">
                     <h4 className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">
-                      Send Reply to Support Team
+                      {t.support.sendReply}
                     </h4>
 
                     {replyError && (
@@ -650,14 +654,14 @@ ${sourcesText}
                       value={replyContent}
                       onChange={(e) => setReplyContent(e.target.value)}
                       rows={3}
-                      placeholder="Type your message or response here..."
+                      placeholder={t.support.replyPlaceholder}
                       className="w-full rounded-xl border border-zinc-200 bg-white p-3 text-xs outline-none focus:border-zinc-900 dark:border-zinc-800 dark:bg-zinc-900 dark:text-white dark:focus:border-white transition-colors resize-none shadow-2xs"
                     />
 
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                       <div>
                         <label className="inline-flex items-center gap-1.5 text-xs text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200 cursor-pointer">
-                          <span>📎 Attach File (Max 20MB)</span>
+                          <span>📎 {t.support.attachFile}</span>
                           <input
                             type="file"
                             onChange={(e) => setReplyFile(e.target.files?.[0] || null)}
@@ -676,7 +680,7 @@ ${sourcesText}
                         disabled={isPending || !replyContent.trim()}
                         className="rounded-xl bg-zinc-900 px-5 py-2 text-xs font-bold text-white hover:bg-zinc-800 disabled:opacity-40 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-100 transition-colors cursor-pointer shadow-xs"
                       >
-                        {isPending ? "Sending..." : "Send Reply"}
+                        {isPending ? t.support.sending : t.support.sendReply}
                       </button>
                     </div>
                   </form>
@@ -685,7 +689,7 @@ ${sourcesText}
             </div>
           ) : (
             <div className="rounded-2xl border border-dashed border-zinc-200 p-12 text-center text-xs text-zinc-400 dark:border-zinc-800 dark:text-zinc-500">
-              Select an inquiry from the list to view the conversation thread.
+              {t.support.selectInquiryNotice}
             </div>
           )}
         </div>
@@ -698,10 +702,10 @@ ${sourcesText}
             <div className="flex items-start justify-between pb-3 border-b border-zinc-100 dark:border-zinc-800">
               <div>
                 <h3 className="text-base font-bold text-zinc-900 dark:text-white">
-                  Create Support Inquiry
+                  {t.support.modalTitle}
                 </h3>
                 <p className="text-xs text-zinc-400 mt-0.5">
-                  Select a category and provide details so our team can assist you promptly.
+                  {t.support.modalSubtitle}
                 </p>
               </div>
               <button
@@ -723,26 +727,29 @@ ${sourcesText}
               {/* Category Selector (4 cols on desktop, 2 cols on mobile) */}
               <div>
                 <label className="block text-[11px] font-bold text-zinc-700 dark:text-zinc-300 mb-1">
-                  Inquiry Category <span className="text-rose-500">*</span>
+                  {t.support.categoryLabel} <span className="text-rose-500">*</span>
                 </label>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
-                  {RETAILER_CASE_CATEGORIES.map((cat) => (
-                    <button
-                      key={cat.key}
-                      type="button"
-                      onClick={() => setNewCategory(cat.key)}
-                      className={`p-2 rounded-xl border text-left transition-all cursor-pointer ${
-                        newCategory === cat.key
-                          ? "border-zinc-900 bg-zinc-900 text-white dark:border-white dark:bg-white dark:text-zinc-900 shadow-2xs"
-                          : "border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300"
-                      }`}
-                    >
-                      <div className="flex items-center gap-1.5 font-bold text-[11px]">
-                        <span>{cat.icon}</span>
-                        <span className="truncate">{cat.labelEn}</span>
-                      </div>
-                    </button>
-                  ))}
+                  {RETAILER_CASE_CATEGORIES.map((cat) => {
+                    const label = locale === "ko" ? (cat.labelKo || cat.labelEn) : cat.labelEn;
+                    return (
+                      <button
+                        key={cat.key}
+                        type="button"
+                        onClick={() => setNewCategory(cat.key)}
+                        className={`p-2 rounded-xl border text-left transition-all cursor-pointer ${
+                          newCategory === cat.key
+                            ? "border-zinc-900 bg-zinc-900 text-white dark:border-white dark:bg-white dark:text-zinc-900 shadow-2xs"
+                            : "border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300"
+                        }`}
+                      >
+                        <div className="flex items-center gap-1.5 font-bold text-[11px]">
+                          <span>{cat.icon}</span>
+                          <span className="truncate">{label}</span>
+                        </div>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 
@@ -751,14 +758,14 @@ ${sourcesText}
                 {context.stores.length > 0 && (
                   <div>
                     <label className="block text-[11px] font-semibold text-zinc-600 dark:text-zinc-400 mb-1">
-                      Store
+                      {t.support.storeLabel}
                     </label>
                     <select
                       value={newStoreId}
                       onChange={(e) => setNewStoreId(e.target.value)}
                       className="w-full rounded-xl border border-zinc-200 bg-white px-2.5 py-1.5 text-xs outline-none focus:border-zinc-400 dark:border-zinc-800 dark:bg-zinc-900 dark:text-white truncate"
                     >
-                      <option value="">Company General</option>
+                      <option value="">{t.support.companyGeneral}</option>
                       {context.stores.map((s) => (
                         <option key={s.id} value={s.id}>
                           🏪 {s.name} ({s.city || "Store"})
@@ -770,14 +777,14 @@ ${sourcesText}
 
                 <div>
                   <label className="block text-[11px] font-semibold text-zinc-600 dark:text-zinc-400 mb-1">
-                    Related Order <span className="font-normal text-zinc-400">(Optional)</span>
+                    {t.support.orderLabel} <span className="font-normal text-zinc-400">({t.common.optional})</span>
                   </label>
                   <select
                     value={newOrderId}
                     onChange={(e) => setNewOrderId(e.target.value)}
                     className="w-full rounded-xl border border-zinc-200 bg-white px-2.5 py-1.5 text-xs outline-none focus:border-zinc-400 dark:border-zinc-800 dark:bg-zinc-900 dark:text-white truncate"
                   >
-                    <option value="">None / Not specific</option>
+                    <option value="">{t.support.noneNotSpecific}</option>
                     {(context.orders || []).map((o) => (
                       <option key={o.id} value={o.id}>
                         #{o.orderNumber} (${o.totalAmount?.toFixed(2) || "0.00"})
@@ -788,14 +795,14 @@ ${sourcesText}
 
                 <div>
                   <label className="block text-[11px] font-semibold text-zinc-600 dark:text-zinc-400 mb-1">
-                    Related Product <span className="font-normal text-zinc-400">(Optional)</span>
+                    {t.support.productLabel} <span className="font-normal text-zinc-400">({t.common.optional})</span>
                   </label>
                   <select
                     value={newProductId}
                     onChange={(e) => setNewProductId(e.target.value)}
                     className="w-full rounded-xl border border-zinc-200 bg-white px-2.5 py-1.5 text-xs outline-none focus:border-zinc-400 dark:border-zinc-800 dark:bg-zinc-900 dark:text-white truncate"
                   >
-                    <option value="">None / Not specific</option>
+                    <option value="">{t.support.noneNotSpecific}</option>
                     {(context.products || []).map((p) => (
                       <option key={p.id} value={p.id}>
                         {p.name} {p.sku ? `(${p.sku})` : ""}
@@ -808,13 +815,13 @@ ${sourcesText}
               {/* Subject */}
               <div>
                 <label className="block text-[11px] font-bold text-zinc-700 dark:text-zinc-300 mb-1">
-                  Subject / Title <span className="text-rose-500">*</span>
+                  {t.support.subjectLabel} <span className="text-rose-500">*</span>
                 </label>
                 <input
                   type="text"
                   value={newTitle}
                   onChange={(e) => setNewTitle(e.target.value)}
-                  placeholder="e.g. Question regarding Order delivery status or product inquiry"
+                  placeholder={t.support.subjectPlaceholder}
                   className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-1.5 text-xs outline-none focus:border-zinc-900 dark:border-zinc-800 dark:bg-zinc-900 dark:text-white shadow-2xs"
                 />
               </div>
@@ -822,13 +829,13 @@ ${sourcesText}
               {/* Message Description */}
               <div>
                 <label className="block text-[11px] font-bold text-zinc-700 dark:text-zinc-300 mb-1">
-                  Description <span className="text-rose-500">*</span>
+                  {t.support.descLabel} <span className="text-rose-500">*</span>
                 </label>
                 <textarea
                   value={newContent}
                   onChange={(e) => setNewContent(e.target.value)}
                   rows={3}
-                  placeholder="Please provide complete details, SKU numbers, or questions so our team can resolve it promptly."
+                  placeholder={t.support.descPlaceholder}
                   className="w-full rounded-xl border border-zinc-200 bg-white p-2.5 text-xs outline-none focus:border-zinc-900 dark:border-zinc-800 dark:bg-zinc-900 dark:text-white transition-colors resize-none shadow-2xs leading-relaxed"
                 />
               </div>
@@ -837,7 +844,7 @@ ${sourcesText}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-center">
                 <div>
                   <label className="block text-[11px] font-bold text-zinc-700 dark:text-zinc-300 mb-1">
-                    Priority
+                    {t.support.priorityLabel}
                   </label>
                   <div className="flex gap-1.5">
                     {[
@@ -863,7 +870,7 @@ ${sourcesText}
 
                 <div>
                   <label className="block text-[11px] font-bold text-zinc-700 dark:text-zinc-300 mb-1">
-                    Attachment <span className="font-normal text-zinc-400">(Max 20MB)</span>
+                    {locale === "ko" ? "첨부 파일" : "Attachment"} <span className="font-normal text-zinc-400">({t.common.optional} - Max 20MB)</span>
                   </label>
                   <input
                     type="file"
@@ -880,14 +887,14 @@ ${sourcesText}
                   onClick={() => setShowNewModal(false)}
                   className="rounded-xl px-4 py-2 text-xs font-bold text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
                 >
-                  Cancel
+                  {t.common.cancel}
                 </button>
                 <button
                   type="submit"
                   disabled={isPending || !newTitle.trim() || !newContent.trim()}
                   className="rounded-xl bg-zinc-900 px-5 py-2 text-xs font-bold text-white hover:bg-zinc-800 disabled:opacity-40 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-100 transition-colors cursor-pointer shadow-xs"
                 >
-                  {isPending ? "Submitting..." : "Submit Inquiry"}
+                  {isPending ? t.support.submitting : t.support.submitInquiry}
                 </button>
               </div>
             </form>
