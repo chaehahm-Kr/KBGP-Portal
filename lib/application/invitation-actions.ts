@@ -96,7 +96,7 @@ export async function checkDuplicateEmailAction(
   // 2. Check company_users table for active portal user or pending invitation
   const { data: activeUsers } = await admin
     .from("company_users")
-    .select("id, name, status, company_id, companies(name)")
+    .select("id, name, status, company_id, companies!company_users_company_id_fkey(name)")
     .ilike("email", normalized);
 
   if (activeUsers && activeUsers.length > 0) {

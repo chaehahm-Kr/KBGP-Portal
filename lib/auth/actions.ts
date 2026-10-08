@@ -168,22 +168,31 @@ async function login(
       };
     }
   } else if (area === "retailer") {
-    const { data: companyUser } = await adminClient
+    const { data: companyUser, error: cuError } = await adminClient
       .from("company_users")
       .select("status")
       .eq("id", data.user.id)
       .maybeSingle();
 
-    if (!companyUser) {
+    if (cuError || !companyUser) {
+      console.warn(`[Auth Security Audit] [${new Date().toISOString()}] Retailer login rejected: company_users not found for user ${data.user.id}`);
       await supabase.auth.signOut();
       return {
         error: "Retailer company account not found. Please contact support.",
       };
     }
     if (companyUser.status === "suspended") {
+      console.warn(`[Auth Security Audit] [${new Date().toISOString()}] Retailer login rejected: account suspended for user ${data.user.id}`);
       await supabase.auth.signOut();
       return {
         error: "This retailer account has been suspended. Please contact support.",
+      };
+    }
+    if (companyUser.status === "removed") {
+      console.warn(`[Auth Security Audit] [${new Date().toISOString()}] Retailer login rejected: account removed for user ${data.user.id}`);
+      await supabase.auth.signOut();
+      return {
+        error: "This account has been removed from the retailer company. Please contact support.",
       };
     }
   }

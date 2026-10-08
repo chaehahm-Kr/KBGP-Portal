@@ -189,7 +189,7 @@ export async function submitRetailerOrder(
     // 1. Fetch Company & Retailer Profile
     const { data: companyUser } = await adminClient
       .from("company_users")
-      .select("company_id, companies(id, name)")
+      .select("company_id, companies!company_users_company_id_fkey(id, name)")
       .eq("id", session.userId)
       .maybeSingle();
 
