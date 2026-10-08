@@ -83,12 +83,37 @@ export default function ResetPasswordConfirmPage() {
           }
 
           if (accessToken && refreshToken) {
+            // Check if token belongs to retailer role
+            if (accessToken.includes(".")) {
+              try {
+                const payloadBase64 = accessToken.split(".")[1];
+                const normalized = payloadBase64.replace(/-/g, "+").replace(/_/g, "/");
+                const jsonStr = decodeURIComponent(
+                  atob(normalized)
+                    .split("")
+                    .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
+                    .join("")
+                );
+                const parsed = JSON.parse(jsonStr);
+                const role = parsed.user_metadata?.role || parsed.app_metadata?.role;
+                if (role === "retailer") {
+                  window.location.replace(`https://portal.kselecthub.com/reset-password${window.location.search}${hash}`);
+                  return;
+                }
+              } catch {}
+            }
+
             const { data, error: sessionError } = await supabase.auth.setSession({
               access_token: accessToken,
               refresh_token: refreshToken,
             });
 
             if (data.session && isMounted) {
+              const role = data.session.user?.user_metadata?.role || data.session.user?.app_metadata?.role;
+              if (role === "retailer") {
+                window.location.replace(`https://portal.kselecthub.com/reset-password${window.location.search}${hash}`);
+                return;
+              }
               setStatus("ready");
               return;
             }
@@ -106,6 +131,11 @@ export default function ResetPasswordConfirmPage() {
         // 3. Check Existing Active Session
         const { data } = await supabase.auth.getSession();
         if (data.session && isMounted) {
+          const role = data.session.user?.user_metadata?.role || data.session.user?.app_metadata?.role;
+          if (role === "retailer") {
+            window.location.replace(`https://portal.kselecthub.com/reset-password${window.location.search}${window.location.hash}`);
+            return;
+          }
           setStatus("ready");
           return;
         }

@@ -43,6 +43,33 @@ export function LoginForm({ action, heading, description }: LoginFormProps) {
       search.includes("error=") ||
       (hash.includes("access_token=") && hash.includes("refresh_token="));
 
+    if (isInvite || isRecovery) {
+      try {
+        const hashParams = new URLSearchParams(hash.startsWith("#") ? hash.substring(1) : hash);
+        const searchParams = new URLSearchParams(search.startsWith("?") ? search.substring(1) : search);
+        const accessToken = hashParams.get("access_token") || searchParams.get("access_token");
+        if (accessToken && accessToken.includes(".")) {
+          const payloadBase64 = accessToken.split(".")[1];
+          const normalized = payloadBase64.replace(/-/g, "+").replace(/_/g, "/");
+          const jsonStr = decodeURIComponent(
+            atob(normalized)
+              .split("")
+              .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
+              .join("")
+          );
+          const parsed = JSON.parse(jsonStr);
+          const role = parsed.user_metadata?.role || parsed.app_metadata?.role;
+          if (role === "retailer") {
+            const targetUrl = isInvite
+              ? `https://portal.kselecthub.com/invite/accept${search}${hash}`
+              : `https://portal.kselecthub.com/reset-password${search}${hash}`;
+            window.location.replace(targetUrl);
+            return;
+          }
+        }
+      } catch {}
+    }
+
     if (isInvite) {
       const targetPath = pathname.startsWith("/admin")
         ? "/admin/invite/accept"
