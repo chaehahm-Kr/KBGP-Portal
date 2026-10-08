@@ -35,7 +35,7 @@ export function RetailerBottomNav({ }: RetailerBottomNavProps) {
                 pathname.startsWith(`/retailer${item.href}/`);
 
           return (
-            <Link
+            <a
               key={item.href}
               href={item.href}
               className={`flex flex-col items-center justify-center gap-0.5 relative transition-colors ${
@@ -51,7 +51,7 @@ export function RetailerBottomNav({ }: RetailerBottomNavProps) {
                 )}
               </div>
               <span className="text-[10px] tracking-tight truncate max-w-[56px] text-center">{item.name}</span>
-            </Link>
+            </a>
           );
         })}
       </div>
