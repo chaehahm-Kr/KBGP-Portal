@@ -26,7 +26,7 @@ import { TASK_DEFINITIONS } from "@/lib/company/task-constants";
 import { InternationalPhoneInput } from "@/components/shared/international-phone-input";
 import { CountrySelect } from "@/components/shared/country-select";
 import { formatCanonicalCountryName } from "@/lib/constants/countries";
-import { formatEasternDateTime } from "@/lib/utils/timezone";
+import { formatEasternDate, formatEasternDateTime } from "@/lib/utils/timezone";
 import { CompanyShippingOriginsTab } from "@/components/company/company-shipping-origins-tab";
 import { type CompanyShippingOrigin } from "@/lib/company/shipping-origin-actions";
 import { CompanyAgreementsTab } from "@/components/admin/company-agreements-tab";
@@ -1166,7 +1166,8 @@ export function CompanyDetailManager({
                   />
                 ) : (
                   <span className="font-semibold text-zinc-900 dark:text-white mt-0.5 block">
-                    {createdAt ? new Date(createdAt).toLocaleDateString() : "(미지정)"}
+                    {/* 등록일은 날짜 선택기 값(UTC 자정)으로 저장된다. 수정 입력칸과 같은 UTC 날짜로 보여줘야 서버·브라우저 결과가 같다 */}
+                    {createdAt ? new Date(createdAt).toISOString().split("T")[0] : "(미지정)"}
                   </span>
                 )}
               </div>
@@ -1810,7 +1811,7 @@ export function CompanyDetailManager({
                             {app.application_number}
                           </Link>
                           <span className="text-[10px] text-zinc-400 ml-2 font-mono">
-                            {new Date(app.submitted_at).toLocaleDateString()}
+                            {formatEasternDate(app.submitted_at)}
                           </span>
                         </div>
                         <span className={`rounded border px-1.5 py-0.5 text-[9px] font-bold ${
@@ -2073,7 +2074,7 @@ export function CompanyDetailManager({
                             />
                           ) : (
                             <span className="font-semibold text-zinc-900 dark:text-white">
-                              {supplierProfile?.default_moq !== null && supplierProfile?.default_moq !== undefined ? `${supplierProfile.default_moq.toLocaleString()} pcs` : "제한 없음"}
+                              {supplierProfile?.default_moq !== null && supplierProfile?.default_moq !== undefined ? `${supplierProfile.default_moq.toLocaleString("en-US")} pcs` : "제한 없음"}
                             </span>
                           )}
                         </div>
