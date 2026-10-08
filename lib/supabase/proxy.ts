@@ -216,12 +216,20 @@ export async function updateSession(request: NextRequest) {
       return createRedirectWithCookies(url);
     }
 
-    // B. Direct access with /retailer prefix -> redirect to clean public URL
+    // B. Direct access with /retailer prefix -> redirect to clean public URL (except RSC internal requests)
     if (pathname.startsWith("/retailer")) {
-      const cleanPath = pathname === "/retailer" ? "/" : pathname.replace(/^\/retailer/, "");
-      const url = request.nextUrl.clone();
-      url.pathname = cleanPath;
-      return createRedirectWithCookies(url);
+      const isRsc =
+        request.headers.get("rsc") === "1" ||
+        request.headers.has("next-router-state-tree") ||
+        request.nextUrl.searchParams.has("_rsc") ||
+        pathname.includes(".rsc");
+
+      if (!isRsc) {
+        const cleanPath = pathname === "/retailer" ? "/" : pathname.replace(/^\/retailer/, "");
+        const url = request.nextUrl.clone();
+        url.pathname = cleanPath;
+        return createRedirectWithCookies(url);
+      }
     }
 
     // C. API routes, manifest, and static asset files pass through without rewrite
