@@ -68,27 +68,7 @@ export async function parseBrandTrademarks(brand: any): Promise<BrandTrademarks>
     };
   }
 
-  // Fallback to parsing from intro JSON string
-  const intro = brand.intro || "";
-  if (intro.startsWith("__JSON_METADATA__:")) {
-    try {
-      const jsonStr = intro.substring("__JSON_METADATA__:".length);
-      const data = JSON.parse(jsonStr);
-      return {
-        has_kr_trademark: !!data.trademarks?.has_kr_trademark,
-        kr_trademark_number: data.trademarks?.kr_trademark_number || null,
-        kr_trademark_path: data.trademarks?.kr_trademark_path || null,
-        has_us_trademark: !!data.trademarks?.has_us_trademark,
-        us_trademark_number: data.trademarks?.us_trademark_number || null,
-        us_trademark_path: data.trademarks?.us_trademark_path || null,
-        intro_text: cleanIntro,
-      };
-    } catch (e) {
-      // Ignore and fallback
-    }
-  }
-
-  // Default fallback
+  // 상표권 칸을 조회하지 않은 경우(DATA-JSON-MIG-006 이후 intro JSON 의 trademarks 는 쓰지 않는다)
   return {
     has_kr_trademark: false,
     kr_trademark_number: null,
@@ -238,34 +218,6 @@ export async function createBrand(
   brand = data;
   insertError = error;
 
-  // Fallback to JSON serialization in 'intro' if columns don't exist yet (42703 or PGRST204)
-  if (insertError && (insertError.code === "42703" || insertError.code === "PGRST204")) {
-    const fallbackIntroObj = {
-      description: parsed.data.intro || "",
-      trademarks: {
-        has_kr_trademark: hasKrTrademark,
-        kr_trademark_number: krTrademarkNumber,
-        kr_trademark_path: null,
-        has_us_trademark: hasUsTrademark,
-        us_trademark_number: usTrademarkNumber,
-        us_trademark_path: null,
-      }
-    };
-    const fallbackIntroString = `__JSON_METADATA__:${JSON.stringify(fallbackIntroObj)}`;
-
-    const { data: fallbackData, error: fallbackError } = await supabase
-      .from("brands")
-      .insert({
-        company_id: companyId,
-        name: parsed.data.name,
-        intro: fallbackIntroString
-      })
-      .select("id")
-      .single();
-
-    brand = fallbackData;
-    insertError = fallbackError;
-  }
 
   if (insertError || !brand) {
     console.error("createBrand query error:", insertError);
@@ -320,27 +272,8 @@ export async function createBrand(
     .update({ ...finalUpdatePayload, ...trademarkPaths })
     .eq("id", brand.id);
 
-  // If path update fails due to columns not existing, update via intro JSON
-  if (finalUpdateError && (finalUpdateError.code === "42703" || finalUpdateError.code === "PGRST204")) {
-    const fallbackIntroObj = {
-      description: parsed.data.intro || "",
-      trademarks: {
-        has_kr_trademark: hasKrTrademark,
-        kr_trademark_number: krTrademarkNumber,
-        kr_trademark_path: krTrademarkPath,
-        has_us_trademark: hasUsTrademark,
-        us_trademark_number: usTrademarkNumber,
-        us_trademark_path: usTrademarkPath,
-      }
-    };
-    const fallbackIntroString = `__JSON_METADATA__:${JSON.stringify(fallbackIntroObj)}`;
-    await supabase
-      .from("brands")
-      .update({
-        ...finalUpdatePayload,
-        intro: fallbackIntroString
-      })
-      .eq("id", brand.id);
+  if (finalUpdateError) {
+    console.error("createBrand logo/trademark update error:", finalUpdateError);
   }
 
   await markBrandOnboardingConfirmed(supabase, companyId);
@@ -488,44 +421,7 @@ export async function updateBrand(
     .update({ ...updatePayload, ...trademarkPayload })
     .eq("id", brandId);
 
-  // Fallback to JSON serialization in 'intro' if columns don't exist yet (42703 or PGRST204)
-  if (updateError && (updateError.code === "42703" || updateError.code === "PGRST204")) {
-    // Collect current values to preserve paths if not modified
-    const currentKrPath = formData.get("currentKrTrademarkPath") as string || null;
-    const currentUsPath = formData.get("currentUsTrademarkPath") as string || null;
-
-    const fallbackIntroObj = {
-      description: parsed.data.intro || "",
-      trademarks: {
-        has_kr_trademark: hasKrTrademark,
-        kr_trademark_number: krTrademarkNumber,
-        kr_trademark_path: krPathToUpdate !== undefined ? krPathToUpdate : currentKrPath,
-        has_us_trademark: hasUsTrademark,
-        us_trademark_number: usTrademarkNumber,
-        us_trademark_path: usPathToUpdate !== undefined ? usPathToUpdate : currentUsPath,
-      }
-    };
-
-    if (krPathToUpdate === null) fallbackIntroObj.trademarks.kr_trademark_path = null;
-    if (usPathToUpdate === null) fallbackIntroObj.trademarks.us_trademark_path = null;
-
-    const fallbackIntroString = `__JSON_METADATA__:${JSON.stringify(fallbackIntroObj)}`;
-
-    const { error: fallbackUpdateError } = await supabase
-      .from("brands")
-      .update({
-        ...updatePayload,
-        intro: fallbackIntroString
-      })
-      .eq("id", brandId);
-
-    if (fallbackUpdateError) {
-      if (fallbackUpdateError.code === "23505") {
-        return { error: "이미 같은 이름의 브랜드가 등록되어 있습니다." };
-      }
-      return { error: "브랜드 정보를 저장하지 못했습니다." };
-    }
-  } else if (updateError) {
+  if (updateError) {
     console.error("updateBrand query error:", updateError);
     if (updateError.code === "23505") {
       return { error: "이미 같은 이름의 브랜드가 등록되어 있습니다." };
@@ -626,43 +522,7 @@ export async function adminUpdateBrand(
     .update({ ...updatePayload, ...trademarkPayload })
     .eq("id", brandId);
 
-  // Fallback to JSON serialization if columns don't exist yet
-  if (updateError && (updateError.code === "42703" || updateError.code === "PGRST204")) {
-    const currentKrPath = formData.get("currentKrTrademarkPath") as string || null;
-    const currentUsPath = formData.get("currentUsTrademarkPath") as string || null;
-
-    const fallbackIntroObj = {
-      description: parsed.data.intro || "",
-      trademarks: {
-        has_kr_trademark: hasKrTrademark,
-        kr_trademark_number: krTrademarkNumber,
-        kr_trademark_path: krPathToUpdate !== undefined ? krPathToUpdate : currentKrPath,
-        has_us_trademark: hasUsTrademark,
-        us_trademark_number: usTrademarkNumber,
-        us_trademark_path: usPathToUpdate !== undefined ? usPathToUpdate : currentUsPath,
-      }
-    };
-
-    if (krPathToUpdate === null) fallbackIntroObj.trademarks.kr_trademark_path = null;
-    if (usPathToUpdate === null) fallbackIntroObj.trademarks.us_trademark_path = null;
-
-    const fallbackIntroString = `__JSON_METADATA__:${JSON.stringify(fallbackIntroObj)}`;
-
-    const { error: fallbackUpdateError } = await supabase
-      .from("brands")
-      .update({
-        ...updatePayload,
-        intro: fallbackIntroString
-      })
-      .eq("id", brandId);
-
-    if (fallbackUpdateError) {
-      if (fallbackUpdateError.code === "23505") {
-        return { error: "이미 같은 이름의 브랜드가 등록되어 있습니다." };
-      }
-      return { error: "브랜드 정보를 저장하지 못했습니다." };
-    }
-  } else if (updateError) {
+  if (updateError) {
     console.error("adminUpdateBrand query error:", updateError);
     if (updateError.code === "23505") {
       return { error: "이미 같은 이름의 브랜드가 등록되어 있습니다." };
