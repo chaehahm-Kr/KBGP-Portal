@@ -2,10 +2,6 @@
 
 import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
-import {
-  countUnreadMetaPoRequests,
-  markMetaPoRequestAsRead,
-} from "@/lib/purchase-order/request-meta-read-state";
 
 export interface AdminUnreadCounts {
   applications: number;
@@ -16,12 +12,6 @@ export interface AdminUnreadCounts {
   totalFinance: number;
   totalProducts: number;
 }
-
-/**
- * DATA-JSON-MIG-004: 0136 이 po_requests 워크플로 칸을 만들고 JSON 요청을 복사했다.
- * 배지와 읽음 처리는 테이블 기준이다. false 로 바꾸면 companies 메타데이터(JSON) 기준으로 돌아간다.
- */
-const PO_REQUESTS_WORKFLOW_ENABLED = true;
 
 export type AdminNotificationEntity =
   | "application"
@@ -47,13 +37,11 @@ export async function getAdminUnreadCounts(): Promise<AdminUnreadCounts> {
         .is("admin_read_at", null),
 
       // 2. PO Requests: Submitted/Under Review PO requests where admin_read_at is NULL
-      PO_REQUESTS_WORKFLOW_ENABLED
-        ? admin
-            .from("po_requests")
-            .select("id", { count: "exact", head: true })
-            .in("status", ["SUBMITTED", "UNDER_REVIEW", "CHANGE_REQUESTED"])
-            .is("admin_read_at", null)
-        : countUnreadMetaPoRequests().then((count) => ({ count })),
+      admin
+        .from("po_requests")
+        .select("id", { count: "exact", head: true })
+        .in("status", ["SUBMITTED", "UNDER_REVIEW", "CHANGE_REQUESTED"])
+        .is("admin_read_at", null),
 
       // 3. Products: Registered / submitted products for admin review where admin_read_at is NULL
       admin
@@ -154,18 +142,6 @@ export async function markAdminItemAsRead(
       break;
     default:
       return false;
-  }
-
-  if (entity === "po_request" && !PO_REQUESTS_WORKFLOW_ENABLED) {
-    const ok = await markMetaPoRequestAsRead(id, adminUserId);
-    if (ok) {
-      pathsToRevalidate.forEach((p) => {
-        try {
-          revalidatePath(p);
-        } catch {}
-      });
-    }
-    return ok;
   }
 
   try {

@@ -19,62 +19,12 @@ import type {
   PoRequestDetail,
 } from "./request-types";
 
-// In-memory / metadata store fallback for zero-downtime resilience
-async function getRequestsFromMeta(companyId?: string): Promise<any[]> {
-  const admin = createAdminClient();
-  let query = admin.from("companies").select("id, name, intro");
-  if (companyId) query = query.eq("id", companyId);
-  const { data: comps } = await query;
-
-  const results: any[] = [];
-  (comps ?? []).forEach((c: any) => {
-    if (c.intro && c.intro.startsWith("__COMPANY_METADATA__:")) {
-      try {
-        const parsed = JSON.parse(c.intro.substring("__COMPANY_METADATA__:".length));
-        if (Array.isArray(parsed.po_requests)) {
-          parsed.po_requests.forEach((r: any) => {
-            results.push({
-              ...r,
-              company_id: r.company_id || c.id,
-              company: { id: c.id, name: c.name },
-              company_name: c.name,
-            });
-          });
-        }
-      } catch (e) {}
-    }
-  });
-  return results;
-}
-
-async function saveRequestToMeta(companyId: string, requestObj: any): Promise<void> {
-  const admin = createAdminClient();
-  const { data: comp } = await admin.from("companies").select("id, name, intro").eq("id", companyId).single();
-
-  let metaObj: any = {};
-  if (comp && comp.intro && comp.intro.startsWith("__COMPANY_METADATA__:")) {
-    try {
-      metaObj = JSON.parse(comp.intro.substring("__COMPANY_METADATA__:".length));
-    } catch (e) {}
-  }
-
-  const existingList: any[] = Array.isArray(metaObj.po_requests) ? metaObj.po_requests : [];
-  const idx = existingList.findIndex((r) => r.id === requestObj.id);
-  const cleanRequestObj = {
-    ...requestObj,
-    company_id: companyId,
-    company_name: comp?.name || requestObj.company_name || "(회사명 미확인)",
-  };
-
-  if (idx >= 0) {
-    existingList[idx] = cleanRequestObj;
-  } else {
-    existingList.unshift(cleanRequestObj);
-  }
-
-  metaObj.po_requests = existingList;
-  const newIntro = `__COMPANY_METADATA__:${JSON.stringify(metaObj)}`;
-  await admin.from("companies").update({ intro: newIntro, updated_at: new Date().toISOString() }).eq("id", companyId);
+/**
+ * DATA-JSON-CLEAN-003: PO 요청은 po_requests 테이블(0136)만 저장소다. companies.intro JSON 백업은
+ * 쓰지 않으므로 테이블 쓰기 실패를 조용히 넘기지 않고 오류로 돌려준다.
+ */
+function assertPoWrite(result: { error: { message: string } | null }, step: string) {
+  if (result.error) throw new Error(`발주 요청 저장 실패(${step}): ${result.error.message}`);
 }
 
 // Generate unique Request Number: PR-YYYYMMDD-XXXX
@@ -120,10 +70,6 @@ export async function getPortalPoRequests(): Promise<PoRequestDetail[]> {
     }
   } catch (e) {}
 
-  if (requests.length === 0) {
-    requests = await getRequestsFromMeta(companyId);
-  }
-
   return formatRequests(requests, companyMap);
 }
 
@@ -162,11 +108,6 @@ export async function getPortalPoRequestDetail(requestId: string): Promise<PoReq
       req = data;
     }
   } catch (e) {}
-
-  if (!req) {
-    const fallbackList = await getRequestsFromMeta(companyId);
-    req = fallbackList.find((r) => r.id === requestId && (r.company_id === companyId || !r.company_id));
-  }
 
   if (!req) {
     throw new Error("발주 요청 정보를 찾을 수 없거나 접근 권한이 없습니다.");
@@ -398,24 +339,10 @@ export async function createPoRequest(input: PoRequestInput): Promise<{ id: stri
     created_at: now,
   };
 
-  // Try saving to DB tables first
-  let dbSaved = false;
-  try {
-    const { error: insErr } = await admin.from("po_requests").insert(requestHeader);
-    if (!insErr) {
-      const lineInserts = linesPayload.map((l) => ({ ...l, po_request_id: requestHeader.id }));
-      await admin.from("po_request_lines").insert(lineInserts);
-      await admin.from("po_request_history").insert(historyEntry);
-      dbSaved = true;
-    }
-  } catch (e) {}
-
-  // Always save to metadata as backup
-  await saveRequestToMeta(companyId, {
-    ...requestHeader,
-    lines: linesPayload,
-    history: [historyEntry],
-  });
+  assertPoWrite(await admin.from("po_requests").insert(requestHeader), "요청서");
+  const lineInserts = linesPayload.map((l) => ({ ...l, po_request_id: requestHeader.id }));
+  assertPoWrite(await admin.from("po_request_lines").insert(lineInserts), "품목");
+  assertPoWrite(await admin.from("po_request_history").insert(historyEntry), "이력");
 
   revalidatePath("/portal/orders/requests");
   revalidatePath("/admin/purchasing/requests");
@@ -519,19 +446,10 @@ export async function updatePoRequest(
     created_at: now,
   };
 
-  try {
-    await admin.from("po_requests").update(updatedHeader).eq("id", requestId);
-    await admin.from("po_request_lines").delete().eq("po_request_id", requestId);
-    await admin.from("po_request_lines").insert(updatedLines);
-    await admin.from("po_request_history").insert(historyEntry);
-  } catch (e) {}
-
-  await saveRequestToMeta(companyId, {
-    ...existing,
-    ...updatedHeader,
-    lines: updatedLines,
-    history: [historyEntry, ...(existing.history || [])],
-  });
+  assertPoWrite(await admin.from("po_requests").update(updatedHeader).eq("id", requestId), "요청서");
+  assertPoWrite(await admin.from("po_request_lines").delete().eq("po_request_id", requestId), "품목 삭제");
+  assertPoWrite(await admin.from("po_request_lines").insert(updatedLines), "품목");
+  assertPoWrite(await admin.from("po_request_history").insert(historyEntry), "이력");
 
   revalidatePath(`/portal/orders/requests/${requestId}`);
   revalidatePath("/portal/orders/requests");
@@ -581,17 +499,8 @@ export async function cancelPoRequest(requestId: string): Promise<{ success: boo
     created_at: now,
   };
 
-  try {
-    await admin.from("po_requests").update({ status: "CANCELLED", updated_at: now }).eq("id", requestId);
-    await admin.from("po_request_history").insert(historyEntry);
-  } catch (e) {}
-
-  await saveRequestToMeta(companyId, {
-    ...existing,
-    status: "CANCELLED",
-    updated_at: now,
-    history: [historyEntry, ...(existing.history || [])],
-  });
+  assertPoWrite(await admin.from("po_requests").update({ status: "CANCELLED", updated_at: now }).eq("id", requestId), "요청서");
+  assertPoWrite(await admin.from("po_request_history").insert(historyEntry), "이력");
 
   revalidatePath(`/portal/orders/requests/${requestId}`);
   revalidatePath("/portal/orders/requests");
@@ -633,10 +542,6 @@ export async function getAdminPoRequests(filters?: {
       rawList = data;
     }
   } catch (e) {}
-
-  if (rawList.length === 0) {
-    rawList = await getRequestsFromMeta();
-  }
 
   const allFormatted = formatRequests(rawList, companyMap);
 
@@ -716,11 +621,6 @@ export async function getAdminPoRequestDetail(requestId: string): Promise<PoRequ
       req = data;
     }
   } catch (e) {}
-
-  if (!req) {
-    const fallbackList = await getRequestsFromMeta();
-    req = fallbackList.find((r) => r.id === requestId);
-  }
 
   if (!req) {
     throw new Error("요청서 정보를 찾을 수 없습니다.");
@@ -811,18 +711,8 @@ export async function startReviewPoRequest(requestId: string): Promise<{ success
     created_at: now,
   };
 
-  try {
-    await admin.from("po_requests").update({ status: "UNDER_REVIEW", reviewed_at: now, updated_at: now }).eq("id", requestId);
-    await admin.from("po_request_history").insert(historyEntry);
-  } catch (e) {}
-
-  await saveRequestToMeta(req.company_id, {
-    ...req,
-    status: "UNDER_REVIEW",
-    reviewed_at: now,
-    updated_at: now,
-    history: [historyEntry, ...(req.history || [])],
-  });
+  assertPoWrite(await admin.from("po_requests").update({ status: "UNDER_REVIEW", reviewed_at: now, updated_at: now }).eq("id", requestId), "요청서");
+  assertPoWrite(await admin.from("po_request_history").insert(historyEntry), "이력");
 
   revalidatePath(`/admin/purchasing/requests/${requestId}`);
   revalidatePath("/admin/purchasing/requests");
@@ -860,25 +750,18 @@ export async function requestChangesPoRequest(requestId: string, reason: string)
     created_at: now,
   };
 
-  try {
+  assertPoWrite(
     await admin
       .from("po_requests")
       .update({
-        status: "CHANGE_REQUESTED",
-        change_request_reason: reason.trim(),
-        updated_at: now,
-      })
-      .eq("id", requestId);
-    await admin.from("po_request_history").insert(historyEntry);
-  } catch (e) {}
-
-  await saveRequestToMeta(req.company_id, {
-    ...req,
-    status: "CHANGE_REQUESTED",
-    change_request_reason: reason.trim(),
-    updated_at: now,
-    history: [historyEntry, ...(req.history || [])],
-  });
+          status: "CHANGE_REQUESTED",
+          change_request_reason: reason.trim(),
+          updated_at: now,
+        })
+      .eq("id", requestId),
+    "요청서"
+  );
+  assertPoWrite(await admin.from("po_request_history").insert(historyEntry), "이력");
 
   revalidatePath(`/admin/purchasing/requests/${requestId}`);
   revalidatePath("/admin/purchasing/requests");
@@ -916,25 +799,18 @@ export async function rejectPoRequest(requestId: string, reason: string): Promis
     created_at: now,
   };
 
-  try {
+  assertPoWrite(
     await admin
       .from("po_requests")
       .update({
-        status: "REJECTED",
-        rejection_reason: reason.trim(),
-        updated_at: now,
-      })
-      .eq("id", requestId);
-    await admin.from("po_request_history").insert(historyEntry);
-  } catch (e) {}
-
-  await saveRequestToMeta(req.company_id, {
-    ...req,
-    status: "REJECTED",
-    rejection_reason: reason.trim(),
-    updated_at: now,
-    history: [historyEntry, ...(req.history || [])],
-  });
+          status: "REJECTED",
+          rejection_reason: reason.trim(),
+          updated_at: now,
+        })
+      .eq("id", requestId),
+    "요청서"
+  );
+  assertPoWrite(await admin.from("po_request_history").insert(historyEntry), "이력");
 
   revalidatePath(`/admin/purchasing/requests/${requestId}`);
   revalidatePath("/admin/purchasing/requests");
@@ -972,10 +848,10 @@ export async function updateAdminRequestAdjustments(
     return line;
   });
 
-  try {
-    for (const adj of lineAdjustments) {
-      const finalQty = Number(adj.admin_final_qty);
-      const finalCost = Number(adj.admin_final_unit_cost);
+  for (const adj of lineAdjustments) {
+    const finalQty = Number(adj.admin_final_qty);
+    const finalCost = Number(adj.admin_final_unit_cost);
+    assertPoWrite(
       await admin
         .from("po_request_lines")
         .update({
@@ -984,15 +860,10 @@ export async function updateAdminRequestAdjustments(
           admin_final_line_total: finalQty * finalCost,
           updated_at: now,
         })
-        .eq("id", adj.id);
-    }
-  } catch (e) {}
-
-  await saveRequestToMeta(req.company_id, {
-    ...req,
-    lines: updatedLines,
-    updated_at: now,
-  });
+        .eq("id", adj.id),
+      "품목 조정"
+    );
+  }
 
   revalidatePath(`/admin/purchasing/requests/${requestId}`);
   return { success: true };
@@ -1015,36 +886,27 @@ export async function linkCreatedPoToRequest(
     id: crypto.randomUUID(),
     po_request_id: requestId,
     action: "CONVERTED_TO_PO",
-    actor_id: "admin",
+    actor_id: null,
     actor_name: "Admin",
     actor_role: "Letusto Admin",
     notes: `정식 발주서(${effectivePoNumber})로 전환 완료`,
     created_at: now,
   };
 
-  try {
+  assertPoWrite(
     await admin
       .from("po_requests")
       .update({
-        status: "CONVERTED_TO_PO",
-        converted_po_id: poId,
-        converted_po_number: effectivePoNumber,
-        converted_at: now,
-        updated_at: now,
-      })
-      .eq("id", requestId);
-    await admin.from("po_request_history").insert(historyEntry);
-  } catch (e) {}
-
-  await saveRequestToMeta(req.company_id, {
-    ...req,
-    status: "CONVERTED_TO_PO",
-    converted_po_id: poId,
-    converted_po_number: effectivePoNumber,
-    converted_at: now,
-    updated_at: now,
-    history: [historyEntry, ...(req.history || [])],
-  });
+          status: "CONVERTED_TO_PO",
+          converted_po_id: poId,
+          converted_po_number: effectivePoNumber,
+          converted_at: now,
+          updated_at: now,
+        })
+      .eq("id", requestId),
+    "요청서"
+  );
+  assertPoWrite(await admin.from("po_request_history").insert(historyEntry), "이력");
 
   revalidatePath(`/admin/purchasing/requests/${requestId}`);
   revalidatePath("/admin/purchasing/requests");

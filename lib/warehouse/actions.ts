@@ -159,7 +159,7 @@ export async function getWarehouses() {
 }
 
 /**
- * Fetch all unlinked shipping origins from company_shipping_origins (including metadata fallback)
+ * Fetch all unlinked shipping origins from company_shipping_origins
  * that are NOT linked to any warehouse in warehouses table.
  */
 export async function getUnlinkedShippingOrigins(): Promise<UnlinkedShippingOriginItem[]> {
@@ -202,49 +202,6 @@ export async function getUnlinkedShippingOrigins(): Promise<UnlinkedShippingOrig
         created_at: item.created_at || new Date().toISOString(),
         updated_at: item.updated_at || new Date().toISOString(),
       }));
-    }
-  } catch (e) {}
-
-  // 2. Metadata fallback (companies.intro starting with __COMPANY_METADATA__:)
-  try {
-    const { data: companiesWithIntro } = await admin
-      .from("companies")
-      .select("id, name, intro")
-      .like("intro", "__COMPANY_METADATA__%");
-
-    if (companiesWithIntro) {
-      for (const comp of companiesWithIntro) {
-        try {
-          const jsonStr = comp.intro.substring("__COMPANY_METADATA__:".length);
-          const meta = JSON.parse(jsonStr);
-          if (Array.isArray(meta.shipping_origins)) {
-            for (const origin of meta.shipping_origins) {
-              if (!rawOrigins.some((r) => r.id === origin.id)) {
-                rawOrigins.push({
-                  id: origin.id,
-                  company_id: comp.id,
-                  company_name: comp.name,
-                  name: origin.name,
-                  is_default: !!origin.is_default,
-                  contact_name: origin.contact_name || "",
-                  phone: origin.phone || "",
-                  email: origin.email || "",
-                  country: origin.country || "South Korea",
-                  address_line1: origin.address_line1 || "",
-                  address_line2: origin.address_line2 || "",
-                  city: origin.city || "",
-                  state_province: origin.state_province || "",
-                  postal_code: origin.postal_code || "",
-                  status: origin.status || "active",
-                  notes: origin.notes || "",
-                  created_at: origin.created_at || new Date().toISOString(),
-                  updated_at: origin.updated_at || new Date().toISOString(),
-                });
-              }
-            }
-          }
-        } catch (e) {}
-      }
     }
   } catch (e) {}
 

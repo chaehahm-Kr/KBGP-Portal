@@ -9,12 +9,9 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 /**
- * DATA-JSON-MIG-005: 0137 이 company_shipping_origins 테이블을 만들고 JSON 출고지를 복사했다.
- * 테이블을 먼저 읽고, 쓸 때는 테이블과 companies.intro 메타데이터(JSON 백업)에 함께 쓴다.
- * false 로 바꾸면 테이블 요청을 보내지 않고 JSON 만 쓴다.
+ * DATA-JSON-CLEAN-003: 출고지는 company_shipping_origins 테이블(0137)만 저장소다.
+ * companies.intro JSON 백업은 쓰지 않으므로 테이블 쓰기 실패를 오류로 돌려준다.
  */
-const SHIPPING_ORIGINS_TABLE_ENABLED = true;
-
 const ORIGIN_TABLE_COLUMNS = [
   "id", "company_id", "name", "is_default", "contact_name", "phone", "email", "country",
   "address_line1", "address_line2", "city", "state_province", "postal_code", "status", "notes",
@@ -33,21 +30,12 @@ function toOriginRow(record: CompanyShippingOrigin): Record<string, unknown> {
   return row;
 }
 
-const SKIPPED_RESULT = { data: null, error: { message: "company_shipping_origins table disabled" } };
-
-/** 어떤 메서드를 이어 붙여도 자기 자신을 돌려주고, await 하면 SKIPPED_RESULT 로 끝나는 빈 쿼리. */
-const skippedQuery: unknown = new Proxy(function () {}, {
-  get(_target, prop) {
-    if (prop === "then") {
-      return (resolve: (value: typeof SKIPPED_RESULT) => unknown) => resolve(SKIPPED_RESULT);
-    }
-    return () => skippedQuery;
-  },
-});
-
 function originsTable(admin: ReturnType<typeof createAdminClient>) {
-  const table = admin.from("company_shipping_origins");
-  return SHIPPING_ORIGINS_TABLE_ENABLED ? table : (skippedQuery as typeof table);
+  return admin.from("company_shipping_origins");
+}
+
+function assertOriginWrite(result: { error: { message: string } | null }) {
+  if (result.error) throw new Error(`출고지 저장 실패: ${result.error.message}`);
 }
 
 export interface CompanyShippingOrigin {
@@ -117,55 +105,6 @@ function validateShippingOriginInput(input: ShippingOriginInput) {
   }
 }
 
-// Helper to get origins from company.intro metadata fallback
-async function getOriginsFromMetadata(companyId: string): Promise<CompanyShippingOrigin[]> {
-  const admin = createAdminClient();
-  const { data: comp } = await admin
-    .from("companies")
-    .select("intro")
-    .eq("id", companyId)
-    .single();
-
-  if (!comp || !comp.intro || !comp.intro.startsWith("__COMPANY_METADATA__:")) {
-    return [];
-  }
-
-  try {
-    const jsonStr = comp.intro.substring("__COMPANY_METADATA__:".length);
-    const parsed = JSON.parse(jsonStr);
-    return Array.isArray(parsed.shipping_origins) ? parsed.shipping_origins : [];
-  } catch (e) {
-    return [];
-  }
-}
-
-// Helper to save origins to company.intro metadata fallback
-async function saveOriginsToMetadata(companyId: string, origins: CompanyShippingOrigin[]): Promise<void> {
-  const admin = createAdminClient();
-  const { data: comp } = await admin
-    .from("companies")
-    .select("intro")
-    .eq("id", companyId)
-    .single();
-
-  let metaObj: any = {};
-  if (comp && comp.intro && comp.intro.startsWith("__COMPANY_METADATA__:")) {
-    try {
-      metaObj = JSON.parse(comp.intro.substring("__COMPANY_METADATA__:".length));
-    } catch (e) {}
-  } else if (comp && comp.intro) {
-    metaObj.description = comp.intro;
-  }
-
-  metaObj.shipping_origins = origins;
-  const newIntro = `__COMPANY_METADATA__:${JSON.stringify(metaObj)}`;
-
-  await admin
-    .from("companies")
-    .update({ intro: newIntro, updated_at: new Date().toISOString() })
-    .eq("id", companyId);
-}
-
 /**
  * Fetch all shipping origins for a specific company
  */
@@ -187,20 +126,6 @@ export async function getCompanyShippingOrigins(companyId: string): Promise<Comp
     }
   } catch (e) {
     // Fallback to metadata
-  }
-
-  if (rawOrigins.length === 0) {
-    try {
-      // Fallback to metadata
-      const fallback = await getOriginsFromMetadata(companyId);
-      rawOrigins = (fallback || []).sort((a, b) => {
-        if (a.is_default && !b.is_default) return -1;
-        if (!a.is_default && b.is_default) return 1;
-        return new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime();
-      });
-    } catch {
-      rawOrigins = [];
-    }
   }
 
   // Enrich with warehouse link info
@@ -271,30 +196,15 @@ export async function adminCreateShippingOrigin(
   };
 
   const admin = createAdminClient();
-  let savedToDb = false;
 
-  try {
-    if (willBeDefault) {
-      await originsTable(admin)
-        .update({ is_default: false, updated_at: now })
-        .eq("company_id", companyId);
-    }
-
-    const { error } = await originsTable(admin)
-      .insert(toOriginRow(newRecord));
-
-    if (!error) {
-      savedToDb = true;
-    }
-  } catch (e) {}
-
-  // Always sync to metadata fallback for complete Single Source of Truth resilience
-  let updatedList = existingOrigins;
   if (willBeDefault) {
-    updatedList = updatedList.map((o) => ({ ...o, is_default: false }));
+    assertOriginWrite(await originsTable(admin)
+      .update({ is_default: false, updated_at: now })
+      .eq("company_id", companyId));
   }
-  updatedList.push(newRecord);
-  await saveOriginsToMetadata(companyId, updatedList);
+
+  assertOriginWrite(await originsTable(admin)
+    .insert(toOriginRow(newRecord)));
 
   revalidatePath(`/admin/companies/${companyId}`);
   revalidatePath("/portal/company/info");
@@ -340,23 +250,14 @@ export async function portalCreateShippingOrigin(
   };
 
   const admin = createAdminClient();
-  try {
-    if (willBeDefault) {
-      await originsTable(admin)
-        .update({ is_default: false, updated_at: now })
-        .eq("company_id", companyId);
-    }
-
-    await originsTable(admin)
-      .insert(toOriginRow(newRecord));
-  } catch (e) {}
-
-  let updatedList = existingOrigins;
   if (willBeDefault) {
-    updatedList = updatedList.map((o) => ({ ...o, is_default: false }));
+    assertOriginWrite(await originsTable(admin)
+      .update({ is_default: false, updated_at: now })
+      .eq("company_id", companyId));
   }
-  updatedList.push(newRecord);
-  await saveOriginsToMetadata(companyId, updatedList);
+
+  assertOriginWrite(await originsTable(admin)
+    .insert(toOriginRow(newRecord)));
 
   revalidatePath(`/admin/companies/${companyId}`);
   revalidatePath("/portal/company/info");
@@ -403,24 +304,15 @@ export async function adminUpdateShippingOrigin(
   };
 
   const admin = createAdminClient();
-  try {
-    if (willBeDefault) {
-      await originsTable(admin)
-        .update({ is_default: false, updated_at: now })
-        .eq("company_id", companyId);
-    }
+  if (willBeDefault) {
+    assertOriginWrite(await originsTable(admin)
+      .update({ is_default: false, updated_at: now })
+      .eq("company_id", companyId));
+  }
 
-    await originsTable(admin)
-      .update(toOriginRow(updatedRecord))
-      .eq("id", id);
-  } catch (e) {}
-
-  let updatedList = existingOrigins.map((o) => {
-    if (o.id === id) return updatedRecord;
-    if (willBeDefault) return { ...o, is_default: false };
-    return o;
-  });
-  await saveOriginsToMetadata(companyId, updatedList);
+  assertOriginWrite(await originsTable(admin)
+    .update(toOriginRow(updatedRecord))
+    .eq("id", id));
 
   revalidatePath(`/admin/companies/${companyId}`);
   revalidatePath("/portal/company/info");
@@ -471,24 +363,15 @@ export async function portalUpdateShippingOrigin(
   };
 
   const admin = createAdminClient();
-  try {
-    if (willBeDefault) {
-      await originsTable(admin)
-        .update({ is_default: false, updated_at: now })
-        .eq("company_id", companyId);
-    }
+  if (willBeDefault) {
+    assertOriginWrite(await originsTable(admin)
+      .update({ is_default: false, updated_at: now })
+      .eq("company_id", companyId));
+  }
 
-    await originsTable(admin)
-      .update(toOriginRow(updatedRecord))
-      .eq("id", id);
-  } catch (e) {}
-
-  let updatedList = existingOrigins.map((o) => {
-    if (o.id === id) return updatedRecord;
-    if (willBeDefault) return { ...o, is_default: false };
-    return o;
-  });
-  await saveOriginsToMetadata(companyId, updatedList);
+  assertOriginWrite(await originsTable(admin)
+    .update(toOriginRow(updatedRecord))
+    .eq("id", id));
 
   revalidatePath(`/admin/companies/${companyId}`);
   revalidatePath("/portal/company/info");
@@ -511,23 +394,13 @@ export async function adminSetDefaultShippingOrigin(
 
   const now = new Date().toISOString();
   const admin = createAdminClient();
-  try {
-    await originsTable(admin)
-      .update({ is_default: false, updated_at: now })
-      .eq("company_id", companyId);
+  assertOriginWrite(await originsTable(admin)
+    .update({ is_default: false, updated_at: now })
+    .eq("company_id", companyId));
 
-    await originsTable(admin)
-      .update({ is_default: true, updated_at: now, updated_by: session.userId })
-      .eq("id", id);
-  } catch (e) {}
-
-  const updatedList = existingOrigins.map((o) => ({
-    ...o,
-    is_default: o.id === id,
-    updated_at: o.id === id ? now : o.updated_at,
-    updated_by: o.id === id ? session.userId : o.updated_by,
-  }));
-  await saveOriginsToMetadata(companyId, updatedList);
+  assertOriginWrite(await originsTable(admin)
+    .update({ is_default: true, updated_at: now, updated_by: session.userId })
+    .eq("id", id));
 
   revalidatePath(`/admin/companies/${companyId}`);
   revalidatePath("/portal/company/info");
@@ -555,23 +428,13 @@ export async function portalSetDefaultShippingOrigin(
 
   const now = new Date().toISOString();
   const admin = createAdminClient();
-  try {
-    await originsTable(admin)
-      .update({ is_default: false, updated_at: now })
-      .eq("company_id", companyId);
+  assertOriginWrite(await originsTable(admin)
+    .update({ is_default: false, updated_at: now })
+    .eq("company_id", companyId));
 
-    await originsTable(admin)
-      .update({ is_default: true, updated_at: now, updated_by: membership.userId })
-      .eq("id", id);
-  } catch (e) {}
-
-  const updatedList = existingOrigins.map((o) => ({
-    ...o,
-    is_default: o.id === id,
-    updated_at: o.id === id ? now : o.updated_at,
-    updated_by: o.id === id ? membership.userId : o.updated_by,
-  }));
-  await saveOriginsToMetadata(companyId, updatedList);
+  assertOriginWrite(await originsTable(admin)
+    .update({ is_default: true, updated_at: now, updated_by: membership.userId })
+    .eq("id", id));
 
   revalidatePath(`/admin/companies/${companyId}`);
   revalidatePath("/portal/company/info");
@@ -611,24 +474,18 @@ export async function adminDeleteShippingOrigin(
     if (e.message?.includes("물류창고")) throw e;
   }
 
-  try {
-    await originsTable(admin)
-      .delete()
-      .eq("id", id);
-  } catch (e) {}
+  assertOriginWrite(await originsTable(admin)
+    .delete()
+    .eq("id", id));
 
   let remaining = existingOrigins.filter((o) => o.id !== id);
   // If we deleted the default origin and there is only 1 origin left, make it default
   if (target.is_default && remaining.length === 1) {
     remaining[0].is_default = true;
-    try {
-      await originsTable(admin)
-        .update({ is_default: true, updated_at: new Date().toISOString() })
-        .eq("id", remaining[0].id);
-    } catch (e) {}
+    assertOriginWrite(await originsTable(admin)
+      .update({ is_default: true, updated_at: new Date().toISOString() })
+      .eq("id", remaining[0].id));
   }
-
-  await saveOriginsToMetadata(companyId, remaining);
 
   revalidatePath(`/admin/companies/${companyId}`);
   revalidatePath("/portal/company/info");
@@ -673,23 +530,17 @@ export async function portalDeleteShippingOrigin(
     if (e.message?.includes("물류창고")) throw e;
   }
 
-  try {
-    await originsTable(admin)
-      .delete()
-      .eq("id", id);
-  } catch (e) {}
+  assertOriginWrite(await originsTable(admin)
+    .delete()
+    .eq("id", id));
 
   let remaining = existingOrigins.filter((o) => o.id !== id);
   if (target.is_default && remaining.length === 1) {
     remaining[0].is_default = true;
-    try {
-      await originsTable(admin)
-        .update({ is_default: true, updated_at: new Date().toISOString() })
-        .eq("id", remaining[0].id);
-    } catch (e) {}
+    assertOriginWrite(await originsTable(admin)
+      .update({ is_default: true, updated_at: new Date().toISOString() })
+      .eq("id", remaining[0].id));
   }
-
-  await saveOriginsToMetadata(companyId, remaining);
 
   revalidatePath(`/admin/companies/${companyId}`);
   revalidatePath("/portal/company/info");
