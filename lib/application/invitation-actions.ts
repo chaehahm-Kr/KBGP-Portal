@@ -16,6 +16,7 @@ import { normalizeEmail } from "@/lib/user/validation";
 import { sendPortalInvitationAction } from "@/lib/company/admin-actions";
 import { generateNextApplicationNumber } from "@/lib/application/number-generator";
 import { buildBrandPortalInvitationUrl, getCanonicalBrandPortalDomain } from "@/lib/utils/url-builder";
+import { syncCompanyUserAclRow } from "@/lib/company/permission-store";
 
 function formatSubmittedDateKo(submittedAt?: string | null): string {
   if (!submittedAt) return "-";
@@ -323,6 +324,12 @@ export async function adminInviteBrandPartner(payload: {
       invitation_expires_at: expiresAt,
       phone: payload.phone?.trim() || null,
       is_primary: true,
+    });
+    await syncCompanyUserAclRow(admin, {
+      userId: companyUserId,
+      companyId,
+      permissionsJson: {},
+      companyRole: "company_admin",
     });
   }
 
@@ -684,6 +691,12 @@ export async function approveAndInviteApplication(
         status: "invited",
         invited_at: new Date().toISOString(),
         is_primary: true,
+      });
+      await syncCompanyUserAclRow(admin, {
+        userId: invitedAuth.user.id,
+        companyId,
+        permissionsJson: {},
+        companyRole: "company_admin",
       });
     }
   } else {
