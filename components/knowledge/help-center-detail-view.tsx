@@ -45,6 +45,7 @@ export interface HelpDetailData {
     title_ko: string;
     title_en: string;
     summary_ko: string;
+    summary_en?: string;
     type: string;
     module: string;
   }>;
@@ -483,7 +484,7 @@ export function HelpCenterDetailView({
             <div className="space-y-0.5 min-w-0">
               <div className="flex items-center gap-2">
                 <h3 className="text-xs sm:text-sm font-bold text-emerald-950 dark:text-emerald-200">
-                  공식 배포 문서 (Official Manual &amp; Policy)
+                  {isEn ? "Official Published Document" : "공식 배포 문서 (Official Manual & Policy)"}
                 </h3>
                 <span className="rounded bg-emerald-200/80 dark:bg-emerald-900 px-1.5 py-0.2 text-[10px] font-bold text-emerald-900 dark:text-emerald-200">
                   PDF
@@ -501,14 +502,14 @@ export function HelpCenterDetailView({
               rel="noreferrer"
               className="rounded-lg bg-white dark:bg-zinc-900 border border-emerald-300 dark:border-emerald-800 px-3.5 py-1.5 text-xs font-bold text-emerald-800 dark:text-emerald-200 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 transition-colors shadow-xs"
             >
-              PDF 보기 (View)
+              {isEn ? "View PDF" : "PDF 보기 (View)"}
             </a>
             <a
               href={`${primaryDoc.url}?action=download`}
               download
               className="rounded-lg bg-emerald-700 px-3.5 py-1.5 text-xs font-bold text-white hover:bg-emerald-800 transition-colors shadow-xs"
             >
-              다운로드 (Download)
+              {isEn ? "Download" : "다운로드 (Download)"}
             </a>
           </div>
         </div>
@@ -518,7 +519,7 @@ export function HelpCenterDetailView({
       {currentSummary && (
         <div className="rounded-xl border border-zinc-200 bg-zinc-50/80 p-4 dark:border-zinc-800 dark:bg-zinc-950/40 space-y-1">
           <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block">
-            📌 SUMMARY (요약)
+            {isEn ? "📌 SUMMARY" : "📌 SUMMARY (요약)"}
           </span>
           <p className="text-xs sm:text-sm text-zinc-800 dark:text-zinc-200 leading-relaxed font-medium">
             {currentSummary}
@@ -539,7 +540,7 @@ export function HelpCenterDetailView({
           <div className="flex items-center gap-2">
             <h3 className="text-sm font-bold text-zinc-900 dark:text-white flex items-center gap-1.5">
               <span>💡</span>
-              <span>관련 자주 묻는 질문 (FAQ)</span>
+              <span>{isEn ? "Related Frequently Asked Questions" : "관련 자주 묻는 질문 (FAQ)"}</span>
             </h3>
             <span className="text-xs text-zinc-400 font-mono">({faqs.length})</span>
           </div>
@@ -547,6 +548,8 @@ export function HelpCenterDetailView({
           <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 divide-y divide-zinc-100 dark:divide-zinc-800 overflow-hidden shadow-xs">
             {faqs.map((faq) => {
               const isOpen = openFaqId === faq.id;
+              const qText = isEn ? (faq.question_en || faq.question_ko) : (faq.question_ko || faq.question_en);
+              const aText = isEn ? (faq.answer_en || faq.answer_ko) : (faq.answer_ko || faq.answer_en);
               return (
                 <div key={faq.id}>
                   <button
@@ -559,7 +562,7 @@ export function HelpCenterDetailView({
                         Q.
                       </span>
                       <span className="text-xs sm:text-sm font-semibold text-zinc-900 dark:text-white truncate">
-                        {faq.question_ko}
+                        {qText}
                       </span>
                     </div>
                     <span className={`text-zinc-400 text-[11px] shrink-0 font-bold transition-transform ${isOpen ? "rotate-180" : ""}`}>
@@ -574,7 +577,7 @@ export function HelpCenterDetailView({
                           A.
                         </span>
                         <div className="space-y-1.5 leading-relaxed flex-1">
-                          <p className="font-normal">{faq.answer_ko}</p>
+                          <p className="font-normal">{aText}</p>
                         </div>
                       </div>
                     </div>
@@ -591,34 +594,38 @@ export function HelpCenterDetailView({
         <div className="space-y-3 pt-2">
           <h3 className="text-sm font-bold text-zinc-900 dark:text-white flex items-center gap-1.5">
             <span>📚</span>
-            <span>관련 도움말 및 가이드</span>
+            <span>{isEn ? "Related Guides & Articles" : "관련 도움말 및 가이드"}</span>
           </h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {related.map((rel) => (
-              <Link
-                key={rel.id}
-                href={`${baseHelpPath}/${rel.slug || rel.id}`}
-                className="p-3.5 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 hover:border-zinc-400 dark:hover:border-zinc-600 transition-all shadow-xs group flex flex-col justify-between"
-              >
-                <div>
-                  <div className="flex items-center gap-2 mb-1">
-                    {getTypeBadge(rel.type)}
-                    <span className="text-[10px] text-zinc-400">{rel.module}</span>
+            {related.map((rel) => {
+              const relTitle = isEn ? (rel.title_en || rel.title_ko || rel.title) : (rel.title_ko || rel.title);
+              const relSummary = isEn ? (rel.summary_en || rel.summary_ko) : (rel.summary_ko || rel.summary_en);
+              return (
+                <Link
+                  key={rel.id}
+                  href={`${baseHelpPath}/${rel.slug || rel.id}`}
+                  className="p-3.5 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 hover:border-zinc-400 dark:hover:border-zinc-600 transition-all shadow-xs group flex flex-col justify-between"
+                >
+                  <div>
+                    <div className="flex items-center gap-2 mb-1">
+                      {getTypeBadge(rel.type)}
+                      <span className="text-[10px] text-zinc-400">{rel.module}</span>
+                    </div>
+                    <h4 className="text-xs font-bold text-zinc-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+                      {relTitle}
+                    </h4>
+                    {relSummary && (
+                      <p className="text-[11px] text-zinc-500 line-clamp-1 mt-0.5">
+                        {relSummary}
+                      </p>
+                    )}
                   </div>
-                  <h4 className="text-xs font-bold text-zinc-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
-                    {rel.title_ko || rel.title}
-                  </h4>
-                  {rel.summary_ko && (
-                    <p className="text-[11px] text-zinc-500 line-clamp-1 mt-0.5">
-                      {rel.summary_ko}
-                    </p>
-                  )}
-                </div>
-                <div className="text-right mt-2 text-[10px] text-blue-600 dark:text-blue-400 font-semibold">
-                  자세히 보기 &rarr;
-                </div>
-              </Link>
-            ))}
+                  <div className="text-right mt-2 text-[10px] text-blue-600 dark:text-blue-400 font-semibold">
+                    {isEn ? "Read More →" : "자세히 보기 →"}
+                  </div>
+                </Link>
+              );
+            })}
           </div>
         </div>
       )}
@@ -629,7 +636,7 @@ export function HelpCenterDetailView({
           <div className="flex items-center gap-1.5">
             <span className="text-base">💬</span>
             <h3 className="text-xs sm:text-sm font-bold text-zinc-900 dark:text-white">
-              원하는 내용을 찾지 못하셨나요?
+              {isEn ? "Couldn't find what you need?" : "원하는 내용을 찾지 못하셨나요?"}
             </h3>
           </div>
           <p className="text-xs text-zinc-500 dark:text-zinc-400">

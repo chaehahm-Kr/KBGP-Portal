@@ -181,7 +181,7 @@ export function HelpCenterMainView({
       });
 
       if (!res.ok) {
-        throw new Error(`답변 조회에 실패했습니다. (상태 코드: ${res.status})`);
+        throw new Error(isEn ? `Failed to retrieve answer. (Status: ${res.status})` : `답변 조회에 실패했습니다. (상태 코드: ${res.status})`);
       }
 
       const data = await res.json();
@@ -192,7 +192,7 @@ export function HelpCenterMainView({
       }, 100);
     } catch (err: any) {
       console.error("Help Center question error:", err);
-      setAskError(err.message || "답변을 조회하는 중 오류가 발생했습니다. 다시 시도해 주세요.");
+      setAskError(err.message || (isEn ? "An error occurred while retrieving answer. Please try again." : "답변을 조회하는 중 오류가 발생했습니다. 다시 시도해 주세요."));
     } finally {
       setIsAsking(false);
     }
