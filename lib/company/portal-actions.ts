@@ -11,6 +11,7 @@ import { saveCompanyMeta, companyIntroRest } from "./company-meta-store";
 import { validateUploadedFile } from "@/lib/files/validate";
 import { logRemittanceChanges } from "@/lib/company/remittance-log";
 import { unstageFormData } from "@/lib/files/staged-upload";
+import { formatCanonicalCountryName } from "@/lib/constants/countries";
 
 export async function updateCompanyPortalMetadata(
   companyId: string,
@@ -78,7 +79,7 @@ export async function updateCompanyPortalMetadata(
     updatePayload.name = payload.name.trim();
   }
   if (payload.country !== undefined) {
-    updatePayload.country = payload.country.trim();
+    updatePayload.country = formatCanonicalCountryName(payload.country) || "South Korea";
   }
   if (payload.contact_phone !== undefined) {
     updatePayload.contact_phone = payload.contact_phone.trim() || null;

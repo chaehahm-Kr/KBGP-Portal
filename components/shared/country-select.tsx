@@ -1,83 +1,88 @@
 "use client";
 
 import React from "react";
-import { TOP_COUNTRIES, OTHER_COUNTRIES } from "@/lib/constants/countries";
+import {
+  TOP_COUNTRIES,
+  OTHER_COUNTRIES,
+  formatCanonicalCountryName,
+  getCountryDisplayLabel,
+} from "@/lib/constants/countries";
 
-interface CountrySelectProps {
-  value: string;
+export interface CountrySelectProps {
+  value?: string | null;
   onChange: (value: string) => void;
+  lang?: "ko" | "en";
   className?: string;
   disabled?: boolean;
   required?: boolean;
   placeholder?: string;
   id?: string;
   name?: string;
+  showAllOption?: boolean;
+  allOptionLabel?: string;
 }
 
 export function CountrySelect({
   value,
   onChange,
+  lang = "ko",
   className = "",
   disabled = false,
   required = false,
-  placeholder = "설립 국가 선택",
+  placeholder,
   id,
   name,
+  showAllOption = false,
+  allOptionLabel,
 }: CountrySelectProps) {
-  // Normalize legacy or localized values for clean selection
-  const normalizeValue = (val: string) => {
-    if (!val) return "";
-    const trimmed = val.trim();
-    if (trimmed === "대한민국" || trimmed.toLowerCase() === "korea" || trimmed === "KR") return "South Korea";
-    if (trimmed === "미국" || trimmed.toLowerCase() === "usa" || trimmed === "US") return "United States";
-    return trimmed;
-  };
+  const selectedCanonicalValue = formatCanonicalCountryName(value);
 
-  const selectedValue = normalizeValue(value);
-
-  // Check if selected value is a custom string not in standard list
-  const isCustomValue = Boolean(
-    selectedValue &&
-    !TOP_COUNTRIES.some((c) => c.name === selectedValue) &&
-    !OTHER_COUNTRIES.some((c) => c.name === selectedValue)
-  );
+  const defaultPlaceholder =
+    lang === "ko" ? "국가 선택 (Select Country)" : "Select Country";
+  const defaultAllLabel =
+    lang === "ko" ? "전체 국가 (All Countries)" : "All Countries";
 
   return (
     <select
       id={id}
       name={name}
-      value={selectedValue}
-      onChange={(e) => onChange(e.target.value)}
+      value={selectedCanonicalValue}
+      onChange={(e) => {
+        const canonical = formatCanonicalCountryName(e.target.value);
+        onChange(canonical);
+      }}
       disabled={disabled}
       required={required}
       className={
         className ||
-        "mt-1 w-full rounded border border-zinc-200 p-1.5 text-xs outline-none bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white cursor-pointer"
+        "mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-xs text-zinc-900 outline-none transition-colors cursor-pointer dark:border-zinc-700 dark:bg-zinc-950 dark:text-white"
       }
     >
-      <option value="">{placeholder}</option>
-      
-      {/* Priority 1: South Korea */}
-      <option value="South Korea">South Korea</option>
-      {/* Priority 2: United States */}
-      <option value="United States">United States</option>
-      
-      {/* Separator */}
-      <option disabled value="__divider__" className="text-zinc-400">
-        ────────────────────────────
-      </option>
-
-      {/* Remaining Countries A-Z */}
-      {OTHER_COUNTRIES.map((country) => (
-        <option key={country.code} value={country.name}>
-          {country.name}
-        </option>
-      ))}
-
-      {/* Fallback for legacy custom country names not in list */}
-      {isCustomValue && (
-        <option value={selectedValue}>{selectedValue}</option>
+      {showAllOption && (
+        <option value="">{allOptionLabel || defaultAllLabel}</option>
       )}
+
+      {!showAllOption && (
+        <option value="">{placeholder || defaultPlaceholder}</option>
+      )}
+
+      {/* Top Priority Countries */}
+      <optgroup label={lang === "ko" ? "주요 국가 (Top Countries)" : "Top Countries"}>
+        {TOP_COUNTRIES.map((country) => (
+          <option key={country.code} value={country.name}>
+            {getCountryDisplayLabel(country.name, lang)}
+          </option>
+        ))}
+      </optgroup>
+
+      {/* Other Countries A-Z */}
+      <optgroup label={lang === "ko" ? "전체 국가 (All Countries)" : "All Countries"}>
+        {OTHER_COUNTRIES.map((country) => (
+          <option key={country.code} value={country.name}>
+            {getCountryDisplayLabel(country.name, lang)}
+          </option>
+        ))}
+      </optgroup>
     </select>
   );
 }

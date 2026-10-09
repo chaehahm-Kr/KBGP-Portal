@@ -7,6 +7,7 @@ import { type CompanyContact, type CompanyParsedMetadata } from "@/lib/company/a
 import { saveCompanyTaskAssignmentsBatch, type BatchTaskAssignmentItem, type TaskAssignmentItem } from "@/lib/company/task-actions";
 import { InternationalPhoneInput } from "@/components/shared/international-phone-input";
 import { CountrySelect } from "@/components/shared/country-select";
+import { getCountryDisplayLabel } from "@/lib/constants/countries";
 import { CompanyShippingOriginsTab } from "@/components/company/company-shipping-origins-tab";
 import { type CompanyShippingOrigin } from "@/lib/company/shipping-origin-actions";
 import { AgreementCard } from "@/components/portal/agreement-card";
@@ -572,7 +573,7 @@ export function CompanyProfileManager({
                 ) : (
                   country?.trim() ? (
                     <span className="font-semibold text-zinc-900 dark:text-white mt-0.5 block">
-                      {country}
+                      {getCountryDisplayLabel(country, "ko")}
                     </span>
                   ) : (
                     <span className="font-semibold text-zinc-400 dark:text-zinc-500 mt-0.5 block">

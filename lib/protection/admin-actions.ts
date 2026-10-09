@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { verifyAdminSession } from "@/lib/auth/dal";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { formatCategoryName } from "@/lib/retailer/products";
+import { formatCanonicalCountryName } from "@/lib/constants/countries";
 import {
   AdminProtectionDecision,
   CreditProcessingStatus,
@@ -444,7 +445,7 @@ export async function getAdminProtectionReviewDetail(
     thumbnailUrl,
     productDescription: prod.description || null,
     productVolume: prod.volume || null,
-    productOrigin: prod.origin || "Republic of Korea",
+    productOrigin: formatCanonicalCountryName(prod.origin) || "South Korea",
     currentCatalogWholesalePrice: prod.wholesale_price ? Number(prod.wholesale_price) : null,
     initialTrialUnitCost,
     activationSource: prot.activation_source || "initial_order",

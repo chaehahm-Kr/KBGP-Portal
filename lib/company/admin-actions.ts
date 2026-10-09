@@ -18,6 +18,7 @@ import { sendTemplatedEmail } from "@/lib/notifications/templates";
 import { logRemittanceChanges } from "@/lib/company/remittance-log";
 import { normalizeEmail, checkUserEmailDuplicate, isPureEnglishName } from "@/lib/user/validation";
 import { getBilingualError } from "@/lib/errors/bilingual-messages";
+import { formatCanonicalCountryName } from "@/lib/constants/countries";
 import {
   getPersonStructuredNames,
   formatKoreanFullName,
@@ -306,7 +307,7 @@ export async function updateCompanyAdminMetadata(
     updatePayload.name = payload.name;
   }
   if (payload.country !== undefined) {
-    updatePayload.country = payload.country.trim();
+    updatePayload.country = formatCanonicalCountryName(payload.country) || "South Korea";
   }
   if (payload.businessRegistrationNumber) {
     updatePayload.business_registration_number = payload.businessRegistrationNumber;
@@ -779,7 +780,11 @@ export async function sendPortalInvitationAction(companyUserId: string) {
 const adminCompanySchema = z.object({
   name: z.string().trim().min(1, "회사명을 입력해주세요."),
   businessNumber: z.string().trim().min(1, "사업자등록번호를 입력해주세요."),
-  country: z.string().trim().min(1, "국가를 입력해주세요."),
+  country: z
+    .string()
+    .trim()
+    .min(1, "국가를 입력해주세요.")
+    .transform((v) => formatCanonicalCountryName(v) || "South Korea"),
   type: z.string().trim().min(1, "회사 유형을 선택해주세요."),
   status: z.string().trim().min(1, "파트너 상태를 선택해주세요."),
   address1: z.string().trim().optional(),

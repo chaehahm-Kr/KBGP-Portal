@@ -15,6 +15,7 @@ import { CreateInfoRequestForm } from "@/components/application/create-info-requ
 import { sendPortalInvitationAction } from "@/lib/company/admin-actions";
 import { getPersonDisplayName } from "@/lib/user/name-helper";
 import { COMPANY_META_PREFIX, companyMetaFromRow } from "@/lib/company/profile-columns";
+import { formatCanonicalCountryName } from "@/lib/constants/countries";
 
 interface ApplicationWorkspaceProps {
   application: any;
@@ -268,7 +269,7 @@ export default function ApplicationWorkspace({
     city: "",
     state: "",
     zip_code: "",
-    country: company?.country || "대한민국",
+    country: formatCanonicalCountryName(company?.country) || "South Korea",
     website: "",
     contacts: [] as any[],
     type: "Brand Owner",
@@ -286,7 +287,7 @@ export default function ApplicationWorkspace({
         city: data.city || "",
         state: data.state || "",
         zip_code: data.zip_code || "",
-        country: data.country || company?.country || "대한민국",
+        country: formatCanonicalCountryName(data.country || company?.country) || "South Korea",
         website: data.website || "",
         contacts: data.contacts || [],
         type: data.type || "Brand Owner",
@@ -298,7 +299,7 @@ export default function ApplicationWorkspace({
 
   // Resolve structured address
   let structuredAddress = {
-    country: company?.country || parsedMeta.country || "대한민국",
+    country: formatCanonicalCountryName(company?.country || parsedMeta.country) || "South Korea",
     address1: "",
     address2: "",
     city: "",
@@ -310,7 +311,7 @@ export default function ApplicationWorkspace({
   if (application?.applicant_address) {
     if (typeof application.applicant_address === "object") {
       structuredAddress = {
-        country: application.applicant_address.country || company?.country || parsedMeta.country || "대한민국",
+        country: formatCanonicalCountryName(application.applicant_address.country || company?.country || parsedMeta.country) || "South Korea",
         address1:
           application.applicant_address.address_line_1 ||
           application.applicant_address.street ||
@@ -326,7 +327,7 @@ export default function ApplicationWorkspace({
       try {
         const parsed = JSON.parse(application.applicant_address);
         structuredAddress = {
-          country: parsed.country || company?.country || parsedMeta.country || "대한민국",
+          country: formatCanonicalCountryName(parsed.country || company?.country || parsedMeta.country) || "South Korea",
           address1: parsed.address_line_1 || parsed.street || parsed.address || "",
           address2: parsed.address_line_2 || "",
           city: parsed.city || "",

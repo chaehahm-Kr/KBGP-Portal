@@ -5,6 +5,7 @@ import { verifyAdminSession } from "@/lib/auth/dal";
 import { RetailerRole } from "@/lib/retailer/onboarding-types";
 import { resolveEffectiveSku } from "@/lib/product/types";
 import { formatCategoryName } from "@/lib/retailer/products";
+import { formatCanonicalCountryName } from "@/lib/constants/countries";
 import {
   ReportingPeriod,
   MovementStatus,
@@ -1279,7 +1280,7 @@ export async function getAdminRetailer360Data(companyId: string): Promise<Retail
       id: company.id,
       name: company.name,
       businessRegistrationNumber: company.business_registration_number,
-      country: company.country || "US",
+      country: formatCanonicalCountryName(company.country) || "United States",
       status: company.status || "active",
       createdAt: company.created_at,
     },

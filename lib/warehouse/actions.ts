@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { verifyAdminSession } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { formatCanonicalCountryName } from "@/lib/constants/countries";
 
 export interface WarehousePayload {
   name: string;
@@ -255,7 +256,7 @@ export async function createWarehouse(payload: WarehousePayload): Promise<Action
   if (!payload.zip_code || !payload.zip_code.trim()) {
     return { success: false, code: "REQUIRED_POSTAL_CODE", field: "zip_code", error: "우편번호(ZIP / Postal Code)를 입력해주세요." };
   }
-  if (!payload.country || !payload.country.trim()) {
+  if (!payload.country || !formatCanonicalCountryName(payload.country)) {
     return { success: false, code: "REQUIRED_COUNTRY", field: "country", error: "국가(Country)를 입력해주세요." };
   }
 
@@ -353,7 +354,7 @@ export async function createWarehouse(payload: WarehousePayload): Promise<Action
     city: payload.city.trim(),
     state: payload.state.trim() || "N/A",
     zip_code: payload.zip_code.trim(),
-    country: payload.country.trim(),
+    country: formatCanonicalCountryName(payload.country) || "South Korea",
     internal_note: payload.internal_note ? payload.internal_note.trim() : null,
     shipping_origin_id: payload.shipping_origin_id || null,
   };
@@ -461,7 +462,7 @@ export async function updateWarehouse(id: string, payload: WarehousePayload): Pr
   if (!payload.zip_code || !payload.zip_code.trim()) {
     return { success: false, code: "REQUIRED_POSTAL_CODE", field: "zip_code", error: "우편번호(ZIP / Postal Code)를 입력해주세요." };
   }
-  if (!payload.country || !payload.country.trim()) {
+  if (!payload.country || !formatCanonicalCountryName(payload.country)) {
     return { success: false, code: "REQUIRED_COUNTRY", field: "country", error: "국가(Country)를 입력해주세요." };
   }
 
@@ -579,7 +580,7 @@ export async function updateWarehouse(id: string, payload: WarehousePayload): Pr
     city: payload.city.trim(),
     state: payload.state.trim() || "N/A",
     zip_code: payload.zip_code.trim(),
-    country: payload.country.trim(),
+    country: formatCanonicalCountryName(payload.country) || "South Korea",
     internal_note: payload.internal_note ? payload.internal_note.trim() : null,
     updated_at: new Date().toISOString()
   };

@@ -25,7 +25,7 @@ import {
 import { TASK_DEFINITIONS } from "@/lib/company/task-constants";
 import { InternationalPhoneInput } from "@/components/shared/international-phone-input";
 import { CountrySelect } from "@/components/shared/country-select";
-import { formatCanonicalCountryName } from "@/lib/constants/countries";
+import { formatCanonicalCountryName, getCountryDisplayLabel } from "@/lib/constants/countries";
 import { formatEasternDate, formatEasternDateTime } from "@/lib/utils/timezone";
 import { CompanyShippingOriginsTab } from "@/components/company/company-shipping-origins-tab";
 import { type CompanyShippingOrigin } from "@/lib/company/shipping-origin-actions";
@@ -1134,7 +1134,7 @@ export function CompanyDetailManager({
                   />
                 ) : (
                   country?.trim() ? (
-                    <span className="font-semibold text-zinc-900 dark:text-white mt-0.5 block">{formatCanonicalCountryName(country)}</span>
+                    <span className="font-semibold text-zinc-900 dark:text-white mt-0.5 block">{getCountryDisplayLabel(country, "ko")}</span>
                   ) : (
                     <span className="font-semibold text-zinc-400 dark:text-zinc-500 mt-0.5 block">미등록</span>
                   )

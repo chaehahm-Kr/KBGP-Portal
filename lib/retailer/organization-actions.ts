@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { verifyRetailerSession } from "@/lib/auth/dal";
 import { RetailerRole } from "@/lib/retailer/onboarding-types";
+import { formatCanonicalCountryName } from "@/lib/constants/countries";
 
 /**
  * Lightweight helper to safely record organization audit logs without throwing
@@ -177,7 +178,7 @@ export async function updateRetailerCompanyInfoAction(payload: {
       .update({
         name: cleanName,
         business_registration_number: payload.businessRegistrationNumber?.trim() || existingComp?.business_registration_number || "",
-        country: payload.country?.trim() || existingComp?.country || "US",
+        country: formatCanonicalCountryName(payload.country?.trim() || existingComp?.country) || "United States",
         contact_name: payload.contactName?.trim() || null,
         contact_phone: payload.contactPhone?.trim() || null,
         updated_at: new Date().toISOString(),

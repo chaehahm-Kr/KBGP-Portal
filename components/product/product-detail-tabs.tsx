@@ -43,6 +43,8 @@ import { ConfirmForm } from "@/components/common/confirm-form";
 import { AddCertificateForm } from "@/components/product/add-certificate-form";
 import { LogisticsHelpModal, type LogisticsHelpSectionKey } from "@/components/product/logistics-help-modal";
 import { validatePrice } from "@/lib/validation/global-validators";
+import { CountrySelect } from "@/components/shared/country-select";
+import { formatCanonicalCountryName } from "@/lib/constants/countries";
 
 import { type CategoryCompletionResult } from "@/lib/product/attribute-completion";
 import { useUnsavedChangesGuard } from "@/hooks/use-unsaved-changes-guard";
@@ -474,7 +476,7 @@ export function ProductDetailTabs({
   const [category, setCategory] = useState(product.category || "");
   const [volumeValue, setVolumeValue] = useState(parsedVolume.value || "");
   const [volumeUnit, setVolumeUnit] = useState<VolumeUnit>(parsedVolume.unit || "ml");
-  const [origin, setOrigin] = useState(product.origin || "");
+  const [origin, setOrigin] = useState(formatCanonicalCountryName(product.origin) || "");
   const [leadTimeValue, setLeadTimeValue] = useState(parsedLeadTime.value || "");
   const [leadTimeUnit, setLeadTimeUnit] = useState(parsedLeadTime.unit || "일");
   const [color, setColor] = useState(product.color || "");
@@ -1872,35 +1874,22 @@ export function ProductDetailTabs({
               </div>
 
               <div id="origin-field">
-                <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1.5">원산지 (Origin) <span className="text-rose-600 dark:text-rose-400 font-bold ml-0.5">*</span></label>
-                <select
+                <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1.5">
+                  원산지 (Origin) <span className="text-rose-600 dark:text-rose-400 font-bold ml-0.5">*</span>
+                </label>
+                <CountrySelect
+                  id="origin"
                   name="origin"
-                  value={origin} onChange={(e) => setOrigin(e.target.value)}
-                  className={`block w-full rounded-lg border px-3.5 py-2 text-xs text-zinc-900 dark:bg-zinc-950 dark:text-white focus:outline-none ${!origin ? "border-rose-350 dark:border-rose-900/60 focus:border-rose-500" : "border-zinc-300 dark:border-zinc-800 focus:border-zinc-900 dark:focus:border-white"}`}
-                >
-                  <option value="">선택 안 함 (None)</option>
-                  <optgroup label="주요 국가 (Major Countries)">
-                    <option value="대한민국">대한민국 (South Korea)</option>
-                    <option value="미국">미국 (United States)</option>
-                    <option value="중국">중국 (China)</option>
-                    <option value="베트남">베트남 (Vietnam)</option>
-                  </optgroup>
-                  <optgroup label="기타 국가 (Other Countries)">
-                    <option value="일본">일본 (Japan)</option>
-                    <option value="대만">대만 (Taiwan)</option>
-                    <option value="태국">태국 (Thailand)</option>
-                    <option value="인도네시아">인도네시아 (Indonesia)</option>
-                    <option value="말레이시아">말레이시아 (Malaysia)</option>
-                    <option value="필리핀">필리핀 (Philippines)</option>
-                    <option value="싱가포르">싱가포르 (Singapore)</option>
-                    <option value="프랑스">프랑스 (France)</option>
-                    <option value="독일">독일 (Germany)</option>
-                    <option value="영국">영국 (United Kingdom)</option>
-                    <option value="이탈리아">이탈리아 (Italy)</option>
-                    <option value="캐나다">캐나다 (Canada)</option>
-                    <option value="호주">호주 (Australia)</option>
-                  </optgroup>
-                </select>
+                  value={origin}
+                  onChange={(val) => setOrigin(val)}
+                  placeholder="원산지 국가 선택 (Select Origin Country)"
+                  required
+                  className={`block w-full rounded-lg border px-3.5 py-2 text-xs text-zinc-900 dark:bg-zinc-950 dark:text-white focus:outline-none transition-colors cursor-pointer ${
+                    !origin
+                      ? "border-rose-350 dark:border-rose-900/60 focus:border-rose-500"
+                      : "border-zinc-300 dark:border-zinc-800 focus:border-zinc-900 dark:focus:border-white"
+                  }`}
+                />
               </div>
 
               <div>

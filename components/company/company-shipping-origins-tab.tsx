@@ -16,6 +16,7 @@ import {
 } from "@/lib/company/shipping-origin-actions";
 import { createWarehouse, type WarehousePayload } from "@/lib/warehouse/actions";
 import { CountrySelect } from "@/components/shared/country-select";
+import { getCountryDisplayLabel } from "@/lib/constants/countries";
 import { InternationalPhoneInput } from "@/components/shared/international-phone-input";
 
 interface CompanyShippingOriginsTabProps {
@@ -440,7 +441,7 @@ export function CompanyShippingOriginsTab({
                     <span className="font-bold">({origin.postal_code})</span>
                     <span className="text-zinc-300 dark:text-zinc-700">|</span>
                     <span className="font-sans font-semibold text-zinc-700 dark:text-zinc-300">
-                      {origin.country}
+                      {getCountryDisplayLabel(origin.country, "ko")}
                     </span>
                   </div>
                 </div>

@@ -15,6 +15,7 @@ import {
 import { recordProductChangeLog, computeProductFieldDiffs } from "@/lib/product/audit";
 import { validatePrice, isNumericPrice, normalizePrice } from "@/lib/validation/global-validators";
 import { unstageFormData } from "@/lib/files/staged-upload";
+import { formatCanonicalCountryName } from "@/lib/constants/countries";
 
 export type ProductFormState = {
   error?: string;
@@ -880,7 +881,12 @@ const productUpdateSchema = z.object({
   description: z.string().trim().nullable().optional(),
   color: z.string().trim().nullable().optional(),
   colorMap: z.string().trim().nullable().optional(),
-  origin: z.string().trim().nullable().optional(),
+  origin: z
+    .string()
+    .trim()
+    .nullable()
+    .optional()
+    .transform((v) => (v ? formatCanonicalCountryName(v) : null)),
   leadTime: z.string().trim().nullable().optional(),
 
   // SKU

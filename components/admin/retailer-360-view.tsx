@@ -28,6 +28,8 @@ import {
   adminConfirmFulfillmentDeliveryAction,
 } from "@/lib/retailer/fulfillment-actions";
 import { adminRetryAgreementPdfAction } from "@/lib/retailer/agreement-actions";
+import { CountrySelect } from "@/components/shared/country-select";
+import { formatCanonicalCountryName } from "@/lib/constants/countries";
 import { RetailerRole } from "@/lib/retailer/onboarding-types";
 import { Retailer360MemberItem } from "@/lib/retailer/admin-retailer-360";
 import { StartImpersonationModal } from "@/components/admin/start-impersonation-modal";
@@ -2551,6 +2553,17 @@ export function Retailer360View({ data, canImpersonate = true }: Retailer360View
                     value={editCompZip}
                     onChange={(e) => setEditCompZip(e.target.value)}
                     className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                    Country
+                  </label>
+                  <CountrySelect
+                    value={editCompCountry}
+                    onChange={(val) => setEditCompCountry(val)}
+                    className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-white cursor-pointer"
                   />
                 </div>
 

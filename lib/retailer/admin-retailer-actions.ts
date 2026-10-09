@@ -5,6 +5,7 @@ import { verifyAdminSession } from "@/lib/auth/dal";
 import { createRetailerInvitation } from "@/lib/retailer/onboarding-actions";
 import { RetailerRole } from "@/lib/retailer/onboarding-types";
 import { revalidatePath } from "next/cache";
+import { formatCanonicalCountryName } from "@/lib/constants/countries";
 
 export interface CreateRetailerPayload {
   companyName: string;
@@ -96,7 +97,7 @@ export async function getAdminRetailersList() {
       id: comp.id,
       name: comp.name,
       businessRegistrationNumber: comp.business_registration_number,
-      country: comp.country || "US",
+      country: formatCanonicalCountryName(comp.country) || "United States",
       status: profile?.status || comp.status || "active",
       paymentTerms: profile?.payment_terms || "PREPAID_CARD",
       creditLimit: Number(profile?.credit_limit || 0),
@@ -406,7 +407,7 @@ export async function getAdminRetailerDetail(companyId: string) {
       id: company.id,
       name: company.name,
       businessRegistrationNumber: company.business_registration_number,
-      country: company.country || "US",
+      country: formatCanonicalCountryName(company.country) || "United States",
       createdAt: company.created_at,
     },
     profile: profile || {
@@ -434,7 +435,7 @@ export async function createRetailerWithInitialStoreAndOwnerAction(payload: Crea
       .insert({
         name: payload.companyName.trim(),
         business_registration_number: payload.businessRegistrationNumber?.trim() || null,
-        country: payload.country || "US",
+        country: formatCanonicalCountryName(payload.country) || "United States",
         company_type: "retailer",
         business_type: "retailer",
         status: "active",
@@ -684,7 +685,7 @@ export async function adminUpdateRetailerCompanyAction(
   if (payload.name !== undefined && payload.name.trim()) compUpdates.name = payload.name.trim();
   if (payload.businessRegistrationNumber !== undefined)
     compUpdates.business_registration_number = payload.businessRegistrationNumber.trim();
-  if (payload.country !== undefined) compUpdates.country = payload.country.trim();
+  if (payload.country !== undefined) compUpdates.country = formatCanonicalCountryName(payload.country) || "United States";
   if (payload.contactName !== undefined) compUpdates.contact_name = payload.contactName.trim() || null;
   if (payload.contactPhone !== undefined) compUpdates.contact_phone = payload.contactPhone.trim() || null;
   if (payload.status !== undefined) compUpdates.status = payload.status === "archived" ? "inactive" : payload.status;

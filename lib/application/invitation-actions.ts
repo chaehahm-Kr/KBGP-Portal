@@ -584,7 +584,7 @@ export async function approveAndInviteApplication(
         .insert({
           name: compName,
           business_registration_number: "PENDING",
-          country: "USA",
+          country: "United States",
           status: "active",
           contact_name: nameToUse,
         })
@@ -656,7 +656,7 @@ export async function approveAndInviteApplication(
       .insert({
         name: compName,
         business_registration_number: "PENDING",
-        country: "대한민국",
+        country: "South Korea",
         status: "active",
         contact_name: nameToUse,
       })

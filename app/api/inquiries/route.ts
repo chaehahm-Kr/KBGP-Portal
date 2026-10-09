@@ -11,6 +11,7 @@ import { getPersonStructuredNames, getPersonGreetingName, getPersonDisplayName }
 import { generateNextApplicationNumber } from "@/lib/application/number-generator";
 import { isPureEnglishName, isNumericPrice, normalizePrice } from "@/lib/validation/global-validators";
 import { companyInsertFieldsFromMeta, replaceCompanyContacts } from "@/lib/company/company-meta-store";
+import { formatCanonicalCountryName } from "@/lib/constants/countries";
 
 export const runtime = "nodejs";
 
@@ -75,7 +76,11 @@ const eligibilityResponseSchema = z.object({
 const payloadSchema = z.object({
   companyName: z.string().trim().min(1),
   businessNumber: z.string().trim().min(1),
-  country: z.string().optional().default("대한민국"),
+  country: z
+    .string()
+    .optional()
+    .default("South Korea")
+    .transform((v) => formatCanonicalCountryName(v) || "South Korea"),
   addressLine1: z.string().optional().default(""),
   addressLine2: z.string().optional().default(""),
   city: z.string().optional().default(""),
@@ -343,7 +348,7 @@ export async function POST(request: Request) {
     .insert({
       name: input.companyName,
       business_registration_number: input.businessNumber,
-      country: input.country?.trim() || "대한민국",
+      country: formatCanonicalCountryName(input.country) || "South Korea",
       contact_name: resolvedContactName,
       contact_phone: input.phone,
       ...profileFields,
@@ -458,7 +463,7 @@ export async function POST(request: Request) {
       applicant_contact_email: input.email,
       applicant_contact_phone: input.phone,
       applicant_address: {
-        country: input.country || "대한민국",
+        country: formatCanonicalCountryName(input.country) || "South Korea",
         address_line_1: input.addressLine1 || "",
         address_line_2: input.addressLine2 || "",
         city: input.city || "",

@@ -7,6 +7,7 @@ import { requireCompanyMembership } from "@/lib/company/dal";
 import { requireMenuPermission } from "@/lib/company/permissions";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { formatCanonicalCountryName } from "@/lib/constants/countries";
 
 /**
  * DATA-JSON-CLEAN-003: 출고지는 company_shipping_origins 테이블(0137)만 저장소다.
@@ -85,7 +86,7 @@ function validateShippingOriginInput(input: ShippingOriginInput) {
   if (!input.name || !input.name.trim()) {
     throw new Error("출고지명은 필수 입력 항목입니다.");
   }
-  if (!input.country || !input.country.trim()) {
+  if (!input.country || !formatCanonicalCountryName(input.country)) {
     throw new Error("국가는 필수 선택 항목입니다.");
   }
   if (!input.address_line1 || !input.address_line1.trim()) {
@@ -181,7 +182,7 @@ export async function adminCreateShippingOrigin(
     contact_name: (input.contact_name || "").trim(),
     phone: (input.phone || "").trim(),
     email: (input.email || "").trim(),
-    country: input.country.trim(),
+    country: formatCanonicalCountryName(input.country) || "South Korea",
     address_line1: input.address_line1.trim(),
     address_line2: (input.address_line2 || "").trim(),
     city: input.city.trim(),
@@ -235,7 +236,7 @@ export async function portalCreateShippingOrigin(
     contact_name: (input.contact_name || "").trim(),
     phone: (input.phone || "").trim(),
     email: (input.email || "").trim(),
-    country: input.country.trim(),
+    country: formatCanonicalCountryName(input.country) || "South Korea",
     address_line1: input.address_line1.trim(),
     address_line2: (input.address_line2 || "").trim(),
     city: input.city.trim(),
@@ -291,7 +292,7 @@ export async function adminUpdateShippingOrigin(
     contact_name: (input.contact_name || "").trim(),
     phone: (input.phone || "").trim(),
     email: (input.email || "").trim(),
-    country: input.country.trim(),
+    country: formatCanonicalCountryName(input.country) || "South Korea",
     address_line1: input.address_line1.trim(),
     address_line2: (input.address_line2 || "").trim(),
     city: input.city.trim(),
@@ -350,7 +351,7 @@ export async function portalUpdateShippingOrigin(
     contact_name: (input.contact_name || "").trim(),
     phone: (input.phone || "").trim(),
     email: (input.email || "").trim(),
-    country: input.country.trim(),
+    country: formatCanonicalCountryName(input.country) || "South Korea",
     address_line1: input.address_line1.trim(),
     address_line2: (input.address_line2 || "").trim(),
     city: input.city.trim(),

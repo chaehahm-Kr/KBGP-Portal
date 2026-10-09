@@ -3,7 +3,7 @@
 import React, { useState, useMemo } from "react";
 import Link from "next/link";
 import { CompanyContactPopover } from "@/components/admin/company-contact-popover";
-import { formatCanonicalCountryName } from "@/lib/constants/countries";
+import { formatCanonicalCountryName, getCountryDisplayLabel } from "@/lib/constants/countries";
 import { CompanyOnboardingPopover, type OnboardingStepItem } from "@/components/admin/company-onboarding-popover";
 import { formatEasternDateTime } from "@/lib/utils/timezone";
 
@@ -365,7 +365,7 @@ export function CompaniesTableClient({ companies, partnerStatuses }: CompaniesTa
                             onChange={() => toggleCountry(c)}
                             className="rounded border-zinc-300 text-zinc-900 focus:ring-zinc-950 dark:border-zinc-700"
                           />
-                          <span>{c}</span>
+                          <span>{getCountryDisplayLabel(c, "ko")}</span>
                         </label>
                       );
                     })}
@@ -531,7 +531,7 @@ export function CompaniesTableClient({ companies, partnerStatuses }: CompaniesTa
                       </div>
                     </td>
                     <td className="px-6 py-3.5 text-zinc-700 dark:text-zinc-300 font-medium">
-                      {formatCanonicalCountryName(company.country)}
+                      {getCountryDisplayLabel(company.country, "ko")}
                     </td>
                     <td className="px-6 py-3.5 text-center text-zinc-900 dark:text-white font-semibold">
                       {company.brandsCount}

@@ -10,11 +10,17 @@ import { publicEnv } from "@/lib/env/public";
 
 import { getPersonStructuredNames } from "@/lib/user/name-helper";
 import { companyInsertFieldsFromMeta, replaceCompanyContacts } from "@/lib/company/company-meta-store";
+import { formatCanonicalCountryName } from "@/lib/constants/countries";
 
 export type InquiryFormState = { error: string } | undefined;
 
 const convertSchema = z.object({
-  country: z.string().trim().optional().default(""),
+  country: z
+    .string()
+    .trim()
+    .optional()
+    .default("")
+    .transform((v) => formatCanonicalCountryName(v) || "South Korea"),
 });
 
 /**
@@ -106,7 +112,7 @@ export async function convertInquiryToCompany(
     .insert({
       name: inquiry.company_name,
       business_registration_number: inquiry.business_registration_number,
-      country: parsed.data.country || "대한민국",
+      country: parsed.data.country || "South Korea",
       contact_name: resolvedContactName,
       contact_phone: inquiry.contact_phone,
       ...profileFields,

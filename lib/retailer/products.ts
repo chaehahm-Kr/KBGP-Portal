@@ -2,6 +2,7 @@ import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { verifyRetailerSession } from "@/lib/auth/dal";
 import { resolveEffectiveSku, isDraftPlaceholderName, isDraftPlaceholderSku } from "@/lib/product/types";
+import { formatCanonicalCountryName } from "@/lib/constants/countries";
 import { evaluateProductRegistrationStatus } from "@/lib/product/registration-status";
 import { resolveProductPricing, parseValidPositiveNumber } from "@/lib/product/pricing-resolver";
 import {
@@ -465,7 +466,7 @@ export async function getRetailerProducts(
         moq,
         isOrderable,
         thumbnailUrl,
-        origin: overrides.origin || p.origin || "Republic of Korea",
+        origin: formatCanonicalCountryName(overrides.origin || p.origin) || "South Korea",
         volume: overrides.volume || p.volume || null,
         status: p.status || "selling",
         salesPolicy,
@@ -835,7 +836,7 @@ export async function getRetailerProductDetail(
     moq,
     isOrderable: visEval.isOrderable,
     thumbnailUrl: images.length > 0 ? images[0].url : null,
-    origin: overrides.origin || p.origin || "Republic of Korea",
+    origin: formatCanonicalCountryName(overrides.origin || p.origin) || "South Korea",
     volume: overrides.volume || p.volume || null,
     status: p.status || "selling",
     description: overrides.description || p.description || null,

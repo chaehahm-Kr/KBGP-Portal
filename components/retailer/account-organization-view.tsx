@@ -19,6 +19,8 @@ import { PwaInstallAffordance } from "@/components/retailer/pwa-install-manager"
 import { changeRetailerPasswordAction } from "@/lib/auth/password-actions";
 import { useTranslation } from "@/lib/i18n";
 import { LanguageToggle } from "@/components/retailer/language-toggle";
+import { CountrySelect } from "@/components/shared/country-select";
+import { formatCanonicalCountryName, getCountryDisplayLabel } from "@/lib/constants/countries";
 
 export interface StoreLocationItem {
   id: string;
@@ -267,6 +269,7 @@ export function AccountOrganizationView({
         companyId: company.id,
         name: compName.trim(),
         businessRegistrationNumber: compRegNo.trim() || undefined,
+        country: compCountry.trim() || undefined,
         contactName: compContactName.trim() || undefined,
         contactPhone: compContactPhone.trim() || undefined,
         contactEmail: compContactEmail.trim() || undefined,
@@ -713,7 +716,7 @@ export function AccountOrganizationView({
               </div>
               <div>
                 <span className="text-[10px] font-medium text-zinc-500 dark:text-zinc-400 block">Country</span>
-                <span className="font-semibold text-zinc-900 dark:text-white block mt-0.5">🇺🇸 {company.country}</span>
+                <span className="font-semibold text-zinc-900 dark:text-white block mt-0.5">{getCountryDisplayLabel(company.country, locale)}</span>
               </div>
 
               <div>
@@ -1185,6 +1188,19 @@ export function AccountOrganizationView({
                     className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-1.5 text-xs outline-none focus:border-zinc-900 dark:border-zinc-800 dark:bg-zinc-900 dark:text-white font-mono"
                   />
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                  Country
+                </label>
+                <CountrySelect
+                  value={compCountry}
+                  onChange={(val) => setCompCountry(val)}
+                  lang={locale === "ko" ? "ko" : "en"}
+                  placeholder={locale === "ko" ? "국가 선택" : "Select Country"}
+                  className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs outline-none focus:border-zinc-900 dark:border-zinc-800 dark:bg-zinc-900 dark:text-white cursor-pointer"
+                />
               </div>
 
               <div className="flex justify-end gap-2 pt-3 border-t border-zinc-100 dark:border-zinc-800">

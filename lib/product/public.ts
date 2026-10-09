@@ -2,6 +2,7 @@ import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { resolveEffectiveSku } from "@/lib/product/types";
 import { formatCategoryName } from "@/lib/retailer/products";
+import { formatCanonicalCountryName } from "@/lib/constants/countries";
 
 export interface PublicProductDetail {
   id: string;
@@ -125,7 +126,7 @@ export async function getPublicProductDetail(productId: string): Promise<PublicP
     sku: effectiveSku,
     category: p.category || "skincare",
     categoryLabel: formatCategoryName(p.category || p.category_code),
-    origin: overrides.origin || p.origin || "Republic of Korea",
+    origin: formatCanonicalCountryName(overrides.origin || p.origin) || "South Korea",
     volume: overrides.volume || p.volume || null,
     description: overrides.description || p.description || null,
     bulletPoints: bulletPoints.filter(Boolean),

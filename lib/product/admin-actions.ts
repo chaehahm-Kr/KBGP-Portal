@@ -14,6 +14,7 @@ import { recordProductChangeLog, getProductChangeHistory, computeProductFieldDif
 import { formatEasternDate, getEasternTodayString } from "@/lib/utils/timezone";
 import { validatePrice, isNumericPrice, normalizePrice } from "@/lib/validation/global-validators";
 import { unstageFormData } from "@/lib/files/staged-upload";
+import { formatCanonicalCountryName } from "@/lib/constants/countries";
 
 export { getProductChangeHistory };
 
@@ -53,6 +54,10 @@ export async function adminUpdateProductOverrides(
   delete cleanOverrides.sales_status;
   delete cleanOverrides.trading_status;
   delete cleanOverrides.retailer_visibility;
+
+  if (cleanOverrides.origin !== undefined && cleanOverrides.origin !== null) {
+    cleanOverrides.origin = formatCanonicalCountryName(cleanOverrides.origin) || null;
+  }
 
   if (currentOverrides.letusto_sku !== undefined) {
     delete currentOverrides.letusto_sku;
