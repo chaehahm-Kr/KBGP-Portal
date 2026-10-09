@@ -3,26 +3,31 @@
 import React, { useState } from "react";
 import { updateHubBadges, type UpdateHubBadgesInput } from "@/lib/product/trading-actions";
 
+interface HubBadgeItem {
+  is_active: boolean;
+  start_date?: string | null;
+  end_date?: string | null;
+  label_en?: string | null;
+  label_ko?: string | null;
+}
+
 interface HubBadgesCardProps {
   productId: string;
   isPromoActive?: boolean;
   hubBadges?: {
-    sale?: {
-      is_active: boolean;
-      start_date?: string | null;
-      end_date?: string | null;
-      label_en?: string | null;
-      label_ko?: string | null;
-    };
-    new?: {
-      is_active: boolean;
-      start_date?: string | null;
-      end_date?: string | null;
-      label_en?: string | null;
-      label_ko?: string | null;
-    };
+    sale?: HubBadgeItem;
+    new?: HubBadgeItem;
+    hot?: HubBadgeItem;
+    priority?: string[];
   };
 }
+
+const BADGE_NAMES: Record<string, { nameKo: string; nameEn: string; icon: string }> = {
+  promotion: { nameKo: "프로모션 (Promotion)", nameEn: "Promotion", icon: "🔥" },
+  sale: { nameKo: "세일 (Sale)", nameEn: "Sale", icon: "🏷️" },
+  hot: { nameKo: "인기 (Hot)", nameEn: "Hot", icon: "🔥" },
+  new: { nameKo: "신상품 (New)", nameEn: "New", icon: "✨" },
+};
 
 export function HubBadgesCard({
   productId,
@@ -35,14 +40,42 @@ export function HubBadgesCard({
   const [saleLabelEn, setSaleLabelEn] = useState<string>(hubBadges?.sale?.label_en || "Sale");
   const [saleLabelKo, setSaleLabelKo] = useState<string>(hubBadges?.sale?.label_ko || "세일");
 
+  const [hotActive, setHotActive] = useState<boolean>(hubBadges?.hot?.is_active || false);
+  const [hotStartDate, setHotStartDate] = useState<string>(hubBadges?.hot?.start_date || "");
+  const [hotEndDate, setHotEndDate] = useState<string>(hubBadges?.hot?.end_date || "");
+  const [hotLabelEn, setHotLabelEn] = useState<string>(hubBadges?.hot?.label_en || "Hot");
+  const [hotLabelKo, setHotLabelKo] = useState<string>(hubBadges?.hot?.label_ko || "인기");
+
   const [newActive, setNewActive] = useState<boolean>(hubBadges?.new?.is_active || false);
   const [newStartDate, setNewStartDate] = useState<string>(hubBadges?.new?.start_date || "");
   const [newEndDate, setNewEndDate] = useState<string>(hubBadges?.new?.end_date || "");
   const [newLabelEn, setNewLabelEn] = useState<string>(hubBadges?.new?.label_en || "New");
   const [newLabelKo, setNewLabelKo] = useState<string>(hubBadges?.new?.label_ko || "신상품");
 
+  // Priority Order State
+  const defaultPriority = ["promotion", "sale", "hot", "new"];
+  const initialPriority = Array.isArray(hubBadges?.priority) && hubBadges.priority.length > 0
+    ? hubBadges.priority
+    : defaultPriority;
+  
+  const fullInitial = [...initialPriority];
+  for (const b of defaultPriority) {
+    if (!fullInitial.includes(b)) fullInitial.push(b);
+  }
+  const [priorityOrder, setPriorityOrder] = useState<string[]>(fullInitial);
+
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [feedback, setFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
+
+  const movePriority = (index: number, direction: "up" | "down") => {
+    const newOrder = [...priorityOrder];
+    const targetIndex = direction === "up" ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= newOrder.length) return;
+    const temp = newOrder[index];
+    newOrder[index] = newOrder[targetIndex];
+    newOrder[targetIndex] = temp;
+    setPriorityOrder(newOrder);
+  };
 
   const handleSave = async () => {
     setIsSaving(true);
@@ -56,6 +89,13 @@ export function HubBadgesCard({
           label_en: saleLabelEn.trim() || "Sale",
           label_ko: saleLabelKo.trim() || "세일",
         },
+        hot: {
+          is_active: hotActive,
+          start_date: hotStartDate || null,
+          end_date: hotEndDate || null,
+          label_en: hotLabelEn.trim() || "Hot",
+          label_ko: hotLabelKo.trim() || "인기",
+        },
         new: {
           is_active: newActive,
           start_date: newStartDate || null,
@@ -63,6 +103,7 @@ export function HubBadgesCard({
           label_en: newLabelEn.trim() || "New",
           label_ko: newLabelKo.trim() || "신상품",
         },
+        priority: priorityOrder,
       };
 
       const res = await updateHubBadges(productId, payload);
@@ -86,7 +127,7 @@ export function HubBadgesCard({
             <span>🏷️</span> Hub 표시 마케팅 배지 (Hub Display Badges)
           </h3>
           <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5">
-            리테일러 허브 상품 카드 이미지 상단에 노출되는 마케팅 배지(최대 3개: Promotion, Sale, New)를 관리합니다.
+            리테일러 허브 상품 카드 이미지 상단에 노출되는 마케팅 배지(Promotion, Sale, Hot, New) 및 우선순위를 관리합니다.
           </p>
         </div>
         <button
@@ -111,7 +152,8 @@ export function HubBadgesCard({
         </div>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      {/* Badges Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* 1. Auto Promotion Status */}
         <div className="p-3.5 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50/70 dark:bg-zinc-950/40 space-y-2">
           <div className="flex items-center justify-between">
@@ -129,7 +171,7 @@ export function HubBadgesCard({
             </span>
           </div>
           <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-snug">
-            상단의 <strong className="text-zinc-700 dark:text-zinc-300">+ 프로모션</strong> 또는 판매 정책에서 유효한 프로모션 단가가 적용 중일 때 자동 노출됩니다.
+            상단 프로모션 또는 단가 정책에서 유효한 프로모션 단가가 적용 중일 때 자동 노출됩니다.
           </p>
         </div>
 
@@ -203,7 +245,77 @@ export function HubBadgesCard({
           </div>
         </div>
 
-        {/* 3. New Badge Settings */}
+        {/* 3. Hot Badge Settings */}
+        <div className="p-3.5 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50/70 dark:bg-zinc-950/40 space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-zinc-800 dark:text-zinc-200 flex items-center gap-1">
+              🔥 Hot (인기) 배지
+            </span>
+            <label className="flex items-center gap-1.5 cursor-pointer text-xs select-none">
+              <input
+                type="checkbox"
+                checked={hotActive}
+                onChange={(e) => setHotActive(e.target.checked)}
+                className="w-4 h-4 text-orange-600 rounded border-zinc-300 dark:border-zinc-700 focus:ring-orange-500 cursor-pointer"
+              />
+              <span className="font-semibold text-zinc-700 dark:text-zinc-300">
+                {hotActive ? "활성" : "비활성"}
+              </span>
+            </label>
+          </div>
+
+          <div className="space-y-2 text-xs">
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="block text-[10px] font-semibold text-zinc-500 mb-0.5">시작일</label>
+                <input
+                  type="date"
+                  value={hotStartDate}
+                  onChange={(e) => setHotStartDate(e.target.value)}
+                  disabled={!hotActive}
+                  className="w-full px-2 py-1 text-xs rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 disabled:opacity-50"
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] font-semibold text-zinc-500 mb-0.5">종료일</label>
+                <input
+                  type="date"
+                  value={hotEndDate}
+                  onChange={(e) => setHotEndDate(e.target.value)}
+                  disabled={!hotActive}
+                  className="w-full px-2 py-1 text-xs rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 disabled:opacity-50"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="block text-[10px] font-semibold text-zinc-500 mb-0.5">영문 라벨</label>
+                <input
+                  type="text"
+                  placeholder="Hot"
+                  value={hotLabelEn}
+                  onChange={(e) => setHotLabelEn(e.target.value)}
+                  disabled={!hotActive}
+                  className="w-full px-2 py-1 text-xs rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 disabled:opacity-50"
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] font-semibold text-zinc-500 mb-0.5">국문 라벨</label>
+                <input
+                  type="text"
+                  placeholder="인기"
+                  value={hotLabelKo}
+                  onChange={(e) => setHotLabelKo(e.target.value)}
+                  disabled={!hotActive}
+                  className="w-full px-2 py-1 text-xs rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 disabled:opacity-50"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* 4. New Badge Settings */}
         <div className="p-3.5 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50/70 dark:bg-zinc-950/40 space-y-3">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-zinc-800 dark:text-zinc-200 flex items-center gap-1">
@@ -271,6 +383,53 @@ export function HubBadgesCard({
               </div>
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* Priority Order Bar */}
+      <div className="pt-2 border-t border-zinc-100 dark:border-zinc-800">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-2">
+          <label className="text-xs font-bold text-zinc-800 dark:text-zinc-200 flex items-center gap-1.5">
+            <span>📊</span> 배지 노출 우선순위 설정 (Badge Display Priority)
+          </label>
+          <span className="text-[11px] text-zinc-500 dark:text-zinc-400">
+            앞쪽에 위치할수록 Hub 카드에서 우선적으로 노출됩니다 (최대 3개).
+          </span>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          {priorityOrder.map((key, idx) => {
+            const info = BADGE_NAMES[key] || { nameKo: key, nameEn: key, icon: "🏷️" };
+            return (
+              <div
+                key={key}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 text-xs font-semibold text-zinc-800 dark:text-zinc-200 shadow-2xs"
+              >
+                <span className="text-zinc-400 text-[10px] font-bold">#{idx + 1}</span>
+                <span>{info.icon}</span>
+                <span>{info.nameKo}</span>
+                <div className="flex items-center gap-0.5 ml-1 border-l border-zinc-200 dark:border-zinc-700 pl-1.5">
+                  <button
+                    type="button"
+                    onClick={() => movePriority(idx, "up")}
+                    disabled={idx === 0}
+                    className="p-0.5 text-zinc-500 hover:text-zinc-900 dark:hover:text-white disabled:opacity-30"
+                    title="우선순위 높이기"
+                  >
+                    ◀
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => movePriority(idx, "down")}
+                    disabled={idx === priorityOrder.length - 1}
+                    className="p-0.5 text-zinc-500 hover:text-zinc-900 dark:hover:text-white disabled:opacity-30"
+                    title="우선순위 낮추기"
+                  >
+                    ▶
+                  </button>
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>

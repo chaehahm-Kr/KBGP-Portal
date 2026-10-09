@@ -1418,6 +1418,14 @@ export interface UpdateHubBadgesInput {
     label_en?: string | null;
     label_ko?: string | null;
   };
+  hot?: {
+    is_active: boolean;
+    start_date?: string | null;
+    end_date?: string | null;
+    label_en?: string | null;
+    label_ko?: string | null;
+  };
+  priority?: string[];
 }
 
 export async function updateHubBadges(productId: string, input: UpdateHubBadgesInput) {
@@ -1441,6 +1449,8 @@ export async function updateHubBadges(productId: string, input: UpdateHubBadgesI
     ...currentBadges,
     sale: input.sale !== undefined ? { ...currentBadges.sale, ...input.sale } : currentBadges.sale,
     new: input.new !== undefined ? { ...currentBadges.new, ...input.new } : currentBadges.new,
+    hot: input.hot !== undefined ? { ...currentBadges.hot, ...input.hot } : currentBadges.hot,
+    priority: input.priority !== undefined ? input.priority : currentBadges.priority,
   };
 
   const updatedPriceAddInfo = {
