@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { verifyAdminSession } from "@/lib/auth/dal";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { resolveEffectiveSku } from "@/lib/product/types";
+import { DEFAULT_INVENTORY_ADJUSTMENT_REASON } from "@/lib/constants/inventory";
 
 export interface InventoryBalanceItem {
   id: string;
@@ -410,7 +411,7 @@ export async function recordManualAdjustment(
   warehouseId: string,
   qtyChange: number,
   qtyHoldChange: number = 0,
-  reason: string = "Physical Count Difference",
+  reason: string = DEFAULT_INVENTORY_ADJUSTMENT_REASON,
   note?: string,
   qtyDamagedChange: number = 0,
   movementType: "MANUAL_ADJUSTMENT" | "OPENING_BALANCE" = "MANUAL_ADJUSTMENT"

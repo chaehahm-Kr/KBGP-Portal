@@ -27,6 +27,12 @@ import { evaluateHubVisibility, type HubVisibilityEvaluation } from "@/lib/produ
 import { resolveActiveMarketingBadges } from "@/lib/product/badge-utils";
 import { RetailerSalesPolicyCard } from "@/components/admin/retailer-sales-policy-card";
 import { HubBadgesCard } from "@/components/admin/hub-badges-card";
+import {
+  INVENTORY_ADJUSTMENT_REASONS,
+  DEFAULT_INVENTORY_ADJUSTMENT_REASON,
+  OTHER_INVENTORY_ADJUSTMENT_REASON,
+  formatInventoryAdjustmentReason,
+} from "@/lib/constants/inventory";
 
 const ArrowLeftIcon = ({ className }: { className?: string }) => (
   <svg
@@ -428,7 +434,8 @@ export function TradingProductDetail({
   const [invTargetDamaged, setInvTargetDamaged] = useState("0");
   const [invTargetHold, setInvTargetHold] = useState("0");
 
-  const [invAdjReason, setInvAdjReason] = useState("실사 재고 차이 조정 (Physical Count Difference)");
+  const [invAdjReason, setInvAdjReason] = useState<string>(DEFAULT_INVENTORY_ADJUSTMENT_REASON);
+  const [invAdjCustomReason, setInvAdjCustomReason] = useState("");
   const [invAdjNote, setInvAdjNote] = useState("");
   const [invAdjError, setInvAdjError] = useState("");
   const [isInvAdjSubmitting, setIsInvAdjSubmitting] = useState(false);
@@ -456,7 +463,8 @@ export function TradingProductDetail({
     setInvTargetDamaged(curDamaged.toString());
     setInvTargetHold(curHold.toString());
 
-    setInvAdjReason("실사 재고 차이 조정 (Physical Count Difference)");
+    setInvAdjReason(DEFAULT_INVENTORY_ADJUSTMENT_REASON);
+    setInvAdjCustomReason("");
     setInvAdjNote("");
     setInvAdjError("");
     setInvAdjMovementType(curOnHand === 0 && (!initialBalances || initialBalances.length === 0) ? "OPENING_BALANCE" : "MANUAL_ADJUSTMENT");
@@ -539,8 +547,13 @@ export function TradingProductDetail({
       setInvAdjError("조정 후 수량은 0 미만(음수)이 될 수 없습니다.");
       return;
     }
-    if (!invAdjReason.trim()) {
-      setInvAdjError("조정 사유를 입력하거나 선택해 주세요.");
+    if (invAdjReason === OTHER_INVENTORY_ADJUSTMENT_REASON && !invAdjCustomReason.trim()) {
+      setInvAdjError("기타 사유를 직접 입력해 주세요 (Please enter the custom reason).");
+      return;
+    }
+    const effectiveReason = formatInventoryAdjustmentReason(invAdjReason, invAdjCustomReason);
+    if (!effectiveReason) {
+      setInvAdjError("조정 사유를 선택하거나 입력해 주세요.");
       return;
     }
 
@@ -551,7 +564,7 @@ export function TradingProductDetail({
         invAdjWarehouseId,
         modalLiveCalculations.dOnHand,
         modalLiveCalculations.dHold,
-        invAdjReason.trim(),
+        effectiveReason,
         invAdjNote.trim(),
         modalLiveCalculations.dDamaged,
         invAdjMovementType
@@ -1760,7 +1773,7 @@ export function TradingProductDetail({
                           <td className={`py-2 text-right font-mono font-bold ${m.qty_change > 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
                             {m.qty_change > 0 ? `+${m.qty_change}` : m.qty_change} EA
                           </td>
-                          <td className="py-2 text-zinc-500 text-[11px] truncate max-w-[120px]">
+                          <td className="py-2 text-zinc-600 dark:text-zinc-300 text-[11px] truncate max-w-[220px]" title={m.reason || m.note || "-"}>
                             {m.reason || m.note || "-"}
                           </td>
                         </tr>
@@ -2570,18 +2583,42 @@ export function TradingProductDetail({
                 </div>
               )}
 
-              <div>
-                <label className="font-bold block mb-1 text-zinc-800 dark:text-zinc-200">
-                  조정 사유 *
+              <div className="space-y-2">
+                <label className="font-bold block text-zinc-800 dark:text-zinc-200">
+                  조정 사유 (Adjustment Reason) *
                 </label>
-                <input
-                  type="text"
+                <select
                   value={invAdjReason}
-                  onChange={(e) => setInvAdjReason(e.target.value)}
-                  required
-                  placeholder="예: 정기 실사 수량 반영"
-                  className="w-full p-2.5 rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white placeholder:text-zinc-400 dark:placeholder:text-zinc-500 focus:ring-2 focus:ring-indigo-500"
-                />
+                  onChange={(e) => {
+                    setInvAdjReason(e.target.value);
+                    if (e.target.value !== OTHER_INVENTORY_ADJUSTMENT_REASON) {
+                      setInvAdjCustomReason("");
+                    }
+                  }}
+                  className="w-full p-2.5 rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white font-medium focus:ring-2 focus:ring-indigo-500"
+                >
+                  {INVENTORY_ADJUSTMENT_REASONS.map((r) => (
+                    <option key={r} value={r} className="bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white">
+                      {r}
+                    </option>
+                  ))}
+                </select>
+
+                {invAdjReason === OTHER_INVENTORY_ADJUSTMENT_REASON && (
+                  <div className="pt-1">
+                    <label className="font-semibold block mb-1 text-[11px] text-zinc-600 dark:text-zinc-400">
+                      기타 상세 사유 직접 입력 (Custom Reason) *
+                    </label>
+                    <input
+                      type="text"
+                      value={invAdjCustomReason}
+                      onChange={(e) => setInvAdjCustomReason(e.target.value)}
+                      required
+                      placeholder="상세 사유를 구체적으로 입력하세요 (e.g. 샘플 테스트 출고, 마케팅 협찬 등)"
+                      className="w-full p-2.5 rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white placeholder:text-zinc-400 dark:placeholder:text-zinc-500 focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </div>
+                )}
               </div>
 
               <div className="flex justify-end gap-2 pt-2 border-t border-zinc-100 dark:border-zinc-800">

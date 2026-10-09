@@ -8,6 +8,12 @@ import {
   recordOpeningBalance,
   recordManualAdjustment,
 } from "@/lib/inventory/actions";
+import {
+  INVENTORY_ADJUSTMENT_REASONS,
+  DEFAULT_INVENTORY_ADJUSTMENT_REASON,
+  OTHER_INVENTORY_ADJUSTMENT_REASON,
+  formatInventoryAdjustmentReason,
+} from "@/lib/constants/inventory";
 
 interface WarehouseOption {
   id: string;
@@ -81,7 +87,8 @@ export function InventoryOverviewList({
   const [adjustWarehouseId, setAdjustWarehouseId] = useState("");
   const [adjustQtyChange, setAdjustQtyChange] = useState<number>(0);
   const [adjustHoldChange, setAdjustHoldChange] = useState<number>(0);
-  const [adjustReason, setAdjustReason] = useState("실물 재물조사 차이 조정");
+  const [adjustReason, setAdjustReason] = useState<string>(DEFAULT_INVENTORY_ADJUSTMENT_REASON);
+  const [adjustCustomReason, setAdjustCustomReason] = useState("");
   const [adjustNote, setAdjustNote] = useState("");
   const [isSubmittingAdjust, setIsSubmittingAdjust] = useState(false);
 
@@ -153,7 +160,8 @@ export function InventoryOverviewList({
     setAdjustWarehouseId(defaultWhId || item.warehouse_balances[0]?.warehouse_id || warehouses[0]?.id || "");
     setAdjustQtyChange(0);
     setAdjustHoldChange(0);
-    setAdjustReason("실물 재물조사 차이 조정");
+    setAdjustReason(DEFAULT_INVENTORY_ADJUSTMENT_REASON);
+    setAdjustCustomReason("");
     setAdjustNote("");
     setActionError(null);
     setActionSuccess(null);
@@ -169,6 +177,13 @@ export function InventoryOverviewList({
       return;
     }
 
+    if (adjustReason === OTHER_INVENTORY_ADJUSTMENT_REASON && !adjustCustomReason.trim()) {
+      setActionError("기타 사유를 직접 입력해 주세요 (Please enter custom reason).");
+      return;
+    }
+
+    const effectiveReason = formatInventoryAdjustmentReason(adjustReason, adjustCustomReason);
+
     setIsSubmittingAdjust(true);
     setActionError(null);
     try {
@@ -177,7 +192,7 @@ export function InventoryOverviewList({
         adjustWarehouseId,
         Number(adjustQtyChange),
         Number(adjustHoldChange),
-        adjustReason,
+        effectiveReason,
         adjustNote.trim()
       );
       setActionSuccess("재고 조정 내역이 성공적으로 반영되었습니다.");
@@ -878,21 +893,42 @@ export function InventoryOverviewList({
                 </div>
               </div>
 
-              <div>
+              <div className="space-y-2">
                 <label className="block text-[11px] font-bold text-zinc-600 dark:text-zinc-400 mb-1">
                   조정 사유 (Reason) *
                 </label>
                 <select
                   value={adjustReason}
-                  onChange={(e) => setAdjustReason(e.target.value)}
-                  className="w-full rounded-lg border border-zinc-300 p-2 dark:border-zinc-700 dark:bg-zinc-800 dark:text-white"
+                  onChange={(e) => {
+                    setAdjustReason(e.target.value);
+                    if (e.target.value !== OTHER_INVENTORY_ADJUSTMENT_REASON) {
+                      setAdjustCustomReason("");
+                    }
+                  }}
+                  className="w-full rounded-lg border border-zinc-300 p-2 dark:border-zinc-700 dark:bg-zinc-800 dark:text-white font-medium"
                 >
-                  <option value="실물 재물조사 차이 조정">실물 재물조사 차이 조정 (Cycle Count Variance)</option>
-                  <option value="파손/불량 재고 전환">파손/불량 재고 전환 (Damaged Goods Hold)</option>
-                  <option value="샘플 출고 및 마케팅 사용">샘플 출고 및 마케팅 사용 (Sample/Marketing Out)</option>
-                  <option value="입고 검수 오류 수정">입고 검수 오류 수정 (Inbound Inspection Correction)</option>
-                  <option value="기타 재고 조정">기타 재고 조정 (Other Adjustment)</option>
+                  {INVENTORY_ADJUSTMENT_REASONS.map((r) => (
+                    <option key={r} value={r}>
+                      {r}
+                    </option>
+                  ))}
                 </select>
+
+                {adjustReason === OTHER_INVENTORY_ADJUSTMENT_REASON && (
+                  <div className="pt-1">
+                    <label className="block text-[10px] font-bold text-zinc-500 dark:text-zinc-400 mb-1">
+                      기타 상세 사유 직접 입력 (Custom Reason) *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="상세 사유를 구체적으로 입력해주세요."
+                      value={adjustCustomReason}
+                      onChange={(e) => setAdjustCustomReason(e.target.value)}
+                      className="w-full rounded-lg border border-zinc-300 p-2 dark:border-zinc-700 dark:bg-zinc-800 dark:text-white text-xs"
+                    />
+                  </div>
+                )}
               </div>
 
               <div>
