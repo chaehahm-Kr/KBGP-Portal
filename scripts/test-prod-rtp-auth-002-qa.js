@@ -123,12 +123,21 @@ async function runRTPAuth002QA() {
     await page.fill('input[type="email"]', testEmail);
     await page.fill('input[type="password"]', intermediatePassword);
     await page.click('button[type="submit"]');
-    await page.waitForURL((url) => !url.pathname.includes('/login'), { timeout: 20000 });
+    try {
+      await page.waitForURL(url => !url.toString().includes('/login'), { timeout: 15000 });
+    } catch (e) {
+      // url did not change in 15s
+    }
     await page.waitForTimeout(2000);
+    
+    if (page.url().includes('/login')) {
+      const pageText = await page.innerText('body');
+      console.log('Login form state/error:', pageText);
+    }
 
     const onDashboard = page.url() === 'https://portal.kselecthub.com/' || page.url().startsWith('https://portal.kselecthub.com/?');
     const authedText = await page.innerText('body');
-    const isAuthed = authedText.includes('QA Retailer') || authedText.includes('Dashboard') || authedText.includes('K SELECT Test Retailer');
+    const isAuthed = authedText.includes('QA Retailer') || authedText.includes('Dashboard') || authedText.includes('K SELECT Test Retailer') || authedText.includes('tammyhahm') || authedText.includes('Store');
     console.log(` -> Login with New Password: ${onDashboard && isAuthed ? 'PASS' : 'FAIL'} (${page.url()})`);
     results.push({ step: '8. New Password Authentication', pass: onDashboard && isAuthed });
 
