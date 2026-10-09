@@ -8,6 +8,12 @@ import {
   resolveRetailerSalesPolicy,
   type ResolvedRetailerSalesPolicy,
 } from "@/lib/product/retailer-policy";
+import {
+  evaluateHubVisibility,
+  type HubVisibilityEvaluation,
+  type EffectiveHubVisibility,
+  type OrderabilityStatus,
+} from "@/lib/product/hub-visibility";
 
 export interface RetailerProductSummary {
   id: string;
@@ -33,6 +39,12 @@ export interface RetailerProductSummary {
   maxDiscountPercent?: number;
   isPromoActive?: boolean;
   promoWholesalePrice?: number | null;
+  availableStock?: number;
+  isSoldOut?: boolean;
+  restockEta?: string | null;
+  orderabilityStatus?: OrderabilityStatus;
+  orderabilityLabel?: string;
+  orderabilityReason?: string;
 }
 
 export interface RetailerProductDetail extends RetailerProductSummary {
@@ -268,68 +280,51 @@ export async function getRetailerProducts(
     };
   }
 
-  // 2. Strict Product Framework filter:
-  // Must be COMPLETE (registration) + SELECTED (selection) + active (operational) + visible (hub visibility) + wholesalePrice > 0 + not deleted
-  const activeProducts = rawProducts.filter((p) => {
-    const info = (p.price_additional_info as any) || {};
-    if (info.deleted_at || (p as any).deleted_at) return false;
-    if (p.status === "discontinued") return false;
+  // 2. Fetch inventory balances across all products
+  const { data: allBalances } = await adminClient
+    .from("inventory_balances")
+    .select("product_id, qty_on_hand, qty_hold, qty_damaged");
 
-    // Isolate Draft technical placeholders
-    if (isDraftPlaceholderName(p.name) || isDraftPlaceholderSku(p.manufacture_sku)) return false;
-
-    // Must be officially SELECTED by K SELECT review
-    if (p.selection_status !== "SELECTED") return false;
-
-    // Must be actively operating (trading_status == 'active')
-    const tradingStatus = (p as any).trading_status || "inactive";
-    if (tradingStatus !== "active") return false;
-
-    // Must be explicitly visible to Retailer Hub (retailer_visibility == 'visible')
-    const retailerVisibility = (p as any).retailer_visibility || "hidden";
-    if (retailerVisibility !== "visible") return false;
-
-    const regEval = evaluateProductRegistrationStatus({
-      id: p.id,
-      name: p.name,
-      name_en: p.name_en,
-      brand_id: p.brand_id,
-      category_code: p.category_code,
-      manufacture_sku: p.manufacture_sku,
-      origin: p.origin,
-      price_krw_retail: p.price_krw_retail,
-      price_usd_fob: p.price_usd_fob,
-      item_width: (p as any).item_width,
-      item_depth: (p as any).item_depth,
-      item_height: (p as any).item_height,
-      item_weight: (p as any).item_weight,
-      package_width: p.package_width,
-      package_depth: p.package_depth,
-      package_height: p.package_height,
-      package_weight: p.package_weight,
-      carton_pack_qty: p.carton_pack_qty,
-      carton_width: (p as any).carton_width,
-      carton_depth: (p as any).carton_depth,
-      carton_height: (p as any).carton_height,
-      carton_weight: (p as any).carton_weight,
-      upc: (p as any).upc,
-      ean: (p as any).ean,
-      selling_online: (p as any).selling_online,
-      sales_link_1: (p as any).sales_link_1,
-      deleted_at: info.deleted_at || (p as any).deleted_at,
-      hasImages: Array.isArray(p.product_images) && p.product_images.length > 0,
-    });
-
-    if (regEval.status !== "COMPLETE") return false;
-
-    // Must have a valid wholesale price (> 0)
-    const { wholesalePrice } = resolveRetailerPrice(p);
-    if (wholesalePrice <= 0) return false;
-
-    return true;
+  const stockMap = new Map<string, number>();
+  (allBalances ?? []).forEach((b: any) => {
+    const onHand = Number(b.qty_on_hand || 0);
+    const hold = Number(b.qty_hold || 0);
+    const damaged = Number(b.qty_damaged || 0);
+    const avail = Math.max(0, onHand - hold - damaged);
+    stockMap.set(b.product_id, (stockMap.get(b.product_id) || 0) + avail);
   });
 
-  // 3. Process products and sign thumbnail URLs
+  // Fetch open inbound shipment ETAs
+  const { data: openShipments } = await adminClient
+    .from("inbound_shipment_lines")
+    .select(`
+      product_id,
+      inbound_shipments!inner(status, eta)
+    `)
+    .not("inbound_shipments.status", "in", '("CANCELLED", "COMPLETED")');
+
+  const restockEtaMap = new Map<string, string>();
+  (openShipments ?? []).forEach((sl: any) => {
+    const shipment = Array.isArray(sl.inbound_shipments) ? sl.inbound_shipments[0] : sl.inbound_shipments;
+    if (shipment?.eta) {
+      const existing = restockEtaMap.get(sl.product_id);
+      if (!existing || new Date(shipment.eta) < new Date(existing)) {
+        restockEtaMap.set(sl.product_id, shipment.eta);
+      }
+    }
+  });
+
+  // 3. Unified Hub Visibility filter:
+  // Must have Effective Hub Visibility == 'PUBLISHED'
+  // Out of stock (availableStock == 0) products REMAIN in the catalog with isSoldOut=true.
+  const activeProducts = rawProducts.filter((p) => {
+    const stock = stockMap.get(p.id) || 0;
+    const eta = restockEtaMap.get(p.id) || null;
+    const visEval = evaluateHubVisibility(p, stock, eta);
+    return visEval.effectiveVisibility === "PUBLISHED";
+  });
+
+  // 4. Process products and sign thumbnail URLs
   const brandMap = new Map<string, { id: string; name: string; count: number }>();
   const categoryMap = new Map<string, { code: string; label: string; count: number }>();
 
@@ -350,9 +345,14 @@ export async function getRetailerProducts(
         resolveEffectiveSku(overrides.manufacture_sku, p.manufacture_sku) ||
         "KS-PROD";
 
+      // Inventory & Visibility Evaluation
+      const stock = stockMap.get(p.id) || 0;
+      const restockEta = restockEtaMap.get(p.id) || null;
+      const visEval = evaluateHubVisibility(p, stock, restockEta);
+
       // Pricing & Sales Policy resolution
-      const salesPolicy = resolveRetailerSalesPolicy(p);
-      const { wholesalePrice: fallbackWholesale, msrp: fallbackMsrp, isPricingActive } = resolveRetailerPrice(p);
+      const salesPolicy = visEval.salesPolicy;
+      const { wholesalePrice: fallbackWholesale, msrp: fallbackMsrp } = resolveRetailerPrice(p);
 
       const isPromoActive = salesPolicy.hasActivePromo && salesPolicy.promoWholesalePrice !== null && salesPolicy.promoWholesalePrice > 0;
       const wholesalePrice = isPromoActive
@@ -360,8 +360,8 @@ export async function getRetailerProducts(
         : (salesPolicy.baseWholesalePrice > 0 ? salesPolicy.baseWholesalePrice : fallbackWholesale);
 
       const msrp = salesPolicy.srpPrice && salesPolicy.srpPrice > 0 ? salesPolicy.srpPrice : fallbackMsrp;
-      const moq = salesPolicy.moq > 0 ? salesPolicy.moq : (overrides.carton_pack_qty || p.carton_pack_qty || 1);
-      const isOrderable = wholesalePrice > 0 && isPricingActive && salesPolicy.isConfigured;
+      const moq = visEval.moq;
+      const isOrderable = visEval.isOrderable;
 
       const hasTiers = salesPolicy.publishedTiers.some((t) => t.discount_percent > 0);
       const maxDiscountPercent = Math.max(0, ...salesPolicy.publishedTiers.map((t) => t.discount_percent));
@@ -419,11 +419,19 @@ export async function getRetailerProducts(
         maxDiscountPercent,
         isPromoActive,
         promoWholesalePrice: salesPolicy.promoWholesalePrice,
+        availableStock: stock,
+        isSoldOut: visEval.isSoldOut,
+        restockEta: visEval.restockEta,
+        orderabilityStatus: visEval.orderabilityStatus,
+        orderabilityLabel: visEval.orderabilityLabel,
+        orderabilityReason: visEval.orderabilityReason,
       };
 
       return item;
     })
   );
+
+
 
   // 4. Apply search & filters
   let filtered = processedList;
@@ -584,57 +592,47 @@ export async function getRetailerProductDetail(
     p = queryData;
   }
 
-  const info = (p.price_additional_info as any) || {};
-  if (
-    info.deleted_at ||
-    (p as any).deleted_at ||
-    p.status === "discontinued" ||
-    p.selection_status !== "SELECTED" ||
-    ((p as any).trading_status || "inactive") !== "active" ||
-    ((p as any).retailer_visibility || "hidden") !== "visible"
-  ) {
-    return null;
-  }
+  // Query inventory balance for product
+  const { data: balances } = await adminClient
+    .from("inventory_balances")
+    .select("qty_on_hand, qty_hold, qty_damaged")
+    .eq("product_id", productId);
 
-  // Enforce Registration Status == COMPLETE
-  const regEval = evaluateProductRegistrationStatus({
-    id: p.id,
-    name: p.name,
-    name_en: p.name_en,
-    brand_id: p.brand_id,
-    category_code: p.category_code,
-    manufacture_sku: p.manufacture_sku,
-    origin: p.origin,
-    price_krw_retail: p.price_krw_retail,
-    price_usd_fob: p.price_usd_fob,
-    package_width: p.package_width,
-    package_depth: p.package_depth,
-    package_height: p.package_height,
-    package_weight: p.package_weight,
-    carton_pack_qty: p.carton_pack_qty,
-    upc: (p as any).upc,
-    ean: (p as any).ean,
-    deleted_at: info.deleted_at || (p as any).deleted_at,
-    hasImages: Array.isArray(p.product_images) && p.product_images.length > 0,
+  let totalAvailable = 0;
+  (balances ?? []).forEach((b: any) => {
+    const onHand = Number(b.qty_on_hand || 0);
+    const hold = Number(b.qty_hold || 0);
+    const damaged = Number(b.qty_damaged || 0);
+    totalAvailable += Math.max(0, onHand - hold - damaged);
   });
 
-  if (regEval.status !== "COMPLETE") {
+  // Query open shipment ETAs
+  const { data: openShipments } = await adminClient
+    .from("inbound_shipment_lines")
+    .select(`
+      product_id,
+      inbound_shipments!inner(status, eta)
+    `)
+    .eq("product_id", productId)
+    .not("inbound_shipments.status", "in", '("CANCELLED", "COMPLETED")');
+
+  let restockEta: string | null = null;
+  (openShipments ?? []).forEach((sl: any) => {
+    const shipment = Array.isArray(sl.inbound_shipments) ? sl.inbound_shipments[0] : sl.inbound_shipments;
+    if (shipment?.eta) {
+      if (!restockEta || new Date(shipment.eta) < new Date(restockEta)) {
+        restockEta = shipment.eta;
+      }
+    }
+  });
+
+  const visEval = evaluateHubVisibility(p, totalAvailable, restockEta);
+
+  if (visEval.effectiveVisibility !== "PUBLISHED") {
     return null;
   }
 
-  // Authoritative wholesale price & sales policy resolution
-  const salesPolicy = resolveRetailerSalesPolicy(p);
-  const { wholesalePrice: fallbackWholesale, msrp: fallbackMsrp, isPricingActive } = resolveRetailerPrice(p);
-
-  const isPromoActive = salesPolicy.hasActivePromo && salesPolicy.promoWholesalePrice !== null && salesPolicy.promoWholesalePrice > 0;
-  const wholesalePrice = isPromoActive
-    ? salesPolicy.promoWholesalePrice!
-    : (salesPolicy.baseWholesalePrice > 0 ? salesPolicy.baseWholesalePrice : fallbackWholesale);
-
-  if (wholesalePrice <= 0) {
-    return null;
-  }
-
+  const info = (p.price_additional_info as any) || {};
   const overrides = info.admin_overrides || {};
   const brand = (p.brands as any) || {};
   const brandId = p.brand_id || brand.id || "unassigned";
@@ -647,7 +645,13 @@ export async function getRetailerProductDetail(
     resolveEffectiveSku(overrides.manufacture_sku, p.manufacture_sku) ||
     "KS-PROD";
 
-  const isOrderable = wholesalePrice > 0 && isPricingActive && salesPolicy.isConfigured;
+  const salesPolicy = visEval.salesPolicy;
+  const { wholesalePrice: fallbackWholesale, msrp: fallbackMsrp } = resolveRetailerPrice(p);
+
+  const isPromoActive = salesPolicy.hasActivePromo && salesPolicy.promoWholesalePrice !== null && salesPolicy.promoWholesalePrice > 0;
+  const wholesalePrice = isPromoActive
+    ? salesPolicy.promoWholesalePrice!
+    : (salesPolicy.baseWholesalePrice > 0 ? salesPolicy.baseWholesalePrice : fallbackWholesale);
 
   const msrp = salesPolicy.srpPrice && salesPolicy.srpPrice > 0 ? salesPolicy.srpPrice : fallbackMsrp;
   const hasTiers = salesPolicy.publishedTiers.some((t) => t.discount_percent > 0);
@@ -690,7 +694,7 @@ export async function getRetailerProductDetail(
     bulletPoints = p.bullet_points.filter(Boolean);
   }
 
-  const moq = salesPolicy.moq > 0 ? salesPolicy.moq : (overrides.carton_pack_qty || p.carton_pack_qty || 1);
+  const moq = visEval.moq;
 
   return {
     id: p.id,
@@ -706,7 +710,7 @@ export async function getRetailerProductDetail(
     msrp,
     marginPercent,
     moq,
-    isOrderable,
+    isOrderable: visEval.isOrderable,
     thumbnailUrl: images.length > 0 ? images[0].url : null,
     origin: overrides.origin || p.origin || "Republic of Korea",
     volume: overrides.volume || p.volume || null,
@@ -728,5 +732,11 @@ export async function getRetailerProductDetail(
     maxDiscountPercent,
     isPromoActive,
     promoWholesalePrice: salesPolicy.promoWholesalePrice,
+    availableStock: totalAvailable,
+    isSoldOut: visEval.isSoldOut,
+    restockEta: visEval.restockEta,
+    orderabilityStatus: visEval.orderabilityStatus,
+    orderabilityLabel: visEval.orderabilityLabel,
+    orderabilityReason: visEval.orderabilityReason,
   };
 }

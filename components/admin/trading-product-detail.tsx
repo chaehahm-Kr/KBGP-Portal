@@ -22,6 +22,7 @@ import {
 } from "@/lib/product/registration-status";
 import { safeFormatUsd, safeFormatPercent } from "@/lib/product/pricing-resolver";
 import { type ResolvedRetailerSalesPolicy, resolveRetailerSalesPolicy } from "@/lib/product/retailer-policy";
+import { evaluateHubVisibility, type HubVisibilityEvaluation } from "@/lib/product/hub-visibility";
 import { RetailerSalesPolicyCard } from "@/components/admin/retailer-sales-policy-card";
 import { useRouter } from "next/navigation";
 
@@ -116,6 +117,17 @@ interface ResolvedTradingProduct {
     reason: string | null;
   };
   salesPolicy?: ResolvedRetailerSalesPolicy;
+
+  hubVisibility?: HubVisibilityEvaluation;
+  effectiveHubVisibility?: string;
+  effectiveHubVisibilityLabel?: string;
+  effectiveHubVisibilityDescription?: string;
+  holdReasons?: string[];
+  holdReasonLabels?: string[];
+  isSoldOut?: boolean;
+  orderabilityStatus?: string;
+  orderabilityLabel?: string;
+  orderabilityReason?: string;
 }
 
 interface InventoryBalanceItem {
@@ -959,6 +971,22 @@ export function TradingProductDetail({
     return list;
   }, [pricingTimeline, pricingFilterType, pricingFilterDays]);
 
+  // Live Authoritative Hub Visibility Memo
+  const liveHubVisibility = useMemo(() => {
+    return evaluateHubVisibility(
+      {
+        ...product,
+        trading_status: currentTradingStatus,
+        retailer_visibility: currentVisibility,
+        trading_wholesale_price: product.operationalWholesale,
+        moq: product.moq,
+        carton_pack_qty: product.carton_pack_qty,
+      },
+      totalAvailable,
+      inboundSummary?.nextEta || null
+    );
+  }, [product, currentTradingStatus, currentVisibility, totalAvailable, inboundSummary]);
+
   // Dynamic Orderability Memo
   const dynamicOrderability = useMemo(() => {
     return evaluateTradingOrderability({
@@ -983,7 +1011,19 @@ export function TradingProductDetail({
       actionLabel?: string;
     }> = [];
 
-    // 0. Registration status (등록 미완료)
+    // 0. Hub On Hold Alert (노출 보류 자동 감지)
+    if (liveHubVisibility.effectiveVisibility === "ON_HOLD") {
+      alerts.push({
+        id: "hub_on_hold",
+        type: "danger",
+        title: "Retailer Hub 노출 보류 (On Hold)",
+        message: `관리자 설정은 '노출'이나, 필수 조건(${liveHubVisibility.holdReasonLabels.join(", ")}) 미충족으로 Hub 노출이 자동 보류 중입니다. 가격/MOQ 설정 시 즉시 자동 노출됩니다.`,
+        target: "pricing_modal",
+        actionLabel: "가격/정책 설정 →",
+      });
+    }
+
+    // 0.1 Registration status (등록 미완료)
     if (product.registration_status && product.registration_status !== "COMPLETE") {
       const missingList = product.registration_missing_fields && product.registration_missing_fields.length > 0
         ? ` (누락: ${product.registration_missing_fields.join(", ")})`
@@ -1397,7 +1437,7 @@ export function TradingProductDetail({
                 );
               })()}
 
-              {/* Pillar 2: Hub Visibility */}
+              {/* Pillar 2: Admin Visibility Setting */}
               {(() => {
                 const vStyle =
                   RETAILER_VISIBILITY_STYLES[currentVisibility as RetailerVisibility] ||
@@ -1406,22 +1446,49 @@ export function TradingProductDetail({
                   <span
                     className={`px-2.5 py-1 text-xs font-semibold rounded-full border ${vStyle.bg} ${vStyle.text} ${vStyle.border}`}
                   >
-                    Hub {RETAILER_VISIBILITY_LABELS[currentVisibility as RetailerVisibility] || currentVisibility}
+                    관리자: {RETAILER_VISIBILITY_LABELS[currentVisibility as RetailerVisibility] || currentVisibility}
                   </span>
                 );
               })()}
 
-              {/* Pillar 3: Dynamic Orderability Badge */}
-              {dynamicOrderability.isOrderable ? (
+              {/* Pillar 3: Effective Hub Visibility */}
+              {liveHubVisibility.effectiveVisibility === "PUBLISHED" ? (
+                <span className="px-2.5 py-1 text-xs font-semibold rounded-full border bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/20 dark:text-emerald-400 dark:border-emerald-900/50">
+                  Hub 노출 (Published)
+                </span>
+              ) : liveHubVisibility.effectiveVisibility === "ON_HOLD" ? (
+                <button
+                  type="button"
+                  onClick={() => setIsPricingModalOpen(true)}
+                  className="px-2.5 py-1 text-xs font-semibold rounded-full border bg-amber-50 text-amber-800 border-amber-300 dark:bg-amber-950/30 dark:text-amber-300 dark:border-amber-800 hover:bg-amber-100 cursor-pointer shadow-2xs"
+                  title={liveHubVisibility.effectiveVisibilityDescription}
+                >
+                  ⚠️ Hub 노출 보류 (On Hold)
+                </button>
+              ) : (
+                <span className="px-2.5 py-1 text-xs font-semibold rounded-full border bg-zinc-100 text-zinc-500 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:border-zinc-700">
+                  Hub 비노출 (Hidden)
+                </span>
+              )}
+
+              {/* Pillar 4: Orderability Status Badge */}
+              {liveHubVisibility.isOrderable ? (
                 <span className="px-2.5 py-1 text-xs font-semibold rounded-full border bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/20 dark:text-emerald-400 dark:border-emerald-900/50">
                   주문 가능 (Orderable)
                 </span>
+              ) : liveHubVisibility.isSoldOut && liveHubVisibility.effectiveVisibility === "PUBLISHED" ? (
+                <span
+                  title={liveHubVisibility.restockEta ? `재입고 예정: ${liveHubVisibility.restockEta}` : "재입고 일정 미정"}
+                  className="px-2.5 py-1 text-xs font-semibold rounded-full border bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/20 dark:text-amber-400 dark:border-amber-800"
+                >
+                  품절 (0 EA)
+                </span>
               ) : (
                 <span
-                  title={dynamicOrderability.reason || "주문 불가"}
+                  title={liveHubVisibility.orderabilityReason || "주문 불가"}
                   className="px-2.5 py-1 text-xs font-semibold rounded-full border bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/20 dark:text-rose-400 dark:border-rose-900/50"
                 >
-                  주문 불가 ({dynamicOrderability.reason || "Not Orderable"})
+                  주문 불가
                 </span>
               )}
             </div>
@@ -1508,17 +1575,7 @@ export function TradingProductDetail({
         )}
       </div>
 
-      {/* 2.5 RETAILER SALES POLICY CARD */}
-      <RetailerSalesPolicyCard
-        productId={product.id}
-        productName={product.name}
-        cartonPackQty={product.carton_pack_qty || 1}
-        salesPolicy={product.salesPolicy || resolveRetailerSalesPolicy(product)}
-        srpPrice={product.srpPrice}
-        mapPrice={product.mapPrice}
-      />
-
-      {/* 3. MAIN OPERATIONAL BODY (LEFT: INVENTORY MANAGEMENT 55% / RIGHT: COMMERCIAL PRICING & COST 45%) */}
+      {/* 3. REAL-TIME SUMMARY AREA (INVENTORY 7 COLS / PRICING & LANDED COST 5 COLS) */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
         
         {/* LEFT COLUMN: 재고 관리 & 로케이션 분할 & 입고 스냅샷 (7 Cols) */}
@@ -1947,7 +2004,17 @@ export function TradingProductDetail({
 
       </div>
 
-      {/* 4. FULL-WIDTH TAB CONTAINER */}
+      {/* 4. RETAILER SALES POLICY CARD */}
+      <RetailerSalesPolicyCard
+        productId={product.id}
+        productName={product.name}
+        cartonPackQty={product.carton_pack_qty || 1}
+        salesPolicy={product.salesPolicy || resolveRetailerSalesPolicy(product)}
+        srpPrice={product.srpPrice}
+        mapPrice={product.mapPrice}
+      />
+
+      {/* 5. FULL-WIDTH TAB CONTAINER */}
       <div className="rounded-xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900 overflow-hidden">
         
         {/* Full-Width Tab Header Strip - Enhanced Contrast & Accessibility */}

@@ -6,6 +6,7 @@ import { TradingProductsList, type TradingProductItem } from "@/components/admin
 import { resolveEffectiveSku } from "@/lib/product/types";
 import { resolveProductPricing } from "@/lib/product/pricing-resolver";
 import { evaluateTradingOrderability, evaluateProductRegistrationStatus } from "@/lib/product/registration-status";
+import { evaluateHubVisibility } from "@/lib/product/hub-visibility";
 
 export const metadata: Metadata = {
   title: "거래 대상 제품 관리 (Trading Products) | K SELECT NETWORK 어드민",
@@ -142,6 +143,8 @@ export default async function AdminTradingProductsPage() {
         hasImages: !!photoUrl,
       });
 
+      const hubVis = evaluateHubVisibility(p, totalAvailable);
+
       const orderability = evaluateTradingOrderability({
         registrationStatus: regEval.status,
         selectionStatus: p.selection_status,
@@ -192,6 +195,16 @@ export default async function AdminTradingProductsPage() {
         sales_status: p.sales_status || "PREPARING",
         trading_status: tradingStatus,
         retailer_visibility: retailerVisibility,
+        effective_visibility: hubVis.effectiveVisibility,
+        effective_visibility_label: hubVis.effectiveVisibilityLabel,
+        effective_visibility_description: hubVis.effectiveVisibilityDescription,
+        hold_reasons: hubVis.holdReasons,
+        hold_reason_labels: hubVis.holdReasonLabels,
+        orderability_status: hubVis.orderabilityStatus,
+        orderability_label: hubVis.orderabilityLabel,
+        orderability_reason: hubVis.orderabilityReason,
+        is_sold_out: hubVis.isSoldOut,
+        moq: hubVis.moq,
         category_code: p.category_code || null,
         category_full_path: p.category_code ? getCategoryFullPath(p.category_code) : null,
         wholesalePrice: pricing.wholesalePrice,
@@ -207,7 +220,7 @@ export default async function AdminTradingProductsPage() {
         qty_damaged: totalDamaged,
         qty_available: totalAvailable,
         warnings,
-        isOrderable: orderability.isOrderable,
+        isOrderable: hubVis.isOrderable,
         orderabilityReasons: orderability.reasons,
         orderabilityPrimaryReason: orderability.reason,
         missingFields: regEval.missingFields || [],

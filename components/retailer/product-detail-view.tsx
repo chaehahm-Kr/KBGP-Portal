@@ -151,11 +151,16 @@ export function RetailerProductDetailView({ product }: ProductDetailViewProps) {
               </div>
             )}
 
-            {/* Category Tag Overlay */}
+            {/* Category & Status Tag Overlay */}
             <div className="absolute top-4 left-4 flex flex-col gap-1.5 items-start">
               <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-white/90 dark:bg-zinc-900/90 text-zinc-800 dark:text-zinc-200 backdrop-blur-md shadow-xs border border-zinc-200/60 dark:border-zinc-700/60">
                 {product.categoryLabel}
               </span>
+              {product.isSoldOut && (
+                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-rose-600 text-white shadow-xs">
+                  품절 (Out of Stock)
+                </span>
+              )}
               {policy.hasActivePromo && (
                 <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-500 text-white shadow-xs">
                   🔥 Active Promotion
@@ -385,7 +390,37 @@ export function RetailerProductDetailView({ product }: ProductDetailViewProps) {
             )}
 
             {/* Ordering Controls & Add to Cart */}
-            {product.isOrderable && product.wholesalePrice > 0 ? (
+            {product.isSoldOut ? (
+              <div className="pt-2 space-y-4">
+                <div className="p-4 sm:p-5 rounded-2xl bg-rose-50/80 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/60 space-y-3">
+                  <div className="flex items-center gap-2 text-rose-800 dark:text-rose-300 font-bold text-sm">
+                    <span className="text-base">🚨</span>
+                    <span>현재 가용 재고가 소진되어 품절(Out of Stock) 상태입니다.</span>
+                  </div>
+                  <div className="p-3 rounded-xl bg-white/80 dark:bg-zinc-900/80 border border-rose-100 dark:border-rose-950 text-xs text-zinc-700 dark:text-zinc-300 space-y-1">
+                    <div className="font-semibold text-zinc-900 dark:text-white">재입고 안내 (Restock Information):</div>
+                    <div>
+                      {product.restockEta ? (
+                        <span className="text-emerald-700 dark:text-emerald-400 font-bold">
+                          입고 예정일: {new Date(product.restockEta).toLocaleDateString("ko-KR", { year: "numeric", month: "long", day: "numeric" })} ({product.restockEta})
+                        </span>
+                      ) : (
+                        <span className="text-zinc-500 dark:text-zinc-400 font-medium">
+                          재입고 일정을 확인 중입니다. (재입고 일정 미정)
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    disabled
+                    className="w-full py-3.5 px-6 rounded-xl font-bold text-sm bg-zinc-200 dark:bg-zinc-800 text-zinc-400 dark:text-zinc-500 cursor-not-allowed text-center"
+                  >
+                    품절 (Out of Stock — 주문 불가)
+                  </button>
+                </div>
+              </div>
+            ) : product.isOrderable && product.wholesalePrice > 0 ? (
               <div className="pt-2 space-y-4">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl bg-white dark:bg-zinc-900/90 border border-zinc-200 dark:border-zinc-800">
                   <div>

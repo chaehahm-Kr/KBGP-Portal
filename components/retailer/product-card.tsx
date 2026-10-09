@@ -44,11 +44,16 @@ export function RetailerProductCard({ product }: ProductCardProps) {
           </div>
         )}
 
-        {/* Category Tag Overlay */}
+        {/* Category & Status Tag Overlay */}
         <div className="absolute top-3 left-3 flex flex-col gap-1 items-start">
           <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-white/90 dark:bg-zinc-900/90 text-zinc-700 dark:text-zinc-300 backdrop-blur-md shadow-xs border border-zinc-200/50 dark:border-zinc-700/50">
             {product.categoryLabel}
           </span>
+          {product.isSoldOut && (
+            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold bg-rose-600 text-white shadow-xs">
+              품절 (Out of Stock)
+            </span>
+          )}
           {product.isPromoActive && (
             <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold bg-amber-500 text-white shadow-xs">
               🔥 Promo

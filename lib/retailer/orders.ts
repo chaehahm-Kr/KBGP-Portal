@@ -9,6 +9,7 @@ import {
   calculateApplicablePrice,
   isValidMoqOrderQuantity,
 } from "@/lib/product/retailer-policy";
+import { evaluateHubVisibility } from "@/lib/product/hub-visibility";
 import { evaluateProductRegistrationStatus } from "@/lib/product/registration-status";
 import { getRetailerPaymentEligibility, getOrderPayments } from "@/lib/retailer/payment-actions";
 import { RetailerPaymentMethod, RetailerPaymentRecord } from "@/lib/retailer/payment-types";
@@ -389,6 +390,21 @@ export async function submitRetailerOrder(
 
     const dbProductMap = new Map(dbProducts.map((p) => [p.id, p]));
 
+    // Fetch stock balances for ordered items
+    const { data: orderBalances } = await adminClient
+      .from("inventory_balances")
+      .select("product_id, qty_on_hand, qty_hold, qty_damaged")
+      .in("product_id", productIds);
+
+    const stockByProd = new Map<string, number>();
+    (orderBalances ?? []).forEach((b: any) => {
+      const onHand = Number(b.qty_on_hand || 0);
+      const hold = Number(b.qty_hold || 0);
+      const damaged = Number(b.qty_damaged || 0);
+      const avail = Math.max(0, onHand - hold - damaged);
+      stockByProd.set(b.product_id, (stockByProd.get(b.product_id) || 0) + avail);
+    });
+
     // 5. Validate Quantities and Calculate Authoritative Server Snapshots
     let subtotalAmount = 0;
     let totalItemsCount = 0;
@@ -410,46 +426,31 @@ export async function submitRetailerOrder(
         return { success: false, error: `Product not found: ${item.productId}` };
       }
 
-      const info = (prod.price_additional_info as any) || {};
-      if (
-        info.deleted_at ||
-        (prod as any).deleted_at ||
-        prod.status === "discontinued" ||
-        (prod as any).selection_status !== "SELECTED" ||
-        ((prod as any).trading_status || "inactive") !== "active" ||
-        ((prod as any).retailer_visibility || "hidden") !== "visible"
-      ) {
-        return { success: false, error: `Product "${prod.name}" is not currently available for ordering.` };
-      }
+      const availableStock = stockByProd.get(item.productId) || 0;
+      const visEval = evaluateHubVisibility(prod, availableStock);
 
-      const regEval = evaluateProductRegistrationStatus({
-        id: prod.id,
-        name: prod.name,
-        name_en: prod.name_en,
-        brand_id: prod.brand_id,
-        category_code: (prod as any).category_code,
-        manufacture_sku: prod.manufacture_sku,
-        origin: (prod as any).origin,
-        price_krw_retail: (prod as any).price_krw_retail,
-        price_usd_fob: prod.price_usd_fob,
-        package_width: (prod as any).package_width,
-        package_depth: (prod as any).package_depth,
-        package_height: (prod as any).package_height,
-        package_weight: (prod as any).package_weight,
-        carton_pack_qty: prod.carton_pack_qty,
-        upc: (prod as any).upc,
-        ean: (prod as any).ean,
-        deleted_at: info.deleted_at || (prod as any).deleted_at,
-        hasImages: Array.isArray((prod as any).product_images) && (prod as any).product_images.length > 0,
-      });
-
-      if (regEval.status !== "COMPLETE") {
+      if (visEval.effectiveVisibility !== "PUBLISHED") {
         return {
           success: false,
-          error: `Product "${prod.name}" registration is incomplete and cannot be ordered.`,
+          error: `Product "${prod.name}" is currently not available for ordering (${visEval.effectiveVisibilityLabel}: ${visEval.holdReasonLabels.join(", ") || "비노출"}).`,
         };
       }
 
+      if (visEval.isSoldOut || !visEval.isOrderable) {
+        return {
+          success: false,
+          error: `Product "${prod.name}" is out of stock or cannot be ordered (${visEval.orderabilityReason || "품절"}).`,
+        };
+      }
+
+      if (item.quantity > availableStock) {
+        return {
+          success: false,
+          error: `Requested quantity (${item.quantity} units) exceeds available stock (${availableStock} units) for product "${prod.name}".`,
+        };
+      }
+
+      const info = (prod.price_additional_info as any) || {};
       const overrides = info.admin_overrides || {};
       const brand = (prod.brands as any) || {};
       const brandName = brand.name || "K SELECT Brand";

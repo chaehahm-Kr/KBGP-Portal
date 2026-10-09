@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useTransition } from "react";
+import React, { useState, useEffect, useTransition, useMemo } from "react";
 import Link from "next/link";
 import { updateTradingStatusAndVisibility } from "@/lib/product/trading-actions";
 import { type MissingFieldItem } from "@/lib/product/registration-status";
@@ -45,6 +45,19 @@ export interface TradingProductItem {
   orderabilityPrimaryReason?: string | null;
   missingFields?: string[];
   missingFieldItems?: MissingFieldItem[];
+  effective_visibility?: "PUBLISHED" | "ON_HOLD" | "HIDDEN";
+  effective_visibility_label?: string;
+  effective_visibility_description?: string;
+  hold_reasons?: string[];
+  hold_reason_labels?: string[];
+  holdReasons?: string[];
+  holdReasonLabels?: string[];
+  orderability_status?: "ORDERABLE" | "OUT_OF_STOCK" | "INSUFFICIENT_STOCK" | "NOT_ORDERABLE";
+  orderability_label?: string;
+  orderability_reason?: string;
+  is_sold_out?: boolean;
+  restock_eta?: string | null;
+  moq?: number;
 }
 
 interface TradingProductsListProps {
@@ -104,6 +117,9 @@ export function TradingProductsList({ initialProducts }: TradingProductsListProp
   // Orderability Detail Modal state
   const [orderabilityModalProduct, setOrderabilityModalProduct] = useState<TradingProductItem | null>(null);
 
+  // Hold Detail Modal state
+  const [holdDetailModalProduct, setHoldDetailModalProduct] = useState<TradingProductItem | null>(null);
+
   const handleQuickFilterClick = (filterId: string) => {
     if (filterId === "all") {
       setQuickFilter("all");
@@ -115,6 +131,37 @@ export function TradingProductsList({ initialProducts }: TradingProductsListProp
   useEffect(() => {
     setProducts(initialProducts);
   }, [initialProducts]);
+
+  // Aggregate Summary Stats
+  const summaryStats = useMemo(() => {
+    const total = products.length;
+    const adminVisible = products.filter((p) => p.retailer_visibility === "visible").length;
+    const adminHidden = products.filter((p) => p.retailer_visibility === "hidden").length;
+
+    const hubPublished = products.filter((p) => p.effective_visibility === "PUBLISHED").length;
+    const hubOnHold = products.filter((p) => p.effective_visibility === "ON_HOLD").length;
+    const hubHidden = products.filter(
+      (p) => p.effective_visibility === "HIDDEN" || p.retailer_visibility === "hidden"
+    ).length;
+
+    const orderable = products.filter((p) => p.isOrderable).length;
+    const outOfStock = products.filter(
+      (p) => p.is_sold_out && p.effective_visibility === "PUBLISHED"
+    ).length;
+    const notOrderable = products.filter((p) => !p.isOrderable && !p.is_sold_out).length;
+
+    return {
+      total,
+      adminVisible,
+      adminHidden,
+      hubPublished,
+      hubOnHold,
+      hubHidden,
+      orderable,
+      outOfStock,
+      notOrderable,
+    };
+  }, [products]);
 
   // Extract unique filter options from initialProducts
   const uniqueCategories = Array.from(new Set(initialProducts.map((p) => p.category))).filter(Boolean);
@@ -162,7 +209,10 @@ export function TradingProductsList({ initialProducts }: TradingProductsListProp
 
     // Quick Filter Chips
     let matchesQuick = true;
-    if (quickFilter === "in_stock") matchesQuick = p.qty_available > 0;
+    if (quickFilter === "hub_published") matchesQuick = p.effective_visibility === "PUBLISHED";
+    else if (quickFilter === "hub_on_hold") matchesQuick = p.effective_visibility === "ON_HOLD";
+    else if (quickFilter === "hub_hidden") matchesQuick = p.effective_visibility === "HIDDEN" || p.retailer_visibility === "hidden";
+    else if (quickFilter === "in_stock") matchesQuick = p.qty_available > 0;
     else if (quickFilter === "out_of_stock") matchesQuick = p.qty_available <= 0;
     else if (quickFilter === "hidden") matchesQuick = p.retailer_visibility === "hidden";
     else if (quickFilter === "historical") matchesQuick = p.trading_status === "historical";
@@ -329,6 +379,56 @@ export function TradingProductsList({ initialProducts }: TradingProductsListProp
         </div>
       )}
 
+      {/* 0. Summary Stat Metrics Bar */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="rounded-xl border border-zinc-200 bg-white p-3.5 shadow-2xs dark:border-zinc-800 dark:bg-zinc-900">
+          <div className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">전체 관리 대상</div>
+          <div className="text-xl font-extrabold text-zinc-900 dark:text-white mt-1">
+            {summaryStats.total} <span className="text-xs font-medium text-zinc-400">개 품목</span>
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-zinc-200 bg-white p-3.5 shadow-2xs dark:border-zinc-800 dark:bg-zinc-900">
+          <div className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">관리자 노출 설정</div>
+          <div className="text-base font-bold text-zinc-800 dark:text-zinc-200 mt-1 flex items-baseline gap-2">
+            <span className="text-emerald-600 dark:text-emerald-400 font-extrabold text-lg">{summaryStats.adminVisible}</span>
+            <span className="text-xs text-zinc-400">노출 / 비노출 {summaryStats.adminHidden}</span>
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-zinc-200 bg-white p-3.5 shadow-2xs dark:border-zinc-800 dark:bg-zinc-900">
+          <div className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">실제 Hub 노출 현황</div>
+          <div className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 mt-1.5 flex items-center gap-1.5 flex-wrap">
+            <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300">
+              노출 {summaryStats.hubPublished}
+            </span>
+            <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-bold bg-amber-50 text-amber-800 border border-amber-300 dark:bg-amber-950/40 dark:text-amber-300">
+              보류 {summaryStats.hubOnHold}
+            </span>
+            <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-medium bg-zinc-100 text-zinc-500 border border-zinc-200 dark:bg-zinc-800 dark:text-zinc-400">
+              비노출 {summaryStats.hubHidden}
+            </span>
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-zinc-200 bg-white p-3.5 shadow-2xs dark:border-zinc-800 dark:bg-zinc-900">
+          <div className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">주문 가능 상태</div>
+          <div className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 mt-1.5 flex items-center gap-1.5 flex-wrap">
+            <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300">
+              주문 가능 {summaryStats.orderable}
+            </span>
+            <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-bold bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-950/40 dark:text-amber-400">
+              품절 {summaryStats.outOfStock}
+            </span>
+            {summaryStats.notOrderable > 0 && (
+              <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-semibold bg-rose-50 text-rose-700 border border-rose-200 dark:bg-rose-950/40 dark:text-rose-400">
+                주문 불가 {summaryStats.notOrderable}
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+
       {/* Search and Filters Panel */}
       <div className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 space-y-4">
         {/* Primary Row: Search & Dropdown Filters */}
@@ -436,19 +536,19 @@ export function TradingProductsList({ initialProducts }: TradingProductsListProp
           <div className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase">운영 퀵 필터 (Quick Filter)</div>
           <div className="flex flex-wrap gap-1.5 items-center">
             {[
-              { id: "all", label: "전체" },
-              { id: "in_stock", label: "입고/재고 있음" },
-              { id: "out_of_stock", label: "품절 (OOS)" },
-              { id: "hidden", label: "비노출" },
-              { id: "historical", label: "운영 종료" },
+              { id: "all", label: `전체 (${summaryStats.total})` },
+              { id: "hub_published", label: `Hub 노출 (${summaryStats.hubPublished})` },
+              { id: "hub_on_hold", label: `⚠️ Hub 노출 보류 (${summaryStats.hubOnHold})` },
+              { id: "hub_hidden", label: `Hub 비노출 (${summaryStats.hubHidden})` },
+              { id: "in_stock", label: "가용재고 있음" },
+              { id: "out_of_stock", label: "품절 (0 EA)" },
               { id: "low_stock", label: "재고 부족 (≤5)" },
               { id: "missing_wholesale", label: "⚠️ 도매가 미입력" },
               { id: "missing_retail", label: "⚠️ 소비자가 미입력" },
               { id: "margin_warning", label: "🚨 마진 경고 (<40%)" },
-              { id: "visible_not_orderable", label: "🚨 노출 중이나 주문 불가" },
             ].map((chip) => {
               const isSelected = quickFilter === chip.id;
-              const isProblemChip = chip.id.includes("missing") || chip.id.includes("warning") || chip.id.includes("visible");
+              const isProblemChip = chip.id.includes("missing") || chip.id.includes("warning") || chip.id.includes("hold");
               return (
                 <button
                   key={chip.id}
@@ -459,10 +559,10 @@ export function TradingProductsList({ initialProducts }: TradingProductsListProp
                   className={`px-3 py-1 rounded-full text-[11px] font-semibold transition-all cursor-pointer border flex items-center gap-1 ${
                     isSelected
                       ? isProblemChip
-                        ? "bg-rose-600 text-white border-rose-600 dark:bg-rose-600 dark:border-rose-600 shadow-xs"
+                        ? "bg-amber-600 text-white border-amber-600 dark:bg-amber-600 dark:border-amber-600 shadow-xs"
                         : "bg-zinc-900 text-white border-zinc-900 dark:bg-white dark:text-zinc-900 dark:border-white shadow-xs"
                       : isProblemChip
-                      ? "bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100 dark:bg-rose-950/30 dark:text-rose-400 dark:border-rose-900/50"
+                      ? "bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100 dark:bg-amber-950/30 dark:text-amber-400 dark:border-amber-900/50"
                       : "bg-zinc-100 text-zinc-650 border-zinc-200 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:border-zinc-700"
                   }`}
                 >
@@ -597,7 +697,9 @@ export function TradingProductsList({ initialProducts }: TradingProductsListProp
                   </div>
                 </th>
                 <th className="px-4 py-3.5 whitespace-nowrap text-center">운영 상태</th>
-                <th className="px-4 py-3.5 whitespace-nowrap text-center">노출 상태</th>
+                <th className="px-4 py-3.5 whitespace-nowrap text-center">관리자 설정</th>
+                <th className="px-4 py-3.5 whitespace-nowrap text-center">실제 Hub 상태</th>
+                <th className="px-4 py-3.5 whitespace-nowrap text-center">주문 가능 상태</th>
                 <th className="px-4 py-3.5 whitespace-nowrap text-right">관리</th>
               </tr>
             </thead>
@@ -830,7 +932,7 @@ export function TradingProductsList({ initialProducts }: TradingProductsListProp
                       </select>
                     </td>
 
-                    {/* 12. Visibility Status Inline Select */}
+                    {/* 12. Admin Visibility Setting Inline Select */}
                     <td className="px-4 py-3 align-middle text-center whitespace-nowrap">
                       <select
                         value={product.retailer_visibility}
@@ -847,7 +949,59 @@ export function TradingProductsList({ initialProducts }: TradingProductsListProp
                       </select>
                     </td>
 
-                    {/* 13. Action CTA */}
+                    {/* 13. Effective Hub Status Badge */}
+                    <td className="px-4 py-3 align-middle text-center whitespace-nowrap">
+                      {product.effective_visibility === "PUBLISHED" ? (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800">
+                          Hub 노출
+                        </span>
+                      ) : product.effective_visibility === "ON_HOLD" ? (
+                        <button
+                          type="button"
+                          onClick={() => setHoldDetailModalProduct(product)}
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-300 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800 hover:bg-amber-100 dark:hover:bg-amber-900/50 cursor-pointer shadow-2xs transition-colors"
+                          title="노출 보류 사유 확인 및 원클릭 해결"
+                        >
+                          <span>⚠️ Hub 노출 보류</span>
+                          <span className="text-[9px] bg-amber-200 dark:bg-amber-900 text-amber-800 dark:text-amber-200 px-1 rounded-full">
+                            {product.holdReasons?.length || 1}
+                          </span>
+                        </button>
+                      ) : (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-zinc-100 text-zinc-500 border border-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:border-zinc-700">
+                          Hub 비노출
+                        </span>
+                      )}
+                    </td>
+
+                    {/* 14. Orderability Status Badge */}
+                    <td className="px-4 py-3 align-middle text-center whitespace-nowrap">
+                      {product.isOrderable ? (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800">
+                          주문 가능
+                        </span>
+                      ) : product.is_sold_out && product.effective_visibility === "PUBLISHED" ? (
+                        <span
+                          className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-800"
+                          title={product.restock_eta ? `재입고 예정: ${product.restock_eta}` : "재입고 일정 미정"}
+                        >
+                          품절 (0 EA)
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setOrderabilityModalProduct(product)}
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-900 hover:bg-rose-100 cursor-pointer"
+                        >
+                          <span>주문 불가</span>
+                          <span className="text-[9px] underline">
+                            {product.orderabilityPrimaryReason || "사유"}
+                          </span>
+                        </button>
+                      )}
+                    </td>
+
+                    {/* 15. Action CTA */}
                     <td className="px-4 py-3 align-middle text-right whitespace-nowrap">
                       <Link
                         href={`/admin/products/trading/${product.id}`}
@@ -861,7 +1015,7 @@ export function TradingProductsList({ initialProducts }: TradingProductsListProp
               })}
               {sortedProducts.length === 0 && (
                 <tr>
-                  <td colSpan={13} className="py-12 text-center text-zinc-400 dark:text-zinc-500 text-xs">
+                  <td colSpan={15} className="py-12 text-center text-zinc-400 dark:text-zinc-500 text-xs">
                     조건에 해당하는 거래 대상 제품이 존재하지 않습니다.
                   </td>
                 </tr>
@@ -1100,6 +1254,118 @@ export function TradingProductsList({ initialProducts }: TradingProductsListProp
               <button
                 type="button"
                 onClick={() => setOrderabilityModalProduct(null)}
+                className="px-4 py-2 text-xs font-semibold text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800 rounded-xl transition-colors cursor-pointer"
+              >
+                닫기
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Hold Detail Modal */}
+      {holdDetailModalProduct && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-xl max-h-[90vh] overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 space-y-4">
+            {/* Modal Header */}
+            <div className="flex items-start justify-between border-b border-zinc-200 dark:border-zinc-800 pb-3">
+              <div>
+                <h3 className="text-base font-bold text-amber-900 dark:text-amber-300 flex items-center gap-2">
+                  <span>⚠️ Retailer Hub 노출 보류 사유</span>
+                </h3>
+                <p className="text-xs text-zinc-600 dark:text-zinc-300 mt-0.5 font-medium">
+                  {holdDetailModalProduct.display_name} ({holdDetailModalProduct.letusto_sku || holdDetailModalProduct.display_manufacture_sku || "SKU 미지정"})
+                </p>
+                <p className="text-[11px] text-zinc-400 dark:text-zinc-500 font-semibold mt-0.5">
+                  {holdDetailModalProduct.brandName} · {holdDetailModalProduct.companyName}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setHoldDetailModalProduct(null)}
+                className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 text-lg font-bold p-1 cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-4 text-xs">
+              <div className="p-3.5 rounded-xl bg-amber-50/90 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/50 text-amber-900 dark:text-amber-200 space-y-1.5 leading-relaxed">
+                <p className="font-bold text-xs flex items-center gap-1.5">
+                  <span>ℹ️</span> 관리자 노출 설정은 &apos;노출 (Visible)&apos;이나, 아래 필수 상업 조건이 미충족되었습니다.
+                </p>
+                <p className="text-[11px] opacity-90">
+                  해당 항목을 설정하시면 별도의 수동 전환 없이 Retailer Hub 카탈로그에 <strong>자동 즉시 노출 (Published)</strong>로 복구됩니다.
+                </p>
+              </div>
+
+              {/* Reasons Breakdown */}
+              <div className="space-y-3">
+                {(holdDetailModalProduct.holdReasons && holdDetailModalProduct.holdReasons.length > 0
+                  ? holdDetailModalProduct.holdReasons
+                  : ["도매가 미입력"]
+                ).map((reasonCode: string, idx: number) => {
+                  let reasonTitle = "도매 공급가 미설정";
+                  let reasonDesc = "미국 수출 FOB 공급가(도매가)가 0달러이거나 미입력 상태입니다. 유효한 도매가를 입력해야 리테일러 카탈로그에 노출됩니다.";
+                  let actionUrl = `/admin/products/trading/${holdDetailModalProduct.id}?tab=price&highlight=pricing-snapshot-card`;
+                  let actionText = "가격 설정 바로가기 →";
+
+                  if (reasonCode === "missing_moq") {
+                    reasonTitle = "최소 주문 수량 (MOQ) 미설정";
+                    reasonDesc = "주문 최소 단위(MOQ)가 1개 이상으로 설정되지 않았습니다. 박스 입수량(Carton Pack Qty) 또는 최소 주문 수량을 설정해 주세요.";
+                    actionUrl = `/admin/products/trading/${holdDetailModalProduct.id}?tab=price`;
+                    actionText = "MOQ / 입수량 설정 →";
+                  } else if (reasonCode === "missing_identification") {
+                    reasonTitle = "기본 식별정보 미입력";
+                    reasonDesc = "상품명, 브랜드, SKU 등 카탈로그 식별 필수 정보가 누락되어 있습니다.";
+                    actionUrl = `/admin/products/trading/${holdDetailModalProduct.id}?tab=basic`;
+                    actionText = "기본 정보 수정 →";
+                  } else if (reasonCode === "not_active_trading") {
+                    reasonTitle = "운영 상태 비활성";
+                    reasonDesc = "상품의 운영 상태가 '운영 중(Active)'이 아닙니다.";
+                    actionUrl = `/admin/products/trading/${holdDetailModalProduct.id}`;
+                    actionText = "운영 상태 확인 →";
+                  }
+
+                  return (
+                    <div
+                      key={idx}
+                      className="p-4 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 space-y-2.5 shadow-2xs"
+                    >
+                      <div className="flex items-center justify-between font-bold text-zinc-900 dark:text-zinc-100">
+                        <span className="text-xs flex items-center gap-1.5">
+                          <span className="text-amber-500 font-bold">#{idx + 1}</span>
+                          <span>{reasonTitle}</span>
+                        </span>
+                        <Link
+                          href={actionUrl}
+                          onClick={() => setHoldDetailModalProduct(null)}
+                          className="px-3 py-1 rounded-lg text-[11px] font-bold bg-amber-600 hover:bg-amber-700 text-white transition-colors shadow-2xs"
+                        >
+                          {actionText}
+                        </Link>
+                      </div>
+                      <p className="text-[11px] text-zinc-600 dark:text-zinc-400 leading-relaxed">
+                        {reasonDesc}
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-zinc-200 dark:border-zinc-800">
+              <Link
+                href={`/admin/products/trading/${holdDetailModalProduct.id}`}
+                onClick={() => setHoldDetailModalProduct(null)}
+                className="px-4 py-2 text-xs font-bold text-white bg-zinc-900 hover:bg-zinc-800 rounded-xl transition-colors dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-100 shadow-2xs"
+              >
+                상품 운영 상세로 이동 →
+              </Link>
+              <button
+                type="button"
+                onClick={() => setHoldDetailModalProduct(null)}
                 className="px-4 py-2 text-xs font-semibold text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800 rounded-xl transition-colors cursor-pointer"
               >
                 닫기

@@ -19,6 +19,7 @@ import {
   evaluateTradingOrderability,
   evaluateProductRegistrationStatus,
 } from "@/lib/product/registration-status";
+import { evaluateHubVisibility, type HubVisibilityEvaluation } from "@/lib/product/hub-visibility";
 
 export interface UpdateTradingPricingInput {
   wholesale_price: number;
@@ -388,6 +389,17 @@ export async function getTradingProductDetailData(productId: string) {
 
   const retailerVisibility = (product as any).retailer_visibility || "hidden";
 
+  const totalOnHand = (balances || []).reduce((sum: number, b: any) => sum + Number(b.qty_on_hand || 0), 0);
+  const totalHold = (balances || []).reduce((sum: number, b: any) => sum + Number(b.qty_hold || 0), 0);
+  const totalDamaged = (balances || []).reduce((sum: number, b: any) => sum + Number(b.qty_damaged || 0), 0);
+  const totalAvailable = Math.max(0, totalOnHand - totalHold - totalDamaged);
+
+  const hubVisibility = evaluateHubVisibility(
+    product,
+    totalAvailable,
+    inboundSummary?.nextEta || null
+  );
+
   const orderability = evaluateTradingOrderability({
     registrationStatus: regEval.status,
     selectionStatus: product.selection_status,
@@ -421,6 +433,18 @@ export async function getTradingProductDetailData(productId: string) {
     category_code: product.category_code || null,
     category_full_path: categoryFullPath,
     registration_status: regEval.status,
+
+    // Hub Visibility & Hold evaluation
+    hubVisibility,
+    effectiveHubVisibility: hubVisibility.effectiveVisibility,
+    effectiveHubVisibilityLabel: hubVisibility.effectiveVisibilityLabel,
+    effectiveHubVisibilityDescription: hubVisibility.effectiveVisibilityDescription,
+    holdReasons: hubVisibility.holdReasons,
+    holdReasonLabels: hubVisibility.holdReasonLabels,
+    isSoldOut: hubVisibility.isSoldOut,
+    orderabilityStatus: hubVisibility.orderabilityStatus,
+    orderabilityLabel: hubVisibility.orderabilityLabel,
+    orderabilityReason: hubVisibility.orderabilityReason,
 
     // Case Pack, MOQ & Order Units
     carton_pack_qty: cartonPackQty,
