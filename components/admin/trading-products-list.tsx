@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useTransition } from "react";
 import Link from "next/link";
 import { updateTradingStatusAndVisibility } from "@/lib/product/trading-actions";
+import { type MissingFieldItem } from "@/lib/product/registration-status";
 
 export interface TradingProductItem {
   id: string;
@@ -43,6 +44,7 @@ export interface TradingProductItem {
   orderabilityReasons?: string[];
   orderabilityPrimaryReason?: string | null;
   missingFields?: string[];
+  missingFieldItems?: MissingFieldItem[];
 }
 
 interface TradingProductsListProps {
@@ -674,9 +676,13 @@ export function TradingProductsList({ initialProducts }: TradingProductsListProp
                                     className="text-[10px] font-bold text-rose-700 dark:text-rose-400 hover:underline cursor-pointer flex items-center gap-1"
                                   >
                                     <span>사유: {product.orderabilityPrimaryReason || "차단 조건 충족"}</span>
-                                    {product.orderabilityReasons && product.orderabilityReasons.length > 1 && (
+                                    {product.orderabilityReasons && product.orderabilityReasons.length > 1 ? (
                                       <span className="bg-rose-200 text-rose-800 dark:bg-rose-900 dark:text-rose-200 px-1 rounded-full text-[9px]">
                                         외 {product.orderabilityReasons.length - 1}건
+                                      </span>
+                                    ) : (
+                                      <span className="bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300 px-1 rounded text-[9px] hover:bg-rose-200">
+                                        해결 →
                                       </span>
                                     )}
                                   </button>
@@ -780,12 +786,33 @@ export function TradingProductsList({ initialProducts }: TradingProductsListProp
 
                     {/* 9. Qty On Hand */}
                     <td className="px-4 py-3 align-middle text-right font-mono font-bold text-zinc-900 dark:text-white">
-                      {product.qty_on_hand}
+                      {product.qty_on_hand} EA
                     </td>
 
                     {/* 10. Qty Available */}
-                    <td className="px-4 py-3 align-middle text-right font-mono font-bold text-emerald-600 dark:text-emerald-400 text-sm">
-                      {product.qty_available}
+                    <td className="px-4 py-3 align-middle text-right font-mono text-xs whitespace-nowrap">
+                      {product.qty_available > 0 ? (
+                        product.qty_available <= 5 ? (
+                          <span className="font-bold text-amber-600 dark:text-amber-400">
+                            {product.qty_available} EA <span className="text-[10px] font-sans font-normal">(부족)</span>
+                          </span>
+                        ) : (
+                          <span className="font-bold text-emerald-600 dark:text-emerald-400">
+                            {product.qty_available} EA
+                          </span>
+                        )
+                      ) : product.qty_on_hand > 0 ? (
+                        <span
+                          className="font-bold text-amber-700 dark:text-amber-400"
+                          title={`실재고 ${product.qty_on_hand} EA 중 보류/불량 ${product.qty_hold + product.qty_damaged} EA`}
+                        >
+                          0 EA <span className="text-[10px] font-sans font-normal">(가용 0 · 홀드)</span>
+                        </span>
+                      ) : (
+                        <span className="font-bold text-rose-600 dark:text-rose-400">
+                          0 EA <span className="text-[10px] font-sans font-normal">(품절)</span>
+                        </span>
+                      )}
                     </td>
 
                     {/* 11. Operational Status Inline Select */}
@@ -890,8 +917,9 @@ export function TradingProductsList({ initialProducts }: TradingProductsListProp
       {/* Orderability Reasons Modal */}
       {orderabilityModalProduct && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 space-y-4">
-            <div className="flex items-center justify-between border-b border-zinc-200 dark:border-zinc-800 pb-3">
+          <div className="w-full max-w-xl max-h-[90vh] overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 space-y-4">
+            {/* Modal Header */}
+            <div className="flex items-start justify-between border-b border-zinc-200 dark:border-zinc-800 pb-3">
               <div>
                 <h3 className="text-base font-bold text-zinc-900 dark:text-white flex items-center gap-2">
                   <span>🚨 주문 차단 사유 상세</span>
@@ -899,68 +927,180 @@ export function TradingProductsList({ initialProducts }: TradingProductsListProp
                 <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5 font-medium">
                   {orderabilityModalProduct.display_name} ({orderabilityModalProduct.letusto_sku || orderabilityModalProduct.display_manufacture_sku || "SKU 미지정"})
                 </p>
+                <p className="text-[11px] text-zinc-400 dark:text-zinc-500 font-semibold mt-0.5">
+                  {orderabilityModalProduct.brandName} · {orderabilityModalProduct.companyName}
+                </p>
               </div>
               <button
                 type="button"
                 onClick={() => setOrderabilityModalProduct(null)}
-                className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 text-lg font-bold"
+                className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 text-lg font-bold p-1 cursor-pointer"
               >
                 ✕
               </button>
             </div>
 
-            <div className="space-y-3 text-xs">
-              <p className="text-zinc-600 dark:text-zinc-400">
-                해당 상품은 현재 Retailer Hub에 <strong>노출(Visible)</strong> 상태이나 아래 <strong>{(orderabilityModalProduct.orderabilityReasons?.length || 1)}개 차단 원인</strong>으로 인해 가맹점 구매가 불가능합니다:
+            <div className="space-y-4 text-xs">
+              <p className="text-zinc-600 dark:text-zinc-400 leading-relaxed">
+                해당 상품은 현재 Retailer Hub에 <strong>노출(Visible)</strong> 상태이나 아래 <strong>{(orderabilityModalProduct.orderabilityReasons?.length || 1)}개 차단 원인</strong>으로 인해 가맹점 주문이 불가능합니다:
               </p>
 
-              <div className="space-y-2">
+              {/* Reasons Cards */}
+              <div className="space-y-3">
                 {(orderabilityModalProduct.orderabilityReasons || ["주문 차단 조건 충족"]).map((reason, idx) => (
-                  <div key={idx} className="p-3 rounded-xl bg-rose-50/80 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/50 space-y-1">
+                  <div key={idx} className="p-4 rounded-xl bg-rose-50/80 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/50 space-y-3">
                     <div className="flex items-center justify-between font-bold text-rose-800 dark:text-rose-300">
-                      <span>{idx + 1}. {reason}</span>
+                      <span className="text-xs">{idx + 1}. {reason}</span>
                     </div>
 
-                    {reason === "등록 미완료" && orderabilityModalProduct.missingFields && orderabilityModalProduct.missingFields.length > 0 && (
-                      <p className="text-[11px] text-rose-700 dark:text-rose-400">
-                        누락 필수 항목: <strong className="underline">{orderabilityModalProduct.missingFields.join(", ")}</strong>
-                      </p>
-                    )}
+                    {/* Reason Details */}
+                    {reason === "등록 미완료" && (
+                      <div className="space-y-2.5">
+                        <p className="text-[11px] text-zinc-600 dark:text-zinc-400 font-medium">
+                          필수 정보가 완성되지 않은 Draft 상태입니다. 아래 누락 항목을 수정한 후 승인 처리해야 최종 등록 완료됩니다:
+                        </p>
 
-                    {reason === "Hub 비노출" && (
-                      <p className="text-[11px] text-zinc-600 dark:text-zinc-400">
-                        운영 상태는 활성이지만 Hub 노출이 &apos;비노출&apos;로 설정되어 가맹점 카탈로그에 표시되지 않습니다.
-                      </p>
-                    )}
-
-                    {reason === "도매가 미입력" && (
-                      <p className="text-[11px] text-zinc-600 dark:text-zinc-400">
-                        미국 수출 FOB 공급가(도매가)가 0달러이거나 미입력 상태입니다.
-                      </p>
+                        {/* Grouped Missing Fields */}
+                        {orderabilityModalProduct.missingFieldItems && orderabilityModalProduct.missingFieldItems.length > 0 ? (
+                          <div className="space-y-2">
+                            {Object.entries(
+                              orderabilityModalProduct.missingFieldItems.reduce((acc, item) => {
+                                const sec = item.section || "기타 정보";
+                                if (!acc[sec]) acc[sec] = [];
+                                acc[sec].push(item);
+                                return acc;
+                              }, {} as Record<string, MissingFieldItem[]>)
+                            ).map(([section, items]) => (
+                              <div key={section} className="p-3 rounded-lg bg-white dark:bg-zinc-900 border border-rose-200 dark:border-rose-900/40 space-y-1.5 shadow-2xs">
+                                <div className="font-bold text-[11px] text-rose-900 dark:text-rose-200 flex items-center justify-between">
+                                  <span>{section} ({items.length}개 항목 누락)</span>
+                                  {/* Action Button Per Section */}
+                                  {section.includes("물류") && (
+                                    <Link
+                                      href={`/admin/products/trading/${orderabilityModalProduct.id}?tab=logistics&highlight=itemWidth-field`}
+                                      onClick={() => setOrderabilityModalProduct(null)}
+                                      className="px-2.5 py-1 rounded text-[10px] font-bold bg-rose-600 text-white hover:bg-rose-700 transition-colors shadow-2xs"
+                                    >
+                                      물류 정보 수정 →
+                                    </Link>
+                                  )}
+                                  {section.includes("가격") && (
+                                    <Link
+                                      href={`/admin/products/trading/${orderabilityModalProduct.id}?tab=price&highlight=priceUsdFob-field`}
+                                      onClick={() => setOrderabilityModalProduct(null)}
+                                      className="px-2.5 py-1 rounded text-[10px] font-bold bg-rose-600 text-white hover:bg-rose-700 transition-colors shadow-2xs"
+                                    >
+                                      가격 정보 수정 →
+                                    </Link>
+                                  )}
+                                  {section.includes("기본") && (
+                                    <Link
+                                      href={`/admin/products/trading/${orderabilityModalProduct.id}?tab=basic&highlight=brandId-field`}
+                                      onClick={() => setOrderabilityModalProduct(null)}
+                                      className="px-2.5 py-1 rounded text-[10px] font-bold bg-rose-600 text-white hover:bg-rose-700 transition-colors shadow-2xs"
+                                    >
+                                      기본 정보 수정 →
+                                    </Link>
+                                  )}
+                                  {section.includes("카테고리") && (
+                                    <Link
+                                      href={`/admin/products/trading/${orderabilityModalProduct.id}?tab=category_attributes`}
+                                      onClick={() => setOrderabilityModalProduct(null)}
+                                      className="px-2.5 py-1 rounded text-[10px] font-bold bg-rose-600 text-white hover:bg-rose-700 transition-colors shadow-2xs"
+                                    >
+                                      카테고리 수정 →
+                                    </Link>
+                                  )}
+                                  {section.includes("미디어") && (
+                                    <Link
+                                      href={`/admin/products/trading/${orderabilityModalProduct.id}?tab=media`}
+                                      onClick={() => setOrderabilityModalProduct(null)}
+                                      className="px-2.5 py-1 rounded text-[10px] font-bold bg-rose-600 text-white hover:bg-rose-700 transition-colors shadow-2xs"
+                                    >
+                                      미디어 등록 →
+                                    </Link>
+                                  )}
+                                </div>
+                                <ul className="text-[11px] text-zinc-700 dark:text-zinc-300 space-y-0.5 pl-1">
+                                  {items.map((it) => (
+                                    <li key={it.key} className="flex items-center gap-1.5">
+                                      <span className="text-rose-500 font-bold">·</span>
+                                      <span>{it.label}</span>
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            ))}
+                          </div>
+                        ) : orderabilityModalProduct.missingFields && orderabilityModalProduct.missingFields.length > 0 ? (
+                          <p className="text-[11px] text-rose-700 dark:text-rose-400">
+                            누락 필수 항목: <strong className="underline">{orderabilityModalProduct.missingFields.join(", ")}</strong>
+                          </p>
+                        ) : null}
+                      </div>
                     )}
 
                     {reason === "판매 가능 재고 없음" && (
-                      <p className="text-[11px] text-zinc-600 dark:text-zinc-400">
-                        물리 실재고에서 보류/불량 재고를 차감한 가용 재고(Available Stock)가 0개입니다.
-                      </p>
+                      <div className="space-y-2">
+                        <p className="text-[11px] text-zinc-600 dark:text-zinc-400 leading-relaxed">
+                          {orderabilityModalProduct.qty_on_hand > 0 ? (
+                            <span>
+                              실재고(<strong>{orderabilityModalProduct.qty_on_hand} EA</strong>)가 등록되어 있으나, 보류/예약(<strong>{orderabilityModalProduct.qty_hold} EA</strong>) 및 불량(<strong>{orderabilityModalProduct.qty_damaged} EA</strong>) 차감으로 인해 실제 판매 가능 재고(Available Stock)가 <strong>0 EA</strong>입니다.
+                            </span>
+                          ) : (
+                            <span>실재고 및 가용 재고가 모두 0 EA로 현재 완전 품절(Out of Stock) 상태입니다.</span>
+                          )}
+                        </p>
+                        <Link
+                          href={`/admin/products/trading/${orderabilityModalProduct.id}?tab=inventory&highlight=inventory-snapshot-card`}
+                          onClick={() => setOrderabilityModalProduct(null)}
+                          className="inline-block px-2.5 py-1 rounded text-[11px] font-bold bg-rose-600 text-white hover:bg-rose-700 transition-colors shadow-2xs"
+                        >
+                          재고 확인 →
+                        </Link>
+                      </div>
+                    )}
+
+                    {reason === "도매가 미입력" && (
+                      <div className="space-y-2">
+                        <p className="text-[11px] text-zinc-600 dark:text-zinc-400 leading-relaxed">
+                          미국 수출 FOB 공급가(도매가)가 0달러이거나 미입력 상태입니다. 유효한 도매가를 입력해야 가맹점 카탈로그에서 주문할 수 있습니다.
+                        </p>
+                        <Link
+                          href={`/admin/products/trading/${orderabilityModalProduct.id}?tab=price&highlight=pricing-snapshot-card`}
+                          onClick={() => setOrderabilityModalProduct(null)}
+                          className="inline-block px-2.5 py-1 rounded text-[11px] font-bold bg-rose-600 text-white hover:bg-rose-700 transition-colors shadow-2xs"
+                        >
+                          가격 설정 →
+                        </Link>
+                      </div>
+                    )}
+
+                    {reason === "Hub 비노출" && (
+                      <div className="space-y-2">
+                        <p className="text-[11px] text-zinc-600 dark:text-zinc-400 leading-relaxed">
+                          Retailer Hub 노출 상태가 &apos;비노출&apos;로 설정되어 가맹점 카탈로그에 노출되지 않습니다. 목록 화면의 노출 상태 선택기에서 &apos;노출&apos;로 변경할 수 있습니다.
+                        </p>
+                      </div>
                     )}
                   </div>
                 ))}
               </div>
             </div>
 
-            <div className="flex items-center justify-end gap-2 pt-2 border-t border-zinc-200 dark:border-zinc-800">
+            {/* Modal Footer */}
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-zinc-200 dark:border-zinc-800">
               <Link
                 href={`/admin/products/trading/${orderabilityModalProduct.id}`}
                 onClick={() => setOrderabilityModalProduct(null)}
-                className="px-4 py-2 text-xs font-bold text-white bg-zinc-900 hover:bg-zinc-800 rounded-xl transition-colors dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-100"
+                className="px-4 py-2 text-xs font-bold text-white bg-zinc-900 hover:bg-zinc-800 rounded-xl transition-colors dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-100 shadow-2xs"
               >
-                상품 360° 관리에서 수정 및 해결하기 →
+                상품 운영으로 이동 →
               </Link>
               <button
                 type="button"
                 onClick={() => setOrderabilityModalProduct(null)}
-                className="px-4 py-2 text-xs font-semibold text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800 rounded-xl transition-colors"
+                className="px-4 py-2 text-xs font-semibold text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800 rounded-xl transition-colors cursor-pointer"
               >
                 닫기
               </button>

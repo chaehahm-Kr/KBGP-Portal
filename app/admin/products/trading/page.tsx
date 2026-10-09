@@ -211,6 +211,7 @@ export default async function AdminTradingProductsPage() {
         orderabilityReasons: orderability.reasons,
         orderabilityPrimaryReason: orderability.reason,
         missingFields: regEval.missingFields || [],
+        missingFieldItems: regEval.missingFieldItems || [],
       };
     })
   );

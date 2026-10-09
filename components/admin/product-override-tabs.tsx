@@ -2168,14 +2168,14 @@ export function ProductOverrideTabs({
                     <span>⚡ Trading Product 실시간 운영 가격 (Live Operational Pricing)</span>
                   </div>
                   <p className="text-indigo-700 dark:text-indigo-300">
-                    현재 마켓 거래 중인 실시간 도매가, 프로모션가, MAP/SRP 오버라이드 및 원가 3-Layer는 Trading Product 360° Hub에서 관리됩니다.
+                    현재 마켓 거래 중인 실시간 도매가, 프로모션가, MAP/SRP 오버라이드 및 원가 3-Layer는 상품 운영 (Product Operations) 화면에서 관리됩니다.
                   </p>
                 </div>
                 <Link
                   href={`/admin/products/trading/${product.id}`}
                   className="px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold whitespace-nowrap shadow-sm transition-colors"
                 >
-                  Trading 360° Hub 이동 →
+                  상품 운영으로 이동 →
                 </Link>
               </div>
             )}

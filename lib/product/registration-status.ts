@@ -378,9 +378,9 @@ export function evaluateProductRegistrationStatus(
       const targetId = step ? step.targetId : "category-depth-1";
       missingItemsPush({
         key: "category_step",
-        section: "카테고리",
+        section: "카테고리 및 속성",
         label: stepLabel,
-        displayTag: `[카테고리: ${stepLabel}]`,
+        displayTag: `[카테고리 및 속성: ${stepLabel}]`,
         tab: "category_attributes",
         targetId: targetId,
         inputName: targetId,
@@ -391,9 +391,9 @@ export function evaluateProductRegistrationStatus(
       for (const reqAttr of input.categoryCompletion.missingRequiredAttributes) {
         missingItemsPush({
           key: `attr_${reqAttr.code}`,
-          section: "속성",
+          section: "카테고리 및 속성",
           label: reqAttr.nameKo,
-          displayTag: `[속성: ${reqAttr.nameKo}]`,
+          displayTag: `[카테고리 및 속성: ${reqAttr.nameKo}]`,
           tab: "category_attributes",
           targetId: `attr-field-${reqAttr.code}`,
           inputName: `attr-input-${reqAttr.code}`,
@@ -404,9 +404,9 @@ export function evaluateProductRegistrationStatus(
     if (!input.category_code) {
       missingItemsPush({
         key: "category_code",
-        section: "카테고리",
+        section: "카테고리 및 속성",
         label: "1Depth 대분류",
-        displayTag: "[카테고리: 1Depth 대분류]",
+        displayTag: "[카테고리 및 속성: 1Depth 대분류]",
         tab: "category_attributes",
         targetId: "category-depth-1",
         inputName: "categorySelect",
@@ -481,9 +481,9 @@ export function evaluateProductRegistrationStatus(
   if (itemW <= 0 || itemD <= 0 || itemH <= 0 || itemWt <= 0) {
     missingItemsPush({
       key: "item_spec",
-      section: "로지스틱스",
+      section: "물류 정보",
       label: "단품 규격",
-      displayTag: "[로지스틱스: 단품 규격]",
+      displayTag: "[물류 정보: 단품 규격]",
       tab: "logistics",
       targetId: "itemWidth-field",
       inputName: "itemWidth",
@@ -492,9 +492,9 @@ export function evaluateProductRegistrationStatus(
   if (pkgW <= 0 || pkgD <= 0 || pkgH <= 0 || pkgWt <= 0) {
     missingItemsPush({
       key: "package_spec",
-      section: "로지스틱스",
+      section: "물류 정보",
       label: "단품 포장 패키지 규격",
-      displayTag: "[로지스틱스: 단품 포장 패키지 규격]",
+      displayTag: "[물류 정보: 단품 포장 패키지 규격]",
       tab: "logistics",
       targetId: "packageWidth-field",
       inputName: "packageWidth",
@@ -503,9 +503,9 @@ export function evaluateProductRegistrationStatus(
   if (cartonQty <= 0 || cartonW <= 0 || cartonD <= 0 || cartonH <= 0 || cartonWt <= 0) {
     missingItemsPush({
       key: "carton_spec",
-      section: "로지스틱스",
+      section: "물류 정보",
       label: "마스터 카톤 규격",
-      displayTag: "[로지스틱스: 마스터 카톤 규격]",
+      displayTag: "[물류 정보: 마스터 카톤 규격]",
       tab: "logistics",
       targetId: "cartonPackQty-field",
       inputName: "cartonPackQty",
@@ -548,9 +548,9 @@ export function evaluateProductRegistrationStatus(
   if (!input.hasImages) {
     missingItemsPush({
       key: "images",
-      section: "미디어",
+      section: "미디어 정보",
       label: "대표 이미지",
-      displayTag: "[미디어: 대표 이미지]",
+      displayTag: "[미디어 정보: 대표 이미지]",
       tab: "media",
       targetId: "product-images-dropzone",
       inputName: "images",
