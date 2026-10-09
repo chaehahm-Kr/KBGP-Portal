@@ -416,9 +416,15 @@ export async function getTradingProductDetailData(productId: string) {
 
     // Case Pack, MOQ & Order Units
     carton_pack_qty: cartonPackQty,
+    hasCasePackConfigured: Boolean(adminOverrides.carton_pack_qty || (product as any).carton_pack_qty),
     moq,
     orderMultiple,
     
+    // Original KRW & Base Prices
+    price_krw_retail: product.price_krw_retail ? Number(product.price_krw_retail) : null,
+    price_krw_wholesale: product.price_krw_wholesale ? Number(product.price_krw_wholesale) : null,
+    registration_missing_fields: regEval.missingFields || [],
+
     // Default Catalog Pricing
     defaultWholesale,
     defaultSrp,
