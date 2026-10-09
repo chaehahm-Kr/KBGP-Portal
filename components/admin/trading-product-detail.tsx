@@ -787,6 +787,9 @@ export function TradingProductDetail({
       list = list.filter((e) => e.timestamp >= cutoffTimestamp);
     }
 
+    return list;
+  }, [pricingTimeline, pricingFilterType, pricingFilterDays]);
+
   // Dynamic Orderability Memo
   const dynamicOrderability = useMemo(() => {
     return evaluateTradingOrderability({
@@ -1263,9 +1266,221 @@ export function TradingProductDetail({
           </div>
         </div>
 
+        {/* COLUMN 2: 가격 및 마진 스냅샷 (Pricing & Margin Snapshot) */}
+        <div className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 flex flex-col justify-between space-y-4">
+          <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-2">
+            <h3 className="text-xs font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">
+              가격 및 마진 스냅샷 (Pricing & Margin)
+            </h3>
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={() => setIsPricingModalOpen(true)}
+                className="px-2.5 py-1 text-xs font-semibold rounded bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 hover:bg-zinc-800 transition-colors shadow-sm"
+              >
+                도매가 설정
+              </button>
+              <button
+                onClick={() => setIsPromoModalOpen(true)}
+                className="px-2.5 py-1 text-xs font-semibold rounded bg-amber-500 text-white hover:bg-amber-600 transition-colors shadow-sm"
+              >
+                + 프로모션 등록
+              </button>
+            </div>
+          </div>
 
+          {/* Row 1: Prices Grid (Wholesale, Promo, MAP, SRP) */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+            <div className="p-2 rounded bg-zinc-50 dark:bg-zinc-950/40 border border-zinc-200 dark:border-zinc-800">
+              <span className="text-[9px] font-bold text-zinc-400 block uppercase">Wholesale</span>
+              <span className="text-sm font-extrabold text-zinc-900 dark:text-white">
+                {product.operationalWholesale > 0 ? `$${product.operationalWholesale.toFixed(2)}` : "Price Missing"}
+              </span>
+            </div>
+            <div className="p-2 rounded bg-zinc-50 dark:bg-zinc-950/40 border border-zinc-200 dark:border-zinc-800">
+              <span className="text-[9px] font-bold text-zinc-400 block uppercase">Promo</span>
+              <span className="text-sm font-extrabold text-amber-600 dark:text-amber-400">
+                {product.promoWholesale !== null && product.promoWholesale > 0 ? `$${product.promoWholesale.toFixed(2)}` : "—"}
+              </span>
+            </div>
+            <div className="p-2 rounded bg-zinc-50 dark:bg-zinc-950/40 border border-zinc-200 dark:border-zinc-800">
+              <span className="text-[9px] font-bold text-zinc-400 block uppercase">MAP</span>
+              <span className="text-sm font-bold text-zinc-900 dark:text-zinc-200">
+                {product.mapPrice > 0 ? `$${product.mapPrice.toFixed(2)}` : "—"}
+              </span>
+            </div>
+            <div className="p-2 rounded bg-zinc-50 dark:bg-zinc-950/40 border border-zinc-200 dark:border-zinc-800">
+              <span className="text-[9px] font-bold text-zinc-400 block uppercase">SRP</span>
+              <span className="text-sm font-bold text-zinc-900 dark:text-zinc-200">
+                {product.srpPrice > 0 ? `$${product.srpPrice.toFixed(2)}` : "—"}
+              </span>
+            </div>
+          </div>
 
-      {/* 3. LOWER FULL-WIDTH HISTORY AREA (BILINGUAL 6-TAB HEADER WITH ZERO SCROLLBAR) */}
+          {/* Row 2: Operating Margins & Order Units */}
+          <div className="grid grid-cols-2 gap-2 text-xs">
+            {/* Our Margin */}
+            <div className="p-2.5 rounded-lg bg-zinc-50 dark:bg-zinc-950/40 border border-zinc-200 dark:border-zinc-800 space-y-0.5">
+              <span className="text-[9px] font-bold text-zinc-400 block uppercase">Our Margin (자사)</span>
+              <div className="text-sm font-extrabold">
+                {product.ourMarginPercent > 0 && product.ourMarginUsd > 0 ? (
+                  <span className={product.ourMarginPercent < 20 ? "text-rose-600 dark:text-rose-400" : "text-zinc-900 dark:text-white"}>
+                    {product.ourMarginPercent.toFixed(1)}% <span className="text-[11px] font-normal text-zinc-500">(${product.ourMarginUsd.toFixed(2)})</span>
+                  </span>
+                ) : (
+                  <span className="text-zinc-400 font-normal">—</span>
+                )}
+              </div>
+            </div>
+
+            {/* Retailer Margin */}
+            <div className="p-2.5 rounded-lg bg-zinc-50 dark:bg-zinc-950/40 border border-zinc-200 dark:border-zinc-800 space-y-0.5">
+              <div className="flex items-center justify-between">
+                <span className="text-[9px] font-bold text-zinc-400 uppercase">Retailer Margin</span>
+                {retailerMarginTone.badge && (
+                  <span className={`px-1.5 py-0.2 rounded text-[9px] font-bold border ${retailerMarginTone.badge}`}>
+                    {retailerMarginTone.label}
+                  </span>
+                )}
+              </div>
+              <div className="text-sm font-extrabold">
+                {product.retailerMarginPercent > 0 && product.retailerMarginUsd > 0 ? (
+                  <span className={retailerMarginTone.color}>
+                    {product.retailerMarginPercent.toFixed(1)}% <span className="text-[11px] font-normal text-zinc-500">(${product.retailerMarginUsd.toFixed(2)})</span>
+                  </span>
+                ) : (
+                  <span className="text-zinc-400 font-normal">—</span>
+                )}
+              </div>
+            </div>
+
+            {/* Case Pack */}
+            <div className="p-2 rounded bg-zinc-50 dark:bg-zinc-950/40 border border-zinc-200 dark:border-zinc-800">
+              <span className="text-[9px] font-bold text-zinc-400 block uppercase">Case Pack (입수량)</span>
+              <span className="text-xs font-bold text-zinc-900 dark:text-zinc-100">
+                {product.carton_pack_qty || 1} EA / 박스
+              </span>
+            </div>
+
+            {/* MOQ / Multiple */}
+            <div className="p-2 rounded bg-zinc-50 dark:bg-zinc-950/40 border border-zinc-200 dark:border-zinc-800">
+              <span className="text-[9px] font-bold text-zinc-400 block uppercase">MOQ / 주문배수</span>
+              <span className="text-xs font-bold text-zinc-900 dark:text-zinc-100">
+                {product.moq || 1} EA ({product.orderMultiple || 1}배수)
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* COLUMN 3: 수입원가 스냅샷 (Cost Snapshot) */}
+        <div className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 flex flex-col justify-between space-y-4">
+          <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-2">
+            <h3 className="text-xs font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">
+              수입원가 스냅샷 (Cost Snapshot)
+            </h3>
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={() => setIsCostOverrideModalOpen(true)}
+                className="px-2 py-0.5 text-[10px] font-bold rounded bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 hover:bg-zinc-800 transition-colors"
+              >
+                {product.hasCostOverride ? "Edit Override" : "Override Cost"}
+              </button>
+              {product.hasCostOverride && (
+                <button
+                  onClick={handleClearCostOverride}
+                  className="px-2 py-0.5 text-[10px] font-bold rounded bg-rose-50 text-rose-600 dark:bg-rose-950/40 dark:text-rose-300 border border-rose-200 dark:border-rose-900/50 hover:bg-rose-100 transition-colors"
+                >
+                  해제
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Effective Landed Cost Hero */}
+          <div className="p-3 rounded-lg bg-zinc-50 dark:bg-zinc-950/40 border border-zinc-200 dark:border-zinc-800 space-y-1">
+            <div className="flex items-center justify-between text-[10px] font-bold text-zinc-500 dark:text-zinc-400 uppercase">
+              <span>Effective Landed Cost (적용 수입원가)</span>
+              <span>Margin Driver</span>
+            </div>
+            <div className="text-2xl font-black text-zinc-900 dark:text-white">
+              ${product.effectiveLandedCost.toFixed(2)}
+            </div>
+            <p className="text-[10px] text-zinc-500 dark:text-zinc-400 truncate">
+              {product.hasCostOverride ? (
+                <span className="text-amber-600 dark:text-amber-400 font-semibold">
+                  수동 원가 오버라이드 적용 중 (사유: {product.overrideReason || "운영 조정"})
+                </span>
+              ) : (
+                <span>Purchasing Landed Cost 수입 정산 기반 실시간 원가</span>
+              )}
+            </p>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2 text-xs">
+            <div className="p-2 rounded bg-zinc-50 dark:bg-zinc-950/40 border border-zinc-200 dark:border-zinc-800">
+              <span className="text-[9px] font-bold text-zinc-400 block uppercase">Base Landed Cost</span>
+              <span className="font-bold text-zinc-900 dark:text-zinc-200">${product.baseLandedCost.toFixed(2)}</span>
+            </div>
+            <div className="p-2 rounded bg-zinc-50 dark:bg-zinc-950/40 border border-zinc-200 dark:border-zinc-800">
+              <span className="text-[9px] font-bold text-zinc-400 block uppercase">Override Cost</span>
+              <span className="font-bold text-zinc-900 dark:text-zinc-200">
+                {product.overrideLandedCost !== null ? `$${product.overrideLandedCost.toFixed(2)}` : "—"}
+              </span>
+            </div>
+          </div>
+
+          <div className="flex justify-end pt-1">
+            <Link
+              href="/admin/purchasing/landed-cost"
+              className="text-[11px] font-semibold text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white underline"
+            >
+              View Landed Cost Cases →
+            </Link>
+          </div>
+        </div>
+
+      </div>
+
+      {/* 4. SECONDARY AREA: OPERATIONAL HEALTH & ISSUE DIAGNOSTICS */}
+      <div className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 space-y-3">
+        <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-2">
+          <h3 className="text-xs font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">
+            운영 진단 & 알림 (Operational Diagnostics & Alerts)
+          </h3>
+          <span className="text-[11px] text-zinc-400">
+            {activeAlerts.length}건 감지
+          </span>
+        </div>
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 text-xs">
+          {activeAlerts.map((alert) => (
+            <div
+              key={alert.id}
+              className={`p-3 rounded-lg border text-xs ${
+                alert.type === "danger"
+                  ? "bg-rose-50/80 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-900/50"
+                  : alert.type === "warning"
+                  ? "bg-amber-50/80 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-900/50"
+                  : "bg-zinc-100 text-zinc-800 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-200 dark:border-zinc-700"
+              }`}
+            >
+              <strong className="block text-xs font-bold flex items-center gap-1.5">
+                <span>{alert.type === "danger" ? "🚨" : alert.type === "warning" ? "⚠️" : "ℹ️"}</span>
+                {alert.title}
+              </strong>
+              <p className="text-[11px] opacity-90 mt-1 pl-5 leading-relaxed">{alert.message}</p>
+            </div>
+          ))}
+
+          {activeAlerts.filter(a => a.type !== "info").length === 0 && (
+            <div className="col-span-full p-3.5 rounded-lg bg-emerald-50/60 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-900/40 text-xs font-medium flex items-center gap-2">
+              <span className="text-base">✅</span>
+              <div>
+                <strong>정상 운영 상태 (No Operational Issues):</strong> 모든 재고, 마진, 상태 및 노출 기준이 정상적으로 충족되어 있습니다.
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
       <div className="rounded-xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900 overflow-hidden">
         
         {/* Full-Width Tab Header */}
