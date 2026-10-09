@@ -23,7 +23,7 @@ export default async function AdminTradingProductsPage() {
     .select(
       "id, name, name_en, category, brand_id, company_id, manufacture_sku, letusto_sku, parent_sku, child_sku, price_krw_retail, price_krw_wholesale, price_usd_fob, price_additional_info, origin, category_code, selection_status, sales_status, trading_status, retailer_visibility, created_at, upc, ean, estimated_retail_price, trading_wholesale_price, trading_promo_wholesale_price, trading_promo_start_date, trading_promo_end_date, trading_srp_price, trading_map_price"
     )
-    .or("trading_status.in.(active,historical),selection_status.eq.SELECTED")
+    .or("trading_status.in.(active,inactive,historical),selection_status.eq.SELECTED")
     .order("created_at", { ascending: false });
 
   if (queryError) {
@@ -32,7 +32,7 @@ export default async function AdminTradingProductsPage() {
       .select(
         "id, name, name_en, category, brand_id, company_id, manufacture_sku, letusto_sku, parent_sku, child_sku, price_krw_retail, price_krw_wholesale, price_usd_fob, price_additional_info, origin, category_code, selection_status, sales_status, trading_status, created_at, upc, ean, estimated_retail_price, trading_wholesale_price, trading_promo_wholesale_price, trading_promo_start_date, trading_promo_end_date, trading_srp_price, trading_map_price"
       )
-      .or("trading_status.in.(active,historical),selection_status.eq.SELECTED")
+      .or("trading_status.in.(active,inactive,historical),selection_status.eq.SELECTED")
       .order("created_at", { ascending: false });
 
     if (fallbackError) {
@@ -96,7 +96,14 @@ export default async function AdminTradingProductsPage() {
       let photoUrl: string | null = null;
       if (firstImage?.storage_path) {
         try {
-          photoUrl = await getSignedFileUrl(firstImage.storage_path);
+          if (firstImage.storage_path.startsWith("http://") || firstImage.storage_path.startsWith("https://")) {
+            photoUrl = firstImage.storage_path;
+          } else {
+            const { data: signedData } = await supabase.storage
+              .from("company-uploads")
+              .createSignedUrl(firstImage.storage_path, 3600);
+            photoUrl = signedData?.signedUrl || null;
+          }
         } catch {
           // Ignore signed URL error
         }

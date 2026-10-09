@@ -64,15 +64,40 @@ type SortField = "name" | "wholesale" | "retail" | "margin" | "onhand" | "availa
 type SortDirection = "asc" | "desc";
 
 const TRADING_COLORS: Record<string, string> = {
-  active: "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-800",
-  inactive: "bg-zinc-100 text-zinc-600 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:border-zinc-700",
-  historical: "bg-zinc-200 text-zinc-700 border-zinc-300 dark:bg-zinc-800 dark:text-zinc-400 dark:border-zinc-700",
+  active: "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/60 dark:text-blue-300 dark:border-blue-700",
+  inactive: "bg-zinc-100 text-zinc-700 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-200 dark:border-zinc-600",
+  historical: "bg-zinc-200 text-zinc-800 border-zinc-300 dark:bg-zinc-800/90 dark:text-zinc-300 dark:border-zinc-600",
 };
 
 const VISIBILITY_COLORS: Record<string, string> = {
-  visible: "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800",
-  hidden: "bg-zinc-100 text-zinc-500 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:border-zinc-700",
+  visible: "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-700",
+  hidden: "bg-zinc-100 text-zinc-600 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:border-zinc-700",
 };
+
+function ProductThumbnail({ photoUrl, alt }: { photoUrl: string | null; alt: string }) {
+  const [hasError, setHasError] = useState(false);
+
+  useEffect(() => {
+    setHasError(false);
+  }, [photoUrl]);
+
+  if (!photoUrl || hasError) {
+    return (
+      <div className="flex h-full w-full items-center justify-center text-[10px] font-bold text-zinc-400 dark:text-zinc-500 bg-zinc-100 dark:bg-zinc-800 border border-dashed border-zinc-200 dark:border-zinc-700 rounded-lg">
+        No Pic
+      </div>
+    );
+  }
+
+  return (
+    <img
+      src={photoUrl}
+      alt={alt}
+      onError={() => setHasError(true)}
+      className="h-full w-full object-cover rounded-lg"
+    />
+  );
+}
 
 export function TradingProductsList({ initialProducts }: TradingProductsListProps) {
   const router = useRouter();
@@ -684,19 +709,7 @@ export function TradingProductsList({ initialProducts }: TradingProductsListProp
                     {/* 1. Photo */}
                     <td className="px-4 py-3 align-middle">
                       <div className="relative h-10 w-10 overflow-hidden rounded-lg border border-zinc-200 bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-800 shrink-0">
-                        {product.photoUrl ? (
-                          <Image
-                            src={product.photoUrl}
-                            alt={product.display_name}
-                            fill
-                            sizes="40px"
-                            className="object-cover"
-                          />
-                        ) : (
-                          <div className="flex h-full w-full items-center justify-center text-[10px] font-medium text-zinc-400">
-                            No Pic
-                          </div>
-                        )}
+                        <ProductThumbnail photoUrl={product.photoUrl} alt={product.display_name} />
                       </div>
                     </td>
 
@@ -829,9 +842,9 @@ export function TradingProductsList({ initialProducts }: TradingProductsListProp
                           TRADING_COLORS[product.trading_status] || TRADING_COLORS.inactive
                         }`}
                       >
-                        <option value="active">운영 중 (Active)</option>
-                        <option value="inactive">운영 중지 (Inactive)</option>
-                        <option value="historical">운영 종료 (Historical)</option>
+                        <option value="active" className="bg-white text-zinc-900 dark:bg-zinc-900 dark:text-zinc-100 font-medium">운영 중 (Active)</option>
+                        <option value="inactive" className="bg-white text-zinc-900 dark:bg-zinc-900 dark:text-zinc-100 font-medium">운영 중지 (Inactive)</option>
+                        <option value="historical" className="bg-white text-zinc-900 dark:bg-zinc-900 dark:text-zinc-100 font-medium">운영 종료 (Historical)</option>
                       </select>
                     </td>
 
@@ -843,12 +856,12 @@ export function TradingProductsList({ initialProducts }: TradingProductsListProp
                         disabled={product.trading_status !== "active"}
                         className={`rounded-lg px-2 py-1 text-[11px] font-bold border outline-none ${
                           product.trading_status !== "active"
-                            ? "opacity-50 cursor-not-allowed bg-zinc-100 text-zinc-400 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-600 dark:border-zinc-700"
+                            ? "opacity-60 cursor-not-allowed bg-zinc-100 text-zinc-500 border-zinc-200 dark:bg-zinc-800/80 dark:text-zinc-300 dark:border-zinc-700"
                             : VISIBILITY_COLORS[product.retailer_visibility] || VISIBILITY_COLORS.hidden
                         }`}
                       >
-                        <option value="visible">노출 (Visible)</option>
-                        <option value="hidden">비노출 (Hidden)</option>
+                        <option value="visible" className="bg-white text-zinc-900 dark:bg-zinc-900 dark:text-zinc-100 font-medium">노출 (Visible)</option>
+                        <option value="hidden" className="bg-white text-zinc-900 dark:bg-zinc-900 dark:text-zinc-100 font-medium">비노출 (Hidden)</option>
                       </select>
                     </td>
 

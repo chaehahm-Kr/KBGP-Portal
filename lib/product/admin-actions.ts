@@ -148,8 +148,8 @@ export async function adminUpdateProductOverrides(
   }
   if (selectionStatus !== undefined) {
     updateData.selection_status = selectionStatus;
-    // Auto-activate trading_status when product is marked as SELECTED (unless explicitly specified otherwise)
-    if (selectionStatus === "SELECTED" && tradingStatus === undefined && (product.trading_status === null || product.trading_status === "inactive")) {
+    // Default trading_status to "active" ONLY for newly selected products whose trading_status is uninitialized (null)
+    if (selectionStatus === "SELECTED" && tradingStatus === undefined && product.trading_status === null) {
       updateData.trading_status = "active";
     }
   }
