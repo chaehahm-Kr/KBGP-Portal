@@ -31,6 +31,9 @@ export interface TradingProductItem {
   retailPrice: number | null;
   retailerMarginPercent: number | null;
   retailerMarginStatus: "normal" | "caution" | "warning" | "none";
+  formattedWholesale: string;
+  formattedRetail: string;
+  formattedMargin: string;
   qty_on_hand: number;
   qty_hold: number;
   qty_damaged: number;
@@ -64,20 +67,6 @@ const VISIBILITY_LABELS: Record<string, string> = {
   hidden: "비노출",
 };
 
-const MARGIN_STATUS_COLORS: Record<string, string> = {
-  normal: "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-400 dark:border-emerald-800",
-  caution: "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/30 dark:text-amber-400 dark:border-amber-800",
-  warning: "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/30 dark:text-rose-400 dark:border-rose-800",
-  none: "bg-zinc-100 text-zinc-500 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:border-zinc-700",
-};
-
-const MARGIN_STATUS_LABELS: Record<string, string> = {
-  normal: "정상",
-  caution: "주의",
-  warning: "경고",
-  none: "미산정",
-};
-
 type SortField = "name" | "wholesale" | "retail" | "margin" | "on_hand" | "available";
 type SortDirection = "asc" | "desc";
 
@@ -95,7 +84,7 @@ export function TradingProductsList({ initialProducts }: TradingProductsListProp
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
 
   const [updatingId, setUpdatingId] = useState<string | null>(null);
-  const [statusMessage, setStatusMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [statusMessage, setStatusMessage] = useState<{ type: "success" | "error" | "info"; text: string } | null>(null);
   const [, startTransition] = useTransition();
 
   // Confirmation Modal state
@@ -226,12 +215,13 @@ export function TradingProductsList({ initialProducts }: TradingProductsListProp
           reason: "Listing screen inline status change",
         });
 
-        if (res.success) {
+        if (res.success && res.trading_status && res.retailer_visibility) {
+          const updatedTrading = res.trading_status;
+          const updatedVis = res.retailer_visibility;
+
           setProducts((prev) =>
             prev.map((p) => {
               if (p.id !== productId) return p;
-              const updatedTrading = res.trading_status;
-              const updatedVis = res.retailer_visibility;
               const updatedWarnings = [...p.warnings];
               
               // Recompute visible_not_orderable warning
@@ -250,10 +240,17 @@ export function TradingProductsList({ initialProducts }: TradingProductsListProp
               };
             })
           );
-          setStatusMessage({ type: "success", text: "상태 및 노출 여부가 업데이트되었습니다." });
+
+          if (res.notice) {
+            setStatusMessage({ type: "info", text: res.notice });
+          } else {
+            setStatusMessage({ type: "success", text: "상태 및 노출 여부가 성공적으로 업데이트되었습니다." });
+          }
+        } else if (res.error) {
+          setStatusMessage({ type: "error", text: res.error });
         }
       } catch (err: any) {
-        setStatusMessage({ type: "error", text: err.message || "상태 변경 중 오류가 발생했습니다." });
+        setStatusMessage({ type: "error", text: err?.message || "상태 변경 중 오류가 발생했습니다." });
       } finally {
         setUpdatingId(null);
         setConfirmationModal(null);
@@ -282,26 +279,26 @@ export function TradingProductsList({ initialProducts }: TradingProductsListProp
 
   const handleVisibilitySelect = (product: TradingProductItem, newVis: string) => {
     if (product.trading_status !== "active" && newVis === "visible") {
-      alert("운영 중지 또는 운영 종료 상태인 제품은 Hub에 노출할 수 없습니다. 먼저 운영 상태를 '운영 중'으로 변경해 주세요.");
+      setStatusMessage({
+        type: "error",
+        text: "운영 중지 또는 운영 종료 상태인 제품은 Hub에 노출할 수 없습니다.",
+      });
       return;
     }
 
     executeStatusUpdate(product.id, product.trading_status as any, newVis as any);
   };
 
-  const formatPrice = (val: number | null) => {
-    if (val === null || val === undefined) return null;
-    return `$${val.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-  };
-
   return (
     <div className="space-y-4">
-      {/* Toast Notification Banner */}
+      {/* Feedback Banner */}
       {statusMessage && (
         <div
-          className={`p-3 rounded-xl text-xs font-semibold flex items-center justify-between border ${
+          className={`p-3.5 rounded-xl text-xs font-semibold flex items-center justify-between border ${
             statusMessage.type === "success"
               ? "bg-emerald-50 text-emerald-800 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800"
+              : statusMessage.type === "info"
+              ? "bg-blue-50 text-blue-800 border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-800"
               : "bg-rose-50 text-rose-800 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800"
           }`}
         >
@@ -511,7 +508,8 @@ export function TradingProductsList({ initialProducts }: TradingProductsListProp
                     )}
                   </div>
                 </th>
-                <th className="px-4 py-3.5 whitespace-nowrap">회사 / 브랜드</th>
+                {/* Brand Primary Column */}
+                <th className="px-4 py-3.5 whitespace-nowrap">브랜드 / 회사</th>
                 <th
                   onClick={() => handleSort("wholesale")}
                   className="px-4 py-3.5 whitespace-nowrap text-right cursor-pointer hover:bg-zinc-100/50 dark:hover:bg-zinc-800/50 select-none"
@@ -585,8 +583,6 @@ export function TradingProductsList({ initialProducts }: TradingProductsListProp
             <tbody className="divide-y divide-zinc-150 dark:divide-zinc-800/80">
               {sortedProducts.map((product) => {
                 const isUpdating = updatingId === product.id;
-                const formattedWholesale = formatPrice(product.wholesalePrice);
-                const formattedRetail = formatPrice(product.retailPrice);
 
                 return (
                   <tr
@@ -672,27 +668,29 @@ export function TradingProductsList({ initialProducts }: TradingProductsListProp
                       </div>
                     </td>
 
-                    {/* 5. Company / Brand Stacked 2 lines */}
+                    {/* 5. Brand (Primary) / Company (Secondary) Stacked 2 lines */}
                     <td className="px-4 py-3 align-middle text-xs whitespace-nowrap max-w-[140px]">
                       <div className="flex flex-col">
+                        {/* 1st Line: Brand (Bold, Primary) */}
+                        <span className="font-bold text-zinc-900 dark:text-white truncate">
+                          {product.brandName}
+                        </span>
+                        {/* 2nd Line: Company (Smaller, Muted Link) */}
                         <Link
                           href={`/admin/companies/${product.company_id}`}
-                          className="font-semibold text-zinc-800 dark:text-zinc-200 hover:underline hover:text-zinc-950 dark:hover:text-white truncate"
+                          className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400 hover:underline hover:text-zinc-800 dark:hover:text-zinc-200 truncate"
                         >
                           {product.companyName}
                         </Link>
-                        <span className="text-[10px] text-zinc-500 dark:text-zinc-400 truncate">
-                          {product.brandName}
-                        </span>
                       </div>
                     </td>
 
                     {/* 6. Wholesale */}
                     <td className="px-4 py-3 align-middle text-right font-mono text-xs whitespace-nowrap">
-                      {formattedWholesale ? (
+                      {product.formattedWholesale !== "Price Missing" ? (
                         <div className="flex flex-col items-end">
                           <span className="font-bold text-zinc-900 dark:text-white">
-                            {formattedWholesale}
+                            {product.formattedWholesale}
                           </span>
                           {product.hasActivePromo && (
                             <span className="text-[9px] font-bold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 px-1 py-0.2 rounded border border-amber-200 dark:border-amber-800">
@@ -709,35 +707,38 @@ export function TradingProductsList({ initialProducts }: TradingProductsListProp
 
                     {/* 7. Retail Price */}
                     <td className="px-4 py-3 align-middle text-right font-mono text-xs whitespace-nowrap">
-                      {formattedRetail ? (
+                      {product.formattedRetail !== "—" ? (
                         <span className="font-bold text-zinc-900 dark:text-white">
-                          {formattedRetail}
+                          {product.formattedRetail}
                         </span>
                       ) : (
-                        <span className="text-amber-600 dark:text-amber-400 font-sans font-semibold text-[11px]">
-                          Price Missing
+                        <span className="text-zinc-400 dark:text-zinc-500 font-sans font-medium text-[11px]">
+                          —
                         </span>
                       )}
                     </td>
 
-                    {/* 8. Retailer Margin */}
+                    {/* 8. Retailer Margin UI Cleanup: Number only if >=50%, Orange if 40-49.9%, Red if <40%, — if invalid */}
                     <td className="px-4 py-3 align-middle text-center whitespace-nowrap">
-                      {product.retailerMarginPercent !== null ? (
+                      {product.formattedMargin !== "—" ? (
                         <div className="flex flex-col items-center gap-0.5">
                           <span className="font-mono font-bold text-xs text-zinc-900 dark:text-white">
-                            {product.retailerMarginPercent.toFixed(1)}%
+                            {product.formattedMargin}
                           </span>
-                          <span
-                            className={`inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-bold border ${
-                              MARGIN_STATUS_COLORS[product.retailerMarginStatus] || MARGIN_STATUS_COLORS.none
-                            }`}
-                          >
-                            {MARGIN_STATUS_LABELS[product.retailerMarginStatus]}
-                          </span>
+                          {product.retailerMarginStatus === "caution" && (
+                            <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-800">
+                              주의
+                            </span>
+                          )}
+                          {product.retailerMarginStatus === "warning" && (
+                            <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-bold bg-rose-50 text-rose-700 border border-rose-200 dark:bg-rose-950/40 dark:text-rose-400 dark:border-rose-800">
+                              경고
+                            </span>
+                          )}
                         </div>
                       ) : (
-                        <span className="text-zinc-400 dark:text-zinc-600 text-[11px]">
-                          미산정
+                        <span className="text-zinc-400 dark:text-zinc-500 font-medium text-[11px]">
+                          —
                         </span>
                       )}
                     </td>

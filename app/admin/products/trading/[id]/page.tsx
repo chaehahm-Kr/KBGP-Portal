@@ -4,7 +4,7 @@ import { getTradingProductDetailData } from "@/lib/product/trading-actions";
 import { TradingProductDetail } from "@/components/admin/trading-product-detail";
 
 export const metadata: Metadata = {
-  title: "Trading Product 360° Operations Hub | K SELECT NETWORK 어드민",
+  title: "상품 운영 (Product Operations) | K SELECT NETWORK 어드민",
 };
 
 export default async function AdminTradingProductDetailPage({

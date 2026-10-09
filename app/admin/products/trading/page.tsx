@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getSignedFileUrl } from "@/lib/files/storage";
 import { TradingProductsList, type TradingProductItem } from "@/components/admin/trading-products-list";
 import { resolveEffectiveSku } from "@/lib/product/types";
+import { resolveProductPricing } from "@/lib/product/pricing-resolver";
 
 export const metadata: Metadata = {
   title: "거래 대상 제품 관리 (Trading Products) | K SELECT NETWORK 어드민",
@@ -86,8 +87,6 @@ export default async function AdminTradingProductsPage() {
     damagedByProduct.set(b.product_id, (damagedByProduct.get(b.product_id) || 0) + Number(b.qty_damaged || 0));
   });
 
-  const now = new Date();
-
   const resolvedProducts: TradingProductItem[] = await Promise.all(
     (products ?? []).map(async (p) => {
       // Find the first image for this product
@@ -103,7 +102,6 @@ export default async function AdminTradingProductsPage() {
 
       const priceAddInfo = (p.price_additional_info as any) || {};
       const adminOverrides = priceAddInfo.admin_overrides || {};
-      const tradingOverrides = priceAddInfo.trading_overrides || {};
 
       const effectiveManufactureSku = resolveEffectiveSku(adminOverrides.manufacture_sku, p.manufacture_sku);
       const effectiveLetustoSku = resolveEffectiveSku(adminOverrides.letusto_sku, p.letusto_sku);
@@ -113,58 +111,8 @@ export default async function AdminTradingProductsPage() {
       const totalDamaged = damagedByProduct.get(p.id) || 0;
       const totalAvailable = Math.max(0, totalOnHand - totalHold - totalDamaged);
 
-      // Resolve Wholesale Price
-      const directWholesale = (p as any).trading_wholesale_price;
-      const jsonWholesale = tradingOverrides.wholesale_price;
-      const baseWholesale = directWholesale !== undefined && directWholesale !== null
-        ? Number(directWholesale)
-        : (jsonWholesale !== undefined && jsonWholesale !== null
-            ? Number(jsonWholesale)
-            : (p.price_usd_fob ? Number(p.price_usd_fob) : (p.price_krw_wholesale ? Number(p.price_krw_wholesale) : null)));
-
-      // Promo Wholesale
-      const directPromoWholesale = (p as any).trading_promo_wholesale_price;
-      const jsonPromoWholesale = tradingOverrides.promo_wholesale_price;
-      const promoWholesale = directPromoWholesale !== undefined && directPromoWholesale !== null
-        ? Number(directPromoWholesale)
-        : (jsonPromoWholesale !== undefined && jsonPromoWholesale !== null ? Number(jsonPromoWholesale) : null);
-
-      const promoStartDate = (p as any).trading_promo_start_date || tradingOverrides.promo_start_date || null;
-      const promoEndDate = (p as any).trading_promo_end_date || tradingOverrides.promo_end_date || null;
-
-      const hasActivePromo = promoWholesale !== null && promoWholesale > 0 && (
-        (!promoStartDate || new Date(promoStartDate) <= now) &&
-        (!promoEndDate || new Date(promoEndDate) >= now)
-      );
-
-      const wholesalePrice = hasActivePromo ? promoWholesale : baseWholesale;
-
-      // Resolve Retail Price (SRP)
-      const directSrp = (p as any).trading_srp_price;
-      const jsonSrp = tradingOverrides.srp_price;
-      const retailPrice = directSrp !== undefined && directSrp !== null
-        ? Number(directSrp)
-        : (jsonSrp !== undefined && jsonSrp !== null
-            ? Number(jsonSrp)
-            : (p.estimated_retail_price
-                ? Number(p.estimated_retail_price)
-                : (p.price_krw_retail ? Number(p.price_krw_retail) : null)));
-
-      // Calculate Retailer Margin Percent
-      let retailerMarginPercent: number | null = null;
-      let retailerMarginStatus: "normal" | "caution" | "warning" | "none" = "none";
-
-      if (retailPrice !== null && wholesalePrice !== null && retailPrice > 0) {
-        const marginUsd = retailPrice - wholesalePrice;
-        retailerMarginPercent = (marginUsd / retailPrice) * 100;
-        if (retailerMarginPercent >= 50) {
-          retailerMarginStatus = "normal";
-        } else if (retailerMarginPercent >= 40) {
-          retailerMarginStatus = "caution";
-        } else {
-          retailerMarginStatus = "warning";
-        }
-      }
+      // Authoritative Pricing Resolution
+      const pricing = resolveProductPricing(p);
 
       // Resolve UPC/EAN
       const upc = p.upc || p.ean || adminOverrides.upc || adminOverrides.ean || null;
@@ -175,10 +123,10 @@ export default async function AdminTradingProductsPage() {
 
       // Compute Warnings
       const warnings: string[] = [];
-      if (wholesalePrice === null || wholesalePrice === 0) {
+      if (!pricing.isWholesaleValid) {
         warnings.push("missing_wholesale");
       }
-      if (retailPrice === null || retailPrice === 0) {
+      if (!pricing.isRetailValid) {
         warnings.push("missing_retail");
       }
       if (totalAvailable <= 0) {
@@ -189,7 +137,7 @@ export default async function AdminTradingProductsPage() {
       if (retailerVisibility === "visible" && (totalAvailable <= 0 || tradingStatus !== "active")) {
         warnings.push("visible_not_orderable");
       }
-      if (retailerMarginPercent !== null && retailerMarginPercent < 40) {
+      if (pricing.isMarginValid && pricing.retailerMarginPercent !== null && pricing.retailerMarginPercent < 40) {
         warnings.push("margin_warning");
       }
 
@@ -215,11 +163,14 @@ export default async function AdminTradingProductsPage() {
         retailer_visibility: retailerVisibility,
         category_code: p.category_code || null,
         category_full_path: p.category_code ? getCategoryFullPath(p.category_code) : null,
-        wholesalePrice,
-        hasActivePromo,
-        retailPrice,
-        retailerMarginPercent,
-        retailerMarginStatus,
+        wholesalePrice: pricing.wholesalePrice,
+        hasActivePromo: pricing.hasActivePromo,
+        retailPrice: pricing.retailPrice,
+        retailerMarginPercent: pricing.retailerMarginPercent,
+        retailerMarginStatus: pricing.retailerMarginStatus,
+        formattedWholesale: pricing.formattedWholesale,
+        formattedRetail: pricing.formattedRetail,
+        formattedMargin: pricing.formattedMargin,
         qty_on_hand: totalOnHand,
         qty_hold: totalHold,
         qty_damaged: totalDamaged,

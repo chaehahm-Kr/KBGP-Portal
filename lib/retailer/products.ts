@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { verifyRetailerSession } from "@/lib/auth/dal";
 import { resolveEffectiveSku, isDraftPlaceholderName, isDraftPlaceholderSku } from "@/lib/product/types";
 import { evaluateProductRegistrationStatus } from "@/lib/product/registration-status";
+import { resolveProductPricing, parseValidPositiveNumber } from "@/lib/product/pricing-resolver";
 
 export interface RetailerProductSummary {
   id: string;
@@ -85,44 +86,25 @@ export function formatCategoryName(cat: string | null | undefined): string {
 }
 
 function resolveRetailerPrice(prod: any) {
+  const pricing = resolveProductPricing(prod);
   const info = (prod.price_additional_info as any) || {};
   const overrides = info.trading_overrides || {};
-  const adminOverrides = info.admin_overrides || {};
   const curation = Array.isArray(prod.product_curations)
     ? prod.product_curations[0]
     : prod.product_curations;
 
-  const now = new Date();
-  const promoPrice = Number(overrides.promo_wholesale_price || prod.trading_promo_wholesale_price || 0);
-  const promoStart = overrides.promo_start_date || prod.trading_promo_start_date;
-  const promoEnd = overrides.promo_end_date || prod.trading_promo_end_date;
-
-  let wholesalePrice = 0;
-  if (promoPrice > 0) {
-    const isStartValid = !promoStart || new Date(promoStart) <= now;
-    const isEndValid = !promoEnd || new Date(promoEnd) >= now;
-    if (isStartValid && isEndValid) {
-      wholesalePrice = promoPrice;
-    }
-  }
-
+  let wholesalePrice = pricing.wholesalePrice || 0;
   if (wholesalePrice <= 0) {
-    const tradingWholesale = Number(overrides.wholesale_price || prod.trading_wholesale_price || 0);
-    if (tradingWholesale > 0) {
-      wholesalePrice = tradingWholesale;
-    }
+    const curationWholesale = parseValidPositiveNumber(curation?.wholesale_price);
+    if (curationWholesale) wholesalePrice = curationWholesale;
   }
 
-  if (wholesalePrice <= 0) {
-    const curationWholesale = Number(curation?.wholesale_price || 0);
-    if (curationWholesale > 0) {
-      wholesalePrice = curationWholesale;
+  let msrp = pricing.retailPrice || 0;
+  if (msrp <= 0) {
+    const curationSrp = parseValidPositiveNumber(curation?.suggest_retail_price);
+    if (curationSrp && (wholesalePrice <= 0 || curationSrp <= 500 || wholesalePrice > 100)) {
+      msrp = curationSrp;
     }
-  }
-
-  let msrp = Number(overrides.srp_price || adminOverrides.suggest_retail_price || curation?.suggest_retail_price || prod.estimated_retail_price || 0);
-  if (msrp <= 0 && wholesalePrice > 0) {
-    msrp = Number((wholesalePrice * 2.0).toFixed(2));
   }
 
   const isPricingActive = overrides.is_pricing_active !== false && prod.trading_pricing_active !== false;

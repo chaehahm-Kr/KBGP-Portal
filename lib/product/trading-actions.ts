@@ -7,6 +7,11 @@ import { getProductInventory } from "@/lib/inventory/actions";
 import { getProductCostSummary } from "@/lib/landed-cost/actions";
 import { getSignedFileUrl } from "@/lib/files/storage";
 import { resolveEffectiveSku } from "@/lib/product/types";
+import { resolveProductPricing } from "@/lib/product/pricing-resolver";
+import {
+  evaluateTradingOrderability,
+  evaluateProductRegistrationStatus,
+} from "@/lib/product/registration-status";
 
 export interface UpdateTradingPricingInput {
   wholesale_price: number;
@@ -33,8 +38,7 @@ export async function getTradingProductDetailData(productId: string) {
   await verifyAdminSession();
   const adminSupabase = createAdminClient();
 
-  let product: any = null;
-  const { data: prodWithVis, error: prodErr } = await adminSupabase
+  const { data: product, error: prodErr } = await adminSupabase
     .from("products")
     .select(`
       id, name, name_en, category, volume, estimated_retail_price, brand_id, company_id,
@@ -43,33 +47,14 @@ export async function getTradingProductDetailData(productId: string) {
       price_krw_retail, price_krw_wholesale, price_usd_fob, price_additional_info,
       item_width, item_depth, item_height, item_weight,
       package_width, package_depth, package_height, package_weight,
-      selection_status, sales_status, category_code, trading_status, retailer_visibility
+      selection_status, sales_status, category_code, trading_status, retailer_visibility,
+      trading_wholesale_price, trading_promo_wholesale_price, trading_promo_start_date, trading_promo_end_date, trading_srp_price, trading_map_price
     `)
     .eq("id", productId)
     .maybeSingle();
 
-  if (prodErr) {
-    const { data: fallbackProd, error: fallbackErr } = await adminSupabase
-      .from("products")
-      .select(`
-        id, name, name_en, category, volume, estimated_retail_price, brand_id, company_id,
-        description, bullet_points, origin, lead_time,
-        parent_sku, child_sku, manufacture_sku, letusto_sku, upc, ean,
-        price_krw_retail, price_krw_wholesale, price_usd_fob, price_additional_info,
-        item_width, item_depth, item_height, item_weight,
-        package_width, package_depth, package_height, package_weight,
-        selection_status, sales_status, category_code, trading_status
-      `)
-      .eq("id", productId)
-      .maybeSingle();
-
-    if (fallbackErr || !fallbackProd) {
-      return null;
-    }
-    product = fallbackProd;
-  } else {
-    if (!prodWithVis) return null;
-    product = prodWithVis;
+  if (prodErr || !product) {
+    return null;
   }
 
   const { data: brand } = await adminSupabase
@@ -170,8 +155,7 @@ export async function getTradingProductDetailData(productId: string) {
     .eq("product_id", productId)
     .order("created_at", { ascending: false });
 
-  // CANONICAL INBOUND CALCULATION LOGIC (Section 5, 6, 7 & 8)
-  // 1. Fetch active shipments for this product where status NOT IN ('CANCELLED', 'COMPLETED')
+  // CANONICAL INBOUND CALCULATION LOGIC
   const { data: openShipmentLines } = await adminSupabase
     .from("inbound_shipment_lines")
     .select(`
@@ -232,7 +216,6 @@ export async function getTradingProductDetailData(productId: string) {
     }
   });
 
-  // 2. Fetch active PO lines where po_status NOT IN ('DRAFT', 'CANCELLED') and fulfillment_status != 'COMPLETED'
   const { data: openPoLines } = await adminSupabase
     .from("purchase_order_lines")
     .select(`
@@ -330,66 +313,82 @@ export async function getTradingProductDetailData(productId: string) {
     ? overrideLandedCost
     : baseLandedCost;
 
-  // Pricing Snapshot (Priority: Trading Override > Catalog Master)
-  const defaultWholesale = adminOverrides.price_usd_fob !== undefined
-    ? parseFloat(adminOverrides.price_usd_fob)
-    : (product.price_usd_fob || 0);
+  // Authoritative Pricing Resolution via Pricing Resolver
+  const pricing = resolveProductPricing(product);
 
-  const defaultSrp = adminOverrides.estimated_retail_price !== undefined
-    ? parseFloat(adminOverrides.estimated_retail_price)
-    : (product.estimated_retail_price || 0);
+  const defaultWholesale = pricing.baseWholesalePrice || 0;
+  const defaultSrp = pricing.retailPrice || 0;
+  const defaultMap = pricing.mapPrice || defaultSrp;
 
-  const defaultMap = defaultSrp > 0 ? defaultSrp : 0;
-
-  const directTradingWholesale = (product as any).trading_wholesale_price;
-  const jsonTradingWholesale = tradingOverrides.wholesale_price;
-  const operationalWholesale = directTradingWholesale !== undefined && directTradingWholesale !== null
-    ? Number(directTradingWholesale)
-    : (jsonTradingWholesale !== undefined && jsonTradingWholesale !== null ? Number(jsonTradingWholesale) : defaultWholesale);
-
-  const directPromoWholesale = (product as any).trading_promo_wholesale_price;
-  const jsonPromoWholesale = tradingOverrides.promo_wholesale_price;
-  const promoWholesale = directPromoWholesale !== undefined && directPromoWholesale !== null
-    ? Number(directPromoWholesale)
-    : (jsonPromoWholesale !== undefined && jsonPromoWholesale !== null ? Number(jsonPromoWholesale) : null);
+  const operationalWholesale = pricing.baseWholesalePrice || 0;
+  const promoWholesale = pricing.promoWholesalePrice;
 
   const promoStartDate = (product as any).trading_promo_start_date || tradingOverrides.promo_start_date || null;
   const promoEndDate = (product as any).trading_promo_end_date || tradingOverrides.promo_end_date || null;
 
-  const directTradingMap = (product as any).trading_map_price;
-  const jsonTradingMap = tradingOverrides.map_price;
-  const mapPrice = directTradingMap !== undefined && directTradingMap !== null
-    ? Number(directTradingMap)
-    : (jsonTradingMap !== undefined && jsonTradingMap !== null ? Number(jsonTradingMap) : defaultMap);
-
-  const directTradingSrp = (product as any).trading_srp_price;
-  const jsonTradingSrp = tradingOverrides.srp_price;
-  const srpPrice = directTradingSrp !== undefined && directTradingSrp !== null
-    ? Number(directTradingSrp)
-    : (jsonTradingSrp !== undefined && jsonTradingSrp !== null ? Number(jsonTradingSrp) : defaultSrp);
+  const mapPrice = pricing.mapPrice || defaultMap;
+  const srpPrice = pricing.retailPrice || defaultSrp;
 
   const pricingNote = (product as any).trading_pricing_note || tradingOverrides.pricing_note || null;
   const isPricingActive = (product as any).trading_pricing_active !== undefined ? (product as any).trading_pricing_active : (tradingOverrides.is_active ?? true);
 
-  const now = new Date();
-  const isPromoActive = promoWholesale !== null && promoWholesale > 0 && (
-    (!promoStartDate || new Date(promoStartDate) <= now) &&
-    (!promoEndDate || new Date(promoEndDate) >= now)
-  );
+  const effectiveWholesale = pricing.wholesalePrice || 0;
 
-  const effectiveWholesale = isPromoActive ? promoWholesale : operationalWholesale;
-
-  const ourMarginUsd = effectiveWholesale - effectiveLandedCost;
+  const ourMarginUsd = effectiveWholesale > 0 && effectiveLandedCost > 0 ? effectiveWholesale - effectiveLandedCost : 0;
   const ourMarginPercent = effectiveWholesale > 0 ? (ourMarginUsd / effectiveWholesale) * 100 : 0;
 
-  const baseOurMarginUsd = operationalWholesale - effectiveLandedCost;
+  const baseOurMarginUsd = operationalWholesale > 0 && effectiveLandedCost > 0 ? operationalWholesale - effectiveLandedCost : 0;
   const baseOurMarginPercent = operationalWholesale > 0 ? (baseOurMarginUsd / operationalWholesale) * 100 : 0;
 
-  const retailerMarginUsd = srpPrice - effectiveWholesale;
-  const retailerMarginPercent = srpPrice > 0 ? (retailerMarginUsd / srpPrice) * 100 : 0;
+  const retailerMarginUsd = srpPrice > 0 && effectiveWholesale > 0 ? srpPrice - effectiveWholesale : 0;
+  const retailerMarginPercent = pricing.retailerMarginPercent || 0;
 
-  const baseRetailerMarginUsd = srpPrice - operationalWholesale;
-  const baseRetailerMarginPercent = srpPrice > 0 ? (baseRetailerMarginUsd / srpPrice) * 100 : 0;
+  const baseRetailerMarginUsd = srpPrice > 0 && operationalWholesale > 0 ? srpPrice - operationalWholesale : 0;
+  const baseRetailerMarginPercent = (srpPrice > 0 && operationalWholesale > 0) ? ((srpPrice - operationalWholesale) / srpPrice) * 100 : 0;
+
+  const cartonPackQty = Math.max(1, Number(adminOverrides.carton_pack_qty || (product as any).carton_pack_qty || 1));
+  const moq = cartonPackQty;
+  const orderMultiple = cartonPackQty;
+
+  const regEval = evaluateProductRegistrationStatus({
+    id: product.id,
+    name: product.name,
+    name_en: product.name_en,
+    brand_id: product.brand_id,
+    category_code: product.category_code,
+    manufacture_sku: product.manufacture_sku,
+    origin: product.origin,
+    price_krw_retail: product.price_krw_retail,
+    price_usd_fob: product.price_usd_fob,
+    package_width: product.package_width,
+    package_depth: product.package_depth,
+    package_height: product.package_height,
+    package_weight: product.package_weight,
+    carton_pack_qty: cartonPackQty,
+    upc: product.upc,
+    ean: product.ean,
+    deleted_at: priceAddInfo.deleted_at || (product as any).deleted_at,
+    hasImages: photoUrls.length > 0,
+  });
+
+  const tradingStatus =
+    product.trading_status === "active" || product.trading_status === "historical"
+      ? product.trading_status
+      : product.selection_status === "SELECTED"
+      ? "active"
+      : "inactive";
+
+  const retailerVisibility = (product as any).retailer_visibility || "hidden";
+
+  const orderability = evaluateTradingOrderability({
+    registrationStatus: regEval.status,
+    selectionStatus: product.selection_status,
+    tradingStatus,
+    retailerVisibility,
+    isPricingActive,
+    wholesalePrice: effectiveWholesale,
+    cartonPackQty,
+  });
 
   const resolvedProduct = {
     id: product.id,
@@ -409,15 +408,16 @@ export async function getTradingProductDetailData(productId: string) {
     upc: product.upc || product.ean || adminOverrides.upc || null,
     selection_status: product.selection_status,
     sales_status: product.sales_status,
-    trading_status:
-      product.trading_status === "active" || product.trading_status === "historical"
-        ? product.trading_status
-        : product.selection_status === "SELECTED"
-        ? "active"
-        : "inactive",
-    retailer_visibility: (product as any).retailer_visibility || "hidden",
+    trading_status: tradingStatus,
+    retailer_visibility: retailerVisibility,
     category_code: product.category_code || null,
     category_full_path: categoryFullPath,
+    registration_status: regEval.status,
+
+    // Case Pack, MOQ & Order Units
+    carton_pack_qty: cartonPackQty,
+    moq,
+    orderMultiple,
     
     // Default Catalog Pricing
     defaultWholesale,
@@ -426,21 +426,18 @@ export async function getTradingProductDetailData(productId: string) {
 
     // Live Operational Pricing
     operationalWholesale,
+    effectiveWholesale,
     promoWholesale,
     promoStartDate,
     promoEndDate,
-    isPromoActive,
+    isPromoActive: pricing.hasActivePromo,
     mapPrice,
     srpPrice,
     pricingNote,
     isPricingActive,
     hasPricingOverride: (
-      (directTradingWholesale !== undefined && directTradingWholesale !== null) ||
-      (jsonTradingWholesale !== undefined && jsonTradingWholesale !== null) ||
-      (directTradingMap !== undefined && directTradingMap !== null) ||
-      (jsonTradingMap !== undefined && jsonTradingMap !== null) ||
-      (directTradingSrp !== undefined && directTradingSrp !== null) ||
-      (jsonTradingSrp !== undefined && jsonTradingSrp !== null)
+      (product as any).trading_wholesale_price !== undefined && (product as any).trading_wholesale_price !== null ||
+      tradingOverrides.wholesale_price !== undefined && tradingOverrides.wholesale_price !== null
     ),
 
     // Cost Snapshot & 3-Layer Model
@@ -461,6 +458,9 @@ export async function getTradingProductDetailData(productId: string) {
     retailerMarginPercent,
     baseRetailerMarginUsd,
     baseRetailerMarginPercent,
+
+    // Calculated Orderability
+    orderability,
   };
 
   return {
@@ -593,9 +593,13 @@ export async function updateTradingPricing(productId: string, input: UpdateTradi
     // Ignore
   }
 
-  revalidatePath(`/admin/products/trading/${productId}`);
-  revalidatePath("/admin/products/trading");
-  revalidatePath(`/admin/products/${productId}`);
+  try {
+    revalidatePath(`/admin/products/trading/${productId}`);
+    revalidatePath("/admin/products/trading");
+    revalidatePath(`/admin/products/${productId}`);
+  } catch {
+    // Ignore
+  }
   return { success: true };
 }
 
@@ -717,8 +721,12 @@ export async function updateTradingPromotion(productId: string, input: UpdateTra
     // Ignore
   }
 
-  revalidatePath(`/admin/products/trading/${productId}`);
-  revalidatePath("/admin/products/trading");
+  try {
+    revalidatePath(`/admin/products/trading/${productId}`);
+    revalidatePath("/admin/products/trading");
+  } catch {
+    // Ignore
+  }
   return { success: true };
 }
 
@@ -827,8 +835,12 @@ export async function updateTradingCostOverride(productId: string, input: Update
     // Ignore
   }
 
-  revalidatePath(`/admin/products/trading/${productId}`);
-  revalidatePath("/admin/products/trading");
+  try {
+    revalidatePath(`/admin/products/trading/${productId}`);
+    revalidatePath("/admin/products/trading");
+  } catch {
+    // Ignore
+  }
   return { success: true };
 }
 
@@ -914,8 +926,12 @@ export async function clearTradingCostOverride(productId: string, reason: string
       .eq("id", productId);
   }
 
-  revalidatePath(`/admin/products/trading/${productId}`);
-  revalidatePath("/admin/products/trading");
+  try {
+    revalidatePath(`/admin/products/trading/${productId}`);
+    revalidatePath("/admin/products/trading");
+  } catch {
+    // Ignore
+  }
   return { success: true };
 }
 
@@ -929,73 +945,91 @@ export async function updateTradingStatusAndVisibility(
   productId: string,
   input: UpdateTradingStatusAndVisibilityInput
 ) {
-  const { userId } = await verifyAdminSession();
-  const supabase = createAdminClient();
+  try {
+    const { userId } = await verifyAdminSession();
+    const supabase = createAdminClient();
 
-  let tradingStatus = input.trading_status;
-  let visibility = input.retailer_visibility;
+    let tradingStatus = input.trading_status;
+    let visibility = input.retailer_visibility;
+    let notice: string | undefined = undefined;
 
-  // Enforce status and visibility combinations:
-  // - active + visible -> allowed
-  // - active + hidden -> allowed
-  // - inactive + hidden -> allowed
-  // - historical + hidden -> allowed
-  // - inactive/historical + visible -> force hidden
-  if (tradingStatus !== "active" && visibility === "visible") {
-    visibility = "hidden";
-  }
+    const { data: currentProd } = await supabase
+      .from("products")
+      .select("trading_status, retailer_visibility, price_additional_info")
+      .eq("id", productId)
+      .maybeSingle();
 
-  const { data: currentProd } = await supabase
-    .from("products")
-    .select("trading_status, retailer_visibility, price_additional_info")
-    .eq("id", productId)
-    .single();
+    if (!currentProd) {
+      return { success: false, error: "제품 정보를 찾을 수 없습니다." };
+    }
 
-  if (!currentProd) throw new Error("Product not found.");
+    // Enforce status and visibility combination rules:
+    // - active + visible -> allowed
+    // - active + hidden -> allowed
+    // - inactive/historical + visible -> NOT ALLOWED -> force hidden + friendly notice
+    if (tradingStatus !== "active" && (visibility === "visible" || currentProd.retailer_visibility === "visible")) {
+      visibility = "hidden";
+      notice = "운영 상태 변경에 따라 Hub 노출도 비노출로 변경되었습니다.";
+    }
 
-  const beforeVal = {
-    trading_status: currentProd.trading_status || "inactive",
-    retailer_visibility: (currentProd as any).retailer_visibility || "hidden",
-  };
+    const beforeVal = {
+      trading_status: currentProd.trading_status || "inactive",
+      retailer_visibility: (currentProd as any).retailer_visibility || "hidden",
+    };
 
-  const afterVal = {
-    trading_status: tradingStatus,
-    retailer_visibility: visibility,
-  };
-
-  const { error } = await supabase
-    .from("products")
-    .update({
+    const afterVal = {
       trading_status: tradingStatus,
       retailer_visibility: visibility,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", productId);
+    };
 
-  if (error) {
-    throw new Error(`상태 업데이트 실패: ${error.message}`);
+    const { error: updateErr } = await supabase
+      .from("products")
+      .update({
+        trading_status: tradingStatus,
+        retailer_visibility: visibility,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", productId);
+
+    if (updateErr) {
+      return { success: false, error: `상태 업데이트 실패: ${updateErr.message}` };
+    }
+
+    try {
+      await supabase.from("trading_product_history").insert({
+        product_id: productId,
+        change_type: "STATUS",
+        field_name: "trading_status_visibility",
+        before_value: beforeVal,
+        after_value: afterVal,
+        reason: input.reason || "Operational status and visibility updated",
+        created_by: userId,
+      });
+    } catch {
+      // Ignore history logging error
+    }
+
+    try {
+      revalidatePath(`/admin/products/trading/${productId}`);
+      revalidatePath("/admin/products/trading");
+      revalidatePath(`/admin/products/${productId}`);
+      revalidatePath("/admin/products");
+      revalidatePath("/products");
+      revalidatePath(`/products/${productId}`);
+    } catch {
+      // Ignore revalidation path exceptions
+    }
+
+    return {
+      success: true,
+      trading_status: tradingStatus,
+      retailer_visibility: visibility,
+      notice,
+    };
+  } catch (err: any) {
+    return {
+      success: false,
+      error: err?.message || "상태 변경 중 오류가 발생했습니다.",
+    };
   }
-
-  try {
-    await supabase.from("trading_product_history").insert({
-      product_id: productId,
-      change_type: "STATUS",
-      field_name: "trading_status_visibility",
-      before_value: beforeVal,
-      after_value: afterVal,
-      reason: input.reason || "Operational status and visibility updated",
-      created_by: userId,
-    });
-  } catch {
-    // Ignore history logging error
-  }
-
-  revalidatePath(`/admin/products/trading/${productId}`);
-  revalidatePath("/admin/products/trading");
-  revalidatePath(`/admin/products/${productId}`);
-  revalidatePath("/admin/products");
-  revalidatePath("/products");
-  revalidatePath(`/products/${productId}`);
-
-  return { success: true, trading_status: tradingStatus, retailer_visibility: visibility };
 }

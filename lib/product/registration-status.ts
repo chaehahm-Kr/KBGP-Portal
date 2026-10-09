@@ -186,6 +186,59 @@ export function sanitizeTradingAndVisibility(
   return { tradingStatus: tStatus, visibility: vStatus };
 }
 
+export interface OrderabilityEvaluation {
+  isOrderable: boolean;
+  reason: string | null;
+}
+
+/**
+ * Authoritative Server-side Orderability Evaluator
+ * Requires ALL of the following:
+ * 1. Registration Status == 'COMPLETE' (if evaluated)
+ * 2. Selection Status == 'SELECTED'
+ * 3. Operational Trading Status == 'active'
+ * 4. Retailer Hub Visibility == 'visible'
+ * 5. Pricing is Active (isPricingActive !== false)
+ * 6. Wholesale Price > 0
+ * 7. Case Pack / MOQ >= 1
+ */
+export function evaluateTradingOrderability(params: {
+  registrationStatus?: string | null;
+  selectionStatus: string | null | undefined;
+  tradingStatus: string | null | undefined;
+  retailerVisibility: string | null | undefined;
+  isPricingActive: boolean;
+  wholesalePrice: number;
+  cartonPackQty?: number | null;
+}): OrderabilityEvaluation {
+  if (params.registrationStatus && params.registrationStatus !== "COMPLETE") {
+    return { isOrderable: false, reason: "등록 미완료" };
+  }
+  if (params.selectionStatus !== "SELECTED") {
+    return { isOrderable: false, reason: "미선정 상품" };
+  }
+  if (params.tradingStatus !== "active") {
+    return {
+      isOrderable: false,
+      reason: params.tradingStatus === "historical" ? "운영 종료 상품" : "운영 중지 상품",
+    };
+  }
+  if (params.retailerVisibility !== "visible") {
+    return { isOrderable: false, reason: "Hub 비노출" };
+  }
+  if (!params.isPricingActive) {
+    return { isOrderable: false, reason: "가격 비활성화" };
+  }
+  if (!params.wholesalePrice || params.wholesalePrice <= 0) {
+    return { isOrderable: false, reason: "도매가 미입력" };
+  }
+  const pack = params.cartonPackQty ?? 1;
+  if (pack < 1) {
+    return { isOrderable: false, reason: "MOQ 미설정" };
+  }
+  return { isOrderable: true, reason: null };
+}
+
 export interface CategoryMissingStep {
   code: "cat1" | "cat2" | "cat3";
   label: string;
