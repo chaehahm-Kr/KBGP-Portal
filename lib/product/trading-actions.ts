@@ -20,7 +20,7 @@ import {
   evaluateTradingOrderability,
   evaluateProductRegistrationStatus,
 } from "@/lib/product/registration-status";
-import { evaluateHubVisibility, type HubVisibilityEvaluation } from "@/lib/product/hub-visibility";
+import { evaluateHubVisibility, evaluateVisibilityEligibility, type HubVisibilityEvaluation } from "@/lib/product/hub-visibility";
 
 export interface UpdateTradingPricingInput {
   wholesale_price: number;
@@ -1337,13 +1337,22 @@ export async function updateTradingStatusAndVisibility(
       return { success: false, error: "제품 정보를 찾을 수 없습니다." };
     }
 
-    // Enforce status and visibility combination rules:
-    // - active + visible -> allowed
-    // - active + hidden -> allowed
-    // - inactive/historical + visible -> NOT ALLOWED -> force hidden + friendly notice
-    if (tradingStatus !== "active" && (visibility === "visible" || currentProd.retailer_visibility === "visible")) {
+    // Enforce status and visibility combination & eligibility rules:
+    // 1. Inactive or Historical -> MUST be hidden
+    if (tradingStatus !== "active") {
       visibility = "hidden";
-      notice = "운영 상태 변경에 따라 Hub 노출도 비노출로 변경되었습니다.";
+      if (input.retailer_visibility === "visible") {
+        return { success: false, error: "운영 중지/종료 상품은 '노출' 상태로 변경할 수 없습니다. (운영 중 상태 필요)" };
+      }
+      notice = "운영 상태 변경에 따라 Hub 노출이 '비노출'로 변경되었습니다.";
+    }
+
+    // 2. Visible requested -> Must pass 3 mandatory eligibility criteria (Wholesale Price > 0, Retail Price > 0, MOQ > 0)
+    if (visibility === "visible") {
+      const eligibility = evaluateVisibilityEligibility(currentProd);
+      if (!eligibility.isEligible) {
+        return { success: false, error: eligibility.errorMessage || "노출 필수 조건(도매가, 소비자가, MOQ)이 충족되지 않았습니다." };
+      }
     }
 
     const beforeVal = {

@@ -1072,14 +1072,14 @@ export function TradingProductDetail({
       actionLabel?: string;
     }> = [];
 
-    if (liveHubVisibility.effectiveVisibility === "ON_HOLD") {
+    if (currentVisibility === "visible" && liveHubVisibility.effectiveVisibility === "HIDDEN") {
       alerts.push({
-        id: "hub_on_hold",
-        type: "danger",
-        title: "Retailer Hub 노출 보류 (On Hold)",
-        message: `관리자 설정은 '노출'이나, 필수 조건(${liveHubVisibility.holdReasonLabels.join(", ")}) 미충족으로 Hub 노출이 자동 보류 중입니다.`,
-        target: "hold_alerts",
-        actionLabel: "보류 사유 확인 →",
+        id: "hub_hidden",
+        type: "warning",
+        title: "Retailer Hub 미노출",
+        message: "필수 조건(도매가, 소비자가, MOQ) 미충족으로 Hub에 노출되지 않습니다.",
+        target: "price",
+        actionLabel: "가격/MOQ 설정 →",
       });
     }
 
@@ -1382,41 +1382,6 @@ export function TradingProductDetail({
               <span className={`px-2.5 py-1 text-xs font-bold rounded-full border ${VISIBILITY_COLORS[currentVisibility] || VISIBILITY_COLORS.hidden}`}>
                 {VISIBILITY_LABELS[currentVisibility] || currentVisibility}
               </span>
-
-              {/* Effective Hub Visibility */}
-              {liveHubVisibility.effectiveVisibility === "PUBLISHED" ? (
-                <span className="px-2.5 py-1 text-xs font-semibold rounded-full border bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/20 dark:text-emerald-400 dark:border-emerald-900/50">
-                  Hub 노출 (Published)
-                </span>
-              ) : liveHubVisibility.effectiveVisibility === "ON_HOLD" ? (
-                <button
-                  type="button"
-                  onClick={navigateToHoldAlerts}
-                  className="px-2.5 py-1 text-xs font-semibold rounded-full border bg-amber-50 text-amber-800 border-amber-300 dark:bg-amber-950/30 dark:text-amber-300 dark:border-amber-800 hover:bg-amber-100 cursor-pointer shadow-2xs"
-                  title="보류 사유 확인"
-                >
-                  ⚠️ Hub 노출 보류 (On Hold)
-                </button>
-              ) : (
-                <span className="px-2.5 py-1 text-xs font-semibold rounded-full border bg-zinc-100 text-zinc-500 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:border-zinc-700">
-                  Hub 비노출 (Hidden)
-                </span>
-              )}
-
-              {/* Orderability */}
-              {liveHubVisibility.isOrderable ? (
-                <span className="px-2.5 py-1 text-xs font-semibold rounded-full border bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/20 dark:text-emerald-400 dark:border-emerald-900/50">
-                  주문 가능
-                </span>
-              ) : (
-                <button
-                  type="button"
-                  onClick={navigateToHoldAlerts}
-                  className="px-2.5 py-1 text-xs font-semibold rounded-full border bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/20 dark:text-rose-400 dark:border-rose-900/50 hover:bg-rose-100"
-                >
-                  주문 불가
-                </button>
-              )}
 
               {/* Status Change Button */}
               <button
