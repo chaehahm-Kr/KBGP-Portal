@@ -74,7 +74,11 @@ export function evaluateHubVisibility(
   const moq =
     salesPolicy.moq > 0
       ? salesPolicy.moq
-      : Number(product.moq) || Number(product.carton_pack_qty) || 1;
+      : Number(product.moq) > 0
+      ? Number(product.moq)
+      : Number(product.carton_pack_qty) > 0
+      ? Number(product.carton_pack_qty)
+      : 0;
 
   if (isDeleted || isPlaceholder) {
     return {
