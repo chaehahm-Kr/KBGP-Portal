@@ -103,7 +103,11 @@ export function RetailerDiscoveryContainer({
 
       {/* Product Grid */}
       {products.length > 0 ? (
-        <div className={GRID_LAYOUT_CLASSES[density] || GRID_LAYOUT_CLASSES[4]}>
+        <div
+          data-testid="products-grid"
+          data-density={density}
+          className={GRID_LAYOUT_CLASSES[density] || GRID_LAYOUT_CLASSES[4]}
+        >
           {products.map((product) => (
             <RetailerProductCard key={product.id} product={product} />
           ))}

@@ -614,6 +614,8 @@ export function RetailerProductFilterBar({
                   <button
                     key={col}
                     type="button"
+                    data-testid={`density-btn-${col}`}
+                    aria-label={`Show ${col} products per row`}
                     onClick={() => onDensityChange(col)}
                     className={`px-2 py-0.5 rounded text-xs font-semibold transition-colors cursor-pointer ${
                       density === col
