@@ -108,12 +108,32 @@ export const RETAILER_NAV_ITEMS: NavItem[] = [
     ],
   },
   {
-    key: "account",
-    name: "Account",
+    key: "settings",
+    name: "Settings",
     href: "/account",
-    icon: "user",
+    icon: "settings",
     roles: ["owner", "buyer", "store_manager", "employee", "accounting"],
     isBottomNav: false,
+    subItems: [
+      {
+        key: "accountSettings",
+        name: "Account Settings",
+        href: "/account",
+        roles: ["owner", "buyer", "store_manager", "employee", "accounting"],
+      },
+      {
+        key: "companySettings",
+        name: "Company & Store Settings",
+        href: "/settings/company",
+        roles: ["owner", "buyer", "store_manager", "employee", "accounting"],
+      },
+      {
+        key: "teamSettings",
+        name: "Team & Staff",
+        href: "/settings/team",
+        roles: ["owner", "buyer"],
+      },
+    ],
   },
 ];
 

@@ -69,6 +69,10 @@ export interface Dictionary {
     askKSelect: string;
     support: string;
     account: string;
+    settings: string;
+    accountSettings: string;
+    companySettings: string;
+    teamSettings: string;
     retailerPortal: string;
   };
   header: {
@@ -175,10 +179,18 @@ export interface Dictionary {
   account: {
     title: string;
     subtitle: string;
+    accountSettingsTitle: string;
+    accountSettingsSubtitle: string;
+    companySettingsTitle: string;
+    companySettingsSubtitle: string;
+    teamSettingsTitle: string;
+    teamSettingsSubtitle: string;
     tabPersonal: string;
     tabOrg: string;
     tabTeam: string;
     tabDocuments: string;
+    appearanceTitle: string;
+    appearanceSubtitle: string;
     languagePreference: string;
     languageSubtitle: string;
     displayName: string;
@@ -195,6 +207,21 @@ export interface Dictionary {
     companyInfo: string;
     businessNumber: string;
     address: string;
+    loginSecurity: string;
+    authMethod: string;
+    activeLoginEmail: string;
+    sessionStatus: string;
+    activeVerified: string;
+    permissionAuthority: string;
+    ownerAuthorityDesc: string;
+    buyerAuthorityDesc: string;
+    staffAuthorityDesc: string;
+    agreementsDocumentsTitle: string;
+    agreementsDocumentsSubtitle: string;
+    accessRestrictedTitle: string;
+    accessRestrictedDesc: string;
+    backToAccount: string;
+    backToDashboard: string;
   };
   help: {
     heroBadge: string;

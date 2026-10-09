@@ -106,10 +106,8 @@ export function RetailerSidebar({
 
       {/* Navigation List */}
       <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-        {navItems
-          .filter((item) => item.key !== "account")
-          .map((item) => {
-            const translatedName = t.nav[item.key as keyof typeof t.nav] || item.name;
+        {navItems.map((item) => {
+          const translatedName = t.nav[item.key as keyof typeof t.nav] || item.name;
 
             if (item.subItems && item.subItems.length > 0) {
               const isGroupActive = item.subItems.some(

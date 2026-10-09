@@ -28,7 +28,7 @@ export function RetailerAgreementBanner({ agreement }: RetailerAgreementBannerPr
       </div>
 
       <Link
-        href="/account?tab=documents"
+        href="/settings/company"
         className="px-3.5 py-1.5 rounded-xl bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 text-xs font-bold hover:bg-zinc-800 dark:hover:bg-zinc-100 transition-colors shrink-0 text-center"
       >
         Review & Sign Agreement →
