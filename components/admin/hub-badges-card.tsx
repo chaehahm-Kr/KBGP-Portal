@@ -197,48 +197,48 @@ export function HubBadgesCard({
           <div className="space-y-2 text-xs">
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <label className="block text-[10px] font-semibold text-zinc-500 mb-0.5">시작일</label>
+                <label className="block text-[10px] font-semibold text-zinc-500 dark:text-zinc-400 mb-0.5">시작일</label>
                 <input
                   type="date"
                   value={saleStartDate}
                   onChange={(e) => setSaleStartDate(e.target.value)}
                   disabled={!saleActive}
-                  className="w-full px-2 py-1 text-xs rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 disabled:opacity-50"
+                  className="w-full px-2 py-1 text-xs font-semibold rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white dark:[color-scheme:dark] disabled:opacity-40 disabled:cursor-not-allowed"
                 />
               </div>
               <div>
-                <label className="block text-[10px] font-semibold text-zinc-500 mb-0.5">종료일</label>
+                <label className="block text-[10px] font-semibold text-zinc-500 dark:text-zinc-400 mb-0.5">종료일</label>
                 <input
                   type="date"
                   value={saleEndDate}
                   onChange={(e) => setSaleEndDate(e.target.value)}
                   disabled={!saleActive}
-                  className="w-full px-2 py-1 text-xs rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 disabled:opacity-50"
+                  className="w-full px-2 py-1 text-xs font-semibold rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white dark:[color-scheme:dark] disabled:opacity-40 disabled:cursor-not-allowed"
                 />
               </div>
             </div>
 
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <label className="block text-[10px] font-semibold text-zinc-500 mb-0.5">영문 라벨</label>
+                <label className="block text-[10px] font-semibold text-zinc-500 dark:text-zinc-400 mb-0.5">영문 라벨</label>
                 <input
                   type="text"
                   placeholder="Sale"
                   value={saleLabelEn}
                   onChange={(e) => setSaleLabelEn(e.target.value)}
                   disabled={!saleActive}
-                  className="w-full px-2 py-1 text-xs rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 disabled:opacity-50"
+                  className="w-full px-2 py-1 text-xs rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white placeholder:text-zinc-400 dark:placeholder:text-zinc-500 disabled:opacity-40 disabled:cursor-not-allowed"
                 />
               </div>
               <div>
-                <label className="block text-[10px] font-semibold text-zinc-500 mb-0.5">국문 라벨</label>
+                <label className="block text-[10px] font-semibold text-zinc-500 dark:text-zinc-400 mb-0.5">국문 라벨</label>
                 <input
                   type="text"
                   placeholder="세일"
                   value={saleLabelKo}
                   onChange={(e) => setSaleLabelKo(e.target.value)}
                   disabled={!saleActive}
-                  className="w-full px-2 py-1 text-xs rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 disabled:opacity-50"
+                  className="w-full px-2 py-1 text-xs rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white placeholder:text-zinc-400 dark:placeholder:text-zinc-500 disabled:opacity-40 disabled:cursor-not-allowed"
                 />
               </div>
             </div>
@@ -267,48 +267,48 @@ export function HubBadgesCard({
           <div className="space-y-2 text-xs">
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <label className="block text-[10px] font-semibold text-zinc-500 mb-0.5">시작일</label>
+                <label className="block text-[10px] font-semibold text-zinc-500 dark:text-zinc-400 mb-0.5">시작일</label>
                 <input
                   type="date"
                   value={hotStartDate}
                   onChange={(e) => setHotStartDate(e.target.value)}
                   disabled={!hotActive}
-                  className="w-full px-2 py-1 text-xs rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 disabled:opacity-50"
+                  className="w-full px-2 py-1 text-xs font-semibold rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white dark:[color-scheme:dark] disabled:opacity-40 disabled:cursor-not-allowed"
                 />
               </div>
               <div>
-                <label className="block text-[10px] font-semibold text-zinc-500 mb-0.5">종료일</label>
+                <label className="block text-[10px] font-semibold text-zinc-500 dark:text-zinc-400 mb-0.5">종료일</label>
                 <input
                   type="date"
                   value={hotEndDate}
                   onChange={(e) => setHotEndDate(e.target.value)}
                   disabled={!hotActive}
-                  className="w-full px-2 py-1 text-xs rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 disabled:opacity-50"
+                  className="w-full px-2 py-1 text-xs font-semibold rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white dark:[color-scheme:dark] disabled:opacity-40 disabled:cursor-not-allowed"
                 />
               </div>
             </div>
 
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <label className="block text-[10px] font-semibold text-zinc-500 mb-0.5">영문 라벨</label>
+                <label className="block text-[10px] font-semibold text-zinc-500 dark:text-zinc-400 mb-0.5">영문 라벨</label>
                 <input
                   type="text"
                   placeholder="Hot"
                   value={hotLabelEn}
                   onChange={(e) => setHotLabelEn(e.target.value)}
                   disabled={!hotActive}
-                  className="w-full px-2 py-1 text-xs rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 disabled:opacity-50"
+                  className="w-full px-2 py-1 text-xs rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white placeholder:text-zinc-400 dark:placeholder:text-zinc-500 disabled:opacity-40 disabled:cursor-not-allowed"
                 />
               </div>
               <div>
-                <label className="block text-[10px] font-semibold text-zinc-500 mb-0.5">국문 라벨</label>
+                <label className="block text-[10px] font-semibold text-zinc-500 dark:text-zinc-400 mb-0.5">국문 라벨</label>
                 <input
                   type="text"
                   placeholder="인기"
                   value={hotLabelKo}
                   onChange={(e) => setHotLabelKo(e.target.value)}
                   disabled={!hotActive}
-                  className="w-full px-2 py-1 text-xs rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 disabled:opacity-50"
+                  className="w-full px-2 py-1 text-xs rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white placeholder:text-zinc-400 dark:placeholder:text-zinc-500 disabled:opacity-40 disabled:cursor-not-allowed"
                 />
               </div>
             </div>
@@ -337,48 +337,48 @@ export function HubBadgesCard({
           <div className="space-y-2 text-xs">
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <label className="block text-[10px] font-semibold text-zinc-500 mb-0.5">시작일</label>
+                <label className="block text-[10px] font-semibold text-zinc-500 dark:text-zinc-400 mb-0.5">시작일</label>
                 <input
                   type="date"
                   value={newStartDate}
                   onChange={(e) => setNewStartDate(e.target.value)}
                   disabled={!newActive}
-                  className="w-full px-2 py-1 text-xs rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 disabled:opacity-50"
+                  className="w-full px-2 py-1 text-xs font-semibold rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white dark:[color-scheme:dark] disabled:opacity-40 disabled:cursor-not-allowed"
                 />
               </div>
               <div>
-                <label className="block text-[10px] font-semibold text-zinc-500 mb-0.5">종료일</label>
+                <label className="block text-[10px] font-semibold text-zinc-500 dark:text-zinc-400 mb-0.5">종료일</label>
                 <input
                   type="date"
                   value={newEndDate}
                   onChange={(e) => setNewEndDate(e.target.value)}
                   disabled={!newActive}
-                  className="w-full px-2 py-1 text-xs rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 disabled:opacity-50"
+                  className="w-full px-2 py-1 text-xs font-semibold rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white dark:[color-scheme:dark] disabled:opacity-40 disabled:cursor-not-allowed"
                 />
               </div>
             </div>
 
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <label className="block text-[10px] font-semibold text-zinc-500 mb-0.5">영문 라벨</label>
+                <label className="block text-[10px] font-semibold text-zinc-500 dark:text-zinc-400 mb-0.5">영문 라벨</label>
                 <input
                   type="text"
                   placeholder="New"
                   value={newLabelEn}
                   onChange={(e) => setNewLabelEn(e.target.value)}
                   disabled={!newActive}
-                  className="w-full px-2 py-1 text-xs rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 disabled:opacity-50"
+                  className="w-full px-2 py-1 text-xs rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white placeholder:text-zinc-400 dark:placeholder:text-zinc-500 disabled:opacity-40 disabled:cursor-not-allowed"
                 />
               </div>
               <div>
-                <label className="block text-[10px] font-semibold text-zinc-500 mb-0.5">국문 라벨</label>
+                <label className="block text-[10px] font-semibold text-zinc-500 dark:text-zinc-400 mb-0.5">국문 라벨</label>
                 <input
                   type="text"
                   placeholder="신상품"
                   value={newLabelKo}
                   onChange={(e) => setNewLabelKo(e.target.value)}
                   disabled={!newActive}
-                  className="w-full px-2 py-1 text-xs rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 disabled:opacity-50"
+                  className="w-full px-2 py-1 text-xs rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white placeholder:text-zinc-400 dark:placeholder:text-zinc-500 disabled:opacity-40 disabled:cursor-not-allowed"
                 />
               </div>
             </div>

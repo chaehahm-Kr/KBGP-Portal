@@ -626,7 +626,7 @@ export function RetailerSalesPolicyCard({
               type="date"
               value={promoStart}
               onChange={(e) => setPromoStart(e.target.value)}
-              className="w-full px-3 py-2 rounded-xl text-xs font-semibold bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 text-zinc-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-indigo-500 shadow-xs"
+              className="w-full px-3 py-2 rounded-xl text-xs font-semibold bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 text-zinc-900 dark:text-white dark:[color-scheme:dark] focus:outline-hidden focus:ring-2 focus:ring-indigo-500 shadow-xs"
             />
           </div>
 
@@ -639,7 +639,7 @@ export function RetailerSalesPolicyCard({
               type="date"
               value={promoEnd}
               onChange={(e) => setPromoEnd(e.target.value)}
-              className="w-full px-3 py-2 rounded-xl text-xs font-semibold bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 text-zinc-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-indigo-500 shadow-xs"
+              className="w-full px-3 py-2 rounded-xl text-xs font-semibold bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 text-zinc-900 dark:text-white dark:[color-scheme:dark] focus:outline-hidden focus:ring-2 focus:ring-indigo-500 shadow-xs"
             />
           </div>
         </div>

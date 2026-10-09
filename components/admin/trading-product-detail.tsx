@@ -2319,7 +2319,7 @@ export function TradingProductDetail({
                     type="date"
                     value={editPromoStart}
                     onChange={(e) => setEditPromoStart(e.target.value)}
-                    className="w-full p-2 rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white"
+                    className="w-full p-2 rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white dark:[color-scheme:dark]"
                   />
                 </div>
                 <div>
@@ -2330,7 +2330,7 @@ export function TradingProductDetail({
                     type="date"
                     value={editPromoEnd}
                     onChange={(e) => setEditPromoEnd(e.target.value)}
-                    className="w-full p-2 rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white"
+                    className="w-full p-2 rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white dark:[color-scheme:dark]"
                   />
                 </div>
               </div>
@@ -2403,8 +2403,8 @@ export function TradingProductDetail({
                 </strong>
               </div>
               <div>
-                <span className="text-[10px] font-bold text-indigo-600 block uppercase">Effective Cost</span>
-                <strong className="text-indigo-900 font-bold">${product.effectiveLandedCost.toFixed(2)}</strong>
+                <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 block uppercase">Effective Cost</span>
+                <strong className="text-indigo-900 dark:text-indigo-300 font-bold">${product.effectiveLandedCost.toFixed(2)}</strong>
               </div>
             </div>
 
@@ -2467,27 +2467,36 @@ export function TradingProductDetail({
               <h3 className="text-base font-bold text-zinc-900 dark:text-white flex items-center gap-2">
                 <span>📦</span> 재고 수동 조정 (Inventory Adjustment)
               </h3>
-              <button onClick={() => setIsInvAdjustModalOpen(false)} className="text-zinc-400 p-1">✕</button>
+              <button
+                onClick={() => setIsInvAdjustModalOpen(false)}
+                className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 p-1 transition-colors"
+              >
+                ✕
+              </button>
             </div>
 
             {invAdjError && (
-              <div className="rounded-lg bg-red-50 p-3 text-xs text-red-600 border border-red-200">
+              <div className="rounded-lg bg-rose-50 dark:bg-rose-950/50 p-3 text-xs text-rose-600 dark:text-rose-300 border border-rose-200 dark:border-rose-800 font-semibold">
                 ⚠️ {invAdjError}
               </div>
             )}
 
             <form onSubmit={handleInvAdjustSubmit} className="space-y-4 text-xs">
               <div>
-                <label className="font-bold text-zinc-700 block mb-1">대상 물류창고 *</label>
+                <label className="font-bold text-zinc-800 dark:text-zinc-200 block mb-1">
+                  대상 물류창고 *
+                </label>
                 <select
                   value={invAdjWarehouseId}
                   onChange={(e) => handleModalWarehouseChange(e.target.value)}
                   required
-                  className="w-full p-2.5 rounded-xl border border-zinc-300 bg-white dark:bg-zinc-950 text-zinc-900 font-medium"
+                  className="w-full p-2.5 rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white font-medium focus:ring-2 focus:ring-indigo-500"
                 >
-                  <option value="">-- 창고 선택 --</option>
+                  <option value="" className="bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white">
+                    -- 창고 선택 --
+                  </option>
                   {warehouses.map((w) => (
-                    <option key={w.id} value={w.id}>
+                    <option key={w.id} value={w.id} className="bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white">
                       {w.name} ({w.code})
                     </option>
                   ))}
@@ -2498,14 +2507,22 @@ export function TradingProductDetail({
                 <button
                   type="button"
                   onClick={() => setInvAdjMode("DELTA")}
-                  className={`p-2.5 text-left rounded-xl border ${invAdjMode === "DELTA" ? "border-indigo-600 bg-indigo-50 font-bold" : "border-zinc-200"}`}
+                  className={`p-2.5 text-left rounded-xl border text-xs font-bold transition-all ${
+                    invAdjMode === "DELTA"
+                      ? "border-indigo-600 bg-indigo-50 dark:bg-indigo-950/70 text-indigo-950 dark:text-indigo-200 dark:border-indigo-500 shadow-xs"
+                      : "border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                  }`}
                 >
                   증감 수량 조정 (Delta)
                 </button>
                 <button
                   type="button"
                   onClick={() => setInvAdjMode("TARGET")}
-                  className={`p-2.5 text-left rounded-xl border ${invAdjMode === "TARGET" ? "border-indigo-600 bg-indigo-50 font-bold" : "border-zinc-200"}`}
+                  className={`p-2.5 text-left rounded-xl border text-xs font-bold transition-all ${
+                    invAdjMode === "TARGET"
+                      ? "border-indigo-600 bg-indigo-50 dark:bg-indigo-950/70 text-indigo-950 dark:text-indigo-200 dark:border-indigo-500 shadow-xs"
+                      : "border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                  }`}
                 >
                   목표 수량 설정 (Target)
                 </button>
@@ -2514,92 +2531,106 @@ export function TradingProductDetail({
               {invAdjMode === "DELTA" ? (
                 <div className="grid grid-cols-3 gap-2">
                   <div>
-                    <label className="font-bold block mb-1 text-[11px]">OnHand (+/-)</label>
+                    <label className="font-bold block mb-1 text-[11px] text-zinc-700 dark:text-zinc-300">
+                      OnHand (+/-)
+                    </label>
                     <input
                       type="number"
                       value={invDeltaOnHand}
                       onChange={(e) => setInvDeltaOnHand(e.target.value)}
-                      className="w-full p-2 font-mono text-center rounded border"
+                      className="w-full p-2 font-mono text-center rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white font-bold focus:ring-2 focus:ring-indigo-500"
                     />
                   </div>
                   <div>
-                    <label className="font-bold block mb-1 text-[11px]">Damaged (+/-)</label>
+                    <label className="font-bold block mb-1 text-[11px] text-zinc-700 dark:text-zinc-300">
+                      Damaged (+/-)
+                    </label>
                     <input
                       type="number"
                       value={invDeltaDamaged}
                       onChange={(e) => setInvDeltaDamaged(e.target.value)}
-                      className="w-full p-2 font-mono text-center rounded border"
+                      className="w-full p-2 font-mono text-center rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white font-bold focus:ring-2 focus:ring-indigo-500"
                     />
                   </div>
                   <div>
-                    <label className="font-bold block mb-1 text-[11px]">Hold (+/-)</label>
+                    <label className="font-bold block mb-1 text-[11px] text-zinc-700 dark:text-zinc-300">
+                      Hold (+/-)
+                    </label>
                     <input
                       type="number"
                       value={invDeltaHold}
                       onChange={(e) => setInvDeltaHold(e.target.value)}
-                      className="w-full p-2 font-mono text-center rounded border"
+                      className="w-full p-2 font-mono text-center rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white font-bold focus:ring-2 focus:ring-indigo-500"
                     />
                   </div>
                 </div>
               ) : (
                 <div className="grid grid-cols-3 gap-2">
                   <div>
-                    <label className="font-bold block mb-1 text-[11px]">목표 OnHand</label>
+                    <label className="font-bold block mb-1 text-[11px] text-zinc-700 dark:text-zinc-300">
+                      목표 OnHand
+                    </label>
                     <input
                       type="number"
                       min="0"
                       value={invTargetOnHand}
                       onChange={(e) => setInvTargetOnHand(e.target.value)}
-                      className="w-full p-2 font-mono text-center rounded border"
+                      className="w-full p-2 font-mono text-center rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white font-bold focus:ring-2 focus:ring-indigo-500"
                     />
                   </div>
                   <div>
-                    <label className="font-bold block mb-1 text-[11px]">목표 Damaged</label>
+                    <label className="font-bold block mb-1 text-[11px] text-zinc-700 dark:text-zinc-300">
+                      목표 Damaged
+                    </label>
                     <input
                       type="number"
                       min="0"
                       value={invTargetDamaged}
                       onChange={(e) => setInvTargetDamaged(e.target.value)}
-                      className="w-full p-2 font-mono text-center rounded border"
+                      className="w-full p-2 font-mono text-center rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white font-bold focus:ring-2 focus:ring-indigo-500"
                     />
                   </div>
                   <div>
-                    <label className="font-bold block mb-1 text-[11px]">목표 Hold</label>
+                    <label className="font-bold block mb-1 text-[11px] text-zinc-700 dark:text-zinc-300">
+                      목표 Hold
+                    </label>
                     <input
                       type="number"
                       min="0"
                       value={invTargetHold}
                       onChange={(e) => setInvTargetHold(e.target.value)}
-                      className="w-full p-2 font-mono text-center rounded border"
+                      className="w-full p-2 font-mono text-center rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white font-bold focus:ring-2 focus:ring-indigo-500"
                     />
                   </div>
                 </div>
               )}
 
               <div>
-                <label className="font-bold block mb-1">조정 사유 *</label>
+                <label className="font-bold block mb-1 text-zinc-800 dark:text-zinc-200">
+                  조정 사유 *
+                </label>
                 <input
                   type="text"
                   value={invAdjReason}
                   onChange={(e) => setInvAdjReason(e.target.value)}
                   required
                   placeholder="예: 정기 실사 수량 반영"
-                  className="w-full p-2 rounded border"
+                  className="w-full p-2.5 rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white placeholder:text-zinc-400 dark:placeholder:text-zinc-500 focus:ring-2 focus:ring-indigo-500"
                 />
               </div>
 
-              <div className="flex justify-end gap-2 pt-2 border-t">
+              <div className="flex justify-end gap-2 pt-2 border-t border-zinc-100 dark:border-zinc-800">
                 <button
                   type="button"
                   onClick={() => setIsInvAdjustModalOpen(false)}
-                  className="px-3.5 py-1.5 text-zinc-600"
+                  className="px-3.5 py-2 text-xs font-semibold rounded-xl border border-zinc-300 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
                 >
                   취소
                 </button>
                 <button
                   type="submit"
                   disabled={isInvAdjSubmitting}
-                  className="px-4 py-2 rounded-xl bg-zinc-900 text-white font-bold"
+                  className="px-4 py-2 rounded-xl bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 font-bold hover:bg-zinc-800 dark:hover:bg-zinc-200 transition-colors shadow-xs disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   {isInvAdjSubmitting ? "저장 중..." : "조정 완료"}
                 </button>
@@ -2617,18 +2648,23 @@ export function TradingProductDetail({
               <h3 className="text-base font-bold text-zinc-900 dark:text-white flex items-center gap-2">
                 <span>⚙️</span> 운영 상태 및 Hub 노출 관리
               </h3>
-              <button onClick={() => setIsStatusModalOpen(false)} className="text-zinc-400 p-1">✕</button>
+              <button
+                onClick={() => setIsStatusModalOpen(false)}
+                className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 p-1 transition-colors"
+              >
+                ✕
+              </button>
             </div>
 
             {statusError && (
-              <div className="rounded-lg bg-red-50 p-3 text-xs text-red-600 border border-red-200">
+              <div className="rounded-lg bg-rose-50 dark:bg-rose-950/50 p-3 text-xs text-rose-600 dark:text-rose-300 border border-rose-200 dark:border-rose-800 font-semibold">
                 ⚠️ {statusError}
               </div>
             )}
 
             <div className="space-y-4">
               <div>
-                <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1.5">
+                <label className="block text-xs font-bold text-zinc-800 dark:text-zinc-200 mb-1.5">
                   운영 상태 (Trading Status)
                 </label>
                 <div className="grid grid-cols-3 gap-2">
@@ -2641,7 +2677,11 @@ export function TradingProductDetail({
                       key={s.val}
                       type="button"
                       onClick={() => handleTargetTradingStatusChange(s.val)}
-                      className={`p-2.5 text-center rounded-xl border ${targetTradingStatus === s.val ? 'border-indigo-600 bg-indigo-50 font-bold' : 'border-zinc-200'}`}
+                      className={`p-2.5 text-center text-xs rounded-xl border transition-all ${
+                        targetTradingStatus === s.val
+                          ? "border-indigo-600 bg-indigo-50 dark:bg-indigo-950/70 text-indigo-950 dark:text-indigo-200 dark:border-indigo-500 font-bold shadow-xs"
+                          : "border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                      }`}
                     >
                       {s.label}
                     </button>
@@ -2650,7 +2690,7 @@ export function TradingProductDetail({
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1.5">
+                <label className="block text-xs font-bold text-zinc-800 dark:text-zinc-200 mb-1.5">
                   Hub 노출 (Visibility)
                 </label>
                 <div className="grid grid-cols-2 gap-2">
@@ -2658,14 +2698,24 @@ export function TradingProductDetail({
                     type="button"
                     disabled={targetTradingStatus !== "active"}
                     onClick={() => setTargetVisibility("visible")}
-                    className={`p-2.5 text-center rounded-xl border ${targetTradingStatus !== "active" ? 'opacity-40 cursor-not-allowed' : targetVisibility === "visible" ? 'border-emerald-600 bg-emerald-50 font-bold' : 'border-zinc-200'}`}
+                    className={`p-2.5 text-center text-xs rounded-xl border transition-all ${
+                      targetTradingStatus !== "active"
+                        ? "opacity-40 cursor-not-allowed border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-950 text-zinc-400 dark:text-zinc-500"
+                        : targetVisibility === "visible"
+                        ? "border-emerald-600 bg-emerald-50 dark:bg-emerald-950/70 text-emerald-950 dark:text-emerald-200 dark:border-emerald-500 font-bold shadow-xs"
+                        : "border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                    }`}
                   >
                     노출 (Visible)
                   </button>
                   <button
                     type="button"
                     onClick={() => setTargetVisibility("hidden")}
-                    className={`p-2.5 text-center rounded-xl border ${targetVisibility === "hidden" ? 'border-zinc-700 bg-zinc-100 font-bold' : 'border-zinc-200'}`}
+                    className={`p-2.5 text-center text-xs rounded-xl border transition-all ${
+                      targetVisibility === "hidden"
+                        ? "border-zinc-700 dark:border-zinc-500 bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 font-bold shadow-xs"
+                        : "border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                    }`}
                   >
                     비노출 (Hidden)
                   </button>
@@ -2673,7 +2723,7 @@ export function TradingProductDetail({
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                <label className="block text-xs font-bold text-zinc-800 dark:text-zinc-200 mb-1">
                   사유 (Reason)
                 </label>
                 <input
@@ -2681,16 +2731,16 @@ export function TradingProductDetail({
                   value={statusReason}
                   onChange={(e) => setStatusReason(e.target.value)}
                   placeholder="변경 사유 입력"
-                  className="w-full rounded-xl border p-2 text-xs"
+                  className="w-full rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 p-2.5 text-xs text-zinc-900 dark:text-white placeholder:text-zinc-400 dark:placeholder:text-zinc-500 focus:ring-2 focus:ring-indigo-500"
                 />
               </div>
             </div>
 
-            <div className="flex justify-end gap-2 border-t pt-3">
+            <div className="flex justify-end gap-2 border-t border-zinc-100 dark:border-zinc-800 pt-3">
               <button
                 type="button"
                 onClick={() => setIsStatusModalOpen(false)}
-                className="px-3.5 py-1.5 text-xs text-zinc-600"
+                className="px-3.5 py-2 text-xs font-semibold rounded-xl border border-zinc-300 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
               >
                 취소
               </button>
@@ -2698,7 +2748,7 @@ export function TradingProductDetail({
                 type="button"
                 disabled={isStatusSubmitting}
                 onClick={handleSaveStatusVisibility}
-                className="rounded-xl bg-indigo-600 px-4 py-2 text-xs font-bold text-white shadow-sm hover:bg-indigo-700"
+                className="rounded-xl bg-indigo-600 dark:bg-indigo-500 px-4 py-2 text-xs font-bold text-white shadow-sm hover:bg-indigo-700 dark:hover:bg-indigo-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
               >
                 {isStatusSubmitting ? "저장 중..." : "상태 저장"}
               </button>
