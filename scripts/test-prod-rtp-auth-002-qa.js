@@ -15,6 +15,8 @@ envText.split('\n').forEach(line => {
   }
 });
 
+const { assertSafeQAAccount } = require('./utils/assert-safe-qa-account');
+
 const adminClient = createClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SECRET_KEY || env.SUPABASE_SERVICE_ROLE_KEY);
 
 async function runRTPAuth002QA() {
@@ -29,6 +31,7 @@ async function runRTPAuth002QA() {
 
   const results = [];
   const testEmail = 'qa-retailer-test@letusto.com';
+  assertSafeQAAccount(testEmail);
   const targetFinalPassword = 'Password123!@#';
   const intermediatePassword = 'TempPassword123!@#';
 
