@@ -260,6 +260,32 @@ function formatValue(key: string, val: any): string {
   return String(val);
 }
 
+function formatPromoPeriod(startDate?: string | null, endDate?: string | null): string {
+  if (!startDate && !endDate) return "상시 프로모션 (기간 제한 없음)";
+  const formatDateStr = (dStr: string) => {
+    try {
+      const d = new Date(dStr);
+      return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+    } catch {
+      return dStr;
+    }
+  };
+  if (startDate && endDate) return `${formatDateStr(startDate)} – ${formatDateStr(endDate)}`;
+  if (startDate) return `From ${formatDateStr(startDate)}`;
+  if (endDate) return `Until ${formatDateStr(endDate)}`;
+  return "-";
+}
+
+function safeFormatMargin(val: number | null | undefined): string {
+  if (val === null || val === undefined || isNaN(val) || !isFinite(val)) return "—";
+  return `${val.toFixed(1)}%`;
+}
+
+function safeFormatDollar(val: number | null | undefined): string {
+  if (val === null || val === undefined || isNaN(val) || !isFinite(val)) return "—";
+  return val < 0 ? `-$${Math.abs(val).toFixed(2)}` : `$${val.toFixed(2)}`;
+}
+
 export type BusinessTab = "summary" | "inventory" | "price" | "hub" | "history";
 
 export function TradingProductDetail({
@@ -1200,6 +1226,13 @@ export function TradingProductDetail({
         const oldPromo = before.promo_wholesale_price !== undefined && before.promo_wholesale_price !== null ? Number(before.promo_wholesale_price) : null;
         const newPromo = after.promo_wholesale_price !== undefined && after.promo_wholesale_price !== null ? Number(after.promo_wholesale_price) : null;
 
+        const isPromoEvent = log.change_type === "PROMOTION";
+        const hasActivePromoInEvent = isPromoEvent && newPromo !== null && newPromo > 0;
+        const appliedWholesale = hasActivePromoInEvent ? newPromo : (newW ?? product.operationalWholesale);
+
+        const appliedOurMarginPct = appliedWholesale > 0 ? ((appliedWholesale - effectiveCost) / appliedWholesale) * 100 : null;
+        const appliedRetailerMarginPct = newS > 0 && appliedWholesale > 0 ? ((newS - appliedWholesale) / newS) * 100 : null;
+
         const oldOurMarginPct = oldW && oldW > 0 ? ((oldW - effectiveCost) / oldW) * 100 : null;
         const newOurMarginPct = newW > 0 ? ((newW - effectiveCost) / newW) * 100 : null;
         const ourMarginDiffPts = (oldOurMarginPct !== null && newOurMarginPct !== null) ? (newOurMarginPct - oldOurMarginPct) : null;
@@ -1216,8 +1249,8 @@ export function TradingProductDetail({
           const baseW = product.operationalWholesale;
           promoDiscountPct = baseW > 0 ? ((newPromo - baseW) / baseW) * 100 : 0;
           promoLabel = promoDiscountPct < 0 ? `Discount ${Math.abs(promoDiscountPct).toFixed(1)}%` : `Increase +${promoDiscountPct.toFixed(1)}%`;
-          promoOurMarginPct = ((newPromo - effectiveCost) / newPromo) * 100;
-          promoRetailerMarginPct = newS > 0 ? ((newS - newPromo) / newS) * 100 : null;
+          promoOurMarginPct = appliedOurMarginPct;
+          promoRetailerMarginPct = appliedRetailerMarginPct;
         }
 
         events.push({
@@ -1230,6 +1263,11 @@ export function TradingProductDetail({
           user,
           reason,
           effectiveCost,
+          appliedWholesale,
+          appliedOurMarginPct,
+          appliedRetailerMarginPct,
+          isPromoEvent,
+          hasActivePromoInEvent,
           oldW,
           newW,
           isWholesaleChanged: oldW !== null && oldW !== newW,
@@ -1727,17 +1765,32 @@ export function TradingProductDetail({
 
             {/* KPI 2: Pricing */}
             <div className="p-4 rounded-xl border border-zinc-200 bg-white shadow-xs dark:border-zinc-800 dark:bg-zinc-900 space-y-1">
-              <span className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider block">
-                적용 도매가 (Wholesale Price)
-              </span>
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider block">
+                  적용 도매가 (Wholesale Price)
+                </span>
+                {product.isPromoActive && (
+                  <span className="px-1.5 py-0.5 text-[9px] font-black rounded bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border border-amber-300 dark:border-amber-800">
+                    PROMO ACTIVE
+                  </span>
+                )}
+              </div>
               <div className="flex items-baseline justify-between">
-                <span className="text-2xl font-black text-zinc-900 dark:text-white">
+                <span className={`text-2xl font-black ${product.isPromoActive ? 'text-amber-600 dark:text-amber-400' : 'text-zinc-900 dark:text-white'}`}>
                   ${product.effectiveWholesale.toFixed(2)}
                 </span>
-                <span className="text-xs text-zinc-500">MOQ {product.moq || 1}</span>
+                <span className="text-xs text-zinc-500 font-medium">
+                  {product.isPromoActive ? `Base: $${product.operationalWholesale.toFixed(2)} | MOQ ${product.moq || 1}` : `MOQ ${product.moq || 1}`}
+                </span>
               </div>
-              <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
-                {product.isPromoActive ? `🔥 프로모션 적용 중 ($${product.promoWholesale?.toFixed(2)})` : `SRP: $${product.srpPrice.toFixed(2)}`}
+              <p className="text-[11px] text-zinc-500 dark:text-zinc-400 truncate">
+                {product.isPromoActive ? (
+                  <span className="text-amber-700 dark:text-amber-400 font-semibold" title={formatPromoPeriod(product.promoStartDate, product.promoEndDate)}>
+                    🔥 {formatPromoPeriod(product.promoStartDate, product.promoEndDate)}
+                  </span>
+                ) : (
+                  `SRP: $${product.srpPrice.toFixed(2)}`
+                )}
               </p>
             </div>
 
@@ -2075,45 +2128,77 @@ export function TradingProductDetail({
               </div>
             </div>
 
-            {/* Price Structure Cards Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {/* Wholesale & MOQ */}
+            {/* Price Structure Cards Grid (4 Independent Tiles) */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              {/* Tile 1: Wholesale Price & MOQ */}
               <div className="p-4 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50/70 dark:bg-zinc-950/40 space-y-2">
-                <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Default Wholesale Price</span>
-                <div className="text-2xl font-black text-zinc-900 dark:text-white">
-                  ${product.operationalWholesale.toFixed(2)}
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Default Wholesale</span>
+                  {product.isPromoActive && (
+                    <span className="px-1.5 py-0.5 text-[9px] font-black rounded bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border border-amber-300 dark:border-amber-800">
+                      PROMO ACTIVE
+                    </span>
+                  )}
                 </div>
-                <div className="text-xs text-zinc-500 space-y-0.5">
+
+                {product.isPromoActive ? (
+                  <div className="space-y-1">
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-2xl font-black text-amber-600 dark:text-amber-400">
+                        ${product.promoWholesale?.toFixed(2)}
+                      </span>
+                      <span className="text-xs text-zinc-400 line-through">
+                        ${product.operationalWholesale.toFixed(2)}
+                      </span>
+                    </div>
+                    <p className="text-[11px] font-semibold text-amber-700 dark:text-amber-400">
+                      🔥 프로모션 적용가 (기본: ${product.operationalWholesale.toFixed(2)})
+                    </p>
+                    <p className="text-[10px] text-zinc-500 dark:text-zinc-400 truncate" title={formatPromoPeriod(product.promoStartDate, product.promoEndDate)}>
+                      기간: {formatPromoPeriod(product.promoStartDate, product.promoEndDate)}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="text-2xl font-black text-zinc-900 dark:text-white">
+                    ${product.operationalWholesale.toFixed(2)}
+                  </div>
+                )}
+
+                <div className="text-xs text-zinc-500 space-y-0.5 pt-1 border-t border-zinc-200/60 dark:border-zinc-800/60">
                   <p>MOQ: <strong className="text-zinc-800 dark:text-zinc-200">{product.moq || 1} EA</strong></p>
                   <p>Case Pack: <strong className="text-zinc-800 dark:text-zinc-200">{product.carton_pack_qty || 1} EA</strong></p>
                 </div>
               </div>
 
-              {/* MAP & SRP */}
+              {/* Tile 2: MAP Price */}
               <div className="p-4 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50/70 dark:bg-zinc-950/40 space-y-2">
-                <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">MAP & Retail Price</span>
-                <div className="flex items-baseline gap-3">
-                  <div>
-                    <span className="text-[10px] text-zinc-400 block">SRP (소비자가)</span>
-                    <strong className="text-lg font-bold text-zinc-900 dark:text-white">
-                      ${product.srpPrice.toFixed(2)}
-                    </strong>
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-zinc-400 block">MAP (최저가)</span>
-                    <strong className="text-lg font-bold text-zinc-700 dark:text-zinc-300">
-                      ${product.mapPrice.toFixed(2)}
-                    </strong>
-                  </div>
+                <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">MAP Price (최저준수가격)</span>
+                <div className="text-2xl font-black text-zinc-900 dark:text-white">
+                  ${product.mapPrice.toFixed(2)}
                 </div>
-                {product.price_krw_retail && (
-                  <p className="text-[11px] text-zinc-500">
-                    원화 기준 MSRP: ₩{product.price_krw_retail.toLocaleString()}
+                <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                  Minimum Advertised Price 기준
+                </p>
+              </div>
+
+              {/* Tile 3: Retail Price / SRP */}
+              <div className="p-4 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50/70 dark:bg-zinc-950/40 space-y-2">
+                <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Retail Price / SRP (권장소비자가)</span>
+                <div className="text-2xl font-black text-zinc-900 dark:text-white">
+                  ${product.srpPrice.toFixed(2)}
+                </div>
+                {product.price_krw_retail ? (
+                  <p className="text-[11px] text-zinc-500 dark:text-zinc-400 truncate">
+                    원화 MSRP: ₩{product.price_krw_retail.toLocaleString()}
+                  </p>
+                ) : (
+                  <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                    Suggested Retail Price (MSRP)
                   </p>
                 )}
               </div>
 
-              {/* Landed Cost & Margin */}
+              {/* Tile 4: Landed Cost & Margins */}
               <div className="p-4 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50/70 dark:bg-zinc-950/40 space-y-2">
                 <div className="flex items-center justify-between">
                   <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Landed Cost & Margins</span>
@@ -2131,13 +2216,13 @@ export function TradingProductDetail({
                 <div className="grid grid-cols-2 gap-2 text-xs pt-1 border-t border-zinc-200 dark:border-zinc-800">
                   <div>
                     <span className="text-[10px] text-zinc-400 block">자사 마진</span>
-                    <strong className="text-indigo-900 dark:text-indigo-200">
+                    <strong className="text-indigo-900 dark:text-indigo-200 font-bold">
                       {safeFormatPercent(product.ourMarginPercent)}
                     </strong>
                   </div>
                   <div>
                     <span className="text-[10px] text-zinc-400 block">리테일러 마진</span>
-                    <strong className="text-emerald-600 dark:text-emerald-400">
+                    <strong className="text-emerald-600 dark:text-emerald-400 font-bold">
                       {safeFormatPercent(product.retailerMarginPercent)}
                     </strong>
                   </div>
@@ -2180,12 +2265,20 @@ export function TradingProductDetail({
                             {item.eventTitle}
                           </span>
                         </td>
-                        <td className="py-2 text-right font-mono font-bold">${item.newW.toFixed(2)}</td>
-                        <td className="py-2 text-right font-mono text-indigo-600 font-bold">
-                          {item.newOurMarginPct !== null ? `${item.newOurMarginPct.toFixed(1)}%` : "—"}
+                        <td className="py-2 text-right font-mono font-bold">
+                          {item.hasActivePromoInEvent ? (
+                            <span className="text-amber-600 dark:text-amber-400 font-black">
+                              ${item.appliedWholesale.toFixed(2)}
+                            </span>
+                          ) : (
+                            <span>${item.appliedWholesale.toFixed(2)}</span>
+                          )}
                         </td>
-                        <td className="py-2 text-right font-mono text-emerald-600 font-bold">
-                          {item.newRetailerMarginPct !== null ? `${item.newRetailerMarginPct.toFixed(1)}%` : "—"}
+                        <td className="py-2 text-right font-mono text-indigo-600 dark:text-indigo-400 font-bold">
+                          {item.appliedOurMarginPct !== null ? `${item.appliedOurMarginPct.toFixed(1)}%` : "—"}
+                        </td>
+                        <td className="py-2 text-right font-mono text-emerald-600 dark:text-emerald-400 font-bold">
+                          {item.appliedRetailerMarginPct !== null ? `${item.appliedRetailerMarginPct.toFixed(1)}%` : "—"}
                         </td>
                         <td className="py-2 text-zinc-500 text-[11px]">
                           {item.user} ({item.reason})
@@ -2483,7 +2576,7 @@ export function TradingProductDetail({
       {/* MODAL 1: PRICING EDIT */}
       {isPricingModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 space-y-4">
+          <div className="w-full max-w-lg rounded-xl bg-white p-6 shadow-xl dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 space-y-4">
             <div className="flex items-center justify-between border-b border-zinc-200 dark:border-zinc-800 pb-3">
               <h3 className="text-base font-bold text-zinc-900 dark:text-white">
                 도매 공급가 및 가격 구조 변경
@@ -2499,7 +2592,7 @@ export function TradingProductDetail({
 
             {pricingError && <p className="text-xs text-rose-600 font-semibold">{pricingError}</p>}
 
-            <form onSubmit={handlePricingSubmit} className="space-y-3 text-xs">
+            <form onSubmit={handlePricingSubmit} className="space-y-3.5 text-xs">
               <div>
                 <label className="font-bold text-zinc-800 dark:text-zinc-200 block mb-1">
                   Default Wholesale Price ($USD) *
@@ -2541,6 +2634,76 @@ export function TradingProductDetail({
                 </div>
               </div>
 
+              {/* Real-time Profitability Simulation Preview */}
+              {(() => {
+                const modalW = parseFloat(editWholesale);
+                const modalS = parseFloat(editSrp);
+                const landed = product.effectiveLandedCost;
+                const isWValid = !isNaN(modalW) && modalW > 0;
+                const isSValid = !isNaN(modalS) && modalS > 0;
+
+                const letustoProfit = isWValid ? modalW - landed : null;
+                const letustoMargin = isWValid && modalW > 0 ? ((modalW - landed) / modalW) * 100 : null;
+
+                const retailerProfit = isWValid && isSValid ? modalS - modalW : null;
+                const retailerMargin = isWValid && isSValid && modalS > 0 ? ((modalS - modalW) / modalS) * 100 : null;
+
+                return (
+                  <div className="p-3.5 rounded-xl bg-zinc-50 dark:bg-zinc-950/70 border border-zinc-200 dark:border-zinc-800 space-y-2.5">
+                    <div className="flex items-center justify-between text-[11px] font-bold text-zinc-500 uppercase tracking-wider border-b border-zinc-200/60 dark:border-zinc-800/60 pb-1.5">
+                      <span>수익성 실시간 시뮬레이션</span>
+                      <span className="font-mono">Landed Cost: ${landed.toFixed(2)}</span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2.5 text-xs">
+                      {/* Letusto */}
+                      <div className="p-2.5 rounded-lg bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800 space-y-1">
+                        <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 uppercase block">
+                          Letusto 자사 수익
+                        </span>
+                        <div className="flex items-baseline justify-between text-[11px]">
+                          <span className="text-zinc-500">이익 (Profit):</span>
+                          <strong className={`font-mono font-bold ${letustoProfit !== null && letustoProfit < 0 ? 'text-rose-600' : 'text-zinc-900 dark:text-white'}`}>
+                            {safeFormatDollar(letustoProfit)}
+                          </strong>
+                        </div>
+                        <div className="flex items-baseline justify-between text-[11px]">
+                          <span className="text-zinc-500">마진율 (Margin):</span>
+                          <strong className={`font-mono font-bold ${letustoMargin !== null && letustoMargin < 15 ? 'text-rose-600' : 'text-indigo-600 dark:text-indigo-400'}`}>
+                            {safeFormatMargin(letustoMargin)}
+                          </strong>
+                        </div>
+                      </div>
+
+                      {/* Retailer */}
+                      <div className="p-2.5 rounded-lg bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800 space-y-1">
+                        <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase block">
+                          Retailer 마진
+                        </span>
+                        <div className="flex items-baseline justify-between text-[11px]">
+                          <span className="text-zinc-500">소비자가 (SRP):</span>
+                          <strong className="font-mono text-zinc-900 dark:text-white">
+                            {isSValid ? `$${modalS.toFixed(2)}` : '—'}
+                          </strong>
+                        </div>
+                        <div className="flex items-baseline justify-between text-[11px]">
+                          <span className="text-zinc-500">이익 (Profit):</span>
+                          <strong className={`font-mono font-bold ${retailerProfit !== null && retailerProfit < 0 ? 'text-rose-600' : 'text-zinc-900 dark:text-white'}`}>
+                            {safeFormatDollar(retailerProfit)}
+                          </strong>
+                        </div>
+                        <div className="flex items-baseline justify-between text-[11px]">
+                          <span className="text-zinc-500">마진율 (Margin):</span>
+                          <strong className={`font-mono font-bold ${retailerMargin !== null && retailerMargin < 30 ? 'text-amber-600' : 'text-emerald-600 dark:text-emerald-400'}`}>
+                            {safeFormatMargin(retailerMargin)}
+                          </strong>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+
               <div>
                 <label className="font-semibold text-zinc-700 dark:text-zinc-300 block mb-1">
                   변경 사유 (Reason)
@@ -2578,7 +2741,7 @@ export function TradingProductDetail({
       {/* MODAL 2: PROMOTION EDIT */}
       {isPromoModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 space-y-4">
+          <div className="w-full max-w-lg rounded-xl bg-white p-6 shadow-xl dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 space-y-4">
             <div className="flex items-center justify-between border-b border-zinc-200 dark:border-zinc-800 pb-3">
               <h3 className="text-base font-bold text-zinc-900 dark:text-white">
                 프로모션 도매가 설정
@@ -2594,7 +2757,7 @@ export function TradingProductDetail({
 
             {promoError && <p className="text-xs text-rose-600 font-semibold">{promoError}</p>}
 
-            <form onSubmit={handlePromoSubmit} className="space-y-3 text-xs">
+            <form onSubmit={handlePromoSubmit} className="space-y-3.5 text-xs">
               <div>
                 <label className="font-bold text-zinc-800 dark:text-zinc-200 block mb-1">
                   Promo Wholesale Price ($USD)
@@ -2618,7 +2781,7 @@ export function TradingProductDetail({
                     type="date"
                     value={editPromoStart}
                     onChange={(e) => setEditPromoStart(e.target.value)}
-                    className="w-full p-2 rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white dark:[color-scheme:dark]"
+                    className="w-full p-2 rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white [color-scheme:light] dark:[color-scheme:dark]"
                   />
                 </div>
                 <div>
@@ -2629,10 +2792,96 @@ export function TradingProductDetail({
                     type="date"
                     value={editPromoEnd}
                     onChange={(e) => setEditPromoEnd(e.target.value)}
-                    className="w-full p-2 rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white dark:[color-scheme:dark]"
+                    className="w-full p-2 rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white [color-scheme:light] dark:[color-scheme:dark]"
                   />
                 </div>
               </div>
+
+              {/* Real-time Promotion Profitability Simulation Preview */}
+              {(() => {
+                const promoW = parseFloat(editPromoPrice);
+                const currentSrp = product.srpPrice;
+                const landed = product.effectiveLandedCost;
+                const isPromoValid = !isNaN(promoW) && promoW > 0;
+
+                const promoLetustoProfit = isPromoValid ? promoW - landed : null;
+                const promoLetustoMargin = isPromoValid && promoW > 0 ? ((promoW - landed) / promoW) * 100 : null;
+
+                const promoRetailerProfit = isPromoValid && currentSrp > 0 ? currentSrp - promoW : null;
+                const promoRetailerMargin = isPromoValid && currentSrp > 0 ? ((currentSrp - promoW) / currentSrp) * 100 : null;
+
+                const isPromoLoss = isPromoValid && promoW < landed;
+                const isPromoLowMargin = isPromoValid && !isPromoLoss && promoLetustoMargin !== null && promoLetustoMargin < 15;
+
+                return (
+                  <div className="p-3.5 rounded-xl bg-zinc-50 dark:bg-zinc-950/70 border border-zinc-200 dark:border-zinc-800 space-y-2.5">
+                    <div className="flex items-center justify-between text-[11px] font-bold text-zinc-500 uppercase tracking-wider border-b border-zinc-200/60 dark:border-zinc-800/60 pb-1.5">
+                      <span>프로모션 수익성 실시간 시뮬레이션</span>
+                      <span className="font-mono">Landed Cost: ${landed.toFixed(2)}</span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2.5 text-xs">
+                      {/* Letusto */}
+                      <div className="p-2.5 rounded-lg bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800 space-y-1">
+                        <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 uppercase block">
+                          Letusto 프로모션 수익
+                        </span>
+                        <div className="flex items-baseline justify-between text-[11px]">
+                          <span className="text-zinc-500">이익 (Profit):</span>
+                          <strong className={`font-mono font-bold ${promoLetustoProfit !== null && promoLetustoProfit < 0 ? 'text-rose-600' : 'text-zinc-900 dark:text-white'}`}>
+                            {safeFormatDollar(promoLetustoProfit)}
+                          </strong>
+                        </div>
+                        <div className="flex items-baseline justify-between text-[11px]">
+                          <span className="text-zinc-500">마진율 (Margin):</span>
+                          <strong className={`font-mono font-bold ${promoLetustoMargin !== null && promoLetustoMargin < 15 ? 'text-rose-600' : 'text-indigo-600 dark:text-indigo-400'}`}>
+                            {safeFormatMargin(promoLetustoMargin)}
+                          </strong>
+                        </div>
+                      </div>
+
+                      {/* Retailer */}
+                      <div className="p-2.5 rounded-lg bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800 space-y-1">
+                        <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase block">
+                          Retailer 프로모션 마진
+                        </span>
+                        <div className="flex items-baseline justify-between text-[11px]">
+                          <span className="text-zinc-500">소비자가 (SRP):</span>
+                          <strong className="font-mono text-zinc-900 dark:text-white">
+                            ${currentSrp.toFixed(2)}
+                          </strong>
+                        </div>
+                        <div className="flex items-baseline justify-between text-[11px]">
+                          <span className="text-zinc-500">이익 (Profit):</span>
+                          <strong className={`font-mono font-bold ${promoRetailerProfit !== null && promoRetailerProfit < 0 ? 'text-rose-600' : 'text-zinc-900 dark:text-white'}`}>
+                            {safeFormatDollar(promoRetailerProfit)}
+                          </strong>
+                        </div>
+                        <div className="flex items-baseline justify-between text-[11px]">
+                          <span className="text-zinc-500">마진율 (Margin):</span>
+                          <strong className="font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                            {safeFormatMargin(promoRetailerMargin)}
+                          </strong>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Warnings */}
+                    {isPromoLoss && (
+                      <div className="p-2.5 rounded-lg bg-rose-50 text-rose-800 dark:bg-rose-950/40 dark:text-rose-300 border border-rose-200 dark:border-rose-900/60 text-[11px] font-semibold flex items-center gap-1.5">
+                        <span>🚨</span>
+                        <span>경고: 프로모션 공급가가 수입원가(${landed.toFixed(2)})보다 낮아 역마진(손실)이 발생합니다.</span>
+                      </div>
+                    )}
+                    {isPromoLowMargin && (
+                      <div className="p-2.5 rounded-lg bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300 border border-amber-200 dark:border-amber-900/60 text-[11px] font-semibold flex items-center gap-1.5">
+                        <span>⚠️</span>
+                        <span>주의: 프로모션 적용 후 자사 마진이 {promoLetustoMargin?.toFixed(1)}%로 권장 기준(15% 이상)보다 낮습니다.</span>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
 
               <div>
                 <label className="font-semibold text-zinc-700 dark:text-zinc-300 block mb-1">
