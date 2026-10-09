@@ -991,7 +991,7 @@ export function TradingProductDetail({
         title: "상품 등록 미완료 (Draft)",
         message: `마스터 상품 기본 정보 또는 필수 항목이 완성되지 않았습니다.${missingList}`,
         target: "catalog_master",
-        actionLabel: "마스터 수정 →",
+        actionLabel: "물류/마스터 수정 →",
       });
     }
 
@@ -1003,7 +1003,7 @@ export function TradingProductDetail({
         title: "판매 가능 재고 소진 (0 EA)",
         message: "현재 판매 가능 재고가 0개입니다. 리테일러 주문 접수가 불가합니다.",
         target: "inventory",
-        actionLabel: "재고 확인 →",
+        actionLabel: "재고 입고/조정 →",
       });
     } else if (totalAvailable < 10) {
       // 2. Low stock (안전 재고 부족)
@@ -1025,7 +1025,7 @@ export function TradingProductDetail({
         title: `불량 재고 격리 (${totalDamaged} EA)`,
         message: `불량 재고 ${totalDamaged}개가 감지되어 판매 가능 수량에서 차감되어 있습니다.`,
         target: "inventory",
-        actionLabel: "재고 조정 →",
+        actionLabel: "불량 재고 조정 →",
       });
     }
 
@@ -1037,7 +1037,7 @@ export function TradingProductDetail({
         title: `보류 재고 관리 (${totalHold} EA)`,
         message: `검토 보류 재고 ${totalHold}개가 지정되어 있습니다.`,
         target: "inventory",
-        actionLabel: "재고 조정 →",
+        actionLabel: "보류 재고 확인 →",
       });
     }
 
@@ -1049,7 +1049,7 @@ export function TradingProductDetail({
         title: "도매가 미설정",
         message: "도매 공급가가 설정되지 않아 리테일러 주문이 불가능합니다.",
         target: "pricing_modal",
-        actionLabel: "도매가 설정 →",
+        actionLabel: "가격 설정 →",
       });
     }
 
@@ -1075,7 +1075,7 @@ export function TradingProductDetail({
         title: "수입원가(Landed Cost) 미산정",
         message: "정산된 수입원가가 없어 자사 마진이 정확하게 계산되지 않습니다.",
         target: "cost_override",
-        actionLabel: "원가 오버라이드 →",
+        actionLabel: "원가 확인/오버라이드 →",
       });
     }
 
@@ -1087,7 +1087,7 @@ export function TradingProductDetail({
         title: `자사 마진 임계치 미달 (${product.ourMarginPercent.toFixed(1)}%)`,
         message: `현재 자사 마진(${product.ourMarginPercent.toFixed(1)}%)이 목표 최소 기준(20.0%)보다 낮습니다.`,
         target: "pricing_modal",
-        actionLabel: "도매가 조정 →",
+        actionLabel: "도매가/원가 조정 →",
       });
     }
 
@@ -1100,7 +1100,7 @@ export function TradingProductDetail({
           title: `리테일러 마진 위험 (${product.retailerMarginPercent.toFixed(1)}% < 40%)`,
           message: `리테일러 마진이 40% 미만으로 가격 경쟁력이 매우 낮습니다.`,
           target: "pricing_modal",
-          actionLabel: "가격 재조정 →",
+          actionLabel: "가격 재설정 →",
         });
       } else if (product.retailerMarginPercent < 50) {
         alerts.push({
@@ -1109,7 +1109,7 @@ export function TradingProductDetail({
           title: `리테일러 마진 주의 (${product.retailerMarginPercent.toFixed(1)}%)`,
           message: `리테일러 마진이 권장 기준(50% 이상)에 미달합니다.`,
           target: "pricing_modal",
-          actionLabel: "가격 재조정 →",
+          actionLabel: "가격 재설정 →",
         });
       }
     }
@@ -1122,7 +1122,7 @@ export function TradingProductDetail({
         title: "운영 중이나 Hub 비노출",
         message: "상품이 '운영 중' 상태이나 Retailer Hub에 '비노출'되어 주문이 유입되지 않습니다.",
         target: "status_modal",
-        actionLabel: "노출 변경 →",
+        actionLabel: "Hub 노출 변경 →",
       });
     }
 
@@ -1134,7 +1134,7 @@ export function TradingProductDetail({
         title: "Hub 노출 중 주문 불가",
         message: `리테일러 포털에 노출 중이나 다음 사유로 주문이 불가합니다: ${dynamicOrderability.reason || "주문 불가"}`,
         target: "status_modal",
-        actionLabel: "상태 확인 →",
+        actionLabel: "운영 상태 확인 →",
       });
     }
 
@@ -1146,7 +1146,7 @@ export function TradingProductDetail({
         title: "가격 정책 비활성화",
         message: "상품의 가격 정책이 비활성화되어 리테일러 주문이 차단되어 있습니다.",
         target: "pricing_modal",
-        actionLabel: "가격 활성화 →",
+        actionLabel: "가격 정책 활성화 →",
       });
     }
     if (!product.hasCasePackConfigured || (product.carton_pack_qty || 1) < 1) {
@@ -1156,7 +1156,7 @@ export function TradingProductDetail({
         title: "MOQ / Case Pack 미설정",
         message: "최소 주문 단위 및 Case Pack 수량이 명시적으로 설정되지 않았습니다.",
         target: "catalog_master",
-        actionLabel: "마스터 설정 →",
+        actionLabel: "물류 정보 수정 →",
       });
     }
 
@@ -1178,7 +1178,7 @@ export function TradingProductDetail({
         title: "수입원가 오버라이드 활성",
         message: `수동 오버라이드 원가 $${product.overrideLandedCost?.toFixed(2)}가 마진 계산 엔진에 적용되어 있습니다.`,
         target: "cost_override",
-        actionLabel: "원가 관리 →",
+        actionLabel: "수입원가 관리 →",
       });
     }
 
@@ -1192,8 +1192,8 @@ export function TradingProductDetail({
       const el = document.getElementById("inventory-snapshot-card");
       if (el) {
         el.scrollIntoView({ behavior: "smooth", block: "center" });
-        el.classList.add("ring-2", "ring-blue-500", "ring-offset-2");
-        setTimeout(() => el.classList.remove("ring-2", "ring-blue-500", "ring-offset-2"), 2000);
+        el.classList.add("ring-2", "ring-indigo-500", "ring-offset-2");
+        setTimeout(() => el.classList.remove("ring-2", "ring-indigo-500", "ring-offset-2"), 2500);
       }
     } else if (target === "pricing_modal") {
       setIsPricingModalOpen(true);
@@ -1493,9 +1493,10 @@ export function TradingProductDetail({
                   </p>
                 </div>
                 {alert.actionLabel && (
-                  <div className="mt-2 pt-1.5 border-t border-black/5 dark:border-white/5 flex items-center justify-between text-[10px] font-semibold text-indigo-600 dark:text-indigo-400 group-hover:underline">
-                    <span>해결 조치</span>
-                    <span>{alert.actionLabel} →</span>
+                  <div className="mt-2 pt-1.5 border-t border-black/5 dark:border-white/5 flex items-center justify-end">
+                    <span className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 group-hover:underline flex items-center gap-0.5">
+                      {alert.actionLabel}
+                    </span>
                   </div>
                 )}
               </div>
@@ -1936,8 +1937,8 @@ export function TradingProductDetail({
       {/* 4. FULL-WIDTH TAB CONTAINER */}
       <div className="rounded-xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900 overflow-hidden">
         
-        {/* Full-Width Tab Header Strip - Enhanced Contrast */}
-        <div className="p-1.5 bg-zinc-100/80 dark:bg-zinc-950/80 border-b border-zinc-200 dark:border-zinc-800 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-1.5">
+        {/* Full-Width Tab Header Strip - Enhanced Contrast & Accessibility */}
+        <div role="tablist" aria-label="상품 운영 이력 탭" className="p-1.5 bg-zinc-100/80 dark:bg-zinc-950/80 border-b border-zinc-200 dark:border-zinc-800 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-1.5">
           {[
             { id: "inventory", en: "Inventory", ko: "재고 변동" },
             { id: "po", en: "PO / Inbound", ko: "입고 이력" },
@@ -1948,8 +1949,12 @@ export function TradingProductDetail({
           ].map((tab) => (
             <button
               key={tab.id}
+              role="tab"
+              id={`tab-${tab.id}`}
+              aria-controls={`tabpanel-${tab.id}`}
+              aria-selected={activeTab === tab.id}
               onClick={() => setActiveTab(tab.id as any)}
-              className={`py-2 px-3 text-center rounded-lg transition-all flex flex-col items-center justify-center ${
+              className={`py-2 px-3 text-center rounded-lg transition-all flex flex-col items-center justify-center focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-1 ${
                 activeTab === tab.id
                   ? "bg-zinc-900 text-white dark:bg-white dark:text-zinc-900 font-bold shadow-sm ring-1 ring-zinc-900/10 dark:ring-white/10"
                   : "bg-transparent text-zinc-600 hover:text-zinc-900 hover:bg-white/60 dark:text-zinc-400 dark:hover:text-white dark:hover:bg-zinc-900/60 font-medium"
