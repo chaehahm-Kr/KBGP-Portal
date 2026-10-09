@@ -14,6 +14,17 @@ import {
   type EffectiveHubVisibility,
   type OrderabilityStatus,
 } from "@/lib/product/hub-visibility";
+import { getCategoryMaster } from "@/lib/product/category-taxonomy-server";
+import {
+  resolveProductCategoryBranch,
+  buildCategoryTreeWithCounts,
+  type CategoryItem,
+  type CategoryHierarchy,
+} from "@/lib/product/category-taxonomy";
+import {
+  resolveActiveMarketingBadges,
+  type ActiveMarketingBadge,
+} from "@/lib/product/badge-utils";
 
 export interface RetailerProductSummary {
   id: string;
@@ -25,6 +36,10 @@ export interface RetailerProductSummary {
   category: string;
   categoryLabel: string;
   categoryCode: string | null;
+  depth1Code: string | null;
+  depth2Code: string | null;
+  depth3Code: string | null;
+  categoryPath?: string;
   wholesalePrice: number;
   msrp: number;
   marginPercent: number;
@@ -39,6 +54,7 @@ export interface RetailerProductSummary {
   maxDiscountPercent?: number;
   isPromoActive?: boolean;
   promoWholesalePrice?: number | null;
+  activeMarketingBadges: ActiveMarketingBadge[];
   availableStock?: number;
   isSoldOut?: boolean;
   restockEta?: string | null;
@@ -69,13 +85,23 @@ export interface RetailerProductDetail extends RetailerProductSummary {
 export interface RetailerCatalogFilters {
   search?: string;
   category?: string;
+  depth1?: string;
+  depth2?: string;
+  depth3?: string;
   brandId?: string;
+  marginFilter?: string; // 'all' | '40' | '50' | '60'
+  pricePreset?: string; // 'all' | 'under5' | '5to10' | '10to20' | 'over20' | 'custom'
+  minPrice?: number;
+  maxPrice?: number;
+  orderableOnly?: boolean;
+  sortBy?: string; // 'default' | 'margin_desc' | 'price_asc' | 'price_desc' | 'newest'
 }
 
 export interface RetailerCatalogResult {
   products: RetailerProductSummary[];
   totalCount: number;
   categories: Array<{ code: string; label: string; count: number }>;
+  categoryHierarchy: CategoryHierarchy;
   brands: Array<{ id: string; name: string; count: number }>;
 }
 
@@ -276,6 +302,12 @@ export async function getRetailerProducts(
       products: [],
       totalCount: 0,
       categories: [],
+      categoryHierarchy: {
+        depth1: [],
+        depth2ByParent: {},
+        depth3ByParent: {},
+        categoryByCode: {},
+      },
       brands: [],
     };
   }
@@ -324,7 +356,11 @@ export async function getRetailerProducts(
     return visEval.effectiveVisibility === "PUBLISHED";
   });
 
-  // 4. Process products and sign thumbnail URLs
+  // 4. Fetch Category Master & build authoritative 3-Depth Category Tree
+  const categoryMaster = await getCategoryMaster();
+  const categoryHierarchy = buildCategoryTreeWithCounts(categoryMaster, activeProducts);
+
+  // 5. Process products and sign thumbnail URLs
   const brandMap = new Map<string, { id: string; name: string; count: number }>();
   const categoryMap = new Map<string, { code: string; label: string; count: number }>();
 
@@ -337,8 +373,9 @@ export async function getRetailerProducts(
       const brandId = p.brand_id || brand.id || "unassigned";
       const brandName = brand.name || "K SELECT Brand";
 
-      const categoryCode = p.category_code || p.category || "skincare";
-      const categoryLabel = formatCategoryName(p.category || p.category_code);
+      // 3-Depth Category Branch Resolution
+      const branch = resolveProductCategoryBranch(p, categoryHierarchy.categoryByCode);
+      const categoryLabel = branch.depth1LabelEn || formatCategoryName(p.category || p.category_code);
 
       // Sku resolution
       const effectiveSku = resolveEffectiveSku(overrides.letusto_sku, p.letusto_sku) ||
@@ -371,6 +408,15 @@ export async function getRetailerProducts(
           ? Number((((msrp - wholesalePrice) / msrp) * 100).toFixed(1))
           : 0;
 
+      // Marketing Badges resolution (Promotion, Sale, New)
+      const activeMarketingBadges = resolveActiveMarketingBadges(
+        {
+          isPromoActive,
+          price_additional_info: p.price_additional_info,
+        },
+        "en"
+      );
+
       // Image signing
       const rawImages = (p.product_images as any[]) || [];
       const sortedImages = [...rawImages].sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
@@ -391,9 +437,13 @@ export async function getRetailerProducts(
       bEntry.count += 1;
       brandMap.set(brandId, bEntry);
 
-      const cEntry = categoryMap.get(categoryCode) || { code: categoryCode, label: categoryLabel, count: 0 };
+      const cEntry = categoryMap.get(branch.depth1Code) || {
+        code: branch.depth1Code,
+        label: branch.depth1LabelEn,
+        count: 0,
+      };
       cEntry.count += 1;
-      categoryMap.set(categoryCode, cEntry);
+      categoryMap.set(branch.depth1Code, cEntry);
 
       const item: RetailerProductSummary = {
         id: p.id,
@@ -405,6 +455,10 @@ export async function getRetailerProducts(
         category: p.category || "skincare",
         categoryLabel,
         categoryCode: p.category_code || null,
+        depth1Code: branch.depth1Code,
+        depth2Code: branch.depth2Code,
+        depth3Code: branch.depth3Code,
+        categoryPath: [branch.depth1LabelEn, branch.depth2LabelEn, branch.depth3LabelEn].filter(Boolean).join(" > "),
         wholesalePrice,
         msrp,
         marginPercent,
@@ -419,6 +473,7 @@ export async function getRetailerProducts(
         maxDiscountPercent,
         isPromoActive,
         promoWholesalePrice: salesPolicy.promoWholesalePrice,
+        activeMarketingBadges,
         availableStock: stock,
         isSoldOut: visEval.isSoldOut,
         restockEta: visEval.restockEta,
@@ -431,9 +486,7 @@ export async function getRetailerProducts(
     })
   );
 
-
-
-  // 4. Apply search & filters
+  // 6. Apply search & filters
   let filtered = processedList;
 
   if (filters.search && filters.search.trim()) {
@@ -444,27 +497,82 @@ export async function getRetailerProducts(
         (p.nameEn && p.nameEn.toLowerCase().includes(q)) ||
         p.brandName.toLowerCase().includes(q) ||
         p.sku.toLowerCase().includes(q) ||
-        p.categoryLabel.toLowerCase().includes(q)
+        p.categoryLabel.toLowerCase().includes(q) ||
+        (p.categoryPath && p.categoryPath.toLowerCase().includes(q))
     );
   }
 
-  if (filters.category && filters.category !== "all") {
+  // 3-Depth Category Filter
+  if (filters.depth3 && filters.depth3 !== "all") {
+    filtered = filtered.filter((p) => p.depth3Code === filters.depth3);
+  } else if (filters.depth2 && filters.depth2 !== "all") {
+    filtered = filtered.filter((p) => p.depth2Code === filters.depth2);
+  } else if (filters.depth1 && filters.depth1 !== "all") {
+    filtered = filtered.filter((p) => p.depth1Code === filters.depth1);
+  } else if (filters.category && filters.category !== "all") {
     filtered = filtered.filter(
       (p) =>
+        p.depth1Code === filters.category ||
+        p.depth2Code === filters.category ||
+        p.depth3Code === filters.category ||
         p.category === filters.category ||
-        p.categoryCode === filters.category ||
-        p.categoryLabel.toLowerCase() === filters.category?.toLowerCase()
+        p.categoryCode === filters.category
     );
   }
 
+  // Brand Filter
   if (filters.brandId && filters.brandId !== "all") {
     filtered = filtered.filter((p) => p.brandId === filters.brandId);
+  }
+
+  // Margin Filter
+  if (filters.marginFilter && filters.marginFilter !== "all") {
+    const minMargin = Number(filters.marginFilter);
+    if (!isNaN(minMargin) && minMargin > 0) {
+      filtered = filtered.filter((p) => p.msrp > 0 && p.wholesalePrice > 0 && p.marginPercent >= minMargin);
+    }
+  }
+
+  // Price Preset Filter
+  if (filters.pricePreset && filters.pricePreset !== "all") {
+    if (filters.pricePreset === "under5") {
+      filtered = filtered.filter((p) => p.wholesalePrice > 0 && p.wholesalePrice < 5);
+    } else if (filters.pricePreset === "5to10") {
+      filtered = filtered.filter((p) => p.wholesalePrice >= 5 && p.wholesalePrice <= 10);
+    } else if (filters.pricePreset === "10to20") {
+      filtered = filtered.filter((p) => p.wholesalePrice >= 10 && p.wholesalePrice <= 20);
+    } else if (filters.pricePreset === "over20") {
+      filtered = filtered.filter((p) => p.wholesalePrice >= 20);
+    }
+  }
+
+  // Custom Min/Max Price Filter
+  if (filters.minPrice !== undefined && !isNaN(filters.minPrice) && filters.minPrice > 0) {
+    filtered = filtered.filter((p) => p.wholesalePrice >= (filters.minPrice ?? 0));
+  }
+  if (filters.maxPrice !== undefined && !isNaN(filters.maxPrice) && filters.maxPrice > 0) {
+    filtered = filtered.filter((p) => p.wholesalePrice <= (filters.maxPrice ?? Infinity));
+  }
+
+  // Orderable Stock Only Filter (default OFF)
+  if (filters.orderableOnly) {
+    filtered = filtered.filter((p) => (p.availableStock ?? 0) >= p.moq && p.isOrderable);
+  }
+
+  // Sorting
+  if (filters.sortBy === "margin_desc") {
+    filtered.sort((a, b) => (b.marginPercent || 0) - (a.marginPercent || 0));
+  } else if (filters.sortBy === "price_asc") {
+    filtered.sort((a, b) => (a.wholesalePrice || 0) - (b.wholesalePrice || 0));
+  } else if (filters.sortBy === "price_desc") {
+    filtered.sort((a, b) => (b.wholesalePrice || 0) - (a.wholesalePrice || 0));
   }
 
   return {
     products: filtered,
     totalCount: filtered.length,
     categories: Array.from(categoryMap.values()).sort((a, b) => b.count - a.count),
+    categoryHierarchy,
     brands: Array.from(brandMap.values()).sort((a, b) => a.name.localeCompare(b.name)),
   };
 }
@@ -694,6 +802,14 @@ export async function getRetailerProductDetail(
     bulletPoints = p.bullet_points.filter(Boolean);
   }
 
+  const activeMarketingBadges = resolveActiveMarketingBadges(
+    {
+      isPromoActive,
+      price_additional_info: p.price_additional_info,
+    },
+    "en"
+  );
+
   const moq = visEval.moq;
 
   return {
@@ -706,6 +822,9 @@ export async function getRetailerProductDetail(
     category: p.category || "skincare",
     categoryLabel,
     categoryCode: p.category_code || null,
+    depth1Code: null,
+    depth2Code: null,
+    depth3Code: null,
     wholesalePrice,
     msrp,
     marginPercent,
@@ -732,6 +851,7 @@ export async function getRetailerProductDetail(
     maxDiscountPercent,
     isPromoActive,
     promoWholesalePrice: salesPolicy.promoWholesalePrice,
+    activeMarketingBadges,
     availableStock: totalAvailable,
     isSoldOut: visEval.isSoldOut,
     restockEta: visEval.restockEta,

@@ -10,7 +10,8 @@ interface ProductCardProps {
 }
 
 export function RetailerProductCard({ product }: ProductCardProps) {
-  const { t } = useTranslation();
+  const { t, locale } = useTranslation();
+  const badges = product.activeMarketingBadges || [];
 
   return (
     <Link
@@ -44,36 +45,31 @@ export function RetailerProductCard({ product }: ProductCardProps) {
           </div>
         )}
 
-        {/* Category & Status Tag Overlay */}
-        <div className="absolute top-3 left-3 flex flex-col gap-1 items-start">
-          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-white/90 dark:bg-zinc-900/90 text-zinc-700 dark:text-zinc-300 backdrop-blur-md shadow-xs border border-zinc-200/50 dark:border-zinc-700/50">
+        {/* Top Left: Category & Out of Stock Overlay */}
+        <div className="absolute top-3 left-3 flex flex-col gap-1 items-start max-w-[60%]">
+          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-white/90 dark:bg-zinc-900/90 text-zinc-700 dark:text-zinc-300 backdrop-blur-md shadow-xs border border-zinc-200/50 dark:border-zinc-700/50 truncate">
             {product.categoryLabel}
           </span>
           {product.isSoldOut && (
             <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold bg-rose-600 text-white shadow-xs">
-              품절 (Out of Stock)
-            </span>
-          )}
-          {product.isPromoActive && (
-            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold bg-amber-500 text-white shadow-xs">
-              🔥 Promo
+              {t.products.outOfStock}
             </span>
           )}
         </div>
 
-        {/* Margin Badge Overlay */}
-        {product.marginPercent > 0 ? (
+        {/* Top Right: Up to 3 Marketing Badges (Promotion, Sale, New) */}
+        {badges.length > 0 && (
           <div className="absolute top-3 right-3 flex flex-col gap-1 items-end">
-            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20 backdrop-blur-md shadow-xs">
-              {product.marginPercent}% {t.products.margin}
-            </span>
-            {product.hasTiers && product.maxDiscountPercent && product.maxDiscountPercent > 0 && !product.isPromoActive ? (
-              <span className="inline-flex items-center px-1.5 py-0.5 rounded-md text-[9px] font-semibold bg-indigo-50/90 text-indigo-700 border border-indigo-200/60 dark:bg-indigo-950/80 dark:text-indigo-300">
-                수량할인 ~{product.maxDiscountPercent}%
+            {badges.map((b, idx) => (
+              <span
+                key={idx}
+                className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border backdrop-blur-md ${b.badgeStyle}`}
+              >
+                {b.label}
               </span>
-            ) : null}
+            ))}
           </div>
-        ) : null}
+        )}
       </div>
 
       {/* Content Container */}
@@ -100,33 +96,53 @@ export function RetailerProductCard({ product }: ProductCardProps) {
           )}
         </div>
 
-        {/* Commercial Pricing Strip */}
-        <div className="pt-3 border-t border-zinc-100 dark:border-zinc-800/80 flex items-end justify-between">
-          <div>
-            <div className="text-[10px] uppercase font-bold tracking-wider text-zinc-400 dark:text-zinc-500">
-              {product.isPromoActive ? "Promo Wholesale" : t.products.wholesalePrice}
+        {/* Commercial Pricing Strip: Wholesale -> Margin -> MSRP */}
+        <div className="pt-3 border-t border-zinc-100 dark:border-zinc-800/80 space-y-1.5">
+          <div className="flex items-baseline justify-between gap-2">
+            {/* Wholesale Price */}
+            <div>
+              <div className="text-[10px] uppercase font-bold tracking-wider text-zinc-400 dark:text-zinc-500">
+                {product.isPromoActive ? t.products.promoBadge : t.products.wholesalePrice}
+              </div>
+              <div className="text-base sm:text-lg font-bold text-zinc-900 dark:text-white flex items-baseline gap-1">
+                <span>{product.wholesalePrice > 0 ? `$${product.wholesalePrice.toFixed(2)}` : "—"}</span>
+                <span className="text-[10px] font-normal text-zinc-400">/ EA</span>
+              </div>
             </div>
-            <div className="text-base sm:text-lg font-bold text-zinc-900 dark:text-white flex items-baseline gap-1">
-              <span>{product.wholesalePrice > 0 ? `$${product.wholesalePrice.toFixed(2)}` : "—"}</span>
-              <span className="text-[10px] font-normal text-zinc-400">/ EA</span>
+
+            {/* Margin */}
+            {product.marginPercent > 0 && product.msrp > 0 && (
+              <div className="text-center px-2 py-0.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200/60 dark:border-emerald-800/60">
+                <span className="text-[11px] sm:text-xs font-bold text-emerald-700 dark:text-emerald-400">
+                  {product.marginPercent}% {t.products.margin}
+                </span>
+              </div>
+            )}
+
+            {/* MSRP */}
+            <div className="text-right">
+              <div className="text-[10px] uppercase font-bold tracking-wider text-zinc-400 dark:text-zinc-500">
+                {t.products.msrp}
+              </div>
+              <div className="text-xs sm:text-sm font-semibold text-zinc-500 dark:text-zinc-400">
+                {product.msrp > 0 ? `$${product.msrp.toFixed(2)}` : "—"}
+              </div>
             </div>
           </div>
 
-          <div className="text-right">
-            <div className="text-[10px] uppercase font-bold tracking-wider text-zinc-400 dark:text-zinc-500">
-              {t.products.msrp}
+          {/* Volume discount subtitle */}
+          {product.hasTiers && product.maxDiscountPercent && product.maxDiscountPercent > 0 && !product.isPromoActive ? (
+            <div className="text-[10px] font-medium text-indigo-600 dark:text-indigo-400">
+              {t.products.bulkDiscountUpTo.replace("{percent}", String(product.maxDiscountPercent))}
             </div>
-            <div className="text-xs sm:text-sm font-semibold text-zinc-500 dark:text-zinc-400">
-              {product.msrp > 0 ? `$${product.msrp.toFixed(2)}` : "—"}
-            </div>
-          </div>
+          ) : null}
         </div>
 
-        {/* Retailer Purchasing Conditions: MOQ & Batch units */}
-        <div className="flex items-center justify-between text-[11px] text-zinc-600 dark:text-zinc-300 bg-zinc-50 dark:bg-zinc-800/50 px-2.5 py-1.5 rounded-lg border border-zinc-150 dark:border-zinc-800">
-          <span className="text-zinc-500">주문 조건:</span>
-          <span className="font-semibold text-zinc-800 dark:text-zinc-200">
-            최소 {product.moq}개 · {product.moq}개 단위 묶음
+        {/* Retailer Purchasing Conditions: Clean MOQ */}
+        <div className="flex items-center justify-between text-xs text-zinc-600 dark:text-zinc-300 bg-zinc-50 dark:bg-zinc-800/50 px-3 py-1.5 rounded-lg border border-zinc-150 dark:border-zinc-800">
+          <span className="text-zinc-500 font-medium">{t.products.moq}:</span>
+          <span className="font-semibold text-zinc-900 dark:text-zinc-100">
+            {product.moq} {locale === "ko" ? "개" : "units"}
           </span>
         </div>
       </div>

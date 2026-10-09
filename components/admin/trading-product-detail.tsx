@@ -24,6 +24,7 @@ import { safeFormatUsd, safeFormatPercent } from "@/lib/product/pricing-resolver
 import { type ResolvedRetailerSalesPolicy, resolveRetailerSalesPolicy } from "@/lib/product/retailer-policy";
 import { evaluateHubVisibility, type HubVisibilityEvaluation } from "@/lib/product/hub-visibility";
 import { RetailerSalesPolicyCard } from "@/components/admin/retailer-sales-policy-card";
+import { HubBadgesCard } from "@/components/admin/hub-badges-card";
 import { useRouter } from "next/navigation";
 
 const ArrowLeftIcon = ({ className }: { className?: string }) => (
@@ -128,6 +129,7 @@ interface ResolvedTradingProduct {
   orderabilityStatus?: string;
   orderabilityLabel?: string;
   orderabilityReason?: string;
+  hubBadges?: any;
 }
 
 interface InventoryBalanceItem {
@@ -2012,6 +2014,13 @@ export function TradingProductDetail({
         salesPolicy={product.salesPolicy || resolveRetailerSalesPolicy(product)}
         srpPrice={product.srpPrice}
         mapPrice={product.mapPrice}
+      />
+
+      {/* 4-1. HUB MARKETING BADGES CARD */}
+      <HubBadgesCard
+        productId={product.id}
+        isPromoActive={product.isPromoActive}
+        hubBadges={product.hubBadges}
       />
 
       {/* 5. FULL-WIDTH TAB CONTAINER */}

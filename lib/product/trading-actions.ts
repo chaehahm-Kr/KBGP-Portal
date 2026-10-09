@@ -500,6 +500,9 @@ export async function getTradingProductDetailData(productId: string) {
 
     // Calculated Orderability
     orderability,
+
+    // Hub Marketing Badges Config
+    hubBadges: ((product.price_additional_info as any) || {}).hub_badges || {},
   };
 
   return {
@@ -1415,4 +1418,75 @@ export async function updateTradingStatusAndVisibility(
       error: err?.message || "상태 변경 중 오류가 발생했습니다.",
     };
   }
+}
+
+export interface UpdateHubBadgesInput {
+  sale?: {
+    is_active: boolean;
+    start_date?: string | null;
+    end_date?: string | null;
+    label_en?: string | null;
+    label_ko?: string | null;
+  };
+  new?: {
+    is_active: boolean;
+    start_date?: string | null;
+    end_date?: string | null;
+    label_en?: string | null;
+    label_ko?: string | null;
+  };
+}
+
+export async function updateHubBadges(productId: string, input: UpdateHubBadgesInput) {
+  const { userId } = await verifyAdminSession();
+  const supabase = createAdminClient();
+
+  const { data: currentProd, error: fetchErr } = await supabase
+    .from("products")
+    .select("price_additional_info")
+    .eq("id", productId)
+    .single();
+
+  if (fetchErr || !currentProd) {
+    throw new Error("Product not found.");
+  }
+
+  const priceAddInfo = (currentProd.price_additional_info as any) || {};
+  const currentBadges = priceAddInfo.hub_badges || {};
+
+  const updatedBadges = {
+    ...currentBadges,
+    sale: input.sale !== undefined ? { ...currentBadges.sale, ...input.sale } : currentBadges.sale,
+    new: input.new !== undefined ? { ...currentBadges.new, ...input.new } : currentBadges.new,
+  };
+
+  const updatedPriceAddInfo = {
+    ...priceAddInfo,
+    hub_badges: updatedBadges,
+  };
+
+  const { error: updateErr } = await supabase
+    .from("products")
+    .update({
+      price_additional_info: updatedPriceAddInfo,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", productId);
+
+  if (updateErr) {
+    throw new Error(updateErr.message);
+  }
+
+  try {
+    revalidatePath(`/admin/products/trading/${productId}`);
+    revalidatePath("/admin/products/trading");
+    revalidatePath("/products");
+    revalidatePath(`/products/${productId}`);
+    revalidatePath("/retailer/products");
+    revalidatePath(`/retailer/products/${productId}`);
+  } catch {
+    // ignore revalidate error
+  }
+
+  return { success: true, hub_badges: updatedBadges };
 }
