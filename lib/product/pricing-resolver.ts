@@ -22,7 +22,8 @@ export interface ResolvedPricing {
   baseWholesalePrice: number | null;
   promoWholesalePrice: number | null;
   hasActivePromo: boolean;
-  retailPrice: number | null; // SRP in USD
+  retailPrice: number | null; // USD SRP
+  krwRetailPrice: number | null; // KRW Original Retail Price
   mapPrice: number | null;
   retailerMarginPercent: number | null;
   retailerMarginStatus: "normal" | "caution" | "warning" | "none";
@@ -30,6 +31,7 @@ export interface ResolvedPricing {
   // Formatted Strings for Safe Display
   formattedWholesale: string; // e.g. "$2.75" or "Price Missing"
   formattedRetail: string;    // e.g. "$15.00" or "—"
+  formattedKrwRetail: string; // e.g. "₩15,000" or "—"
   formattedMap: string;       // e.g. "$15.00" or "—"
   formattedMargin: string;    // e.g. "58.3%" or "—"
   isWholesaleValid: boolean;
@@ -66,6 +68,15 @@ export function safeFormatUsd(val: number | null | undefined, fallback = "—"):
 }
 
 /**
+ * Safe currency formatter for KRW
+ */
+export function safeFormatKrw(val: number | null | undefined, fallback = "—"): string {
+  const num = parseValidPositiveNumber(val);
+  if (num === null) return fallback;
+  return `₩${Math.round(num).toLocaleString("ko-KR")}`;
+}
+
+/**
  * Safe percentage formatter
  */
 export function safeFormatPercent(val: number | null | undefined, fallback = "—"): string {
@@ -76,6 +87,7 @@ export function safeFormatPercent(val: number | null | undefined, fallback = "�
 
 /**
  * Authoritative Pricing Resolver
+ * Evaluates USD Wholesale, USD Retail (SRP), KRW Retail, and Retailer Margin with strict currency boundary rules.
  */
 export function resolveProductPricing(input: RawProductPricingInput): ResolvedPricing {
   const priceAddInfo = input.price_additional_info || {};
@@ -106,43 +118,41 @@ export function resolveProductPricing(input: RawProductPricingInput): ResolvedPr
 
   const wholesalePrice = hasActivePromo ? promoWholesalePrice : baseWholesalePrice;
 
-  // 3. Resolve Retail Price (SRP in USD)
+  // 3. Resolve KRW Retail Price (Original Korea Local Price)
+  const directKrwRetail = parseValidPositiveNumber(input.price_krw_retail);
+  const jsonKrwRetail = parseValidPositiveNumber(adminOverrides.price_krw_retail);
+  const krwRetailPrice = directKrwRetail ?? jsonKrwRetail ?? null;
+
+  // 4. Resolve USD Retail Price (Explicit USD SRP Fields ONLY)
+  // Strict Currency Rule: NEVER use price_krw_retail as USD SRP!
   const directSrp = parseValidPositiveNumber(input.trading_srp_price);
   const jsonSrp = parseValidPositiveNumber(tradingOverrides.srp_price);
   const adminSrp = parseValidPositiveNumber(adminOverrides.estimated_retail_price);
   const dbEstSrp = parseValidPositiveNumber(input.estimated_retail_price);
 
-  let rawSrp = directSrp ?? jsonSrp ?? adminSrp ?? dbEstSrp ?? null;
+  const retailPrice = directSrp ?? jsonSrp ?? adminSrp ?? dbEstSrp ?? null;
 
-  // Currency Sanitation Guard:
-  // If rawSrp > 500 while wholesalePrice <= 100 (e.g. rawSrp = 15000 from KRW retail price mistakenly passed in estimated_retail_price),
-  // it is an unconverted KRW value, NOT a valid USD SRP. Treat as null!
-  if (rawSrp !== null && rawSrp > 500 && (wholesalePrice === null || wholesalePrice <= 100)) {
-    rawSrp = null;
-  }
-
-  const retailPrice = rawSrp;
-
-  // 4. Resolve MAP Price
+  // 5. Resolve MAP Price
   const directMap = parseValidPositiveNumber(input.trading_map_price);
   const jsonMap = parseValidPositiveNumber(tradingOverrides.map_price);
   const mapPrice = directMap ?? jsonMap ?? (retailPrice && retailPrice > 0 ? retailPrice : null);
 
-  // 5. Calculate Retailer Margin Percent
+  // 6. Calculate Retailer Margin Percent
+  // Only calculable when both wholesalePrice and retailPrice exist and retailPrice >= wholesalePrice
   let retailerMarginPercent: number | null = null;
   let retailerMarginStatus: "normal" | "caution" | "warning" | "none" = "none";
 
-  if (wholesalePrice !== null && retailPrice !== null && retailPrice > 0 && wholesalePrice < retailPrice) {
+  if (wholesalePrice !== null && retailPrice !== null && retailPrice > 0 && wholesalePrice <= retailPrice) {
     const marginRatio = (retailPrice - wholesalePrice) / retailPrice;
     const calcMargin = marginRatio * 100;
     if (Number.isFinite(calcMargin) && !Number.isNaN(calcMargin) && calcMargin >= 0 && calcMargin <= 100) {
       retailerMarginPercent = Math.round(calcMargin * 10) / 10;
       if (retailerMarginPercent >= 50) {
-        retailerMarginStatus = "normal";
+        retailerMarginStatus = "normal"; // UI displays number only without green badge
       } else if (retailerMarginPercent >= 40) {
-        retailerMarginStatus = "caution";
+        retailerMarginStatus = "caution"; // Orange badge 주의
       } else {
-        retailerMarginStatus = "warning";
+        retailerMarginStatus = "warning"; // Red badge 경고
       }
     }
   }
@@ -151,9 +161,10 @@ export function resolveProductPricing(input: RawProductPricingInput): ResolvedPr
   const isRetailValid = retailPrice !== null && retailPrice > 0;
   const isMarginValid = retailerMarginPercent !== null;
 
-  // 6. Formatted strings for safe display
+  // 7. Formatted strings for safe display
   const formattedWholesale = isWholesaleValid ? `$${wholesalePrice!.toFixed(2)}` : "Price Missing";
   const formattedRetail = isRetailValid ? `$${retailPrice!.toFixed(2)}` : "—";
+  const formattedKrwRetail = krwRetailPrice !== null ? `₩${Math.round(krwRetailPrice).toLocaleString("ko-KR")}` : "—";
   const formattedMap = mapPrice !== null && mapPrice > 0 ? `$${mapPrice.toFixed(2)}` : "—";
   const formattedMargin = isMarginValid ? `${retailerMarginPercent!.toFixed(1)}%` : "—";
 
@@ -163,11 +174,13 @@ export function resolveProductPricing(input: RawProductPricingInput): ResolvedPr
     promoWholesalePrice,
     hasActivePromo,
     retailPrice,
+    krwRetailPrice,
     mapPrice,
     retailerMarginPercent,
     retailerMarginStatus,
     formattedWholesale,
     formattedRetail,
+    formattedKrwRetail,
     formattedMap,
     formattedMargin,
     isWholesaleValid,

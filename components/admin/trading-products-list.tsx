@@ -39,6 +39,10 @@ export interface TradingProductItem {
   qty_damaged: number;
   qty_available: number;
   warnings: string[];
+  isOrderable?: boolean;
+  orderabilityReasons?: string[];
+  orderabilityPrimaryReason?: string | null;
+  missingFields?: string[];
 }
 
 interface TradingProductsListProps {
@@ -94,6 +98,17 @@ export function TradingProductsList({ initialProducts }: TradingProductsListProp
     newTradingStatus: "active" | "inactive" | "historical";
     newVisibility: "visible" | "hidden";
   } | null>(null);
+
+  // Orderability Detail Modal state
+  const [orderabilityModalProduct, setOrderabilityModalProduct] = useState<TradingProductItem | null>(null);
+
+  const handleQuickFilterClick = (filterId: string) => {
+    if (filterId === "all") {
+      setQuickFilter("all");
+    } else {
+      setQuickFilter((prev) => (prev === filterId ? "all" : filterId));
+    }
+  };
 
   useEffect(() => {
     setProducts(initialProducts);
@@ -435,8 +450,11 @@ export function TradingProductsList({ initialProducts }: TradingProductsListProp
               return (
                 <button
                   key={chip.id}
-                  onClick={() => setQuickFilter(chip.id)}
-                  className={`px-3 py-1 rounded-full text-[11px] font-semibold transition-all cursor-pointer border ${
+                  type="button"
+                  role="button"
+                  aria-pressed={isSelected}
+                  onClick={() => handleQuickFilterClick(chip.id)}
+                  className={`px-3 py-1 rounded-full text-[11px] font-semibold transition-all cursor-pointer border flex items-center gap-1 ${
                     isSelected
                       ? isProblemChip
                         ? "bg-rose-600 text-white border-rose-600 dark:bg-rose-600 dark:border-rose-600 shadow-xs"
@@ -446,7 +464,8 @@ export function TradingProductsList({ initialProducts }: TradingProductsListProp
                       : "bg-zinc-100 text-zinc-650 border-zinc-200 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:border-zinc-700"
                   }`}
                 >
-                  {chip.label}
+                  <span>{chip.label}</span>
+                  {isSelected && chip.id !== "all" && <span className="text-[10px] opacity-80">✕</span>}
                 </button>
               );
             })}
@@ -644,9 +663,25 @@ export function TradingProductsList({ initialProducts }: TradingProductsListProp
                         {product.warnings.length > 0 && (
                           <div className="flex flex-wrap gap-1 pt-0.5">
                             {product.warnings.includes("visible_not_orderable") && (
-                              <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-bold bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200 dark:border-rose-800">
-                                🚨 노출 중이나 주문 불가
-                              </span>
+                              <div className="flex flex-col gap-0.5 pt-0.5">
+                                <div className="flex items-center gap-1 flex-wrap">
+                                  <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-bold bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200 dark:border-rose-800">
+                                    🚨 노출 중이나 주문 불가
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => setOrderabilityModalProduct(product)}
+                                    className="text-[10px] font-bold text-rose-700 dark:text-rose-400 hover:underline cursor-pointer flex items-center gap-1"
+                                  >
+                                    <span>사유: {product.orderabilityPrimaryReason || "차단 조건 충족"}</span>
+                                    {product.orderabilityReasons && product.orderabilityReasons.length > 1 && (
+                                      <span className="bg-rose-200 text-rose-800 dark:bg-rose-900 dark:text-rose-200 px-1 rounded-full text-[9px]">
+                                        외 {product.orderabilityReasons.length - 1}건
+                                      </span>
+                                    )}
+                                  </button>
+                                </div>
+                              </div>
                             )}
                             {product.warnings.includes("missing_wholesale") && (
                               <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
@@ -846,6 +881,88 @@ export function TradingProductsList({ initialProducts }: TradingProductsListProp
                 className="px-4 py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-xl transition-colors cursor-pointer shadow-xs"
               >
                 운영 종료로 변경
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Orderability Reasons Modal */}
+      {orderabilityModalProduct && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 space-y-4">
+            <div className="flex items-center justify-between border-b border-zinc-200 dark:border-zinc-800 pb-3">
+              <div>
+                <h3 className="text-base font-bold text-zinc-900 dark:text-white flex items-center gap-2">
+                  <span>🚨 주문 차단 사유 상세</span>
+                </h3>
+                <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5 font-medium">
+                  {orderabilityModalProduct.display_name} ({orderabilityModalProduct.letusto_sku || orderabilityModalProduct.display_manufacture_sku || "SKU 미지정"})
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setOrderabilityModalProduct(null)}
+                className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 text-lg font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <p className="text-zinc-600 dark:text-zinc-400">
+                해당 상품은 현재 Retailer Hub에 <strong>노출(Visible)</strong> 상태이나 아래 <strong>{(orderabilityModalProduct.orderabilityReasons?.length || 1)}개 차단 원인</strong>으로 인해 가맹점 구매가 불가능합니다:
+              </p>
+
+              <div className="space-y-2">
+                {(orderabilityModalProduct.orderabilityReasons || ["주문 차단 조건 충족"]).map((reason, idx) => (
+                  <div key={idx} className="p-3 rounded-xl bg-rose-50/80 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/50 space-y-1">
+                    <div className="flex items-center justify-between font-bold text-rose-800 dark:text-rose-300">
+                      <span>{idx + 1}. {reason}</span>
+                    </div>
+
+                    {reason === "등록 미완료" && orderabilityModalProduct.missingFields && orderabilityModalProduct.missingFields.length > 0 && (
+                      <p className="text-[11px] text-rose-700 dark:text-rose-400">
+                        누락 필수 항목: <strong className="underline">{orderabilityModalProduct.missingFields.join(", ")}</strong>
+                      </p>
+                    )}
+
+                    {reason === "Hub 비노출" && (
+                      <p className="text-[11px] text-zinc-600 dark:text-zinc-400">
+                        운영 상태는 활성이지만 Hub 노출이 &apos;비노출&apos;로 설정되어 가맹점 카탈로그에 표시되지 않습니다.
+                      </p>
+                    )}
+
+                    {reason === "도매가 미입력" && (
+                      <p className="text-[11px] text-zinc-600 dark:text-zinc-400">
+                        미국 수출 FOB 공급가(도매가)가 0달러이거나 미입력 상태입니다.
+                      </p>
+                    )}
+
+                    {reason === "판매 가능 재고 없음" && (
+                      <p className="text-[11px] text-zinc-600 dark:text-zinc-400">
+                        물리 실재고에서 보류/불량 재고를 차감한 가용 재고(Available Stock)가 0개입니다.
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-zinc-200 dark:border-zinc-800">
+              <Link
+                href={`/admin/products/trading/${orderabilityModalProduct.id}`}
+                onClick={() => setOrderabilityModalProduct(null)}
+                className="px-4 py-2 text-xs font-bold text-white bg-zinc-900 hover:bg-zinc-800 rounded-xl transition-colors dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-100"
+              >
+                상품 360° 관리에서 수정 및 해결하기 →
+              </Link>
+              <button
+                type="button"
+                onClick={() => setOrderabilityModalProduct(null)}
+                className="px-4 py-2 text-xs font-semibold text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800 rounded-xl transition-colors"
+              >
+                닫기
               </button>
             </div>
           </div>

@@ -189,18 +189,12 @@ export function sanitizeTradingAndVisibility(
 export interface OrderabilityEvaluation {
   isOrderable: boolean;
   reason: string | null;
+  reasons: string[];
 }
 
 /**
  * Authoritative Server-side Orderability Evaluator
- * Requires ALL of the following:
- * 1. Registration Status == 'COMPLETE' (if evaluated)
- * 2. Selection Status == 'SELECTED'
- * 3. Operational Trading Status == 'active'
- * 4. Retailer Hub Visibility == 'visible'
- * 5. Pricing is Active (isPricingActive !== false)
- * 6. Wholesale Price > 0
- * 7. Case Pack / MOQ >= 1
+ * Accumulates all active blocking reasons.
  */
 export function evaluateTradingOrderability(params: {
   registrationStatus?: string | null;
@@ -210,33 +204,41 @@ export function evaluateTradingOrderability(params: {
   isPricingActive: boolean;
   wholesalePrice: number;
   cartonPackQty?: number | null;
+  availableStock?: number | null;
 }): OrderabilityEvaluation {
+  const reasons: string[] = [];
+
   if (params.registrationStatus && params.registrationStatus !== "COMPLETE") {
-    return { isOrderable: false, reason: "등록 미완료" };
+    reasons.push("등록 미완료");
   }
   if (params.selectionStatus !== "SELECTED") {
-    return { isOrderable: false, reason: "미선정 상품" };
+    reasons.push("미선정 상품");
   }
   if (params.tradingStatus !== "active") {
-    return {
-      isOrderable: false,
-      reason: params.tradingStatus === "historical" ? "운영 종료 상품" : "운영 중지 상품",
-    };
+    reasons.push(params.tradingStatus === "historical" ? "운영 종료 상품" : "운영 중지 상품");
   }
   if (params.retailerVisibility !== "visible") {
-    return { isOrderable: false, reason: "Hub 비노출" };
+    reasons.push("Hub 비노출");
   }
   if (!params.isPricingActive) {
-    return { isOrderable: false, reason: "가격 비활성화" };
+    reasons.push("가격 비활성화");
   }
   if (!params.wholesalePrice || params.wholesalePrice <= 0) {
-    return { isOrderable: false, reason: "도매가 미입력" };
+    reasons.push("도매가 미입력");
   }
   const pack = params.cartonPackQty ?? 1;
   if (pack < 1) {
-    return { isOrderable: false, reason: "MOQ 미설정" };
+    reasons.push("MOQ 미설정");
   }
-  return { isOrderable: true, reason: null };
+  if (params.availableStock !== undefined && params.availableStock !== null && params.availableStock <= 0) {
+    reasons.push("판매 가능 재고 없음");
+  }
+
+  return {
+    isOrderable: reasons.length === 0,
+    reason: reasons.length > 0 ? reasons[0] : null,
+    reasons,
+  };
 }
 
 export interface CategoryMissingStep {

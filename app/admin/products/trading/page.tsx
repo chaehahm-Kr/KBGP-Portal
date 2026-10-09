@@ -5,6 +5,7 @@ import { getSignedFileUrl } from "@/lib/files/storage";
 import { TradingProductsList, type TradingProductItem } from "@/components/admin/trading-products-list";
 import { resolveEffectiveSku } from "@/lib/product/types";
 import { resolveProductPricing } from "@/lib/product/pricing-resolver";
+import { evaluateTradingOrderability, evaluateProductRegistrationStatus } from "@/lib/product/registration-status";
 
 export const metadata: Metadata = {
   title: "거래 대상 제품 관리 (Trading Products) | K SELECT NETWORK 어드민",
@@ -121,6 +122,36 @@ export default async function AdminTradingProductsPage() {
       const tradingStatus = p.trading_status || (p.selection_status === "SELECTED" ? "active" : "inactive");
       const retailerVisibility = (p as any).retailer_visibility || "hidden";
 
+      // Authoritative Registration & Orderability Evaluation
+      const regEval = evaluateProductRegistrationStatus({
+        id: p.id,
+        name: p.name,
+        name_en: p.name_en,
+        brand_id: p.brand_id,
+        category_code: p.category_code,
+        manufacture_sku: p.manufacture_sku,
+        origin: p.origin,
+        price_krw_retail: p.price_krw_retail,
+        price_usd_fob: p.price_usd_fob,
+        package_width: p.package_width,
+        package_depth: p.package_depth,
+        package_height: p.package_height,
+        package_weight: p.package_weight,
+        upc: p.upc,
+        ean: p.ean,
+        hasImages: !!photoUrl,
+      });
+
+      const orderability = evaluateTradingOrderability({
+        registrationStatus: regEval.status,
+        selectionStatus: p.selection_status,
+        tradingStatus,
+        retailerVisibility,
+        isPricingActive: true,
+        wholesalePrice: pricing.wholesalePrice || 0,
+        availableStock: totalAvailable,
+      });
+
       // Compute Warnings
       const warnings: string[] = [];
       if (!pricing.isWholesaleValid) {
@@ -134,7 +165,7 @@ export default async function AdminTradingProductsPage() {
       } else if (totalAvailable <= 5) {
         warnings.push("low_stock");
       }
-      if (retailerVisibility === "visible" && (totalAvailable <= 0 || tradingStatus !== "active")) {
+      if (retailerVisibility === "visible" && !orderability.isOrderable) {
         warnings.push("visible_not_orderable");
       }
       if (pricing.isMarginValid && pricing.retailerMarginPercent !== null && pricing.retailerMarginPercent < 40) {
@@ -176,6 +207,10 @@ export default async function AdminTradingProductsPage() {
         qty_damaged: totalDamaged,
         qty_available: totalAvailable,
         warnings,
+        isOrderable: orderability.isOrderable,
+        orderabilityReasons: orderability.reasons,
+        orderabilityPrimaryReason: orderability.reason,
+        missingFields: regEval.missingFields || [],
       };
     })
   );
