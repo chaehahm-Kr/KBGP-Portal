@@ -326,25 +326,25 @@ export async function getTradingProductDetailData(productId: string) {
   const promoStartDate = (product as any).trading_promo_start_date || tradingOverrides.promo_start_date || null;
   const promoEndDate = (product as any).trading_promo_end_date || tradingOverrides.promo_end_date || null;
 
-  const mapPrice = pricing.mapPrice || defaultMap;
-  const srpPrice = pricing.retailPrice || defaultSrp;
+  const mapPrice = pricing.mapPrice || 0;
+  const srpPrice = pricing.retailPrice || 0;
 
   const pricingNote = (product as any).trading_pricing_note || tradingOverrides.pricing_note || null;
   const isPricingActive = (product as any).trading_pricing_active !== undefined ? (product as any).trading_pricing_active : (tradingOverrides.is_active ?? true);
 
   const effectiveWholesale = pricing.wholesalePrice || 0;
 
-  const ourMarginUsd = effectiveWholesale > 0 && effectiveLandedCost > 0 ? effectiveWholesale - effectiveLandedCost : 0;
-  const ourMarginPercent = effectiveWholesale > 0 ? (ourMarginUsd / effectiveWholesale) * 100 : 0;
+  const ourMarginUsd = effectiveWholesale > 0 && effectiveLandedCost > 0 ? effectiveWholesale - effectiveLandedCost : null;
+  const ourMarginPercent = effectiveWholesale > 0 && ourMarginUsd !== null ? (ourMarginUsd / effectiveWholesale) * 100 : null;
 
-  const baseOurMarginUsd = operationalWholesale > 0 && effectiveLandedCost > 0 ? operationalWholesale - effectiveLandedCost : 0;
-  const baseOurMarginPercent = operationalWholesale > 0 ? (baseOurMarginUsd / operationalWholesale) * 100 : 0;
+  const baseOurMarginUsd = operationalWholesale > 0 && effectiveLandedCost > 0 ? operationalWholesale - effectiveLandedCost : null;
+  const baseOurMarginPercent = operationalWholesale > 0 && baseOurMarginUsd !== null ? (baseOurMarginUsd / operationalWholesale) * 100 : null;
 
-  const retailerMarginUsd = srpPrice > 0 && effectiveWholesale > 0 ? srpPrice - effectiveWholesale : 0;
-  const retailerMarginPercent = pricing.retailerMarginPercent || 0;
+  const retailerMarginUsd = srpPrice > 0 && effectiveWholesale > 0 ? srpPrice - effectiveWholesale : null;
+  const retailerMarginPercent = pricing.retailerMarginPercent;
 
-  const baseRetailerMarginUsd = srpPrice > 0 && operationalWholesale > 0 ? srpPrice - operationalWholesale : 0;
-  const baseRetailerMarginPercent = (srpPrice > 0 && operationalWholesale > 0) ? ((srpPrice - operationalWholesale) / srpPrice) * 100 : 0;
+  const baseRetailerMarginUsd = srpPrice > 0 && operationalWholesale > 0 ? srpPrice - operationalWholesale : null;
+  const baseRetailerMarginPercent = (srpPrice > 0 && operationalWholesale > 0) ? ((srpPrice - operationalWholesale) / srpPrice) * 100 : null;
 
   const cartonPackQty = Math.max(1, Number(adminOverrides.carton_pack_qty || (product as any).carton_pack_qty || 1));
   const moq = cartonPackQty;

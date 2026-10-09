@@ -19,6 +19,7 @@ import {
   RetailerVisibility,
   evaluateTradingOrderability,
 } from "@/lib/product/registration-status";
+import { safeFormatUsd, safeFormatPercent } from "@/lib/product/pricing-resolver";
 import { useRouter } from "next/navigation";
 
 const ArrowLeftIcon = ({ className }: { className?: string }) => (
@@ -92,14 +93,14 @@ interface ResolvedTradingProduct {
   effectiveLandedCost: number;
   hasCostOverride: boolean;
 
-  ourMarginUsd: number;
-  ourMarginPercent: number;
-  baseOurMarginUsd: number;
-  baseOurMarginPercent: number;
-  retailerMarginUsd: number;
-  retailerMarginPercent: number;
-  baseRetailerMarginUsd: number;
-  baseRetailerMarginPercent: number;
+  ourMarginUsd: number | null;
+  ourMarginPercent: number | null;
+  baseOurMarginUsd: number | null;
+  baseOurMarginPercent: number | null;
+  retailerMarginUsd: number | null;
+  retailerMarginPercent: number | null;
+  baseRetailerMarginUsd: number | null;
+  baseRetailerMarginPercent: number | null;
 
   orderability?: {
     isOrderable: boolean;
@@ -876,7 +877,7 @@ export function TradingProductDetail({
     }
 
     // 8. Low our margin (자사 마진 임계치 미달 < 20%)
-    if (product.operationalWholesale > 0 && product.effectiveLandedCost > 0 && product.ourMarginPercent < 20) {
+    if (product.operationalWholesale > 0 && product.effectiveLandedCost > 0 && product.ourMarginPercent !== null && product.ourMarginPercent < 20) {
       alerts.push({
         id: "low_our_margin",
         type: "danger",
@@ -886,7 +887,7 @@ export function TradingProductDetail({
     }
 
     // 9. Low retailer margin (리테일러 마진 주의/경고)
-    if (product.srpPrice > 0 && product.operationalWholesale > 0) {
+    if (product.srpPrice > 0 && product.operationalWholesale > 0 && product.retailerMarginPercent !== null) {
       if (product.retailerMarginPercent < 40) {
         alerts.push({
           id: "retailer_margin_danger",
@@ -965,11 +966,11 @@ export function TradingProductDetail({
 
   // Helper for Retailer Margin status badge
   const retailerMarginTone = useMemo(() => {
-    if (!product.srpPrice || product.srpPrice <= 0 || !product.operationalWholesale || product.operationalWholesale <= 0) {
+    if (!product.srpPrice || product.srpPrice <= 0 || !product.operationalWholesale || product.operationalWholesale <= 0 || product.retailerMarginPercent === null) {
       return { label: null, color: "text-zinc-400 dark:text-zinc-500", badge: null };
     }
     if (product.retailerMarginPercent >= 50) {
-      return { label: "정상", color: "text-zinc-900 dark:text-white", badge: null };
+      return { label: null, color: "text-zinc-900 dark:text-white", badge: null };
     }
     if (product.retailerMarginPercent >= 40) {
       return {
@@ -1322,9 +1323,9 @@ export function TradingProductDetail({
             <div className="p-2.5 rounded-lg bg-zinc-50 dark:bg-zinc-950/40 border border-zinc-200 dark:border-zinc-800 space-y-0.5">
               <span className="text-[9px] font-bold text-zinc-400 block uppercase">Our Margin (자사)</span>
               <div className="text-sm font-extrabold">
-                {product.ourMarginPercent > 0 && product.ourMarginUsd > 0 ? (
+                {product.ourMarginPercent !== null && product.ourMarginUsd !== null && product.ourMarginUsd > 0 ? (
                   <span className={product.ourMarginPercent < 20 ? "text-rose-600 dark:text-rose-400" : "text-zinc-900 dark:text-white"}>
-                    {product.ourMarginPercent.toFixed(1)}% <span className="text-[11px] font-normal text-zinc-500">(${product.ourMarginUsd.toFixed(2)})</span>
+                    {safeFormatPercent(product.ourMarginPercent)} <span className="text-[11px] font-normal text-zinc-500">({safeFormatUsd(product.ourMarginUsd)})</span>
                   </span>
                 ) : (
                   <span className="text-zinc-400 font-normal">—</span>
@@ -1343,9 +1344,9 @@ export function TradingProductDetail({
                 )}
               </div>
               <div className="text-sm font-extrabold">
-                {product.retailerMarginPercent > 0 && product.retailerMarginUsd > 0 ? (
+                {product.retailerMarginPercent !== null && product.retailerMarginUsd !== null && product.retailerMarginUsd > 0 ? (
                   <span className={retailerMarginTone.color}>
-                    {product.retailerMarginPercent.toFixed(1)}% <span className="text-[11px] font-normal text-zinc-500">(${product.retailerMarginUsd.toFixed(2)})</span>
+                    {safeFormatPercent(product.retailerMarginPercent)} <span className="text-[11px] font-normal text-zinc-500">({safeFormatUsd(product.retailerMarginUsd)})</span>
                   </span>
                 ) : (
                   <span className="text-zinc-400 font-normal">—</span>
@@ -1755,42 +1756,42 @@ export function TradingProductDetail({
                 <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3 text-xs">
                   <div className="p-2.5 rounded-lg bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800">
                     <span className="text-[10px] font-bold text-zinc-400 block uppercase">Wholesale Price</span>
-                    <strong className="text-sm font-extrabold text-zinc-900 dark:text-white">${product.operationalWholesale.toFixed(2)}</strong>
+                    <strong className="text-sm font-extrabold text-zinc-900 dark:text-white">{safeFormatUsd(product.operationalWholesale)}</strong>
                   </div>
 
                   <div className="p-2.5 rounded-lg bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800">
                     <span className="text-[10px] font-bold text-amber-600 block uppercase">Promo Wholesale</span>
                     <strong className="text-sm font-extrabold text-amber-600 dark:text-amber-400">
-                      {product.promoWholesale ? `$${product.promoWholesale.toFixed(2)}` : "없음"}
+                      {safeFormatUsd(product.promoWholesale, "없음")}
                     </strong>
                   </div>
 
                   <div className="p-2.5 rounded-lg bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800">
                     <span className="text-[10px] font-bold text-zinc-400 block uppercase">MAP</span>
-                    <strong className="text-sm font-bold text-zinc-800 dark:text-zinc-200">${product.mapPrice.toFixed(2)}</strong>
+                    <strong className="text-sm font-bold text-zinc-800 dark:text-zinc-200">{safeFormatUsd(product.mapPrice)}</strong>
                   </div>
 
                   <div className="p-2.5 rounded-lg bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800">
                     <span className="text-[10px] font-bold text-zinc-400 block uppercase">SRP</span>
-                    <strong className="text-sm font-bold text-zinc-800 dark:text-zinc-200">${product.srpPrice.toFixed(2)}</strong>
+                    <strong className="text-sm font-bold text-zinc-800 dark:text-zinc-200">{safeFormatUsd(product.srpPrice)}</strong>
                   </div>
 
                   <div className="p-2.5 rounded-lg bg-indigo-50/80 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-900/40">
                     <span className="text-[10px] font-bold text-indigo-700 dark:text-indigo-400 block uppercase">Effective Cost</span>
-                    <strong className="text-sm font-extrabold text-indigo-900 dark:text-indigo-200">${product.effectiveLandedCost.toFixed(2)}</strong>
+                    <strong className="text-sm font-extrabold text-indigo-900 dark:text-indigo-200">{safeFormatUsd(product.effectiveLandedCost)}</strong>
                   </div>
 
                   <div className="p-2.5 rounded-lg bg-emerald-50/80 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900/40">
                     <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400 block uppercase">Our Margin</span>
                     <strong className="text-sm font-extrabold text-emerald-800 dark:text-emerald-300">
-                      {product.ourMarginPercent.toFixed(1)}% <span className="text-[10px] font-normal">(${product.ourMarginUsd.toFixed(2)})</span>
+                      {safeFormatPercent(product.ourMarginPercent)} <span className="text-[10px] font-normal">({safeFormatUsd(product.ourMarginUsd)})</span>
                     </strong>
                   </div>
 
                   <div className="p-2.5 rounded-lg bg-blue-50/80 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900/40">
                     <span className="text-[10px] font-bold text-blue-700 dark:text-blue-400 block uppercase">Retailer Margin</span>
                     <strong className="text-sm font-extrabold text-blue-800 dark:text-blue-300">
-                      {product.retailerMarginPercent.toFixed(1)}% <span className="text-[10px] font-normal">(${product.retailerMarginUsd.toFixed(2)})</span>
+                      {safeFormatPercent(product.retailerMarginPercent)} <span className="text-[10px] font-normal">({safeFormatUsd(product.retailerMarginUsd)})</span>
                     </strong>
                   </div>
                 </div>
@@ -2194,19 +2195,19 @@ export function TradingProductDetail({
             <div className="grid grid-cols-4 gap-2 p-3 rounded-lg bg-zinc-50 dark:bg-zinc-950/60 border border-zinc-200 dark:border-zinc-800 text-xs">
               <div>
                 <span className="text-[10px] font-bold text-zinc-400 block uppercase">Current Wholesale</span>
-                <strong className="text-zinc-800 dark:text-zinc-200">${product.operationalWholesale.toFixed(2)}</strong>
+                <strong className="text-zinc-800 dark:text-zinc-200">{safeFormatUsd(product.operationalWholesale)}</strong>
               </div>
               <div>
                 <span className="text-[10px] font-bold text-zinc-400 block uppercase">Current MAP</span>
-                <strong className="text-zinc-800 dark:text-zinc-200">${product.mapPrice.toFixed(2)}</strong>
+                <strong className="text-zinc-800 dark:text-zinc-200">{safeFormatUsd(product.mapPrice)}</strong>
               </div>
               <div>
                 <span className="text-[10px] font-bold text-zinc-400 block uppercase">Current SRP</span>
-                <strong className="text-zinc-800 dark:text-zinc-200">${product.srpPrice.toFixed(2)}</strong>
+                <strong className="text-zinc-800 dark:text-zinc-200">{safeFormatUsd(product.srpPrice)}</strong>
               </div>
               <div>
                 <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 block uppercase">Effective Cost</span>
-                <strong className="text-indigo-900 dark:text-indigo-200 font-bold">${product.effectiveLandedCost.toFixed(2)}</strong>
+                <strong className="text-indigo-900 dark:text-indigo-200 font-bold">{safeFormatUsd(product.effectiveLandedCost)}</strong>
               </div>
             </div>
 
@@ -2258,7 +2259,7 @@ export function TradingProductDetail({
 
                 const newOurMarginUsd = newW - product.effectiveLandedCost;
                 const newOurMarginPct = newW > 0 ? (newOurMarginUsd / newW) * 100 : 0;
-                const marginChangePts = newOurMarginPct - product.baseOurMarginPercent;
+                const marginChangePts = newOurMarginPct - (product.baseOurMarginPercent ?? 0);
 
                 const newRetailerMarginUsd = !isNaN(newS) && newS > 0 ? newS - newW : 0;
                 const newRetailerMarginPct = !isNaN(newS) && newS > 0 ? (newRetailerMarginUsd / newS) * 100 : 0;
@@ -2370,19 +2371,19 @@ export function TradingProductDetail({
             <div className="grid grid-cols-4 gap-2 p-3 rounded-lg bg-zinc-50 dark:bg-zinc-950/60 border border-zinc-200 dark:border-zinc-800 text-xs">
               <div>
                 <span className="text-[10px] font-bold text-zinc-400 block uppercase">Current Wholesale</span>
-                <strong className="text-zinc-800 dark:text-zinc-200">${product.operationalWholesale.toFixed(2)}</strong>
+                <strong className="text-zinc-800 dark:text-zinc-200">{safeFormatUsd(product.operationalWholesale)}</strong>
               </div>
               <div>
                 <span className="text-[10px] font-bold text-zinc-400 block uppercase">Current MAP</span>
-                <strong className="text-zinc-800 dark:text-zinc-200">${product.mapPrice.toFixed(2)}</strong>
+                <strong className="text-zinc-800 dark:text-zinc-200">{safeFormatUsd(product.mapPrice)}</strong>
               </div>
               <div>
                 <span className="text-[10px] font-bold text-zinc-400 block uppercase">Current SRP</span>
-                <strong className="text-zinc-800 dark:text-zinc-200">${product.srpPrice.toFixed(2)}</strong>
+                <strong className="text-zinc-800 dark:text-zinc-200">{safeFormatUsd(product.srpPrice)}</strong>
               </div>
               <div>
                 <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 block uppercase">Effective Cost</span>
-                <strong className="text-indigo-900 dark:text-indigo-200 font-bold">${product.effectiveLandedCost.toFixed(2)}</strong>
+                <strong className="text-indigo-900 dark:text-indigo-200 font-bold">{safeFormatUsd(product.effectiveLandedCost)}</strong>
               </div>
             </div>
 

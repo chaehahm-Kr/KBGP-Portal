@@ -30,6 +30,7 @@ export interface ResolvedPricing {
   // Formatted Strings for Safe Display
   formattedWholesale: string; // e.g. "$2.75" or "Price Missing"
   formattedRetail: string;    // e.g. "$15.00" or "—"
+  formattedMap: string;       // e.g. "$15.00" or "—"
   formattedMargin: string;    // e.g. "58.3%" or "—"
   isWholesaleValid: boolean;
   isRetailValid: boolean;
@@ -56,6 +57,24 @@ export function parseValidPositiveNumber(val: any): number | null {
 }
 
 /**
+ * Safe currency formatter for USD
+ */
+export function safeFormatUsd(val: number | null | undefined, fallback = "—"): string {
+  const num = parseValidPositiveNumber(val);
+  if (num === null) return fallback;
+  return `$${num.toFixed(2)}`;
+}
+
+/**
+ * Safe percentage formatter
+ */
+export function safeFormatPercent(val: number | null | undefined, fallback = "—"): string {
+  if (val === null || val === undefined) return fallback;
+  if (typeof val !== "number" || !Number.isFinite(val) || Number.isNaN(val)) return fallback;
+  return `${val.toFixed(1)}%`;
+}
+
+/**
  * Authoritative Pricing Resolver
  */
 export function resolveProductPricing(input: RawProductPricingInput): ResolvedPricing {
@@ -68,9 +87,8 @@ export function resolveProductPricing(input: RawProductPricingInput): ResolvedPr
   const jsonWholesale = parseValidPositiveNumber(tradingOverrides.wholesale_price);
   const adminWholesale = parseValidPositiveNumber(adminOverrides.price_usd_fob);
   const dbFob = parseValidPositiveNumber(input.price_usd_fob);
-  const dbKrwWholesale = parseValidPositiveNumber(input.price_krw_wholesale);
 
-  const baseWholesalePrice = directWholesale ?? jsonWholesale ?? adminWholesale ?? dbFob ?? dbKrwWholesale ?? null;
+  const baseWholesalePrice = directWholesale ?? jsonWholesale ?? adminWholesale ?? dbFob ?? null;
 
   // 2. Resolve Promo Wholesale
   const directPromo = parseValidPositiveNumber(input.trading_promo_wholesale_price);
@@ -97,7 +115,7 @@ export function resolveProductPricing(input: RawProductPricingInput): ResolvedPr
   let rawSrp = directSrp ?? jsonSrp ?? adminSrp ?? dbEstSrp ?? null;
 
   // Currency Sanitation Guard:
-  // If rawSrp > 500 while wholesalePrice <= 100 (e.g. rawSrp = 15000 from KRW retail price),
+  // If rawSrp > 500 while wholesalePrice <= 100 (e.g. rawSrp = 15000 from KRW retail price mistakenly passed in estimated_retail_price),
   // it is an unconverted KRW value, NOT a valid USD SRP. Treat as null!
   if (rawSrp !== null && rawSrp > 500 && (wholesalePrice === null || wholesalePrice <= 100)) {
     rawSrp = null;
@@ -136,6 +154,7 @@ export function resolveProductPricing(input: RawProductPricingInput): ResolvedPr
   // 6. Formatted strings for safe display
   const formattedWholesale = isWholesaleValid ? `$${wholesalePrice!.toFixed(2)}` : "Price Missing";
   const formattedRetail = isRetailValid ? `$${retailPrice!.toFixed(2)}` : "—";
+  const formattedMap = mapPrice !== null && mapPrice > 0 ? `$${mapPrice.toFixed(2)}` : "—";
   const formattedMargin = isMarginValid ? `${retailerMarginPercent!.toFixed(1)}%` : "—";
 
   return {
@@ -149,6 +168,7 @@ export function resolveProductPricing(input: RawProductPricingInput): ResolvedPr
     retailerMarginStatus,
     formattedWholesale,
     formattedRetail,
+    formattedMap,
     formattedMargin,
     isWholesaleValid,
     isRetailValid,
