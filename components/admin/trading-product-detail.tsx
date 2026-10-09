@@ -825,32 +825,80 @@ export function TradingProductDetail({
     return events.sort((a, b) => b.timestamp - a.timestamp);
   }, [costSummary, historyLogs, product]);
 
-  // Parse audit logs into human-readable field-level change rows
-  const parsedAuditRows = useMemo(() => {
-    const rows: any[] = [];
+  // Warehouse Map for fast name/code resolution in history logs
+  const warehouseMap = useMemo(() => {
+    const map = new Map<string, string>();
+    (warehouses || []).forEach((w: any) => {
+      map.set(w.id, w.code ? `${w.name} (${w.code})` : w.name);
+    });
+    return map;
+  }, [warehouses]);
 
-    historyLogs.forEach((log: any) => {
-      const dateStr = new Date(log.created_at).toLocaleString("ko-KR");
+  // Parse audit logs into human-readable field-level change rows combining historyLogs, inventory movements & receiving history
+  const parsedAuditRows = useMemo(() => {
+    const rows: Array<{
+      id: string;
+      timestamp: number;
+      date: string;
+      category: string;
+      categoryBadgeLabel: string;
+      filterGroup: "INV" | "PRICE" | "COST" | "HUB" | "SALES" | "GENERAL";
+      field: string;
+      prevVal: string;
+      newVal: string;
+      reason: string;
+      user: string;
+      operatorReason: string;
+    }> = [];
+
+    // 1. Process trading product history logs
+    (historyLogs || []).forEach((log: any) => {
+      const createdDate = new Date(log.created_at);
+      const dateStr = createdDate.toLocaleString("ko-KR", {
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+      const timestamp = createdDate.getTime();
       const user = log.creator?.full_name || "Admin";
       const category = log.change_type || "GENERAL";
       const reason = log.reason || "-";
+
+      let filterGroup: "INV" | "PRICE" | "COST" | "HUB" | "SALES" | "GENERAL" = "GENERAL";
+      if (["STOCK", "INVENTORY", "MANUAL_ADJUSTMENT", "RECEIVING", "SHIPMENT", "OPENING_BALANCE"].includes(category)) {
+        filterGroup = "INV";
+      } else if (["PRICING", "PROMOTION"].includes(category)) {
+        filterGroup = "PRICE";
+      } else if (["COST", "COST_OVERRIDE"].includes(category)) {
+        filterGroup = "COST";
+      } else if (["STATUS", "VISIBILITY", "HUB_BADGE"].includes(category)) {
+        filterGroup = "HUB";
+      } else if (["ORDER", "PO", "SALES"].includes(category)) {
+        filterGroup = "SALES";
+      }
 
       const beforeObj = log.before_value || {};
       const afterObj = log.after_value || {};
 
       const allKeys = Array.from(new Set([...Object.keys(beforeObj), ...Object.keys(afterObj)]));
-      const displayKeys = allKeys.filter(k => !["updated_at", "updated_by", "id"].includes(k));
+      const displayKeys = allKeys.filter((k) => !["updated_at", "updated_by", "id"].includes(k));
 
       if (displayKeys.length === 0) {
         rows.push({
-          id: `${log.id}-summary`,
+          id: `log-${log.id}-summary`,
+          timestamp,
           date: dateStr,
           category,
-          field: log.field_name || "General Change",
+          categoryBadgeLabel: category,
+          filterGroup,
+          field: log.field_name || "일반 변경 (General Change)",
           prevVal: formatValue("general", beforeObj),
           newVal: formatValue("general", afterObj),
           reason,
           user,
+          operatorReason: `${user} · ${reason}`,
         });
       } else {
         displayKeys.forEach((key) => {
@@ -859,32 +907,219 @@ export function TradingProductDetail({
           const newVal = formatValue(key, afterObj[key]);
 
           rows.push({
-            id: `${log.id}-${key}`,
+            id: `log-${log.id}-${key}`,
+            timestamp,
             date: dateStr,
             category,
+            categoryBadgeLabel: category,
+            filterGroup,
             field: fieldLabel,
             prevVal,
             newVal,
             reason,
             user,
+            operatorReason: `${user} · ${reason}`,
           });
         });
       }
     });
 
-    return rows;
-  }, [historyLogs]);
+    // 2. Authoritative Inventory Movements (Manual adjustments, Opening balance, Transfers, Receivings)
+    (initialMovements || []).forEach((m: any) => {
+      const createdDate = new Date(m.created_at);
+      const dateStr = createdDate.toLocaleString("ko-KR", {
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+      const timestamp = createdDate.getTime();
+      const user = m.profiles?.full_name || m.creator_name || "Admin";
+      const whName = warehouseMap.get(m.warehouse_id) || m.warehouse_id || "기본물류창고";
+      const reasonText = m.reason || m.note || MOVEMENT_LABELS[m.type] || "재고 수동 조정";
+      const catLabel = MOVEMENT_LABELS[m.type] || m.type;
+      const opReason = `${user} · ${reasonText} · ${whName}`;
+
+      const deltaOnHand = Number(m.qty_change || 0);
+      const deltaDamaged = Number(m.qty_damaged_change || 0);
+      const deltaHold = Number(m.qty_hold_change || 0);
+
+      let hasSpecificEntry = false;
+
+      // On-Hand Balance Entry
+      if (
+        deltaOnHand !== 0 ||
+        (m.type === "OPENING_BALANCE" && m.balance_on_hand_after !== undefined && m.balance_on_hand_after !== null)
+      ) {
+        hasSpecificEntry = true;
+        const afterOnHand =
+          m.balance_on_hand_after !== undefined && m.balance_on_hand_after !== null
+            ? Number(m.balance_on_hand_after)
+            : null;
+        const beforeOnHand = afterOnHand !== null ? afterOnHand - deltaOnHand : null;
+
+        rows.push({
+          id: `mov-${m.id}-onhand`,
+          timestamp,
+          date: dateStr,
+          category: m.type,
+          categoryBadgeLabel: catLabel,
+          filterGroup: "INV",
+          field: `On Hand 재고 (${whName})`,
+          prevVal: beforeOnHand !== null ? `${beforeOnHand} EA` : "-",
+          newVal:
+            afterOnHand !== null
+              ? `${afterOnHand} EA (${deltaOnHand > 0 ? `+${deltaOnHand}` : deltaOnHand} EA)`
+              : `${deltaOnHand > 0 ? `+${deltaOnHand}` : deltaOnHand} EA`,
+          reason: reasonText,
+          user,
+          operatorReason: opReason,
+        });
+      }
+
+      // Damaged Balance Entry
+      if (deltaDamaged !== 0) {
+        hasSpecificEntry = true;
+        const afterDamaged =
+          m.balance_damaged_after !== undefined && m.balance_damaged_after !== null
+            ? Number(m.balance_damaged_after)
+            : null;
+        const beforeDamaged = afterDamaged !== null ? afterDamaged - deltaDamaged : null;
+
+        rows.push({
+          id: `mov-${m.id}-damaged`,
+          timestamp,
+          date: dateStr,
+          category: m.type,
+          categoryBadgeLabel: catLabel,
+          filterGroup: "INV",
+          field: `Damaged 불량 재고 (${whName})`,
+          prevVal: beforeDamaged !== null ? `${beforeDamaged} EA` : "-",
+          newVal:
+            afterDamaged !== null
+              ? `${afterDamaged} EA (${deltaDamaged > 0 ? `+${deltaDamaged}` : deltaDamaged} EA)`
+              : `${deltaDamaged > 0 ? `+${deltaDamaged}` : deltaDamaged} EA`,
+          reason: reasonText,
+          user,
+          operatorReason: opReason,
+        });
+      }
+
+      // Hold Balance Entry
+      if (deltaHold !== 0) {
+        hasSpecificEntry = true;
+        const afterHold =
+          m.balance_hold_after !== undefined && m.balance_hold_after !== null
+            ? Number(m.balance_hold_after)
+            : null;
+        const beforeHold = afterHold !== null ? afterHold - deltaHold : null;
+
+        rows.push({
+          id: `mov-${m.id}-hold`,
+          timestamp,
+          date: dateStr,
+          category: m.type,
+          categoryBadgeLabel: catLabel,
+          filterGroup: "INV",
+          field: `Hold 보류 재고 (${whName})`,
+          prevVal: beforeHold !== null ? `${beforeHold} EA` : "-",
+          newVal:
+            afterHold !== null
+              ? `${afterHold} EA (${deltaHold > 0 ? `+${deltaHold}` : deltaHold} EA)`
+              : `${deltaHold > 0 ? `+${deltaHold}` : deltaHold} EA`,
+          reason: reasonText,
+          user,
+          operatorReason: opReason,
+        });
+      }
+
+      // Fallback if delta is zero but row is logged
+      if (!hasSpecificEntry) {
+        rows.push({
+          id: `mov-${m.id}-general`,
+          timestamp,
+          date: dateStr,
+          category: m.type,
+          categoryBadgeLabel: catLabel,
+          filterGroup: "INV",
+          field: `재고 변동 내역 (${whName})`,
+          prevVal: "-",
+          newVal: `${m.balance_on_hand_after ?? 0} EA`,
+          reason: reasonText,
+          user,
+          operatorReason: opReason,
+        });
+      }
+    });
+
+    // 3. PO Receiving Lines Integration (if not already logged via inventory movements)
+    (receivingHistory || []).forEach((r: any) => {
+      const receiving = r.receivings;
+      const wh = receiving?.warehouses;
+      const whName = wh ? (wh.code ? `${wh.name} (${wh.code})` : wh.name) : "입고물류창고";
+      const recNumber = receiving?.receiving_number || "RECEIVING";
+      const createdDate = new Date(r.created_at);
+      const dateStr = createdDate.toLocaleString("ko-KR", {
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+      const timestamp = createdDate.getTime();
+
+      const alreadyInMovements = (initialMovements || []).some(
+        (m: any) => m.type === "RECEIVING" && (m.reference_id === r.id || m.reference_id === receiving?.id)
+      );
+
+      if (!alreadyInMovements && (r.received_qty > 0 || r.damaged_qty > 0 || r.hold_qty > 0)) {
+        rows.push({
+          id: `rec-${r.id}`,
+          timestamp,
+          date: dateStr,
+          category: "RECEIVING",
+          categoryBadgeLabel: "입고 완료",
+          filterGroup: "INV",
+          field: `입고 완료 (${whName})`,
+          prevVal: "-",
+          newVal: `+${r.received_qty || 0} EA${r.damaged_qty ? ` (불량 ${r.damaged_qty} EA)` : ""}`,
+          reason: `PO 입고 처리 (${recNumber})`,
+          user: "Warehouse Manager",
+          operatorReason: `Warehouse Manager · PO 입고 (${recNumber}) · ${whName}`,
+        });
+      }
+    });
+
+    return rows.sort((a, b) => b.timestamp - a.timestamp);
+  }, [historyLogs, initialMovements, receivingHistory, warehouseMap]);
 
   // Filtered Audit Rows based on historyFilterType
   const filteredAuditRows = useMemo(() => {
     if (historyFilterType === "ALL") return parsedAuditRows;
-    if (historyFilterType === "INV") return parsedAuditRows.filter((r) => ["STOCK", "INVENTORY", "MANUAL_ADJUSTMENT", "RECEIVING", "SHIPMENT"].includes(r.category));
-    if (historyFilterType === "PRICE") return parsedAuditRows.filter((r) => ["PRICING", "PROMOTION"].includes(r.category));
-    if (historyFilterType === "COST") return parsedAuditRows.filter((r) => ["COST", "COST_OVERRIDE"].includes(r.category));
-    if (historyFilterType === "HUB") return parsedAuditRows.filter((r) => ["STATUS", "VISIBILITY", "HUB_BADGE"].includes(r.category));
-    if (historyFilterType === "SALES") return parsedAuditRows.filter((r) => ["ORDER", "PO", "SALES"].includes(r.category));
+    if (historyFilterType === "INV") return parsedAuditRows.filter((r) => r.filterGroup === "INV");
+    if (historyFilterType === "PRICE") return parsedAuditRows.filter((r) => r.filterGroup === "PRICE");
+    if (historyFilterType === "COST") return parsedAuditRows.filter((r) => r.filterGroup === "COST");
+    if (historyFilterType === "HUB") return parsedAuditRows.filter((r) => r.filterGroup === "HUB");
+    if (historyFilterType === "SALES") return parsedAuditRows.filter((r) => r.filterGroup === "SALES");
     return parsedAuditRows;
   }, [parsedAuditRows, historyFilterType]);
+
+  // History Pagination State
+  const [historyPage, setHistoryPage] = useState(1);
+  const [historyPageSize, setHistoryPageSize] = useState(20);
+
+  // Reset pagination when filter changes
+  useEffect(() => {
+    setHistoryPage(1);
+  }, [historyFilterType]);
+
+  const totalHistoryCount = filteredAuditRows.length;
+  const totalHistoryPages = Math.max(1, Math.ceil(totalHistoryCount / historyPageSize));
+  const paginatedAuditRows = useMemo(() => {
+    const start = (historyPage - 1) * historyPageSize;
+    return filteredAuditRows.slice(start, start + historyPageSize);
+  }, [filteredAuditRows, historyPage, historyPageSize]);
 
   // Pricing Tab Filter State
   const [pricingFilterType, setPricingFilterType] = useState<"ALL" | "PRICING" | "PROMOTION">("ALL");
@@ -1741,40 +1976,58 @@ export function TradingProductDetail({
 
             {/* Recent Inventory Movement History */}
             <div className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 space-y-3">
-              <h4 className="text-xs font-bold text-zinc-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
-                <span>🔄</span> 최근 재고 수불 이력 (Recent Movements)
-              </h4>
+              <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-2.5">
+                <h4 className="text-xs font-bold text-zinc-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
+                  <span>🔄</span> 최근 재고 변동 내역 (Recent Inventory Changes)
+                </h4>
+                <span className="text-[11px] font-semibold text-zinc-400">최신 5건</span>
+              </div>
               <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs">
+                <table className="w-full text-left text-xs table-fixed">
                   <thead>
-                    <tr className="border-b border-zinc-200 dark:border-zinc-800 text-[10px] text-zinc-400 uppercase">
-                      <th className="py-2">일시</th>
-                      <th className="py-2">구분</th>
-                      <th className="py-2 text-right">변동 수량</th>
-                      <th className="py-2">사유</th>
+                    <tr className="border-b border-zinc-200 dark:border-zinc-800 text-[10px] text-zinc-400 uppercase bg-zinc-50/50 dark:bg-zinc-950/30">
+                      <th className="py-2.5 px-3 w-[105px]">일시</th>
+                      <th className="py-2.5 px-3 w-[115px]">구분</th>
+                      <th className="py-2.5 px-3 w-[95px] text-right">변동 수량</th>
+                      <th className="py-2.5 pl-6 pr-3">사유</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/50">
                     {initialMovements.length === 0 ? (
                       <tr>
-                        <td colSpan={4} className="py-4 text-center text-zinc-400 text-[11px]">
-                          수불 이력이 없습니다.
+                        <td colSpan={4} className="py-6 text-center text-zinc-400 text-[11px]">
+                          재고 변동 이력이 없습니다.
                         </td>
                       </tr>
                     ) : (
                       initialMovements.slice(0, 5).map((m) => (
-                        <tr key={m.id}>
-                          <td className="py-2 text-zinc-500 text-[10px]">
-                            {new Date(m.created_at).toLocaleDateString()}
+                        <tr key={m.id} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-800/30">
+                          <td className="py-2.5 px-3 text-zinc-500 text-[11px] whitespace-nowrap">
+                            {new Date(m.created_at).toLocaleDateString("ko-KR", {
+                              month: "2-digit",
+                              day: "2-digit",
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })}
                           </td>
-                          <td className="py-2 font-bold text-zinc-800 dark:text-zinc-200">
-                            {MOVEMENT_LABELS[m.type] || m.type}
+                          <td className="py-2.5 px-3">
+                            <span className="px-2 py-0.5 text-[10px] font-bold rounded bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 whitespace-nowrap inline-block">
+                              {MOVEMENT_LABELS[m.type] || m.type}
+                            </span>
                           </td>
-                          <td className={`py-2 text-right font-mono font-bold ${m.qty_change > 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                          <td className={`py-2.5 px-3 text-right font-mono font-bold whitespace-nowrap ${
+                            m.qty_change > 0
+                              ? "text-emerald-600 dark:text-emerald-400"
+                              : m.qty_change < 0
+                              ? "text-rose-600 dark:text-rose-400"
+                              : "text-zinc-600 dark:text-zinc-400"
+                          }`}>
                             {m.qty_change > 0 ? `+${m.qty_change}` : m.qty_change} EA
                           </td>
-                          <td className="py-2 text-zinc-600 dark:text-zinc-300 text-[11px] truncate max-w-[220px]" title={m.reason || m.note || "-"}>
-                            {m.reason || m.note || "-"}
+                          <td className="py-2.5 pl-6 pr-3 text-zinc-700 dark:text-zinc-300 text-xs font-medium">
+                            <span className="truncate block max-w-full" title={m.reason || m.note || "-"}>
+                              {m.reason || m.note || "-"}
+                            </span>
                           </td>
                         </tr>
                       ))
@@ -2064,22 +2317,25 @@ export function TradingProductDetail({
       {activeTab === "history" && (
         <div className="space-y-6">
           <div className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 space-y-4">
-            {/* Filter Bar */}
+            {/* Filter Bar Header */}
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-zinc-100 dark:border-zinc-800 pb-3">
               <div>
                 <h3 className="text-xs font-bold text-zinc-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
                   <span>📜</span> 상품 통합 감사 및 변경 이력 (Audit History Logs)
                 </h3>
                 <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5">
-                  재고, 가격, 원가, 상태 및 Hub 노출 변경 기록을 카테고리별로 조회합니다.
+                  재고 변동(수동 조정·실사·입고), 가격, 원가, 상태 및 Hub 노출 변경 기록을 실시간 카테고리별로 통합 조회합니다.
                 </p>
               </div>
 
               <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-zinc-500 dark:text-zinc-400">
+                  총 <span className="text-zinc-900 dark:text-white font-black">{totalHistoryCount}</span>건
+                </span>
                 <button
                   type="button"
                   onClick={() => setShowRawJson(!showRawJson)}
-                  className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300"
+                  className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-750 transition-colors"
                 >
                   {showRawJson ? "표준 보기" : "Raw JSON 보기"}
                 </button>
@@ -2089,68 +2345,133 @@ export function TradingProductDetail({
             {/* History Sub-Filter Bar */}
             <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs">
               {[
-                { id: "ALL", label: "전체" },
-                { id: "INV", label: "재고·입고" },
-                { id: "PRICE", label: "가격·프로모션" },
-                { id: "COST", label: "원가" },
-                { id: "HUB", label: "Hub·운영 상태" },
-                { id: "SALES", label: "판매·주문" },
+                { id: "ALL", label: "전체", count: parsedAuditRows.length },
+                { id: "INV", label: "재고·입고", count: parsedAuditRows.filter((r) => r.filterGroup === "INV").length },
+                { id: "PRICE", label: "가격·프로모션", count: parsedAuditRows.filter((r) => r.filterGroup === "PRICE").length },
+                { id: "COST", label: "원가", count: parsedAuditRows.filter((r) => r.filterGroup === "COST").length },
+                { id: "HUB", label: "Hub·운영 상태", count: parsedAuditRows.filter((r) => r.filterGroup === "HUB").length },
+                { id: "SALES", label: "판매·주문", count: parsedAuditRows.filter((r) => r.filterGroup === "SALES").length },
               ].map((f) => (
                 <button
                   key={f.id}
                   onClick={() => setHistoryFilterType(f.id as any)}
-                  className={`px-3 py-1 rounded-lg font-bold transition-all ${
+                  className={`px-3 py-1.5 rounded-lg font-bold transition-all flex items-center gap-1.5 shrink-0 ${
                     historyFilterType === f.id
-                      ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
-                      : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-400"
+                      ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 shadow-2xs"
+                      : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-700"
                   }`}
                 >
-                  {f.label}
+                  <span>{f.label}</span>
+                  <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${
+                    historyFilterType === f.id
+                      ? "bg-zinc-700 text-zinc-200 dark:bg-zinc-300 dark:text-zinc-800"
+                      : "bg-zinc-200 text-zinc-600 dark:bg-zinc-700 dark:text-zinc-300"
+                  }`}>
+                    {f.count}
+                  </span>
                 </button>
               ))}
             </div>
 
-            {/* Audit Logs Table */}
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
-                <thead>
-                  <tr className="border-b border-zinc-200 dark:border-zinc-800 text-[10px] text-zinc-400 uppercase bg-zinc-50/60 dark:bg-zinc-950/40">
-                    <th className="p-3">일시</th>
-                    <th className="p-3">구분</th>
-                    <th className="p-3">변경 항목</th>
-                    <th className="p-3">변경 전 (Before)</th>
-                    <th className="p-3">변경 후 (After)</th>
-                    <th className="p-3">작업자 & 사유</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/60 font-mono">
-                  {filteredAuditRows.length === 0 ? (
-                    <tr>
-                      <td colSpan={6} className="p-6 text-center text-zinc-400 text-xs font-sans">
-                        조회된 변경 이력이 없습니다.
-                      </td>
-                    </tr>
-                  ) : (
-                    filteredAuditRows.map((row) => (
-                      <tr key={row.id} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-800/30">
-                        <td className="p-3 text-[10px] text-zinc-500 font-sans">{row.date}</td>
-                        <td className="p-3 font-sans">
-                          <span className="px-2 py-0.5 text-[10px] font-bold rounded bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
-                            {row.category}
-                          </span>
-                        </td>
-                        <td className="p-3 font-sans font-bold text-zinc-900 dark:text-zinc-100">{row.field}</td>
-                        <td className="p-3 text-zinc-500 text-[11px] truncate max-w-[140px]">{row.prevVal}</td>
-                        <td className="p-3 text-indigo-600 dark:text-indigo-400 font-bold text-[11px] truncate max-w-[140px]">{row.newVal}</td>
-                        <td className="p-3 font-sans text-zinc-600 dark:text-zinc-400 text-[11px]">
-                          {row.user} ({row.reason})
-                        </td>
+            {/* Raw JSON View */}
+            {showRawJson ? (
+              <div className="p-4 rounded-xl bg-zinc-950 text-zinc-200 font-mono text-xs overflow-x-auto max-h-[600px] border border-zinc-800">
+                <pre>{JSON.stringify(filteredAuditRows, null, 2)}</pre>
+              </div>
+            ) : (
+              <>
+                {/* Audit Logs Table */}
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead>
+                      <tr className="border-b border-zinc-200 dark:border-zinc-800 text-[10px] text-zinc-400 uppercase bg-zinc-50/60 dark:bg-zinc-950/40">
+                        <th className="p-3 w-36">일시</th>
+                        <th className="p-3 w-32">구분</th>
+                        <th className="p-3 min-w-[180px]">변경 항목</th>
+                        <th className="p-3 w-36">변경 전 (Before)</th>
+                        <th className="p-3 w-44">변경 후 (After)</th>
+                        <th className="p-3 min-w-[220px]">작업자 & 사유</th>
                       </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
+                    </thead>
+                    <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/60 font-mono">
+                      {paginatedAuditRows.length === 0 ? (
+                        <tr>
+                          <td colSpan={6} className="p-8 text-center text-zinc-400 text-xs font-sans">
+                            조회된 변경 이력이 없습니다.
+                          </td>
+                        </tr>
+                      ) : (
+                        paginatedAuditRows.map((row) => (
+                          <tr key={row.id} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-800/30">
+                            <td className="p-3 text-[11px] text-zinc-500 font-sans whitespace-nowrap">{row.date}</td>
+                            <td className="p-3 font-sans">
+                              <span className="px-2 py-0.5 text-[10px] font-bold rounded bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 whitespace-nowrap inline-block">
+                                {row.categoryBadgeLabel || row.category}
+                              </span>
+                            </td>
+                            <td className="p-3 font-sans font-bold text-zinc-900 dark:text-zinc-100">{row.field}</td>
+                            <td className="p-3 text-zinc-500 text-[11px]">{row.prevVal}</td>
+                            <td className="p-3 text-indigo-600 dark:text-indigo-400 font-bold text-[11px]">{row.newVal}</td>
+                            <td className="p-3 font-sans text-zinc-700 dark:text-zinc-300 text-[11px] leading-relaxed">
+                              {row.operatorReason}
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Pagination Controls */}
+                {totalHistoryCount > 0 && (
+                  <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-3 border-t border-zinc-100 dark:border-zinc-800 text-xs text-zinc-500">
+                    <div className="flex items-center gap-2">
+                      <span>페이지 당 항목:</span>
+                      <select
+                        value={historyPageSize}
+                        onChange={(e) => {
+                          setHistoryPageSize(Number(e.target.value));
+                          setHistoryPage(1);
+                        }}
+                        className="px-2 py-1 rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200 text-xs font-semibold"
+                      >
+                        <option value={10}>10건</option>
+                        <option value={20}>20건</option>
+                        <option value={50}>50건</option>
+                        <option value={100}>100건</option>
+                      </select>
+                      <span className="text-[11px] text-zinc-400 ml-2">
+                        {(historyPage - 1) * historyPageSize + 1} - {Math.min(historyPage * historyPageSize, totalHistoryCount)} / 총 {totalHistoryCount}건
+                      </span>
+                    </div>
+
+                    {totalHistoryPages > 1 && (
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          disabled={historyPage <= 1}
+                          onClick={() => setHistoryPage((p) => Math.max(1, p - 1))}
+                          className="px-2.5 py-1 rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 disabled:opacity-40 font-semibold"
+                        >
+                          이전
+                        </button>
+                        <span className="px-2 font-mono font-bold text-zinc-800 dark:text-zinc-200">
+                          {historyPage} / {totalHistoryPages}
+                        </span>
+                        <button
+                          type="button"
+                          disabled={historyPage >= totalHistoryPages}
+                          onClick={() => setHistoryPage((p) => Math.min(totalHistoryPages, p + 1))}
+                          className="px-2.5 py-1 rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 disabled:opacity-40 font-semibold"
+                        >
+                          다음
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </>
+            )}
           </div>
         </div>
       )}
