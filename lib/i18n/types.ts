@@ -169,14 +169,17 @@ export interface Dictionary {
     anyMargin: string;
     priceFilter: string;
     anyPrice: string;
-    under5: string;
-    between5and10: string;
+    under10: string;
     between10and20: string;
-    over20: string;
+    between20and30: string;
+    between30and40: string;
+    between40and50: string;
+    over50: string;
     customPrice: string;
     minPrice: string;
     maxPrice: string;
     apply: string;
+    invalidPriceRange: string;
     sortBy: string;
     sortDefault: string;
     sortMarginHigh: string;
@@ -184,9 +187,12 @@ export interface Dictionary {
     sortPriceHigh: string;
     showingResults: string;
     clearAll: string;
-    categoryDepth1: string;
-    categoryDepth2: string;
-    categoryDepth3: string;
+    categoryFixedLabel: string;
+    subcategoryFixedLabel: string;
+    detailCategoryFixedLabel: string;
+    selectCategoryPrompt: string;
+    selectSubcategoryPrompt: string;
+    productsPerRow: string;
   };
   orders: {
     title: string;

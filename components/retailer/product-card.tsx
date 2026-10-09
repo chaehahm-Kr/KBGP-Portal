@@ -96,35 +96,36 @@ export function RetailerProductCard({ product }: ProductCardProps) {
           )}
         </div>
 
-        {/* Commercial Pricing Strip: Wholesale -> Margin -> MSRP */}
-        <div className="pt-3 border-t border-zinc-100 dark:border-zinc-800/80 space-y-1.5">
-          <div className="flex items-baseline justify-between gap-2">
-            {/* Wholesale Price */}
+        {/* Commercial Pricing Strip: Wholesale | Margin | MSRP */}
+        <div className="pt-2.5 border-t border-zinc-100 dark:border-zinc-800/80 space-y-1">
+          <div className="grid grid-cols-3 items-end gap-1 text-left">
+            {/* 1. Wholesale */}
             <div>
-              <div className="text-[10px] uppercase font-bold tracking-wider text-zinc-400 dark:text-zinc-500">
+              <div className="text-[10px] uppercase font-bold tracking-wider text-zinc-400 dark:text-zinc-500 truncate">
                 {product.isPromoActive ? t.products.promoBadge : t.products.wholesalePrice}
               </div>
-              <div className="text-base sm:text-lg font-bold text-zinc-900 dark:text-white flex items-baseline gap-1">
+              <div className="text-sm sm:text-base font-bold text-zinc-900 dark:text-white flex items-baseline gap-0.5 truncate">
                 <span>{product.wholesalePrice > 0 ? `$${product.wholesalePrice.toFixed(2)}` : "—"}</span>
-                <span className="text-[10px] font-normal text-zinc-400">/ EA</span>
+                <span className="text-[9px] font-normal text-zinc-400">/EA</span>
               </div>
             </div>
 
-            {/* Margin */}
-            {product.marginPercent > 0 && product.msrp > 0 && (
-              <div className="text-center px-2 py-0.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200/60 dark:border-emerald-800/60">
-                <span className="text-[11px] sm:text-xs font-bold text-emerald-700 dark:text-emerald-400">
-                  {product.marginPercent}% {t.products.margin}
-                </span>
+            {/* 2. Margin */}
+            <div className="text-center">
+              <div className="text-[10px] uppercase font-bold tracking-wider text-zinc-400 dark:text-zinc-500 truncate">
+                {t.products.margin}
               </div>
-            )}
+              <div className="text-sm sm:text-base font-bold text-emerald-600 dark:text-emerald-400 truncate">
+                {product.marginPercent > 0 && product.msrp > 0 ? `${product.marginPercent}%` : "—"}
+              </div>
+            </div>
 
-            {/* MSRP */}
+            {/* 3. MSRP */}
             <div className="text-right">
-              <div className="text-[10px] uppercase font-bold tracking-wider text-zinc-400 dark:text-zinc-500">
+              <div className="text-[10px] uppercase font-bold tracking-wider text-zinc-400 dark:text-zinc-500 truncate">
                 {t.products.msrp}
               </div>
-              <div className="text-xs sm:text-sm font-semibold text-zinc-500 dark:text-zinc-400">
+              <div className="text-sm sm:text-base font-semibold text-zinc-600 dark:text-zinc-300 truncate">
                 {product.msrp > 0 ? `$${product.msrp.toFixed(2)}` : "—"}
               </div>
             </div>
@@ -132,16 +133,16 @@ export function RetailerProductCard({ product }: ProductCardProps) {
 
           {/* Volume discount subtitle */}
           {product.hasTiers && product.maxDiscountPercent && product.maxDiscountPercent > 0 && !product.isPromoActive ? (
-            <div className="text-[10px] font-medium text-indigo-600 dark:text-indigo-400">
+            <div className="text-[10px] font-medium text-indigo-600 dark:text-indigo-400 truncate">
               {t.products.bulkDiscountUpTo.replace("{percent}", String(product.maxDiscountPercent))}
             </div>
           ) : null}
         </div>
 
         {/* Retailer Purchasing Conditions: Clean MOQ */}
-        <div className="flex items-center justify-between text-xs text-zinc-600 dark:text-zinc-300 bg-zinc-50 dark:bg-zinc-800/50 px-3 py-1.5 rounded-lg border border-zinc-150 dark:border-zinc-800">
-          <span className="text-zinc-500 font-medium">{t.products.moq}:</span>
-          <span className="font-semibold text-zinc-900 dark:text-zinc-100">
+        <div className="flex items-center justify-between text-xs text-zinc-600 dark:text-zinc-300 bg-zinc-50 dark:bg-zinc-800/50 px-2.5 py-1.5 rounded-lg border border-zinc-150 dark:border-zinc-800">
+          <span className="text-zinc-500 font-medium text-[11px]">{t.products.moq}:</span>
+          <span className="font-semibold text-zinc-900 dark:text-zinc-100 text-[11px] sm:text-xs">
             {product.moq} {locale === "ko" ? "개" : "units"}
           </span>
         </div>

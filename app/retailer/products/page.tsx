@@ -2,8 +2,7 @@ import React from "react";
 import type { Metadata } from "next";
 import { verifyRetailerSession } from "@/lib/auth/dal";
 import { getRetailerProducts } from "@/lib/retailer/products";
-import { RetailerProductCard } from "@/components/retailer/product-card";
-import { RetailerProductFilterBar } from "@/components/retailer/product-filter-bar";
+import { RetailerDiscoveryContainer } from "@/components/retailer/discovery-container";
 import { getServerTranslations } from "@/lib/i18n/server";
 
 export const dynamic = "force-dynamic";
@@ -69,11 +68,13 @@ export default async function RetailerProductsPage({ searchParams }: RetailerPro
         </p>
       </div>
 
-      {/* Filter and Search Bar */}
-      <RetailerProductFilterBar
+      {/* Discovery Client Container (Filter Bar + Dynamic Density Grid) */}
+      <RetailerDiscoveryContainer
         categoryHierarchy={catalog.categoryHierarchy}
         categories={catalog.categories}
         brands={catalog.brands}
+        products={catalog.products}
+        totalCount={catalog.totalCount}
         currentSearch={resolvedParams.search}
         currentDepth1={resolvedParams.depth1}
         currentDepth2={resolvedParams.depth2}
@@ -86,40 +87,7 @@ export default async function RetailerProductsPage({ searchParams }: RetailerPro
         currentMaxPrice={maxPrice}
         currentOrderableOnly={orderableOnly}
         currentSortBy={resolvedParams.sort || "default"}
-        totalCount={catalog.totalCount}
       />
-
-      {/* Products Catalog Grid */}
-      {catalog.products.length > 0 ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-5 sm:gap-6">
-          {catalog.products.map((product) => (
-            <RetailerProductCard key={product.id} product={product} />
-          ))}
-        </div>
-      ) : (
-        /* Empty State */
-        <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/40 p-12 text-center space-y-4 shadow-xs">
-          <div className="w-16 h-16 rounded-2xl bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-3xl mx-auto">
-            🔍
-          </div>
-          <div className="max-w-sm mx-auto space-y-1">
-            <h3 className="text-base font-bold text-zinc-900 dark:text-white">
-              {t.products.noProductsFound}
-            </h3>
-            <p className="text-xs text-zinc-500 dark:text-zinc-400">
-              {t.products.noProductsDesc}
-            </p>
-          </div>
-          <div className="pt-2">
-            <a
-              href="/products"
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 hover:opacity-90 transition-opacity"
-            >
-              {t.products.resetFilters}
-            </a>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

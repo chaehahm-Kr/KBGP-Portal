@@ -535,14 +535,18 @@ export async function getRetailerProducts(
 
   // Price Preset Filter
   if (filters.pricePreset && filters.pricePreset !== "all") {
-    if (filters.pricePreset === "under5") {
-      filtered = filtered.filter((p) => p.wholesalePrice > 0 && p.wholesalePrice < 5);
-    } else if (filters.pricePreset === "5to10") {
-      filtered = filtered.filter((p) => p.wholesalePrice >= 5 && p.wholesalePrice <= 10);
-    } else if (filters.pricePreset === "10to20") {
-      filtered = filtered.filter((p) => p.wholesalePrice >= 10 && p.wholesalePrice <= 20);
-    } else if (filters.pricePreset === "over20") {
-      filtered = filtered.filter((p) => p.wholesalePrice >= 20);
+    if (filters.pricePreset === "under10") {
+      filtered = filtered.filter((p) => p.wholesalePrice > 0 && p.wholesalePrice < 10);
+    } else if (filters.pricePreset === "between10and20" || filters.pricePreset === "10to20") {
+      filtered = filtered.filter((p) => p.wholesalePrice >= 10 && p.wholesalePrice < 20);
+    } else if (filters.pricePreset === "between20and30" || filters.pricePreset === "20to30") {
+      filtered = filtered.filter((p) => p.wholesalePrice >= 20 && p.wholesalePrice < 30);
+    } else if (filters.pricePreset === "between30and40" || filters.pricePreset === "30to40") {
+      filtered = filtered.filter((p) => p.wholesalePrice >= 30 && p.wholesalePrice < 40);
+    } else if (filters.pricePreset === "between40and50" || filters.pricePreset === "40to50") {
+      filtered = filtered.filter((p) => p.wholesalePrice >= 40 && p.wholesalePrice < 50);
+    } else if (filters.pricePreset === "over50" || filters.pricePreset === "50plus") {
+      filtered = filtered.filter((p) => p.wholesalePrice >= 50);
     }
   }
 

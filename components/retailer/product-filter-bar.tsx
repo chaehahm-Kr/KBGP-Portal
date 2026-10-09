@@ -9,6 +9,8 @@ import {
   getCategoryDisplayName,
 } from "@/lib/product/category-taxonomy";
 
+export type GridDensity = 4 | 6 | 8;
+
 interface FilterBarProps {
   categoryHierarchy?: CategoryHierarchy;
   categories: Array<{ code: string; label: string; count: number }>;
@@ -26,6 +28,8 @@ interface FilterBarProps {
   currentOrderableOnly?: boolean;
   currentSortBy?: string;
   totalCount: number;
+  density?: GridDensity;
+  onDensityChange?: (density: GridDensity) => void;
 }
 
 export function RetailerProductFilterBar({
@@ -45,6 +49,8 @@ export function RetailerProductFilterBar({
   currentOrderableOnly = false,
   currentSortBy = "default",
   totalCount,
+  density = 4,
+  onDensityChange,
 }: FilterBarProps) {
   const router = useRouter();
   const pathname = usePathname();
@@ -67,6 +73,7 @@ export function RetailerProductFilterBar({
   const [customMax, setCustomMax] = useState<string>(
     currentMaxPrice !== undefined && currentMaxPrice > 0 ? String(currentMaxPrice) : ""
   );
+  const [priceRangeError, setPriceRangeError] = useState<string | null>(null);
 
   const updateQueryParams = (updates: Record<string, string | null | undefined>) => {
     const params = new URLSearchParams(searchParams.toString());
@@ -140,10 +147,29 @@ export function RetailerProductFilterBar({
   };
 
   const handleMarginChange = (margin: string) => {
-    updateQueryParams({ margin: margin === "all" ? null : margin });
+    // Re-clicking active margin filter deselects it
+    if (margin === currentMarginFilter || margin === "all") {
+      updateQueryParams({ margin: null });
+    } else {
+      updateQueryParams({ margin });
+    }
   };
 
   const handlePricePresetChange = (preset: string) => {
+    setPriceRangeError(null);
+    // Re-clicking active preset deselects it
+    if (preset === currentPricePreset && preset !== "custom") {
+      setShowCustomPrice(false);
+      setCustomMin("");
+      setCustomMax("");
+      updateQueryParams({
+        price_preset: null,
+        min_price: null,
+        max_price: null,
+      });
+      return;
+    }
+
     if (preset === "custom") {
       setShowCustomPrice(true);
       updateQueryParams({ price_preset: "custom" });
@@ -160,12 +186,19 @@ export function RetailerProductFilterBar({
   };
 
   const handleApplyCustomPrice = () => {
-    const min = parseFloat(customMin);
-    const max = parseFloat(customMax);
+    const min = customMin ? parseFloat(customMin) : undefined;
+    const max = customMax ? parseFloat(customMax) : undefined;
+
+    if (min !== undefined && max !== undefined && !isNaN(min) && !isNaN(max) && min > max) {
+      setPriceRangeError(t.products.invalidPriceRange);
+      return;
+    }
+
+    setPriceRangeError(null);
     updateQueryParams({
       price_preset: "custom",
-      min_price: !isNaN(min) && min > 0 ? String(min) : null,
-      max_price: !isNaN(max) && max > 0 ? String(max) : null,
+      min_price: min !== undefined && !isNaN(min) && min >= 0 ? String(min) : null,
+      max_price: max !== undefined && !isNaN(max) && max >= 0 ? String(max) : null,
     });
   };
 
@@ -179,6 +212,7 @@ export function RetailerProductFilterBar({
     setShowCustomPrice(false);
     setCustomMin("");
     setCustomMax("");
+    setPriceRangeError(null);
     startTransition(() => {
       router.push(pathname);
     });
@@ -214,61 +248,7 @@ export function RetailerProductFilterBar({
 
   return (
     <div className="space-y-4">
-      {/* 1-Depth Category Exploration Tiles (Above Search Bar) */}
-      {depth1Items.length > 0 && (
-        <div className="space-y-2">
-          <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
-            {/* All Tile */}
-            <button
-              type="button"
-              onClick={() => handleDepth1Select("all")}
-              className={`px-3.5 py-2 rounded-xl font-semibold text-xs whitespace-nowrap transition-all flex items-center gap-1.5 shadow-2xs ${
-                !activeDepth1
-                  ? "bg-zinc-900 text-white dark:bg-white dark:text-zinc-900 shadow-xs"
-                  : "bg-zinc-100 hover:bg-zinc-200 text-zinc-700 dark:bg-zinc-800 dark:hover:bg-zinc-700 dark:text-zinc-300"
-              }`}
-            >
-              <span>{t.products.allCategories}</span>
-              <span className={`text-[11px] px-1.5 py-0.2 rounded-full font-normal ${
-                !activeDepth1
-                  ? "bg-white/20 text-white dark:bg-zinc-900/20 dark:text-zinc-900"
-                  : "bg-zinc-200/80 text-zinc-600 dark:bg-zinc-700 dark:text-zinc-400"
-              }`}>
-                {totalCategoryProducts}
-              </span>
-            </button>
-
-            {/* Depth 1 Category Tiles */}
-            {depth1Items.map((cat) => {
-              const isSelected = activeDepth1 === cat.code;
-              const displayName = getCategoryDisplayName(cat, locale);
-              return (
-                <button
-                  key={cat.code}
-                  type="button"
-                  onClick={() => handleDepth1Select(cat.code)}
-                  className={`px-3.5 py-2 rounded-xl font-semibold text-xs whitespace-nowrap transition-all flex items-center gap-1.5 shadow-2xs ${
-                    isSelected
-                      ? "bg-zinc-900 text-white dark:bg-white dark:text-zinc-900 shadow-xs"
-                      : "bg-zinc-100 hover:bg-zinc-200 text-zinc-700 dark:bg-zinc-800 dark:hover:bg-zinc-700 dark:text-zinc-300"
-                  }`}
-                >
-                  <span>{displayName}</span>
-                  <span className={`text-[11px] px-1.5 py-0.2 rounded-full font-normal ${
-                    isSelected
-                      ? "bg-white/20 text-white dark:bg-zinc-900/20 dark:text-zinc-900"
-                      : "bg-zinc-200/80 text-zinc-600 dark:bg-zinc-700 dark:text-zinc-400"
-                  }`}>
-                    {cat.product_count}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* Main Search, Brand, and Sort Row */}
+      {/* 1. Main Search, Brand, and Sort Row */}
       <div className="flex flex-col md:flex-row gap-3">
         {/* Search Input */}
         <div className="relative flex-1">
@@ -331,83 +311,154 @@ export function RetailerProductFilterBar({
         </div>
       </div>
 
-      {/* 2-Depth Sub-Category exploration buttons (Below Search Bar) */}
-      {activeDepth1 && depth2Items.length > 0 && (
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none text-xs">
-          <span className="text-zinc-400 dark:text-zinc-500 font-medium shrink-0 mr-1 text-[11px] uppercase tracking-wider">
-            {locale === "ko" ? "중분류" : "Subcategory"}:
-          </span>
+      {/* 2. Category (1-Depth Navigation) - Fixed Title */}
+      <div className="space-y-1.5">
+        <div className="text-[11px] font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 flex items-center gap-1.5">
+          <span>{t.products.categoryFixedLabel}</span>
+        </div>
+        <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+          {/* All Button */}
           <button
             type="button"
-            onClick={() => handleDepth2Select("all")}
-            className={`px-3 py-1.5 rounded-lg font-medium whitespace-nowrap transition-colors ${
-              !activeDepth2
-                ? "bg-zinc-800 text-white dark:bg-zinc-200 dark:text-zinc-900 font-semibold"
-                : "bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-600 dark:text-zinc-400"
+            onClick={() => handleDepth1Select("all")}
+            className={`px-3.5 py-2 rounded-xl font-semibold text-xs whitespace-nowrap transition-all flex items-center gap-1.5 shadow-2xs cursor-pointer ${
+              !activeDepth1
+                ? "bg-zinc-900 text-white dark:bg-white dark:text-zinc-900 shadow-xs"
+                : "bg-zinc-100 hover:bg-zinc-200 text-zinc-700 dark:bg-zinc-800 dark:hover:bg-zinc-700 dark:text-zinc-300"
             }`}
           >
-            {t.common.all}
+            <span>{t.products.allCategories}</span>
+            <span
+              className={`text-[11px] px-1.5 py-0.2 rounded-full font-normal ${
+                !activeDepth1
+                  ? "bg-white/20 text-white dark:bg-zinc-900/20 dark:text-zinc-900"
+                  : "bg-zinc-200/80 text-zinc-600 dark:bg-zinc-700 dark:text-zinc-400"
+              }`}
+            >
+              {totalCategoryProducts}
+            </span>
           </button>
-          {depth2Items.map((cat) => {
-            const isSelected = activeDepth2 === cat.code;
+
+          {/* Depth 1 Items */}
+          {depth1Items.map((cat) => {
+            const isSelected = activeDepth1 === cat.code;
             const displayName = getCategoryDisplayName(cat, locale);
             return (
               <button
                 key={cat.code}
                 type="button"
-                onClick={() => handleDepth2Select(cat.code)}
-                className={`px-3 py-1.5 rounded-lg font-medium whitespace-nowrap transition-colors ${
+                onClick={() => handleDepth1Select(cat.code)}
+                className={`px-3.5 py-2 rounded-xl font-semibold text-xs whitespace-nowrap transition-all flex items-center gap-1.5 shadow-2xs cursor-pointer ${
                   isSelected
-                    ? "bg-zinc-800 text-white dark:bg-zinc-200 dark:text-zinc-900 font-semibold"
-                    : "bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-600 dark:text-zinc-400"
+                    ? "bg-zinc-900 text-white dark:bg-white dark:text-zinc-900 shadow-xs"
+                    : "bg-zinc-100 hover:bg-zinc-200 text-zinc-700 dark:bg-zinc-800 dark:hover:bg-zinc-700 dark:text-zinc-300"
                 }`}
               >
-                {displayName} ({cat.product_count})
+                <span>{displayName}</span>
+                <span
+                  className={`text-[11px] px-1.5 py-0.2 rounded-full font-normal ${
+                    isSelected
+                      ? "bg-white/20 text-white dark:bg-zinc-900/20 dark:text-zinc-900"
+                      : "bg-zinc-200/80 text-zinc-600 dark:bg-zinc-700 dark:text-zinc-400"
+                  }`}
+                >
+                  {cat.product_count}
+                </span>
               </button>
             );
           })}
         </div>
-      )}
+      </div>
 
-      {/* 3-Depth Sub-Category exploration buttons (Below 2-Depth) */}
-      {activeDepth2 && depth3Items.length > 0 && (
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none text-xs">
-          <span className="text-zinc-400 dark:text-zinc-500 font-medium shrink-0 mr-1 text-[11px] uppercase tracking-wider">
-            {locale === "ko" ? "소분류" : "Detailed"}:
-          </span>
-          <button
-            type="button"
-            onClick={() => handleDepth3Select("all")}
-            className={`px-2.5 py-1 rounded-md font-medium whitespace-nowrap transition-colors text-[11px] ${
-              !activeDepth3
-                ? "bg-zinc-700 text-white dark:bg-zinc-300 dark:text-zinc-900 font-semibold"
-                : "bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-600 dark:text-zinc-400"
-            }`}
-          >
-            {t.common.all}
-          </button>
-          {depth3Items.map((cat) => {
-            const isSelected = activeDepth3 === cat.code;
-            const displayName = getCategoryDisplayName(cat, locale);
-            return (
-              <button
-                key={cat.code}
-                type="button"
-                onClick={() => handleDepth3Select(cat.code)}
-                className={`px-2.5 py-1 rounded-md font-medium whitespace-nowrap transition-colors text-[11px] ${
-                  isSelected
-                    ? "bg-zinc-700 text-white dark:bg-zinc-300 dark:text-zinc-900 font-semibold"
-                    : "bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-600 dark:text-zinc-400"
-                }`}
-              >
-                {displayName} ({cat.product_count})
-              </button>
-            );
-          })}
+      {/* 3. Subcategory (2-Depth Navigation) - Fixed Title */}
+      <div className="space-y-1.5">
+        <div className="text-[11px] font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 flex items-center gap-1.5">
+          <span>{t.products.subcategoryFixedLabel}</span>
         </div>
-      )}
+        {!activeDepth1 ? (
+          <div className="py-2 px-3.5 rounded-xl bg-zinc-50 dark:bg-zinc-900/50 border border-dashed border-zinc-200 dark:border-zinc-800 text-xs text-zinc-400 dark:text-zinc-500 italic">
+            {t.products.selectCategoryPrompt}
+          </div>
+        ) : depth2Items.length > 0 ? (
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none text-xs">
+            <button
+              type="button"
+              onClick={() => handleDepth2Select("all")}
+              className={`px-3 py-1.5 rounded-lg font-medium whitespace-nowrap transition-colors cursor-pointer ${
+                !activeDepth2
+                  ? "bg-zinc-800 text-white dark:bg-zinc-200 dark:text-zinc-900 font-semibold"
+                  : "bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-600 dark:text-zinc-400"
+              }`}
+            >
+              {t.common.all}
+            </button>
+            {depth2Items.map((cat) => {
+              const isSelected = activeDepth2 === cat.code;
+              const displayName = getCategoryDisplayName(cat, locale);
+              return (
+                <button
+                  key={cat.code}
+                  type="button"
+                  onClick={() => handleDepth2Select(cat.code)}
+                  className={`px-3 py-1.5 rounded-lg font-medium whitespace-nowrap transition-colors cursor-pointer ${
+                    isSelected
+                      ? "bg-zinc-800 text-white dark:bg-zinc-200 dark:text-zinc-900 font-semibold"
+                      : "bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-600 dark:text-zinc-400"
+                  }`}
+                >
+                  {displayName} ({cat.product_count})
+                </button>
+              );
+            })}
+          </div>
+        ) : null}
+      </div>
 
-      {/* Commercial Purchasing Filters: Margin, Price, and Stock Availability */}
+      {/* 4. Detail Category (3-Depth Navigation) - Fixed Title */}
+      <div className="space-y-1.5">
+        <div className="text-[11px] font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 flex items-center gap-1.5">
+          <span>{t.products.detailCategoryFixedLabel}</span>
+        </div>
+        {!activeDepth2 ? (
+          <div className="py-2 px-3.5 rounded-xl bg-zinc-50 dark:bg-zinc-900/50 border border-dashed border-zinc-200 dark:border-zinc-800 text-xs text-zinc-400 dark:text-zinc-500 italic">
+            {t.products.selectSubcategoryPrompt}
+          </div>
+        ) : depth3Items.length > 0 ? (
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none text-xs">
+            <button
+              type="button"
+              onClick={() => handleDepth3Select("all")}
+              className={`px-2.5 py-1 rounded-md font-medium whitespace-nowrap transition-colors text-[11px] cursor-pointer ${
+                !activeDepth3
+                  ? "bg-zinc-700 text-white dark:bg-zinc-300 dark:text-zinc-900 font-semibold"
+                  : "bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-600 dark:text-zinc-400"
+              }`}
+            >
+              {t.common.all}
+            </button>
+            {depth3Items.map((cat) => {
+              const isSelected = activeDepth3 === cat.code;
+              const displayName = getCategoryDisplayName(cat, locale);
+              return (
+                <button
+                  key={cat.code}
+                  type="button"
+                  onClick={() => handleDepth3Select(cat.code)}
+                  className={`px-2.5 py-1 rounded-md font-medium whitespace-nowrap transition-colors text-[11px] cursor-pointer ${
+                    isSelected
+                      ? "bg-zinc-700 text-white dark:bg-zinc-300 dark:text-zinc-900 font-semibold"
+                      : "bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-600 dark:text-zinc-400"
+                  }`}
+                >
+                  {displayName} ({cat.product_count})
+                </button>
+              );
+            })}
+          </div>
+        ) : null}
+      </div>
+
+      {/* 5. Commercial Purchasing Filters: Margin, Stock, Price */}
       <div className="p-3.5 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50/70 dark:bg-zinc-900/50 space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-4">
           {/* Margin Filter */}
@@ -428,7 +479,7 @@ export function RetailerProductFilterBar({
                     key={m.key}
                     type="button"
                     onClick={() => handleMarginChange(m.key)}
-                    className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${
+                    className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
                       isSelected
                         ? "bg-emerald-600 text-white font-semibold shadow-2xs"
                         : "bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-700"
@@ -455,7 +506,7 @@ export function RetailerProductFilterBar({
           </label>
         </div>
 
-        {/* Price Filter Presets & Custom Range */}
+        {/* Price Filter Presets (Under $10, $10-$20, $20-$30, $30-$40, $40-$50, $50+, Custom) */}
         <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-zinc-200/60 dark:border-zinc-800/60 text-xs">
           <span className="font-semibold text-zinc-700 dark:text-zinc-300 shrink-0">
             {t.products.priceFilter}:
@@ -463,10 +514,12 @@ export function RetailerProductFilterBar({
           <div className="flex flex-wrap items-center gap-1">
             {[
               { key: "all", label: t.products.anyPrice },
-              { key: "under5", label: t.products.under5 },
-              { key: "5to10", label: t.products.between5and10 },
+              { key: "under10", label: t.products.under10 },
               { key: "10to20", label: t.products.between10and20 },
-              { key: "over20", label: t.products.over20 },
+              { key: "20to30", label: t.products.between20and30 },
+              { key: "30to40", label: t.products.between30and40 },
+              { key: "40to50", label: t.products.between40and50 },
+              { key: "over50", label: t.products.over50 },
               { key: "custom", label: t.products.customPrice },
             ].map((p) => {
               const isSelected = currentPricePreset === p.key;
@@ -475,7 +528,7 @@ export function RetailerProductFilterBar({
                   key={p.key}
                   type="button"
                   onClick={() => handlePricePresetChange(p.key)}
-                  className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${
+                  className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
                     isSelected
                       ? "bg-zinc-900 text-white dark:bg-white dark:text-zinc-900 font-semibold shadow-2xs"
                       : "bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-700"
@@ -489,7 +542,7 @@ export function RetailerProductFilterBar({
 
           {/* Custom Price Inputs */}
           {showCustomPrice && (
-            <div className="flex items-center gap-1.5 ml-auto">
+            <div className="flex flex-wrap items-center gap-1.5 ml-auto">
               <span className="text-zinc-400">$</span>
               <input
                 type="number"
@@ -513,17 +566,24 @@ export function RetailerProductFilterBar({
               <button
                 type="button"
                 onClick={handleApplyCustomPrice}
-                className="px-2.5 py-1 rounded-lg bg-indigo-600 text-white text-xs font-semibold hover:bg-indigo-700 shadow-2xs"
+                className="px-2.5 py-1 rounded-lg bg-indigo-600 text-white text-xs font-semibold hover:bg-indigo-700 shadow-2xs cursor-pointer"
               >
                 {t.products.apply}
               </button>
             </div>
           )}
         </div>
+
+        {/* Inline price range validation error */}
+        {priceRangeError && (
+          <div className="text-[11px] font-medium text-rose-600 dark:text-rose-400 pt-1">
+            ⚠ {priceRangeError}
+          </div>
+        )}
       </div>
 
-      {/* Results & Active Filters Bar */}
-      <div className="flex items-center justify-between text-xs text-zinc-500 dark:text-zinc-400 pt-1">
+      {/* 6. Results Summary, Active Filters & Products per row Selector */}
+      <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-zinc-500 dark:text-zinc-400 pt-1">
         <div className="flex items-center gap-2">
           <span>
             {locale === "ko" ? (
@@ -544,15 +604,41 @@ export function RetailerProductFilterBar({
           )}
         </div>
 
-        {hasActiveFilters && (
-          <button
-            type="button"
-            onClick={handleResetFilters}
-            className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline inline-flex items-center gap-1 cursor-pointer"
-          >
-            {t.products.resetFilters} ✕
-          </button>
-        )}
+        <div className="flex items-center gap-4">
+          {/* Products per row selector (Grid Density: 4 / 6 / 8) */}
+          {onDensityChange && (
+            <div className="hidden sm:flex items-center gap-1.5 text-xs text-zinc-600 dark:text-zinc-400">
+              <span className="font-medium text-[11px]">{t.products.productsPerRow}:</span>
+              <div className="flex items-center gap-0.5 bg-zinc-100 dark:bg-zinc-800 p-0.5 rounded-lg border border-zinc-200 dark:border-zinc-700">
+                {([4, 6, 8] as const).map((col) => (
+                  <button
+                    key={col}
+                    type="button"
+                    onClick={() => onDensityChange(col)}
+                    className={`px-2 py-0.5 rounded text-xs font-semibold transition-colors cursor-pointer ${
+                      density === col
+                        ? "bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white shadow-2xs"
+                        : "text-zinc-500 hover:text-zinc-900 dark:hover:text-white"
+                    }`}
+                  >
+                    {col}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Reset Filters */}
+          {hasActiveFilters && (
+            <button
+              type="button"
+              onClick={handleResetFilters}
+              className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline inline-flex items-center gap-1 cursor-pointer"
+            >
+              {t.products.resetFilters} ✕
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );
