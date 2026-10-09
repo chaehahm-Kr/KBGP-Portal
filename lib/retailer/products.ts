@@ -139,8 +139,8 @@ export async function getRetailerProducts(
   await verifyRetailerSession();
   const adminClient = createAdminClient();
 
-  // 1. Fetch all candidate products
-  const { data: rawProducts, error } = await adminClient
+  let rawProducts: any[] | null = null;
+  const { data: queryData, error } = await adminClient
     .from("products")
     .select(`
       id,
@@ -201,8 +201,74 @@ export async function getRetailerProducts(
     `)
     .order("created_at", { ascending: false });
 
-  if (error || !rawProducts) {
-    console.error("Error fetching retailer products:", error);
+  if (error || !queryData) {
+    const { data: fallbackData } = await adminClient
+      .from("products")
+      .select(`
+        id,
+        name,
+        name_en,
+        category,
+        category_code,
+        brand_id,
+        letusto_sku,
+        manufacture_sku,
+        status,
+        selection_status,
+        trading_status,
+        sales_status,
+        trading_pricing_active,
+        trading_wholesale_price,
+        trading_promo_wholesale_price,
+        trading_promo_start_date,
+        trading_promo_end_date,
+        estimated_retail_price,
+        price_usd_fob,
+        price_krw_retail,
+        price_krw_wholesale,
+        price_additional_info,
+        origin,
+        volume,
+        item_width,
+        item_depth,
+        item_height,
+        item_weight,
+        carton_pack_qty,
+        carton_width,
+        carton_depth,
+        carton_height,
+        carton_weight,
+        package_width,
+        package_depth,
+        package_height,
+        package_weight,
+        upc,
+        ean,
+        selling_online,
+        sales_link_1,
+        brands (
+          id,
+          name
+        ),
+        product_curations (
+          wholesale_price,
+          suggest_retail_price,
+          status
+        ),
+        product_images (
+          id,
+          storage_path,
+          position
+        )
+      `)
+      .order("created_at", { ascending: false });
+
+    rawProducts = fallbackData || [];
+  } else {
+    rawProducts = queryData;
+  }
+
+  if (!rawProducts || rawProducts.length === 0) {
     return {
       products: [],
       totalCount: 0,
@@ -398,7 +464,8 @@ export async function getRetailerProductDetail(
   await verifyRetailerSession();
   const adminClient = createAdminClient();
 
-  const { data: p, error } = await adminClient
+  let p: any = null;
+  const { data: queryData, error } = await adminClient
     .from("products")
     .select(`
       id,
@@ -451,9 +518,64 @@ export async function getRetailerProductDetail(
     .eq("id", productId)
     .maybeSingle();
 
-  if (error || !p) {
-    console.error("Error fetching retailer product detail:", error);
-    return null;
+  if (error || !queryData) {
+    const { data: fallbackData } = await adminClient
+      .from("products")
+      .select(`
+        id,
+        name,
+        name_en,
+        category,
+        category_code,
+        brand_id,
+        letusto_sku,
+        manufacture_sku,
+        status,
+        selection_status,
+        trading_status,
+        sales_status,
+        trading_pricing_active,
+        trading_wholesale_price,
+        trading_promo_wholesale_price,
+        trading_promo_start_date,
+        trading_promo_end_date,
+        description,
+        bullet_points,
+        origin,
+        volume,
+        upc,
+        ean,
+        estimated_retail_price,
+        price_usd_fob,
+        price_krw_retail,
+        price_additional_info,
+        carton_pack_qty,
+        package_width,
+        package_depth,
+        package_height,
+        package_weight,
+        brands (
+          id,
+          name
+        ),
+        product_curations (
+          wholesale_price,
+          suggest_retail_price,
+          status
+        ),
+        product_images (
+          id,
+          storage_path,
+          position
+        )
+      `)
+      .eq("id", productId)
+      .maybeSingle();
+
+    if (!fallbackData) return null;
+    p = fallbackData;
+  } else {
+    p = queryData;
   }
 
   const info = (p.price_additional_info as any) || {};

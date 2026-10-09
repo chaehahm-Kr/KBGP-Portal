@@ -33,7 +33,8 @@ export async function getTradingProductDetailData(productId: string) {
   await verifyAdminSession();
   const adminSupabase = createAdminClient();
 
-  const { data: product, error: prodErr } = await adminSupabase
+  let product: any = null;
+  const { data: prodWithVis, error: prodErr } = await adminSupabase
     .from("products")
     .select(`
       id, name, name_en, category, volume, estimated_retail_price, brand_id, company_id,
@@ -47,8 +48,28 @@ export async function getTradingProductDetailData(productId: string) {
     .eq("id", productId)
     .maybeSingle();
 
-  if (prodErr || !product) {
-    return null;
+  if (prodErr) {
+    const { data: fallbackProd, error: fallbackErr } = await adminSupabase
+      .from("products")
+      .select(`
+        id, name, name_en, category, volume, estimated_retail_price, brand_id, company_id,
+        description, bullet_points, origin, lead_time,
+        parent_sku, child_sku, manufacture_sku, letusto_sku, upc, ean,
+        price_krw_retail, price_krw_wholesale, price_usd_fob, price_additional_info,
+        item_width, item_depth, item_height, item_weight,
+        package_width, package_depth, package_height, package_weight,
+        selection_status, sales_status, category_code, trading_status
+      `)
+      .eq("id", productId)
+      .maybeSingle();
+
+    if (fallbackErr || !fallbackProd) {
+      return null;
+    }
+    product = fallbackProd;
+  } else {
+    if (!prodWithVis) return null;
+    product = prodWithVis;
   }
 
   const { data: brand } = await adminSupabase

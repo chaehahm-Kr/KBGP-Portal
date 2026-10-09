@@ -14,7 +14,8 @@ export default async function AdminTradingProductsPage() {
   const supabase = createAdminClient();
 
   // 1. Fetch products where trading_status is active or historical, or selection_status is SELECTED
-  const { data: products, error: queryError } = await supabase
+  let products: any[] = [];
+  const { data: prodsWithVis, error: queryError } = await supabase
     .from("products")
     .select(
       "id, name, name_en, category, brand_id, company_id, manufacture_sku, letusto_sku, parent_sku, child_sku, price_krw_retail, price_krw_wholesale, price_usd_fob, price_additional_info, origin, category_code, selection_status, sales_status, trading_status, retailer_visibility, created_at, upc, ean, estimated_retail_price, trading_wholesale_price, trading_promo_wholesale_price, trading_promo_start_date, trading_promo_end_date, trading_srp_price, trading_map_price"
@@ -23,7 +24,20 @@ export default async function AdminTradingProductsPage() {
     .order("created_at", { ascending: false });
 
   if (queryError) {
-    throw new Error(`Failed to fetch trading products: ${queryError.message}`);
+    const { data: fallbackProds, error: fallbackError } = await supabase
+      .from("products")
+      .select(
+        "id, name, name_en, category, brand_id, company_id, manufacture_sku, letusto_sku, parent_sku, child_sku, price_krw_retail, price_krw_wholesale, price_usd_fob, price_additional_info, origin, category_code, selection_status, sales_status, trading_status, created_at, upc, ean, estimated_retail_price, trading_wholesale_price, trading_promo_wholesale_price, trading_promo_start_date, trading_promo_end_date, trading_srp_price, trading_map_price"
+      )
+      .or("trading_status.in.(active,historical),selection_status.eq.SELECTED")
+      .order("created_at", { ascending: false });
+
+    if (fallbackError) {
+      throw new Error(`Failed to fetch trading products: ${fallbackError.message}`);
+    }
+    products = fallbackProds || [];
+  } else {
+    products = prodsWithVis || [];
   }
 
   // 2. Fetch all companies for name mapping
