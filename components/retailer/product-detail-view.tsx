@@ -1,9 +1,14 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import Link from "next/link";
 import { useCart } from "@/components/retailer/cart-context";
 import { RetailerProductDetail } from "@/lib/retailer/products";
+import {
+  resolveRetailerSalesPolicy,
+  calculateApplicablePrice,
+  isValidMoqOrderQuantity,
+} from "@/lib/product/retailer-policy";
 
 interface ProductDetailViewProps {
   product: RetailerProductDetail;
@@ -11,11 +16,27 @@ interface ProductDetailViewProps {
 
 export function RetailerProductDetailView({ product }: ProductDetailViewProps) {
   const { addItem } = useCart();
-  const moq = Math.max(1, product.cartonPackQty || 1);
-  const [orderQty, setOrderQty] = useState(moq);
+  
+  // Resolve Sales Policy
+  const policy = useMemo(() => {
+    return product.salesPolicy || resolveRetailerSalesPolicy(product);
+  }, [product]);
+
+  const moq = policy.moq > 0 ? policy.moq : Math.max(1, product.cartonPackQty || 1);
+  const [orderQty, setOrderQty] = useState<number>(moq);
+  const [rawQtyInput, setRawQtyInput] = useState<string>(moq.toString());
   const [addedSuccess, setAddedSuccess] = useState(false);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [copiedSku, setCopiedSku] = useState(false);
+
+  // Validate Quantity
+  const parsedQty = parseInt(rawQtyInput, 10);
+  const isQtyValid = !isNaN(parsedQty) && isValidMoqOrderQuantity(parsedQty, moq);
+
+  // Live Price Calculation based on Policy and Quantity
+  const livePriceResult = useMemo(() => {
+    return calculateApplicablePrice(policy, isQtyValid ? parsedQty : moq);
+  }, [policy, parsedQty, isQtyValid, moq]);
 
   const activeImage =
     product.images.length > 0
@@ -28,8 +49,43 @@ export function RetailerProductDetailView({ product }: ProductDetailViewProps) {
     setTimeout(() => setCopiedSku(false), 2000);
   };
 
+  const handleQtyChange = (valStr: string) => {
+    setRawQtyInput(valStr);
+    const parsed = parseInt(valStr, 10);
+    if (!isNaN(parsed) && parsed > 0) {
+      setOrderQty(parsed);
+    }
+  };
+
+  const handleStepQty = (delta: number) => {
+    const current = isNaN(parsedQty) || parsedQty <= 0 ? moq : parsedQty;
+    const next = Math.max(moq, current + delta * moq);
+    setOrderQty(next);
+    setRawQtyInput(next.toString());
+  };
+
+  const handleQuickSelect = (targetQty: number) => {
+    setOrderQty(targetQty);
+    setRawQtyInput(targetQty.toString());
+  };
+
   const handleAddToCart = () => {
-    addItem(product, orderQty);
+    if (!isQtyValid) return;
+    addItem(
+      {
+        id: product.id,
+        name: product.name,
+        nameEn: product.nameEn,
+        brandName: product.brandName,
+        sku: product.sku,
+        thumbnailUrl: product.thumbnailUrl,
+        wholesalePrice: livePriceResult.effectiveUnitPrice,
+        msrp: product.msrp,
+        marginPercent: livePriceResult.retailerMarginPercent ?? product.marginPercent,
+        cartonPackQty: moq,
+      },
+      parsedQty
+    );
     setAddedSuccess(true);
     setTimeout(() => setAddedSuccess(false), 3000);
   };
@@ -96,10 +152,15 @@ export function RetailerProductDetailView({ product }: ProductDetailViewProps) {
             )}
 
             {/* Category Tag Overlay */}
-            <div className="absolute top-4 left-4">
+            <div className="absolute top-4 left-4 flex flex-col gap-1.5 items-start">
               <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-white/90 dark:bg-zinc-900/90 text-zinc-800 dark:text-zinc-200 backdrop-blur-md shadow-xs border border-zinc-200/60 dark:border-zinc-700/60">
                 {product.categoryLabel}
               </span>
+              {policy.hasActivePromo && (
+                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-500 text-white shadow-xs">
+                  🔥 Active Promotion
+                </span>
+              )}
             </div>
           </div>
 
@@ -175,13 +236,21 @@ export function RetailerProductDetailView({ product }: ProductDetailViewProps) {
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               {/* Wholesale Price */}
               <div>
-                <div className="text-xs uppercase font-bold tracking-wider text-zinc-400 dark:text-zinc-500">
-                  Wholesale B2B Price
+                <div className="text-xs uppercase font-bold tracking-wider text-zinc-400 dark:text-zinc-500 flex items-center gap-1.5">
+                  <span>Wholesale B2B Price</span>
+                  {policy.hasActivePromo && (
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500 text-white">
+                      Promo
+                    </span>
+                  )}
                 </div>
-                <div className="text-2xl sm:text-3xl font-extrabold text-zinc-900 dark:text-white mt-0.5">
-                  {product.wholesalePrice > 0
-                    ? `$${product.wholesalePrice.toFixed(2)}`
-                    : "Pricing on Request"}
+                <div className="text-2xl sm:text-3xl font-extrabold text-zinc-900 dark:text-white mt-0.5 flex items-baseline gap-1">
+                  <span>
+                    {livePriceResult.effectiveUnitPrice > 0
+                      ? `$${livePriceResult.effectiveUnitPrice.toFixed(2)}`
+                      : "Pricing on Request"}
+                  </span>
+                  <span className="text-xs font-normal text-zinc-400">/ EA</span>
                 </div>
                 <div className="text-[11px] text-zinc-400 dark:text-zinc-500 mt-0.5">
                   Per single unit • Excl. local sales taxes
@@ -195,24 +264,89 @@ export function RetailerProductDetailView({ product }: ProductDetailViewProps) {
                     MSRP (Suggested Retail)
                   </div>
                   <div className="text-lg sm:text-xl font-bold text-zinc-700 dark:text-zinc-300">
-                    {product.msrp > 0 ? `$${product.msrp.toFixed(2)}` : "-"}
+                    {product.msrp > 0 ? `$${product.msrp.toFixed(2)}` : "—"}
                   </div>
                 </div>
 
-                {product.marginPercent > 0 && (
+                {livePriceResult.retailerMarginPercent !== null && livePriceResult.retailerMarginPercent > 0 ? (
                   <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20">
-                    {product.marginPercent}% Estimated Margin
+                    {livePriceResult.retailerMarginPercent}% Estimated Margin
                   </span>
+                ) : (
+                  <span className="text-xs text-zinc-400 font-medium">Margin: —</span>
                 )}
               </div>
             </div>
 
+            {/* Quantity Discount Tiers Table (Published Tiers Only) */}
+            {policy.publishedTiers.length > 0 && (
+              <div className="pt-4 border-t border-zinc-200 dark:border-zinc-800/80 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold uppercase tracking-wider text-zinc-700 dark:text-zinc-300 flex items-center gap-1.5">
+                    <span>📊</span> Quantity Discount Tiers (수량별 공급 단가)
+                  </span>
+                  <span className="text-[11px] text-zinc-400">Packs of {moq} units</span>
+                </div>
+
+                <div className="overflow-x-auto rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/70">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead>
+                      <tr className="border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-800/50 text-[10px] font-bold text-zinc-500 dark:text-zinc-400 uppercase">
+                        <th className="py-2 px-3">Order Quantity</th>
+                        <th className="py-2 px-2 text-center">Batch Multiple</th>
+                        <th className="py-2 px-2 text-center">Discount</th>
+                        <th className="py-2 px-2 text-right">Unit Price</th>
+                        <th className="py-2 px-3 text-right">Pack Total</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
+                      {policy.publishedTiers.map((t) => {
+                        const isCurrentActive = isQtyValid && livePriceResult.appliedTierId === t.id && livePriceResult.appliedReason !== "promotion";
+                        return (
+                          <tr
+                            key={t.id}
+                            className={`transition-colors ${
+                              isCurrentActive
+                                ? "bg-indigo-50/80 dark:bg-indigo-950/40 font-bold"
+                                : "hover:bg-zinc-50/50 dark:hover:bg-zinc-800/30"
+                            }`}
+                          >
+                            <td className="py-2 px-3 font-semibold text-zinc-800 dark:text-zinc-200">
+                              {t.min_qty.toLocaleString()} units +
+                            </td>
+                            <td className="py-2 px-2 text-center font-mono text-zinc-500 dark:text-zinc-400">
+                              {t.multiple}× MOQ
+                            </td>
+                            <td className="py-2 px-2 text-center">
+                              {t.discount_percent > 0 ? (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300">
+                                  {t.discount_percent}% OFF
+                                </span>
+                              ) : (
+                                <span className="text-zinc-400 font-normal">Base</span>
+                              )}
+                            </td>
+                            <td className="py-2 px-2 text-right font-mono font-bold text-zinc-900 dark:text-white">
+                              ${t.unit_price.toFixed(2)}
+                            </td>
+                            <td className="py-2 px-3 text-right font-mono text-zinc-600 dark:text-zinc-400">
+                              ${(t.min_qty * t.unit_price).toFixed(2)}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
             {/* Ordering MOQ & Case Pack Strip */}
-            <div className="pt-4 border-t border-zinc-200 dark:border-zinc-800/80 flex flex-wrap items-center justify-between gap-2 text-xs text-zinc-600 dark:text-zinc-300">
+            <div className="pt-3 border-t border-zinc-200 dark:border-zinc-800/80 flex flex-wrap items-center justify-between gap-2 text-xs text-zinc-600 dark:text-zinc-300">
               <div className="flex items-center gap-2">
                 <span className="text-zinc-400">Order Multiple / MOQ:</span>
                 <strong className="text-zinc-900 dark:text-white font-semibold">
-                  {product.cartonPackQty} units per master carton
+                  최소 {moq}개 · {moq}개 단위 묶음 (Batch of {moq} units)
                 </strong>
               </div>
               {product.volume && (
@@ -225,6 +359,31 @@ export function RetailerProductDetailView({ product }: ProductDetailViewProps) {
               )}
             </div>
 
+            {/* Quick Tier Selection Buttons */}
+            {policy.publishedTiers.length > 0 && (
+              <div className="space-y-1.5 pt-1">
+                <span className="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 block">
+                  Quick Select Quantity:
+                </span>
+                <div className="flex flex-wrap gap-2">
+                  {policy.publishedTiers.map((t) => (
+                    <button
+                      key={t.id}
+                      type="button"
+                      onClick={() => handleQuickSelect(t.min_qty)}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-mono font-bold transition-all cursor-pointer ${
+                        parsedQty === t.min_qty
+                          ? "bg-indigo-600 text-white shadow-xs"
+                          : "bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700"
+                      }`}
+                    >
+                      {t.min_qty} units {t.discount_percent > 0 ? `(${t.discount_percent}% off)` : ""}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Ordering Controls & Add to Cart */}
             {product.isOrderable && product.wholesalePrice > 0 ? (
               <div className="pt-2 space-y-4">
@@ -233,14 +392,19 @@ export function RetailerProductDetailView({ product }: ProductDetailViewProps) {
                     <div className="text-xs font-bold text-zinc-900 dark:text-white flex items-center gap-1.5">
                       <span>Order Quantity</span>
                       <span className="text-[10px] font-normal text-zinc-500 dark:text-zinc-400">
-                        (Multiple of {moq})
+                        (Multiple of {moq} units)
                       </span>
                     </div>
-                    <div className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
+                    <div className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
                       Line Total:{" "}
-                      <strong className="text-zinc-900 dark:text-white font-bold text-sm">
-                        ${(orderQty * product.wholesalePrice).toFixed(2)}
+                      <strong className="text-zinc-900 dark:text-white font-bold text-base font-mono">
+                        ${isQtyValid ? livePriceResult.subtotal.toFixed(2) : "—"}
                       </strong>
+                      {isQtyValid && (
+                        <span className="text-[11px] text-zinc-400 ml-2">
+                          (${livePriceResult.effectiveUnitPrice.toFixed(2)} × {parsedQty} units)
+                        </span>
+                      )}
                     </div>
                   </div>
 
@@ -249,32 +413,27 @@ export function RetailerProductDetailView({ product }: ProductDetailViewProps) {
                     <div className="inline-flex items-center rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 p-1">
                       <button
                         type="button"
-                        onClick={() => setOrderQty((prev) => Math.max(moq, prev - moq))}
-                        disabled={orderQty <= moq}
-                        className="w-8 h-8 rounded-lg flex items-center justify-center font-bold text-sm text-zinc-700 dark:text-zinc-300 hover:bg-white dark:hover:bg-zinc-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                        onClick={() => handleStepQty(-1)}
+                        disabled={parsedQty <= moq}
+                        className="w-8 h-8 rounded-lg flex items-center justify-center font-bold text-sm text-zinc-700 dark:text-zinc-300 hover:bg-white dark:hover:bg-zinc-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors cursor-pointer"
                         aria-label="Decrease quantity"
                       >
                         −
                       </button>
                       <input
                         type="number"
-                        value={orderQty}
-                        onChange={(e) => {
-                          const val = parseInt(e.target.value, 10);
-                          if (!isNaN(val) && val > 0) setOrderQty(val);
-                        }}
-                        onBlur={() => {
-                          let val = Math.max(moq, orderQty);
-                          const rem = val % moq;
-                          if (rem !== 0) val = val + (moq - rem);
-                          setOrderQty(val);
-                        }}
-                        className="w-14 text-center font-bold text-sm bg-transparent border-0 text-zinc-900 dark:text-white focus:outline-none"
+                        min={moq}
+                        step={moq}
+                        value={rawQtyInput}
+                        onChange={(e) => handleQtyChange(e.target.value)}
+                        className={`w-16 text-center font-bold font-mono text-sm bg-transparent border-0 focus:outline-hidden ${
+                          !isQtyValid ? "text-rose-600 dark:text-rose-400 ring-2 ring-rose-500 rounded" : "text-zinc-900 dark:text-white"
+                        }`}
                       />
                       <button
                         type="button"
-                        onClick={() => setOrderQty((prev) => prev + moq)}
-                        className="w-8 h-8 rounded-lg flex items-center justify-center font-bold text-sm text-zinc-700 dark:text-zinc-300 hover:bg-white dark:hover:bg-zinc-700 transition-colors"
+                        onClick={() => handleStepQty(1)}
+                        className="w-8 h-8 rounded-lg flex items-center justify-center font-bold text-sm text-zinc-700 dark:text-zinc-300 hover:bg-white dark:hover:bg-zinc-700 transition-colors cursor-pointer"
                         aria-label="Increase quantity"
                       >
                         +
@@ -283,12 +442,23 @@ export function RetailerProductDetailView({ product }: ProductDetailViewProps) {
                   </div>
                 </div>
 
+                {/* Validation Warning Banner if not a multiple */}
+                {!isQtyValid && (
+                  <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 text-xs text-rose-700 dark:text-rose-300 flex items-center gap-2">
+                    <span className="font-bold text-sm">⚠️</span>
+                    <span>
+                      주문 수량은 최소 {moq}개 이상이며, <strong>{moq}개 단위의 배수</strong>({moq}, {moq * 2}, {moq * 3}...)여야 합니다.
+                    </span>
+                  </div>
+                )}
+
                 {/* Action Buttons */}
                 <div className="flex flex-col sm:flex-row gap-3">
                   <button
                     type="button"
                     onClick={handleAddToCart}
-                    className={`flex-1 py-3.5 px-6 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all shadow-sm cursor-pointer ${
+                    disabled={!isQtyValid}
+                    className={`flex-1 py-3.5 px-6 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all shadow-sm cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ${
                       addedSuccess
                         ? "bg-emerald-600 text-white"
                         : "bg-zinc-900 dark:bg-white text-white dark:text-zinc-950 hover:opacity-95"
@@ -297,160 +467,57 @@ export function RetailerProductDetailView({ product }: ProductDetailViewProps) {
                     {addedSuccess ? (
                       <>
                         <span>✓</span>
-                        <span>Added to Cart ({orderQty} units)</span>
+                        <span>Added to Cart ({parsedQty} units)</span>
                       </>
                     ) : (
                       <>
                         <span>🛒</span>
-                        <span>Add to Order Cart</span>
+                        <span>Add {isQtyValid ? `${parsedQty} units` : ""} to Cart</span>
                       </>
                     )}
                   </button>
-
-                  {addedSuccess && (
-                    <Link
-                      href="/cart"
-                      className="py-3.5 px-6 rounded-xl font-bold text-sm bg-indigo-50 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 hover:bg-indigo-100 dark:hover:bg-indigo-900 transition-colors flex items-center justify-center gap-1.5"
-                    >
-                      <span>View Cart →</span>
-                    </Link>
-                  )}
-                </div>
-
-                {/* Product Training & Support Links */}
-                <div className="pt-3 border-t border-zinc-200/80 dark:border-zinc-800/80 flex items-center justify-between gap-3 flex-wrap">
-                  <span className="text-xs text-zinc-500 dark:text-zinc-400">
-                    Store staff selling guide & support:
-                  </span>
-                  <div className="flex items-center gap-2">
-                    <Link
-                      href={`/retailer/support?new=1&category=product_pricing&product_id=${product.id}&title=${encodeURIComponent(`[Product Inquiry] ${product.name}`)}`}
-                      className="py-2 px-3 rounded-xl text-xs font-semibold bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700 transition-colors inline-flex items-center gap-1.5 shrink-0"
-                    >
-                      <span>🛟</span>
-                      <span>Support</span>
-                    </Link>
-                    <Link
-                      href={`/training/${product.id}`}
-                      className="py-2 px-3.5 rounded-xl text-xs font-bold bg-blue-50 dark:bg-blue-950/80 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800 hover:bg-blue-100 dark:hover:bg-blue-900 transition-colors inline-flex items-center gap-1.5 shrink-0"
-                    >
-                      <span>🎓</span>
-                      <span>Product Training</span>
-                      <span>→</span>
-                    </Link>
-                  </div>
                 </div>
               </div>
             ) : (
-              <div className="pt-2 p-4 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-center space-y-1">
-                <div className="text-xs font-bold text-amber-800 dark:text-amber-300">
-                  Wholesale Pricing Pending
-                </div>
-                <div className="text-[11px] text-amber-700 dark:text-amber-400">
-                  This product is currently undergoing pricing review and cannot be added to cart. Please contact your K SELECT account representative for commercial inquiries.
-                </div>
+              <div className="p-4 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-center text-xs text-zinc-500 dark:text-zinc-400">
+                This item is currently not available for purchase.
               </div>
             )}
           </div>
 
-          {/* Key Bullet Points / Highlights */}
-          {product.bulletPoints && product.bulletPoints.length > 0 && (
-            <div className="space-y-3">
-              <h3 className="text-sm font-bold uppercase tracking-wider text-zinc-900 dark:text-white">
-                Key Product Highlights
-              </h3>
-              <ul className="space-y-2 text-xs sm:text-sm text-zinc-600 dark:text-zinc-300">
-                {product.bulletPoints.map((bp, i) => (
-                  <li key={i} className="flex items-start gap-2.5">
-                    <span className="text-emerald-500 font-bold mt-0.5">✓</span>
-                    <span>{bp}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-
           {/* Description */}
           {product.description && (
             <div className="space-y-2">
-              <h3 className="text-sm font-bold uppercase tracking-wider text-zinc-900 dark:text-white">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">
                 Product Description
               </h3>
-              <p className="text-xs sm:text-sm text-zinc-600 dark:text-zinc-300 leading-relaxed whitespace-pre-line">
+              <p className="text-sm text-zinc-700 dark:text-zinc-300 leading-relaxed whitespace-pre-line">
                 {product.description}
               </p>
             </div>
           )}
 
-          {/* Specifications & Logistics Table */}
-          <div className="space-y-3 pt-2">
-            <h3 className="text-sm font-bold uppercase tracking-wider text-zinc-900 dark:text-white">
-              Specifications & Logistics
-            </h3>
-
-            <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 overflow-hidden divide-y divide-zinc-200 dark:divide-zinc-800 text-xs">
-              <div className="grid grid-cols-3 p-3 bg-zinc-50/50 dark:bg-zinc-900/50">
-                <span className="text-zinc-500 font-medium">Brand</span>
-                <span className="col-span-2 text-zinc-900 dark:text-white font-semibold">
-                  {product.brandName}
-                </span>
-              </div>
-              <div className="grid grid-cols-3 p-3 bg-white dark:bg-zinc-900">
-                <span className="text-zinc-500 font-medium">Category</span>
-                <span className="col-span-2 text-zinc-900 dark:text-white">
-                  {product.categoryLabel}
-                </span>
-              </div>
-              <div className="grid grid-cols-3 p-3 bg-zinc-50/50 dark:bg-zinc-900/50">
-                <span className="text-zinc-500 font-medium">Master SKU</span>
-                <span className="col-span-2 text-zinc-900 dark:text-white font-mono">
-                  {product.sku}
-                </span>
-              </div>
-              {product.upc && (
-                <div className="grid grid-cols-3 p-3 bg-white dark:bg-zinc-900">
-                  <span className="text-zinc-500 font-medium">UPC Barcode</span>
-                  <span className="col-span-2 text-zinc-900 dark:text-white font-mono">
-                    {product.upc}
-                  </span>
-                </div>
-              )}
-              {product.ean && (
-                <div className="grid grid-cols-3 p-3 bg-zinc-50/50 dark:bg-zinc-900/50">
-                  <span className="text-zinc-500 font-medium">EAN Barcode</span>
-                  <span className="col-span-2 text-zinc-900 dark:text-white font-mono">
-                    {product.ean}
-                  </span>
-                </div>
-              )}
-              <div className="grid grid-cols-3 p-3 bg-white dark:bg-zinc-900">
-                <span className="text-zinc-500 font-medium">Country of Origin</span>
-                <span className="col-span-2 text-zinc-900 dark:text-white">
-                  {product.origin || "Republic of Korea"}
-                </span>
-              </div>
-              <div className="grid grid-cols-3 p-3 bg-zinc-50/50 dark:bg-zinc-900/50">
-                <span className="text-zinc-500 font-medium">Case Pack (Carton)</span>
-                <span className="col-span-2 text-zinc-900 dark:text-white">
-                  {product.cartonPackQty} units / carton
-                </span>
-              </div>
-              {(product.packageDimensions.width ||
-                product.packageDimensions.depth ||
-                product.packageDimensions.height ||
-                product.packageDimensions.weight) && (
-                <div className="grid grid-cols-3 p-3 bg-white dark:bg-zinc-900">
-                  <span className="text-zinc-500 font-medium">Package Dimensions & Weight</span>
-                  <span className="col-span-2 text-zinc-900 dark:text-white">
-                    {product.packageDimensions.width && product.packageDimensions.depth && product.packageDimensions.height
-                      ? `${product.packageDimensions.width} × ${product.packageDimensions.depth} × ${product.packageDimensions.height} mm`
-                      : "Standard retail packaging"}
-                    {product.packageDimensions.weight ? ` • ${product.packageDimensions.weight}g` : ""}
-                  </span>
-                </div>
-              )}
+          {/* Bullet Points */}
+          {product.bulletPoints.length > 0 && (
+            <div className="space-y-2">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">
+                Highlights & Features
+              </h3>
+              <ul className="space-y-1.5">
+                {product.bulletPoints.map((point, idx) => (
+                  <li
+                    key={idx}
+                    className="flex items-start gap-2 text-xs text-zinc-700 dark:text-zinc-300"
+                  >
+                    <span className="text-indigo-600 dark:text-indigo-400 font-bold shrink-0 mt-0.5">
+                      ✓
+                    </span>
+                    <span>{point}</span>
+                  </li>
+                ))}
+              </ul>
             </div>
-          </div>
+          )}
         </div>
       </div>
     </div>

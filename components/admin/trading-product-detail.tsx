@@ -21,6 +21,8 @@ import {
   evaluateTradingOrderability,
 } from "@/lib/product/registration-status";
 import { safeFormatUsd, safeFormatPercent } from "@/lib/product/pricing-resolver";
+import { type ResolvedRetailerSalesPolicy, resolveRetailerSalesPolicy } from "@/lib/product/retailer-policy";
+import { RetailerSalesPolicyCard } from "@/components/admin/retailer-sales-policy-card";
 import { useRouter } from "next/navigation";
 
 const ArrowLeftIcon = ({ className }: { className?: string }) => (
@@ -113,6 +115,7 @@ interface ResolvedTradingProduct {
     isOrderable: boolean;
     reason: string | null;
   };
+  salesPolicy?: ResolvedRetailerSalesPolicy;
 }
 
 interface InventoryBalanceItem {
@@ -1504,6 +1507,16 @@ export function TradingProductDetail({
           </div>
         )}
       </div>
+
+      {/* 2.5 RETAILER SALES POLICY CARD */}
+      <RetailerSalesPolicyCard
+        productId={product.id}
+        productName={product.name}
+        cartonPackQty={product.carton_pack_qty || 1}
+        salesPolicy={product.salesPolicy || resolveRetailerSalesPolicy(product)}
+        srpPrice={product.srpPrice}
+        mapPrice={product.mapPrice}
+      />
 
       {/* 3. MAIN OPERATIONAL BODY (LEFT: INVENTORY MANAGEMENT 55% / RIGHT: COMMERCIAL PRICING & COST 45%) */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">

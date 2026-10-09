@@ -4,6 +4,11 @@ import { revalidatePath } from "next/cache";
 import { verifyRetailerSession } from "@/lib/auth/dal";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { resolveEffectiveSku } from "@/lib/product/types";
+import {
+  resolveRetailerSalesPolicy,
+  calculateApplicablePrice,
+  isValidMoqOrderQuantity,
+} from "@/lib/product/retailer-policy";
 import { evaluateProductRegistrationStatus } from "@/lib/product/registration-status";
 import { getRetailerPaymentEligibility, getOrderPayments } from "@/lib/retailer/payment-actions";
 import { RetailerPaymentMethod, RetailerPaymentRecord } from "@/lib/retailer/payment-types";
@@ -453,33 +458,37 @@ export async function submitRetailerOrder(
         resolveEffectiveSku(overrides.manufacture_sku, prod.manufacture_sku) ||
         "KS-SKU";
 
-      const pack = Math.max(1, overrides.carton_pack_qty || prod.carton_pack_qty || 1);
+      const policy = resolveRetailerSalesPolicy(prod);
+
+      if (!policy.isConfigured || policy.moq <= 0 || policy.baseWholesalePrice <= 0) {
+        return {
+          success: false,
+          error: `Product "${prod.name}" has no valid retailer sales policy configured and cannot be ordered.`,
+        };
+      }
 
       // Enforce MOQ & Multiple
-      if (item.quantity < pack || item.quantity % pack !== 0) {
+      if (!isValidMoqOrderQuantity(item.quantity, policy.moq)) {
         return {
           success: false,
-          error: `Quantity for "${prod.name}" must be at least ${pack} and a multiple of ${pack}.`,
+          error: `Quantity for "${prod.name}" must be at least ${policy.moq} and a multiple of ${policy.moq}.`,
         };
       }
 
-      // Authoritative Wholesale Price Resolution (Never FOB)
-      const priceResolution = resolveAuthoritativeWholesalePrice(prod);
-      const wholesalePrice = priceResolution.wholesalePrice;
-
-      if (!priceResolution.isOrderable || wholesalePrice <= 0) {
+      const priceResult = calculateApplicablePrice(policy, item.quantity);
+      if (!priceResult.isOrderable || priceResult.effectiveUnitPrice <= 0) {
         return {
           success: false,
-          error: `Product "${prod.name}" has no valid wholesale pricing configured and cannot be ordered.`,
+          error: `Product "${prod.name}" cannot be ordered: ${priceResult.orderableReason || "Invalid price calculation"}`,
         };
       }
 
-      let msrp: number | null = priceResolution.srp;
+      let msrp: number | null = policy.srpPrice;
       if (!msrp || msrp <= 0) {
-        msrp = Number((wholesalePrice * 2.0).toFixed(2));
+        msrp = Number((priceResult.effectiveUnitPrice * 2.0).toFixed(2));
       }
 
-      const lineTotal = Number((item.quantity * wholesalePrice).toFixed(2));
+      const lineTotal = priceResult.subtotal;
       subtotalAmount += lineTotal;
       totalItemsCount += item.quantity;
 
@@ -488,10 +497,10 @@ export async function submitRetailerOrder(
         sku,
         productName: overrides.name?.trim() || prod.name,
         brandName,
-        unitWholesalePrice: wholesalePrice,
+        unitWholesalePrice: priceResult.effectiveUnitPrice,
         unitMsrp: msrp,
         quantity: item.quantity,
-        casePackQty: pack,
+        casePackQty: policy.moq,
         lineTotal,
       });
     }

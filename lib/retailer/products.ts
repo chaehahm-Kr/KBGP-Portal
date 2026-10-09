@@ -4,6 +4,10 @@ import { verifyRetailerSession } from "@/lib/auth/dal";
 import { resolveEffectiveSku, isDraftPlaceholderName, isDraftPlaceholderSku } from "@/lib/product/types";
 import { evaluateProductRegistrationStatus } from "@/lib/product/registration-status";
 import { resolveProductPricing, parseValidPositiveNumber } from "@/lib/product/pricing-resolver";
+import {
+  resolveRetailerSalesPolicy,
+  type ResolvedRetailerSalesPolicy,
+} from "@/lib/product/retailer-policy";
 
 export interface RetailerProductSummary {
   id: string;
@@ -24,6 +28,11 @@ export interface RetailerProductSummary {
   origin: string | null;
   volume: string | null;
   status: string;
+  salesPolicy?: ResolvedRetailerSalesPolicy;
+  hasTiers?: boolean;
+  maxDiscountPercent?: number;
+  isPromoActive?: boolean;
+  promoWholesalePrice?: number | null;
 }
 
 export interface RetailerProductDetail extends RetailerProductSummary {
@@ -341,9 +350,21 @@ export async function getRetailerProducts(
         resolveEffectiveSku(overrides.manufacture_sku, p.manufacture_sku) ||
         "KS-PROD";
 
-      // Pricing resolution (Strictly Retailer wholesale price from product_curations / trading_overrides, confidential FOB is never used)
-      const { wholesalePrice, msrp, isPricingActive } = resolveRetailerPrice(p);
-      const isOrderable = wholesalePrice > 0 && isPricingActive;
+      // Pricing & Sales Policy resolution
+      const salesPolicy = resolveRetailerSalesPolicy(p);
+      const { wholesalePrice: fallbackWholesale, msrp: fallbackMsrp, isPricingActive } = resolveRetailerPrice(p);
+
+      const isPromoActive = salesPolicy.hasActivePromo && salesPolicy.promoWholesalePrice !== null && salesPolicy.promoWholesalePrice > 0;
+      const wholesalePrice = isPromoActive
+        ? salesPolicy.promoWholesalePrice!
+        : (salesPolicy.baseWholesalePrice > 0 ? salesPolicy.baseWholesalePrice : fallbackWholesale);
+
+      const msrp = salesPolicy.srpPrice && salesPolicy.srpPrice > 0 ? salesPolicy.srpPrice : fallbackMsrp;
+      const moq = salesPolicy.moq > 0 ? salesPolicy.moq : (overrides.carton_pack_qty || p.carton_pack_qty || 1);
+      const isOrderable = wholesalePrice > 0 && isPricingActive && salesPolicy.isConfigured;
+
+      const hasTiers = salesPolicy.publishedTiers.some((t) => t.discount_percent > 0);
+      const maxDiscountPercent = Math.max(0, ...salesPolicy.publishedTiers.map((t) => t.discount_percent));
 
       const marginPercent =
         msrp > 0 && wholesalePrice > 0
@@ -364,8 +385,6 @@ export async function getRetailerProducts(
           // ignore error
         }
       }
-
-      const moq = overrides.carton_pack_qty || p.carton_pack_qty || 1;
 
       // Accumulate filter counts
       const bEntry = brandMap.get(brandId) || { id: brandId, name: brandName, count: 0 };
@@ -395,6 +414,11 @@ export async function getRetailerProducts(
         origin: overrides.origin || p.origin || "Republic of Korea",
         volume: overrides.volume || p.volume || null,
         status: p.status || "selling",
+        salesPolicy,
+        hasTiers,
+        maxDiscountPercent,
+        isPromoActive,
+        promoWholesalePrice: salesPolicy.promoWholesalePrice,
       };
 
       return item;
@@ -598,8 +622,15 @@ export async function getRetailerProductDetail(
     return null;
   }
 
-  // Authoritative wholesale price resolution
-  const { wholesalePrice, msrp, isPricingActive } = resolveRetailerPrice(p);
+  // Authoritative wholesale price & sales policy resolution
+  const salesPolicy = resolveRetailerSalesPolicy(p);
+  const { wholesalePrice: fallbackWholesale, msrp: fallbackMsrp, isPricingActive } = resolveRetailerPrice(p);
+
+  const isPromoActive = salesPolicy.hasActivePromo && salesPolicy.promoWholesalePrice !== null && salesPolicy.promoWholesalePrice > 0;
+  const wholesalePrice = isPromoActive
+    ? salesPolicy.promoWholesalePrice!
+    : (salesPolicy.baseWholesalePrice > 0 ? salesPolicy.baseWholesalePrice : fallbackWholesale);
+
   if (wholesalePrice <= 0) {
     return null;
   }
@@ -616,7 +647,11 @@ export async function getRetailerProductDetail(
     resolveEffectiveSku(overrides.manufacture_sku, p.manufacture_sku) ||
     "KS-PROD";
 
-  const isOrderable = wholesalePrice > 0 && isPricingActive;
+  const isOrderable = wholesalePrice > 0 && isPricingActive && salesPolicy.isConfigured;
+
+  const msrp = salesPolicy.srpPrice && salesPolicy.srpPrice > 0 ? salesPolicy.srpPrice : fallbackMsrp;
+  const hasTiers = salesPolicy.publishedTiers.some((t) => t.discount_percent > 0);
+  const maxDiscountPercent = Math.max(0, ...salesPolicy.publishedTiers.map((t) => t.discount_percent));
 
   const marginPercent =
     msrp > 0 && wholesalePrice > 0
@@ -655,7 +690,7 @@ export async function getRetailerProductDetail(
     bulletPoints = p.bullet_points.filter(Boolean);
   }
 
-  const moq = overrides.carton_pack_qty || p.carton_pack_qty || 1;
+  const moq = salesPolicy.moq > 0 ? salesPolicy.moq : (overrides.carton_pack_qty || p.carton_pack_qty || 1);
 
   return {
     id: p.id,
@@ -688,5 +723,10 @@ export async function getRetailerProductDetail(
     },
     cartonPackQty: moq,
     images,
+    salesPolicy,
+    hasTiers,
+    maxDiscountPercent,
+    isPromoActive,
+    promoWholesalePrice: salesPolicy.promoWholesalePrice,
   };
 }

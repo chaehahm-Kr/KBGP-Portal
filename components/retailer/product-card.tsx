@@ -45,20 +45,30 @@ export function RetailerProductCard({ product }: ProductCardProps) {
         )}
 
         {/* Category Tag Overlay */}
-        <div className="absolute top-3 left-3">
+        <div className="absolute top-3 left-3 flex flex-col gap-1 items-start">
           <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-white/90 dark:bg-zinc-900/90 text-zinc-700 dark:text-zinc-300 backdrop-blur-md shadow-xs border border-zinc-200/50 dark:border-zinc-700/50">
             {product.categoryLabel}
           </span>
+          {product.isPromoActive && (
+            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold bg-amber-500 text-white shadow-xs">
+              🔥 Promo
+            </span>
+          )}
         </div>
 
         {/* Margin Badge Overlay */}
-        {product.marginPercent > 0 && (
-          <div className="absolute top-3 right-3">
+        {product.marginPercent > 0 ? (
+          <div className="absolute top-3 right-3 flex flex-col gap-1 items-end">
             <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20 backdrop-blur-md shadow-xs">
               {product.marginPercent}% {t.products.margin}
             </span>
+            {product.hasTiers && product.maxDiscountPercent && product.maxDiscountPercent > 0 && !product.isPromoActive ? (
+              <span className="inline-flex items-center px-1.5 py-0.5 rounded-md text-[9px] font-semibold bg-indigo-50/90 text-indigo-700 border border-indigo-200/60 dark:bg-indigo-950/80 dark:text-indigo-300">
+                수량할인 ~{product.maxDiscountPercent}%
+              </span>
+            ) : null}
           </div>
-        )}
+        ) : null}
       </div>
 
       {/* Content Container */}
@@ -89,12 +99,11 @@ export function RetailerProductCard({ product }: ProductCardProps) {
         <div className="pt-3 border-t border-zinc-100 dark:border-zinc-800/80 flex items-end justify-between">
           <div>
             <div className="text-[10px] uppercase font-bold tracking-wider text-zinc-400 dark:text-zinc-500">
-              {t.products.wholesalePrice}
+              {product.isPromoActive ? "Promo Wholesale" : t.products.wholesalePrice}
             </div>
-            <div className="text-base sm:text-lg font-bold text-zinc-900 dark:text-white">
-              {product.wholesalePrice > 0
-                ? `$${product.wholesalePrice.toFixed(2)}`
-                : "-"}
+            <div className="text-base sm:text-lg font-bold text-zinc-900 dark:text-white flex items-baseline gap-1">
+              <span>{product.wholesalePrice > 0 ? `$${product.wholesalePrice.toFixed(2)}` : "—"}</span>
+              <span className="text-[10px] font-normal text-zinc-400">/ EA</span>
             </div>
           </div>
 
@@ -103,16 +112,16 @@ export function RetailerProductCard({ product }: ProductCardProps) {
               {t.products.msrp}
             </div>
             <div className="text-xs sm:text-sm font-semibold text-zinc-500 dark:text-zinc-400">
-              {product.msrp > 0 ? `$${product.msrp.toFixed(2)}` : "-"}
+              {product.msrp > 0 ? `$${product.msrp.toFixed(2)}` : "—"}
             </div>
           </div>
         </div>
 
-        {/* MOQ / Case Pack */}
-        <div className="flex items-center justify-between text-[11px] text-zinc-500 dark:text-zinc-400 bg-zinc-50 dark:bg-zinc-800/40 px-2.5 py-1.5 rounded-lg">
-          <span>{t.products.casePackMoq}:</span>
-          <span className="font-semibold text-zinc-700 dark:text-zinc-300">
-            {product.moq} {product.moq > 1 ? t.products.unit : t.products.unit}
+        {/* Retailer Purchasing Conditions: MOQ & Batch units */}
+        <div className="flex items-center justify-between text-[11px] text-zinc-600 dark:text-zinc-300 bg-zinc-50 dark:bg-zinc-800/50 px-2.5 py-1.5 rounded-lg border border-zinc-150 dark:border-zinc-800">
+          <span className="text-zinc-500">주문 조건:</span>
+          <span className="font-semibold text-zinc-800 dark:text-zinc-200">
+            최소 {product.moq}개 · {product.moq}개 단위 묶음
           </span>
         </div>
       </div>

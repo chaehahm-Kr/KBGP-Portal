@@ -1,3 +1,8 @@
+import {
+  type ResolvedRetailerSalesPolicy,
+  calculateApplicablePrice,
+} from "@/lib/product/retailer-policy";
+
 export interface CartItem {
   productId: string;
   productName: string;
@@ -6,11 +11,15 @@ export interface CartItem {
   sku: string;
   thumbnailUrl: string | null;
   wholesalePrice: number;
+  baseWholesalePrice?: number;
   msrp: number;
   marginPercent: number;
   quantity: number;
   casePackQty: number; // MOQ & order multiple
   lineTotal: number;
+  salesPolicy?: ResolvedRetailerSalesPolicy;
+  discountPercent?: number;
+  appliedReason?: string;
 }
 
 export interface CartSummary {
@@ -21,7 +30,7 @@ export interface CartSummary {
 }
 
 /**
- * Validate that a quantity is valid given a case pack quantity.
+ * Validate that a quantity is valid given an MOQ/case pack quantity.
  * Minimum is casePackQty, and quantity must be a multiple of casePackQty.
  */
 export function isValidCartQuantity(quantity: number, casePackQty: number): boolean {
@@ -44,7 +53,7 @@ export function getNextValidQuantity(currentQty: number, casePackQty: number, di
 }
 
 /**
- * Recalculate summary metrics from items
+ * Recalculate summary metrics from items with dynamic Tier & Promo price resolution
  */
 export function computeCartSummary(items: CartItem[]): CartSummary {
   let subtotal = 0;
@@ -54,7 +63,23 @@ export function computeCartSummary(items: CartItem[]): CartSummary {
     const pack = Math.max(1, item.casePackQty || 1);
     let qty = item.quantity;
     if (qty < pack) qty = pack;
-    const lineTotal = Number((qty * item.wholesalePrice).toFixed(2));
+
+    let effectivePrice = item.wholesalePrice;
+    let discountPercent = item.discountPercent || 0;
+    let appliedReason = item.appliedReason || "base_moq";
+    let marginPercent = item.marginPercent;
+
+    if (item.salesPolicy && item.salesPolicy.isConfigured) {
+      const calc = calculateApplicablePrice(item.salesPolicy, qty);
+      effectivePrice = calc.effectiveUnitPrice;
+      discountPercent = calc.discountPercent;
+      appliedReason = calc.appliedReason;
+      if (calc.retailerMarginPercent !== null) {
+        marginPercent = calc.retailerMarginPercent;
+      }
+    }
+
+    const lineTotal = Math.round((qty * effectivePrice + Number.EPSILON) * 100) / 100;
     subtotal += lineTotal;
     totalUnits += qty;
 
@@ -62,13 +87,17 @@ export function computeCartSummary(items: CartItem[]): CartSummary {
       ...item,
       quantity: qty,
       casePackQty: pack,
+      wholesalePrice: effectivePrice,
+      discountPercent,
+      appliedReason,
+      marginPercent,
       lineTotal,
     };
   });
 
   return {
     items: sanitizedItems,
-    subtotal: Number(subtotal.toFixed(2)),
+    subtotal: Math.round((subtotal + Number.EPSILON) * 100) / 100,
     totalUnits,
     totalSkus: sanitizedItems.length,
   };

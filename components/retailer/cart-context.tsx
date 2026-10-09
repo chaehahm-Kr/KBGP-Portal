@@ -22,6 +22,7 @@ interface CartContextType {
       msrp: number;
       marginPercent?: number;
       cartonPackQty?: number;
+      salesPolicy?: import("@/lib/product/retailer-policy").ResolvedRetailerSalesPolicy;
     },
     quantity?: number
   ) => void;
@@ -80,16 +81,13 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       if (existingIndex > -1) {
         const current = prev[existingIndex];
         const newQty = current.quantity + qtyToAdd;
-        const lineTotal = Number((newQty * current.wholesalePrice).toFixed(2));
         nextItems = [...prev];
         nextItems[existingIndex] = {
           ...current,
           quantity: newQty,
-          lineTotal,
+          salesPolicy: product.salesPolicy || current.salesPolicy,
         };
-        setLastAddedItem(nextItems[existingIndex]);
       } else {
-        const lineTotal = Number((qtyToAdd * product.wholesalePrice).toFixed(2));
         const newItem: CartItem = {
           productId: product.id,
           productName: product.name,
@@ -98,17 +96,23 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
           sku: product.sku,
           thumbnailUrl: product.thumbnailUrl || null,
           wholesalePrice: product.wholesalePrice,
+          baseWholesalePrice: product.wholesalePrice,
           msrp: product.msrp,
           marginPercent: product.marginPercent ?? 50,
           quantity: qtyToAdd,
           casePackQty: pack,
-          lineTotal,
+          lineTotal: 0,
+          salesPolicy: product.salesPolicy,
         };
         nextItems = [newItem, ...prev];
-        setLastAddedItem(newItem);
       }
 
-      return computeCartSummary(nextItems).items;
+      const summary = computeCartSummary(nextItems);
+      const updatedItem = summary.items.find((i) => i.productId === product.id) || null;
+      if (updatedItem) {
+        setLastAddedItem(updatedItem);
+      }
+      return summary.items;
     });
   };
 

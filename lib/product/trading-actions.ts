@@ -9,6 +9,13 @@ import { getSignedFileUrl } from "@/lib/files/storage";
 import { resolveEffectiveSku } from "@/lib/product/types";
 import { resolveProductPricing } from "@/lib/product/pricing-resolver";
 import {
+  resolveRetailerSalesPolicy,
+  calculateTierUnitPrice,
+  type ResolvedRetailerSalesPolicy,
+  type RetailerPriceTier,
+} from "@/lib/product/retailer-policy";
+import { validateLetustoSku, normalizeLetustoSku } from "@/lib/product/sku-utils";
+import {
   evaluateTradingOrderability,
   evaluateProductRegistrationStatus,
 } from "@/lib/product/registration-status";
@@ -347,8 +354,9 @@ export async function getTradingProductDetailData(productId: string) {
   const baseRetailerMarginPercent = (srpPrice > 0 && operationalWholesale > 0) ? ((srpPrice - operationalWholesale) / srpPrice) * 100 : null;
 
   const cartonPackQty = Math.max(1, Number(adminOverrides.carton_pack_qty || (product as any).carton_pack_qty || 1));
-  const moq = cartonPackQty;
-  const orderMultiple = cartonPackQty;
+  const salesPolicy = resolveRetailerSalesPolicy(product);
+  const moq = salesPolicy.moq > 0 ? salesPolicy.moq : cartonPackQty;
+  const orderMultiple = moq;
 
   const regEval = evaluateProductRegistrationStatus({
     id: product.id,
@@ -419,6 +427,7 @@ export async function getTradingProductDetailData(productId: string) {
     hasCasePackConfigured: Boolean(adminOverrides.carton_pack_qty || (product as any).carton_pack_qty),
     moq,
     orderMultiple,
+    salesPolicy,
     
     // Original KRW & Base Prices
     price_krw_retail: product.price_krw_retail ? Number(product.price_krw_retail) : null,
@@ -859,15 +868,22 @@ export async function updateLetustoSku(productId: string, input: UpdateLetustoSk
   const { userId } = await verifyAdminSession();
   const supabase = createAdminClient();
 
-  const rawSku = input.letusto_sku !== null && input.letusto_sku !== undefined ? String(input.letusto_sku).trim() : "";
-  const normalizedSku = rawSku.length > 0 ? rawSku : null;
+  const rawSku = input.letusto_sku !== null && input.letusto_sku !== undefined ? String(input.letusto_sku) : "";
+  let normalizedSku: string | null = null;
   const reason = input.reason?.trim() || "Letusto SKU updated";
 
   // Validate format if provided
-  if (normalizedSku !== null) {
+  if (rawSku.trim().length > 0) {
+    const valResult = validateLetustoSku(rawSku);
+    if (!valResult.isValid) {
+      throw new Error(valResult.error || "올바른 Letusto SKU 형식이 아닙니다.");
+    }
+    normalizedSku = valResult.normalizedSku;
+
     if (normalizedSku.length > 64) {
       throw new Error("Letusto SKU는 최대 64자까지 입력할 수 있습니다.");
     }
+
     // Check for duplicate SKU in products
     const { data: existingProd } = await supabase
       .from("products")
@@ -960,22 +976,224 @@ export async function updateLetustoSku(productId: string, input: UpdateLetustoSk
       created_by: userId,
     });
   } catch {
-    // Ignore if table doesn't exist
+    // Ignore
   }
 
   try {
     revalidatePath(`/admin/products/trading/${productId}`);
     revalidatePath("/admin/products/trading");
     revalidatePath(`/admin/products/${productId}`);
-    revalidatePath("/admin/products");
-    revalidatePath("/admin/inventory");
-    revalidatePath("/retailer/products");
-    revalidatePath(`/retailer/products/${productId}`);
+    revalidatePath(`/products/${productId}`);
+    revalidatePath("/products");
   } catch {
     // Ignore
   }
 
   return { success: true, letusto_sku: normalizedSku };
+}
+
+export interface UpdateRetailerSalesPolicyInput {
+  moq: number;
+  base_wholesale_price: number;
+  tiers: Array<{
+    id: string;
+    multiple: number;
+    discount_percent: number;
+    is_published: boolean;
+  }>;
+  promo_wholesale_price?: number | null;
+  promo_start_date?: string | null;
+  promo_end_date?: string | null;
+  note?: string | null;
+  reason?: string | null;
+}
+
+export async function updateRetailerSalesPolicy(
+  productId: string,
+  input: UpdateRetailerSalesPolicyInput
+) {
+  const { userId } = await verifyAdminSession();
+  const supabase = createAdminClient();
+
+  // 1. Validation
+  const moq = Math.floor(Number(input.moq));
+  if (!Number.isInteger(moq) || moq < 1) {
+    throw new Error("Retailer MOQ는 1 이상의 정수여야 합니다.");
+  }
+
+  const basePrice = Number(input.base_wholesale_price);
+  if (isNaN(basePrice) || basePrice <= 0) {
+    throw new Error("기본 Retailer 판매 단가는 0보다 큰 유효한 금액이어야 합니다.");
+  }
+
+  // Validate tiers
+  if (!Array.isArray(input.tiers) || input.tiers.length === 0) {
+    throw new Error("최소 1개 이상의 가격 기준(기본 MOQ)이 필요합니다.");
+  }
+
+  const sanitizedTiers = input.tiers.map((t, idx) => {
+    const mult = Math.floor(Number(t.multiple));
+    if (!Number.isInteger(mult) || mult < 1) {
+      throw new Error(`행 ${idx + 1}: 주문 배수는 1 이상의 정수여야 합니다.`);
+    }
+    const disc = Number(t.discount_percent);
+    if (isNaN(disc) || disc < 0 || disc >= 100) {
+      throw new Error(`행 ${idx + 1}: 할인율은 0% 이상 100% 미만이어야 합니다.`);
+    }
+    const unitPrice = calculateTierUnitPrice(basePrice, mult === 1 ? 0 : disc);
+    if (unitPrice <= 0) {
+      throw new Error(`행 ${idx + 1}: 계산된 단가가 0보다 커야 합니다.`);
+    }
+    return {
+      id: t.id || (mult === 1 ? "tier-base" : `tier-${idx}`),
+      multiple: mult,
+      discount_percent: mult === 1 ? 0 : disc,
+      is_published: t.is_published !== false,
+    };
+  });
+
+  // Ensure Base tier exists
+  if (!sanitizedTiers.some((t) => t.multiple === 1)) {
+    sanitizedTiers.unshift({
+      id: "tier-base",
+      multiple: 1,
+      discount_percent: 0,
+      is_published: true,
+    });
+  }
+
+  // Check for duplicate multiples
+  const seenMultiples = new Set<number>();
+  for (const t of sanitizedTiers) {
+    if (seenMultiples.has(t.multiple)) {
+      throw new Error(`주문 배수 ${t.multiple}배가 중복 등록되었습니다. 각 기준의 배수는 고유해야 합니다.`);
+    }
+    seenMultiples.add(t.multiple);
+  }
+
+  // Validate Promo
+  let promoPrice: number | null = null;
+  if (
+    input.promo_wholesale_price !== null &&
+    input.promo_wholesale_price !== undefined &&
+    input.promo_wholesale_price !== ("" as any)
+  ) {
+    promoPrice = Number(input.promo_wholesale_price);
+    if (isNaN(promoPrice) || promoPrice <= 0) {
+      throw new Error("프로모션 단가는 0보다 큰 유효한 금액이어야 합니다.");
+    }
+  }
+
+  const promoStart = input.promo_start_date ? input.promo_start_date.trim() : null;
+  const promoEnd = input.promo_end_date ? input.promo_end_date.trim() : null;
+  if (promoStart && promoEnd && new Date(promoStart) > new Date(promoEnd)) {
+    throw new Error("프로모션 시작일은 종료일보다 이전이어야 합니다.");
+  }
+
+  // 2. Fetch current product
+  const { data: currentProd, error: fetchErr } = await supabase
+    .from("products")
+    .select("id, name, price_additional_info, trading_wholesale_price, trading_promo_wholesale_price")
+    .eq("id", productId)
+    .single();
+
+  if (fetchErr || !currentProd) {
+    throw new Error("상품을 찾을 수 없습니다.");
+  }
+
+  const priceAddInfo = (currentProd.price_additional_info as any) || {};
+  const currentHistory = priceAddInfo.trading_history || [];
+
+  const newPolicy = {
+    moq,
+    order_multiple: moq,
+    base_wholesale_price: basePrice,
+    initial_source: "saved_policy",
+    is_saved: true,
+    tiers: sanitizedTiers,
+    promotion: {
+      promo_wholesale_price: promoPrice,
+      promo_start_date: promoStart,
+      promo_end_date: promoEnd,
+      note: input.note || null,
+    },
+    updated_at: new Date().toISOString(),
+    updated_by: userId,
+  };
+
+  const beforeVal = {
+    sales_policy: priceAddInfo.retailer_sales_policy || null,
+    trading_wholesale_price: currentProd.trading_wholesale_price,
+    trading_promo_wholesale_price: currentProd.trading_promo_wholesale_price,
+  };
+
+  const afterVal = {
+    sales_policy: newPolicy,
+    trading_wholesale_price: basePrice,
+    trading_promo_wholesale_price: promoPrice,
+  };
+
+  const historyEntry = {
+    id: crypto.randomUUID(),
+    product_id: productId,
+    change_type: "SALES_POLICY",
+    field_name: "retailer_sales_policy",
+    before_value: beforeVal,
+    after_value: afterVal,
+    reason: input.reason || "Retailer sales policy updated",
+    created_by: userId,
+    created_at: new Date().toISOString(),
+  };
+
+  const updatedPriceAddInfo = {
+    ...priceAddInfo,
+    retailer_sales_policy: newPolicy,
+    trading_history: [historyEntry, ...currentHistory],
+  };
+
+  const updatePayload: any = {
+    price_additional_info: updatedPriceAddInfo,
+    trading_wholesale_price: basePrice,
+    trading_promo_wholesale_price: promoPrice,
+    trading_promo_start_date: promoStart,
+    trading_promo_end_date: promoEnd,
+  };
+
+  const { error: updateErr } = await supabase
+    .from("products")
+    .update(updatePayload)
+    .eq("id", productId);
+
+  if (updateErr) {
+    throw new Error(`리테일러 판매 정책 저장 실패: ${updateErr.message}`);
+  }
+
+  try {
+    await supabase.from("trading_product_history").insert({
+      product_id: productId,
+      change_type: "SALES_POLICY",
+      field_name: "retailer_sales_policy",
+      before_value: beforeVal,
+      after_value: afterVal,
+      reason: input.reason || "Retailer sales policy updated",
+      created_by: userId,
+    });
+  } catch {
+    // Ignore
+  }
+
+  try {
+    revalidatePath(`/admin/products/trading/${productId}`);
+    revalidatePath("/admin/products/trading");
+    revalidatePath(`/admin/products/${productId}`);
+    revalidatePath(`/products/${productId}`);
+    revalidatePath("/products");
+    revalidatePath("/cart");
+  } catch {
+    // Ignore revalidate error in test/dev environments
+  }
+
+  return { success: true };
 }
 
 export async function clearTradingCostOverride(productId: string, reason: string) {
