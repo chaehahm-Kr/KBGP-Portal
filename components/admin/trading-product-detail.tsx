@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import { recordManualAdjustment } from "@/lib/inventory/actions";
 import {
   updateTradingPricing,
@@ -23,9 +24,9 @@ import {
 import { safeFormatUsd, safeFormatPercent } from "@/lib/product/pricing-resolver";
 import { type ResolvedRetailerSalesPolicy, resolveRetailerSalesPolicy } from "@/lib/product/retailer-policy";
 import { evaluateHubVisibility, type HubVisibilityEvaluation } from "@/lib/product/hub-visibility";
+import { resolveActiveMarketingBadges } from "@/lib/product/badge-utils";
 import { RetailerSalesPolicyCard } from "@/components/admin/retailer-sales-policy-card";
 import { HubBadgesCard } from "@/components/admin/hub-badges-card";
-import { useRouter } from "next/navigation";
 
 const ArrowLeftIcon = ({ className }: { className?: string }) => (
   <svg
@@ -130,6 +131,7 @@ interface ResolvedTradingProduct {
   orderabilityLabel?: string;
   orderabilityReason?: string;
   hubBadges?: any;
+  price_additional_info?: any;
 }
 
 interface InventoryBalanceItem {
@@ -252,6 +254,8 @@ function formatValue(key: string, val: any): string {
   return String(val);
 }
 
+export type BusinessTab = "summary" | "inventory" | "price" | "hub" | "history";
+
 export function TradingProductDetail({
   product,
   initialBalances,
@@ -270,6 +274,7 @@ export function TradingProductDetail({
   },
 }: TradingProductDetailProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   // Aggregate inventory totals
   const totalOnHand = initialBalances.reduce((sum, b) => sum + b.qty_on_hand, 0);
@@ -277,11 +282,58 @@ export function TradingProductDetail({
   const totalDamaged = initialBalances.reduce((sum, b) => sum + (b.qty_damaged || 0), 0);
   const totalAvailable = Math.max(0, totalOnHand - totalHold - totalDamaged);
 
-  // Active Tab for Lower Full-Width Section
-  const [activeTab, setActiveTab] = useState<"inventory" | "po" | "cost" | "pricing" | "sales" | "audit">("inventory");
+  // Active Tab state synced with URL ?tab=...
+  const [activeTab, setActiveTab] = useState<BusinessTab>("summary");
+  const [holdHighlight, setHoldHighlight] = useState(false);
 
-  // Show raw JSON toggle for audit log
+  useEffect(() => {
+    const tabParam = searchParams?.get("tab");
+    if (tabParam && ["summary", "inventory", "price", "hub", "history"].includes(tabParam)) {
+      setActiveTab(tabParam as BusinessTab);
+    }
+    if (typeof window !== "undefined" && window.location.hash === "#hold-alerts") {
+      setActiveTab("hub");
+      setTimeout(() => {
+        const el = document.getElementById("hold-alerts");
+        if (el) {
+          el.scrollIntoView({ behavior: "smooth", block: "center" });
+          setHoldHighlight(true);
+          setTimeout(() => setHoldHighlight(false), 3000);
+        }
+      }, 250);
+    }
+  }, [searchParams]);
+
+  const handleTabChange = (newTab: BusinessTab) => {
+    setActiveTab(newTab);
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      url.searchParams.set("tab", newTab);
+      window.history.replaceState({}, "", url.toString());
+    }
+  };
+
+  const navigateToHoldAlerts = () => {
+    setActiveTab("hub");
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      url.searchParams.set("tab", "hub");
+      url.hash = "hold-alerts";
+      window.history.replaceState({}, "", url.toString());
+      setTimeout(() => {
+        const el = document.getElementById("hold-alerts");
+        if (el) {
+          el.scrollIntoView({ behavior: "smooth", block: "center" });
+          setHoldHighlight(true);
+          setTimeout(() => setHoldHighlight(false), 3000);
+        }
+      }, 150);
+    }
+  };
+
+  // Audit Log Filters
   const [showRawJson, setShowRawJson] = useState(false);
+  const [historyFilterType, setHistoryFilterType] = useState<"ALL" | "INV" | "PRICE" | "COST" | "HUB" | "SALES">("ALL");
 
   // Letusto SKU Editing State
   const [letustoSku, setLetustoSku] = useState<string>(product.letusto_sku || "");
@@ -599,7 +651,7 @@ export function TradingProductDetail({
     return [];
   }, [product.photoUrls, product.photoUrl]);
 
-  React.useEffect(() => {
+  useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (!isLightboxOpen) return;
       if (e.key === "Escape") {
@@ -810,6 +862,17 @@ export function TradingProductDetail({
     return rows;
   }, [historyLogs]);
 
+  // Filtered Audit Rows based on historyFilterType
+  const filteredAuditRows = useMemo(() => {
+    if (historyFilterType === "ALL") return parsedAuditRows;
+    if (historyFilterType === "INV") return parsedAuditRows.filter((r) => ["STOCK", "INVENTORY", "MANUAL_ADJUSTMENT", "RECEIVING", "SHIPMENT"].includes(r.category));
+    if (historyFilterType === "PRICE") return parsedAuditRows.filter((r) => ["PRICING", "PROMOTION"].includes(r.category));
+    if (historyFilterType === "COST") return parsedAuditRows.filter((r) => ["COST", "COST_OVERRIDE"].includes(r.category));
+    if (historyFilterType === "HUB") return parsedAuditRows.filter((r) => ["STATUS", "VISIBILITY", "HUB_BADGE"].includes(r.category));
+    if (historyFilterType === "SALES") return parsedAuditRows.filter((r) => ["ORDER", "PO", "SALES"].includes(r.category));
+    return parsedAuditRows;
+  }, [parsedAuditRows, historyFilterType]);
+
   // Pricing Tab Filter State
   const [pricingFilterType, setPricingFilterType] = useState<"ALL" | "PRICING" | "PROMOTION">("ALL");
   const [pricingFilterDays, setPricingFilterDays] = useState<"ALL" | "30" | "90">("ALL");
@@ -889,16 +952,13 @@ export function TradingProductDetail({
         const oldPromo = before.promo_wholesale_price !== undefined && before.promo_wholesale_price !== null ? Number(before.promo_wholesale_price) : null;
         const newPromo = after.promo_wholesale_price !== undefined && after.promo_wholesale_price !== null ? Number(after.promo_wholesale_price) : null;
 
-        // Our Margin
         const oldOurMarginPct = oldW && oldW > 0 ? ((oldW - effectiveCost) / oldW) * 100 : null;
         const newOurMarginPct = newW > 0 ? ((newW - effectiveCost) / newW) * 100 : null;
         const ourMarginDiffPts = (oldOurMarginPct !== null && newOurMarginPct !== null) ? (newOurMarginPct - oldOurMarginPct) : null;
 
-        // Retailer Margin
         const oldRetailerMarginPct = oldS && oldS > 0 && oldW && oldW > 0 ? ((oldS - oldW) / oldS) * 100 : null;
         const newRetailerMarginPct = newS > 0 && newW > 0 ? ((newS - newW) / newS) * 100 : null;
 
-        // Promo Discount % & Promo Margins
         let promoDiscountPct: number | null = null;
         let promoLabel: string | null = null;
         let promoOurMarginPct: number | null = null;
@@ -922,7 +982,6 @@ export function TradingProductDetail({
           user,
           reason,
           effectiveCost,
-          // Before/After values
           oldW,
           newW,
           isWholesaleChanged: oldW !== null && oldW !== newW,
@@ -941,7 +1000,6 @@ export function TradingProductDetail({
           promoLabel,
           promoOurMarginPct,
           promoRetailerMarginPct,
-          // Calculated Margins
           oldOurMarginPct,
           newOurMarginPct,
           ourMarginDiffPts,
@@ -957,19 +1015,15 @@ export function TradingProductDetail({
   // Filtered Pricing Timeline Memo
   const filteredPricingTimeline = useMemo(() => {
     let list = pricingTimeline;
-
     if (pricingFilterType === "PRICING") {
-      list = list.filter((e) => e.changeType === "PRICING");
+      list = list.filter((e) => !e.isPromoChanged);
     } else if (pricingFilterType === "PROMOTION") {
-      list = list.filter((e) => e.changeType === "PROMOTION");
+      list = list.filter((e) => e.isPromoChanged);
     }
-
     if (pricingFilterDays !== "ALL") {
-      const cutoffDays = parseInt(pricingFilterDays);
-      const cutoffTimestamp = Date.now() - cutoffDays * 24 * 60 * 60 * 1000;
-      list = list.filter((e) => e.timestamp >= cutoffTimestamp);
+      const cutoff = Date.now() - parseInt(pricingFilterDays) * 24 * 60 * 60 * 1000;
+      list = list.filter((e) => e.timestamp >= cutoff);
     }
-
     return list;
   }, [pricingTimeline, pricingFilterType, pricingFilterDays]);
 
@@ -1002,7 +1056,12 @@ export function TradingProductDetail({
     });
   }, [currentTradingStatus, currentVisibility, product]);
 
-  // Compute active operational alerts (Comprehensive 12-rule Diagnostics + Registration + Direct Actions)
+  // Active Marketing Badges (Resolved by priority order)
+  const activeMarketingBadges = useMemo(() => {
+    return resolveActiveMarketingBadges(product, "ko");
+  }, [product]);
+
+  // Compute active operational alerts
   const activeAlerts = useMemo(() => {
     const alerts: Array<{
       id: string;
@@ -1013,19 +1072,17 @@ export function TradingProductDetail({
       actionLabel?: string;
     }> = [];
 
-    // 0. Hub On Hold Alert (노출 보류 자동 감지)
     if (liveHubVisibility.effectiveVisibility === "ON_HOLD") {
       alerts.push({
         id: "hub_on_hold",
         type: "danger",
         title: "Retailer Hub 노출 보류 (On Hold)",
-        message: `관리자 설정은 '노출'이나, 필수 조건(${liveHubVisibility.holdReasonLabels.join(", ")}) 미충족으로 Hub 노출이 자동 보류 중입니다. 가격/MOQ 설정 시 즉시 자동 노출됩니다.`,
-        target: "pricing_modal",
-        actionLabel: "가격/정책 설정 →",
+        message: `관리자 설정은 '노출'이나, 필수 조건(${liveHubVisibility.holdReasonLabels.join(", ")}) 미충족으로 Hub 노출이 자동 보류 중입니다.`,
+        target: "hold_alerts",
+        actionLabel: "보류 사유 확인 →",
       });
     }
 
-    // 0.1 Registration status (등록 미완료)
     if (product.registration_status && product.registration_status !== "COMPLETE") {
       const missingList = product.registration_missing_fields && product.registration_missing_fields.length > 0
         ? ` (누락: ${product.registration_missing_fields.join(", ")})`
@@ -1040,53 +1097,26 @@ export function TradingProductDetail({
       });
     }
 
-    // 1. Out of stock (재고 소진)
     if (totalAvailable === 0) {
       alerts.push({
         id: "out_of_stock",
         type: "danger",
         title: "판매 가능 재고 소진 (0 EA)",
         message: "현재 판매 가능 재고가 0개입니다. 리테일러 주문 접수가 불가합니다.",
-        target: "inventory",
+        target: "inventory_tab",
         actionLabel: "재고 입고/조정 →",
       });
     } else if (totalAvailable < 10) {
-      // 2. Low stock (안전 재고 부족)
       alerts.push({
         id: "low_stock",
         type: "warning",
         title: `안전 재고 부족 (${totalAvailable} EA)`,
         message: `현재 판매 가능 재고가 ${totalAvailable}개로 안전 재고(10개) 미만입니다.`,
-        target: "inventory",
+        target: "inventory_tab",
         actionLabel: "재고 확인 →",
       });
     }
 
-    // 3. Damaged stock (불량 재고 격리)
-    if (totalDamaged > 0) {
-      alerts.push({
-        id: "damaged_stock",
-        type: "warning",
-        title: `불량 재고 격리 (${totalDamaged} EA)`,
-        message: `불량 재고 ${totalDamaged}개가 감지되어 판매 가능 수량에서 차감되어 있습니다.`,
-        target: "inventory",
-        actionLabel: "불량 재고 조정 →",
-      });
-    }
-
-    // 4. Hold stock (보류 재고 관리)
-    if (totalHold > 0) {
-      alerts.push({
-        id: "hold_stock",
-        type: "warning",
-        title: `보류 재고 관리 (${totalHold} EA)`,
-        message: `검토 보류 재고 ${totalHold}개가 지정되어 있습니다.`,
-        target: "inventory",
-        actionLabel: "보류 재고 확인 →",
-      });
-    }
-
-    // 5. Missing wholesale price (도매가 미설정)
     if (!product.operationalWholesale || product.operationalWholesale <= 0) {
       alerts.push({
         id: "missing_wholesale",
@@ -1098,7 +1128,6 @@ export function TradingProductDetail({
       });
     }
 
-    // 6. Missing retail price (소비자가 미설정)
     if (!product.srpPrice || product.srpPrice <= 0) {
       alerts.push({
         id: "missing_srp",
@@ -1112,19 +1141,6 @@ export function TradingProductDetail({
       });
     }
 
-    // 7. Missing landed cost (수입원가 미산정)
-    if (product.baseLandedCost <= 0 && !product.hasCostOverride) {
-      alerts.push({
-        id: "missing_cost",
-        type: "warning",
-        title: "수입원가(Landed Cost) 미산정",
-        message: "정산된 수입원가가 없어 자사 마진이 정확하게 계산되지 않습니다.",
-        target: "cost_override",
-        actionLabel: "원가 확인/오버라이드 →",
-      });
-    }
-
-    // 8. Low our margin (자사 마진 임계치 미달 < 20%)
     if (product.operationalWholesale > 0 && product.effectiveLandedCost > 0 && product.ourMarginPercent !== null && product.ourMarginPercent < 20) {
       alerts.push({
         id: "low_our_margin",
@@ -1136,30 +1152,6 @@ export function TradingProductDetail({
       });
     }
 
-    // 9. Low retailer margin (리테일러 마진 주의/경고)
-    if (product.srpPrice > 0 && product.operationalWholesale > 0 && product.retailerMarginPercent !== null) {
-      if (product.retailerMarginPercent < 40) {
-        alerts.push({
-          id: "retailer_margin_danger",
-          type: "danger",
-          title: `리테일러 마진 위험 (${product.retailerMarginPercent.toFixed(1)}% < 40%)`,
-          message: `리테일러 마진이 40% 미만으로 가격 경쟁력이 매우 낮습니다.`,
-          target: "pricing_modal",
-          actionLabel: "가격 재설정 →",
-        });
-      } else if (product.retailerMarginPercent < 50) {
-        alerts.push({
-          id: "retailer_margin_caution",
-          type: "warning",
-          title: `리테일러 마진 주의 (${product.retailerMarginPercent.toFixed(1)}%)`,
-          message: `리테일러 마진이 권장 기준(50% 이상)에 미달합니다.`,
-          target: "pricing_modal",
-          actionLabel: "가격 재설정 →",
-        });
-      }
-    }
-
-    // 10. Active but hidden (운영 중이나 Hub 비노출)
     if (currentTradingStatus === "active" && currentVisibility === "hidden") {
       alerts.push({
         id: "active_hidden",
@@ -1171,41 +1163,6 @@ export function TradingProductDetail({
       });
     }
 
-    // 11. Visible but not orderable (허브 노출 상태이나 주문 불가)
-    if (currentVisibility === "visible" && !dynamicOrderability.isOrderable) {
-      alerts.push({
-        id: "visible_not_orderable",
-        type: "danger",
-        title: "Hub 노출 중 주문 불가",
-        message: `리테일러 포털에 노출 중이나 다음 사유로 주문이 불가합니다: ${dynamicOrderability.reason || "주문 불가"}`,
-        target: "status_modal",
-        actionLabel: "운영 상태 확인 →",
-      });
-    }
-
-    // 12. Pricing disabled or MOQ missing
-    if (!product.isPricingActive) {
-      alerts.push({
-        id: "pricing_disabled",
-        type: "danger",
-        title: "가격 정책 비활성화",
-        message: "상품의 가격 정책이 비활성화되어 리테일러 주문이 차단되어 있습니다.",
-        target: "pricing_modal",
-        actionLabel: "가격 정책 활성화 →",
-      });
-    }
-    if (!product.hasCasePackConfigured || (product.carton_pack_qty || 1) < 1) {
-      alerts.push({
-        id: "moq_missing",
-        type: "warning",
-        title: "MOQ / Case Pack 미설정",
-        message: "최소 주문 단위 및 Case Pack 수량이 명시적으로 설정되지 않았습니다.",
-        target: "catalog_master",
-        actionLabel: "물류 정보 수정 →",
-      });
-    }
-
-    // Informational active settings
     if (product.isPromoActive) {
       alerts.push({
         id: "active_promo",
@@ -1216,30 +1173,16 @@ export function TradingProductDetail({
         actionLabel: "프로모션 관리 →",
       });
     }
-    if (product.hasCostOverride) {
-      alerts.push({
-        id: "cost_override",
-        type: "info",
-        title: "수입원가 오버라이드 활성",
-        message: `수동 오버라이드 원가 $${product.overrideLandedCost?.toFixed(2)}가 마진 계산 엔진에 적용되어 있습니다.`,
-        target: "cost_override",
-        actionLabel: "수입원가 관리 →",
-      });
-    }
 
     return alerts;
-  }, [totalAvailable, totalDamaged, totalHold, product, currentTradingStatus, currentVisibility, dynamicOrderability]);
+  }, [totalAvailable, product, currentTradingStatus, currentVisibility, liveHubVisibility]);
 
-  // Action flow handler for operational alert items
   const handleAlertAction = (target?: string) => {
     if (!target) return;
-    if (target === "inventory") {
-      const el = document.getElementById("inventory-snapshot-card");
-      if (el) {
-        el.scrollIntoView({ behavior: "smooth", block: "center" });
-        el.classList.add("ring-2", "ring-indigo-500", "ring-offset-2");
-        setTimeout(() => el.classList.remove("ring-2", "ring-indigo-500", "ring-offset-2"), 2500);
-      }
+    if (target === "hold_alerts") {
+      navigateToHoldAlerts();
+    } else if (target === "inventory_tab") {
+      handleTabChange("inventory");
     } else if (target === "pricing_modal") {
       setIsPricingModalOpen(true);
     } else if (target === "promo_modal") {
@@ -1250,42 +1193,63 @@ export function TradingProductDetail({
       handleOpenStatusModal();
     } else if (target === "catalog_master") {
       router.push(`/admin/products/${product.id}`);
-    } else if (target === "cost_page") {
-      router.push("/admin/purchasing/landed-cost");
     }
   };
 
-  // Helper for Retailer Margin status badge
-  const retailerMarginTone = useMemo(() => {
-    if (!product.srpPrice || product.srpPrice <= 0 || !product.operationalWholesale || product.operationalWholesale <= 0 || product.retailerMarginPercent === null) {
-      return { label: null, color: "text-zinc-400 dark:text-zinc-500", badge: null };
-    }
-    if (product.retailerMarginPercent >= 50) {
-      return { label: null, color: "text-zinc-900 dark:text-white", badge: null };
-    }
-    if (product.retailerMarginPercent >= 40) {
-      return {
-        label: "주의",
-        color: "text-amber-600 dark:text-amber-400",
-        badge: "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-800",
-      };
-    }
-    return {
-      label: "경고",
-      color: "text-rose-600 dark:text-rose-400",
-      badge: "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:text-rose-400 dark:border-rose-800",
-    };
-  }, [product.srpPrice, product.operationalWholesale, product.retailerMarginPercent]);
-
   return (
-    <div className="space-y-6">
-      {/* 1. HORIZONTAL PRODUCT IDENTITY & GLOBAL STATUS HEADER */}
+    <div className="w-full max-w-7xl space-y-6 pb-12">
+      {/* Top Breadcrumb & Page Identifier */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div>
+          <div className="flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400 mb-1">
+            <Link
+              href="/admin/products/trading"
+              className="hover:text-zinc-900 dark:hover:text-white transition-colors"
+            >
+              어드민
+            </Link>
+            <span>/</span>
+            <Link
+              href="/admin/products/trading"
+              className="hover:text-zinc-900 dark:hover:text-white transition-colors"
+            >
+              상품 관리
+            </Link>
+            <span>/</span>
+            <span className="font-bold text-zinc-900 dark:text-white">
+              상품 운영 (Product Operations)
+            </span>
+          </div>
+          <h1 className="text-xl font-bold tracking-tight text-zinc-900 dark:text-white flex items-center gap-2">
+            <span>⚙️</span> {product.display_name || product.name}
+          </h1>
+        </div>
+
+        {/* Global Action Header Links */}
+        <div className="flex items-center gap-2">
+          <a
+            href={`https://portal.kselecthub.com/products/${product.id}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="px-3.5 py-1.5 text-xs font-bold rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-800 dark:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors shadow-2xs inline-flex items-center gap-1.5"
+          >
+            <span>🌐</span> Retailer Hub에서 미리보기 ↗
+          </a>
+          <Link
+            href="/admin/products/trading"
+            className="px-3.5 py-1.5 text-xs font-semibold rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors"
+          >
+            목록으로 돌아가기
+          </Link>
+        </div>
+      </div>
+
+      {/* 1. PERSISTENT COMPACT HEADER & PRODUCT IDENTITY */}
       <div className="rounded-xl border border-zinc-200 bg-white p-4 sm:p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-          
-          {/* Left: Product Thumbnail & Identity */}
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-5">
+          {/* Product Image & Key Information */}
           <div className="flex items-start gap-4 min-w-0 flex-1">
-            {/* Product Photo Thumbnail */}
+            {/* Thumbnail Viewer with Lightbox */}
             <div
               onClick={() => {
                 if (photoUrls.length > 0) {
@@ -1293,7 +1257,7 @@ export function TradingProductDetail({
                   setIsLightboxOpen(true);
                 }
               }}
-              className={`w-24 h-24 sm:w-28 sm:h-28 rounded-xl border border-zinc-200 dark:border-zinc-800 overflow-hidden bg-zinc-50 dark:bg-zinc-950 shrink-0 flex items-center justify-center relative group shadow-sm ${
+              className={`w-24 h-24 sm:w-28 sm:h-28 rounded-xl border border-zinc-200 dark:border-zinc-800 overflow-hidden bg-zinc-50 dark:bg-zinc-950 shrink-0 flex items-center justify-center relative group shadow-2xs ${
                 photoUrls.length > 0 ? "cursor-pointer hover:border-zinc-400 dark:hover:border-zinc-600 transition-all" : ""
               }`}
             >
@@ -1314,37 +1278,26 @@ export function TradingProductDetail({
               )}
             </div>
 
-            {/* Title, Brand, Category, Supplier & SKUs */}
+            {/* Title, Brand, Category, SKUs */}
             <div className="min-w-0 flex-1 space-y-1.5">
               <div className="flex items-center gap-2 flex-wrap text-xs">
-                <Link
-                  href="/admin/products/trading"
-                  className="inline-flex items-center gap-1 text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white transition-colors"
-                >
-                  <ArrowLeftIcon className="w-3 h-3" />
-                  Trading Products
-                </Link>
-                <span className="text-zinc-300 dark:text-zinc-700">•</span>
                 <span className="font-bold text-zinc-900 dark:text-zinc-100 bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 rounded border border-zinc-200 dark:border-zinc-700">
                   {product.brandName}
                 </span>
                 <span className="text-zinc-500 dark:text-zinc-400 font-medium">
                   공급사: {product.companyName}
                 </span>
-                <span className="px-2 py-0.5 text-[10px] font-semibold rounded-full border bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 border-zinc-200 dark:border-zinc-700">
-                  선정: {product.selection_status}
-                </span>
                 <Link
                   href={`/admin/products/${product.id}`}
                   className="text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 hover:underline ml-auto"
                 >
-                  Catalog Master View →
+                  Catalog Master 상세 →
                 </Link>
               </div>
 
-              <h1 className="text-lg sm:text-xl font-bold tracking-tight text-zinc-900 dark:text-white truncate" title={product.name}>
+              <h2 className="text-lg font-bold tracking-tight text-zinc-900 dark:text-white truncate" title={product.name}>
                 {product.name}
-              </h1>
+              </h2>
 
               {product.category_full_path && (
                 <p className="text-xs text-zinc-500 dark:text-zinc-400 truncate">
@@ -1352,11 +1305,17 @@ export function TradingProductDetail({
                 </p>
               )}
 
-              {/* SKU & Identification Strip */}
-              <div className="flex items-center gap-x-4 gap-y-1.5 flex-wrap pt-1 text-xs border-t border-zinc-100 dark:border-zinc-800">
-                {/* Letusto SKU */}
+              {/* SKU Strip */}
+              <div className="flex items-center gap-x-4 gap-y-1 flex-wrap pt-1 text-xs border-t border-zinc-100 dark:border-zinc-800">
                 <div className="flex items-center gap-1.5">
-                  <span className="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400">Letusto SKU:</span>
+                  <span className="text-[11px] font-semibold text-zinc-500">Catalog SKU:</span>
+                  <span className="font-mono text-xs font-bold text-zinc-800 dark:text-zinc-200">
+                    {product.manufacture_sku || "미설정"}
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[11px] font-semibold text-zinc-500">Letusto SKU:</span>
                   {isEditingSku ? (
                     <div className="flex items-center gap-1">
                       <input
@@ -1365,26 +1324,24 @@ export function TradingProductDetail({
                         onChange={(e) => setSkuInput(e.target.value)}
                         placeholder="LET-PROD-001"
                         maxLength={64}
-                        className="px-2 py-0.5 text-xs font-mono rounded border border-indigo-400 dark:border-indigo-500 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-indigo-500 w-36"
+                        className="px-2 py-0.5 text-xs font-mono rounded border border-indigo-400 dark:border-indigo-500 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white focus:outline-none w-32"
                         autoFocus
                       />
                       <button
                         type="button"
                         disabled={isSkuSubmitting}
                         onClick={() => handleSaveSku()}
-                        className="px-2 py-0.5 text-[10px] font-bold rounded bg-indigo-600 hover:bg-indigo-700 text-white transition-colors disabled:opacity-50"
+                        className="px-2 py-0.5 text-[10px] font-bold rounded bg-indigo-600 text-white hover:bg-indigo-700"
                       >
-                        {isSkuSubmitting ? "저장 중" : "저장"}
+                        저장
                       </button>
                       <button
                         type="button"
-                        disabled={isSkuSubmitting}
                         onClick={handleCancelEditSku}
-                        className="px-1.5 py-0.5 text-[10px] font-medium rounded border border-zinc-300 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                        className="px-1.5 py-0.5 text-[10px] text-zinc-500"
                       >
                         취소
                       </button>
-                      {skuError && <span className="text-[10px] text-rose-600 font-medium ml-1">{skuError}</span>}
                     </div>
                   ) : (
                     <div className="flex items-center gap-1">
@@ -1394,8 +1351,7 @@ export function TradingProductDetail({
                       <button
                         type="button"
                         onClick={handleStartEditSku}
-                        className="px-1 py-0.5 text-[10px] font-medium rounded text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/50"
-                        title="Letusto SKU 편집"
+                        className="text-[10px] font-semibold text-indigo-600 dark:text-indigo-400 hover:underline ml-1"
                       >
                         ✏️ 편집
                       </button>
@@ -1403,57 +1359,31 @@ export function TradingProductDetail({
                   )}
                 </div>
 
-                {/* Manufacturer SKU */}
-                <div className="flex items-center gap-1.5">
-                  <span className="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400">제조사 SKU:</span>
-                  <span className="font-mono text-xs text-zinc-800 dark:text-zinc-200" title={product.manufacture_sku || ""}>
-                    {product.manufacture_sku || "—"}
-                  </span>
-                </div>
-
-                {/* UPC / EAN */}
-                <div className="flex items-center gap-1.5">
-                  <span className="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400">UPC / EAN:</span>
-                  <span className="font-mono text-xs text-zinc-800 dark:text-zinc-200" title={product.upc || ""}>
-                    {product.upc || "—"}
-                  </span>
-                </div>
+                {product.upc && (
+                  <div className="flex items-center gap-1">
+                    <span className="text-[11px] font-semibold text-zinc-500">UPC:</span>
+                    <span className="font-mono text-xs text-zinc-700 dark:text-zinc-300">{product.upc}</span>
+                  </div>
+                )}
               </div>
             </div>
           </div>
 
-          {/* Right: Operational Status Badges & Action CTA */}
-          <div className="flex flex-row lg:flex-col items-end justify-between lg:justify-center gap-2 border-t lg:border-t-0 lg:border-l border-zinc-100 dark:border-zinc-800 pt-3 lg:pt-0 lg:pl-5 shrink-0">
+          {/* Right Status Controls & Active Marketing Badges */}
+          <div className="flex flex-col items-start lg:items-end gap-3 shrink-0">
+            {/* Status Badges Row */}
             <div className="flex items-center gap-1.5 flex-wrap">
-              {/* Pillar 1: Operational Status */}
-              {(() => {
-                const tStyle =
-                  TRADING_STATUS_STYLES[currentTradingStatus as TradingStatus] ||
-                  TRADING_STATUS_STYLES.inactive;
-                return (
-                  <span
-                    className={`px-2.5 py-1 text-xs font-semibold rounded-full border ${tStyle.bg} ${tStyle.text} ${tStyle.border}`}
-                  >
-                    {TRADING_STATUS_LABELS[currentTradingStatus as TradingStatus] || currentTradingStatus}
-                  </span>
-                );
-              })()}
+              {/* Trading Status */}
+              <span className={`px-2.5 py-1 text-xs font-bold rounded-full border ${TRADING_COLORS[currentTradingStatus] || TRADING_COLORS.inactive}`}>
+                {TRADING_LABELS[currentTradingStatus] || currentTradingStatus}
+              </span>
 
-              {/* Pillar 2: Admin Visibility Setting */}
-              {(() => {
-                const vStyle =
-                  RETAILER_VISIBILITY_STYLES[currentVisibility as RetailerVisibility] ||
-                  RETAILER_VISIBILITY_STYLES.hidden;
-                return (
-                  <span
-                    className={`px-2.5 py-1 text-xs font-semibold rounded-full border ${vStyle.bg} ${vStyle.text} ${vStyle.border}`}
-                  >
-                    관리자: {RETAILER_VISIBILITY_LABELS[currentVisibility as RetailerVisibility] || currentVisibility}
-                  </span>
-                );
-              })()}
+              {/* Visibility */}
+              <span className={`px-2.5 py-1 text-xs font-bold rounded-full border ${VISIBILITY_COLORS[currentVisibility] || VISIBILITY_COLORS.hidden}`}>
+                {VISIBILITY_LABELS[currentVisibility] || currentVisibility}
+              </span>
 
-              {/* Pillar 3: Effective Hub Visibility */}
+              {/* Effective Hub Visibility */}
               {liveHubVisibility.effectiveVisibility === "PUBLISHED" ? (
                 <span className="px-2.5 py-1 text-xs font-semibold rounded-full border bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/20 dark:text-emerald-400 dark:border-emerald-900/50">
                   Hub 노출 (Published)
@@ -1461,9 +1391,9 @@ export function TradingProductDetail({
               ) : liveHubVisibility.effectiveVisibility === "ON_HOLD" ? (
                 <button
                   type="button"
-                  onClick={() => setIsPricingModalOpen(true)}
+                  onClick={navigateToHoldAlerts}
                   className="px-2.5 py-1 text-xs font-semibold rounded-full border bg-amber-50 text-amber-800 border-amber-300 dark:bg-amber-950/30 dark:text-amber-300 dark:border-amber-800 hover:bg-amber-100 cursor-pointer shadow-2xs"
-                  title={liveHubVisibility.effectiveVisibilityDescription}
+                  title="보류 사유 확인"
                 >
                   ⚠️ Hub 노출 보류 (On Hold)
                 </button>
@@ -1473,1209 +1403,792 @@ export function TradingProductDetail({
                 </span>
               )}
 
-              {/* Pillar 4: Orderability Status Badge */}
+              {/* Orderability */}
               {liveHubVisibility.isOrderable ? (
                 <span className="px-2.5 py-1 text-xs font-semibold rounded-full border bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/20 dark:text-emerald-400 dark:border-emerald-900/50">
-                  주문 가능 (Orderable)
-                </span>
-              ) : liveHubVisibility.isSoldOut && liveHubVisibility.effectiveVisibility === "PUBLISHED" ? (
-                <span
-                  title={liveHubVisibility.restockEta ? `재입고 예정: ${liveHubVisibility.restockEta}` : "재입고 일정 미정"}
-                  className="px-2.5 py-1 text-xs font-semibold rounded-full border bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/20 dark:text-amber-400 dark:border-amber-800"
-                >
-                  품절 (0 EA)
+                  주문 가능
                 </span>
               ) : (
-                <span
-                  title={liveHubVisibility.orderabilityReason || "주문 불가"}
-                  className="px-2.5 py-1 text-xs font-semibold rounded-full border bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/20 dark:text-rose-400 dark:border-rose-900/50"
+                <button
+                  type="button"
+                  onClick={navigateToHoldAlerts}
+                  className="px-2.5 py-1 text-xs font-semibold rounded-full border bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/20 dark:text-rose-400 dark:border-rose-900/50 hover:bg-rose-100"
                 >
                   주문 불가
-                </span>
+                </button>
               )}
-            </div>
 
-            <button
-              onClick={handleOpenStatusModal}
-              className="px-3 py-1.5 text-xs font-semibold bg-zinc-900 hover:bg-zinc-800 text-white dark:bg-zinc-100 dark:hover:bg-white dark:text-zinc-900 rounded-lg transition-colors shadow-sm inline-flex items-center gap-1.5"
-            >
-              <span>⚙️</span> 상태/노출 관리
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* 2. OPERATIONAL ALERTS SHELF (운영 감지) - Full-Width Responsive Banner */}
-      <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 space-y-3">
-        <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-2">
-          <div className="flex items-center gap-2">
-            <h3 className="text-xs font-bold text-zinc-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
-              <span>📡</span> 운영 감지 (Operational Alerts)
-            </h3>
-            <span className="px-2 py-0.2 rounded-full text-[10px] font-bold bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700">
-              {activeAlerts.length}건
-            </span>
-          </div>
-          <span className="text-[11px] text-zinc-400 font-medium">
-            클릭 시 해당 영역으로 즉시 이동
-          </span>
-        </div>
-
-        {activeAlerts.filter((a) => a.type !== "info").length === 0 ? (
-          <div className="p-3 rounded-lg bg-emerald-50/70 dark:bg-emerald-950/30 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-900/40 text-xs font-medium flex items-center gap-2">
-            <span className="text-base">✅</span>
-            <div>
-              <strong>정상 운영 상태:</strong> 모든 재고, 가격, 마진, 상태 및 노출 기준이 정상적으로 충족되어 있습니다.
-            </div>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
-            {activeAlerts.map((alert) => (
-              <div
-                key={alert.id}
-                onClick={() => handleAlertAction(alert.target)}
-                className={`p-3 rounded-lg border text-xs cursor-pointer transition-all hover:border-zinc-400 dark:hover:border-zinc-500 hover:shadow-xs flex flex-col justify-between group ${
-                  alert.type === "danger"
-                    ? "bg-rose-50/90 text-rose-900 border-rose-200 dark:bg-rose-950/40 dark:text-rose-200 dark:border-rose-900/60"
-                    : alert.type === "warning"
-                    ? "bg-amber-50/90 text-amber-900 border-amber-200 dark:bg-amber-950/40 dark:text-amber-200 dark:border-amber-900/60"
-                    : "bg-zinc-50 text-zinc-800 border-zinc-200 dark:bg-zinc-800/80 dark:text-zinc-200 dark:border-zinc-700"
-                }`}
-              >
-                <div>
-                  <div className="flex items-center justify-between gap-1.5 mb-1">
-                    <strong className="text-[11px] font-bold flex items-center gap-1.5 truncate">
-                      <span>{alert.type === "danger" ? "🚨" : alert.type === "warning" ? "⚠️" : "ℹ️"}</span>
-                      <span className="truncate">{alert.title}</span>
-                    </strong>
-                    <span
-                      className={`text-[9px] font-bold px-1.5 py-0.5 rounded shrink-0 ${
-                        alert.type === "danger"
-                          ? "bg-rose-200/80 text-rose-900 dark:bg-rose-900 dark:text-rose-100"
-                          : alert.type === "warning"
-                          ? "bg-amber-200/80 text-amber-900 dark:bg-amber-900 dark:text-amber-100"
-                          : "bg-zinc-200 text-zinc-800 dark:bg-zinc-700 dark:text-zinc-200"
-                      }`}
-                    >
-                      {alert.type === "danger" ? "위험" : alert.type === "warning" ? "주의" : "안내"}
-                    </span>
-                  </div>
-                  <p className="text-[10px] opacity-85 leading-snug">
-                    {alert.message}
-                  </p>
-                </div>
-                {alert.actionLabel && (
-                  <div className="mt-2 pt-1.5 border-t border-black/5 dark:border-white/5 flex items-center justify-end">
-                    <span className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 group-hover:underline flex items-center gap-0.5">
-                      {alert.actionLabel}
-                    </span>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* 3. REAL-TIME SUMMARY AREA (INVENTORY 7 COLS / PRICING & LANDED COST 5 COLS) */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
-        
-        {/* LEFT COLUMN: 재고 관리 & 로케이션 분할 & 입고 스냅샷 (7 Cols) */}
-        <div id="inventory-snapshot-card" className="lg:col-span-7 rounded-xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-zinc-100 dark:border-zinc-800 pb-2.5">
-            <div>
-              <h3 className="text-xs font-bold text-zinc-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
-                <span>📦</span> 실시간 재고 현황 (Inventory Management)
-              </h3>
-              <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5">
-                로케이션별 판매가능 재고, 실보유 재고, 불량/보류 및 수동 조정 관리
-              </p>
-            </div>
-            <div className="flex items-center gap-2">
-              <select
-                value={selectedLocationId}
-                onChange={(e) => setSelectedLocationId(e.target.value)}
-                className="bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-700 rounded-lg px-2.5 py-1 text-xs font-medium text-zinc-900 dark:text-white shadow-xs"
-              >
-                <option value="ALL">📍 전체 로케이션 합산 (ALL)</option>
-                {warehouses.map((w) => (
-                  <option key={w.id} value={w.id}>
-                    📍 {w.name} ({w.code})
-                  </option>
-                ))}
-              </select>
+              {/* Status Change Button */}
               <button
-                onClick={() => handleOpenInvAdjustModal()}
-                className="px-3 py-1 text-xs font-bold rounded-lg bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 hover:bg-zinc-800 dark:hover:bg-zinc-200 transition-colors shadow-sm shrink-0"
+                onClick={handleOpenStatusModal}
+                className="px-3 py-1 text-xs font-bold bg-zinc-900 hover:bg-zinc-800 text-white dark:bg-zinc-100 dark:hover:bg-white dark:text-zinc-900 rounded-lg transition-colors shadow-2xs inline-flex items-center gap-1 ml-1"
               >
-                재고 수동 조정
+                <span>⚙️</span> 상태 관리
               </button>
             </div>
-          </div>
 
-          {/* Available Hero & 3 Sub Metrics Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
-            {/* Available Hero */}
-            <div
-              className={`sm:col-span-2 p-3.5 rounded-xl border flex flex-col justify-between ${
-                activeLocationBalance.available === 0
-                  ? "bg-rose-50/70 dark:bg-rose-950/30 border-rose-200 dark:border-rose-900/50"
-                  : activeLocationBalance.available < 10
-                  ? "bg-amber-50/70 dark:bg-amber-950/30 border-amber-200 dark:border-amber-900/50"
-                  : "bg-emerald-50/70 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-900/50"
-              }`}
-            >
-              <div className="flex items-center justify-between">
-                <span
-                  className={`text-[10px] font-bold block uppercase tracking-wide ${
-                    activeLocationBalance.available === 0
-                      ? "text-rose-700 dark:text-rose-400"
-                      : activeLocationBalance.available < 10
-                      ? "text-amber-700 dark:text-amber-400"
-                      : "text-emerald-700 dark:text-emerald-400"
-                  }`}
-                >
-                  Available (판매가능 재고)
-                </span>
-                <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-white/80 dark:bg-zinc-900/80 text-zinc-600 dark:text-zinc-300 border border-zinc-200/50 dark:border-zinc-700/50">
-                  {activeLocationBalance.isAll ? "전체 합산" : activeLocationBalance.warehouseCode}
-                </span>
-              </div>
-              <div
-                className={`text-2xl sm:text-3xl font-black mt-2 ${
-                  activeLocationBalance.available === 0
-                    ? "text-rose-800 dark:text-rose-300"
-                    : activeLocationBalance.available < 10
-                    ? "text-amber-800 dark:text-amber-300"
-                    : "text-emerald-800 dark:text-emerald-300"
+            {/* Active Marketing Badges (Top 3 + +N Overflow counter) */}
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="text-[11px] font-semibold text-zinc-400">마케팅 배지:</span>
+              {activeMarketingBadges.length === 0 ? (
+                <span className="text-[11px] text-zinc-400 italic">설정된 배지 없음</span>
+              ) : (
+                <>
+                  {activeMarketingBadges.slice(0, 3).map((badge) => (
+                    <span
+                      key={badge.type}
+                      className={`px-2 py-0.5 text-[10px] font-bold rounded-full border ${badge.badgeStyle}`}
+                    >
+                      {badge.label}
+                    </span>
+                  ))}
+                  {activeMarketingBadges.length > 3 && (
+                    <span
+                      onClick={() => handleTabChange("hub")}
+                      className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-zinc-200 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 cursor-pointer hover:bg-zinc-300"
+                      title={activeMarketingBadges.slice(3).map((b) => b.label).join(", ")}
+                    >
+                      +{activeMarketingBadges.length - 3}
+                    </span>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* 2. THE 5 MAIN BUSINESS TABS (5개 업무 탭 NAVIGATION) */}
+      <div className="border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 rounded-xl px-2 shadow-2xs">
+        <nav className="flex space-x-1 sm:space-x-4 overflow-x-auto py-2">
+          {[
+            { id: "summary", label: "운영개요", icon: "📊", desc: "핵심 KPI & Diagnositcs" },
+            { id: "inventory", label: "Inventory", icon: "📦", desc: "창고별 재고 및 수동 조정" },
+            { id: "price", label: "Price", icon: "💲", desc: "도매가·프로모션·수입원가" },
+            { id: "hub", label: "Hub", icon: "🌐", desc: "노출 관리·차단 사유·마케팅 배지" },
+            { id: "history", label: "History", icon: "📜", desc: "통합 감사 및 활동 이력" },
+          ].map((tab) => {
+            const isActive = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => handleTabChange(tab.id as BusinessTab)}
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
+                  isActive
+                    ? "bg-zinc-900 text-white shadow-xs dark:bg-zinc-100 dark:text-zinc-900"
+                    : "text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:text-white dark:hover:bg-zinc-800/60"
                 }`}
               >
-                {activeLocationBalance.available.toLocaleString()} <span className="text-base font-bold">EA</span>
+                <span className="text-sm">{tab.icon}</span>
+                <span>{tab.label}</span>
+              </button>
+            );
+          })}
+        </nav>
+      </div>
+
+      {/* TAB CONTENT AREAS */}
+
+      {/* ========================================================================= */}
+      {/* TAB 1: 운영개요 (SUMMARY) */}
+      {/* ========================================================================= */}
+      {activeTab === "summary" && (
+        <div className="space-y-6">
+          {/* Quick KPI Overview Grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {/* KPI 1: Inventory */}
+            <div className="p-4 rounded-xl border border-zinc-200 bg-white shadow-xs dark:border-zinc-800 dark:bg-zinc-900 space-y-1">
+              <span className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider block">
+                판매 가능 재고 (Available Stock)
+              </span>
+              <div className="flex items-baseline justify-between">
+                <span className="text-2xl font-black text-zinc-900 dark:text-white">
+                  {totalAvailable.toLocaleString()} EA
+                </span>
+                <span className="text-xs text-zinc-500 font-mono">OnHand: {totalOnHand}</span>
               </div>
+              <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                보류: {totalHold} | 불량: {totalDamaged}
+              </p>
             </div>
 
-            {/* 3 Sub Metrics Column / Grid */}
-            <div className="sm:col-span-2 grid grid-cols-3 gap-2 text-xs">
-              <div className="p-3 rounded-xl bg-zinc-50 dark:bg-zinc-950/40 border border-zinc-200 dark:border-zinc-800 flex flex-col justify-between">
-                <span className="text-[9px] font-bold text-zinc-500 dark:text-zinc-400 block uppercase">On Hand (실보유)</span>
-                <span className="text-base font-bold text-zinc-900 dark:text-zinc-100 mt-1">{activeLocationBalance.onHand.toLocaleString()} EA</span>
+            {/* KPI 2: Pricing */}
+            <div className="p-4 rounded-xl border border-zinc-200 bg-white shadow-xs dark:border-zinc-800 dark:bg-zinc-900 space-y-1">
+              <span className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider block">
+                적용 도매가 (Wholesale Price)
+              </span>
+              <div className="flex items-baseline justify-between">
+                <span className="text-2xl font-black text-zinc-900 dark:text-white">
+                  ${product.effectiveWholesale.toFixed(2)}
+                </span>
+                <span className="text-xs text-zinc-500">MOQ {product.moq || 1}</span>
               </div>
-              <div className="p-3 rounded-xl bg-zinc-50 dark:bg-zinc-950/40 border border-zinc-200 dark:border-zinc-800 flex flex-col justify-between">
-                <span className="text-[9px] font-bold text-zinc-500 dark:text-zinc-400 block uppercase">Damaged (불량)</span>
-                <span className={`text-base font-bold mt-1 ${activeLocationBalance.damaged > 0 ? "text-rose-600 dark:text-rose-400" : "text-zinc-900 dark:text-zinc-100"}`}>
-                  {activeLocationBalance.damaged.toLocaleString()} EA
+              <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                {product.isPromoActive ? `🔥 프로모션 적용 중 ($${product.promoWholesale?.toFixed(2)})` : `SRP: $${product.srpPrice.toFixed(2)}`}
+              </p>
+            </div>
+
+            {/* KPI 3: Retailer Margin */}
+            <div className="p-4 rounded-xl border border-zinc-200 bg-white shadow-xs dark:border-zinc-800 dark:bg-zinc-900 space-y-1">
+              <span className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider block">
+                리테일러 마진율 (Retailer Margin)
+              </span>
+              <div className="flex items-baseline justify-between">
+                <span className="text-2xl font-black text-emerald-600 dark:text-emerald-400">
+                  {safeFormatPercent(product.retailerMarginPercent)}
+                </span>
+                <span className="text-xs text-zinc-500">
+                  {product.retailerMarginUsd !== null ? `$${product.retailerMarginUsd.toFixed(2)}` : "—"}
                 </span>
               </div>
-              <div className="p-3 rounded-xl bg-zinc-50 dark:bg-zinc-950/40 border border-zinc-200 dark:border-zinc-800 flex flex-col justify-between">
-                <span className="text-[9px] font-bold text-zinc-500 dark:text-zinc-400 block uppercase">Hold (보류)</span>
-                <span className={`text-base font-bold mt-1 ${activeLocationBalance.hold > 0 ? "text-amber-600 dark:text-amber-400" : "text-zinc-900 dark:text-zinc-100"}`}>
-                  {activeLocationBalance.hold.toLocaleString()} EA
+              <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                권장 기준: 50% 이상 (SRP 대비)
+              </p>
+            </div>
+
+            {/* KPI 4: Landed Cost & Our Margin */}
+            <div className="p-4 rounded-xl border border-zinc-200 bg-white shadow-xs dark:border-zinc-800 dark:bg-zinc-900 space-y-1">
+              <span className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider block">
+                수입원가 & 자사 마진 (Landed & Our Margin)
+              </span>
+              <div className="flex items-baseline justify-between">
+                <span className="text-2xl font-black text-indigo-600 dark:text-indigo-400">
+                  ${product.effectiveLandedCost.toFixed(2)}
+                </span>
+                <span className="text-xs font-bold text-indigo-900 dark:text-indigo-200">
+                  {safeFormatPercent(product.ourMarginPercent)}
                 </span>
               </div>
+              <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                {product.hasCostOverride ? "수동 오버라이드 원가 적용 중" : "시스템 자동 계산 원가"}
+              </p>
             </div>
           </div>
 
-          {/* Full-Width Location Comparison Table */}
-          <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 overflow-hidden text-xs">
-            <div className="bg-zinc-50 dark:bg-zinc-950/80 px-3 py-2 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between">
-              <span className="text-[11px] font-bold text-zinc-700 dark:text-zinc-300 uppercase flex items-center gap-1.5">
-                <span>🏢</span> 로케이션별 재고 상세 (Warehouse Breakdown)
+          {/* Operational Alerts & Diagnositcs Shelf */}
+          <div className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 space-y-4">
+            <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-3">
+              <div>
+                <h3 className="text-xs font-bold text-zinc-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
+                  <span>📡</span> 운영 진단 및 즉시 조치 사항 (Operational Diagnostics)
+                </h3>
+                <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5">
+                  재고, 가격, 마진, 물류, 노출 기준을 실시간으로 점검한 진단 결과입니다.
+                </p>
+              </div>
+              <span className="px-2.5 py-1 text-xs font-bold rounded-full bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
+                {activeAlerts.length}건 감지됨
               </span>
-              <span className="text-[10px] text-zinc-400">행 클릭 시 해당 로케이션 필터 적용</span>
             </div>
+
+            {activeAlerts.filter((a) => a.type !== "info").length === 0 ? (
+              <div className="p-4 rounded-xl bg-emerald-50/80 dark:bg-emerald-950/30 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-900/40 text-xs font-medium flex items-center gap-3">
+                <span className="text-xl">✅</span>
+                <div>
+                  <strong className="block text-sm font-bold">정상 운영 상태 (All Clear)</strong>
+                  모든 재고, 가격, 마진, 상태 및 노출 기준이 정상적으로 충족되어 있습니다.
+                </div>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {activeAlerts.map((alert) => (
+                  <div
+                    key={alert.id}
+                    onClick={() => handleAlertAction(alert.target)}
+                    className={`p-3.5 rounded-xl border text-xs cursor-pointer transition-all hover:border-zinc-400 dark:hover:border-zinc-500 flex flex-col justify-between ${
+                      alert.type === "danger"
+                        ? "bg-rose-50/90 text-rose-900 border-rose-200 dark:bg-rose-950/40 dark:text-rose-200 dark:border-rose-900/60"
+                        : alert.type === "warning"
+                        ? "bg-amber-50/90 text-amber-900 border-amber-200 dark:bg-amber-950/40 dark:text-amber-200 dark:border-amber-900/60"
+                        : "bg-zinc-50 text-zinc-800 border-zinc-200 dark:bg-zinc-800/80 dark:text-zinc-200 dark:border-zinc-700"
+                    }`}
+                  >
+                    <div>
+                      <strong className="text-xs font-bold flex items-center gap-1.5 mb-1">
+                        <span>{alert.type === "danger" ? "🚨" : alert.type === "warning" ? "⚠️" : "ℹ️"}</span>
+                        <span>{alert.title}</span>
+                      </strong>
+                      <p className="text-[11px] leading-snug opacity-90">{alert.message}</p>
+                    </div>
+                    {alert.actionLabel && (
+                      <div className="pt-2 text-[11px] font-bold text-indigo-700 dark:text-indigo-300 text-right">
+                        {alert.actionLabel}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* TAB 2: INVENTORY (재고) */}
+      {/* ========================================================================= */}
+      {activeTab === "inventory" && (
+        <div className="space-y-6">
+          {/* Location Breakdown & Stock Snapshot Card */}
+          <div id="inventory-snapshot-card" className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-zinc-100 dark:border-zinc-800 pb-3">
+              <div>
+                <h3 className="text-xs font-bold text-zinc-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
+                  <span>📦</span> 창고 로케이션별 재고 현황 (Warehouse Balances)
+                </h3>
+                <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5">
+                  물류 창고별 보유(OnHand), 검수보류(Hold), 불량(Damaged), 판매가능(Available) 수량입니다.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <select
+                  value={selectedLocationId}
+                  onChange={(e) => setSelectedLocationId(e.target.value)}
+                  className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200"
+                >
+                  <option value="ALL">전체 로케이션 (ALL)</option>
+                  {warehouses.map((w) => (
+                    <option key={w.id} value={w.id}>
+                      {w.name} ({w.code})
+                    </option>
+                  ))}
+                </select>
+
+                <button
+                  type="button"
+                  onClick={() => handleOpenInvAdjustModal()}
+                  className="px-3.5 py-1.5 text-xs font-bold rounded-lg bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 hover:bg-zinc-800 dark:hover:bg-zinc-200 transition-colors shadow-xs"
+                >
+                  + 수동 재고 조정
+                </button>
+              </div>
+            </div>
+
+            {/* Warehouse Balances Table */}
             <div className="overflow-x-auto">
-              <table className="w-full text-left">
-                <thead className="bg-zinc-100/60 dark:bg-zinc-900/60 text-[10px] text-zinc-500 uppercase border-b border-zinc-200 dark:border-zinc-800">
-                  <tr>
-                    <th className="py-2 px-3">창고 (Warehouse)</th>
-                    <th className="py-2 px-2 text-right">가용 (Available)</th>
-                    <th className="py-2 px-2 text-right">보유 (On Hand)</th>
-                    <th className="py-2 px-2 text-right">불량 (Damaged)</th>
-                    <th className="py-2 px-2 text-right">보류 (Hold)</th>
-                    <th className="py-2 px-2.5 text-center">운영 작업</th>
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="border-b border-zinc-200 dark:border-zinc-800 text-[11px] font-bold text-zinc-500 dark:text-zinc-400 uppercase bg-zinc-50/60 dark:bg-zinc-950/40">
+                    <th className="p-3">물류 창고 (Location)</th>
+                    <th className="p-3 text-right">OnHand (물리보유)</th>
+                    <th className="p-3 text-right">Damaged (불량격리)</th>
+                    <th className="p-3 text-right">Hold (검토보류)</th>
+                    <th className="p-3 text-right">Available (판매가능)</th>
+                    <th className="p-3 text-center">조정</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/50 font-mono text-xs">
-                  {warehouses.map((w) => {
-                    const b = initialBalances.find((item) => item.warehouse_id === w.id);
-                    const onHand = b?.qty_on_hand || 0;
-                    const damaged = b?.qty_damaged || 0;
-                    const hold = b?.qty_hold || 0;
-                    const avail = Math.max(0, onHand - damaged - hold);
-                    const isSelected = selectedLocationId === w.id;
-
-                    return (
-                      <tr
-                        key={w.id}
-                        onClick={() => setSelectedLocationId(isSelected ? "ALL" : w.id)}
-                        className={`cursor-pointer transition-colors ${
-                          isSelected
-                            ? "bg-indigo-50/80 dark:bg-indigo-950/50 text-indigo-950 dark:text-indigo-200"
-                            : "hover:bg-zinc-50 dark:hover:bg-zinc-900/50 text-zinc-700 dark:text-zinc-300"
-                        }`}
-                      >
-                        <td className="py-2 px-3 font-sans font-medium">
-                          <div className="flex items-center gap-1.5">
-                            <span className="font-bold text-zinc-900 dark:text-white">{w.name}</span>
-                            <span className="text-[10px] text-zinc-400 font-mono">({w.code})</span>
-                          </div>
-                        </td>
-                        <td className="py-2 px-2 text-right font-bold text-indigo-600 dark:text-indigo-400">{avail}</td>
-                        <td className="py-2 px-2 text-right">{onHand}</td>
-                        <td className={`py-2 px-2 text-right ${damaged > 0 ? "text-rose-600 font-bold" : "text-zinc-400"}`}>{damaged}</td>
-                        <td className={`py-2 px-2 text-right ${hold > 0 ? "text-amber-600 font-bold" : "text-zinc-400"}`}>{hold}</td>
-                        <td className="py-2 px-2.5 text-center" onClick={(e) => e.stopPropagation()}>
-                          <button
-                            type="button"
-                            onClick={() => handleOpenInvAdjustModal(w.id)}
-                            className="px-2 py-0.5 rounded text-[11px] font-bold bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 transition-colors"
-                          >
-                            조정
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
+                <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/60 font-mono">
+                  {initialBalances.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="p-6 text-center text-zinc-400 font-sans text-xs">
+                        등록된 창고 재고가 없습니다. '+ 수동 재고 조정'을 통해 기초 재고를 등록해 주세요.
+                      </td>
+                    </tr>
+                  ) : (
+                    initialBalances.map((b) => {
+                      const avail = Math.max(0, b.qty_on_hand - (b.qty_damaged || 0) - b.qty_hold);
+                      return (
+                        <tr key={b.id} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-800/30">
+                          <td className="p-3 font-sans font-bold text-zinc-900 dark:text-zinc-100">
+                            {b.warehouse_name} ({b.warehouse_code})
+                          </td>
+                          <td className="p-3 text-right font-bold">{b.qty_on_hand} EA</td>
+                          <td className="p-3 text-right text-rose-600 dark:text-rose-400">{b.qty_damaged || 0} EA</td>
+                          <td className="p-3 text-right text-amber-600 dark:text-amber-400">{b.qty_hold} EA</td>
+                          <td className="p-3 text-right font-black text-indigo-600 dark:text-indigo-400">{avail} EA</td>
+                          <td className="p-3 text-center font-sans">
+                            <button
+                              type="button"
+                              onClick={() => handleOpenInvAdjustModal(b.warehouse_id)}
+                              className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline"
+                            >
+                              조정 →
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
                 </tbody>
-                <tfoot className="bg-zinc-50 dark:bg-zinc-950 font-mono text-xs font-bold border-t border-zinc-200 dark:border-zinc-800">
-                  <tr
-                    onClick={() => setSelectedLocationId("ALL")}
-                    className={`cursor-pointer ${selectedLocationId === "ALL" ? "text-indigo-600 dark:text-indigo-400 bg-indigo-50/40 dark:bg-indigo-950/20" : "text-zinc-900 dark:text-white"}`}
-                  >
-                    <td className="py-2 px-3 font-sans">합계 (Total)</td>
-                    <td className="py-2 px-2 text-right text-indigo-600 dark:text-indigo-400">{totalAvailable}</td>
-                    <td className="py-2 px-2 text-right">{totalOnHand}</td>
-                    <td className="py-2 px-2 text-right text-rose-600">{totalDamaged}</td>
-                    <td className="py-2 px-2 text-right text-amber-600">{totalHold}</td>
-                    <td className="py-2 px-2.5 text-center">
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleOpenInvAdjustModal();
-                        }}
-                        className="px-2 py-0.5 rounded text-[11px] font-bold bg-zinc-900 text-white dark:bg-white dark:text-zinc-900 shadow-xs"
-                      >
-                        전체 조정
-                      </button>
-                    </td>
-                  </tr>
-                </tfoot>
               </table>
             </div>
           </div>
 
-          {/* Inbound Snapshot Panel */}
-          <div className="p-3.5 rounded-xl bg-zinc-50 dark:bg-zinc-950/40 border border-zinc-200 dark:border-zinc-800 space-y-2 text-xs">
-            <div className="flex items-center justify-between border-b border-zinc-200 dark:border-zinc-800 pb-1.5">
-              <span className="text-[11px] font-bold text-zinc-800 dark:text-zinc-200 uppercase flex items-center gap-1.5">
-                <span>🚢</span> 입고 예정 현황 (Inbound Snapshot)
-              </span>
+          {/* Inbound PO Status & Stock Movement Logs */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Inbound PO List */}
+            <div className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 space-y-3">
+              <h4 className="text-xs font-bold text-zinc-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
+                <span>🚚</span> 입고 예정 및 진행 PO (Inbound PO History)
+              </h4>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead>
+                    <tr className="border-b border-zinc-200 dark:border-zinc-800 text-[10px] text-zinc-400 uppercase">
+                      <th className="py-2">PO 번호</th>
+                      <th className="py-2">공급사</th>
+                      <th className="py-2 text-right">발주 수량</th>
+                      <th className="py-2 text-center">상태</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/50">
+                    {poHistory.length === 0 ? (
+                      <tr>
+                        <td colSpan={4} className="py-4 text-center text-zinc-400 text-[11px]">
+                          입고 예정 PO 이력이 없습니다.
+                        </td>
+                      </tr>
+                    ) : (
+                      poHistory.slice(0, 5).map((po: any) => (
+                        <tr key={po.id}>
+                          <td className="py-2 font-mono font-bold text-zinc-808 dark:text-zinc-200">
+                            {po.purchase_orders?.po_number || po.id.slice(0, 8)}
+                          </td>
+                          <td className="py-2 text-zinc-600 dark:text-zinc-400 truncate max-w-[120px]">
+                            {po.purchase_orders?.companies?.name || "Supplier"}
+                          </td>
+                          <td className="py-2 text-right font-mono font-bold">{po.qty} EA</td>
+                          <td className="py-2 text-center">
+                            <span className="px-2 py-0.5 text-[10px] font-semibold rounded bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
+                              {po.purchase_orders?.po_status || "OPEN"}
+                            </span>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Recent Inventory Movement History */}
+            <div className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 space-y-3">
+              <h4 className="text-xs font-bold text-zinc-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
+                <span>🔄</span> 최근 재고 수불 이력 (Recent Movements)
+              </h4>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead>
+                    <tr className="border-b border-zinc-200 dark:border-zinc-800 text-[10px] text-zinc-400 uppercase">
+                      <th className="py-2">일시</th>
+                      <th className="py-2">구분</th>
+                      <th className="py-2 text-right">변동 수량</th>
+                      <th className="py-2">사유</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/50">
+                    {initialMovements.length === 0 ? (
+                      <tr>
+                        <td colSpan={4} className="py-4 text-center text-zinc-400 text-[11px]">
+                          수불 이력이 없습니다.
+                        </td>
+                      </tr>
+                    ) : (
+                      initialMovements.slice(0, 5).map((m) => (
+                        <tr key={m.id}>
+                          <td className="py-2 text-zinc-500 text-[10px]">
+                            {new Date(m.created_at).toLocaleDateString()}
+                          </td>
+                          <td className="py-2 font-bold text-zinc-800 dark:text-zinc-200">
+                            {MOVEMENT_LABELS[m.type] || m.type}
+                          </td>
+                          <td className={`py-2 text-right font-mono font-bold ${m.qty_change > 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                            {m.qty_change > 0 ? `+${m.qty_change}` : m.qty_change} EA
+                          </td>
+                          <td className="py-2 text-zinc-500 text-[11px] truncate max-w-[120px]">
+                            {m.reason || m.note || "-"}
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* TAB 3: PRICE (가격) */}
+      {/* ========================================================================= */}
+      {activeTab === "price" && (
+        <div className="space-y-6">
+          {/* Pricing Overview & Modals Trigger Card */}
+          <div className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 space-y-5">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-zinc-100 dark:border-zinc-800 pb-3">
+              <div>
+                <h3 className="text-xs font-bold text-zinc-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
+                  <span>💲</span> 거래 가격 및 단가 정책 (Trading Pricing Structure)
+                </h3>
+                <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5">
+                  도매가(Wholesale), 프로모션가, 최저준수가격(MAP), 권장소비자가(SRP) 및 수입원가를 통합 관리합니다.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsPricingModalOpen(true)}
+                  className="px-3.5 py-1.5 text-xs font-bold rounded-lg bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 hover:bg-zinc-800 dark:hover:bg-zinc-200 transition-colors shadow-xs"
+                >
+                  ⚙️ 도매가/가격 수정
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsPromoModalOpen(true)}
+                  className="px-3.5 py-1.5 text-xs font-bold rounded-lg bg-amber-500 hover:bg-amber-600 text-white transition-colors shadow-xs"
+                >
+                  🔥 프로모션 설정
+                </button>
+              </div>
+            </div>
+
+            {/* Price Structure Cards Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* Wholesale & MOQ */}
+              <div className="p-4 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50/70 dark:bg-zinc-950/40 space-y-2">
+                <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Default Wholesale Price</span>
+                <div className="text-2xl font-black text-zinc-900 dark:text-white">
+                  ${product.operationalWholesale.toFixed(2)}
+                </div>
+                <div className="text-xs text-zinc-500 space-y-0.5">
+                  <p>MOQ: <strong className="text-zinc-800 dark:text-zinc-200">{product.moq || 1} EA</strong></p>
+                  <p>Case Pack: <strong className="text-zinc-800 dark:text-zinc-200">{product.carton_pack_qty || 1} EA</strong></p>
+                </div>
+              </div>
+
+              {/* MAP & SRP */}
+              <div className="p-4 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50/70 dark:bg-zinc-950/40 space-y-2">
+                <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">MAP & Retail Price</span>
+                <div className="flex items-baseline gap-3">
+                  <div>
+                    <span className="text-[10px] text-zinc-400 block">SRP (소비자가)</span>
+                    <strong className="text-lg font-bold text-zinc-900 dark:text-white">
+                      ${product.srpPrice.toFixed(2)}
+                    </strong>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-zinc-400 block">MAP (최저가)</span>
+                    <strong className="text-lg font-bold text-zinc-700 dark:text-zinc-300">
+                      ${product.mapPrice.toFixed(2)}
+                    </strong>
+                  </div>
+                </div>
+                {product.price_krw_retail && (
+                  <p className="text-[11px] text-zinc-500">
+                    원화 기준 MSRP: ₩{product.price_krw_retail.toLocaleString()}
+                  </p>
+                )}
+              </div>
+
+              {/* Landed Cost & Margin */}
+              <div className="p-4 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50/70 dark:bg-zinc-950/40 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Landed Cost & Margins</span>
+                  <button
+                    type="button"
+                    onClick={() => setIsCostOverrideModalOpen(true)}
+                    className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline"
+                  >
+                    원가 관리 →
+                  </button>
+                </div>
+                <div className="text-xl font-bold text-indigo-600 dark:text-indigo-400">
+                  ${product.effectiveLandedCost.toFixed(2)}
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-xs pt-1 border-t border-zinc-200 dark:border-zinc-800">
+                  <div>
+                    <span className="text-[10px] text-zinc-400 block">자사 마진</span>
+                    <strong className="text-indigo-900 dark:text-indigo-200">
+                      {safeFormatPercent(product.ourMarginPercent)}
+                    </strong>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-zinc-400 block">리테일러 마진</span>
+                    <strong className="text-emerald-600 dark:text-emerald-400">
+                      {safeFormatPercent(product.retailerMarginPercent)}
+                    </strong>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Pricing & Promotion History Timeline */}
+          <div className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 space-y-4">
+            <h4 className="text-xs font-bold text-zinc-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
+              <span>📜</span> 가격 및 프로모션 변동 히스토리 (Pricing Timeline)
+            </h4>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="border-b border-zinc-200 dark:border-zinc-800 text-[10px] text-zinc-400 uppercase">
+                    <th className="py-2">일시</th>
+                    <th className="py-2">이벤트</th>
+                    <th className="py-2 text-right">적용 도매가</th>
+                    <th className="py-2 text-right">자사 마진</th>
+                    <th className="py-2 text-right">리테일러 마진</th>
+                    <th className="py-2">작업자 & 사유</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/50">
+                  {filteredPricingTimeline.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="py-4 text-center text-zinc-400 text-[11px]">
+                        가격 변동 이력이 없습니다.
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredPricingTimeline.map((item: any) => (
+                      <tr key={item.id}>
+                        <td className="py-2 text-[10px] text-zinc-500">{item.date}</td>
+                        <td className="py-2">
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${item.eventBadgeColor}`}>
+                            {item.eventTitle}
+                          </span>
+                        </td>
+                        <td className="py-2 text-right font-mono font-bold">${item.newW.toFixed(2)}</td>
+                        <td className="py-2 text-right font-mono text-indigo-600 font-bold">
+                          {item.newOurMarginPct !== null ? `${item.newOurMarginPct.toFixed(1)}%` : "—"}
+                        </td>
+                        <td className="py-2 text-right font-mono text-emerald-600 font-bold">
+                          {item.newRetailerMarginPct !== null ? `${item.newRetailerMarginPct.toFixed(1)}%` : "—"}
+                        </td>
+                        <td className="py-2 text-zinc-500 text-[11px]">
+                          {item.user} ({item.reason})
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* TAB 4: HUB (HUB 노출 및 마케팅) */}
+      {/* ========================================================================= */}
+      {activeTab === "hub" && (
+        <div className="space-y-6">
+          {/* Admin Visibility & Effective Hub Visibility Card */}
+          <div className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-zinc-100 dark:border-zinc-800 pb-3">
+              <div>
+                <h3 className="text-xs font-bold text-zinc-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
+                  <span>⚙️</span> Retailer Hub 운영 상태 및 노출 제어 (Visibility & Operating Status)
+                </h3>
+                <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5">
+                  운영 상태(active/inactive/historical)와 관리자 노출 설정(visible/hidden)을 변경합니다.
+                </p>
+              </div>
+
               <button
-                onClick={() => setActiveTab("po")}
-                className="text-[11px] font-bold text-indigo-600 hover:text-indigo-700 dark:text-indigo-400 dark:hover:text-indigo-300 underline"
+                type="button"
+                onClick={handleOpenStatusModal}
+                className="px-4 py-1.5 text-xs font-bold rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 transition-colors shadow-xs"
               >
-                PO / 입고 이력 탭 바로가기 →
+                ⚙️ 상태 및 노출 변경
               </button>
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
-              <div className="p-2 rounded-lg bg-white dark:bg-zinc-900 border border-zinc-200/70 dark:border-zinc-800">
-                <span className="text-zinc-500 dark:text-zinc-400 text-[10px] font-semibold block uppercase">Incoming Qty</span>
-                <strong className="text-zinc-900 dark:text-white font-black text-sm">
-                  {inboundSummary.incomingQty.toLocaleString()} EA
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
+              <div className="p-3.5 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50/70 dark:bg-zinc-950/40">
+                <span className="text-[10px] font-bold text-zinc-400 block uppercase">Operational Status</span>
+                <strong className="text-sm font-bold text-zinc-900 dark:text-white mt-1 block">
+                  {TRADING_LABELS[currentTradingStatus] || currentTradingStatus}
                 </strong>
               </div>
-              <div className="p-2 rounded-lg bg-white dark:bg-zinc-900 border border-zinc-200/70 dark:border-zinc-800">
-                <span className="text-zinc-500 dark:text-zinc-400 text-[10px] font-semibold block uppercase">Open Inbound</span>
-                <strong className="text-zinc-800 dark:text-zinc-200 font-bold text-sm">
-                  {inboundSummary.openInboundCount}건
+
+              <div className="p-3.5 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50/70 dark:bg-zinc-950/40">
+                <span className="text-[10px] font-bold text-zinc-400 block uppercase">Admin Visibility</span>
+                <strong className="text-sm font-bold text-zinc-900 dark:text-white mt-1 block">
+                  {VISIBILITY_LABELS[currentVisibility] || currentVisibility}
                 </strong>
               </div>
-              <div className="p-2 rounded-lg bg-white dark:bg-zinc-900 border border-zinc-200/70 dark:border-zinc-800">
-                <span className="text-zinc-500 dark:text-zinc-400 text-[10px] font-semibold block uppercase">Next ETA</span>
-                <strong className="text-zinc-800 dark:text-zinc-200 font-mono text-xs">
-                  {inboundSummary.nextEta || "—"}
-                </strong>
-              </div>
-              <div className="p-2 rounded-lg bg-white dark:bg-zinc-900 border border-zinc-200/70 dark:border-zinc-800">
-                <span className="text-zinc-500 dark:text-zinc-400 text-[10px] font-semibold block uppercase">Destination</span>
-                <strong className="text-zinc-800 dark:text-zinc-200 truncate block text-xs" title={inboundSummary.destinationWarehouseName || ""}>
-                  {inboundSummary.destinationWarehouseName || "—"}
+
+              <div className="p-3.5 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50/70 dark:bg-zinc-950/40">
+                <span className="text-[10px] font-bold text-zinc-400 block uppercase">Effective Hub Visibility</span>
+                <strong className="text-sm font-bold text-indigo-600 dark:text-indigo-400 mt-1 block">
+                  {liveHubVisibility.effectiveVisibilityLabel}
                 </strong>
               </div>
             </div>
           </div>
-        </div>
 
-        {/* RIGHT COLUMN: 가격/마진 및 수입원가 (5 Cols) */}
-        <div className="lg:col-span-5 space-y-5">
-          
-          {/* CARD 1: 가격 및 마진 (Commercial Pricing) */}
-          <div id="pricing-snapshot-card" className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 space-y-4">
-            <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-2.5">
+          {/* ORDER HOLD & BLOCK REASONS CHECKLIST CARD */}
+          <div
+            id="hold-alerts"
+            className={`rounded-xl border p-5 transition-all shadow-sm ${
+              holdHighlight
+                ? "border-amber-500 ring-4 ring-amber-500/30 bg-amber-50/50 dark:bg-amber-950/40"
+                : "border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900"
+            }`}
+          >
+            <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-3 mb-4">
               <div>
                 <h3 className="text-xs font-bold text-zinc-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
-                  <span>🏷️</span> 가격 및 마진 (Pricing & Margin)
+                  <span>⚠️</span> Hub 노출 보류 및 주문 차단 사유 (Order Hold & Block Reasons)
                 </h3>
                 <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5">
-                  도매가, 할인가, 권장가 및 마진율 정책
+                  상품이 Hub에서 비노출되거나 주문이 불가능한 상세 사유 목록입니다.
                 </p>
               </div>
-              <div className="flex items-center gap-1.5">
-                <button
-                  onClick={() => setIsPricingModalOpen(true)}
-                  className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 hover:bg-zinc-800 transition-colors shadow-sm"
-                >
-                  도매가 설정
-                </button>
-                <button
-                  onClick={() => setIsPromoModalOpen(true)}
-                  className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-amber-500 text-white hover:bg-amber-600 transition-colors shadow-sm"
-                >
-                  + 프로모션
-                </button>
-              </div>
-            </div>
 
-            {/* Price Grid (2x2) */}
-            <div className="grid grid-cols-2 gap-2 text-xs">
-              <div className="p-2.5 rounded-lg bg-zinc-50 dark:bg-zinc-950/40 border border-zinc-200 dark:border-zinc-800 space-y-0.5">
-                <span className="text-[9px] font-bold text-zinc-400 uppercase block">Wholesale (도매)</span>
-                <span className="text-base font-extrabold text-zinc-900 dark:text-white">
-                  {product.operationalWholesale > 0 ? `$${product.operationalWholesale.toFixed(2)}` : <span className="text-rose-600 dark:text-rose-400 text-xs font-bold">도매가 미입력</span>}
-                </span>
-                {product.price_krw_wholesale && (
-                  <span className="text-[10px] text-zinc-400 block truncate">
-                    ₩{product.price_krw_wholesale.toLocaleString()}
-                  </span>
-                )}
-              </div>
-              <div className="p-2.5 rounded-lg bg-zinc-50 dark:bg-zinc-950/40 border border-zinc-200 dark:border-zinc-800 space-y-0.5">
-                <span className="text-[9px] font-bold text-zinc-400 uppercase block">Promo (할인가)</span>
-                <span className="text-base font-extrabold text-amber-600 dark:text-amber-400">
-                  {product.promoWholesale !== null && product.promoWholesale > 0 ? `$${product.promoWholesale.toFixed(2)}` : "—"}
-                </span>
-              </div>
-              <div className="p-2.5 rounded-lg bg-zinc-50 dark:bg-zinc-950/40 border border-zinc-200 dark:border-zinc-800 space-y-0.5">
-                <span className="text-[9px] font-bold text-zinc-400 uppercase block">MAP (최저가)</span>
-                <span className="text-base font-bold text-zinc-900 dark:text-zinc-200">
-                  {product.mapPrice > 0 ? `$${product.mapPrice.toFixed(2)}` : "—"}
-                </span>
-              </div>
-              <div className="p-2.5 rounded-lg bg-zinc-50 dark:bg-zinc-950/40 border border-zinc-200 dark:border-zinc-800 space-y-0.5">
-                <span className="text-[9px] font-bold text-zinc-400 uppercase block">SRP (소비자가)</span>
-                <span className="text-base font-bold text-zinc-900 dark:text-zinc-200">
-                  {product.srpPrice > 0 ? `$${product.srpPrice.toFixed(2)}` : <span className="text-zinc-400 font-normal">미설정</span>}
-                </span>
-                {product.price_krw_retail && (
-                  <span className="text-[10px] text-zinc-400 block truncate" title={`원화 기준 권장소비자가: ₩${product.price_krw_retail.toLocaleString()}`}>
-                    ₩{product.price_krw_retail.toLocaleString()}
-                  </span>
-                )}
-              </div>
-            </div>
-
-            {/* Operating Margins & Order Units */}
-            <div className="grid grid-cols-2 gap-2 text-xs">
-              {/* Our Margin */}
-              <div className="p-2.5 rounded-lg bg-zinc-50 dark:bg-zinc-950/40 border border-zinc-200 dark:border-zinc-800 space-y-0.5">
-                <span className="text-[9px] font-bold text-zinc-400 block uppercase">Our Margin (자사)</span>
-                <div className="text-sm font-extrabold">
-                  {product.ourMarginPercent !== null && product.ourMarginUsd !== null && product.effectiveLandedCost > 0 && product.operationalWholesale > 0 ? (
-                    <span className={product.ourMarginPercent < 20 ? "text-rose-600 dark:text-rose-400" : "text-zinc-900 dark:text-white"}>
-                      {safeFormatPercent(product.ourMarginPercent)} <span className="text-[11px] font-normal text-zinc-500">({safeFormatUsd(product.ourMarginUsd)})</span>
-                    </span>
-                  ) : (
-                    <span className="text-zinc-400 font-normal">—</span>
-                  )}
-                </div>
-              </div>
-
-              {/* Retailer Margin */}
-              <div className="p-2.5 rounded-lg bg-zinc-50 dark:bg-zinc-950/40 border border-zinc-200 dark:border-zinc-800 space-y-0.5">
-                <div className="flex items-center justify-between">
-                  <span className="text-[9px] font-bold text-zinc-400 uppercase">Retailer Margin</span>
-                  {retailerMarginTone.badge && (
-                    <span className={`px-1.5 py-0.2 rounded text-[9px] font-bold border ${retailerMarginTone.badge}`}>
-                      {retailerMarginTone.label}
-                    </span>
-                  )}
-                </div>
-                <div className="text-sm font-extrabold">
-                  {product.retailerMarginPercent !== null && product.retailerMarginUsd !== null && product.srpPrice > 0 && product.operationalWholesale > 0 ? (
-                    <span className={retailerMarginTone.color}>
-                      {safeFormatPercent(product.retailerMarginPercent)} <span className="text-[11px] font-normal text-zinc-500">({safeFormatUsd(product.retailerMarginUsd)})</span>
-                    </span>
-                  ) : (
-                    <span className="text-zinc-400 font-normal">—</span>
-                  )}
-                </div>
-              </div>
-
-              {/* Case Pack */}
-              <div className="p-2 rounded-lg bg-zinc-50 dark:bg-zinc-950/40 border border-zinc-200 dark:border-zinc-800">
-                <span className="text-[9px] font-bold text-zinc-400 block uppercase">Case Pack (입수량)</span>
-                <span className="text-xs font-bold text-zinc-900 dark:text-zinc-100">
-                  {product.hasCasePackConfigured ? `${product.carton_pack_qty} EA / 박스` : <span className="text-zinc-400 font-normal">— (미설정)</span>}
-                </span>
-              </div>
-
-              {/* MOQ / Multiple */}
-              <div className="p-2 rounded-lg bg-zinc-50 dark:bg-zinc-950/40 border border-zinc-200 dark:border-zinc-800">
-                <span className="text-[9px] font-bold text-zinc-400 block uppercase">MOQ / 주문배수</span>
-                <span className="text-xs font-bold text-zinc-900 dark:text-zinc-100">
-                  {product.hasCasePackConfigured ? `${product.moq} EA (${product.orderMultiple}배수)` : <span className="text-zinc-400 font-normal">— (미설정)</span>}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* CARD 2: 수입원가 스냅샷 (Landed Cost) */}
-          <div id="cost-snapshot-card" className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 space-y-3.5">
-            <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-2">
-              <h3 className="text-xs font-bold text-zinc-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
-                <span>💰</span> 수입원가 스냅샷 (Landed Cost)
-              </h3>
-              <div className="flex items-center gap-1.5">
-                <button
-                  onClick={() => setIsCostOverrideModalOpen(true)}
-                  className="px-2 py-0.5 text-[10px] font-bold rounded bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 hover:bg-zinc-800 transition-colors"
-                >
-                  {product.hasCostOverride ? "Edit Override" : "Override Cost"}
-                </button>
-                {product.hasCostOverride && (
-                  <button
-                    onClick={handleClearCostOverride}
-                    className="px-2 py-0.5 text-[10px] font-bold rounded bg-rose-50 text-rose-600 dark:bg-rose-950/40 dark:text-rose-300 border border-rose-200 dark:border-rose-900/50 hover:bg-rose-100 transition-colors"
-                  >
-                    해제
-                  </button>
-                )}
-              </div>
-            </div>
-
-            {/* Effective Landed Cost Hero */}
-            <div className="p-3 rounded-lg bg-zinc-50 dark:bg-zinc-950/40 border border-zinc-200 dark:border-zinc-800 space-y-1">
-              <div className="flex items-center justify-between text-[10px] font-bold text-zinc-500 dark:text-zinc-400 uppercase">
-                <span>Effective Landed Cost (적용 수입원가)</span>
-                <span className="text-indigo-600 dark:text-indigo-400 font-bold">마진 기준값</span>
-              </div>
-              <div className="text-2xl font-black text-zinc-900 dark:text-white">
-                {product.effectiveLandedCost > 0 ? `$${product.effectiveLandedCost.toFixed(2)}` : <span className="text-zinc-400 text-lg font-bold">— (원가 미등록)</span>}
-              </div>
-              <p className="text-[10px] text-zinc-500 dark:text-zinc-400 truncate">
-                {product.hasCostOverride ? (
-                  <span className="text-amber-600 dark:text-amber-400 font-semibold">
-                    수동 원가 오버라이드 적용 중 (사유: {product.overrideReason || "운영 조정"})
-                  </span>
-                ) : product.baseLandedCost > 0 ? (
-                  <span>Purchasing Landed Cost 수입 정산 기반 실시간 원가</span>
-                ) : (
-                  <span className="text-zinc-400">수입 정산 원가 미생성 (오버라이드로 수동 입력 가능)</span>
-                )}
-              </p>
-            </div>
-
-            <div className="grid grid-cols-2 gap-2 text-xs">
-              <div className="p-2 rounded bg-zinc-50 dark:bg-zinc-950/40 border border-zinc-200 dark:border-zinc-800">
-                <span className="text-[9px] font-bold text-zinc-400 block uppercase">Base Landed Cost</span>
-                <span className="font-bold text-zinc-900 dark:text-zinc-200">
-                  {product.baseLandedCost > 0 ? `$${product.baseLandedCost.toFixed(2)}` : "—"}
-                </span>
-              </div>
-              <div className="p-2 rounded bg-zinc-50 dark:bg-zinc-950/40 border border-zinc-200 dark:border-zinc-800">
-                <span className="text-[9px] font-bold text-zinc-400 block uppercase">Override Cost</span>
-                <span className="font-bold text-zinc-900 dark:text-zinc-200">
-                  {product.overrideLandedCost !== null && product.overrideLandedCost > 0 ? `$${product.overrideLandedCost.toFixed(2)}` : "—"}
-                </span>
-              </div>
-            </div>
-
-            <div className="flex justify-end pt-1">
-              <Link
-                href="/admin/purchasing/landed-cost"
-                className="text-[11px] font-semibold text-indigo-600 hover:text-indigo-700 dark:text-indigo-400 dark:hover:text-indigo-300 underline"
-              >
-                View Landed Cost Cases →
-              </Link>
-            </div>
-          </div>
-
-        </div>
-
-      </div>
-
-      {/* 4. RETAILER SALES POLICY CARD */}
-      <RetailerSalesPolicyCard
-        productId={product.id}
-        productName={product.name}
-        cartonPackQty={product.carton_pack_qty || 1}
-        salesPolicy={product.salesPolicy || resolveRetailerSalesPolicy(product)}
-        srpPrice={product.srpPrice}
-        mapPrice={product.mapPrice}
-      />
-
-      {/* 4-1. HUB MARKETING BADGES CARD */}
-      <HubBadgesCard
-        productId={product.id}
-        isPromoActive={product.isPromoActive}
-        hubBadges={product.hubBadges}
-      />
-
-      {/* 5. FULL-WIDTH TAB CONTAINER */}
-      <div className="rounded-xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900 overflow-hidden">
-        
-        {/* Full-Width Tab Header Strip - Enhanced Contrast & Accessibility */}
-        <div role="tablist" aria-label="상품 운영 이력 탭" className="p-1.5 bg-zinc-100/80 dark:bg-zinc-950/80 border-b border-zinc-200 dark:border-zinc-800 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-1.5">
-          {[
-            { id: "inventory", en: "Inventory", ko: "재고 변동" },
-            { id: "po", en: "PO / Inbound", ko: "입고 이력" },
-            { id: "cost", en: "Cost History", ko: "원가 이력" },
-            { id: "pricing", en: "Pricing", ko: "가격/프로모션" },
-            { id: "sales", en: "Sales", ko: "판매 요약" },
-            { id: "audit", en: "Audit Log", ko: "변경 이력" },
-          ].map((tab) => (
-            <button
-              key={tab.id}
-              role="tab"
-              id={`tab-${tab.id}`}
-              aria-controls={`tabpanel-${tab.id}`}
-              aria-selected={activeTab === tab.id}
-              onClick={() => setActiveTab(tab.id as any)}
-              className={`py-2 px-3 text-center rounded-lg transition-all flex flex-col items-center justify-center focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-1 ${
-                activeTab === tab.id
-                  ? "bg-zinc-900 text-white dark:bg-white dark:text-zinc-900 font-bold shadow-sm ring-1 ring-zinc-900/10 dark:ring-white/10"
-                  : "bg-transparent text-zinc-600 hover:text-zinc-900 hover:bg-white/60 dark:text-zinc-400 dark:hover:text-white dark:hover:bg-zinc-900/60 font-medium"
-              }`}
-            >
-              <span className="text-xs leading-tight font-bold">{tab.en}</span>
-              <span className={`text-[10px] mt-0.5 leading-tight ${activeTab === tab.id ? "text-zinc-300 dark:text-zinc-600 font-medium" : "text-zinc-400 dark:text-zinc-500"}`}>
-                {tab.ko}
+              <span className={`px-2.5 py-1 text-xs font-bold rounded-full border ${liveHubVisibility.isOrderable ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-rose-50 text-rose-700 border-rose-200'}`}>
+                {liveHubVisibility.isOrderable ? "주문 가능 (Orderable)" : "주문 차단됨 (Blocked)"}
               </span>
-            </button>
-          ))}
-        </div>
-
-        {/* Full-Width Tab Content Panels */}
-        <div className="p-6">
-          
-          {/* TAB 1: INVENTORY ACTIVITY */}
-          {activeTab === "inventory" && (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <h3 className="text-sm font-bold text-zinc-900 dark:text-white">
-                  재고 수불 및 변동 히스토리 ({initialMovements.length}건)
-                </h3>
-              </div>
-
-              {initialMovements.length === 0 ? (
-                <div className="p-8 text-center text-xs text-zinc-400 border border-dashed border-zinc-200 dark:border-zinc-800 rounded-lg">
-                  기록된 재고 변동 내역이 없습니다.
-                </div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs text-zinc-600 dark:text-zinc-300">
-                    <thead className="bg-zinc-50 text-[10px] uppercase font-bold text-zinc-400 dark:bg-zinc-950 border-b border-zinc-100 dark:border-zinc-800">
-                      <tr>
-                        <th className="py-2.5 px-3">일시</th>
-                        <th className="py-2.5 px-3">구분</th>
-                        <th className="py-2.5 px-3 text-right">OnHand 변동</th>
-                        <th className="py-2.5 px-3 text-right">Damaged 변동</th>
-                        <th className="py-2.5 px-3 text-right">Hold 변동</th>
-                        <th className="py-2.5 px-3 text-right">잔고 (OnHand / Damaged / Hold)</th>
-                        <th className="py-2.5 px-3">사유 및 메모</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
-                      {initialMovements.map((m) => (
-                        <tr key={m.id} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-950/50">
-                          <td className="py-2.5 px-3 font-mono text-[11px]">
-                            {new Date(m.created_at).toLocaleString("ko-KR")}
-                          </td>
-                          <td className="py-2.5 px-3 font-semibold text-zinc-900 dark:text-zinc-100">
-                            {MOVEMENT_LABELS[m.type] || m.type}
-                          </td>
-                          <td className={`py-2.5 px-3 text-right font-bold ${m.qty_change > 0 ? "text-emerald-600" : m.qty_change < 0 ? "text-rose-600" : ""}`}>
-                            {m.qty_change > 0 ? `+${m.qty_change}` : m.qty_change}
-                          </td>
-                          <td className={`py-2.5 px-3 text-right font-bold ${m.qty_damaged_change > 0 ? "text-rose-600" : ""}`}>
-                            {m.qty_damaged_change > 0 ? `+${m.qty_damaged_change}` : m.qty_damaged_change || 0}
-                          </td>
-                          <td className={`py-2.5 px-3 text-right font-bold ${m.qty_hold_change > 0 ? "text-amber-600" : ""}`}>
-                            {m.qty_hold_change > 0 ? `+${m.qty_hold_change}` : m.qty_hold_change || 0}
-                          </td>
-                          <td className="py-2.5 px-3 text-right font-mono font-medium text-zinc-700 dark:text-zinc-300">
-                            {m.balance_on_hand_after} / {m.balance_damaged_after || 0} / {m.balance_hold_after || 0}
-                          </td>
-                          <td className="py-2.5 px-3 text-zinc-500 text-[11px]">
-                            {[m.reason, m.note].filter(Boolean).join(" - ") || "-"}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
             </div>
-          )}
 
-          {/* TAB 2: PO / INBOUND HISTORY */}
-          {activeTab === "po" && (
-            <div className="space-y-6">
-              <div>
-                <h3 className="text-sm font-bold text-zinc-900 dark:text-white mb-3">
-                  발주 내역 (Purchase Orders - {poHistory.length}건)
-                </h3>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs text-zinc-600 dark:text-zinc-300">
-                    <thead className="bg-zinc-50 text-[10px] uppercase font-bold text-zinc-400 dark:bg-zinc-950 border-b border-zinc-100 dark:border-zinc-800">
-                      <tr>
-                        <th className="py-2.5 px-3">PO 번호</th>
-                        <th className="py-2.5 px-3">공급사</th>
-                        <th className="py-2.5 px-3">발주일</th>
-                        <th className="py-2.5 px-3 text-right">발주 수량</th>
-                        <th className="py-2.5 px-3 text-right">단가</th>
-                        <th className="py-2.5 px-3">상태</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
-                      {poHistory.map((po) => (
-                        <tr key={po.id} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-950/50">
-                          <td className="py-2.5 px-3 font-mono font-semibold text-indigo-600 dark:text-indigo-400">
-                            <Link href={`/admin/purchasing/orders/${po.purchase_orders?.id}`}>
-                              {po.purchase_orders?.po_number || "-"}
-                            </Link>
-                          </td>
-                          <td className="py-2.5 px-3">{po.purchase_orders?.companies?.name || "-"}</td>
-                          <td className="py-2.5 px-3 font-mono">{po.purchase_orders?.order_date || "-"}</td>
-                          <td className="py-2.5 px-3 text-right font-bold">{po.qty} EA</td>
-                          <td className="py-2.5 px-3 text-right font-mono">${po.unit_cost?.toFixed(2)}</td>
-                          <td className="py-2.5 px-3">
-                            <span className="px-2 py-0.5 text-[10px] font-bold rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300">
-                              {po.purchase_orders?.po_status}
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+            {liveHubVisibility.holdReasonLabels.length === 0 ? (
+              <div className="p-4 rounded-xl bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs font-semibold flex items-center gap-2">
+                <span>✅</span> 주문 차단 및 노출 보류 사유가 전혀 없습니다. 상품이 정상 거래 가능합니다.
               </div>
-
-              <div>
-                <h3 className="text-sm font-bold text-zinc-900 dark:text-white mb-3">
-                  입고 내역 (Receiving History - {receivingHistory.length}건)
-                </h3>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs text-zinc-600 dark:text-zinc-300">
-                    <thead className="bg-zinc-50 text-[10px] uppercase font-bold text-zinc-400 dark:bg-zinc-950 border-b border-zinc-100 dark:border-zinc-800">
-                      <tr>
-                        <th className="py-2.5 px-3">입고 번호</th>
-                        <th className="py-2.5 px-3">입고일</th>
-                        <th className="py-2.5 px-3">창고</th>
-                        <th className="py-2.5 px-3 text-right">입고 수량</th>
-                        <th className="py-2.5 px-3 text-right">불량 수량</th>
-                        <th className="py-2.5 px-3 text-right">보류 수량</th>
-                        <th className="py-2.5 px-3">상태</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
-                      {receivingHistory.map((rec) => (
-                        <tr key={rec.id} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-950/50">
-                          <td className="py-2.5 px-3 font-mono font-semibold text-indigo-600 dark:text-indigo-400">
-                            {rec.receivings?.receiving_number || "-"}
-                          </td>
-                          <td className="py-2.5 px-3 font-mono">{rec.receivings?.received_date || "-"}</td>
-                          <td className="py-2.5 px-3">{rec.receivings?.warehouses?.name || "-"}</td>
-                          <td className="py-2.5 px-3 text-right font-bold text-emerald-600">{rec.received_qty} EA</td>
-                          <td className="py-2.5 px-3 text-right font-bold text-rose-600">{rec.damaged_qty || 0} EA</td>
-                          <td className="py-2.5 px-3 text-right font-bold text-amber-600">{rec.hold_qty || 0} EA</td>
-                          <td className="py-2.5 px-3">
-                            <span className="px-2 py-0.5 text-[10px] font-bold rounded bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
-                              {rec.receivings?.status}
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* TAB 3: COST HISTORY (INCLUDES SYSTEM LANDED COST + MANUAL OVERRIDE HISTORY) */}
-          {activeTab === "cost" && (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <h3 className="text-sm font-bold text-zinc-900 dark:text-white">
-                  수입원가 통합 히스토리 (System Landed Cost + Manual Cost Override - {combinedCostTimeline.length}건)
-                </h3>
-              </div>
-
-              {combinedCostTimeline.length === 0 ? (
-                <div className="p-8 text-center text-xs text-zinc-400 border border-dashed border-zinc-200 dark:border-zinc-800 rounded-lg">
-                  기록된 원가 산정 및 오버라이드 이력이 없습니다.
-                </div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs text-zinc-600 dark:text-zinc-300">
-                    <thead className="bg-zinc-50 text-[10px] uppercase font-bold text-zinc-400 dark:bg-zinc-950 border-b border-zinc-100 dark:border-zinc-800">
-                      <tr>
-                        <th className="py-2.5 px-3">일시</th>
-                        <th className="py-2.5 px-3">이벤트 구분</th>
-                        <th className="py-2.5 px-3 text-right">이전 적용원가</th>
-                        <th className="py-2.5 px-3 text-right">신규 적용원가</th>
-                        <th className="py-2.5 px-3 text-right">Base Landed Cost</th>
-                        <th className="py-2.5 px-3 text-right">Override Cost</th>
-                        <th className="py-2.5 px-3">사유 및 출처</th>
-                        <th className="py-2.5 px-3">담당자</th>
-                        <th className="py-2.5 px-3">상태</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
-                      {combinedCostTimeline.map((item) => (
-                        <tr key={item.id} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-950/50">
-                          <td className="py-2.5 px-3 font-mono text-[11px] whitespace-nowrap">{item.date}</td>
-                          <td className="py-2.5 px-3">
-                            {item.eventType === "SYSTEM_LANDED_COST" ? (
-                              <span className="px-2 py-0.5 text-[10px] font-bold rounded bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
-                                System Landed Cost
-                              </span>
-                            ) : item.eventType === "MANUAL_OVERRIDE" ? (
-                              <span className="px-2 py-0.5 text-[10px] font-bold rounded bg-indigo-100 text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-300">
-                                Manual Cost Override
-                              </span>
-                            ) : (
-                              <span className="px-2 py-0.5 text-[10px] font-bold rounded bg-rose-100 text-rose-700 dark:bg-rose-950/50 dark:text-rose-300">
-                                Override Cleared
-                              </span>
-                            )}
-                          </td>
-                          <td className="py-2.5 px-3 text-right font-mono">
-                            {item.prevEffectiveCost !== undefined ? `$${item.prevEffectiveCost.toFixed(2)}` : "-"}
-                          </td>
-                          <td className="py-2.5 px-3 text-right font-mono font-bold text-indigo-600 dark:text-indigo-400">
-                            ${item.newEffectiveCost !== undefined ? item.newEffectiveCost.toFixed(2) : item.unitLandedCost?.toFixed(2)}
-                          </td>
-                          <td className="py-2.5 px-3 text-right font-mono text-zinc-500">
-                            ${item.unitLandedCost?.toFixed(2) || item.baseLandedCost?.toFixed(2)}
-                          </td>
-                          <td className="py-2.5 px-3 text-right font-mono font-semibold">
-                            {item.overrideCost !== undefined && item.overrideCost !== null ? `$${item.overrideCost.toFixed(2)}` : "-"}
-                          </td>
-                          <td className="py-2.5 px-3 text-zinc-600 dark:text-zinc-300 text-[11px]">
-                            {item.reason || item.caseNumber || "-"}
-                          </td>
-                          <td className="py-2.5 px-3 text-zinc-500 text-[11px]">{item.user}</td>
-                          <td className="py-2.5 px-3">
-                            <span className={`px-2 py-0.5 text-[10px] font-bold rounded ${
-                              item.status === "Active"
-                                ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300"
-                                : "bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400"
-                            }`}>
-                              {item.status}
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* TAB 4: PRICING & PROMOTIONS TIMELINE */}
-          {activeTab === "pricing" && (
-            <div className="space-y-4">
-
-              {/* 2. Chronological Pricing & Promotion History Timeline */}
+            ) : (
               <div className="space-y-3">
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-zinc-200 dark:border-zinc-800 pb-2">
-                  <div>
-                    <h3 className="text-sm font-bold text-zinc-900 dark:text-white flex items-center gap-2">
-                      <span>📈 가격 및 프로모션 히스토리 타임라인 (Commercial Pricing Timeline)</span>
-                      <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400">
-                        {filteredPricingTimeline.length}건
-                      </span>
-                    </h3>
-                    <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5">
-                      도매가, MAP, SRP 및 프로모션 변경 이력과 당시 수입원가 기준 마진 변동 추이를 기록합니다.
-                    </p>
-                  </div>
-
-                  {/* Lightweight Filter Controls */}
-                  <div className="flex items-center gap-2 text-xs">
-                    <div className="flex items-center rounded-lg border border-zinc-200 dark:border-zinc-800 p-0.5 bg-zinc-50 dark:bg-zinc-900">
-                      <button
-                        type="button"
-                        onClick={() => setPricingFilterType("ALL")}
-                        className={`px-2.5 py-1 text-[11px] font-semibold rounded-md transition-colors ${
-                          pricingFilterType === "ALL"
-                            ? "bg-white text-zinc-900 dark:bg-zinc-800 dark:text-white shadow-sm"
-                            : "text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white"
-                        }`}
-                      >
-                        전체
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setPricingFilterType("PRICING")}
-                        className={`px-2.5 py-1 text-[11px] font-semibold rounded-md transition-colors ${
-                          pricingFilterType === "PRICING"
-                            ? "bg-white text-zinc-900 dark:bg-zinc-800 dark:text-white shadow-sm"
-                            : "text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white"
-                        }`}
-                      >
-                        가격 정책 변경
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setPricingFilterType("PROMOTION")}
-                        className={`px-2.5 py-1 text-[11px] font-semibold rounded-md transition-colors ${
-                          pricingFilterType === "PROMOTION"
-                            ? "bg-white text-zinc-900 dark:bg-zinc-800 dark:text-white shadow-sm"
-                            : "text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white"
-                        }`}
-                      >
-                        프로모션
-                      </button>
-                    </div>
-
-                    <div className="flex items-center rounded-lg border border-zinc-200 dark:border-zinc-800 p-0.5 bg-zinc-50 dark:bg-zinc-900">
-                      <button
-                        type="button"
-                        onClick={() => setPricingFilterDays("ALL")}
-                        className={`px-2 py-1 text-[11px] font-semibold rounded-md transition-colors ${
-                          pricingFilterDays === "ALL"
-                            ? "bg-white text-zinc-900 dark:bg-zinc-800 dark:text-white shadow-sm"
-                            : "text-zinc-500 hover:text-zinc-900 dark:text-zinc-400"
-                        }`}
-                      >
-                        전체 기간
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setPricingFilterDays("30")}
-                        className={`px-2 py-1 text-[11px] font-semibold rounded-md transition-colors ${
-                          pricingFilterDays === "30"
-                            ? "bg-white text-zinc-900 dark:bg-zinc-800 dark:text-white shadow-sm"
-                            : "text-zinc-500 hover:text-zinc-900 dark:text-zinc-400"
-                        }`}
-                      >
-                        30일
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setPricingFilterDays("90")}
-                        className={`px-2 py-1 text-[11px] font-semibold rounded-md transition-colors ${
-                          pricingFilterDays === "90"
-                            ? "bg-white text-zinc-900 dark:bg-zinc-800 dark:text-white shadow-sm"
-                            : "text-zinc-500 hover:text-zinc-900 dark:text-zinc-400"
-                        }`}
-                      >
-                        90일
-                      </button>
-                    </div>
-                  </div>
+                <div className="p-3.5 rounded-xl bg-rose-50/80 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/50 text-xs text-rose-900 dark:text-rose-200">
+                  <strong className="block font-bold mb-1">감지된 주문 차단 / 노출 보류 항목:</strong>
+                  <ul className="list-disc list-inside space-y-1 text-[11px]">
+                    {liveHubVisibility.holdReasonLabels.map((reason, i) => (
+                      <li key={i} className="font-semibold">{reason}</li>
+                    ))}
+                  </ul>
                 </div>
-
-                {filteredPricingTimeline.length === 0 ? (
-                  <div className="p-8 text-center text-xs text-zinc-400 border border-dashed border-zinc-200 dark:border-zinc-800 rounded-lg">
-                    기록된 상업 가격 변경 또는 프로모션 이력이 없습니다.
-                  </div>
-                ) : (
-                  <div className="overflow-x-auto rounded-xl border border-zinc-200 dark:border-zinc-800 shadow-sm bg-white dark:bg-zinc-900">
-                    <table className="w-full text-left text-xs text-zinc-600 dark:text-zinc-300">
-                      <thead className="bg-zinc-50 text-[10px] uppercase font-bold text-zinc-400 dark:bg-zinc-950 border-b border-zinc-200 dark:border-zinc-800">
-                        <tr>
-                          <th className="py-3 px-3.5">일시 및 이벤트</th>
-                          <th className="py-3 px-3 text-right">Operational Wholesale</th>
-                          <th className="py-3 px-3 text-right">Promo Wholesale</th>
-                          <th className="py-3 px-3 text-right">MAP</th>
-                          <th className="py-3 px-3 text-right">SRP</th>
-                          <th className="py-3 px-3 text-right">Cost Basis</th>
-                          <th className="py-3 px-3 text-right">Our Margin</th>
-                          <th className="py-3 px-3 text-right">Retailer Margin</th>
-                          <th className="py-3 px-3.5">사유 및 작성자</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
-                        {filteredPricingTimeline.map((item) => (
-                          <tr key={item.id} className="hover:bg-zinc-50/70 dark:hover:bg-zinc-950/60 transition-colors">
-                            {/* Column 1: Date & Event Type Badge */}
-                            <td className="py-3 px-3.5 space-y-1">
-                              <span className="font-mono text-[11px] text-zinc-500 block">{item.date}</span>
-                              <span className={`inline-block px-2 py-0.5 text-[10px] font-bold rounded border ${item.eventBadgeColor}`}>
-                                {item.eventTitle}
-                              </span>
-                            </td>
-
-                            {/* Column 2: Operational Wholesale */}
-                            <td className="py-3 px-3 text-right font-mono">
-                              {item.isWholesaleChanged ? (
-                                <div>
-                                  <span className="text-zinc-400 text-[10px] block line-through">
-                                    ${item.oldW?.toFixed(2)}
-                                  </span>
-                                  <strong className="text-emerald-600 dark:text-emerald-400 font-extrabold text-xs">
-                                    ${item.newW.toFixed(2)}
-                                  </strong>
-                                </div>
-                              ) : (
-                                <span className="text-zinc-400">—</span>
-                              )}
-                            </td>
-
-                            {/* Column 3: Promo Wholesale */}
-                            <td className="py-3 px-3 text-right font-mono">
-                              {item.changeType === "PROMOTION" && item.newPromo !== null ? (
-                                <div>
-                                  <strong className="text-amber-600 dark:text-amber-400 font-extrabold text-xs block">
-                                    ${item.newPromo.toFixed(2)}
-                                  </strong>
-                                  {item.promoLabel && (
-                                    <span className="inline-block mt-0.5 px-1.5 py-0.2 text-[9px] font-bold rounded bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
-                                      {item.promoLabel}
-                                    </span>
-                                  )}
-                                  {item.promoStartDate && item.promoEndDate && (
-                                    <span className="text-[9px] text-zinc-400 block font-sans mt-0.5">
-                                      {item.promoStartDate} ~ {item.promoEndDate}
-                                    </span>
-                                  )}
-                                </div>
-                              ) : item.isPromoChanged && item.newPromo === null ? (
-                                <span className="text-xs font-bold text-rose-500">해제됨</span>
-                              ) : (
-                                <span className="text-zinc-400">—</span>
-                              )}
-                            </td>
-
-                            {/* Column 4: MAP */}
-                            <td className="py-3 px-3 text-right font-mono">
-                              {item.isMapChanged ? (
-                                <div>
-                                  <span className="text-zinc-400 text-[10px] block line-through">
-                                    {item.oldM !== null ? `$${item.oldM.toFixed(2)}` : "-"}
-                                  </span>
-                                  <strong className="text-zinc-800 dark:text-zinc-200 font-bold">
-                                    ${item.newM.toFixed(2)}
-                                  </strong>
-                                </div>
-                              ) : (
-                                <span className="text-zinc-400">—</span>
-                              )}
-                            </td>
-
-                            {/* Column 5: SRP */}
-                            <td className="py-3 px-3 text-right font-mono">
-                              {item.isSrpChanged ? (
-                                <div>
-                                  <span className="text-zinc-400 text-[10px] block line-through">
-                                    {item.oldS !== null ? `$${item.oldS.toFixed(2)}` : "-"}
-                                  </span>
-                                  <strong className="text-zinc-800 dark:text-zinc-200 font-bold">
-                                    ${item.newS.toFixed(2)}
-                                  </strong>
-                                </div>
-                              ) : (
-                                <span className="text-zinc-400">—</span>
-                              )}
-                            </td>
-
-                            {/* Column 6: Cost Basis (Effective Landed Cost at time) */}
-                            <td className="py-3 px-3 text-right font-mono font-bold text-indigo-600 dark:text-indigo-400">
-                              ${item.effectiveCost.toFixed(2)}
-                            </td>
-
-                            {/* Column 7: Our Margin Impact */}
-                            <td className="py-3 px-3 text-right font-mono">
-                              {item.changeType === "PROMOTION" && item.promoOurMarginPct !== null ? (
-                                <div>
-                                  <strong className={`text-xs font-extrabold ${item.promoOurMarginPct <= 0 ? 'text-rose-600' : 'text-amber-600 dark:text-amber-400'}`}>
-                                    {item.promoOurMarginPct.toFixed(1)}%
-                                  </strong>
-                                  <span className="text-[9px] text-zinc-400 block font-sans">Promo Margin</span>
-                                </div>
-                              ) : item.isWholesaleChanged && item.oldOurMarginPct !== null && item.newOurMarginPct !== null ? (
-                                <div>
-                                  <span className="text-zinc-400 text-[10px] block line-through">
-                                    {item.oldOurMarginPct.toFixed(1)}%
-                                  </span>
-                                  <strong className={`text-xs font-extrabold ${item.newOurMarginPct <= 0 ? 'text-rose-600' : 'text-emerald-600 dark:text-emerald-400'}`}>
-                                    {item.newOurMarginPct.toFixed(1)}%
-                                  </strong>
-                                  {item.ourMarginDiffPts !== null && (
-                                    <span className={`text-[10px] font-bold block ${item.ourMarginDiffPts >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
-                                      {item.ourMarginDiffPts >= 0 ? `+${item.ourMarginDiffPts.toFixed(1)}%p` : `${item.ourMarginDiffPts.toFixed(1)}%p`}
-                                    </span>
-                                  )}
-                                </div>
-                              ) : (
-                                <strong className={`text-xs font-bold ${item.newOurMarginPct && item.newOurMarginPct <= 0 ? 'text-rose-600' : 'text-zinc-800 dark:text-zinc-200'}`}>
-                                  {item.newOurMarginPct !== null ? `${item.newOurMarginPct.toFixed(1)}%` : "-"}
-                                </strong>
-                              )}
-                            </td>
-
-                            {/* Column 8: Retailer Margin */}
-                            <td className="py-3 px-3 text-right font-mono">
-                              {item.changeType === "PROMOTION" && item.promoRetailerMarginPct !== null ? (
-                                <div>
-                                  <strong className="text-xs font-bold text-blue-600 dark:text-blue-400">
-                                    {item.promoRetailerMarginPct.toFixed(1)}%
-                                  </strong>
-                                  <span className="text-[9px] text-zinc-400 block font-sans">Promo Retailer</span>
-                                </div>
-                              ) : (item.isWholesaleChanged || item.isSrpChanged) && item.oldRetailerMarginPct !== null && item.newRetailerMarginPct !== null ? (
-                                <div>
-                                  <span className="text-zinc-400 text-[10px] block line-through">
-                                    {item.oldRetailerMarginPct.toFixed(1)}%
-                                  </span>
-                                  <strong className="text-xs font-bold text-blue-600 dark:text-blue-400">
-                                    {item.newRetailerMarginPct.toFixed(1)}%
-                                  </strong>
-                                </div>
-                              ) : item.newRetailerMarginPct !== null ? (
-                                <span className="text-xs font-bold text-zinc-800 dark:text-zinc-200">
-                                  {item.newRetailerMarginPct.toFixed(1)}%
-                                </span>
-                              ) : (
-                                <span className="text-zinc-400">—</span>
-                              )}
-                            </td>
-
-                            {/* Column 9: Reason & User */}
-                            <td className="py-3 px-3.5 space-y-0.5">
-                              <p className="text-xs text-zinc-800 dark:text-zinc-200 font-medium line-clamp-2">
-                                {item.reason}
-                              </p>
-                              <span className="text-[10px] text-zinc-400 font-semibold block">
-                                by {item.user}
-                              </span>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
               </div>
-            </div>
-          )}
+            )}
+          </div>
 
-          {/* TAB 5: SALES SUMMARY */}
-          {activeTab === "sales" && (
-            <div className="space-y-4">
-              <h3 className="text-sm font-bold text-zinc-900 dark:text-white">
-                판매 실적 및 회전율 요약 (Sales Summary)
-              </h3>
+          {/* Retailer Sales Policy Card */}
+          <RetailerSalesPolicyCard
+            productId={product.id}
+            productName={product.name}
+            cartonPackQty={product.carton_pack_qty || 0}
+            salesPolicy={product.salesPolicy || resolveRetailerSalesPolicy(product)}
+            srpPrice={product.srpPrice ?? null}
+            mapPrice={product.mapPrice ?? null}
+          />
 
-              <div className="p-6 rounded-lg bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 text-center space-y-2">
-                <p className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">
-                  Sales data is not available yet.
-                </p>
-                <p className="text-[11px] text-zinc-400">
-                  리테일 POS 및 셀러 파트너 주문 실적 데이터 연동 준비 중입니다.
-                </p>
-              </div>
-            </div>
-          )}
+          {/* Hub Marketing Badges Configuration Card */}
+          <HubBadgesCard
+            productId={product.id}
+            isPromoActive={product.isPromoActive}
+            hubBadges={product.hubBadges || product.price_additional_info?.hub_badges || {}}
+          />
+        </div>
+      )}
 
-          {/* TAB 6: AUDIT LOG (HUMAN-READABLE DEFAULT + OPTIONAL RAW JSON TOGGLE) */}
-          {activeTab === "audit" && (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <h3 className="text-sm font-bold text-zinc-900 dark:text-white">
-                  Trading Product 변경 감사 로그 (Human-Readable Audit Log - {parsedAuditRows.length}건)
+      {/* ========================================================================= */}
+      {/* TAB 5: HISTORY (이력관리) */}
+      {/* ========================================================================= */}
+      {activeTab === "history" && (
+        <div className="space-y-6">
+          <div className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 space-y-4">
+            {/* Filter Bar */}
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-zinc-100 dark:border-zinc-800 pb-3">
+              <div>
+                <h3 className="text-xs font-bold text-zinc-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
+                  <span>📜</span> 상품 통합 감사 및 변경 이력 (Audit History Logs)
                 </h3>
+                <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5">
+                  재고, 가격, 원가, 상태 및 Hub 노출 변경 기록을 카테고리별로 조회합니다.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
                 <button
+                  type="button"
                   onClick={() => setShowRawJson(!showRawJson)}
-                  className="px-2.5 py-1 text-[11px] font-semibold rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 transition-colors"
+                  className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300"
                 >
-                  {showRawJson ? "숨기기 (Hide Raw JSON)" : "View Raw JSON"}
+                  {showRawJson ? "표준 보기" : "Raw JSON 보기"}
                 </button>
               </div>
-
-              {parsedAuditRows.length === 0 ? (
-                <div className="p-8 text-center text-xs text-zinc-400 border border-dashed border-zinc-200 dark:border-zinc-800 rounded-lg">
-                  기록된 변경 감사 로그가 없습니다.
-                </div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs text-zinc-600 dark:text-zinc-300">
-                    <thead className="bg-zinc-50 text-[10px] uppercase font-bold text-zinc-400 dark:bg-zinc-950 border-b border-zinc-100 dark:border-zinc-800">
-                      <tr>
-                        <th className="py-2.5 px-3">일시</th>
-                        <th className="py-2.5 px-3">구분 (Category)</th>
-                        <th className="py-2.5 px-3">항목 (Field)</th>
-                        <th className="py-2.5 px-3">이전 값 (Previous)</th>
-                        <th className="py-2.5 px-3">신규 값 (New)</th>
-                        <th className="py-2.5 px-3">변경 사유 (Reason)</th>
-                        <th className="py-2.5 px-3">작성자 (User)</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
-                      {parsedAuditRows.map((row) => (
-                        <tr key={row.id} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-950/50">
-                          <td className="py-2.5 px-3 font-mono text-[11px] whitespace-nowrap">{row.date}</td>
-                          <td className="py-2.5 px-3">
-                            <span className="px-2 py-0.5 text-[10px] font-bold rounded bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-900/40">
-                              {row.category}
-                            </span>
-                          </td>
-                          <td className="py-2.5 px-3 font-semibold text-zinc-900 dark:text-zinc-100">
-                            {row.field}
-                          </td>
-                          <td className="py-2.5 px-3 font-mono text-[11px] text-zinc-500">
-                            {row.prevVal}
-                          </td>
-                          <td className="py-2.5 px-3 font-mono text-[11px] font-bold text-zinc-900 dark:text-white">
-                            {row.newVal}
-                          </td>
-                          <td className="py-2.5 px-3 text-zinc-600 dark:text-zinc-300 text-[11px]">
-                            {row.reason}
-                          </td>
-                          <td className="py-2.5 px-3 text-zinc-500 text-[11px] whitespace-nowrap">
-                            {row.user}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-
-              {/* Optional Admin Collapsible Raw JSON Viewer */}
-              {showRawJson && (
-                <div className="mt-4 p-4 rounded-lg bg-zinc-950 text-zinc-200 text-xs font-mono overflow-x-auto space-y-2 border border-zinc-800">
-                  <div className="font-bold text-amber-400">Raw Audit History Logs (Admin Debug View)</div>
-                  <pre>{JSON.stringify(historyLogs, null, 2)}</pre>
-                </div>
-              )}
             </div>
-          )}
 
+            {/* History Sub-Filter Bar */}
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs">
+              {[
+                { id: "ALL", label: "전체" },
+                { id: "INV", label: "재고·입고" },
+                { id: "PRICE", label: "가격·프로모션" },
+                { id: "COST", label: "원가" },
+                { id: "HUB", label: "Hub·운영 상태" },
+                { id: "SALES", label: "판매·주문" },
+              ].map((f) => (
+                <button
+                  key={f.id}
+                  onClick={() => setHistoryFilterType(f.id as any)}
+                  className={`px-3 py-1 rounded-lg font-bold transition-all ${
+                    historyFilterType === f.id
+                      ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
+                      : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-400"
+                  }`}
+                >
+                  {f.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Audit Logs Table */}
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="border-b border-zinc-200 dark:border-zinc-800 text-[10px] text-zinc-400 uppercase bg-zinc-50/60 dark:bg-zinc-950/40">
+                    <th className="p-3">일시</th>
+                    <th className="p-3">구분</th>
+                    <th className="p-3">변경 항목</th>
+                    <th className="p-3">변경 전 (Before)</th>
+                    <th className="p-3">변경 후 (After)</th>
+                    <th className="p-3">작업자 & 사유</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/60 font-mono">
+                  {filteredAuditRows.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="p-6 text-center text-zinc-400 text-xs font-sans">
+                        조회된 변경 이력이 없습니다.
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredAuditRows.map((row) => (
+                      <tr key={row.id} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-800/30">
+                        <td className="p-3 text-[10px] text-zinc-500 font-sans">{row.date}</td>
+                        <td className="p-3 font-sans">
+                          <span className="px-2 py-0.5 text-[10px] font-bold rounded bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
+                            {row.category}
+                          </span>
+                        </td>
+                        <td className="p-3 font-sans font-bold text-zinc-900 dark:text-zinc-100">{row.field}</td>
+                        <td className="p-3 text-zinc-500 text-[11px] truncate max-w-[140px]">{row.prevVal}</td>
+                        <td className="p-3 text-indigo-600 dark:text-indigo-400 font-bold text-[11px] truncate max-w-[140px]">{row.newVal}</td>
+                        <td className="p-3 font-sans text-zinc-600 dark:text-zinc-400 text-[11px]">
+                          {row.user} ({row.reason})
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
-      </div>
+      )}
 
-      {/* MODAL 1: EDIT PRICING */}
+      {/* ========================================================================= */}
+      {/* MODALS SECTION */}
+      {/* ========================================================================= */}
+
+      {/* MODAL 1: PRICING EDIT */}
       {isPricingModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-lg rounded-xl bg-white p-6 shadow-xl dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 space-y-4">
-            {/* Header */}
+          <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 space-y-4">
             <div className="flex items-center justify-between border-b border-zinc-200 dark:border-zinc-800 pb-3">
-              <div>
-                <h3 className="text-base font-bold text-zinc-900 dark:text-white">
-                  운영 도매가 및 가격 정책 설정 (Pricing Policy Edit)
-                </h3>
-                <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
-                  운영 도매가, MAP, SRP 기준 가격을 변경합니다.
-                </p>
-              </div>
+              <h3 className="text-base font-bold text-zinc-900 dark:text-white">
+                도매 공급가 및 가격 구조 변경
+              </h3>
               <button
                 type="button"
                 onClick={() => setIsPricingModalOpen(false)}
@@ -2685,152 +2198,77 @@ export function TradingProductDetail({
               </button>
             </div>
 
-            {/* Current State */}
-            <div className="grid grid-cols-4 gap-2 p-3 rounded-lg bg-zinc-50 dark:bg-zinc-950/60 border border-zinc-200 dark:border-zinc-800 text-xs">
-              <div>
-                <span className="text-[10px] font-bold text-zinc-400 block uppercase">Current Wholesale</span>
-                <strong className="text-zinc-800 dark:text-zinc-200">{safeFormatUsd(product.operationalWholesale)}</strong>
-              </div>
-              <div>
-                <span className="text-[10px] font-bold text-zinc-400 block uppercase">Current MAP</span>
-                <strong className="text-zinc-800 dark:text-zinc-200">{safeFormatUsd(product.mapPrice)}</strong>
-              </div>
-              <div>
-                <span className="text-[10px] font-bold text-zinc-400 block uppercase">Current SRP</span>
-                <strong className="text-zinc-800 dark:text-zinc-200">{safeFormatUsd(product.srpPrice)}</strong>
-              </div>
-              <div>
-                <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 block uppercase">Effective Cost</span>
-                <strong className="text-indigo-900 dark:text-indigo-200 font-bold">{safeFormatUsd(product.effectiveLandedCost)}</strong>
-              </div>
-            </div>
-
             {pricingError && <p className="text-xs text-rose-600 font-semibold">{pricingError}</p>}
 
-            <form onSubmit={handlePricingSubmit} className="space-y-4 text-xs">
-              {/* Editable Inputs */}
-              <div className="grid grid-cols-3 gap-3">
+            <form onSubmit={handlePricingSubmit} className="space-y-3 text-xs">
+              <div>
+                <label className="font-bold text-zinc-800 dark:text-zinc-200 block mb-1">
+                  Default Wholesale Price ($USD) *
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={editWholesale}
+                  onChange={(e) => setEditWholesale(e.target.value)}
+                  required
+                  className="w-full p-2 rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 font-bold text-zinc-900 dark:text-white"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="font-bold text-zinc-800 dark:text-zinc-200 block mb-1">New Wholesale ($USD) *</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={editWholesale}
-                    onChange={(e) => setEditWholesale(e.target.value)}
-                    required
-                    className="w-full p-2.5 rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 font-bold text-sm text-zinc-900 dark:text-white"
-                  />
-                </div>
-                <div>
-                  <label className="font-semibold text-zinc-700 dark:text-zinc-300 block mb-1">MAP ($USD)</label>
+                  <label className="font-semibold text-zinc-700 dark:text-zinc-300 block mb-1">
+                    MAP ($USD)
+                  </label>
                   <input
                     type="number"
                     step="0.01"
                     value={editMap}
                     onChange={(e) => setEditMap(e.target.value)}
-                    className="w-full p-2.5 rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-xs text-zinc-900 dark:text-white"
+                    className="w-full p-2 rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white"
                   />
                 </div>
                 <div>
-                  <label className="font-semibold text-zinc-700 dark:text-zinc-300 block mb-1">SRP ($USD)</label>
+                  <label className="font-semibold text-zinc-700 dark:text-zinc-300 block mb-1">
+                    SRP ($USD)
+                  </label>
                   <input
                     type="number"
                     step="0.01"
                     value={editSrp}
                     onChange={(e) => setEditSrp(e.target.value)}
-                    className="w-full p-2.5 rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-xs text-zinc-900 dark:text-white"
+                    className="w-full p-2 rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white"
                   />
                 </div>
               </div>
 
-              {/* Live Impact Preview */}
-              {(() => {
-                const newW = parseFloat(editWholesale);
-                const newS = parseFloat(editSrp);
-                const newM = parseFloat(editMap);
-
-                if (isNaN(newW) || newW <= 0) return null;
-
-                const newOurMarginUsd = newW - product.effectiveLandedCost;
-                const newOurMarginPct = newW > 0 ? (newOurMarginUsd / newW) * 100 : 0;
-                const marginChangePts = newOurMarginPct - (product.baseOurMarginPercent ?? 0);
-
-                const newRetailerMarginUsd = !isNaN(newS) && newS > 0 ? newS - newW : 0;
-                const newRetailerMarginPct = !isNaN(newS) && newS > 0 ? (newRetailerMarginUsd / newS) * 100 : 0;
-
-                return (
-                  <div className="space-y-2">
-                    <div className="p-3 rounded-lg bg-zinc-100 dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700 space-y-2 text-xs">
-                      <div className="flex items-center justify-between text-[11px] font-bold text-zinc-800 dark:text-zinc-200">
-                        <span>Live Pricing Impact Preview (Current → New → Impact)</span>
-                      </div>
-                      <div className="grid grid-cols-2 gap-3 text-xs">
-                        <div className="p-2 rounded bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900/40">
-                          <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400 block uppercase">New Our Margin</span>
-                          <strong className={`text-xs font-extrabold ${newOurMarginUsd <= 0 ? 'text-rose-600' : 'text-emerald-800 dark:text-emerald-300'}`}>
-                            ${newOurMarginUsd.toFixed(2)} ({newOurMarginPct.toFixed(1)}%)
-                          </strong>
-                          <span className="text-[10px] text-zinc-500 block mt-0.5">
-                            Margin Change: {marginChangePts >= 0 ? `+${marginChangePts.toFixed(1)}%p` : `${marginChangePts.toFixed(1)}%p`}
-                          </span>
-                        </div>
-
-                        <div className="p-2 rounded bg-blue-50/70 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900/40">
-                          <span className="text-[10px] font-bold text-blue-700 dark:text-blue-400 block uppercase">New Retailer Margin</span>
-                          <strong className="text-xs font-extrabold text-blue-800 dark:text-blue-300">
-                            ${newRetailerMarginUsd.toFixed(2)} ({newRetailerMarginPct.toFixed(1)}%)
-                          </strong>
-                          <span className="text-[10px] text-zinc-500 block mt-0.5">
-                            SRP (${!isNaN(newS) ? newS.toFixed(2) : '0.00'}) 기준
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Validation Warnings */}
-                    {newW <= product.effectiveLandedCost && (
-                      <div className="p-2 rounded bg-rose-50 border border-rose-200 text-rose-700 text-[11px] font-medium">
-                        ⚠️ <strong>주의:</strong> 입력한 도매가가 적용 수입원가(${product.effectiveLandedCost.toFixed(2)}) 이하입니다. (자사 마진 0% 이하)
-                      </div>
-                    )}
-                    {!isNaN(newM) && !isNaN(newS) && newM > newS && newS > 0 && (
-                      <div className="p-2 rounded bg-amber-50 border border-amber-200 text-amber-700 text-[11px] font-medium">
-                        ⚠️ <strong>주의:</strong> MAP(최저준수가격)가 SRP(권장소비자가)보다 큽니다.
-                      </div>
-                    )}
-                  </div>
-                );
-              })()}
-
-              {/* Optional Reason */}
               <div>
                 <label className="font-semibold text-zinc-700 dark:text-zinc-300 block mb-1">
-                  Pricing Reason <span className="text-zinc-400 font-normal">(Optional)</span>
+                  변경 사유 (Reason)
                 </label>
                 <input
                   type="text"
                   value={editPricingReason}
                   onChange={(e) => setEditPricingReason(e.target.value)}
-                  placeholder="Optional pricing change note"
-                  className="w-full p-2 rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-xs text-zinc-900 dark:text-white"
+                  placeholder="예: 공급 계약 단가 조정"
+                  className="w-full p-2 rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white"
                 />
               </div>
 
-              {/* Action Buttons */}
               <div className="flex justify-end gap-2 pt-2 border-t border-zinc-100 dark:border-zinc-800">
                 <button
                   type="button"
                   onClick={() => setIsPricingModalOpen(false)}
-                  className="px-3.5 py-1.5 rounded border border-zinc-300 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 transition-colors"
+                  className="px-3 py-1.5 rounded border border-zinc-300 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100"
                 >
                   취소
                 </button>
                 <button
                   type="submit"
                   disabled={isPricingSubmitting}
-                  className="px-4 py-1.5 rounded bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 font-bold transition-colors"
+                  className="px-4 py-1.5 rounded bg-zinc-900 text-white font-bold hover:bg-zinc-800 dark:bg-white dark:text-zinc-900"
                 >
-                  {isPricingSubmitting ? "적용 중..." : "Apply Pricing"}
+                  {isPricingSubmitting ? "저장 중..." : "도매가 저장"}
                 </button>
               </div>
             </form>
@@ -2838,20 +2276,14 @@ export function TradingProductDetail({
         </div>
       )}
 
-      {/* MODAL 2: ADD PROMOTION */}
+      {/* MODAL 2: PROMOTION EDIT */}
       {isPromoModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-lg rounded-xl bg-white p-6 shadow-xl dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 space-y-4">
-            {/* Header */}
+          <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 space-y-4">
             <div className="flex items-center justify-between border-b border-zinc-200 dark:border-zinc-800 pb-3">
-              <div>
-                <h3 className="text-base font-bold text-zinc-900 dark:text-white">
-                  프로모션 도매가 설정 (Promotion Setup)
-                </h3>
-                <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
-                  한시적 프로모션 공급가 및 기간을 지정합니다.
-                </p>
-              </div>
+              <h3 className="text-base font-bold text-zinc-900 dark:text-white">
+                프로모션 도매가 설정
+              </h3>
               <button
                 type="button"
                 onClick={() => setIsPromoModalOpen(false)}
@@ -2861,140 +2293,75 @@ export function TradingProductDetail({
               </button>
             </div>
 
-            {/* Current State Context */}
-            <div className="grid grid-cols-4 gap-2 p-3 rounded-lg bg-zinc-50 dark:bg-zinc-950/60 border border-zinc-200 dark:border-zinc-800 text-xs">
-              <div>
-                <span className="text-[10px] font-bold text-zinc-400 block uppercase">Current Wholesale</span>
-                <strong className="text-zinc-800 dark:text-zinc-200">{safeFormatUsd(product.operationalWholesale)}</strong>
-              </div>
-              <div>
-                <span className="text-[10px] font-bold text-zinc-400 block uppercase">Current MAP</span>
-                <strong className="text-zinc-800 dark:text-zinc-200">{safeFormatUsd(product.mapPrice)}</strong>
-              </div>
-              <div>
-                <span className="text-[10px] font-bold text-zinc-400 block uppercase">Current SRP</span>
-                <strong className="text-zinc-800 dark:text-zinc-200">{safeFormatUsd(product.srpPrice)}</strong>
-              </div>
-              <div>
-                <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 block uppercase">Effective Cost</span>
-                <strong className="text-indigo-900 dark:text-indigo-200 font-bold">{safeFormatUsd(product.effectiveLandedCost)}</strong>
-              </div>
-            </div>
-
             {promoError && <p className="text-xs text-rose-600 font-semibold">{promoError}</p>}
 
-            <form onSubmit={handlePromoSubmit} className="space-y-4 text-xs">
-              {/* Editable Inputs */}
+            <form onSubmit={handlePromoSubmit} className="space-y-3 text-xs">
               <div>
                 <label className="font-bold text-zinc-800 dark:text-zinc-200 block mb-1">
-                  Promotional Wholesale Price ($USD)
+                  Promo Wholesale Price ($USD)
                 </label>
                 <input
                   type="number"
                   step="0.01"
                   value={editPromoPrice}
                   onChange={(e) => setEditPromoPrice(e.target.value)}
-                  placeholder="Leave empty to clear active promotion"
-                  className="w-full p-2.5 rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 font-bold text-sm text-zinc-900 dark:text-white"
+                  placeholder="비워둘 경우 프로모션 해제"
+                  className="w-full p-2 rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 font-bold text-zinc-900 dark:text-white"
                 />
               </div>
 
-              {/* Live Calculation Preview */}
-              {(() => {
-                const promoPrice = parseFloat(editPromoPrice);
-                if (isNaN(promoPrice) || promoPrice <= 0) return null;
-
-                const diffUsd = promoPrice - product.operationalWholesale;
-                const changePct = product.operationalWholesale > 0 ? (diffUsd / product.operationalWholesale) * 100 : 0;
-                const ourMarginUsd = promoPrice - product.effectiveLandedCost;
-                const ourMarginPct = promoPrice > 0 ? (ourMarginUsd / promoPrice) * 100 : 0;
-                const retailerMarginUsd = product.srpPrice - promoPrice;
-                const retailerMarginPct = product.srpPrice > 0 ? (retailerMarginUsd / product.srpPrice) * 100 : 0;
-
-                return (
-                  <div className="p-3 rounded-lg bg-amber-50/70 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/50 space-y-2 text-xs">
-                    <div className="flex items-center justify-between text-[11px] font-bold text-amber-800 dark:text-amber-300">
-                      <span>Live Impact Preview (프로모션 마진 및 할인율 계산)</span>
-                    </div>
-                    <div className="grid grid-cols-3 gap-2 text-xs">
-                      <div>
-                        <span className="text-[10px] text-zinc-500 block">Wholesale Change</span>
-                        <strong className={`text-xs font-bold ${diffUsd < 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
-                          {diffUsd < 0 ? `-$${Math.abs(diffUsd).toFixed(2)} (${changePct.toFixed(1)}%)` : `+$${diffUsd.toFixed(2)} (+${changePct.toFixed(1)}%)`}
-                        </strong>
-                      </div>
-                      <div>
-                        <span className="text-[10px] text-zinc-500 block">Our Margin ($ / %)</span>
-                        <strong className={`text-xs font-bold ${ourMarginUsd < 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
-                          ${ourMarginUsd.toFixed(2)} ({ourMarginPct.toFixed(1)}%)
-                        </strong>
-                      </div>
-                      <div>
-                        <span className="text-[10px] text-zinc-500 block">Retailer Margin ($ / %)</span>
-                        <strong className="text-xs font-bold text-blue-600">
-                          ${retailerMarginUsd.toFixed(2)} ({retailerMarginPct.toFixed(1)}%)
-                        </strong>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })()}
-
-              {/* Date Pickers */}
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="font-semibold text-zinc-700 dark:text-zinc-300 block mb-1">시작일 (Start Date)</label>
+                  <label className="font-semibold text-zinc-700 dark:text-zinc-300 block mb-1">
+                    시작일 (Start Date)
+                  </label>
                   <input
                     type="date"
                     value={editPromoStart}
                     onChange={(e) => setEditPromoStart(e.target.value)}
-                    className="w-full p-2 rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-xs text-zinc-900 dark:text-white"
+                    className="w-full p-2 rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white"
                   />
                 </div>
                 <div>
-                  <label className="font-semibold text-zinc-700 dark:text-zinc-300 block mb-1">종료일 (End Date)</label>
+                  <label className="font-semibold text-zinc-700 dark:text-zinc-300 block mb-1">
+                    종료일 (End Date)
+                  </label>
                   <input
                     type="date"
                     value={editPromoEnd}
                     onChange={(e) => setEditPromoEnd(e.target.value)}
-                    className="w-full p-2 rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-xs text-zinc-900 dark:text-white"
+                    className="w-full p-2 rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white"
                   />
                 </div>
               </div>
 
-              {editPromoStart && editPromoEnd && new Date(editPromoEnd) < new Date(editPromoStart) && (
-                <p className="text-xs font-semibold text-rose-600">⚠️ 종료일은 시작일보다 빠를 수 없습니다.</p>
-              )}
-
-              {/* Optional Reason */}
               <div>
                 <label className="font-semibold text-zinc-700 dark:text-zinc-300 block mb-1">
-                  Promotion Reason <span className="text-zinc-400 font-normal">(Optional)</span>
+                  프로모션 사유
                 </label>
                 <input
                   type="text"
                   value={editPromoReason}
                   onChange={(e) => setEditPromoReason(e.target.value)}
-                  placeholder="Optional promotion note"
-                  className="w-full p-2 rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-xs text-zinc-900 dark:text-white"
+                  placeholder="예: 블랙프라이데이 특별 할인가 적용"
+                  className="w-full p-2 rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white"
                 />
               </div>
 
-              {/* Action Buttons */}
               <div className="flex justify-end gap-2 pt-2 border-t border-zinc-100 dark:border-zinc-800">
                 <button
                   type="button"
                   onClick={() => setIsPromoModalOpen(false)}
-                  className="px-3.5 py-1.5 rounded border border-zinc-300 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 transition-colors"
+                  className="px-3 py-1.5 rounded border border-zinc-300 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100"
                 >
                   취소
                 </button>
                 <button
                   type="submit"
-                  disabled={isPromoSubmitting || (!!editPromoStart && !!editPromoEnd && new Date(editPromoEnd) < new Date(editPromoStart))}
-                  className="px-4 py-1.5 rounded bg-amber-600 hover:bg-amber-700 text-white font-bold transition-colors disabled:opacity-50"
+                  disabled={isPromoSubmitting}
+                  className="px-4 py-1.5 rounded bg-amber-500 text-white font-bold hover:bg-amber-600"
                 >
-                  {isPromoSubmitting ? "저장 중..." : "Save Promotion"}
+                  {isPromoSubmitting ? "저장 중..." : "프로모션 저장"}
                 </button>
               </div>
             </form>
@@ -3006,7 +2373,6 @@ export function TradingProductDetail({
       {isCostOverrideModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="w-full max-w-lg rounded-xl bg-white p-6 shadow-xl dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 space-y-5">
-            {/* Header */}
             <div className="flex items-center justify-between border-b border-zinc-200 dark:border-zinc-800 pb-3">
               <div>
                 <h3 className="text-base font-bold text-zinc-900 dark:text-white">
@@ -3025,7 +2391,6 @@ export function TradingProductDetail({
               </button>
             </div>
 
-            {/* Current State */}
             <div className="grid grid-cols-3 gap-3 p-3 rounded-lg bg-zinc-50 dark:bg-zinc-950/60 border border-zinc-200 dark:border-zinc-800 text-xs">
               <div>
                 <span className="text-[10px] font-bold text-zinc-400 block uppercase">Base Landed Cost</span>
@@ -3038,15 +2403,14 @@ export function TradingProductDetail({
                 </strong>
               </div>
               <div>
-                <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 block uppercase">Current Effective</span>
-                <strong className="text-indigo-900 dark:text-indigo-200 font-bold">${product.effectiveLandedCost.toFixed(2)}</strong>
+                <span className="text-[10px] font-bold text-indigo-600 block uppercase">Effective Cost</span>
+                <strong className="text-indigo-900 font-bold">${product.effectiveLandedCost.toFixed(2)}</strong>
               </div>
             </div>
 
             {costOverrideError && <p className="text-xs text-rose-600 font-semibold">{costOverrideError}</p>}
 
             <form onSubmit={handleCostOverrideSubmit} className="space-y-4 text-xs">
-              {/* Editable Input */}
               <div>
                 <label className="font-bold text-zinc-800 dark:text-zinc-200 block mb-1">
                   New Override Cost ($USD) *
@@ -3061,71 +2425,33 @@ export function TradingProductDetail({
                 />
               </div>
 
-              {/* Live Impact Preview */}
-              {(() => {
-                const parsedVal = parseFloat(editCostOverride);
-                const newEffective = !isNaN(parsedVal) && parsedVal > 0 ? parsedVal : product.baseLandedCost;
-                const diffUsd = newEffective - product.effectiveLandedCost;
-                const diffPct = product.effectiveLandedCost > 0 ? (diffUsd / product.effectiveLandedCost) * 100 : 0;
-
-                return (
-                  <div className="p-3 rounded-lg bg-indigo-50/70 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-900/50 space-y-1 text-xs">
-                    <div className="flex items-center justify-between text-[11px] font-bold text-indigo-800 dark:text-indigo-300">
-                      <span>Live Impact Preview (실시간 변경 적용 영향)</span>
-                    </div>
-                    <div className="grid grid-cols-3 gap-2 pt-1 text-xs">
-                      <div>
-                        <span className="text-[10px] text-zinc-500 dark:text-zinc-400 block">New Effective Cost</span>
-                        <strong className="text-indigo-900 dark:text-indigo-200 text-sm font-extrabold">
-                          ${newEffective.toFixed(2)}
-                        </strong>
-                      </div>
-                      <div>
-                        <span className="text-[10px] text-zinc-500 dark:text-zinc-400 block">Difference ($)</span>
-                        <strong className={`text-xs font-bold ${diffUsd > 0 ? 'text-rose-600' : diffUsd < 0 ? 'text-emerald-600' : 'text-zinc-600'}`}>
-                          {diffUsd > 0 ? `+$${diffUsd.toFixed(2)}` : diffUsd < 0 ? `-$${Math.abs(diffUsd).toFixed(2)}` : '$0.00'}
-                        </strong>
-                      </div>
-                      <div>
-                        <span className="text-[10px] text-zinc-500 dark:text-zinc-400 block">Difference (%)</span>
-                        <strong className={`text-xs font-bold ${diffPct > 0 ? 'text-rose-600' : diffPct < 0 ? 'text-emerald-600' : 'text-zinc-600'}`}>
-                          {diffPct > 0 ? `+${diffPct.toFixed(1)}%` : `${diffPct.toFixed(1)}%`}
-                        </strong>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })()}
-
-              {/* Optional Reason Note */}
               <div>
                 <label className="font-semibold text-zinc-700 dark:text-zinc-300 block mb-1">
-                  Override Reason <span className="text-zinc-400 font-normal">(Optional)</span>
+                  Override Reason
                 </label>
                 <textarea
                   value={editCostReason}
                   onChange={(e) => setEditCostReason(e.target.value)}
                   rows={2}
-                  placeholder="Optional note for this override"
+                  placeholder="사유를 입력하세요"
                   className="w-full p-2 rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-xs text-zinc-900 dark:text-white"
                 />
               </div>
 
-              {/* Action Buttons */}
               <div className="flex justify-end gap-2 pt-2 border-t border-zinc-100 dark:border-zinc-800">
                 <button
                   type="button"
                   onClick={() => setIsCostOverrideModalOpen(false)}
-                  className="px-3.5 py-1.5 rounded border border-zinc-300 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 transition-colors"
+                  className="px-3.5 py-1.5 rounded border border-zinc-300 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100"
                 >
                   취소
                 </button>
                 <button
                   type="submit"
                   disabled={isCostSubmitting}
-                  className="px-4 py-1.5 rounded bg-indigo-600 hover:bg-indigo-700 text-white font-bold transition-colors"
+                  className="px-4 py-1.5 rounded bg-indigo-600 hover:bg-indigo-700 text-white font-bold"
                 >
-                  {isCostSubmitting ? "저장 중..." : product.hasCostOverride ? "Update Override" : "Save Override"}
+                  {isCostSubmitting ? "저장 중..." : "오버라이드 저장"}
                 </button>
               </div>
             </form>
@@ -3133,294 +2459,149 @@ export function TradingProductDetail({
         </div>
       )}
 
-      {/* UNIFIED MODAL: INVENTORY MANUAL ADJUSTMENT (기초재고·수동조정 통합) */}
+      {/* MODAL 4: INVENTORY ADJUSTMENT */}
       {isInvAdjustModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm animate-in fade-in duration-200">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
           <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 space-y-4">
             <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-3">
-              <div>
-                <h3 className="text-base font-bold text-zinc-900 dark:text-white flex items-center gap-2">
-                  <span>📦</span> 재고 수동 조정 (Inventory Adjustment)
-                </h3>
-                <p className="text-xs text-zinc-500 mt-0.5">{product.name}</p>
-              </div>
-              <button
-                onClick={() => setIsInvAdjustModalOpen(false)}
-                className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 p-1"
-              >
-                ✕
-              </button>
+              <h3 className="text-base font-bold text-zinc-900 dark:text-white flex items-center gap-2">
+                <span>📦</span> 재고 수동 조정 (Inventory Adjustment)
+              </h3>
+              <button onClick={() => setIsInvAdjustModalOpen(false)} className="text-zinc-400 p-1">✕</button>
             </div>
 
             {invAdjError && (
-              <div className="rounded-lg bg-red-50 dark:bg-red-950/40 p-3 text-xs text-red-600 dark:text-red-400 border border-red-200 dark:border-red-900/50">
+              <div className="rounded-lg bg-red-50 p-3 text-xs text-red-600 border border-red-200">
                 ⚠️ {invAdjError}
               </div>
             )}
 
             <form onSubmit={handleInvAdjustSubmit} className="space-y-4 text-xs">
-              {/* Warehouse Selection */}
               <div>
-                <label className="font-bold text-zinc-700 dark:text-zinc-300 block mb-1">
-                  대상 물류창고 (Location) *
-                </label>
+                <label className="font-bold text-zinc-700 block mb-1">대상 물류창고 *</label>
                 <select
                   value={invAdjWarehouseId}
                   onChange={(e) => handleModalWarehouseChange(e.target.value)}
                   required
-                  className="w-full p-2.5 rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white font-medium"
+                  className="w-full p-2.5 rounded-xl border border-zinc-300 bg-white dark:bg-zinc-950 text-zinc-900 font-medium"
                 >
-                  <option value="">-- 창고를 선택하세요 --</option>
+                  <option value="">-- 창고 선택 --</option>
                   {warehouses.map((w) => (
                     <option key={w.id} value={w.id}>
-                      {w.name} ({w.code}) {w.status === "inactive" ? "- 비활성" : ""}
+                      {w.name} ({w.code})
                     </option>
                   ))}
                 </select>
               </div>
 
-              {/* Adjustment Mode Switch: DELTA vs TARGET */}
-              <div>
-                <label className="font-bold text-zinc-700 dark:text-zinc-300 block mb-1.5">
-                  조정 방식 (Adjustment Mode)
-                </label>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setInvAdjMode("DELTA")}
-                    className={`p-2.5 text-left rounded-xl border transition-all ${
-                      invAdjMode === "DELTA"
-                        ? "border-indigo-600 bg-indigo-50/60 text-indigo-900 dark:border-indigo-500 dark:bg-indigo-950/30 dark:text-indigo-200 ring-1 ring-indigo-500 font-bold"
-                        : "border-zinc-200 bg-zinc-50/50 text-zinc-600 hover:bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-900/50 dark:text-zinc-400"
-                    }`}
-                  >
-                    <div className="text-xs">➕➖ 증감 수량 조정 (Delta)</div>
-                    <div className="text-[10px] text-zinc-500 font-normal mt-0.5">현재 재고에 수량 추가/차감</div>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setInvAdjMode("TARGET")}
-                    className={`p-2.5 text-left rounded-xl border transition-all ${
-                      invAdjMode === "TARGET"
-                        ? "border-indigo-600 bg-indigo-50/60 text-indigo-900 dark:border-indigo-500 dark:bg-indigo-950/30 dark:text-indigo-200 ring-1 ring-indigo-500 font-bold"
-                        : "border-zinc-200 bg-zinc-50/50 text-zinc-600 hover:bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-900/50 dark:text-zinc-400"
-                    }`}
-                  >
-                    <div className="text-xs">🎯 목표 수량 설정 (Target)</div>
-                    <div className="text-[10px] text-zinc-500 font-normal mt-0.5">실사 기준 최종 수량으로 지정</div>
-                  </button>
-                </div>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setInvAdjMode("DELTA")}
+                  className={`p-2.5 text-left rounded-xl border ${invAdjMode === "DELTA" ? "border-indigo-600 bg-indigo-50 font-bold" : "border-zinc-200"}`}
+                >
+                  증감 수량 조정 (Delta)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setInvAdjMode("TARGET")}
+                  className={`p-2.5 text-left rounded-xl border ${invAdjMode === "TARGET" ? "border-indigo-600 bg-indigo-50 font-bold" : "border-zinc-200"}`}
+                >
+                  목표 수량 설정 (Target)
+                </button>
               </div>
 
-              {/* Input Fields based on Mode */}
               {invAdjMode === "DELTA" ? (
                 <div className="grid grid-cols-3 gap-2">
                   <div>
-                    <label className="font-bold text-zinc-700 dark:text-zinc-300 block mb-1 text-[11px]">
-                      On Hand 증감 (+/-)
-                    </label>
+                    <label className="font-bold block mb-1 text-[11px]">OnHand (+/-)</label>
                     <input
                       type="number"
                       value={invDeltaOnHand}
                       onChange={(e) => setInvDeltaOnHand(e.target.value)}
-                      placeholder="0"
-                      className="w-full p-2 font-mono text-center rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white font-bold"
+                      className="w-full p-2 font-mono text-center rounded border"
                     />
                   </div>
                   <div>
-                    <label className="font-bold text-zinc-700 dark:text-zinc-300 block mb-1 text-[11px]">
-                      Damaged 증감 (+/-)
-                    </label>
+                    <label className="font-bold block mb-1 text-[11px]">Damaged (+/-)</label>
                     <input
                       type="number"
                       value={invDeltaDamaged}
                       onChange={(e) => setInvDeltaDamaged(e.target.value)}
-                      placeholder="0"
-                      className="w-full p-2 font-mono text-center rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white font-bold"
+                      className="w-full p-2 font-mono text-center rounded border"
                     />
                   </div>
                   <div>
-                    <label className="font-bold text-zinc-700 dark:text-zinc-300 block mb-1 text-[11px]">
-                      Hold 증감 (+/-)
-                    </label>
+                    <label className="font-bold block mb-1 text-[11px]">Hold (+/-)</label>
                     <input
                       type="number"
                       value={invDeltaHold}
                       onChange={(e) => setInvDeltaHold(e.target.value)}
-                      placeholder="0"
-                      className="w-full p-2 font-mono text-center rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white font-bold"
+                      className="w-full p-2 font-mono text-center rounded border"
                     />
                   </div>
                 </div>
               ) : (
                 <div className="grid grid-cols-3 gap-2">
                   <div>
-                    <label className="font-bold text-zinc-700 dark:text-zinc-300 block mb-1 text-[11px]">
-                      최종 목표 On Hand
-                    </label>
+                    <label className="font-bold block mb-1 text-[11px]">목표 OnHand</label>
                     <input
                       type="number"
                       min="0"
                       value={invTargetOnHand}
                       onChange={(e) => setInvTargetOnHand(e.target.value)}
-                      placeholder="0"
-                      className="w-full p-2 font-mono text-center rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white font-bold"
+                      className="w-full p-2 font-mono text-center rounded border"
                     />
                   </div>
                   <div>
-                    <label className="font-bold text-zinc-700 dark:text-zinc-300 block mb-1 text-[11px]">
-                      최종 목표 Damaged
-                    </label>
+                    <label className="font-bold block mb-1 text-[11px]">목표 Damaged</label>
                     <input
                       type="number"
                       min="0"
                       value={invTargetDamaged}
                       onChange={(e) => setInvTargetDamaged(e.target.value)}
-                      placeholder="0"
-                      className="w-full p-2 font-mono text-center rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white font-bold"
+                      className="w-full p-2 font-mono text-center rounded border"
                     />
                   </div>
                   <div>
-                    <label className="font-bold text-zinc-700 dark:text-zinc-300 block mb-1 text-[11px]">
-                      최종 목표 Hold
-                    </label>
+                    <label className="font-bold block mb-1 text-[11px]">목표 Hold</label>
                     <input
                       type="number"
                       min="0"
                       value={invTargetHold}
                       onChange={(e) => setInvTargetHold(e.target.value)}
-                      placeholder="0"
-                      className="w-full p-2 font-mono text-center rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white font-bold"
+                      className="w-full p-2 font-mono text-center rounded border"
                     />
                   </div>
                 </div>
               )}
 
-              {/* LIVE IMPACT PREVIEW TABLE */}
-              <div className="p-3 rounded-xl bg-zinc-50 dark:bg-zinc-950/60 border border-zinc-200 dark:border-zinc-800 space-y-1.5">
-                <div className="flex items-center justify-between text-[11px] font-bold text-zinc-700 dark:text-zinc-300">
-                  <span>📊 조정 전·후 실시간 계산 (Live Preview)</span>
-                  <span className="text-[10px] font-normal text-zinc-400">Available = OnHand - Damaged - Hold</span>
-                </div>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-center text-xs">
-                    <thead>
-                      <tr className="text-[10px] text-zinc-400 uppercase border-b border-zinc-200 dark:border-zinc-800">
-                        <th className="py-1 text-left">항목</th>
-                        <th className="py-1">현재 잔고</th>
-                        <th className="py-1">변동 수량</th>
-                        <th className="py-1">조정 후 결과</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/60 font-mono">
-                      <tr>
-                        <td className="py-1.5 text-left font-bold text-zinc-700 dark:text-zinc-300 font-sans">Available (판매가능)</td>
-                        <td className="py-1.5">{currentModalWhBalance.available}</td>
-                        <td className={`py-1.5 font-bold ${modalLiveCalculations.resAvailable - currentModalWhBalance.available > 0 ? 'text-emerald-600' : modalLiveCalculations.resAvailable - currentModalWhBalance.available < 0 ? 'text-rose-600' : 'text-zinc-500'}`}>
-                          {modalLiveCalculations.resAvailable - currentModalWhBalance.available > 0 ? `+${modalLiveCalculations.resAvailable - currentModalWhBalance.available}` : modalLiveCalculations.resAvailable - currentModalWhBalance.available}
-                        </td>
-                        <td className="py-1.5 font-extrabold text-indigo-600 dark:text-indigo-400">{modalLiveCalculations.resAvailable} EA</td>
-                      </tr>
-                      <tr>
-                        <td className="py-1 text-left text-zinc-500 font-sans">On Hand (물리보유)</td>
-                        <td className="py-1">{currentModalWhBalance.onHand}</td>
-                        <td className={`py-1 ${modalLiveCalculations.dOnHand > 0 ? 'text-emerald-600 font-bold' : modalLiveCalculations.dOnHand < 0 ? 'text-rose-600 font-bold' : 'text-zinc-500'}`}>
-                          {modalLiveCalculations.dOnHand > 0 ? `+${modalLiveCalculations.dOnHand}` : modalLiveCalculations.dOnHand}
-                        </td>
-                        <td className={`py-1 font-bold ${modalLiveCalculations.resOnHand < 0 ? 'text-rose-600 font-black' : 'text-zinc-900 dark:text-zinc-100'}`}>
-                          {modalLiveCalculations.resOnHand}
-                        </td>
-                      </tr>
-                      <tr>
-                        <td className="py-1 text-left text-zinc-500 font-sans">Damaged (불량격리)</td>
-                        <td className="py-1">{currentModalWhBalance.damaged}</td>
-                        <td className={`py-1 ${modalLiveCalculations.dDamaged > 0 ? 'text-rose-600 font-bold' : modalLiveCalculations.dDamaged < 0 ? 'text-emerald-600 font-bold' : 'text-zinc-500'}`}>
-                          {modalLiveCalculations.dDamaged > 0 ? `+${modalLiveCalculations.dDamaged}` : modalLiveCalculations.dDamaged}
-                        </td>
-                        <td className={`py-1 font-bold ${modalLiveCalculations.resDamaged < 0 ? 'text-rose-600 font-black' : 'text-zinc-900 dark:text-zinc-100'}`}>
-                          {modalLiveCalculations.resDamaged}
-                        </td>
-                      </tr>
-                      <tr>
-                        <td className="py-1 text-left text-zinc-500 font-sans">Hold (검토보류)</td>
-                        <td className="py-1">{currentModalWhBalance.hold}</td>
-                        <td className={`py-1 ${modalLiveCalculations.dHold > 0 ? 'text-amber-600 font-bold' : modalLiveCalculations.dHold < 0 ? 'text-emerald-600 font-bold' : 'text-zinc-500'}`}>
-                          {modalLiveCalculations.dHold > 0 ? `+${modalLiveCalculations.dHold}` : modalLiveCalculations.dHold}
-                        </td>
-                        <td className={`py-1 font-bold ${modalLiveCalculations.resHold < 0 ? 'text-rose-600 font-black' : 'text-zinc-900 dark:text-zinc-100'}`}>
-                          {modalLiveCalculations.resHold}
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-              {/* Movement Type & Reason Selection */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="font-bold text-zinc-700 dark:text-zinc-300 block mb-1">
-                    이동 구분 (Movement Type)
-                  </label>
-                  <select
-                    value={invAdjMovementType}
-                    onChange={(e) => setInvAdjMovementType(e.target.value as any)}
-                    className="w-full p-2 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white"
-                  >
-                    <option value="MANUAL_ADJUSTMENT">수동 조정 (Manual Adjustment)</option>
-                    <option value="OPENING_BALANCE">기초 재고 등록 (Opening Balance)</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="font-bold text-zinc-700 dark:text-zinc-300 block mb-1">
-                    조정 사유 (Reason) *
-                  </label>
-                  <select
-                    value={invAdjReason}
-                    onChange={(e) => setInvAdjReason(e.target.value)}
-                    required
-                    className="w-full p-2 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white"
-                  >
-                    <option value="실사 재고 차이 조정 (Physical Count Difference)">실사 재고 차이 조정 (Physical Count Difference)</option>
-                    <option value="기초 재고 등록 (Opening Balance Entry)">기초 재고 등록 (Opening Balance Entry)</option>
-                    <option value="불량 재고 발견 및 격리 (Damaged Stock Quarantine)">불량 재고 발견 및 격리 (Damaged Stock Quarantine)</option>
-                    <option value="검수 보류 설정 (Hold for Inspection)">검수 보류 설정 (Hold for Inspection)</option>
-                    <option value="파손/분실 처리 (Loss / Breakage)">파손/분실 처리 (Loss / Breakage)</option>
-                    <option value="반품 재입고 (Return Restock)">반품 재입고 (Return Restock)</option>
-                    <option value="기타 운영 조정 (Other Operational Reason)">기타 운영 조정 (Other Operational Reason)</option>
-                  </select>
-                </div>
-              </div>
-
               <div>
-                <label className="font-bold text-zinc-700 dark:text-zinc-300 block mb-1">
-                  상세 메모 (Note) <span className="text-zinc-400 font-normal">(Optional)</span>
-                </label>
+                <label className="font-bold block mb-1">조정 사유 *</label>
                 <input
                   type="text"
-                  value={invAdjNote}
-                  onChange={(e) => setInvAdjNote(e.target.value)}
-                  placeholder="예: 정기 재고실사 NJ 창고 3열 실측 반영"
-                  className="w-full p-2 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white"
+                  value={invAdjReason}
+                  onChange={(e) => setInvAdjReason(e.target.value)}
+                  required
+                  placeholder="예: 정기 실사 수량 반영"
+                  className="w-full p-2 rounded border"
                 />
               </div>
 
-              <div className="flex items-center justify-end gap-2 pt-3 border-t border-zinc-100 dark:border-zinc-800">
+              <div className="flex justify-end gap-2 pt-2 border-t">
                 <button
                   type="button"
                   onClick={() => setIsInvAdjustModalOpen(false)}
-                  className="px-3.5 py-1.5 text-xs font-medium text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white"
+                  className="px-3.5 py-1.5 text-zinc-600"
                 >
                   취소
                 </button>
                 <button
                   type="submit"
-                  disabled={isInvAdjSubmitting || modalLiveCalculations.hasNegativeResult || modalLiveCalculations.hasZeroDelta}
-                  className="px-4 py-2 rounded-xl bg-zinc-900 text-white dark:bg-white dark:text-zinc-900 font-bold hover:bg-zinc-800 dark:hover:bg-zinc-100 disabled:opacity-40 transition-colors shadow-sm"
+                  disabled={isInvAdjSubmitting}
+                  className="px-4 py-2 rounded-xl bg-zinc-900 text-white font-bold"
                 >
-                  {isInvAdjSubmitting ? "조정 처리 중..." : "재고 조정 완료"}
+                  {isInvAdjSubmitting ? "저장 중..." : "조정 완료"}
                 </button>
               </div>
             </form>
@@ -3428,98 +2609,19 @@ export function TradingProductDetail({
         </div>
       )}
 
-      {/* MODAL 6: PRODUCT IMAGE LIGHTBOX */}
-      {isLightboxOpen && photoUrls.length > 0 && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
-          onClick={() => setIsLightboxOpen(false)}
-        >
-          <div
-            className="relative max-w-4xl w-full max-h-[90vh] flex flex-col items-center justify-center p-2"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Close button */}
-            <button
-              onClick={() => setIsLightboxOpen(false)}
-              className="absolute top-2 right-2 z-10 rounded-full bg-black/60 text-white p-2 hover:bg-black/90 transition-colors"
-              title="Close (ESC)"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-
-            {/* Main Image Container */}
-            <div className="relative flex items-center justify-center max-h-[75vh] w-full overflow-hidden rounded-xl bg-zinc-950/80 p-2 border border-zinc-800">
-              <img
-                src={photoUrls[lightboxIndex]}
-                alt={`${product.name} ${lightboxIndex + 1}`}
-                className="max-h-[72vh] max-w-full object-contain rounded-lg shadow-2xl"
-              />
-
-              {/* Navigation Controls */}
-              {photoUrls.length > 1 && (
-                <>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setLightboxIndex((prev) => (prev > 0 ? prev - 1 : photoUrls.length - 1));
-                    }}
-                    className="absolute left-3 top-1/2 -translate-y-1/2 rounded-full bg-black/70 hover:bg-black text-white p-3 transition-colors shadow-lg font-bold"
-                    title="Previous (Left Arrow)"
-                  >
-                    ❮
-                  </button>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setLightboxIndex((prev) => (prev < photoUrls.length - 1 ? prev + 1 : 0));
-                    }}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full bg-black/70 hover:bg-black text-white p-3 transition-colors shadow-lg font-bold"
-                    title="Next (Right Arrow)"
-                  >
-                    ❯
-                  </button>
-                </>
-              )}
-            </div>
-
-            {/* Image Counter & Product Name */}
-            <div className="mt-3 flex items-center gap-3">
-              <span className="text-xs font-semibold text-zinc-200 truncate max-w-md">
-                {product.name}
-              </span>
-              {photoUrls.length > 1 && (
-                <span className="text-xs font-mono font-bold text-white bg-zinc-800/90 px-3 py-0.5 rounded-full border border-zinc-700">
-                  {lightboxIndex + 1} / {photoUrls.length}
-                </span>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Status & Visibility Management Modal */}
+      {/* MODAL 5: STATUS & VISIBILITY CONTROL */}
       {isStatusModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm animate-in fade-in duration-200">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
           <div className="w-full max-w-md rounded-2xl border border-zinc-200 bg-white p-6 shadow-2xl dark:border-zinc-800 dark:bg-zinc-900 space-y-4">
             <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-3">
-              <div>
-                <h3 className="text-base font-bold text-zinc-900 dark:text-white flex items-center gap-2">
-                  <span>⚙️</span> 운영 상태 및 Hub 노출 관리
-                </h3>
-                <p className="text-xs text-zinc-500 mt-0.5">{product.name}</p>
-              </div>
-              <button
-                onClick={() => setIsStatusModalOpen(false)}
-                className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 p-1"
-              >
-                ✕
-              </button>
+              <h3 className="text-base font-bold text-zinc-900 dark:text-white flex items-center gap-2">
+                <span>⚙️</span> 운영 상태 및 Hub 노출 관리
+              </h3>
+              <button onClick={() => setIsStatusModalOpen(false)} className="text-zinc-400 p-1">✕</button>
             </div>
 
             {statusError && (
-              <div className="rounded-lg bg-red-50 dark:bg-red-950/40 p-3 text-xs text-red-600 dark:text-red-400 border border-red-200 dark:border-red-900/50">
+              <div className="rounded-lg bg-red-50 p-3 text-xs text-red-600 border border-red-200">
                 ⚠️ {statusError}
               </div>
             )}
@@ -3527,26 +2629,21 @@ export function TradingProductDetail({
             <div className="space-y-4">
               <div>
                 <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1.5">
-                  운영 상태 (Operational Trading Status)
+                  운영 상태 (Trading Status)
                 </label>
                 <div className="grid grid-cols-3 gap-2">
                   {[
-                    { val: "active", label: "운영 중", desc: "주문 및 재고 관리 활성" },
-                    { val: "inactive", label: "운영 중지", desc: "주문 일시 중단" },
-                    { val: "historical", label: "운영 종료", desc: "이력 보관" },
+                    { val: "active", label: "운영 중" },
+                    { val: "inactive", label: "운영 중지" },
+                    { val: "historical", label: "운영 종료" },
                   ].map((s) => (
                     <button
                       key={s.val}
                       type="button"
                       onClick={() => handleTargetTradingStatusChange(s.val)}
-                      className={`p-2.5 text-left rounded-xl border transition-all ${
-                        targetTradingStatus === s.val
-                          ? "border-indigo-600 bg-indigo-50/50 text-indigo-900 dark:border-indigo-500 dark:bg-indigo-950/30 dark:text-indigo-200 ring-1 ring-indigo-500"
-                          : "border-zinc-200 bg-zinc-50/50 text-zinc-700 hover:bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-900/50 dark:text-zinc-300"
-                      }`}
+                      className={`p-2.5 text-center rounded-xl border ${targetTradingStatus === s.val ? 'border-indigo-600 bg-indigo-50 font-bold' : 'border-zinc-200'}`}
                     >
-                      <div className="text-xs font-bold">{s.label}</div>
-                      <div className="text-[10px] text-zinc-500 mt-0.5 leading-tight">{s.desc}</div>
+                      {s.label}
                     </button>
                   ))}
                 </div>
@@ -3554,70 +2651,46 @@ export function TradingProductDetail({
 
               <div>
                 <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1.5">
-                  Retailer Hub 노출 여부 (Visibility)
+                  Hub 노출 (Visibility)
                 </label>
                 <div className="grid grid-cols-2 gap-2">
                   <button
                     type="button"
                     disabled={targetTradingStatus !== "active"}
                     onClick={() => setTargetVisibility("visible")}
-                    className={`p-2.5 text-left rounded-xl border transition-all ${
-                      targetTradingStatus !== "active"
-                        ? "opacity-40 cursor-not-allowed border-zinc-200 bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-950"
-                        : targetVisibility === "visible"
-                        ? "border-emerald-600 bg-emerald-50/50 text-emerald-900 dark:border-emerald-500 dark:bg-emerald-950/30 dark:text-emerald-200 ring-1 ring-emerald-500"
-                        : "border-zinc-200 bg-zinc-50/50 text-zinc-700 hover:bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-900/50 dark:text-zinc-300"
-                    }`}
+                    className={`p-2.5 text-center rounded-xl border ${targetTradingStatus !== "active" ? 'opacity-40 cursor-not-allowed' : targetVisibility === "visible" ? 'border-emerald-600 bg-emerald-50 font-bold' : 'border-zinc-200'}`}
                   >
-                    <div className="text-xs font-bold flex items-center gap-1">
-                      <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" />
-                      노출 (Visible)
-                    </div>
-                    <div className="text-[10px] text-zinc-500 mt-0.5">리테일러 포털에 공개</div>
+                    노출 (Visible)
                   </button>
-
                   <button
                     type="button"
                     onClick={() => setTargetVisibility("hidden")}
-                    className={`p-2.5 text-left rounded-xl border transition-all ${
-                      targetVisibility === "hidden"
-                        ? "border-zinc-700 bg-zinc-100 text-zinc-900 dark:border-zinc-500 dark:bg-zinc-800 dark:text-zinc-100 ring-1 ring-zinc-500"
-                        : "border-zinc-200 bg-zinc-50/50 text-zinc-700 hover:bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-900/50 dark:text-zinc-300"
-                    }`}
+                    className={`p-2.5 text-center rounded-xl border ${targetVisibility === "hidden" ? 'border-zinc-700 bg-zinc-100 font-bold' : 'border-zinc-200'}`}
                   >
-                    <div className="text-xs font-bold flex items-center gap-1">
-                      <span className="w-2 h-2 rounded-full bg-zinc-400 inline-block" />
-                      비노출 (Hidden)
-                    </div>
-                    <div className="text-[10px] text-zinc-500 mt-0.5">리테일러 포털 미노출</div>
+                    비노출 (Hidden)
                   </button>
                 </div>
-                {targetTradingStatus !== "active" && (
-                  <p className="text-[11px] text-amber-600 dark:text-amber-400 mt-1.5 flex items-center gap-1">
-                    ℹ️ 운영 중지 또는 종료 상태에서는 '비노출'만 가능합니다.
-                  </p>
-                )}
               </div>
 
               <div>
                 <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1">
-                  변경 사유 (Optional Reason)
+                  사유 (Reason)
                 </label>
                 <input
                   type="text"
                   value={statusReason}
                   onChange={(e) => setStatusReason(e.target.value)}
-                  placeholder="예: 신규 시즌 런칭으로 허브 노출 개시"
-                  className="w-full rounded-xl border border-zinc-300 bg-white px-3 py-2 text-xs text-zinc-900 placeholder:text-zinc-400 focus:border-indigo-500 focus:outline-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-white"
+                  placeholder="변경 사유 입력"
+                  className="w-full rounded-xl border p-2 text-xs"
                 />
               </div>
             </div>
 
-            <div className="flex items-center justify-end gap-2 border-t border-zinc-100 dark:border-zinc-800 pt-3">
+            <div className="flex justify-end gap-2 border-t pt-3">
               <button
                 type="button"
                 onClick={() => setIsStatusModalOpen(false)}
-                className="px-3.5 py-1.5 text-xs font-medium text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white"
+                className="px-3.5 py-1.5 text-xs text-zinc-600"
               >
                 취소
               </button>
@@ -3625,7 +2698,7 @@ export function TradingProductDetail({
                 type="button"
                 disabled={isStatusSubmitting}
                 onClick={handleSaveStatusVisibility}
-                className="rounded-xl bg-indigo-600 px-4 py-2 text-xs font-bold text-white shadow-sm hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+                className="rounded-xl bg-indigo-600 px-4 py-2 text-xs font-bold text-white shadow-sm hover:bg-indigo-700"
               >
                 {isStatusSubmitting ? "저장 중..." : "상태 저장"}
               </button>
@@ -3634,6 +2707,27 @@ export function TradingProductDetail({
         </div>
       )}
 
+      {/* LIGHTBOX MODAL */}
+      {isLightboxOpen && photoUrls.length > 0 && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
+          onClick={() => setIsLightboxOpen(false)}
+        >
+          <div className="relative max-w-4xl w-full max-h-[90vh] flex flex-col items-center justify-center" onClick={(e) => e.stopPropagation()}>
+            <button
+              onClick={() => setIsLightboxOpen(false)}
+              className="absolute top-2 right-2 text-white p-2 text-xl font-bold"
+            >
+              ✕
+            </button>
+            <img
+              src={photoUrls[lightboxIndex]}
+              alt={product.name}
+              className="max-h-[75vh] max-w-full object-contain rounded-lg shadow-2xl"
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
