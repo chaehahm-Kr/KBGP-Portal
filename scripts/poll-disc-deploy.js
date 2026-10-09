@@ -1,7 +1,7 @@
 const https = require('https');
 
 async function pollDeployment() {
-  const targetSha = 'e887603';
+  const targetSha = '11c2fdb';
   console.log(`Polling https://portal.kselecthub.com/api/diagnostics for commit SHA starting with ${targetSha}...`);
 
   for (let i = 0; i < 40; i++) {

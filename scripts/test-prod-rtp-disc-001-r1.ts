@@ -24,7 +24,8 @@ async function runBrowserQA() {
       waitUntil: "load",
       timeout: 15000,
     });
-    const diagData = JSON.parse(await diagRes.text());
+    const diagText = diagRes ? await diagRes.text() : "{}";
+    const diagData = JSON.parse(diagText);
     console.log(`- Live Deployment Commit SHA: ${diagData.deployment?.commitSha}`);
     console.log(`- Runtime Environment: ${diagData.deployment?.environment}`);
     assert(
