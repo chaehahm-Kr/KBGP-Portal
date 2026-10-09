@@ -54,16 +54,18 @@ export default async function RetailerProductsPage({ searchParams }: RetailerPro
   });
 
   return (
-    <div className="space-y-6 sm:space-y-8">
+    <div className="space-y-3 sm:space-y-4">
       {/* Page Header */}
-      <div className="border-b border-zinc-200 dark:border-zinc-800 pb-5">
-        <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-md text-[11px] font-semibold bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-400 border border-indigo-200/50 dark:border-indigo-800/50 mb-2">
-          <span>✨</span> {t.products.b2bCatalogBadge}
+      <div className="border-b border-zinc-200 dark:border-zinc-800 pb-3">
+        <div className="flex flex-wrap items-center gap-2.5">
+          <h1 className="text-xl sm:text-2xl font-bold text-zinc-900 dark:text-white tracking-tight">
+            {t.products.title}
+          </h1>
+          <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[10px] font-semibold bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-400 border border-indigo-200/50 dark:border-indigo-800/50">
+            <span>✨</span> {t.products.b2bCatalogBadge}
+          </div>
         </div>
-        <h1 className="text-2xl sm:text-3xl font-bold text-zinc-900 dark:text-white tracking-tight">
-          {t.products.title}
-        </h1>
-        <p className="text-xs sm:text-sm text-zinc-500 dark:text-zinc-400 mt-1 max-w-2xl">
+        <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1 max-w-2xl line-clamp-1">
           {t.products.subtitle}
         </p>
       </div>
