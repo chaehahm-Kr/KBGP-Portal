@@ -158,7 +158,7 @@ Commit 전에 반드시:
 ---
 
 # 21. Mandatory Completion Report Schema
-모든 개발 Task 완료 보고에는 아래 정보를 포함:
+모든 개발 Task 완료 보고는 반드시 응답의 마지막에 단일 ` ```markdown ` 코드 블록으로 제공하여 사용자가 원클릭으로 전체 보고서를 복사할 수 있도록 합니다:
 
 ```markdown
 ## Task
@@ -223,6 +223,12 @@ COMPLETE
 - Brand Portal과 Admin은 서로 분리된 별개의 제품 시스템으로 진화해서는 안 됩니다.
 - K SELECT 전체 시스템에는 단 하나의 authoritative Product domain model이 존재합니다.
 - 브랜드 포털(`lib/product/*`, `components/product/*`)에 새로운 기능, 속성 연산 로직, 검증 규칙, 로지스틱스 스펙 등이 추가되거나 수정되는 경우, 반드시 어드민 제품 관리(`app/admin/products/*`, `components/admin/*`)에서도 동일한 도메인 모델과 연산식을 맞추어 동기화 작업을 수행해야 합니다.
+
+---
+
+# 26. Standalone One-Click Copyable Completion Report Rule (최종 완료 보고서 원클릭 복사 규칙)
+- 모든 Task 완료 시 출력하는 **최종 완료 보고서는 반드시 응답의 가장 마지막에 단 하나의 독립된 ` ```markdown ` 코드 블록**으로 생성해야 합니다.
+- 코드 블록 바깥에 본문을 장황하게 중복 서술하지 않고, 사용자가 채팅 UI의 "Copy code" 버튼 하나만 눌러 전체 표준 완료 보고서를 즉시 복사하여 다른 시스템이나 기록에 붙여넣을 수 있도록 제공합니다.
 
 ---
 
