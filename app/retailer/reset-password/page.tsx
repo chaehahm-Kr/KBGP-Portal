@@ -209,6 +209,10 @@ export default function RetailerResetPasswordPage() {
     // Sign out to enforce clean login with new credentials
     await supabase.auth.signOut();
 
+    if (typeof window !== "undefined") {
+      window.history.replaceState(null, "", window.location.pathname);
+    }
+
     setPending(false);
     setSuccess(true);
   }

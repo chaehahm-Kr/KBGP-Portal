@@ -33,7 +33,7 @@ async function runRTPAuth002QA() {
   const testEmail = 'qa-retailer-test@letusto.com';
   assertSafeQAAccount(testEmail);
   const targetFinalPassword = 'Password123!@#';
-  const intermediatePassword = 'TempPassword123!@#';
+  const intermediatePassword = `TempPass${Date.now()}!@#`;
 
   try {
     // 1. Forgot Password page UI & request
@@ -122,15 +122,13 @@ async function runRTPAuth002QA() {
     await page.waitForSelector('input[type="email"]', { timeout: 10000 });
     await page.fill('input[type="email"]', testEmail);
     await page.fill('input[type="password"]', intermediatePassword);
-    await Promise.all([
-      page.waitForNavigation({ timeout: 15000 }).catch(e => null),
-      page.click('button[type="submit"]')
-    ]);
-    await page.waitForTimeout(3000);
+    await page.click('button[type="submit"]');
+    await page.waitForURL((url) => !url.pathname.includes('/login'), { timeout: 20000 });
+    await page.waitForTimeout(2000);
 
     const onDashboard = page.url() === 'https://portal.kselecthub.com/' || page.url().startsWith('https://portal.kselecthub.com/?');
     const authedText = await page.innerText('body');
-    const isAuthed = authedText.includes('Tammy Chun') || authedText.includes('Test Store 01') || authedText.includes('Dashboard');
+    const isAuthed = authedText.includes('QA Retailer') || authedText.includes('Dashboard') || authedText.includes('K SELECT Test Retailer');
     console.log(` -> Login with New Password: ${onDashboard && isAuthed ? 'PASS' : 'FAIL'} (${page.url()})`);
     results.push({ step: '8. New Password Authentication', pass: onDashboard && isAuthed });
 
