@@ -403,35 +403,49 @@ export async function recordOpeningBalance(
 }
 
 /**
- * Record a manual inventory adjustment.
+ * Record a manual inventory adjustment (delta adjustment or target baseline setting).
  */
 export async function recordManualAdjustment(
   productId: string,
   warehouseId: string,
   qtyChange: number,
-  qtyHoldChange: number,
-  reason: string,
-  note?: string
+  qtyHoldChange: number = 0,
+  reason: string = "Physical Count Difference",
+  note?: string,
+  qtyDamagedChange: number = 0,
+  movementType: "MANUAL_ADJUSTMENT" | "OPENING_BALANCE" = "MANUAL_ADJUSTMENT"
 ) {
   const { userId } = await verifyAdminSession();
   const supabase = createAdminClient();
 
+  if (!productId) throw new Error("상품 ID가 필요합니다.");
+  if (!warehouseId) throw new Error("조정 대상 물류창고를 선택해 주세요.");
+  if (!reason || !reason.trim()) throw new Error("조정 사유를 반드시 입력해 주세요.");
+
+  const deltaOnHand = Number(qtyChange) || 0;
+  const deltaHold = Number(qtyHoldChange) || 0;
+  const deltaDamaged = Number(qtyDamagedChange) || 0;
+
+  if (deltaOnHand === 0 && deltaHold === 0 && deltaDamaged === 0) {
+    throw new Error("최소 하나의 수량(보유, 불량, 보류) 변동이 있어야 합니다.");
+  }
+
   // 1. Verify product status
   const { data: product } = await supabase
     .from("products")
-    .select("trading_status")
+    .select("id, trading_status, selection_status")
     .eq("id", productId)
     .single();
 
   if (!product) throw new Error("제품을 찾을 수 없습니다.");
-  if (product.trading_status === "inactive") {
+  if (product.trading_status === "inactive" && product.selection_status !== "SELECTED") {
     throw new Error("비대상(Inactive) 상품에는 재고 조작을 수행할 수 없습니다.");
   }
 
   // 2. Verify warehouse status
   const { data: warehouse } = await supabase
     .from("warehouses")
-    .select("status")
+    .select("id, name, code, status")
     .eq("id", warehouseId)
     .single();
 
@@ -440,17 +454,44 @@ export async function recordManualAdjustment(
     throw new Error("비활성(Inactive) 상태의 물류창고에는 재고를 등록할 수 없습니다.");
   }
 
-  // 3. Insert movement (trigger will update balance and validate non-negative constraints)
+  // 3. Pre-validate current balance to provide clear validation before DB trigger exception
+  const { data: currentBalance } = await supabase
+    .from("inventory_balances")
+    .select("qty_on_hand, qty_hold, qty_damaged")
+    .eq("product_id", productId)
+    .eq("warehouse_id", warehouseId)
+    .maybeSingle();
+
+  const curOnHand = Number(currentBalance?.qty_on_hand || 0);
+  const curHold = Number(currentBalance?.qty_hold || 0);
+  const curDamaged = Number(currentBalance?.qty_damaged || 0);
+
+  const finalOnHand = curOnHand + deltaOnHand;
+  const finalHold = curHold + deltaHold;
+  const finalDamaged = curDamaged + deltaDamaged;
+
+  if (finalOnHand < 0) {
+    throw new Error(`보유 재고(On Hand)는 0 미만이 될 수 없습니다. (현재: ${curOnHand}, 변동: ${deltaOnHand >= 0 ? "+" : ""}${deltaOnHand}, 결과: ${finalOnHand})`);
+  }
+  if (finalHold < 0) {
+    throw new Error(`보류 재고(Hold)는 0 미만이 될 수 없습니다. (현재: ${curHold}, 변동: ${deltaHold >= 0 ? "+" : ""}${deltaHold}, 결과: ${finalHold})`);
+  }
+  if (finalDamaged < 0) {
+    throw new Error(`불량 재고(Damaged)는 0 미만이 될 수 없습니다. (현재: ${curDamaged}, 변동: ${deltaDamaged >= 0 ? "+" : ""}${deltaDamaged}, 결과: ${finalDamaged})`);
+  }
+
+  // 4. Insert movement (trigger will update balance and validate non-negative constraints)
   const { error: moveErr } = await supabase
     .from("inventory_movements")
     .insert({
       product_id: productId,
       warehouse_id: warehouseId,
-      type: "MANUAL_ADJUSTMENT",
-      qty_change: qtyChange,
-      qty_hold_change: qtyHoldChange,
-      reason,
-      note: note || "수동 재고 조정",
+      type: movementType,
+      qty_change: deltaOnHand,
+      qty_hold_change: deltaHold,
+      qty_damaged_change: deltaDamaged,
+      reason: reason.trim(),
+      note: note?.trim() || (movementType === "OPENING_BALANCE" ? "기초 재고 입력" : "수동 재고 조정"),
       created_by: userId,
     });
 
@@ -458,7 +499,12 @@ export async function recordManualAdjustment(
     throw new Error(`재고 조정 실패: ${moveErr.message}`);
   }
 
-  revalidatePath(`/admin/products/trading/${productId}`);
-  revalidatePath("/admin/inventory");
+  try {
+    revalidatePath(`/admin/products/trading/${productId}`);
+    revalidatePath("/admin/products/trading");
+    revalidatePath("/admin/inventory");
+  } catch {
+    // Ignore
+  }
   return { success: true };
 }

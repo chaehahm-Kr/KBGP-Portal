@@ -850,6 +850,134 @@ export async function updateTradingCostOverride(productId: string, input: Update
   return { success: true };
 }
 
+export interface UpdateLetustoSkuInput {
+  letusto_sku: string | null;
+  reason?: string | null;
+}
+
+export async function updateLetustoSku(productId: string, input: UpdateLetustoSkuInput) {
+  const { userId } = await verifyAdminSession();
+  const supabase = createAdminClient();
+
+  const rawSku = input.letusto_sku !== null && input.letusto_sku !== undefined ? String(input.letusto_sku).trim() : "";
+  const normalizedSku = rawSku.length > 0 ? rawSku : null;
+  const reason = input.reason?.trim() || "Letusto SKU updated";
+
+  // Validate format if provided
+  if (normalizedSku !== null) {
+    if (normalizedSku.length > 64) {
+      throw new Error("Letusto SKU는 최대 64자까지 입력할 수 있습니다.");
+    }
+    // Check for duplicate SKU in products
+    const { data: existingProd } = await supabase
+      .from("products")
+      .select("id, name, letusto_sku, price_additional_info")
+      .or(`letusto_sku.eq.${normalizedSku},price_additional_info->admin_overrides->>letusto_sku.eq.${normalizedSku}`)
+      .neq("id", productId)
+      .limit(1)
+      .maybeSingle();
+
+    if (existingProd) {
+      throw new Error(`이미 다른 상품("${existingProd.name}")에 할당된 Letusto SKU입니다. 고유한 SKU를 입력해 주세요.`);
+    }
+  }
+
+  // Fetch current product
+  const { data: currentProd, error: fetchErr } = await supabase
+    .from("products")
+    .select("id, name, letusto_sku, price_additional_info")
+    .eq("id", productId)
+    .single();
+
+  if (fetchErr || !currentProd) {
+    throw new Error("상품을 찾을 수 없습니다.");
+  }
+
+  const priceAddInfo = (currentProd.price_additional_info as any) || {};
+  const adminOverrides = priceAddInfo.admin_overrides || {};
+  const currentHistory = priceAddInfo.trading_history || [];
+
+  const currentEffectiveSku = currentProd.letusto_sku || adminOverrides.letusto_sku || null;
+  if (currentEffectiveSku === normalizedSku) {
+    return { success: true, letusto_sku: normalizedSku, message: "동일한 SKU입니다." };
+  }
+
+  const beforeVal = {
+    letusto_sku: currentEffectiveSku,
+  };
+  const afterVal = {
+    letusto_sku: normalizedSku,
+    reason,
+  };
+
+  const updatedAdminOverrides = {
+    ...adminOverrides,
+    letusto_sku: normalizedSku,
+    updated_at: new Date().toISOString(),
+    updated_by: userId,
+  };
+
+  const historyEntry = {
+    id: crypto.randomUUID(),
+    product_id: productId,
+    change_type: "SKU_UPDATE",
+    field_name: "letusto_sku",
+    before_value: beforeVal,
+    after_value: afterVal,
+    reason,
+    created_by: userId,
+    created_at: new Date().toISOString(),
+  };
+
+  const updatedPriceAddInfo = {
+    ...priceAddInfo,
+    admin_overrides: updatedAdminOverrides,
+    trading_history: [historyEntry, ...currentHistory],
+  };
+
+  // Update products table: both direct column and JSON admin_overrides
+  const { error: updateErr } = await supabase
+    .from("products")
+    .update({
+      letusto_sku: normalizedSku,
+      price_additional_info: updatedPriceAddInfo,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", productId);
+
+  if (updateErr) {
+    throw new Error(`Letusto SKU 저장 실패: ${updateErr.message}`);
+  }
+
+  try {
+    await supabase.from("trading_product_history").insert({
+      product_id: productId,
+      change_type: "SKU_UPDATE",
+      field_name: "letusto_sku",
+      before_value: beforeVal,
+      after_value: afterVal,
+      reason,
+      created_by: userId,
+    });
+  } catch {
+    // Ignore if table doesn't exist
+  }
+
+  try {
+    revalidatePath(`/admin/products/trading/${productId}`);
+    revalidatePath("/admin/products/trading");
+    revalidatePath(`/admin/products/${productId}`);
+    revalidatePath("/admin/products");
+    revalidatePath("/admin/inventory");
+    revalidatePath("/retailer/products");
+    revalidatePath(`/retailer/products/${productId}`);
+  } catch {
+    // Ignore
+  }
+
+  return { success: true, letusto_sku: normalizedSku };
+}
+
 export async function clearTradingCostOverride(productId: string, reason: string) {
   const { userId } = await verifyAdminSession();
   const supabase = createAdminClient();

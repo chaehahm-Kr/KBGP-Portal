@@ -2,13 +2,14 @@
 
 import React, { useState, useMemo } from "react";
 import Link from "next/link";
-import { recordOpeningBalance, recordManualAdjustment } from "@/lib/inventory/actions";
+import { recordManualAdjustment } from "@/lib/inventory/actions";
 import {
   updateTradingPricing,
   updateTradingPromotion,
   updateTradingCostOverride,
   clearTradingCostOverride,
   updateTradingStatusAndVisibility,
+  updateLetustoSku,
 } from "@/lib/product/trading-actions";
 import {
   TRADING_STATUS_LABELS,
@@ -265,28 +266,235 @@ export function TradingProductDetail({
   // Show raw JSON toggle for audit log
   const [showRawJson, setShowRawJson] = useState(false);
 
+  // Letusto SKU Editing State
+  const [letustoSku, setLetustoSku] = useState<string>(product.letusto_sku || "");
+  const [isEditingSku, setIsEditingSku] = useState(false);
+  const [skuInput, setSkuInput] = useState<string>(product.letusto_sku || "");
+  const [skuReason, setSkuReason] = useState<string>("");
+  const [skuError, setSkuError] = useState<string>("");
+  const [isSkuSubmitting, setIsSkuSubmitting] = useState(false);
+
+  const handleStartEditSku = () => {
+    setSkuInput(letustoSku);
+    setSkuReason("");
+    setSkuError("");
+    setIsEditingSku(true);
+  };
+
+  const handleCancelEditSku = () => {
+    setSkuInput(letustoSku);
+    setSkuError("");
+    setIsEditingSku(false);
+  };
+
+  const handleSaveSku = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    setSkuError("");
+    const trimmed = skuInput.trim();
+    if (trimmed.length > 64) {
+      setSkuError("Letusto SKU는 최대 64자까지 입력할 수 있습니다.");
+      return;
+    }
+    setIsSkuSubmitting(true);
+    try {
+      const res = await updateLetustoSku(product.id, {
+        letusto_sku: trimmed.length > 0 ? trimmed : null,
+        reason: skuReason.trim() || "Letusto SKU updated via Trading Product Detail",
+      });
+      if (res?.success) {
+        setLetustoSku(res.letusto_sku || "");
+        setIsEditingSku(false);
+        router.refresh();
+      }
+    } catch (err: any) {
+      setSkuError(err.message || "Letusto SKU 저장 실패");
+    } finally {
+      setIsSkuSubmitting(false);
+    }
+  };
+
+  // Location selection for Inventory Snapshot
+  const [selectedLocationId, setSelectedLocationId] = useState<string>("ALL");
+
+  const activeLocationBalance = useMemo(() => {
+    if (selectedLocationId === "ALL") {
+      return {
+        isAll: true,
+        warehouseName: "전체 로케이션 (ALL Locations)",
+        warehouseCode: "ALL",
+        onHand: totalOnHand,
+        damaged: totalDamaged,
+        hold: totalHold,
+        available: totalAvailable,
+      };
+    }
+    const found = initialBalances.find((b) => b.warehouse_id === selectedLocationId);
+    const onHand = found ? found.qty_on_hand : 0;
+    const damaged = found ? (found.qty_damaged || 0) : 0;
+    const hold = found ? found.qty_hold : 0;
+    const available = Math.max(0, onHand - damaged - hold);
+    const whObj = warehouses.find((w) => w.id === selectedLocationId);
+    return {
+      isAll: false,
+      warehouseName: whObj ? `${whObj.name} (${whObj.code})` : "선택된 창고",
+      warehouseCode: whObj?.code || "",
+      onHand,
+      damaged,
+      hold,
+      available,
+    };
+  }, [selectedLocationId, initialBalances, warehouses, totalOnHand, totalDamaged, totalHold, totalAvailable]);
+
+  // Unified Inventory Adjustment Modal State
+  const [isInvAdjustModalOpen, setIsInvAdjustModalOpen] = useState(false);
+  const [invAdjWarehouseId, setInvAdjWarehouseId] = useState("");
+  const [invAdjMode, setInvAdjMode] = useState<"DELTA" | "TARGET">("DELTA");
+  const [invAdjMovementType, setInvAdjMovementType] = useState<"MANUAL_ADJUSTMENT" | "OPENING_BALANCE">("MANUAL_ADJUSTMENT");
+
+  const [invDeltaOnHand, setInvDeltaOnHand] = useState("0");
+  const [invDeltaDamaged, setInvDeltaDamaged] = useState("0");
+  const [invDeltaHold, setInvDeltaHold] = useState("0");
+
+  const [invTargetOnHand, setInvTargetOnHand] = useState("0");
+  const [invTargetDamaged, setInvTargetDamaged] = useState("0");
+  const [invTargetHold, setInvTargetHold] = useState("0");
+
+  const [invAdjReason, setInvAdjReason] = useState("실사 재고 차이 조정 (Physical Count Difference)");
+  const [invAdjNote, setInvAdjNote] = useState("");
+  const [invAdjError, setInvAdjError] = useState("");
+  const [isInvAdjSubmitting, setIsInvAdjSubmitting] = useState(false);
+
   // Modals state
-  const [isOpeningModalOpen, setIsOpeningModalOpen] = useState(false);
-  const [isAdjustmentModalOpen, setIsAdjustmentModalOpen] = useState(false);
   const [isPricingModalOpen, setIsPricingModalOpen] = useState(false);
   const [isPromoModalOpen, setIsPromoModalOpen] = useState(false);
   const [isCostOverrideModalOpen, setIsCostOverrideModalOpen] = useState(false);
 
-  // Opening Balance Form State
-  const [openWarehouseId, setOpenWarehouseId] = useState("");
-  const [openQty, setOpenQty] = useState("0");
-  const [openNote, setOpenNote] = useState("");
-  const [openError, setOpenError] = useState("");
-  const [isOpeningSubmitting, setIsOpeningSubmitting] = useState(false);
+  const handleOpenInvAdjustModal = (whId?: string, defaultMode: "DELTA" | "TARGET" = "DELTA") => {
+    const targetWhId = whId || (selectedLocationId !== "ALL" ? selectedLocationId : (warehouses[0]?.id || ""));
+    setInvAdjWarehouseId(targetWhId);
+    setInvAdjMode(defaultMode);
 
-  // Manual Adjustment Form State
-  const [adjWarehouseId, setAdjWarehouseId] = useState("");
-  const [adjQtyChange, setAdjQtyChange] = useState("0");
-  const [adjQtyHoldChange, setAdjQtyHoldChange] = useState("0");
-  const [adjReason, setAdjReason] = useState("Physical Count Difference");
-  const [adjNote, setAdjNote] = useState("");
-  const [adjError, setAdjError] = useState("");
-  const [isAdjustmentSubmitting, setIsAdjustmentSubmitting] = useState(false);
+    const existing = initialBalances.find((b) => b.warehouse_id === targetWhId);
+    const curOnHand = existing?.qty_on_hand || 0;
+    const curDamaged = existing?.qty_damaged || 0;
+    const curHold = existing?.qty_hold || 0;
+
+    setInvDeltaOnHand("0");
+    setInvDeltaDamaged("0");
+    setInvDeltaHold("0");
+
+    setInvTargetOnHand(curOnHand.toString());
+    setInvTargetDamaged(curDamaged.toString());
+    setInvTargetHold(curHold.toString());
+
+    setInvAdjReason("실사 재고 차이 조정 (Physical Count Difference)");
+    setInvAdjNote("");
+    setInvAdjError("");
+    setInvAdjMovementType(curOnHand === 0 && (!initialBalances || initialBalances.length === 0) ? "OPENING_BALANCE" : "MANUAL_ADJUSTMENT");
+    setIsInvAdjustModalOpen(true);
+  };
+
+  const handleModalWarehouseChange = (newWhId: string) => {
+    setInvAdjWarehouseId(newWhId);
+    const existing = initialBalances.find((b) => b.warehouse_id === newWhId);
+    const curOnHand = existing?.qty_on_hand || 0;
+    const curDamaged = existing?.qty_damaged || 0;
+    const curHold = existing?.qty_hold || 0;
+
+    setInvDeltaOnHand("0");
+    setInvDeltaDamaged("0");
+    setInvDeltaHold("0");
+
+    setInvTargetOnHand(curOnHand.toString());
+    setInvTargetDamaged(curDamaged.toString());
+    setInvTargetHold(curHold.toString());
+  };
+
+  const currentModalWhBalance = useMemo(() => {
+    const existing = initialBalances.find((b) => b.warehouse_id === invAdjWarehouseId);
+    const onHand = existing?.qty_on_hand || 0;
+    const damaged = existing?.qty_damaged || 0;
+    const hold = existing?.qty_hold || 0;
+    const available = Math.max(0, onHand - damaged - hold);
+    return { onHand, damaged, hold, available };
+  }, [invAdjWarehouseId, initialBalances]);
+
+  const modalLiveCalculations = useMemo(() => {
+    let dOnHand = 0;
+    let dDamaged = 0;
+    let dHold = 0;
+
+    if (invAdjMode === "DELTA") {
+      dOnHand = parseInt(invDeltaOnHand) || 0;
+      dDamaged = parseInt(invDeltaDamaged) || 0;
+      dHold = parseInt(invDeltaHold) || 0;
+    } else {
+      const tOnHand = parseInt(invTargetOnHand) || 0;
+      const tDamaged = parseInt(invTargetDamaged) || 0;
+      const tHold = parseInt(invTargetHold) || 0;
+      dOnHand = tOnHand - currentModalWhBalance.onHand;
+      dDamaged = tDamaged - currentModalWhBalance.damaged;
+      dHold = tHold - currentModalWhBalance.hold;
+    }
+
+    const resOnHand = currentModalWhBalance.onHand + dOnHand;
+    const resDamaged = currentModalWhBalance.damaged + dDamaged;
+    const resHold = currentModalWhBalance.hold + dHold;
+    const resAvailable = Math.max(0, resOnHand - resDamaged - resHold);
+
+    return {
+      dOnHand,
+      dDamaged,
+      dHold,
+      resOnHand,
+      resDamaged,
+      resHold,
+      resAvailable,
+      hasZeroDelta: dOnHand === 0 && dDamaged === 0 && dHold === 0,
+      hasNegativeResult: resOnHand < 0 || resDamaged < 0 || resHold < 0,
+    };
+  }, [invAdjMode, invDeltaOnHand, invDeltaDamaged, invDeltaHold, invTargetOnHand, invTargetDamaged, invTargetHold, currentModalWhBalance]);
+
+  const handleInvAdjustSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setInvAdjError("");
+    if (!invAdjWarehouseId) {
+      setInvAdjError("물류창고를 선택해 주세요.");
+      return;
+    }
+    if (modalLiveCalculations.hasZeroDelta) {
+      setInvAdjError("최소 하나의 수량(보유, 불량, 보류) 변동이 있어야 합니다.");
+      return;
+    }
+    if (modalLiveCalculations.hasNegativeResult) {
+      setInvAdjError("조정 후 수량은 0 미만(음수)이 될 수 없습니다.");
+      return;
+    }
+    if (!invAdjReason.trim()) {
+      setInvAdjError("조정 사유를 입력하거나 선택해 주세요.");
+      return;
+    }
+
+    setIsInvAdjSubmitting(true);
+    try {
+      await recordManualAdjustment(
+        product.id,
+        invAdjWarehouseId,
+        modalLiveCalculations.dOnHand,
+        modalLiveCalculations.dHold,
+        invAdjReason.trim(),
+        invAdjNote.trim(),
+        modalLiveCalculations.dDamaged,
+        invAdjMovementType
+      );
+      setIsInvAdjustModalOpen(false);
+      router.refresh();
+    } catch (err: any) {
+      setInvAdjError(err.message || "재고 조정 실패");
+    } finally {
+      setIsInvAdjSubmitting(false);
+    }
+  };
 
   // Pricing Form State
   const [editWholesale, setEditWholesale] = useState(product.operationalWholesale.toString());
@@ -388,55 +596,6 @@ export function TradingProductDetail({
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [isLightboxOpen, photoUrls.length]);
-
-  // Handlers
-  const handleOpenSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setOpenError("");
-    setIsOpeningSubmitting(true);
-    try {
-      if (!openWarehouseId) throw new Error("물류창고를 선택해 주세요.");
-      const qty = parseInt(openQty);
-      if (isNaN(qty) || qty < 0) throw new Error("올바른 수량을 입력해 주세요 (0 이상).");
-
-      await recordOpeningBalance(product.id, openWarehouseId, qty, openNote);
-      setOpenWarehouseId("");
-      setOpenQty("0");
-      setOpenNote("");
-      setIsOpeningModalOpen(false);
-      router.refresh();
-    } catch (err: any) {
-      setOpenError(err.message || "기초 재고 입력 중 오류가 발생했습니다.");
-    } finally {
-      setIsOpeningSubmitting(false);
-    }
-  };
-
-  const handleAdjSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setAdjError("");
-    setIsAdjustmentSubmitting(true);
-    try {
-      if (!adjWarehouseId) throw new Error("물류창고를 선택해 주세요.");
-      const qtyChange = parseInt(adjQtyChange);
-      const qtyHoldChange = parseInt(adjQtyHoldChange);
-
-      if (isNaN(qtyChange) || isNaN(qtyHoldChange)) throw new Error("올바른 변동 수량을 입력해 주세요.");
-      if (qtyChange === 0 && qtyHoldChange === 0) throw new Error("최소 하나의 수량 변동이 있어야 합니다.");
-
-      await recordManualAdjustment(product.id, adjWarehouseId, qtyChange, qtyHoldChange, adjReason, adjNote);
-      setAdjWarehouseId("");
-      setAdjQtyChange("0");
-      setAdjQtyHoldChange("0");
-      setAdjNote("");
-      setIsAdjustmentModalOpen(false);
-      router.refresh();
-    } catch (err: any) {
-      setAdjError(err.message || "수동 조정 중 오류가 발생했습니다.");
-    } finally {
-      setIsAdjustmentSubmitting(false);
-    }
-  };
 
   const handlePricingSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1150,7 +1309,7 @@ export function TradingProductDetail({
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-stretch">
         {/* LEFT: Product Identity Card (6 cols) */}
         <div className="lg:col-span-6 flex flex-col justify-between rounded-xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-          <div className="space-y-3.5">
+          <div className="space-y-3">
             <div className="flex items-start justify-between border-b border-zinc-100 dark:border-zinc-800 pb-2">
               <h3 className="text-xs font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">
                 제품 식별 요약 (Product Identity)
@@ -1164,6 +1323,7 @@ export function TradingProductDetail({
             </div>
 
             <div className="flex flex-col sm:flex-row items-start gap-4">
+              {/* Product Photo Thumbnail */}
               <div
                 onClick={() => {
                   if (photoUrls.length > 0) {
@@ -1188,7 +1348,8 @@ export function TradingProductDetail({
                 )}
               </div>
 
-              <div className="min-w-0 flex-1 space-y-1.5">
+              {/* Product Details & SKUs beside the photo */}
+              <div className="min-w-0 flex-1 space-y-2">
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-[11px] font-bold text-zinc-800 dark:text-zinc-200 bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 rounded border border-zinc-200 dark:border-zinc-700">
                     {product.brandName}
@@ -1216,30 +1377,90 @@ export function TradingProductDetail({
                     📂 {product.category_full_path}
                   </p>
                 )}
-              </div>
-            </div>
-          </div>
 
-          {/* Integrated Compact SKUs */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-xs border-t border-zinc-100 dark:border-zinc-800 pt-3 mt-3">
-            <div className="bg-zinc-50/70 dark:bg-zinc-950/40 p-2 rounded-lg border border-zinc-200 dark:border-zinc-800">
-              <span className="text-[9px] font-bold text-zinc-400 block uppercase">Letusto SKU</span>
-              <span className="font-mono text-zinc-900 dark:text-zinc-100 font-bold text-xs truncate block">{product.letusto_sku || "—"}</span>
-            </div>
-            <div className="bg-zinc-50/70 dark:bg-zinc-950/40 p-2 rounded-lg border border-zinc-200 dark:border-zinc-800">
-              <span className="text-[9px] font-bold text-zinc-400 block uppercase">제조사 SKU</span>
-              <span className="font-mono text-zinc-900 dark:text-zinc-100 font-bold text-xs truncate block">{product.manufacture_sku || "—"}</span>
-            </div>
-            <div className="bg-zinc-50/70 dark:bg-zinc-950/40 p-2 rounded-lg border border-zinc-200 dark:border-zinc-800">
-              <span className="text-[9px] font-bold text-zinc-400 block uppercase">UPC / EAN</span>
-              <span className="font-mono text-zinc-900 dark:text-zinc-100 font-bold text-xs truncate block">{product.upc || "—"}</span>
+                {/* Relocated SKU & UPC/EAN Information beside photo */}
+                <div className="space-y-1.5 pt-1.5 border-t border-zinc-100 dark:border-zinc-800">
+                  {/* Letusto SKU with inline edit */}
+                  <div className="flex items-center justify-between gap-2 text-xs">
+                    <span className="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 w-24 shrink-0">
+                      Letusto SKU:
+                    </span>
+                    {isEditingSku ? (
+                      <div className="flex-1 space-y-1">
+                        <div className="flex items-center gap-1.5">
+                          <input
+                            type="text"
+                            value={skuInput}
+                            onChange={(e) => setSkuInput(e.target.value)}
+                            placeholder="예: LET-PROD-001"
+                            maxLength={64}
+                            className="flex-1 px-2 py-1 text-xs font-mono rounded border border-indigo-400 dark:border-indigo-500 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                            autoFocus
+                          />
+                          <button
+                            type="button"
+                            disabled={isSkuSubmitting}
+                            onClick={() => handleSaveSku()}
+                            className="px-2.5 py-1 text-[11px] font-bold rounded bg-indigo-600 hover:bg-indigo-700 text-white transition-colors disabled:opacity-50"
+                          >
+                            {isSkuSubmitting ? "저장 중" : "저장"}
+                          </button>
+                          <button
+                            type="button"
+                            disabled={isSkuSubmitting}
+                            onClick={handleCancelEditSku}
+                            className="px-2 py-1 text-[11px] font-medium rounded border border-zinc-300 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                          >
+                            취소
+                          </button>
+                        </div>
+                        {skuError && <p className="text-[10px] text-rose-600 font-medium">{skuError}</p>}
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-1.5 flex-1 justify-between">
+                        <span className="font-mono text-xs font-bold text-zinc-900 dark:text-zinc-100 truncate">
+                          {letustoSku || <span className="text-zinc-400 font-normal italic">미설정</span>}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={handleStartEditSku}
+                          className="px-1.5 py-0.5 text-[10px] font-medium rounded text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 border border-transparent hover:border-indigo-200 transition-colors"
+                          title="Letusto SKU 편집"
+                        >
+                          ✏️ 편집
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Manufacturer SKU */}
+                  <div className="flex items-center justify-between gap-2 text-xs">
+                    <span className="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 w-24 shrink-0">
+                      제조사 SKU:
+                    </span>
+                    <span className="font-mono text-xs text-zinc-800 dark:text-zinc-200 flex-1 truncate" title={product.manufacture_sku || ""}>
+                      {product.manufacture_sku || "—"}
+                    </span>
+                  </div>
+
+                  {/* UPC / EAN */}
+                  <div className="flex items-center justify-between gap-2 text-xs">
+                    <span className="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 w-24 shrink-0">
+                      UPC / EAN:
+                    </span>
+                    <span className="font-mono text-xs text-zinc-800 dark:text-zinc-200 flex-1 truncate" title={product.upc || ""}>
+                      {product.upc || "—"}
+                    </span>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
 
         {/* RIGHT: Operational Detection Card / 운영 감지 (6 cols) */}
         <div className="lg:col-span-6 flex flex-col justify-between rounded-xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-          <div className="space-y-3">
+          <div className="space-y-2.5">
             <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-2">
               <div className="flex items-center gap-2">
                 <h3 className="text-xs font-bold text-zinc-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
@@ -1249,37 +1470,37 @@ export function TradingProductDetail({
                   {activeAlerts.length}건
                 </span>
               </div>
-              <span className="text-[11px] text-zinc-400 font-medium">
-                클릭 시 해당 관리 영역으로 이동
+              <span className="text-[10px] text-zinc-400 font-medium">
+                클릭 시 해당 영역으로 이동
               </span>
             </div>
 
-            {/* Alert items list */}
-            <div className="space-y-2 max-h-[220px] overflow-y-auto pr-1">
+            {/* Alert items list - compressed padding & typography for 5~6 items visible */}
+            <div className="space-y-1.5 max-h-[290px] overflow-y-auto pr-1">
               {activeAlerts.map((alert) => (
                 <div
                   key={alert.id}
                   onClick={() => handleAlertAction(alert.target)}
-                  className={`p-2.5 rounded-lg border text-xs cursor-pointer transition-all hover:border-zinc-400 dark:hover:border-zinc-500 hover:shadow-xs active:scale-[0.99] group ${
+                  className={`p-2 rounded-lg border text-xs cursor-pointer transition-all hover:border-zinc-400 dark:hover:border-zinc-500 hover:shadow-xs active:scale-[0.99] group ${
                     alert.type === "danger"
-                      ? "bg-rose-50/80 text-rose-800 border-rose-200 dark:bg-rose-950/40 dark:text-rose-200 dark:border-rose-900/60"
+                      ? "bg-rose-50/90 text-rose-900 border-rose-200 dark:bg-rose-950/40 dark:text-rose-200 dark:border-rose-900/60"
                       : alert.type === "warning"
-                      ? "bg-amber-50/80 text-amber-800 border-amber-200 dark:bg-amber-950/40 dark:text-amber-200 dark:border-amber-900/60"
+                      ? "bg-amber-50/90 text-amber-900 border-amber-200 dark:bg-amber-950/40 dark:text-amber-200 dark:border-amber-900/60"
                       : "bg-zinc-50 text-zinc-800 border-zinc-200 dark:bg-zinc-800/80 dark:text-zinc-200 dark:border-zinc-700"
                   }`}
                 >
                   <div className="flex items-center justify-between gap-2">
-                    <strong className="text-xs font-bold flex items-center gap-1.5">
+                    <strong className="text-[11px] font-bold flex items-center gap-1.5 truncate">
                       <span>{alert.type === "danger" ? "🚨" : alert.type === "warning" ? "⚠️" : "ℹ️"}</span>
-                      <span>{alert.title}</span>
+                      <span className="truncate">{alert.title}</span>
                     </strong>
                     {alert.actionLabel && (
-                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-white/80 dark:bg-zinc-900/80 text-zinc-700 dark:text-zinc-300 border border-zinc-200/80 dark:border-zinc-700 group-hover:bg-zinc-900 group-hover:text-white dark:group-hover:bg-white dark:group-hover:text-zinc-900 transition-colors shrink-0">
+                      <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-white/90 dark:bg-zinc-900/90 text-zinc-700 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700 group-hover:bg-zinc-900 group-hover:text-white dark:group-hover:bg-white dark:group-hover:text-zinc-900 transition-colors shrink-0">
                         {alert.actionLabel}
                       </span>
                     )}
                   </div>
-                  <p className="text-[11px] opacity-90 mt-1 pl-5 leading-relaxed">
+                  <p className="text-[10px] opacity-85 mt-0.5 pl-4 leading-snug line-clamp-2">
                     {alert.message}
                   </p>
                 </div>
@@ -1307,53 +1528,67 @@ export function TradingProductDetail({
             <h3 className="text-xs font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">
               실시간 재고 스냅샷 (Inventory)
             </h3>
-            <div className="flex items-center gap-1.5">
-              <button
-                onClick={() => setIsOpeningModalOpen(true)}
-                className="px-2 py-0.5 text-[10px] font-bold rounded bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 text-zinc-700 dark:text-zinc-300 transition-colors"
-              >
-                + 기초 재고
-              </button>
-              <button
-                onClick={() => setIsAdjustmentModalOpen(true)}
-                className="px-2 py-0.5 text-[10px] font-bold rounded bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 text-zinc-700 dark:text-zinc-300 transition-colors"
-              >
-                수동 조정
-              </button>
-            </div>
+            <button
+              onClick={() => handleOpenInvAdjustModal()}
+              className="px-2.5 py-1 text-xs font-bold rounded-lg bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 hover:bg-zinc-800 dark:hover:bg-zinc-200 transition-colors shadow-sm"
+            >
+              재고 수동 조정
+            </button>
+          </div>
+
+          {/* Location Selector Filter */}
+          <div className="flex items-center justify-between gap-2 text-xs bg-zinc-50 dark:bg-zinc-950/60 p-2 rounded-lg border border-zinc-200 dark:border-zinc-800">
+            <span className="font-semibold text-zinc-600 dark:text-zinc-400 shrink-0">📍 로케이션:</span>
+            <select
+              value={selectedLocationId}
+              onChange={(e) => setSelectedLocationId(e.target.value)}
+              className="flex-1 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded px-2 py-1 text-xs font-medium text-zinc-900 dark:text-white"
+            >
+              <option value="ALL">전체 로케이션 합산 (ALL Locations)</option>
+              {warehouses.map((w) => (
+                <option key={w.id} value={w.id}>
+                  {w.name} ({w.code})
+                </option>
+              ))}
+            </select>
           </div>
 
           {/* Available Hero Metric */}
           <div
             className={`p-3 rounded-lg border ${
-              totalAvailable === 0
+              activeLocationBalance.available === 0
                 ? "bg-rose-50/70 dark:bg-rose-950/30 border-rose-200/70 dark:border-rose-900/50"
-                : totalAvailable < 10
+                : activeLocationBalance.available < 10
                 ? "bg-amber-50/70 dark:bg-amber-950/30 border-amber-200/70 dark:border-amber-900/50"
                 : "bg-emerald-50/70 dark:bg-emerald-950/30 border-emerald-200/70 dark:border-emerald-900/50"
             }`}
           >
-            <span
-              className={`text-[10px] font-bold block uppercase ${
-                totalAvailable === 0
-                  ? "text-rose-700 dark:text-rose-400"
-                  : totalAvailable < 10
-                  ? "text-amber-700 dark:text-amber-400"
-                  : "text-emerald-700 dark:text-emerald-400"
-              }`}
-            >
-              Available (판매가능 재고)
-            </span>
+            <div className="flex items-center justify-between">
+              <span
+                className={`text-[10px] font-bold block uppercase ${
+                  activeLocationBalance.available === 0
+                    ? "text-rose-700 dark:text-rose-400"
+                    : activeLocationBalance.available < 10
+                    ? "text-amber-700 dark:text-amber-400"
+                    : "text-emerald-700 dark:text-emerald-400"
+                }`}
+              >
+                Available (판매가능 재고)
+              </span>
+              <span className="text-[10px] font-medium text-zinc-500 dark:text-zinc-400">
+                {activeLocationBalance.isAll ? "전체 합산" : activeLocationBalance.warehouseCode}
+              </span>
+            </div>
             <div
               className={`text-2xl font-extrabold ${
-                totalAvailable === 0
+                activeLocationBalance.available === 0
                   ? "text-rose-800 dark:text-rose-300"
-                  : totalAvailable < 10
+                  : activeLocationBalance.available < 10
                   ? "text-amber-800 dark:text-amber-300"
                   : "text-emerald-800 dark:text-emerald-300"
               }`}
             >
-              {totalAvailable.toLocaleString()} <span className="text-sm font-bold">EA</span>
+              {activeLocationBalance.available.toLocaleString()} <span className="text-sm font-bold">EA</span>
             </div>
           </div>
 
@@ -1361,19 +1596,106 @@ export function TradingProductDetail({
           <div className="grid grid-cols-3 gap-2 text-xs">
             <div className="p-2 rounded-lg bg-zinc-50 dark:bg-zinc-950/40 border border-zinc-200 dark:border-zinc-800">
               <span className="text-[9px] font-bold text-zinc-500 dark:text-zinc-400 block uppercase">On Hand</span>
-              <span className="text-sm font-bold text-zinc-900 dark:text-zinc-100">{totalOnHand.toLocaleString()} EA</span>
+              <span className="text-sm font-bold text-zinc-900 dark:text-zinc-100">{activeLocationBalance.onHand.toLocaleString()} EA</span>
             </div>
             <div className="p-2 rounded-lg bg-zinc-50 dark:bg-zinc-950/40 border border-zinc-200 dark:border-zinc-800">
               <span className="text-[9px] font-bold text-zinc-500 dark:text-zinc-400 block uppercase">Damaged</span>
-              <span className={`text-sm font-bold ${totalDamaged > 0 ? "text-rose-600 dark:text-rose-400" : "text-zinc-900 dark:text-zinc-100"}`}>
-                {totalDamaged.toLocaleString()} EA
+              <span className={`text-sm font-bold ${activeLocationBalance.damaged > 0 ? "text-rose-600 dark:text-rose-400" : "text-zinc-900 dark:text-zinc-100"}`}>
+                {activeLocationBalance.damaged.toLocaleString()} EA
               </span>
             </div>
             <div className="p-2 rounded-lg bg-zinc-50 dark:bg-zinc-950/40 border border-zinc-200 dark:border-zinc-800">
               <span className="text-[9px] font-bold text-zinc-500 dark:text-zinc-400 block uppercase">Hold</span>
-              <span className={`text-sm font-bold ${totalHold > 0 ? "text-amber-600 dark:text-amber-400" : "text-zinc-900 dark:text-zinc-100"}`}>
-                {totalHold.toLocaleString()} EA
+              <span className={`text-sm font-bold ${activeLocationBalance.hold > 0 ? "text-amber-600 dark:text-amber-400" : "text-zinc-900 dark:text-zinc-100"}`}>
+                {activeLocationBalance.hold.toLocaleString()} EA
               </span>
+            </div>
+          </div>
+
+          {/* Location Breakdown Table */}
+          <div className="rounded-lg border border-zinc-200 dark:border-zinc-800 overflow-hidden text-xs">
+            <div className="bg-zinc-50 dark:bg-zinc-950/80 px-2.5 py-1.5 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between">
+              <span className="text-[10px] font-bold text-zinc-600 dark:text-zinc-400 uppercase">
+                🏢 로케이션별 재고 현황
+              </span>
+              <span className="text-[9px] text-zinc-400">행 클릭 시 필터링</span>
+            </div>
+            <div className="max-h-[140px] overflow-y-auto">
+              <table className="w-full text-left">
+                <thead className="bg-zinc-100/50 dark:bg-zinc-900/50 text-[9px] text-zinc-500 uppercase border-b border-zinc-100 dark:border-zinc-800">
+                  <tr>
+                    <th className="py-1 px-2">창고</th>
+                    <th className="py-1 px-1 text-right">가용</th>
+                    <th className="py-1 px-1 text-right">보유</th>
+                    <th className="py-1 px-1 text-right">불량</th>
+                    <th className="py-1 px-1 text-right">보류</th>
+                    <th className="py-1 px-1.5 text-center">작업</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/50 font-mono text-[11px]">
+                  {warehouses.map((w) => {
+                    const b = initialBalances.find((item) => item.warehouse_id === w.id);
+                    const onHand = b?.qty_on_hand || 0;
+                    const damaged = b?.qty_damaged || 0;
+                    const hold = b?.qty_hold || 0;
+                    const avail = Math.max(0, onHand - damaged - hold);
+                    const isSelected = selectedLocationId === w.id;
+
+                    return (
+                      <tr
+                        key={w.id}
+                        onClick={() => setSelectedLocationId(isSelected ? "ALL" : w.id)}
+                        className={`cursor-pointer transition-colors ${
+                          isSelected
+                            ? "bg-indigo-50/70 dark:bg-indigo-950/40 text-indigo-900 dark:text-indigo-200"
+                            : "hover:bg-zinc-50 dark:hover:bg-zinc-900/50 text-zinc-700 dark:text-zinc-300"
+                        }`}
+                      >
+                        <td className="py-1.5 px-2 font-sans font-medium truncate max-w-[90px]" title={w.name}>
+                          {w.code || w.name}
+                        </td>
+                        <td className="py-1.5 px-1 text-right font-bold text-indigo-600 dark:text-indigo-400">{avail}</td>
+                        <td className="py-1.5 px-1 text-right">{onHand}</td>
+                        <td className={`py-1.5 px-1 text-right ${damaged > 0 ? "text-rose-600 font-bold" : "text-zinc-400"}`}>{damaged}</td>
+                        <td className={`py-1.5 px-1 text-right ${hold > 0 ? "text-amber-600 font-bold" : "text-zinc-400"}`}>{hold}</td>
+                        <td className="py-1.5 px-1.5 text-center" onClick={(e) => e.stopPropagation()}>
+                          <button
+                            type="button"
+                            onClick={() => handleOpenInvAdjustModal(w.id)}
+                            className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 transition-colors"
+                          >
+                            조정
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+                <tfoot className="bg-zinc-50 dark:bg-zinc-950 font-mono text-[11px] font-bold border-t border-zinc-200 dark:border-zinc-800">
+                  <tr
+                    onClick={() => setSelectedLocationId("ALL")}
+                    className={`cursor-pointer ${selectedLocationId === "ALL" ? "text-indigo-600 dark:text-indigo-400" : "text-zinc-900 dark:text-white"}`}
+                  >
+                    <td className="py-1.5 px-2 font-sans">합계 (Total)</td>
+                    <td className="py-1.5 px-1 text-right text-indigo-600 dark:text-indigo-400">{totalAvailable}</td>
+                    <td className="py-1.5 px-1 text-right">{totalOnHand}</td>
+                    <td className="py-1.5 px-1 text-right text-rose-600">{totalDamaged}</td>
+                    <td className="py-1.5 px-1 text-right text-amber-600">{totalHold}</td>
+                    <td className="py-1.5 px-1.5 text-center">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleOpenInvAdjustModal();
+                        }}
+                        className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-zinc-900 text-white dark:bg-white dark:text-zinc-900"
+                      >
+                        전체
+                      </button>
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
             </div>
           </div>
 
@@ -1607,10 +1929,12 @@ export function TradingProductDetail({
         </div>
 
       </div>
+
+      {/* 4. FULL-WIDTH TAB CONTAINER */}
       <div className="rounded-xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900 overflow-hidden">
         
-        {/* Full-Width Tab Header */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950">
+        {/* Full-Width Tab Header Strip - Enhanced Contrast */}
+        <div className="p-1.5 bg-zinc-100/80 dark:bg-zinc-950/80 border-b border-zinc-200 dark:border-zinc-800 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-1.5">
           {[
             { id: "inventory", en: "Inventory", ko: "재고 변동" },
             { id: "po", en: "PO / Inbound", ko: "입고 이력" },
@@ -1622,14 +1946,16 @@ export function TradingProductDetail({
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id as any)}
-              className={`py-2.5 px-2 text-center transition-colors border-b-2 flex flex-col items-center justify-center ${
+              className={`py-2 px-3 text-center rounded-lg transition-all flex flex-col items-center justify-center ${
                 activeTab === tab.id
-                  ? "border-zinc-900 text-zinc-900 dark:border-white dark:text-white bg-white dark:bg-zinc-900 font-bold"
-                  : "border-transparent text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200"
+                  ? "bg-zinc-900 text-white dark:bg-white dark:text-zinc-900 font-bold shadow-sm ring-1 ring-zinc-900/10 dark:ring-white/10"
+                  : "bg-transparent text-zinc-600 hover:text-zinc-900 hover:bg-white/60 dark:text-zinc-400 dark:hover:text-white dark:hover:bg-zinc-900/60 font-medium"
               }`}
             >
-              <span className="text-xs leading-tight font-semibold">{tab.en}</span>
-              <span className="text-[10px] font-normal text-zinc-400 dark:text-zinc-500">{tab.ko}</span>
+              <span className="text-xs leading-tight font-bold">{tab.en}</span>
+              <span className={`text-[10px] mt-0.5 leading-tight ${activeTab === tab.id ? "text-zinc-300 dark:text-zinc-600 font-medium" : "text-zinc-400 dark:text-zinc-500"}`}>
+                {tab.ko}
+              </span>
             </button>
           ))}
         </div>
@@ -2764,145 +3090,294 @@ export function TradingProductDetail({
         </div>
       )}
 
-      {/* MODAL 4: OPENING BALANCE */}
-      {isOpeningModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 space-y-4">
-            <h3 className="text-base font-bold text-zinc-900 dark:text-white">기초 재고 등록</h3>
-            {openError && <p className="text-xs text-rose-600">{openError}</p>}
-            <form onSubmit={handleOpenSubmit} className="space-y-3 text-xs">
+      {/* UNIFIED MODAL: INVENTORY MANUAL ADJUSTMENT (기초재고·수동조정 통합) */}
+      {isInvAdjustModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 space-y-4">
+            <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-3">
               <div>
-                <label className="font-bold text-zinc-700 dark:text-zinc-300">물류창고 선택 *</label>
-                <select
-                  value={openWarehouseId}
-                  onChange={(e) => setOpenWarehouseId(e.target.value)}
-                  required
-                  className="w-full mt-1 p-2 rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950"
-                >
-                  <option value="">-- 창고 선택 --</option>
-                  {warehouses.map((w) => (
-                    <option key={w.id} value={w.id}>{w.name} ({w.code})</option>
-                  ))}
-                </select>
+                <h3 className="text-base font-bold text-zinc-900 dark:text-white flex items-center gap-2">
+                  <span>📦</span> 재고 수동 조정 (Inventory Adjustment)
+                </h3>
+                <p className="text-xs text-zinc-500 mt-0.5">{product.name}</p>
               </div>
-              <div>
-                <label className="font-bold text-zinc-700 dark:text-zinc-300">기초 재고 수량 (EA) *</label>
-                <input
-                  type="number"
-                  value={openQty}
-                  onChange={(e) => setOpenQty(e.target.value)}
-                  required
-                  min="0"
-                  className="w-full mt-1 p-2 rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950"
-                />
-              </div>
-              <div>
-                <label className="font-bold text-zinc-700 dark:text-zinc-300">메모</label>
-                <input
-                  type="text"
-                  value={openNote}
-                  onChange={(e) => setOpenNote(e.target.value)}
-                  placeholder="예: 최초 입고 실사 재고 등록"
-                  className="w-full mt-1 p-2 rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950"
-                />
-              </div>
-              <div className="flex justify-end gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setIsOpeningModalOpen(false)}
-                  className="px-3 py-1.5 rounded border text-zinc-700 dark:text-zinc-300"
-                >
-                  취소
-                </button>
-                <button
-                  type="submit"
-                  disabled={isOpeningSubmitting}
-                  className="px-3 py-1.5 rounded bg-emerald-600 text-white font-bold"
-                >
-                  {isOpeningSubmitting ? "등록 중..." : "등록 완료"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+              <button
+                onClick={() => setIsInvAdjustModalOpen(false)}
+                className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 p-1"
+              >
+                ✕
+              </button>
+            </div>
 
-      {/* MODAL 5: MANUAL ADJUSTMENT */}
-      {isAdjustmentModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 space-y-4">
-            <h3 className="text-base font-bold text-zinc-900 dark:text-white">수동 재고 조정</h3>
-            {adjError && <p className="text-xs text-rose-600">{adjError}</p>}
-            <form onSubmit={handleAdjSubmit} className="space-y-3 text-xs">
+            {invAdjError && (
+              <div className="rounded-lg bg-red-50 dark:bg-red-950/40 p-3 text-xs text-red-600 dark:text-red-400 border border-red-200 dark:border-red-900/50">
+                ⚠️ {invAdjError}
+              </div>
+            )}
+
+            <form onSubmit={handleInvAdjustSubmit} className="space-y-4 text-xs">
+              {/* Warehouse Selection */}
               <div>
-                <label className="font-bold text-zinc-700 dark:text-zinc-300">물류창고 선택 *</label>
+                <label className="font-bold text-zinc-700 dark:text-zinc-300 block mb-1">
+                  대상 물류창고 (Location) *
+                </label>
                 <select
-                  value={adjWarehouseId}
-                  onChange={(e) => setAdjWarehouseId(e.target.value)}
+                  value={invAdjWarehouseId}
+                  onChange={(e) => handleModalWarehouseChange(e.target.value)}
                   required
-                  className="w-full mt-1 p-2 rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950"
+                  className="w-full p-2.5 rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white font-medium"
                 >
-                  <option value="">-- 창고 선택 --</option>
+                  <option value="">-- 창고를 선택하세요 --</option>
                   {warehouses.map((w) => (
-                    <option key={w.id} value={w.id}>{w.name} ({w.code})</option>
+                    <option key={w.id} value={w.id}>
+                      {w.name} ({w.code}) {w.status === "inactive" ? "- 비활성" : ""}
+                    </option>
                   ))}
                 </select>
               </div>
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="font-bold text-zinc-700 dark:text-zinc-300">On Hand 변동 (+/-)</label>
-                  <input
-                    type="number"
-                    value={adjQtyChange}
-                    onChange={(e) => setAdjQtyChange(e.target.value)}
-                    required
-                    className="w-full mt-1 p-2 rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950"
-                  />
-                </div>
-                <div>
-                  <label className="font-bold text-zinc-700 dark:text-zinc-300">Hold 변동 (+/-)</label>
-                  <input
-                    type="number"
-                    value={adjQtyHoldChange}
-                    onChange={(e) => setAdjQtyHoldChange(e.target.value)}
-                    required
-                    className="w-full mt-1 p-2 rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950"
-                  />
+
+              {/* Adjustment Mode Switch: DELTA vs TARGET */}
+              <div>
+                <label className="font-bold text-zinc-700 dark:text-zinc-300 block mb-1.5">
+                  조정 방식 (Adjustment Mode)
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setInvAdjMode("DELTA")}
+                    className={`p-2.5 text-left rounded-xl border transition-all ${
+                      invAdjMode === "DELTA"
+                        ? "border-indigo-600 bg-indigo-50/60 text-indigo-900 dark:border-indigo-500 dark:bg-indigo-950/30 dark:text-indigo-200 ring-1 ring-indigo-500 font-bold"
+                        : "border-zinc-200 bg-zinc-50/50 text-zinc-600 hover:bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-900/50 dark:text-zinc-400"
+                    }`}
+                  >
+                    <div className="text-xs">➕➖ 증감 수량 조정 (Delta)</div>
+                    <div className="text-[10px] text-zinc-500 font-normal mt-0.5">현재 재고에 수량 추가/차감</div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setInvAdjMode("TARGET")}
+                    className={`p-2.5 text-left rounded-xl border transition-all ${
+                      invAdjMode === "TARGET"
+                        ? "border-indigo-600 bg-indigo-50/60 text-indigo-900 dark:border-indigo-500 dark:bg-indigo-950/30 dark:text-indigo-200 ring-1 ring-indigo-500 font-bold"
+                        : "border-zinc-200 bg-zinc-50/50 text-zinc-600 hover:bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-900/50 dark:text-zinc-400"
+                    }`}
+                  >
+                    <div className="text-xs">🎯 목표 수량 설정 (Target)</div>
+                    <div className="text-[10px] text-zinc-500 font-normal mt-0.5">실사 기준 최종 수량으로 지정</div>
+                  </button>
                 </div>
               </div>
+
+              {/* Input Fields based on Mode */}
+              {invAdjMode === "DELTA" ? (
+                <div className="grid grid-cols-3 gap-2">
+                  <div>
+                    <label className="font-bold text-zinc-700 dark:text-zinc-300 block mb-1 text-[11px]">
+                      On Hand 증감 (+/-)
+                    </label>
+                    <input
+                      type="number"
+                      value={invDeltaOnHand}
+                      onChange={(e) => setInvDeltaOnHand(e.target.value)}
+                      placeholder="0"
+                      className="w-full p-2 font-mono text-center rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white font-bold"
+                    />
+                  </div>
+                  <div>
+                    <label className="font-bold text-zinc-700 dark:text-zinc-300 block mb-1 text-[11px]">
+                      Damaged 증감 (+/-)
+                    </label>
+                    <input
+                      type="number"
+                      value={invDeltaDamaged}
+                      onChange={(e) => setInvDeltaDamaged(e.target.value)}
+                      placeholder="0"
+                      className="w-full p-2 font-mono text-center rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white font-bold"
+                    />
+                  </div>
+                  <div>
+                    <label className="font-bold text-zinc-700 dark:text-zinc-300 block mb-1 text-[11px]">
+                      Hold 증감 (+/-)
+                    </label>
+                    <input
+                      type="number"
+                      value={invDeltaHold}
+                      onChange={(e) => setInvDeltaHold(e.target.value)}
+                      placeholder="0"
+                      className="w-full p-2 font-mono text-center rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white font-bold"
+                    />
+                  </div>
+                </div>
+              ) : (
+                <div className="grid grid-cols-3 gap-2">
+                  <div>
+                    <label className="font-bold text-zinc-700 dark:text-zinc-300 block mb-1 text-[11px]">
+                      최종 목표 On Hand
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={invTargetOnHand}
+                      onChange={(e) => setInvTargetOnHand(e.target.value)}
+                      placeholder="0"
+                      className="w-full p-2 font-mono text-center rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white font-bold"
+                    />
+                  </div>
+                  <div>
+                    <label className="font-bold text-zinc-700 dark:text-zinc-300 block mb-1 text-[11px]">
+                      최종 목표 Damaged
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={invTargetDamaged}
+                      onChange={(e) => setInvTargetDamaged(e.target.value)}
+                      placeholder="0"
+                      className="w-full p-2 font-mono text-center rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white font-bold"
+                    />
+                  </div>
+                  <div>
+                    <label className="font-bold text-zinc-700 dark:text-zinc-300 block mb-1 text-[11px]">
+                      최종 목표 Hold
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={invTargetHold}
+                      onChange={(e) => setInvTargetHold(e.target.value)}
+                      placeholder="0"
+                      className="w-full p-2 font-mono text-center rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white font-bold"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* LIVE IMPACT PREVIEW TABLE */}
+              <div className="p-3 rounded-xl bg-zinc-50 dark:bg-zinc-950/60 border border-zinc-200 dark:border-zinc-800 space-y-1.5">
+                <div className="flex items-center justify-between text-[11px] font-bold text-zinc-700 dark:text-zinc-300">
+                  <span>📊 조정 전·후 실시간 계산 (Live Preview)</span>
+                  <span className="text-[10px] font-normal text-zinc-400">Available = OnHand - Damaged - Hold</span>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-center text-xs">
+                    <thead>
+                      <tr className="text-[10px] text-zinc-400 uppercase border-b border-zinc-200 dark:border-zinc-800">
+                        <th className="py-1 text-left">항목</th>
+                        <th className="py-1">현재 잔고</th>
+                        <th className="py-1">변동 수량</th>
+                        <th className="py-1">조정 후 결과</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/60 font-mono">
+                      <tr>
+                        <td className="py-1.5 text-left font-bold text-zinc-700 dark:text-zinc-300 font-sans">Available (판매가능)</td>
+                        <td className="py-1.5">{currentModalWhBalance.available}</td>
+                        <td className={`py-1.5 font-bold ${modalLiveCalculations.resAvailable - currentModalWhBalance.available > 0 ? 'text-emerald-600' : modalLiveCalculations.resAvailable - currentModalWhBalance.available < 0 ? 'text-rose-600' : 'text-zinc-500'}`}>
+                          {modalLiveCalculations.resAvailable - currentModalWhBalance.available > 0 ? `+${modalLiveCalculations.resAvailable - currentModalWhBalance.available}` : modalLiveCalculations.resAvailable - currentModalWhBalance.available}
+                        </td>
+                        <td className="py-1.5 font-extrabold text-indigo-600 dark:text-indigo-400">{modalLiveCalculations.resAvailable} EA</td>
+                      </tr>
+                      <tr>
+                        <td className="py-1 text-left text-zinc-500 font-sans">On Hand (물리보유)</td>
+                        <td className="py-1">{currentModalWhBalance.onHand}</td>
+                        <td className={`py-1 ${modalLiveCalculations.dOnHand > 0 ? 'text-emerald-600 font-bold' : modalLiveCalculations.dOnHand < 0 ? 'text-rose-600 font-bold' : 'text-zinc-500'}`}>
+                          {modalLiveCalculations.dOnHand > 0 ? `+${modalLiveCalculations.dOnHand}` : modalLiveCalculations.dOnHand}
+                        </td>
+                        <td className={`py-1 font-bold ${modalLiveCalculations.resOnHand < 0 ? 'text-rose-600 font-black' : 'text-zinc-900 dark:text-zinc-100'}`}>
+                          {modalLiveCalculations.resOnHand}
+                        </td>
+                      </tr>
+                      <tr>
+                        <td className="py-1 text-left text-zinc-500 font-sans">Damaged (불량격리)</td>
+                        <td className="py-1">{currentModalWhBalance.damaged}</td>
+                        <td className={`py-1 ${modalLiveCalculations.dDamaged > 0 ? 'text-rose-600 font-bold' : modalLiveCalculations.dDamaged < 0 ? 'text-emerald-600 font-bold' : 'text-zinc-500'}`}>
+                          {modalLiveCalculations.dDamaged > 0 ? `+${modalLiveCalculations.dDamaged}` : modalLiveCalculations.dDamaged}
+                        </td>
+                        <td className={`py-1 font-bold ${modalLiveCalculations.resDamaged < 0 ? 'text-rose-600 font-black' : 'text-zinc-900 dark:text-zinc-100'}`}>
+                          {modalLiveCalculations.resDamaged}
+                        </td>
+                      </tr>
+                      <tr>
+                        <td className="py-1 text-left text-zinc-500 font-sans">Hold (검토보류)</td>
+                        <td className="py-1">{currentModalWhBalance.hold}</td>
+                        <td className={`py-1 ${modalLiveCalculations.dHold > 0 ? 'text-amber-600 font-bold' : modalLiveCalculations.dHold < 0 ? 'text-emerald-600 font-bold' : 'text-zinc-500'}`}>
+                          {modalLiveCalculations.dHold > 0 ? `+${modalLiveCalculations.dHold}` : modalLiveCalculations.dHold}
+                        </td>
+                        <td className={`py-1 font-bold ${modalLiveCalculations.resHold < 0 ? 'text-rose-600 font-black' : 'text-zinc-900 dark:text-zinc-100'}`}>
+                          {modalLiveCalculations.resHold}
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Movement Type & Reason Selection */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="font-bold text-zinc-700 dark:text-zinc-300 block mb-1">
+                    이동 구분 (Movement Type)
+                  </label>
+                  <select
+                    value={invAdjMovementType}
+                    onChange={(e) => setInvAdjMovementType(e.target.value as any)}
+                    className="w-full p-2 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white"
+                  >
+                    <option value="MANUAL_ADJUSTMENT">수동 조정 (Manual Adjustment)</option>
+                    <option value="OPENING_BALANCE">기초 재고 등록 (Opening Balance)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="font-bold text-zinc-700 dark:text-zinc-300 block mb-1">
+                    조정 사유 (Reason) *
+                  </label>
+                  <select
+                    value={invAdjReason}
+                    onChange={(e) => setInvAdjReason(e.target.value)}
+                    required
+                    className="w-full p-2 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white"
+                  >
+                    <option value="실사 재고 차이 조정 (Physical Count Difference)">실사 재고 차이 조정 (Physical Count Difference)</option>
+                    <option value="기초 재고 등록 (Opening Balance Entry)">기초 재고 등록 (Opening Balance Entry)</option>
+                    <option value="불량 재고 발견 및 격리 (Damaged Stock Quarantine)">불량 재고 발견 및 격리 (Damaged Stock Quarantine)</option>
+                    <option value="검수 보류 설정 (Hold for Inspection)">검수 보류 설정 (Hold for Inspection)</option>
+                    <option value="파손/분실 처리 (Loss / Breakage)">파손/분실 처리 (Loss / Breakage)</option>
+                    <option value="반품 재입고 (Return Restock)">반품 재입고 (Return Restock)</option>
+                    <option value="기타 운영 조정 (Other Operational Reason)">기타 운영 조정 (Other Operational Reason)</option>
+                  </select>
+                </div>
+              </div>
+
               <div>
-                <label className="font-bold text-zinc-700 dark:text-zinc-300">조정 사유 *</label>
+                <label className="font-bold text-zinc-700 dark:text-zinc-300 block mb-1">
+                  상세 메모 (Note) <span className="text-zinc-400 font-normal">(Optional)</span>
+                </label>
                 <input
                   type="text"
-                  value={adjReason}
-                  onChange={(e) => setAdjReason(e.target.value)}
-                  required
-                  className="w-full mt-1 p-2 rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950"
+                  value={invAdjNote}
+                  onChange={(e) => setInvAdjNote(e.target.value)}
+                  placeholder="예: 정기 재고실사 NJ 창고 3열 실측 반영"
+                  className="w-full p-2 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white"
                 />
               </div>
-              <div>
-                <label className="font-bold text-zinc-700 dark:text-zinc-300">메모</label>
-                <input
-                  type="text"
-                  value={adjNote}
-                  onChange={(e) => setAdjNote(e.target.value)}
-                  className="w-full mt-1 p-2 rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950"
-                />
-              </div>
-              <div className="flex justify-end gap-2 pt-2">
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-zinc-100 dark:border-zinc-800">
                 <button
                   type="button"
-                  onClick={() => setIsAdjustmentModalOpen(false)}
-                  className="px-3 py-1.5 rounded border text-zinc-700 dark:text-zinc-300"
+                  onClick={() => setIsInvAdjustModalOpen(false)}
+                  className="px-3.5 py-1.5 text-xs font-medium text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white"
                 >
                   취소
                 </button>
                 <button
                   type="submit"
-                  disabled={isAdjustmentSubmitting}
-                  className="px-3 py-1.5 rounded bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 font-bold"
+                  disabled={isInvAdjSubmitting || modalLiveCalculations.hasNegativeResult || modalLiveCalculations.hasZeroDelta}
+                  className="px-4 py-2 rounded-xl bg-zinc-900 text-white dark:bg-white dark:text-zinc-900 font-bold hover:bg-zinc-800 dark:hover:bg-zinc-100 disabled:opacity-40 transition-colors shadow-sm"
                 >
-                  {isAdjustmentSubmitting ? "조정 중..." : "조정 완료"}
+                  {isInvAdjSubmitting ? "조정 처리 중..." : "재고 조정 완료"}
                 </button>
               </div>
             </form>
