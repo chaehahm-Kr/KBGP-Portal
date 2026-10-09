@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { verifyAdminSession } from "@/lib/auth/dal";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getSignedFileUrl } from "@/lib/files/storage";
-import { TradingProductsList } from "@/components/admin/trading-products-list";
+import { TradingProductsList, type TradingProductItem } from "@/components/admin/trading-products-list";
 import { resolveEffectiveSku } from "@/lib/product/types";
 
 export const metadata: Metadata = {
@@ -17,7 +17,7 @@ export default async function AdminTradingProductsPage() {
   const { data: products, error: queryError } = await supabase
     .from("products")
     .select(
-      "id, name, name_en, category, brand_id, company_id, manufacture_sku, letusto_sku, parent_sku, child_sku, price_krw_retail, price_usd_fob, price_additional_info, origin, category_code, selection_status, sales_status, trading_status, retailer_visibility, created_at"
+      "id, name, name_en, category, brand_id, company_id, manufacture_sku, letusto_sku, parent_sku, child_sku, price_krw_retail, price_krw_wholesale, price_usd_fob, price_additional_info, origin, category_code, selection_status, sales_status, trading_status, retailer_visibility, created_at, upc, ean, estimated_retail_price, trading_wholesale_price, trading_promo_wholesale_price, trading_promo_start_date, trading_promo_end_date, trading_srp_price, trading_map_price"
     )
     .or("trading_status.in.(active,historical),selection_status.eq.SELECTED")
     .order("created_at", { ascending: false });
@@ -72,7 +72,9 @@ export default async function AdminTradingProductsPage() {
     damagedByProduct.set(b.product_id, (damagedByProduct.get(b.product_id) || 0) + Number(b.qty_damaged || 0));
   });
 
-  const resolvedProducts = await Promise.all(
+  const now = new Date();
+
+  const resolvedProducts: TradingProductItem[] = await Promise.all(
     (products ?? []).map(async (p) => {
       // Find the first image for this product
       const firstImage = (productImages ?? []).find((img) => img.product_id === p.id);
@@ -85,7 +87,10 @@ export default async function AdminTradingProductsPage() {
         }
       }
 
-      const adminOverrides = (p.price_additional_info as any)?.admin_overrides || {};
+      const priceAddInfo = (p.price_additional_info as any) || {};
+      const adminOverrides = priceAddInfo.admin_overrides || {};
+      const tradingOverrides = priceAddInfo.trading_overrides || {};
+
       const effectiveManufactureSku = resolveEffectiveSku(adminOverrides.manufacture_sku, p.manufacture_sku);
       const effectiveLetustoSku = resolveEffectiveSku(adminOverrides.letusto_sku, p.letusto_sku);
 
@@ -93,6 +98,86 @@ export default async function AdminTradingProductsPage() {
       const totalHold = holdByProduct.get(p.id) || 0;
       const totalDamaged = damagedByProduct.get(p.id) || 0;
       const totalAvailable = Math.max(0, totalOnHand - totalHold - totalDamaged);
+
+      // Resolve Wholesale Price
+      const directWholesale = (p as any).trading_wholesale_price;
+      const jsonWholesale = tradingOverrides.wholesale_price;
+      const baseWholesale = directWholesale !== undefined && directWholesale !== null
+        ? Number(directWholesale)
+        : (jsonWholesale !== undefined && jsonWholesale !== null
+            ? Number(jsonWholesale)
+            : (p.price_usd_fob ? Number(p.price_usd_fob) : (p.price_krw_wholesale ? Number(p.price_krw_wholesale) : null)));
+
+      // Promo Wholesale
+      const directPromoWholesale = (p as any).trading_promo_wholesale_price;
+      const jsonPromoWholesale = tradingOverrides.promo_wholesale_price;
+      const promoWholesale = directPromoWholesale !== undefined && directPromoWholesale !== null
+        ? Number(directPromoWholesale)
+        : (jsonPromoWholesale !== undefined && jsonPromoWholesale !== null ? Number(jsonPromoWholesale) : null);
+
+      const promoStartDate = (p as any).trading_promo_start_date || tradingOverrides.promo_start_date || null;
+      const promoEndDate = (p as any).trading_promo_end_date || tradingOverrides.promo_end_date || null;
+
+      const hasActivePromo = promoWholesale !== null && promoWholesale > 0 && (
+        (!promoStartDate || new Date(promoStartDate) <= now) &&
+        (!promoEndDate || new Date(promoEndDate) >= now)
+      );
+
+      const wholesalePrice = hasActivePromo ? promoWholesale : baseWholesale;
+
+      // Resolve Retail Price (SRP)
+      const directSrp = (p as any).trading_srp_price;
+      const jsonSrp = tradingOverrides.srp_price;
+      const retailPrice = directSrp !== undefined && directSrp !== null
+        ? Number(directSrp)
+        : (jsonSrp !== undefined && jsonSrp !== null
+            ? Number(jsonSrp)
+            : (p.estimated_retail_price
+                ? Number(p.estimated_retail_price)
+                : (p.price_krw_retail ? Number(p.price_krw_retail) : null)));
+
+      // Calculate Retailer Margin Percent
+      let retailerMarginPercent: number | null = null;
+      let retailerMarginStatus: "normal" | "caution" | "warning" | "none" = "none";
+
+      if (retailPrice !== null && wholesalePrice !== null && retailPrice > 0) {
+        const marginUsd = retailPrice - wholesalePrice;
+        retailerMarginPercent = (marginUsd / retailPrice) * 100;
+        if (retailerMarginPercent >= 50) {
+          retailerMarginStatus = "normal";
+        } else if (retailerMarginPercent >= 40) {
+          retailerMarginStatus = "caution";
+        } else {
+          retailerMarginStatus = "warning";
+        }
+      }
+
+      // Resolve UPC/EAN
+      const upc = p.upc || p.ean || adminOverrides.upc || adminOverrides.ean || null;
+
+      // Status resolution
+      const tradingStatus = p.trading_status || (p.selection_status === "SELECTED" ? "active" : "inactive");
+      const retailerVisibility = (p as any).retailer_visibility || "hidden";
+
+      // Compute Warnings
+      const warnings: string[] = [];
+      if (wholesalePrice === null || wholesalePrice === 0) {
+        warnings.push("missing_wholesale");
+      }
+      if (retailPrice === null || retailPrice === 0) {
+        warnings.push("missing_retail");
+      }
+      if (totalAvailable <= 0) {
+        warnings.push("out_of_stock");
+      } else if (totalAvailable <= 5) {
+        warnings.push("low_stock");
+      }
+      if (retailerVisibility === "visible" && (totalAvailable <= 0 || tradingStatus !== "active")) {
+        warnings.push("visible_not_orderable");
+      }
+      if (retailerMarginPercent !== null && retailerMarginPercent < 40) {
+        warnings.push("margin_warning");
+      }
 
       return {
         id: p.id,
@@ -103,6 +188,7 @@ export default async function AdminTradingProductsPage() {
         letusto_sku: effectiveLetustoSku,
         parent_sku: adminOverrides.parent_sku !== undefined ? adminOverrides.parent_sku : p.parent_sku,
         child_sku: adminOverrides.child_sku !== undefined ? adminOverrides.child_sku : p.child_sku,
+        upc,
         category: p.category,
         brand_id: p.brand_id,
         company_id: p.company_id,
@@ -111,14 +197,20 @@ export default async function AdminTradingProductsPage() {
         photoUrl,
         selection_status: p.selection_status || "UNREVIEWED",
         sales_status: p.sales_status || "PREPARING",
-        trading_status: p.trading_status || (p.selection_status === "SELECTED" ? "active" : "inactive"),
-        retailer_visibility: (p as any).retailer_visibility || "hidden",
+        trading_status: tradingStatus,
+        retailer_visibility: retailerVisibility,
         category_code: p.category_code || null,
         category_full_path: p.category_code ? getCategoryFullPath(p.category_code) : null,
+        wholesalePrice,
+        hasActivePromo,
+        retailPrice,
+        retailerMarginPercent,
+        retailerMarginStatus,
         qty_on_hand: totalOnHand,
         qty_hold: totalHold,
         qty_damaged: totalDamaged,
         qty_available: totalAvailable,
+        warnings,
       };
     })
   );
