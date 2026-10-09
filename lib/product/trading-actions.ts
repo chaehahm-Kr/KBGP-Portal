@@ -42,7 +42,7 @@ export async function getTradingProductDetailData(productId: string) {
       price_krw_retail, price_krw_wholesale, price_usd_fob, price_additional_info,
       item_width, item_depth, item_height, item_weight,
       package_width, package_depth, package_height, package_weight,
-      selection_status, sales_status, category_code, trading_status
+      selection_status, sales_status, category_code, trading_status, retailer_visibility
     `)
     .eq("id", productId)
     .maybeSingle();
@@ -394,6 +394,7 @@ export async function getTradingProductDetailData(productId: string) {
         : product.selection_status === "SELECTED"
         ? "active"
         : "inactive",
+    retailer_visibility: (product as any).retailer_visibility || "hidden",
     category_code: product.category_code || null,
     category_full_path: categoryFullPath,
     
@@ -895,4 +896,85 @@ export async function clearTradingCostOverride(productId: string, reason: string
   revalidatePath(`/admin/products/trading/${productId}`);
   revalidatePath("/admin/products/trading");
   return { success: true };
+}
+
+export interface UpdateTradingStatusAndVisibilityInput {
+  trading_status: "active" | "inactive" | "historical";
+  retailer_visibility: "visible" | "hidden";
+  reason?: string;
+}
+
+export async function updateTradingStatusAndVisibility(
+  productId: string,
+  input: UpdateTradingStatusAndVisibilityInput
+) {
+  const { userId } = await verifyAdminSession();
+  const supabase = createAdminClient();
+
+  let tradingStatus = input.trading_status;
+  let visibility = input.retailer_visibility;
+
+  // Enforce status and visibility combinations:
+  // - active + visible -> allowed
+  // - active + hidden -> allowed
+  // - inactive + hidden -> allowed
+  // - historical + hidden -> allowed
+  // - inactive/historical + visible -> force hidden
+  if (tradingStatus !== "active" && visibility === "visible") {
+    visibility = "hidden";
+  }
+
+  const { data: currentProd } = await supabase
+    .from("products")
+    .select("trading_status, retailer_visibility, price_additional_info")
+    .eq("id", productId)
+    .single();
+
+  if (!currentProd) throw new Error("Product not found.");
+
+  const beforeVal = {
+    trading_status: currentProd.trading_status || "inactive",
+    retailer_visibility: (currentProd as any).retailer_visibility || "hidden",
+  };
+
+  const afterVal = {
+    trading_status: tradingStatus,
+    retailer_visibility: visibility,
+  };
+
+  const { error } = await supabase
+    .from("products")
+    .update({
+      trading_status: tradingStatus,
+      retailer_visibility: visibility,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", productId);
+
+  if (error) {
+    throw new Error(`상태 업데이트 실패: ${error.message}`);
+  }
+
+  try {
+    await supabase.from("trading_product_history").insert({
+      product_id: productId,
+      change_type: "STATUS",
+      field_name: "trading_status_visibility",
+      before_value: beforeVal,
+      after_value: afterVal,
+      reason: input.reason || "Operational status and visibility updated",
+      created_by: userId,
+    });
+  } catch {
+    // Ignore history logging error
+  }
+
+  revalidatePath(`/admin/products/trading/${productId}`);
+  revalidatePath("/admin/products/trading");
+  revalidatePath(`/admin/products/${productId}`);
+  revalidatePath("/admin/products");
+  revalidatePath("/products");
+  revalidatePath(`/products/${productId}`);
+
+  return { success: true, trading_status: tradingStatus, retailer_visibility: visibility };
 }

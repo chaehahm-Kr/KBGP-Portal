@@ -182,6 +182,7 @@ export interface Product {
   selection_status?: string | null;
   sales_status?: string | null;
   trading_status?: string | null;
+  retailer_visibility?: "visible" | "hidden" | string | null;
   deleted_at?: string | null;
   last_updated_by_name?: string | null;
   last_updated_source?: string | null;

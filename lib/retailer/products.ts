@@ -84,6 +84,52 @@ export function formatCategoryName(cat: string | null | undefined): string {
     .join(" ");
 }
 
+function resolveRetailerPrice(prod: any) {
+  const info = (prod.price_additional_info as any) || {};
+  const overrides = info.trading_overrides || {};
+  const adminOverrides = info.admin_overrides || {};
+  const curation = Array.isArray(prod.product_curations)
+    ? prod.product_curations[0]
+    : prod.product_curations;
+
+  const now = new Date();
+  const promoPrice = Number(overrides.promo_wholesale_price || prod.trading_promo_wholesale_price || 0);
+  const promoStart = overrides.promo_start_date || prod.trading_promo_start_date;
+  const promoEnd = overrides.promo_end_date || prod.trading_promo_end_date;
+
+  let wholesalePrice = 0;
+  if (promoPrice > 0) {
+    const isStartValid = !promoStart || new Date(promoStart) <= now;
+    const isEndValid = !promoEnd || new Date(promoEnd) >= now;
+    if (isStartValid && isEndValid) {
+      wholesalePrice = promoPrice;
+    }
+  }
+
+  if (wholesalePrice <= 0) {
+    const tradingWholesale = Number(overrides.wholesale_price || prod.trading_wholesale_price || 0);
+    if (tradingWholesale > 0) {
+      wholesalePrice = tradingWholesale;
+    }
+  }
+
+  if (wholesalePrice <= 0) {
+    const curationWholesale = Number(curation?.wholesale_price || 0);
+    if (curationWholesale > 0) {
+      wholesalePrice = curationWholesale;
+    }
+  }
+
+  let msrp = Number(overrides.srp_price || adminOverrides.suggest_retail_price || curation?.suggest_retail_price || prod.estimated_retail_price || 0);
+  if (msrp <= 0 && wholesalePrice > 0) {
+    msrp = Number((wholesalePrice * 2.0).toFixed(2));
+  }
+
+  const isPricingActive = overrides.is_pricing_active !== false && prod.trading_pricing_active !== false;
+
+  return { wholesalePrice, msrp, isPricingActive };
+}
+
 /**
  * Fetch products list for authenticated Retailer with search and filter capabilities
  */
@@ -106,6 +152,14 @@ export async function getRetailerProducts(
       letusto_sku,
       manufacture_sku,
       status,
+      selection_status,
+      trading_status,
+      retailer_visibility,
+      trading_pricing_active,
+      trading_wholesale_price,
+      trading_promo_wholesale_price,
+      trading_promo_start_date,
+      trading_promo_end_date,
       estimated_retail_price,
       price_usd_fob,
       price_krw_retail,
@@ -157,14 +211,26 @@ export async function getRetailerProducts(
     };
   }
 
-  // 2. Filter out soft-deleted, discontinued, or incomplete Draft products
+  // 2. Strict Product Framework filter:
+  // Must be COMPLETE (registration) + SELECTED (selection) + active (operational) + visible (hub visibility) + wholesalePrice > 0 + not deleted
   const activeProducts = rawProducts.filter((p) => {
     const info = (p.price_additional_info as any) || {};
     if (info.deleted_at || (p as any).deleted_at) return false;
     if (p.status === "discontinued") return false;
 
-    // Isolate Draft technical placeholders & incomplete drafts from Retailer catalog
+    // Isolate Draft technical placeholders
     if (isDraftPlaceholderName(p.name) || isDraftPlaceholderSku(p.manufacture_sku)) return false;
+
+    // Must be officially SELECTED by K SELECT review
+    if (p.selection_status !== "SELECTED") return false;
+
+    // Must be actively operating (trading_status == 'active')
+    const tradingStatus = (p as any).trading_status || "inactive";
+    if (tradingStatus !== "active") return false;
+
+    // Must be explicitly visible to Retailer Hub (retailer_visibility == 'visible')
+    const retailerVisibility = (p as any).retailer_visibility || "hidden";
+    if (retailerVisibility !== "visible") return false;
 
     const regEval = evaluateProductRegistrationStatus({
       id: p.id,
@@ -197,7 +263,11 @@ export async function getRetailerProducts(
       hasImages: Array.isArray(p.product_images) && p.product_images.length > 0,
     });
 
-    if (regEval.isDraft) return false;
+    if (regEval.status !== "COMPLETE") return false;
+
+    // Must have a valid wholesale price (> 0)
+    const { wholesalePrice } = resolveRetailerPrice(p);
+    if (wholesalePrice <= 0) return false;
 
     return true;
   });
@@ -210,9 +280,6 @@ export async function getRetailerProducts(
     activeProducts.map(async (p) => {
       const info = (p.price_additional_info as any) || {};
       const overrides = info.admin_overrides || {};
-      const curation = Array.isArray(p.product_curations)
-        ? p.product_curations[0]
-        : p.product_curations;
 
       const brand = (p.brands as any) || {};
       const brandId = p.brand_id || brand.id || "unassigned";
@@ -226,22 +293,9 @@ export async function getRetailerProducts(
         resolveEffectiveSku(overrides.manufacture_sku, p.manufacture_sku) ||
         "KS-PROD";
 
-      // Pricing resolution (Strictly Retailer wholesale price from product_curations, confidential FOB is never used)
-      let wholesalePrice = 0;
-      if (curation?.wholesale_price && Number(curation.wholesale_price) > 0) {
-        wholesalePrice = Number(curation.wholesale_price);
-      }
-
-      const isOrderable = wholesalePrice > 0;
-
-      let msrp = 0;
-      if (curation?.suggest_retail_price && Number(curation.suggest_retail_price) > 0) {
-        msrp = Number(curation.suggest_retail_price);
-      } else if (p.estimated_retail_price && Number(p.estimated_retail_price) > 0) {
-        msrp = Number(p.estimated_retail_price);
-      } else if (wholesalePrice > 0) {
-        msrp = Number((wholesalePrice * 2.0).toFixed(2));
-      }
+      // Pricing resolution (Strictly Retailer wholesale price from product_curations / trading_overrides, confidential FOB is never used)
+      const { wholesalePrice, msrp, isPricingActive } = resolveRetailerPrice(p);
+      const isOrderable = wholesalePrice > 0 && isPricingActive;
 
       const marginPercent =
         msrp > 0 && wholesalePrice > 0
@@ -356,6 +410,14 @@ export async function getRetailerProductDetail(
       letusto_sku,
       manufacture_sku,
       status,
+      selection_status,
+      trading_status,
+      retailer_visibility,
+      trading_pricing_active,
+      trading_wholesale_price,
+      trading_promo_wholesale_price,
+      trading_promo_start_date,
+      trading_promo_end_date,
       description,
       bullet_points,
       origin,
@@ -364,6 +426,7 @@ export async function getRetailerProductDetail(
       ean,
       estimated_retail_price,
       price_usd_fob,
+      price_krw_retail,
       price_additional_info,
       carton_pack_qty,
       package_width,
@@ -394,15 +457,50 @@ export async function getRetailerProductDetail(
   }
 
   const info = (p.price_additional_info as any) || {};
-  if (info.deleted_at || (p as any).deleted_at || p.status === "discontinued") {
+  if (
+    info.deleted_at ||
+    (p as any).deleted_at ||
+    p.status === "discontinued" ||
+    p.selection_status !== "SELECTED" ||
+    ((p as any).trading_status || "inactive") !== "active" ||
+    ((p as any).retailer_visibility || "hidden") !== "visible"
+  ) {
+    return null;
+  }
+
+  // Enforce Registration Status == COMPLETE
+  const regEval = evaluateProductRegistrationStatus({
+    id: p.id,
+    name: p.name,
+    name_en: p.name_en,
+    brand_id: p.brand_id,
+    category_code: p.category_code,
+    manufacture_sku: p.manufacture_sku,
+    origin: p.origin,
+    price_krw_retail: p.price_krw_retail,
+    price_usd_fob: p.price_usd_fob,
+    package_width: p.package_width,
+    package_depth: p.package_depth,
+    package_height: p.package_height,
+    package_weight: p.package_weight,
+    carton_pack_qty: p.carton_pack_qty,
+    upc: (p as any).upc,
+    ean: (p as any).ean,
+    deleted_at: info.deleted_at || (p as any).deleted_at,
+    hasImages: Array.isArray(p.product_images) && p.product_images.length > 0,
+  });
+
+  if (regEval.status !== "COMPLETE") {
+    return null;
+  }
+
+  // Authoritative wholesale price resolution
+  const { wholesalePrice, msrp, isPricingActive } = resolveRetailerPrice(p);
+  if (wholesalePrice <= 0) {
     return null;
   }
 
   const overrides = info.admin_overrides || {};
-  const curation = Array.isArray(p.product_curations)
-    ? p.product_curations[0]
-    : p.product_curations;
-
   const brand = (p.brands as any) || {};
   const brandId = p.brand_id || brand.id || "unassigned";
   const brandName = brand.name || "K SELECT Brand";
@@ -414,22 +512,7 @@ export async function getRetailerProductDetail(
     resolveEffectiveSku(overrides.manufacture_sku, p.manufacture_sku) ||
     "KS-PROD";
 
-  // Pricing resolution (Strictly Retailer wholesale price from product_curations, confidential FOB is never used)
-  let wholesalePrice = 0;
-  if (curation?.wholesale_price && Number(curation.wholesale_price) > 0) {
-    wholesalePrice = Number(curation.wholesale_price);
-  }
-
-  const isOrderable = wholesalePrice > 0;
-
-  let msrp = 0;
-  if (curation?.suggest_retail_price && Number(curation.suggest_retail_price) > 0) {
-    msrp = Number(curation.suggest_retail_price);
-  } else if (p.estimated_retail_price && Number(p.estimated_retail_price) > 0) {
-    msrp = Number(p.estimated_retail_price);
-  } else if (wholesalePrice > 0) {
-    msrp = Number((wholesalePrice * 2.0).toFixed(2));
-  }
+  const isOrderable = wholesalePrice > 0 && isPricingActive;
 
   const marginPercent =
     msrp > 0 && wholesalePrice > 0

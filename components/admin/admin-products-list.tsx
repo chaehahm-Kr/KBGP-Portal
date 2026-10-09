@@ -28,6 +28,7 @@ interface AdminProductItem {
   deleted_at: string | null;
   selection_status: string;
   sales_status: string;
+  trading_status: string;
   category_code?: string | null;
   category_full_path?: string | null;
   completeness_rate?: number;
@@ -66,18 +67,16 @@ const SELECTION_LABELS: Record<string, string> = {
   NOT_SELECTED: "미선정",
 };
 
-const SALES_COLORS: Record<string, string> = {
-  PREPARING: "bg-zinc-100 text-zinc-500 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:border-zinc-700",
-  ON_SALE: "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/20 dark:text-emerald-400 dark:border-emerald-900/50",
-  PAUSED: "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/20 dark:text-amber-400 dark:border-amber-900/50",
-  ENDED: "bg-zinc-250 text-zinc-650 border-zinc-300 dark:bg-zinc-950 dark:text-zinc-500 dark:border-zinc-850",
+const TRADING_COLORS: Record<string, string> = {
+  active: "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/20 dark:text-blue-400 dark:border-blue-900/50",
+  inactive: "bg-zinc-100 text-zinc-650 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:border-zinc-700",
+  historical: "bg-zinc-200 text-zinc-650 border-zinc-300 dark:bg-zinc-900 dark:text-zinc-500 dark:border-zinc-800",
 };
 
-const SALES_LABELS: Record<string, string> = {
-  PREPARING: "판매 준비",
-  ON_SALE: "판매 중",
-  PAUSED: "일시 중지",
-  ENDED: "판매 종료",
+const TRADING_LABELS: Record<string, string> = {
+  active: "운영 중",
+  inactive: "운영 중지",
+  historical: "운영 종료",
 };
 
 export function AdminProductsList({ initialProducts }: AdminProductsListProps) {
@@ -127,8 +126,8 @@ export function AdminProductsList({ initialProducts }: AdminProductsListProps) {
   // 2. 제품 선정 상태 필터 (디폴트: All)
   const [selectedSelectionStatus, setSelectedSelectionStatus] = useState<string>("all");
 
-  // 3. 판매 상태 필터 (디폴트: All)
-  const [selectedSalesStatus, setSelectedSalesStatus] = useState<string>("all");
+  // 3. 운영 상태 필터 (디폴트: All)
+  const [selectedTradingStatus, setSelectedTradingStatus] = useState<string>("all");
 
   // 복수 선택 토글 핸들러
   const handleRegStatusToggle = (status: string) => {
@@ -149,34 +148,28 @@ export function AdminProductsList({ initialProducts }: AdminProductsListProps) {
     });
   };
 
-  // 인라인 선정/판매 상태 변경 서버 액션 호출
+  // 인라인 선정/운영 상태 변경 서버 액션 호출
   const handleInlineStatusChange = async (
     productId: string,
-    field: "selection_status" | "sales_status",
+    field: "selection_status" | "trading_status",
     value: string
   ) => {
     const original = products.find((p) => p.id === productId);
     if (!original) return;
 
-    // 만약 판매 상태를 변경하려는데 선정되지 않은 상태라면 가드 작동
-    if (field === "sales_status" && original.selection_status !== "SELECTED") {
-      alert("선정된 제품만 판매 상태를 변경할 수 있습니다.");
-      return;
-    }
-
-    // 만약 선정 상태를 'SELECTED' 외의 것으로 변경하면 판매 상태는 자동으로 'PREPARING'으로 초기화 적용
     const nextSelectionStatus = field === "selection_status" ? value : original.selection_status;
-    const nextSalesStatus = field === "sales_status"
-      ? value
-      : nextSelectionStatus !== "SELECTED"
-      ? "PREPARING"
-      : original.sales_status;
+    let nextTradingStatus = field === "trading_status" ? value : original.trading_status;
+
+    // 만약 선정 상태를 'SELECTED'로 변경하면 운영 상태는 자동으로 'active'로 승격
+    if (field === "selection_status" && nextSelectionStatus === "SELECTED" && nextTradingStatus === "inactive") {
+      nextTradingStatus = "active";
+    }
 
     startTransition(async () => {
       try {
         const payload: Record<string, any> = {
           selection_status: nextSelectionStatus,
-          sales_status: nextSalesStatus,
+          trading_status: nextTradingStatus,
         };
 
         await adminUpdateProductOverrides(productId, payload);
@@ -185,7 +178,7 @@ export function AdminProductsList({ initialProducts }: AdminProductsListProps) {
         setProducts((prev) =>
           prev.map((p) =>
             p.id === productId
-              ? { ...p, selection_status: nextSelectionStatus, sales_status: nextSalesStatus }
+              ? { ...p, selection_status: nextSelectionStatus, trading_status: nextTradingStatus }
               : p
           )
         );
@@ -280,11 +273,11 @@ export function AdminProductsList({ initialProducts }: AdminProductsListProps) {
     const matchesSelectionStatus =
       selectedSelectionStatus === "all" || product.selection_status === selectedSelectionStatus;
 
-    // 5. 판매 상태 필터링
-    const matchesSalesStatus =
-      selectedSalesStatus === "all" || product.sales_status === selectedSalesStatus;
+    // 5. 운영 상태 필터링
+    const matchesTradingStatus =
+      selectedTradingStatus === "all" || product.trading_status === selectedTradingStatus;
 
-    return matchesSearch && matchesBrand && matchesCategory && matchesRegStatus && matchesSelectionStatus && matchesSalesStatus;
+    return matchesSearch && matchesBrand && matchesCategory && matchesRegStatus && matchesSelectionStatus && matchesTradingStatus;
   });
 
   const allFilteredIds = filteredProducts.map((p) => p.id);
@@ -485,28 +478,28 @@ export function AdminProductsList({ initialProducts }: AdminProductsListProps) {
             </div>
           </div>
 
-          {/* ③ 판매 상태 필터 */}
+          {/* ③ 운영 상태 필터 */}
           <div className="flex flex-col gap-2 text-xs">
-            <span className="font-bold text-zinc-400 dark:text-zinc-500">판매 상태</span>
+            <span className="font-bold text-zinc-400 dark:text-zinc-500">운영 상태</span>
             <div className="flex items-center gap-1.5 flex-wrap">
               <button
                 type="button"
-                onClick={() => setSelectedSalesStatus("all")}
+                onClick={() => setSelectedTradingStatus("all")}
                 className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${
-                  selectedSalesStatus === "all"
+                  selectedTradingStatus === "all"
                     ? "bg-zinc-950 text-white border-zinc-950 dark:bg-white dark:text-zinc-950"
                     : "bg-zinc-50 text-zinc-600 border-zinc-200 hover:bg-zinc-100 dark:bg-zinc-950 dark:text-zinc-400 dark:border-zinc-850"
                 }`}
               >
                 All
               </button>
-              {Object.entries(SALES_LABELS).map(([code, label]) => {
-                const isSelected = selectedSalesStatus === code;
+              {Object.entries(TRADING_LABELS).map(([code, label]) => {
+                const isSelected = selectedTradingStatus === code;
                 return (
                   <button
                     key={code}
                     type="button"
-                    onClick={() => setSelectedSalesStatus(code)}
+                    onClick={() => setSelectedTradingStatus(code)}
                     className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${
                       isSelected
                         ? "bg-zinc-900 text-white border-zinc-900 dark:bg-zinc-100 dark:text-zinc-950"
@@ -539,7 +532,7 @@ export function AdminProductsList({ initialProducts }: AdminProductsListProps) {
               </span>
             )}
           </div>
-          {(searchTerm || selectedBrandFilter || selectedCategory !== "all" || selectedRegStatuses.length !== 2 || !selectedRegStatuses.includes("active") || !selectedRegStatuses.includes("draft") || selectedSelectionStatus !== "all" || selectedSalesStatus !== "all") && (
+          {(searchTerm || selectedBrandFilter || selectedCategory !== "all" || selectedRegStatuses.length !== 2 || !selectedRegStatuses.includes("active") || !selectedRegStatuses.includes("draft") || selectedSelectionStatus !== "all" || selectedTradingStatus !== "all") && (
             <button
               type="button"
               onClick={() => {
@@ -548,7 +541,7 @@ export function AdminProductsList({ initialProducts }: AdminProductsListProps) {
                 setSelectedCategory("all");
                 setSelectedRegStatuses(["active", "draft"]);
                 setSelectedSelectionStatus("all");
-                setSelectedSalesStatus("all");
+                setSelectedTradingStatus("all");
               }}
               className="text-zinc-900 hover:underline dark:text-zinc-250 font-semibold cursor-pointer"
             >
@@ -611,7 +604,7 @@ export function AdminProductsList({ initialProducts }: AdminProductsListProps) {
                 <th className="px-5 py-3.5 whitespace-nowrap">속성 완성도</th>
                 <th className="px-5 py-3.5 whitespace-nowrap">등록 상태</th>
                 <th className="px-5 py-3.5 whitespace-nowrap">선정 상태</th>
-                <th className="px-5 py-3.5 whitespace-nowrap">판매 상태</th>
+                <th className="px-5 py-3.5 whitespace-nowrap">운영 상태</th>
                 <th className="px-5 py-3.5 whitespace-nowrap">최종 수정</th>
                 <th className="px-5 py-3.5 whitespace-nowrap text-right">관리</th>
               </tr>
@@ -786,19 +779,17 @@ export function AdminProductsList({ initialProducts }: AdminProductsListProps) {
                       </select>
                     </td>
 
-                    {/* ③ 제품 판매 상태 인라인 셀렉터 */}
-                    <td className="px-5 py-4 align-middle" title={!isSelected ? "선정된 제품만 판매 상태를 변경할 수 있습니다." : undefined}>
+                    {/* ③ 제품 운영 상태 인라인 셀렉터 */}
+                    <td className="px-5 py-4 align-middle">
                       <select
-                        value={product.sales_status}
-                        onChange={(e) => handleInlineStatusChange(product.id, "sales_status", e.target.value)}
-                        disabled={isPending || !isSelected}
-                        className={`rounded border text-[11px] font-bold px-2 py-1 outline-none transition select-none whitespace-nowrap ${
-                          !isSelected 
-                            ? "bg-zinc-50 text-zinc-350 border-zinc-200 cursor-not-allowed dark:bg-zinc-900 dark:text-zinc-700 dark:border-zinc-800" 
-                            : SALES_COLORS[product.sales_status as keyof typeof SALES_COLORS] || "border-zinc-200"
+                        value={product.trading_status}
+                        onChange={(e) => handleInlineStatusChange(product.id, "trading_status", e.target.value)}
+                        disabled={isPending}
+                        className={`rounded border text-[11px] font-bold px-2 py-1 outline-none transition select-none whitespace-nowrap cursor-pointer ${
+                          TRADING_COLORS[product.trading_status] || TRADING_COLORS.inactive
                         }`}
                       >
-                        {Object.entries(SALES_LABELS).map(([code, label]) => (
+                        {Object.entries(TRADING_LABELS).map(([code, label]) => (
                           <option key={code} value={code} className="bg-white text-zinc-900 dark:bg-zinc-950 dark:text-white">
                             {label}
                           </option>

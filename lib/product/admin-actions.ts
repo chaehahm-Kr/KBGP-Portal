@@ -37,19 +37,21 @@ export async function adminUpdateProductOverrides(
   const currentMeta = (product.price_additional_info as Record<string, any>) || {};
   const currentOverrides = (currentMeta.admin_overrides as Record<string, any>) || {};
 
-  // Extract and clean letusto_sku, brand_id, selection_status, sales_status, and trading_status from the overrides payload to save them to database columns directly
+  // Extract and clean letusto_sku, brand_id, selection_status, sales_status, trading_status, and retailer_visibility from the overrides payload to save them to database columns directly
   const cleanOverrides = { ...overrides };
   const letustoSku = cleanOverrides.letusto_sku;
   const brandId = cleanOverrides.brand_id;
   const selectionStatus = cleanOverrides.selection_status;
   const salesStatus = cleanOverrides.sales_status;
   const tradingStatus = cleanOverrides.trading_status;
+  const retailerVisibility = cleanOverrides.retailer_visibility;
 
   delete cleanOverrides.letusto_sku;
   delete cleanOverrides.brand_id;
   delete cleanOverrides.selection_status;
   delete cleanOverrides.sales_status;
   delete cleanOverrides.trading_status;
+  delete cleanOverrides.retailer_visibility;
 
   if (currentOverrides.letusto_sku !== undefined) {
     delete currentOverrides.letusto_sku;
@@ -65,6 +67,9 @@ export async function adminUpdateProductOverrides(
   }
   if (currentOverrides.trading_status !== undefined) {
     delete currentOverrides.trading_status;
+  }
+  if (currentOverrides.retailer_visibility !== undefined) {
+    delete currentOverrides.retailer_visibility;
   }
 
   if (cleanOverrides.price_krw_retail !== undefined && cleanOverrides.price_krw_retail !== null && String(cleanOverrides.price_krw_retail).trim() !== "") {
@@ -149,6 +154,17 @@ export async function adminUpdateProductOverrides(
     updateData.trading_status = tradingStatus;
   }
 
+  const effectiveTradingStatus = updateData.trading_status || product.trading_status || "inactive";
+  if (retailerVisibility !== undefined) {
+    if (retailerVisibility === "visible" && effectiveTradingStatus !== "active") {
+      updateData.retailer_visibility = "hidden";
+    } else {
+      updateData.retailer_visibility = retailerVisibility;
+    }
+  } else if (updateData.trading_status && updateData.trading_status !== "active") {
+    updateData.retailer_visibility = "hidden";
+  }
+
   // Calculate field-level diffs comparing merged before and after states
   const beforeMerged: Record<string, any> = {
     ...product,
@@ -166,6 +182,7 @@ export async function adminUpdateProductOverrides(
   if (selectionStatus !== undefined) afterMerged.selection_status = updateData.selection_status;
   if (salesStatus !== undefined) afterMerged.sales_status = updateData.sales_status;
   if (tradingStatus !== undefined) afterMerged.trading_status = updateData.trading_status;
+  if (updateData.retailer_visibility !== undefined) afterMerged.retailer_visibility = updateData.retailer_visibility;
 
   const { diffs, sectionNames } = computeProductFieldDiffs(beforeMerged, afterMerged);
 

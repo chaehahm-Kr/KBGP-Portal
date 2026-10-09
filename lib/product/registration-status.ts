@@ -15,6 +15,10 @@ export type SalesStatus =
 
 export type RegistrationStatus = "COMPLETE" | "DRAFT" | "DELETED";
 
+export type TradingStatus = "active" | "inactive" | "historical";
+
+export type RetailerVisibility = "visible" | "hidden";
+
 export const SELECTION_STATUS_LABELS: Record<SelectionStatus, string> = {
   UNREVIEWED: "미검토",
   UNDER_REVIEW: "검토 중",
@@ -48,6 +52,48 @@ export const SELECTION_STATUS_STYLES: Record<SelectionStatus, { bg: string; text
     bg: "bg-rose-50 dark:bg-rose-950/30",
     text: "text-rose-700 dark:text-rose-400",
     border: "border-rose-200 dark:border-rose-800/60",
+  },
+};
+
+export const TRADING_STATUS_LABELS: Record<TradingStatus, string> = {
+  active: "운영 중",
+  inactive: "운영 중지",
+  historical: "운영 종료",
+};
+
+export const TRADING_STATUS_STYLES: Record<TradingStatus, { bg: string; text: string; border: string }> = {
+  active: {
+    bg: "bg-blue-50 dark:bg-blue-950/30",
+    text: "text-blue-700 dark:text-blue-400",
+    border: "border-blue-200 dark:border-blue-800/60",
+  },
+  inactive: {
+    bg: "bg-zinc-100 dark:bg-zinc-850",
+    text: "text-zinc-700 dark:text-zinc-400",
+    border: "border-zinc-200 dark:border-zinc-700",
+  },
+  historical: {
+    bg: "bg-zinc-200 dark:bg-zinc-800",
+    text: "text-zinc-600 dark:text-zinc-400",
+    border: "border-zinc-300 dark:border-zinc-700",
+  },
+};
+
+export const RETAILER_VISIBILITY_LABELS: Record<RetailerVisibility, string> = {
+  visible: "노출",
+  hidden: "비노출",
+};
+
+export const RETAILER_VISIBILITY_STYLES: Record<RetailerVisibility, { bg: string; text: string; border: string }> = {
+  visible: {
+    bg: "bg-emerald-50 dark:bg-emerald-950/30",
+    text: "text-emerald-700 dark:text-emerald-400",
+    border: "border-emerald-200 dark:border-emerald-800/60",
+  },
+  hidden: {
+    bg: "bg-zinc-100 dark:bg-zinc-850",
+    text: "text-zinc-500 dark:text-zinc-400",
+    border: "border-zinc-200 dark:border-zinc-700",
   },
 };
 
@@ -104,6 +150,41 @@ export const REGISTRATION_STATUS_STYLES: Record<RegistrationStatus, { bg: string
     border: "border-zinc-200 dark:border-zinc-700",
   },
 };
+
+export function mapSalesStatusToTradingStatus(salesStatus: SalesStatus | string | null | undefined): TradingStatus {
+  switch (salesStatus) {
+    case "ON_SALE":
+      return "active";
+    case "ENDED":
+      return "historical";
+    case "PAUSED":
+    case "PREPARING":
+    default:
+      return "inactive";
+  }
+}
+
+export function isValidStatusVisibilityCombination(tradingStatus: TradingStatus, visibility: RetailerVisibility): boolean {
+  if (visibility === "visible") {
+    return tradingStatus === "active";
+  }
+  return true;
+}
+
+export function sanitizeTradingAndVisibility(
+  tradingStatus: TradingStatus | string | null | undefined,
+  visibility: RetailerVisibility | string | null | undefined
+): { tradingStatus: TradingStatus; visibility: RetailerVisibility } {
+  let tStatus: TradingStatus = "inactive";
+  if (tradingStatus === "active" || tradingStatus === "historical" || tradingStatus === "inactive") {
+    tStatus = tradingStatus;
+  }
+  let vStatus: RetailerVisibility = "hidden";
+  if (visibility === "visible" && tStatus === "active") {
+    vStatus = "visible";
+  }
+  return { tradingStatus: tStatus, visibility: vStatus };
+}
 
 export interface CategoryMissingStep {
   code: "cat1" | "cat2" | "cat3";

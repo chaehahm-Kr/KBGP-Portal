@@ -1639,12 +1639,12 @@ export function ProductOverrideTabs({
         {/* Basic & SKU Tab */}
         {activeTab === "basic" && (
           <div className="space-y-6">
-            {/* 제품 관리 상태 설정 (선정, 판매 및 거래 운영 상태) */}
+            {/* 제품 관리 상태 설정 (선정 및 거래 운영 상태) */}
             <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 space-y-4">
               <h3 className="text-xs font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider border-b border-zinc-100 pb-2 dark:border-zinc-800">
-                제품 관리 상태 설정 (선정, 판매 및 거래 운영 상태)
+                제품 관리 상태 설정 (선정 및 거래 운영 상태)
               </h3>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {/* 제품 선정 상태 */}
                 <div className="space-y-1.5">
                   <label className="text-[11px] font-bold text-zinc-650 dark:text-zinc-400">제품 선정 상태</label>
@@ -1662,43 +1662,20 @@ export function ProductOverrideTabs({
                   <p className="text-[10px] text-zinc-400">최초 등록 제품의 기본값은 '미검토'입니다.</p>
                 </div>
 
-                {/* 판매 상태 */}
+                {/* 운영 상태 (Trading Product) */}
                 <div className="space-y-1.5">
-                  <label className="text-[11px] font-bold text-zinc-650 dark:text-zinc-455">판매 상태</label>
-                  <select
-                    value={salesStatus}
-                    onChange={(e) => setSalesStatus(e.target.value)}
-                    disabled={selectionStatus !== "SELECTED"}
-                    className="w-full rounded border border-zinc-200 p-2.5 text-xs text-zinc-900 bg-white dark:border-zinc-850 dark:bg-zinc-950 dark:text-white focus:border-zinc-950 outline-none font-bold disabled:bg-zinc-50 disabled:text-zinc-400 dark:disabled:bg-zinc-900"
-                  >
-                    <option value="PREPARING">판매 준비</option>
-                    <option value="ON_SALE">판매 중</option>
-                    <option value="PAUSED">일시 중지</option>
-                    <option value="ENDED">판매 종료</option>
-                  </select>
-                  {selectionStatus !== "SELECTED" ? (
-                    <p className="text-[10px] text-rose-600 font-bold dark:text-rose-400 mt-1 flex items-center gap-1">
-                      <span>⚠️</span> 선정된 제품만 판매 상태를 변경할 수 있습니다.
-                    </p>
-                  ) : (
-                    <p className="text-[10px] text-zinc-450 dark:text-zinc-500">선정된 제품의 실시간 판매 노출 상태를 제어합니다.</p>
-                  )}
-                </div>
-
-                {/* 거래 운영 상태 (Trading Product) */}
-                <div className="space-y-1.5">
-                  <label className="text-[11px] font-bold text-zinc-650 dark:text-zinc-455">거래 운영 여부 (Trading Product)</label>
+                  <label className="text-[11px] font-bold text-zinc-650 dark:text-zinc-455">운영 상태 (Operational Status)</label>
                   <select
                     value={tradingStatus}
                     onChange={(e) => setTradingStatus(e.target.value)}
                     className="w-full rounded border border-zinc-200 p-2.5 text-xs text-zinc-900 bg-white dark:border-zinc-850 dark:bg-zinc-955 dark:text-white focus:border-zinc-950 outline-none font-bold"
                   >
-                    <option value="inactive">비대상 (Inactive)</option>
-                    <option value="active">운영 대상 (Active)</option>
-                    <option value="historical">과거 운영 이력 대상 (Historical)</option>
+                    <option value="active">운영 중 (Active)</option>
+                    <option value="inactive">운영 중지 (Inactive)</option>
+                    <option value="historical">운영 종료 (Historical)</option>
                   </select>
-                  <p className="text-[10px] text-zinc-450 dark:text-zinc-500">
-                    실제 구매, 입고, 재고, 판매 운영에 참여시킬 것인지 결정합니다.
+                  <p className="text-[10px] text-zinc-455 dark:text-zinc-500">
+                    실제 Letusto/K SELECT의 구매, 입고, 재고, 판매 운영 대상 여부를 관리합니다.
                   </p>
                 </div>
               </div>

@@ -17,7 +17,7 @@ export default async function AdminTradingProductsPage() {
   const { data: products, error: queryError } = await supabase
     .from("products")
     .select(
-      "id, name, name_en, category, brand_id, company_id, manufacture_sku, letusto_sku, parent_sku, child_sku, price_krw_retail, price_usd_fob, price_additional_info, origin, category_code, selection_status, sales_status, trading_status, created_at"
+      "id, name, name_en, category, brand_id, company_id, manufacture_sku, letusto_sku, parent_sku, child_sku, price_krw_retail, price_usd_fob, price_additional_info, origin, category_code, selection_status, sales_status, trading_status, retailer_visibility, created_at"
     )
     .or("trading_status.in.(active,historical),selection_status.eq.SELECTED")
     .order("created_at", { ascending: false });
@@ -112,6 +112,7 @@ export default async function AdminTradingProductsPage() {
         selection_status: p.selection_status || "UNREVIEWED",
         sales_status: p.sales_status || "PREPARING",
         trading_status: p.trading_status || (p.selection_status === "SELECTED" ? "active" : "inactive"),
+        retailer_visibility: (p as any).retailer_visibility || "hidden",
         category_code: p.category_code || null,
         category_full_path: p.category_code ? getCategoryFullPath(p.category_code) : null,
         qty_on_hand: totalOnHand,

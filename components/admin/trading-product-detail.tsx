@@ -8,7 +8,16 @@ import {
   updateTradingPromotion,
   updateTradingCostOverride,
   clearTradingCostOverride,
+  updateTradingStatusAndVisibility,
 } from "@/lib/product/trading-actions";
+import {
+  TRADING_STATUS_LABELS,
+  TRADING_STATUS_STYLES,
+  RETAILER_VISIBILITY_LABELS,
+  RETAILER_VISIBILITY_STYLES,
+  TradingStatus,
+  RetailerVisibility,
+} from "@/lib/product/registration-status";
 import { useRouter } from "next/navigation";
 
 const ArrowLeftIcon = ({ className }: { className?: string }) => (
@@ -46,8 +55,9 @@ interface ResolvedTradingProduct {
   photoUrls?: string[];
   upc?: string | null;
   selection_status: string;
-  sales_status: string;
+  sales_status?: string;
   trading_status: string;
+  retailer_visibility: string;
   category_code: string | null;
   category_full_path: string;
 
@@ -139,18 +149,26 @@ interface TradingProductDetailProps {
   inboundSummary?: InboundSummaryItem;
 }
 
-const SALES_COLORS: Record<string, string> = {
-  PREPARING: "bg-zinc-100 text-zinc-650 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:border-zinc-700",
-  ON_SALE: "bg-emerald-50 text-emerald-700 border-emerald-250 dark:bg-emerald-950/20 dark:text-emerald-400 dark:border-emerald-900/50",
-  PAUSED: "bg-amber-50 text-amber-700 border-amber-250 dark:bg-amber-950/20 dark:text-amber-400 dark:border-amber-900/50",
-  ENDED: "bg-zinc-250 text-zinc-650 border-zinc-300 dark:bg-zinc-950 dark:text-zinc-500 dark:border-zinc-850",
+const TRADING_COLORS: Record<string, string> = {
+  active: "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/20 dark:text-blue-400 dark:border-blue-900/50",
+  inactive: "bg-zinc-100 text-zinc-650 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:border-zinc-700",
+  historical: "bg-zinc-200 text-zinc-650 border-zinc-300 dark:bg-zinc-900 dark:text-zinc-500 dark:border-zinc-800",
 };
 
-const SALES_LABELS: Record<string, string> = {
-  PREPARING: "판매 준비",
-  ON_SALE: "판매 중",
-  PAUSED: "일시 중지",
-  ENDED: "판매 종료",
+const TRADING_LABELS: Record<string, string> = {
+  active: "운영 중 (Active)",
+  inactive: "운영 중지 (Inactive)",
+  historical: "운영 종료 (Historical)",
+};
+
+const VISIBILITY_COLORS: Record<string, string> = {
+  visible: "bg-emerald-50 text-emerald-700 border-emerald-250 dark:bg-emerald-950/20 dark:text-emerald-400 dark:border-emerald-900/50",
+  hidden: "bg-zinc-100 text-zinc-500 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:border-zinc-700",
+};
+
+const VISIBILITY_LABELS: Record<string, string> = {
+  visible: "노출 (Visible)",
+  hidden: "비노출 (Hidden)",
 };
 
 const MOVEMENT_LABELS: Record<string, string> = {
@@ -272,6 +290,59 @@ export function TradingProductDetail({
   const [editCostReason, setEditCostReason] = useState("");
   const [costOverrideError, setCostOverrideError] = useState("");
   const [isCostSubmitting, setIsCostSubmitting] = useState(false);
+
+  // Operational Status & Visibility Management State
+  const [currentTradingStatus, setCurrentTradingStatus] = useState<string>(product.trading_status || "inactive");
+  const [currentVisibility, setCurrentVisibility] = useState<string>(product.retailer_visibility || "hidden");
+  const [isStatusModalOpen, setIsStatusModalOpen] = useState(false);
+  const [targetTradingStatus, setTargetTradingStatus] = useState<string>(product.trading_status || "inactive");
+  const [targetVisibility, setTargetVisibility] = useState<string>(product.retailer_visibility || "hidden");
+  const [statusReason, setStatusReason] = useState("");
+  const [statusError, setStatusError] = useState("");
+  const [isStatusSubmitting, setIsStatusSubmitting] = useState(false);
+
+  const handleOpenStatusModal = () => {
+    setTargetTradingStatus(currentTradingStatus);
+    setTargetVisibility(currentVisibility);
+    setStatusReason("");
+    setStatusError("");
+    setIsStatusModalOpen(true);
+  };
+
+  const handleTargetTradingStatusChange = (val: string) => {
+    setTargetTradingStatus(val);
+    if (val !== "active") {
+      setTargetVisibility("hidden");
+    }
+  };
+
+  const handleSaveStatusVisibility = async () => {
+    setStatusError("");
+    if (targetTradingStatus !== "active" && targetVisibility === "visible") {
+      setStatusError("운영 중(Active) 상품만 Retailer Hub에 '노출'될 수 있습니다.");
+      return;
+    }
+
+    setIsStatusSubmitting(true);
+    try {
+      const res = await updateTradingStatusAndVisibility(product.id, {
+        trading_status: targetTradingStatus as "active" | "inactive" | "historical",
+        retailer_visibility: targetVisibility as "visible" | "hidden",
+        reason: statusReason.trim() || "Operational status and visibility updated",
+      });
+
+      if (res?.success) {
+        setCurrentTradingStatus(res.trading_status);
+        setCurrentVisibility(res.retailer_visibility);
+        setIsStatusModalOpen(false);
+        router.refresh();
+      }
+    } catch (err: any) {
+      setStatusError(err.message || "상태 변경 실패");
+    } finally {
+      setIsStatusSubmitting(false);
+    }
+  };
 
   // Lightbox state
   const [isLightboxOpen, setIsLightboxOpen] = useState(false);
@@ -776,17 +847,38 @@ export function TradingProductDetail({
             <span>/</span>
             <span className="text-zinc-900 dark:text-white font-medium">360° Management Hub</span>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2.5 flex-wrap">
             <h1 className="text-xl font-bold tracking-tight text-zinc-900 dark:text-white">
               {product.display_name}
             </h1>
-            <span
-              className={`px-2.5 py-0.5 text-xs font-semibold rounded-full border ${
-                SALES_COLORS[product.sales_status] || SALES_COLORS.PREPARING
-              }`}
+            {(() => {
+              const tStyle =
+                TRADING_STATUS_STYLES[currentTradingStatus as TradingStatus] ||
+                TRADING_STATUS_STYLES.inactive;
+              const vStyle =
+                RETAILER_VISIBILITY_STYLES[currentVisibility as RetailerVisibility] ||
+                RETAILER_VISIBILITY_STYLES.hidden;
+              return (
+                <>
+                  <span
+                    className={`px-2.5 py-0.5 text-xs font-semibold rounded-full border ${tStyle.bg} ${tStyle.text} ${tStyle.border}`}
+                  >
+                    {TRADING_STATUS_LABELS[currentTradingStatus as TradingStatus] || currentTradingStatus}
+                  </span>
+                  <span
+                    className={`px-2.5 py-0.5 text-xs font-semibold rounded-full border ${vStyle.bg} ${vStyle.text} ${vStyle.border}`}
+                  >
+                    Hub {RETAILER_VISIBILITY_LABELS[currentVisibility as RetailerVisibility] || currentVisibility}
+                  </span>
+                </>
+              );
+            })()}
+            <button
+              onClick={handleOpenStatusModal}
+              className="px-2.5 py-1 text-xs font-medium bg-zinc-100 hover:bg-zinc-200 text-zinc-800 dark:bg-zinc-800 dark:hover:bg-zinc-700 dark:text-zinc-200 rounded-lg border border-zinc-200 dark:border-zinc-700 transition-colors shadow-sm inline-flex items-center gap-1.5 ml-1"
             >
-              {SALES_LABELS[product.sales_status] || product.sales_status}
-            </span>
+              <span>⚙️</span> 상태/노출 관리
+            </button>
           </div>
         </div>
       </div>
@@ -860,15 +952,30 @@ export function TradingProductDetail({
                 )}
 
                 <div className="flex items-center gap-1.5 pt-1">
-                  <span
-                    className={`px-2 py-0.5 text-[10px] font-semibold rounded-full border ${
-                      SALES_COLORS[product.sales_status] || SALES_COLORS.PREPARING
-                    }`}
-                  >
-                    Sales: {SALES_LABELS[product.sales_status] || product.sales_status}
-                  </span>
+                  {(() => {
+                    const tStyle =
+                      TRADING_STATUS_STYLES[currentTradingStatus as TradingStatus] ||
+                      TRADING_STATUS_STYLES.inactive;
+                    const vStyle =
+                      RETAILER_VISIBILITY_STYLES[currentVisibility as RetailerVisibility] ||
+                      RETAILER_VISIBILITY_STYLES.hidden;
+                    return (
+                      <>
+                        <span
+                          className={`px-2 py-0.5 text-[10px] font-semibold rounded-full border ${tStyle.bg} ${tStyle.text} ${tStyle.border}`}
+                        >
+                          운영: {TRADING_STATUS_LABELS[currentTradingStatus as TradingStatus] || currentTradingStatus}
+                        </span>
+                        <span
+                          className={`px-2 py-0.5 text-[10px] font-semibold rounded-full border ${vStyle.bg} ${vStyle.text} ${vStyle.border}`}
+                        >
+                          노출: {RETAILER_VISIBILITY_LABELS[currentVisibility as RetailerVisibility] || currentVisibility}
+                        </span>
+                      </>
+                    );
+                  })()}
                   <span className="px-2 py-0.5 text-[10px] font-semibold rounded-full border bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 border-zinc-200 dark:border-zinc-700">
-                    Trading: {product.trading_status.toUpperCase()}
+                    선정: {product.selection_status}
                   </span>
                 </div>
               </div>
@@ -2510,6 +2617,141 @@ export function TradingProductDetail({
                   {lightboxIndex + 1} / {photoUrls.length}
                 </span>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Status & Visibility Management Modal */}
+      {isStatusModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="w-full max-w-md rounded-2xl border border-zinc-200 bg-white p-6 shadow-2xl dark:border-zinc-800 dark:bg-zinc-900 space-y-4">
+            <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-3">
+              <div>
+                <h3 className="text-base font-bold text-zinc-900 dark:text-white flex items-center gap-2">
+                  <span>⚙️</span> 운영 상태 및 Hub 노출 관리
+                </h3>
+                <p className="text-xs text-zinc-500 mt-0.5">{product.name}</p>
+              </div>
+              <button
+                onClick={() => setIsStatusModalOpen(false)}
+                className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 p-1"
+              >
+                ✕
+              </button>
+            </div>
+
+            {statusError && (
+              <div className="rounded-lg bg-red-50 dark:bg-red-950/40 p-3 text-xs text-red-600 dark:text-red-400 border border-red-200 dark:border-red-900/50">
+                ⚠️ {statusError}
+              </div>
+            )}
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1.5">
+                  운영 상태 (Operational Trading Status)
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { val: "active", label: "운영 중", desc: "주문 및 재고 관리 활성" },
+                    { val: "inactive", label: "운영 중지", desc: "주문 일시 중단" },
+                    { val: "historical", label: "운영 종료", desc: "이력 보관" },
+                  ].map((s) => (
+                    <button
+                      key={s.val}
+                      type="button"
+                      onClick={() => handleTargetTradingStatusChange(s.val)}
+                      className={`p-2.5 text-left rounded-xl border transition-all ${
+                        targetTradingStatus === s.val
+                          ? "border-indigo-600 bg-indigo-50/50 text-indigo-900 dark:border-indigo-500 dark:bg-indigo-950/30 dark:text-indigo-200 ring-1 ring-indigo-500"
+                          : "border-zinc-200 bg-zinc-50/50 text-zinc-700 hover:bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-900/50 dark:text-zinc-300"
+                      }`}
+                    >
+                      <div className="text-xs font-bold">{s.label}</div>
+                      <div className="text-[10px] text-zinc-500 mt-0.5 leading-tight">{s.desc}</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1.5">
+                  Retailer Hub 노출 여부 (Visibility)
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    disabled={targetTradingStatus !== "active"}
+                    onClick={() => setTargetVisibility("visible")}
+                    className={`p-2.5 text-left rounded-xl border transition-all ${
+                      targetTradingStatus !== "active"
+                        ? "opacity-40 cursor-not-allowed border-zinc-200 bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-950"
+                        : targetVisibility === "visible"
+                        ? "border-emerald-600 bg-emerald-50/50 text-emerald-900 dark:border-emerald-500 dark:bg-emerald-950/30 dark:text-emerald-200 ring-1 ring-emerald-500"
+                        : "border-zinc-200 bg-zinc-50/50 text-zinc-700 hover:bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-900/50 dark:text-zinc-300"
+                    }`}
+                  >
+                    <div className="text-xs font-bold flex items-center gap-1">
+                      <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" />
+                      노출 (Visible)
+                    </div>
+                    <div className="text-[10px] text-zinc-500 mt-0.5">리테일러 포털에 공개</div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setTargetVisibility("hidden")}
+                    className={`p-2.5 text-left rounded-xl border transition-all ${
+                      targetVisibility === "hidden"
+                        ? "border-zinc-700 bg-zinc-100 text-zinc-900 dark:border-zinc-500 dark:bg-zinc-800 dark:text-zinc-100 ring-1 ring-zinc-500"
+                        : "border-zinc-200 bg-zinc-50/50 text-zinc-700 hover:bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-900/50 dark:text-zinc-300"
+                    }`}
+                  >
+                    <div className="text-xs font-bold flex items-center gap-1">
+                      <span className="w-2 h-2 rounded-full bg-zinc-400 inline-block" />
+                      비노출 (Hidden)
+                    </div>
+                    <div className="text-[10px] text-zinc-500 mt-0.5">리테일러 포털 미노출</div>
+                  </button>
+                </div>
+                {targetTradingStatus !== "active" && (
+                  <p className="text-[11px] text-amber-600 dark:text-amber-400 mt-1.5 flex items-center gap-1">
+                    ℹ️ 운영 중지 또는 종료 상태에서는 '비노출'만 가능합니다.
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1">
+                  변경 사유 (Optional Reason)
+                </label>
+                <input
+                  type="text"
+                  value={statusReason}
+                  onChange={(e) => setStatusReason(e.target.value)}
+                  placeholder="예: 신규 시즌 런칭으로 허브 노출 개시"
+                  className="w-full rounded-xl border border-zinc-300 bg-white px-3 py-2 text-xs text-zinc-900 placeholder:text-zinc-400 focus:border-indigo-500 focus:outline-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-white"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 border-t border-zinc-100 dark:border-zinc-800 pt-3">
+              <button
+                type="button"
+                onClick={() => setIsStatusModalOpen(false)}
+                className="px-3.5 py-1.5 text-xs font-medium text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white"
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                disabled={isStatusSubmitting}
+                onClick={handleSaveStatusVisibility}
+                className="rounded-xl bg-indigo-600 px-4 py-2 text-xs font-bold text-white shadow-sm hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+              >
+                {isStatusSubmitting ? "저장 중..." : "상태 저장"}
+              </button>
             </div>
           </div>
         </div>

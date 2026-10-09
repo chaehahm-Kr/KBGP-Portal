@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { verifyRetailerSession } from "@/lib/auth/dal";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { resolveEffectiveSku } from "@/lib/product/types";
+import { evaluateProductRegistrationStatus } from "@/lib/product/registration-status";
 import { getRetailerPaymentEligibility, getOrderPayments } from "@/lib/retailer/payment-actions";
 import { RetailerPaymentMethod, RetailerPaymentRecord } from "@/lib/retailer/payment-types";
 import { getOrderFulfillments } from "@/lib/retailer/fulfillment-actions";
@@ -104,9 +105,20 @@ function resolveAuthoritativeWholesalePrice(prod: {
     ? prod.product_curations[0]
     : prod.product_curations;
 
-  const now = new Date();
+  const isPricingActive =
+    overrides.is_pricing_active !== false && (prod as any).trading_pricing_active !== false;
+
+  if (!isPricingActive) {
+    return {
+      wholesalePrice: 0,
+      isPromo: false,
+      srp: null,
+      isOrderable: false,
+    };
+  }
 
   // 1. Check Promo Wholesale Price
+  const now = new Date();
   const promoPrice = Number(
     overrides.promo_wholesale_price || (prod as any).trading_promo_wholesale_price || 0
   );
@@ -327,13 +339,31 @@ export async function submitRetailerOrder(
         name,
         name_en,
         brand_id,
+        category,
+        category_code,
         letusto_sku,
         manufacture_sku,
         status,
+        selection_status,
+        trading_status,
+        retailer_visibility,
+        trading_pricing_active,
+        trading_wholesale_price,
+        trading_promo_wholesale_price,
+        trading_promo_start_date,
+        trading_promo_end_date,
         estimated_retail_price,
         price_usd_fob,
+        price_krw_retail,
         price_additional_info,
+        origin,
         carton_pack_qty,
+        package_width,
+        package_depth,
+        package_height,
+        package_weight,
+        upc,
+        ean,
         brands (
           id,
           name
@@ -341,6 +371,9 @@ export async function submitRetailerOrder(
         product_curations (
           wholesale_price,
           suggest_retail_price
+        ),
+        product_images (
+          id
         )
       `)
       .in("id", productIds);
@@ -373,8 +406,43 @@ export async function submitRetailerOrder(
       }
 
       const info = (prod.price_additional_info as any) || {};
-      if (info.deleted_at || prod.status === "discontinued") {
-        return { success: false, error: `Product "${prod.name}" is no longer available.` };
+      if (
+        info.deleted_at ||
+        (prod as any).deleted_at ||
+        prod.status === "discontinued" ||
+        (prod as any).selection_status !== "SELECTED" ||
+        ((prod as any).trading_status || "inactive") !== "active" ||
+        ((prod as any).retailer_visibility || "hidden") !== "visible"
+      ) {
+        return { success: false, error: `Product "${prod.name}" is not currently available for ordering.` };
+      }
+
+      const regEval = evaluateProductRegistrationStatus({
+        id: prod.id,
+        name: prod.name,
+        name_en: prod.name_en,
+        brand_id: prod.brand_id,
+        category_code: (prod as any).category_code,
+        manufacture_sku: prod.manufacture_sku,
+        origin: (prod as any).origin,
+        price_krw_retail: (prod as any).price_krw_retail,
+        price_usd_fob: prod.price_usd_fob,
+        package_width: (prod as any).package_width,
+        package_depth: (prod as any).package_depth,
+        package_height: (prod as any).package_height,
+        package_weight: (prod as any).package_weight,
+        carton_pack_qty: prod.carton_pack_qty,
+        upc: (prod as any).upc,
+        ean: (prod as any).ean,
+        deleted_at: info.deleted_at || (prod as any).deleted_at,
+        hasImages: Array.isArray((prod as any).product_images) && (prod as any).product_images.length > 0,
+      });
+
+      if (regEval.status !== "COMPLETE") {
+        return {
+          success: false,
+          error: `Product "${prod.name}" registration is incomplete and cannot be ordered.`,
+        };
       }
 
       const overrides = info.admin_overrides || {};
