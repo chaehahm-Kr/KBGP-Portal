@@ -80,9 +80,7 @@ export async function updateSession(request: NextRequest) {
 
   function createRewriteWithCookies(rewriteUrl: URL) {
     const rewriteResponse = NextResponse.rewrite(rewriteUrl, {
-      request: {
-        headers: request.headers,
-      },
+      request,
     });
     supabaseResponse.cookies.getAll().forEach((cookie) => {
       rewriteResponse.cookies.set(cookie);
@@ -175,9 +173,7 @@ export async function updateSession(request: NextRequest) {
             request.cookies.set(mappedName, value);
           });
           supabaseResponse = NextResponse.next({
-            request: {
-              headers: request.headers,
-            },
+            request,
           });
           cookiesToSet.forEach(({ name, value, options }) => {
             const mappedName = prefix && name.startsWith("sb-") ? `${prefix}${name}` : name;

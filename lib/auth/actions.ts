@@ -70,12 +70,20 @@ async function login(
     }
     
     // Server / Network / 5xx system failure
-    if ((error.status && error.status >= 500) || error.message?.includes("fetch failed")) {
+    if ((error.status && error.status >= 500) || error.message?.includes("fetch failed") || error.message?.includes("network")) {
       console.error("[login] System auth error:", error);
       return {
         error: area === "retailer"
           ? "A temporary system error occurred. Please try again in a few moments."
           : "로그인 처리 중 문제가 발생했습니다. 잠시 후 다시 시도해주세요.",
+      };
+    }
+
+    if (error.status === 429 || error.message?.includes("Too many requests")) {
+      return {
+        error: area === "retailer"
+          ? "Too many requests. Please wait a few moments before trying again."
+          : "요청이 너무 많습니다. 잠시 후 다시 시도해주세요.",
       };
     }
 

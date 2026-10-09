@@ -46,10 +46,20 @@ const verifySession = cache(async (area: AppRole): Promise<VerifiedSession> => {
 
   const supabase = await createClient();
 
-  const {
+  let {
     data: { user },
     error: userError,
   } = await supabase.auth.getUser();
+
+  // Retry once on transient network or fetch failures
+  if (userError && (userError.message?.includes("fetch failed") || (userError as any).status >= 500)) {
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    const retry = await supabase.auth.getUser();
+    if (retry.data?.user) {
+      user = retry.data.user;
+      userError = null;
+    }
+  }
 
   if (userError || !user) {
     const reasonCode = userError ? "AUTH_GET_USER_ERROR" : "AUTH_USER_NOT_FOUND";
