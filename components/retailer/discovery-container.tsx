@@ -78,7 +78,7 @@ export function RetailerDiscoveryContainer({
   };
 
   return (
-    <div className="space-y-6 sm:space-y-8">
+    <div className="space-y-6 sm:space-y-8 w-full max-w-full overflow-hidden">
       {/* Search, Category Navigation, & Purchasing Filters */}
       <RetailerProductFilterBar
         categoryHierarchy={categoryHierarchy}

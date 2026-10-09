@@ -247,7 +247,7 @@ export function RetailerProductFilterBar({
     currentOrderableOnly;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 w-full max-w-full overflow-hidden">
       {/* 1. Main Search, Brand, and Sort Row */}
       <div className="flex flex-col md:flex-row gap-3">
         {/* Search Input */}
