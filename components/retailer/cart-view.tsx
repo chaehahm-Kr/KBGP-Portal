@@ -106,7 +106,7 @@ export function RetailerCartView() {
                         </span>
                         <h3 className="text-sm sm:text-base font-bold text-zinc-900 dark:text-white line-clamp-2 leading-snug">
                           <Link
-                            href={`/products/${item.productId}`}
+                            href={`/retailer/products/${item.productId}`}
                             className="hover:underline"
                           >
                             {item.productName}

@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { revalidateAllProductPaths } from "@/lib/product/revalidate";
 import { verifyAdminSession } from "@/lib/auth/dal";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getProductInventory } from "@/lib/inventory/actions";
@@ -636,9 +637,7 @@ export async function updateTradingPricing(productId: string, input: UpdateTradi
   }
 
   try {
-    revalidatePath(`/admin/products/trading/${productId}`);
-    revalidatePath("/admin/products/trading");
-    revalidatePath(`/admin/products/${productId}`);
+    revalidateAllProductPaths(productId);
   } catch {
     // Ignore
   }
@@ -764,8 +763,7 @@ export async function updateTradingPromotion(productId: string, input: UpdateTra
   }
 
   try {
-    revalidatePath(`/admin/products/trading/${productId}`);
-    revalidatePath("/admin/products/trading");
+    revalidateAllProductPaths(productId);
   } catch {
     // Ignore
   }
@@ -878,8 +876,7 @@ export async function updateTradingCostOverride(productId: string, input: Update
   }
 
   try {
-    revalidatePath(`/admin/products/trading/${productId}`);
-    revalidatePath("/admin/products/trading");
+    revalidateAllProductPaths(productId);
   } catch {
     // Ignore
   }
@@ -1007,11 +1004,7 @@ export async function updateLetustoSku(productId: string, input: UpdateLetustoSk
   }
 
   try {
-    revalidatePath(`/admin/products/trading/${productId}`);
-    revalidatePath("/admin/products/trading");
-    revalidatePath(`/admin/products/${productId}`);
-    revalidatePath(`/products/${productId}`);
-    revalidatePath("/products");
+    revalidateAllProductPaths(productId);
   } catch {
     // Ignore
   }
@@ -1214,11 +1207,7 @@ export async function updateRetailerSalesPolicy(
     }
 
     try {
-      revalidatePath(`/admin/products/trading/${productId}`);
-      revalidatePath("/admin/products/trading");
-      revalidatePath(`/admin/products/${productId}`);
-      revalidatePath(`/products/${productId}`);
-      revalidatePath("/products");
+      revalidateAllProductPaths(productId);
       revalidatePath("/cart");
     } catch {
       // Ignore revalidate error in test/dev environments
@@ -1313,8 +1302,7 @@ export async function clearTradingCostOverride(productId: string, reason: string
   }
 
   try {
-    revalidatePath(`/admin/products/trading/${productId}`);
-    revalidatePath("/admin/products/trading");
+    revalidateAllProductPaths(productId);
   } catch {
     // Ignore
   }
@@ -1396,12 +1384,7 @@ export async function updateTradingStatusAndVisibility(
     }
 
     try {
-      revalidatePath(`/admin/products/trading/${productId}`);
-      revalidatePath("/admin/products/trading");
-      revalidatePath(`/admin/products/${productId}`);
-      revalidatePath("/admin/products");
-      revalidatePath("/products");
-      revalidatePath(`/products/${productId}`);
+      revalidateAllProductPaths(productId);
     } catch {
       // Ignore revalidation path exceptions
     }

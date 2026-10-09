@@ -4,6 +4,7 @@ import { verifyAdminSession } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { revalidatePath } from "next/cache";
+import { revalidateAllProductPaths } from "@/lib/product/revalidate";
 import { redirect } from "next/navigation";
 import { validateUploadedFile } from "@/lib/files/validate";
 import crypto from "crypto";
@@ -226,13 +227,8 @@ export async function adminUpdateProductOverrides(
     });
   }
 
-  revalidatePath(`/admin/products/${productId}`);
-  revalidatePath(`/admin/products`);
+  revalidateAllProductPaths(productId);
   revalidatePath(`/admin/inventory`);
-  revalidatePath(`/admin/products/trading/${productId}`);
-  revalidatePath(`/admin/products/trading`);
-  revalidatePath(`/portal/products/${productId}`);
-  revalidatePath(`/portal/products`);
   return { success: true };
 }
 
@@ -1966,10 +1962,7 @@ export async function adminSoftDeleteProduct(productId: string): Promise<{ succe
     },
   });
 
-  revalidatePath("/admin/products");
-  revalidatePath(`/admin/products/${productId}`);
-  revalidatePath("/portal/products");
-  revalidatePath(`/portal/products/${productId}`);
+  revalidateAllProductPaths(productId);
   return { success: true };
 }
 
@@ -2043,8 +2036,7 @@ export async function adminBulkSoftDeleteProducts(productIds: string[]): Promise
     });
   }
 
-  revalidatePath("/admin/products");
-  revalidatePath("/portal/products");
+  productIds.forEach((id) => revalidateAllProductPaths(id));
   return { success: true, count: productIds.length };
 }
 
@@ -2132,9 +2124,6 @@ export async function adminRestoreProduct(productId: string): Promise<{ success:
     },
   });
 
-  revalidatePath("/admin/products");
-  revalidatePath(`/admin/products/${productId}`);
-  revalidatePath("/portal/products");
-  revalidatePath(`/portal/products/${productId}`);
+  revalidateAllProductPaths(productId);
   return { success: true };
 }

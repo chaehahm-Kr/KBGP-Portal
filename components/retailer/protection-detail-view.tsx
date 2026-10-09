@@ -354,7 +354,7 @@ export function ProtectionDetailView({
             </Link>
             <span className="text-zinc-300 dark:text-zinc-700">•</span>
             <Link
-              href={`/products/${protection.productId}`}
+              href={`/retailer/products/${protection.productId}`}
               className="text-xs font-bold text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white flex items-center gap-1"
             >
               <span>View Product Detail</span>

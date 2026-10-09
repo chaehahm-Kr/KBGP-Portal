@@ -404,7 +404,7 @@ export function RetailerOrderDetailView({ order }: OrderDetailViewProps) {
                       {item.brandName}
                     </span>
                     <h3 className="text-sm font-bold text-zinc-900 dark:text-white leading-snug">
-                      <Link href={`/products/${item.productId}`} className="hover:underline">
+                      <Link href={`/retailer/products/${item.productId}`} className="hover:underline">
                         {item.productName}
                       </Link>
                     </h3>
