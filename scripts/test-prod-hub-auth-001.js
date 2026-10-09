@@ -184,15 +184,15 @@ async function runProductionAuthQA() {
     console.log('\n[Scenario 7] Checking Brand Portal & Admin Auth Isolation...');
     const brandPage = await context.newPage();
     await brandPage.goto('https://portal.kselectnetwork.com/portal/login', { waitUntil: 'load', timeout: 30000 });
-    const brandBody = await brandPage.innerText('body');
-    assert(brandBody.includes('K SELECT') || brandBody.includes('브랜드'), 'Brand Portal login must be accessible');
+    await brandPage.locator('input#email').waitFor({ timeout: 10000 });
+    assert(await brandPage.locator('input#email').isVisible(), 'Brand Portal email input must be visible');
     console.log('✓ Brand Portal login page healthy and isolated.');
     await brandPage.close();
 
     const adminPage = await context.newPage();
     await adminPage.goto('https://admin.kselectnetwork.com/admin/login', { waitUntil: 'load', timeout: 30000 });
-    const adminBody = await adminPage.innerText('body');
-    assert(adminBody.includes('관리자') || adminBody.includes('Admin') || adminBody.includes('K SELECT'), 'Admin login must be accessible');
+    await adminPage.locator('input#email').waitFor({ timeout: 10000 });
+    assert(await adminPage.locator('input#email').isVisible(), 'Admin email input must be visible');
     console.log('✓ Admin Portal login page healthy and isolated.');
     await adminPage.close();
 

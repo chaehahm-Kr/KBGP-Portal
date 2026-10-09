@@ -80,7 +80,9 @@ export async function updateSession(request: NextRequest) {
 
   function createRewriteWithCookies(rewriteUrl: URL) {
     const rewriteResponse = NextResponse.rewrite(rewriteUrl, {
-      request,
+      request: {
+        headers: request.headers,
+      },
     });
     supabaseResponse.cookies.getAll().forEach((cookie) => {
       rewriteResponse.cookies.set(cookie);
@@ -173,7 +175,9 @@ export async function updateSession(request: NextRequest) {
             request.cookies.set(mappedName, value);
           });
           supabaseResponse = NextResponse.next({
-            request,
+            request: {
+              headers: request.headers,
+            },
           });
           cookiesToSet.forEach(({ name, value, options }) => {
             const mappedName = prefix && name.startsWith("sb-") ? `${prefix}${name}` : name;
@@ -189,14 +193,30 @@ export async function updateSession(request: NextRequest) {
 
   // createServerClient와 getUser() 사이에는 다른 코드를 두지 않는다 (위 주석 참고).
   // getUser()를 호출해야 만료된 session이 refresh token을 이용하여 쿠키(setAll)에 의해 자동 갱신됩니다.
-  const {
+  let {
     data: { user },
     error: userError,
   } = await supabase.auth.getUser();
+
+  // Retry once on transient network or fetch failures
+  if (userError && (userError.message?.includes("fetch failed") || (userError as any).status >= 500)) {
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    const retry = await supabase.auth.getUser();
+    if (retry.data?.user) {
+      user = retry.data.user;
+      userError = null;
+    }
+  }
+
   if (userError && !userError.message.includes("Auth session missing!")) {
     console.warn(`[Auth Security Audit] [${new Date().toISOString()}] proxy updateSession getUser warning for ${pathname}:`, userError.message);
   }
-  const isAuthenticated = Boolean(user);
+
+  const allReqCookies = request.cookies.getAll();
+  const hasAuthCookie = allReqCookies.some(c => c.name.includes("auth-token") || (prefix && c.name.startsWith(`${prefix}sb-`)));
+  // If a transient network glitch occurred but auth cookies exist, do not reject at proxy level; allow DAL to verify
+  const isNetworkErrorWithCookies = !user && userError && (userError.message?.includes("fetch failed") || (userError as any).status >= 500) && hasAuthCookie;
+  const isAuthenticated = Boolean(user) || Boolean(isNetworkErrorWithCookies);
 
   // Impersonation session check & stale cookie cleanup
   const impersonationCookie = request.cookies.get(COOKIE_NAME)?.value;

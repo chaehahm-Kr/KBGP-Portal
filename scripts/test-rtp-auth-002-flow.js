@@ -20,7 +20,7 @@ async function testRecoveryFlow() {
   console.log('Testing Retailer Password Reset Flow (RTP-AUTH-002)');
   console.log('====================================================\n');
 
-  const email = 'tammyhahm@gmail.com';
+  const email = 'qa-retailer-test@letusto.com';
   const targetRedirect = 'https://portal.kselecthub.com/reset-password';
 
   console.log(`[Step 1] Generating Supabase Recovery Link for ${email}...`);

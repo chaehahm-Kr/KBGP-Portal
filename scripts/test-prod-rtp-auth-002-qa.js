@@ -28,7 +28,7 @@ async function runRTPAuth002QA() {
   const page = await context.newPage();
 
   const results = [];
-  const testEmail = 'tammyhahm@gmail.com';
+  const testEmail = 'qa-retailer-test@letusto.com';
   const targetFinalPassword = 'Password123!@#';
   const intermediatePassword = 'TempPassword123!@#';
 
@@ -132,12 +132,16 @@ async function runRTPAuth002QA() {
     results.push({ step: '8. New Password Authentication', pass: onDashboard && isAuthed });
 
     // 9. Reset back to targetFinalPassword via admin API so standard test credentials remain intact
-    console.log('[Step 9] Restoring standard test password...');
-    await adminClient.auth.admin.updateUserById(
-      '7c3c4899-fa85-4cf0-94c8-6d497b36f82f',
-      { password: targetFinalPassword }
-    );
-    console.log(' -> Restored standard password successfully.');
+    console.log('[Step 9] Restoring standard QA test password...');
+    const { data: { users: allUsers } } = await adminClient.auth.admin.listUsers();
+    const targetQA = allUsers.find(u => u.email === testEmail);
+    if (targetQA) {
+      await adminClient.auth.admin.updateUserById(
+        targetQA.id,
+        { password: targetFinalPassword }
+      );
+      console.log(' -> Restored standard QA test password successfully.');
+    }
 
     // 10. Verify direct access to reset-password without token fails safely to Invalid state
     console.log('[Step 10] Testing direct visit to https://portal.kselecthub.com/reset-password without token...');
