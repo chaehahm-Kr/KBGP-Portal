@@ -1079,13 +1079,13 @@ export function ContentStatusList({ initialProducts, filterOptions }: ContentSta
                     </td>
 
                     {/* 13. Manage */}
-                    <td className="py-2.5 px-3 text-right">
+                    <td className="py-2 px-0.5 text-right">
                       <Link
                         href={`/admin/products/content/${p.id}`}
-                        className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-bold text-indigo-600 hover:text-indigo-700 dark:text-indigo-400 dark:hover:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 transition-colors cursor-pointer"
+                        className="inline-flex items-center gap-0.5 px-1 py-0.5 rounded text-[10px] font-bold text-indigo-600 hover:text-indigo-700 dark:text-indigo-400 dark:hover:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 transition-colors cursor-pointer"
                       >
                         <span>Manage</span>
-                        <ExternalLinkIcon className="w-3 h-3" />
+                        <ExternalLinkIcon className="w-2.5 h-2.5 shrink-0" />
                       </Link>
                     </td>
                   </tr>
