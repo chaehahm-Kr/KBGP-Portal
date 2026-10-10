@@ -67,6 +67,11 @@ export interface RetailerProductSummary {
   orderabilityReason?: string;
 }
 
+import {
+  getRetailerProductSpecifications,
+  type ProductSpecificationGroup,
+} from "@/lib/product/specifications-resolver";
+
 export interface RetailerProductDetail extends RetailerProductSummary {
   description: string | null;
   bulletPoints: string[];
@@ -89,6 +94,7 @@ export interface RetailerProductDetail extends RetailerProductSummary {
     url: string;
     position: number;
   }>;
+  specifications: ProductSpecificationGroup[];
 }
 
 export interface RetailerCatalogFilters {
@@ -877,6 +883,21 @@ export async function getRetailerProductDetail(
     }
   });
 
+  // Fetch Specifications
+  const specifications = await getRetailerProductSpecifications(productId, p.category_code, adminClient);
+
+  // If formulation or storageCondition exists in specifications, use the formatted English text
+  specifications.forEach((grp) => {
+    grp.items.forEach((item) => {
+      if (item.code === "FORMULATION" && !formulation) {
+        formulation = item.value;
+      }
+      if (item.code === "STORAGE_CONDITION" && !storageCondition) {
+        storageCondition = item.value;
+      }
+    });
+  });
+
   const howToUse = overrides.how_to_use || p.how_to_use || null;
   const ingredients = overrides.ingredients_text || p.ingredients_text || null;
 
@@ -911,6 +932,7 @@ export async function getRetailerProductDetail(
     categoryPath,
     formulation,
     storageCondition,
+    specifications,
     upc: overrides.upc || p.upc || null,
     ean: overrides.ean || p.ean || null,
     packageDimensions: {

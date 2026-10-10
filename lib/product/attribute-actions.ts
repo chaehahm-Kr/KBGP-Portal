@@ -100,6 +100,7 @@ export interface AttributeMasterItem {
   allowOther: boolean;
   brandEditable: boolean;
   adminOnly: boolean;
+  retailerVisible?: boolean;
   isSearchable: boolean;
   displayOrder: number;
   helpText: string | null;
@@ -157,6 +158,7 @@ export async function getCategoryAttributes(
     allowOther: attr.allow_other,
     brandEditable: attr.brand_editable,
     adminOnly: attr.admin_only,
+    retailerVisible: attr.retailer_visible !== undefined ? Boolean(attr.retailer_visible) : !attr.admin_only,
     isSearchable: attr.is_searchable,
     displayOrder: attr.display_order,
     helpText: attr.help_text,
@@ -262,6 +264,7 @@ export async function getCategoryAttributes(
         allowOther: attr.allow_other,
         brandEditable: attr.brand_editable,
         adminOnly: attr.admin_only,
+        retailerVisible: attr.retailer_visible !== undefined ? Boolean(attr.retailer_visible) : !attr.admin_only,
         isSearchable: attr.is_searchable,
         displayOrder: pa.display_order,
         helpText: attr.help_text,
@@ -796,6 +799,7 @@ export async function getAllAttributesWithDetails(): Promise<AttributeMasterItem
     allowOther: attr.allow_other,
     brandEditable: attr.brand_editable,
     adminOnly: attr.admin_only,
+    retailerVisible: (attr as any).retailer_visible !== undefined ? Boolean((attr as any).retailer_visible) : !attr.admin_only,
     isSearchable: attr.is_searchable,
     displayOrder: attr.display_order,
     helpText: attr.help_text,
@@ -887,6 +891,7 @@ export async function saveAttribute(
     allowOther?: boolean;
     brandEditable: boolean;
     adminOnly: boolean;
+    retailerVisible?: boolean;
     isSearchable: boolean;
     displayOrder: number;
     helpText?: string | null;
@@ -920,6 +925,7 @@ export async function saveAttribute(
       allow_other: attribute.allowOther !== undefined ? attribute.allowOther : false,
       brand_editable: attribute.brandEditable,
       admin_only: attribute.adminOnly,
+      retailer_visible: attribute.retailerVisible !== undefined ? attribute.retailerVisible : !attribute.adminOnly,
       is_searchable: attribute.isSearchable,
       display_order: attribute.displayOrder,
       help_text: attribute.helpText || null,

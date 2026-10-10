@@ -32,6 +32,7 @@ export function AttributeList({ initialAttributes }: { initialAttributes: Attrib
     allowOther: false,
     brandEditable: true,
     adminOnly: false,
+    retailerVisible: true,
     isSearchable: true,
     displayOrder: 10,
     helpText: "",
@@ -85,6 +86,7 @@ export function AttributeList({ initialAttributes }: { initialAttributes: Attrib
       allowOther: false,
       brandEditable: true,
       adminOnly: false,
+      retailerVisible: true,
       isSearchable: true,
       displayOrder: 10,
       helpText: "",
@@ -112,6 +114,7 @@ export function AttributeList({ initialAttributes }: { initialAttributes: Attrib
       allowOther: !!a.allowOther,
       brandEditable: a.brandEditable,
       adminOnly: a.adminOnly,
+      retailerVisible: a.retailerVisible !== undefined ? a.retailerVisible : !a.adminOnly,
       isSearchable: a.isSearchable !== false,
       displayOrder: a.displayOrder || 10,
       helpText: a.helpText || "",
@@ -195,6 +198,7 @@ export function AttributeList({ initialAttributes }: { initialAttributes: Attrib
             allowOther: modalData.allowOther,
             brandEditable: modalData.brandEditable,
             adminOnly: modalData.adminOnly,
+            retailerVisible: modalData.retailerVisible,
             isSearchable: modalData.isSearchable,
             displayOrder: modalData.displayOrder,
             helpText: modalData.helpText || null,
@@ -377,12 +381,27 @@ export function AttributeList({ initialAttributes }: { initialAttributes: Attrib
                       )}
                     </td>
                     <td className="px-6 py-4 text-center whitespace-nowrap">
-                      <span className={`
-                        text-[10px] font-semibold px-2 py-0.5 rounded
-                        ${a.brandEditable ? 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-900/30' : 'bg-rose-50 dark:bg-rose-950/30 text-rose-700 dark:text-rose-400 border border-rose-200 dark:border-rose-900/30'}
-                      `}>
-                        {a.brandEditable ? "수정 가능" : "수정 불가"}
-                      </span>
+                      <div className="flex flex-col items-center gap-1">
+                        <span className={`
+                          text-[10px] font-semibold px-2 py-0.5 rounded
+                          ${a.brandEditable ? 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-900/30' : 'bg-rose-50 dark:bg-rose-950/30 text-rose-700 dark:text-rose-400 border border-rose-200 dark:border-rose-900/30'}
+                        `}>
+                          {a.brandEditable ? "수정 가능" : "수정 불가"}
+                        </span>
+                        {a.adminOnly ? (
+                          <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-900/30">
+                            어드민 전용
+                          </span>
+                        ) : a.retailerVisible === false ? (
+                          <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-400 dark:text-zinc-500">
+                            리테일러 비노출
+                          </span>
+                        ) : (
+                          <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-indigo-50 dark:bg-indigo-950/30 text-indigo-700 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-900/30">
+                            리테일러 공개
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-6 py-4 text-center whitespace-nowrap">
                       <span className={`
@@ -609,10 +628,29 @@ export function AttributeList({ initialAttributes }: { initialAttributes: Attrib
                     id="chk-admin"
                     checked={modalData.adminOnly}
                     disabled={isPending}
-                    onChange={(e) => setModalData(prev => ({ ...prev, adminOnly: e.target.checked }))}
+                    onChange={(e) => {
+                      const isAdmin = e.target.checked;
+                      setModalData(prev => ({
+                        ...prev,
+                        adminOnly: isAdmin,
+                        retailerVisible: isAdmin ? false : prev.retailerVisible
+                      }));
+                    }}
                     className="rounded text-indigo-650 w-4 h-4 cursor-pointer"
                   />
                   <label htmlFor="chk-admin" className="text-xs font-bold cursor-pointer">어드민 전용</label>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="chk-retailer"
+                    checked={modalData.retailerVisible}
+                    disabled={isPending || modalData.adminOnly}
+                    onChange={(e) => setModalData(prev => ({ ...prev, retailerVisible: e.target.checked }))}
+                    className="rounded text-indigo-650 w-4 h-4 cursor-pointer"
+                  />
+                  <label htmlFor="chk-retailer" className="text-xs font-bold cursor-pointer">리테일러 공개</label>
                 </div>
               </div>
 
