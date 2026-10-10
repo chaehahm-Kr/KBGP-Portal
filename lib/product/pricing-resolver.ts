@@ -111,9 +111,14 @@ export function resolveProductPricing(input: RawProductPricingInput): ResolvedPr
   const promoEndDate = input.trading_promo_end_date || tradingOverrides.promo_end_date || null;
 
   const now = new Date();
+  let endDateObj = promoEndDate ? new Date(promoEndDate) : null;
+  if (endDateObj && typeof promoEndDate === "string" && promoEndDate.length === 10) {
+    endDateObj = new Date(`${promoEndDate}T23:59:59.999Z`);
+  }
+
   const hasActivePromo = promoWholesalePrice !== null && (
     (!promoStartDate || new Date(promoStartDate) <= now) &&
-    (!promoEndDate || new Date(promoEndDate) >= now)
+    (!endDateObj || endDateObj >= now)
   );
 
   const wholesalePrice = hasActivePromo ? promoWholesalePrice : baseWholesalePrice;
