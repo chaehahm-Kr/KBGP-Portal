@@ -26,7 +26,7 @@ export default async function AdminProductDetailPage({
     .from("products")
     .select(`
       id, name, name_en, category, volume, estimated_retail_price, ingredients_text, ingredients_file_path, ingredients_file_path_en, brand_id, company_id,
-      description, bullet_points, color, color_map, origin, lead_time,
+      description, how_to_use, bullet_points, color, color_map, origin, lead_time,
       parent_sku, child_sku, manufacture_sku, letusto_sku, upc, ean,
       price_krw_retail, price_krw_wholesale, price_usd_fob, price_additional_info,
       item_width, item_depth, item_height, item_weight,
