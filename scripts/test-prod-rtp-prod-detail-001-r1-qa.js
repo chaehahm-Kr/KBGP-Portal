@@ -45,7 +45,7 @@ async function runQA() {
     const diagData = JSON.parse(await diagRes.text());
     const liveSha = diagData.deployment?.commitSha;
     console.log(`- portal.kselecthub.com Commit SHA: ${liveSha}`);
-    assert(liveSha && liveSha.startsWith('b26b8e9'), 'portal.kselecthub.com must be running commit b26b8e9');
+    assert(liveSha && liveSha.startsWith('5bd2ed5'), 'portal.kselecthub.com must be running commit 5bd2ed5');
 
     // Step 2: Login to Retailer Portal
     console.log('\n[Step 2] Logging into Retailer Portal (https://portal.kselecthub.com/login)...');
@@ -81,16 +81,16 @@ async function runQA() {
     assert.strictEqual(sectionHeaders[4]?.trim(), 'Product Details', 'Section 5 must be Product Details');
 
     // Verify 7 Fixed Product Details cards
-    const detailCardLabels = await overviewPanel.locator('div:has-text("Product Details") + div span.uppercase').allTextContents();
+    const detailCardLabels = await overviewPanel.locator('h3:has-text("Product Details") + div span.uppercase').allTextContents();
     console.log('✓ Product Details Card Labels:', detailCardLabels.map(l => l.trim()));
     assert.deepStrictEqual(
       detailCardLabels.map(l => l.trim()),
-      ['BRAND', 'CATEGORY', 'SIZE / VOLUME', 'COUNTRY OF ORIGIN', 'FORMULATION', 'STORAGE CONDITION', 'UPC'],
+      ['Brand', 'Category', 'Size / Volume', 'Country of Origin', 'Formulation', 'Storage Condition', 'UPC'],
       'Product Details must contain exact 7 fixed fields'
     );
 
     // Verify values for full product
-    const detailCardValues = await overviewPanel.locator('div:has-text("Product Details") + div span.font-semibold').allTextContents();
+    const detailCardValues = await overviewPanel.locator('h3:has-text("Product Details") + div span.font-semibold').allTextContents();
     console.log('✓ Product Details Values on Prod 1:', detailCardValues.map(v => v.trim()));
     assert(detailCardValues.length === 7, 'Must have 7 values rendered');
 
@@ -125,15 +125,15 @@ async function runQA() {
     }
 
     // Verify 7 Fixed Product Details cards are present
-    const detailCardLabels2 = await overviewPanel2.locator('div:has-text("Product Details") + div span.uppercase').allTextContents();
+    const detailCardLabels2 = await overviewPanel2.locator('h3:has-text("Product Details") + div span.uppercase').allTextContents();
     assert.deepStrictEqual(
       detailCardLabels2.map(l => l.trim()),
-      ['BRAND', 'CATEGORY', 'SIZE / VOLUME', 'COUNTRY OF ORIGIN', 'FORMULATION', 'STORAGE CONDITION', 'UPC'],
+      ['Brand', 'Category', 'Size / Volume', 'Country of Origin', 'Formulation', 'Storage Condition', 'UPC'],
       'Product Details must render all 7 cards even on partial data'
     );
 
     // Verify empty fields show em dash '—'
-    const detailCardValues2 = await overviewPanel2.locator('div:has-text("Product Details") + div span.font-semibold').allTextContents();
+    const detailCardValues2 = await overviewPanel2.locator('h3:has-text("Product Details") + div span.font-semibold').allTextContents();
     console.log('✓ Product Details Values on Prod 2:', detailCardValues2.map(v => v.trim()));
     assert(detailCardValues2.some(v => v.trim() === '—'), 'Empty fields in Product Details must show "—"');
 
