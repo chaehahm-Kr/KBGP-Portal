@@ -170,7 +170,7 @@ export function MediaAssetsWorkspace({ product }: MediaAssetsWorkspaceProps) {
     purpose: "Retailer Portal Product Listing & Customer Overview",
     audience: "customer",
     style: "Clean & Professional Commercial Style",
-    language: "Bilingual (EN / KO)",
+    language: "English",
     optional_instruction: "",
   });
   const [isGenerating, setIsGenerating] = useState(false);
@@ -533,6 +533,7 @@ export function MediaAssetsWorkspace({ product }: MediaAssetsWorkspaceProps) {
               { id: "reference_files", title: "E. Reference Files", desc: "PDF guides, lab tests, product reference documents" },
             ].map((group) => {
               const groupItems = sources.filter((s) => s.group_type === group.id);
+              const isInfoGroup = group.id === "product_info";
               return (
                 <div key={group.id} className="border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-hidden">
                   <div className="bg-zinc-50 dark:bg-zinc-850 px-4 py-2.5 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between">
@@ -541,35 +542,100 @@ export function MediaAssetsWorkspace({ product }: MediaAssetsWorkspaceProps) {
                       <span className="text-[11px] text-zinc-500 dark:text-zinc-400 block">{group.desc}</span>
                     </div>
                     <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-zinc-200 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-300">
-                      {groupItems.length} items
+                      {isInfoGroup ? "Authoritative Catalog Data" : `${groupItems.length} items`}
                     </span>
                   </div>
-                  <div className="p-4 divide-y divide-zinc-100 dark:divide-zinc-800">
-                    {groupItems.length === 0 ? (
-                      <p className="text-xs text-zinc-400 italic py-2">No items uploaded in this group yet.</p>
-                    ) : (
-                      groupItems.map((item) => (
-                        <div key={item.id} className="py-2.5 first:pt-0 last:pb-0 flex items-center justify-between gap-3">
-                          <div className="flex items-center gap-3 min-w-0">
-                            {item.url && (item.source_type === "image" || item.group_type === "brand_materials") ? (
-                              <img src={item.url} alt={item.title} className="w-9 h-9 rounded-lg object-cover border border-zinc-200 dark:border-zinc-700 shrink-0" />
-                            ) : (
-                              <div className="w-9 h-9 rounded-lg bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center shrink-0">
-                                <FileTextIcon className="w-4 h-4 text-zinc-500" />
-                              </div>
-                            )}
-                            <div className="min-w-0">
-                              <span className="text-xs font-bold text-zinc-900 dark:text-zinc-100 block truncate">{item.title}</span>
-                              <span className="text-[10.5px] text-zinc-500 truncate block">
-                                Type: {item.source_type} {item.file_name && `• ${item.file_name}`}
-                              </span>
-                            </div>
+
+                  {isInfoGroup ? (
+                    <div className="p-3 bg-white dark:bg-zinc-900">
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                        <div className="p-2.5 bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200/80 dark:border-emerald-900/40 rounded-lg flex items-center gap-2">
+                          <CheckCircleIcon className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                          <div>
+                            <span className="text-[11px] font-bold text-zinc-900 dark:text-zinc-100 block">Product Name & Brand</span>
+                            <span className="text-[10px] text-zinc-500">Synced ({product.brand_name})</span>
                           </div>
-                          <span className="text-[10px] font-mono text-zinc-400 shrink-0">Catalog Synced</span>
                         </div>
-                      ))
-                    )}
-                  </div>
+                        <div className="p-2.5 bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200/80 dark:border-emerald-900/40 rounded-lg flex items-center gap-2">
+                          <CheckCircleIcon className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                          <div>
+                            <span className="text-[11px] font-bold text-zinc-900 dark:text-zinc-100 block">Description & Summary</span>
+                            <span className="text-[10px] text-zinc-500">Synced from Catalog</span>
+                          </div>
+                        </div>
+                        <div className="p-2.5 bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200/80 dark:border-emerald-900/40 rounded-lg flex items-center gap-2">
+                          <CheckCircleIcon className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                          <div>
+                            <span className="text-[11px] font-bold text-zinc-900 dark:text-zinc-100 block">Bullet Points & Highlights</span>
+                            <span className="text-[10px] text-zinc-500">Synced from Catalog</span>
+                          </div>
+                        </div>
+                        <div className="p-2.5 bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200/80 dark:border-emerald-900/40 rounded-lg flex items-center gap-2">
+                          <CheckCircleIcon className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                          <div>
+                            <span className="text-[11px] font-bold text-zinc-900 dark:text-zinc-100 block">How to Use Directions</span>
+                            <span className="text-[10px] text-zinc-500">Synced from Catalog</span>
+                          </div>
+                        </div>
+                        <div className="p-2.5 bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200/80 dark:border-emerald-900/40 rounded-lg flex items-center gap-2">
+                          <CheckCircleIcon className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                          <div>
+                            <span className="text-[11px] font-bold text-zinc-900 dark:text-zinc-100 block">Ingredients & Formula</span>
+                            <span className="text-[10px] text-zinc-500">Synced from Catalog</span>
+                          </div>
+                        </div>
+                        <div className="p-2.5 bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200/80 dark:border-emerald-900/40 rounded-lg flex items-center gap-2">
+                          <CheckCircleIcon className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                          <div>
+                            <span className="text-[11px] font-bold text-zinc-900 dark:text-zinc-100 block">Product Attributes</span>
+                            <span className="text-[10px] text-zinc-500">Synced from Catalog</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="divide-y divide-zinc-100 dark:divide-zinc-800">
+                      {groupItems.length === 0 ? (
+                        <div className="px-4 py-2.5 bg-zinc-50 dark:bg-zinc-850/50 flex items-center justify-between text-xs">
+                          <span className="text-zinc-500 dark:text-zinc-400 font-medium">
+                            No materials uploaded for this group yet.
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setUploadGroup(group.id as SourceGroupType);
+                              setShowUploadModal(true);
+                            }}
+                            className="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer flex items-center gap-1"
+                          >
+                            <PlusIcon className="w-3.5 h-3.5" />
+                            <span>Add Material</span>
+                          </button>
+                        </div>
+                      ) : (
+                        groupItems.map((item) => (
+                          <div key={item.id} className="p-3 flex items-center justify-between gap-3">
+                            <div className="flex items-center gap-3 min-w-0">
+                              {item.url && (item.source_type === "image" || item.group_type === "brand_materials") ? (
+                                <img src={item.url} alt={item.title} className="w-9 h-9 rounded-lg object-cover border border-zinc-200 dark:border-zinc-700 shrink-0" />
+                              ) : (
+                                <div className="w-9 h-9 rounded-lg bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center shrink-0">
+                                  <FileTextIcon className="w-4 h-4 text-zinc-500" />
+                                </div>
+                              )}
+                              <div className="min-w-0">
+                                <span className="text-xs font-bold text-zinc-900 dark:text-zinc-100 block truncate">{item.title}</span>
+                                <span className="text-[10.5px] text-zinc-500 truncate block">
+                                  Type: {item.source_type} {item.file_name && `• ${item.file_name}`}
+                                </span>
+                              </div>
+                            </div>
+                            <span className="text-[10px] font-mono text-zinc-400 shrink-0">Catalog Synced</span>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -631,11 +697,19 @@ export function MediaAssetsWorkspace({ product }: MediaAssetsWorkspaceProps) {
               Step 2 — Review Auto-Selected Sources
             </span>
             <div className="bg-zinc-50 dark:bg-zinc-850 p-4 rounded-xl border border-zinc-200 dark:border-zinc-800 space-y-2 max-h-56 overflow-y-auto">
-              {sources.length === 0 ? (
-                <p className="text-xs text-zinc-400 italic">No source materials found for this product.</p>
-              ) : (
-                sources.map((src) => {
-                  const isChecked = selectedSourceIds.includes(src.id);
+              {(() => {
+                const displaySources = sources.length > 0 ? sources : [
+                  {
+                    id: `info-cat-${product.id}`,
+                    product_id: product.id,
+                    group_type: "product_info" as SourceGroupType,
+                    title: `${product.name} (Official Catalog Data)`,
+                    source_type: "catalog_sync",
+                    created_at: new Date().toISOString(),
+                  }
+                ];
+                return displaySources.map((src) => {
+                  const isChecked = selectedSourceIds.includes(src.id) || src.group_type === "product_info";
                   return (
                     <label key={src.id} className="flex items-center gap-2.5 text-xs text-zinc-800 dark:text-zinc-200 cursor-pointer">
                       <input
@@ -654,8 +728,8 @@ export function MediaAssetsWorkspace({ product }: MediaAssetsWorkspaceProps) {
                       <span className="text-[10px] font-mono text-zinc-400">[{src.group_type}]</span>
                     </label>
                   );
-                })
-              )}
+                });
+              })()}
             </div>
           </div>
 

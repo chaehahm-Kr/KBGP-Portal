@@ -208,7 +208,7 @@ export function ContentProductDetail({ product }: ContentProductDetailProps) {
   ];
 
   return (
-    <div className="space-y-6 max-w-[1400px] mx-auto">
+    <div className="space-y-5">
       {/* Back button */}
       <div>
         <Link
@@ -221,10 +221,10 @@ export function ContentProductDetail({ product }: ContentProductDetailProps) {
       </div>
 
       {/* Product Summary Header Card */}
-      <div className="bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 p-6 shadow-sm">
-        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
-          <div className="flex items-center gap-5">
-            <div className="w-20 h-20 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-850 overflow-hidden shrink-0 flex items-center justify-center">
+      <div className="bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 p-4 sm:p-5 shadow-sm">
+        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <div className="w-14 h-14 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-850 overflow-hidden shrink-0 flex items-center justify-center">
               {product.photoUrl ? (
                 <img
                   src={product.photoUrl}
@@ -237,7 +237,7 @@ export function ContentProductDetail({ product }: ContentProductDetailProps) {
             </div>
 
             <div>
-              <div className="flex flex-wrap items-center gap-2 mb-1.5">
+              <div className="flex flex-wrap items-center gap-2 mb-1">
                 <span className="text-xs font-semibold text-blue-600 dark:text-blue-400 uppercase tracking-wider">
                   {product.brand_name}
                 </span>
@@ -247,11 +247,11 @@ export function ContentProductDetail({ product }: ContentProductDetailProps) {
                 </span>
               </div>
 
-              <h1 className="text-xl font-bold text-zinc-900 dark:text-zinc-100">
+              <h1 className="text-lg font-bold text-zinc-900 dark:text-zinc-100">
                 {product.name}
               </h1>
 
-              <div className="flex flex-wrap items-center gap-3 text-xs text-zinc-500 dark:text-zinc-400 mt-2 font-mono">
+              <div className="flex flex-wrap items-center gap-3 text-xs text-zinc-500 dark:text-zinc-400 mt-1.5 font-mono">
                 <span>SKU: <strong className="text-zinc-800 dark:text-zinc-200">{product.letusto_sku || "-"}</strong></span>
                 {product.upc && <span>UPC: <strong className="text-zinc-800 dark:text-zinc-200">{product.upc}</strong></span>}
                 <span>Last Updated: {product.last_updated}</span>
@@ -260,7 +260,7 @@ export function ContentProductDetail({ product }: ContentProductDetailProps) {
           </div>
 
           {/* Right Status Badges (Read-Only) */}
-          <div className="flex flex-col sm:flex-row md:flex-col items-start md:items-end gap-2.5 shrink-0 bg-zinc-50 dark:bg-zinc-850/50 p-3.5 rounded-xl border border-zinc-200/80 dark:border-zinc-800">
+          <div className="flex flex-col sm:flex-row md:flex-col items-start md:items-end gap-2 shrink-0 bg-zinc-50 dark:bg-zinc-850/50 p-3 rounded-xl border border-zinc-200/80 dark:border-zinc-800">
             <div className="flex items-center gap-2">
               <span className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400">Operational:</span>
               <span
@@ -309,7 +309,7 @@ export function ContentProductDetail({ product }: ContentProductDetailProps) {
 
       {/* 7 Tab Navigation */}
       <div className="border-b border-zinc-200 dark:border-zinc-800">
-        <nav className="flex space-x-2 overflow-x-auto pb-px" aria-label="Tabs">
+        <nav className="flex space-x-1.5 overflow-x-auto pb-px" aria-label="Tabs">
           {tabs.map((tab) => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
@@ -317,7 +317,7 @@ export function ContentProductDetail({ product }: ContentProductDetailProps) {
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center gap-2 py-3 px-4 text-xs font-semibold border-b-2 whitespace-nowrap transition-colors ${
+                className={`flex items-center gap-1.5 py-2.5 px-3.5 text-xs font-semibold border-b-2 whitespace-nowrap transition-colors ${
                   isActive
                     ? "border-blue-600 text-blue-600 dark:border-blue-400 dark:text-blue-400"
                     : "border-transparent text-zinc-500 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200 hover:border-zinc-300 dark:hover:border-zinc-700"
@@ -325,9 +325,9 @@ export function ContentProductDetail({ product }: ContentProductDetailProps) {
               >
                 <Icon className="w-4 h-4" />
                 <span>{tab.name}</span>
-                <span className="text-[10.5px] opacity-70">({tab.labelKo})</span>
+                <span className="hidden xl:inline text-[10.5px] opacity-70">({tab.labelKo})</span>
                 {tab.badge && (
-                  <span className={`px-1.5 py-0.5 text-[9.5px] font-bold rounded border ${tab.badgeColor}`}>
+                  <span className={`px-1.5 py-0.5 text-[9px] font-bold rounded border ${tab.badgeColor}`}>
                     {tab.badge}
                   </span>
                 )}
