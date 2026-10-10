@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import Link from "next/link";
 import type { ContentProductItem } from "@/lib/product/content-actions";
 import { MediaAssetsWorkspace } from "./media-assets-workspace";
+import { FaqWorkspace } from "./faq-workspace";
 
 // Native SVG Icons
 function ArrowLeftIcon({ className = "w-4 h-4" }: { className?: string }) {
@@ -451,34 +452,7 @@ export function ContentProductDetail({ product }: ContentProductDetailProps) {
 
         {/* Tab 4: FAQ */}
         {activeTab === "faq" && (
-          <div className="bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 p-8 shadow-sm space-y-6">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-6 border-b border-zinc-100 dark:border-zinc-800 gap-4">
-              <div>
-                <div className="flex items-center gap-2">
-                  <HelpCircleIcon className="w-5 h-5 text-amber-600 dark:text-amber-400" />
-                  <h2 className="text-lg font-bold text-zinc-900 dark:text-zinc-100">
-                    Product FAQ (상품 자주 묻는 질문)
-                  </h2>
-                </div>
-                <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
-                  소비자 및 매장 고객이 자주 질문하는 제품 문의와 공식 답변을 관리합니다.
-                </p>
-              </div>
-              <span className="px-3 py-1 rounded-md text-xs font-semibold bg-zinc-100 text-zinc-700 border border-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 shrink-0">
-                Module Foundation
-              </span>
-            </div>
-
-            <div className="p-6 rounded-xl border border-dashed border-zinc-300 dark:border-zinc-700 bg-zinc-50/50 dark:bg-zinc-850/30 flex flex-col items-center justify-center text-center py-10">
-              <HelpCircleIcon className="w-10 h-10 text-zinc-400 mb-3" />
-              <h3 className="text-sm font-semibold text-zinc-800 dark:text-zinc-200">
-                FAQ Management Framework Ready
-              </h3>
-              <p className="text-xs text-zinc-500 dark:text-zinc-400 max-w-md mt-1">
-                Category-based FAQ grouping, multi-language Q&A curation, and automated search suggestions will be configurable here.
-              </p>
-            </div>
-          </div>
+          <FaqWorkspace product={product} />
         )}
 
         {/* Tab 5: Reviews */}

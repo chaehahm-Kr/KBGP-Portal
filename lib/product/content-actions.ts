@@ -127,6 +127,24 @@ export async function getContentStatusProducts(): Promise<{
     }
   }
 
+  // 5.5 Fetch product FAQs to determine authoritative FAQ status
+  let faqsByProduct = new Map<string, { approved: number; draft: number }>();
+  try {
+    const { data: rawFaqs } = await adminSupabase
+      .from("product_faqs")
+      .select("product_id, status");
+    if (rawFaqs) {
+      for (const f of rawFaqs) {
+        const stats = faqsByProduct.get(f.product_id) || { approved: 0, draft: 0 };
+        if (f.status === "approved") stats.approved++;
+        else if (f.status === "draft") stats.draft++;
+        faqsByProduct.set(f.product_id, stats);
+      }
+    }
+  } catch (err) {
+    console.warn("[getContentStatusProducts] Warning fetching product_faqs:", err);
+  }
+
   // 6. Build product items
   const products: ContentProductItem[] = await Promise.all(
     rawProducts.map(async (p) => {
@@ -199,9 +217,20 @@ export async function getContentStatusProducts(): Promise<{
       const trainingStatus: TrainingStatus =
         contentMeta.training_status || (info.training_ready ? "ready" : "missing");
 
-      // FAQ status
-      const faqStatus: FaqStatus =
-        contentMeta.faq_status || (info.faqs?.length > 0 ? "published" : "empty");
+      // Authoritative FAQ status from product_faqs
+      const faqStats = faqsByProduct.get(p.id);
+      let faqStatus: FaqStatus = "empty";
+      if (faqStats && (faqStats.approved > 0 || faqStats.draft > 0)) {
+        if (faqStats.approved > 0) {
+          faqStatus = "published";
+        } else {
+          faqStatus = "draft";
+        }
+      } else if (contentMeta.faq_status) {
+        faqStatus = contentMeta.faq_status;
+      } else if (info.faqs?.length > 0) {
+        faqStatus = "published";
+      }
 
       // Review status
       const reviewStatus: ReviewStatus =
@@ -435,8 +464,26 @@ export async function getContentProductDetail(productId: string): Promise<Conten
   const trainingStatus: TrainingStatus =
     contentMeta.training_status || (info.training_ready ? "ready" : "missing");
 
-  const faqStatus: FaqStatus =
-    contentMeta.faq_status || (info.faqs?.length > 0 ? "published" : "empty");
+  // Fetch product_faqs for authoritative status
+  let faqStatus: FaqStatus = "empty";
+  try {
+    const { data: productFaqs } = await adminSupabase
+      .from("product_faqs")
+      .select("status")
+      .eq("product_id", p.id);
+
+    if (productFaqs && productFaqs.length > 0) {
+      const hasApproved = productFaqs.some((f) => f.status === "approved");
+      faqStatus = hasApproved ? "published" : "draft";
+    } else if (contentMeta.faq_status) {
+      faqStatus = contentMeta.faq_status;
+    } else if (info.faqs?.length > 0) {
+      faqStatus = "published";
+    }
+  } catch (err) {
+    console.warn("[getContentProductDetail] Warning fetching product_faqs:", err);
+    faqStatus = contentMeta.faq_status || (info.faqs?.length > 0 ? "published" : "empty");
+  }
 
   const reviewStatus: ReviewStatus =
     contentMeta.review_status || (info.reviews?.length > 0 ? "active" : "none");
