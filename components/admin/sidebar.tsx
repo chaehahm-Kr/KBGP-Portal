@@ -219,6 +219,7 @@ export default function Sidebar({
       subItems: [
         { name: "Product Catalog", href: "/admin/products" },
         { name: "Trading Products", href: "/admin/products/trading" },
+        { name: "Content & Training", href: "/admin/products/content" },
         { name: "Inventory Overview", href: "/admin/inventory" },
         { name: "Compliance", href: "/admin/products?status=compliance" },
         { name: "Pricing Simulator", href: "/admin/products/pricing-profitability" },
