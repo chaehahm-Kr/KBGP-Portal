@@ -893,15 +893,15 @@ export function ContentStatusList({ initialProducts, filterOptions }: ContentSta
       {/* CONTENT STATUS TABLE */}
       <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-2xs overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs text-zinc-600 dark:text-zinc-400 min-w-[1280px]">
-            <thead className="bg-zinc-50 dark:bg-zinc-850 text-[11px] font-semibold text-zinc-700 dark:text-zinc-300 border-b border-zinc-200 dark:border-zinc-800 select-none">
+          <table className="w-full text-left text-xs text-zinc-600 dark:text-zinc-400">
+            <thead className="bg-zinc-50 dark:bg-zinc-850 text-[10.5px] font-semibold text-zinc-700 dark:text-zinc-300 border-b border-zinc-200 dark:border-zinc-800 select-none">
               <tr>
                 {/* 1. Product Column (Compact: Thumbnail, Name, SKU) */}
                 <th
                   onClick={() => handleSort("name")}
-                  className="py-3 px-3 font-semibold cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors w-[270px]"
+                  className="py-2.5 px-2.5 font-semibold cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors w-[220px]"
                 >
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex items-center gap-1">
                     <span>Product</span>
                     <ArrowUpDownIcon className="w-3 h-3 text-zinc-400" />
                   </div>
@@ -910,34 +910,34 @@ export function ContentStatusList({ initialProducts, filterOptions }: ContentSta
                 {/* 2. Brand / Category Compact 2-Line Column */}
                 <th
                   onClick={() => handleSort("brand")}
-                  className="py-3 px-3 font-semibold cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors w-[180px]"
+                  className="py-2.5 px-2 font-semibold cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors w-[150px]"
                 >
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex items-center gap-1">
                     <span>Brand / Category</span>
                     <ArrowUpDownIcon className="w-3 h-3 text-zinc-400" />
                   </div>
                 </th>
 
                 {/* Status Columns */}
-                <th className="py-3 px-2 text-center w-[85px]">Operational</th>
-                <th className="py-3 px-2 text-center w-[80px]">Visibility</th>
-                <th className="py-3 px-2 text-center w-[125px]">Overall Status</th>
-                <th className="py-3 px-2 text-center w-[100px]">Customer Page</th>
-                <th className="py-3 px-2 text-center w-[85px]">Training</th>
-                <th className="py-3 px-2 text-center w-[90px]">Media</th>
-                <th className="py-3 px-2 text-center w-[70px]">FAQ</th>
-                <th className="py-3 px-2 text-center w-[75px]">Reviews</th>
-                <th className="py-3 px-2 text-center w-[95px]">Publishing / QR</th>
+                <th className="py-2.5 px-1 text-center w-[75px]">Operational</th>
+                <th className="py-2.5 px-1 text-center w-[70px]">Visibility</th>
+                <th className="py-2.5 px-1 text-center w-[105px]">Overall Status</th>
+                <th className="py-2.5 px-1 text-center w-[90px]">Customer Page</th>
+                <th className="py-2.5 px-1 text-center w-[70px]">Training</th>
+                <th className="py-2.5 px-1 text-center w-[70px]">Media</th>
+                <th className="py-2.5 px-1 text-center w-[50px]">FAQ</th>
+                <th className="py-2.5 px-1 text-center w-[60px]">Reviews</th>
+                <th className="py-2.5 px-1 text-center w-[85px]">Publishing / QR</th>
                 <th
                   onClick={() => handleSort("updated")}
-                  className="py-3 px-2.5 font-semibold cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors text-right w-[95px]"
+                  className="py-2.5 px-1.5 font-semibold cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors text-right w-[75px]"
                 >
                   <div className="flex items-center justify-end gap-1">
                     <span>Updated</span>
                     <ArrowUpDownIcon className="w-3 h-3 text-zinc-400" />
                   </div>
                 </th>
-                <th className="py-3 px-3 font-semibold text-right w-[80px]">Manage</th>
+                <th className="py-2.5 px-2 font-semibold text-right w-[65px]">Manage</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
