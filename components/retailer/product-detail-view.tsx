@@ -28,7 +28,7 @@ export function RetailerProductDetailView({ product }: ProductDetailViewProps) {
   const [addedSuccess, setAddedSuccess] = useState(false);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [copiedSku, setCopiedSku] = useState(false);
-  type DetailTab = "overview" | "specifications" | "retail_assets" | "customer_qr";
+  type DetailTab = "overview" | "specifications" | "packaging_shipping" | "retail_assets" | "customer_qr";
   const [activeTab, setActiveTab] = useState<DetailTab>("overview");
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [mediaFilter, setMediaFilter] = useState<"all" | "images" | "videos">("all");
@@ -37,6 +37,86 @@ export function RetailerProductDetailView({ product }: ProductDetailViewProps) {
   const totalSpecificationsCount = useMemo(() => {
     return product.specifications?.reduce((sum, g) => sum + g.items.length, 0) || 0;
   }, [product.specifications]);
+
+  const packagingShippingData = useMemo(() => {
+    const orderingItems: Array<{ label: string; value: string }> = [];
+    if (product.cartonPackQty && product.cartonPackQty > 0) {
+      orderingItems.push({
+        label: "Case Pack (Units per Case)",
+        value: `${product.cartonPackQty} units / case`,
+      });
+    }
+    if (moq > 0) {
+      orderingItems.push({
+        label: "Minimum Order Quantity (MOQ)",
+        value: `${moq} units`,
+      });
+      orderingItems.push({
+        label: "Order Multiple",
+        value: `${moq} units batch`,
+      });
+    }
+
+    const unitItems: Array<{ label: string; value: string }> = [];
+    const unitDim = product.unitDimensions || product.packageDimensions;
+    if (unitDim && (unitDim.width || unitDim.depth || unitDim.height)) {
+      const parts: string[] = [];
+      if (unitDim.width && unitDim.width > 0) parts.push(`${unitDim.width}`);
+      if (unitDim.depth && unitDim.depth > 0) parts.push(`${unitDim.depth}`);
+      if (unitDim.height && unitDim.height > 0) parts.push(`${unitDim.height}`);
+      if (parts.length > 0) {
+        unitItems.push({
+          label: "Unit Dimensions (W × D × H)",
+          value: `${parts.join(" × ")} mm`,
+        });
+      }
+    }
+
+    const rawUnitWeight = product.unitWeight || product.packageDimensions?.weight;
+    if (rawUnitWeight && rawUnitWeight > 0) {
+      const grams = rawUnitWeight;
+      const oz = (grams / 28.3495).toFixed(1);
+      unitItems.push({
+        label: "Unit Weight",
+        value: `${grams} g (${oz} oz)`,
+      });
+    }
+
+    const caseItems: Array<{ label: string; value: string }> = [];
+    const caseDim = product.caseDimensions;
+    if (caseDim && (caseDim.width || caseDim.depth || caseDim.height)) {
+      const parts: string[] = [];
+      if (caseDim.width && caseDim.width > 0) parts.push(`${caseDim.width}`);
+      if (caseDim.depth && caseDim.depth > 0) parts.push(`${caseDim.depth}`);
+      if (caseDim.height && caseDim.height > 0) parts.push(`${caseDim.height}`);
+      if (parts.length > 0) {
+        caseItems.push({
+          label: "Case Dimensions (W × D × H)",
+          value: `${parts.join(" × ")} mm`,
+        });
+      }
+    }
+
+    const rawCaseWeight = product.caseWeight;
+    if (rawCaseWeight && rawCaseWeight > 0) {
+      const kg = rawCaseWeight;
+      const lb = (kg * 2.20462).toFixed(1);
+      caseItems.push({
+        label: "Case Weight",
+        value: `${kg} kg (${lb} lb)`,
+      });
+    }
+
+    const totalItemCount = orderingItems.length + unitItems.length + caseItems.length;
+
+    return {
+      orderingItems,
+      unitItems,
+      caseItems,
+      totalItemCount,
+      isEmpty: totalItemCount === 0,
+    };
+  }, [product, moq]);
 
   const totalAssetsCount = (product.images?.length || 0) + (product.videos?.length || 0);
   const totalImagesCount = product.images?.length || 0;
@@ -669,11 +749,25 @@ export function RetailerProductDetailView({ product }: ProductDetailViewProps) {
           </button>
           <button
             type="button"
-            disabled
-            className="px-5 py-2.5 text-xs font-semibold text-zinc-400 dark:text-zinc-600 cursor-not-allowed whitespace-nowrap opacity-60"
-            title="Coming Soon"
+            onClick={() => setActiveTab("packaging_shipping")}
+            className={`px-5 py-2.5 text-xs transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
+              activeTab === "packaging_shipping"
+                ? "font-bold border-b-2 border-indigo-600 dark:border-indigo-400 text-indigo-600 dark:text-indigo-400"
+                : "font-semibold border-b-2 border-transparent text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200"
+            }`}
           >
-            Packaging & Shipping
+            <span>Packaging & Shipping</span>
+            {packagingShippingData.totalItemCount > 0 && (
+              <span
+                className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
+                  activeTab === "packaging_shipping"
+                    ? "bg-indigo-100 dark:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300"
+                    : "bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400"
+                }`}
+              >
+                {packagingShippingData.totalItemCount}
+              </span>
+            )}
           </button>
           <button
             type="button"
@@ -868,6 +962,116 @@ export function RetailerProductDetailView({ product }: ProductDetailViewProps) {
                     </div>
                   </div>
                 ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Tab Panel: Packaging & Shipping */}
+        {activeTab === "packaging_shipping" && (
+          <div className="space-y-6 bg-white dark:bg-zinc-900/60 rounded-2xl border border-zinc-200 dark:border-zinc-800 p-6 sm:p-8 shadow-xs">
+            {/* Header */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-zinc-100 dark:border-zinc-800/80 pb-5">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm sm:text-base font-bold text-zinc-900 dark:text-white tracking-tight">
+                    Packaging & Shipping Specifications
+                  </h3>
+                  {packagingShippingData.totalItemCount > 0 && (
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-100 dark:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300">
+                      {packagingShippingData.totalItemCount} Specifications
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                  Logistics, master carton packing units, product dimensions, and shipping weights.
+                </p>
+              </div>
+            </div>
+
+            {packagingShippingData.isEmpty ? (
+              <div className="py-16 text-center text-zinc-400 dark:text-zinc-500 space-y-2">
+                <span className="text-4xl block mb-3">📦</span>
+                <p className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">
+                  Packaging and shipping specifications are currently being updated for this product.
+                </p>
+                <p className="text-xs text-zinc-400 dark:text-zinc-500">
+                  For bulk freight inquiries or customized pallet dimensions, please contact your account manager.
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {/* Group A: Ordering Specifications */}
+                {packagingShippingData.orderingItems.length > 0 && (
+                  <div className="space-y-3.5 p-5 rounded-2xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200/80 dark:border-zinc-800/80">
+                    <div className="flex items-center gap-2 border-b border-zinc-200/60 dark:border-zinc-700/60 pb-3">
+                      <span className="text-base">📦</span>
+                      <h4 className="text-xs font-bold uppercase tracking-wider text-zinc-900 dark:text-zinc-100">
+                        Ordering & Case Pack
+                      </h4>
+                    </div>
+                    <div className="space-y-3">
+                      {packagingShippingData.orderingItems.map((item, idx) => (
+                        <div key={idx} className="space-y-0.5">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500 block">
+                            {item.label}
+                          </span>
+                          <span className="text-sm font-bold text-zinc-900 dark:text-white font-mono">
+                            {item.value}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Group B: Unit Specifications */}
+                {packagingShippingData.unitItems.length > 0 && (
+                  <div className="space-y-3.5 p-5 rounded-2xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200/80 dark:border-zinc-800/80">
+                    <div className="flex items-center gap-2 border-b border-zinc-200/60 dark:border-zinc-700/60 pb-3">
+                      <span className="text-base">📏</span>
+                      <h4 className="text-xs font-bold uppercase tracking-wider text-zinc-900 dark:text-zinc-100">
+                        Single Unit Specs
+                      </h4>
+                    </div>
+                    <div className="space-y-3">
+                      {packagingShippingData.unitItems.map((item, idx) => (
+                        <div key={idx} className="space-y-0.5">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500 block">
+                            {item.label}
+                          </span>
+                          <span className="text-sm font-bold text-zinc-900 dark:text-white font-mono">
+                            {item.value}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Group C: Master Case Specifications */}
+                {packagingShippingData.caseItems.length > 0 && (
+                  <div className="space-y-3.5 p-5 rounded-2xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200/80 dark:border-zinc-800/80">
+                    <div className="flex items-center gap-2 border-b border-zinc-200/60 dark:border-zinc-700/60 pb-3">
+                      <span className="text-base">🚛</span>
+                      <h4 className="text-xs font-bold uppercase tracking-wider text-zinc-900 dark:text-zinc-100">
+                        Master Carton Specs
+                      </h4>
+                    </div>
+                    <div className="space-y-3">
+                      {packagingShippingData.caseItems.map((item, idx) => (
+                        <div key={idx} className="space-y-0.5">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500 block">
+                            {item.label}
+                          </span>
+                          <span className="text-sm font-bold text-zinc-900 dark:text-white font-mono">
+                            {item.value}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>

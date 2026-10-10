@@ -96,6 +96,18 @@ export interface RetailerProductDetail extends RetailerProductSummary {
     height: number | null;
     weight: number | null;
   };
+  unitDimensions?: {
+    width: number | null;
+    depth: number | null;
+    height: number | null;
+  };
+  unitWeight?: number | null;
+  caseDimensions?: {
+    width: number | null;
+    depth: number | null;
+    height: number | null;
+  };
+  caseWeight?: number | null;
   cartonPackQty: number;
   images: Array<{
     id: string;
@@ -661,6 +673,14 @@ export async function getRetailerProductDetail(
       price_krw_retail,
       price_additional_info,
       carton_pack_qty,
+      item_width,
+      item_depth,
+      item_height,
+      item_weight,
+      carton_width,
+      carton_depth,
+      carton_height,
+      carton_weight,
       package_width,
       package_depth,
       package_height,
@@ -716,6 +736,14 @@ export async function getRetailerProductDetail(
         price_krw_retail,
         price_additional_info,
         carton_pack_qty,
+        item_width,
+        item_depth,
+        item_height,
+        item_weight,
+        carton_width,
+        carton_depth,
+        carton_height,
+        carton_weight,
         package_width,
         package_depth,
         package_height,
@@ -985,6 +1013,18 @@ export async function getRetailerProductDetail(
       height: overrides.package_height || p.package_height || null,
       weight: overrides.package_weight || p.package_weight || null,
     },
+    unitDimensions: {
+      width: overrides.item_width || p.item_width || overrides.package_width || p.package_width || null,
+      depth: overrides.item_depth || p.item_depth || overrides.package_depth || p.package_depth || null,
+      height: overrides.item_height || p.item_height || overrides.package_height || p.package_height || null,
+    },
+    unitWeight: overrides.package_weight || p.package_weight || overrides.item_weight || p.item_weight || null,
+    caseDimensions: {
+      width: overrides.carton_width || p.carton_width || null,
+      depth: overrides.carton_depth || p.carton_depth || null,
+      height: overrides.carton_height || p.carton_height || null,
+    },
+    caseWeight: overrides.carton_weight || p.carton_weight || null,
     cartonPackQty: moq,
     images,
     videos,
