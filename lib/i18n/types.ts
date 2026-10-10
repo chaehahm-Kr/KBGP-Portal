@@ -58,6 +58,8 @@ export interface Dictionary {
   nav: {
     home: string;
     products: string;
+    allProducts: string;
+    savedProducts: string;
     weeklyCheck: string;
     orders: string;
     sales: string;

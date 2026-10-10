@@ -2,6 +2,7 @@ import React from "react";
 import type { Metadata } from "next";
 import { verifyRetailerSession } from "@/lib/auth/dal";
 import { getRetailerProducts } from "@/lib/retailer/products";
+import { getRetailerCollections, getRetailerSavedProductMap } from "@/lib/retailer/saved-products";
 import { RetailerDiscoveryContainer } from "@/components/retailer/discovery-container";
 import { getServerTranslations } from "@/lib/i18n/server";
 
@@ -25,6 +26,7 @@ interface RetailerProductsPageProps {
     min_price?: string;
     max_price?: string;
     orderable_only?: string;
+    saved_only?: string;
     sort?: string;
   }>;
 }
@@ -37,21 +39,31 @@ export default async function RetailerProductsPage({ searchParams }: RetailerPro
   const minPrice = resolvedParams.min_price ? parseFloat(resolvedParams.min_price) : undefined;
   const maxPrice = resolvedParams.max_price ? parseFloat(resolvedParams.max_price) : undefined;
   const orderableOnly = resolvedParams.orderable_only === "true";
+  const savedOnly = resolvedParams.saved_only === "true";
 
-  const catalog = await getRetailerProducts({
-    search: resolvedParams.search,
-    category: resolvedParams.category,
-    depth1: resolvedParams.depth1,
-    depth2: resolvedParams.depth2,
-    depth3: resolvedParams.depth3,
-    brandId: resolvedParams.brand,
-    marginFilter: resolvedParams.margin,
-    pricePreset: resolvedParams.price_preset,
-    minPrice: !isNaN(minPrice as number) ? minPrice : undefined,
-    maxPrice: !isNaN(maxPrice as number) ? maxPrice : undefined,
-    orderableOnly,
-    sortBy: resolvedParams.sort,
-  });
+  const [catalog, collections, savedMap] = await Promise.all([
+    getRetailerProducts({
+      search: resolvedParams.search,
+      category: resolvedParams.category,
+      depth1: resolvedParams.depth1,
+      depth2: resolvedParams.depth2,
+      depth3: resolvedParams.depth3,
+      brandId: resolvedParams.brand,
+      marginFilter: resolvedParams.margin,
+      pricePreset: resolvedParams.price_preset,
+      minPrice: !isNaN(minPrice as number) ? minPrice : undefined,
+      maxPrice: !isNaN(maxPrice as number) ? maxPrice : undefined,
+      orderableOnly,
+      sortBy: resolvedParams.sort,
+    }),
+    getRetailerCollections(),
+    getRetailerSavedProductMap(),
+  ]);
+
+  let displayProducts = catalog.products;
+  if (savedOnly) {
+    displayProducts = displayProducts.filter((p) => savedMap.savedProductIds.includes(p.id));
+  }
 
   return (
     <div className="space-y-3 sm:space-y-4">
@@ -75,8 +87,8 @@ export default async function RetailerProductsPage({ searchParams }: RetailerPro
         categoryHierarchy={catalog.categoryHierarchy}
         categories={catalog.categories}
         brands={catalog.brands}
-        products={catalog.products}
-        totalCount={catalog.totalCount}
+        products={displayProducts}
+        totalCount={savedOnly ? displayProducts.length : catalog.totalCount}
         currentSearch={resolvedParams.search}
         currentDepth1={resolvedParams.depth1}
         currentDepth2={resolvedParams.depth2}
@@ -88,7 +100,11 @@ export default async function RetailerProductsPage({ searchParams }: RetailerPro
         currentMinPrice={minPrice}
         currentMaxPrice={maxPrice}
         currentOrderableOnly={orderableOnly}
+        currentSavedOnly={savedOnly}
         currentSortBy={resolvedParams.sort || "default"}
+        allCollections={collections}
+        savedProductIds={savedMap.savedProductIds}
+        productCollectionsMap={savedMap.productCollectionsMap}
       />
     </div>
   );

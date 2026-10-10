@@ -54,6 +54,8 @@ export const enDictionary: Dictionary = {
   nav: {
     home: "Dashboard",
     products: "Products",
+    allProducts: "All Products",
+    savedProducts: "Saved Products",
     weeklyCheck: "Weekly Check",
     orders: "Orders",
     sales: "Sales & Reorder",

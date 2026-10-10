@@ -26,6 +26,7 @@ interface FilterBarProps {
   currentMinPrice?: number;
   currentMaxPrice?: number;
   currentOrderableOnly?: boolean;
+  currentSavedOnly?: boolean;
   currentSortBy?: string;
   totalCount: number;
   density?: GridDensity;
@@ -47,6 +48,7 @@ export function RetailerProductFilterBar({
   currentMinPrice,
   currentMaxPrice,
   currentOrderableOnly = false,
+  currentSavedOnly = false,
   currentSortBy = "default",
   totalCount,
   density = 4,
@@ -205,6 +207,12 @@ export function RetailerProductFilterBar({
   const handleToggleOrderableOnly = () => {
     updateQueryParams({
       orderable_only: currentOrderableOnly ? null : "true",
+    });
+  };
+
+  const handleToggleSavedOnly = () => {
+    updateQueryParams({
+      saved_only: currentSavedOnly ? null : "true",
     });
   };
 
@@ -504,18 +512,36 @@ export function RetailerProductFilterBar({
             </div>
           </div>
 
-          {/* Orderable Stock Only Toggle */}
-          <label className="flex items-center gap-1.5 cursor-pointer text-xs select-none">
-            <input
-              type="checkbox"
-              checked={currentOrderableOnly}
-              onChange={handleToggleOrderableOnly}
-              className="w-3.5 h-3.5 text-indigo-600 rounded border-zinc-300 dark:border-zinc-700 focus:ring-indigo-500 cursor-pointer"
-            />
-            <span className="font-medium text-zinc-700 dark:text-zinc-300 text-[11px] sm:text-xs">
-              {t.products.orderableStockOnly}
-            </span>
-          </label>
+          <div className="flex items-center gap-3">
+            {/* Saved Products Only Toggle */}
+            <label className="flex items-center gap-1.5 cursor-pointer text-xs select-none">
+              <input
+                type="checkbox"
+                checked={currentSavedOnly}
+                onChange={handleToggleSavedOnly}
+                className="w-3.5 h-3.5 text-rose-600 rounded border-zinc-300 dark:border-zinc-700 focus:ring-rose-500 cursor-pointer"
+              />
+              <span className={`font-medium text-[11px] sm:text-xs flex items-center gap-1 ${
+                currentSavedOnly ? "text-rose-600 dark:text-rose-400 font-bold" : "text-zinc-700 dark:text-zinc-300"
+              }`}>
+                <span>❤️</span>
+                <span>{locale === "ko" ? "저장한 상품만" : "Saved Only"}</span>
+              </span>
+            </label>
+
+            {/* Orderable Stock Only Toggle */}
+            <label className="flex items-center gap-1.5 cursor-pointer text-xs select-none">
+              <input
+                type="checkbox"
+                checked={currentOrderableOnly}
+                onChange={handleToggleOrderableOnly}
+                className="w-3.5 h-3.5 text-indigo-600 rounded border-zinc-300 dark:border-zinc-700 focus:ring-indigo-500 cursor-pointer"
+              />
+              <span className="font-medium text-zinc-700 dark:text-zinc-300 text-[11px] sm:text-xs">
+                {t.products.orderableStockOnly}
+              </span>
+            </label>
+          </div>
         </div>
 
         {/* Row 2: Price Filter Presets & Custom Range */}

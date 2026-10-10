@@ -35,6 +35,20 @@ export const RETAILER_NAV_ITEMS: NavItem[] = [
     icon: "package",
     roles: ["owner", "buyer", "store_manager", "employee", "accounting"],
     isBottomNav: true,
+    subItems: [
+      {
+        key: "allProducts",
+        name: "All Products",
+        href: "/products",
+        roles: ["owner", "buyer", "store_manager", "employee", "accounting"],
+      },
+      {
+        key: "savedProducts",
+        name: "Saved Products",
+        href: "/products/saved",
+        roles: ["owner", "buyer", "store_manager", "employee", "accounting"],
+      },
+    ],
   },
   {
     key: "weeklyCheck",

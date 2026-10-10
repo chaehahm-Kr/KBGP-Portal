@@ -54,6 +54,8 @@ export const koDictionary: Dictionary = {
   nav: {
     home: "대시보드",
     products: "제품",
+    allProducts: "전체 제품",
+    savedProducts: "관심 상품 (Saved)",
     weeklyCheck: "상품 확인",
     orders: "주문",
     sales: "매출 및 재발주",

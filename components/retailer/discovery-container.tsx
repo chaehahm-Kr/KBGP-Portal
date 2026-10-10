@@ -32,7 +32,11 @@ interface DiscoveryContainerProps {
   currentMinPrice?: number;
   currentMaxPrice?: number;
   currentOrderableOnly?: boolean;
+  currentSavedOnly?: boolean;
   currentSortBy?: string;
+  allCollections?: any[];
+  savedProductIds?: string[];
+  productCollectionsMap?: Record<string, string[]>;
 }
 
 export function RetailerDiscoveryContainer({
@@ -52,10 +56,23 @@ export function RetailerDiscoveryContainer({
   currentMinPrice,
   currentMaxPrice,
   currentOrderableOnly,
+  currentSavedOnly,
   currentSortBy,
+  allCollections = [],
+  savedProductIds = [],
+  productCollectionsMap = {},
 }: DiscoveryContainerProps) {
   const { t } = useTranslation();
   const [density, setDensity] = useState<GridDensity>(4);
+  const [activeCollections, setActiveCollections] = useState(allCollections);
+  const [savedIds, setSavedIds] = useState<string[]>(savedProductIds);
+  const [collectionsMap, setCollectionsMap] = useState<Record<string, string[]>>(productCollectionsMap);
+
+  useEffect(() => {
+    setActiveCollections(allCollections);
+    setSavedIds(savedProductIds);
+    setCollectionsMap(productCollectionsMap);
+  }, [allCollections, savedProductIds, productCollectionsMap]);
 
   useEffect(() => {
     try {
@@ -77,6 +94,22 @@ export function RetailerDiscoveryContainer({
     }
   };
 
+  const handleSaveToggle = (productId: string, isSaved: boolean, colIds: string[]) => {
+    if (isSaved) {
+      if (!savedIds.includes(productId)) {
+        setSavedIds([...savedIds, productId]);
+      }
+      setCollectionsMap((prev) => ({ ...prev, [productId]: colIds }));
+    } else {
+      setSavedIds(savedIds.filter((id) => id !== productId));
+      setCollectionsMap((prev) => {
+        const next = { ...prev };
+        delete next[productId];
+        return next;
+      });
+    }
+  };
+
   return (
     <div className="space-y-3 sm:space-y-4 w-full max-w-full overflow-hidden">
       {/* Search, Category Navigation, & Purchasing Filters */}
@@ -95,6 +128,7 @@ export function RetailerDiscoveryContainer({
         currentMinPrice={currentMinPrice}
         currentMaxPrice={currentMaxPrice}
         currentOrderableOnly={currentOrderableOnly}
+        currentSavedOnly={currentSavedOnly}
         currentSortBy={currentSortBy || "default"}
         totalCount={totalCount}
         density={density}
@@ -109,7 +143,15 @@ export function RetailerDiscoveryContainer({
           className={GRID_LAYOUT_CLASSES[density] || GRID_LAYOUT_CLASSES[4]}
         >
           {products.map((product) => (
-            <RetailerProductCard key={product.id} product={product} />
+            <RetailerProductCard
+              key={product.id}
+              product={product}
+              isSaved={savedIds.includes(product.id)}
+              savedCollectionIds={collectionsMap[product.id] || []}
+              allCollections={activeCollections}
+              onSaveToggle={handleSaveToggle}
+              onCollectionsUpdated={setActiveCollections}
+            />
           ))}
         </div>
       ) : (
@@ -128,7 +170,7 @@ export function RetailerDiscoveryContainer({
           </div>
           <div className="pt-2">
             <a
-              href="/products"
+              href="/retailer/products"
               className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 hover:opacity-90 transition-opacity"
             >
               {t.products.resetFilters}
