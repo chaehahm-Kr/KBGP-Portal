@@ -5,115 +5,74 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { resolveProductName } from "@/lib/product/name-resolver";
 import { revalidatePath } from "next/cache";
 
-export const FAQ_CATEGORIES = [
-  "Product Basics",
-  "Who It’s For",
-  "How to Use",
-  "Routine / Compatibility",
-  "Ingredients / Safety",
-  "Warnings / Precautions",
-  "Storage / Practical Info",
-] as const;
+import {
+  FAQ_CATEGORIES,
+  type FaqCategory,
+  type FaqAudience,
+  type FaqStatus,
+  type FaqSourceType,
+  type ProductFaqItem,
+  type CreateFaqInput,
+  type UpdateFaqInput,
+  type FaqAiSuggestion,
+} from "./faq-types";
 
-export type FaqCategory = (typeof FAQ_CATEGORIES)[number];
-export type FaqAudience = "customer" | "retail_staff" | "both";
-export type FaqStatus = "draft" | "approved" | "archived";
-export type FaqSourceType = "manual" | "ai_suggested";
-
-export interface ProductFaqItem {
-  id: string;
-  product_id: string;
-  company_id: string | null;
-  question: string;
-  answer: string;
-  category: FaqCategory;
-  audience: FaqAudience;
-  status: FaqStatus;
-  sort_order: number;
-  source_type: FaqSourceType;
-  source_refs: string[];
-  ai_provider?: string | null;
-  ai_model?: string | null;
-  requires_brand_confirmation: boolean;
-  created_by?: string | null;
-  approved_at?: string | null;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface CreateFaqInput {
-  productId: string;
-  question: string;
-  answer: string;
-  category: FaqCategory;
-  audience?: FaqAudience;
-  status?: FaqStatus;
-  sort_order?: number;
-  source_type?: FaqSourceType;
-  source_refs?: string[];
-  requires_brand_confirmation?: boolean;
-}
-
-export interface UpdateFaqInput {
-  question?: string;
-  answer?: string;
-  category?: FaqCategory;
-  audience?: FaqAudience;
-  status?: FaqStatus;
-  sort_order?: number;
-  requires_brand_confirmation?: boolean;
-}
-
-export interface FaqAiSuggestion {
-  tempId: string;
-  question: string;
-  answer: string;
-  category: FaqCategory;
-  audience: FaqAudience;
-  source_refs: string[];
-  requires_brand_confirmation: boolean;
-  selected: boolean;
-}
+export {
+  FAQ_CATEGORIES,
+  type FaqCategory,
+  type FaqAudience,
+  type FaqStatus,
+  type FaqSourceType,
+  type ProductFaqItem,
+  type CreateFaqInput,
+  type UpdateFaqInput,
+  type FaqAiSuggestion,
+};
 
 /**
  * Fetch all FAQs for an admin workspace by product ID
  */
 export async function getProductFaqs(productId: string): Promise<ProductFaqItem[]> {
-  await verifyAdminSession();
-  const adminSupabase = createAdminClient();
+  try {
+    await verifyAdminSession();
+    const adminSupabase = createAdminClient();
 
-  const { data, error } = await adminSupabase
-    .from("product_faqs")
-    .select("*")
-    .eq("product_id", productId)
-    .order("sort_order", { ascending: true })
-    .order("created_at", { ascending: true });
+    const { data, error } = await adminSupabase
+      .from("product_faqs")
+      .select("*")
+      .eq("product_id", productId)
+      .order("sort_order", { ascending: true })
+      .order("created_at", { ascending: true });
 
-  if (error) {
-    console.error("[getProductFaqs] Error:", error);
+    if (error) {
+      console.error("[getProductFaqs] Error:", error);
+      return [];
+    }
+
+    return (data || []).map((row) => ({
+      id: row.id,
+      product_id: row.product_id,
+      company_id: row.company_id,
+      question: row.question,
+      answer: row.answer,
+      category: row.category as FaqCategory,
+      audience: (row.audience as FaqAudience) || "both",
+      status: (row.status as FaqStatus) || "draft",
+      sort_order: row.sort_order ?? 0,
+      source_type: (row.source_type as FaqSourceType) || "manual",
+      source_refs: Array.isArray(row.source_refs) ? row.source_refs : [],
+      ai_provider: row.ai_provider,
+      ai_model: row.ai_model,
+      requires_brand_confirmation: Boolean(row.requires_brand_confirmation),
+      created_by: row.created_by,
+      approved_at: row.approved_at,
+      created_at: row.created_at,
+      updated_at: row.updated_at,
+    }));
+  } catch (err) {
+    console.error("[getProductFaqs] Unexpected exception:", err);
     return [];
   }
-
-  return (data || []).map((row) => ({
-    id: row.id,
-    product_id: row.product_id,
-    company_id: row.company_id,
-    question: row.question,
-    answer: row.answer,
-    category: row.category as FaqCategory,
-    audience: (row.audience as FaqAudience) || "both",
-    status: (row.status as FaqStatus) || "draft",
-    sort_order: row.sort_order ?? 0,
-    source_type: (row.source_type as FaqSourceType) || "manual",
-    source_refs: Array.isArray(row.source_refs) ? row.source_refs : [],
-    ai_provider: row.ai_provider,
-    ai_model: row.ai_model,
-    requires_brand_confirmation: Boolean(row.requires_brand_confirmation),
-    created_by: row.created_by,
-    approved_at: row.approved_at,
-    created_at: row.created_at,
-    updated_at: row.updated_at,
-  }));
 }
 
 /**

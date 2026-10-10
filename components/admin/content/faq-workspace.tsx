@@ -9,6 +9,8 @@ import {
   type FaqStatus,
   type ProductFaqItem,
   type FaqAiSuggestion,
+} from "@/lib/product/faq-types";
+import {
   getProductFaqs,
   createProductFaq,
   updateProductFaq,
