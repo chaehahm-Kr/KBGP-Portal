@@ -436,36 +436,36 @@ export function ContentStatusList({ initialProducts, filterOptions }: ContentSta
     switch (status) {
       case "published":
         return (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10.5px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800 whitespace-nowrap">
-            <CheckCircleIcon className="w-3 h-3 text-emerald-600 dark:text-emerald-400 shrink-0" />
+          <span className="inline-flex items-center gap-0.5 px-1 py-0.5 rounded text-[9.5px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800 whitespace-nowrap">
+            <CheckCircleIcon className="w-2.5 h-2.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
             Published
           </span>
         );
       case "ready":
         return (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10.5px] font-bold bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-800 whitespace-nowrap">
-            <SparklesIcon className="w-3 h-3 text-blue-600 dark:text-blue-400 shrink-0" />
+          <span className="inline-flex items-center gap-0.5 px-1 py-0.5 rounded text-[9.5px] font-bold bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-800 whitespace-nowrap">
+            <SparklesIcon className="w-2.5 h-2.5 text-blue-600 dark:text-blue-400 shrink-0" />
             Ready
           </span>
         );
       case "in_progress":
         return (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10.5px] font-bold bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800 whitespace-nowrap">
-            <ClockIcon className="w-3 h-3 text-amber-600 dark:text-amber-400 shrink-0" />
+          <span className="inline-flex items-center gap-0.5 px-1 py-0.5 rounded text-[9.5px] font-bold bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800 whitespace-nowrap">
+            <ClockIcon className="w-2.5 h-2.5 text-amber-600 dark:text-amber-400 shrink-0" />
             In Progress
           </span>
         );
       case "needs_attention":
         return (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10.5px] font-bold bg-rose-50 text-rose-700 border border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800 whitespace-nowrap">
-            <AlertCircleIcon className="w-3 h-3 text-rose-600 dark:text-rose-400 shrink-0" />
+          <span className="inline-flex items-center gap-0.5 px-1 py-0.5 rounded text-[9.5px] font-bold bg-rose-50 text-rose-700 border border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800 whitespace-nowrap">
+            <AlertCircleIcon className="w-2.5 h-2.5 text-rose-600 dark:text-rose-400 shrink-0" />
             Needs Attention
           </span>
         );
       case "not_started":
       default:
         return (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10.5px] font-bold bg-zinc-100 text-zinc-600 border border-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:border-zinc-700 whitespace-nowrap">
+          <span className="inline-flex items-center gap-0.5 px-1 py-0.5 rounded text-[9.5px] font-bold bg-zinc-100 text-zinc-600 border border-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:border-zinc-700 whitespace-nowrap">
             Not Started
           </span>
         );
@@ -479,20 +479,20 @@ export function ContentStatusList({ initialProducts, filterOptions }: ContentSta
   ) => {
     if (val === "published" || val === "ready" || val === "complete" || val === "live" || val === "active") {
       return (
-        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-400 dark:border-emerald-800/50 whitespace-nowrap">
+        <span className="inline-flex items-center px-1 py-0.5 rounded text-[9.5px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-400 dark:border-emerald-800/50 whitespace-nowrap">
           {val === "complete" && extra !== undefined ? `Complete (${extra})` : val === "active" ? "Active" : val.charAt(0).toUpperCase() + val.slice(1)}
         </span>
       );
     }
     if (val === "draft" || val === "in_progress" || val === "partial" || val === "pending" || val === "inactive") {
       return (
-        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-950/30 dark:text-amber-400 dark:border-amber-800/50 whitespace-nowrap">
+        <span className="inline-flex items-center px-1 py-0.5 rounded text-[9.5px] font-medium bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-950/30 dark:text-amber-400 dark:border-amber-800/50 whitespace-nowrap">
           {val === "partial" && extra !== undefined ? `Partial (${extra})` : val === "in_progress" ? "In Progress" : val.charAt(0).toUpperCase() + val.slice(1)}
         </span>
       );
     }
     return (
-      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-zinc-100 text-zinc-500 border border-zinc-200 dark:bg-zinc-800/60 dark:text-zinc-400 dark:border-zinc-700 whitespace-nowrap">
+      <span className="inline-flex items-center px-1 py-0.5 rounded text-[9.5px] font-medium bg-zinc-100 text-zinc-500 border border-zinc-200 dark:bg-zinc-800/60 dark:text-zinc-400 dark:border-zinc-700 whitespace-nowrap">
         {val === "not_generated" ? "Not Gen" : val === "not_started" ? "Not Started" : val.charAt(0).toUpperCase() + val.slice(1)}
       </span>
     );
