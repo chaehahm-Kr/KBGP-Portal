@@ -893,51 +893,51 @@ export function ContentStatusList({ initialProducts, filterOptions }: ContentSta
       {/* CONTENT STATUS TABLE */}
       <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-2xs overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs text-zinc-600 dark:text-zinc-400">
-            <thead className="bg-zinc-50 dark:bg-zinc-850 text-[10.5px] font-semibold text-zinc-700 dark:text-zinc-300 border-b border-zinc-200 dark:border-zinc-800 select-none">
+          <table className="w-full table-fixed text-left text-xs text-zinc-600 dark:text-zinc-400">
+            <thead className="bg-zinc-50 dark:bg-zinc-850 text-[10px] font-semibold text-zinc-700 dark:text-zinc-300 border-b border-zinc-200 dark:border-zinc-800 select-none">
               <tr>
                 {/* 1. Product Column (Compact: Thumbnail, Name, SKU) */}
                 <th
                   onClick={() => handleSort("name")}
-                  className="py-2.5 px-2.5 font-semibold cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors w-[220px]"
+                  className="py-2 px-1.5 font-semibold cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors w-[185px]"
                 >
                   <div className="flex items-center gap-1">
                     <span>Product</span>
-                    <ArrowUpDownIcon className="w-3 h-3 text-zinc-400" />
+                    <ArrowUpDownIcon className="w-3 h-3 text-zinc-400 shrink-0" />
                   </div>
                 </th>
 
                 {/* 2. Brand / Category Compact 2-Line Column */}
                 <th
                   onClick={() => handleSort("brand")}
-                  className="py-2.5 px-2 font-semibold cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors w-[150px]"
+                  className="py-2 px-1.5 font-semibold cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors w-[125px]"
                 >
                   <div className="flex items-center gap-1">
                     <span>Brand / Category</span>
-                    <ArrowUpDownIcon className="w-3 h-3 text-zinc-400" />
+                    <ArrowUpDownIcon className="w-3 h-3 text-zinc-400 shrink-0" />
                   </div>
                 </th>
 
                 {/* Status Columns */}
-                <th className="py-2.5 px-1 text-center w-[75px]">Operational</th>
-                <th className="py-2.5 px-1 text-center w-[70px]">Visibility</th>
-                <th className="py-2.5 px-1 text-center w-[105px]">Overall Status</th>
-                <th className="py-2.5 px-1 text-center w-[90px]">Customer Page</th>
-                <th className="py-2.5 px-1 text-center w-[70px]">Training</th>
-                <th className="py-2.5 px-1 text-center w-[70px]">Media</th>
-                <th className="py-2.5 px-1 text-center w-[50px]">FAQ</th>
-                <th className="py-2.5 px-1 text-center w-[60px]">Reviews</th>
-                <th className="py-2.5 px-1 text-center w-[85px]">Publishing / QR</th>
+                <th className="py-2 px-0.5 text-center w-[65px]">Operational</th>
+                <th className="py-2 px-0.5 text-center w-[60px]">Visibility</th>
+                <th className="py-2 px-0.5 text-center w-[95px]">Overall Status</th>
+                <th className="py-2 px-0.5 text-center w-[80px]">Customer Page</th>
+                <th className="py-2 px-0.5 text-center w-[60px]">Training</th>
+                <th className="py-2 px-0.5 text-center w-[55px]">Media</th>
+                <th className="py-2 px-0.5 text-center w-[45px]">FAQ</th>
+                <th className="py-2 px-0.5 text-center w-[50px]">Reviews</th>
+                <th className="py-2 px-0.5 text-center w-[75px]">Publishing / QR</th>
                 <th
                   onClick={() => handleSort("updated")}
-                  className="py-2.5 px-1.5 font-semibold cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors text-right w-[75px]"
+                  className="py-2 px-1 font-semibold cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors text-right w-[65px]"
                 >
                   <div className="flex items-center justify-end gap-1">
                     <span>Updated</span>
-                    <ArrowUpDownIcon className="w-3 h-3 text-zinc-400" />
+                    <ArrowUpDownIcon className="w-3 h-3 text-zinc-400 shrink-0" />
                   </div>
                 </th>
-                <th className="py-2.5 px-2 font-semibold text-right w-[65px]">Manage</th>
+                <th className="py-2 px-1 font-semibold text-right w-[60px]">Manage</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
@@ -967,8 +967,8 @@ export function ContentStatusList({ initialProducts, filterOptions }: ContentSta
                     className="hover:bg-zinc-50/80 dark:hover:bg-zinc-850/50 transition-colors group"
                   >
                     {/* 1. Product (Thumbnail, Name, SKU) */}
-                    <td className="py-2.5 px-3">
-                      <div className="flex items-center gap-2.5">
+                    <td className="py-2 px-1.5">
+                      <div className="flex items-center gap-2">
                         {/* Thumbnail with Lightbox Click Handler */}
                         <div
                           onClick={(e) => {
@@ -977,7 +977,7 @@ export function ContentStatusList({ initialProducts, filterOptions }: ContentSta
                               setLightboxImage({ url: p.photoUrl, title: p.name, sku: p.letusto_sku });
                             }
                           }}
-                          className={`w-9 h-9 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-850 overflow-hidden shrink-0 relative flex items-center justify-center transition-all ${
+                          className={`w-8 h-8 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-850 overflow-hidden shrink-0 relative flex items-center justify-center transition-all ${
                             p.photoUrl ? "cursor-pointer hover:ring-2 hover:ring-indigo-500/30 group-hover:border-zinc-300" : ""
                           }`}
                           title={p.photoUrl ? "Click to view full image" : "No image registered"}
@@ -990,11 +990,11 @@ export function ContentStatusList({ initialProducts, filterOptions }: ContentSta
                                 className="w-full h-full object-cover"
                               />
                               <div className="absolute inset-0 bg-black/30 opacity-0 hover:opacity-100 transition-opacity flex items-center justify-center">
-                                <ZoomInIcon className="w-3.5 h-3.5 text-white" />
+                                <ZoomInIcon className="w-3 h-3 text-white" />
                               </div>
                             </>
                           ) : (
-                            <span className="text-[9px] font-bold text-zinc-400">No Pic</span>
+                            <span className="text-[8px] font-bold text-zinc-400">No Pic</span>
                           )}
                         </div>
 
@@ -1002,12 +1002,12 @@ export function ContentStatusList({ initialProducts, filterOptions }: ContentSta
                         <div className="min-w-0 flex-1">
                           <Link
                             href={`/admin/products/content/${p.id}`}
-                            className="font-bold text-zinc-900 dark:text-zinc-100 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors line-clamp-1 text-xs"
+                            className="font-bold text-zinc-900 dark:text-zinc-100 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors truncate block text-[11.5px]"
                             title={p.name}
                           >
                             {p.name}
                           </Link>
-                          <div className="text-[10px] text-zinc-400 font-mono mt-0.5 truncate">
+                          <div className="text-[9.5px] text-zinc-400 font-mono mt-0.5 truncate">
                             SKU: {p.letusto_sku || "-"}
                           </div>
                         </div>
@@ -1015,66 +1015,66 @@ export function ContentStatusList({ initialProducts, filterOptions }: ContentSta
                     </td>
 
                     {/* 2. Brand / Category Compact 2-Line Column */}
-                    <td className="py-2.5 px-3">
+                    <td className="py-2 px-1.5">
                       <div className="min-w-0">
                         {/* Line 1: Brand */}
-                        <div className="font-bold text-zinc-900 dark:text-zinc-100 truncate text-xs" title={p.brand_name}>
+                        <div className="font-bold text-zinc-900 dark:text-zinc-100 truncate text-[11.5px]" title={p.brand_name}>
                           {p.brand_name}
                         </div>
                         {/* Line 2: 1st > 2nd Category English Name */}
-                        <div className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400 truncate mt-0.5" title={p.category_display_path}>
+                        <div className="text-[10px] font-medium text-zinc-500 dark:text-zinc-400 truncate mt-0.5" title={p.category_display_path}>
                           {p.category_display_path}
                         </div>
                       </div>
                     </td>
 
                     {/* 3. Operational */}
-                    <td className="py-2.5 px-2 text-center">
+                    <td className="py-2 px-0.5 text-center">
                       {renderOperationalBadge(p.operational_status)}
                     </td>
 
                     {/* 4. Visibility */}
-                    <td className="py-2.5 px-2 text-center">
+                    <td className="py-2 px-0.5 text-center">
                       {renderVisibilityBadge(p.visibility)}
                     </td>
 
                     {/* 5. Overall Status */}
-                    <td className="py-2.5 px-2 text-center">
+                    <td className="py-2 px-0.5 text-center">
                       {renderOverallStatusBadge(p.overall_status)}
                     </td>
 
                     {/* 6. Customer Page */}
-                    <td className="py-2.5 px-2 text-center">
+                    <td className="py-2 px-0.5 text-center">
                       {renderModuleStatusBadge("customer", p.customer_page_status)}
                     </td>
 
                     {/* 7. Training */}
-                    <td className="py-2.5 px-2 text-center">
+                    <td className="py-2 px-0.5 text-center">
                       {renderModuleStatusBadge("training", p.training_status)}
                     </td>
 
                     {/* 8. Media */}
-                    <td className="py-2.5 px-2 text-center">
+                    <td className="py-2 px-0.5 text-center">
                       {renderModuleStatusBadge("media", p.media_status, p.image_count)}
                     </td>
 
                     {/* 9. FAQ */}
-                    <td className="py-2.5 px-2 text-center">
+                    <td className="py-2 px-0.5 text-center">
                       {renderModuleStatusBadge("faq", p.faq_status)}
                     </td>
 
                     {/* 10. Reviews */}
-                    <td className="py-2.5 px-2 text-center">
+                    <td className="py-2 px-0.5 text-center">
                       {renderModuleStatusBadge("review", p.review_status)}
                     </td>
 
                     {/* 11. Publishing / QR */}
-                    <td className="py-2.5 px-2 text-center">
+                    <td className="py-2 px-0.5 text-center">
                       {renderModuleStatusBadge("qr", p.qr_status)}
                     </td>
 
                     {/* 12. Last Updated */}
-                    <td className="py-2.5 px-2.5 text-right font-mono text-[10.5px] text-zinc-500 dark:text-zinc-400 whitespace-nowrap">
+                    <td className="py-2 px-1 text-right font-mono text-[10px] text-zinc-500 dark:text-zinc-400 whitespace-nowrap">
                       {p.last_updated}
                     </td>
 
