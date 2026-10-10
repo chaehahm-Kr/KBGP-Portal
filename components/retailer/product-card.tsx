@@ -278,8 +278,15 @@ export function RetailerProductCard({
             <div className="grid grid-cols-3 items-center divide-x divide-zinc-200 dark:divide-zinc-800 text-center py-1">
               {/* Col 1: Wholesale */}
               <div className="px-1 text-left">
-                <div className="text-[9px] uppercase font-bold tracking-wider text-zinc-400 dark:text-zinc-500 truncate">
-                  {product.isPromoActive ? t.products.promoBadge : t.products.wholesalePrice}
+                <div className="flex items-center gap-1">
+                  <span className="text-[9px] uppercase font-bold tracking-wider text-zinc-400 dark:text-zinc-500 truncate">
+                    WHOLESALE
+                  </span>
+                  {product.isPromoActive && (
+                    <span className="px-1 py-0.2 text-[8px] font-black rounded bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300">
+                      PROMO
+                    </span>
+                  )}
                 </div>
                 <div className="text-xs sm:text-sm font-black text-zinc-900 dark:text-zinc-100 flex items-baseline gap-0.5 truncate mt-0.5">
                   <span>
@@ -294,7 +301,7 @@ export function RetailerProductCard({
               {/* Col 2: Margin */}
               <div className="px-1 text-center">
                 <div className="text-[9px] uppercase font-bold tracking-wider text-zinc-400 dark:text-zinc-500 truncate">
-                  {t.products.margin}
+                  MARGIN
                 </div>
                 <div className="text-xs sm:text-sm font-black text-emerald-600 dark:text-emerald-400 truncate mt-0.5">
                   {product.marginPercent > 0 && product.msrp > 0 ? `${product.marginPercent}%` : "—"}
@@ -304,7 +311,7 @@ export function RetailerProductCard({
               {/* Col 3: MSRP */}
               <div className="px-1 text-right">
                 <div className="text-[9px] uppercase font-bold tracking-wider text-zinc-400 dark:text-zinc-500 truncate">
-                  {t.products.msrp}
+                  MSRP
                 </div>
                 <div className="text-xs sm:text-sm font-bold text-zinc-600 dark:text-zinc-300 truncate mt-0.5">
                   {product.msrp > 0 ? `$${product.msrp.toFixed(2)}` : "—"}

@@ -1552,12 +1552,6 @@ export function TradingProductDetail({
                 <span className="text-zinc-500 dark:text-zinc-400 font-medium">
                   공급사: {product.companyName}
                 </span>
-                <Link
-                  href={`/admin/products/${product.id}`}
-                  className="text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 hover:underline ml-auto"
-                >
-                  Catalog Master 상세 →
-                </Link>
               </div>
 
               <h2 className="text-lg font-bold tracking-tight text-zinc-900 dark:text-white truncate" title={product.name}>
@@ -1635,7 +1629,16 @@ export function TradingProductDetail({
           </div>
 
           {/* Right Status Controls & Active Marketing Badges */}
-          <div className="flex flex-col items-start lg:items-end gap-3 shrink-0">
+          <div className="flex flex-col items-start lg:items-end gap-2.5 shrink-0">
+            {/* Catalog Master Link */}
+            <Link
+              href={`/admin/products/${product.id}`}
+              className="inline-flex items-center gap-1 text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 hover:underline"
+            >
+              <span>📦</span>
+              <span>Catalog Master 상세 →</span>
+            </Link>
+
             {/* Status Badges Row */}
             <div className="flex items-center gap-1.5 flex-wrap">
               {/* Trading Status */}
@@ -1820,6 +1823,12 @@ export function TradingProductDetail({
               </p>
             </div>
           </div>
+
+          {/* Retailer Short Description Card */}
+          <RetailerShortDescriptionCard
+            productId={product.id}
+            initialShortDescription={product.short_description}
+          />
 
           {/* Operational Alerts & Diagnositcs Shelf */}
           <div className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 space-y-4">
@@ -2296,12 +2305,6 @@ export function TradingProductDetail({
             salesPolicy={product.salesPolicy || resolveRetailerSalesPolicy(product)}
             srpPrice={product.srpPrice ?? null}
             mapPrice={product.mapPrice ?? null}
-          />
-
-          {/* Retailer Short Description Card */}
-          <RetailerShortDescriptionCard
-            productId={product.id}
-            initialShortDescription={product.short_description}
           />
 
           {/* Hub Marketing Badges Configuration Card */}
