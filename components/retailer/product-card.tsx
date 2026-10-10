@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { RetailerProductSummary } from "@/lib/retailer/products";
 import { useTranslation } from "@/lib/i18n";
 import { useCart } from "@/components/retailer/cart-context";
@@ -25,9 +26,14 @@ export function RetailerProductCard({
   onSaveToggle,
   onCollectionsUpdated,
 }: ProductCardProps) {
+  const router = useRouter();
   const { t, locale } = useTranslation();
-  const { addItem } = useCart();
+  const { addItem, items } = useCart();
   const badges = product.activeMarketingBadges || [];
+
+  // Check if product is currently in cart
+  const cartItem = items.find((i) => i.productId === product.id);
+  const isInCart = Boolean(cartItem);
 
   // Carousel Image state
   const images: string[] =
@@ -38,7 +44,6 @@ export function RetailerProductCard({
       : [];
 
   const [currentImgIndex, setCurrentImgIndex] = useState(0);
-  const [justAdded, setJustAdded] = useState(false);
   const [isSaved, setIsSaved] = useState(initialIsSaved);
   const [savedCollectionIds, setSavedCollectionIds] = useState<string[]>(initialSavedCollectionIds);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -88,6 +93,16 @@ export function RetailerProductCard({
     e.stopPropagation();
     if (!product.isOrderable || product.isSoldOut) return;
 
+    if (isInCart) {
+      router.push("/cart");
+      return;
+    }
+
+    const effectivePrice =
+      product.isPromoActive && product.promoWholesalePrice
+        ? product.promoWholesalePrice
+        : product.wholesalePrice;
+
     addItem(
       {
         id: product.id,
@@ -96,17 +111,14 @@ export function RetailerProductCard({
         brandName: product.brandName,
         sku: product.sku,
         thumbnailUrl: product.thumbnailUrl,
-        wholesalePrice: product.isPromoActive && product.promoWholesalePrice ? product.promoWholesalePrice : product.wholesalePrice,
+        wholesalePrice: effectivePrice,
         msrp: product.msrp,
         marginPercent: product.marginPercent,
+        cartonPackQty: product.moq || 1,
+        salesPolicy: product.salesPolicy,
       },
       product.moq || 1
     );
-
-    setJustAdded(true);
-    setTimeout(() => {
-      setJustAdded(false);
-    }, 1500);
   };
 
   return (
@@ -143,7 +155,7 @@ export function RetailerProductCard({
           </div>
         </div>
 
-        {/* 2. PRODUCT IMAGE CONTAINER with Carousel & Category Badge Overlay */}
+        {/* 2. PRODUCT IMAGE CONTAINER with Carousel (Clean, no category overlay) */}
         <div className="relative aspect-[4/3] w-full bg-zinc-100/90 dark:bg-zinc-800/50 overflow-hidden flex items-center justify-center p-3 mt-1">
           {activeImage ? (
             <img
@@ -169,14 +181,6 @@ export function RetailerProductCard({
               <span className="text-[10px] font-medium">{t.common.noData}</span>
             </div>
           )}
-
-          {/* Category Overlay Badge on Top-Left of Image */}
-          <div className="absolute top-2.5 left-2.5 z-10 pointer-events-none">
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] sm:text-[10px] font-semibold bg-white/95 dark:bg-zinc-900/90 text-zinc-700 dark:text-zinc-300 backdrop-blur-md shadow-2xs border border-zinc-200/70 dark:border-zinc-700/70">
-              <span>🏷️</span>
-              <span className="truncate max-w-[120px]">{product.categoryLabel}</span>
-            </span>
-          </div>
 
           {/* Carousel Chevron Controls (Shown when >= 2 images) */}
           {images.length >= 2 && (
@@ -222,39 +226,48 @@ export function RetailerProductCard({
           )}
         </div>
 
-        {/* 3. BODY SECTION: Monospace SKU + Heart Save & Product Title */}
+        {/* 3. BODY SECTION: Monospace SKU + [Category Badge | Heart] & Product Title */}
         <div className="flex-1 flex flex-col px-3.5 pt-3 pb-2 space-y-2">
-          {/* SKU & Heart Button */}
+          {/* Action Row: SKU (Left) | Category Badge + Heart (Right) */}
           <div className="flex items-center justify-between gap-2">
             <span className="font-mono text-[11px] font-medium text-zinc-400 dark:text-zinc-500 truncate tracking-tight">
               SKU | {product.sku}
             </span>
 
-            {/* Heart Save Button */}
-            <button
-              type="button"
-              onClick={handleHeartClick}
-              aria-label={isSaved ? "Saved to collection" : "Save product"}
-              className={`p-1 rounded-full transition-transform hover:scale-115 shrink-0 ${
-                isSaved
-                  ? "text-rose-500 fill-rose-500"
-                  : "text-zinc-400 hover:text-rose-500 dark:text-zinc-500 dark:hover:text-rose-400"
-              }`}
-            >
-              <svg
-                className="w-4 h-4"
-                fill={isSaved ? "currentColor" : "none"}
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth={isSaved ? 0 : 2}
+            {/* Right Action Area: Category Badge | Heart */}
+            <div className="flex items-center gap-1.5 shrink-0">
+              {/* Category Badge */}
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-zinc-100 dark:bg-zinc-800/90 text-zinc-700 dark:text-zinc-300 border border-zinc-200/60 dark:border-zinc-700/60 truncate max-w-[125px]">
+                <span>🏷️</span>
+                <span className="truncate">{product.categoryLabel}</span>
+              </span>
+
+              {/* Heart Save Button */}
+              <button
+                type="button"
+                onClick={handleHeartClick}
+                aria-label={isSaved ? "Saved to collection" : "Save product"}
+                className={`p-1 rounded-full transition-transform hover:scale-115 shrink-0 ${
+                  isSaved
+                    ? "text-rose-500 fill-rose-500"
+                    : "text-zinc-400 hover:text-rose-500 dark:text-zinc-500 dark:hover:text-rose-400"
+                }`}
               >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12Z"
-                />
-              </svg>
-            </button>
+                <svg
+                  className="w-4 h-4"
+                  fill={isSaved ? "currentColor" : "none"}
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={isSaved ? 0 : 2}
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12Z"
+                  />
+                </svg>
+              </button>
+            </div>
           </div>
 
           {/* Title & Short Description */}
@@ -328,36 +341,38 @@ export function RetailerProductCard({
               {t.products.moq} <strong className="text-zinc-900 dark:text-zinc-100 font-bold">· {product.moq} {locale === "ko" ? "개" : "units"}</strong>
             </div>
 
-            <button
-              type="button"
-              onClick={handleAddToCart}
-              disabled={!product.isOrderable || product.isSoldOut}
-              className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center gap-1 shadow-xs shrink-0 ${
-                justAdded
-                  ? "bg-emerald-600 text-white"
-                  : !product.isOrderable || product.isSoldOut
-                  ? "bg-zinc-200 text-zinc-400 dark:bg-zinc-800 dark:text-zinc-600 cursor-not-allowed shadow-none"
-                  : "bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-white"
-              }`}
-            >
-              {justAdded ? (
-                <>
-                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                  </svg>
-                  <span>{locale === "ko" ? "담김!" : "Added!"}</span>
-                </>
-              ) : !product.isOrderable || product.isSoldOut ? (
+            {isInCart ? (
+              <button
+                type="button"
+                onClick={handleAddToCart}
+                title={locale === "ko" ? "장바구니 보기" : "View Cart"}
+                className="px-3 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center gap-1 shadow-xs shrink-0 bg-emerald-600 hover:bg-emerald-500 text-white cursor-pointer"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                </svg>
+                <span>{locale === "ko" ? `담김 (${cartItem?.quantity})` : `Added (${cartItem?.quantity})`}</span>
+              </button>
+            ) : !product.isOrderable || product.isSoldOut ? (
+              <button
+                type="button"
+                disabled
+                className="px-3 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center gap-1 shrink-0 bg-zinc-200 text-zinc-400 dark:bg-zinc-800 dark:text-zinc-600 cursor-not-allowed shadow-none"
+              >
                 <span>{t.products.outOfStock}</span>
-              ) : (
-                <>
-                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-                  </svg>
-                  <span>{locale === "ko" ? "빠른 담기" : "Quick Add"}</span>
-                </>
-              )}
-            </button>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={handleAddToCart}
+                className="px-3 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center gap-1 shadow-xs shrink-0 bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-white cursor-pointer"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                </svg>
+                <span>{locale === "ko" ? "빠른 담기" : "Quick Add"}</span>
+              </button>
+            )}
           </div>
         </div>
       </Link>
