@@ -316,23 +316,11 @@ export function TradingProductDetail({
 
   // Active Tab state synced with URL ?tab=...
   const [activeTab, setActiveTab] = useState<BusinessTab>("summary");
-  const [holdHighlight, setHoldHighlight] = useState(false);
 
   useEffect(() => {
     const tabParam = searchParams?.get("tab");
     if (tabParam && ["summary", "inventory", "price", "hub", "history"].includes(tabParam)) {
       setActiveTab(tabParam as BusinessTab);
-    }
-    if (typeof window !== "undefined" && window.location.hash === "#hold-alerts") {
-      setActiveTab("hub");
-      setTimeout(() => {
-        const el = document.getElementById("hold-alerts");
-        if (el) {
-          el.scrollIntoView({ behavior: "smooth", block: "center" });
-          setHoldHighlight(true);
-          setTimeout(() => setHoldHighlight(false), 3000);
-        }
-      }, 250);
     }
   }, [searchParams]);
 
@@ -342,24 +330,6 @@ export function TradingProductDetail({
       const url = new URL(window.location.href);
       url.searchParams.set("tab", newTab);
       window.history.replaceState({}, "", url.toString());
-    }
-  };
-
-  const navigateToHoldAlerts = () => {
-    setActiveTab("hub");
-    if (typeof window !== "undefined") {
-      const url = new URL(window.location.href);
-      url.searchParams.set("tab", "hub");
-      url.hash = "hold-alerts";
-      window.history.replaceState({}, "", url.toString());
-      setTimeout(() => {
-        const el = document.getElementById("hold-alerts");
-        if (el) {
-          el.scrollIntoView({ behavior: "smooth", block: "center" });
-          setHoldHighlight(true);
-          setTimeout(() => setHoldHighlight(false), 3000);
-        }
-      }, 150);
     }
   };
 
@@ -1172,7 +1142,8 @@ export function TradingProductDetail({
         const before = log.before_value || {};
         const after = log.after_value || {};
 
-        const effectiveCost = after.effective_landed_cost ?? before.effective_landed_cost ?? product.effectiveLandedCost;
+        const rawCost = after.effective_landed_cost ?? before.effective_landed_cost ?? (product.effectiveLandedCost > 0 ? product.effectiveLandedCost : (product.baseLandedCost > 0 ? product.baseLandedCost : null));
+        const effectiveCostNum = (typeof rawCost === "number" && !isNaN(rawCost) && rawCost > 0) ? rawCost : null;
 
         let eventTitle = "Pricing Event";
         let eventBadgeColor = "bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 border-zinc-200 dark:border-zinc-700";
@@ -1230,11 +1201,17 @@ export function TradingProductDetail({
         const hasActivePromoInEvent = isPromoEvent && newPromo !== null && newPromo > 0;
         const appliedWholesale = hasActivePromoInEvent ? newPromo : (newW ?? product.operationalWholesale);
 
-        const appliedOurMarginPct = appliedWholesale > 0 ? ((appliedWholesale - effectiveCost) / appliedWholesale) * 100 : null;
+        const appliedOurMarginPct = (appliedWholesale > 0 && effectiveCostNum !== null && effectiveCostNum > 0)
+          ? ((appliedWholesale - effectiveCostNum) / appliedWholesale) * 100
+          : null;
         const appliedRetailerMarginPct = newS > 0 && appliedWholesale > 0 ? ((newS - appliedWholesale) / newS) * 100 : null;
 
-        const oldOurMarginPct = oldW && oldW > 0 ? ((oldW - effectiveCost) / oldW) * 100 : null;
-        const newOurMarginPct = newW > 0 ? ((newW - effectiveCost) / newW) * 100 : null;
+        const oldOurMarginPct = (oldW && oldW > 0 && effectiveCostNum !== null && effectiveCostNum > 0)
+          ? ((oldW - effectiveCostNum) / oldW) * 100
+          : null;
+        const newOurMarginPct = (newW > 0 && effectiveCostNum !== null && effectiveCostNum > 0)
+          ? ((newW - effectiveCostNum) / newW) * 100
+          : null;
         const ourMarginDiffPts = (oldOurMarginPct !== null && newOurMarginPct !== null) ? (newOurMarginPct - oldOurMarginPct) : null;
 
         const oldRetailerMarginPct = oldS && oldS > 0 && oldW && oldW > 0 ? ((oldS - oldW) / oldS) * 100 : null;
@@ -1262,7 +1239,7 @@ export function TradingProductDetail({
           eventBadgeColor,
           user,
           reason,
-          effectiveCost,
+          effectiveCost: effectiveCostNum,
           appliedWholesale,
           appliedOurMarginPct,
           appliedRetailerMarginPct,
@@ -1466,7 +1443,7 @@ export function TradingProductDetail({
   const handleAlertAction = (target?: string) => {
     if (!target) return;
     if (target === "hold_alerts") {
-      navigateToHoldAlerts();
+      handleTabChange("hub");
     } else if (target === "inventory_tab") {
       handleTabChange("inventory");
     } else if (target === "pricing_modal") {
@@ -1668,6 +1645,17 @@ export function TradingProductDetail({
               <span className={`px-2.5 py-1 text-xs font-bold rounded-full border ${VISIBILITY_COLORS[currentVisibility] || VISIBILITY_COLORS.hidden}`}>
                 {VISIBILITY_LABELS[currentVisibility] || currentVisibility}
               </span>
+
+              {/* Active Promotion Badge */}
+              {product.isPromoActive && (
+                <span
+                  className="px-2.5 py-1 text-xs font-black rounded-full border bg-amber-50 text-amber-700 border-amber-300 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-800 flex items-center gap-1 shadow-2xs"
+                  title={`프로모션 적용가 $${product.effectiveWholesale.toFixed(2)} (기본: $${product.operationalWholesale.toFixed(2)}) | 기간: ${formatPromoPeriod(product.promoStartDate, product.promoEndDate)}`}
+                >
+                  <span>🔥</span>
+                  <span>PROMO (${product.effectiveWholesale.toFixed(2)})</span>
+                </span>
+              )}
 
               {/* Status Change Button */}
               <button
@@ -2298,93 +2286,6 @@ export function TradingProductDetail({
       {/* ========================================================================= */}
       {activeTab === "hub" && (
         <div className="space-y-6">
-          {/* Admin Visibility & Effective Hub Visibility Card */}
-          <div className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-zinc-100 dark:border-zinc-800 pb-3">
-              <div>
-                <h3 className="text-xs font-bold text-zinc-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
-                  <span>⚙️</span> Retailer Hub 운영 상태 및 노출 제어 (Visibility & Operating Status)
-                </h3>
-                <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5">
-                  운영 상태(active/inactive/historical)와 관리자 노출 설정(visible/hidden)을 변경합니다.
-                </p>
-              </div>
-
-              <button
-                type="button"
-                onClick={handleOpenStatusModal}
-                className="px-4 py-1.5 text-xs font-bold rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 transition-colors shadow-xs"
-              >
-                ⚙️ 상태 및 노출 변경
-              </button>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
-              <div className="p-3.5 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50/70 dark:bg-zinc-950/40">
-                <span className="text-[10px] font-bold text-zinc-400 block uppercase">Operational Status</span>
-                <strong className="text-sm font-bold text-zinc-900 dark:text-white mt-1 block">
-                  {TRADING_LABELS[currentTradingStatus] || currentTradingStatus}
-                </strong>
-              </div>
-
-              <div className="p-3.5 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50/70 dark:bg-zinc-950/40">
-                <span className="text-[10px] font-bold text-zinc-400 block uppercase">Admin Visibility</span>
-                <strong className="text-sm font-bold text-zinc-900 dark:text-white mt-1 block">
-                  {VISIBILITY_LABELS[currentVisibility] || currentVisibility}
-                </strong>
-              </div>
-
-              <div className="p-3.5 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50/70 dark:bg-zinc-950/40">
-                <span className="text-[10px] font-bold text-zinc-400 block uppercase">Effective Hub Visibility</span>
-                <strong className="text-sm font-bold text-indigo-600 dark:text-indigo-400 mt-1 block">
-                  {liveHubVisibility.effectiveVisibilityLabel}
-                </strong>
-              </div>
-            </div>
-          </div>
-
-          {/* ORDER HOLD & BLOCK REASONS CHECKLIST CARD */}
-          <div
-            id="hold-alerts"
-            className={`rounded-xl border p-5 transition-all shadow-sm ${
-              holdHighlight
-                ? "border-amber-500 ring-4 ring-amber-500/30 bg-amber-50/50 dark:bg-amber-950/40"
-                : "border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900"
-            }`}
-          >
-            <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-3 mb-4">
-              <div>
-                <h3 className="text-xs font-bold text-zinc-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
-                  <span>⚠️</span> Hub 노출 보류 및 주문 차단 사유 (Order Hold & Block Reasons)
-                </h3>
-                <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5">
-                  상품이 Hub에서 비노출되거나 주문이 불가능한 상세 사유 목록입니다.
-                </p>
-              </div>
-
-              <span className={`px-2.5 py-1 text-xs font-bold rounded-full border ${liveHubVisibility.isOrderable ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-rose-50 text-rose-700 border-rose-200'}`}>
-                {liveHubVisibility.isOrderable ? "주문 가능 (Orderable)" : "주문 차단됨 (Blocked)"}
-              </span>
-            </div>
-
-            {liveHubVisibility.holdReasonLabels.length === 0 ? (
-              <div className="p-4 rounded-xl bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs font-semibold flex items-center gap-2">
-                <span>✅</span> 주문 차단 및 노출 보류 사유가 전혀 없습니다. 상품이 정상 거래 가능합니다.
-              </div>
-            ) : (
-              <div className="space-y-3">
-                <div className="p-3.5 rounded-xl bg-rose-50/80 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/50 text-xs text-rose-900 dark:text-rose-200">
-                  <strong className="block font-bold mb-1">감지된 주문 차단 / 노출 보류 항목:</strong>
-                  <ul className="list-disc list-inside space-y-1 text-[11px]">
-                    {liveHubVisibility.holdReasonLabels.map((reason, i) => (
-                      <li key={i} className="font-semibold">{reason}</li>
-                    ))}
-                  </ul>
-                </div>
-              </div>
-            )}
-          </div>
-
           {/* Retailer Sales Policy Card */}
           <RetailerSalesPolicyCard
             productId={product.id}

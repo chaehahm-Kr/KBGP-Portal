@@ -180,8 +180,8 @@ export function RetailerSalesPolicyCard({
     const safePrice = numBasePrice > 0 ? numBasePrice : initialBasePrice;
     setTiers(generateDefaultPriceTiers(safeMoq, safePrice));
     setErrorMessage(null);
-    setSuccessMessage("기본 3단계 수량 할인(1x/0%, 3x/2%, 6x/5%) 구조로 재설정되었습니다.");
-    setTimeout(() => setSuccessMessage(null), 4000);
+    setSuccessMessage("해당 상품의 기본 3단계 수량 할인(1x/0%, 3x/2%, 6x/5%) 구조로 재설정되었습니다. '판매 정책 저장 및 Hub 적용'을 누르면 저장됩니다.");
+    setTimeout(() => setSuccessMessage(null), 5000);
   };
 
   // Save Policy
@@ -275,8 +275,9 @@ export function RetailerSalesPolicyCard({
             type="button"
             onClick={handleResetDefaults}
             className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-zinc-300 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors"
+            title="해당 상품의 리테일러 판매 정책을 기본 3단계(1x/0%, 3x/2%, 6x/5%) 구조로 재설정합니다 (저장 시 Hub 적용)"
           >
-            기본값 재설정 (3단계)
+            기본 판매 정책으로 재설정
           </button>
           <button
             type="button"
@@ -292,7 +293,7 @@ export function RetailerSalesPolicyCard({
             ) : (
               <>
                 <span>💾</span>
-                <span>정책 저장 및 게시</span>
+                <span>판매 정책 저장 및 Hub 적용</span>
               </>
             )}
           </button>
