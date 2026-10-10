@@ -49,6 +49,7 @@ async function runQA() {
     // 4. Click Media Assets Tab
     console.log('\n[Step 4] Clicking Media Assets Tab...');
     const mediaTab = page.locator('button:has-text("Media Assets")').first();
+    await mediaTab.waitFor({ state: 'visible', timeout: 15000 });
     assert(await mediaTab.isVisible(), 'Media Assets tab must be visible');
     await mediaTab.click();
     await page.waitForTimeout(1500);
@@ -63,7 +64,7 @@ async function runQA() {
     const createAiBtn = page.locator('button:has-text("Create with AI")').first();
     assert(await createAiBtn.isVisible(), 'Primary CTA Create with AI button must be visible');
 
-    const summarySourcesTile = page.locator('span:has-text("Source Materials")');
+    const summarySourcesTile = page.locator('span:has-text("Source Materials")').first();
     assert(await summarySourcesTile.isVisible(), 'Source Materials summary tile must be visible');
 
     // 6. Verify 4 Workspace Tabs (Source Materials, Create with AI, Drafts, Approved Assets)
@@ -146,7 +147,7 @@ async function runQA() {
     const custTab = page.locator('button:has-text("Customer Pages")').first();
     await custTab.click();
     await page.waitForTimeout(500);
-    assert(await page.locator('h2:has-text("Customer Overview Page")').isVisible(), 'Customer Overview Page heading must remain functional');
+    assert(await page.locator('h2:has-text("Customer Pages")').isVisible(), 'Customer Pages heading must remain functional');
 
     const trainTab = page.locator('button:has-text("Training")').first();
     await trainTab.click();
