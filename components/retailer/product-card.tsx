@@ -94,7 +94,7 @@ export function RetailerProductCard({
     if (!product.isOrderable || product.isSoldOut) return;
 
     if (isInCart) {
-      router.push("/cart");
+      window.location.href = "/cart";
       return;
     }
 
