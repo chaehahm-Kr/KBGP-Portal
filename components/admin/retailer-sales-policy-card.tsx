@@ -53,7 +53,6 @@ export function RetailerSalesPolicyCard({
   );
   const [promoStart, setPromoStart] = useState<string>(salesPolicy.promoStartDate || "");
   const [promoEnd, setPromoEnd] = useState<string>(salesPolicy.promoEndDate || "");
-  const [policyNote, setPolicyNote] = useState<string>("");
 
   // UI State
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -174,16 +173,6 @@ export function RetailerSalesPolicyCard({
     setTiers((prev) => prev.filter((_, i) => i !== idx));
   };
 
-  // Reset to default 3 tiers
-  const handleResetDefaults = () => {
-    const safeMoq = numMoq > 0 ? numMoq : (initialMoq > 0 ? initialMoq : 10);
-    const safePrice = numBasePrice > 0 ? numBasePrice : initialBasePrice;
-    setTiers(generateDefaultPriceTiers(safeMoq, safePrice));
-    setErrorMessage(null);
-    setSuccessMessage("해당 상품의 기본 3단계 수량 할인(1x/0%, 3x/2%, 6x/5%) 구조로 재설정되었습니다. '판매 정책 저장 및 Hub 적용'을 누르면 저장됩니다.");
-    setTimeout(() => setSuccessMessage(null), 5000);
-  };
-
   // Save Policy
   const handleSavePolicy = async () => {
     setIsSubmitting(true);
@@ -223,14 +212,14 @@ export function RetailerSalesPolicyCard({
         promo_wholesale_price: numPromo > 0 ? numPromo : null,
         promo_start_date: promoStart || null,
         promo_end_date: promoEnd || null,
-        reason: policyNote.trim() || "Retailer Sales Policy saved from Admin Trading Detail",
+        reason: "Retailer Sales Policy saved from Admin Trading Detail",
       });
 
       if (!res.success) {
         throw new Error(res.error || "리테일러 판매 정책 저장 중 오류가 발생했습니다.");
       }
 
-      setSuccessMessage("리테일러 판매 정책이 성공적으로 저장 및 적용되었습니다.");
+      setSuccessMessage("리테일러 판매 정책이 성공적으로 저장 및 Hub에 적용되었습니다.");
       setTimeout(() => setSuccessMessage(null), 5000);
       router.refresh();
     } catch (err: any) {
@@ -245,7 +234,7 @@ export function RetailerSalesPolicyCard({
       {/* Header & Status */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-zinc-100 dark:border-zinc-800 pb-4">
         <div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <h3 className="text-sm sm:text-base font-bold text-zinc-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
               <span>📋</span> 리테일러 판매 정책 (Retailer Sales Policy)
             </h3>
@@ -267,36 +256,6 @@ export function RetailerSalesPolicyCard({
           <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
             리테일러 대상 B2B 최소 주문 수량(MOQ), 공급 단가, 수량별 할인 구간 및 프로모션을 통합 관리합니다.
           </p>
-        </div>
-
-        {/* Global Save & Actions */}
-        <div className="flex items-center gap-2 shrink-0">
-          <button
-            type="button"
-            onClick={handleResetDefaults}
-            className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-zinc-300 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors"
-            title="해당 상품의 리테일러 판매 정책을 기본 3단계(1x/0%, 3x/2%, 6x/5%) 구조로 재설정합니다 (저장 시 Hub 적용)"
-          >
-            기본 판매 정책으로 재설정
-          </button>
-          <button
-            type="button"
-            disabled={isSubmitting}
-            onClick={handleSavePolicy}
-            className="px-4 py-1.5 text-xs font-bold rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white transition-colors shadow-sm disabled:opacity-50 flex items-center gap-1.5"
-          >
-            {isSubmitting ? (
-              <>
-                <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                <span>저장 중...</span>
-              </>
-            ) : (
-              <>
-                <span>💾</span>
-                <span>판매 정책 저장 및 Hub 적용</span>
-              </>
-            )}
-          </button>
         </div>
       </div>
 
@@ -650,37 +609,26 @@ export function RetailerSalesPolicyCard({
         </p>
       </div>
 
-      {/* 4. Policy Save Note & Bottom Actions */}
-      <div className="pt-2 flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-zinc-100 dark:border-zinc-800">
-        <div className="w-full sm:w-2/3">
-          <input
-            type="text"
-            value={policyNote}
-            onChange={(e) => setPolicyNote(e.target.value)}
-            placeholder="정책 변경 사유 또는 메모를 입력하세요 (선택 사항)"
-            className="w-full px-3 py-2 rounded-xl text-xs bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700 text-zinc-900 dark:text-white focus:outline-hidden focus:ring-1 focus:ring-indigo-500"
-          />
-        </div>
-        <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
-          <button
-            type="button"
-            disabled={isSubmitting}
-            onClick={handleSavePolicy}
-            className="w-full sm:w-auto px-5 py-2 text-xs font-bold rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white transition-all shadow-sm disabled:opacity-50 flex items-center justify-center gap-1.5"
-          >
-            {isSubmitting ? (
-              <>
-                <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                <span>저장 중...</span>
-              </>
-            ) : (
-              <>
-                <span>💾</span>
-                <span>리테일러 판매 정책 저장 및 Hub 적용</span>
-              </>
-            )}
-          </button>
-        </div>
+      {/* 4. Bottom Primary Save Action */}
+      <div className="pt-3 flex items-center justify-end border-t border-zinc-100 dark:border-zinc-800">
+        <button
+          type="button"
+          disabled={isSubmitting}
+          onClick={handleSavePolicy}
+          className="w-full sm:w-auto px-6 py-2.5 text-xs font-bold rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white transition-all shadow-sm disabled:opacity-50 flex items-center justify-center gap-1.5 cursor-pointer"
+        >
+          {isSubmitting ? (
+            <>
+              <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              <span>저장 중...</span>
+            </>
+          ) : (
+            <>
+              <span>💾</span>
+              <span>판매 정책 저장</span>
+            </>
+          )}
+        </button>
       </div>
     </div>
   );
