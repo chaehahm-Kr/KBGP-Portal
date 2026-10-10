@@ -807,24 +807,28 @@ export function RetailerProductDetailView({ product }: ProductDetailViewProps) {
         {/* Tab Panel: Product Overview */}
         {activeTab === "overview" && (
           <div className="space-y-8 bg-white dark:bg-zinc-900/60 rounded-2xl border border-zinc-200 dark:border-zinc-800 p-6 sm:p-8 shadow-xs">
-            {/* A. Product Description */}
-            {product.description && (
-              <div className="space-y-2.5">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">
-                  Product Description
-                </h3>
+            {/* 1. Product Description */}
+            <div className="space-y-2.5">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">
+                Product Description
+              </h3>
+              {product.description && product.description.trim() ? (
                 <p className="text-sm text-zinc-700 dark:text-zinc-300 leading-relaxed whitespace-pre-line">
                   {product.description}
                 </p>
-              </div>
-            )}
+              ) : (
+                <p className="text-sm text-zinc-400 dark:text-zinc-500 italic">
+                  Information not available yet.
+                </p>
+              )}
+            </div>
 
-            {/* B. Key Benefits */}
-            {product.bulletPoints && product.bulletPoints.length > 0 && (
-              <div className="space-y-3 pt-4 border-t border-zinc-100 dark:border-zinc-800/60">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">
-                  Key Benefits
-                </h3>
+            {/* 2. Key Benefits */}
+            <div className="space-y-3 pt-6 border-t border-zinc-100 dark:border-zinc-800/60">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">
+                Key Benefits
+              </h3>
+              {product.bulletPoints && product.bulletPoints.length > 0 ? (
                 <ul className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
                   {product.bulletPoints.map((point, idx) => (
                     <li
@@ -838,79 +842,106 @@ export function RetailerProductDetailView({ product }: ProductDetailViewProps) {
                     </li>
                   ))}
                 </ul>
-              </div>
-            )}
+              ) : (
+                <p className="text-sm text-zinc-400 dark:text-zinc-500 italic">
+                  Key benefits have not been added yet.
+                </p>
+              )}
+            </div>
 
-            {/* C. How to Use */}
-            {product.howToUse && (
-              <div className="space-y-2.5 pt-4 border-t border-zinc-100 dark:border-zinc-800/60">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">
-                  How to Use
-                </h3>
+            {/* 3. How to Use */}
+            <div className="space-y-2.5 pt-6 border-t border-zinc-100 dark:border-zinc-800/60">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">
+                How to Use
+              </h3>
+              {product.howToUse && product.howToUse.trim() ? (
                 <div className="text-sm text-zinc-700 dark:text-zinc-300 leading-relaxed whitespace-pre-line bg-zinc-50 dark:bg-zinc-800/40 p-4 rounded-xl border border-zinc-150/60 dark:border-zinc-800/80">
                   {product.howToUse}
                 </div>
-              </div>
-            )}
+              ) : (
+                <p className="text-sm text-zinc-400 dark:text-zinc-500 italic">
+                  Usage instructions are not available yet.
+                </p>
+              )}
+            </div>
 
-            {/* D. Ingredients */}
-            {product.ingredients && (
-              <div className="space-y-2.5 pt-4 border-t border-zinc-100 dark:border-zinc-800/60">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">
-                  Ingredients (전성분)
-                </h3>
+            {/* 4. Ingredients */}
+            <div className="space-y-2.5 pt-6 border-t border-zinc-100 dark:border-zinc-800/60">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">
+                Ingredients (전성분)
+              </h3>
+              {product.ingredients && product.ingredients.trim() ? (
                 <div className="text-xs text-zinc-600 dark:text-zinc-400 leading-relaxed whitespace-pre-line bg-zinc-50 dark:bg-zinc-800/40 p-4 rounded-xl border border-zinc-150/60 dark:border-zinc-800/80 font-mono">
                   {product.ingredients}
                 </div>
-              </div>
-            )}
+              ) : (
+                <p className="text-sm text-zinc-400 dark:text-zinc-500 italic">
+                  Ingredient information is not available yet.
+                </p>
+              )}
+            </div>
 
-            {/* E. Product Details Grid */}
-            <div className="space-y-3 pt-4 border-t border-zinc-100 dark:border-zinc-800/60">
+            {/* 5. Product Details Grid (7 Fixed Items) */}
+            <div className="space-y-3 pt-6 border-t border-zinc-100 dark:border-zinc-800/60">
               <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">
                 Product Details
               </h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5 text-xs">
+                {/* 1. Brand */}
                 <div className="p-3.5 rounded-xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-150/60 dark:border-zinc-800/80 space-y-0.5">
                   <span className="text-zinc-400 dark:text-zinc-500 block text-[10px] font-bold uppercase">Brand</span>
-                  <span className="font-semibold text-zinc-900 dark:text-white">{product.brandName}</span>
+                  <span className="font-semibold text-zinc-900 dark:text-white">
+                    {product.brandName || "—"}
+                  </span>
                 </div>
-                {product.categoryPath && (
-                  <div className="p-3.5 rounded-xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-150/60 dark:border-zinc-800/80 space-y-0.5">
-                    <span className="text-zinc-400 dark:text-zinc-500 block text-[10px] font-bold uppercase">Category</span>
-                    <span className="font-semibold text-zinc-900 dark:text-white">{product.categoryPath}</span>
-                  </div>
-                )}
-                {product.volume && (
-                  <div className="p-3.5 rounded-xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-150/60 dark:border-zinc-800/80 space-y-0.5">
-                    <span className="text-zinc-400 dark:text-zinc-500 block text-[10px] font-bold uppercase">Size / Volume</span>
-                    <span className="font-semibold text-zinc-900 dark:text-white">{product.volume}</span>
-                  </div>
-                )}
-                {product.origin && (
-                  <div className="p-3.5 rounded-xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-150/60 dark:border-zinc-800/80 space-y-0.5">
-                    <span className="text-zinc-400 dark:text-zinc-500 block text-[10px] font-bold uppercase">Country of Origin</span>
-                    <span className="font-semibold text-zinc-900 dark:text-white">{product.origin}</span>
-                  </div>
-                )}
-                {product.formulation && (
-                  <div className="p-3.5 rounded-xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-150/60 dark:border-zinc-800/80 space-y-0.5">
-                    <span className="text-zinc-400 dark:text-zinc-500 block text-[10px] font-bold uppercase">Formulation</span>
-                    <span className="font-semibold text-zinc-900 dark:text-white">{product.formulation}</span>
-                  </div>
-                )}
-                {product.storageCondition && (
-                  <div className="p-3.5 rounded-xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-150/60 dark:border-zinc-800/80 space-y-0.5">
-                    <span className="text-zinc-400 dark:text-zinc-500 block text-[10px] font-bold uppercase">Storage Condition</span>
-                    <span className="font-semibold text-zinc-900 dark:text-white">{product.storageCondition}</span>
-                  </div>
-                )}
-                {product.upc && (
-                  <div className="p-3.5 rounded-xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-150/60 dark:border-zinc-800/80 space-y-0.5">
-                    <span className="text-zinc-400 dark:text-zinc-500 block text-[10px] font-bold uppercase">UPC</span>
-                    <span className="font-semibold font-mono text-zinc-900 dark:text-white">{product.upc}</span>
-                  </div>
-                )}
+
+                {/* 2. Category */}
+                <div className="p-3.5 rounded-xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-150/60 dark:border-zinc-800/80 space-y-0.5">
+                  <span className="text-zinc-400 dark:text-zinc-500 block text-[10px] font-bold uppercase">Category</span>
+                  <span className="font-semibold text-zinc-900 dark:text-white">
+                    {product.categoryPath || product.categoryLabel || "—"}
+                  </span>
+                </div>
+
+                {/* 3. Size / Volume */}
+                <div className="p-3.5 rounded-xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-150/60 dark:border-zinc-800/80 space-y-0.5">
+                  <span className="text-zinc-400 dark:text-zinc-500 block text-[10px] font-bold uppercase">Size / Volume</span>
+                  <span className="font-semibold text-zinc-900 dark:text-white">
+                    {product.volume || "—"}
+                  </span>
+                </div>
+
+                {/* 4. Country of Origin */}
+                <div className="p-3.5 rounded-xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-150/60 dark:border-zinc-800/80 space-y-0.5">
+                  <span className="text-zinc-400 dark:text-zinc-500 block text-[10px] font-bold uppercase">Country of Origin</span>
+                  <span className="font-semibold text-zinc-900 dark:text-white">
+                    {product.origin || "—"}
+                  </span>
+                </div>
+
+                {/* 5. Formulation */}
+                <div className="p-3.5 rounded-xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-150/60 dark:border-zinc-800/80 space-y-0.5">
+                  <span className="text-zinc-400 dark:text-zinc-500 block text-[10px] font-bold uppercase">Formulation</span>
+                  <span className="font-semibold text-zinc-900 dark:text-white">
+                    {product.formulation || "—"}
+                  </span>
+                </div>
+
+                {/* 6. Storage Condition */}
+                <div className="p-3.5 rounded-xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-150/60 dark:border-zinc-800/80 space-y-0.5">
+                  <span className="text-zinc-400 dark:text-zinc-500 block text-[10px] font-bold uppercase">Storage Condition</span>
+                  <span className="font-semibold text-zinc-900 dark:text-white">
+                    {product.storageCondition || "—"}
+                  </span>
+                </div>
+
+                {/* 7. UPC */}
+                <div className="p-3.5 rounded-xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-150/60 dark:border-zinc-800/80 space-y-0.5">
+                  <span className="text-zinc-400 dark:text-zinc-500 block text-[10px] font-bold uppercase">UPC</span>
+                  <span className="font-semibold font-mono text-zinc-900 dark:text-white">
+                    {product.upc || "—"}
+                  </span>
+                </div>
               </div>
             </div>
           </div>

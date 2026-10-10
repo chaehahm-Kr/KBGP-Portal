@@ -663,6 +663,7 @@ export async function getRetailerProductDetail(
       trading_promo_end_date,
       description,
       bullet_points,
+      how_to_use,
       ingredients_text,
       origin,
       volume,
@@ -726,6 +727,7 @@ export async function getRetailerProductDetail(
         trading_promo_end_date,
         description,
         bullet_points,
+        how_to_use,
         ingredients_text,
         origin,
         volume,
@@ -970,8 +972,8 @@ export async function getRetailerProductDetail(
     });
   });
 
-  const howToUse = overrides.how_to_use || (p as any).how_to_use || null;
-  const ingredients = overrides.ingredients_text || p.ingredients_text || null;
+  const howToUse = overrides.how_to_use || (p as any).how_to_use || (info as any).how_to_use || null;
+  const ingredients = overrides.ingredients_text || p.ingredients_text || (info as any).ingredients_text || null;
 
   return {
     id: p.id,
