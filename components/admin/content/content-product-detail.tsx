@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import type { ContentProductItem } from "@/lib/product/content-actions";
+import { MediaAssetsWorkspace } from "./media-assets-workspace";
 
 // Native SVG Icons
 function ArrowLeftIcon({ className = "w-4 h-4" }: { className?: string }) {
@@ -445,57 +446,7 @@ export function ContentProductDetail({ product }: ContentProductDetailProps) {
 
         {/* Tab 3: Media Assets */}
         {activeTab === "media-assets" && (
-          <div className="bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 p-8 shadow-sm space-y-6">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-6 border-b border-zinc-100 dark:border-zinc-800 gap-4">
-              <div>
-                <div className="flex items-center gap-2">
-                  <ImageIcon className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
-                  <h2 className="text-lg font-bold text-zinc-900 dark:text-zinc-100">
-                    Media Assets (미디어 에셋)
-                  </h2>
-                </div>
-                <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
-                  고해상도 제품 컷, 라이프스타일 이미지, 영상, POS 홍보물 에셋을 관리합니다.
-                </p>
-              </div>
-              <span className="px-3 py-1 rounded-md text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 shrink-0">
-                {product.image_count} Registered Images
-              </span>
-            </div>
-
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-              <div className="p-4 rounded-lg bg-zinc-50 dark:bg-zinc-850 border border-zinc-200/80 dark:border-zinc-750 flex flex-col items-center text-center">
-                <ImageIcon className="w-6 h-6 text-zinc-500 mb-2" />
-                <span className="text-xs font-semibold text-zinc-800 dark:text-zinc-200">Packshots</span>
-                <span className="text-xs text-zinc-500 mt-0.5">{product.image_count} Files</span>
-              </div>
-              <div className="p-4 rounded-lg bg-zinc-50 dark:bg-zinc-850 border border-zinc-200/80 dark:border-zinc-750 flex flex-col items-center text-center">
-                <SparklesIcon className="w-6 h-6 text-zinc-500 mb-2" />
-                <span className="text-xs font-semibold text-zinc-800 dark:text-zinc-200">Lifestyle</span>
-                <span className="text-xs text-zinc-500 mt-0.5">Catalog Synced</span>
-              </div>
-              <div className="p-4 rounded-lg bg-zinc-50 dark:bg-zinc-850 border border-zinc-200/80 dark:border-zinc-750 flex flex-col items-center text-center">
-                <VideoIcon className="w-6 h-6 text-zinc-500 mb-2" />
-                <span className="text-xs font-semibold text-zinc-800 dark:text-zinc-200">Videos</span>
-                <span className="text-xs text-zinc-500 mt-0.5">{product.video_count} Files</span>
-              </div>
-              <div className="p-4 rounded-lg bg-zinc-50 dark:bg-zinc-850 border border-zinc-200/80 dark:border-zinc-750 flex flex-col items-center text-center">
-                <LayersIcon className="w-6 h-6 text-zinc-500 mb-2" />
-                <span className="text-xs font-semibold text-zinc-800 dark:text-zinc-200">POS / POP</span>
-                <span className="text-xs text-zinc-500 mt-0.5">Ready for Sync</span>
-              </div>
-            </div>
-
-            <div className="p-6 rounded-xl border border-dashed border-zinc-300 dark:border-zinc-700 bg-zinc-50/50 dark:bg-zinc-850/30 flex flex-col items-center justify-center text-center py-10">
-              <ImageIcon className="w-10 h-10 text-zinc-400 mb-3" />
-              <h3 className="text-sm font-semibold text-zinc-800 dark:text-zinc-200">
-                Media Asset Manager Framework Ready
-              </h3>
-              <p className="text-xs text-zinc-500 dark:text-zinc-400 max-w-md mt-1">
-                Batch uploader, high-res CDN delivery, and video streaming integration will be manageable in the next media update.
-              </p>
-            </div>
-          </div>
+          <MediaAssetsWorkspace product={product} />
         )}
 
         {/* Tab 4: FAQ */}
