@@ -13,7 +13,7 @@ export default async function AdminContentAndTrainingPage() {
   const { products, filterOptions } = await getContentStatusProducts();
 
   return (
-    <div className="p-6 max-w-[1600px] mx-auto space-y-6">
+    <div className="space-y-6">
       <ContentStatusList initialProducts={products} filterOptions={filterOptions} />
     </div>
   );

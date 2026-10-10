@@ -3,7 +3,8 @@
 import { verifyAdminSession } from "@/lib/auth/dal";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { resolveProductName } from "@/lib/product/name-resolver";
-import { getSignedFileUrl } from "@/lib/files/storage";
+import { getCategoryMaster } from "@/lib/product/category-taxonomy-server";
+import { resolveProductCategoryBranch, type CategoryItem } from "@/lib/product/category-taxonomy";
 
 export type ContentOverallStatus = "published" | "ready" | "in_progress" | "needs_attention" | "not_started";
 export type CustomerPageStatus = "published" | "draft" | "missing" | "not_started";
@@ -29,6 +30,9 @@ export interface ContentProductItem {
   category: string;
   category_code: string | null;
   category_full_path: string | null;
+  category_display_path: string; // 1st > 2nd Depth English Path from Category Master
+  depth1Code?: string;
+  depth2Code?: string | null;
   photoUrl: string | null;
 
   // Read-only Operational & Visibility Statuses
@@ -52,9 +56,17 @@ export interface ContentProductItem {
   updated_at: string;
 }
 
+export interface ContentStatusCategoryOption {
+  code: string;
+  name: string; // 1st or 1st > 2nd Depth English Name
+  depth: 1 | 2;
+  depth1Code: string;
+  depth2Code: string | null;
+}
+
 export interface ContentStatusListFilterOptions {
   brands: { id: string; name: string }[];
-  categories: { code: string; name: string }[];
+  categories: ContentStatusCategoryOption[];
 }
 
 export async function getContentStatusProducts(): Promise<{
@@ -92,32 +104,23 @@ export async function getContentStatusProducts(): Promise<{
     .select("id, name");
   const companyMap = new Map((rawCompanies ?? []).map((c) => [c.id, c.name]));
 
-  // 4. Fetch categories
-  const { data: rawCategories } = await adminSupabase
-    .from("categories")
-    .select("code, name_ko, parent_code, depth");
-  const categoryMap = new Map((rawCategories ?? []).map((c) => [c.code, c]));
+  // 4. Fetch category master (authoritative source)
+  const categoryMaster = await getCategoryMaster();
+  const categoryByCode: Record<string, CategoryItem> = {};
+  categoryMaster.forEach((c) => {
+    categoryByCode[c.code] = c;
+  });
 
-  const getCategoryFullPath = (code: string | null | undefined): string => {
-    if (!code) return "";
-    const path: string[] = [];
-    let current = categoryMap.get(code);
-    while (current) {
-      path.unshift(current.name_ko);
-      current = current.parent_code ? categoryMap.get(current.parent_code) : undefined;
-    }
-    return path.join(" > ");
-  };
-
-  // 5. Fetch product images
+  // 5. Fetch product images (authoritative packshot image)
   const { data: rawImages } = await adminSupabase
     .from("product_images")
-    .select("product_id, image_url, file_path, is_primary, display_order, image_type")
-    .order("display_order", { ascending: true });
+    .select("id, product_id, storage_path, position")
+    .order("position", { ascending: true });
 
-  const imagesByProduct = new Map<string, Array<any>>();
+  const imagesByProduct = new Map<string, Array<{ id: string; storage_path: string; position: number }>>();
   if (rawImages) {
     for (const img of rawImages) {
+      if (!img.storage_path) continue;
       const list = imagesByProduct.get(img.product_id) || [];
       list.push(img);
       imagesByProduct.set(img.product_id, list);
@@ -128,16 +131,23 @@ export async function getContentStatusProducts(): Promise<{
   const products: ContentProductItem[] = await Promise.all(
     rawProducts.map(async (p) => {
       const pImages = imagesByProduct.get(p.id) || [];
-      const primaryImg = pImages.find((img) => img.is_primary) || pImages[0];
       let photoUrl: string | null = null;
-      if (primaryImg) {
-        if (primaryImg.image_url) {
-          photoUrl = primaryImg.image_url;
-        } else if (primaryImg.file_path) {
-          try {
-            photoUrl = await getSignedFileUrl(primaryImg.file_path, 3600, "company-uploads");
-          } catch {
-            photoUrl = null;
+      if (pImages.length > 0) {
+        const firstImg = pImages[0];
+        if (firstImg.storage_path) {
+          if (firstImg.storage_path.startsWith("http://") || firstImg.storage_path.startsWith("https://")) {
+            photoUrl = firstImg.storage_path;
+          } else {
+            try {
+              const { data: signed } = await adminSupabase.storage
+                .from("company-uploads")
+                .createSignedUrl(firstImg.storage_path, 3600);
+              if (signed?.signedUrl) {
+                photoUrl = signed.signedUrl;
+              }
+            } catch {
+              photoUrl = null;
+            }
           }
         }
       }
@@ -228,7 +238,16 @@ export async function getContentStatusProducts(): Promise<{
 
       const brandName = brandMap.get(p.brand_id) || "Unknown Brand";
       const companyName = companyMap.get(p.company_id) || "Unknown Company";
-      const categoryFullPath = getCategoryFullPath(p.category_code) || p.category || "-";
+
+      // 1st + 2nd Depth English Category Path from Master
+      const branch = resolveProductCategoryBranch(p, categoryByCode);
+      const categoryDisplayPath = branch.depth2LabelEn
+        ? `${branch.depth1LabelEn} > ${branch.depth2LabelEn}`
+        : branch.depth1LabelEn;
+
+      const categoryFullPath = [branch.depth1LabelEn, branch.depth2LabelEn, branch.depth3LabelEn]
+        .filter(Boolean)
+        .join(" > ");
 
       const updatedDate = p.updated_at ? new Date(p.updated_at).toISOString().split("T")[0] : "-";
 
@@ -248,6 +267,9 @@ export async function getContentStatusProducts(): Promise<{
         category: p.category || "-",
         category_code: p.category_code || null,
         category_full_path: categoryFullPath,
+        category_display_path: categoryDisplayPath,
+        depth1Code: branch.depth1Code,
+        depth2Code: branch.depth2Code,
         photoUrl,
         operational_status: operationalStatus,
         visibility,
@@ -266,7 +288,7 @@ export async function getContentStatusProducts(): Promise<{
     })
   );
 
-  // Extract unique brands and categories for filtering
+  // Extract unique brands for filtering
   const brandList = Array.from(new Set(products.map((p) => p.brand_id)))
     .map((id) => ({
       id,
@@ -274,20 +296,39 @@ export async function getContentStatusProducts(): Promise<{
     }))
     .sort((a, b) => a.name.localeCompare(b.name));
 
-  const categoryList = Array.from(
-    new Set(products.map((p) => p.category_full_path || p.category).filter(Boolean))
-  )
-    .map((cat) => ({
-      code: cat as string,
-      name: cat as string,
-    }))
-    .sort((a, b) => a.name.localeCompare(b.name));
+  // Build 1st + 2nd Depth English Category Filter Options from Category Master
+  const categoryOptions: ContentStatusCategoryOption[] = [];
+  const depth1List = categoryMaster.filter((c) => c.depth === 1).sort((a, b) => a.display_order - b.display_order);
+
+  depth1List.forEach((d1) => {
+    categoryOptions.push({
+      code: d1.code,
+      name: d1.name_en,
+      depth: 1,
+      depth1Code: d1.code,
+      depth2Code: null,
+    });
+
+    const depth2List = categoryMaster
+      .filter((c) => c.depth === 2 && c.parent_code === d1.code)
+      .sort((a, b) => a.display_order - b.display_order);
+
+    depth2List.forEach((d2) => {
+      categoryOptions.push({
+        code: d2.code,
+        name: `${d1.name_en} > ${d2.name_en}`,
+        depth: 2,
+        depth1Code: d1.code,
+        depth2Code: d2.code,
+      });
+    });
+  });
 
   return {
     products,
     filterOptions: {
       brands: brandList,
-      categories: categoryList,
+      categories: categoryOptions,
     },
   };
 }
@@ -323,38 +364,35 @@ export async function getContentProductDetail(productId: string): Promise<Conten
     .eq("id", p.company_id)
     .maybeSingle();
 
-  const { data: rawCategories } = await adminSupabase
-    .from("categories")
-    .select("code, name_ko, parent_code, depth");
-  const categoryMap = new Map((rawCategories ?? []).map((c) => [c.code, c]));
-
-  const getCategoryFullPath = (code: string | null | undefined): string => {
-    if (!code) return "";
-    const path: string[] = [];
-    let current = categoryMap.get(code);
-    while (current) {
-      path.unshift(current.name_ko);
-      current = current.parent_code ? categoryMap.get(current.parent_code) : undefined;
-    }
-    return path.join(" > ");
-  };
+  const categoryMaster = await getCategoryMaster();
+  const categoryByCode: Record<string, CategoryItem> = {};
+  categoryMaster.forEach((c) => {
+    categoryByCode[c.code] = c;
+  });
 
   const { data: rawImages } = await adminSupabase
     .from("product_images")
-    .select("image_url, file_path, is_primary, display_order, image_type")
+    .select("id, product_id, storage_path, position")
     .eq("product_id", p.id)
-    .order("display_order", { ascending: true });
+    .order("position", { ascending: true });
 
-  const primaryImg = rawImages?.find((img) => img.is_primary) || rawImages?.[0];
   let photoUrl: string | null = null;
-  if (primaryImg) {
-    if (primaryImg.image_url) {
-      photoUrl = primaryImg.image_url;
-    } else if (primaryImg.file_path) {
-      try {
-        photoUrl = await getSignedFileUrl(primaryImg.file_path, 3600, "company-uploads");
-      } catch {
-        photoUrl = null;
+  if (rawImages && rawImages.length > 0) {
+    const firstImg = rawImages[0];
+    if (firstImg.storage_path) {
+      if (firstImg.storage_path.startsWith("http://") || firstImg.storage_path.startsWith("https://")) {
+        photoUrl = firstImg.storage_path;
+      } else {
+        try {
+          const { data: signed } = await adminSupabase.storage
+            .from("company-uploads")
+            .createSignedUrl(firstImg.storage_path, 3600);
+          if (signed?.signedUrl) {
+            photoUrl = signed.signedUrl;
+          }
+        } catch {
+          photoUrl = null;
+        }
       }
     }
   }
@@ -432,7 +470,16 @@ export async function getContentProductDetail(productId: string): Promise<Conten
 
   const brandName = brand?.name || "Unknown Brand";
   const companyName = company?.name || "Unknown Company";
-  const categoryFullPath = getCategoryFullPath(p.category_code) || p.category || "-";
+
+  const branch = resolveProductCategoryBranch(p, categoryByCode);
+  const categoryDisplayPath = branch.depth2LabelEn
+    ? `${branch.depth1LabelEn} > ${branch.depth2LabelEn}`
+    : branch.depth1LabelEn;
+
+  const categoryFullPath = [branch.depth1LabelEn, branch.depth2LabelEn, branch.depth3LabelEn]
+    .filter(Boolean)
+    .join(" > ");
+
   const updatedDate = p.updated_at ? new Date(p.updated_at).toISOString().split("T")[0] : "-";
 
   return {
@@ -451,6 +498,9 @@ export async function getContentProductDetail(productId: string): Promise<Conten
     category: p.category || "-",
     category_code: p.category_code || null,
     category_full_path: categoryFullPath,
+    category_display_path: categoryDisplayPath,
+    depth1Code: branch.depth1Code,
+    depth2Code: branch.depth2Code,
     photoUrl,
     operational_status: operationalStatus,
     visibility,
