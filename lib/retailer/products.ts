@@ -72,6 +72,14 @@ import {
   type ProductSpecificationGroup,
 } from "@/lib/product/specifications-resolver";
 
+export interface RetailerProductVideo {
+  id: string;
+  url: string;
+  type: "video_file" | "video_url";
+  title?: string | null;
+  position: number;
+}
+
 export interface RetailerProductDetail extends RetailerProductSummary {
   description: string | null;
   bulletPoints: string[];
@@ -94,6 +102,7 @@ export interface RetailerProductDetail extends RetailerProductSummary {
     url: string;
     position: number;
   }>;
+  videos: RetailerProductVideo[];
   specifications: ProductSpecificationGroup[];
 }
 
@@ -829,6 +838,43 @@ export async function getRetailerProductDetail(
     }
   }
 
+  // Sign all product videos
+  const { data: rawVideos } = await adminClient
+    .from("product_videos")
+    .select("id, storage_path, video_url, position")
+    .eq("product_id", productId)
+    .order("position", { ascending: true });
+
+  const videos: RetailerProductVideo[] = [];
+  for (const v of rawVideos || []) {
+    if (v.storage_path) {
+      try {
+        const { data: signed } = await adminClient.storage
+          .from("company-uploads")
+          .createSignedUrl(v.storage_path, 3600);
+        if (signed?.signedUrl) {
+          videos.push({
+            id: v.id,
+            url: signed.signedUrl,
+            type: "video_file",
+            title: `Product Video ${(v.position ?? 0) + 1}`,
+            position: v.position ?? 0,
+          });
+        }
+      } catch {
+        // ignore error
+      }
+    } else if (v.video_url) {
+      videos.push({
+        id: v.id,
+        url: v.video_url,
+        type: "video_url",
+        title: `Product Video ${(v.position ?? 0) + 1}`,
+        position: v.position ?? 0,
+      });
+    }
+  }
+
   // Bullet points
   let bulletPoints: string[] = [];
   if (Array.isArray(overrides.bullet_points) && overrides.bullet_points.length > 0) {
@@ -941,6 +987,7 @@ export async function getRetailerProductDetail(
     },
     cartonPackQty: moq,
     images,
+    videos,
     salesPolicy,
     hasTiers,
     maxDiscountPercent,

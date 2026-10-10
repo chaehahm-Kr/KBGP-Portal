@@ -28,11 +28,108 @@ export function RetailerProductDetailView({ product }: ProductDetailViewProps) {
   const [addedSuccess, setAddedSuccess] = useState(false);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [copiedSku, setCopiedSku] = useState(false);
-  const [activeTab, setActiveTab] = useState<"overview" | "specifications">("overview");
+  type DetailTab = "overview" | "specifications" | "retail_assets" | "customer_qr";
+  const [activeTab, setActiveTab] = useState<DetailTab>("overview");
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  const [mediaFilter, setMediaFilter] = useState<"all" | "images" | "videos">("all");
+  const [downloadingAll, setDownloadingAll] = useState(false);
 
   const totalSpecificationsCount = useMemo(() => {
     return product.specifications?.reduce((sum, g) => sum + g.items.length, 0) || 0;
   }, [product.specifications]);
+
+  const totalAssetsCount = (product.images?.length || 0) + (product.videos?.length || 0);
+  const totalImagesCount = product.images?.length || 0;
+  const totalVideosCount = product.videos?.length || 0;
+
+  const mediaList = useMemo(() => {
+    const list: Array<{
+      id: string;
+      type: "image" | "video";
+      url: string;
+      position: number;
+      title: string;
+      category: string;
+    }> = [];
+
+    (product.images || []).forEach((img, idx) => {
+      list.push({
+        id: img.id,
+        type: "image",
+        url: img.url,
+        position: img.position ?? idx,
+        title: idx === 0 ? "Primary Packshot" : `Gallery Shot #${idx + 1}`,
+        category: idx === 0 ? "Packshot" : "Gallery Image",
+      });
+    });
+
+    (product.videos || []).forEach((vid, idx) => {
+      list.push({
+        id: vid.id,
+        type: "video",
+        url: vid.url,
+        position: vid.position ?? (product.images?.length || 0) + idx,
+        title: vid.title || `Product Video #${idx + 1}`,
+        category: "Video",
+      });
+    });
+
+    return list;
+  }, [product.images, product.videos]);
+
+  const filteredMedia = useMemo(() => {
+    if (mediaFilter === "images") return mediaList.filter((m) => m.type === "image");
+    if (mediaFilter === "videos") return mediaList.filter((m) => m.type === "video");
+    return mediaList;
+  }, [mediaList, mediaFilter]);
+
+  React.useEffect(() => {
+    if (lightboxIndex === null) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setLightboxIndex(null);
+      } else if (e.key === "ArrowLeft") {
+        setLightboxIndex((prev) => (prev !== null && prev > 0 ? prev - 1 : filteredMedia.length - 1));
+      } else if (e.key === "ArrowRight") {
+        setLightboxIndex((prev) => (prev !== null && prev < filteredMedia.length - 1 ? prev + 1 : 0));
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [lightboxIndex, filteredMedia.length]);
+
+  const handleDownloadAsset = async (url: string, filename: string) => {
+    try {
+      const res = await fetch(url);
+      const blob = await res.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = blobUrl;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(blobUrl);
+    } catch {
+      window.open(url, "_blank");
+    }
+  };
+
+  const handleDownloadAllImages = async () => {
+    if (product.images.length === 0) return;
+    setDownloadingAll(true);
+    try {
+      for (let i = 0; i < product.images.length; i++) {
+        const img = product.images[i];
+        const ext = img.url.includes(".png") ? "png" : img.url.includes(".svg") ? "svg" : "jpg";
+        const filename = `${product.sku || "product"}_asset_${i + 1}.${ext}`;
+        await handleDownloadAsset(img.url, filename);
+        await new Promise((r) => setTimeout(r, 300));
+      }
+    } finally {
+      setDownloadingAll(false);
+    }
+  };
 
   // Validate Quantity
   const parsedQty = parseInt(rawQtyInput, 10);
@@ -576,23 +673,40 @@ export function RetailerProductDetailView({ product }: ProductDetailViewProps) {
             className="px-5 py-2.5 text-xs font-semibold text-zinc-400 dark:text-zinc-600 cursor-not-allowed whitespace-nowrap opacity-60"
             title="Coming Soon"
           >
-            Logistics & Shipping
+            Packaging & Shipping
           </button>
           <button
             type="button"
-            disabled
-            className="px-5 py-2.5 text-xs font-semibold text-zinc-400 dark:text-zinc-600 cursor-not-allowed whitespace-nowrap opacity-60"
-            title="Coming Soon"
+            onClick={() => setActiveTab("retail_assets")}
+            className={`px-5 py-2.5 text-xs transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
+              activeTab === "retail_assets"
+                ? "font-bold border-b-2 border-indigo-600 dark:border-indigo-400 text-indigo-600 dark:text-indigo-400"
+                : "font-semibold border-b-2 border-transparent text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200"
+            }`}
           >
-            Media Assets
+            <span>Retail Assets</span>
+            {totalAssetsCount > 0 && (
+              <span
+                className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
+                  activeTab === "retail_assets"
+                    ? "bg-indigo-100 dark:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300"
+                    : "bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400"
+                }`}
+              >
+                {totalAssetsCount}
+              </span>
+            )}
           </button>
           <button
             type="button"
-            disabled
-            className="px-5 py-2.5 text-xs font-semibold text-zinc-400 dark:text-zinc-600 cursor-not-allowed whitespace-nowrap opacity-60"
-            title="Coming Soon"
+            onClick={() => setActiveTab("customer_qr")}
+            className={`px-5 py-2.5 text-xs transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
+              activeTab === "customer_qr"
+                ? "font-bold border-b-2 border-indigo-600 dark:border-indigo-400 text-indigo-600 dark:text-indigo-400"
+                : "font-semibold border-b-2 border-transparent text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200"
+            }`}
           >
-            Customer Experience
+            <span>Customer Page & QR</span>
           </button>
         </div>
 
@@ -758,7 +872,367 @@ export function RetailerProductDetailView({ product }: ProductDetailViewProps) {
             )}
           </div>
         )}
+
+        {/* Tab Panel: Retail Assets (Media Kit) */}
+        {activeTab === "retail_assets" && (
+          <div className="space-y-6 bg-white dark:bg-zinc-900/60 rounded-2xl border border-zinc-200 dark:border-zinc-800 p-6 sm:p-8 shadow-xs">
+            {/* Header & Controls */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-zinc-100 dark:border-zinc-800/80 pb-6">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm sm:text-base font-bold text-zinc-900 dark:text-white tracking-tight">
+                    Retail Assets & Media Kit
+                  </h3>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-100 dark:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300">
+                    {totalAssetsCount} Assets
+                  </span>
+                </div>
+                <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                  High-resolution product photography, e-commerce packshots, and marketing media assets for retail merchandising.
+                </p>
+              </div>
+
+              {/* Filter Pills & Batch Download */}
+              <div className="flex flex-wrap items-center gap-2">
+                {totalVideosCount > 0 && (
+                  <div className="flex items-center rounded-xl bg-zinc-100 dark:bg-zinc-800 p-1">
+                    <button
+                      type="button"
+                      onClick={() => setMediaFilter("all")}
+                      className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all ${
+                        mediaFilter === "all"
+                          ? "bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white shadow-2xs"
+                          : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white"
+                      }`}
+                    >
+                      All ({totalAssetsCount})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setMediaFilter("images")}
+                      className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all ${
+                        mediaFilter === "images"
+                          ? "bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white shadow-2xs"
+                          : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white"
+                      }`}
+                    >
+                      Images ({totalImagesCount})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setMediaFilter("videos")}
+                      className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all ${
+                        mediaFilter === "videos"
+                          ? "bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white shadow-2xs"
+                          : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white"
+                      }`}
+                    >
+                      Videos ({totalVideosCount})
+                    </button>
+                  </div>
+                )}
+
+                {totalImagesCount > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleDownloadAllImages}
+                    disabled={downloadingAll}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold bg-zinc-900 text-white dark:bg-white dark:text-zinc-900 hover:opacity-90 transition-opacity cursor-pointer shadow-xs disabled:opacity-50"
+                  >
+                    <span>{downloadingAll ? "⏳" : "⬇️"}</span>
+                    <span>{downloadingAll ? "Downloading..." : `Download All (${totalImagesCount})`}</span>
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Media Grid */}
+            {filteredMedia.length === 0 ? (
+              <div className="py-16 text-center text-zinc-400 dark:text-zinc-500">
+                <span className="text-4xl block mb-3">🖼️</span>
+                <p className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">
+                  No retail media assets available for this product.
+                </p>
+                <p className="text-xs text-zinc-400 dark:text-zinc-500 mt-1">
+                  Product images and videos will appear here once registered by the brand.
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+                {filteredMedia.map((media, mIdx) => {
+                  const isPackshot = media.type === "image" && media.position === 0;
+                  const isVideo = media.type === "video";
+
+                  return (
+                    <div
+                      key={media.id || mIdx}
+                      className="group relative flex flex-col rounded-2xl border border-zinc-200/80 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/80 overflow-hidden hover:border-zinc-300 dark:hover:border-zinc-700 transition-all duration-200 shadow-2xs hover:shadow-md"
+                    >
+                      {/* Media Preview Box */}
+                      <div className="relative aspect-square w-full bg-zinc-100 dark:bg-zinc-950 flex items-center justify-center overflow-hidden">
+                        {isVideo ? (
+                          <div className="relative w-full h-full flex items-center justify-center bg-zinc-900 text-white">
+                            <video
+                              src={media.url}
+                              className="w-full h-full object-cover opacity-70"
+                              preload="metadata"
+                            />
+                            <div className="absolute inset-0 flex items-center justify-center">
+                              <span className="w-12 h-12 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center text-xl text-white shadow-lg group-hover:scale-110 transition-transform">
+                                ▶
+                              </span>
+                            </div>
+                          </div>
+                        ) : (
+                          <img
+                            src={media.url}
+                            alt={media.title}
+                            className="w-full h-full object-contain p-3 transition-transform duration-300 group-hover:scale-105"
+                            loading="lazy"
+                          />
+                        )}
+
+                        {/* Top Badge */}
+                        <div className="absolute top-2.5 left-2.5 z-10">
+                          <span
+                            className={`inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold tracking-tight shadow-xs ${
+                              isPackshot
+                                ? "bg-indigo-600 text-white"
+                                : isVideo
+                                ? "bg-purple-600 text-white"
+                                : "bg-black/60 backdrop-blur-xs text-white"
+                            }`}
+                          >
+                            {isPackshot ? "⭐ Packshot" : isVideo ? "🎥 Video" : `Gallery #${media.position + 1}`}
+                          </span>
+                        </div>
+
+                        {/* Hover Quick Action Buttons Overlay */}
+                        <div className="absolute inset-0 bg-black/40 backdrop-blur-xs opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2 p-3">
+                          <button
+                            type="button"
+                            onClick={() => setLightboxIndex(mIdx)}
+                            className="p-2.5 rounded-xl bg-white text-zinc-900 dark:bg-zinc-800 dark:text-white hover:scale-105 transition-transform shadow-md cursor-pointer text-xs font-semibold flex items-center gap-1"
+                            title="Expand Preview"
+                          >
+                            <span>🔍</span>
+                            <span>Preview</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleDownloadAsset(
+                                media.url,
+                                `${product.sku || "product"}_${media.type}_${media.position + 1}.${
+                                  media.url.includes(".png") ? "png" : media.url.includes(".svg") ? "svg" : isVideo ? "mp4" : "jpg"
+                                }`
+                              )
+                            }
+                            className="p-2.5 rounded-xl bg-indigo-600 text-white hover:bg-indigo-500 hover:scale-105 transition-all shadow-md cursor-pointer text-xs font-semibold flex items-center gap-1"
+                            title="Download High-Res Asset"
+                          >
+                            <span>⬇️</span>
+                            <span>Download</span>
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Bottom Info Bar */}
+                      <div className="p-3 flex items-center justify-between gap-2 border-t border-zinc-150/60 dark:border-zinc-800/80 bg-white dark:bg-zinc-900/90">
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs font-bold text-zinc-900 dark:text-white truncate">
+                            {media.title}
+                          </p>
+                          <p className="text-[10px] text-zinc-400 dark:text-zinc-500 uppercase tracking-wider truncate">
+                            {media.category} · High-Res
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleDownloadAsset(
+                              media.url,
+                              `${product.sku || "product"}_${media.type}_${media.position + 1}.${
+                                media.url.includes(".png") ? "png" : media.url.includes(".svg") ? "svg" : isVideo ? "mp4" : "jpg"
+                              }`
+                            )
+                          }
+                          aria-label={`Download ${media.title}`}
+                          className="p-1.5 rounded-lg text-zinc-500 hover:text-indigo-600 dark:text-zinc-400 dark:hover:text-indigo-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+                          title="Download Asset"
+                        >
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+                          </svg>
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Tab Panel: Customer Page & QR (Coming Soon Placeholder) */}
+        {activeTab === "customer_qr" && (
+          <div className="bg-white dark:bg-zinc-900/60 rounded-2xl border border-zinc-200 dark:border-zinc-800 p-8 sm:p-14 shadow-xs text-center">
+            <div className="max-w-md mx-auto space-y-4">
+              <div className="w-16 h-16 rounded-3xl bg-indigo-50 dark:bg-indigo-950/50 border border-indigo-100 dark:border-indigo-900/60 flex items-center justify-center text-3xl mx-auto shadow-xs">
+                📱
+              </div>
+              <div className="space-y-1.5">
+                <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-400 border border-amber-200/60 dark:border-amber-900/60">
+                  <span>⚡</span>
+                  <span>Feature in Preparation</span>
+                </div>
+                <h3 className="text-base sm:text-lg font-bold text-zinc-900 dark:text-white tracking-tight">
+                  Customer Page & QR Code — Coming Soon
+                </h3>
+                <p className="text-xs text-zinc-500 dark:text-zinc-400 leading-relaxed">
+                  Smart digital shelf QR codes, verified consumer reviews, compliance disclosures, and interactive product storytelling pages are currently being prepared in the Admin catalog.
+                </p>
+              </div>
+              <div className="pt-3 flex flex-wrap justify-center gap-2 text-[11px] text-zinc-400 dark:text-zinc-500">
+                <span className="px-2.5 py-1 rounded-lg bg-zinc-100 dark:bg-zinc-800 font-mono">
+                  SKU: {product.sku}
+                </span>
+                <span className="px-2.5 py-1 rounded-lg bg-zinc-100 dark:bg-zinc-800 font-mono">
+                  Brand: {product.brandName}
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
+
+      {/* Lightbox Preview Modal */}
+      {lightboxIndex !== null && filteredMedia[lightboxIndex] && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4 sm:p-6"
+          onClick={() => setLightboxIndex(null)}
+        >
+          <div
+            className="relative max-w-4xl w-full max-h-[90vh] bg-zinc-950 border border-zinc-800 rounded-3xl overflow-hidden flex flex-col shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800 bg-zinc-900/80">
+              <div className="flex items-center gap-2.5">
+                <span className="text-xs font-bold text-white">
+                  {filteredMedia[lightboxIndex].title}
+                </span>
+                <span className="text-[11px] text-zinc-400 font-mono">
+                  ({lightboxIndex + 1} / {filteredMedia.length})
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() =>
+                    handleDownloadAsset(
+                      filteredMedia[lightboxIndex].url,
+                      `${product.sku || "product"}_${filteredMedia[lightboxIndex].type}_${lightboxIndex + 1}.${
+                        filteredMedia[lightboxIndex].url.includes(".png")
+                          ? "png"
+                          : filteredMedia[lightboxIndex].url.includes(".svg")
+                          ? "svg"
+                          : filteredMedia[lightboxIndex].type === "video"
+                          ? "mp4"
+                          : "jpg"
+                      }`
+                    )
+                  }
+                  className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white transition-colors cursor-pointer flex items-center gap-1.5"
+                >
+                  <span>⬇️</span>
+                  <span>Download</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setLightboxIndex(null)}
+                  className="p-1.5 rounded-xl text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors cursor-pointer"
+                  aria-label="Close Preview"
+                >
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            {/* Modal Body: Image / Video Display */}
+            <div className="relative flex-1 min-h-[360px] sm:min-h-[500px] flex items-center justify-center p-4 bg-zinc-950 overflow-hidden">
+              {filteredMedia[lightboxIndex].type === "video" ? (
+                <video
+                  src={filteredMedia[lightboxIndex].url}
+                  controls
+                  autoPlay
+                  className="max-h-[70vh] max-w-full rounded-xl object-contain shadow-lg"
+                />
+              ) : (
+                <img
+                  src={filteredMedia[lightboxIndex].url}
+                  alt={filteredMedia[lightboxIndex].title}
+                  className="max-h-[70vh] max-w-full object-contain rounded-xl shadow-lg"
+                />
+              )}
+
+              {/* Navigation Chevrons */}
+              {filteredMedia.length > 1 && (
+                <>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setLightboxIndex((prev) =>
+                        prev !== null && prev > 0 ? prev - 1 : filteredMedia.length - 1
+                      );
+                    }}
+                    aria-label="Previous Asset"
+                    className="absolute left-4 top-1/2 -translate-y-1/2 p-3 rounded-full bg-black/60 hover:bg-black/80 text-white backdrop-blur-sm transition-transform hover:scale-110 cursor-pointer shadow-lg"
+                  >
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+                    </svg>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setLightboxIndex((prev) =>
+                        prev !== null && prev < filteredMedia.length - 1 ? prev + 1 : 0
+                      );
+                    }}
+                    aria-label="Next Asset"
+                    className="absolute right-4 top-1/2 -translate-y-1/2 p-3 rounded-full bg-black/60 hover:bg-black/80 text-white backdrop-blur-sm transition-transform hover:scale-110 cursor-pointer shadow-lg"
+                  >
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                    </svg>
+                  </button>
+                </>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="px-6 py-3 border-t border-zinc-800 bg-zinc-900/60 flex items-center justify-between text-xs text-zinc-400">
+              <span>{filteredMedia[lightboxIndex].category} · High Resolution</span>
+              <a
+                href={filteredMedia[lightboxIndex].url}
+                target="_blank"
+                rel="noreferrer"
+                className="hover:text-indigo-400 transition-colors inline-flex items-center gap-1"
+              >
+                <span>Open Original in New Tab</span>
+                <span>↗</span>
+              </a>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
