@@ -899,7 +899,7 @@ export function ContentStatusList({ initialProducts, filterOptions }: ContentSta
                 {/* 1. Product Column (Compact: Thumbnail, Name, SKU) */}
                 <th
                   onClick={() => handleSort("name")}
-                  className="py-2 px-1.5 font-semibold cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors w-[185px]"
+                  className="py-2 px-1 font-semibold cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors w-[160px]"
                 >
                   <div className="flex items-center gap-1">
                     <span>Product</span>
@@ -910,7 +910,7 @@ export function ContentStatusList({ initialProducts, filterOptions }: ContentSta
                 {/* 2. Brand / Category Compact 2-Line Column */}
                 <th
                   onClick={() => handleSort("brand")}
-                  className="py-2 px-1.5 font-semibold cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors w-[125px]"
+                  className="py-2 px-1 font-semibold cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors w-[110px]"
                 >
                   <div className="flex items-center gap-1">
                     <span>Brand / Category</span>
@@ -919,25 +919,25 @@ export function ContentStatusList({ initialProducts, filterOptions }: ContentSta
                 </th>
 
                 {/* Status Columns */}
-                <th className="py-2 px-0.5 text-center w-[65px]">Operational</th>
-                <th className="py-2 px-0.5 text-center w-[60px]">Visibility</th>
-                <th className="py-2 px-0.5 text-center w-[95px]">Overall Status</th>
-                <th className="py-2 px-0.5 text-center w-[80px]">Customer Page</th>
-                <th className="py-2 px-0.5 text-center w-[60px]">Training</th>
-                <th className="py-2 px-0.5 text-center w-[55px]">Media</th>
-                <th className="py-2 px-0.5 text-center w-[45px]">FAQ</th>
-                <th className="py-2 px-0.5 text-center w-[50px]">Reviews</th>
-                <th className="py-2 px-0.5 text-center w-[75px]">Publishing / QR</th>
+                <th className="py-2 px-0.5 text-center w-[60px]">Operational</th>
+                <th className="py-2 px-0.5 text-center w-[55px]">Visibility</th>
+                <th className="py-2 px-0.5 text-center w-[85px]">Overall Status</th>
+                <th className="py-2 px-0.5 text-center w-[75px]">Customer Page</th>
+                <th className="py-2 px-0.5 text-center w-[55px]">Training</th>
+                <th className="py-2 px-0.5 text-center w-[45px]">Media</th>
+                <th className="py-2 px-0.5 text-center w-[40px]">FAQ</th>
+                <th className="py-2 px-0.5 text-center w-[45px]">Reviews</th>
+                <th className="py-2 px-0.5 text-center w-[65px]">Publishing / QR</th>
                 <th
                   onClick={() => handleSort("updated")}
-                  className="py-2 px-1 font-semibold cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors text-right w-[65px]"
+                  className="py-2 px-0.5 font-semibold cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors text-right w-[55px]"
                 >
                   <div className="flex items-center justify-end gap-1">
                     <span>Updated</span>
                     <ArrowUpDownIcon className="w-3 h-3 text-zinc-400 shrink-0" />
                   </div>
                 </th>
-                <th className="py-2 px-1 font-semibold text-right w-[60px]">Manage</th>
+                <th className="py-2 px-0.5 font-semibold text-right w-[50px]">Manage</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
