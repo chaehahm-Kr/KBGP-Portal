@@ -234,6 +234,12 @@ export function RetailerProductDetailView({ product }: ProductDetailViewProps) {
                 {product.nameEn}
               </p>
             )}
+
+            {product.shortDescription && (
+              <p className="text-sm text-zinc-600 dark:text-zinc-300 font-medium line-clamp-2 leading-snug mt-1">
+                {product.shortDescription}
+              </p>
+            )}
           </div>
 
           {/* Commercial Pricing Card */}
@@ -519,10 +525,58 @@ export function RetailerProductDetailView({ product }: ProductDetailViewProps) {
               </div>
             )}
           </div>
+        </div>
+      </div>
 
-          {/* Description */}
+      {/* Product Information Tabs */}
+      <div className="pt-8 border-t border-zinc-200 dark:border-zinc-800 space-y-6">
+        {/* Tab Header Navigation */}
+        <div className="flex items-center gap-2 border-b border-zinc-200 dark:border-zinc-800 overflow-x-auto pb-px">
+          <button
+            type="button"
+            className="px-5 py-2.5 text-xs font-bold border-b-2 border-indigo-600 dark:border-indigo-400 text-indigo-600 dark:text-indigo-400 cursor-pointer whitespace-nowrap"
+          >
+            Product Overview
+          </button>
+          <button
+            type="button"
+            disabled
+            className="px-5 py-2.5 text-xs font-semibold text-zinc-400 dark:text-zinc-600 cursor-not-allowed whitespace-nowrap opacity-60"
+            title="Coming Soon"
+          >
+            Specifications
+          </button>
+          <button
+            type="button"
+            disabled
+            className="px-5 py-2.5 text-xs font-semibold text-zinc-400 dark:text-zinc-600 cursor-not-allowed whitespace-nowrap opacity-60"
+            title="Coming Soon"
+          >
+            Logistics & Shipping
+          </button>
+          <button
+            type="button"
+            disabled
+            className="px-5 py-2.5 text-xs font-semibold text-zinc-400 dark:text-zinc-600 cursor-not-allowed whitespace-nowrap opacity-60"
+            title="Coming Soon"
+          >
+            Media Assets
+          </button>
+          <button
+            type="button"
+            disabled
+            className="px-5 py-2.5 text-xs font-semibold text-zinc-400 dark:text-zinc-600 cursor-not-allowed whitespace-nowrap opacity-60"
+            title="Coming Soon"
+          >
+            Customer Experience
+          </button>
+        </div>
+
+        {/* Tab Panel: Product Overview */}
+        <div className="space-y-8 bg-white dark:bg-zinc-900/60 rounded-2xl border border-zinc-200 dark:border-zinc-800 p-6 sm:p-8 shadow-xs">
+          {/* A. Product Description */}
           {product.description && (
-            <div className="space-y-2">
+            <div className="space-y-2.5">
               <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">
                 Product Description
               </h3>
@@ -532,17 +586,17 @@ export function RetailerProductDetailView({ product }: ProductDetailViewProps) {
             </div>
           )}
 
-          {/* Bullet Points */}
-          {product.bulletPoints.length > 0 && (
-            <div className="space-y-2">
+          {/* B. Key Benefits */}
+          {product.bulletPoints && product.bulletPoints.length > 0 && (
+            <div className="space-y-3 pt-4 border-t border-zinc-100 dark:border-zinc-800/60">
               <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">
-                Highlights & Features
+                Key Benefits
               </h3>
-              <ul className="space-y-1.5">
+              <ul className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
                 {product.bulletPoints.map((point, idx) => (
                   <li
                     key={idx}
-                    className="flex items-start gap-2 text-xs text-zinc-700 dark:text-zinc-300"
+                    className="flex items-start gap-2.5 text-xs text-zinc-700 dark:text-zinc-300 bg-zinc-50 dark:bg-zinc-800/40 p-3 rounded-xl border border-zinc-150/60 dark:border-zinc-800/80"
                   >
                     <span className="text-indigo-600 dark:text-indigo-400 font-bold shrink-0 mt-0.5">
                       ✓
@@ -553,6 +607,79 @@ export function RetailerProductDetailView({ product }: ProductDetailViewProps) {
               </ul>
             </div>
           )}
+
+          {/* C. How to Use */}
+          {product.howToUse && (
+            <div className="space-y-2.5 pt-4 border-t border-zinc-100 dark:border-zinc-800/60">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">
+                How to Use
+              </h3>
+              <div className="text-sm text-zinc-700 dark:text-zinc-300 leading-relaxed whitespace-pre-line bg-zinc-50 dark:bg-zinc-800/40 p-4 rounded-xl border border-zinc-150/60 dark:border-zinc-800/80">
+                {product.howToUse}
+              </div>
+            </div>
+          )}
+
+          {/* D. Ingredients */}
+          {product.ingredients && (
+            <div className="space-y-2.5 pt-4 border-t border-zinc-100 dark:border-zinc-800/60">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">
+                Ingredients (전성분)
+              </h3>
+              <div className="text-xs text-zinc-600 dark:text-zinc-400 leading-relaxed whitespace-pre-line bg-zinc-50 dark:bg-zinc-800/40 p-4 rounded-xl border border-zinc-150/60 dark:border-zinc-800/80 font-mono">
+                {product.ingredients}
+              </div>
+            </div>
+          )}
+
+          {/* E. Product Details Grid */}
+          <div className="space-y-3 pt-4 border-t border-zinc-100 dark:border-zinc-800/60">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">
+              Product Details
+            </h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5 text-xs">
+              <div className="p-3.5 rounded-xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-150/60 dark:border-zinc-800/80 space-y-0.5">
+                <span className="text-zinc-400 dark:text-zinc-500 block text-[10px] font-bold uppercase">Brand</span>
+                <span className="font-semibold text-zinc-900 dark:text-white">{product.brandName}</span>
+              </div>
+              {product.categoryPath && (
+                <div className="p-3.5 rounded-xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-150/60 dark:border-zinc-800/80 space-y-0.5">
+                  <span className="text-zinc-400 dark:text-zinc-500 block text-[10px] font-bold uppercase">Category</span>
+                  <span className="font-semibold text-zinc-900 dark:text-white">{product.categoryPath}</span>
+                </div>
+              )}
+              {product.volume && (
+                <div className="p-3.5 rounded-xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-150/60 dark:border-zinc-800/80 space-y-0.5">
+                  <span className="text-zinc-400 dark:text-zinc-500 block text-[10px] font-bold uppercase">Size / Volume</span>
+                  <span className="font-semibold text-zinc-900 dark:text-white">{product.volume}</span>
+                </div>
+              )}
+              {product.origin && (
+                <div className="p-3.5 rounded-xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-150/60 dark:border-zinc-800/80 space-y-0.5">
+                  <span className="text-zinc-400 dark:text-zinc-500 block text-[10px] font-bold uppercase">Country of Origin</span>
+                  <span className="font-semibold text-zinc-900 dark:text-white">{product.origin}</span>
+                </div>
+              )}
+              {product.formulation && (
+                <div className="p-3.5 rounded-xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-150/60 dark:border-zinc-800/80 space-y-0.5">
+                  <span className="text-zinc-400 dark:text-zinc-500 block text-[10px] font-bold uppercase">Formulation</span>
+                  <span className="font-semibold text-zinc-900 dark:text-white">{product.formulation}</span>
+                </div>
+              )}
+              {product.storageCondition && (
+                <div className="p-3.5 rounded-xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-150/60 dark:border-zinc-800/80 space-y-0.5">
+                  <span className="text-zinc-400 dark:text-zinc-500 block text-[10px] font-bold uppercase">Storage Condition</span>
+                  <span className="font-semibold text-zinc-900 dark:text-white">{product.storageCondition}</span>
+                </div>
+              )}
+              {product.upc && (
+                <div className="p-3.5 rounded-xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-150/60 dark:border-zinc-800/80 space-y-0.5">
+                  <span className="text-zinc-400 dark:text-zinc-500 block text-[10px] font-bold uppercase">UPC</span>
+                  <span className="font-semibold font-mono text-zinc-900 dark:text-white">{product.upc}</span>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       </div>
     </div>

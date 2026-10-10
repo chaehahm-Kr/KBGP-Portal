@@ -552,6 +552,7 @@ export function ProductOverrideTabs({
   const [ovColor, setOvColor] = useState(overrides.color || "");
   const [ovColorMap, setOvColorMap] = useState(overrides.color_map || "");
   const [ovDescription, setOvDescription] = useState(overrides.description || "");
+  const [ovHowToUse, setOvHowToUse] = useState(overrides.how_to_use || product.how_to_use || "");
   const [ovBullets, setOvBullets] = useState<string[]>(
     overrides.bullet_points && overrides.bullet_points.length > 0
       ? overrides.bullet_points
@@ -1031,6 +1032,7 @@ export function ProductOverrideTabs({
     if (ovColor !== (overrides.color || "")) return true;
     if (ovColorMap !== (overrides.color_map || "")) return true;
     if (ovDescription !== (overrides.description || "")) return true;
+    if (ovHowToUse !== (overrides.how_to_use || product.how_to_use || "")) return true;
     if (JSON.stringify(ovBullets) !== JSON.stringify(initialBullets)) return true;
     if (ovManufactureSku !== (overrides.manufacture_sku || "")) return true;
     if (ovLetustoSku !== (product.letusto_sku || "")) return true;
@@ -1057,6 +1059,7 @@ export function ProductOverrideTabs({
     ovColor, overrides.color,
     ovColorMap, overrides.color_map,
     ovDescription, overrides.description,
+    ovHowToUse, overrides.how_to_use, product.how_to_use,
     ovBullets, initialBullets,
     ovManufactureSku, overrides.manufacture_sku,
     ovLetustoSku, product.letusto_sku,
@@ -1242,6 +1245,7 @@ export function ProductOverrideTabs({
       addString("color", ovColor);
       addString("color_map", ovColorMap);
       addString("description", ovDescription);
+      addString("how_to_use", ovHowToUse);
 
       // Filter and clean bullet points
       const cleanedBullets = ovBullets.map((b) => b.trim()).filter((b) => b !== "");
@@ -2062,6 +2066,24 @@ export function ProductOverrideTabs({
                       </div>
                     ))}
                   </div>
+                </div>
+              </div>
+
+              {/* How to Use */}
+              <div className="space-y-1">
+                <label className="text-[11px] font-bold text-zinc-600 dark:text-zinc-400">사용 방법 (How to Use)</label>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
+                  <div className="p-2.5 rounded bg-zinc-50 border border-zinc-150 text-zinc-500 dark:bg-zinc-950/40 dark:border-zinc-850 whitespace-pre-wrap leading-relaxed">
+                    <span className="text-[8px] font-bold text-zinc-400 block mb-1 uppercase font-sans">포털 원본</span>
+                    {product.how_to_use || "등록된 사용 방법 없음"}
+                  </div>
+                  <textarea
+                    value={ovHowToUse}
+                    onChange={(e) => setOvHowToUse(e.target.value)}
+                    placeholder="제품 사용 방법 오버라이드 작성..."
+                    rows={3}
+                    className="w-full rounded border border-zinc-200 p-2 text-xs text-zinc-900 bg-white dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:border-zinc-950 outline-none resize-none"
+                  />
                 </div>
               </div>
             </div>

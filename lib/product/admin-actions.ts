@@ -143,6 +143,9 @@ export async function adminUpdateProductOverrides(
   if (letustoSku !== undefined) {
     updateData.letusto_sku = letustoSku && letustoSku.trim() !== "" ? letustoSku.trim() : null;
   }
+  if (cleanOverrides.how_to_use !== undefined) {
+    updateData.how_to_use = cleanOverrides.how_to_use && String(cleanOverrides.how_to_use).trim() !== "" ? String(cleanOverrides.how_to_use).trim() : null;
+  }
   if (brandId !== undefined && brandId !== "") {
     updateData.brand_id = brandId;
   }

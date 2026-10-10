@@ -70,6 +70,11 @@ export interface RetailerProductSummary {
 export interface RetailerProductDetail extends RetailerProductSummary {
   description: string | null;
   bulletPoints: string[];
+  howToUse?: string | null;
+  ingredients?: string | null;
+  categoryPath?: string;
+  formulation?: string | null;
+  storageCondition?: string | null;
   upc: string | null;
   ean: string | null;
   packageDimensions: {
@@ -631,6 +636,8 @@ export async function getRetailerProductDetail(
       trading_promo_end_date,
       description,
       bullet_points,
+      ingredients_text,
+      how_to_use,
       origin,
       volume,
       upc,
@@ -685,6 +692,8 @@ export async function getRetailerProductDetail(
         trading_promo_end_date,
         description,
         bullet_points,
+        ingredients_text,
+        how_to_use,
         origin,
         volume,
         upc,
@@ -837,6 +846,40 @@ export async function getRetailerProductDetail(
   const authoritativeName = resolveProductName(p);
   const shortDesc = resolveShortDescription(p);
 
+  // Category taxonomy path
+  const categoryMaster = await getCategoryMaster();
+  const categoryByCode: Record<string, CategoryItem> = {};
+  categoryMaster.forEach((c) => {
+    categoryByCode[c.code] = c;
+  });
+  const catBranch = resolveProductCategoryBranch(p, categoryByCode);
+  const categoryPath = [catBranch.depth1LabelEn, catBranch.depth2LabelEn, catBranch.depth3LabelEn]
+    .filter(Boolean)
+    .join(" > ") || categoryLabel;
+
+  // Dynamic attributes (Formulation & Storage Condition)
+  const { data: attrVals } = await adminClient
+    .from("product_attribute_values")
+    .select("attribute_code, value_json, text_value")
+    .eq("product_id", productId);
+
+  let formulation: string | null = null;
+  let storageCondition: string | null = null;
+
+  (attrVals || []).forEach((av: any) => {
+    if (av.attribute_code === "FORMULATION") {
+      const val = av.text_value || (Array.isArray(av.value_json) ? av.value_json.join(", ") : av.value_json);
+      if (val) formulation = String(val);
+    }
+    if (av.attribute_code === "STORAGE_CONDITION") {
+      const val = av.text_value || (Array.isArray(av.value_json) ? av.value_json.join(", ") : av.value_json);
+      if (val) storageCondition = String(val);
+    }
+  });
+
+  const howToUse = overrides.how_to_use || p.how_to_use || null;
+  const ingredients = overrides.ingredients_text || p.ingredients_text || null;
+
   return {
     id: p.id,
     name: authoritativeName,
@@ -863,6 +906,11 @@ export async function getRetailerProductDetail(
     status: p.status || "selling",
     description: overrides.description || p.description || null,
     bulletPoints,
+    howToUse,
+    ingredients,
+    categoryPath,
+    formulation,
+    storageCondition,
     upc: overrides.upc || p.upc || null,
     ean: overrides.ean || p.ean || null,
     packageDimensions: {

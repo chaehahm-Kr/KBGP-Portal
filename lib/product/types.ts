@@ -121,6 +121,7 @@ export interface Product {
 
   // New fields
   description?: string | null;
+  how_to_use?: string | null;
   bullet_points?: string[] | null;
   color?: string | null;
   color_map?: string | null;
