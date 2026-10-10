@@ -27,6 +27,7 @@ import { evaluateHubVisibility, type HubVisibilityEvaluation } from "@/lib/produ
 import { resolveActiveMarketingBadges } from "@/lib/product/badge-utils";
 import { RetailerSalesPolicyCard } from "@/components/admin/retailer-sales-policy-card";
 import { HubBadgesCard } from "@/components/admin/hub-badges-card";
+import { RetailerShortDescriptionCard } from "@/components/admin/retailer-short-description-card";
 import {
   INVENTORY_ADJUSTMENT_REASONS,
   DEFAULT_INVENTORY_ADJUSTMENT_REASON,
@@ -136,6 +137,7 @@ interface ResolvedTradingProduct {
   orderabilityStatus?: string;
   orderabilityLabel?: string;
   orderabilityReason?: string;
+  short_description?: string | null;
   hubBadges?: any;
   price_additional_info?: any;
 }
@@ -2294,6 +2296,12 @@ export function TradingProductDetail({
             salesPolicy={product.salesPolicy || resolveRetailerSalesPolicy(product)}
             srpPrice={product.srpPrice ?? null}
             mapPrice={product.mapPrice ?? null}
+          />
+
+          {/* Retailer Short Description Card */}
+          <RetailerShortDescriptionCard
+            productId={product.id}
+            initialShortDescription={product.short_description}
           />
 
           {/* Hub Marketing Badges Configuration Card */}

@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getSignedFileUrl } from "@/lib/files/storage";
 import { TradingProductsList, type TradingProductItem } from "@/components/admin/trading-products-list";
 import { resolveEffectiveSku } from "@/lib/product/types";
+import { resolveProductName } from "@/lib/product/name-resolver";
 import { resolveProductPricing } from "@/lib/product/pricing-resolver";
 import { evaluateTradingOrderability, evaluateProductRegistrationStatus } from "@/lib/product/registration-status";
 import { evaluateHubVisibility } from "@/lib/product/hub-visibility";
@@ -182,10 +183,12 @@ export default async function AdminTradingProductsPage() {
         warnings.push("margin_warning");
       }
 
+      const authoritativeName = resolveProductName(p);
+
       return {
         id: p.id,
-        name: p.name,
-        display_name: adminOverrides.name_en || p.name_en || adminOverrides.name || p.name,
+        name: authoritativeName,
+        display_name: authoritativeName,
         manufacture_sku: p.manufacture_sku,
         display_manufacture_sku: effectiveManufactureSku,
         letusto_sku: effectiveLetustoSku,

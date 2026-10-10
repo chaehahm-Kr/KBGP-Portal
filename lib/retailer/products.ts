@@ -2,6 +2,7 @@ import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { verifyRetailerSession } from "@/lib/auth/dal";
 import { resolveEffectiveSku, isDraftPlaceholderName, isDraftPlaceholderSku } from "@/lib/product/types";
+import { resolveProductName, resolveShortDescription } from "@/lib/product/name-resolver";
 import { formatCanonicalCountryName } from "@/lib/constants/countries";
 import { evaluateProductRegistrationStatus } from "@/lib/product/registration-status";
 import { resolveProductPricing, parseValidPositiveNumber } from "@/lib/product/pricing-resolver";
@@ -47,6 +48,8 @@ export interface RetailerProductSummary {
   moq: number;
   isOrderable: boolean;
   thumbnailUrl: string | null;
+  imageUrls?: string[];
+  shortDescription?: string | null;
   origin: string | null;
   volume: string | null;
   status: string;
@@ -418,20 +421,29 @@ export async function getRetailerProducts(
         "en"
       );
 
-      // Image signing
+      // Image signing (sign up to 6 images for listing card carousel)
       const rawImages = (p.product_images as any[]) || [];
       const sortedImages = [...rawImages].sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
-      let thumbnailUrl: string | null = null;
-      if (sortedImages.length > 0 && sortedImages[0].storage_path) {
-        try {
-          const { data: signed } = await adminClient.storage
-            .from("company-uploads")
-            .createSignedUrl(sortedImages[0].storage_path, 3600);
-          thumbnailUrl = signed?.signedUrl || null;
-        } catch {
-          // ignore error
+      const imageUrls: string[] = [];
+      if (sortedImages.length > 0) {
+        for (const img of sortedImages.slice(0, 6)) {
+          if (img.storage_path) {
+            if (img.storage_path.startsWith("http://") || img.storage_path.startsWith("https://")) {
+              imageUrls.push(img.storage_path);
+            } else {
+              try {
+                const { data: signed } = await adminClient.storage
+                  .from("company-uploads")
+                  .createSignedUrl(img.storage_path, 3600);
+                if (signed?.signedUrl) imageUrls.push(signed.signedUrl);
+              } catch {
+                // ignore error
+              }
+            }
+          }
         }
       }
+      const thumbnailUrl = imageUrls.length > 0 ? imageUrls[0] : null;
 
       // Accumulate filter counts
       const bEntry = brandMap.get(brandId) || { id: brandId, name: brandName, count: 0 };
@@ -446,10 +458,13 @@ export async function getRetailerProducts(
       cEntry.count += 1;
       categoryMap.set(branch.depth1Code, cEntry);
 
+      const authoritativeName = resolveProductName(p);
+      const shortDesc = resolveShortDescription(p);
+
       const item: RetailerProductSummary = {
         id: p.id,
-        name: overrides.name?.trim() || p.name,
-        nameEn: overrides.name_en?.trim() || p.name_en || null,
+        name: authoritativeName,
+        nameEn: authoritativeName,
         brandId,
         brandName,
         sku: effectiveSku,
@@ -466,6 +481,8 @@ export async function getRetailerProducts(
         moq,
         isOrderable,
         thumbnailUrl,
+        imageUrls,
+        shortDescription: shortDesc,
         origin: formatCanonicalCountryName(overrides.origin || p.origin) || "South Korea",
         volume: overrides.volume || p.volume || null,
         status: p.status || "selling",
@@ -817,10 +834,13 @@ export async function getRetailerProductDetail(
 
   const moq = visEval.moq;
 
+  const authoritativeName = resolveProductName(p);
+  const shortDesc = resolveShortDescription(p);
+
   return {
     id: p.id,
-    name: overrides.name?.trim() || p.name,
-    nameEn: overrides.name_en?.trim() || p.name_en || null,
+    name: authoritativeName,
+    nameEn: authoritativeName,
     brandId,
     brandName,
     sku: effectiveSku,
@@ -836,6 +856,8 @@ export async function getRetailerProductDetail(
     moq,
     isOrderable: visEval.isOrderable,
     thumbnailUrl: images.length > 0 ? images[0].url : null,
+    imageUrls: images.map((i) => i.url),
+    shortDescription: shortDesc,
     origin: formatCanonicalCountryName(overrides.origin || p.origin) || "South Korea",
     volume: overrides.volume || p.volume || null,
     status: p.status || "selling",

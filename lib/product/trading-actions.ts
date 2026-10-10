@@ -502,6 +502,9 @@ export async function getTradingProductDetailData(productId: string) {
     // Calculated Orderability
     orderability,
 
+    // Short Description
+    short_description: tradingOverrides.short_description || null,
+
     // Hub Marketing Badges Config
     hubBadges: ((product.price_additional_info as any) || {}).hub_badges || {},
   };
@@ -1492,3 +1495,65 @@ export async function updateHubBadges(productId: string, input: UpdateHubBadgesI
 
   return { success: true, hub_badges: updatedBadges };
 }
+
+export interface UpdateTradingShortDescriptionInput {
+  short_description: string | null;
+  reason?: string;
+}
+
+export async function updateTradingShortDescription(
+  productId: string,
+  input: UpdateTradingShortDescriptionInput
+) {
+  const { userId } = await verifyAdminSession();
+  const supabase = createAdminClient();
+
+  const shortDesc = input.short_description?.trim() || null;
+  const reason = input.reason || "Short description updated";
+
+  const { data: currentProd, error: fetchErr } = await supabase
+    .from("products")
+    .select("price_additional_info")
+    .eq("id", productId)
+    .single();
+
+  if (fetchErr || !currentProd) {
+    throw new Error("Product not found.");
+  }
+
+  const priceAddInfo = (currentProd.price_additional_info as any) || {};
+  const currentOverrides = priceAddInfo.trading_overrides || {};
+
+  const updatedOverrides = {
+    ...currentOverrides,
+    short_description: shortDesc,
+    short_description_updated_at: new Date().toISOString(),
+    short_description_updated_by: userId,
+  };
+
+  const updatedPriceAddInfo = {
+    ...priceAddInfo,
+    trading_overrides: updatedOverrides,
+  };
+
+  const { error: updateErr } = await supabase
+    .from("products")
+    .update({
+      price_additional_info: updatedPriceAddInfo,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", productId);
+
+  if (updateErr) {
+    throw new Error(`리테일러용 간략 설명 저장 실패: ${updateErr.message}`);
+  }
+
+  try {
+    revalidateAllProductPaths(productId);
+  } catch {
+    // Ignore
+  }
+
+  return { success: true, short_description: shortDesc };
+}
+

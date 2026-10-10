@@ -1,3 +1,5 @@
+export { resolveProductName, resolveShortDescription } from "@/lib/product/name-resolver";
+
 export type ProductCategory =
   | "skincare"
   | "hair_scalp"

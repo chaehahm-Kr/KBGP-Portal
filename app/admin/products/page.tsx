@@ -6,6 +6,7 @@ import { AdminProductsList } from "@/components/admin/admin-products-list";
 import { evaluateProductRegistrationStatus } from "@/lib/product/registration-status";
 import { getBatchProductCategoryCompletions } from "@/lib/product/attribute-completion";
 import { resolveEffectiveSku } from "@/lib/product/types";
+import { resolveProductName } from "@/lib/product/name-resolver";
 
 export const metadata: Metadata = {
   title: "제품 관리 | K SELECT NETWORK 어드민",
@@ -130,10 +131,12 @@ export default async function AdminProductsPage() {
           categoryCompletion: catCompletion,
         });
 
+        const authoritativeName = resolveProductName(p);
+
         return {
           id: p.id,
-          name: p.name,
-          display_name: adminOverrides.name_en || p.name_en || adminOverrides.name || p.name,
+          name: authoritativeName,
+          display_name: authoritativeName,
           manufacture_sku: p.manufacture_sku,
           display_manufacture_sku: effectiveManufactureSku,
           letusto_sku: effectiveLetustoSku,
