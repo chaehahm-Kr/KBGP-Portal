@@ -879,6 +879,7 @@ const productUpdateSchema = z.object({
     .transform((v) => (v ? Number(v) : null)),
   ingredientsText: z.string().trim().nullable().optional(),
   description: z.string().trim().nullable().optional(),
+  howToUse: z.string().trim().nullable().optional(),
   color: z.string().trim().nullable().optional(),
   colorMap: z.string().trim().nullable().optional(),
   origin: z
@@ -989,6 +990,7 @@ export async function updateProduct(
     estimatedRetailPrice: formData.get("estimatedRetailPrice") || null,
     ingredientsText: formData.get("ingredientsText") || null,
     description: formData.get("description") || null,
+    howToUse: formData.get("howToUse") || null,
     color: formData.get("color") || null,
     colorMap: formData.get("colorMap") || null,
     origin: formData.get("origin") || null,
@@ -1183,6 +1185,7 @@ export async function updateProduct(
       estimated_retail_price: parsed.data.estimatedRetailPrice,
       ingredients_text: parsed.data.ingredientsText || null,
       description: parsed.data.description || null,
+      how_to_use: parsed.data.howToUse || null,
       bullet_points: bulletPoints,
       color: parsed.data.color || null,
       color_map: parsed.data.colorMap || null,

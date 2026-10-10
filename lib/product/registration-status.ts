@@ -275,6 +275,7 @@ export interface ProductRegistrationEvaluationInput {
   selling_online?: boolean | null;
   sales_link_1?: string | null;
   deleted_at?: string | null;
+  how_to_use?: string | null;
   adminOverrides?: Record<string, any> | null;
   hasImages: boolean;
   categoryCompletion?: {
@@ -333,6 +334,7 @@ export function evaluateProductRegistrationStatus(
   const effectiveNameEn = safeString(overrides.name_en !== undefined && overrides.name_en !== null ? overrides.name_en : input.name_en);
   const effectiveManufactureSku = safeString(overrides.manufacture_sku !== undefined && overrides.manufacture_sku !== null ? overrides.manufacture_sku : input.manufacture_sku);
   const effectiveOrigin = safeString(overrides.origin !== undefined && overrides.origin !== null ? overrides.origin : input.origin);
+  const effectiveHowToUse = safeString(overrides.how_to_use !== undefined && overrides.how_to_use !== null ? overrides.how_to_use : input.how_to_use);
   const effectivePriceKrw = overrides.price_krw_retail !== undefined && overrides.price_krw_retail !== null ? Number(overrides.price_krw_retail) : Number(input.price_krw_retail || 0);
   const effectivePriceUsd = overrides.price_usd_fob !== undefined && overrides.price_usd_fob !== null ? Number(overrides.price_usd_fob) : Number(input.price_usd_fob || 0);
   const effectiveUpc = safeString(overrides.upc !== undefined && overrides.upc !== null ? overrides.upc : input.upc);
@@ -453,7 +455,20 @@ export function evaluateProductRegistrationStatus(
     });
   }
 
-  // 6. Pricing (Retail KRW & FOB USD)
+  // 6. How to Use
+  if (!effectiveHowToUse) {
+    missingItemsPush({
+      key: "how_to_use",
+      section: "기본 정보",
+      label: "사용 방법",
+      displayTag: "[기본 정보: 사용 방법]",
+      tab: "basic",
+      targetId: "howToUse-field",
+      inputName: "howToUse",
+    });
+  }
+
+  // 7. Pricing (Retail KRW & FOB USD)
   if (effectivePriceKrw <= 0) {
     missingItemsPush({
       key: "price_krw_retail",

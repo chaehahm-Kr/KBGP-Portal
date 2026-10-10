@@ -482,6 +482,7 @@ export function ProductDetailTabs({
   const [color, setColor] = useState(product.color || "");
   const [colorMap, setColorMap] = useState(product.color_map || "");
   const [description, setDescription] = useState(product.description || "");
+  const [howToUse, setHowToUse] = useState(product.how_to_use || "");
   const [priceKrwRetail, setPriceKrwRetail] = useState(product.price_krw_retail?.toString() || "");
   const [priceKrwWholesale, setPriceKrwWholesale] = useState(product.price_krw_wholesale?.toString() || "");
   const [estimatedRetailPrice, setEstimatedRetailPrice] = useState(product.estimated_retail_price?.toString() || "");
@@ -668,6 +669,7 @@ export function ProductDetailTabs({
     color: product.color || "",
     colorMap: product.color_map || "",
     description: product.description || "",
+    howToUse: product.how_to_use || "",
     ingredientsText: product.ingredients_text || "",
     isParentSku: getInitialParentState(),
     isChildSku: getInitialChildState(),
@@ -724,6 +726,7 @@ export function ProductDetailTabs({
     category_code: category || product.category_code,
     manufacture_sku: manufactureSku || product.manufacture_sku,
     origin: origin || product.origin,
+    how_to_use: howToUse || product.how_to_use,
     price_krw_retail: priceKrwRetail || product.price_krw_retail,
     price_usd_fob: priceUsdFobState || product.price_usd_fob,
     item_width: itemWidth || product.item_width,
@@ -1005,7 +1008,11 @@ export function ProductDetailTabs({
     setC40hqCbm(sim40HQ.totalCbm);
   };
 
-  const addBullet = () => setBullets([...bullets, ""]);
+  const addBullet = () => {
+    if (bullets.length < 5) {
+      setBullets([...bullets, ""]);
+    }
+  };
   const removeBullet = (index: number) => {
     const updated = bullets.filter((_, i) => i !== index);
     setBullets(updated.length === 0 ? [""] : updated);
@@ -1045,6 +1052,7 @@ export function ProductDetailTabs({
     color !== initialSnapshotRef.current.color ||
     colorMap !== initialSnapshotRef.current.colorMap ||
     description !== initialSnapshotRef.current.description ||
+    howToUse !== initialSnapshotRef.current.howToUse ||
     ingredientsText !== initialSnapshotRef.current.ingredientsText ||
     isParentSku !== initialSnapshotRef.current.isParentSku ||
     isChildSku !== initialSnapshotRef.current.isChildSku ||
@@ -1171,6 +1179,7 @@ export function ProductDetailTabs({
       formData.set("color", color.trim());
       formData.set("colorMap", colorMap);
       formData.set("description", description.trim());
+      formData.set("howToUse", howToUse.trim());
       formData.set("ingredientsText", ingredientsText.trim());
       formData.set("parentSku", isParentSku ? "Y" : "");
       formData.set("childSku", isChildSku ? "Y" : "");
@@ -1270,6 +1279,7 @@ export function ProductDetailTabs({
         color,
         colorMap,
         description,
+        howToUse,
         ingredientsText,
         isParentSku,
         isChildSku,
@@ -1947,6 +1957,7 @@ export function ProductDetailTabs({
               </div>
             </div>
 
+            {/* 1. 제품 상세 설명 (Description) */}
             <div>
               <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1.5">제품 상세 설명 (Description)</label>
               <textarea
@@ -1959,6 +1970,72 @@ export function ProductDetailTabs({
               />
             </div>
 
+            {/* 2. 제품 블랫포인트 (Bullet Points) */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between border-b border-zinc-100 pb-2 dark:border-zinc-850">
+                <div>
+                  <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300">
+                    제품 블랫포인트 (Bullet Points)
+                  </label>
+                  <p className="text-[10px] text-zinc-400 dark:text-zinc-500 mt-0.5">
+                    아마존 등 입점 사이트에 제품 소구 특징으로 5개 핵심 사항을 입력할 수 있습니다. (최대 5개)
+                  </p>
+                </div>
+                {bullets.length < 5 && (
+                  <button
+                    type="button"
+                    onClick={addBullet}
+                    className="rounded bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 px-2.5 py-1 text-[11px] font-bold text-zinc-800 dark:text-zinc-200 cursor-pointer"
+                  >
+                    + 추가
+                  </button>
+                )}
+              </div>
+
+              <div className="space-y-2.5">
+                {bullets.map((bullet, i) => (
+                  <div key={i} className="flex items-center gap-2">
+                    <span className="text-xs font-bold font-mono text-zinc-400 shrink-0 w-12">Point {i + 1}</span>
+                    <input
+                      type="text"
+                      value={bullet}
+                      onChange={(e) => handleBulletChange(i, e.target.value)}
+                      placeholder="핵심 요약 포인트 입력"
+                      className="block flex-1 rounded-lg border border-zinc-300 px-3.5 py-2 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-zinc-900 dark:focus:border-white"
+                    />
+                    {bullets.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => removeBullet(i)}
+                        className="text-rose-500 hover:text-rose-700 font-bold px-2 py-1 text-xs shrink-0 cursor-pointer"
+                      >
+                        삭제
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* 3. 사용 방법 (How to Use) */}
+            <div id="howToUse-field">
+              <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1.5">
+                사용 방법 (How to Use) <span className="text-rose-600 dark:text-rose-400 font-bold ml-0.5">*</span>
+              </label>
+              <textarea
+                id="howToUse-field-input"
+                name="howToUse"
+                rows={4}
+                value={howToUse}
+                onChange={(e) => setHowToUse(e.target.value)}
+                placeholder="제품의 올바른 사용법, 사용 순서, 권장 용량 및 팁 등을 자세히 기입해 주세요."
+                className={`block w-full rounded-lg border px-3.5 py-2 text-xs text-zinc-900 dark:bg-zinc-950 dark:text-white focus:outline-none resize-y ${
+                  !howToUse.trim() ? "border-rose-350 dark:border-rose-900/60 focus:border-rose-500" : "border-zinc-300 dark:border-zinc-800 focus:border-zinc-900 dark:focus:border-white"
+                }`}
+              />
+            </div>
+
+            {/* 4. 전성분표 (Ingredients) */}
             <div>
               <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1.5">전성분표 (Ingredients)</label>
               <textarea
@@ -2280,46 +2357,6 @@ export function ProductDetailTabs({
                 </div>
               </div>
             )}
-          </div>
-
-          {/* Bullet Points Management Card */}
-          <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 space-y-4">
-            <div className="flex items-center justify-between border-b border-zinc-100 pb-3 dark:border-zinc-850">
-              <h2 className="text-sm font-bold text-zinc-900 dark:text-white">
-                제품 블랙 포인트 (Bullet Points)
-              </h2>
-              <button
-                type="button"
-                onClick={addBullet}
-                className="rounded bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 px-2.5 py-1 text-[11px] font-bold text-zinc-800 dark:text-zinc-200 cursor-pointer"
-              >
-                + 추가
-              </button>
-            </div>
-            
-            <p className="text-[10px] text-zinc-400 dark:text-zinc-500">아마존 등 입점 사이트에 제품 소구 특징으로 5개 핵심 사항을 입력할 수 있습니다. 줄을 자유롭게 늘려가며 관리해 보세요.</p>
-
-            <div className="space-y-3 mt-4">
-              {bullets.map((bullet, i) => (
-                <div key={i} className="flex items-center gap-2">
-                  <span className="text-xs font-bold font-mono text-zinc-400 shrink-0 w-6">Line {i + 1}</span>
-                  <input
-                    type="text"
-                    value={bullet}
-                    onChange={(e) => handleBulletChange(i, e.target.value)}
-                    placeholder="핵심 요약 포인트 입력"
-                    className="block flex-1 rounded-lg border border-zinc-300 px-3.5 py-2 text-xs text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:outline-none focus:border-zinc-900 dark:focus:border-white"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => removeBullet(i)}
-                    className="text-rose-500 hover:text-rose-700 font-bold px-2 py-1 text-xs shrink-0 cursor-pointer"
-                  >
-                    삭제
-                  </button>
-                </div>
-              ))}
-            </div>
           </div>
         </div>
 

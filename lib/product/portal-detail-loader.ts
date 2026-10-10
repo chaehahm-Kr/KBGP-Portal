@@ -59,7 +59,7 @@ export async function getPortalProductDetail(
     .from("products")
     .select(`
       id, name, name_en, category, volume, estimated_retail_price, ingredients_text, ingredients_file_path, ingredients_file_path_en, brand_id,
-      description, bullet_points, color, color_map, origin, lead_time,
+      description, how_to_use, bullet_points, color, color_map, origin, lead_time,
       parent_sku, child_sku, manufacture_sku, letusto_sku, upc, ean,
       selling_online, selling_offline, sales_link_1, sales_link_2,
       price_krw_retail, price_krw_wholesale, price_usd_fob, price_additional_info,
