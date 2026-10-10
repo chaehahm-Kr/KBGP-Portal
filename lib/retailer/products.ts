@@ -643,7 +643,6 @@ export async function getRetailerProductDetail(
       description,
       bullet_points,
       ingredients_text,
-      how_to_use,
       origin,
       volume,
       upc,
@@ -699,7 +698,6 @@ export async function getRetailerProductDetail(
         description,
         bullet_points,
         ingredients_text,
-        how_to_use,
         origin,
         volume,
         upc,
@@ -898,7 +896,7 @@ export async function getRetailerProductDetail(
     });
   });
 
-  const howToUse = overrides.how_to_use || p.how_to_use || null;
+  const howToUse = overrides.how_to_use || (p as any).how_to_use || null;
   const ingredients = overrides.ingredients_text || p.ingredients_text || null;
 
   return {
