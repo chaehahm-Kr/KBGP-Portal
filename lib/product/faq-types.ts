@@ -64,6 +64,8 @@ export interface FaqAiSuggestion {
   category: FaqCategory;
   audience: FaqAudience;
   source_refs: string[];
+  ai_provider?: string | null;
+  ai_model?: string | null;
   requires_brand_confirmation: boolean;
   selected: boolean;
 }

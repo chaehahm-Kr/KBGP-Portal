@@ -334,6 +334,8 @@ export function FaqWorkspace({ product }: FaqWorkspaceProps) {
           category: s.category,
           audience: s.audience,
           source_refs: s.source_refs,
+          ai_provider: s.ai_provider,
+          ai_model: s.ai_model,
           requires_brand_confirmation: s.requires_brand_confirmation,
           // If bulk approving, force items requiring brand confirmation to remain in draft
           status: s.requires_brand_confirmation ? "draft" : targetStatus,

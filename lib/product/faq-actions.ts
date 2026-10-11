@@ -288,6 +288,8 @@ export async function reorderProductFaqs(
   }
 }
 
+import { generateGeminiFaqs } from "./gemini-faq-client";
+
 /**
  * Save multiple draft FAQs (from AI suggestions or import)
  */
@@ -299,6 +301,8 @@ export async function saveBulkDraftFaqs(
     category: FaqCategory;
     audience: FaqAudience;
     source_refs?: string[];
+    ai_provider?: string | null;
+    ai_model?: string | null;
     requires_brand_confirmation?: boolean;
     status?: FaqStatus;
   }>
@@ -331,8 +335,8 @@ export async function saveBulkDraftFaqs(
       sort_order: baseSortOrder + i,
       source_type: "ai_suggested" as const,
       source_refs: f.source_refs || [],
-      ai_provider: "google",
-      ai_model: "gemini-2.5-flash",
+      ai_provider: f.ai_provider || "local",
+      ai_model: f.ai_model || "deterministic-grounded-v1",
       requires_brand_confirmation: Boolean(f.requires_brand_confirmation),
       created_by: session?.userId || null,
       approved_at: f.status === "approved" ? new Date().toISOString() : null,
@@ -357,6 +361,7 @@ export async function saveBulkDraftFaqs(
 
 /**
  * Generate AI FAQ suggestions based on authoritative product catalog facts
+ * Hybrid Pipeline: Real Google Gemini Generation -> Rule-Based Grounding & Validation Fallback
  */
 export async function generateFaqAiSuggestions(
   productId: string,
@@ -381,151 +386,189 @@ export async function generateFaqAiSuggestions(
       return { success: false, suggestions: [], error: "Product not found" };
     }
 
-  // 2. Fetch Brand Name
-  const { data: brand } = await adminSupabase
-    .from("brands")
-    .select("name")
-    .eq("id", p.brand_id)
-    .maybeSingle();
+    // 2. Fetch Brand Name
+    const { data: brand } = await adminSupabase
+      .from("brands")
+      .select("name")
+      .eq("id", p.brand_id)
+      .maybeSingle();
 
-  const brandName = brand?.name || "K-Beauty Brand";
-  const productName = resolveProductName(p);
-  const info = (p.price_additional_info as any) || {};
-  const description = (p.description || "").trim();
-  const howToUse = (p.how_to_use || info.how_to_use || "").trim();
-  const bulletPoints: string[] = Array.isArray(p.bullet_points)
-    ? p.bullet_points
-    : Array.isArray(info.bullet_points)
-    ? info.bullet_points
-    : [];
-  const ingredients = (p.ingredients_text || info.ingredients || "").trim();
-  const targetCount = Math.min(Math.max(options?.count || 8, 5), 10);
+    const brandName = brand?.name || "K-Beauty Brand";
+    const productName = resolveProductName(p);
+    const info = (p.price_additional_info as any) || {};
+    const description = (p.description || "").trim();
+    const howToUse = (p.how_to_use || info.how_to_use || "").trim();
+    const bulletPoints: string[] = Array.isArray(p.bullet_points)
+      ? p.bullet_points
+      : Array.isArray(info.bullet_points)
+      ? info.bullet_points
+      : [];
+    const ingredients = (p.ingredients_text || info.ingredients || "").trim();
+    const categoryName = p.category || "Skincare";
+    const targetCount = Math.min(Math.max(options?.count || 8, 5), 10);
 
-  // 3. Extract knowledge facts strictly
-  const hasSpecificHowToUse = Boolean(howToUse);
-  const hasSpecificIngredients = Boolean(ingredients);
-  const hasBulletPoints = bulletPoints.length > 0;
-  const hasDescription = Boolean(description);
+    // Build Grounded Product Context
+    const groundedContext = {
+      productName,
+      brandName,
+      categoryName,
+      description,
+      bulletPoints,
+      howToUse,
+      ingredients,
+    };
 
-  // Build strictly grounded candidate pool
-  const candidatePool: Array<Omit<FaqAiSuggestion, "tempId" | "selected">> = [];
+    // 3. Attempt Live Google Gemini Generation
+    const geminiResult = await generateGeminiFaqs(groundedContext, targetCount);
 
-  // 1. Product Basics (Grounded in Bullet Points or Description)
-  if (hasBulletPoints || hasDescription) {
+    if (geminiResult.success && geminiResult.suggestions.length > 0) {
+      console.log(`[generateFaqAiSuggestions] Generated ${geminiResult.suggestions.length} FAQs via Gemini (${geminiResult.model})`);
+      return {
+        success: true,
+        suggestions: geminiResult.suggestions,
+      };
+    }
+
+    // 4. Grounding Layer Fallback: Deterministic Rule-Based Generation
+    console.log("[generateFaqAiSuggestions] Using Grounding Layer Deterministic Fallback");
+    const hasSpecificHowToUse = Boolean(howToUse);
+    const hasSpecificIngredients = Boolean(ingredients);
+    const hasBulletPoints = bulletPoints.length > 0;
+    const hasDescription = Boolean(description);
+
+    const candidatePool: Array<Omit<FaqAiSuggestion, "tempId" | "selected">> = [];
+
+    // Product Basics
+    if (hasBulletPoints || hasDescription) {
+      candidatePool.push({
+        question: `What are the primary benefits and key features of ${productName}?`,
+        answer: hasBulletPoints
+          ? `${productName} by ${brandName} is formulated with key features: ${bulletPoints.slice(0, 3).join("; ")}.`
+          : `${productName} by ${brandName}: ${description.slice(0, 200)}...`,
+        category: "Product Basics",
+        audience: "both",
+        source_refs: hasBulletPoints ? ["Bullet Points"] : ["Description"],
+        ai_provider: "local",
+        ai_model: "deterministic-grounded-v1",
+        requires_brand_confirmation: false,
+      });
+    }
+
+    // Who It’s For
+    const combinedText = `${description} ${bulletPoints.join(" ")}`.toLowerCase();
+    const matchedConcerns: string[] = [];
+    if (combinedText.includes("sensitive")) matchedConcerns.push("sensitive skin");
+    if (combinedText.includes("calming") || combinedText.includes("soothing")) matchedConcerns.push("soothing and calming care");
+    if (combinedText.includes("hydrat") || combinedText.includes("moistur")) matchedConcerns.push("hydration and moisture care");
+    if (combinedText.includes("dry")) matchedConcerns.push("dry skin");
+    if (combinedText.includes("brighten") || combinedText.includes("tone")) matchedConcerns.push("brightening and skin tone care");
+    if (combinedText.includes("barrier")) matchedConcerns.push("skin barrier support");
+    if (combinedText.includes("acne") || combinedText.includes("trouble") || combinedText.includes("blemish")) matchedConcerns.push("blemish-prone skin");
+
+    if (matchedConcerns.length > 0) {
+      candidatePool.push({
+        question: `Which skin concerns is ${productName} suited for?`,
+        answer: `Based on product specifications from ${brandName}, this formula is targeted for ${matchedConcerns.join(", ")}.`,
+        category: "Who It’s For",
+        audience: "both",
+        source_refs: hasBulletPoints ? ["Bullet Points", "Description"] : ["Description"],
+        ai_provider: "local",
+        ai_model: "deterministic-grounded-v1",
+        requires_brand_confirmation: false,
+      });
+    }
+
+    // How to Use
+    if (hasSpecificHowToUse) {
+      candidatePool.push({
+        question: `How should ${productName} be applied according to instructions?`,
+        answer: howToUse,
+        category: "How to Use",
+        audience: "both",
+        source_refs: ["How to Use"],
+        ai_provider: "local",
+        ai_model: "deterministic-grounded-v1",
+        requires_brand_confirmation: false,
+      });
+    }
+
+    // Ingredients / Safety
+    if (hasSpecificIngredients) {
+      candidatePool.push({
+        question: `What ingredients are listed for ${productName}?`,
+        answer: `Official ingredients list: ${ingredients.slice(0, 220)}${ingredients.length > 220 ? "..." : ""}`,
+        category: "Ingredients / Safety",
+        audience: "both",
+        source_refs: ["Ingredients"],
+        ai_provider: "local",
+        ai_model: "deterministic-grounded-v1",
+        requires_brand_confirmation: false,
+      });
+    }
+
+    // Warnings / Precautions
     candidatePool.push({
-      question: `What are the primary benefits and key features of ${productName}?`,
-      answer: hasBulletPoints
-        ? `${productName} by ${brandName} is formulated with key features: ${bulletPoints.slice(0, 3).join("; ")}.`
-        : `${productName} by ${brandName}: ${description.slice(0, 200)}...`,
-      category: "Product Basics",
+      question: `Are there specific safety precautions or warnings for ${productName}?`,
+      answer: `For external use only. Discontinue use if irritation develops. Brand confirmation is required for specific medical warnings, active ingredient contraindications, and allergen disclosures.`,
+      category: "Warnings / Precautions",
       audience: "both",
-      source_refs: hasBulletPoints ? ["Bullet Points"] : ["Description"],
-      requires_brand_confirmation: false,
+      source_refs: ["Brand Confirmation Required"],
+      ai_provider: "local",
+      ai_model: "deterministic-grounded-v1",
+      requires_brand_confirmation: true,
     });
-  }
 
-  // 2. Who It’s For (Only if explicit skin type / concern keywords exist in description or bullet points)
-  const combinedText = `${description} ${bulletPoints.join(" ")}`.toLowerCase();
-  const matchedConcerns: string[] = [];
-  if (combinedText.includes("sensitive")) matchedConcerns.push("sensitive skin");
-  if (combinedText.includes("calming") || combinedText.includes("soothing")) matchedConcerns.push("soothing and calming care");
-  if (combinedText.includes("hydrat") || combinedText.includes("moistur")) matchedConcerns.push("hydration and moisture care");
-  if (combinedText.includes("dry")) matchedConcerns.push("dry skin");
-  if (combinedText.includes("brighten") || combinedText.includes("tone")) matchedConcerns.push("brightening and skin tone care");
-  if (combinedText.includes("barrier")) matchedConcerns.push("skin barrier support");
-  if (combinedText.includes("acne") || combinedText.includes("trouble") || combinedText.includes("blemish")) matchedConcerns.push("blemish-prone skin");
-
-  if (matchedConcerns.length > 0) {
+    // Storage / Practical Info
     candidatePool.push({
-      question: `Which skin concerns is ${productName} suited for?`,
-      answer: `Based on product specifications from ${brandName}, this formula is targeted for ${matchedConcerns.join(", ")}.`,
-      category: "Who It’s For",
+      question: `How should ${productName} be stored?`,
+      answer: `Store in a cool, dry place away from direct sunlight and excessive heat. Keep the container securely closed after each use.`,
+      category: "Storage / Practical Info",
       audience: "both",
-      source_refs: hasBulletPoints ? ["Bullet Points", "Description"] : ["Description"],
+      source_refs: ["Catalog Specifications"],
+      ai_provider: "local",
+      ai_model: "deterministic-grounded-v1",
       requires_brand_confirmation: false,
     });
+
+    // Retail Staff Training Q&A
+    if (hasBulletPoints || hasDescription) {
+      candidatePool.push({
+        question: `[Staff Tip] What key product details should retail staff highlight to customers?`,
+        answer: `Highlight ${brandName}'s core product identity: ${
+          hasBulletPoints ? bulletPoints.slice(0, 2).join("; ") : description.slice(0, 140)
+        }.`,
+        category: "Product Basics",
+        audience: "retail_staff",
+        source_refs: hasBulletPoints ? ["Bullet Points", "Catalog"] : ["Description"],
+        ai_provider: "local",
+        ai_model: "deterministic-grounded-v1",
+        requires_brand_confirmation: false,
+      });
+    }
+
+    const selectedPool = candidatePool.slice(0, targetCount);
+
+    const suggestions: FaqAiSuggestion[] = selectedPool.map((item, idx) => ({
+      tempId: `fallback_${Date.now()}_${idx}`,
+      question: item.question,
+      answer: item.answer,
+      category: item.category,
+      audience: item.audience,
+      source_refs: item.source_refs,
+      ai_provider: item.ai_provider || "local",
+      ai_model: item.ai_model || "deterministic-grounded-v1",
+      requires_brand_confirmation: item.requires_brand_confirmation,
+      selected: true,
+    }));
+
+    return {
+      success: true,
+      suggestions,
+    };
+  } catch (err: any) {
+    console.error("[generateFaqAiSuggestions] Exception:", err);
+    return { success: false, suggestions: [], error: err.message || "Failed to generate suggestions" };
   }
-
-  // 3. How to Use (Only if How to Use is explicitly present in catalog)
-  if (hasSpecificHowToUse) {
-    candidatePool.push({
-      question: `How should ${productName} be applied according to instructions?`,
-      answer: howToUse,
-      category: "How to Use",
-      audience: "both",
-      source_refs: ["How to Use"],
-      requires_brand_confirmation: false,
-    });
-  }
-
-  // 4. Ingredients / Formulation (Only if Ingredients text is present in catalog)
-  if (hasSpecificIngredients) {
-    candidatePool.push({
-      question: `What ingredients are listed for ${productName}?`,
-      answer: `Official ingredients list: ${ingredients.slice(0, 220)}${ingredients.length > 220 ? "..." : ""}`,
-      category: "Ingredients / Safety",
-      audience: "both",
-      source_refs: ["Ingredients"],
-      requires_brand_confirmation: false,
-    });
-  }
-
-  // 5. Warnings / Precautions (Always included with Brand Confirmation Required safeguard)
-  candidatePool.push({
-    question: `Are there specific safety precautions or warnings for ${productName}?`,
-    answer: `For external use only. Discontinue use if irritation develops. Brand confirmation is required for specific medical warnings, active ingredient contraindications, and allergen disclosures.`,
-    category: "Warnings / Precautions",
-    audience: "both",
-    source_refs: ["Brand Confirmation Required"],
-    requires_brand_confirmation: true, // Safeguard: Flags Brand Confirmation Required
-  });
-
-  // 6. Storage / Practical Info
-  candidatePool.push({
-    question: `How should ${productName} be stored?`,
-    answer: `Store in a cool, dry place away from direct sunlight and excessive heat. Keep the container securely closed after each use.`,
-    category: "Storage / Practical Info",
-    audience: "both",
-    source_refs: ["Catalog Specifications"],
-    requires_brand_confirmation: false,
-  });
-
-  // 7. Retail Staff Training Q&A (If description or bullet points exist)
-  if (hasBulletPoints || hasDescription) {
-    candidatePool.push({
-      question: `[Staff Tip] What key product details should retail staff highlight to customers?`,
-      answer: `Highlight ${brandName}'s core product identity: ${
-        hasBulletPoints ? bulletPoints.slice(0, 2).join("; ") : description.slice(0, 140)
-      }.`,
-      category: "Product Basics",
-      audience: "retail_staff",
-      source_refs: hasBulletPoints ? ["Bullet Points", "Catalog"] : ["Description"],
-      requires_brand_confirmation: false,
-    });
-  }
-
-  // Prioritize factual accuracy: Return only verified candidate questions up to targetCount
-  const selectedPool = candidatePool.slice(0, targetCount);
-
-  const suggestions: FaqAiSuggestion[] = selectedPool.map((item, idx) => ({
-    tempId: `sug_${Date.now()}_${idx}`,
-    question: item.question,
-    answer: item.answer,
-    category: item.category,
-    audience: item.audience,
-    source_refs: item.source_refs,
-    requires_brand_confirmation: item.requires_brand_confirmation,
-    selected: true, // pre-selected by default for convenience
-  }));
-
-  return {
-    success: true,
-    suggestions,
-  };
-} catch (err: any) {
-  console.error("[generateFaqAiSuggestions] Exception:", err);
-  return { success: false, suggestions: [], error: err.message || "Failed to generate suggestions" };
-}
 }
 
 /**
