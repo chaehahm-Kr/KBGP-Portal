@@ -18,6 +18,7 @@ export async function GET() {
       NEXT_PUBLIC_SUPABASE_URL: publicEnv.NEXT_PUBLIC_SUPABASE_URL || "Not Configured",
       hasSupabaseSecretKey: !!serverEnv.SUPABASE_SECRET_KEY,
       hasResendApiKey: !!serverEnv.RESEND_API_KEY,
+      hasGeminiApiKey: Boolean(process.env.GEMINI_API_KEY || process.env.GOOGLE_AI_KEY || process.env.GOOGLE_API_KEY),
       emailFromAddress: serverEnv.EMAIL_FROM_ADDRESS || "Not Configured",
     }
   });
