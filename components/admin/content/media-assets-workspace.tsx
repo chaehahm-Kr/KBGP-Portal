@@ -408,6 +408,7 @@ export function MediaAssetsWorkspace({ product }: MediaAssetsWorkspaceProps) {
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-4">
           <button
             type="button"
+            data-testid="summary-sources-card"
             onClick={() => setActiveMainTab("sources")}
             className={`p-3.5 rounded-xl border text-left transition-all cursor-pointer flex items-center justify-between ${
               activeMainTab === "sources"
@@ -428,6 +429,7 @@ export function MediaAssetsWorkspace({ product }: MediaAssetsWorkspaceProps) {
 
           <button
             type="button"
+            data-testid="summary-drafts-card"
             onClick={() => setActiveMainTab("drafts")}
             className={`p-3.5 rounded-xl border text-left transition-all cursor-pointer flex items-center justify-between ${
               activeMainTab === "drafts"
@@ -448,6 +450,7 @@ export function MediaAssetsWorkspace({ product }: MediaAssetsWorkspaceProps) {
 
           <button
             type="button"
+            data-testid="summary-approved-card"
             onClick={() => setActiveMainTab("approved")}
             className={`p-3.5 rounded-xl border text-left transition-all cursor-pointer flex items-center justify-between ${
               activeMainTab === "approved"
