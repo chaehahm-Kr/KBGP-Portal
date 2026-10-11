@@ -1351,7 +1351,11 @@ export function MediaAssetsWorkspace({ product }: MediaAssetsWorkspaceProps) {
 
             <div className="p-4 bg-zinc-100 dark:bg-zinc-850 rounded-xl flex items-center justify-center min-h-48 border border-zinc-200 dark:border-zinc-700">
               {previewAsset.url ? (
-                <img src={previewAsset.url} alt={previewAsset.title} className="max-h-80 object-contain rounded" />
+                previewAsset.url.includes(".mp4") ? (
+                  <video src={previewAsset.url} controls className="max-h-80 w-full object-contain rounded" />
+                ) : (
+                  <img src={previewAsset.url} alt={previewAsset.title} className="max-h-80 object-contain rounded" />
+                )
               ) : (
                 <div className="text-center space-y-2">
                   <ImageIcon className="w-10 h-10 text-zinc-400 mx-auto" />

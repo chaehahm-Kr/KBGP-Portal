@@ -145,6 +145,7 @@ export interface AIProviderAdapterResult {
     title: string;
     media_type: MediaType;
     url?: string;
+    storage_path?: string;
     thumbnail_url?: string;
     content_data: AssetContentData;
   };

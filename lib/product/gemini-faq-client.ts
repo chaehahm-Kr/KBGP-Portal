@@ -50,8 +50,8 @@ export async function generateGeminiFaqs(
     };
   }
 
-  // Active models to attempt in order
-  const candidateModels = ["gemini-2.5-flash", "gemini-1.5-flash"];
+  // Active models to attempt in order (standard Google AI Studio model names)
+  const candidateModels = ["gemini-1.5-flash", "gemini-2.0-flash", "gemini-1.5-pro"];
 
   const prompt = `You are a specialized B2B/B2C K-Beauty Product Content & FAQ Generator for an authoritative brand network.
 Your task is to generate between 5 and ${targetCount} clear, factual, customer-friendly and retail-friendly FAQ items.

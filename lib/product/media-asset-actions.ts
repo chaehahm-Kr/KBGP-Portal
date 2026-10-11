@@ -423,8 +423,14 @@ export async function createAIMediaJob(
       model: "evaluating",
     });
 
-    // 2. Execute AI Provider Adapter
-    const aiResult = await executeAIMediaGeneration(outputType, creationSettings, selectedSources);
+    // 2. Execute AI Provider Adapter with Storage Persistence
+    const aiResult = await executeAIMediaGeneration(
+      outputType,
+      creationSettings,
+      selectedSources,
+      productId,
+      companyId
+    );
 
     // Update job status
     const finalJobStatus = aiResult.status === "completed" ? "completed" : "failed";
@@ -459,6 +465,7 @@ export async function createAIMediaJob(
       status: assetStatus,
       media_type: mediaType,
       url: aiResult.asset?.url || "",
+      storage_path: aiResult.asset?.storage_path || undefined,
       thumbnail_url: aiResult.asset?.thumbnail_url || "",
       content_data: {
         ...(aiResult.asset?.content_data || {}),
@@ -484,6 +491,8 @@ export async function createAIMediaJob(
       title: assetTitle,
       status: assetStatus,
       media_type: mediaType,
+      storage_path: aiResult.asset?.storage_path || null,
+      thumbnail_path: aiResult.asset?.thumbnail_url || null,
       content_data: newAsset.content_data,
       source_material_ids: selectedSourceIds,
       version: 1,
