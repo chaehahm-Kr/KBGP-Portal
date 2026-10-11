@@ -704,11 +704,11 @@ export function MediaAssetsWorkspace({ product }: MediaAssetsWorkspaceProps) {
                         </div>
                       ) : (
                         groupItems.map((item) => {
-                          const isSynced =
+                          const isBrandSynced = item.id.startsWith("brand-mat-") || item.group_type === "brand_materials";
+                          const isCatalogSynced =
                             item.id.startsWith("info-cat-") ||
                             item.id.startsWith("img-cat-") ||
                             item.id.startsWith("vid-cat-") ||
-                            item.id.startsWith("brand-mat-") ||
                             item.source_type === "catalog_sync";
 
                           return (
@@ -730,14 +730,18 @@ export function MediaAssetsWorkspace({ product }: MediaAssetsWorkspaceProps) {
                               </div>
 
                               <div className="flex items-center gap-2 shrink-0">
-                                {isSynced ? (
+                                {isBrandSynced ? (
+                                  <span className="text-[10px] font-mono text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-950/60 px-2 py-0.5 rounded font-semibold">
+                                    Brand Synced
+                                  </span>
+                                ) : isCatalogSynced ? (
                                   <span className="text-[10px] font-mono text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 px-2 py-0.5 rounded font-semibold">
                                     Catalog Synced
                                   </span>
                                 ) : (
                                   <>
                                     <span className="text-[10px] font-mono text-zinc-500 bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 rounded">
-                                      Custom Upload
+                                      Manual Upload
                                     </span>
                                     <button
                                       type="button"
@@ -989,6 +993,7 @@ export function MediaAssetsWorkspace({ product }: MediaAssetsWorkspaceProps) {
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
               {filterAssets(draftAssets).map((asset) => {
                 const isFailed = asset.status === "failed" || !!asset.content_data?.error_message || asset.content_data?.provider_info?.generation_status === "failed";
+                const isLegacyDraft = !asset.storage_path || asset.storage_path.endsWith(".svg") || asset.content_data?.is_mock;
                 const isHighlighted = highlightedDraftId === asset.id;
 
                 return (
@@ -999,6 +1004,8 @@ export function MediaAssetsWorkspace({ product }: MediaAssetsWorkspaceProps) {
                         ? "ring-2 ring-indigo-500 border-indigo-400 bg-indigo-50/30 dark:bg-indigo-950/20 shadow-md"
                         : isFailed
                         ? "border-rose-200 dark:border-rose-900/60 bg-rose-50/20 dark:bg-rose-950/10"
+                        : isLegacyDraft
+                        ? "border-amber-200 dark:border-amber-900/60 bg-amber-50/20 dark:bg-amber-950/10"
                         : "border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-850"
                     }`}
                   >
@@ -1008,10 +1015,12 @@ export function MediaAssetsWorkspace({ product }: MediaAssetsWorkspaceProps) {
                           className={`px-2 py-0.5 text-[9.5px] font-bold rounded uppercase ${
                             isFailed
                               ? "bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300"
-                              : "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300"
+                              : isLegacyDraft
+                              ? "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300"
+                              : "bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300"
                           }`}
                         >
-                          {isFailed ? "FAILED / ACTION NEEDED" : `Draft v${asset.version}`}
+                          {isFailed ? "FAILED / ACTION NEEDED" : isLegacyDraft ? `LEGACY DRAFT v${asset.version}` : `Draft v${asset.version}`}
                         </span>
                         <span className="text-[10px] text-zinc-400 font-mono">
                           {new Date(asset.created_at).toLocaleDateString()}
@@ -1021,7 +1030,7 @@ export function MediaAssetsWorkspace({ product }: MediaAssetsWorkspaceProps) {
                       <h4 className="text-xs font-bold text-zinc-900 dark:text-zinc-100 line-clamp-2">{asset.title}</h4>
                       <p className="text-[10.5px] text-zinc-500">Type: {asset.asset_type}</p>
 
-                      {/* Clean Error Display for Failed Assets (Requirement 9) */}
+                      {/* Clean Error Display for Failed Assets */}
                       {isFailed && (
                         <div className="p-2.5 rounded-lg bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-800 text-[11px] text-rose-700 dark:text-rose-300 space-y-1">
                           <span className="font-semibold block">Generation Failed</span>
@@ -1030,9 +1039,17 @@ export function MediaAssetsWorkspace({ product }: MediaAssetsWorkspaceProps) {
                           </span>
                         </div>
                       )}
+
+                      {/* Warning Notice for Legacy Drafts */}
+                      {!isFailed && isLegacyDraft && (
+                        <div className="p-2 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-[10.5px] text-amber-800 dark:text-amber-300">
+                          <span className="font-semibold block">Legacy Mock Placeholder</span>
+                          <span className="text-[10px] block">Cannot be approved until replaced with actual AI media.</span>
+                        </div>
+                      )}
                     </div>
 
-                    {/* CARD ACTIONS (Requirements 8, 10) */}
+                    {/* CARD ACTIONS */}
                     <div className="pt-3 border-t border-zinc-200/60 dark:border-zinc-800 flex items-center justify-between gap-1.5">
                       {isFailed ? (
                         <>
@@ -1080,13 +1097,24 @@ export function MediaAssetsWorkspace({ product }: MediaAssetsWorkspaceProps) {
                             Edit
                           </button>
 
-                          <button
-                            type="button"
-                            onClick={() => setApprovingAsset(asset)}
-                            className="px-2.5 py-1 text-[10.5px] font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors cursor-pointer"
-                          >
-                            Approve
-                          </button>
+                          {isLegacyDraft ? (
+                            <button
+                              type="button"
+                              disabled
+                              title="Legacy mock placeholder cannot be approved until replaced with real AI media"
+                              className="px-2.5 py-1 text-[10.5px] font-bold bg-zinc-300 dark:bg-zinc-700 text-zinc-500 cursor-not-allowed rounded-lg opacity-60"
+                            >
+                              Approve
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => setApprovingAsset(asset)}
+                              className="px-2.5 py-1 text-[10.5px] font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors cursor-pointer"
+                            >
+                              Approve
+                            </button>
+                          )}
 
                           <button
                             type="button"
@@ -1401,6 +1429,12 @@ export function MediaAssetsWorkspace({ product }: MediaAssetsWorkspaceProps) {
               Creates a new Draft version linked to the original parent asset. Original Approved asset will be preserved.
             </p>
 
+            {(!editAsNewDraftModalAsset.storage_path || editAsNewDraftModalAsset.storage_path.endsWith(".svg") || editAsNewDraftModalAsset.content_data?.is_mock) && (
+              <div className="p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-xs text-amber-800 dark:text-amber-200">
+                <strong>⚠️ Warning:</strong> This original asset is a legacy mock placeholder. The new draft version will also remain un-approvable until replaced with actual AI-generated media.
+              </div>
+            )}
+
             <div className="space-y-2 text-xs">
               <label className="block font-bold text-zinc-700">New Draft Title</label>
               <input
@@ -1672,6 +1706,17 @@ export function MediaAssetsWorkspace({ product }: MediaAssetsWorkspaceProps) {
                 <XIcon className="w-4 h-4" />
               </button>
             </div>
+
+            {(!previewAsset.storage_path || previewAsset.storage_path.endsWith(".svg") || previewAsset.content_data?.is_mock) && (
+              <div className="p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-xs text-amber-800 dark:text-amber-200 flex items-center gap-2">
+                <AlertTriangleIcon className="w-4 h-4 text-amber-500 shrink-0" />
+                <span>
+                  {previewAsset.media_type === "video"
+                    ? "Storyboard / Reference Preview — Not a playable MP4 video file."
+                    : "Legacy / Test Preview — Not a production-ready generated asset."}
+                </span>
+              </div>
+            )}
 
             <div className="p-4 bg-zinc-100 dark:bg-zinc-850 rounded-xl flex items-center justify-center min-h-48 border border-zinc-200 dark:border-zinc-700">
               {previewAsset.url && !previewAsset.url.endsWith(".svg") && previewAsset.status !== "failed" ? (

@@ -25,7 +25,7 @@ export async function getMediaSourceMaterials(
     // 1. Fetch Product Catalog authoritative data
     const { data: product } = await supabase
       .from("products")
-      .select("id, company_id, brand_id, name, description, bullet_points, ingredients, how_to_use")
+      .select("id, company_id, brand_id, name, description, bullet_points, how_to_use")
       .eq("id", productId)
       .single();
 
@@ -42,7 +42,6 @@ export async function getMediaSourceMaterials(
           name: product.name,
           description: product.description,
           bullet_points: product.bullet_points || [],
-          ingredients: product.ingredients,
           how_to_use: product.how_to_use,
         },
         created_at: new Date().toISOString(),
