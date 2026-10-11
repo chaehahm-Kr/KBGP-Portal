@@ -17,6 +17,7 @@ export async function executeAIMediaGeneration(
   settings: CreationSettings,
   selectedSources: SourceMaterialItem[]
 ): Promise<AIProviderAdapterResult> {
+  const geminiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_AI_KEY || process.env.GOOGLE_API_KEY;
   const openAiKey = process.env.OPENAI_API_KEY;
   const replicateKey = process.env.REPLICATE_API_KEY;
   const stabilityKey = process.env.STABILITY_API_KEY;
@@ -35,12 +36,15 @@ export async function executeAIMediaGeneration(
 
   // Determine provider per output type
   const isVideo = outputType === "product_video" || outputType === "how_to_video";
-  const isImageOrGraphic = !isVideo;
 
   const activeProvider = isVideo
-    ? runwayKey
+    ? geminiKey
+      ? "Google AI (Veo 2)"
+      : runwayKey
       ? "Runway AI (Gen-2)"
       : "Unsupported / Integration Required"
+    : geminiKey
+    ? "Google AI (Imagen 3)"
     : replicateKey
     ? "Replicate (FLUX.1)"
     : openAiKey
@@ -50,9 +54,13 @@ export async function executeAIMediaGeneration(
     : "Unsupported / Integration Required";
 
   const activeModel = isVideo
-    ? runwayKey
+    ? geminiKey
+      ? "veo-2.0-generate-001"
+      : runwayKey
       ? "runway-gen2-video"
       : "video-ai-v1"
+    : geminiKey
+    ? "imagen-3.0-generate-002"
     : replicateKey
     ? "flux-1-schnell"
     : openAiKey
@@ -61,20 +69,20 @@ export async function executeAIMediaGeneration(
 
   // Check if real AI provider keys exist
   const hasRealKey = isVideo
-    ? Boolean(runwayKey || replicateKey)
-    : Boolean(openAiKey || replicateKey || stabilityKey);
+    ? Boolean(geminiKey || runwayKey || replicateKey)
+    : Boolean(geminiKey || openAiKey || replicateKey || stabilityKey);
 
   if (!hasRealKey) {
     // Return explicit failure / unsupported result per Requirement 1, 13, and 20
     const missingKey = isVideo
-      ? "RUNWAY_API_KEY / REPLICATE_API_KEY"
-      : "OPENAI_API_KEY / REPLICATE_API_KEY / STABILITY_API_KEY";
+      ? "GEMINI_API_KEY / RUNWAY_API_KEY / REPLICATE_API_KEY"
+      : "GEMINI_API_KEY / OPENAI_API_KEY / REPLICATE_API_KEY / STABILITY_API_KEY";
 
     return {
       status: "failed",
       provider: activeProvider,
       model: activeModel,
-      error_message: `AI Provider Key (${missingKey}) not configured in environment for ${outputType}. Real AI API integration required.`,
+      error_message: `AI Provider Key (${missingKey}) not configured in Vercel environment for ${outputType}. Real AI API integration required.`,
       asset: {
         title: `${productName} — ${getOutputTypeName(outputType)} (Draft)`,
         media_type: isVideo ? "video" : "image",
