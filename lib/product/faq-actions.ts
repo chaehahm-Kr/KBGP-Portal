@@ -82,7 +82,8 @@ export async function createProductFaq(input: CreateFaqInput): Promise<{ success
       ? input.sort_order
       : (currentFaqs && currentFaqs.length > 0 ? (currentFaqs[0].sort_order + 1) : 0);
 
-    const status = input.status || "draft";
+    const isBrandConf = Boolean(input.requires_brand_confirmation) || input.category === "Warnings / Precautions";
+    const status = isBrandConf ? "draft" : (input.status || "draft");
     const approvedAt = status === "approved" ? new Date().toISOString() : null;
 
     const { data, error } = await adminSupabase
@@ -97,7 +98,7 @@ export async function createProductFaq(input: CreateFaqInput): Promise<{ success
         sort_order: nextSortOrder,
         source_type: input.source_type || "manual",
         source_refs: input.source_refs || [],
-        requires_brand_confirmation: Boolean(input.requires_brand_confirmation),
+        requires_brand_confirmation: isBrandConf,
         created_by: session?.userId || null,
         approved_at: approvedAt,
       })
@@ -152,6 +153,16 @@ export async function updateProductFaq(
     await verifyAdminSession();
     const adminSupabase = createAdminClient();
 
+    const { data: existingFaq } = await adminSupabase
+      .from("product_faqs")
+      .select("requires_brand_confirmation, category")
+      .eq("id", id)
+      .maybeSingle();
+
+    const isBrandConf = input.requires_brand_confirmation !== undefined
+      ? Boolean(input.requires_brand_confirmation)
+      : (existingFaq ? (Boolean(existingFaq.requires_brand_confirmation) || existingFaq.category === "Warnings / Precautions") : false);
+
     const updatePayload: Record<string, any> = {
       updated_at: new Date().toISOString(),
     };
@@ -164,13 +175,18 @@ export async function updateProductFaq(
     if (input.requires_brand_confirmation !== undefined) {
       updatePayload.requires_brand_confirmation = input.requires_brand_confirmation;
     }
+
     if (input.status !== undefined) {
-      updatePayload.status = input.status;
-      if (input.status === "approved") {
+      const finalStatus = isBrandConf ? "draft" : input.status;
+      updatePayload.status = finalStatus;
+      if (finalStatus === "approved") {
         updatePayload.approved_at = new Date().toISOString();
       } else {
         updatePayload.approved_at = null;
       }
+    } else if (isBrandConf) {
+      updatePayload.status = "draft";
+      updatePayload.approved_at = null;
     }
 
     const { data, error } = await adminSupabase
@@ -325,22 +341,26 @@ export async function saveBulkDraftFaqs(
 
     let baseSortOrder = currentFaqs && currentFaqs.length > 0 ? currentFaqs[0].sort_order + 1 : 0;
 
-    const rows = faqs.map((f, i) => ({
-      product_id: productId,
-      question: f.question.trim(),
-      answer: f.answer.trim(),
-      category: f.category,
-      audience: f.audience || "both",
-      status: f.status || "draft",
-      sort_order: baseSortOrder + i,
-      source_type: "ai_suggested" as const,
-      source_refs: f.source_refs || [],
-      ai_provider: f.ai_provider || "local",
-      ai_model: f.ai_model || "deterministic-grounded-v1",
-      requires_brand_confirmation: Boolean(f.requires_brand_confirmation),
-      created_by: session?.userId || null,
-      approved_at: f.status === "approved" ? new Date().toISOString() : null,
-    }));
+    const rows = faqs.map((f, i) => {
+      const isBrandConf = Boolean(f.requires_brand_confirmation) || f.category === "Warnings / Precautions";
+      const finalStatus = isBrandConf ? "draft" : (f.status || "draft");
+      return {
+        product_id: productId,
+        question: f.question.trim(),
+        answer: f.answer.trim(),
+        category: f.category,
+        audience: f.audience || "both",
+        status: finalStatus,
+        sort_order: baseSortOrder + i,
+        source_type: "ai_suggested" as const,
+        source_refs: f.source_refs || [],
+        ai_provider: f.ai_provider || "local",
+        ai_model: f.ai_model || "deterministic-grounded-v1",
+        requires_brand_confirmation: isBrandConf,
+        created_by: session?.userId || null,
+        approved_at: finalStatus === "approved" ? new Date().toISOString() : null,
+      };
+    });
 
     const { error } = await adminSupabase.from("product_faqs").insert(rows);
 

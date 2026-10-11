@@ -167,10 +167,17 @@ Respond with a JSON array of FAQ objects matching this exact structure:
           item.question.toLowerCase().includes("contraindication") ||
           item.question.toLowerCase().includes("adverse");
 
+        let cleanAnswer = String(item.answer).trim();
+        // Remove repeated source headings like "How to Use DR120 Barrier Cream\n"
+        cleanAnswer = cleanAnswer
+          .replace(/^How to Use [^\n]+\n+/i, "")
+          .replace(/^How to Use:\s*/i, "")
+          .trim();
+
         validatedSuggestions.push({
           tempId: `gemini_${Date.now()}_${i}`,
           question: String(item.question).trim(),
-          answer: String(item.answer).trim(),
+          answer: cleanAnswer,
           category,
           audience,
           source_refs,
