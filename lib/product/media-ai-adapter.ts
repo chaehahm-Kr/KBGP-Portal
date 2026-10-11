@@ -188,22 +188,19 @@ export async function executeAIMediaGeneration(
       let lastApiError = "";
 
       if (geminiKey) {
-        // Target model: gemini-3.1-flash-image
         const prompt = `Professional e-commerce ${outputType.replace("_", " ")} image for ${productName}. Style: ${settings.style}. Features: ${rawBullets.slice(0, 3).join("; ")}`;
         const modelName = "gemini-3.1-flash-image";
 
-        // Attempt 1: generateImages endpoint
+        // Attempt 1: Imagen 3 REST predict endpoint (official Google AI Studio Imagen 3 endpoint)
         try {
           const imgApiRes = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateImages?key=${geminiKey}`,
+            `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:predict?key=${geminiKey}`,
             {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
-                prompt,
-                number_of_images: 1,
-                output_mime_type: "image/jpeg",
-                aspect_ratio: "1:1",
+                instances: [{ prompt }],
+                parameters: { sampleCount: 1, aspectRatio: "1:1", outputMimeType: "image/jpeg" },
               }),
             }
           );
@@ -211,9 +208,8 @@ export async function executeAIMediaGeneration(
           if (imgApiRes.ok) {
             const data = await imgApiRes.json();
             const b64 =
-              data?.generatedImages?.[0]?.image?.imageBytes ||
               data?.predictions?.[0]?.bytesBase64Encoded ||
-              data?.images?.[0]?.bytesBase64;
+              data?.generatedImages?.[0]?.image?.imageBytes;
             if (b64) {
               imageBuffer = Buffer.from(b64, "base64");
               ext = "jpeg";
@@ -221,49 +217,47 @@ export async function executeAIMediaGeneration(
             }
           } else {
             const errBody = await imgApiRes.text();
-            lastApiError = `Google Image API (${modelName}:generateImages) returned HTTP ${imgApiRes.status}: ${errBody.slice(0, 300)}`;
+            lastApiError = `Google Imagen 3 API (imagen-3.0-generate-002:predict) returned HTTP ${imgApiRes.status}: ${errBody.slice(0, 300)}`;
             console.warn("[media-ai-adapter]", lastApiError);
           }
         } catch (e: any) {
-          lastApiError = e.message || `Network exception calling Google Image API (${modelName}:generateImages)`;
+          lastApiError = e.message || `Network exception calling Google Imagen API`;
           console.warn("[media-ai-adapter] Image call exception:", e);
         }
 
-        // Attempt 2: generateContent endpoint if Attempt 1 produced no binary
+        // Attempt 2: gemini-3.1-flash-image generateImages endpoint
         if (!imageBuffer) {
           try {
             const contentRes = await fetch(
-              `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${geminiKey}`,
+              `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateImages?key=${geminiKey}`,
               {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                  contents: [{ parts: [{ text: `Generate an image: ${prompt}` }] }],
-                  generationConfig: { responseMimeType: "image/jpeg" },
+                  prompt,
+                  number_of_images: 1,
+                  output_mime_type: "image/jpeg",
+                  aspect_ratio: "1:1",
                 }),
               }
             );
 
             if (contentRes.ok) {
               const cData = await contentRes.json();
-              const parts = cData?.candidates?.[0]?.content?.parts || [];
-              for (const part of parts) {
-                const inlineData = part?.inlineData || part?.inline_data;
-                if (inlineData?.data) {
-                  imageBuffer = Buffer.from(inlineData.data, "base64");
-                  mimeType = inlineData.mimeType || "image/jpeg";
-                  ext = mimeType.split("/")[1] || "jpeg";
-                  break;
-                }
+              const b64 = cData?.generatedImages?.[0]?.image?.imageBytes;
+              if (b64) {
+                imageBuffer = Buffer.from(b64, "base64");
+                mimeType = "image/jpeg";
+                ext = "jpeg";
               }
             } else {
               const errText = await contentRes.text();
-              const secondErr = `Google Image API (${modelName}:generateContent) returned HTTP ${contentRes.status}: ${errText.slice(0, 300)}`;
+              const secondErr = `Google Image API (${modelName}:generateImages) returned HTTP ${contentRes.status}: ${errText.slice(0, 300)}`;
               lastApiError = `${lastApiError} | ${secondErr}`;
               console.warn("[media-ai-adapter]", secondErr);
             }
           } catch (e: any) {
-            console.warn("[media-ai-adapter] generateContent exception:", e);
+            console.warn("[media-ai-adapter] generateImages exception:", e);
           }
         }
       }
