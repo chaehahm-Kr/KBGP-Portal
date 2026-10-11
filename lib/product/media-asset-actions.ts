@@ -1,7 +1,7 @@
 "use server";
 
 import { createAdminClient } from "@/lib/supabase/admin";
-import { executeAIMediaGeneration } from "./media-ai-adapter";
+import { executeAIMediaGeneration, resolveAuthoritativeMediaProvider } from "./media-ai-adapter";
 import type {
   AIOutputType,
   CreationSettings,
@@ -372,6 +372,13 @@ export async function getGenerationJobs(
 }
 
 /**
+ * Authoritative provider check for Media Assets UI
+ */
+export async function getMediaAIProviderAvailability(outputType: AIOutputType) {
+  return resolveAuthoritativeMediaProvider(outputType);
+}
+
+/**
  * Create Generation Job & Execute AI Generation
  */
 export async function createAIMediaJob(
@@ -396,7 +403,8 @@ export async function createAIMediaJob(
 
     const companyId = product?.company_id || "4c845ae8-b93b-4db2-858f-bda3252e8167";
 
-    // 1. Create Job record in status 'generating'
+    // 1. Create Job record with authoritative provider evaluation
+    const providerInfo = resolveAuthoritativeMediaProvider(outputType);
     const jobId = crypto.randomUUID();
     const newJob: GenerationJob = {
       id: jobId,
@@ -405,8 +413,8 @@ export async function createAIMediaJob(
       status: "generating",
       creation_settings: creationSettings,
       selected_source_ids: selectedSourceIds,
-      provider: "evaluating",
-      model: "evaluating",
+      provider: providerInfo.provider,
+      model: providerInfo.model,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
@@ -419,8 +427,8 @@ export async function createAIMediaJob(
       status: "generating",
       creation_settings: creationSettings,
       selected_source_ids: selectedSourceIds,
-      provider: "evaluating",
-      model: "evaluating",
+      provider: providerInfo.provider,
+      model: providerInfo.model,
     });
 
     // 2. Execute AI Provider Adapter with Storage Persistence

@@ -8,6 +8,96 @@ import type {
   VideoScene,
 } from "./media-asset-types";
 
+export interface MediaProviderStatus {
+  hasKey: boolean;
+  provider: string;
+  model: string;
+  missingKeyMessage?: string;
+}
+
+/**
+ * Authoritative single provider availability and routing evaluator
+ */
+export function resolveAuthoritativeMediaProvider(outputType: AIOutputType): MediaProviderStatus {
+  const geminiKey =
+    process.env.GEMINI_API_KEY ||
+    process.env.GOOGLE_AI_KEY ||
+    process.env.GOOGLE_API_KEY;
+
+  const openAiKey = process.env.OPENAI_API_KEY;
+  const replicateKey = process.env.REPLICATE_API_KEY;
+  const stabilityKey = process.env.STABILITY_API_KEY;
+  const runwayKey = process.env.RUNWAY_API_KEY;
+
+  const isVideo = outputType === "product_video" || outputType === "how_to_video";
+
+  if (isVideo) {
+    if (geminiKey) {
+      return {
+        hasKey: true,
+        provider: "Google AI (Veo 3.1 Video)",
+        model: "veo-3.1-generate-preview",
+      };
+    }
+    if (runwayKey) {
+      return {
+        hasKey: true,
+        provider: "Runway AI (Gen-2)",
+        model: "runway-gen2-video",
+      };
+    }
+    if (replicateKey) {
+      return {
+        hasKey: true,
+        provider: "Replicate (Video AI)",
+        model: "video-flux-v1",
+      };
+    }
+    return {
+      hasKey: false,
+      provider: "Unsupported / Integration Required",
+      model: "video-ai-v1",
+      missingKeyMessage: `AI Provider Key (GEMINI_API_KEY / RUNWAY_API_KEY) not configured in Vercel environment for ${outputType}. Real AI API integration required.`,
+    };
+  }
+
+  // 4 Image Output Types
+  if (geminiKey) {
+    return {
+      hasKey: true,
+      provider: "Google AI (gemini-3.1-flash-image)",
+      model: "gemini-3.1-flash-image",
+    };
+  }
+  if (replicateKey) {
+    return {
+      hasKey: true,
+      provider: "Replicate (FLUX.1)",
+      model: "flux-1-schnell",
+    };
+  }
+  if (openAiKey) {
+    return {
+      hasKey: true,
+      provider: "OpenAI (DALL-E 3)",
+      model: "dall-e-3",
+    };
+  }
+  if (stabilityKey) {
+    return {
+      hasKey: true,
+      provider: "Stability AI (SD3)",
+      model: "sd3-turbo",
+    };
+  }
+  return {
+    hasKey: false,
+    provider: "Unsupported / Integration Required",
+    model: "image-ai-v1",
+    missingKeyMessage: `AI Provider Key (GEMINI_API_KEY) not configured in Vercel environment for ${outputType}. Real AI API integration required.`,
+  };
+}
+
 /**
  * Media Assets AI Provider Service
  * Executes real Google AI (Gemini / Imagen 3 / Veo 3.1) media generation pipelines
@@ -25,11 +115,6 @@ export async function executeAIMediaGeneration(
     process.env.GOOGLE_AI_KEY ||
     process.env.GOOGLE_API_KEY;
 
-  const openAiKey = process.env.OPENAI_API_KEY;
-  const replicateKey = process.env.REPLICATE_API_KEY;
-  const stabilityKey = process.env.STABILITY_API_KEY;
-  const runwayKey = process.env.RUNWAY_API_KEY;
-
   // Extract catalog facts from selected sources
   const productInfoSource = selectedSources.find((s) => s.group_type === "product_info");
   const catalogMeta = productInfoSource?.metadata || {};
@@ -43,59 +128,25 @@ export async function executeAIMediaGeneration(
 
   const isVideo = outputType === "product_video" || outputType === "how_to_video";
 
-  // Authoritative Provider & Model assignment
-  const activeProvider = isVideo
-    ? geminiKey
-      ? "Google AI (Veo 3.1 Video)"
-      : runwayKey
-      ? "Runway AI (Gen-2)"
-      : "Unsupported / Integration Required"
-    : geminiKey
-    ? "Google AI (gemini-3.1-flash-image)"
-    : replicateKey
-    ? "Replicate (FLUX.1)"
-    : openAiKey
-    ? "OpenAI (DALL-E 3)"
-    : stabilityKey
-    ? "Stability AI (SD3)"
-    : "Unsupported / Integration Required";
+  // Authoritative Provider & Model resolution
+  const providerStatus = resolveAuthoritativeMediaProvider(outputType);
+  const activeProvider = providerStatus.provider;
+  const activeModel = providerStatus.model;
 
-  const activeModel = isVideo
-    ? geminiKey
-      ? "veo-3.1-generate-preview"
-      : runwayKey
-      ? "runway-gen2-video"
-      : "video-ai-v1"
-    : geminiKey
-    ? "gemini-3.1-flash-image"
-    : replicateKey
-    ? "flux-1-schnell"
-    : openAiKey
-    ? "dall-e-3"
-    : "image-ai-v1";
-
-  // Check if real AI provider keys exist
-  const hasRealKey = isVideo
-    ? Boolean(geminiKey || runwayKey || replicateKey)
-    : Boolean(geminiKey || openAiKey || replicateKey || stabilityKey);
-
-  if (!hasRealKey) {
-    const missingKey = isVideo
-      ? "GEMINI_API_KEY / RUNWAY_API_KEY / REPLICATE_API_KEY"
-      : "GEMINI_API_KEY / OPENAI_API_KEY / REPLICATE_API_KEY / STABILITY_API_KEY";
-
+  if (!providerStatus.hasKey) {
+    const errorMsg = providerStatus.missingKeyMessage || `AI Provider Key not configured for ${outputType}. Real AI API integration required.`;
     return {
       status: "failed",
       provider: activeProvider,
       model: activeModel,
-      error_message: `AI Provider Key (${missingKey}) not configured in Vercel environment for ${outputType}. Real AI API integration required.`,
+      error_message: errorMsg,
       asset: {
         title: `${productName} — ${getOutputTypeName(outputType)} (Draft)`,
         media_type: isVideo ? "video" : "image",
         content_data: {
           prompt: `Generate ${getOutputTypeName(outputType)} for ${productName}`,
           creation_settings: settings,
-          error_message: `AI Provider Key (${missingKey}) not configured. Real AI integration required.`,
+          error_message: errorMsg,
           provider_info: {
             provider: activeProvider,
             model: activeModel,
