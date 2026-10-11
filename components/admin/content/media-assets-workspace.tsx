@@ -17,14 +17,25 @@ import type {
 import {
   getMediaSourceMaterials,
   uploadMediaSourceMaterial,
+  uploadMultipleMediaSourceMaterials,
+  deleteMediaSourceMaterial,
   getMediaAssets,
   getGenerationJobs,
   createAIMediaJob,
   updateDraftMediaAsset,
   approveMediaAsset,
   editApprovedAsNewDraft,
+  deleteDraftMediaAsset,
   archiveMediaAsset,
 } from "@/lib/product/media-asset-actions";
+
+function TrashIcon({ className = "w-4 h-4" }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+    </svg>
+  );
+}
 
 // Icons
 function SparklesIcon({ className = "w-4 h-4" }: { className?: string }) {
@@ -156,12 +167,21 @@ export function MediaAssetsWorkspace({ product }: MediaAssetsWorkspaceProps) {
   // Asset type filter
   const [typeFilter, setTypeFilter] = useState<AssetTypeFilter>("all");
 
-  // Upload modal state
+  // Upload modal state (Multi-file support)
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [uploadGroup, setUploadGroup] = useState<SourceGroupType>("existing_content");
   const [uploadTitle, setUploadTitle] = useState("");
-  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [selectedUploadFiles, setSelectedUploadFiles] = useState<File[]>([]);
   const [isUploading, setIsUploading] = useState(false);
+
+  // Detail & Error Modals
+  const [viewDetailsAsset, setViewDetailsAsset] = useState<MediaAssetItem | null>(null);
+
+  // Edit as New Draft Version Modal (Requirement 17 & 18)
+  const [editAsNewDraftModalAsset, setEditAsNewDraftModalAsset] = useState<MediaAssetItem | null>(null);
+  const [editAsNewDraftTitle, setEditAsNewDraftTitle] = useState("");
+  const [isCreatingNewDraftVersion, setIsCreatingNewDraftVersion] = useState(false);
+  const [highlightedDraftId, setHighlightedDraftId] = useState<string | null>(null);
 
   // Create with AI modal / step state
   const [selectedOutputType, setSelectedOutputType] = useState<AIOutputType>("benefit_graphic");
@@ -213,7 +233,7 @@ export function MediaAssetsWorkspace({ product }: MediaAssetsWorkspaceProps) {
     reloadData();
   }, [product.id]);
 
-  // Default Source Rules auto-selection (Requirement 5)
+  // Default Source Rules auto-selection (Requirement 6)
   useEffect(() => {
     const autoSelectedIds: string[] = [];
     sources.forEach((src) => {
@@ -240,7 +260,6 @@ export function MediaAssetsWorkspace({ product }: MediaAssetsWorkspaceProps) {
       }
     });
 
-    // Fallback if no matching group
     if (autoSelectedIds.length === 0 && sources.length > 0) {
       autoSelectedIds.push(sources[0].id);
     }
@@ -248,23 +267,49 @@ export function MediaAssetsWorkspace({ product }: MediaAssetsWorkspaceProps) {
     setSelectedSourceIds(autoSelectedIds);
   }, [selectedOutputType, sources]);
 
-  // Handle Source Upload
-  const handleUploadSource = async () => {
-    if (!uploadFile) return;
+  // Multi-File Upload Handler (Requirement 4)
+  const handleBatchUploadSources = async () => {
+    if (selectedUploadFiles.length === 0) return;
     setIsUploading(true);
-    const formData = new FormData();
-    formData.append("file", uploadFile);
 
-    const res = await uploadMediaSourceMaterial(product.id, uploadGroup, uploadTitle, formData);
+    const fileItems = selectedUploadFiles.map((f, idx) => ({
+      file: f,
+      title: uploadTitle ? (selectedUploadFiles.length > 1 ? `${uploadTitle} (${idx + 1})` : uploadTitle) : f.name,
+    }));
+
+    const res = await uploadMultipleMediaSourceMaterials(product.id, uploadGroup, fileItems);
     setIsUploading(false);
 
-    if (res.success && res.source) {
-      setSources((prev) => [res.source!, ...prev]);
+    if (res.success && res.sources) {
+      setSources((prev) => [...res.sources!, ...prev]);
       setShowUploadModal(false);
       setUploadTitle("");
-      setUploadFile(null);
+      setSelectedUploadFiles([]);
     } else {
-      alert(res.error || "Failed to upload file");
+      alert(res.errors?.join("\n") || "Failed to upload files");
+    }
+  };
+
+  // Delete Manual Source Handler (Requirement 5)
+  const handleDeleteSource = async (sourceId: string) => {
+    if (!confirm("Are you sure you want to delete this manual source material?")) return;
+    const res = await deleteMediaSourceMaterial(sourceId);
+    if (res.success) {
+      setSources((prev) => prev.filter((s) => s.id !== sourceId));
+      if (res.warning) alert(res.warning);
+    } else {
+      alert(res.error || "Failed to delete source material");
+    }
+  };
+
+  // Delete Draft Media Asset (Requirement 10)
+  const handleDeleteDraft = async (assetId: string) => {
+    if (!confirm("Are you sure you want to delete this draft asset?")) return;
+    const res = await deleteDraftMediaAsset(assetId);
+    if (res.success) {
+      setAssets((prev) => prev.filter((a) => a.id !== assetId));
+    } else {
+      alert(res.error || "Failed to delete draft asset");
     }
   };
 
@@ -285,9 +330,26 @@ export function MediaAssetsWorkspace({ product }: MediaAssetsWorkspaceProps) {
 
     if (!res.success) {
       setGenerationError(res.error || "AI generation failed or unsupported");
-    } else {
-      setActiveMainTab("drafts");
     }
+    setActiveMainTab("drafts");
+  };
+
+  // Retry Failed Generation (Requirement 8)
+  const handleRetryGeneration = async (outputType: string) => {
+    const validAIOutputTypes: AIOutputType[] = [
+      "benefit_graphic",
+      "infographic",
+      "how_to_graphic",
+      "lifestyle_image",
+      "product_video",
+      "how_to_video",
+    ];
+    if (validAIOutputTypes.includes(outputType as AIOutputType)) {
+      setSelectedOutputType(outputType as AIOutputType);
+    } else {
+      setSelectedOutputType("benefit_graphic");
+    }
+    setActiveMainTab("create");
   };
 
   // Open Edit Modal
@@ -348,14 +410,32 @@ export function MediaAssetsWorkspace({ product }: MediaAssetsWorkspaceProps) {
     }
   };
 
-  // Handle Edit as New Draft
-  const handleEditAsNewDraft = async (approvedAsset: MediaAssetItem) => {
-    const res = await editApprovedAsNewDraft(approvedAsset.id);
-    if (res.success) {
-      await reloadData();
+  // Open Edit as New Draft Version Naming Modal (Requirement 17)
+  const openEditAsNewDraftModal = (approvedAsset: MediaAssetItem) => {
+    const nextVersion = (approvedAsset.version || 1) + 1;
+    setEditAsNewDraftModalAsset(approvedAsset);
+    setEditAsNewDraftTitle(`${approvedAsset.title} — v${nextVersion} Draft`);
+  };
+
+  // Confirm Edit as New Draft Version (Requirement 17 & 18)
+  const handleConfirmCreateNewDraftVersion = async () => {
+    if (!editAsNewDraftModalAsset) return;
+    setIsCreatingNewDraftVersion(true);
+
+    const res = await editApprovedAsNewDraft(editAsNewDraftModalAsset.id, editAsNewDraftTitle);
+    setIsCreatingNewDraftVersion(false);
+
+    if (res.success && res.newAsset) {
+      setAssets((prev) => [res.newAsset!, ...prev]);
+      setEditAsNewDraftModalAsset(null);
+      setHighlightedDraftId(res.newAsset.id);
       setActiveMainTab("drafts");
+
+      setTimeout(() => {
+        setHighlightedDraftId(null);
+      }, 4000);
     } else {
-      alert(res.error || "Failed to create new draft");
+      alert(res.error || "Failed to create new draft version");
     }
   };
 
@@ -514,7 +594,7 @@ export function MediaAssetsWorkspace({ product }: MediaAssetsWorkspaceProps) {
           <div className="flex items-center justify-between">
             <div>
               <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">
-                Product Source Materials (5 Core Groups)
+                Product Source Materials ({sources.length} Total Sources)
               </h3>
               <p className="text-xs text-zinc-500 dark:text-zinc-400">
                 Authoritative catalog details, registered packshots, brand guide, and marketing references.
@@ -522,7 +602,10 @@ export function MediaAssetsWorkspace({ product }: MediaAssetsWorkspaceProps) {
             </div>
             <button
               type="button"
-              onClick={() => setShowUploadModal(true)}
+              onClick={() => {
+                setSelectedUploadFiles([]);
+                setShowUploadModal(true);
+              }}
               className="px-3 py-1.5 bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 text-xs font-bold rounded-xl hover:bg-zinc-800 dark:hover:bg-zinc-200 transition-colors flex items-center gap-1.5 cursor-pointer"
             >
               <PlusIcon className="w-3.5 h-3.5" />
@@ -610,6 +693,7 @@ export function MediaAssetsWorkspace({ product }: MediaAssetsWorkspaceProps) {
                             type="button"
                             onClick={() => {
                               setUploadGroup(group.id as SourceGroupType);
+                              setSelectedUploadFiles([]);
                               setShowUploadModal(true);
                             }}
                             className="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer flex items-center gap-1"
@@ -619,26 +703,57 @@ export function MediaAssetsWorkspace({ product }: MediaAssetsWorkspaceProps) {
                           </button>
                         </div>
                       ) : (
-                        groupItems.map((item) => (
-                          <div key={item.id} className="p-3 flex items-center justify-between gap-3">
-                            <div className="flex items-center gap-3 min-w-0">
-                              {item.url && (item.source_type === "image" || item.group_type === "brand_materials") ? (
-                                <img src={item.url} alt={item.title} className="w-9 h-9 rounded-lg object-cover border border-zinc-200 dark:border-zinc-700 shrink-0" />
-                              ) : (
-                                <div className="w-9 h-9 rounded-lg bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center shrink-0">
-                                  <FileTextIcon className="w-4 h-4 text-zinc-500" />
+                        groupItems.map((item) => {
+                          const isSynced =
+                            item.id.startsWith("info-cat-") ||
+                            item.id.startsWith("img-cat-") ||
+                            item.id.startsWith("vid-cat-") ||
+                            item.id.startsWith("brand-mat-") ||
+                            item.source_type === "catalog_sync";
+
+                          return (
+                            <div key={item.id} className="p-3 flex items-center justify-between gap-3 hover:bg-zinc-50/50 dark:hover:bg-zinc-850/50">
+                              <div className="flex items-center gap-3 min-w-0">
+                                {item.url && (item.source_type === "image" || item.group_type === "brand_materials") ? (
+                                  <img src={item.url} alt={item.title} className="w-9 h-9 rounded-lg object-cover border border-zinc-200 dark:border-zinc-700 shrink-0" />
+                                ) : (
+                                  <div className="w-9 h-9 rounded-lg bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center shrink-0">
+                                    <FileTextIcon className="w-4 h-4 text-zinc-500" />
+                                  </div>
+                                )}
+                                <div className="min-w-0">
+                                  <span className="text-xs font-bold text-zinc-900 dark:text-zinc-100 block truncate">{item.title}</span>
+                                  <span className="text-[10.5px] text-zinc-500 truncate block">
+                                    Type: {item.source_type} {item.file_name && `• ${item.file_name}`}
+                                  </span>
                                 </div>
-                              )}
-                              <div className="min-w-0">
-                                <span className="text-xs font-bold text-zinc-900 dark:text-zinc-100 block truncate">{item.title}</span>
-                                <span className="text-[10.5px] text-zinc-500 truncate block">
-                                  Type: {item.source_type} {item.file_name && `• ${item.file_name}`}
-                                </span>
+                              </div>
+
+                              <div className="flex items-center gap-2 shrink-0">
+                                {isSynced ? (
+                                  <span className="text-[10px] font-mono text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 px-2 py-0.5 rounded font-semibold">
+                                    Catalog Synced
+                                  </span>
+                                ) : (
+                                  <>
+                                    <span className="text-[10px] font-mono text-zinc-500 bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 rounded">
+                                      Custom Upload
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDeleteSource(item.id)}
+                                      title="Delete Manual Source Material"
+                                      aria-label="Delete Manual Source Material"
+                                      className="p-1 text-zinc-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded transition-colors cursor-pointer"
+                                    >
+                                      <TrashIcon className="w-4 h-4" />
+                                    </button>
+                                  </>
+                                )}
                               </div>
                             </div>
-                            <span className="text-[10px] font-mono text-zinc-400 shrink-0">Catalog Synced</span>
-                          </div>
-                        ))
+                          );
+                        })
                       )}
                     </div>
                   )}
@@ -872,57 +987,122 @@ export function MediaAssetsWorkspace({ product }: MediaAssetsWorkspaceProps) {
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-              {filterAssets(draftAssets).map((asset) => (
-                <div key={asset.id} className="border border-zinc-200 dark:border-zinc-800 rounded-xl p-4 bg-zinc-50 dark:bg-zinc-850 space-y-3 flex flex-col justify-between">
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="px-2 py-0.5 text-[9.5px] font-bold rounded uppercase bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300">
-                        {asset.status === "failed" ? "Failed / Action Needed" : `Draft v${asset.version}`}
-                      </span>
-                      <span className="text-[10px] text-zinc-400 font-mono">
-                        {new Date(asset.created_at).toLocaleDateString()}
-                      </span>
+              {filterAssets(draftAssets).map((asset) => {
+                const isFailed = asset.status === "failed" || !!asset.content_data?.error_message || asset.content_data?.provider_info?.generation_status === "failed";
+                const isHighlighted = highlightedDraftId === asset.id;
+
+                return (
+                  <div
+                    key={asset.id}
+                    className={`border rounded-xl p-4 space-y-3 flex flex-col justify-between transition-all ${
+                      isHighlighted
+                        ? "ring-2 ring-indigo-500 border-indigo-400 bg-indigo-50/30 dark:bg-indigo-950/20 shadow-md"
+                        : isFailed
+                        ? "border-rose-200 dark:border-rose-900/60 bg-rose-50/20 dark:bg-rose-950/10"
+                        : "border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-850"
+                    }`}
+                  >
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span
+                          className={`px-2 py-0.5 text-[9.5px] font-bold rounded uppercase ${
+                            isFailed
+                              ? "bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300"
+                              : "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300"
+                          }`}
+                        >
+                          {isFailed ? "FAILED / ACTION NEEDED" : `Draft v${asset.version}`}
+                        </span>
+                        <span className="text-[10px] text-zinc-400 font-mono">
+                          {new Date(asset.created_at).toLocaleDateString()}
+                        </span>
+                      </div>
+
+                      <h4 className="text-xs font-bold text-zinc-900 dark:text-zinc-100 line-clamp-2">{asset.title}</h4>
+                      <p className="text-[10.5px] text-zinc-500">Type: {asset.asset_type}</p>
+
+                      {/* Clean Error Display for Failed Assets (Requirement 9) */}
+                      {isFailed && (
+                        <div className="p-2.5 rounded-lg bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-800 text-[11px] text-rose-700 dark:text-rose-300 space-y-1">
+                          <span className="font-semibold block">Generation Failed</span>
+                          <span className="text-[10.5px] text-rose-600 dark:text-rose-400 block line-clamp-2">
+                            Google AI API request failed (Rate Limit / Quota Exceeded). Click View Details to inspect.
+                          </span>
+                        </div>
+                      )}
                     </div>
 
-                    <h4 className="text-xs font-bold text-zinc-900 dark:text-zinc-100 line-clamp-2">{asset.title}</h4>
-                    <p className="text-[10.5px] text-zinc-500">Type: {asset.asset_type}</p>
+                    {/* CARD ACTIONS (Requirements 8, 10) */}
+                    <div className="pt-3 border-t border-zinc-200/60 dark:border-zinc-800 flex items-center justify-between gap-1.5">
+                      {isFailed ? (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => handleRetryGeneration(asset.asset_type)}
+                            className="px-2.5 py-1 text-[11px] font-bold bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors cursor-pointer"
+                          >
+                            Retry
+                          </button>
 
-                    {/* Diagnostic Warning if failed */}
-                    {asset.status === "failed" && (
-                      <div className="p-2 rounded bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-800 text-[10px] text-rose-700 dark:text-rose-300">
-                        {asset.content_data.error_message || "AI Provider key missing. Real AI API integration required."}
-                      </div>
-                    )}
+                          <button
+                            type="button"
+                            onClick={() => setViewDetailsAsset(asset)}
+                            className="px-2.5 py-1 text-[11px] font-semibold text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-750 rounded-lg cursor-pointer"
+                          >
+                            View Details
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteDraft(asset.id)}
+                            title="Delete Failed Asset"
+                            aria-label="Delete Failed Asset"
+                            className="p-1 text-zinc-400 hover:text-rose-600 cursor-pointer"
+                          >
+                            <TrashIcon className="w-4 h-4" />
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => setPreviewAsset(asset)}
+                            className="px-2 py-1 text-[10.5px] font-semibold text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-750 rounded-lg cursor-pointer"
+                          >
+                            Preview
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => openEditModal(asset)}
+                            className="px-2 py-1 text-[10.5px] font-semibold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 rounded-lg cursor-pointer"
+                          >
+                            Edit
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => setApprovingAsset(asset)}
+                            className="px-2.5 py-1 text-[10.5px] font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors cursor-pointer"
+                          >
+                            Approve
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteDraft(asset.id)}
+                            title="Delete Draft Asset"
+                            aria-label="Delete Draft Asset"
+                            className="p-1 text-zinc-400 hover:text-rose-600 cursor-pointer"
+                          >
+                            <TrashIcon className="w-4 h-4" />
+                          </button>
+                        </>
+                      )}
+                    </div>
                   </div>
-
-                  {/* CARD ACTIONS */}
-                  <div className="pt-3 border-t border-zinc-200/60 dark:border-zinc-800 flex items-center justify-between gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setPreviewAsset(asset)}
-                      className="px-2.5 py-1 text-[11px] font-semibold text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-750 rounded-lg cursor-pointer"
-                    >
-                      Preview
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => openEditModal(asset)}
-                      className="px-2.5 py-1 text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 rounded-lg cursor-pointer"
-                    >
-                      Edit
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => setApprovingAsset(asset)}
-                      className="px-3 py-1 text-[11px] font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors cursor-pointer"
-                    >
-                      Approve
-                    </button>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
@@ -966,81 +1146,102 @@ export function MediaAssetsWorkspace({ product }: MediaAssetsWorkspaceProps) {
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-              {filterAssets(approvedAssets).map((asset) => (
-                <div key={asset.id} className="border border-emerald-200 dark:border-emerald-900/60 rounded-xl p-4 bg-emerald-50/20 dark:bg-emerald-950/10 space-y-3 flex flex-col justify-between">
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="px-2 py-0.5 text-[9.5px] font-bold rounded uppercase bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
-                        Approved v{asset.version}
-                      </span>
-                      <span className="text-[10px] text-zinc-400 font-mono">
-                        {asset.approved_at ? new Date(asset.approved_at).toLocaleDateString() : ""}
-                      </span>
-                    </div>
+              {filterAssets(approvedAssets).map((asset) => {
+                const isValidApproved =
+                  !!asset.storage_path &&
+                  !asset.storage_path.endsWith(".svg") &&
+                  !asset.content_data?.is_mock &&
+                  asset.content_data?.provider_info?.generation_status !== "failed";
 
-                    <h4 className="text-xs font-bold text-zinc-900 dark:text-zinc-100 line-clamp-2">{asset.title}</h4>
+                return (
+                  <div
+                    key={asset.id}
+                    className={`border rounded-xl p-4 space-y-3 flex flex-col justify-between ${
+                      isValidApproved
+                        ? "border-emerald-200 dark:border-emerald-900/60 bg-emerald-50/20 dark:bg-emerald-950/10"
+                        : "border-amber-200 dark:border-amber-900/60 bg-amber-50/20 dark:bg-amber-950/10"
+                    }`}
+                  >
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span
+                          className={`px-2 py-0.5 text-[9.5px] font-bold rounded uppercase ${
+                            isValidApproved
+                              ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
+                              : "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300"
+                          }`}
+                        >
+                          {isValidApproved ? `Approved v${asset.version}` : "LEGACY / REVIEW NEEDED"}
+                        </span>
+                        <span className="text-[10px] text-zinc-400 font-mono">
+                          {asset.approved_at ? new Date(asset.approved_at).toLocaleDateString() : ""}
+                        </span>
+                      </div>
 
-                    <div className="flex flex-wrap items-center gap-1">
-                      <span className="text-[10px] text-zinc-500 mr-1">Used In:</span>
-                      {asset.used_in.length === 0 ? (
-                        <span className="text-[10px] text-zinc-400 italic">None assigned</span>
-                      ) : (
-                        asset.used_in.map((u) => (
-                          <span key={u} className="px-1.5 py-0.2 rounded text-[9.5px] font-semibold bg-zinc-200 text-zinc-700 dark:bg-zinc-700 dark:text-zinc-300">
-                            {u === "customer_page" ? "Customer Page" : "Training"}
+                      <h4 className="text-xs font-bold text-zinc-900 dark:text-zinc-100 line-clamp-2">{asset.title}</h4>
+
+                      <div className="flex flex-wrap items-center gap-1">
+                        <span className="text-[10px] text-zinc-500 mr-1">Usability:</span>
+                        {isValidApproved ? (
+                          <span className="px-1.5 py-0.2 rounded text-[9.5px] font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+                            Eligible for Customer Page & Staff Training
                           </span>
-                        ))
-                      )}
+                        ) : (
+                          <span className="px-1.5 py-0.2 rounded text-[9.5px] font-semibold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 italic">
+                            Excluded from Reuse (Legacy Mock Placeholder)
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* ACTIONS */}
+                    <div className="pt-3 border-t border-zinc-200/60 dark:border-zinc-800 flex flex-wrap items-center justify-between gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => setPreviewAsset(asset)}
+                        className="px-2 py-1 text-[10.5px] font-semibold text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-750 rounded-lg cursor-pointer"
+                      >
+                        Preview
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setLineageAsset(asset)}
+                        aria-label="View Lineage Info"
+                        title="View Lineage Info"
+                        className="px-2 py-1 text-[10.5px] font-semibold text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 rounded-lg cursor-pointer"
+                      >
+                        <InfoIcon className="w-3.5 h-3.5 inline mr-1" />
+                        Lineage
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => openEditAsNewDraftModal(asset)}
+                        className="px-2.5 py-1 text-[10.5px] font-bold bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 rounded-lg hover:bg-zinc-800 cursor-pointer"
+                      >
+                        Edit as New Draft
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleArchive(asset.id)}
+                        aria-label="Archive Asset"
+                        title="Archive Asset"
+                        className="p-1 text-zinc-400 hover:text-rose-600 cursor-pointer"
+                      >
+                        <ArchiveIcon className="w-3.5 h-3.5" />
+                      </button>
                     </div>
                   </div>
-
-                  {/* ACTIONS */}
-                  <div className="pt-3 border-t border-zinc-200/60 dark:border-zinc-800 flex flex-wrap items-center justify-between gap-1.5">
-                    <button
-                      type="button"
-                      onClick={() => setPreviewAsset(asset)}
-                      className="px-2 py-1 text-[10.5px] font-semibold text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-750 rounded-lg cursor-pointer"
-                    >
-                      Preview
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => setLineageAsset(asset)}
-                      aria-label="View Lineage Info"
-                      title="View Lineage Info"
-                      className="px-2 py-1 text-[10.5px] font-semibold text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 rounded-lg cursor-pointer"
-                    >
-                      <InfoIcon className="w-3.5 h-3.5 inline mr-1" />
-                      Lineage
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => handleEditAsNewDraft(asset)}
-                      className="px-2.5 py-1 text-[10.5px] font-bold bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 rounded-lg hover:bg-zinc-800 cursor-pointer"
-                    >
-                      Edit as New Draft
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => handleArchive(asset.id)}
-                      aria-label="Archive Asset"
-                      title="Archive Asset"
-                      className="p-1 text-zinc-400 hover:text-rose-600 cursor-pointer"
-                    >
-                      <ArchiveIcon className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
       )}
 
-      {/* MODAL 1: UPLOAD SOURCE MATERIAL */}
+      {/* MODAL 1: UPLOAD SOURCE MATERIAL (MULTI-FILE & CUSTOM UI) */}
       {showUploadModal && (
         <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
           <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 p-6 max-w-md w-full space-y-4 shadow-xl">
@@ -1067,10 +1268,10 @@ export function MediaAssetsWorkspace({ product }: MediaAssetsWorkspaceProps) {
               </div>
 
               <div>
-                <label className="block font-bold text-zinc-600 mb-1">Title</label>
+                <label className="block font-bold text-zinc-600 mb-1">Title / Label Prefix</label>
                 <input
                   type="text"
-                  placeholder="Amazon Detail Image 1..."
+                  placeholder="Amazon Detail Image..."
                   value={uploadTitle}
                   onChange={(e) => setUploadTitle(e.target.value)}
                   className="w-full py-1.5 px-2.5 rounded-xl border border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800"
@@ -1078,13 +1279,49 @@ export function MediaAssetsWorkspace({ product }: MediaAssetsWorkspaceProps) {
               </div>
 
               <div>
-                <label className="block font-bold text-zinc-600 mb-1">Select File</label>
-                <input
-                  type="file"
-                  onChange={(e) => setUploadFile(e.target.files?.[0] || null)}
-                  className="w-full py-1.5 px-2 text-xs"
-                />
+                <label className="block font-bold text-zinc-600 mb-1">Select Files (Multi-File Supported)</label>
+                <label className="border-2 border-dashed border-zinc-300 dark:border-zinc-700 hover:border-indigo-500 rounded-xl p-4 flex flex-col items-center justify-center cursor-pointer bg-zinc-50 dark:bg-zinc-850 transition-colors">
+                  <FileTextIcon className="w-6 h-6 text-zinc-400 mb-1" />
+                  <span className="text-xs font-semibold text-indigo-600 dark:text-indigo-400">Click to Select Files</span>
+                  <span className="text-[10px] text-zinc-400 mt-0.5">Images, Videos, PDFs, Documents</span>
+                  <input
+                    type="file"
+                    multiple
+                    onChange={(e) => {
+                      if (e.target.files) {
+                        setSelectedUploadFiles((prev) => [...prev, ...Array.from(e.target.files!)]);
+                      }
+                    }}
+                    className="hidden"
+                  />
+                </label>
               </div>
+
+              {/* Selected File List */}
+              {selectedUploadFiles.length > 0 && (
+                <div className="space-y-1.5 max-h-36 overflow-y-auto border border-zinc-200 dark:border-zinc-800 rounded-lg p-2 bg-white dark:bg-zinc-900">
+                  <span className="text-[10.5px] font-bold text-zinc-500 block">
+                    Selected Files ({selectedUploadFiles.length}):
+                  </span>
+                  {selectedUploadFiles.map((file, idx) => (
+                    <div key={idx} className="flex items-center justify-between text-[11px] bg-zinc-50 dark:bg-zinc-800 p-1.5 rounded">
+                      <span className="truncate font-mono font-medium max-w-[200px]">{file.name}</span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] text-zinc-400 font-mono">
+                          ({(file.size / 1024).toFixed(0)} KB)
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedUploadFiles((prev) => prev.filter((_, i) => i !== idx))}
+                          className="text-zinc-400 hover:text-rose-600"
+                        >
+                          <XIcon className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             <div className="flex justify-end gap-2 pt-2 border-t border-zinc-100 dark:border-zinc-800">
@@ -1097,18 +1334,105 @@ export function MediaAssetsWorkspace({ product }: MediaAssetsWorkspaceProps) {
               </button>
               <button
                 type="button"
-                disabled={isUploading || !uploadFile}
-                onClick={handleUploadSource}
+                disabled={isUploading || selectedUploadFiles.length === 0}
+                onClick={handleBatchUploadSources}
                 className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-bold text-xs rounded-xl"
               >
-                {isUploading ? "Uploading..." : "Upload Source"}
+                {isUploading ? "Uploading..." : `Upload (${selectedUploadFiles.length}) Files`}
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* MODAL 2: QUICK EDIT */}
+      {/* MODAL 2: VIEW DETAILS (TECHNICAL ERROR DETAILS) */}
+      {viewDetailsAsset && (
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 p-6 max-w-lg w-full space-y-4 shadow-xl">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">
+                Failed Generation Technical Details
+              </h3>
+              <button onClick={() => setViewDetailsAsset(null)} className="text-zinc-400 hover:text-zinc-600">
+                <XIcon className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-3 bg-zinc-50 dark:bg-zinc-850 rounded-xl border border-zinc-200 dark:border-zinc-800 space-y-2 text-xs font-mono">
+              <div><strong className="text-zinc-500">Asset Title:</strong> {viewDetailsAsset.title}</div>
+              <div><strong className="text-zinc-500">Asset Type:</strong> {viewDetailsAsset.asset_type}</div>
+              <div><strong className="text-zinc-500">AI Provider:</strong> {viewDetailsAsset.content_data.provider_info?.provider || "N/A"}</div>
+              <div><strong className="text-zinc-500">AI Model:</strong> {viewDetailsAsset.content_data.provider_info?.model || "N/A"}</div>
+              <div>
+                <strong className="text-zinc-500 block mb-1">Raw Provider Error Message:</strong>
+                <pre className="p-2 rounded bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 text-[10px] whitespace-pre-wrap font-mono border border-rose-200 max-h-48 overflow-y-auto">
+                  {viewDetailsAsset.content_data.error_message || "No error trace recorded."}
+                </pre>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-zinc-100 dark:border-zinc-800">
+              <button
+                type="button"
+                onClick={() => setViewDetailsAsset(null)}
+                className="px-4 py-1.5 bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 font-bold text-xs rounded-xl"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 3: EDIT AS NEW DRAFT TITLE MODAL (Requirement 17 & 18) */}
+      {editAsNewDraftModalAsset && (
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 p-6 max-w-md w-full space-y-4 shadow-xl">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">
+                Create New Draft Version
+              </h3>
+              <button onClick={() => setEditAsNewDraftModalAsset(null)} className="text-zinc-400 hover:text-zinc-600">
+                <XIcon className="w-4 h-4" />
+              </button>
+            </div>
+
+            <p className="text-xs text-zinc-500">
+              Creates a new Draft version linked to the original parent asset. Original Approved asset will be preserved.
+            </p>
+
+            <div className="space-y-2 text-xs">
+              <label className="block font-bold text-zinc-700">New Draft Title</label>
+              <input
+                type="text"
+                value={editAsNewDraftTitle}
+                onChange={(e) => setEditAsNewDraftTitle(e.target.value)}
+                className="w-full py-1.5 px-2.5 rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 font-bold text-xs"
+              />
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-zinc-100 dark:border-zinc-800">
+              <button
+                type="button"
+                onClick={() => setEditAsNewDraftModalAsset(null)}
+                className="px-3 py-1.5 text-xs font-semibold text-zinc-600 hover:bg-zinc-100 rounded-xl"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isCreatingNewDraftVersion || !editAsNewDraftTitle.trim()}
+                onClick={handleConfirmCreateNewDraftVersion}
+                className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-bold text-xs rounded-xl"
+              >
+                {isCreatingNewDraftVersion ? "Creating..." : "Create Draft"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 4: QUICK EDIT */}
       {editingAsset && (
         <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
           <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 p-6 max-w-lg w-full space-y-4 shadow-xl max-h-[85vh] overflow-y-auto">
@@ -1197,7 +1521,7 @@ export function MediaAssetsWorkspace({ product }: MediaAssetsWorkspaceProps) {
         </div>
       )}
 
-      {/* MODAL 3: APPROVE CONFIRMATION */}
+      {/* MODAL 5: APPROVE CONFIRMATION */}
       {approvingAsset && (
         <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
           <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 p-6 max-w-md w-full space-y-4 shadow-xl">
@@ -1302,7 +1626,7 @@ export function MediaAssetsWorkspace({ product }: MediaAssetsWorkspaceProps) {
         </div>
       )}
 
-      {/* MODAL 4: LINEAGE & TRACEABILITY */}
+      {/* MODAL 6: LINEAGE & TRACEABILITY */}
       {lineageAsset && (
         <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
           <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 p-6 max-w-md w-full space-y-4 shadow-xl text-xs">
@@ -1338,7 +1662,7 @@ export function MediaAssetsWorkspace({ product }: MediaAssetsWorkspaceProps) {
         </div>
       )}
 
-      {/* MODAL 5: PREVIEW */}
+      {/* MODAL 7: PREVIEW (WITH VALIDITY GUARD) */}
       {previewAsset && (
         <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4">
           <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 p-6 max-w-xl w-full space-y-4 shadow-xl">
@@ -1350,28 +1674,23 @@ export function MediaAssetsWorkspace({ product }: MediaAssetsWorkspaceProps) {
             </div>
 
             <div className="p-4 bg-zinc-100 dark:bg-zinc-850 rounded-xl flex items-center justify-center min-h-48 border border-zinc-200 dark:border-zinc-700">
-              {previewAsset.url ? (
+              {previewAsset.url && !previewAsset.url.endsWith(".svg") && previewAsset.status !== "failed" ? (
                 previewAsset.url.includes(".mp4") ? (
                   <video src={previewAsset.url} controls className="max-h-80 w-full object-contain rounded" />
                 ) : (
                   <img src={previewAsset.url} alt={previewAsset.title} className="max-h-80 object-contain rounded" />
                 )
               ) : (
-                <div className="text-center space-y-2">
-                  <ImageIcon className="w-10 h-10 text-zinc-400 mx-auto" />
-                  <span className="text-xs text-zinc-500 block font-semibold">
-                    {previewAsset.asset_type.toUpperCase()} Preview
+                <div className="text-center space-y-2 py-6">
+                  <AlertTriangleIcon className="w-10 h-10 text-amber-500 mx-auto" />
+                  <span className="text-xs text-zinc-700 dark:text-zinc-300 block font-bold">
+                    No Valid Media File Available for Preview
                   </span>
-                  {previewAsset.content_data.benefits_list && (
-                    <div className="text-left text-xs space-y-1 mt-2">
-                      <span className="font-bold block">Synthesized Benefits:</span>
-                      {previewAsset.content_data.benefits_list.map((b, i) => (
-                        <div key={i} className="text-[11px] text-zinc-600 dark:text-zinc-400">
-                          • <strong>{b.title}:</strong> {b.description}
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                  <span className="text-[11px] text-zinc-500 block max-w-sm mx-auto">
+                    {previewAsset.status === "failed"
+                      ? "This asset generation failed. Please click Retry to generate a new draft."
+                      : "This is a legacy diagnostic placeholder asset."}
+                  </span>
                 </div>
               )}
             </div>

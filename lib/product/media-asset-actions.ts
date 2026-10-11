@@ -547,6 +547,7 @@ export async function updateDraftMediaAsset(
 
 /**
  * Directly Approve Draft Asset (Draft -> Approved)
+ * Enforces Server-Side Guard: Rejects failed, missing media, or legacy mock SVG assets.
  */
 export async function approveMediaAsset(
   assetId: string,
@@ -554,6 +555,26 @@ export async function approveMediaAsset(
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const supabase = createAdminClient();
+
+    // SERVER-SIDE APPROVAL GUARD (Requirement 14 & 19)
+    const { data: asset } = await supabase
+      .from("product_media_assets")
+      .select("*")
+      .eq("id", assetId)
+      .single();
+
+    if (!asset) {
+      return { success: false, error: "Media asset not found" };
+    }
+
+    if (asset.status === "failed" || asset.content_data?.provider_info?.generation_status === "failed") {
+      return { success: false, error: "Cannot approve failed generation assets." };
+    }
+
+    if (!asset.storage_path || asset.storage_path.endsWith(".svg") || asset.content_data?.is_mock) {
+      return { success: false, error: "Cannot approve invalid or legacy test placeholder media assets." };
+    }
+
     const { error } = await supabase
       .from("product_media_assets")
       .update({
@@ -566,6 +587,7 @@ export async function approveMediaAsset(
 
     if (error) {
       console.warn("DB approve asset error:", error);
+      return { success: false, error: error.message };
     }
     return { success: true };
   } catch (err: any) {
@@ -577,8 +599,9 @@ export async function approveMediaAsset(
  * Edit Approved Asset as New Draft (Clones into new Draft with parent_asset_id lineage)
  */
 export async function editApprovedAsNewDraft(
-  approvedAssetId: string
-): Promise<{ success: boolean; newDraftId?: string; error?: string }> {
+  approvedAssetId: string,
+  customTitle?: string
+): Promise<{ success: boolean; newDraftId?: string; newAsset?: MediaAssetItem; error?: string }> {
   try {
     const supabase = createAdminClient();
     const { data: approved } = await supabase
@@ -593,30 +616,151 @@ export async function editApprovedAsNewDraft(
 
     const newDraftId = crypto.randomUUID();
     const nextVersion = (approved.version || 1) + 1;
+    const titleToUse = customTitle || `${approved.title} — v${nextVersion} Draft`;
 
-    const { error } = await supabase.from("product_media_assets").insert({
-      id: newDraftId,
-      product_id: approved.product_id,
-      company_id: approved.company_id,
-      asset_type: approved.asset_type,
-      title: `${approved.title} (v${nextVersion} Draft)`,
-      status: "draft",
-      media_type: approved.media_type,
-      storage_path: approved.storage_path,
-      content_data: approved.content_data,
-      source_material_ids: approved.source_material_ids,
-      parent_asset_id: approvedAssetId,
-      version: nextVersion,
-    });
+    const { data: newRow, error } = await supabase
+      .from("product_media_assets")
+      .insert({
+        id: newDraftId,
+        product_id: approved.product_id,
+        company_id: approved.company_id,
+        asset_type: approved.asset_type,
+        title: titleToUse,
+        status: "draft",
+        media_type: approved.media_type,
+        storage_path: approved.storage_path,
+        content_data: approved.content_data,
+        source_material_ids: approved.source_material_ids,
+        parent_asset_id: approvedAssetId,
+        version: nextVersion,
+      })
+      .select()
+      .single();
 
     if (error) {
       console.warn("DB insert new draft error:", error);
+      return { success: false, error: error.message };
     }
 
-    return { success: true, newDraftId };
+    const newAsset: MediaAssetItem = {
+      id: newRow.id,
+      product_id: newRow.product_id,
+      company_id: newRow.company_id,
+      asset_type: newRow.asset_type,
+      title: newRow.title,
+      status: newRow.status,
+      media_type: newRow.media_type,
+      storage_path: newRow.storage_path,
+      content_data: newRow.content_data || {},
+      source_material_ids: newRow.source_material_ids || [],
+      used_in: newRow.used_in || [],
+      parent_asset_id: newRow.parent_asset_id,
+      version: newRow.version || nextVersion,
+      created_at: newRow.created_at,
+      updated_at: newRow.updated_at,
+    };
+
+    return { success: true, newDraftId, newAsset };
   } catch (err: any) {
     return { success: false, error: err.message };
   }
+}
+
+/**
+ * Delete Manual Source Material
+ */
+export async function deleteMediaSourceMaterial(
+  sourceId: string
+): Promise<{ success: boolean; warning?: string; error?: string }> {
+  try {
+    const supabase = createAdminClient();
+
+    // Prevent deletion of synced catalog/brand materials
+    if (
+      sourceId.startsWith("info-cat-") ||
+      sourceId.startsWith("img-cat-") ||
+      sourceId.startsWith("vid-cat-") ||
+      sourceId.startsWith("brand-mat-")
+    ) {
+      return { success: false, error: "Authoritative Product Catalog and Brand sources cannot be deleted." };
+    }
+
+    // Check if any assets reference this source
+    const { data: assets } = await supabase
+      .from("product_media_assets")
+      .select("id, title")
+      .contains("source_material_ids", [sourceId]);
+
+    let warning: string | undefined = undefined;
+    if (assets && assets.length > 0) {
+      warning = `Source material was referenced by ${assets.length} media asset(s). Source unlinked safely.`;
+    }
+
+    const { error } = await supabase
+      .from("product_media_sources")
+      .delete()
+      .eq("id", sourceId);
+
+    if (error) {
+      return { success: false, error: error.message };
+    }
+
+    return { success: true, warning };
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+}
+
+/**
+ * Delete Draft Media Asset (Draft or Failed)
+ */
+export async function deleteDraftMediaAsset(
+  assetId: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const supabase = createAdminClient();
+    const { error } = await supabase
+      .from("product_media_assets")
+      .delete()
+      .eq("id", assetId);
+
+    if (error) {
+      return { success: false, error: error.message };
+    }
+
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+}
+
+/**
+ * Upload Multiple Source Material files
+ */
+export async function uploadMultipleMediaSourceMaterials(
+  productId: string,
+  groupType: SourceMaterialItem["group_type"],
+  files: Array<{ file: File; title?: string }>
+): Promise<{ success: boolean; sources?: SourceMaterialItem[]; errors?: string[] }> {
+  const sources: SourceMaterialItem[] = [];
+  const errors: string[] = [];
+
+  for (const item of files) {
+    const formData = new FormData();
+    formData.append("file", item.file);
+    const res = await uploadMediaSourceMaterial(productId, groupType, item.title || item.file.name, formData);
+    if (res.success && res.source) {
+      sources.push(res.source);
+    } else if (res.error) {
+      errors.push(`${item.file.name}: ${res.error}`);
+    }
+  }
+
+  return {
+    success: sources.length > 0,
+    sources,
+    errors: errors.length > 0 ? errors : undefined,
+  };
 }
 
 /**

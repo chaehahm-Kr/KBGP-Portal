@@ -88,6 +88,7 @@ export interface VideoScene {
 
 export interface AssetContentData {
   prompt?: string;
+  is_mock?: boolean;
   creation_settings?: CreationSettings;
   text_layers?: TextLayer[];
   benefits_list?: BenefitItem[];
