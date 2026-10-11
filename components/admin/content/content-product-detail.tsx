@@ -164,7 +164,7 @@ export function ContentProductDetail({ product }: ContentProductDetailProps) {
       name: "Media Assets",
       labelKo: "미디어 에셋",
       icon: ImageIcon,
-      badge: product.media_status === "complete" ? `COMPLETE (${product.image_count})` : product.media_status.toUpperCase(),
+      badge: product.media_status === "complete" ? "COMPLETE" : product.media_status.toUpperCase(),
       badgeColor:
         product.media_status === "complete"
           ? "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300"
@@ -175,8 +175,18 @@ export function ContentProductDetail({ product }: ContentProductDetailProps) {
       name: "FAQ",
       labelKo: "상품 FAQ",
       icon: HelpCircleIcon,
-      badge: product.faq_status.toUpperCase(),
-      badgeColor: "bg-zinc-100 text-zinc-600 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-400",
+      badge:
+        product.faq_status === "ready"
+          ? (product.faq_approved_count && product.faq_approved_count > 0 ? `READY (${product.faq_approved_count})` : "READY")
+          : product.faq_status === "draft"
+          ? "DRAFT"
+          : "EMPTY",
+      badgeColor:
+        product.faq_status === "ready"
+          ? "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300"
+          : product.faq_status === "draft"
+          ? "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300"
+          : "bg-zinc-100 text-zinc-600 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-400",
     },
     {
       id: "reviews",
@@ -317,7 +327,7 @@ export function ContentProductDetail({ product }: ContentProductDetailProps) {
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center gap-1.5 py-2.5 px-3.5 text-xs font-semibold border-b-2 whitespace-nowrap transition-colors ${
+                className={`flex items-center gap-1.5 py-2 px-2.5 sm:px-3 text-[11.5px] font-semibold border-b-2 whitespace-nowrap transition-colors ${
                   isActive
                     ? "border-blue-600 text-blue-600 dark:border-blue-400 dark:text-blue-400"
                     : "border-transparent text-zinc-500 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200 hover:border-zinc-300 dark:hover:border-zinc-700"

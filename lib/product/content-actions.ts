@@ -10,7 +10,7 @@ export type ContentOverallStatus = "published" | "ready" | "in_progress" | "need
 export type CustomerPageStatus = "published" | "draft" | "missing" | "not_started";
 export type TrainingStatus = "ready" | "in_progress" | "missing";
 export type MediaStatus = "complete" | "partial" | "missing";
-export type FaqStatus = "published" | "draft" | "empty";
+export type FaqStatus = "ready" | "draft" | "empty";
 export type ReviewStatus = "active" | "pending" | "none";
 export type QrPublishingStatus = "live" | "inactive" | "not_generated";
 
@@ -51,6 +51,7 @@ export interface ContentProductItem {
   // Metrics
   image_count: number;
   video_count: number;
+  faq_approved_count?: number;
 
   last_updated: string;
   updated_at: string;
@@ -217,19 +218,22 @@ export async function getContentStatusProducts(): Promise<{
       const trainingStatus: TrainingStatus =
         contentMeta.training_status || (info.training_ready ? "ready" : "missing");
 
-      // Authoritative FAQ status from product_faqs
+      // Authoritative FAQ status from product_faqs (Ready, Draft, Empty)
       const faqStats = faqsByProduct.get(p.id);
       let faqStatus: FaqStatus = "empty";
+      let faqApprovedCount = 0;
       if (faqStats && (faqStats.approved > 0 || faqStats.draft > 0)) {
+        faqApprovedCount = faqStats.approved;
         if (faqStats.approved > 0) {
-          faqStatus = "published";
+          faqStatus = "ready";
         } else {
           faqStatus = "draft";
         }
       } else if (contentMeta.faq_status) {
-        faqStatus = contentMeta.faq_status;
+        faqStatus = contentMeta.faq_status === "published" ? "ready" : contentMeta.faq_status;
       } else if (info.faqs?.length > 0) {
-        faqStatus = "published";
+        faqStatus = "ready";
+        faqApprovedCount = info.faqs.length;
       }
 
       // Review status
@@ -464,8 +468,9 @@ export async function getContentProductDetail(productId: string): Promise<Conten
   const trainingStatus: TrainingStatus =
     contentMeta.training_status || (info.training_ready ? "ready" : "missing");
 
-  // Fetch product_faqs for authoritative status
+  // Fetch product_faqs for authoritative status (Ready, Draft, Empty)
   let faqStatus: FaqStatus = "empty";
+  let faqApprovedCount = 0;
   try {
     const { data: productFaqs } = await adminSupabase
       .from("product_faqs")
@@ -473,16 +478,18 @@ export async function getContentProductDetail(productId: string): Promise<Conten
       .eq("product_id", p.id);
 
     if (productFaqs && productFaqs.length > 0) {
-      const hasApproved = productFaqs.some((f) => f.status === "approved");
-      faqStatus = hasApproved ? "published" : "draft";
+      const approvedList = productFaqs.filter((f) => f.status === "approved");
+      faqApprovedCount = approvedList.length;
+      faqStatus = approvedList.length > 0 ? "ready" : "draft";
     } else if (contentMeta.faq_status) {
-      faqStatus = contentMeta.faq_status;
+      faqStatus = contentMeta.faq_status === "published" ? "ready" : contentMeta.faq_status;
     } else if (info.faqs?.length > 0) {
-      faqStatus = "published";
+      faqStatus = "ready";
+      faqApprovedCount = info.faqs.length;
     }
   } catch (err) {
     console.warn("[getContentProductDetail] Warning fetching product_faqs:", err);
-    faqStatus = contentMeta.faq_status || (info.faqs?.length > 0 ? "published" : "empty");
+    faqStatus = contentMeta.faq_status === "published" ? "ready" : (contentMeta.faq_status || (info.faqs?.length > 0 ? "ready" : "empty"));
   }
 
   const reviewStatus: ReviewStatus =

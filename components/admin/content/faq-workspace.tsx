@@ -134,7 +134,6 @@ export function FaqWorkspace({ product }: FaqWorkspaceProps) {
   const [formAnswer, setFormAnswer] = useState("");
   const [formCategory, setFormCategory] = useState<FaqCategory>("Product Basics");
   const [formAudience, setFormAudience] = useState<FaqAudience>("both");
-  const [formStatus, setFormStatus] = useState<FaqStatus>("draft");
   const [formRequiresConfirmation, setFormRequiresConfirmation] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -169,7 +168,6 @@ export function FaqWorkspace({ product }: FaqWorkspaceProps) {
     setFormAnswer("");
     setFormCategory("Product Basics");
     setFormAudience("both");
-    setFormStatus("draft");
     setFormRequiresConfirmation(false);
     setFormError(null);
     setIsAddModalOpen(true);
@@ -182,17 +180,20 @@ export function FaqWorkspace({ product }: FaqWorkspaceProps) {
     setFormAnswer(item.answer);
     setFormCategory(item.category);
     setFormAudience(item.audience);
-    setFormStatus(item.status);
     setFormRequiresConfirmation(item.requires_brand_confirmation);
     setFormError(null);
     setIsAddModalOpen(true);
   };
 
-  // Save Add / Edit
-  const handleSaveFaq = async (e: React.FormEvent) => {
-    e.preventDefault();
+  // Save Add / Edit with specific status (Draft or Approved)
+  const handleSaveFaqWithStatus = async (targetStatus: FaqStatus) => {
     if (!formQuestion.trim() || !formAnswer.trim()) {
       setFormError("Question and Answer are required.");
+      return;
+    }
+
+    if (targetStatus === "approved" && formRequiresConfirmation) {
+      setFormError("Brand confirmation required items cannot be approved directly. Clear the flag to approve.");
       return;
     }
 
@@ -204,7 +205,7 @@ export function FaqWorkspace({ product }: FaqWorkspaceProps) {
             answer: formAnswer,
             category: formCategory,
             audience: formAudience,
-            status: formStatus,
+            status: targetStatus,
             requires_brand_confirmation: formRequiresConfirmation,
           });
           if (!res.success) {
@@ -218,7 +219,7 @@ export function FaqWorkspace({ product }: FaqWorkspaceProps) {
             answer: formAnswer,
             category: formCategory,
             audience: formAudience,
-            status: formStatus,
+            status: targetStatus,
             requires_brand_confirmation: formRequiresConfirmation,
           });
           if (!res.success) {
@@ -474,7 +475,7 @@ export function FaqWorkspace({ product }: FaqWorkspaceProps) {
               }`}
             >
               <EyeIcon className="w-3.5 h-3.5 text-blue-500" />
-              Customer QR Preview
+              Customer Preview
             </button>
             <button
               onClick={() => setViewMode("training_preview")}
@@ -800,7 +801,7 @@ export function FaqWorkspace({ product }: FaqWorkspaceProps) {
               </div>
             )}
 
-            <form onSubmit={handleSaveFaq} className="space-y-4">
+            <form onSubmit={(e) => { e.preventDefault(); handleSaveFaqWithStatus("draft"); }} className="space-y-4">
               {/* Question Input */}
               <div>
                 <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
@@ -866,39 +867,27 @@ export function FaqWorkspace({ product }: FaqWorkspaceProps) {
                 </div>
               </div>
 
-              {/* Status & Confirmation Toggle */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
-                <div>
-                  <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
-                    Status (상태)
-                  </label>
-                  <select
-                    value={formStatus}
-                    onChange={(e) => setFormStatus(e.target.value as FaqStatus)}
-                    className="w-full px-3 py-2 text-xs rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-850 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-amber-500/20"
-                  >
-                    <option value="draft">Draft (초안)</option>
-                    <option value="approved">Approved (승인)</option>
-                    <option value="archived">Archived (보관됨)</option>
-                  </select>
-                </div>
-
-                <div className="flex items-center pt-5">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={formRequiresConfirmation}
-                      onChange={(e) => setFormRequiresConfirmation(e.target.checked)}
-                      className="w-4 h-4 text-amber-600 rounded border-zinc-300 focus:ring-amber-500"
-                    />
-                    <span className="text-xs text-zinc-700 dark:text-zinc-300 font-medium">
-                      Requires Brand Confirmation
+              {/* Confirmation Safeguard Toggle */}
+              <div className="pt-2 pb-1">
+                <label className="flex items-start gap-2.5 p-3 rounded-lg border border-amber-200 dark:border-amber-900/60 bg-amber-50/50 dark:bg-amber-950/20 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={formRequiresConfirmation}
+                    onChange={(e) => setFormRequiresConfirmation(e.target.checked)}
+                    className="mt-0.5 w-4 h-4 text-amber-600 rounded border-zinc-300 focus:ring-amber-500"
+                  />
+                  <div>
+                    <span className="text-xs font-bold text-amber-900 dark:text-amber-300">
+                      Requires Brand Confirmation (브랜드 공식 확인 필요)
                     </span>
-                  </label>
-                </div>
+                    <p className="text-[11px] text-amber-700 dark:text-amber-400 mt-0.5">
+                      Flag this item if specific warnings, active ingredients, or claims must be confirmed by the brand before public approval.
+                    </p>
+                  </div>
+                </label>
               </div>
 
-              {/* Action Buttons */}
+              {/* Action Buttons: Cancel, Save Draft, Approve */}
               <div className="flex items-center justify-end gap-2.5 pt-4 border-t border-zinc-100 dark:border-zinc-800">
                 <button
                   type="button"
@@ -908,11 +897,26 @@ export function FaqWorkspace({ product }: FaqWorkspaceProps) {
                   Cancel
                 </button>
                 <button
-                  type="submit"
+                  type="button"
                   disabled={isPending}
-                  className="px-4 py-2 text-xs font-semibold rounded-lg bg-amber-600 hover:bg-amber-700 text-white shadow-sm transition-colors"
+                  onClick={() => handleSaveFaqWithStatus("draft")}
+                  className="px-4 py-2 text-xs font-semibold rounded-lg bg-zinc-900 hover:bg-zinc-800 text-white dark:bg-zinc-100 dark:hover:bg-white dark:text-zinc-900 shadow-sm transition-colors cursor-pointer disabled:opacity-50"
                 >
-                  {isPending ? "Saving..." : editingFaq ? "Save Changes" : "Create FAQ"}
+                  {isPending ? "Saving..." : "Save Draft"}
+                </button>
+                <button
+                  type="button"
+                  disabled={isPending || formRequiresConfirmation}
+                  onClick={() => handleSaveFaqWithStatus("approved")}
+                  title={
+                    formRequiresConfirmation
+                      ? "Items requiring brand confirmation cannot be approved directly. Clear confirmation flag to approve."
+                      : "Approve for Customer Preview & Retail Staff Training"
+                  }
+                  className="px-4 py-2 text-xs font-semibold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5"
+                >
+                  <CheckIcon className="w-3.5 h-3.5" />
+                  {isPending ? "Approving..." : "Approve"}
                 </button>
               </div>
             </form>

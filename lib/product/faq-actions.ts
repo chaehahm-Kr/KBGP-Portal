@@ -401,117 +401,110 @@ export async function generateFaqAiSuggestions(
   const ingredients = (p.ingredients_text || info.ingredients || "").trim();
   const targetCount = Math.min(Math.max(options?.count || 8, 5), 10);
 
-  // 3. Extract knowledge facts
+  // 3. Extract knowledge facts strictly
   const hasSpecificHowToUse = Boolean(howToUse);
   const hasSpecificIngredients = Boolean(ingredients);
   const hasBulletPoints = bulletPoints.length > 0;
-  const categoryName = p.category || "Skincare";
+  const hasDescription = Boolean(description);
 
-  // Build curated suggestions across 7 categories
-  const candidatePool: Array<Omit<FaqAiSuggestion, "tempId" | "selected">> = [
-    // 1. Product Basics
-    {
+  // Build strictly grounded candidate pool
+  const candidatePool: Array<Omit<FaqAiSuggestion, "tempId" | "selected">> = [];
+
+  // 1. Product Basics (Grounded in Bullet Points or Description)
+  if (hasBulletPoints || hasDescription) {
+    candidatePool.push({
       question: `What are the primary benefits and key features of ${productName}?`,
       answer: hasBulletPoints
-        ? `${productName} by ${brandName} is designed to deliver targeted care with key benefits: ${bulletPoints.slice(0, 3).join("; ")}.`
-        : description
-        ? `${productName} by ${brandName} is formulated to ${description.slice(0, 150)}...`
-        : `${productName} is an authentic ${categoryName} formulation from ${brandName} designed for balanced, effective daily skincare care.`,
+        ? `${productName} by ${brandName} is formulated with key features: ${bulletPoints.slice(0, 3).join("; ")}.`
+        : `${productName} by ${brandName}: ${description.slice(0, 200)}...`,
       category: "Product Basics",
       audience: "both",
-      source_refs: ["Description", hasBulletPoints ? "Bullet Points" : "Catalog"],
+      source_refs: hasBulletPoints ? ["Bullet Points"] : ["Description"],
       requires_brand_confirmation: false,
-    },
-    // 2. Who It’s For
-    {
-      question: `Which skin types or concerns is ${productName} best suited for?`,
-      answer: description.toLowerCase().includes("sensitive") || description.toLowerCase().includes("calming")
-        ? `Ideal for sensitive, irritated, or reactive skin, as well as all skin types seeking gentle and soothing hydration.`
-        : `Suitable for all skin types, especially skin experiencing dryness, dullness, or uneven texture. Patch testing is recommended for hypersensitive skin.`,
+    });
+  }
+
+  // 2. Who It’s For (Only if explicit skin type / concern keywords exist in description or bullet points)
+  const combinedText = `${description} ${bulletPoints.join(" ")}`.toLowerCase();
+  const matchedConcerns: string[] = [];
+  if (combinedText.includes("sensitive")) matchedConcerns.push("sensitive skin");
+  if (combinedText.includes("calming") || combinedText.includes("soothing")) matchedConcerns.push("soothing and calming care");
+  if (combinedText.includes("hydrat") || combinedText.includes("moistur")) matchedConcerns.push("hydration and moisture care");
+  if (combinedText.includes("dry")) matchedConcerns.push("dry skin");
+  if (combinedText.includes("brighten") || combinedText.includes("tone")) matchedConcerns.push("brightening and skin tone care");
+  if (combinedText.includes("barrier")) matchedConcerns.push("skin barrier support");
+  if (combinedText.includes("acne") || combinedText.includes("trouble") || combinedText.includes("blemish")) matchedConcerns.push("blemish-prone skin");
+
+  if (matchedConcerns.length > 0) {
+    candidatePool.push({
+      question: `Which skin concerns is ${productName} suited for?`,
+      answer: `Based on product specifications from ${brandName}, this formula is targeted for ${matchedConcerns.join(", ")}.`,
       category: "Who It’s For",
       audience: "both",
-      source_refs: ["Description", "Attributes"],
+      source_refs: hasBulletPoints ? ["Bullet Points", "Description"] : ["Description"],
       requires_brand_confirmation: false,
-    },
-    // 3. How to Use
-    {
-      question: `How and when should ${productName} be applied in a skincare routine?`,
-      answer: hasSpecificHowToUse
-        ? howToUse
-        : `Apply an appropriate amount onto cleansed skin morning and evening. Gently pat until fully absorbed, following with your favorite moisturizer or sunscreen during the day.`,
+    });
+  }
+
+  // 3. How to Use (Only if How to Use is explicitly present in catalog)
+  if (hasSpecificHowToUse) {
+    candidatePool.push({
+      question: `How should ${productName} be applied according to instructions?`,
+      answer: howToUse,
       category: "How to Use",
       audience: "both",
-      source_refs: [hasSpecificHowToUse ? "How to Use" : "Standard Usage"],
+      source_refs: ["How to Use"],
       requires_brand_confirmation: false,
-    },
-    // 4. Routine / Compatibility
-    {
-      question: `Can ${productName} be layered with active ingredients like Vitamin C, Retinol, or AHA/BHA?`,
-      answer: `Yes, it pairs harmoniously with most daily skincare essentials. If using high-potency exfoliating acids or retinoids, introduce gradually and ensure adequate skin barrier hydration and SPF protection.`,
-      category: "Routine / Compatibility",
-      audience: "both",
-      source_refs: ["Product Compatibility", "Skincare Guidelines"],
-      requires_brand_confirmation: false,
-    },
-    // 5. Ingredients / Safety
-    {
-      question: `What are the standout ingredients and formulation standards in this product?`,
-      answer: hasSpecificIngredients
-        ? `Formulated with premium active components including ${ingredients.slice(0, 180)}. Cruelty-free and crafted in accordance with rigorous Korean skincare safety standards.`
-        : `Crafted with gentle, skin-friendly ingredients certified under Korean cosmetic standards to ensure optimal efficacy without unnecessary harsh additives.`,
+    });
+  }
+
+  // 4. Ingredients / Formulation (Only if Ingredients text is present in catalog)
+  if (hasSpecificIngredients) {
+    candidatePool.push({
+      question: `What ingredients are listed for ${productName}?`,
+      answer: `Official ingredients list: ${ingredients.slice(0, 220)}${ingredients.length > 220 ? "..." : ""}`,
       category: "Ingredients / Safety",
       audience: "both",
-      source_refs: [hasSpecificIngredients ? "Ingredients" : "Catalog"],
+      source_refs: ["Ingredients"],
       requires_brand_confirmation: false,
-    },
-    // 6. Warnings / Precautions (Enforces Safety & Confirmation Rule)
-    {
-      question: `Are there any specific precautions, contraindications, or allergy warnings?`,
-      answer: `For external use only. Discontinue use if redness, swelling, or irritation occurs and consult a dermatologist. Avoid direct contact with eyes. Keep out of reach of children. (Please confirm with brand for specific medical warnings).`,
-      category: "Warnings / Precautions",
-      audience: "both",
-      source_refs: ["Standard Safety", "Brand Verification Required"],
-      requires_brand_confirmation: true, // Safeguard: Flags Brand Confirmation Required
-    },
-    // 7. Storage / Practical Info
-    {
-      question: `How should ${productName} be stored and what is the shelf life after opening?`,
-      answer: `Store in a cool, dry place away from direct sunlight and high humidity. Secure the cap firmly after each use. Typically recommended to use within 12 months after opening (PAO 12M).`,
-      category: "Storage / Practical Info",
-      audience: "both",
-      source_refs: ["Storage Guidelines", "PAO Specs"],
-      requires_brand_confirmation: false,
-    },
-    // 8. Staff Training Specific Q&A
-    {
-      question: `[Staff Tip] How should retail staff explain the unique selling points of ${productName} to shoppers?`,
-      answer: `Highlight ${brandName}'s focus on gentle efficacy, clean formulation, and fast-absorbing texture. Recommend pairing with complementary hydrating products to boost overall basket size and customer retention.`,
+    });
+  }
+
+  // 5. Warnings / Precautions (Always included with Brand Confirmation Required safeguard)
+  candidatePool.push({
+    question: `Are there specific safety precautions or warnings for ${productName}?`,
+    answer: `For external use only. Discontinue use if irritation develops. Brand confirmation is required for specific medical warnings, active ingredient contraindications, and allergen disclosures.`,
+    category: "Warnings / Precautions",
+    audience: "both",
+    source_refs: ["Brand Confirmation Required"],
+    requires_brand_confirmation: true, // Safeguard: Flags Brand Confirmation Required
+  });
+
+  // 6. Storage / Practical Info
+  candidatePool.push({
+    question: `How should ${productName} be stored?`,
+    answer: `Store in a cool, dry place away from direct sunlight and excessive heat. Keep the container securely closed after each use.`,
+    category: "Storage / Practical Info",
+    audience: "both",
+    source_refs: ["Catalog Specifications"],
+    requires_brand_confirmation: false,
+  });
+
+  // 7. Retail Staff Training Q&A (If description or bullet points exist)
+  if (hasBulletPoints || hasDescription) {
+    candidatePool.push({
+      question: `[Staff Tip] What key product details should retail staff highlight to customers?`,
+      answer: `Highlight ${brandName}'s core product identity: ${
+        hasBulletPoints ? bulletPoints.slice(0, 2).join("; ") : description.slice(0, 140)
+      }.`,
       category: "Product Basics",
       audience: "retail_staff",
-      source_refs: ["Retail Staff Guide", "Selling Points"],
+      source_refs: hasBulletPoints ? ["Bullet Points", "Catalog"] : ["Description"],
       requires_brand_confirmation: false,
-    },
-    // 9. Routine / Compatibility extra
-    {
-      question: `Can this product be used under makeup during daytime wear?`,
-      answer: `Yes, the lightweight, non-greasy texture absorbs seamlessly without pilling or leaving a white cast, creating an optimal primer-like smooth base for makeup application.`,
-      category: "Routine / Compatibility",
-      audience: "customer",
-      source_refs: ["Texture & Application"],
-      requires_brand_confirmation: false,
-    },
-    // 10. Who It’s For extra
-    {
-      question: `Is this formula suitable for acne-prone or congested skin?`,
-      answer: `The formula is non-comedogenic and lightweight, designed not to clog pores while keeping the moisture barrier hydrated and calm.`,
-      category: "Who It’s For",
-      audience: "both",
-      source_refs: ["Skin Compatibility"],
-      requires_brand_confirmation: false,
-    },
-  ];
+    });
+  }
 
-  // Slice to requested count
+  // Prioritize factual accuracy: Return only verified candidate questions up to targetCount
   const selectedPool = candidatePool.slice(0, targetCount);
 
   const suggestions: FaqAiSuggestion[] = selectedPool.map((item, idx) => ({
