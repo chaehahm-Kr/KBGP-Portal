@@ -161,108 +161,14 @@ export async function executeAIMediaGeneration(
 
   // --- Real Provider Synthesis & Storage Upload Logic ---
   try {
-    if (outputType === "benefit_graphic") {
+    if (outputType === "benefit_graphic" || outputType === "infographic" || outputType === "how_to_graphic" || outputType === "lifestyle_image") {
       const benefits = synthesizeBenefits(rawBullets, description);
-      const textLayers = benefits.map((b, i) => ({
-        id: `b-${i}`,
-        text: `${b.title}: ${b.description}`,
-        position: `layer-${i + 1}`,
-        style: "font-semibold text-xs",
-      }));
-
-      // Call Google AI Image API or synthesize authoritative graphic
-      let imageBuffer: Buffer | null = null;
-      let ext = "jpg";
-      let mimeType = "image/jpeg";
-
-      if (geminiKey) {
-        try {
-          // Attempt Google Imagen 3 / Gemini Image predict endpoint
-          const prompt = `Professional e-commerce product benefit infographic for ${productName}. Style: ${settings.style}. Key features: ${benefits.map((b) => b.title + " - " + b.description).join("; ")}`;
-          const imgApiRes = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:predict?key=${geminiKey}`,
-            {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                instances: [{ prompt }],
-                parameters: { sampleCount: 1, aspectRatio: "1:1", outputMimeType: "image/jpeg" },
-              }),
-            }
-          );
-
-          if (imgApiRes.ok) {
-            const data = await imgApiRes.json();
-            const b64 = data?.predictions?.[0]?.bytesBase64Encoded;
-            if (b64) {
-              imageBuffer = Buffer.from(b64, "base64");
-            }
-          }
-        } catch (e) {
-          console.warn("[media-ai-adapter] Google AI direct image call error:", e);
-        }
-      }
-
-      // Generate visual vector canvas SVG if binary API is unavailable
-      if (!imageBuffer) {
-        const svgContent = generateBenefitGraphicSvg(productName, benefits, settings.style);
-        imageBuffer = Buffer.from(svgContent, "utf-8");
-        ext = "svg";
-        mimeType = "image/svg+xml";
-      }
-
-      // Upload to Supabase Storage: company-uploads
-      const filename = `${crypto.randomUUID()}.${ext}`;
-      const storagePath = `${companyId}/products/${productId}/media-assets/${filename}`;
-
-      const { error: uploadErr } = await supabase.storage
-        .from("company-uploads")
-        .upload(storagePath, imageBuffer, {
-          contentType: mimeType,
-          upsert: true,
-        });
-
-      if (uploadErr) {
-        console.error("[media-ai-adapter] Supabase Storage upload error:", uploadErr);
-      }
-
-      const { data: sData } = await supabase.storage
-        .from("company-uploads")
-        .createSignedUrl(storagePath, 86400);
-
-      const signedUrl = sData?.signedUrl || "";
-
-      return {
-        status: "completed",
-        provider: activeProvider,
-        model: activeModel,
-        asset: {
-          title: `${productName} — 6 Key Benefits Graphic`,
-          media_type: "image",
-          url: signedUrl,
-          storage_path: storagePath,
-          thumbnail_url: signedUrl,
-          content_data: {
-            prompt: `High quality e-commerce benefit graphic for ${productName} highlighting 6 key features. Style: ${settings.style}. Target: ${settings.audience}.`,
-            creation_settings: settings,
-            benefits_list: benefits,
-            text_layers: textLayers,
-            layout: "grid-2x3",
-            provider_info: {
-              provider: activeProvider,
-              model: activeModel,
-              generation_status: "completed",
-            },
-          },
-        },
-      };
-    }
-
-    if (outputType === "infographic" || outputType === "how_to_graphic" || outputType === "lifestyle_image") {
       const isInfographic = outputType === "infographic";
       const isHowTo = outputType === "how_to_graphic";
 
-      const textLayers = isInfographic
+      const textLayers = outputType === "benefit_graphic"
+        ? benefits.map((b, i) => ({ id: `b-${i}`, text: `${b.title}: ${b.description}`, position: `layer-${i + 1}`, style: "font-semibold text-xs" }))
+        : isInfographic
         ? [
             { id: "t-1", text: productName, position: "header", style: "font-bold text-sm" },
             { id: "t-2", text: `Ingredients: ${ingredients || "Official formula"}`, position: "body-1", style: "text-xs" },
@@ -277,47 +183,108 @@ export async function executeAIMediaGeneration(
         : [{ id: "hero", text: `${productName} Commercial Photography`, position: "center", style: "font-bold" }];
 
       let imageBuffer: Buffer | null = null;
-      let ext = "jpg";
+      let ext = "jpeg";
       let mimeType = "image/jpeg";
+      let lastApiError = "";
 
       if (geminiKey) {
-        try {
-          const prompt = `Professional commercial ${outputType.replace("_", " ")} for ${productName}. Style: ${settings.style}. ${settings.optional_instruction || ""}`;
-          const imgApiRes = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:predict?key=${geminiKey}`,
-            {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                instances: [{ prompt }],
-                parameters: { sampleCount: 1, aspectRatio: "1:1", outputMimeType: "image/jpeg" },
-              }),
-            }
-          );
+        // Attempt Google Imagen 3 / Gemini Image predict endpoints
+        const imageModels = [
+          "imagen-3.0-generate-002",
+          "imagen-3.0-fast-generate-001",
+        ];
 
-          if (imgApiRes.ok) {
-            const data = await imgApiRes.json();
-            const b64 = data?.predictions?.[0]?.bytesBase64Encoded;
-            if (b64) imageBuffer = Buffer.from(b64, "base64");
+        const prompt = `Professional e-commerce ${outputType.replace("_", " ")} image for ${productName}. Style: ${settings.style}. Features: ${rawBullets.slice(0, 3).join("; ")}`;
+
+        for (const imgModel of imageModels) {
+          try {
+            const imgApiRes = await fetch(
+              `https://generativelanguage.googleapis.com/v1beta/models/${imgModel}:predict?key=${geminiKey}`,
+              {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  instances: [{ prompt }],
+                  parameters: { sampleCount: 1, aspectRatio: "1:1", outputMimeType: "image/jpeg" },
+                }),
+              }
+            );
+
+            if (imgApiRes.ok) {
+              const data = await imgApiRes.json();
+              const b64 = data?.predictions?.[0]?.bytesBase64Encoded;
+              if (b64) {
+                imageBuffer = Buffer.from(b64, "base64");
+                ext = "jpeg";
+                mimeType = "image/jpeg";
+                break;
+              }
+            } else {
+              const errBody = await imgApiRes.text();
+              lastApiError = `Google Imagen API (${imgModel}) returned HTTP ${imgApiRes.status}: ${errBody.slice(0, 300)}`;
+              console.warn("[media-ai-adapter]", lastApiError);
+            }
+          } catch (e: any) {
+            lastApiError = e.message || "Network exception calling Google Imagen API";
+            console.warn("[media-ai-adapter] Image call exception:", e);
           }
-        } catch (e) {
-          console.warn("[media-ai-adapter] Google AI image call error:", e);
         }
       }
 
+      // STRICT VALIDATION: Local SVG is NOT an AI generation success
       if (!imageBuffer) {
-        const svgContent = generateGenericGraphicSvg(productName, outputType, textLayers, settings.style);
-        imageBuffer = Buffer.from(svgContent, "utf-8");
-        ext = "svg";
-        mimeType = "image/svg+xml";
+        return {
+          status: "failed",
+          provider: activeProvider,
+          model: activeModel,
+          error_message: lastApiError || `Google AI Image API call failed: No real image binary returned for ${outputType}.`,
+          asset: {
+            title: `${productName} — ${getOutputTypeName(outputType)} (Draft)`,
+            media_type: "image",
+            content_data: {
+              prompt: `Generate ${getOutputTypeName(outputType)} for ${productName}`,
+              creation_settings: settings,
+              error_message: lastApiError || `Google AI Image API call failed. Real image binary required.`,
+              provider_info: {
+                provider: activeProvider,
+                model: activeModel,
+                generation_status: "failed",
+              },
+            },
+          },
+        };
       }
 
+      // Verify Image MIME (must be image/* and NOT image/svg+xml)
+      if (mimeType === "image/svg+xml" || !mimeType.startsWith("image/")) {
+        return {
+          status: "failed",
+          provider: activeProvider,
+          model: activeModel,
+          error_message: `Invalid asset MIME type (${mimeType}). AI image assets must be binary image files (PNG/JPEG/WEBP).`,
+        };
+      }
+
+      // Upload binary to Supabase Storage: company-uploads
       const filename = `${crypto.randomUUID()}.${ext}`;
       const storagePath = `${companyId}/products/${productId}/media-assets/${filename}`;
 
-      await supabase.storage
+      const { error: uploadErr } = await supabase.storage
         .from("company-uploads")
-        .upload(storagePath, imageBuffer, { contentType: mimeType, upsert: true });
+        .upload(storagePath, imageBuffer, {
+          contentType: mimeType,
+          upsert: true,
+        });
+
+      if (uploadErr) {
+        console.error("[media-ai-adapter] Supabase Storage upload error:", uploadErr);
+        return {
+          status: "failed",
+          provider: activeProvider,
+          model: activeModel,
+          error_message: `Storage upload failed: ${uploadErr.message}`,
+        };
+      }
 
       const { data: sData } = await supabase.storage
         .from("company-uploads")
@@ -336,10 +303,11 @@ export async function executeAIMediaGeneration(
           storage_path: storagePath,
           thumbnail_url: signedUrl,
           content_data: {
-            prompt: `Clean ${outputType.replace("_", " ")} for ${productName}. Style: ${settings.style}.`,
+            prompt: `High quality e-commerce ${outputType.replace("_", " ")} for ${productName}. Style: ${settings.style}.`,
             creation_settings: settings,
+            benefits_list: benefits,
             text_layers: textLayers,
-            layout: isInfographic ? "vertical-stack" : isHowTo ? "3-step-horizontal" : "hero-shot",
+            layout: outputType === "benefit_graphic" ? "grid-2x3" : isInfographic ? "vertical-stack" : isHowTo ? "3-step-horizontal" : "hero-shot",
             provider_info: {
               provider: activeProvider,
               model: activeModel,
@@ -350,7 +318,7 @@ export async function executeAIMediaGeneration(
       };
     }
 
-    // --- VIDEO GENERATION (Product Video & How-to Video via Google Veo 3.1) ---
+    // --- VIDEO GENERATION (Product Video & How-to Video via Google Veo) ---
     if (outputType === "product_video" || outputType === "how_to_video") {
       const isHowTo = outputType === "how_to_video";
       const scenes: VideoScene[] = isHowTo
@@ -366,7 +334,7 @@ export async function executeAIMediaGeneration(
           ];
 
       let videoBuffer: Buffer | null = null;
-      let operationId = `veo-op-${crypto.randomUUID()}`;
+      let lastVeoError = "";
 
       if (geminiKey) {
         try {
@@ -383,28 +351,63 @@ export async function executeAIMediaGeneration(
             }
           );
 
-          if (veoRes.ok) {
+          if (!veoRes.ok) {
+            const errText = await veoRes.text();
+            lastVeoError = `Google Veo API returned HTTP ${veoRes.status}: ${errText.slice(0, 300)}`;
+            console.warn("[media-ai-adapter]", lastVeoError);
+          } else {
             const opData = await veoRes.json();
-            if (opData?.name) operationId = opData.name;
+            // If operation completes with video content
+            if (opData?.response?.videoBytesBase64) {
+              videoBuffer = Buffer.from(opData.response.videoBytesBase64, "base64");
+            }
           }
-        } catch (e) {
+        } catch (e: any) {
+          lastVeoError = e.message || "Network exception calling Google Veo Video API";
           console.warn("[media-ai-adapter] Google Veo call warning:", e);
         }
       }
 
-      // Generate visual video preview stream buffer
+      // STRICT VALIDATION: SVG Storyboard is NOT an AI Video generation success
       if (!videoBuffer) {
-        // Create an MP4 container stream buffer or SVG video storyboard
-        const svgVideoStoryboard = generateVideoStoryboardSvg(productName, scenes, settings.style);
-        videoBuffer = Buffer.from(svgVideoStoryboard, "utf-8");
+        return {
+          status: "failed",
+          provider: "Google AI (Veo 3.1 Video)",
+          model: "veo-3.1-generate-preview",
+          error_message: lastVeoError || "Google Veo Video API call failed: No playable MP4 video binary returned by Veo API.",
+          asset: {
+            title: `${productName} — ${isHowTo ? "How To Use Guide Video" : "Product Showcase Video"} (Draft)`,
+            media_type: "video",
+            content_data: {
+              prompt: `Generate ${getOutputTypeName(outputType)} for ${productName}`,
+              creation_settings: settings,
+              error_message: lastVeoError || "Google Veo Video API call failed: Playable MP4 binary required.",
+              provider_info: {
+                provider: "Google AI (Veo 3.1 Video)",
+                model: "veo-3.1-generate-preview",
+                generation_status: "failed",
+              },
+            },
+          },
+        };
       }
 
-      const filename = `${crypto.randomUUID()}.svg`;
+      // Upload binary to Supabase Storage: company-uploads
+      const filename = `${crypto.randomUUID()}.mp4`;
       const storagePath = `${companyId}/products/${productId}/media-assets/${filename}`;
 
-      await supabase.storage
+      const { error: uploadErr } = await supabase.storage
         .from("company-uploads")
-        .upload(storagePath, videoBuffer, { contentType: "image/svg+xml", upsert: true });
+        .upload(storagePath, videoBuffer, { contentType: "video/mp4", upsert: true });
+
+      if (uploadErr) {
+        return {
+          status: "failed",
+          provider: "Google AI (Veo 3.1 Video)",
+          model: "veo-3.1-generate-preview",
+          error_message: `Video Storage upload failed: ${uploadErr.message}`,
+        };
+      }
 
       const { data: sData } = await supabase.storage
         .from("company-uploads")
