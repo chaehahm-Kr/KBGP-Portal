@@ -406,9 +406,10 @@ export function MediaAssetsWorkspace({ product }: MediaAssetsWorkspaceProps) {
 
         {/* SUMMARY TILES */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-4">
-          <div
+          <button
+            type="button"
             onClick={() => setActiveMainTab("sources")}
-            className={`p-3.5 rounded-xl border transition-all cursor-pointer flex items-center justify-between ${
+            className={`p-3.5 rounded-xl border text-left transition-all cursor-pointer flex items-center justify-between ${
               activeMainTab === "sources"
                 ? "bg-indigo-50/60 dark:bg-indigo-950/40 border-indigo-300 dark:border-indigo-800"
                 : "bg-zinc-50 dark:bg-zinc-850 border-zinc-200 dark:border-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-800"
@@ -423,11 +424,12 @@ export function MediaAssetsWorkspace({ product }: MediaAssetsWorkspaceProps) {
               </span>
             </div>
             <FileTextIcon className="w-6 h-6 text-zinc-400" />
-          </div>
+          </button>
 
-          <div
+          <button
+            type="button"
             onClick={() => setActiveMainTab("drafts")}
-            className={`p-3.5 rounded-xl border transition-all cursor-pointer flex items-center justify-between ${
+            className={`p-3.5 rounded-xl border text-left transition-all cursor-pointer flex items-center justify-between ${
               activeMainTab === "drafts"
                 ? "bg-amber-50/60 dark:bg-amber-950/40 border-amber-300 dark:border-amber-800"
                 : "bg-zinc-50 dark:bg-zinc-850 border-zinc-200 dark:border-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-800"
@@ -442,11 +444,12 @@ export function MediaAssetsWorkspace({ product }: MediaAssetsWorkspaceProps) {
               </span>
             </div>
             <EditIcon className="w-6 h-6 text-amber-500" />
-          </div>
+          </button>
 
-          <div
+          <button
+            type="button"
             onClick={() => setActiveMainTab("approved")}
-            className={`p-3.5 rounded-xl border transition-all cursor-pointer flex items-center justify-between ${
+            className={`p-3.5 rounded-xl border text-left transition-all cursor-pointer flex items-center justify-between ${
               activeMainTab === "approved"
                 ? "bg-emerald-50/60 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-800"
                 : "bg-zinc-50 dark:bg-zinc-850 border-zinc-200 dark:border-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-800"
@@ -461,7 +464,7 @@ export function MediaAssetsWorkspace({ product }: MediaAssetsWorkspaceProps) {
               </span>
             </div>
             <CheckCircleIcon className="w-6 h-6 text-emerald-500" />
-          </div>
+          </button>
         </div>
       </div>
 

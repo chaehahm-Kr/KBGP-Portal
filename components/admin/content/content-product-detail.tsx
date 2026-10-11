@@ -325,7 +325,7 @@ export function ContentProductDetail({ product }: ContentProductDetailProps) {
               >
                 <Icon className="w-4 h-4" />
                 <span>{tab.name}</span>
-                <span className="hidden xl:inline text-[10.5px] opacity-70">({tab.labelKo})</span>
+                <span className="hidden 2xl:inline text-[10.5px] opacity-70">({tab.labelKo})</span>
                 {tab.badge && (
                   <span className={`px-1.5 py-0.5 text-[9px] font-bold rounded border ${tab.badgeColor}`}>
                     {tab.badge}
