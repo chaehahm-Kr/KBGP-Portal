@@ -189,75 +189,80 @@ export async function executeAIMediaGeneration(
 
       if (geminiKey) {
         const prompt = `Professional e-commerce ${outputType.replace("_", " ")} image for ${productName}. Style: ${settings.style}. Features: ${rawBullets.slice(0, 3).join("; ")}`;
-        const modelName = "gemini-3.1-flash-image";
 
-        // Attempt 1: Imagen 3 REST predict endpoint (official Google AI Studio Imagen 3 endpoint)
+        // Attempt 1: Official /v1beta/interactions endpoint
         try {
-          const imgApiRes = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:predict?key=${geminiKey}`,
+          const interactRes = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/interactions?key=${geminiKey}`,
             {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
-                instances: [{ prompt }],
-                parameters: { sampleCount: 1, aspectRatio: "1:1", outputMimeType: "image/jpeg" },
+                model: "gemini-3.1-flash-image",
+                input: prompt,
+                response_format: { type: "image" },
               }),
             }
           );
 
-          if (imgApiRes.ok) {
-            const data = await imgApiRes.json();
+          if (interactRes.ok) {
+            const data = await interactRes.json();
             const b64 =
-              data?.predictions?.[0]?.bytesBase64Encoded ||
-              data?.generatedImages?.[0]?.image?.imageBytes;
+              data?.output?.[0]?.data ||
+              data?.images?.[0]?.data ||
+              data?.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
             if (b64) {
               imageBuffer = Buffer.from(b64, "base64");
               ext = "jpeg";
               mimeType = "image/jpeg";
             }
           } else {
-            const errBody = await imgApiRes.text();
-            lastApiError = `Google Imagen 3 API (imagen-3.0-generate-002:predict) returned HTTP ${imgApiRes.status}: ${errBody.slice(0, 300)}`;
+            const errText = await interactRes.text();
+            lastApiError = `Google Gemini Interactions API (gemini-3.1-flash-image) returned HTTP ${interactRes.status}: ${errText.slice(0, 300)}`;
             console.warn("[media-ai-adapter]", lastApiError);
           }
         } catch (e: any) {
-          lastApiError = e.message || `Network exception calling Google Imagen API`;
-          console.warn("[media-ai-adapter] Image call exception:", e);
+          lastApiError = e.message || "Network exception calling Gemini Interactions API";
+          console.warn("[media-ai-adapter] Interactions API exception:", e);
         }
 
-        // Attempt 2: gemini-3.1-flash-image generateImages endpoint
+        // Attempt 2: Official generateContent with responseModalities ["IMAGE"]
         if (!imageBuffer) {
           try {
             const contentRes = await fetch(
-              `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateImages?key=${geminiKey}`,
+              `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-image:generateContent?key=${geminiKey}`,
               {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                  prompt,
-                  number_of_images: 1,
-                  output_mime_type: "image/jpeg",
-                  aspect_ratio: "1:1",
+                  contents: [{ parts: [{ text: `Generate a high quality e-commerce product photo: ${prompt}` }] }],
+                  generationConfig: {
+                    responseModalities: ["IMAGE"],
+                  },
                 }),
               }
             );
 
             if (contentRes.ok) {
               const cData = await contentRes.json();
-              const b64 = cData?.generatedImages?.[0]?.image?.imageBytes;
-              if (b64) {
-                imageBuffer = Buffer.from(b64, "base64");
-                mimeType = "image/jpeg";
-                ext = "jpeg";
+              const parts = cData?.candidates?.[0]?.content?.parts || [];
+              for (const part of parts) {
+                const inlineData = part?.inlineData || part?.inline_data;
+                if (inlineData?.data) {
+                  imageBuffer = Buffer.from(inlineData.data, "base64");
+                  mimeType = inlineData.mimeType || "image/jpeg";
+                  ext = mimeType.split("/")[1] || "jpeg";
+                  break;
+                }
               }
             } else {
               const errText = await contentRes.text();
-              const secondErr = `Google Image API (${modelName}:generateImages) returned HTTP ${contentRes.status}: ${errText.slice(0, 300)}`;
+              const secondErr = `Google Gemini generateContent API (gemini-3.1-flash-image) returned HTTP ${contentRes.status}: ${errText.slice(0, 300)}`;
               lastApiError = `${lastApiError} | ${secondErr}`;
               console.warn("[media-ai-adapter]", secondErr);
             }
           } catch (e: any) {
-            console.warn("[media-ai-adapter] generateImages exception:", e);
+            console.warn("[media-ai-adapter] generateContent exception:", e);
           }
         }
       }
@@ -372,16 +377,18 @@ export async function executeAIMediaGeneration(
         try {
           const videoPrompt = `Commercial product video for ${productName}. Style: ${settings.style}. Scene instructions: ${scenes.map((s) => s.title + ": " + s.text).join(". ")}`;
           
-          // Attempt 1: predictLongRunning
+          const videoPayload = {
+            instances: [{ prompt: videoPrompt }],
+          };
+          console.log("[media-ai-adapter] Outbound Veo request payload:", JSON.stringify(videoPayload));
+
+          // Attempt 1: predictLongRunning with minimal official request payload
           let veoRes = await fetch(
             `https://generativelanguage.googleapis.com/v1beta/models/${veoModel}:predictLongRunning?key=${geminiKey}`,
             {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                instances: [{ prompt: videoPrompt }],
-                parameters: { aspectRatio: "16:9", durationSeconds: 5, personGeneration: "ALLOW_ADULT" },
-              }),
+              body: JSON.stringify(videoPayload),
             }
           );
 
