@@ -249,6 +249,14 @@ export function FaqWorkspace({ product }: FaqWorkspaceProps) {
 
   // Status Change (Approve, Archive, Set to Draft)
   const handleStatusChange = async (id: string, newStatus: FaqStatus) => {
+    const targetFaq = faqs.find((f) => f.id === id);
+    if (newStatus === "approved" && targetFaq?.requires_brand_confirmation) {
+      const confirmed = confirm(
+        "⚠️ Warning: This FAQ is flagged with 'Brand Confirmation Required'.\nPlease verify official brand documentation before approving for public customer & training use.\n\nDo you want to proceed with approval?"
+      );
+      if (!confirmed) return;
+    }
+
     startTransition(async () => {
       const res = await updateFaqStatus(id, product.id, newStatus);
       if (res.success) {
@@ -308,7 +316,7 @@ export function FaqWorkspace({ product }: FaqWorkspaceProps) {
     );
   };
 
-  // Save selected AI suggestions as Drafts
+  // Save selected AI suggestions as Drafts (Safeguards Brand Confirmation items)
   const handleSaveSelectedAiDrafts = async (targetStatus: FaqStatus = "draft") => {
     const selected = aiSuggestions.filter((s) => s.selected);
     if (selected.length === 0) {
@@ -326,7 +334,8 @@ export function FaqWorkspace({ product }: FaqWorkspaceProps) {
           audience: s.audience,
           source_refs: s.source_refs,
           requires_brand_confirmation: s.requires_brand_confirmation,
-          status: targetStatus,
+          // If bulk approving, force items requiring brand confirmation to remain in draft
+          status: s.requires_brand_confirmation ? "draft" : targetStatus,
         }))
       );
 
