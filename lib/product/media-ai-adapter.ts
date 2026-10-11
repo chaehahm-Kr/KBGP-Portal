@@ -265,6 +265,74 @@ export async function executeAIMediaGeneration(
             console.warn("[media-ai-adapter] generateContent exception:", e);
           }
         }
+
+        // Attempt 3: Official Imagen 3 predict (imagen-3.0-generate-002)
+        if (!imageBuffer) {
+          try {
+            const imagenRes = await fetch(
+              `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:predict?key=${geminiKey}`,
+              {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  instances: [{ prompt }],
+                  parameters: { sampleCount: 1, aspectRatio: "1:1" },
+                }),
+              }
+            );
+
+            if (imagenRes.ok) {
+              const imgData = await imagenRes.json();
+              const b64 = imgData?.predictions?.[0]?.bytesBase64Encoded;
+              if (b64) {
+                imageBuffer = Buffer.from(b64, "base64");
+                ext = "jpeg";
+                mimeType = "image/jpeg";
+              }
+            } else {
+              const errText = await imagenRes.text();
+              const thirdErr = `Google Imagen 3 API (imagen-3.0-generate-002) returned HTTP ${imagenRes.status}: ${errText.slice(0, 300)}`;
+              lastApiError = `${lastApiError} | ${thirdErr}`;
+              console.warn("[media-ai-adapter]", thirdErr);
+            }
+          } catch (e: any) {
+            console.warn("[media-ai-adapter] Imagen 3 exception:", e);
+          }
+        }
+
+        // Attempt 4: Official Imagen 3 Fast predict (imagen-3.0-fast-generate-001)
+        if (!imageBuffer) {
+          try {
+            const fastRes = await fetch(
+              `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-fast-generate-001:predict?key=${geminiKey}`,
+              {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  instances: [{ prompt }],
+                  parameters: { sampleCount: 1, aspectRatio: "1:1" },
+                }),
+              }
+            );
+
+            if (fastRes.ok) {
+              const fastData = await fastRes.json();
+              const b64 = fastData?.predictions?.[0]?.bytesBase64Encoded;
+              if (b64) {
+                imageBuffer = Buffer.from(b64, "base64");
+                ext = "jpeg";
+                mimeType = "image/jpeg";
+              }
+            } else {
+              const errText = await fastRes.text();
+              const fourthErr = `Google Imagen 3 Fast API (imagen-3.0-fast-generate-001) returned HTTP ${fastRes.status}: ${errText.slice(0, 300)}`;
+              lastApiError = `${lastApiError} | ${fourthErr}`;
+              console.warn("[media-ai-adapter]", fourthErr);
+            }
+          } catch (e: any) {
+            console.warn("[media-ai-adapter] Imagen 3 Fast exception:", e);
+          }
+        }
       }
 
       // STRICT VALIDATION: Local SVG is NOT an AI generation success
@@ -392,26 +460,26 @@ export async function executeAIMediaGeneration(
             }
           );
 
-          // Attempt 2: generateVideos if predictLongRunning is 404 or unsupported
-          if (veoRes.status === 404) {
-            veoRes = await fetch(
-              `https://generativelanguage.googleapis.com/v1beta/models/${veoModel}:generateVideos?key=${geminiKey}`,
+          // Attempt 2: veo-2.0-generate-001 if veo-3.1 returns error
+          if (!veoRes.ok) {
+            const veo2Res = await fetch(
+              `https://generativelanguage.googleapis.com/v1beta/models/veo-2.0-generate-001:predictLongRunning?key=${geminiKey}`,
               {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  prompt: videoPrompt,
-                  videoConfig: { aspectRatio: "16:9", durationSeconds: 5 },
-                }),
+                body: JSON.stringify(videoPayload),
               }
             );
+            if (veo2Res.ok) {
+              veoRes = veo2Res;
+            } else {
+              const errText = await veoRes.text();
+              lastVeoError = `Google Veo API (${veoModel}) returned HTTP ${veoRes.status}: ${errText.slice(0, 300)}`;
+              console.warn("[media-ai-adapter]", lastVeoError);
+            }
           }
 
-          if (!veoRes.ok) {
-            const errText = await veoRes.text();
-            lastVeoError = `Google Veo API (${veoModel}) returned HTTP ${veoRes.status}: ${errText.slice(0, 300)}`;
-            console.warn("[media-ai-adapter]", lastVeoError);
-          } else {
+          if (veoRes.ok) {
             const opData = await veoRes.json();
             // Immediate video payload if returned synchronously
             if (opData?.response?.videoBytesBase64) {
