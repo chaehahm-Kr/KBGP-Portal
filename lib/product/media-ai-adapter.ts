@@ -188,45 +188,82 @@ export async function executeAIMediaGeneration(
       let lastApiError = "";
 
       if (geminiKey) {
-        // Attempt Google Imagen 3 / Gemini Image predict endpoints
-        const imageModels = [
-          "imagen-3.0-generate-002",
-          "imagen-3.0-fast-generate-001",
-        ];
-
+        // Target model: gemini-3.1-flash-image
         const prompt = `Professional e-commerce ${outputType.replace("_", " ")} image for ${productName}. Style: ${settings.style}. Features: ${rawBullets.slice(0, 3).join("; ")}`;
+        const modelName = "gemini-3.1-flash-image";
 
-        for (const imgModel of imageModels) {
+        // Attempt 1: generateImages endpoint
+        try {
+          const imgApiRes = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateImages?key=${geminiKey}`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                prompt,
+                number_of_images: 1,
+                output_mime_type: "image/jpeg",
+                aspect_ratio: "1:1",
+              }),
+            }
+          );
+
+          if (imgApiRes.ok) {
+            const data = await imgApiRes.json();
+            const b64 =
+              data?.generatedImages?.[0]?.image?.imageBytes ||
+              data?.predictions?.[0]?.bytesBase64Encoded ||
+              data?.images?.[0]?.bytesBase64;
+            if (b64) {
+              imageBuffer = Buffer.from(b64, "base64");
+              ext = "jpeg";
+              mimeType = "image/jpeg";
+            }
+          } else {
+            const errBody = await imgApiRes.text();
+            lastApiError = `Google Image API (${modelName}:generateImages) returned HTTP ${imgApiRes.status}: ${errBody.slice(0, 300)}`;
+            console.warn("[media-ai-adapter]", lastApiError);
+          }
+        } catch (e: any) {
+          lastApiError = e.message || `Network exception calling Google Image API (${modelName}:generateImages)`;
+          console.warn("[media-ai-adapter] Image call exception:", e);
+        }
+
+        // Attempt 2: generateContent endpoint if Attempt 1 produced no binary
+        if (!imageBuffer) {
           try {
-            const imgApiRes = await fetch(
-              `https://generativelanguage.googleapis.com/v1beta/models/${imgModel}:predict?key=${geminiKey}`,
+            const contentRes = await fetch(
+              `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${geminiKey}`,
               {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                  instances: [{ prompt }],
-                  parameters: { sampleCount: 1, aspectRatio: "1:1", outputMimeType: "image/jpeg" },
+                  contents: [{ parts: [{ text: `Generate an image: ${prompt}` }] }],
+                  generationConfig: { responseMimeType: "image/jpeg" },
                 }),
               }
             );
 
-            if (imgApiRes.ok) {
-              const data = await imgApiRes.json();
-              const b64 = data?.predictions?.[0]?.bytesBase64Encoded;
-              if (b64) {
-                imageBuffer = Buffer.from(b64, "base64");
-                ext = "jpeg";
-                mimeType = "image/jpeg";
-                break;
+            if (contentRes.ok) {
+              const cData = await contentRes.json();
+              const parts = cData?.candidates?.[0]?.content?.parts || [];
+              for (const part of parts) {
+                const inlineData = part?.inlineData || part?.inline_data;
+                if (inlineData?.data) {
+                  imageBuffer = Buffer.from(inlineData.data, "base64");
+                  mimeType = inlineData.mimeType || "image/jpeg";
+                  ext = mimeType.split("/")[1] || "jpeg";
+                  break;
+                }
               }
             } else {
-              const errBody = await imgApiRes.text();
-              lastApiError = `Google Imagen API (${imgModel}) returned HTTP ${imgApiRes.status}: ${errBody.slice(0, 300)}`;
-              console.warn("[media-ai-adapter]", lastApiError);
+              const errText = await contentRes.text();
+              const secondErr = `Google Image API (${modelName}:generateContent) returned HTTP ${contentRes.status}: ${errText.slice(0, 300)}`;
+              lastApiError = `${lastApiError} | ${secondErr}`;
+              console.warn("[media-ai-adapter]", secondErr);
             }
           } catch (e: any) {
-            lastApiError = e.message || "Network exception calling Google Imagen API";
-            console.warn("[media-ai-adapter] Image call exception:", e);
+            console.warn("[media-ai-adapter] generateContent exception:", e);
           }
         }
       }
@@ -337,10 +374,13 @@ export async function executeAIMediaGeneration(
       let lastVeoError = "";
 
       if (geminiKey) {
+        const veoModel = "veo-3.1-generate-preview";
         try {
           const videoPrompt = `Commercial product video for ${productName}. Style: ${settings.style}. Scene instructions: ${scenes.map((s) => s.title + ": " + s.text).join(". ")}`;
-          const veoRes = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/veo-2.0-generate-001:predictLongRunning?key=${geminiKey}`,
+          
+          // Attempt 1: predictLongRunning
+          let veoRes = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/${veoModel}:predictLongRunning?key=${geminiKey}`,
             {
               method: "POST",
               headers: { "Content-Type": "application/json" },
@@ -351,19 +391,56 @@ export async function executeAIMediaGeneration(
             }
           );
 
+          // Attempt 2: generateVideos if predictLongRunning is 404 or unsupported
+          if (veoRes.status === 404) {
+            veoRes = await fetch(
+              `https://generativelanguage.googleapis.com/v1beta/models/${veoModel}:generateVideos?key=${geminiKey}`,
+              {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  prompt: videoPrompt,
+                  videoConfig: { aspectRatio: "16:9", durationSeconds: 5 },
+                }),
+              }
+            );
+          }
+
           if (!veoRes.ok) {
             const errText = await veoRes.text();
-            lastVeoError = `Google Veo API returned HTTP ${veoRes.status}: ${errText.slice(0, 300)}`;
+            lastVeoError = `Google Veo API (${veoModel}) returned HTTP ${veoRes.status}: ${errText.slice(0, 300)}`;
             console.warn("[media-ai-adapter]", lastVeoError);
           } else {
             const opData = await veoRes.json();
-            // If operation completes with video content
+            // Immediate video payload if returned synchronously
             if (opData?.response?.videoBytesBase64) {
               videoBuffer = Buffer.from(opData.response.videoBytesBase64, "base64");
+            } else if (opData?.name) {
+              // Poll long running operation endpoint
+              const opName = opData.name;
+              for (let pollCount = 0; pollCount < 3; pollCount++) {
+                await new Promise((r) => setTimeout(r, 2000));
+                const pollRes = await fetch(
+                  `https://generativelanguage.googleapis.com/v1beta/${opName}?key=${geminiKey}`
+                );
+                if (pollRes.ok) {
+                  const pollData = await pollRes.json();
+                  if (pollData?.done) {
+                    const b64 =
+                      pollData?.response?.videoBytesBase64 ||
+                      pollData?.response?.generatedVideos?.[0]?.video?.bytesBase64 ||
+                      pollData?.response?.video?.bytesBase64;
+                    if (b64) {
+                      videoBuffer = Buffer.from(b64, "base64");
+                    }
+                    break;
+                  }
+                }
+              }
             }
           }
         } catch (e: any) {
-          lastVeoError = e.message || "Network exception calling Google Veo Video API";
+          lastVeoError = e.message || `Network exception calling Google Veo Video API (${veoModel})`;
           console.warn("[media-ai-adapter] Google Veo call warning:", e);
         }
       }
