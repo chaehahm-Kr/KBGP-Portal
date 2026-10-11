@@ -319,7 +319,7 @@ export function ContentProductDetail({ product }: ContentProductDetailProps) {
 
       {/* 7 Tab Navigation */}
       <div className="border-b border-zinc-200 dark:border-zinc-800">
-        <nav className="flex space-x-1.5 overflow-x-auto pb-px" aria-label="Tabs">
+        <nav className="flex space-x-1 overflow-x-auto pb-px" aria-label="Tabs">
           {tabs.map((tab) => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
@@ -327,7 +327,7 @@ export function ContentProductDetail({ product }: ContentProductDetailProps) {
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center gap-1.5 py-2 px-2.5 sm:px-3 text-[11.5px] font-semibold border-b-2 whitespace-nowrap transition-colors ${
+                className={`flex items-center gap-1.5 py-2 px-2 sm:px-2.5 text-[11.5px] font-semibold border-b-2 whitespace-nowrap transition-colors ${
                   isActive
                     ? "border-blue-600 text-blue-600 dark:border-blue-400 dark:text-blue-400"
                     : "border-transparent text-zinc-500 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200 hover:border-zinc-300 dark:hover:border-zinc-700"
