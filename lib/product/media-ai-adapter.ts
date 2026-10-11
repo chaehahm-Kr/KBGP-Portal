@@ -39,12 +39,12 @@ export async function executeAIMediaGeneration(
 
   const activeProvider = isVideo
     ? geminiKey
-      ? "Google AI (Veo 2)"
+      ? "Google AI (Veo 3.1 Video)"
       : runwayKey
       ? "Runway AI (Gen-2)"
       : "Unsupported / Integration Required"
     : geminiKey
-    ? "Google AI (Imagen 3)"
+    ? "Google AI (gemini-3.1-flash-image)"
     : replicateKey
     ? "Replicate (FLUX.1)"
     : openAiKey
@@ -55,12 +55,12 @@ export async function executeAIMediaGeneration(
 
   const activeModel = isVideo
     ? geminiKey
-      ? "veo-2.0-generate-001"
+      ? "veo-3.1-generate-preview"
       : runwayKey
       ? "runway-gen2-video"
       : "video-ai-v1"
     : geminiKey
-    ? "imagen-3.0-generate-002"
+    ? "gemini-3.1-flash-image"
     : replicateKey
     ? "flux-1-schnell"
     : openAiKey
