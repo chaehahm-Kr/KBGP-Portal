@@ -39,7 +39,7 @@ import { CategoryAttributeForm, type CategoryAttributeFormHandle, type CategoryC
 import { ProductChangeHistoryTab } from "@/components/product/product-change-history-tab";
 import type { ProductChangeLogItem } from "@/lib/product/audit";
 import { useUnsavedChangesGuard } from "@/hooks/use-unsaved-changes-guard";
-import { evaluateProductRegistrationStatus } from "@/lib/product/registration-status";
+import { evaluateProductRegistrationStatus, type MissingFieldItem } from "@/lib/product/registration-status";
 import type { CategoryCompletionResult } from "@/lib/product/attribute-completion";
 import { formatEasternDate, getEasternTodayString } from "@/lib/utils/timezone";
 import { LogisticsHelpModal, type LogisticsHelpSectionKey } from "@/components/product/logistics-help-modal";
@@ -969,7 +969,32 @@ export function ProductOverrideTabs({
   });
 
   const missingFields = registrationEvaluation.missingFields;
+  const missingFieldItems = registrationEvaluation.missingFieldItems || [];
   const isDraft = registrationEvaluation.isDraft;
+
+  // ADM-PROD-UI-002: 포털과 같은 동작 — 누락 항목 배지를 누르면 해당 탭의 입력칸으로 이동한다
+  const handleMissingBadgeClick = (item: MissingFieldItem) => {
+    setActiveTab(item.tab);
+    setTimeout(() => {
+      let el: HTMLElement | null = item.targetId ? document.getElementById(item.targetId) : null;
+      if (!el && item.inputName) {
+        el = (document.getElementsByName(item.inputName)[0] as HTMLElement) || null;
+      }
+      if (!el) return;
+
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      const highlight = ["ring-4", "ring-rose-500/70", "border-rose-500"];
+      el.classList.add(...highlight);
+      const targetEl = el;
+      setTimeout(() => targetEl.classList.remove(...highlight), 2500);
+
+      const focusable =
+        targetEl instanceof HTMLInputElement || targetEl instanceof HTMLSelectElement || targetEl instanceof HTMLTextAreaElement
+          ? targetEl
+          : (targetEl.querySelector("input, select, textarea") as HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement | null);
+      if (focusable && focusable.type !== "file") focusable.focus();
+    }, 80);
+  };
 
   const effectiveBrandId = ovBrandId || product.brand_id;
   const effectiveNameEn = ovNameEn.trim() !== "" ? ovNameEn : product.name_en;
@@ -1483,13 +1508,16 @@ export function ProductOverrideTabs({
             브랜드사(제조사) 또는 어드민 관리자가 아래 필수 항목들을 보완 완료해야만 최종 'Complete (등록 완료)' 상태로 전환할 수 있습니다:
           </p>
           <div className="flex flex-wrap gap-2 pt-1">
-            {missingFields.map((field) => (
-              <span
-                key={field}
-                className="inline-flex items-center rounded-md bg-amber-50 px-2 py-1 text-[10px] font-bold text-amber-700 ring-1 ring-inset ring-amber-600/10 dark:bg-amber-950/40 dark:text-amber-450 dark:ring-amber-900/30"
+            {missingFieldItems.map((item) => (
+              <button
+                key={item.key}
+                type="button"
+                onClick={() => handleMissingBadgeClick(item)}
+                title="클릭하면 해당 입력 항목으로 이동합니다"
+                className="inline-flex items-center rounded-md bg-amber-50 px-2 py-1 text-[10px] font-bold text-amber-700 ring-1 ring-inset ring-amber-600/10 hover:bg-amber-100 dark:bg-amber-950/40 dark:text-amber-450 dark:ring-amber-900/30 dark:hover:bg-amber-900/40 cursor-pointer transition-colors"
               >
-                • {field}
-              </span>
+                • {item.section}: {item.label}
+              </button>
             ))}
           </div>
         </div>
@@ -1748,7 +1776,7 @@ export function ProductOverrideTabs({
                     </div>
                     <input
                       type="text"
-                      value={ovManufactureSku}
+                      id="manufactureSku-field" value={ovManufactureSku}
                       onChange={(e) => setOvManufactureSku(sanitizeSku(e.target.value))}
                       onBlur={(e) => setOvManufactureSku(trimSkuSeparators(e.target.value))}
                       placeholder="제조사 SKU 오버라이드..."
@@ -1794,7 +1822,7 @@ export function ProductOverrideTabs({
                     </div>
                     <input
                       type="text"
-                      value={ovNameEn}
+                      id="nameEn-field" value={ovNameEn}
                       onChange={(e) => setOvNameEn(e.target.value)}
                       placeholder="English Product Name"
                       className="w-full rounded border border-zinc-200 p-2 text-xs text-zinc-900 bg-white dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:border-zinc-950 outline-none"
@@ -1831,7 +1859,7 @@ export function ProductOverrideTabs({
                       {brandName}
                     </div>
                     <select
-                      value={ovBrandId}
+                      id="brandId-field" value={ovBrandId}
                       onChange={(e) => setOvBrandId(e.target.value)}
                       className="w-full rounded border border-zinc-200 p-2 text-xs text-zinc-900 bg-white dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:border-zinc-950 outline-none"
                     >
@@ -1914,7 +1942,7 @@ export function ProductOverrideTabs({
                       {product.origin || "-"}
                     </div>
                     <select
-                      value={ovOrigin}
+                      id="origin-field" value={ovOrigin}
                       onChange={(e) => setOvOrigin(e.target.value)}
                       className="w-full rounded border border-zinc-200 p-2 text-xs text-zinc-900 bg-white dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:border-zinc-950 outline-none"
                     >
@@ -2078,7 +2106,7 @@ export function ProductOverrideTabs({
                     {product.how_to_use || "등록된 사용 방법 없음"}
                   </div>
                   <textarea
-                    value={ovHowToUse}
+                    id="howToUse-field" value={ovHowToUse}
                     onChange={(e) => setOvHowToUse(e.target.value)}
                     placeholder="제품 사용 방법 오버라이드 작성..."
                     rows={3}
@@ -2130,7 +2158,7 @@ export function ProductOverrideTabs({
                     </div>
                     <input
                       type="text"
-                      value={ovUpc}
+                      id="upc-field" value={ovUpc}
                       onChange={(e) => setOvUpc(e.target.value)}
                       placeholder="UPC 번호 오버라이드..."
                       className="w-full rounded border border-zinc-200 p-2 text-xs text-zinc-900 bg-white dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:border-zinc-950 outline-none font-mono"
@@ -2176,6 +2204,7 @@ export function ProductOverrideTabs({
             volume={formatVolume(ovVolumeValue, ovVolumeUnit) || product.volume || null}
             colorMap={ovColorMap || product.color_map || null}
             isAdmin={true}
+            onCompletionChange={setCategoryCompletion}
             onDirtyChange={handleCatAttrDirtyChange}
           />
         </div>
@@ -2223,7 +2252,7 @@ export function ProductOverrideTabs({
                     </div>
                     <input
                       type="number"
-                      value={ovPriceKrwRetail}
+                      id="priceKrwRetail-field" value={ovPriceKrwRetail}
                       onChange={(e) => setOvPriceKrwRetail(e.target.value)}
                       placeholder="소비자가 오버라이드..."
                       className="w-full rounded border border-zinc-200 p-2 text-xs text-zinc-900 bg-white dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:border-zinc-950 outline-none"
@@ -2262,7 +2291,7 @@ export function ProductOverrideTabs({
                     <input
                       type="number"
                       step="0.01"
-                      value={ovPriceUsdFob}
+                      id="priceUsdFob-field" value={ovPriceUsdFob}
                       onChange={(e) => setOvPriceUsdFob(e.target.value)}
                       placeholder="FOB 공급가 오버라이드..."
                       className="w-full rounded border border-zinc-200 p-2 text-xs text-zinc-900 bg-white dark:border-zinc-800 dark:bg-zinc-950 dark:text-white focus:border-zinc-950 outline-none"
@@ -2525,29 +2554,6 @@ export function ProductOverrideTabs({
           </div>
         )}
 
-        {/* Category & Attributes Tab */}
-        {activeTab === "category_attributes" && (
-          <div className="bg-slate-900/10 p-2 rounded-2xl">
-            <CategoryAttributeForm
-              ref={categoryAttrRef}
-              productId={product.id}
-              initialCategoryCode={(product as any).category_code || null}
-              brandName={brandName}
-              companyName={companyName}
-              productName={product.name}
-              productNameEn={product.name_en || null}
-              manufactureSku={product.manufacture_sku || null}
-              letustoSku={product.letusto_sku || null}
-              origin={product.origin || null}
-              volume={product.volume || null}
-              colorMap={product.color_map || null}
-              isAdmin={true}
-              onCompletionChange={setCategoryCompletion}
-              onDirtyChange={setIsCatAttrDirty}
-            />
-          </div>
-        )}
-
         {/* Logistics Tab */}
         {activeTab === "logistics" && (
           <div className="space-y-6">
@@ -2573,7 +2579,7 @@ export function ProductOverrideTabs({
                 <div className="space-y-1">
                   <label className="font-bold text-zinc-600 dark:text-zinc-455 block">가로 (Width, mm)</label>
                   <div className="p-1 rounded bg-zinc-50 text-[10px] text-zinc-400 dark:bg-zinc-950/20 font-mono text-center">원본: {product.item_width || 0}</div>
-                  <input type="number" step="0.1" placeholder={product.item_width?.toString() || "0"} value={ovItemWidth} onChange={(e) => setOvItemWidth(e.target.value)} className="w-full rounded border border-zinc-200 p-1.5 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white outline-none" />
+                  <input type="number" step="0.1" placeholder={product.item_width?.toString() || "0"} id="itemWidth-field" value={ovItemWidth} onChange={(e) => setOvItemWidth(e.target.value)} className="w-full rounded border border-zinc-200 p-1.5 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white outline-none" />
                 </div>
                 {/* Depth */}
                 <div className="space-y-1">
@@ -2628,7 +2634,7 @@ export function ProductOverrideTabs({
                         type="number"
                         step="0.1"
                         placeholder={product.package_width?.toString() || "0.0"}
-                        value={ovPackageWidth}
+                        id="packageWidth-field" value={ovPackageWidth}
                         onChange={(e) => handleWidthCmChange(e.target.value)}
                         className="mt-0.5 block w-full rounded border border-zinc-300 bg-white px-2 py-1 text-xs text-zinc-900 outline-none focus:border-zinc-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
                       />
@@ -2796,7 +2802,7 @@ export function ProductOverrideTabs({
                 <div className="space-y-1">
                   <label className="font-bold text-zinc-600 dark:text-zinc-455 block">입수량 (Qty, 개)</label>
                   <div className="p-1 rounded bg-zinc-50 text-[10px] text-zinc-400 dark:bg-zinc-950/20 font-mono text-center">원본: {product.carton_pack_qty !== undefined && product.carton_pack_qty !== null ? product.carton_pack_qty : "-"}</div>
-                  <input type="number" placeholder={product.carton_pack_qty !== undefined && product.carton_pack_qty !== null ? product.carton_pack_qty.toString() : "예: 24"} value={ovCartonPackQty} onChange={(e) => setOvCartonPackQty(e.target.value)} className="w-full rounded border border-zinc-200 p-1.5 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white outline-none" />
+                  <input type="number" placeholder={product.carton_pack_qty !== undefined && product.carton_pack_qty !== null ? product.carton_pack_qty.toString() : "예: 24"} id="cartonPackQty-field" value={ovCartonPackQty} onChange={(e) => setOvCartonPackQty(e.target.value)} className="w-full rounded border border-zinc-200 p-1.5 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white outline-none" />
                 </div>
                 {/* Width */}
                 <div className="space-y-1">
@@ -3444,6 +3450,7 @@ export function ProductOverrideTabs({
                       컴퓨터에서 이미지 선택 (다중 선택 가능)
                     </label>
                     <input
+                      id="product-images-dropzone"
                       ref={fileInputRef}
                       type="file"
                       accept="image/jpeg,image/png,image/webp"
