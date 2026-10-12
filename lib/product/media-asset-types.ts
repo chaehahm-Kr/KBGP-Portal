@@ -86,6 +86,23 @@ export interface VideoScene {
   duration?: number;
 }
 
+export interface CandidateVariant {
+  variant_id: string;
+  style: string;
+  label: string;
+  selected?: boolean;
+}
+
+export interface GroundingAudit {
+  product_identity_lock: string;
+  container_form_factor: string;
+  claim_grounding: string;
+  unverified_claims_detected: boolean;
+  source_material_count: number;
+  primary_packshot_used: boolean;
+  validated_at: string;
+}
+
 export interface AssetContentData {
   prompt?: string;
   is_mock?: boolean;
@@ -95,6 +112,8 @@ export interface AssetContentData {
   scenes?: VideoScene[];
   layout?: string;
   error_message?: string;
+  candidate_variants?: CandidateVariant[];
+  grounding_audit?: GroundingAudit;
   provider_info?: {
     provider: string;
     model: string;
