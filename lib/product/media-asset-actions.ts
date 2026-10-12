@@ -788,3 +788,71 @@ export async function archiveMediaAsset(
     return { success: false, error: err.message };
   }
 }
+
+/**
+ * Restore Archived Media Asset back to Approved
+ */
+export async function restoreMediaAsset(
+  assetId: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const supabase = createAdminClient();
+    const { error } = await supabase
+      .from("product_media_assets")
+      .update({
+        status: "approved",
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", assetId);
+
+    if (error) return { success: false, error: error.message };
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+}
+
+/**
+ * Bulk Delete Media Assets
+ */
+export async function deleteMultipleMediaAssets(
+  assetIds: string[]
+): Promise<{ success: boolean; deletedCount: number; error?: string }> {
+  try {
+    if (!assetIds || assetIds.length === 0) return { success: true, deletedCount: 0 };
+    const supabase = createAdminClient();
+    const { error } = await supabase
+      .from("product_media_assets")
+      .delete()
+      .in("id", assetIds);
+
+    if (error) return { success: false, deletedCount: 0, error: error.message };
+    return { success: true, deletedCount: assetIds.length };
+  } catch (err: any) {
+    return { success: false, deletedCount: 0, error: err.message };
+  }
+}
+
+/**
+ * Bulk Archive Media Assets
+ */
+export async function archiveMultipleMediaAssets(
+  assetIds: string[]
+): Promise<{ success: boolean; archivedCount: number; error?: string }> {
+  try {
+    if (!assetIds || assetIds.length === 0) return { success: true, archivedCount: 0 };
+    const supabase = createAdminClient();
+    const { error } = await supabase
+      .from("product_media_assets")
+      .update({
+        status: "archived",
+        updated_at: new Date().toISOString(),
+      })
+      .in("id", assetIds);
+
+    if (error) return { success: false, archivedCount: 0, error: error.message };
+    return { success: true, archivedCount: assetIds.length };
+  } catch (err: any) {
+    return { success: false, archivedCount: 0, error: err.message };
+  }
+}
