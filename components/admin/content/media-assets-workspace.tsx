@@ -736,7 +736,7 @@ export function MediaAssetsWorkspace({ product }: MediaAssetsWorkspaceProps) {
                                   </span>
                                 ) : isCatalogSynced ? (
                                   <span className="text-[10px] font-mono text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 px-2 py-0.5 rounded font-semibold">
-                                    Catalog Synced
+                                    {item.metadata?.is_external ? "Catalog Synced — External Video" : "Catalog Synced"}
                                   </span>
                                 ) : (
                                   <>

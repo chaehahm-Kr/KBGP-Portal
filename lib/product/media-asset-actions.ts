@@ -81,7 +81,7 @@ export async function getMediaSourceMaterials(
       // Catalog Videos
       const { data: catalogVids } = await supabase
         .from("product_videos")
-        .select("id, storage_path, title")
+        .select("id, storage_path, video_url, position")
         .eq("product_id", productId);
 
       if (catalogVids && catalogVids.length > 0) {
@@ -92,16 +92,21 @@ export async function getMediaSourceMaterials(
               .from("company-uploads")
               .createSignedUrl(vid.storage_path, 3600);
             signedUrl = sData?.signedUrl || "";
+          } else if (vid.video_url) {
+            signedUrl = vid.video_url;
           }
+
+          const isExternal = !vid.storage_path && !!vid.video_url;
 
           sources.push({
             id: `vid-cat-${vid.id}`,
             product_id: productId,
             group_type: "product_media",
-            title: vid.title || "Catalog Product Video",
-            source_type: "video",
+            title: isExternal ? "Catalog Product Video (External Video)" : "Catalog Product Video",
+            source_type: "catalog_sync",
             url: signedUrl,
-            storage_path: vid.storage_path,
+            storage_path: vid.storage_path || undefined,
+            metadata: { is_external: isExternal, position: vid.position, video_url: vid.video_url },
             created_at: new Date().toISOString(),
           });
         }
