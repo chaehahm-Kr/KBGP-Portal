@@ -61,7 +61,7 @@ export function TrainingListView({
           <div className="flex items-center gap-2">
             <span className="text-2xl">🎓</span>
             <h1 className="text-xl sm:text-2xl font-black text-zinc-900 dark:text-white tracking-tight">
-              Product Training & Staff Guides
+              Learning Center
             </h1>
           </div>
           <p className="text-xs sm:text-sm text-zinc-500 dark:text-zinc-400 mt-1">

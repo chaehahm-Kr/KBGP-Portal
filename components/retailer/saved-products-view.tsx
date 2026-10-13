@@ -153,7 +153,7 @@ export function SavedProductsView({
         <div>
           <div className="flex items-center gap-2">
             <h1 className="text-xl sm:text-2xl font-bold text-zinc-900 dark:text-white tracking-tight">
-              {locale === "ko" ? "관심 상품 및 컬렉션" : "Saved Products & Collections"}
+              {locale === "ko" ? "관심 상품 (Saved Products)" : "Saved Products"}
             </h1>
             <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-rose-50 text-rose-600 dark:bg-rose-950/60 dark:text-rose-400 border border-rose-200 dark:border-rose-900">
               ❤️ {savedIds.length} {locale === "ko" ? "개 저장됨" : "Saved"}

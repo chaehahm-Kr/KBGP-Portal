@@ -57,15 +57,21 @@ export interface Dictionary {
   };
   nav: {
     home: string;
+    shopProducts?: string;
     products: string;
     allProducts: string;
     savedProducts: string;
-    weeklyCheck: string;
     orders: string;
     bills?: string;
+    myProducts?: string;
+    weeklyInventory?: string;
+    weeklyCheck: string;
+    productPerformance?: string;
     sales: string;
+    priceTags?: string;
     tags: string;
     stores: string;
+    learningCenter?: string;
     training: string;
     helpSupport: string;
     helpCenter: string;
@@ -76,6 +82,8 @@ export interface Dictionary {
     accountSettings: string;
     companySettings: string;
     teamSettings: string;
+    shippingSettings?: string;
+    paymentSettings?: string;
     retailerPortal: string;
   };
   header: {

@@ -282,12 +282,16 @@ export function RetailerHeader({
                 const translatedName = t.nav[item.key as keyof typeof t.nav] || item.name;
 
                 if (item.subItems && item.subItems.length > 0) {
-                  const isGroupActive = item.subItems.some(
-                    (sub) =>
-                      pathname === sub.href ||
-                      pathname.startsWith(`${sub.href}/`) ||
-                      pathname === `/retailer${sub.href}` ||
-                      pathname.startsWith(`/retailer${sub.href}/`)
+                  const isGroupActive = item.subItems.some((sub) =>
+                    sub.href === "/products"
+                      ? pathname === "/products" ||
+                        pathname === "/retailer/products" ||
+                        ((pathname.startsWith("/products/") || pathname.startsWith("/retailer/products/")) &&
+                          !pathname.includes("/saved"))
+                      : pathname === sub.href ||
+                        pathname.startsWith(`${sub.href}/`) ||
+                        pathname === `/retailer${sub.href}` ||
+                        pathname.startsWith(`/retailer${sub.href}/`)
                   );
                   const isOpen = openSections[item.key] ?? isGroupActive;
 
@@ -296,10 +300,12 @@ export function RetailerHeader({
                       <button
                         type="button"
                         onClick={() => toggleSection(item.key)}
-                        className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                          isOpen
-                            ? "text-zinc-900 dark:text-white hover:bg-zinc-100 dark:hover:bg-zinc-900"
-                            : "text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-900 hover:text-zinc-900 dark:hover:text-zinc-100"
+                        className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-xs transition-all cursor-pointer ${
+                          isGroupActive
+                            ? "text-zinc-900 dark:text-white font-bold bg-zinc-100/70 dark:bg-zinc-900/70"
+                            : isOpen
+                            ? "text-zinc-900 dark:text-white font-semibold hover:bg-zinc-100 dark:hover:bg-zinc-900"
+                            : "text-zinc-600 dark:text-zinc-400 font-medium hover:bg-zinc-100 dark:hover:bg-zinc-900 hover:text-zinc-900 dark:hover:text-zinc-100"
                         }`}
                       >
                         <div className="flex items-center gap-3">
@@ -324,10 +330,15 @@ export function RetailerHeader({
                         <div className="pl-6 pr-1 py-1 space-y-1">
                           {item.subItems.map((sub) => {
                             const isSubActive =
-                              pathname === sub.href ||
-                              pathname.startsWith(`${sub.href}/`) ||
-                              pathname === `/retailer${sub.href}` ||
-                              pathname.startsWith(`/retailer${sub.href}/`);
+                              sub.href === "/products"
+                                ? pathname === "/products" ||
+                                  pathname === "/retailer/products" ||
+                                  ((pathname.startsWith("/products/") || pathname.startsWith("/retailer/products/")) &&
+                                    !pathname.includes("/saved"))
+                                : pathname === sub.href ||
+                                  pathname.startsWith(`${sub.href}/`) ||
+                                  pathname === `/retailer${sub.href}` ||
+                                  pathname.startsWith(`/retailer${sub.href}/`);
                             const translatedSubName = t.nav[sub.key as keyof typeof t.nav] || sub.name;
 
                             return (
@@ -337,7 +348,7 @@ export function RetailerHeader({
                                 onClick={() => setMobileMenuOpen(false)}
                                 className={`flex items-center justify-between px-3 py-2 rounded-lg text-xs transition-all ${
                                   isSubActive
-                                    ? "bg-zinc-900 text-white dark:bg-zinc-800 dark:text-white font-semibold"
+                                    ? "bg-zinc-900 text-white dark:bg-zinc-800 dark:text-white font-semibold shadow-xs"
                                     : "text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-900 font-medium"
                                 }`}
                               >

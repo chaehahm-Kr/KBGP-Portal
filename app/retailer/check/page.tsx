@@ -7,7 +7,14 @@ import {
 } from "@/lib/retailer/weekly-check";
 import { RetailerWeeklyCheckDashboard } from "@/components/retailer/weekly-check-dashboard";
 
+import type { Metadata } from "next";
+
 export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = {
+  title: "Weekly Inventory | K SELECT HUB Retailer",
+  description: "Store periodic stock count for K SELECT products to calculate estimated movement and reorders.",
+};
 
 interface CheckPageProps {
   searchParams: Promise<{

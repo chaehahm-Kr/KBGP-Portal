@@ -8,7 +8,7 @@ import { SavedProductsView } from "@/components/retailer/saved-products-view";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Saved Products & Collections | K SELECT HUB Retailer",
+  title: "Saved Products | K SELECT HUB Retailer",
   description: "View and organize your saved products and curated collections.",
 };
 

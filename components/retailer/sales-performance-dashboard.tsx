@@ -100,7 +100,7 @@ export function SalesPerformanceDashboard({ data }: { data: PerformanceDashboard
         <div>
           <div className="flex items-center gap-2.5 flex-wrap">
             <h1 className="text-xl sm:text-2xl font-bold text-zinc-900 dark:text-white tracking-tight">
-              Product Performance & Reorder
+              Product Performance
             </h1>
             <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-purple-50 dark:bg-purple-950/70 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
               {selectedStoreId === "all" ? "🏢 Company-Wide View" : "🏬 Store-Level View"}

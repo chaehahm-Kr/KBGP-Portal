@@ -3,7 +3,14 @@ import { verifyRetailerSession } from "@/lib/auth/dal";
 import { getRetailerPerformanceData, ReportingPeriod } from "@/lib/retailer/performance";
 import { SalesPerformanceDashboard } from "@/components/retailer/sales-performance-dashboard";
 
+import type { Metadata } from "next";
+
 export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = {
+  title: "Product Performance | K SELECT HUB Retailer",
+  description: "Weekly count velocity, estimated retail sales, gross margins, and demand-based reorder signals.",
+};
 
 interface RetailerSalesPageProps {
   searchParams: Promise<{

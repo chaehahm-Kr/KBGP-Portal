@@ -16,8 +16,8 @@ export function RetailerBottomNav({ }: RetailerBottomNavProps) {
 
   const items = [
     { name: t.nav.home, href: "/", icon: "home" },
-    { name: t.nav.products, href: "/products", icon: "package" },
-    { name: t.nav.weeklyCheck, href: "/check", icon: "clipboard-check", highlight: true },
+    { name: t.nav.shopProducts || t.nav.products, href: "/products", icon: "shopping-bag" },
+    { name: t.nav.weeklyInventory || t.nav.weeklyCheck, href: "/check", icon: "clipboard-check", highlight: false },
     { name: t.nav.orders, href: "/orders", icon: "shopping-cart" },
     { name: t.nav.account, href: "/account", icon: "user" },
   ];

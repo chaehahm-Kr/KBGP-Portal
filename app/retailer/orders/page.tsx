@@ -9,7 +9,7 @@ import { getServerTranslations } from "@/lib/i18n/server";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Store Orders | K SELECT HUB Retailer",
+  title: "Orders | K SELECT HUB Retailer",
   description: "View and track your store purchase orders and wholesale shipments.",
 };
 
