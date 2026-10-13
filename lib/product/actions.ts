@@ -1741,6 +1741,7 @@ export async function deleteProduct(productId: string): Promise<{ success: boole
         .update({
           deleted_at: now,
           selection_status: "NOT_SELECTED",
+          trading_status: "historical",
           sales_status: "ENDED",
           price_additional_info: updatedPriceInfo,
         })
@@ -1867,6 +1868,7 @@ export async function bulkDeleteProducts(productIds: string[]): Promise<{ succes
         .update({
           deleted_at: now,
           selection_status: "NOT_SELECTED",
+          trading_status: "historical",
           sales_status: "ENDED",
         })
         .in("id", validIds)

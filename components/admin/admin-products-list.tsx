@@ -348,7 +348,7 @@ export function AdminProductsList({ initialProducts }: AdminProductsListProps) {
         <div>
           <h1 className="text-xl font-bold text-zinc-900 dark:text-white">제품 통합 관리</h1>
           <p className="text-xs text-zinc-550 dark:text-zinc-400">
-            모든 브랜드사에서 포털에 등록한 제품 카탈로그 및 선정 상태와 판매 상태를 모니터링하고 제어합니다.
+            모든 브랜드사에서 포털에 등록한 제품 카탈로그 및 선정 상태와 운영 상태를 모니터링하고 제어합니다.
           </p>
         </div>
         <div className="shrink-0">

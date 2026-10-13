@@ -595,7 +595,8 @@ export function ProductOverrideTabs({
   // Selection & Sales Statuses
   const [selectionStatus, setSelectionStatus] = useState(product.selection_status || "UNREVIEWED");
   const [salesStatus, setSalesStatus] = useState(product.sales_status || "PREPARING");
-  const [tradingStatus, setTradingStatus] = useState(product.trading_status || "inactive");
+  const defaultTradingStatus = product.trading_status || (product.selection_status === "SELECTED" ? "active" : "inactive");
+  const [tradingStatus, setTradingStatus] = useState(defaultTradingStatus);
 
   const handleSelectionStatusChange = (val: string) => {
     setSelectionStatus(val);
@@ -1050,7 +1051,8 @@ export function ProductOverrideTabs({
   const isBasicDirty = useMemo(() => {
     if (selectionStatus !== (product.selection_status || "UNREVIEWED")) return true;
     if (salesStatus !== (product.sales_status || "PREPARING")) return true;
-    if (tradingStatus !== (product.trading_status || "inactive")) return true;
+    const defaultTrading = product.trading_status || (product.selection_status === "SELECTED" ? "active" : "inactive");
+    if (tradingStatus !== defaultTrading) return true;
     if (JSON.stringify([...selectedSupplierIds].sort()) !== initialSuppliersStr) return true;
     if (ovName !== (overrides.name || "")) return true;
     if (ovNameEn !== (overrides.name_en || "")) return true;

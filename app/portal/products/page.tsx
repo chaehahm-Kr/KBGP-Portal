@@ -31,7 +31,7 @@ export default async function ProductsPage() {
   let products: any[] | null = null;
   const { data: firstQueryProducts, error: queryError } = await supabase
     .from("products")
-    .select("id, name, name_en, category, brand_id, letusto_sku, manufacture_sku, price_krw_retail, price_usd_fob, item_width, item_depth, item_height, item_weight, package_width, package_depth, package_height, package_weight, carton_pack_qty, carton_width, carton_depth, carton_height, carton_weight, price_additional_info, origin, upc, ean, selling_online, selling_offline, sales_link_1, sales_link_2, category_code, selection_status, sales_status, status")
+    .select("id, name, name_en, category, brand_id, letusto_sku, manufacture_sku, price_krw_retail, price_usd_fob, item_width, item_depth, item_height, item_weight, package_width, package_depth, package_height, package_weight, carton_pack_qty, carton_width, carton_depth, carton_height, carton_weight, price_additional_info, origin, upc, ean, selling_online, selling_offline, sales_link_1, sales_link_2, category_code, selection_status, sales_status, trading_status, status")
     .eq("company_id", companyId)
     .order("created_at", { ascending: false });
 
@@ -160,6 +160,7 @@ export default async function ProductsPage() {
           registration_status: registrationEvaluation.status,
           selection_status: p.selection_status || "UNREVIEWED",
           sales_status: p.sales_status || "PREPARING",
+          trading_status: p.trading_status || (p.selection_status === "SELECTED" ? "active" : "inactive"),
           deleted_at: effectiveDeletedAt,
           category_code: p.category_code || null,
           category_completion: catCompletion,
@@ -182,6 +183,7 @@ export default async function ProductsPage() {
           registration_status: "DRAFT" as const,
           selection_status: p.selection_status || "UNREVIEWED",
           sales_status: p.sales_status || "PREPARING",
+          trading_status: p?.trading_status || (p?.selection_status === "SELECTED" ? "active" : "inactive"),
           deleted_at: fallbackDeletedAt,
           category_code: p.category_code || null,
           category_completion: null,

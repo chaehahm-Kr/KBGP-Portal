@@ -171,8 +171,8 @@ export const PRODUCT_AUDIT_FIELD_DEFINITIONS: Record<
   selectionStatus: { label: "선정 상태", section: "운영 및 선정 상태" },
   sales_status: { label: "판매 상태", section: "운영 및 선정 상태" },
   salesStatus: { label: "판매 상태", section: "운영 및 선정 상태" },
-  trading_status: { label: "무역 운영 상태", section: "운영 및 선정 상태" },
-  tradingStatus: { label: "무역 운영 상태", section: "운영 및 선정 상태" },
+  trading_status: { label: "운영 상태", section: "운영 및 선정 상태" },
+  tradingStatus: { label: "운영 상태", section: "운영 및 선정 상태" },
 };
 
 export function formatAuditValue(val: any, type?: string): string {

@@ -1905,6 +1905,7 @@ export async function adminSoftDeleteProduct(productId: string): Promise<{ succe
     .update({
       deleted_at: now,
       selection_status: "NOT_SELECTED",
+      trading_status: "historical",
       sales_status: "ENDED",
     } as any)
     .eq("id", productId);
@@ -1919,6 +1920,7 @@ export async function adminSoftDeleteProduct(productId: string): Promise<{ succe
       .update({
         price_additional_info: updatedInfo,
         selection_status: "NOT_SELECTED",
+        trading_status: "historical",
         sales_status: "ENDED",
       })
       .eq("id", productId);
@@ -1991,6 +1993,7 @@ export async function adminBulkSoftDeleteProducts(productIds: string[]): Promise
     .update({
       deleted_at: now,
       selection_status: "NOT_SELECTED",
+      trading_status: "historical",
       sales_status: "ENDED",
     } as any)
     .in("id", productIds);
@@ -2011,6 +2014,7 @@ export async function adminBulkSoftDeleteProducts(productIds: string[]): Promise
         .update({
           price_additional_info: updatedInfo,
           selection_status: "NOT_SELECTED",
+          trading_status: "historical",
           sales_status: "ENDED",
         })
         .eq("id", id);
@@ -2067,6 +2071,7 @@ export async function adminRestoreProduct(productId: string): Promise<{ success:
     .update({
       deleted_at: null,
       selection_status: "UNREVIEWED",
+      trading_status: "inactive",
       sales_status: "PREPARING",
     } as any)
     .eq("id", productId);
@@ -2081,6 +2086,7 @@ export async function adminRestoreProduct(productId: string): Promise<{ success:
       .update({
         price_additional_info: updatedInfo,
         selection_status: "UNREVIEWED",
+        trading_status: "inactive",
         sales_status: "PREPARING",
       })
       .eq("id", productId);

@@ -91,6 +91,7 @@ interface CompanyDetailManagerProps {
     is_draft: boolean;
     selection_status: string;
     sales_status: string;
+    trading_status?: string;
   }[];
   applications: {
     id: string;
@@ -1708,7 +1709,7 @@ export function CompanyDetailManager({
                         <th className="px-4 py-2.5">브랜드</th>
                         <th className="px-4 py-2.5">등록 상태</th>
                         <th className="px-4 py-2.5">선정 상태</th>
-                        <th className="px-4 py-2.5">판매 상태</th>
+                        <th className="px-4 py-2.5">운영 상태</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800/60">
@@ -1767,21 +1768,17 @@ export function CompanyDetailManager({
                               </td>
                               <td className="px-4 py-3">
                                 <span className={`inline-block rounded px-2 py-0.5 text-[9px] font-bold border ${
-                                  prod.sales_status === "SELLING"
-                                    ? "bg-emerald-50 text-emerald-700 border-emerald-100 dark:bg-emerald-955/40 dark:border-emerald-800/40 dark:text-emerald-300"
-                                    : prod.sales_status === "PAUSED"
-                                    ? "bg-amber-50 text-amber-700 border-amber-100 dark:bg-amber-955/40 dark:border-amber-800/40 dark:text-amber-300"
-                                    : prod.sales_status === "STOPPED"
-                                    ? "bg-rose-50 text-rose-700 border-rose-100 dark:bg-rose-950/40 dark:border-rose-800/40 dark:text-rose-300"
-                                    : "bg-zinc-50 text-zinc-650 border-zinc-150 dark:bg-zinc-900 dark:border-zinc-750 dark:text-zinc-400"
+                                  prod.trading_status === "active"
+                                    ? "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:border-blue-800/40 dark:text-blue-300"
+                                    : prod.trading_status === "historical"
+                                    ? "bg-zinc-200 text-zinc-600 border-zinc-300 dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-400"
+                                    : "bg-zinc-100 text-zinc-700 border-zinc-200 dark:bg-zinc-850 dark:border-zinc-700 dark:text-zinc-400"
                                 }`}>
-                                  {prod.sales_status === "SELLING"
-                                    ? "판매 중"
-                                    : prod.sales_status === "PAUSED"
-                                    ? "일시 중지"
-                                    : prod.sales_status === "STOPPED"
-                                    ? "판매 종료"
-                                    : "판매 준비"}
+                                  {prod.trading_status === "active"
+                                    ? "운영 중"
+                                    : prod.trading_status === "historical"
+                                    ? "운영 종료"
+                                    : "운영 중지"}
                                 </span>
                               </td>
                             </tr>

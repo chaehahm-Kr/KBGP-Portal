@@ -13,10 +13,13 @@ import { useSearchParams } from "next/navigation";
 import {
   SELECTION_STATUS_LABELS,
   SELECTION_STATUS_STYLES,
+  TRADING_STATUS_LABELS,
+  TRADING_STATUS_STYLES,
   SALES_STATUS_LABELS,
   SALES_STATUS_STYLES,
   type SelectionStatus,
   type SalesStatus,
+  type TradingStatus,
 } from "@/lib/product/registration-status";
 
 interface PortalProductItem {
@@ -34,6 +37,7 @@ interface PortalProductItem {
   missing_fields?: string[];
   selection_status?: SelectionStatus | string;
   sales_status?: SalesStatus | string;
+  trading_status?: TradingStatus | string;
   deleted_at: string | null;
   category_code?: string | null;
   category_completion?: {
@@ -234,6 +238,7 @@ export function PortalProductsList({ initialProducts, hasBrand, canCreateProduct
                   deleted_at: now,
                   is_draft: false,
                   selection_status: "NOT_SELECTED",
+                  trading_status: "historical",
                   sales_status: "ENDED",
                 }
               : p
@@ -450,7 +455,7 @@ export function PortalProductsList({ initialProducts, hasBrand, canCreateProduct
                 <th className="px-3 py-3 min-w-[140px] max-w-[180px]">카테고리 / 속성</th>
                 <th className="px-2.5 py-3 min-w-[110px] max-w-[150px]">등록 상태</th>
                 <th className="px-2 py-3 whitespace-nowrap text-center">선정 상태</th>
-                <th className="px-2 py-3 whitespace-nowrap text-center">판매 상태</th>
+                <th className="px-2 py-3 whitespace-nowrap text-center">운영 상태</th>
                 <th className="px-3 py-3 text-right whitespace-nowrap w-24">관리</th>
               </tr>
             </thead>
@@ -635,20 +640,16 @@ export function PortalProductsList({ initialProducts, hasBrand, canCreateProduct
                       })()}
                     </td>
 
-                    {/* Sales Status Badge */}
+                    {/* Operational Status Badge */}
                     <td className="px-2 py-3 text-center whitespace-nowrap">
                       {(() => {
-                        const salesKey = (product.sales_status || "PREPARING") as SalesStatus;
-                        const label = SALES_STATUS_LABELS[salesKey] || product.sales_status;
-                        const style = SALES_STATUS_STYLES[salesKey] || {
-                          bg: "bg-zinc-100 dark:bg-zinc-800",
-                          text: "text-zinc-700 dark:text-zinc-300",
-                          border: "border-zinc-200 dark:border-zinc-700",
-                        };
+                        const tKey = (product.trading_status || (product.selection_status === "SELECTED" ? "active" : "inactive")) as TradingStatus;
+                        const label = TRADING_STATUS_LABELS[tKey] || (tKey === "active" ? "운영 중" : tKey === "historical" ? "운영 종료" : "운영 중지");
+                        const style = TRADING_STATUS_STYLES[tKey] || TRADING_STATUS_STYLES.inactive;
                         return (
                           <span
                             className={`inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-bold border ${style.bg} ${style.text} ${style.border}`}
-                            title="어드민 판매 운영 상태"
+                            title="어드민 운영 상태 (Read Only)"
                           >
                             {label}
                           </span>

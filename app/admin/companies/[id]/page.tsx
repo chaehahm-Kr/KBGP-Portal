@@ -162,7 +162,7 @@ export default async function AdminCompanyDetailPage({
 
     const { data: rawProducts } = await supabase
       .from("products")
-      .select("id, name, name_en, category, category_code, brand_id, company_id, manufacture_sku, letusto_sku, parent_sku, child_sku, price_krw_retail, price_usd_fob, package_width, package_depth, package_height, package_weight, price_additional_info, origin, upc, ean, selection_status, sales_status")
+      .select("id, name, name_en, category, category_code, brand_id, company_id, manufacture_sku, letusto_sku, parent_sku, child_sku, price_krw_retail, price_usd_fob, package_width, package_depth, package_height, package_weight, price_additional_info, origin, upc, ean, selection_status, sales_status, trading_status")
       .eq("company_id", id);
 
     const resolvedProducts = (rawProducts ?? []).map((p) => {
@@ -219,6 +219,7 @@ export default async function AdminCompanyDetailPage({
         is_draft: isDraft,
         selection_status: p.selection_status || "UNREVIEWED",
         sales_status: p.sales_status || "PREPARING",
+        trading_status: p.trading_status || (p.selection_status === "SELECTED" ? "active" : "inactive"),
       };
     });
 

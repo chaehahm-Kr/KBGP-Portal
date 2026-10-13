@@ -51,6 +51,8 @@ import { useUnsavedChangesGuard } from "@/hooks/use-unsaved-changes-guard";
 import {
   SELECTION_STATUS_LABELS,
   SELECTION_STATUS_STYLES,
+  TRADING_STATUS_LABELS,
+  TRADING_STATUS_STYLES,
   SALES_STATUS_LABELS,
   SALES_STATUS_STYLES,
   REGISTRATION_STATUS_LABELS,
@@ -58,6 +60,7 @@ import {
   evaluateProductRegistrationStatus,
   type SelectionStatus,
   type SalesStatus,
+  type TradingStatus,
   type RegistrationStatus,
   type MissingFieldItem,
 } from "@/lib/product/registration-status";
@@ -1633,21 +1636,17 @@ export function ProductDetailTabs({
 
                 <span className="text-zinc-300 dark:text-zinc-700">•</span>
 
-                {/* 3. Sales Status Badge (Read Only) */}
+                {/* 3. Operational Status Badge (Read Only) */}
                 <div className="flex items-center gap-1.5">
-                  <span className="text-[11px] font-bold text-zinc-500 dark:text-zinc-400">판매 상태:</span>
+                  <span className="text-[11px] font-bold text-zinc-500 dark:text-zinc-400">운영 상태:</span>
                   {(() => {
-                    const salesKey = (product.sales_status || "PREPARING") as SalesStatus;
-                    const label = SALES_STATUS_LABELS[salesKey] || product.sales_status || "판매 준비";
-                    const style = SALES_STATUS_STYLES[salesKey] || {
-                      bg: "bg-zinc-100 dark:bg-zinc-800",
-                      text: "text-zinc-700 dark:text-zinc-300",
-                      border: "border-zinc-200 dark:border-zinc-700",
-                    };
+                    const tKey = (product.trading_status || (product.selection_status === "SELECTED" ? "active" : "inactive")) as TradingStatus;
+                    const label = TRADING_STATUS_LABELS[tKey] || (tKey === "active" ? "운영 중" : tKey === "historical" ? "운영 종료" : "운영 중지");
+                    const style = TRADING_STATUS_STYLES[tKey] || TRADING_STATUS_STYLES.inactive;
                     return (
                       <span
                         className={`inline-flex items-center rounded px-2 py-0.5 text-[10px] font-bold border ${style.bg} ${style.text} ${style.border} whitespace-nowrap`}
-                        title="어드민 판매 운영 상태 (Read Only)"
+                        title="어드민 운영 상태 (Read Only)"
                       >
                         {label}
                       </span>
