@@ -92,14 +92,6 @@ export const RETAILER_NAV_ITEMS: NavItem[] = [
     isBottomNav: false,
   },
   {
-    key: "stores",
-    name: "Stores",
-    href: "/stores",
-    icon: "store",
-    roles: ["owner", "buyer", "store_manager"],
-    isBottomNav: false,
-  },
-  {
     key: "training",
     name: "Training",
     href: "/training",

@@ -134,7 +134,7 @@ export default async function RetailerHomePage() {
         .from("retailer_orders")
         .select("id", { count: "exact", head: true })
         .eq("company_id", companyId)
-        .or("order_status.in.(submitted,confirmed,processing),payment_status.in.(unpaid,payment_pending)");
+        .or("order_status.in.(submitted,confirmed,processing,partially_shipped),payment_status.in.(unpaid,payment_pending)");
 
       ordersAttentionCount = openOrdersCount || 0;
     } catch {
@@ -584,7 +584,7 @@ export default async function RetailerHomePage() {
 
           {/* Row 2, Card 6: Company & Store Settings */}
           <Link
-            href="/stores"
+            href="/settings/company"
             className="group rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-4 sm:p-5 shadow-xs hover:border-zinc-400 dark:hover:border-zinc-600 transition-all space-y-2.5"
           >
             <div className="w-9 h-9 rounded-lg bg-rose-50 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 flex items-center justify-center font-bold text-base group-hover:scale-105 transition-transform">
