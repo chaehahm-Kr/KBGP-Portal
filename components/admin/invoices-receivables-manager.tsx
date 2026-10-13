@@ -415,9 +415,15 @@ export function InvoicesReceivablesManager({
                         )}
                       </td>
 
-                      {/* Order # */}
+                      {/* Order # & Dispatch */}
                       <td className="py-3 px-4 font-mono text-zinc-600 dark:text-zinc-300 whitespace-nowrap">
-                        {inv.order?.order_number || "-"}
+                        <div>{inv.order?.order_number || "-"}</div>
+                        {inv.fulfillment_number && (
+                          <div className="text-[10px] text-indigo-600 dark:text-indigo-400 font-sans font-medium flex items-center gap-0.5 mt-0.5">
+                            <span>🚚</span>
+                            <span>{inv.fulfillment_number}</span>
+                          </div>
+                        )}
                       </td>
 
                       {/* Invoice Date */}
@@ -725,6 +731,14 @@ export function InvoicesReceivablesManager({
                           {selectedInvoiceDetail.retailer_orders?.order_number || selectedInvoiceDetail.order?.order_number}
                         </span>
                       </div>
+                      {selectedInvoiceDetail.fulfillment_number && (
+                        <div className="flex justify-between py-0.5">
+                          <span className="text-zinc-500">Related Dispatch:</span>
+                          <span className="font-mono font-bold text-indigo-600 dark:text-indigo-400">
+                            🚚 {selectedInvoiceDetail.fulfillment_number}
+                          </span>
+                        </div>
+                      )}
                       <div className="flex justify-between py-0.5">
                         <span className="text-zinc-500">Invoice Date:</span>
                         <span className="font-medium text-zinc-900 dark:text-white">{selectedInvoiceDetail.invoice_date}</span>
@@ -807,6 +821,12 @@ export function InvoicesReceivablesManager({
                         <span>Amount Paid:</span>
                         <span>${Number(selectedInvoiceDetail.amount_paid || 0).toFixed(2)}</span>
                       </div>
+                      {Number(selectedInvoiceDetail.prepayment_allocated_amount || 0) > 0 && (
+                        <div className="flex justify-between text-indigo-600 dark:text-indigo-400 text-[11px] font-medium">
+                          <span>(Prepayment Allocated):</span>
+                          <span>-${Number(selectedInvoiceDetail.prepayment_allocated_amount).toFixed(2)}</span>
+                        </div>
+                      )}
                       <div className="flex justify-between font-black text-sm text-indigo-600 dark:text-indigo-400 pt-1 border-t border-dashed border-zinc-200 dark:border-zinc-800">
                         <span>Balance Due:</span>
                         <span>${Number(selectedInvoiceDetail.balance_due || 0).toFixed(2)}</span>
@@ -850,6 +870,42 @@ export function InvoicesReceivablesManager({
                       </div>
                     )}
                   </div>
+
+                  {/* Prepayment Allocations Audit Trail */}
+                  {selectedInvoiceDetail.allocations && selectedInvoiceDetail.allocations.length > 0 && (
+                    <div className="space-y-2 pt-2 border-t border-zinc-200 dark:border-zinc-800">
+                      <div className="text-xs font-bold text-zinc-700 dark:text-zinc-300 uppercase tracking-wider flex items-center gap-1.5">
+                        <span>💳</span>
+                        <span>Prepayment Allocations ({selectedInvoiceDetail.allocations.length})</span>
+                      </div>
+                      <div className="border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-hidden text-xs">
+                        <table className="w-full text-left">
+                          <thead className="bg-zinc-50 dark:bg-zinc-800/60 border-b border-zinc-200 dark:border-zinc-800 text-[11px] font-bold text-zinc-400">
+                            <tr>
+                              <th className="py-2 px-3">Allocated Date</th>
+                              <th className="py-2 px-3">Notes</th>
+                              <th className="py-2 px-3 text-right">Allocated Amount</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
+                            {selectedInvoiceDetail.allocations.map((a: any) => (
+                              <tr key={a.id}>
+                                <td className="py-2 px-3 text-zinc-500">
+                                  {new Date(a.allocated_at || a.created_at).toLocaleDateString()}
+                                </td>
+                                <td className="py-2 px-3 text-zinc-700 dark:text-zinc-300">
+                                  {a.notes || "Prepayment auto-allocated to dispatch invoice"}
+                                </td>
+                                <td className="py-2 px-3 text-right font-bold text-emerald-600 dark:text-emerald-400">
+                                  ${Number(a.allocated_amount || 0).toFixed(2)}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
                 </>
               )}
             </div>

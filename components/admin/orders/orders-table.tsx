@@ -469,17 +469,26 @@ export function AdminOrdersTable({ initialOrders, initialTotal }: OrdersTablePro
 
                       {/* Invoice Link */}
                       <td className="py-3.5 px-4 whitespace-nowrap">
-                        {primaryInv ? (
-                          <div>
-                            <Link
-                              href={`/admin/finance/invoices/${primaryInv.id}`}
-                              className="font-mono text-[11px] text-indigo-600 dark:text-indigo-400 hover:underline block"
-                            >
-                              {primaryInv.invoiceNumber}
-                            </Link>
-                            <span className="text-[10px] text-zinc-500">
-                              {primaryInv.invoiceStatus.toUpperCase()} • {primaryInv.termsName}
-                            </span>
+                        {ord.invoices && ord.invoices.length > 0 ? (
+                          <div className="space-y-1">
+                            {ord.invoices.map((inv) => (
+                              <div key={inv.id}>
+                                <Link
+                                  href={`/admin/finance/invoices/${inv.id}`}
+                                  className="font-mono text-[11px] text-indigo-600 dark:text-indigo-400 hover:underline inline-flex items-center gap-1"
+                                >
+                                  <span>{inv.invoiceNumber}</span>
+                                  {inv.fulfillmentNumber && (
+                                    <span className="text-[9px] font-sans px-1 py-0.2 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400">
+                                      {inv.fulfillmentNumber}
+                                    </span>
+                                  )}
+                                </Link>
+                                <span className="text-[10px] text-zinc-500 block">
+                                  {inv.invoiceStatus.toUpperCase()} • {inv.termsName || ord.paymentTerms}
+                                </span>
+                              </div>
+                            ))}
                           </div>
                         ) : (
                           <span className="text-[11px] text-zinc-400 italic">

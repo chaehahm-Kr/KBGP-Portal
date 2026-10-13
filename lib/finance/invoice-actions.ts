@@ -243,6 +243,11 @@ export async function getAdminInvoicesAction(filters?: {
               total_amount: Number(row.retailer_orders.total_amount || 0),
             }
           : undefined,
+        fulfillment_id: row.fulfillment_id || null,
+        fulfillment_number: row.fulfillment_number || null,
+        prepayment_allocated_amount: Number(row.prepayment_allocated_amount || 0),
+        prepayment_allocation_status: row.prepayment_allocation_status || "none",
+        dispatch_notes: row.dispatch_notes || null,
         ar_status: arStatus,
       };
     });
@@ -306,11 +311,28 @@ export async function getAdminInvoiceDetailAction(invoiceId: string) {
       return { success: false, error: invErr?.message || "Invoice not found" };
     }
 
-    // Line items from retailer_order_items
-    const { data: items } = await adminClient
-      .from("retailer_order_items")
+    // Line items: query dispatch-specific retailer_invoice_items first, fallback to order items
+    let items: any[] = [];
+    const { data: invItems, error: invItemsErr } = await adminClient
+      .from("retailer_invoice_items")
       .select("*")
-      .eq("order_id", inv.order_id);
+      .eq("invoice_id", invoiceId);
+
+    if (!invItemsErr && invItems && invItems.length > 0) {
+      items = invItems;
+    } else {
+      const { data: orderItems } = await adminClient
+        .from("retailer_order_items")
+        .select("*")
+        .eq("order_id", inv.order_id);
+      items = orderItems || [];
+    }
+
+    // Prepayment allocations audit log
+    const { data: allocations } = await adminClient
+      .from("retailer_prepayment_allocations")
+      .select("*")
+      .eq("invoice_id", invoiceId);
 
     // Payments history from retailer_order_payments
     const { data: payments } = await adminClient
@@ -332,11 +354,39 @@ export async function getAdminInvoiceDetailAction(invoiceId: string) {
         ar_status: arStatus,
         items: items || [],
         payments: payments || [],
+        allocations: allocations || [],
       },
     };
   } catch (err: any) {
     console.error("getAdminInvoiceDetailAction error:", err);
     return { success: false, error: err.message };
+  }
+}
+
+/**
+ * Phase B3: Issues an authoritative dispatch-based invoice for a confirmed fulfillment.
+ */
+export async function issueDispatchInvoiceAction(
+  fulfillmentId: string,
+  options?: { notes?: string }
+): Promise<{ success: boolean; invoiceId?: string; invoiceNumber?: string; alreadyExists?: boolean; error?: string }> {
+  try {
+    await verifyAdminSession();
+    const adminClient = createAdminClient();
+    const { createDispatchInvoice } = await import("@/lib/finance/dispatch-invoicing");
+    const res = await createDispatchInvoice(adminClient, fulfillmentId, options);
+
+    if (res.success) {
+      revalidatePath("/admin/finance/receivables");
+      revalidatePath("/admin/sales/orders");
+      revalidatePath("/bills");
+      revalidatePath("/orders");
+    }
+
+    return res;
+  } catch (err: any) {
+    console.error("issueDispatchInvoiceAction error:", err);
+    return { success: false, error: err.message || "Failed to issue dispatch invoice." };
   }
 }
 

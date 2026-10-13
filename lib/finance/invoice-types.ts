@@ -43,6 +43,13 @@ export interface RetailerInvoice {
     order_status: string;
     total_amount: number;
   };
+  fulfillment_id?: string | null;
+  fulfillment_number?: string | null;
+  prepayment_allocated_amount?: number;
+  prepayment_allocation_status?: string;
+  dispatch_notes?: string | null;
+  items?: any[];
+  allocations?: any[];
   ar_status?: ARStatus;
 }
 
