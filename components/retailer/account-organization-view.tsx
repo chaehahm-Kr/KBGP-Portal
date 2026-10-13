@@ -752,12 +752,19 @@ export function AccountOrganizationView({
 
             {/* Commercial Terms Summary (Read-Only) */}
             <div className="p-3.5 rounded-xl bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-100 dark:border-zinc-800 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 mt-2">
-              <div>
-                <span className="text-zinc-400 block text-[10px] font-medium">Payment & Commercial Terms</span>
-                <span className="font-bold text-zinc-900 dark:text-white">
-                  {company.approvedTerms || company.paymentTerms || "Prepaid Card"}
+              <div className="space-y-0.5">
+                <div className="flex items-center gap-2">
+                  <span className="text-zinc-400 block text-[10px] font-medium">Payment & Commercial Terms</span>
+                  {company.termsStatus && (
+                    <span className="px-1.5 py-0.2 rounded text-[10px] font-semibold bg-zinc-200 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-300">
+                      {formatTermsStatusDisplay(company.termsStatus)}
+                    </span>
+                  )}
+                </div>
+                <div className="font-bold text-zinc-900 dark:text-white">
+                  {formatApprovedTermsDisplay(company.approvedTerms || company.paymentTerms)}
                   {company.creditLimit ? ` · Credit Limit: $${company.creditLimit.toLocaleString()}` : ""}
-                </span>
+                </div>
               </div>
               <span className="px-2.5 py-1 rounded text-[10px] font-semibold bg-zinc-200 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-300 shrink-0">
                 Admin Underwritten
