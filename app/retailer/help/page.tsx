@@ -10,8 +10,8 @@ export default function RetailerHelpCenterPage() {
   return (
     <HelpCenterMainView
       portalType="RETAILER"
-      baseHelpPath="/retailer/help"
-      baseSupportPath="/retailer/support"
+      baseHelpPath="/help"
+      baseSupportPath="/support"
       apiEndpoint="/api/retailer/help"
       heroBadgeText={t.help.heroBadge}
       heroTitle={t.help.heroTitle}

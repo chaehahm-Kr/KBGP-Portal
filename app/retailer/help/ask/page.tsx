@@ -10,8 +10,8 @@ export default function RetailerAskKSelectPage() {
   return (
     <AskKSelectView
       portalType="RETAILER"
-      baseHelpPath="/retailer/help"
-      baseSupportPath="/retailer/support"
+      baseHelpPath="/help"
+      baseSupportPath="/support"
       apiEndpoint="/api/knowledge/ask"
       heroBadge={t.help.askHeroBadge}
       heroTitle={t.help.askHeroTitle}

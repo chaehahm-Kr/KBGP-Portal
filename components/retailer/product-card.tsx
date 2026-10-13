@@ -94,7 +94,7 @@ export function RetailerProductCard({
     if (!product.isOrderable || product.isSoldOut) return;
 
     if (isInCart) {
-      window.location.href = "/cart";
+      router.push("/cart");
       return;
     }
 
@@ -116,6 +116,7 @@ export function RetailerProductCard({
         marginPercent: product.marginPercent,
         cartonPackQty: product.moq || 1,
         salesPolicy: product.salesPolicy,
+        availableStock: product.availableStock,
       },
       product.moq || 1
     );
@@ -124,7 +125,7 @@ export function RetailerProductCard({
   return (
     <>
       <Link
-        href={`/retailer/products/${product.id}`}
+        href={`/products/${product.id}`}
         className="group relative flex flex-col rounded-2xl border border-zinc-200/80 dark:border-zinc-800 bg-white dark:bg-zinc-900 overflow-hidden shadow-xs hover:shadow-xl hover:border-zinc-300 dark:hover:border-zinc-700 transition-all duration-200 text-left"
       >
         {/* 1. TOP HEADER BAR: Brand Pill (Left) & Active Badges (Right) */}

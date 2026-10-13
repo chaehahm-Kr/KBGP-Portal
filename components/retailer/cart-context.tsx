@@ -22,6 +22,7 @@ interface CartContextType {
       msrp: number;
       marginPercent?: number;
       cartonPackQty?: number;
+      availableStock?: number;
       salesPolicy?: import("@/lib/product/retailer-policy").ResolvedRetailerSalesPolicy;
     },
     quantity?: number
@@ -85,6 +86,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         nextItems[existingIndex] = {
           ...current,
           quantity: newQty,
+          availableStock: product.availableStock !== undefined ? product.availableStock : current.availableStock,
           salesPolicy: product.salesPolicy || current.salesPolicy,
         };
       } else {
@@ -102,6 +104,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
           quantity: qtyToAdd,
           casePackQty: pack,
           lineTotal: 0,
+          availableStock: product.availableStock,
           salesPolicy: product.salesPolicy,
         };
         nextItems = [newItem, ...prev];

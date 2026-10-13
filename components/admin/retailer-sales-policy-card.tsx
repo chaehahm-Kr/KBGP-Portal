@@ -54,6 +54,22 @@ export function RetailerSalesPolicyCard({
   const [promoStart, setPromoStart] = useState<string>(salesPolicy.promoStartDate || "");
   const [promoEnd, setPromoEnd] = useState<string>(salesPolicy.promoEndDate || "");
 
+  // Account Purchase Limit State
+  const initialPurchaseLimit = salesPolicy.purchaseLimit || {
+    enabled: true,
+    useDefault: true,
+    period: "monthly" as const,
+    maxQuantity: initialMoq > 0 ? initialMoq * 10 : 100,
+  };
+  const [limitEnabled, setLimitEnabled] = useState<boolean>(initialPurchaseLimit.enabled);
+  const [limitUseDefault, setLimitUseDefault] = useState<boolean>(initialPurchaseLimit.useDefault);
+  const [limitPeriod, setLimitPeriod] = useState<"monthly" | "weekly" | "daily">(initialPurchaseLimit.period);
+  const [customLimitQty, setCustomLimitQty] = useState<string>(
+    !initialPurchaseLimit.useDefault && initialPurchaseLimit.maxQuantity
+      ? initialPurchaseLimit.maxQuantity.toString()
+      : (initialMoq > 0 ? (initialMoq * 10).toString() : "100")
+  );
+
   // UI State
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -212,6 +228,12 @@ export function RetailerSalesPolicyCard({
         promo_wholesale_price: numPromo > 0 ? numPromo : null,
         promo_start_date: promoStart || null,
         promo_end_date: promoEnd || null,
+        purchase_limit: {
+          enabled: limitEnabled,
+          use_default: limitUseDefault,
+          period: limitPeriod,
+          max_quantity: limitUseDefault ? null : (parseInt(customLimitQty, 10) || null),
+        },
         reason: "Retailer Sales Policy saved from Admin Trading Detail",
       });
 
@@ -609,7 +631,124 @@ export function RetailerSalesPolicyCard({
         </p>
       </div>
 
-      {/* 4. Bottom Primary Save Action */}
+      {/* 4. Account Purchase Limit Settings */}
+      <div className="p-4 sm:p-5 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50/60 dark:bg-zinc-950/40 space-y-4">
+        <div className="flex items-center justify-between border-b border-zinc-200/70 dark:border-zinc-800 pb-2">
+          <div className="flex items-center gap-2">
+            <h4 className="text-xs font-bold uppercase tracking-wider text-zinc-800 dark:text-zinc-200 flex items-center gap-1.5">
+              <span>4. 리테일러 계정 구매 한도 (Account Purchase Limit)</span>
+            </h4>
+            <span
+              className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                limitEnabled
+                  ? "bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-950/40 dark:text-indigo-300 dark:border-indigo-800"
+                  : "bg-zinc-100 text-zinc-500 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:border-zinc-700"
+              }`}
+            >
+              {limitEnabled ? "한도 적용 중" : "한도 미적용 (무제한)"}
+            </span>
+          </div>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={limitEnabled}
+              onChange={(e) => setLimitEnabled(e.target.checked)}
+              className="rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+            />
+            <span className="text-xs font-bold text-zinc-700 dark:text-zinc-300">한도 활성화</span>
+          </label>
+        </div>
+
+        {limitEnabled && (
+          <div className="space-y-4 pt-1">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {/* Period Selection */}
+              <div className="space-y-1.5">
+                <label className="block text-xs font-bold text-zinc-800 dark:text-zinc-200">
+                  제한 주기 (Period)
+                </label>
+                <select
+                  value={limitPeriod}
+                  onChange={(e) => setLimitPeriod(e.target.value as "monthly" | "weekly" | "daily")}
+                  className="w-full px-3 py-2 rounded-xl text-xs font-semibold bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 text-zinc-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-indigo-500 shadow-xs cursor-pointer"
+                >
+                  <option value="monthly">월별 (Monthly - 캘린더 월 기준)</option>
+                  <option value="weekly">주별 (Weekly - 캘린더 주 기준)</option>
+                  <option value="daily">일별 (Daily - 캘린더 일 기준)</option>
+                </select>
+              </div>
+
+              {/* Limit Rule Mode */}
+              <div className="space-y-1.5">
+                <label className="block text-xs font-bold text-zinc-800 dark:text-zinc-200">
+                  한도 수량 기준
+                </label>
+                <div className="flex items-center gap-4 pt-1">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="limitMode"
+                      checked={limitUseDefault}
+                      onChange={() => setLimitUseDefault(true)}
+                      className="text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                    />
+                    <span className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
+                      기본 (MOQ × 10 = <strong>{numMoq > 0 ? numMoq * 10 : 100} EA</strong>)
+                    </span>
+                  </label>
+
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="limitMode"
+                      checked={!limitUseDefault}
+                      onChange={() => setLimitUseDefault(false)}
+                      className="text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                    />
+                    <span className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
+                      직접 입력 (Custom)
+                    </span>
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            {/* Custom Limit Input if not using default */}
+            {!limitUseDefault && (
+              <div className="p-3 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 space-y-1.5 max-w-sm">
+                <label className="block text-xs font-bold text-zinc-800 dark:text-zinc-200">
+                  직접 지정 최대 구매 수량 (EA)
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  step={numMoq > 0 ? numMoq : 1}
+                  value={customLimitQty}
+                  onChange={(e) => setCustomLimitQty(e.target.value)}
+                  placeholder="예: 240"
+                  className="w-full px-3 py-2 rounded-xl text-xs font-bold bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 text-zinc-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-indigo-500 shadow-xs"
+                />
+              </div>
+            )}
+
+            {/* Summary Guidance Box */}
+            <div className="p-3 rounded-xl bg-indigo-50/70 dark:bg-indigo-950/30 border border-indigo-100 dark:border-indigo-900/50 text-xs text-indigo-900 dark:text-indigo-300 space-y-1">
+              <div className="font-bold flex items-center gap-1.5">
+                <span>🛡️</span>
+                <span>
+                  적용 한도: {limitPeriod === "monthly" ? "월간" : limitPeriod === "weekly" ? "주간" : "일간"}{" "}
+                  {limitUseDefault ? (numMoq > 0 ? numMoq * 10 : 100) : (customLimitQty || 100)} EA
+                </span>
+              </div>
+              <p className="text-[11px] text-indigo-700 dark:text-indigo-400">
+                각 리테일러 계정은 해당 주기 동안 합산하여 이 수량을 초과해 주문할 수 없으며, 기간 내 승인/주문 완료된 수량을 제외한 잔여 수량만 구매 가능합니다.
+              </p>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* 5. Bottom Primary Save Action */}
       <div className="pt-3 flex items-center justify-end border-t border-zinc-100 dark:border-zinc-800">
         <button
           type="button"

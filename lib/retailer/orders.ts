@@ -14,6 +14,7 @@ import { evaluateProductRegistrationStatus } from "@/lib/product/registration-st
 import { getRetailerPaymentEligibility, getOrderPayments } from "@/lib/retailer/payment-actions";
 import { RetailerPaymentMethod, RetailerPaymentRecord } from "@/lib/retailer/payment-types";
 import { getOrderFulfillments } from "@/lib/retailer/fulfillment-actions";
+import { getRetailerAccountPurchaseAllowance } from "@/lib/retailer/purchase-limits";
 
 export interface RetailerOrderSummary {
   id: string;
@@ -474,6 +475,24 @@ export async function submitRetailerOrder(
           success: false,
           error: `Quantity for "${prod.name}" must be at least ${policy.moq} and a multiple of ${policy.moq}.`,
         };
+      }
+
+      // Enforce Retailer Account Purchase Limit
+      if (policy.purchaseLimit?.enabled) {
+        const allowance = await getRetailerAccountPurchaseAllowance(
+          companyId,
+          prod.id,
+          policy.moq,
+          availableStock,
+          policy.purchaseLimit
+        );
+
+        if (item.quantity > allowance.remainingAllowance) {
+          return {
+            success: false,
+            error: `Requested quantity (${item.quantity} units) exceeds your account purchase limit of ${allowance.limit} units for this ${allowance.period} (${allowance.remainingAllowance} units remaining) for product "${prod.name}".`,
+          };
+        }
       }
 
       const priceResult = calculateApplicablePrice(policy, item.quantity);

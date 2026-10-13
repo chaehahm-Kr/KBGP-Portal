@@ -237,7 +237,7 @@ export async function updateSession(request: NextRequest) {
       return createRedirectWithCookies(url);
     }
 
-    // B. Direct access with /retailer prefix -> redirect to clean public URL (except RSC internal requests)
+    // B. Direct access with /retailer prefix -> redirect to clean public URL ONLY for full page browser GET requests
     if (pathname.startsWith("/retailer")) {
       const isRsc =
         request.headers.get("rsc") === "1" ||
@@ -245,7 +245,14 @@ export async function updateSession(request: NextRequest) {
         request.nextUrl.searchParams.has("_rsc") ||
         pathname.includes(".rsc");
 
-      if (!isRsc) {
+      const isDataOrPrefetch =
+        request.headers.get("next-router-prefetch") === "1" ||
+        request.headers.get("purpose") === "prefetch" ||
+        request.headers.get("x-nextjs-data") === "1" ||
+        request.method !== "GET" ||
+        isRsc;
+
+      if (!isDataOrPrefetch && request.headers.get("accept")?.includes("text/html")) {
         const cleanPath = pathname === "/retailer" ? "/" : pathname.replace(/^\/retailer/, "");
         const url = request.nextUrl.clone();
         url.pathname = cleanPath;
@@ -281,7 +288,9 @@ export async function updateSession(request: NextRequest) {
     }
 
     // F. Authenticated user or public path -> internally rewrite clean public URL to /retailer/*
-    const internalPath = `/retailer${pathname === "/" ? "" : pathname}`;
+    const internalPath = pathname.startsWith("/retailer")
+      ? pathname
+      : `/retailer${pathname === "/" ? "" : pathname}`;
     const internalUrl = request.nextUrl.clone();
     internalUrl.pathname = internalPath;
     return createRewriteWithCookies(internalUrl);

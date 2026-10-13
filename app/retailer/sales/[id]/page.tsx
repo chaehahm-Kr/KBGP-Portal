@@ -44,7 +44,7 @@ export default async function ProductPerformanceDetailPage({
         </p>
         <div className="pt-2">
           <Link
-            href="/retailer/sales"
+            href="/sales"
             className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors"
           >
             ← Back to Performance Dashboard

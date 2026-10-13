@@ -10,8 +10,8 @@ export default function RetailerHelpDetailPage() {
   return (
     <HelpCenterDetailView
       portalType="RETAILER"
-      baseHelpPath="/retailer/help"
-      baseSupportPath="/retailer/support"
+      baseHelpPath="/help"
+      baseSupportPath="/support"
       apiDetailBaseEndpoint="/api/retailer/help"
       supportCtaText={t.help.supportCta}
       supportDescription={t.help.detailSupportDesc}

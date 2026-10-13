@@ -146,7 +146,7 @@ export function RetailerOrderDetailView({ order }: OrderDetailViewProps) {
         <div className="flex items-center gap-2">
           {getStatusBadge(order.orderStatus)}
           <Link
-            href={`/retailer/support?new=1&category=order_delivery&order_id=${order.id}&store_id=${order.storeId || ""}&title=${encodeURIComponent(`[Order #${order.orderNumber}] Order & Delivery Inquiry`)}`}
+            href={`/support?new=1&category=order_delivery&order_id=${order.id}&store_id=${order.storeId || ""}&title=${encodeURIComponent(`[Order #${order.orderNumber}] Order & Delivery Inquiry`)}`}
             className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-200 border border-zinc-200 dark:border-zinc-700 transition-colors"
           >
             <span>🛟</span>
@@ -404,7 +404,7 @@ export function RetailerOrderDetailView({ order }: OrderDetailViewProps) {
                       {item.brandName}
                     </span>
                     <h3 className="text-sm font-bold text-zinc-900 dark:text-white leading-snug">
-                      <Link href={`/retailer/products/${item.productId}`} className="hover:underline">
+                      <Link href={`/products/${item.productId}`} className="hover:underline">
                         {item.productName}
                       </Link>
                     </h3>

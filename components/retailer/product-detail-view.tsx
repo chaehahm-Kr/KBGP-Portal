@@ -9,12 +9,14 @@ import {
   calculateApplicablePrice,
   isValidMoqOrderQuantity,
 } from "@/lib/product/retailer-policy";
+import { type RetailerPurchaseAllowance } from "@/lib/retailer/purchase-limits";
 
 interface ProductDetailViewProps {
   product: RetailerProductDetail;
+  initialAllowance?: RetailerPurchaseAllowance;
 }
 
-export function RetailerProductDetailView({ product }: ProductDetailViewProps) {
+export function RetailerProductDetailView({ product, initialAllowance }: ProductDetailViewProps) {
   const { addItem } = useCart();
   
   // Resolve Sales Policy
@@ -23,6 +25,10 @@ export function RetailerProductDetailView({ product }: ProductDetailViewProps) {
   }, [product]);
 
   const moq = policy.moq > 0 ? policy.moq : Math.max(1, product.cartonPackQty || 1);
+  const availableStock = product.availableStock ?? 0;
+  const remainingAllowance = initialAllowance?.remainingAllowance ?? 999999;
+  const effectiveMax = Math.min(availableStock, remainingAllowance);
+  const maxValidQty = effectiveMax < moq ? 0 : Math.floor(effectiveMax / moq) * moq;
   const [orderQty, setOrderQty] = useState<number>(moq);
   const [rawQtyInput, setRawQtyInput] = useState<string>(moq.toString());
   const [addedSuccess, setAddedSuccess] = useState(false);
@@ -211,9 +217,15 @@ export function RetailerProductDetailView({ product }: ProductDetailViewProps) {
     }
   };
 
-  // Validate Quantity
+  // Validate Quantity against MOQ multiple, available stock, and account purchase limit
   const parsedQty = parseInt(rawQtyInput, 10);
-  const isQtyValid = !isNaN(parsedQty) && isValidMoqOrderQuantity(parsedQty, moq);
+  const isStockExceeded = !isNaN(parsedQty) && parsedQty > availableStock;
+  const isAllowanceExceeded = !isNaN(parsedQty) && parsedQty > remainingAllowance;
+  const isQtyValid =
+    !isNaN(parsedQty) &&
+    isValidMoqOrderQuantity(parsedQty, moq) &&
+    !isStockExceeded &&
+    !isAllowanceExceeded;
 
   // Live Price Calculation based on Policy and Quantity
   const livePriceResult = useMemo(() => {
@@ -242,11 +254,13 @@ export function RetailerProductDetailView({ product }: ProductDetailViewProps) {
   const handleStepQty = (delta: number) => {
     const current = isNaN(parsedQty) || parsedQty <= 0 ? moq : parsedQty;
     const next = Math.max(moq, current + delta * moq);
+    if (delta > 0 && next > effectiveMax) return;
     setOrderQty(next);
     setRawQtyInput(next.toString());
   };
 
   const handleQuickSelect = (targetQty: number) => {
+    if (targetQty > effectiveMax) return;
     setOrderQty(targetQty);
     setRawQtyInput(targetQty.toString());
   };
@@ -265,11 +279,13 @@ export function RetailerProductDetailView({ product }: ProductDetailViewProps) {
         msrp: product.msrp,
         marginPercent: livePriceResult.retailerMarginPercent ?? product.marginPercent,
         cartonPackQty: moq,
+        salesPolicy: policy,
+        availableStock: product.availableStock,
       },
       parsedQty
     );
     setAddedSuccess(true);
-    setTimeout(() => setAddedSuccess(false), 3000);
+    setTimeout(() => setAddedSuccess(false), 5000);
   };
 
   return (
@@ -552,6 +568,38 @@ export function RetailerProductDetailView({ product }: ProductDetailViewProps) {
               )}
             </div>
 
+            {/* Stock & Account Purchase Limit Status Banner */}
+            <div className="p-3.5 rounded-xl bg-zinc-50 dark:bg-zinc-850/80 border border-zinc-200 dark:border-zinc-800 space-y-2 text-xs">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <div className="flex items-center gap-1.5 font-bold text-zinc-800 dark:text-zinc-200">
+                  <span>📦 가용 재고 (Available Stock):</span>
+                  <span className={availableStock > 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600"}>
+                    {availableStock} EA
+                  </span>
+                </div>
+
+                {initialAllowance?.limitEnabled && (
+                  <div className="flex items-center gap-1.5 text-zinc-600 dark:text-zinc-400">
+                    <span>
+                      계정 한도 ({initialAllowance.period === "monthly" ? "월간" : initialAllowance.period === "weekly" ? "주간" : "일간"}):
+                    </span>
+                    <strong className="text-zinc-900 dark:text-white">{initialAllowance.limit} EA</strong>
+                    <span className="text-zinc-300 dark:text-zinc-700">•</span>
+                    <span>잔여 한도:</span>
+                    <strong className={initialAllowance.remainingAllowance < moq ? "text-rose-600 font-bold" : "text-indigo-600 dark:text-indigo-400 font-bold"}>
+                      {initialAllowance.remainingAllowance} EA
+                    </strong>
+                  </div>
+                )}
+              </div>
+
+              {initialAllowance?.limitEnabled && initialAllowance.purchasedInPeriod > 0 && (
+                <div className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                  이번 기간 기주문 수량: <strong>{initialAllowance.purchasedInPeriod} EA</strong>
+                </div>
+              )}
+            </div>
+
             {/* Quick Tier Selection Buttons */}
             {policy.publishedTiers.length > 0 && (
               <div className="space-y-1.5 pt-1">
@@ -559,20 +607,34 @@ export function RetailerProductDetailView({ product }: ProductDetailViewProps) {
                   Quick Select Quantity:
                 </span>
                 <div className="flex flex-wrap gap-2">
-                  {policy.publishedTiers.map((t) => (
-                    <button
-                      key={t.id}
-                      type="button"
-                      onClick={() => handleQuickSelect(t.min_qty)}
-                      className={`px-3 py-1.5 rounded-xl text-xs font-mono font-bold transition-all cursor-pointer ${
-                        parsedQty === t.min_qty
-                          ? "bg-indigo-600 text-white shadow-xs"
-                          : "bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700"
-                      }`}
-                    >
-                      {t.min_qty} units {t.discount_percent > 0 ? `(${t.discount_percent}% off)` : ""}
-                    </button>
-                  ))}
+                  {policy.publishedTiers.map((t) => {
+                    const isTierExceeded = t.min_qty > effectiveMax;
+                    return (
+                      <button
+                        key={t.id}
+                        type="button"
+                        disabled={isTierExceeded}
+                        onClick={() => handleQuickSelect(t.min_qty)}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-mono font-bold transition-all ${
+                          isTierExceeded
+                            ? "bg-zinc-100 dark:bg-zinc-800/40 text-zinc-400 dark:text-zinc-600 cursor-not-allowed opacity-50"
+                            : parsedQty === t.min_qty
+                            ? "bg-indigo-600 text-white shadow-xs cursor-pointer"
+                            : "bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700 cursor-pointer"
+                        }`}
+                        title={
+                          isTierExceeded
+                            ? t.min_qty > availableStock
+                              ? `가용 재고(${availableStock} EA)를 초과합니다.`
+                              : `계정 구매 한도(${remainingAllowance} EA)를 초과합니다.`
+                            : ""
+                        }
+                      >
+                        {t.min_qty} units {t.discount_percent > 0 ? `(${t.discount_percent}% off)` : ""}
+                        {isTierExceeded && <span className="ml-1 text-[10px] opacity-70">✕</span>}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             )}
@@ -656,7 +718,8 @@ export function RetailerProductDetailView({ product }: ProductDetailViewProps) {
                       <button
                         type="button"
                         onClick={() => handleStepQty(1)}
-                        className="w-8 h-8 rounded-lg flex items-center justify-center font-bold text-sm text-zinc-700 dark:text-zinc-300 hover:bg-white dark:hover:bg-zinc-700 transition-colors cursor-pointer"
+                        disabled={parsedQty >= effectiveMax}
+                        className="w-8 h-8 rounded-lg flex items-center justify-center font-bold text-sm text-zinc-700 dark:text-zinc-300 hover:bg-white dark:hover:bg-zinc-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors cursor-pointer"
                         aria-label="Increase quantity"
                       >
                         +
@@ -665,8 +728,26 @@ export function RetailerProductDetailView({ product }: ProductDetailViewProps) {
                   </div>
                 </div>
 
-                {/* Validation Warning Banner if not a multiple */}
-                {!isQtyValid && (
+                {/* Validation Warnings */}
+                {isStockExceeded && (
+                  <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 text-xs text-amber-800 dark:text-amber-300 flex items-center gap-2">
+                    <span className="font-bold text-sm">⚠️</span>
+                    <span>
+                      가용 재고 초과: 현재 <strong>{availableStock}개</strong>까지만 주문 가능합니다. 수량을 조정해주세요.
+                    </span>
+                  </div>
+                )}
+
+                {isAllowanceExceeded && (
+                  <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 text-xs text-rose-700 dark:text-rose-300 flex items-center gap-2">
+                    <span className="font-bold text-sm">⚠️</span>
+                    <span>
+                      계정 구매 한도 초과: 이번 {initialAllowance?.period === "monthly" ? "월" : initialAllowance?.period === "weekly" ? "주" : "일"}에 주문 가능한 잔여 한도는 <strong>{remainingAllowance}개</strong>입니다.
+                    </span>
+                  </div>
+                )}
+
+                {!isQtyValid && !isStockExceeded && !isAllowanceExceeded && (
                   <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 text-xs text-rose-700 dark:text-rose-300 flex items-center gap-2">
                     <span className="font-bold text-sm">⚠️</span>
                     <span>
@@ -699,6 +780,16 @@ export function RetailerProductDetailView({ product }: ProductDetailViewProps) {
                       </>
                     )}
                   </button>
+
+                  {addedSuccess && (
+                    <Link
+                      href="/cart"
+                      className="py-3.5 px-5 rounded-xl font-bold text-sm bg-indigo-600 hover:bg-indigo-700 text-white flex items-center justify-center gap-2 transition-all shadow-sm cursor-pointer whitespace-nowrap"
+                    >
+                      <span>장바구니 확인 (View Cart)</span>
+                      <span>→</span>
+                    </Link>
+                  )}
                 </div>
               </div>
             ) : (

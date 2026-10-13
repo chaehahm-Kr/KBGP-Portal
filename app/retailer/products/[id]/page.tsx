@@ -35,10 +35,13 @@ export async function generateMetadata({
   }
 }
 
+import { createAdminClient } from "@/lib/supabase/admin";
+import { getRetailerAccountPurchaseAllowance } from "@/lib/retailer/purchase-limits";
+
 export default async function RetailerProductDetailPage({
   params,
 }: ProductDetailPageProps) {
-  await verifyRetailerSession();
+  const session = await verifyRetailerSession();
   const { id } = await params;
 
   const product = await getRetailerProductDetail(id);
@@ -47,5 +50,25 @@ export default async function RetailerProductDetailPage({
     notFound();
   }
 
-  return <RetailerProductDetailView product={product} />;
+  let initialAllowance = undefined;
+  if (session?.userId) {
+    const adminClient = createAdminClient();
+    const { data: compUser } = await adminClient
+      .from("company_users")
+      .select("company_id")
+      .eq("id", session.userId)
+      .maybeSingle();
+
+    if (compUser?.company_id) {
+      initialAllowance = await getRetailerAccountPurchaseAllowance(
+        compUser.company_id,
+        product.id,
+        product.moq || product.cartonPackQty || 1,
+        product.availableStock || 0,
+        product.salesPolicy?.purchaseLimit
+      );
+    }
+  }
+
+  return <RetailerProductDetailView product={product} initialAllowance={initialAllowance} />;
 }

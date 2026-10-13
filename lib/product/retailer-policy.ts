@@ -29,6 +29,23 @@ export interface RetailerSalesPolicyInput {
   promo_start_date?: string | null;
   promo_end_date?: string | null;
   note?: string | null;
+  purchase_limit?: RetailerPurchaseLimitConfig;
+}
+
+export type PurchaseLimitPeriod = "monthly" | "weekly" | "daily";
+
+export interface RetailerPurchaseLimitConfig {
+  enabled: boolean;
+  use_default: boolean; // default: true -> moq * 10
+  period: PurchaseLimitPeriod; // default: "monthly"
+  max_quantity?: number | null; // custom limit when use_default = false
+}
+
+export interface ResolvedPurchaseLimit {
+  enabled: boolean;
+  useDefault: boolean;
+  period: PurchaseLimitPeriod;
+  maxQuantity: number;
 }
 
 export interface ResolvedRetailerSalesPolicy {
@@ -51,6 +68,9 @@ export interface ResolvedRetailerSalesPolicy {
   // SRP & Map for Margins
   srpPrice: number | null;
   mapPrice: number | null;
+
+  // Account Purchase Limit
+  purchaseLimit: ResolvedPurchaseLimit;
 }
 
 export interface ApplicablePriceResult {
@@ -250,6 +270,23 @@ export function resolveRetailerSalesPolicy(product: any): ResolvedRetailerSalesP
   const jsonMap = parseValidPositiveNumber(tradingOverrides.map_price);
   const mapPrice = directMap ?? jsonMap ?? (srpPrice && srpPrice > 0 ? srpPrice : null);
 
+  // 6. Resolve Account Purchase Limit (Default: MOQ * 10, Monthly)
+  const savedLimit = savedPolicy?.purchase_limit || (tradingOverrides as any)?.purchase_limit;
+  const limitEnabled = savedLimit?.enabled !== false;
+  const limitUseDefault = savedLimit?.use_default !== false;
+  const limitPeriod: PurchaseLimitPeriod = savedLimit?.period || "monthly";
+  const defaultMaxQty = Math.max(1, (moq > 0 ? moq : 1) * 10);
+  const resolvedMaxQty = limitUseDefault
+    ? defaultMaxQty
+    : Math.max(1, Number(savedLimit?.max_quantity) || defaultMaxQty);
+
+  const purchaseLimit: ResolvedPurchaseLimit = {
+    enabled: limitEnabled,
+    useDefault: limitUseDefault,
+    period: limitPeriod,
+    maxQuantity: resolvedMaxQty,
+  };
+
   return {
     isConfigured: isMoqValid && isBasePriceValid,
     initialSource: savedPolicy ? "saved_policy" : initialSource,
@@ -266,6 +303,7 @@ export function resolveRetailerSalesPolicy(product: any): ResolvedRetailerSalesP
     hasActivePromo,
     srpPrice,
     mapPrice,
+    purchaseLimit,
   };
 }
 

@@ -1,8 +1,10 @@
 "use client";
 
-import React from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useCart } from "@/components/retailer/cart-context";
+import { validateRetailerCartItemsAction } from "@/lib/retailer/purchase-limit-actions";
+import { type RetailerPurchaseAllowance } from "@/lib/retailer/purchase-limits";
 
 export function RetailerCartView() {
   const {
@@ -15,6 +17,38 @@ export function RetailerCartView() {
     clearCart,
     isLoading,
   } = useCart();
+
+  const [allowances, setAllowances] = useState<Record<string, RetailerPurchaseAllowance>>({});
+  const [isValidating, setIsValidating] = useState(false);
+
+  // Validate live stock and account allowances
+  const validateCartItems = useCallback(async (productIds: string[]) => {
+    if (!productIds || productIds.length === 0) {
+      setAllowances({});
+      return;
+    }
+
+    setIsValidating(true);
+    try {
+      const res = await validateRetailerCartItemsAction(productIds);
+      if (res.success && res.allowances) {
+        setAllowances(res.allowances);
+      }
+    } catch (err) {
+      console.error("[RetailerCartView] Cart validation failed:", err);
+    } finally {
+      setIsValidating(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (items.length > 0) {
+      const ids = items.map((i) => i.productId);
+      validateCartItems(ids);
+    } else {
+      setAllowances({});
+    }
+  }, [items, validateCartItems]);
 
   if (isLoading) {
     return (
@@ -51,6 +85,23 @@ export function RetailerCartView() {
     );
   }
 
+  // Check if any cart item violates stock or account limits
+  const violations = items.map((item) => {
+    const allowance = allowances[item.productId];
+    const stock = allowance ? allowance.availableStock : (item.availableStock !== undefined ? item.availableStock : 999999);
+    const overStock = item.quantity > stock;
+    const overLimit = Boolean(allowance?.limitEnabled && item.quantity > allowance.remainingAllowance);
+    return {
+      productId: item.productId,
+      overStock,
+      overLimit,
+      stock,
+      allowance,
+    };
+  });
+
+  const hasAnyViolation = violations.some((v) => v.overStock || v.overLimit);
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -72,16 +123,44 @@ export function RetailerCartView() {
         </button>
       </div>
 
+      {/* Global Stock/Limit Warning Banner if violations exist */}
+      {hasAnyViolation && (
+        <div className="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/70 text-amber-900 dark:text-amber-200 flex items-start gap-3 shadow-xs">
+          <span className="text-lg shrink-0">⚠️</span>
+          <div className="space-y-1">
+            <h4 className="text-xs font-bold uppercase tracking-wider">
+              주문 수량 조정 필요 (Action Required Before Checkout)
+            </h4>
+            <p className="text-xs text-amber-800 dark:text-amber-300">
+              장바구니에 담긴 일부 상품의 수량이 현재 가용 재고(Available Stock) 또는 계정 구매 한도(Account Purchase Limit)를 초과했습니다. 수량을 조정한 후 주문을 진행해주세요.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Main Grid: Items List + Summary Column */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
         {/* Left: Items List (8 cols on lg) */}
         <div className="lg:col-span-8 space-y-4">
           {items.map((item) => {
             const pack = Math.max(1, item.casePackQty || 1);
+            const violation = violations.find((v) => v.productId === item.productId);
+            const stock = violation?.stock ?? (item.availableStock !== undefined ? item.availableStock : 999999);
+            const allowance = violation?.allowance;
+            const isOverStock = violation?.overStock ?? false;
+            const isOverLimit = violation?.overLimit ?? false;
+            const effectiveMax = allowance
+              ? Math.min(stock, allowance.remainingAllowance)
+              : stock;
+
             return (
               <div
                 key={item.productId}
-                className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-4 sm:p-5 shadow-xs space-y-4"
+                className={`rounded-2xl border bg-white dark:bg-zinc-900 p-4 sm:p-5 shadow-xs space-y-4 transition-all ${
+                  isOverStock || isOverLimit
+                    ? "border-amber-300 dark:border-amber-700/80 ring-2 ring-amber-400/30"
+                    : "border-zinc-200 dark:border-zinc-800"
+                }`}
               >
                 <div className="flex gap-4">
                   {/* Thumbnail */}
@@ -106,8 +185,8 @@ export function RetailerCartView() {
                         </span>
                         <h3 className="text-sm sm:text-base font-bold text-zinc-900 dark:text-white line-clamp-2 leading-snug">
                           <Link
-                            href={`/retailer/products/${item.productId}`}
-                            className="hover:underline"
+                            href={`/products/${item.productId}`}
+                            className="hover:underline hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
                           >
                             {item.productName}
                           </Link>
@@ -151,9 +230,33 @@ export function RetailerCartView() {
                           </span>
                         </>
                       )}
+                      <span>•</span>
+                      <span className="text-zinc-600 dark:text-zinc-400 font-medium">
+                        가용 재고: <strong className={stock > 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600"}>{stock} EA</strong>
+                      </span>
                     </div>
                   </div>
                 </div>
+
+                {/* Over-Stock Alert Banner */}
+                {isOverStock && (
+                  <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 text-xs text-amber-800 dark:text-amber-300 font-medium flex items-center gap-2">
+                    <span className="font-bold">⚠️</span>
+                    <span>
+                      Only {stock} units are currently available. Please adjust your quantity before checkout.
+                    </span>
+                  </div>
+                )}
+
+                {/* Over-Limit Alert Banner */}
+                {isOverLimit && allowance && (
+                  <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 text-xs text-rose-800 dark:text-rose-300 font-medium flex items-center gap-2">
+                    <span className="font-bold">⚠️</span>
+                    <span>
+                      This quantity ({item.quantity} units) exceeds your account purchase limit of {allowance.limit} units for this {allowance.period === "monthly" ? "month" : allowance.period === "weekly" ? "week" : "day"} ({allowance.remainingAllowance} units remaining). Please adjust your quantity before checkout.
+                    </span>
+                  </div>
+                )}
 
                 {/* Bottom Row: Quantity Controls & Line Total */}
                 <div className="flex flex-wrap items-center justify-between gap-4 pt-3 border-t border-zinc-100 dark:border-zinc-800">
@@ -167,13 +270,15 @@ export function RetailerCartView() {
                         type="button"
                         onClick={() => updateQuantity(item.productId, item.quantity - pack)}
                         disabled={item.quantity <= pack}
-                        className="w-7 h-7 rounded-lg flex items-center justify-center font-bold text-sm text-zinc-700 dark:text-zinc-300 hover:bg-white dark:hover:bg-zinc-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                        className="w-7 h-7 rounded-lg flex items-center justify-center font-bold text-sm text-zinc-700 dark:text-zinc-300 hover:bg-white dark:hover:bg-zinc-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors cursor-pointer"
                         aria-label="Decrease quantity"
                       >
                         −
                       </button>
                       <input
                         type="number"
+                        min={pack}
+                        step={pack}
                         value={item.quantity}
                         onChange={(e) => {
                           const val = parseInt(e.target.value, 10);
@@ -181,12 +286,17 @@ export function RetailerCartView() {
                             updateQuantity(item.productId, val);
                           }
                         }}
-                        className="w-12 text-center font-bold text-xs bg-transparent border-0 text-zinc-900 dark:text-white focus:outline-none"
+                        className={`w-16 text-center font-bold text-xs bg-transparent border-0 focus:outline-hidden ${
+                          isOverStock || isOverLimit
+                            ? "text-rose-600 dark:text-rose-400 font-black"
+                            : "text-zinc-900 dark:text-white"
+                        }`}
                       />
                       <button
                         type="button"
                         onClick={() => updateQuantity(item.productId, item.quantity + pack)}
-                        className="w-7 h-7 rounded-lg flex items-center justify-center font-bold text-sm text-zinc-700 dark:text-zinc-300 hover:bg-white dark:hover:bg-zinc-700 transition-colors"
+                        disabled={item.quantity + pack > effectiveMax}
+                        className="w-7 h-7 rounded-lg flex items-center justify-center font-bold text-sm text-zinc-700 dark:text-zinc-300 hover:bg-white dark:hover:bg-zinc-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors cursor-pointer"
                         aria-label="Increase quantity"
                       >
                         +
@@ -252,17 +362,41 @@ export function RetailerCartView() {
               </div>
             </div>
 
+            {/* Violation Alert inside Summary */}
+            {hasAnyViolation && (
+              <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 text-xs text-amber-800 dark:text-amber-300 space-y-1">
+                <div className="font-bold flex items-center gap-1.5">
+                  <span>⚠️</span>
+                  <span>수량 초과 상품 확인 필요</span>
+                </div>
+                <p className="text-[11px] leading-relaxed">
+                  가용 재고 또는 계정 구매 한도를 초과한 상품이 포함되어 있어 주문을 진행할 수 없습니다. 수량을 조정한 후 결제를 진행해주세요.
+                </p>
+              </div>
+            )}
+
             <div className="space-y-2 pt-2">
-              <Link
-                href="/checkout"
-                className="w-full py-3.5 px-6 rounded-xl font-bold text-sm bg-zinc-900 dark:bg-white text-white dark:text-zinc-950 hover:opacity-95 transition-opacity flex items-center justify-center gap-2 shadow-xs"
-              >
-                <span>Proceed to Checkout</span>
-                <span>→</span>
-              </Link>
+              {hasAnyViolation ? (
+                <button
+                  type="button"
+                  disabled
+                  className="w-full py-3.5 px-6 rounded-xl font-bold text-sm bg-zinc-300 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-500 cursor-not-allowed flex items-center justify-center gap-2 shadow-xs"
+                >
+                  <span>Proceed to Checkout (Adjust Quantities)</span>
+                </button>
+              ) : (
+                <Link
+                  href="/checkout"
+                  className="w-full py-3.5 px-6 rounded-xl font-bold text-sm bg-zinc-900 dark:bg-white text-white dark:text-zinc-950 hover:opacity-95 transition-opacity flex items-center justify-center gap-2 shadow-xs cursor-pointer"
+                >
+                  <span>Proceed to Checkout</span>
+                  <span>→</span>
+                </Link>
+              )}
+
               <Link
                 href="/products"
-                className="w-full py-2.5 px-4 text-center rounded-xl text-xs font-semibold text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-colors block"
+                className="w-full py-2.5 px-4 text-center rounded-xl text-xs font-semibold text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-colors block cursor-pointer"
               >
                 ← Continue Browsing Catalog
               </Link>

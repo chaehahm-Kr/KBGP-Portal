@@ -168,7 +168,7 @@ export function SavedProductsView({
 
         <div className="flex items-center gap-2 shrink-0">
           <Link
-            href="/retailer/products"
+            href="/products"
             className="px-3 py-1.5 rounded-xl bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 text-xs font-semibold transition-colors flex items-center gap-1.5"
           >
             <span>🔍</span>
@@ -328,7 +328,7 @@ export function SavedProductsView({
           </div>
           <div className="pt-2">
             <Link
-              href="/retailer/products"
+              href="/products"
               className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 hover:opacity-90 transition-opacity"
             >
               {locale === "ko" ? "상품 둘러보기" : "Explore Products"}

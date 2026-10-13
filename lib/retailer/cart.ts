@@ -17,6 +17,7 @@ export interface CartItem {
   quantity: number;
   casePackQty: number; // MOQ & order multiple
   lineTotal: number;
+  availableStock?: number;
   salesPolicy?: ResolvedRetailerSalesPolicy;
   discountPercent?: number;
   appliedReason?: string;

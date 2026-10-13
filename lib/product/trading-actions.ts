@@ -1033,6 +1033,12 @@ export interface UpdateRetailerSalesPolicyInput {
   promo_end_date?: string | null;
   note?: string | null;
   reason?: string | null;
+  purchase_limit?: {
+    enabled: boolean;
+    use_default: boolean;
+    period: "monthly" | "weekly" | "daily";
+    max_quantity?: number | null;
+  };
 }
 
 export async function updateRetailerSalesPolicy(
@@ -1148,6 +1154,21 @@ export async function updateRetailerSalesPolicy(
         promo_end_date: promoEnd,
         note: input.note || null,
       },
+      purchase_limit: input.purchase_limit
+        ? {
+            enabled: input.purchase_limit.enabled !== false,
+            use_default: input.purchase_limit.use_default !== false,
+            period: input.purchase_limit.period || "monthly",
+            max_quantity: input.purchase_limit.use_default
+              ? null
+              : (input.purchase_limit.max_quantity ? Number(input.purchase_limit.max_quantity) : null),
+          }
+        : priceAddInfo.retailer_sales_policy?.purchase_limit || {
+            enabled: true,
+            use_default: true,
+            period: "monthly",
+            max_quantity: null,
+          },
       updated_at: new Date().toISOString(),
       updated_by: userId,
     };
