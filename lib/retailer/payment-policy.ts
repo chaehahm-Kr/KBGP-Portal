@@ -49,6 +49,9 @@ export interface ChannelPolicyTerms {
   authoritativeArAvailable: boolean;
   openArBalance: number | null;
   availableCredit: number | null;
+  hasPastDue?: boolean;
+  pastDueAmount?: number;
+  isBlockedByPastDue?: boolean;
   disclosureLabel: string;
   termsDisplayLabel: string;
 }

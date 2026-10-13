@@ -60,13 +60,15 @@ export async function getRetailerPaymentEligibility(
     });
   }
 
-  // Net Terms Option (Only shown if authorized & approved by Admin)
-  if (policy.terms.effectiveEnabled) {
+  // Net Terms Option (Shown if authorized & approved by Admin, or enabled)
+  if (policy.terms.effectiveEnabled || (policy.terms.termsStatus === "approved" && policy.terms.approvedTerms !== "prepaid")) {
+    const isPastDueBlocked = Boolean(policy.terms.isBlockedByPastDue);
+
     availableMethods.push({
       id: "terms",
       label: policy.terms.termsDisplayLabel,
-      description: `Approved B2B credit terms. Estimated due date: Order Date + ${policy.terms.termDays} Days (Provisional — formal commercial invoice issued upon order dispatch).`,
-      badge: "Approved Terms",
+      description: `Invoice issued after order release. Payment due ${policy.terms.termDays} days from invoice date.`,
+      badge: isPastDueBlocked ? "Past Due Hold" : "Approved Terms",
       isTerms: true,
       termsLabel: policy.terms.termsDisplayLabel,
       providerConfigured: true,
@@ -75,6 +77,10 @@ export async function getRetailerPaymentEligibility(
       feeAmount: 0,
       feeSource: "waived",
       disclosureLabel: policy.terms.disclosureLabel,
+      disabled: isPastDueBlocked,
+      disabledReason: isPastDueBlocked
+        ? "Net Terms checkout is temporarily suspended because your account has past-due invoices. Please settle outstanding balances or select Card / ACH."
+        : undefined,
     });
   }
 

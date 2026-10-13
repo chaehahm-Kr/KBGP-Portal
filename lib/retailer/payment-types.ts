@@ -41,6 +41,8 @@ export interface RetailerPaymentEligibility {
     feeAmount: number;
     feeSource: PaymentFeeSource;
     disclosureLabel: string;
+    disabled?: boolean;
+    disabledReason?: string;
   }>;
 }
 

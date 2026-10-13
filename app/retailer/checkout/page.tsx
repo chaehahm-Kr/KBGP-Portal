@@ -54,12 +54,53 @@ export default async function RetailerCheckoutPage() {
     }
   }
 
+  // 4. Fetch Saved Shipping Addresses
+  const savedAddresses: import("@/lib/retailer/shipping-address-types").RetailerShippingAddress[] = [];
+  if (companyId) {
+    try {
+      const { data: addressRows } = await adminClient
+        .from("retailer_shipping_addresses")
+        .select("*")
+        .eq("company_id", companyId)
+        .eq("is_active", true)
+        .order("is_default", { ascending: false })
+        .order("created_at", { ascending: false });
+
+      if (addressRows) {
+        savedAddresses.push(
+          ...addressRows.map((r: any) => ({
+            id: r.id,
+            companyId: r.company_id,
+            label: r.label,
+            recipientName: r.recipient_name,
+            attentionName: r.attention_name || null,
+            addressLine1: r.address_line1,
+            addressLine2: r.address_line2 || null,
+            city: r.city,
+            state: r.state,
+            zip: r.zip,
+            country: r.country || "US",
+            phone: r.phone || null,
+            deliveryNotes: r.delivery_notes || null,
+            isDefault: Boolean(r.is_default),
+            isActive: Boolean(r.is_active),
+            createdAt: r.created_at,
+            updatedAt: r.updated_at,
+          }))
+        );
+      }
+    } catch (e) {
+      // Pending migration / schema cache fallback
+    }
+  }
+
   return (
     <RetailerCheckoutView
       companyName={companyName}
       userEmail={session.email}
       paymentEligibility={paymentEligibility}
       stores={stores}
+      savedAddresses={savedAddresses}
     />
   );
 }

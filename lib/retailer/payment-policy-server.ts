@@ -13,6 +13,7 @@ import {
   getTermDaysFromApprovedTerms,
   formatCheckoutTermsLabel,
 } from "./payment-policy";
+import { getRetailerARStatus } from "@/lib/finance/invoice-actions";
 
 /**
  * Helper to parse any retailer-specific fee override from internal metadata or note
@@ -222,15 +223,33 @@ export async function resolveEffectivePaymentPolicy(
 
   // 5. Resolve Terms Policy
   const isValidNetTerms = approvedTerms !== "prepaid";
+  // Auto-sync: If terms are approved by Admin and valid, terms are effectively enabled for active retailers
   const termsEffectiveEnabled =
-    termsEnabled && termsStatus === "approved" && isValidNetTerms && isRetailerActive;
+    termsStatus === "approved" && isValidNetTerms && isRetailerActive;
   const termDays = getTermDaysFromApprovedTerms(approvedTerms);
   const termsDisplayLabel = formatCheckoutTermsLabel(approvedTerms);
 
-  // AR Foundation: No authoritative open AR table exists yet in Phase 1
-  const authoritativeArAvailable = false;
-  const openArBalance: number | null = null;
-  const availableCredit = creditLimit > 0 ? creditLimit : null;
+  // Authoritative AR Resolver integration (ADM-INV-AR-001 / 0162)
+  let authoritativeArAvailable = true;
+  let openArBalance = 0;
+  let availableCredit = creditLimit;
+  let hasPastDue = false;
+  let pastDueAmount = 0;
+  let isBlockedByPastDue = false;
+
+  try {
+    const arStatus = await getRetailerARStatus(companyId);
+    openArBalance = arStatus.openAR;
+    availableCredit = arStatus.availableCredit;
+    hasPastDue = arStatus.hasPastDue;
+    pastDueAmount = arStatus.pastDueAmount;
+    if (pastDueBlocksTerms && hasPastDue) {
+      isBlockedByPastDue = true;
+    }
+  } catch (arErr) {
+    console.warn("Could not resolve live AR status for company:", companyId, arErr);
+    authoritativeArAvailable = false;
+  }
 
   return {
     companyId,
@@ -260,15 +279,18 @@ export async function resolveEffectivePaymentPolicy(
     },
     terms: {
       effectiveEnabled: termsEffectiveEnabled,
-      termsEnabled,
+      termsEnabled: termsEffectiveEnabled || termsEnabled,
       termsStatus,
       approvedTerms,
       termDays,
       creditLimit,
-      pastDueBlockingEnabled: GLOBAL_PAYMENT_POLICY_DEFAULTS.pastDueBlocksTerms,
+      pastDueBlockingEnabled: pastDueBlocksTerms,
       authoritativeArAvailable,
       openArBalance,
       availableCredit,
+      hasPastDue,
+      pastDueAmount,
+      isBlockedByPastDue,
       disclosureLabel: "No Processing Fee",
       termsDisplayLabel,
     },

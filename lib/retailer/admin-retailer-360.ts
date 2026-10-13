@@ -21,6 +21,9 @@ import {
   normalizeRetailerAccountStatus,
   formatRetailerAccountStatusDisplay,
 } from "./commercial-types";
+import { getRetailerARStatus } from "@/lib/finance/invoice-actions";
+import type { RetailerARStatus } from "@/lib/finance/invoice-types";
+import type { RetailerShippingAddress } from "./shipping-address-types";
 
 export interface NeedsAttentionItem {
   id: string;
@@ -355,6 +358,8 @@ export interface Retailer360Data {
   };
   protections: Retailer360ProtectionItem[];
   cases: Retailer360CaseItem[];
+  arStatus?: RetailerARStatus;
+  shippingAddresses?: RetailerShippingAddress[];
 }
 
 export async function getAdminRetailer360Data(companyId: string): Promise<Retailer360Data | null> {
@@ -1451,6 +1456,48 @@ export async function getAdminRetailer360Data(companyId: string): Promise<Retail
   const companyCore = resolveAuthoritativeCompanyCore(company);
   const billingInfo = resolveEffectiveRetailerBilling(profile, companyCore);
 
+  // Authoritative live AR Status & Shipping Addresses
+  let arStatus: RetailerARStatus | undefined;
+  try {
+    arStatus = await getRetailerARStatus(companyId);
+  } catch (arErr) {
+    console.warn("Could not load AR status for retailer 360:", arErr);
+  }
+
+  let savedShippingAddresses: RetailerShippingAddress[] = [];
+  try {
+    const { data: addressRows } = await adminClient
+      .from("retailer_shipping_addresses")
+      .select("*")
+      .eq("company_id", companyId)
+      .eq("is_active", true)
+      .order("is_default", { ascending: false });
+
+    if (addressRows) {
+      savedShippingAddresses = addressRows.map((r: any) => ({
+        id: r.id,
+        companyId: r.company_id,
+        label: r.label,
+        recipientName: r.recipient_name,
+        attentionName: r.attention_name || null,
+        addressLine1: r.address_line1,
+        addressLine2: r.address_line2 || null,
+        city: r.city,
+        state: r.state,
+        zip: r.zip,
+        country: r.country || "US",
+        phone: r.phone || null,
+        deliveryNotes: r.delivery_notes || null,
+        isDefault: Boolean(r.is_default),
+        isActive: Boolean(r.is_active),
+        createdAt: r.created_at,
+        updatedAt: r.updated_at,
+      }));
+    }
+  } catch (shipErr) {
+    // pending migration / schema fallback
+  }
+
   return {
     company: {
       id: companyCore.id,
@@ -1487,5 +1534,7 @@ export async function getAdminRetailer360Data(companyId: string): Promise<Retail
     },
     protections,
     cases,
+    arStatus,
+    shippingAddresses: savedShippingAddresses,
   };
 }

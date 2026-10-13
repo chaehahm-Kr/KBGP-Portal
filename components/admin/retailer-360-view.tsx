@@ -1161,7 +1161,7 @@ export function Retailer360View({ data, canImpersonate = true }: Retailer360View
             <button
               type="button"
               onClick={() => setShowAddStoreModal(true)}
-              className="rounded-xl bg-zinc-900 px-3.5 py-1.5 text-xs font-bold text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 transition-colors shadow-2xs cursor-pointer"
+              className="rounded-xl bg-zinc-900 px-3.5 py-1.5 text-xs font-bold text-white hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200 dark:hover:text-zinc-950 transition-colors shadow-2xs cursor-pointer"
             >
               + Add Store Location
             </button>
@@ -1256,6 +1256,69 @@ export function Retailer360View({ data, canImpersonate = true }: Retailer360View
               </tbody>
             </table>
           </div>
+
+          {/* Saved Shipping & Fulfillment Destinations */}
+          <div className="space-y-4 pt-4 border-t border-zinc-200 dark:border-zinc-800">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-bold text-zinc-900 dark:text-white flex items-center gap-2">
+                  <span>Saved Shipping & Delivery Addresses</span>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
+                    {data.shippingAddresses?.length || 0}
+                  </span>
+                </h3>
+                <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                  Reusable non-store delivery destinations (warehouses, cross-docks, customer delivery points) managed by the retailer.
+                </p>
+              </div>
+            </div>
+
+            {(!data.shippingAddresses || data.shippingAddresses.length === 0) ? (
+              <div className="p-6 rounded-2xl border border-dashed border-zinc-200 dark:border-zinc-800 text-center text-xs text-zinc-400">
+                No custom saved shipping addresses registered for this retailer. Orders will default to store addresses.
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {data.shippingAddresses.map((addr) => (
+                  <div
+                    key={addr.id}
+                    className="p-4 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-2xs space-y-2 text-xs"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-zinc-900 dark:text-white text-sm">
+                          {addr.label}
+                        </span>
+                        {addr.isDefault && (
+                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+                            Default
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-[10px] text-zinc-400 font-mono">
+                        {addr.country}
+                      </span>
+                    </div>
+
+                    <div className="text-zinc-600 dark:text-zinc-300 space-y-0.5">
+                      <p className="font-semibold text-zinc-900 dark:text-white">
+                        {addr.recipientName} {addr.attentionName ? `(Attn: ${addr.attentionName})` : ""}
+                      </p>
+                      <p>{addr.addressLine1}</p>
+                      {addr.addressLine2 && <p>{addr.addressLine2}</p>}
+                      <p>{addr.city}, {addr.state} {addr.zip}</p>
+                      {addr.phone && <p className="text-zinc-500">Phone: {addr.phone}</p>}
+                      {addr.deliveryNotes && (
+                        <p className="text-[11px] text-zinc-400 italic pt-1 border-t border-zinc-100 dark:border-zinc-800">
+                          Note: {addr.deliveryNotes}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       )}
 
@@ -1269,7 +1332,7 @@ export function Retailer360View({ data, canImpersonate = true }: Retailer360View
             <button
               type="button"
               onClick={() => setShowInviteModal(true)}
-              className="rounded-xl bg-zinc-900 px-3.5 py-1.5 text-xs font-bold text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 transition-colors shadow-2xs cursor-pointer"
+              className="rounded-xl bg-zinc-900 px-3.5 py-1.5 text-xs font-bold text-white hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200 dark:hover:text-zinc-950 transition-colors shadow-2xs cursor-pointer"
             >
               + Invite Team Member
             </button>
@@ -1488,7 +1551,7 @@ export function Retailer360View({ data, canImpersonate = true }: Retailer360View
                       <button
                         type="button"
                         onClick={() => handleOpenFulfillmentModal(order)}
-                        className="rounded-xl bg-zinc-900 px-3.5 py-2 text-xs font-bold text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 transition-colors shadow-2xs cursor-pointer"
+                        className="rounded-xl bg-zinc-900 px-3.5 py-2 text-xs font-bold text-white hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200 dark:hover:text-zinc-950 transition-colors shadow-2xs cursor-pointer"
                       >
                         + Create Shipment
                       </button>
@@ -1873,7 +1936,15 @@ export function Retailer360View({ data, canImpersonate = true }: Retailer360View
                   <input
                     type="checkbox"
                     checked={termsEnabled}
-                    onChange={(e) => setTermsEnabled(e.target.checked)}
+                    onChange={(e) => {
+                      const checked = e.target.checked;
+                      setTermsEnabled(checked);
+                      if (checked && termsStatus !== "approved") {
+                        setTermsStatus("approved");
+                      } else if (!checked && termsStatus === "approved") {
+                        setTermsStatus("suspended");
+                      }
+                    }}
                     className="mt-0.5 rounded border-zinc-300 text-purple-600 focus:ring-purple-500"
                   />
                   <div>
@@ -2074,7 +2145,15 @@ export function Retailer360View({ data, canImpersonate = true }: Retailer360View
                   </label>
                   <select
                     value={termsStatus}
-                    onChange={(e) => setTermsStatus(normalizeTermsStatus(e.target.value))}
+                    onChange={(e) => {
+                      const newStatus = normalizeTermsStatus(e.target.value);
+                      setTermsStatus(newStatus);
+                      if (newStatus === "approved" && approvedTerms !== "prepaid") {
+                        setTermsEnabled(true);
+                      } else if (newStatus !== "approved") {
+                        setTermsEnabled(false);
+                      }
+                    }}
                     className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs font-bold outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
                   >
                     <option value="pending">Pending Review / Underwriting</option>
@@ -2090,7 +2169,15 @@ export function Retailer360View({ data, canImpersonate = true }: Retailer360View
                   </label>
                   <select
                     value={approvedTerms}
-                    onChange={(e) => setApprovedTerms(normalizeApprovedTerms(e.target.value))}
+                    onChange={(e) => {
+                      const newTerms = normalizeApprovedTerms(e.target.value);
+                      setApprovedTerms(newTerms);
+                      if (newTerms === "prepaid") {
+                        setTermsEnabled(false);
+                      } else if (termsStatus === "approved") {
+                        setTermsEnabled(true);
+                      }
+                    }}
                     className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs font-bold outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
                   >
                     <option value="prepaid">Prepaid (Credit Card / ACH)</option>
@@ -2117,35 +2204,45 @@ export function Retailer360View({ data, canImpersonate = true }: Retailer360View
                 </div>
               </div>
 
-              {/* AR Balance & Drawdown Summary Placeholders */}
+              {/* Authoritative Live AR Balance & Available Credit */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs pt-1">
                 <div className="p-3 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 space-y-1">
                   <div className="flex items-center justify-between">
                     <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">Current Open Balance</span>
-                    <span className="text-[9px] px-1.5 py-0.5 rounded font-bold bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400">
-                      Pending A/R Ledger Engine
+                    <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold ${
+                      (data.arStatus?.openAR || 0) > 0
+                        ? (data.arStatus?.hasPastDue
+                            ? "bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300 border border-red-200 dark:border-red-800"
+                            : "bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border border-amber-200 dark:border-amber-800")
+                        : "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800"
+                    }`}>
+                      {(data.arStatus?.openAR || 0) > 0
+                        ? `${data.arStatus?.openInvoiceCount || 1} Open Invoice(s)`
+                        : "Authoritative AR Active"}
                     </span>
                   </div>
                   <p className="font-mono font-bold text-zinc-900 dark:text-white text-base">
-                    $0.00
+                    {formatCurrency(data.arStatus?.openAR ?? 0)}
                   </p>
                   <p className="text-[10px] text-zinc-400">
-                    Accounts receivable aging and open invoice ledger integration pending
+                    {data.arStatus?.hasPastDue
+                      ? `⚠️ ${formatCurrency(data.arStatus.pastDueAmount)} past due across ${data.arStatus.pastDueInvoiceCount} invoice(s)`
+                      : "Live Accounts Receivable ledger synced from issued invoices"}
                   </p>
                 </div>
 
                 <div className="p-3 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 space-y-1">
                   <div className="flex items-center justify-between">
                     <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">Available Credit</span>
-                    <span className="text-[9px] px-1.5 py-0.5 rounded font-bold bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300">
+                    <span className="text-[9px] px-1.5 py-0.5 rounded font-bold bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
                       Rule Gated
                     </span>
                   </div>
                   <p className="font-mono font-bold text-zinc-900 dark:text-white text-base">
-                    {formatCurrency(creditLimit)}
+                    {formatCurrency(Math.max(0, creditLimit - (data.arStatus?.openAR || 0)))}
                   </p>
                   <p className="text-[10px] text-zinc-400">
-                    Subject to live order drawdowns. Net terms option in checkout is only visible when Net Terms is Enabled AND Status is Approved.
+                    Live calculation: Credit Limit ({formatCurrency(creditLimit)}) − Open AR ({formatCurrency(data.arStatus?.openAR || 0)}).
                   </p>
                 </div>
               </div>
@@ -2180,7 +2277,7 @@ export function Retailer360View({ data, canImpersonate = true }: Retailer360View
                 type="button"
                 onClick={handleSaveTerms}
                 disabled={isPending}
-                className="rounded-xl bg-zinc-900 px-6 py-2.5 text-xs font-bold text-white hover:bg-zinc-800 disabled:opacity-40 dark:bg-white dark:text-zinc-900 transition-colors shadow-2xs cursor-pointer"
+                className="rounded-xl bg-zinc-900 px-6 py-2.5 text-xs font-bold text-white hover:bg-zinc-800 disabled:opacity-40 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200 dark:hover:text-zinc-950 dark:disabled:bg-zinc-800 dark:disabled:text-zinc-500 transition-colors shadow-2xs cursor-pointer"
               >
                 {isPending ? "Saving Settings..." : "Save Commercial & Compliance Settings"}
               </button>

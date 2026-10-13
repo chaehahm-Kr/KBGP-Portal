@@ -12,6 +12,7 @@ import {
   normalizeTermsStatus,
   normalizeRetailerAccountStatus,
 } from "@/lib/retailer/commercial-types";
+import { getRetailerARStatus } from "@/lib/finance/invoice-actions";
 
 export interface CreateRetailerPayload {
   companyName: string;
@@ -432,6 +433,23 @@ export async function getAdminRetailerDetail(companyId: string) {
     };
   });
 
+  // 7. Authoritative live AR Status
+  const arStatus = await getRetailerARStatus(companyId);
+
+  // 8. Saved Shipping Addresses
+  let savedAddresses: any[] = [];
+  try {
+    const { data: addressRows } = await adminClient
+      .from("retailer_shipping_addresses")
+      .select("*")
+      .eq("company_id", companyId)
+      .eq("is_active", true)
+      .order("is_default", { ascending: false });
+    if (addressRows) savedAddresses = addressRows;
+  } catch (e) {
+    // schema cache / pending migration fallback
+  }
+
   return {
     company: {
       id: company.id,
@@ -469,6 +487,8 @@ export async function getAdminRetailerDetail(companyId: string) {
     invitations: invitations || [],
     agreements: agreements || [],
     orders: orders || [],
+    arStatus,
+    shippingAddresses: savedAddresses,
   };
 }
 
@@ -639,14 +659,24 @@ export async function updateRetailerTermsAction(
   if (payload.paymentMethodAchEnabled !== undefined) {
     updateData.payment_method_ach_enabled = Boolean(payload.paymentMethodAchEnabled);
   }
-  if (payload.termsEnabled !== undefined) {
-    updateData.terms_enabled = Boolean(payload.termsEnabled);
-  }
   if (payload.approvedTerms !== undefined || payload.paymentTerms !== undefined) {
     updateData.approved_terms = normalizeApprovedTerms(payload.approvedTerms || payload.paymentTerms);
   }
   if (payload.termsStatus !== undefined) {
     updateData.terms_status = normalizeTermsStatus(payload.termsStatus);
+  }
+
+  // Auto-sync: Terms approval automatically synchronizes terms_enabled
+  if (updateData.terms_status !== undefined) {
+    if (updateData.terms_status === "approved") {
+      const curApproved = updateData.approved_terms || payload.approvedTerms || "net30";
+      updateData.terms_enabled = curApproved !== "prepaid";
+    } else {
+      // If terms are pending, suspended, or rejected, auto-disable terms
+      updateData.terms_enabled = false;
+    }
+  } else if (payload.termsEnabled !== undefined) {
+    updateData.terms_enabled = Boolean(payload.termsEnabled);
   }
   if (payload.resaleCertificateNumber !== undefined) {
     updateData.resale_certificate_number = payload.resaleCertificateNumber.trim() || null;

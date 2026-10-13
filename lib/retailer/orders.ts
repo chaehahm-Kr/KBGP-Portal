@@ -97,6 +97,22 @@ export interface RetailerOrderDetail extends RetailerOrderSummary {
 
 export interface SubmitOrderPayload {
   storeId?: string;
+  savedAddressId?: string;
+  destinationType?: "store" | "saved_address" | "custom_address";
+  customShippingAddress?: {
+    label?: string;
+    recipientName: string;
+    attentionName?: string;
+    addressLine1: string;
+    addressLine2?: string;
+    city: string;
+    state: string;
+    zip: string;
+    country?: string;
+    phone?: string;
+    deliveryNotes?: string;
+    saveToAddressBook?: boolean;
+  };
   paymentMethod?: RetailerPaymentMethod;
   notes?: string;
   couponCode?: string;
@@ -316,53 +332,167 @@ export async function submitRetailerOrder(
       paymentTerms = "PREPAID_ACH";
     }
 
-    // 3. Validate Store & Address
-    let storeId: string | null = payload.storeId || null;
-    let storeData: any = null;
+    // 3. Resolve Delivery Destination (Store, Saved Shipping Address, or One-Time Custom Address)
+    const destinationType = payload.destinationType || (payload.savedAddressId ? "saved_address" : payload.customShippingAddress ? "custom_address" : "store");
 
-    if (storeId) {
-      const { data: store } = await adminClient
-        .from("stores")
-        .select("id, name, address, city, state, zip, phone, manager_name")
-        .eq("id", storeId)
+    let resolvedRecipient = session.email;
+    let resolvedAttention: string | null = null;
+    let resolvedAddressLine1 = "";
+    let resolvedAddressLine2: string | null = null;
+    let resolvedCity = "";
+    let resolvedState = "";
+    let resolvedZip = "";
+    let resolvedCountry = "US";
+    let resolvedPhone: string | null = null;
+    let destinationLabel = "Store Destination";
+    let resolvedStoreId: string | null = null;
+    let resolvedSavedAddressId: string | null = null;
+
+    if (destinationType === "saved_address" && payload.savedAddressId) {
+      const { data: savedAddr } = await adminClient
+        .from("retailer_shipping_addresses")
+        .select("*")
+        .eq("id", payload.savedAddressId)
         .eq("company_id", companyId)
         .maybeSingle();
 
-      if (!store) {
-        return { success: false, error: "Selected store is invalid or not accessible." };
+      if (!savedAddr) {
+        return { success: false, error: "Selected shipping address is invalid or not accessible." };
       }
-      storeData = store;
+
+      resolvedRecipient = savedAddr.recipient_name;
+      resolvedAttention = savedAddr.attention_name || null;
+      resolvedAddressLine1 = savedAddr.address_line1;
+      resolvedAddressLine2 = savedAddr.address_line2 || null;
+      resolvedCity = savedAddr.city;
+      resolvedState = savedAddr.state;
+      resolvedZip = savedAddr.zip;
+      resolvedCountry = savedAddr.country || "US";
+      resolvedPhone = savedAddr.phone || null;
+      destinationLabel = savedAddr.label;
+      resolvedSavedAddressId = savedAddr.id;
+    } else if (destinationType === "custom_address" && payload.customShippingAddress) {
+      const c = payload.customShippingAddress;
+      if (!c.recipientName?.trim() || !c.addressLine1?.trim() || !c.city?.trim() || !c.state?.trim() || !c.zip?.trim()) {
+        return { success: false, error: "Recipient name, address line 1, city, state, and zip are required for custom shipping address." };
+      }
+
+      resolvedRecipient = c.recipientName.trim();
+      resolvedAttention = c.attentionName?.trim() || null;
+      resolvedAddressLine1 = c.addressLine1.trim();
+      resolvedAddressLine2 = c.addressLine2?.trim() || null;
+      resolvedCity = c.city.trim();
+      resolvedState = c.state.trim().toUpperCase();
+      resolvedZip = c.zip.trim();
+      resolvedCountry = c.country?.trim() || "US";
+      resolvedPhone = c.phone?.trim() || null;
+      destinationLabel = c.label?.trim() || "Custom Delivery Address";
+
+      // If user checked "Save this address for future orders", persist it safely
+      if (c.saveToAddressBook) {
+        try {
+          const { data: savedRow } = await adminClient
+            .from("retailer_shipping_addresses")
+            .insert({
+              company_id: companyId,
+              label: destinationLabel,
+              recipient_name: resolvedRecipient,
+              attention_name: resolvedAttention,
+              address_line1: resolvedAddressLine1,
+              address_line2: resolvedAddressLine2,
+              city: resolvedCity,
+              state: resolvedState,
+              zip: resolvedZip,
+              country: resolvedCountry,
+              phone: resolvedPhone,
+              delivery_notes: c.deliveryNotes?.trim() || null,
+              is_default: false,
+              is_active: true,
+            })
+            .select("id")
+            .maybeSingle();
+
+          if (savedRow?.id) {
+            resolvedSavedAddressId = savedRow.id;
+          }
+        } catch (saveErr) {
+          console.warn("Could not save one-time address to address book:", saveErr);
+        }
+      }
     } else {
-      // Auto-select primary store if exists
-      const { data: stores } = await adminClient
-        .from("stores")
-        .select("id, name, address, city, state, zip, phone, manager_name")
-        .eq("company_id", companyId)
-        .limit(1);
+      // Default: Store Destination
+      let storeId: string | null = payload.storeId || null;
+      let storeData: any = null;
 
-      if (stores && stores.length > 0) {
-        storeData = stores[0];
-        storeId = stores[0].id;
+      if (storeId) {
+        const { data: store } = await adminClient
+          .from("stores")
+          .select("id, name, address, city, state, zip, phone, manager_name")
+          .eq("id", storeId)
+          .eq("company_id", companyId)
+          .maybeSingle();
+
+        if (!store) {
+          return { success: false, error: "Selected store is invalid or not accessible." };
+        }
+        storeData = store;
+      } else {
+        const { data: stores } = await adminClient
+          .from("stores")
+          .select("id, name, address, city, state, zip, phone, manager_name")
+          .eq("company_id", companyId)
+          .limit(1);
+
+        if (stores && stores.length > 0) {
+          storeData = stores[0];
+          storeId = stores[0].id;
+        }
       }
+
+      // If store_manager, verify store-scope assignment
+      if (userRole === "store_manager" && !hasAllStoresAccess && storeId) {
+        const { data: storeAccess } = await adminClient
+          .from("retailer_user_store_access")
+          .select("id")
+          .eq("user_id", session.userId)
+          .eq("company_id", companyId)
+          .eq("store_id", storeId)
+          .maybeSingle();
+
+        if (!storeAccess) {
+          return {
+            success: false,
+            error: "You do not have authorization to place orders for the selected store.",
+          };
+        }
+      }
+
+      resolvedStoreId = storeId;
+      destinationLabel = storeData?.name || "Store Destination";
+      resolvedRecipient = storeData?.manager_name || session.email;
+      resolvedAddressLine1 = storeData?.address || "";
+      resolvedCity = storeData?.city || "";
+      resolvedState = storeData?.state || "";
+      resolvedZip = storeData?.zip || "";
+      resolvedPhone = storeData?.phone || null;
     }
 
-    // If store_manager, verify store-scope assignment
-    if (userRole === "store_manager" && !hasAllStoresAccess && storeId) {
-      const { data: storeAccess } = await adminClient
-        .from("retailer_user_store_access")
-        .select("id")
-        .eq("user_id", session.userId)
-        .eq("company_id", companyId)
-        .eq("store_id", storeId)
-        .maybeSingle();
-
-      if (!storeAccess) {
-        return {
-          success: false,
-          error: "You do not have authorization to place orders for the selected store.",
-        };
-      }
-    }
+    const shippingSnapshot = {
+      destination_type: destinationType,
+      label: destinationLabel,
+      store_id: resolvedStoreId,
+      saved_address_id: resolvedSavedAddressId,
+      recipient_name: resolvedRecipient,
+      attention_name: resolvedAttention,
+      address_line1: resolvedAddressLine1,
+      address_line2: resolvedAddressLine2,
+      city: resolvedCity,
+      state: resolvedState,
+      zip: resolvedZip,
+      country: resolvedCountry,
+      phone: resolvedPhone,
+      delivery_notes: payload.customShippingAddress?.deliveryNotes || payload.notes || null,
+    };
 
     // 4. Fetch Real Products from Product Master & Validate
     const productIds = payload.items.map((i) => i.productId);
@@ -656,6 +786,7 @@ export async function submitRetailerOrder(
       payment_snapshot: paymentSnapshot,
       order_total_snapshot: orderTotalSnapshot,
       promotion_snapshot: appliedPromotionSnapshot,
+      shipping_snapshot: shippingSnapshot,
     });
     const paymentNotesContent = payload.notes
       ? `${payload.notes.trim()}\n\n[PAYMENT_SNAPSHOT]: ${snapshotJson}`
@@ -679,7 +810,7 @@ export async function submitRetailerOrder(
       order_number: orderNumber,
       company_id: companyId,
       user_id: session.userId,
-      store_id: storeId,
+      store_id: resolvedStoreId,
       order_status: "submitted",
       payment_status: "unpaid",
       payment_method: chosenPaymentMethod,
@@ -697,12 +828,15 @@ export async function submitRetailerOrder(
       total_amount: finalTotalAmount,
       total_items_count: totalItemsCount,
       total_skus_count: validatedLines.length,
-      shipping_address: storeData?.address || null,
-      shipping_city: storeData?.city || null,
-      shipping_state: storeData?.state || null,
-      shipping_zip: storeData?.zip || null,
-      shipping_phone: storeData?.phone || null,
-      recipient_name: storeData?.manager_name || session.email,
+      shipping_address: resolvedAddressLine2 ? `${resolvedAddressLine1}, ${resolvedAddressLine2}` : resolvedAddressLine1,
+      shipping_address_line2: resolvedAddressLine2,
+      shipping_city: resolvedCity,
+      shipping_state: resolvedState,
+      shipping_zip: resolvedZip,
+      shipping_phone: resolvedPhone,
+      recipient_name: resolvedRecipient,
+      shipping_destination_type: destinationType,
+      shipping_snapshot: shippingSnapshot,
       notes: payload.notes || null,
       payment_notes: paymentNotesContent,
       is_test: isTestCompany,
@@ -725,7 +859,7 @@ export async function submitRetailerOrder(
         order_number: orderNumber,
         company_id: companyId,
         user_id: session.userId,
-        store_id: storeId,
+        store_id: resolvedStoreId,
         order_status: "submitted",
         payment_status: "unpaid",
         payment_method: chosenPaymentMethod,
@@ -737,12 +871,12 @@ export async function submitRetailerOrder(
         total_amount: finalTotalAmount,
         total_items_count: totalItemsCount,
         total_skus_count: validatedLines.length,
-        shipping_address: storeData?.address || null,
-        shipping_city: storeData?.city || null,
-        shipping_state: storeData?.state || null,
-        shipping_zip: storeData?.zip || null,
-        shipping_phone: storeData?.phone || null,
-        recipient_name: storeData?.manager_name || session.email,
+        shipping_address: resolvedAddressLine2 ? `${resolvedAddressLine1}, ${resolvedAddressLine2}` : resolvedAddressLine1,
+        shipping_city: resolvedCity,
+        shipping_state: resolvedState,
+        shipping_zip: resolvedZip,
+        shipping_phone: resolvedPhone,
+        recipient_name: resolvedRecipient,
         notes: payload.notes || null,
         payment_notes: paymentNotesContent,
         is_test: isTestCompany,

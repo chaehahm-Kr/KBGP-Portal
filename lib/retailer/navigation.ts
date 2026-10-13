@@ -155,6 +155,18 @@ export const RETAILER_NAV_ITEMS: NavItem[] = [
         href: "/settings/team",
         roles: ["owner", "buyer"],
       },
+      {
+        key: "shippingSettings",
+        name: "Shipping Addresses",
+        href: "/settings/shipping",
+        roles: ["owner", "buyer", "store_manager", "accounting"],
+      },
+      {
+        key: "paymentSettings",
+        name: "Payment Methods",
+        href: "/settings/payments",
+        roles: ["owner", "buyer", "accounting"],
+      },
     ],
   },
 ];
